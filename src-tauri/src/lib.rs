@@ -21055,7 +21055,7 @@ mod keylog {
     use windows::Win32::UI::WindowsAndMessaging::{
         CallNextHookEx, GetForegroundWindow, GetGUIThreadInfo, GetMessageW, GetWindowLongW, GetWindowThreadProcessId,
         PostThreadMessageW, SetWindowsHookExW, UnhookWindowsHookEx, ES_PASSWORD, GUITHREADINFO, GWL_STYLE, KBDLLHOOKSTRUCT,
-        LLKHF_INJECTED, MSG, WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_QUIT, WM_SYSKEYDOWN, WM_SYSKEYUP,
+        LLKHF_EXTENDED, LLKHF_INJECTED, MSG, WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_QUIT, WM_SYSKEYDOWN, WM_SYSKEYUP,
     };
 
     // How long a single UI Automation call may hang before it gives up --
@@ -21442,25 +21442,36 @@ mod keylog {
         })
     }
 
+    // A key's VK/scan-code/extended-flag identity, bundled purely to keep
+    // resolve_verdict/verdict_at_stop's own argument count down -- see
+    // RawKey for what each field means and is_alt_numpad_entry for why scan
+    // and extended matter alongside the VK.
+    #[derive(Clone, Copy)]
+    struct KeyId {
+        vk: u32,
+        scan: u32,
+        extended: bool,
+    }
+
     // Turns a `Verdict` into the final gap/record boolean `Recorder::record`
     // takes, which for `Verdict::TextOnly` means running the specific key
     // (and the modifier state it carried) through `is_kept_in_text_context`
     // -- see that function's own doc for exactly what a text field's
     // shortcut allow-list covers.
-    fn resolve_verdict(v: Verdict, vk: u32, ctrl: bool, alt: bool, win: bool) -> bool {
+    fn resolve_verdict(v: Verdict, id: KeyId, ctrl: bool, alt: bool, win: bool) -> bool {
         match v {
             Verdict::Gap => true,
             Verdict::Allow => false,
-            Verdict::TextOnly => !is_kept_in_text_context(vk, ctrl, alt, win),
+            Verdict::TextOnly => !is_kept_in_text_context(id.vk, id.scan, id.extended, ctrl, alt, win),
         }
     }
 
     // Called only once the capture is stopping and no further check will
     // ever arrive: a key `verdict` still cannot decide is gapped, the same
     // as any other doubt, never assumed safe just because time ran out.
-    fn verdict_at_stop(ledger: &Ledger, t: u64, injected: bool, vk: u32, ctrl: bool, alt: bool, win: bool) -> bool {
+    fn verdict_at_stop(ledger: &Ledger, t: u64, injected: bool, id: KeyId, ctrl: bool, alt: bool, win: bool) -> bool {
         match verdict(ledger, t, injected) {
-            Some(v) => resolve_verdict(v, vk, ctrl, alt, win),
+            Some(v) => resolve_verdict(v, id, ctrl, alt, win),
             None => true,
         }
     }
@@ -21479,6 +21490,13 @@ mod keylog {
         // different physical keys, so down/up matching (see Recorder)
         // identifies a key by the pair, not the VK alone.
         scan: u32,
+        // LLKHF_EXTENDED: set for the dedicated nav-cluster/arrow keys and
+        // the right-hand Ctrl/Alt, clear for the numpad's own keys -- the
+        // one signal (alongside the scan code itself) that tells a numpad
+        // digit typed with NumLock off apart from the same VK code arriving
+        // from the real Insert/Delete/arrow cluster. See NEW-2's
+        // is_alt_numpad_entry.
+        extended: bool,
         down: bool,
         t_ms: u64,
         // LLKHF_INJECTED: a password manager's auto-type, a
@@ -21570,16 +21588,54 @@ mod keylog {
         is_ctrl_vk(vk) || is_alt_vk(vk) || is_win_vk(vk) || is_shift_vk(vk)
     }
 
+    // NEW-2: the numpad's own physical keys, whichever VK they currently
+    // send. With NumLock on they send VK_NUMPAD0..VK_DIVIDE directly; with
+    // it off the very same physical keys send the nav-cluster VKs instead
+    // (VK_INSERT, VK_END, arrows, ...) while keeping their own non-extended
+    // scan code -- the real Insert/Delete/arrow-cluster keys send those same
+    // VKs too, but always with LLKHF_EXTENDED set. So scan code plus the
+    // extended flag, not the VK alone, is what actually identifies a numpad
+    // key here.
+    const VK_NUMPAD0: u32 = 0x60;
+    const VK_DIVIDE: u32 = 0x6F; // VK_NUMPAD0..=VK_DIVIDE is contiguous
+    const NUMPAD_SCAN_MIN: u32 = 0x47;
+    const NUMPAD_SCAN_MAX: u32 = 0x53; // inclusive of 0x4E, Numpad +
+
+    fn is_numpad_scan(scan: u32, extended: bool) -> bool {
+        !extended && (NUMPAD_SCAN_MIN..=NUMPAD_SCAN_MAX).contains(&scan)
+    }
+
+    fn is_numpad_vk(vk: u32) -> bool {
+        (VK_NUMPAD0..=VK_DIVIDE).contains(&vk)
+    }
+
+    // Whether this key, struck while Alt alone is held, is (or could be) a
+    // step of an Alt+Numpad Unicode/code-page character entry rather than an
+    // ordinary Alt+key shortcut -- the classic Alt+<decimal> sequence, or
+    // EnableHexNumpad's hex-digit variant, both compose an arbitrary
+    // character out of a run of individually plausible-looking Alt+key
+    // combinations. Matches on the VK (NumLock on) OR the scan code (NumLock
+    // off, arriving as a nav-cluster VK) -- either alone is enough.
+    fn is_alt_numpad_entry(vk: u32, scan: u32, extended: bool) -> bool {
+        is_numpad_vk(vk) || is_numpad_scan(scan, extended)
+    }
+
     // A text field's shortcut-only allow-list (see FieldClass::Text and
     // Verdict::TextOnly): a non-character key kept unconditionally, or a
     // non-modifier key held together with Ctrl, Alt or Win -- EXCEPT bare
     // Ctrl+Alt with no Win, which Windows uses to emulate AltGr (e.g.
     // Ctrl+Alt+Q types "@" on a German keyboard) and must be treated as
-    // ordinary typing, not a shortcut. A lone modifier press (no other key
-    // held with it) is never itself a shortcut. Everything else -- letters,
-    // digits, punctuation, space, Shift+char, dead keys, numpad digits --
-    // falls through and is dropped.
-    fn is_kept_in_text_context(vk: u32, ctrl: bool, alt: bool, win: bool) -> bool {
+    // ordinary typing, not a shortcut, and EXCEPT Alt alone over a numpad
+    // key, which composes a character instead (see is_alt_numpad_entry) and
+    // is checked before the nav-key allow below so it cannot be shadowed by
+    // VK_INSERT/VK_LEFT/etc sharing those VK codes with NumLock off. A lone
+    // modifier press (no other key held with it) is never itself a
+    // shortcut. Everything else -- letters, digits, punctuation, space,
+    // Shift+char, dead keys -- falls through and is dropped.
+    fn is_kept_in_text_context(vk: u32, scan: u32, extended: bool, ctrl: bool, alt: bool, win: bool) -> bool {
+        if alt && !ctrl && !win && is_alt_numpad_entry(vk, scan, extended) {
+            return false;
+        }
         if is_nav_or_edit_key(vk) {
             return true;
         }
@@ -21662,6 +21718,7 @@ mod keylog {
                 let info = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
                 let down = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;
                 let injected = (info.flags.0 & LLKHF_INJECTED.0) != 0;
+                let extended = (info.flags.0 & LLKHF_EXTENDED.0) != 0;
                 let t_ms = mono_ms();
                 // Update the shared modifier state (if this event IS one of
                 // Ctrl/Alt/Win, and is not itself injected -- see
@@ -21692,7 +21749,7 @@ mod keylog {
                     if let Some(tx) = guard.as_ref() {
                         // try_send: this callback must never block, a full
                         // channel just means the newest event is dropped.
-                        let _ = tx.try_send(RawKey { vk: info.vkCode, scan: info.scanCode, down, t_ms, injected, ctrl, alt, win });
+                        let _ = tx.try_send(RawKey { vk: info.vkCode, scan: info.scanCode, extended, down, t_ms, injected, ctrl, alt, win });
                     }
                 }
             }
@@ -21938,7 +21995,7 @@ mod keylog {
             };
             let Some(v) = v else { break };
             let raw = pending.pop_front().expect("front already confirmed present above");
-            let gap = resolve_verdict(v, raw.vk, raw.ctrl, raw.alt, raw.win);
+            let gap = resolve_verdict(v, KeyId { vk: raw.vk, scan: raw.scan, extended: raw.extended }, raw.ctrl, raw.alt, raw.win);
             let t_ms = clock.lock().unwrap_or_else(|e| e.into_inner()).active_ms(raw.t_ms);
             rec.record(raw.vk, raw.scan, raw.down, t_ms, gap);
         }
@@ -22126,7 +22183,7 @@ mod keylog {
         // but never starts a new one.
         for raw in pending {
             let ledger = ledger.lock().unwrap_or_else(|e| e.into_inner());
-            let gap = verdict_at_stop(&ledger, raw.t_ms, raw.injected, raw.vk, raw.ctrl, raw.alt, raw.win);
+            let gap = verdict_at_stop(&ledger, raw.t_ms, raw.injected, KeyId { vk: raw.vk, scan: raw.scan, extended: raw.extended }, raw.ctrl, raw.alt, raw.win);
             drop(ledger);
             let t_ms = clock.lock().unwrap_or_else(|e| e.into_inner()).active_ms(raw.t_ms);
             rec.record(raw.vk, raw.scan, raw.down, t_ms, gap);
@@ -22612,7 +22669,7 @@ mod keylog {
             let mut ledger = Ledger::default();
             ledger.push_check(0, FieldClass::NonText); // far too early to qualify for a key at t=1000
             assert_eq!(verdict(&ledger, 1_000, false), None, "still pending under the normal algorithm");
-            assert!(verdict_at_stop(&ledger, 1_000, false, 0x41, false, false, false), "stopping must resolve doubt as a gap, never as recorded");
+            assert!(verdict_at_stop(&ledger, 1_000, false, KeyId { vk: 0x41, scan: 0, extended: false }, false, false, false), "stopping must resolve doubt as a gap, never as recorded");
         }
 
         #[test]
@@ -22620,7 +22677,7 @@ mod keylog {
             let mut ledger = Ledger::default();
             ledger.push_check(0, FieldClass::NonText);
             ledger.push_check(400, FieldClass::NonText);
-            assert!(!verdict_at_stop(&ledger, 50, false, 0x41, false, false, false), "a real, already-completed answer is not thrown away just because the capture is stopping");
+            assert!(!verdict_at_stop(&ledger, 50, false, KeyId { vk: 0x41, scan: 0, extended: false }, false, false, false), "a real, already-completed answer is not thrown away just because the capture is stopping");
         }
 
         // --- NEW-1: a modifier the hook tracked as held must still be
@@ -22659,12 +22716,12 @@ mod keylog {
 
         #[test]
         fn plain_typing_in_a_text_field_is_dropped() {
-            assert!(resolve_verdict(Verdict::TextOnly, 0x41, false, false, false), "a plain letter key in a text field must be gapped");
+            assert!(resolve_verdict(Verdict::TextOnly, KeyId { vk: 0x41, scan: 0, extended: false }, false, false, false), "a plain letter key in a text field must be gapped");
         }
 
         #[test]
         fn ctrl_c_in_a_text_field_is_kept() {
-            assert!(!resolve_verdict(Verdict::TextOnly, 0x43, true, false, false), "Ctrl+C is a shortcut, not typed text, so it must record");
+            assert!(!resolve_verdict(Verdict::TextOnly, KeyId { vk: 0x43, scan: 0, extended: false }, true, false, false), "Ctrl+C is a shortcut, not typed text, so it must record");
         }
 
         #[test]
@@ -22673,7 +22730,63 @@ mod keylog {
             // types "@" on a German keyboard) -- it types a character and
             // must be gapped exactly like plain typing, not treated as a
             // Ctrl+Alt shortcut.
-            assert!(resolve_verdict(Verdict::TextOnly, 0x51, true, true, false), "AltGr must still be gapped, not treated as a shortcut");
+            assert!(resolve_verdict(Verdict::TextOnly, KeyId { vk: 0x51, scan: 0, extended: false }, true, true, false), "AltGr must still be gapped, not treated as a shortcut");
+        }
+
+        // --- NEW-2: Alt+Numpad / EnableHexNumpad character entry must be
+        // dropped in a text field, never kept as an "Alt+key shortcut".
+
+        #[test]
+        fn alt_numpad_digit_with_numlock_on_is_dropped_in_a_text_field() {
+            // NumLock on: Numpad 6 arrives as VK_NUMPAD6 (0x66).
+            assert!(resolve_verdict(Verdict::TextOnly, KeyId { vk: 0x66, scan: 0x4D, extended: false }, false, true, false), "an Alt+Numpad digit composes a character, it is not a shortcut");
+        }
+
+        #[test]
+        fn alt_numpad_plus_with_numlock_on_is_dropped_in_a_text_field() {
+            assert!(resolve_verdict(Verdict::TextOnly, KeyId { vk: 0x6B, scan: 0x4E, extended: false }, false, true, false), "Numpad + starts EnableHexNumpad entry and must be dropped too");
+        }
+
+        #[test]
+        fn alt_numpad_digit_with_numlock_off_is_dropped_by_its_scan_code() {
+            // NumLock off: the same physical Numpad 6 key now arrives as
+            // VK_LEFT (0x25) with scan code 0x4B and NOT extended -- the
+            // scan code is what actually identifies it, since VK_LEFT alone
+            // is an ordinary, always-kept nav key.
+            assert!(resolve_verdict(Verdict::TextOnly, KeyId { vk: VK_LEFT, scan: 0x4B, extended: false }, false, true, false), "a numpad-origin nav VK with NumLock off must still be dropped under Alt");
+        }
+
+        #[test]
+        fn alt_numpad_digit_key_up_is_dropped_too() {
+            // The down/up pair must agree -- a kept down but dropped up (or
+            // vice versa) would still leave a recoverable half of the key in
+            // the sidecar's own down/up matching.
+            assert!(resolve_verdict(Verdict::TextOnly, KeyId { vk: 0x66, scan: 0x4D, extended: false }, false, true, false), "the down is dropped");
+            assert!(resolve_verdict(Verdict::TextOnly, KeyId { vk: 0x66, scan: 0x4D, extended: false }, false, true, false), "and so is the matching up, same inputs either way");
+        }
+
+        #[test]
+        fn the_real_nav_cluster_key_is_unaffected_by_the_numpad_check() {
+            // The genuine Insert/Delete/arrow cluster sends the same VKs as
+            // the numpad's NumLock-off keys, but always with LLKHF_EXTENDED
+            // set -- Alt+Left from the real arrow cluster must stay a kept
+            // nav key exactly as before, not be swept up by NEW-2.
+            assert!(!resolve_verdict(Verdict::TextOnly, KeyId { vk: VK_LEFT, scan: 0x4B, extended: true }, false, true, false), "the real, extended arrow key must still be kept under Alt");
+        }
+
+        #[test]
+        fn alt_with_an_ordinary_letter_is_unaffected_by_the_numpad_check() {
+            assert!(!resolve_verdict(Verdict::TextOnly, KeyId { vk: 0x41, scan: 0x1E, extended: false }, false, true, false), "Alt+A is an ordinary shortcut, not a numpad scan or VK");
+        }
+
+        #[test]
+        fn ctrl_alt_numpad_is_not_treated_as_numpad_entry() {
+            // The numpad check only applies to Alt held ALONE -- Ctrl+Alt is
+            // AltGr territory (see altgr_in_a_text_field_is_dropped) and any
+            // other combination is an ordinary shortcut, not Alt+Numpad
+            // entry, so this must fall through to the normal ctrl/alt/win
+            // shortcut rule instead of the numpad-specific one.
+            assert!(!resolve_verdict(Verdict::TextOnly, KeyId { vk: 0x66, scan: 0x4D, extended: false }, true, true, true), "Ctrl+Alt+Win+Numpad6 is an ordinary shortcut combo, not character entry");
         }
 
         #[test]
@@ -22687,7 +22800,7 @@ mod keylog {
             ledger.push_check(400, FieldClass::Text);
             let v = verdict(&ledger, 50, false).expect("a qualifying check exists");
             assert_eq!(v, Verdict::TextOnly);
-            assert!(resolve_verdict(v, 0x41, false, false, false), "the fail-closed Text default must still drop plain typing");
+            assert!(resolve_verdict(v, KeyId { vk: 0x41, scan: 0, extended: false }, false, false, false), "the fail-closed Text default must still drop plain typing");
         }
 
         #[test]
@@ -22697,7 +22810,7 @@ mod keylog {
             ledger.push_check(400, FieldClass::NonText);
             let v = verdict(&ledger, 50, false).expect("a qualifying check exists");
             assert_eq!(v, Verdict::Allow);
-            assert!(!resolve_verdict(v, 0x41, false, false, false), "a NonText field's plain typing must keep recording as before");
+            assert!(!resolve_verdict(v, KeyId { vk: 0x41, scan: 0, extended: false }, false, false, false), "a NonText field's plain typing must keep recording as before");
         }
 
         #[test]
@@ -22707,7 +22820,7 @@ mod keylog {
             ledger.push_check(400, FieldClass::Password);
             let v = verdict(&ledger, 50, false).expect("a qualifying check exists");
             assert_eq!(v, Verdict::Gap);
-            assert!(resolve_verdict(v, 0x43, true, false, false), "shortcuts are blocked in password fields too, not just typed characters");
+            assert!(resolve_verdict(v, KeyId { vk: 0x43, scan: 0, extended: false }, true, false, false), "shortcuts are blocked in password fields too, not just typed characters");
         }
 
         #[test]
