@@ -14,6 +14,9 @@ Checks:
   5. Every action that is not an alt binding (does not end in "Alt") is
      referenced by at least one button, static or dynamic -- an entry nobody
      ever shows is dead weight in the table.
+  6. Every `openShortcutsModal(...)` call site names a scope that at least one
+     SHORTCUTS entry actually uses -- catches a typo'd scope name silently
+     opening an empty table.
 
 Run:  python tests/shortcut_check.py
 Exit: 0 = clean, 1 = problems found.
@@ -87,6 +90,22 @@ def dynamic_shortcut_actions():
     return literal, prefixes
 
 
+OPEN_MODAL_CALL = re.compile(r'openShortcutsModal\(\s*(?P<expr>[^)]+)\)')
+
+
+def open_modal_scopes():
+    """Every scope name (or array of them) passed to an openShortcutsModal()
+    call in application code."""
+    found = []
+    for js in ("main.js", "video.js"):
+        src = (REPO / "ui" / js).read_text(encoding="utf-8")
+        for m in OPEN_MODAL_CALL.finditer(src):
+            expr = m.group("expr").strip()
+            for s in re.findall(r'"([^"]+)"', expr):
+                found.append((js, s))
+    return found
+
+
 def main():
     bad = []
     entries = parse_shortcuts()
@@ -140,6 +159,14 @@ def main():
             continue
         if action not in referenced:
             bad.append(f"shortcuts.js: action '{action}' is never shown by a button (static or dynamic)")
+
+    # openShortcutsModal() call sites. "library" is a reserved scope name with
+    # no entry yet (see the comment at the top of shortcuts.js) -- allowed
+    # alongside a real one, but nothing else unknown is.
+    known_scopes = {s for e in entries for s in e["scopes"]} | {"library"}
+    for js, scope in open_modal_scopes():
+        if scope not in known_scopes:
+            bad.append(f"{js}: openShortcutsModal() names scope '{scope}', which no SHORTCUTS entry uses")
 
     for line in bad:
         print(f"   FAIL {line}")
