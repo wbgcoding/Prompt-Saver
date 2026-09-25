@@ -25863,7 +25863,7 @@ fn export_video_blocking(
     Ok(final_dst.to_string_lossy().to_string())
 }
 
-// The video editor window (own label, one instance) and its own chrome —
+// The video editor window (own label, one instance) and its own chrome:
 // decorations(false)+transparent(true)+resizable(true), same shape as the
 // main window's own (custom HTML titlebar drawn by video.html itself), not
 // the fixed-size borderless-pill pattern the other satellite windows use.
@@ -26648,7 +26648,7 @@ fn set_start_minimized(app: AppHandle, state: State<Db>, enabled: bool) -> Resul
 
 fn csv_cell(s: &str) -> String {
     // CSV formula injection: a cell starting with =, +, -, @ or a tab is read as a
-    // formula by Excel/LibreOffice once reopened — CSV-quoting only protects the
+    // formula by Excel/LibreOffice once reopened: CSV-quoting only protects the
     // CSV syntax, not spreadsheet evaluation. A leading single quote forces text.
     let needs_prefix = matches!(s.as_bytes().first(), Some(b'=' | b'+' | b'-' | b'@' | b'\t' | b'\r'));
     let s = if needs_prefix { format!("'{s}") } else { s.to_string() };
@@ -26661,7 +26661,7 @@ fn csv_row(cells: &[&str]) -> String {
 }
 
 // Joins/splits a rotating prompt's entries for every text-based export format
-// (CSV cell, TXT body, Markdown-sync body) — ONE marker everywhere. NOT the bare
+// (CSV cell, TXT body, Markdown-sync body): ONE marker everywhere. NOT the bare
 // "---" a first design sketched: `to_txt`'s blocks are already joined on the
 // literal "\n\n---\n\n" (between DIFFERENT prompts), and `prompt_to_md`'s header is
 // bounded by bare "---" lines too, so a bare "---" inside one prompt's own body
@@ -26671,7 +26671,7 @@ fn csv_row(cells: &[&str]) -> String {
 const VARIANT_SEP: &str = "\n<!-- next -->\n";
 // Escaped form of the marker, used ONLY so an entry that happens to contain the
 // literal separator text survives the round trip instead of being silently
-// split into extra entries — the inserted backslash means this
+// split into extra entries: the inserted backslash means this
 // string can never equal VARIANT_SEP itself, so .split(VARIANT_SEP) never
 // matches inside it.
 const VARIANT_SEP_ESCAPED: &str = "\n<!-- \\next -->\n";
@@ -26821,10 +26821,10 @@ fn resolved_for_export(p: &Prompt, remembered: &HashMap<String, String>, fixed: 
     rp
 }
 
-// Export the prompt library only (incl. images/files) — never app settings,
+// Export the prompt library only (incl. images/files): never app settings,
 // views or grid layout, so importing elsewhere can't clobber the user's setup.
 fn to_csv(prompts: &[Prompt]) -> String {
-    // pdfpage appended at the END, not inserted among the existing columns —
+    // pdfpage appended at the END, not inserted among the existing columns:
     // an older export re-imported here has no such column, and row.get() on a
     // short row already returns None (-> the same default 0), never shifting
     // any OTHER column's fixed index. rotatemode follows the identical
@@ -26835,7 +26835,7 @@ fn to_csv(prompts: &[Prompt]) -> String {
     ];
     let mut rows = vec![csv_row(&head)];
     for p in prompts {
-        // Entries 2..n ride along INSIDE the text cell — the CSV writer quotes
+        // Entries 2..n ride along INSIDE the text cell: the CSV writer quotes
         // every cell (embedded newlines included), so the join marker needs no
         // escaping of its own.
         let text = join_variants(&p.text, &p.variants);
@@ -26855,7 +26855,7 @@ fn to_csv(prompts: &[Prompt]) -> String {
             &p.caption_size.to_string(),
             &p.tags.join(","),
             // The CSV writer quotes every cell and doubles inner quotes, so a
-            // multi-line note travels verbatim — no escaping needed here.
+            // multi-line note travels verbatim: no escaping needed here.
             &p.notes,
             &p.pdf_page.to_string(),
             &p.rotate_mode,
@@ -26868,7 +26868,7 @@ fn to_txt(prompts: &[Prompt]) -> String {
     use std::fmt::Write;
     let blocks: Vec<String> = prompts.iter().map(|p| {
         // Entries 2..n ride along inside the body itself, joined by the same
-        // marker as CSV/Markdown-sync — never the bare "---" the blocks below are
+        // marker as CSV/Markdown-sync: never the bare "---" the blocks below are
         // themselves separated by.
         let mut block = format!("### {}\n{}", p.name, join_variants(&p.text, &p.variants));
         if !p.color.is_empty() {
@@ -26889,7 +26889,7 @@ fn to_txt(prompts: &[Prompt]) -> String {
             let _ = write!(block, "\n@file {}", p.file_path);
         }
         // Only a PDF attachment reads this, and 0 (the first page) is by far
-        // the common case — skip the line entirely then, same as every other
+        // the common case: skip the line entirely then, same as every other
         // optional field here.
         if p.pdf_page > 0 {
             let _ = write!(block, "\n@pdfpage {}", p.pdf_page);
@@ -26913,7 +26913,7 @@ fn to_txt(prompts: &[Prompt]) -> String {
         if !p.image.is_empty() {
             let _ = write!(block, "\n@imagedata {}", p.image);
         }
-        // Order/random preference — sparse like every other optional field here
+        // Order/random preference: sparse like every other optional field here
         // (a plain prompt, the overwhelming majority, never gets an empty line).
         if !p.rotate_mode.is_empty() {
             let _ = write!(block, "\n@rotatemode {}", p.rotate_mode);
