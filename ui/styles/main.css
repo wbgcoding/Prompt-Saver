@@ -2414,6 +2414,10 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   color: var(--muted);
 }
 .help-tip-ico { flex: 0 0 auto; color: var(--accent); }
+/* Inline copy of a real button's icon, dropped in place of {icon:key} in
+   ui/help.js so a sentence naming a button shows it as it actually looks. */
+.help-icon { display: inline-flex; vertical-align: -3px; margin: 0 1px; color: var(--fg); }
+.help-icon svg { display: block; width: 14px; height: 14px; }
 /* Hand-drawn help diagrams instead of screenshots, coloured entirely through
    currentColor so every theme stays readable and no image ever goes stale. */
 .help-sketch { margin: 2px 0; color: var(--fg); max-width: 100%; }

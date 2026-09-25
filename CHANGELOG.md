@@ -178,6 +178,10 @@ the video editor and the introduction tour ship on).
   editor timeline, a chain of steps) next to the articles they belong to,
   drawn in the current theme's own colours instead of a screenshot that would
   go stale with the next redesign. Off switches back to text only.
+- **Real button icons in the help text**: wherever an article names a button
+  (screenshot, record, OCR, microphone, library, theme editor) the sentence
+  now shows that button's actual icon, read live from the button itself so it
+  always matches, instead of only the word.
 - **Twenty-one settings that were fixed constants are now expert values**: the
   colour-history swatch size, the colour-picker loupe grid size, screenshot
   quality and an optional capture delay, a rotating prompt's tooltip preview

@@ -415,6 +415,7 @@ PROBE = """
         let totalGroups = 0;
         let sawTip = false;
         let sawSketch = false;
+        let sawIcon = false;
         const seenTitles = new Set();
         for (let i = 0; i < tabs.length; i++) {
           document.querySelectorAll('#help-tabs-bar .expert-tab')[i].click();
@@ -428,6 +429,21 @@ PROBE = """
           if (empties.length) out.errors.push(empties.length + ' help category has an empty overview (tab ' + i + ')');
           if (document.querySelector('#help-body .help-tip')) sawTip = true;
           if (document.querySelector('#help-body .help-sketch svg')) sawSketch = true;
+          // 500: a {icon:key} placeholder in ui/help.js is swapped for the real
+          // button's own svg at render time, never left as raw text, never empty.
+          const icons = [...document.querySelectorAll('#help-body .help-icon')];
+          if (icons.length) {
+            sawIcon = true;
+            for (const ic of icons) {
+              const svg = ic.querySelector('svg');
+              if (!svg || !svg.innerHTML.trim()) {
+                out.errors.push('500: a help icon placeholder has no real button svg (tab ' + i + ')');
+              }
+            }
+          }
+          if (document.getElementById('help-body').textContent.includes('{icon:')) {
+            out.errors.push('500: a raw {icon: placeholder is visible in the help text (tab ' + i + ')');
+          }
           for (const g of here) {
             const t = g.querySelector('.help-group-title-text');
             if (t) seenTitles.add(t.textContent.trim());
@@ -442,6 +458,12 @@ PROBE = """
         }
         if (!sawTip) out.errors.push('no help category shows a tip callout');
         if (!sawSketch) out.errors.push('no help category shows a diagram');
+        if (!sawIcon) out.errors.push('500: no help category shows a real button icon inline');
+        // 500: every icon a placeholder can point at is a button that actually
+        // exists in the program, not a name help.js made up.
+        for (const id of ['snip-btn', 'record-btn', 'ocr-btn', 'voice-btn', 'library-btn', 'theme-edit-open']) {
+          if (!document.getElementById(id)) out.errors.push('500: help icon source button #' + id + ' does not exist');
+        }
         const search = document.getElementById('help-search');
         // Multi-word query whose words are not literally adjacent anywhere — only the
         // term-AND-logic search (73) finds it, a plain includes() search finds nothing.

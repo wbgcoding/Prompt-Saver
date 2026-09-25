@@ -15022,10 +15022,11 @@ function helpSectionLabel(id) {
 // Strips case and diacritics so "ordner"/"Übersicht" match "Ordner"/"ubersicht" alike.
 const helpNorm = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
-// Splits text into plain text nodes + <mark> spans around every term match. Never
+// Appends text nodes + <mark> spans around every term match, without clearing
+// the element first (appendHelpText below calls this between icon swaps). Never
 // innerHTML — the search query is user input and must not be parsed as markup.
-function markTerms(el, text, terms) {
-  el.textContent = "";
+function appendTermMarks(el, text, terms) {
+  if (!text) return;
   const norm = helpNorm(text);
   const ranges = [];
   for (const term of terms) {
@@ -15053,6 +15054,57 @@ function markTerms(el, text, terms) {
     pos = end;
   }
   if (pos < text.length) el.appendChild(document.createTextNode(text.slice(pos)));
+}
+
+// Where each `{icon:key}` placeholder in ui/help.js gets its picture from: the
+// real button's own SVG element, read live, never a copy of its path data. A
+// help sentence naming a button this way always shows the button as it looks
+// today, including a future icon redesign, with zero upkeep in help.js itself.
+const HELP_ICON_SOURCES = {
+  screenshot: () => $("snip-btn")?.querySelector("svg")?.outerHTML,
+  record: () => $("record-btn")?.querySelector("svg")?.outerHTML,
+  ocr: () => $("ocr-btn")?.querySelector("svg")?.outerHTML,
+  mic: () => $("voice-btn")?.querySelector("svg")?.outerHTML,
+  library: () => $("library-btn")?.querySelector("svg")?.outerHTML,
+  themeEditor: () => $("theme-edit-open")?.querySelector("svg")?.outerHTML,
+};
+
+// Builds the inline icon span for one `{icon:key}` placeholder, or null when the
+// key is unknown or its button is missing, so the caller then just drops the
+// placeholder rather than showing broken markup.
+function helpIconSpan(key) {
+  const getSvg = HELP_ICON_SOURCES[key];
+  const svg = getSvg && getSvg();
+  if (!svg) return null;
+  const span = document.createElement("span");
+  span.className = "help-icon";
+  span.innerHTML = svg;
+  const inner = span.firstElementChild;
+  if (inner) inner.setAttribute("aria-hidden", "true");
+  return span;
+}
+
+// Splits text on `{icon:key}` placeholders, swapping each for the real button's
+// icon, and marks search terms in the text around them via appendTermMarks.
+function appendHelpText(el, text, terms) {
+  const re = /\{icon:([a-zA-Z][a-zA-Z0-9]*)\}/g;
+  let last = 0;
+  let m;
+  while ((m = re.exec(text))) {
+    appendTermMarks(el, text.slice(last, m.index), terms);
+    const icon = helpIconSpan(m[1]);
+    if (icon) el.appendChild(icon);
+    last = re.lastIndex;
+  }
+  appendTermMarks(el, text.slice(last), terms);
+}
+
+// The one place help text (title, overview, steps, outcome, settings, tip) is
+// written into the DOM: clears the element, then renders icons plus, only when
+// asked, the search-term highlight markTerms used to do alone.
+function setHelpText(el, text, terms, highlight) {
+  el.textContent = "";
+  appendHelpText(el, text, highlight ? terms : []);
 }
 
 function renderHelp() {
@@ -15132,8 +15184,7 @@ function renderHelp() {
     head.className = "expert-group-title collapsible";
     const titleSpan = document.createElement("span");
     titleSpan.className = "help-group-title-text";
-    if (searching && highlight) markTerms(titleSpan, cat.title, terms);
-    else titleSpan.textContent = cat.title;
+    setHelpText(titleSpan, cat.title, terms, searching && highlight);
     head.appendChild(titleSpan);
     if (searching) {
       const badge = document.createElement("span");
@@ -15154,16 +15205,14 @@ function renderHelp() {
     // entry (e.g. the quick launcher) doesn't have to force a step list.
     const ov = document.createElement("p");
     ov.className = "help-overview";
-    if (searching && highlight) markTerms(ov, cat.whatItIs, terms);
-    else ov.textContent = cat.whatItIs;
+    setHelpText(ov, cat.whatItIs, terms, searching && highlight);
     body.appendChild(ov);
     if (cat.howTo && cat.howTo.length) {
       const ol = document.createElement("ol");
       ol.className = "help-steps";
       for (const step of cat.howTo) {
         const li = document.createElement("li");
-        if (searching && highlight) markTerms(li, step, terms);
-        else li.textContent = step;
+        setHelpText(li, step, terms, searching && highlight);
         ol.appendChild(li);
       }
       body.appendChild(ol);
@@ -15184,7 +15233,7 @@ function renderHelp() {
     if (cat.whatHappens) {
       const wh = document.createElement("p");
       wh.className = "help-happens";
-      wh.textContent = cat.whatHappens;
+      setHelpText(wh, cat.whatHappens, [], false);
       body.appendChild(wh);
     }
     if (cat.settings.length) {
@@ -15192,7 +15241,7 @@ function renderHelp() {
       ul.className = "help-settings";
       for (const s of cat.settings) {
         const li = document.createElement("li");
-        li.textContent = s;
+        setHelpText(li, s, [], false);
         ul.appendChild(li);
       }
       body.appendChild(ul);
@@ -15205,7 +15254,7 @@ function renderHelp() {
       ico.setAttribute("aria-hidden", "true");
       ico.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a5 5 0 0 0-3 9v1.5a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1V10a5 5 0 0 0-3-9zm-1.5 13h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1 0-1z"/></svg>';
       const txt = document.createElement("span");
-      txt.textContent = cat.tip;
+      setHelpText(txt, cat.tip, [], false);
       tip.appendChild(ico);
       tip.appendChild(txt);
       body.appendChild(tip);

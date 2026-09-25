@@ -191,14 +191,14 @@ export const HELP_CONTENT = {
       howTo: ["Pick a theme from Settings.", "Open the theme editor, once enabled, to adjust any theme's colours and save a custom one."],
       whatHappens: "\"System\" follows the OS light or dark setting live. A custom theme is saved separately — the built-in it was based on stays untouched.",
       settings: ["Theme choice — Settings", "Theme editor — Expert menu → Appearance → Global colour palette", "Accent-coloured header, frosted dialogs, hidden or accent-coloured scrollbars, smooth scrolling — Expert menu → Appearance → Visual"],
-      tip: "Custom themes are on out of the box; switching them off in the expert menu also hides the editor button.",
+      tip: "Custom themes are on out of the box; switching them off in the expert menu also hides the editor button {icon:themeEditor}.",
     },
     {
       section: "organising",
       title: "Library & search",
       whatItIs: "The library lists every tile as a searchable, filterable list, unlike the grid, which shows only what fits.",
       howTo: [
-        "Click the library button in the toolbar to open it.",
+        "Click the library button {icon:library} in the toolbar to open it.",
         "Type to search, or use the type and colour filters to narrow the list.",
         "Click a row to copy.",
         "Use its menu to edit, drag onto the grid, tag, or delete.",
@@ -450,7 +450,7 @@ export const HELP_CONTENT = {
       title: "Open a file in the editor",
       whatItIs: "Opens an existing picture or video in whichever editor its content calls for, instead of only ever reaching an editor through a fresh capture or recording.",
       howTo: [
-        "Right-click the screenshot or record button, or an image/video attachment in the library.",
+        "Right-click the screenshot {icon:screenshot} or record {icon:record} button, or an image/video attachment in the library.",
         "Choose \"Open a file in the editor\" and pick the file.",
         "Edit as usual; saving asks where to put the result.",
       ],
@@ -463,7 +463,7 @@ export const HELP_CONTENT = {
       title: "Screen recording",
       whatItIs: "Records a window, a monitor, or a dragged region as a video, next to the screenshot tool.",
       howTo: [
-        "Click the record button; pick a window, drag a region, or click empty desktop for the whole screen — same overlay as the screenshot tool.",
+        "Click the record button {icon:record}; pick a window, drag a region, or click empty desktop for the whole screen — same overlay as the screenshot tool.",
         "An optional countdown toast counts down before capture actually starts.",
         "A small floating control bar shows elapsed time and file size, and offers Pause/Resume, Stop and Discard; two optional global hotkeys and the tray menu can stop or pause/resume it too, live only while it is actually running. A window recording using the every-display or current-display canvas also gets a switch-target button, to swap what it is capturing without starting over.",
         "Stopping offers Save, Save as…, Copy, Edit or Discard.",
@@ -492,7 +492,7 @@ export const HELP_CONTENT = {
       title: "Text recognition (OCR)",
       whatItIs: "Pulls text out of a screenshot or an image file using Windows' own on-device recognizer — fully offline, nothing leaves the machine.",
       howTo: [
-        "From the composer — the OCR button offers a screenshot or an existing image file.",
+        "From the composer — the OCR button {icon:ocr} offers a screenshot or an existing image file.",
         "From a screenshot already taken — the snip dialog's \"Recognize text\" button.",
         "Review the result, then copy it or insert it directly.",
       ],
@@ -503,7 +503,7 @@ export const HELP_CONTENT = {
     {
       section: "basics",
       title: "Voice dictation",
-      whatItIs: "The microphone button turns speech into text, recognised entirely on-device.",
+      whatItIs: "The microphone button {icon:mic} turns speech into text, recognised entirely on-device.",
       howTo: [
         "Click the microphone icon next to the composer, or in a tile's editor.",
         "Speak; the text appears as it is recognised.",
@@ -804,14 +804,14 @@ export const HELP_CONTENT = {
       howTo: ["Ein Theme in den Einstellungen wählen.", "Den Theme-Editor, sobald aktiviert, öffnen, um Farben eines Themes anzupassen und ein eigenes zu speichern."],
       whatHappens: "\"System\" folgt live der Hell-/Dunkel-Einstellung des Betriebssystems. Ein benutzerdefiniertes Theme wird separat gespeichert — das integrierte, auf dem es basierte, bleibt unangetastet.",
       settings: ["Theme-Wahl — Einstellungen", "Theme-Editor — Experten-Menü → Aussehen → Globale Farbauswahl", "Kopfzeile in Akzentfarbe, milchige Dialoge, versteckte oder eingefärbte Scrollbalken, weiches Scrollen — Experten-Menü → Aussehen → Visuell"],
-      tip: "Benutzerdefinierte Themes sind ab Werk an; werden sie im Experten-Menü ausgeschaltet, verschwindet auch der Editor-Button.",
+      tip: "Benutzerdefinierte Themes sind ab Werk an; werden sie im Experten-Menü ausgeschaltet, verschwindet auch der Editor-Button {icon:themeEditor}.",
     },
     {
       section: "organising",
       title: "Bibliothek & Suche",
       whatItIs: "Die Bibliothek listet jede Kachel als durchsuchbare, filterbare Liste, anders als das Raster, das nur zeigt, was passt.",
       howTo: [
-        "Klick auf den Bibliothek-Button in der Werkzeugleiste öffnet sie.",
+        "Klick auf den Bibliothek-Button {icon:library} in der Werkzeugleiste öffnet sie.",
         "Tippen zum Suchen, oder Typ- und Farb-Filter zum Eingrenzen der Liste nutzen.",
         "Klick auf eine Zeile zum Kopieren.",
         "Das Menü zum Bearbeiten, auf das Raster Ziehen, Taggen oder Löschen nutzen.",
@@ -1063,7 +1063,7 @@ export const HELP_CONTENT = {
       title: "Datei im Editor öffnen",
       whatItIs: "Öffnet ein vorhandenes Bild oder Video in dem Editor, den sein Inhalt verlangt, statt einen Editor nur über eine frische Aufnahme zu erreichen.",
       howTo: [
-        "Rechtsklick auf den Bildschirmfoto- oder Aufnahme-Knopf, oder auf einen Bild-/Videoanhang in der Bibliothek.",
+        "Rechtsklick auf den Bildschirmfoto- {icon:screenshot} oder Aufnahme-Knopf {icon:record}, oder auf einen Bild-/Videoanhang in der Bibliothek.",
         "\"Datei im Editor öffnen\" wählen und die Datei aussuchen.",
         "Wie gewohnt bearbeiten; beim Speichern wird nach dem Ziel gefragt.",
       ],
@@ -1076,7 +1076,7 @@ export const HELP_CONTENT = {
       title: "Bildschirmaufnahme",
       whatItIs: "Nimmt ein Fenster, einen Monitor oder einen gezogenen Bereich als Video auf, neben dem Screenshot-Werkzeug.",
       howTo: [
-        "Auf den Aufnahme-Knopf klicken; ein Fenster anklicken, einen Bereich ziehen oder auf den freien Desktop klicken für den ganzen Bildschirm — dieselbe Übersicht wie beim Screenshot-Werkzeug.",
+        "Auf den Aufnahme-Knopf {icon:record} klicken; ein Fenster anklicken, einen Bereich ziehen oder auf den freien Desktop klicken für den ganzen Bildschirm — dieselbe Übersicht wie beim Screenshot-Werkzeug.",
         "Ein Countdown zählt optional herunter, bevor die Aufnahme wirklich startet.",
         "Eine kleine Bedienleiste zeigt Laufzeit und Dateigröße und bietet Pause/Fortsetzen, Stopp und Verwerfen; zwei optionale globale Hotkeys sowie das Tray-Menü können sie ebenfalls stoppen oder pausieren/fortsetzen, aber nur, solange die Aufnahme wirklich läuft. Eine Fensteraufnahme mit der Leinwand für alle Bildschirme oder den aktuellen Bildschirm bekommt zusätzlich einen Knopf zum Wechseln des Aufnahmeziels, ohne von vorn zu beginnen.",
         "Stopp bietet Speichern, Speichern unter…, Kopieren, Bearbeiten oder Verwerfen an.",
@@ -1105,7 +1105,7 @@ export const HELP_CONTENT = {
       title: "Texterkennung (OCR)",
       whatItIs: "Liest mit der geräteeigenen Erkennung von Windows Text aus einem Screenshot oder einer Bilddatei — vollständig offline, nichts verlässt das Gerät.",
       howTo: [
-        "Über die Eingabeleiste — der OCR-Button bietet einen Screenshot oder eine vorhandene Bilddatei an.",
+        "Über die Eingabeleiste — der OCR-Button {icon:ocr} bietet einen Screenshot oder eine vorhandene Bilddatei an.",
         "Bei einem bereits aufgenommenen Screenshot — über den Button „Text erkennen“ im Aufnahme-Dialog.",
         "Das Ergebnis prüfen und anschließend kopieren oder direkt einfügen.",
       ],
@@ -1116,7 +1116,7 @@ export const HELP_CONTENT = {
     {
       section: "basics",
       title: "Spracheingabe",
-      whatItIs: "Der Mikrofon-Button verwandelt Sprache in Text — die Erkennung läuft komplett auf dem Gerät.",
+      whatItIs: "Der Mikrofon-Button {icon:mic} verwandelt Sprache in Text — die Erkennung läuft komplett auf dem Gerät.",
       howTo: [
         "Auf das Mikrofon-Icon neben der Eingabeleiste klicken, oder im Editor einer Kachel.",
         "Sprechen; der Text erscheint, während er erkannt wird.",
