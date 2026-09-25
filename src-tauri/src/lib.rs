@@ -20633,7 +20633,8 @@ mod keylog {
     use windows::Win32::System::Threading::GetCurrentThreadId;
     use windows::Win32::UI::Accessibility::{
         CUIAutomation, IUIAutomation, IUIAutomation2, IUIAutomationElement, IUIAutomationFocusChangedEventHandler,
-        IUIAutomationFocusChangedEventHandler_Impl,
+        IUIAutomationFocusChangedEventHandler_Impl, IUIAutomationTextPattern, IUIAutomationValuePattern, UIA_DocumentControlTypeId,
+        UIA_EditControlTypeId, UIA_TextPatternId, UIA_ValuePatternId,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
         CallNextHookEx, GetForegroundWindow, GetGUIThreadInfo, GetMessageW, GetWindowLongW, GetWindowThreadProcessId,
@@ -20842,6 +20843,38 @@ mod keylog {
     // recording with nothing ever shrinking it back down.
     const IDLE_PRUNE_MS: u64 = 1_000;
 
+    // What the focused control was, at the instant a check ran. `Password`
+    // is the strictest tier (see `verdict`: gaps absolutely everything,
+    // shortcuts included). `Text` covers any other text-entry control --
+    // an Edit or Document control type, an editable ValuePattern or
+    // TextPattern, or plain doubt (UI Automation unreachable, the call
+    // erroring, an unrecognized or proxy element) -- and permits only
+    // shortcuts and navigation keys through (see `is_kept_in_text_context`).
+    // `NonText` is the narrowest tier: reached only by a POSITIVE
+    // classification that the control is neither a password field nor a
+    // text-entry one, and behaves exactly as the pre-existing "not
+    // password" verdict always did, recording everything not otherwise
+    // caught by a blind or dirty window.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum FieldClass {
+        Password,
+        Text,
+        NonText,
+    }
+
+    // The three shapes a resolved key's fate can take. `Gap` is
+    // unconditional (injected input, the ledger's own fail_closed flag, a
+    // blind window, a confirmed password field, or a dirty guard window).
+    // `Allow` is the NonText tier's unconditional record. `TextOnly` still
+    // needs the specific key (and its modifier state) run through
+    // `is_kept_in_text_context` before a final gap/record decision exists.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum Verdict {
+        Gap,
+        Allow,
+        TextOnly,
+    }
+
     // Ordered log of every completed focus check (`checks`, each stamped by
     // the instant it STARTED, not when it finished) and every focus-change
     // event's own arrival (`arrivals`), both on the `mono_ms()` clock.
@@ -20854,7 +20887,7 @@ mod keylog {
     // below for why a single "before" and "after" point was not enough).
     #[derive(Default)]
     struct Ledger {
-        checks: Vec<(u64, bool)>, // (start_ms, is_password)
+        checks: Vec<(u64, FieldClass)>, // (start_ms, class)
         arrivals: Vec<u64>,
         // Set once and never cleared for the lifetime of a capture: the
         // focus-changed handler could not be registered, so no event will
@@ -20872,9 +20905,9 @@ mod keylog {
     const LEDGER_HARD_CAP: usize = 20_000;
 
     impl Ledger {
-        fn push_check(&mut self, start_ms: u64, is_password: bool) {
+        fn push_check(&mut self, start_ms: u64, class: FieldClass) {
             let pos = self.checks.partition_point(|(t, _)| *t <= start_ms);
-            self.checks.insert(pos, (start_ms, is_password));
+            self.checks.insert(pos, (start_ms, class));
             self.enforce_cap();
         }
 
@@ -20917,7 +20950,7 @@ mod keylog {
         // is short. `checks` stays sorted by start time (see push_check),
         // so the earliest qualifying one is found with a binary search
         // instead of a linear scan.
-        fn qualifying_check(&self, t: u64) -> Option<(u64, bool)> {
+        fn qualifying_check(&self, t: u64) -> Option<(u64, FieldClass)> {
             let need = t.saturating_add(SETTLE_MS);
             let idx = self.checks.partition_point(|(start, _)| *start < need);
             self.checks.get(idx).copied()
@@ -20946,7 +20979,7 @@ mod keylog {
         // another, dirtier check) that happened in between and that the
         // qualifying check alone, being a single point, cannot see.
         fn window_is_dirty(&self, from: u64, to: u64) -> bool {
-            let bad_check = self.checks.iter().any(|(t, is_pw)| *is_pw && *t >= from && *t <= to);
+            let bad_check = self.checks.iter().any(|(t, class)| *class == FieldClass::Password && *t >= from && *t <= to);
             let bad_arrival = self.arrivals.iter().any(|t| *t >= from && *t <= to);
             bad_check || bad_arrival
         }
@@ -20964,30 +20997,56 @@ mod keylog {
         }
     }
 
-    // The binding verdict algorithm. `Some(true)` = gap, `Some(false)` =
-    // record, `None` = not enough information exists YET (the caller must
-    // keep the key pending and wait for a later check) -- never treated as
-    // "record", only ever eventually resolved to a gap if nothing ever
-    // qualifies (see `verdict_at_stop`).
-    fn verdict(ledger: &Ledger, t: u64, injected: bool) -> Option<bool> {
+    // The binding verdict algorithm. `Some(Verdict::Gap)` is unconditional,
+    // `Some(Verdict::Allow)` is an unconditional record (the NonText tier),
+    // `Some(Verdict::TextOnly)` still needs the key itself run through
+    // `resolve_verdict` before a final answer exists, and `None` means not
+    // enough information exists YET (the caller must keep the key pending
+    // and wait for a later check) -- never treated as a record, only ever
+    // eventually resolved to a gap if nothing ever qualifies (see
+    // `verdict_at_stop`).
+    fn verdict(ledger: &Ledger, t: u64, injected: bool) -> Option<Verdict> {
         if injected || ledger.fail_closed {
-            return Some(true);
+            return Some(Verdict::Gap);
         }
         if ledger.in_blind_window(t) {
-            return Some(true);
+            return Some(Verdict::Gap);
         }
-        let (check_time, is_password) = ledger.qualifying_check(t)?;
-        if is_password {
-            return Some(true);
+        let (check_time, class) = ledger.qualifying_check(t)?;
+        if class == FieldClass::Password {
+            return Some(Verdict::Gap);
         }
-        Some(ledger.window_is_dirty(t.saturating_sub(GUARD_MS), check_time))
+        if ledger.window_is_dirty(t.saturating_sub(GUARD_MS), check_time) {
+            return Some(Verdict::Gap);
+        }
+        Some(match class {
+            FieldClass::NonText => Verdict::Allow,
+            FieldClass::Text => Verdict::TextOnly,
+            FieldClass::Password => unreachable!("handled above"),
+        })
+    }
+
+    // Turns a `Verdict` into the final gap/record boolean `Recorder::record`
+    // takes, which for `Verdict::TextOnly` means running the specific key
+    // (and the modifier state it carried) through `is_kept_in_text_context`
+    // -- see that function's own doc for exactly what a text field's
+    // shortcut allow-list covers.
+    fn resolve_verdict(v: Verdict, vk: u32, ctrl: bool, alt: bool, win: bool) -> bool {
+        match v {
+            Verdict::Gap => true,
+            Verdict::Allow => false,
+            Verdict::TextOnly => !is_kept_in_text_context(vk, ctrl, alt, win),
+        }
     }
 
     // Called only once the capture is stopping and no further check will
     // ever arrive: a key `verdict` still cannot decide is gapped, the same
     // as any other doubt, never assumed safe just because time ran out.
-    fn verdict_at_stop(ledger: &Ledger, t: u64, injected: bool) -> bool {
-        verdict(ledger, t, injected).unwrap_or(true)
+    fn verdict_at_stop(ledger: &Ledger, t: u64, injected: bool, vk: u32, ctrl: bool, alt: bool, win: bool) -> bool {
+        match verdict(ledger, t, injected) {
+            Some(v) => resolve_verdict(v, vk, ctrl, alt, win),
+            None => true,
+        }
     }
 
     // finish_and_continue_recording's cutoff: once a switch instant has been
@@ -21012,6 +21071,13 @@ mod keylog {
         // that check anyway; injected input skips straight to being gapped
         // here since it never went through a person's fingers at all.
         injected: bool,
+        // Ctrl/Alt/Win held at this exact key's own hook-time timestamp --
+        // see ModifierState. Used only by a text field's shortcut filter
+        // (is_kept_in_text_context); irrelevant, but always present, for a
+        // password or non-text field.
+        ctrl: bool,
+        alt: bool,
+        win: bool,
     }
 
     // Tab, Shift+Tab (same VK code as Tab -- the shift state never changes
@@ -21027,6 +21093,108 @@ mod keylog {
 
     fn is_focus_moving_key(vk: u32) -> bool {
         matches!(vk, VK_TAB | VK_RETURN | VK_ESCAPE)
+    }
+
+    // The non-character keys a text field's shortcut-only tier still keeps
+    // regardless of any modifier: they navigate or edit structurally
+    // (cursor movement, deleting, paging) rather than producing a
+    // character, and F-keys are conventionally shortcuts even bare.
+    const VK_BACK: u32 = 0x08;
+    const VK_DELETE: u32 = 0x2E;
+    const VK_INSERT: u32 = 0x2D;
+    const VK_LEFT: u32 = 0x25;
+    const VK_UP: u32 = 0x26;
+    const VK_RIGHT: u32 = 0x27;
+    const VK_DOWN: u32 = 0x28;
+    const VK_HOME: u32 = 0x24;
+    const VK_END: u32 = 0x23;
+    const VK_PRIOR: u32 = 0x21; // Page Up
+    const VK_NEXT: u32 = 0x22; // Page Down
+    const VK_F1: u32 = 0x70;
+    const VK_F24: u32 = 0x87; // F1..=F24 is contiguous in Windows' VK space
+
+    fn is_nav_or_edit_key(vk: u32) -> bool {
+        matches!(vk, VK_RETURN | VK_TAB | VK_ESCAPE | VK_BACK | VK_DELETE | VK_INSERT | VK_LEFT | VK_UP | VK_RIGHT | VK_DOWN | VK_HOME | VK_END | VK_PRIOR | VK_NEXT)
+            || (VK_F1..=VK_F24).contains(&vk)
+    }
+
+    // Ctrl, Alt/Menu, Win and Shift, generic plus left/right variants --
+    // used both to track live modifier state (see ModifierState) and to
+    // keep a bare modifier key-press itself from ever counting as its own
+    // "combo" in `is_kept_in_text_context`.
+    const VK_CONTROL: u32 = 0x11;
+    const VK_LCONTROL: u32 = 0xA2;
+    const VK_RCONTROL: u32 = 0xA3;
+    const VK_MENU: u32 = 0x12;
+    const VK_LMENU: u32 = 0xA4;
+    const VK_RMENU: u32 = 0xA5;
+    const VK_LWIN: u32 = 0x5B;
+    const VK_RWIN: u32 = 0x5C;
+    const VK_SHIFT: u32 = 0x10;
+    const VK_LSHIFT: u32 = 0xA0;
+    const VK_RSHIFT: u32 = 0xA1;
+
+    fn is_ctrl_vk(vk: u32) -> bool {
+        matches!(vk, VK_CONTROL | VK_LCONTROL | VK_RCONTROL)
+    }
+
+    fn is_alt_vk(vk: u32) -> bool {
+        matches!(vk, VK_MENU | VK_LMENU | VK_RMENU)
+    }
+
+    fn is_win_vk(vk: u32) -> bool {
+        matches!(vk, VK_LWIN | VK_RWIN)
+    }
+
+    fn is_shift_vk(vk: u32) -> bool {
+        matches!(vk, VK_SHIFT | VK_LSHIFT | VK_RSHIFT)
+    }
+
+    fn is_modifier_vk(vk: u32) -> bool {
+        is_ctrl_vk(vk) || is_alt_vk(vk) || is_win_vk(vk) || is_shift_vk(vk)
+    }
+
+    // A text field's shortcut-only allow-list (see FieldClass::Text and
+    // Verdict::TextOnly): a non-character key kept unconditionally, or a
+    // non-modifier key held together with Ctrl, Alt or Win -- EXCEPT bare
+    // Ctrl+Alt with no Win, which Windows uses to emulate AltGr (e.g.
+    // Ctrl+Alt+Q types "@" on a German keyboard) and must be treated as
+    // ordinary typing, not a shortcut. A lone modifier press (no other key
+    // held with it) is never itself a shortcut. Everything else -- letters,
+    // digits, punctuation, space, Shift+char, dead keys, numpad digits --
+    // falls through and is dropped.
+    fn is_kept_in_text_context(vk: u32, ctrl: bool, alt: bool, win: bool) -> bool {
+        if is_nav_or_edit_key(vk) {
+            return true;
+        }
+        if is_modifier_vk(vk) {
+            return false;
+        }
+        let altgr = ctrl && alt && !win;
+        (ctrl || alt || win) && !altgr
+    }
+
+    // Tracks which of Ctrl, Alt and Win are currently held, purely from the
+    // hook thread's own serialized stream of key-down/up events -- Windows
+    // calls a low-level hook's procedure one event at a time on the thread
+    // that installed it, so nothing here races against itself. Reset to
+    // "nothing held" every time the hook is (re)installed (see
+    // `install_hook`): while unhooked (paused, or before the first key)
+    // this thread sees no events at all, so any state carried across that
+    // gap could just as easily be stale as correct -- and stale-true would
+    // fail OPEN (wrongly treating a plain character as part of a shortcut),
+    // which is the one direction that must never happen here.
+    #[derive(Default, Clone, Copy)]
+    struct ModifierState {
+        ctrl: bool,
+        alt: bool,
+        win: bool,
+    }
+
+    static MODIFIERS: OnceLock<Mutex<ModifierState>> = OnceLock::new();
+
+    fn modifiers_slot() -> &'static Mutex<ModifierState> {
+        MODIFIERS.get_or_init(|| Mutex::new(ModifierState::default()))
     }
 
     // Bounds how many raw keys can sit in the channel between the hook
@@ -21057,11 +21225,28 @@ mod keylog {
                 let down = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;
                 let injected = (info.flags.0 & LLKHF_INJECTED.0) != 0;
                 let t_ms = mono_ms();
+                // Update the shared modifier state (if this event IS one of
+                // Ctrl/Alt/Win) before snapshotting it, so this key's own
+                // down/up is already reflected -- and so a companion key
+                // arriving right after sees it too.
+                let (ctrl, alt, win) = {
+                    let mut state = modifiers_slot().lock().unwrap_or_else(|e| e.into_inner());
+                    if is_ctrl_vk(info.vkCode) {
+                        state.ctrl = down;
+                    }
+                    if is_alt_vk(info.vkCode) {
+                        state.alt = down;
+                    }
+                    if is_win_vk(info.vkCode) {
+                        state.win = down;
+                    }
+                    (state.ctrl, state.alt, state.win)
+                };
                 if let Ok(guard) = raw_tx_slot().lock() {
                     if let Some(tx) = guard.as_ref() {
                         // try_send: this callback must never block, a full
                         // channel just means the newest event is dropped.
-                        let _ = tx.try_send(RawKey { vk: info.vkCode, scan: info.scanCode, down, t_ms, injected });
+                        let _ = tx.try_send(RawKey { vk: info.vkCode, scan: info.scanCode, down, t_ms, injected, ctrl, alt, win });
                     }
                 }
             }
@@ -21104,14 +21289,14 @@ mod keylog {
         }
     }
 
-    // The CURRENT focused-control password state, resolved fresh every call
-    // -- no cache of any kind, HWND-keyed or otherwise (see Ledger's doc for
-    // why that used to be unsafe). Called both by the UIA focus-changed
-    // event handler and by the consumer's own scheduled checks, so there is
-    // exactly one code path deciding "is this a password field" no matter
-    // which of the two triggered it.
-    fn focused_password(uia: &Option<IUIAutomation>) -> bool {
-        detect_password(focused_hwnd(), uia)
+    // The CURRENT focused control's classification, resolved fresh every
+    // call -- no cache of any kind, HWND-keyed or otherwise (see Ledger's
+    // doc for why that used to be unsafe). Called both by the UIA
+    // focus-changed event handler and by the consumer's own scheduled
+    // checks, so there is exactly one code path deciding a field's class no
+    // matter which of the two triggered it.
+    fn classify_focused_field(uia: &Option<IUIAutomation>) -> FieldClass {
+        classify_field(focused_hwnd(), uia)
     }
 
     // A focus "identity" cheap enough to poll every FOCUS_POLL_MS while keys
@@ -21147,7 +21332,7 @@ mod keylog {
     // FAIL CLOSED throughout: any doubt (UI Automation unreachable, the call
     // erroring, no focused window at all) is treated as a password field.
     // Never record anything while in doubt.
-    fn detect_password(hwnd: HWND, uia: &Option<IUIAutomation>) -> bool {
+    fn is_password_field(hwnd: HWND, uia: &Option<IUIAutomation>) -> bool {
         let uia_password = uia.as_ref().and_then(|uia| unsafe { uia.GetFocusedElement() }.ok()).and_then(|el| unsafe { el.CurrentIsPassword() }.ok());
         match uia_password {
             None => return true, // UI Automation unreachable -- doubt means password.
@@ -21160,6 +21345,54 @@ mod keylog {
             return true;
         }
         (unsafe { GetWindowLongW(hwnd, GWL_STYLE) } & ES_PASSWORD) != 0
+    }
+
+    // Whether the focused element can be POSITIVELY ruled out as a
+    // text-entry control -- the only way FieldClass::NonText is ever
+    // reached. Everything else, including every shape of doubt, falls to
+    // FieldClass::Text in `classify_field`: an Edit or Document control
+    // type, an editable ValuePattern, or a TextPattern present at all (its
+    // own read-only state is not reliably queryable through classic UI
+    // Automation, so its mere presence is treated as "could be editable")
+    // all say "text" outright, and a missing UI Automation object, a
+    // GetFocusedElement/CurrentControlType failure, or any other unreadable
+    // property says "cannot positively rule it out" -- which is exactly
+    // the same doubt.
+    fn is_confidently_non_text(uia: &Option<IUIAutomation>) -> bool {
+        let Some(uia) = uia else { return false };
+        let Ok(el) = (unsafe { uia.GetFocusedElement() }) else { return false };
+        let Ok(control_type) = (unsafe { el.CurrentControlType() }) else { return false };
+        if control_type == UIA_EditControlTypeId || control_type == UIA_DocumentControlTypeId {
+            return false;
+        }
+        if let Ok(value_pattern) = unsafe { el.GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId) } {
+            match unsafe { value_pattern.CurrentIsReadOnly() } {
+                Ok(read_only) if !read_only.as_bool() => return false, // editable ValuePattern -- text
+                Ok(_) => {}                                            // read-only ValuePattern -- keep checking
+                Err(_) => return false,                                // doubt about read-only -- text
+            }
+        }
+        if unsafe { el.GetCurrentPatternAs::<IUIAutomationTextPattern>(UIA_TextPatternId) }.is_ok() {
+            return false; // a TextPattern exists at all -- cannot rule out editable text
+        }
+        true
+    }
+
+    // The full classification: FieldClass::Password takes priority over
+    // everything (the existing, unchanged `is_password_field` fail-closed
+    // rule), then FieldClass::NonText only on a positive, confident
+    // non-text classification, and FieldClass::Text for anything else at
+    // all -- see `is_confidently_non_text`'s own doc for why doubt lands
+    // here rather than in the narrower NonText tier.
+    fn classify_field(hwnd: HWND, uia: &Option<IUIAutomation>) -> FieldClass {
+        if is_password_field(hwnd, uia) {
+            return FieldClass::Password;
+        }
+        if is_confidently_non_text(uia) {
+            FieldClass::NonText
+        } else {
+            FieldClass::Text
+        }
     }
 
     // The UI Automation focus-changed event's own handler object: the OS
@@ -21201,11 +21434,11 @@ mod keylog {
                 guard.push_arrival(now);
                 now
             };
-            let password = focused_password(&Some(self.uia.clone()));
+            let class = classify_focused_field(&Some(self.uia.clone()));
             // This check is recorded as having STARTED at the arrival
             // instant, not whenever it happened to finish -- it
             // conceptually began the moment focus was noticed.
-            self.ledger.lock().unwrap_or_else(|e| e.into_inner()).push_check(arrived_at, password);
+            self.ledger.lock().unwrap_or_else(|e| e.into_inner()).push_check(arrived_at, class);
             Ok(())
         }
     }
@@ -21251,14 +21484,15 @@ mod keylog {
             // switch instant is only known once finish_and_continue_recording
             // actually runs) -- checked fresh on every resolution pass, not
             // only once at push time.
-            let gap = if past_cutoff(front.t_ms, cutoff_ms) {
-                Some(true)
+            let v = if past_cutoff(front.t_ms, cutoff_ms) {
+                Some(Verdict::Gap)
             } else {
                 let guard = ledger.lock().unwrap_or_else(|e| e.into_inner());
                 verdict(&guard, front.t_ms, front.injected)
             };
-            let Some(gap) = gap else { break };
+            let Some(v) = v else { break };
             let raw = pending.pop_front().expect("front already confirmed present above");
+            let gap = resolve_verdict(v, raw.vk, raw.ctrl, raw.alt, raw.win);
             let t_ms = clock.lock().unwrap_or_else(|e| e.into_inner()).active_ms(raw.t_ms);
             rec.record(raw.vk, raw.scan, raw.down, t_ms, gap);
         }
@@ -21306,7 +21540,7 @@ mod keylog {
         // can possibly be judged -- see Ledger::qualifying_check: a key with
         // no check starting at or after its own SETTLE_MS deadline has no
         // qualifying check at all yet, and is never guessed at.
-        ledger.lock().unwrap_or_else(|e| e.into_inner()).push_check(mono_ms(), focused_password(&uia));
+        ledger.lock().unwrap_or_else(|e| e.into_inner()).push_check(mono_ms(), classify_focused_field(&uia));
         let focus_handler: Option<IUIAutomationFocusChangedEventHandler> =
             uia.as_ref().map(|uia| FocusHandler { ledger: ledger.clone(), uia: uia.clone() }.into());
         if let (Some(uia), Some(handler)) = (&uia, &focus_handler) {
@@ -21412,8 +21646,8 @@ mod keylog {
             // nothing was watching in between.
             let now = mono_ms();
             if settle_check_due(pending.front().map(|front| front.t_ms), now) {
-                let password = focused_password(&uia);
-                ledger.lock().unwrap_or_else(|e| e.into_inner()).push_check(now, password);
+                let class = classify_focused_field(&uia);
+                ledger.lock().unwrap_or_else(|e| e.into_inner()).push_check(now, class);
             }
             // The ~50ms focus poll: while any key is still waiting on a
             // verdict, check whether the focused HWND or element has moved
@@ -21446,7 +21680,7 @@ mod keylog {
         // but never starts a new one.
         for raw in pending {
             let ledger = ledger.lock().unwrap_or_else(|e| e.into_inner());
-            let gap = verdict_at_stop(&ledger, raw.t_ms, raw.injected);
+            let gap = verdict_at_stop(&ledger, raw.t_ms, raw.injected, raw.vk, raw.ctrl, raw.alt, raw.win);
             drop(ledger);
             let t_ms = clock.lock().unwrap_or_else(|e| e.into_inner()).active_ms(raw.t_ms);
             rec.record(raw.vk, raw.scan, raw.down, t_ms, gap);
@@ -21481,6 +21715,10 @@ mod keylog {
     }
 
     fn install_hook() -> Option<HookHandle> {
+        // See ModifierState's own doc: whatever this said while unhooked
+        // cannot be trusted, and "nothing held" is the only safe assumption
+        // to restart from -- a stale true would fail open, not closed.
+        *modifiers_slot().lock().unwrap_or_else(|e| e.into_inner()) = ModifierState::default();
         let (ready_tx, ready_rx) = channel::<Result<u32, String>>();
         let thread = thread::Builder::new().name("key-overlay-hook".into()).spawn(move || hook_thread_main(ready_tx)).ok()?;
         match ready_rx.recv() {
@@ -21869,20 +22107,20 @@ mod keylog {
             // A check that started before that deadline is not enough, no
             // matter what it says -- the caller must keep waiting.
             let mut ledger = Ledger::default();
-            ledger.push_check(0, false);
+            ledger.push_check(0, FieldClass::NonText);
             assert_eq!(verdict(&ledger, 0, false), None, "a same-instant check does not qualify");
-            ledger.push_check(299, false);
+            ledger.push_check(299, FieldClass::NonText);
             assert_eq!(verdict(&ledger, 0, false), None, "still one ms short of the settle deadline");
-            ledger.push_check(300, false);
-            assert_eq!(verdict(&ledger, 0, false), Some(false), "a check starting exactly at the deadline qualifies");
+            ledger.push_check(300, FieldClass::NonText);
+            assert_eq!(verdict(&ledger, 0, false), Some(Verdict::Allow), "a check starting exactly at the deadline qualifies");
         }
 
         #[test]
         fn verdict_records_normal_typing_once_a_stable_field_has_a_qualifying_check() {
             let mut ledger = Ledger::default();
-            ledger.push_check(0, false); // the capture-start confirmation
-            ledger.push_check(400, false); // a later check, no focus change in between
-            assert_eq!(verdict(&ledger, 50, false), Some(false));
+            ledger.push_check(0, FieldClass::NonText); // the capture-start confirmation
+            ledger.push_check(400, FieldClass::NonText); // a later check, no focus change in between
+            assert_eq!(verdict(&ledger, 50, false), Some(Verdict::Allow));
         }
 
         #[test]
@@ -21892,13 +22130,13 @@ mod keylog {
             // arrived -- the arrival's blind window still gaps it, because
             // the window reaches GUARD_MS BEFORE the arrival too.
             let mut ledger = Ledger::default();
-            ledger.push_check(0, false);
+            ledger.push_check(0, FieldClass::NonText);
             let key_t = 250;
             let arrival = 260; // the Tab's own event arrives just after the key
             ledger.push_arrival(arrival);
-            ledger.push_check(arrival, true); // the field turned out to be a password field
-            ledger.push_check(700, true); // any later check while still in the field
-            assert_eq!(verdict(&ledger, key_t, false), Some(true));
+            ledger.push_check(arrival, FieldClass::Password); // the field turned out to be a password field
+            ledger.push_check(700, FieldClass::Password); // any later check while still in the field
+            assert_eq!(verdict(&ledger, key_t, false), Some(Verdict::Gap));
         }
 
         #[test]
@@ -21909,34 +22147,90 @@ mod keylog {
             // the Tab-out), the blind windows around the two arrivals still
             // gap every character in between.
             let mut ledger = Ledger::default();
-            ledger.push_check(0, false);
+            ledger.push_check(0, FieldClass::NonText);
             let tab_in = 10;
             ledger.push_arrival(tab_in);
-            ledger.push_check(tab_in, true);
+            ledger.push_check(tab_in, FieldClass::Password);
             let pin_chars = [50u64, 70, 90, 110];
             let tab_out = 200;
             ledger.push_arrival(tab_out);
-            ledger.push_check(tab_out, false);
-            ledger.push_check(900, false); // the lagging consumer's own late recheck
+            ledger.push_check(tab_out, FieldClass::NonText);
+            ledger.push_check(900, FieldClass::NonText); // the lagging consumer's own late recheck
             for t in pin_chars {
-                assert!(verdict(&ledger, t, false) == Some(true), "PIN char at {t} must gap");
+                assert!(verdict(&ledger, t, false) == Some(Verdict::Gap), "PIN char at {t} must gap");
             }
         }
 
         #[test]
         fn verdict_at_stop_gaps_a_key_with_no_qualifying_check_instead_of_waiting_forever() {
             let mut ledger = Ledger::default();
-            ledger.push_check(0, false); // far too early to qualify for a key at t=1000
+            ledger.push_check(0, FieldClass::NonText); // far too early to qualify for a key at t=1000
             assert_eq!(verdict(&ledger, 1_000, false), None, "still pending under the normal algorithm");
-            assert!(verdict_at_stop(&ledger, 1_000, false), "stopping must resolve doubt as a gap, never as recorded");
+            assert!(verdict_at_stop(&ledger, 1_000, false, 0x41, false, false, false), "stopping must resolve doubt as a gap, never as recorded");
         }
 
         #[test]
         fn verdict_at_stop_still_honors_a_qualifying_check_that_already_completed() {
             let mut ledger = Ledger::default();
-            ledger.push_check(0, false);
-            ledger.push_check(400, false);
-            assert!(!verdict_at_stop(&ledger, 50, false), "a real, already-completed answer is not thrown away just because the capture is stopping");
+            ledger.push_check(0, FieldClass::NonText);
+            ledger.push_check(400, FieldClass::NonText);
+            assert!(!verdict_at_stop(&ledger, 50, false, 0x41, false, false, false), "a real, already-completed answer is not thrown away just because the capture is stopping");
+        }
+
+        // --- Text-context filtering: a Text-classified field keeps
+        // shortcuts but drops the typed characters themselves.
+
+        #[test]
+        fn plain_typing_in_a_text_field_is_dropped() {
+            assert!(resolve_verdict(Verdict::TextOnly, 0x41, false, false, false), "a plain letter key in a text field must be gapped");
+        }
+
+        #[test]
+        fn ctrl_c_in_a_text_field_is_kept() {
+            assert!(!resolve_verdict(Verdict::TextOnly, 0x43, true, false, false), "Ctrl+C is a shortcut, not typed text, so it must record");
+        }
+
+        #[test]
+        fn altgr_in_a_text_field_is_dropped() {
+            // Ctrl+Alt with no Win is Windows' AltGr emulation (Ctrl+Alt+Q
+            // types "@" on a German keyboard) -- it types a character and
+            // must be gapped exactly like plain typing, not treated as a
+            // Ctrl+Alt shortcut.
+            assert!(resolve_verdict(Verdict::TextOnly, 0x51, true, true, false), "AltGr must still be gapped, not treated as a shortcut");
+        }
+
+        #[test]
+        fn an_unresolved_classification_defaults_to_text_and_drops_typing() {
+            // A failed or unknown classification resolves to FieldClass::Text,
+            // the fail-closed default -- proven here through the same
+            // verdict() pipeline the production code calls, not just the
+            // resolve_verdict helper alone.
+            let mut ledger = Ledger::default();
+            ledger.push_check(0, FieldClass::Text);
+            ledger.push_check(400, FieldClass::Text);
+            let v = verdict(&ledger, 50, false).expect("a qualifying check exists");
+            assert_eq!(v, Verdict::TextOnly);
+            assert!(resolve_verdict(v, 0x41, false, false, false), "the fail-closed Text default must still drop plain typing");
+        }
+
+        #[test]
+        fn a_nontext_field_keeps_plain_letter_keys() {
+            let mut ledger = Ledger::default();
+            ledger.push_check(0, FieldClass::NonText);
+            ledger.push_check(400, FieldClass::NonText);
+            let v = verdict(&ledger, 50, false).expect("a qualifying check exists");
+            assert_eq!(v, Verdict::Allow);
+            assert!(!resolve_verdict(v, 0x41, false, false, false), "a NonText field's plain typing must keep recording as before");
+        }
+
+        #[test]
+        fn a_password_field_drops_ctrl_c_too() {
+            let mut ledger = Ledger::default();
+            ledger.push_check(0, FieldClass::Password);
+            ledger.push_check(400, FieldClass::Password);
+            let v = verdict(&ledger, 50, false).expect("a qualifying check exists");
+            assert_eq!(v, Verdict::Gap);
+            assert!(resolve_verdict(v, 0x43, true, false, false), "shortcuts are blocked in password fields too, not just typed characters");
         }
 
         #[test]
@@ -21953,35 +22247,35 @@ mod keylog {
             assert!(is_focus_moving_key(VK_ESCAPE));
             assert!(!is_focus_moving_key(0x41)); // an ordinary letter key never counts
             let mut ledger = Ledger::default();
-            ledger.push_check(0, false); // the field looked clean before any of this
+            ledger.push_check(0, FieldClass::NonText); // the field looked clean before any of this
             let key_t = 100;
             let tab_out_t = 150; // well within 300ms of the key
             ledger.push_arrival(tab_out_t); // what the hook-time synthetic arrival does
-            ledger.push_check(700, false); // the consumer's own later recheck, also clean
-            assert_eq!(verdict(&ledger, key_t, false), Some(true), "the synthetic arrival's blind window must still gap the key");
+            ledger.push_check(700, FieldClass::NonText); // the consumer's own later recheck, also clean
+            assert_eq!(verdict(&ledger, key_t, false), Some(Verdict::Gap), "the synthetic arrival's blind window must still gap the key");
         }
 
         #[test]
         fn handler_registration_failure_gaps_every_key_regardless_of_checks() {
             let mut ledger = Ledger::default();
-            ledger.push_check(0, false);
-            ledger.push_check(400, false);
-            assert_eq!(verdict(&ledger, 50, false), Some(false), "before the failure, a clean qualifying check still records");
+            ledger.push_check(0, FieldClass::NonText);
+            ledger.push_check(400, FieldClass::NonText);
+            assert_eq!(verdict(&ledger, 50, false), Some(Verdict::Allow), "before the failure, a clean qualifying check still records");
             ledger.gap_everything();
-            assert_eq!(verdict(&ledger, 50, false), Some(true), "once the handler failed to register, nothing gets recorded again");
-            assert_eq!(verdict(&ledger, 1_000_000, false), Some(true), "including any key far later, however clean its own checks look");
+            assert_eq!(verdict(&ledger, 50, false), Some(Verdict::Gap), "once the handler failed to register, nothing gets recorded again");
+            assert_eq!(verdict(&ledger, 1_000_000, false), Some(Verdict::Gap), "including any key far later, however clean its own checks look");
         }
 
         #[test]
         fn pruning_drops_only_entries_no_pending_or_future_key_could_ever_need_again() {
             let mut ledger = Ledger::default();
-            ledger.push_check(0, false); // ancient, long since resolved
+            ledger.push_check(0, FieldClass::NonText); // ancient, long since resolved
             ledger.push_arrival(50); // ancient focus change, long since resolved
-            ledger.push_check(50, true);
+            ledger.push_check(50, FieldClass::Password);
             // One key already resolved by a qualifying check, one still
             // waiting on its own.
             let resolved_key = 5_000;
-            ledger.push_check(resolved_key + SETTLE_MS, false);
+            ledger.push_check(resolved_key + SETTLE_MS, FieldClass::NonText);
             let pending_key = 5_200;
             let before_resolved = verdict(&ledger, resolved_key, false);
             let before_pending = verdict(&ledger, pending_key, false);
@@ -22069,7 +22363,7 @@ mod keylog {
             // A clean check well within the settle window, so a key right
             // now would otherwise record normally -- proving the eventual
             // gap comes from the cap, not from an ordinary dirty window.
-            ledger.push_check(0, false);
+            ledger.push_check(0, FieldClass::NonText);
             assert_eq!(verdict(&ledger, 0, false), None, "not yet, no qualifying check exists"); // sanity: still pure, unaffected by the flood below
             for i in 0..LEDGER_HARD_CAP {
                 // Arrivals far enough apart that none of them land in each
@@ -22079,8 +22373,8 @@ mod keylog {
             }
             assert!(ledger.fail_closed, "the cap must have tripped fail_closed");
             assert!(ledger.checks.is_empty() && ledger.arrivals.is_empty(), "history must actually be dropped, not just capped");
-            assert_eq!(verdict(&ledger, 0, false), Some(true), "every verdict from here on must gap, regardless of any earlier clean check");
-            assert_eq!(verdict(&ledger, 50_000_000, false), Some(true), "including a key far outside every arrival's own window");
+            assert_eq!(verdict(&ledger, 0, false), Some(Verdict::Gap), "every verdict from here on must gap, regardless of any earlier clean check");
+            assert_eq!(verdict(&ledger, 50_000_000, false), Some(Verdict::Gap), "including a key far outside every arrival's own window");
         }
 
         // --- ActiveClock: pause drops events, and offsets use the
