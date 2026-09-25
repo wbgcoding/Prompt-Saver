@@ -6722,6 +6722,10 @@ fn discarded_stale_in(dir: &Path, age: Duration) -> (u32, u64) {
             count += 1;
             bytes += size;
             let _ = fs::remove_file(path.with_extension("mic.wav"));
+            // A discarded take's key-overlay sidecar used to be
+            // left behind here, orphaned in the trash forever once its video
+            // was purged.
+            let _ = fs::remove_file(path.with_extension("keys.json"));
         }
     }
     (count, bytes)
@@ -26029,6 +26033,12 @@ fn restore_discarded_recording(dir: String, name: String) -> bool {
     if sidecar_src.is_file() {
         let _ = move_file(&sidecar_src, &dst.with_extension("mic.wav"));
     }
+    // The key-overlay sidecar used to stay behind in the trash on
+    // a restore, orphaned at the old path forever.
+    let keys_src = src.with_extension("keys.json");
+    if keys_src.is_file() {
+        let _ = move_file(&keys_src, &dst.with_extension("keys.json"));
+    }
     true
 }
 
@@ -26043,6 +26053,9 @@ fn delete_discarded_recording_now(dir: String, name: String) -> bool {
         return false;
     }
     let _ = fs::remove_file(path.with_extension("mic.wav"));
+    // A manual "delete for good" used to leave the key-overlay
+    // sidecar sitting in the trash forever once its video was gone.
+    let _ = fs::remove_file(path.with_extension("keys.json"));
     fs::remove_file(&path).is_ok()
 }
 
@@ -36729,6 +36742,20 @@ mod tests {
     }
 
     #[test]
+    fn restore_discarded_recording_brings_the_key_overlay_sidecar_back_too() {
+        let dir = std::env::temp_dir().join(format!("ps-restore-keys-{}", std::process::id()));
+        let trash = dir.join("verworfen");
+        fs::create_dir_all(&trash).unwrap();
+        fs::write(trash.join("rec-x.mp4"), b"video").unwrap();
+        fs::write(trash.join("rec-x.keys.json"), b"{}").unwrap();
+        let dir_s = dir.to_string_lossy().to_string();
+        assert!(restore_discarded_recording(dir_s, "rec-x.mp4".to_string()));
+        assert!(dir.join("rec-x.keys.json").is_file(), "the key-overlay sidecar must travel with its recording");
+        assert!(!trash.join("rec-x.keys.json").exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn restore_discarded_recording_never_overwrites_a_file_already_at_the_old_spot() {
         let dir = std::env::temp_dir().join(format!("ps-restore-collide-{}", std::process::id()));
         let trash = dir.join("verworfen");
@@ -36755,6 +36782,19 @@ mod tests {
     }
 
     #[test]
+    fn delete_discarded_recording_now_removes_its_key_overlay_sidecar_too() {
+        let dir = std::env::temp_dir().join(format!("ps-discard-delete-keys-{}", std::process::id()));
+        let trash = dir.join("verworfen");
+        fs::create_dir_all(&trash).unwrap();
+        fs::write(trash.join("rec-x.mp4"), b"video").unwrap();
+        fs::write(trash.join("rec-x.keys.json"), b"{}").unwrap();
+        let dir_s = dir.to_string_lossy().to_string();
+        assert!(delete_discarded_recording_now(dir_s, "rec-x.mp4".to_string()));
+        assert!(!trash.join("rec-x.keys.json").exists(), "a purge for good must not leave the key-overlay sidecar behind");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn is_bare_filename_rejects_a_path_traversal_attempt() {
         assert!(is_bare_filename("rec-x.mp4"));
         assert!(!is_bare_filename("../rec-x.mp4"));
@@ -36776,6 +36816,21 @@ mod tests {
         assert_eq!(bytes, 3);
         assert!(!old.exists());
         assert!(recent.is_file(), "a recent discard must survive this sweep");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn discarded_stale_in_removes_the_key_overlay_sidecar_alongside_an_old_discard() {
+        let dir = std::env::temp_dir().join(format!("ps-discarded-stale-keys-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let old = dir.join("rec-old.mp4");
+        let old_keys = dir.join("rec-old.keys.json");
+        fs::write(&old, b"old").unwrap();
+        fs::write(&old_keys, b"{}").unwrap();
+        backdate(&old, Duration::from_secs(25 * 3600));
+        let (count, _bytes) = discarded_stale_in(&dir, Duration::from_secs(24 * 3600));
+        assert_eq!(count, 1);
+        assert!(!old_keys.exists(), "the key-overlay sidecar of a purged discard must not be left orphaned");
         let _ = fs::remove_dir_all(&dir);
     }
 
