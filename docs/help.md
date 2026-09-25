@@ -203,8 +203,9 @@ keys are pressed anywhere on the screen while a recording runs, so a tutorial
 can show them afterward with the video editor's own "Keys" overlay. Only key
 identifiers and their timestamps are ever recorded, never any text — a
 focused password field is skipped for as long as it stays focused and shows
-as a gap instead. How long a released key stays visible is adjustable in the
-expert menu.
+as a gap instead. In text fields only shortcuts are shown, like Ctrl+C or
+Enter. What you type stays out of the video. How long a released key stays
+visible is adjustable in the expert menu.
 
 ### Video editor
 
@@ -1044,9 +1045,10 @@ gleichzeitig laufen, ist im Experten-Menü einstellbar. Eine Tastenanzeige
 mit, welche Tasten gedrückt werden, damit eine Anleitung sie hinterher über
 die „Tasten"-Überlagerung des Video-Editors zeigen kann. Aufgezeichnet werden
 nur Tastenkennungen mit Zeitstempeln, nie ein Textinhalt — ein fokussiertes
-Passwortfeld wird für diese Zeit ausgelassen und erscheint als Lücke. Wie
-lange eine losgelassene Taste sichtbar bleibt, ist im Expertenmenü
-einstellbar.
+Passwortfeld wird für diese Zeit ausgelassen und erscheint als Lücke. In
+Textfeldern erscheinen nur Tastenkürzel, etwa Strg+C oder Enter. Was du
+tippst, bleibt aus dem Video. Wie lange eine losgelassene Taste sichtbar
+bleibt, ist im Expertenmenü einstellbar.
 
 **Screenshot- und Video-Editor** — arbeiten bei den gemeinsamen Werkzeugen
 gleich: Strg+Plus, Strg+Minus und Strg+0 zoomen in beiden hinein, heraus und
