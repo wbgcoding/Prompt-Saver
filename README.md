@@ -2,7 +2,7 @@
 
 # Prompt Saver
 
-**Your prompts, one click away — from a grid, from the search, or from a floating button over any app.**
+**Your prompts, one click away: from a grid, from the search, or from a floating button over any app.**
 
 A tiny, fully offline prompt manager for Windows. No account, no cloud, no telemetry.
 
@@ -19,9 +19,9 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 
 ## Why
 
-- **Faster than a notes file** — click a tile, the text is in your clipboard.
-- **Always within reach** — pin prompts as floating buttons that stay on top of every other window.
-- **Yours alone** — everything lives in a local file. The app only goes online if you let it check for updates.
+- **Faster than a notes file**: click a tile, the text is in your clipboard.
+- **Always within reach**: pin prompts as floating buttons that stay on top of every other window.
+- **Yours alone**: everything lives in a local file. The app only goes online if you let it check for updates.
 
 ## Features
 
@@ -30,15 +30,15 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | | |
 |---|---|
 | **Grid & views** | Free placement on a per-view grid (1×1 up to 20×20), drag tiles anywhere, drop on an occupied cell to swap. Up to 20 named views, each with its own size and layout. Drop a tile on a view tab to move it into that view, Ctrl to copy it there instead; hovering a collapsed view group opens it |
-| **Library** | Every saved prompt in one searchable list — copy, edit, drag onto the grid, filter by color or type |
+| **Library** | Every saved prompt in one searchable list: copy, edit, drag onto the grid, filter by color or type |
 | **Search & sort** | Typo-tolerant search ("promt" still finds "prompt"), sorted by most used or recently used |
 | **Saved searches** | Star a query, its tag filters and sort to bring it back with one click from a chip above the search field |
 | **Search everything** | A toolbar icon or Ctrl+K opens an overlay that searches prompts, copy history, attachments, views, settings and help at once, arrow keys move across the groups, Enter runs the fitting action for whatever is highlighted |
 | **Library tiles** | Switch the library from a list to big preview tiles, name below, same click/select/right-click behavior either way |
 | **Tags** | Label prompts with your own colored tags and narrow the library down to any combination of them |
-| **Archive** | Set a prompt aside without deleting it — hidden from the library and grid, still findable by search and included in export and backups |
+| **Archive** | Set a prompt aside without deleting it, hidden from the library and grid but still findable by search and included in export and backups |
 | **View groups** | Drag one view tab onto another to collect them into a folder tab with a member popover |
-| **Private notes** | A notes field per prompt for context you keep but never copy — searchable, shown in the tooltip |
+| **Private notes** | A notes field per prompt for context you keep but never copy, searchable and shown in the tooltip |
 | **Favorites** | Star prompts for a live favorites view |
 | **Batch editing** | Multi-select in the library to recolor, favorite, move between views, export or delete in one go |
 | **Undo** | Deleting a view, clearing the copy history, clearing the clipboard inbox, deleting a tag, or a batch delete or tag change offers an Undo button right on the confirmation |
@@ -48,13 +48,13 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 
 | | |
 |---|---|
-| **One click** | Click a tile — the text is copied, a bubble confirms it |
+| **One click** | Click a tile and the text is copied; a bubble confirms it |
 | **Floating buttons** | Pin any prompt as a frameless, always-on-top pill. Drag to move, right-click for size, edit or remove; positions survive restarts |
 | **Auto-paste** | A fast second click (or Enter) copies **and** pastes into the app you were just in |
-| **Variables** | Write `{#{Name}#}` placeholders and fill them in on copy — or `{#{tone\|formal,casual}#}` for a dropdown; an optional fixed-value list suggests a value for a name you use often, shown only as a placeholder |
+| **Variables** | Write `{#{Name}#}` placeholders and fill them in on copy, or `{#{tone\|formal,casual}#}` for a dropdown; an optional fixed-value list suggests a value for a name you use often, shown only as a placeholder |
 | **Self-filling** | `date`, `time`, `weekday`, `clipboard` and `uuid` fill themselves in, no dialog, in your language |
-| **Rotating prompts** | Give a prompt a list of texts instead of one — each copy serves the next entry, in order or shuffled, with a small badge showing where you are |
-| **Prompt hotkeys** | Give a prompt its own global key combination that copies — and optionally pastes — from any app, with a small keyboard badge on its tile |
+| **Rotating prompts** | Give a prompt a list of texts instead of one: each copy serves the next entry, in order or shuffled, with a small badge showing where you are |
+| **Prompt hotkeys** | Give a prompt its own global key combination that copies, and optionally pastes, from any app, with a small keyboard badge on its tile |
 | **Tray menu** | Copy a recent or favorite prompt straight from the tray, without opening the window; a filter field at the top searches every prompt as you type |
 | **Drag-out** | Ctrl-drag a tile, library row or floating button into any other app to drop its text |
 | **Button folders** | Drag one floating button onto another and they merge into a folder that opens in place |
@@ -68,31 +68,31 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | | |
 |---|---|
 | **Images, GIFs & videos** | Save a picture from the clipboard or a file and paste it anywhere with one click |
-| **Video player** | Looping previews on tiles *and* floating buttons, with scrubber, loop and volume — remembered per prompt |
+| **Video player** | Looping previews on tiles *and* floating buttons, with scrubber, loop and volume, remembered per prompt |
 | **PDF & files** | Attach any file by path; a PDF's first page becomes the button's image. A plain text, Markdown, JSON or CSV attachment also previews its start in the editor, as plain text, never rendered |
-| **Screenshot tool** | Capture a region or a whole window — even protected ones like the Task Manager |
+| **Screenshot tool** | Capture a region or a whole window, even protected ones like the Task Manager |
 | **Screen recording** | Record a window, a dragged region or the whole screen to MP4, with system and microphone audio (both on by default), a small floating control bar with optional stop/pause hotkeys and tray entries, and an optional conversion afterward to WebM, AVI, MOV, MKV, animated WebP or APNG |
 | **Key overlay** | Optional, off by default: records which keys are pressed anywhere on the screen during a recording as identifiers and timestamps only, never any text, skipping a focused password field entirely, so the video editor's "Keys" overlay can show them afterward |
 | **Camera recording** | Optional, off by default: a "Record camera" entry on the record button's right-click menu opens its own window with a live preview, Start/Pause/Stop, audio source, resolution and target folder; the window (or its status dot in the recording bar) is always visible while the camera runs. Recorded to its own file, so it can be positioned freely later; if a screen recording runs at the same time, both share one start point and the video editor opens them aligned, the camera as an overlay |
 | **Batch export recordings** | The recording folder's cleanup dialog can export several finished recordings at once: check which ones, then pick one format, quality and destination folder for all of them, with a final count of how many finished and how many failed |
 | **Video editor** | Trim, crop, change speed, fade, resize (width/height/percent fields, an aspect-ratio lock, and presets from 4K down to 25%) and add image/freeze-frame/text/pixelate/spotlight/keys/video overlays on a recording or any attached video (the keys overlay offers four keyboard-layout presets plus a free selection of keys, filled from a recording's own key data), on a zoomable filmstrip-and-waveform timeline with a live preview (itself zoomable and pannable) and no processing until export; drag a crop box or overlay and it snaps to the frame edges, its centre and other overlays; right-click an overlay to duplicate or delete it, nudge or resize a selected one with the arrow keys, and each overlay kind remembers its last colour, thickness, opacity and font size for the next one; "Add a video" can also splice a second video in as a whole extra section at the start, the end or the current position, normalized to the main video's own size, rate and sound; a toolbar button (or the V key) compares against the untouched source, held for a peek or tapped to lock it on; exports to MP4, WebM, GIF, AVI, MOV, MKV, animated WebP or APNG |
-| **Screenshot editor** | Opens right after a capture: crop, pen, marker, line, arrow, rectangle, ellipse, text (with a choice of no background, a solid plate or an outline behind the letters), step numbers, pixelate, spotlight, resize (the image's actual pixel size, with width/height/percent fields and presets) and a hand tool to pan while zoomed in, with undo/redo, snapping to the canvas edges, its centre and other shapes, a right-click menu to duplicate or delete a shape, arrow keys to nudge or resize a selected one, and a toolbar button (or the V key) to compare against the untouched capture, before it becomes a copy button. Either editor can also open an existing picture or video (right-click the screenshot/record button or a library attachment), never touching the original — it works on a copy and asks where to save the result |
-| **Text recognition (OCR)** | Pull text out of a screenshot or an image file with Windows' own on-device recognizer — fully offline, nothing uploaded. On by default; needs a Windows language pack, which the app offers to install for you (needs administrator rights — including for the listing itself, on systems where Windows demands them) |
-| **Voice dictation** | Speak into the composer or the editor with Windows' own on-device speech recognizer — fully offline, nothing uploaded unless you allow online recognition. Spoken punctuation and formatting commands, auto-capitalization and a global hotkey included. On by default; shares OCR's language-pack dialog |
+| **Screenshot editor** | Opens right after a capture: crop, pen, marker, line, arrow, rectangle, ellipse, text (with a choice of no background, a solid plate or an outline behind the letters), step numbers, pixelate, spotlight, resize (the image's actual pixel size, with width/height/percent fields and presets) and a hand tool to pan while zoomed in, with undo/redo, snapping to the canvas edges, its centre and other shapes, a right-click menu to duplicate or delete a shape, arrow keys to nudge or resize a selected one, and a toolbar button (or the V key) to compare against the untouched capture, before it becomes a copy button. Either editor can also open an existing picture or video (right-click the screenshot/record button or a library attachment), never touching the original: it works on a copy and asks where to save the result |
+| **Text recognition (OCR)** | Pull text out of a screenshot or an image file with Windows' own on-device recognizer, fully offline with nothing uploaded. On by default; needs a Windows language pack, which the app offers to install for you (needs administrator rights, including for the listing itself, on systems where Windows demands them) |
+| **Voice dictation** | Speak into the composer or the editor with Windows' own on-device speech recognizer, fully offline with nothing uploaded unless you allow online recognition. Spoken punctuation and formatting commands, auto-capitalization and a global hotkey included. On by default; shares OCR's language-pack dialog |
 | **Color picker** | A pipette freezes the screen, magnifies the pixel under the cursor and copies it as hex, rgb or hsl |
-| **Markdown preview** | Render a prompt in the editor — headings, lists, quotes and syntax-colored code, toggled or side by side |
+| **Markdown preview** | Render a prompt in the editor: headings, lists, quotes and syntax-colored code, toggled or side by side |
 | **Full-screen viewer** | Click any preview to open it full-screen: scroll to zoom up to 8×, drag to pan |
 
 ### 🎨 Make it yours
 
 | | |
 |---|---|
-| **8 themes** | Light, dark and system (live OS detection), plus Programmer, Neon Violet, Ocean, Cyberpunk and Black & White — or build your own in the theme editor |
-| **Custom themes** | Build your own on top of any built-in one — a color per value, grouped and previewed live |
+| **8 themes** | Light, dark and system (live OS detection), plus Programmer, Neon Violet, Ocean, Cyberpunk and Black & White, or build your own in the theme editor |
+| **Custom themes** | Build your own on top of any built-in one: a color per value, grouped and previewed live |
 | **Colors & fonts** | Tint tiles and pills from a palette or a color picker; 20 fonts, per prompt if you like |
 | **Readable text on color** | Tile, folder, view-tab and message text picks black or white automatically from the color underneath; switch it off or move the brightness cutoff in the expert menu |
 | **Auto-fit text** | Tile text grows to fill the button, or pick a fixed size |
-| **Scaling** | Separate size control for UI, popups, icons and buttons — from 50 % up |
+| **Scaling** | Separate size control for UI, popups, icons and buttons, from 50 % up |
 | **Distraction-free** | Hide the top and bottom bars; the grid takes over the freed space |
 | **11 languages** | Auto-detected from the system: EN, DE, ES, IT, PT, PL, ZH, JA, NL, TR, RO |
 
@@ -102,7 +102,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 |---|---|
 | **Backups** | Rotating local snapshots, compressed and encrypted, on a schedule you can change or switch off. Diagnostics, a restore list, usage statistics (exportable as CSV, TXT or JSON, including which tools get used most) and a storage breakdown (database, attachments, screenshots, recordings, backups, temporary files, error log, each with its own folder) live in their own window. Each snapshot's row can open its full content: entry, view and tag counts, the version that made it, encryption status, and a searchable, sortable list of every prompt it holds with a restore for just that one |
 | **Smart retention** | Keep a plain number of snapshots, or a number per day, week, month and year |
-| **Backup password** | Optional — protects new backup files with a key derived from your password |
+| **Backup password** | Optional: protects new backup files with a key derived from your password |
 | **Version history** | Every prompt keeps its earlier versions; preview and restore any of them |
 | **Editor draft autosave** | The open editor saves its text every few seconds so a crash or a closed window never loses unsaved work; a save or cancel removes the draft, and the next start asks once whether to restore one it still finds |
 | **Import / export** | One backup file with prompts, views, layouts, colors, styles and language. Plain CSV/TXT export for the texts alone |
@@ -120,7 +120,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | **Guided first run** | A short walkthrough on first launch covering the basics, with a step to turn on the screenshot editor, color picker, OCR or voice dictation right there; reopen it anytime from Settings |
 | **Auto updates** | Checks for a new version on start (switchable off) with one-click install, verified against a published checksum |
 | **What's new** | A small notice after an update lists what changed since the version you last saw, from a list shipped with the app; reopen the current version's list anytime from the About dialog |
-| **100 % local** | A single local database, sealed with Windows' own per-account encryption so no other account on the PC can read it. On the rare machine where Windows refuses to encrypt (a damaged user profile), saving keeps working in readable form rather than losing the data — and the app says so on startup and permanently in the privacy settings, until the next successful save seals it again. No account, no telemetry, no network traffic except the update check and, only if video export needs ffmpeg and it isn't already present, a one-time optional download you explicitly approve. A single prompt can also be marked confidential, encrypting its text with its own vault password; forgetting that password means those entries are lost for good |
+| **100 % local** | A single local database, sealed with Windows' own per-account encryption so no other account on the PC can read it. On the rare machine where Windows refuses to encrypt (a damaged user profile), saving keeps working in readable form rather than losing the data, and the app says so on startup and permanently in the privacy settings, until the next successful save seals it again. No account, no telemetry, no network traffic except the update check and, only if video export needs ffmpeg and it isn't already present, a one-time optional download you explicitly approve. A single prompt can also be marked confidential, encrypting its text with its own vault password; forgetting that password means those entries are lost for good |
 | **Command line** | `prompt-saver.exe <command> ...` for scripts: list, get, copy, add, edit, delete, restore, tags, views, search, export, import, backups, one setting. Talks to an already running copy over its own channel, or runs alone with no window otherwise. `--yes` guards every change, `--json` switches the output. Full list: `prompt-saver.exe --help` |
 | **Remote access & links** | Both off by default. `promptsaver://open/<id>` and `promptsaver://copy/<id>` links open or copy a prompt, never delete or change one, and ask for confirmation once per kind. A local receiver exposes the same commands as the command line to another program, loopback only unless a separate switch opens it to address ranges you list; it refuses to start without a generated password, locks out repeated wrong guesses, rate limits, logs every access and never serves a locked entry |
 | **Small** | ~8 MB installer (Rust / Tauri), using the Windows WebView2 runtime |
@@ -131,8 +131,8 @@ From the [latest release](../../releases/latest):
 
 | File | What it is |
 |---|---|
-| `Prompt.Saver_<version>_x64-setup.exe` | **Installer** — all users or current user only, optional desktop / start-menu shortcuts, upgrades keep your data |
-| `prompt-saver.exe` | **Portable** — one standalone exe, no installation, keeps its data next to itself |
+| `Prompt.Saver_<version>_x64-setup.exe` | **Installer**: all users or current user only, optional desktop / start-menu shortcuts, upgrades keep your data |
+| `prompt-saver.exe` | **Portable**: one standalone exe, no installation, keeps its data next to itself |
 
 Both need the Microsoft WebView2 runtime (preinstalled on Windows 11 and current Windows 10; the app offers Microsoft's installer if it is missing).
 
@@ -169,14 +169,14 @@ Requirements: [Node.js](https://nodejs.org), [Rust](https://rustup.rs) (MSVC too
 
 PDF previews are rendered by PDFium, which is compiled into the exe. Download
 `pdfium.dll` (x64) from [pdfium-binaries](https://github.com/bblanchon/pdfium-binaries/releases)
-and put it in `src-tauri/` before building — the build fails without it.
+and put it in `src-tauri/` before building, since the build fails without it.
 
 Video export/conversion shells out to ffmpeg, which the installer ships as a
 plain file rather than compiling in. Download the gyan.dev "essentials" build
 (currently pinned to release
 [9.0.1](https://github.com/GyanD/codexffmpeg/releases/tag/9.0.1)), extract
 `ffmpeg.exe` from the zip's `bin/` folder and put it in `src-tauri/` before
-building — the installer bundle step fails without it (the portable exe still
+building, since the installer bundle step fails without it (the portable exe still
 builds fine; it offers to download ffmpeg itself on first need instead).
 
 ```bat
@@ -221,8 +221,8 @@ python tests/perf_hot_paths.py          # times four hot paths against 1000 prom
 ```
 
 A large library behaves differently from a handful of prompts. `python
-tests/gen_perf_corpus.py` writes `test-data/data.db` — 500 prompts, 60 of them
-carrying a full-size stored image — so the grid and the library can be measured
+tests/gen_perf_corpus.py` writes `test-data/data.db`: 500 prompts, 60 of them
+carrying a full-size stored image, so the grid and the library can be measured
 against a realistic store instead of a demo one. `test-data/` is ignored by git;
 point the app's data folder at it, or copy the file next to the portable exe.
 
@@ -235,4 +235,4 @@ Third-party components and their licenses: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-
 ## Copyright
 
 © 2026 BGCoding. The source is published so anyone can see what the app does with
-their data — it is not released for reuse, redistribution or derivative works.
+their data; it is not released for reuse, redistribution or derivative works.

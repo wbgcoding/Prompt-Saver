@@ -871,7 +871,7 @@ function renderBgOpsPop(ops) {
     label.textContent = bgOpLabel(op.kind);
     const pct = document.createElement("span");
     pct.className = "bg-ops-pct";
-    pct.textContent = op.state === "error" ? "–" : op.state === "done" ? "100%" : (op.pct != null ? `${op.pct}%` : "…");
+    pct.textContent = op.state === "error" ? "—" : op.state === "done" ? "100%" : (op.pct != null ? `${op.pct}%` : "…");
     row.append(label, pct);
     if (op.target) {
       const openBtn = document.createElement("button");
@@ -9438,7 +9438,7 @@ async function loadHistory(id) {
     time.textContent = new Date(v.ts * 1000).toLocaleString(LANG);
     const prev = document.createElement("span");
     prev.className = "hist-preview";
-    prev.textContent = (v.name ? v.name + " — " : "") + olderEntries[0].slice(0, HISTORY_PREVIEW_LEN);
+    prev.textContent = (v.name ? v.name + ": " : "") + olderEntries[0].slice(0, HISTORY_PREVIEW_LEN);
     head.append(time, prev);
     if (olderEntries.length > 1) {
       const chip = document.createElement("span");
@@ -19538,7 +19538,7 @@ function bind() {
       // Some snapshot could not be opened or its scrub could not be confirmed
       // written back -- an emergency wipe reporting silent success there would
       // leave the user believing they are clean when they may not be.
-      if (failed > 0) msg += ` — ${t("clipPurgeBackupsFailed").replace("{n}", String(failed))}`;
+      if (failed > 0) msg += `. ${t("clipPurgeBackupsFailed").replace("{n}", String(failed))}`;
       toast(msg);
     }
   });
