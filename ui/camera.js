@@ -42,6 +42,12 @@ let recExt = "webm";
 let paused = false;
 let recStartWall = 0;
 let recTimer = 0;
+// The two expert-menu settings this window has no control of its own for
+// (device, framerate) -- read once at boot, applied to every getUserMedia
+// call below. Resolution has its own in-window select, so only its starting
+// value comes from settings.
+let videoDeviceId = "";
+let frameRate = 30;
 
 function t(key) {
   return (i18nDict && i18nDict[key]) || key;
@@ -108,7 +114,12 @@ async function refreshPreview() {
   const width = Math.round((height * 16) / 9);
   const audioDeviceId = audioSelect.value;
   const constraints = {
-    video: { width: { ideal: width }, height: { ideal: height } },
+    video: {
+      width: { ideal: width },
+      height: { ideal: height },
+      frameRate: { ideal: frameRate },
+      ...(videoDeviceId ? { deviceId: { exact: videoDeviceId } } : {}),
+    },
     audio: audioDeviceId ? { deviceId: { exact: audioDeviceId } } : false,
   };
   try {
@@ -274,6 +285,10 @@ Promise.all([invoke("get_settings"), import("./i18n.js"), import("./floatShared.
     folderLabel.textContent = i18nDict.valRecordingDir || "";
     startBtn.textContent = t("cameraStart");
     folderPathEl.textContent = s.ui_texts?.recordingDir || defaultDir || "";
+    videoDeviceId = s.ui_texts?.cameraDevice || "";
+    frameRate = Number(s.ui_values?.cameraFramerate) || 30;
+    const savedRes = s.ui_texts?.cameraResolution;
+    if (savedRes && resSelect.querySelector(`option[value="${savedRes}"]`)) resSelect.value = savedRes;
     for (const el of document.querySelectorAll("[data-i18n-title]")) {
       const key = el.getAttribute("data-i18n-title");
       const text = i18nDict[key] ?? I18N.en[key];

@@ -206,6 +206,21 @@ focused password field is skipped for as long as it stays focused and shows
 as a gap instead. How long a released key stays visible is adjustable in the
 expert menu.
 
+An optional camera recording (off by default, in the expert menu) adds a
+"Record camera" entry to the record button's right-click menu. It opens its
+own small window with a live preview, its own Start/Pause/Stop, an audio
+source, a resolution choice and a target folder — the same controls the
+screen recorder itself has. A camera-shaped window with no visible preview
+or indicator never happens: the window itself, or its status dot in the
+recording bar, always shows while the camera is live. It records to its own
+file, never burned into a screen recording, so either can be repositioned
+later. If a screen recording is running at the same time, both share the
+same start point; the video editor then opens on the screen recording with
+the camera laid on top as an aligned overlay once both are finished. With no
+screen recording running, the camera take is its own zero point and opens on
+its own. Default camera, resolution and frame rate are all adjustable in the
+expert menu.
+
 ### Video editor
 
 On by default, reachable from a recording's own result dialog (the Edit
@@ -1047,6 +1062,22 @@ nur Tastenkennungen mit Zeitstempeln, nie ein Textinhalt — ein fokussiertes
 Passwortfeld wird für diese Zeit ausgelassen und erscheint als Lücke. Wie
 lange eine losgelassene Taste sichtbar bleibt, ist im Expertenmenü
 einstellbar.
+
+Eine optionale Kameraaufnahme (Standard aus, im Expertenmenü) fügt dem
+Rechtsklickmenü des Aufnahme-Knopfs den Eintrag „Kamera aufnehmen" hinzu. Sie
+öffnet ein eigenes kleines Fenster mit Live-Vorschau, eigenem
+Start/Pause/Stopp, einer Tonquelle, einer Auflösungswahl und einem
+Zielordner — denselben Bedienelementen wie die Bildschirmaufnahme selbst. Ein
+Kamerafenster ohne sichtbare Vorschau oder Anzeige gibt es nie: Entweder das
+Fenster selbst oder sein Statuspunkt in der Bedienleiste zeigt immer, solange
+die Kamera läuft. Sie zeichnet in eine eigene Datei auf, nie ins Bild der
+Bildschirmaufnahme eingebrannt, damit beide später frei positioniert werden
+können. Läuft gleichzeitig eine Bildschirmaufnahme, teilen sich beide
+denselben Startpunkt; der Video-Editor öffnet dann die Bildschirmaufnahme mit
+der Kamera deckungsgleich als Überlagerung obenauf, sobald beide fertig sind.
+Läuft keine Bildschirmaufnahme, ist die Kameraaufnahme ihr eigener Nullpunkt
+und öffnet sich allein. Standardkamera, Auflösung und Bildrate sind alle im
+Expertenmenü einstellbar.
 
 **Screenshot- und Video-Editor** — arbeiten bei den gemeinsamen Werkzeugen
 gleich: Strg+Plus, Strg+Minus und Strg+0 zoomen in beiden hinein, heraus und

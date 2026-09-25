@@ -1391,6 +1391,10 @@ const FLAG_LABELS = {
   // OFF -- a low-level keyboard hook exists nowhere in this app unless the
   // user turns this on for a specific recording.
   keyOverlay: "flagKeyOverlay",
+  // The record button's right-click "Record camera" entry and its own window.
+  // Ships OFF, like every feature that can turn a camera light on -- see
+  // camera.rs for the WebView2 permission handling this switch gates.
+  cameraRecord: "flagCameraRecord",
   numFieldWheel: "flagNumFieldWheel",
   editStateKeep: "flagEditStateKeep",
   recStopHotkey: "flagRecStopHotkey",
@@ -1782,6 +1786,7 @@ const EXPERT_VALUES = {
   // this row must not change what already happens today.
   recDiskWarnMb: { label: "valRecDiskWarnMb", min: 200, max: 20000, step: 100, def: 500, unit: "MB", gate: "screenRecord" },
   keyOverlayHoldMs: { label: "valKeyOverlayHoldMs", min: 100, max: 2000, step: 50, def: 400, unit: "ms", gate: "keyOverlay" },
+  cameraFramerate: { label: "valCameraFramerate", min: 10, max: 60, step: 5, def: 30, unit: "fps", gate: "cameraRecord" },
   recMaxMin: { label: "valRecMaxMin", min: 0, max: 600, step: 5, def: 0, unit: "min", zeroLabel: "valUnlimited", gate: "screenRecord" },
   recMaxMb: { label: "valRecMaxMb", min: 0, max: 100000, step: 500, def: 0, unit: "MB", zeroLabel: "valUnlimited", gate: "screenRecord" },
   // How many recordings the "export selected" batch dialog encodes at once --
@@ -2080,6 +2085,24 @@ const EXPERT_DROPDOWNS = {
       try { await invoke("set_ui_text", { key: "recMicDevice", value: v }); } catch (e) { errToast(e); }
     },
   },
+  // Which camera the camera window opens with. Options come from
+  // navigator.mediaDevices.enumerateDevices() (cameraDevicesCache, near the
+  // recording wiring below) -- listing devices never turns the camera light
+  // on, only getUserMedia does, so this is safe to populate from the main
+  // window itself. Empty string = the system default camera.
+  cameraDevice: {
+    label: "valCameraDevice",
+    gate: "cameraRecord",
+    def: "",
+    options: () => [["", t("langAuto")], ...cameraDevicesCache.map((d) => [d.id, d.name])],
+    get: () => settings.ui_texts?.cameraDevice || "",
+    set: async (v) => {
+      settings.ui_texts = { ...(settings.ui_texts || {}), cameraDevice: v };
+      try { await invoke("set_ui_text", { key: "cameraDevice", value: v }); } catch (e) { errToast(e); }
+    },
+  },
+  cameraResolution: enumDropdown("cameraResolution", "valCameraResolution",
+    [["480", "optCameraRes480"], ["720", "optCameraRes720"], ["1080", "optCameraRes1080"]], "720", "cameraRecord"),
   // Three quality steps, default "high". Picking a step re-suggests the
   // matching recBitrateKbps default (REC_QUALITY_BITRATE) so the two controls
   // stay in sync without forcing a second manual edit -- the slider still
@@ -2254,7 +2277,7 @@ const EXPERT_TABS = [
     // The recording hotkeys render their own capture row directly (hotkeyRow())
     // instead of a button that jumps to a settings field -- see actionRow()'s
     // "hotkey" branch.
-    { title: "expGroupRecording", flags: ["screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, { key: "recCropNotice", gate: "screenRecord" }, { key: "recBarSize", gate: "screenRecord" }, { key: "recTargetSwitch", gate: "screenRecord" }, { key: "recAutoCrop", gate: "screenRecord" }, { key: "keyOverlay", gate: "screenRecord" }], values: ["recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "recCanvasMaxPx", "recDiskWarnMb", "recMaxMin", "recMaxMb", "exportParallel", "keyOverlayHoldMs"], dropdowns: ["recMicDevice", "recQuality", "recFormat", "recCanvasMode"], paths: ["recordingDir"],
+    { title: "expGroupRecording", flags: ["screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, { key: "recCropNotice", gate: "screenRecord" }, { key: "recBarSize", gate: "screenRecord" }, { key: "recTargetSwitch", gate: "screenRecord" }, { key: "recAutoCrop", gate: "screenRecord" }, { key: "keyOverlay", gate: "screenRecord" }, "cameraRecord"], values: ["recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "recCanvasMaxPx", "recDiskWarnMb", "recMaxMin", "recMaxMb", "exportParallel", "keyOverlayHoldMs", "cameraFramerate"], dropdowns: ["recMicDevice", "recQuality", "recFormat", "recCanvasMode", "cameraDevice", "cameraResolution"], paths: ["recordingDir"],
       actions: [{ id: "rec-stop-hotkey-row", type: "hotkey", hotkeyKey: "recStopHotkey", label: "recStopHotkeyLabel", gate: "recStopHotkey" }, { id: "rec-pause-hotkey-row", type: "hotkey", hotkeyKey: "recPauseHotkey", label: "recPauseHotkeyLabel", gate: "recPauseHotkey" }] },
     { title: "expGroupVideoEditor", flags: ["videoEditor", { key: "veOvRemember", gate: "videoEditor" }, { key: "videoEditSnap", gate: "videoEditor" }], values: ["videoEditUndoMax", "veExportKbpsHigh", "veExportKbpsSmall", "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "veExtraClipsMax"], dropdowns: ["veDefaultFormat", "veDefaultQuality", "veDefaultScale", "veOvFont", "veDefaultPanel"], colors: ["veOvColor"], paths: ["videoExportDir"] },
     // What the screenshot editor and the video editor share -- created here so
@@ -2515,6 +2538,7 @@ const EXPERT_TIPS = [
   "recStopHotkey", "recPauseHotkey", "recTrayEntries", "recCropNotice", "recBarSize", "recTargetSwitch",
   "recAutoCrop", "recCanvasMode", "recCanvasMaxPx", "recMaxMin", "recMaxMb", "recDiskWarnMb", "exportParallel",
   "keyOverlay", "keyOverlayHoldMs",
+  "cameraRecord", "cameraDevice", "cameraResolution", "cameraFramerate",
   "videoEditor", "videoEditUndoMax", "veOvRemember", "videoEditSnap",
   "veDefaultFormat", "veDefaultQuality", "veDefaultScale", "veExportKbpsHigh", "veExportKbpsSmall",
   "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "veOvColor", "veOvFont",
@@ -3010,6 +3034,7 @@ let defaultSyncDir = "";
 let defaultRecordingDir = "";
 let ocrLangsCache = []; // [{tag, label}], fetched once at startup (init())
 let micDevicesCache = []; // [{id, name}], fetched once at startup (init())
+let cameraDevicesCache = []; // [{id, name}], fetched once at startup (init())
 // Whether ffmpeg was found (see ffmpeg_status's own doc comment: never probed
 // on app start, only lazily the first time a control that needs it renders --
 // here, the first time the recQuality/recFormat expert rows are built).
@@ -21096,6 +21121,15 @@ async function init() {
     // Microphone list for recMicDevice -- fetched once, cached, "Automatic"
     // (system default) is always prepended separately (see EXPERT_DROPDOWNS.recMicDevice above).
     invoke("list_mic_devices").then((devs) => { micDevicesCache = devs || []; }).catch(() => {});
+    // Camera list for EXPERT_DROPDOWNS.cameraDevice above -- a browser API
+    // call, not a Rust round trip, and safe to make from this window: listing
+    // devices never opens a stream, so no camera light and no permission
+    // prompt happens here.
+    navigator.mediaDevices?.enumerateDevices?.()
+      .then((devs) => {
+        cameraDevicesCache = devs.filter((d) => d.kind === "videoinput").map((d, i) => ({ id: d.deviceId, name: d.label || `${t("cameraMenuItem")} ${i + 1}` }));
+      })
+      .catch(() => {});
     invoke("voice_languages").then((langs) => { voiceLangsCache = langs || []; }).catch(() => {});
     // Re-applies flags once this resolves so no-voice-engine reflects reality
     // (the optimistic default above assumes support until this says otherwise).
