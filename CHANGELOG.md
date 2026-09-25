@@ -521,6 +521,15 @@ the video editor and the introduction tour ship on).
   read-only instead and says so with a permanent banner, while a lock nobody
   has refreshed for a while is taken over automatically instead of leaving
   anyone locked out. Switchable off in the expert menu, on by default.
+- **Key overlay for recordings** (expert menu, off by default). Records
+  which keys are pressed anywhere on the screen while a recording runs, as
+  key identifiers and timestamps only — never any text, and a focused
+  password field is skipped for as long as it stays focused and shows up as
+  a gap instead. The video editor's new "Keys" overlay turns this into a
+  picture: four keyboard-layout presets (keys pressed, half keyboard, full
+  keyboard, game keys) plus a free selection, sharing the same range,
+  duplicate, snap and export as every other overlay. How long a released key
+  stays visible is adjustable in the expert menu.
 
 ### Improved
 
