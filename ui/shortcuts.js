@@ -11,10 +11,15 @@
 // existed.
 //
 // scopes: "snipEditor" (the screenshot editor overlay in the main window),
-// "videoEditor" (the video editor window). "main" and "library" are valid
-// scope names too, reserved for shortcuts added there later.
+// "videoEditor" (the video editor window), "mainWindow" (the main window
+// itself, outside either editor) and "library" (reserved for a library-only
+// shortcut, none exist yet).
 
 export const SHORTCUTS = [
+  // ---- main window ----
+  { action: "mainCreate", code: "Enter", mods: ["ctrl"], scopes: ["mainWindow"], descKey: "save" },
+  { action: "mainGlobalSearch", code: "KeyK", mods: ["ctrl"], scopes: ["mainWindow"], descKey: "globalSearchBtn" },
+
   // ---- screenshot editor ----
   { action: "snipUndo", code: "KeyZ", mods: ["ctrl"], scopes: ["snipEditor"], descKey: "snipEditUndoTip" },
   { action: "snipRedo", code: "KeyY", mods: ["ctrl"], scopes: ["snipEditor"], descKey: "snipEditRedoTip" },
@@ -116,14 +121,17 @@ export function withShortcut(el, action, t, lang) {
   return el;
 }
 
-// Rows for the "?" overview table of one editor, one row per distinct key
-// combo (an action with an alt binding, e.g. veRedoAlt, is folded into its
-// primary row's description rather than listed twice).
+// Rows for a "?" overview table, one row per distinct key combo (an action
+// with an alt binding, e.g. veRedoAlt, is folded into its primary row's
+// description rather than listed twice). `scope` is one scope name or an
+// array of them -- the main window's overview shows mainWindow + library
+// together, since a user there has no reason to tell those two apart.
 export function rowsForScope(scope, t, lang) {
+  const scopes = Array.isArray(scope) ? scope : [scope];
   const seen = new Set();
   const rows = [];
   for (const entry of SHORTCUTS) {
-    if (!entry.scopes.includes(scope)) continue;
+    if (!entry.scopes.some((s) => scopes.includes(s))) continue;
     if (entry.action.endsWith("Alt")) continue; // shown as part of the primary action's row
     if (seen.has(entry.descKey)) continue;
     seen.add(entry.descKey);
