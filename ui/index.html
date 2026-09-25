@@ -44,7 +44,7 @@
       </button>
       <!-- Search everything: prompts, copy history, attachments, views,
            settings and help in one overlay. Also opened with Ctrl+K. -->
-      <button id="global-search-btn" class="icon-btn" data-i18n-title="globalSearchBtn" data-i18n-aria="globalSearchBtn">
+      <button id="global-search-btn" class="icon-btn" data-i18n-title="globalSearchBtn" data-i18n-aria="globalSearchBtn" data-shortcut="mainGlobalSearch">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
           <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14Zm10 17-5.6-5.6"/>
         </svg>
@@ -222,7 +222,7 @@
         <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 10l6 6 6-6"/>
       </svg>
     </button>
-    <button id="save" class="primary-btn" data-i18n="save" disabled>Save</button>
+    <button id="save" class="primary-btn" data-i18n="save" data-i18n-title="save" data-shortcut="mainCreate" disabled>Save</button>
   </footer>
 
   <!-- Name / edit modal -->
@@ -945,6 +945,12 @@
     <div class="modal">
       <div class="modal-head">
         <h2 class="modal-title" data-i18n="helpMenu">Help</h2>
+        <!-- Reuses the shortcutsTitle string the two editors' own "?" buttons
+             already carry -- the main window's own entry into the same table,
+             filtered to mainWindow + library instead of an editor scope. -->
+        <button id="help-shortcuts" class="icon-btn" type="button" data-i18n-title="shortcutsTitle" data-i18n-aria="shortcutsTitle">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M9.2 9.5a2.8 2.8 0 1 1 3.9 2.6c-.9.4-1.4 1-1.4 2.1"/><circle cx="12" cy="16.6" r="1" fill="currentColor" stroke="none"/></svg>
+        </button>
         <button id="help-close" class="icon-btn" data-i18n-aria="close">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
             <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
@@ -1479,6 +1485,9 @@
          no JS needed (same as the main window's own header). -->
     <div class="snip-edit-titlebar" data-tauri-drag-region>
       <span class="snip-edit-titlebar-label" data-i18n="snipEditTitle"></span>
+      <button id="snip-edit-shortcuts" class="icon-btn" type="button" data-tauri-drag-region="false" data-i18n-title="shortcutsTitle" data-i18n-aria="shortcutsTitle">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M9.2 9.5a2.8 2.8 0 1 1 3.9 2.6c-.9.4-1.4 1-1.4 2.1"/><circle cx="12" cy="16.6" r="1" fill="currentColor" stroke="none"/></svg>
+      </button>
       <button id="snip-edit-close" class="icon-btn snip-edit-close" type="button" data-tauri-drag-region="false" data-i18n-title="close" data-i18n-aria="close">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/></svg>
       </button>
@@ -1487,26 +1496,26 @@
       <div id="snip-edit-tools" class="snip-edit-tools" role="toolbar" data-i18n-aria="snipEditToolsLabel"></div>
       <div id="snip-edit-context" class="snip-edit-context"></div>
       <div class="snip-edit-view">
-        <button id="snip-edit-undo" class="icon-btn" type="button" data-i18n-title="snipEditUndoTip" data-i18n-aria="undo">
+        <button id="snip-edit-undo" class="icon-btn" type="button" data-i18n-title="snipEditUndoTip" data-i18n-aria="undo" data-shortcut="snipUndo">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M7 7 3 11l4 4M3 11h11a6 6 0 0 1 0 12h-2"/></svg>
         </button>
-        <button id="snip-edit-redo" class="icon-btn" type="button" data-i18n-title="snipEditRedoTip" data-i18n-aria="redo">
+        <button id="snip-edit-redo" class="icon-btn" type="button" data-i18n-title="snipEditRedoTip" data-i18n-aria="redo" data-shortcut="snipRedo">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M17 7l4 4-4 4M21 11H10a6 6 0 0 0 0 12h2"/></svg>
         </button>
         <span class="snip-edit-sep" aria-hidden="true"></span>
-        <button id="snip-edit-zoom-out" class="icon-btn" type="button" data-i18n-title="snipEditZoomOut" data-i18n-aria="snipEditZoomOut">
+        <button id="snip-edit-zoom-out" class="icon-btn" type="button" data-i18n-title="snipEditZoomOut" data-i18n-aria="snipEditZoomOut" data-shortcut="snipZoomOut">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M21 21l-4.3-4.3M8 11h6"/></svg>
         </button>
         <span id="snip-edit-zoom-val" class="snip-edit-zoom-val">100%</span>
-        <button id="snip-edit-zoom-in" class="icon-btn" type="button" data-i18n-title="snipEditZoomIn" data-i18n-aria="snipEditZoomIn">
+        <button id="snip-edit-zoom-in" class="icon-btn" type="button" data-i18n-title="snipEditZoomIn" data-i18n-aria="snipEditZoomIn" data-shortcut="snipZoomIn">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M21 21l-4.3-4.3M11 8v6M8 11h6"/></svg>
         </button>
-        <button id="snip-edit-fit" class="ghost-btn" type="button" data-i18n="snipEditFit" data-i18n-title="snipEditFitTip"></button>
+        <button id="snip-edit-fit" class="ghost-btn" type="button" data-i18n="snipEditFit" data-i18n-title="snipEditFitTip" data-shortcut="snipZoomReset"></button>
         <span class="snip-edit-sep" aria-hidden="true"></span>
         <button id="snip-edit-scale" class="ghost-btn" type="button" data-i18n="snipEditScale" data-i18n-title="snipEditScaleTip"></button>
         <span class="snip-edit-sep" aria-hidden="true"></span>
         <span id="snip-edit-original-badge" class="snip-edit-original-badge hidden" data-i18n="originalBadge"></span>
-        <button id="snip-edit-original" class="icon-btn" type="button" data-i18n-title="showOriginalTip" data-i18n-aria="showOriginal">
+        <button id="snip-edit-original" class="icon-btn" type="button" data-i18n-title="showOriginalTip" data-i18n-aria="showOriginal" data-shortcut="snipShowOriginal">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
         </button>
       </div>
@@ -1521,16 +1530,33 @@
     </div>
     <div id="snip-edit-nudge-hint" class="snip-edit-nudge-hint hidden" data-i18n="snipEditNudgeHint"></div>
     <div class="snip-edit-actions">
-      <button id="snip-edit-cancel" class="ghost-btn" type="button" data-i18n="cancel" data-i18n-title="snipEditCancelTip"></button>
+      <button id="snip-edit-cancel" class="ghost-btn" type="button" data-i18n="cancel" data-i18n-title="snipEditCancelTip" data-shortcut="snipCancel"></button>
       <button id="snip-edit-saveas" class="ghost-btn" type="button" data-i18n="screenshotSaveAs" data-i18n-title="snipEditSaveAsTip"></button>
       <button id="snip-edit-copy" class="ghost-btn" type="button" data-i18n="copy" data-i18n-title="snipEditCopyTip"></button>
-      <button id="snip-edit-apply" class="primary-btn" type="button" data-i18n="apply" data-i18n-title="snipEditApplyTip"></button>
+      <button id="snip-edit-apply" class="primary-btn" type="button" data-i18n="apply" data-i18n-title="snipEditApplyTip" data-shortcut="snipApply"></button>
     </div>
     <!-- SouthEast-only, same as the app needs elsewhere -- a full 8-handle
          resize rig is native-window territory the main window itself doesn't
          have either; this overlay only needed SOME way to get bigger/smaller. -->
     <div id="snip-edit-resize-grip" class="snip-edit-resize-grip" data-tauri-drag-region="false" data-i18n-title="snipEditResizeTip" data-i18n-aria="snipEditResizeTip">
       <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M15 15h-3v-2h1v-1h2v3ZM11 15H9v-2h2v2Zm4-4h-2V9h2v2ZM7 15H5v-2h2v2Zm8-4h-2V9h2v2Zm-4 0h-2V9h2v2Z"/></svg>
+    </div>
+  </div>
+
+  <!-- Shared with the video editor window: same modal/modal-narrow/modal-titlebar
+       shell every list-style modal in the app already uses, filled from
+       shortcuts.js's SHORTCUTS table instead of a second dialog type. -->
+  <div id="shortcuts-modal" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal modal-narrow">
+      <div class="modal-titlebar">
+        <h2 class="modal-title" data-i18n="shortcutsTitle">Keyboard shortcuts</h2>
+        <button id="shortcuts-modal-close" class="icon-btn modal-x" data-i18n-aria="close">
+          <svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true">
+            <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
+          </svg>
+        </button>
+      </div>
+      <div id="shortcuts-modal-list" class="shortcuts-list"></div>
     </div>
   </div>
 
