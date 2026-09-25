@@ -22898,8 +22898,15 @@ async fn start_recording(
     })
     .await
     .map_err(|e| e.to_string())??;
+    // Started BEFORE the session is published: a stop/cancel racing in the
+    // instant after publish used to see an already-live recording with no
+    // key-overlay capture yet, since maybe_start ran only after that publish
+    // -- the hook ended up installed with nothing recording (the stop found
+    // no session-scoped capture to tear down its own way) and the NEXT
+    // recording's own maybe_start then silently no-op'd against it, "never a
+    // second hook" mistaking the orphan for an already-running one.
+    keylog::maybe_start(key_overlay_on, key_overlay_hold_ms, keylog::mono_ms());
     *rstate.0.lock().unwrap_or_else(|e| e.into_inner()) = Some(session);
-    keylog::maybe_start(key_overlay_on, key_overlay_hold_ms, now_ms());
     // A fresh recording never inherits an earlier chain's already-closed
     // parts -- only finish_and_continue_recording ever adds to this list.
     REC_SESSION_PARTS.lock().unwrap_or_else(|e| e.into_inner()).clear();
