@@ -18,6 +18,7 @@ soon as the run has been evaluated; only `target/release/` ships.
 | `node tests/eta_check.js` | `makeEtaEstimator()`/`formatEta()`: nothing shows before `minPct`/`minSecs`, a mid-run pause does not skew the average rate, and the seconds/minutes/over-an-hour wording tiers land where expected. |
 | `node tests/ink_check.js` | `applyFloatTheme()`'s readable-ink rule: the black/white split follows `autoInk`/`inkThreshold` from a `theme-changed` event and from one `ink_prefs()` fetch at load, not the old fixed 0.179 cutoff. |
 | `python tests/source_hygiene.py` | No tracked source file outside `tests/` carries a work-item number, an AI-tool name or an internal planning-doc filename in a comment. |
+| `python tests/no_emdash.py` | No em dash, en dash, horizontal bar or figure dash in `ui/i18n.js`, `ui/help.js`, `docs/help.md`, `README.md` or any `ui/*.js`/`ui/*.html` file's visible text (comments excluded). Known-good exceptions live in its `EXCEPTIONS` list with a reason each. |
 | `python tests/flag_polarity.py` | Every `flag-<key>` / `noflag-<key>` class in a stylesheet or in markup belongs to the registry its prefix implies. |
 | `python tests/tooltip_check.py` | No icon-only control without a tooltip or an accessible name, in any window. |
 | `python tests/shortcut_check.py` | Every `ui/shortcuts.js` action resolves to a real i18n key, no key combo is bound twice in one scope, every `data-shortcut` button carries `data-i18n-title` so it actually shows the key, every `withShortcut()` call (static or dynamic) names a real action, and every non-alt action is shown by at least one button. |
@@ -37,6 +38,13 @@ Covers line **and** block comments (`/* */`, `<!-- -->`), the spelled-out forms
 blanked first, so a URL in code is never read as a comment. Known-good exceptions live
 in its `EXCEPTIONS` list with a reason each. This is a permanent gate, not a one-time
 cleanup.
+
+### `no_emdash.py` in detail
+Strips `//` and `/* */` / `<!-- -->` comments before scanning a `.js`/`.html` file (a
+comment is out of scope on purpose, cleaned up separately later), then flags any of the
+four dash characters left in the visible text: string literals, markup, and every line of
+`docs/help.md` and `README.md`. A plain ASCII hyphen (e.g. a `00:12-00:34` time range) is
+not one of the four and never trips it.
 
 ### `flag_polarity.py` in detail
 A default-off feature gated on `noflag-` (or the reverse) parses fine, passes every

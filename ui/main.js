@@ -871,7 +871,7 @@ function renderBgOpsPop(ops) {
     label.textContent = bgOpLabel(op.kind);
     const pct = document.createElement("span");
     pct.className = "bg-ops-pct";
-    pct.textContent = op.state === "error" ? "–" : op.state === "done" ? "100%" : (op.pct != null ? `${op.pct}%` : "…");
+    pct.textContent = op.state === "error" ? "—" : op.state === "done" ? "100%" : (op.pct != null ? `${op.pct}%` : "…");
     row.append(label, pct);
     if (op.target) {
       const openBtn = document.createElement("button");
