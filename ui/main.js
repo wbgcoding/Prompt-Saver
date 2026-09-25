@@ -1505,6 +1505,13 @@ const OPT_FLAG_LABELS = {
   // folder is still fresh -- see acquire_data_dir_lock/DATA_DIR_READONLY in
   // lib.rs.
   dataDirLock: "flagDataDirLock",
+  // Swaps the whole window over to a bundled sample library -- for showing the
+  // app or taking a screenshot without exposing real data. The real store is
+  // never touched; see enable_demo_mode/disable_demo_mode in lib.rs. This flag
+  // is never toggled through the normal set_ui_flag path (see flagRow's own
+  // demoMode branch below) -- it only ever reads true from the sample
+  // settings a demo session itself ships with.
+  demoMode: "flagDemoMode",
   // Off keeps the historical "one placement" guarantee (adding elsewhere moves
   // it there); on lets a prompt sit in several views at once, sharing the same data.
   multiViewPrompt: "flagMultiViewPrompt",
@@ -2273,7 +2280,7 @@ const EXPERT_TABS = [
     // Toolbar button visibility (mirrors the header right-click tool list).
     { title: "expGroupToolbar", flags: ["gridViewBorder", "pinButton", "barToggles", { key: "barToggleBoth", gate: "barToggles" }, "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons", "headerSeparators", "toolbarHoverDim"] },
     { title: "expGroupPrivacy", notices: ["storeUnsealed", "settingsLocked", "settingsWriteFailed"], flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "tilesHoverDim", "secretPrompts"], values: ["tileBlur", "mediaBlur", "tilesHoverOpacity", "secretTimeoutMin"] },
-    { title: "expGroupSystem", notices: ["dataDirReadOnly"], flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }, { key: "whatsNew", gate: "showUpdates" }, "keyboardNav", "allowMultipleInstances", "dataDirLock", "taskbarProgress", "etaShow"], values: ["kbFocusFadeMs", "etaMinPct", "etaMinSecs", "bgDoneKeepMin"], selects: ["updateCheckH"], paths: ["dataDir"],
+    { title: "expGroupSystem", notices: ["dataDirReadOnly"], flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }, { key: "whatsNew", gate: "showUpdates" }, "keyboardNav", "allowMultipleInstances", "dataDirLock", "demoMode", "taskbarProgress", "etaShow"], values: ["kbFocusFadeMs", "etaMinPct", "etaMinSecs", "bgDoneKeepMin"], selects: ["updateCheckH"], paths: ["dataDir"],
       actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }] },
     { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "firstRunTour"],
       actions: [{ id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
@@ -2516,7 +2523,7 @@ const EXPERT_TIPS = [
   "voiceLangCheckH", "voiceLangNoticeMs", "voiceLangSnoozeH", "voiceHotkey", "voiceHotkeyTarget",
   "trayCustomMenu", "trayRecent", "trayFavs", "trayRecentN", "trayFavN", "trayLabelMax", "traySearch", "trayMenuMax",
   "checkUpdateOnStart", "showUpdates", "updateCheckH", "whatsNew", "importExport", "toolbarHoverDim", "keyboardNav", "allowMultipleInstances",
-  "taskbarProgress", "etaShow", "dataDir", "dataDirLock",
+  "taskbarProgress", "etaShow", "dataDir", "dataDirLock", "demoMode",
   "headerSeparators", "floating", "floatPark", "floatParkCleanupH",
   "pillFolders", "pillFontSize", "pillTextMinW", "pillBorderW", "pillRingFrac", "pillMenuGap",
   "pillMergeRadius", "pillMergeGrow", "pillFolderTileSize", "pillFolderTileGap", "pillFolderPad", "pillFolderPopGap",
@@ -2657,6 +2664,28 @@ function flagRow(key) {
   input.checked = flagState(key);
   input.addEventListener("change", async () => {
     const enabled = input.checked;
+    // Demo mode swaps the whole store, which needs a relaunch either way, so it
+    // never goes through the normal set_ui_flag path below: turning it on calls
+    // its own backend command and the app restarts into the sample library;
+    // turning it off asks first, since anything typed during the session is
+    // about to disappear, then restarts back into the real one.
+    if (key === "demoMode") {
+      if (enabled) {
+        try { await invoke("enable_demo_mode"); } // the app restarts on success and never returns here
+        catch (err) { errToast(err); input.checked = false; }
+      } else {
+        const ok = await confirmDialog({
+          title: t(flagLabelKey(key)),
+          message: t("demoModeOffConfirm"),
+          confirmLabel: t("demoModeOffConfirmOk"),
+          danger: true,
+        });
+        if (!ok) { input.checked = true; return; }
+        try { await invoke("disable_demo_mode"); }
+        catch (err) { errToast(err); input.checked = true; }
+      }
+      return;
+    }
     // Turning sync on starts writing every text prompt as a plain-text .md file
     // next to the encrypted DB — say so before it happens, not just in the help doc.
     if (key === "promptSync" && enabled) {

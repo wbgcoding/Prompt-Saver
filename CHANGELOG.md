@@ -335,6 +335,15 @@ the video editor and the introduction tour ship on).
   runs the fitting action for whatever is highlighted. The field remembers
   the last five searches. Expert menu switch, on by default, with a value
   for how many hits each group shows.
+- **Demo mode**: an expert-menu switch swaps the whole window to a bundled
+  sample library covering most features at once (prompts with and without
+  an image, a rotating prompt, a placeholder, tags, a favorite, two views,
+  a folder, an attachment and a video), never touching the real data.
+  Rebuilds the sample library fresh every time and restarts into it. A
+  permanent marker stays visible while it is on; switching back asks first,
+  since anything changed during the session is discarded. The same sample
+  library is also the source for the help window's picture and for
+  `docs/screenshot.png`.
 - **Duplicate a shape or overlay** — right-click a rectangle, ellipse, line,
   arrow, spotlight or pixelation in the screenshot editor, or an overlay's row
   in the video editor, for a menu to duplicate or delete it. A duplicate keeps

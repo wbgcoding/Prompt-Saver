@@ -12178,6 +12178,80 @@ TILE_HOTKEY_BADGE_PROBE = """
 </script>
 """
 
+# 459: demo mode -- window.__DEMO_TEST__ models booting straight into an
+# already-active demo session (what a real restart into the sample library
+# looks like from the window's side; the swap itself and the sample library's
+# own content are Rust-side and covered there). Its own boot, same reasoning
+# as the probes above.
+DEMO_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  try {
+    const cm = document.getElementById('confirm-modal');
+    for (let i = 0; i < 80 && cm.classList.contains('hidden'); i++) await sleep(100);
+    if (!cm.classList.contains('hidden')) { document.getElementById('confirm-cancel').click(); await sleep(300); }
+
+    const banner = document.getElementById('demo-mode-banner');
+    if (!banner || getComputedStyle(banner).display === 'none') {
+      errs.push('459: the demo-mode marker is not visible while demo mode is on');
+    } else if (!banner.textContent.trim()) {
+      errs.push('459: the demo-mode marker has no text');
+    }
+
+    // Turning it off asks first -- cancelling must leave demo mode untouched
+    // and the checkbox still checked.
+    document.getElementById('gear').click();
+    await sleep(200);
+    document.getElementById('expert-open').click();
+    await sleep(300);
+    let row = null;
+    for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+      tb.click();
+      await sleep(80);
+      row = [...document.querySelectorAll('#expert-flags .switch-field')]
+        .find((r) => (r.querySelector('span') || {}).textContent === 'Demo mode');
+      if (row) break;
+    }
+    const cb = row && row.querySelector('input.switch');
+    if (!cb) {
+      errs.push('459: no expert-menu switch found for demo mode');
+    } else {
+      if (!cb.checked) errs.push('459: the demo-mode switch does not show as on during a demo session');
+      window.__SMOKE_CALLS__ = [];
+      cb.checked = false;
+      cb.dispatchEvent(new Event('change'));
+      await sleep(200);
+      if (document.getElementById('confirm-modal').classList.contains('hidden')) {
+        errs.push('459: turning demo mode off did not ask for confirmation first');
+      }
+      document.getElementById('confirm-cancel').click();
+      await sleep(150);
+      if (!cb.checked) errs.push('459: cancelling the confirmation must leave the switch on');
+      if (window.__SMOKE_CALLS__.includes('disable_demo_mode')) {
+        errs.push('459: cancelling the confirmation must not call disable_demo_mode');
+      }
+      // Confirming calls the real switch-back command -- the actual data swap
+      // and relaunch are Rust-side (see the cargo tests), not reachable here.
+      cb.checked = false;
+      cb.dispatchEvent(new Event('change'));
+      await sleep(200);
+      document.getElementById('confirm-ok').click();
+      await sleep(200);
+      if (!window.__SMOKE_CALLS__.includes('disable_demo_mode')) {
+        errs.push('459: confirming did not call disable_demo_mode');
+      }
+    }
+  } catch (e) { errs.push('459 probe: ' + e.message); }
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
 CAP_NEEDS_ADMIN_PROBE = """
 <script>
 (async () => {
@@ -13525,6 +13599,31 @@ def main():
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- tile hotkey badge")
+        for e in errs:
+            print(f"   FAIL: {e}")
+        failed += len(errs)
+        if not errs:
+            print("   ok")
+
+        # 459: demo mode's marker banner and its confirm-before-switch-back.
+        side = tmp / "ui" / "demo-mode.html"
+        side.write_text(
+            (REPO / "ui" / "index.html").read_text(encoding="utf-8")
+            .replace("<script",
+                     '<script>window.__DEMO_TEST__ = true;</script>\n'
+                     '<script src="tauri_stub.js"></script>\n<script', 1)
+            .replace("</body>", DEMO_PROBE + "</body>"),
+            encoding="utf-8")
+        proc = subprocess.run(
+            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+             f"--user-data-dir={tmp / 'profile-demo-mode'}", "--allow-file-access-from-files",
+             "--window-size=1000,780", "--virtual-time-budget=45000",
+             "--dump-dom", side.as_uri()],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=180)
+        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        print("-- demo mode")
         for e in errs:
             print(f"   FAIL: {e}")
         failed += len(errs)

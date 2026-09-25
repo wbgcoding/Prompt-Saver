@@ -621,6 +621,22 @@ lost on restart. The app says so the same way: once in a dialog, and as a
 permanent row in this privacy group for as long as the last save is still
 failing — it clears itself the moment a save reaches disk again.
 
+### Demo mode
+
+An expert-menu switch (System tab) swaps the whole window to a bundled sample
+library covering most features at once: prompts with and without an image, a
+rotating prompt, a couple of plain prompts to start a chain with, a
+placeholder, tags, a favorite, two views, a folder, an attachment and (when
+available) a video. Turning it on rebuilds the sample library fresh every
+time and restarts the app into it; the real library is never opened, written
+or even read while any of this happens. A permanent marker stays visible in
+the window for as long as demo mode is on, so nobody mistakes the sample data
+for their own. Turning it back off asks for confirmation, since anything
+changed during the session is discarded, then restarts back into the real
+library exactly as it was. The same sample library is also the source for
+this help window's own picture and for `docs/screenshot.png`: see the
+README's "Building from source" section for the exact steps.
+
 ### System
 
 Update checks (never installs without asking), keyboard navigation, allowing
@@ -1260,6 +1276,22 @@ für den Rest der Sitzung aktiv, gehen aber beim Neustart verloren. Die App
 sagt das genauso: einmal als Hinweis, und als dauerhafte Zeile in dieser
 Datenschutz-Gruppe, solange der letzte Speichervorgang fehlschlägt — sie
 verschwindet von selbst, sobald wieder erfolgreich gespeichert wird.
+
+**Vorführung**: Ein Schalter im Experten-Menü (Reiter System) schaltet das
+ganze Fenster auf einen mitgelieferten Beispielbestand um, der möglichst
+viele Funktionen auf einmal zeigt: Prompts mit und ohne Bild, ein
+rotierender, zwei einfache Prompts für den Anfang einer Kette, ein
+Platzhalter, Tags, ein Favorit, zwei Ansichten, ein Ordner, ein Anhang und
+(wenn vorhanden) ein Video. Das Einschalten baut den Beispielbestand jedes
+Mal frisch auf und startet die App darin neu; der echte Bestand wird dabei
+nie geöffnet, geschrieben oder auch nur gelesen. Eine dauerhafte Marke bleibt
+im Fenster sichtbar, solange die Vorführung läuft, damit niemand den
+Beispielbestand für den eigenen hält. Das Zurückschalten fragt zuerst nach,
+weil alles, was während der Vorführung geändert wurde, dabei verloren geht,
+und startet dann genau in den echten Bestand zurück. Derselbe
+Beispielbestand ist auch die Vorlage für das Bild in diesem Hilfefenster und
+für `docs/screenshot.png`: der genaue Ablauf steht im Abschnitt „Building
+from source" der README.
 
 **System** — Updates, Tastatur-Navigation, mehrere Instanzen, Datenordner.
 Lange Vorgänge (Export, Umwandlung, ffmpeg-Download, Sicherung, Import) füllen

@@ -113,6 +113,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | | |
 |---|---|
 | **Expert menu** | Seven tabs with an on/off switch for every feature and a parameter for everything adjustable. Settings that are not self-explanatory carry a tooltip. Three quick profiles above the tabs (Quiet, Standard, All on) show how many settings would change before applying |
+| **Demo mode** | An expert-menu switch swaps the whole window to a bundled sample library covering most features at once, with a permanent marker while it is on. The real data is never touched; anything changed during the session is discarded, with a confirmation first, when switching back |
 | **Runs in the background** | Optional minimize-to-tray, autostart at login, global hotkey |
 | **Guided first run** | A short walkthrough on first launch covering the basics, with a step to turn on the screenshot editor, color picker, OCR or voice dictation right there; reopen it anytime from Settings |
 | **Auto updates** | Checks for a new version on start (switchable off) with one-click install, verified against a published checksum |
@@ -192,6 +193,13 @@ npm run build              # portable exe + NSIS installer
 # -> src-tauri/target/release/prompt-saver.exe
 # -> src-tauri/target/release/bundle/nsis/Prompt Saver_<version>_x64-setup.exe
 ```
+
+### Updating the screenshot
+
+`docs/screenshot.png` (shown at the top of this file) and the in-app help's
+own picture both come from the bundled sample library, never a real one. To
+refresh either: turn on Demo mode in the expert menu (System tab), resize the
+window to a fixed size, then take the screenshot the normal way.
 
 ### Running the tests
 

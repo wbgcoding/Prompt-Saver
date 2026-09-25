@@ -16256,6 +16256,249 @@ async fn delete_data_dir(path: String) -> bool {
     ok
 }
 
+// ---- Demo mode ----
+//
+// A bundled, harmless sample library that stands in for the user's own data
+// while it is switched on, so showing the app or taking a screenshot never
+// exposes anything real. The sample store lives in its own "demo" subfolder
+// of the canonical data directory and is rebuilt from scratch every time
+// demo mode is switched on, so nothing changed during an earlier session
+// carries into the next one. The real store is never opened, written or even
+// read by any of this: switching demo mode on or off only ever touches the
+// "datapath" redirect file and the demo subfolder next to it.
+
+const DEMO_SUBFOLDER: &str = "demo";
+const DEMO_POINTER_BACKUP: &str = "datapath.before-demo";
+
+// A small solid-colour picture, generated once and kept as a literal instead
+// of a shipped file, since the sample image tile needs a valid PNG, not a real
+// photo.
+const DEMO_IMAGE_PNG_BASE64: &str =
+    "iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAIAAABvFaqvAAAAH0lEQVR42mNwm7aKKohh1KBRg0YNGjVo1KBRgwbeIACHvm2u1wMIiAAAAABJRU5ErkJggg==";
+
+fn demo_prompt(id: &str, name: &str, text: &str) -> Prompt {
+    Prompt { name: name.to_string(), text: text.to_string(), ..sync_blank_prompt(id.to_string()) }
+}
+
+// Ten prompts covering as many features at once as one harmless example
+// reasonably can: plain text, an image tile, a rotating prompt, a self-fill
+// placeholder, a favorite, two members of the sample folder, and (best
+// effort, skipped if ffmpeg is not on hand) a real attached video next to a
+// plain attached text file.
+fn demo_prompts(dir: &Path, ffmpeg: Option<&Path>) -> Vec<Prompt> {
+    let mut list = vec![
+        Prompt {
+            tags: vec!["Demo".to_string()],
+            ..demo_prompt(
+                "demo-welcome",
+                "Willkommen",
+                "Das hier ist ein Beispieleintrag im Vorführmodus. Ein Klick kopiert ihn wie jeden anderen.",
+            )
+        },
+        Prompt {
+            image: format!("data:image/png;base64,{DEMO_IMAGE_PNG_BASE64}"),
+            show_image: true,
+            ..demo_prompt(
+                "demo-image",
+                "Bild-Kachel",
+                "Diese Kachel zeigt ein Bild statt ihres Namens.",
+            )
+        },
+        Prompt {
+            variants: vec!["Guten Tag!".to_string(), "Guten Abend!".to_string()],
+            ..demo_prompt("demo-rotating", "Rotierender Gruß", "Guten Morgen!")
+        },
+        demo_prompt(
+            "demo-placeholder",
+            "Persönliche Anrede",
+            "Hallo {#{Name}#}, vielen Dank für deine Nachricht.",
+        ),
+        Prompt {
+            favorite: true,
+            tags: vec!["Demo".to_string(), "Favorit".to_string()],
+            ..demo_prompt("demo-favorite", "Lieblingsprompt", "Ein favorisierter Beispieleintrag.")
+        },
+        demo_prompt("demo-chain-a", "Erster Baustein", "Der erste Teil einer möglichen Kette."),
+        demo_prompt("demo-chain-b", "Zweiter Baustein", "Der zweite Teil einer möglichen Kette."),
+        Prompt {
+            file_path: dir.join("Anhang.txt").to_string_lossy().to_string(),
+            ..demo_prompt("demo-attachment", "Angehängte Datei", "")
+        },
+        demo_prompt("demo-folder-a", "Ordner-Eintrag 1", "Erster Eintrag im Beispielordner."),
+        demo_prompt("demo-folder-b", "Ordner-Eintrag 2", "Zweiter Eintrag im Beispielordner."),
+    ];
+    let _ = fs::write(dir.join("Anhang.txt"), "Eine harmlose Beispieldatei für den Vorführmodus.\n");
+    if let Some(ffmpeg) = ffmpeg {
+        let video = dir.join("Videoaufnahme.mp4");
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            let ok = std::process::Command::new(ffmpeg)
+                .args(["-y", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=duration=2:size=320x240:rate=10"])
+                .args(["-c:v", "libx264", "-pix_fmt", "yuv420p"])
+                .arg(&video)
+                .creation_flags(CREATE_NO_WINDOW)
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+            if ok {
+                list.push(Prompt {
+                    file_path: video.to_string_lossy().to_string(),
+                    ..demo_prompt("demo-video", "Videoaufnahme", "")
+                });
+            }
+        }
+    }
+    list
+}
+
+// Two views and one grid folder, arranged the same way every time a fresh
+// sample store is built.
+fn demo_settings(has_video: bool) -> Settings {
+    let mut settings = Settings::default();
+    settings.ui_flags.insert("demoMode".to_string(), true);
+    settings.active_view = "home".to_string();
+    let mut home = View {
+        id: "home".to_string(),
+        name: "Start".to_string(),
+        cols: default_cols(),
+        rows: default_rows(),
+        layouts: HashMap::new(),
+        color: String::new(),
+        members: {
+            let mut m = vec![
+                "demo-welcome".to_string(),
+                "demo-image".to_string(),
+                "demo-rotating".to_string(),
+                "demo-placeholder".to_string(),
+                "demo-favorite".to_string(),
+                "demo-chain-a".to_string(),
+                "demo-chain-b".to_string(),
+                "demo-folder-a".to_string(),
+                "demo-folder-b".to_string(),
+            ];
+            if has_video {
+                m.push("demo-video".to_string());
+            }
+            m
+        },
+    };
+    let folder = TileFolder {
+        id: "demo-folder".to_string(),
+        name: "Beispielordner".to_string(),
+        color: String::new(),
+        view_id: "home".to_string(),
+        cell: [0, 0],
+        members: vec!["demo-folder-a".to_string(), "demo-folder-b".to_string()],
+    };
+    let folder_cells: std::collections::HashSet<(u32, u32)> = [(0u32, 0u32)].into_iter().collect();
+    let folder_members: std::collections::HashSet<String> = folder.members.iter().cloned().collect();
+    rebuild_view_layout(&mut home, &folder_cells, &folder_members);
+    let mut team = View {
+        id: "team".to_string(),
+        name: "Team".to_string(),
+        cols: default_cols(),
+        rows: default_rows(),
+        layouts: HashMap::new(),
+        color: "#ef4444".to_string(),
+        members: vec!["demo-attachment".to_string()],
+    };
+    rebuild_view_layout(&mut team, &std::collections::HashSet::new(), &std::collections::HashSet::new());
+    settings.views = vec![home, team];
+    settings.tile_folders = vec![folder];
+    settings
+}
+
+// Wipes and rebuilds the sample store at `dir` from nothing. Never touches
+// anything outside `dir`.
+fn build_demo_store(dir: &Path, ffmpeg: Option<&Path>) -> Result<(), String> {
+    let _ = fs::remove_dir_all(dir);
+    fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    // Not db_conn_at(): its schema-init guard runs only once per process (see
+    // its own comment), which is exactly right for the app's single real
+    // connection but would silently skip creating the tables here whenever
+    // something else already opened a store first in the same process (every
+    // test in this file, and a session that enters demo mode more than once).
+    let mut conn = Connection::open(dir.join("data.db")).map_err(|e| e.to_string())?;
+    if !db_conn_init_schema(&conn) {
+        return Err("could not prepare the demo store".to_string());
+    }
+    let mut written = WrittenRows::new();
+    let prompts = demo_prompts(dir, ffmpeg);
+    let has_video = prompts.iter().any(|p| p.id == "demo-video");
+    db_write_prompts(&mut conn, &prompts, &mut written).map_err(|e| e.to_string())?;
+    db_write_settings(&conn, &demo_settings(has_video)).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// Points `canonical`'s "datapath" redirect at the demo subfolder, after
+// rebuilding it fresh, first saving whatever the redirect held before (a
+// custom folder, or none) so `exit_demo_mode` can put it back exactly.
+fn enter_demo_mode(canonical: &Path, ffmpeg: Option<&Path>) -> Result<PathBuf, String> {
+    fs::create_dir_all(canonical).map_err(|e| e.to_string())?;
+    let demo = canonical.join(DEMO_SUBFOLDER);
+    build_demo_store(&demo, ffmpeg)?;
+    let pointer = canonical.join("datapath");
+    let backup = canonical.join(DEMO_POINTER_BACKUP);
+    if pointer.exists() {
+        fs::copy(&pointer, &backup).map_err(|e| e.to_string())?;
+    } else {
+        fs::write(&backup, b"").map_err(|e| e.to_string())?; // marker: no redirect before
+    }
+    fs::write(&pointer, demo.to_string_lossy().as_bytes()).map_err(|e| e.to_string())?;
+    Ok(demo)
+}
+
+// Restores whatever `canonical`'s redirect held before demo mode. The demo
+// subfolder itself is left alone: the next enable wipes and rebuilds it, so
+// there is nothing to clean up here, and nothing changed during the session
+// that just ended is kept anywhere the app will read from again.
+fn exit_demo_mode(canonical: &Path) -> Result<(), String> {
+    let pointer = canonical.join("datapath");
+    let backup = canonical.join(DEMO_POINTER_BACKUP);
+    if !backup.exists() {
+        // Nothing recorded (a restart mid-demo, or exit called twice): the
+        // safest fallback is no redirect at all, never leaving demo active.
+        let _ = fs::remove_file(&pointer);
+        return Ok(());
+    }
+    let prev = fs::read_to_string(&backup).map_err(|e| e.to_string())?;
+    if prev.trim().is_empty() {
+        let _ = fs::remove_file(&pointer);
+    } else {
+        fs::write(&pointer, prev.as_bytes()).map_err(|e| e.to_string())?;
+    }
+    let _ = fs::remove_file(&backup);
+    Ok(())
+}
+
+// Switches to the bundled sample library, relaunching the app so every
+// window loads it fresh, the same relaunch restore_backup already uses for
+// a full data swap. The real store is flushed first so nothing pending is
+// lost, then never touched again by anything below.
+#[tauri::command]
+async fn enable_demo_mode(app: AppHandle, state: State<'_, Db>) -> Result<(), String> {
+    {
+        let store = lock(&state);
+        if !store.prompts_locked {
+            save_prompts(&app, &store);
+        }
+        save_settings(&app, &store.settings);
+    }
+    let ffmpeg = ffmpeg_search_path(&app);
+    enter_demo_mode(&default_data_dir(&app), ffmpeg.as_deref())?;
+    app.restart();
+}
+
+// Switches back to the real library and relaunches. Whatever was changed
+// during the demo session simply stops being read from anywhere: the demo
+// folder is not deleted, only abandoned until the next enable overwrites it.
+#[tauri::command]
+async fn disable_demo_mode(app: AppHandle) -> Result<(), String> {
+    exit_demo_mode(&default_data_dir(&app))?;
+    app.restart();
+}
+
 // Local wall-clock stamp for screenshot names: "YYYY-MM-DD_HH-MM-SS" (filename-safe).
 #[cfg(windows)]
 fn local_stamp() -> String {
@@ -29030,6 +29273,8 @@ pub fn run() {
             current_data_dir_sync_hint,
             set_data_dir,
             delete_data_dir,
+            enable_demo_mode,
+            disable_demo_mode,
             paste_into_previous,
             ocr_languages,
             ocr_image,
@@ -38159,6 +38404,135 @@ mod tests {
 
         *LAST_OLD_DATA_DIR.lock().unwrap() = None;
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // Demo mode: switching on builds the sample store in its own subfolder and
+    // redirects the canonical folder at it, switching off puts the redirect back
+    // exactly as it was, and the real database, sitting right next to the
+    // redirect file the whole time, is never opened by either direction.
+    #[test]
+    fn demo_mode_round_trip_never_touches_the_real_store() {
+        let canonical = std::env::temp_dir().join(format!("{}-test-demo-roundtrip", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&canonical);
+        std::fs::create_dir_all(&canonical).unwrap();
+        let real_db = canonical.join("data.db");
+        std::fs::write(&real_db, b"the real store, byte for byte").unwrap();
+        let real_bytes_before = std::fs::read(&real_db).unwrap();
+
+        // No redirect exists yet: enabling must create one.
+        assert!(!canonical.join("datapath").exists());
+        let demo = enter_demo_mode(&canonical, None).unwrap();
+        assert_eq!(demo, canonical.join(DEMO_SUBFOLDER));
+        assert!(demo.join("data.db").exists(), "enabling must create the sample store");
+        assert_eq!(
+            std::fs::read_to_string(canonical.join("datapath")).unwrap(),
+            demo.to_string_lossy(),
+            "the canonical folder must now redirect to the demo subfolder"
+        );
+        assert_eq!(
+            std::fs::read(&real_db).unwrap(),
+            real_bytes_before,
+            "the real database must be untouched by enabling demo mode"
+        );
+
+        exit_demo_mode(&canonical).unwrap();
+        assert!(
+            !canonical.join("datapath").exists(),
+            "disabling must remove the redirect there was none of before"
+        );
+        assert!(
+            !canonical.join(DEMO_POINTER_BACKUP).exists(),
+            "the backup marker must be cleaned up once restored"
+        );
+        assert_eq!(
+            std::fs::read(&real_db).unwrap(),
+            real_bytes_before,
+            "the real database must still be untouched after disabling demo mode"
+        );
+
+        let _ = std::fs::remove_dir_all(&canonical);
+    }
+
+    // A user who had already redirected their data elsewhere (the "move data
+    // folder" expert action) must get that exact redirect back, not an empty one,
+    // when demo mode is switched off again.
+    #[test]
+    fn demo_mode_restores_a_pre_existing_custom_redirect() {
+        let canonical = std::env::temp_dir().join(format!("{}-test-demo-custom-redirect", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&canonical);
+        std::fs::create_dir_all(&canonical).unwrap();
+        let custom = canonical.join("elsewhere");
+        std::fs::create_dir_all(&custom).unwrap();
+        std::fs::write(canonical.join("datapath"), custom.to_string_lossy().as_bytes()).unwrap();
+
+        enter_demo_mode(&canonical, None).unwrap();
+        assert_ne!(
+            std::fs::read_to_string(canonical.join("datapath")).unwrap(),
+            custom.to_string_lossy(),
+            "entering demo mode must point away from the custom folder"
+        );
+
+        exit_demo_mode(&canonical).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(canonical.join("datapath")).unwrap(),
+            custom.to_string_lossy(),
+            "the original custom redirect must come back exactly"
+        );
+
+        let _ = std::fs::remove_dir_all(&canonical);
+    }
+
+    // Re-entering demo mode (switch off, then back on in the same session)
+    // rebuilds the sample store from nothing rather than keeping whatever a
+    // previous demo session left behind.
+    #[test]
+    fn demo_mode_rebuilds_fresh_on_every_enable() {
+        let canonical = std::env::temp_dir().join(format!("{}-test-demo-rebuild", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&canonical);
+        std::fs::create_dir_all(&canonical).unwrap();
+
+        let demo = enter_demo_mode(&canonical, None).unwrap();
+        std::fs::write(demo.join("left-over.txt"), b"a change made during the demo session").unwrap();
+        exit_demo_mode(&canonical).unwrap();
+
+        enter_demo_mode(&canonical, None).unwrap();
+        assert!(
+            !demo.join("left-over.txt").exists(),
+            "a fresh enable must wipe whatever a previous demo session left behind"
+        );
+
+        let _ = std::fs::remove_dir_all(&canonical);
+    }
+
+    // The sample store itself: every prompt kind the spec asks for is present,
+    // and the sample library and settings load back exactly as any other store's
+    // would through the normal reader.
+    #[test]
+    fn demo_store_contains_every_sample_kind() {
+        let dir = std::env::temp_dir().join(format!("{}-test-demo-contents", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&dir);
+        build_demo_store(&dir, None).unwrap();
+
+        let conn = db_conn_at(&dir).unwrap();
+        let mut written = WrittenRows::new();
+        let (prompts, settings, _plain, _fails, _locked) = db_load(&conn, &mut written);
+        let settings = settings.expect("the sample settings row must load back");
+        let by_id: HashMap<&str, &Prompt> = prompts.iter().map(|p| (p.id.as_str(), p)).collect();
+
+        assert!(by_id.get("demo-image").is_some_and(|p| !p.image.is_empty()), "an image tile");
+        assert!(by_id.get("demo-welcome").unwrap().image.is_empty(), "a tile without an image");
+        assert!(!by_id.get("demo-rotating").unwrap().variants.is_empty(), "a rotating prompt");
+        assert!(by_id.get("demo-placeholder").unwrap().text.contains("{#{"), "a self-fill placeholder");
+        assert!(by_id.get("demo-favorite").unwrap().favorite, "a favorite");
+        assert!(!by_id.get("demo-attachment").unwrap().file_path.is_empty(), "an attachment");
+        assert!(!by_id.get("demo-welcome").unwrap().tags.is_empty(), "a tagged prompt");
+
+        assert_eq!(settings.views.len(), 2, "two views");
+        assert_eq!(settings.tile_folders.len(), 1, "one grid folder");
+        assert_eq!(settings.tile_folders[0].members.len(), 2);
+        assert_eq!(settings.ui_flags.get("demoMode"), Some(&true));
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     // Adopting an installed store copies its files one by one. If the database

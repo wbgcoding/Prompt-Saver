@@ -154,6 +154,11 @@
     <div id="data-dir-readonly-banner" class="data-dir-readonly-banner hidden">
       <span id="data-dir-readonly-text"></span>
     </div>
+    <!-- Visible for as long as demo mode is on -- gated purely by the demoMode
+         flag in CSS (.noflag-demoMode hides it), since that flag IS the mode:
+         a demo session's own settings ship with it true, the real profile's
+         never do. -->
+    <div id="demo-mode-banner" class="demo-mode-banner" data-i18n="demoModeBanner"></div>
     <!-- Shown for as long as the local remote-access receiver is actually running -->
     <div id="remote-api-banner" class="remote-api-banner hidden">
       <span id="remote-api-banner-text"></span>
