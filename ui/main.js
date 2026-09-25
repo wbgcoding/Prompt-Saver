@@ -8,7 +8,7 @@ import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT,
 import { EXAMPLE_IMAGE_DATA_URL } from "./exampleAssets.js";
 import { HELP_CONTENT } from "./help.js";
 import { HELP_SKETCHES } from "./helpSketches.js";
-import { DRAG_OUT_MODS, FOLDER_SVG, fileUri, resolveLang, ffmpegDownloadPct, themeColorScheme, playCopySound, numberField, makeEtaEstimator, formatEta, a11yProgressText, parseFfmpegError, fmtBytes, makeHoldOrTapToggle } from "./floatShared.js";
+import { DRAG_OUT_MODS, FOLDER_SVG, fileUri, resolveLang, ffmpegDownloadPct, themeColorScheme, playCopySound, numberField, makeEtaEstimator, formatEta, a11yProgressText, parseFfmpegError, fmtBytes, makeHoldOrTapToggle, trapTabWithin } from "./floatShared.js";
 import { placePopover, placePopoverAt, setPopoverPad } from "./popover.js";
 import { createColorPop } from "./colorpop.js";
 import { snapMove } from "./snap.js";
@@ -16580,10 +16580,20 @@ function bind() {
     btn.classList.toggle("is-paused", state === "paused");
   }
   async function syncRecordBtnFromStatus() {
+    // Skipped while the window is hidden (minimized to tray) -- the button
+    // it updates is not visible either, so there is nothing to resync until
+    // the window is shown again, which re-applies the real state on its own.
+    if (document.hidden) return;
     const status = await invoke("recording_status").catch(() => null);
     setRecordBtnState(!status ? "idle" : status.paused ? "paused" : "recording");
   }
   setInterval(syncRecordBtnFromStatus, 5000);
+  // Catches up the moment the window is shown again instead of waiting out
+  // the rest of the 5s poll interval for a state change that happened while
+  // hidden.
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) syncRecordBtnFromStatus();
+  });
   listen("recording-cancelled", () => setRecordBtnState("idle"));
   let recCountdownTimer = 0;
   function cancelRecCountdown() {
@@ -21086,16 +21096,6 @@ function tourGoto(i) {
 // the container instead of escaping to the page behind it. Declared at top
 // level so both bind()'s screenshot-editor code and the tour code below can
 // call it without a second implementation.
-function trapTabWithin(container, e) {
-  const list = [...container.querySelectorAll('button, input, [tabindex]:not([tabindex="-1"]), select, textarea, a[href]')]
-    .filter((el) => !el.disabled && el.offsetParent !== null);
-  if (!list.length) return;
-  const first = list[0], last = list[list.length - 1];
-  if (!container.contains(document.activeElement)) { e.preventDefault(); first.focus(); return; }
-  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-}
-
 function tourKeydown(e) {
   // A confirmation dialog on top (tourAskSkip) owns every key while it is open --
   // otherwise Escape would close both it and the tour underneath on one press.

@@ -5003,7 +5003,7 @@ fn file_dialog_for(app: &AppHandle, label: &str) -> rfd::FileDialog {
 // Pure label choice: the requested window if it is open, else "main" as a
 // fallback, else nobody. Kept apart from the AppHandle lookup so the choice
 // itself is unit-testable without a live Tauri app.
-fn resolve_dialog_parent_label<'a>(exists: impl Fn(&str) -> bool, label: &'a str) -> Option<&'a str> {
+fn resolve_dialog_parent_label(exists: impl Fn(&str) -> bool, label: &str) -> Option<&str> {
     if exists(label) {
         Some(label)
     } else if exists("main") {
@@ -13972,10 +13972,8 @@ fn sweep_edit_state_conn(conn: &Connection, exists: impl Fn(&str) -> bool, keep_
     for (id, target, updated_at) in rows {
         let gone = !exists(&target);
         let expired = keep_days > 0.0 && updated_at < cutoff;
-        if gone || expired {
-            if conn.execute("DELETE FROM edit_state WHERE id = ?1", params![id]).is_ok() {
-                removed += 1;
-            }
+        if (gone || expired) && conn.execute("DELETE FROM edit_state WHERE id = ?1", params![id]).is_ok() {
+            removed += 1;
         }
     }
     removed
@@ -21981,13 +21979,25 @@ mod recording {
         }
     }
 
+    // Grouped so `start` stays under clippy's argument limit; every field is
+    // still read individually the moment the function body begins.
+    pub struct RecStartOptions {
+        pub show_cursor: bool,
+        pub video_kbps: u32,
+        pub video_fps: u32,
+        pub canvas_ceiling: (u32, u32),
+        pub disk_warn_mb: f64,
+        pub max_min: f64,
+        pub max_mb: f64,
+    }
+
     // show_cursor: the mouse-cursor toggle (ships ON) -- windows-capture's
     // own capture setting, never a manually drawn cursor. audio: neither
     // source active takes the exact original video-only path unchanged.
     pub fn start(
-        target: RecTarget, output_path: PathBuf, show_cursor: bool, audio: AudioConfig, video_kbps: u32, video_fps: u32,
-        canvas_mode: &str, canvas_ceiling: (u32, u32), disk_warn_mb: f64, max_min: f64, max_mb: f64,
+        target: RecTarget, output_path: PathBuf, audio: AudioConfig, canvas_mode: &str, opts: RecStartOptions,
     ) -> Result<RecSession, String> {
+        let RecStartOptions { show_cursor, video_kbps, video_fps, canvas_ceiling, disk_warn_mb, max_min, max_mb } = opts;
         let (native_w, native_h) = resolve_target_size(target)?;
         let audio_active = audio.system || audio.mic;
         // Both sources active used to mean "mixed into the encoder's one
@@ -22285,12 +22295,12 @@ mod recording {
     // reactive notice: the timestamp of the first frame the resize-safety-net
     // had to shrink to keep fitting, or None if that never happened this
     // recording.
-    pub fn stop(
-        session: RecSession,
-    ) -> Result<
-        (PathBuf, u64, Option<String>, Option<PathBuf>, Option<&'static str>, Option<(u32, u32, u32, u32)>, (u32, u32), Option<u64>),
-        String,
-    > {
+    // path, dropped-frame count, encode error, mic sidecar path, canvas note,
+    // used-area crop rect, canvas size, first-resize timestamp -- see the
+    // field-by-field comment above.
+    pub type StopResult = (PathBuf, u64, Option<String>, Option<PathBuf>, Option<&'static str>, Option<(u32, u32, u32, u32)>, (u32, u32), Option<u64>);
+
+    pub fn stop(session: RecSession) -> Result<StopResult, String> {
         let path = session.output_path.clone();
         let mic_wav_path = session.mic_wav_path.clone();
         let canvas_note = session.canvas_note;
@@ -22629,7 +22639,10 @@ async fn start_recording(
     let dir = data_dir(&app).join("recordings");
     let session = tauri::async_runtime::spawn_blocking(move || {
         let out_path = recording::new_output_path(&dir)?;
-        recording::start(target, out_path, show_cursor, audio, video_kbps, video_fps, &canvas_mode, canvas_ceiling, disk_warn_mb, max_min, max_mb)
+        recording::start(
+            target, out_path, audio, &canvas_mode,
+            recording::RecStartOptions { show_cursor, video_kbps, video_fps, canvas_ceiling, disk_warn_mb, max_min, max_mb },
+        )
     })
     .await
     .map_err(|e| e.to_string())??;
@@ -22721,7 +22734,7 @@ async fn switch_recording_target(app: AppHandle, rstate: State<'_, RecordingStat
 
 #[cfg(windows)]
 enum ContinueOutcome {
-    Continued(recording::RecSession, RecordingContinuedPayload),
+    Continued(Box<recording::RecSession>, RecordingContinuedPayload),
     // The switch itself failed after the old file was already closed for
     // good -- there is no way back to "still recording" from there, so this
     // names the finished take instead of a failed no-op (the String is the
@@ -22787,7 +22800,8 @@ async fn finish_and_continue_recording(
         let part_number = REC_SESSION_PARTS.lock().unwrap_or_else(|e| e.into_inner()).len() as u32 + 2;
         let out_path = recording::continuation_output_path(&base_path, part_number);
         match recording::start(
-            target, out_path.clone(), show_cursor, audio, video_kbps, video_fps, &canvas_mode, canvas_ceiling, disk_warn_mb, max_min, max_mb,
+            target, out_path.clone(), audio, &canvas_mode,
+            recording::RecStartOptions { show_cursor, video_kbps, video_fps, canvas_ceiling, disk_warn_mb, max_min, max_mb },
         ) {
             Ok(new_session) => {
                 // The switch worked -- this part is now an interim one with no
@@ -22819,7 +22833,7 @@ async fn finish_and_continue_recording(
                     path: path.to_string_lossy().to_string(),
                     mic_wav_path: mic_wav_path.map(|p| p.to_string_lossy().to_string()),
                 });
-                Ok(ContinueOutcome::Continued(new_session, RecordingContinuedPayload {
+                Ok(ContinueOutcome::Continued(Box::new(new_session), RecordingContinuedPayload {
                     finished_part_path: path.to_string_lossy().to_string(),
                     finished_part_dropped_frames: dropped,
                     finished_part_encode_error: encode_error,
@@ -22865,7 +22879,7 @@ async fn finish_and_continue_recording(
             Err(e)
         }
         Ok(ContinueOutcome::Continued(new_session, payload)) => {
-            *rstate.0.lock().unwrap_or_else(|e| e.into_inner()) = Some(new_session);
+            *rstate.0.lock().unwrap_or_else(|e| e.into_inner()) = Some(*new_session);
             Ok(payload)
         }
         Ok(ContinueOutcome::StoppedInstead(err)) => {
@@ -24345,7 +24359,7 @@ fn download_ffmpeg_blocking(app: &AppHandle) -> Result<String, String> {
             "ffmpeg-download-progress",
             serde_json::json!({ "downloaded": bytes.len() as u64, "total": total }),
         );
-        let pct = if total > 0 { Some(((bytes.len() as u64 * 100) / total) as u32) } else { None };
+        let pct = (bytes.len() as u64 * 100).checked_div(total).map(|v| v as u32);
         push_bg_op(app, "ffmpeg-download", "ffmpeg-download", if pct.is_some() { "running" } else { "indeterminate" }, pct, None);
     }
     if FFMPEG_DOWNLOAD_CANCEL.load(Ordering::SeqCst) {
@@ -24425,7 +24439,9 @@ fn cancel_recording_convert() {
 // stale/superseded recording (the result modal was discarded and a new
 // recording already started) is refused rather than acting on the wrong
 // file.
-static PENDING_REC_CROP: Mutex<Option<(PathBuf, (u32, u32, u32, u32))>> = Mutex::new(None);
+// (recording path, crop rect as x, y, w, h)
+type PendingRecCrop = Option<(PathBuf, (u32, u32, u32, u32))>;
+static PENDING_REC_CROP: Mutex<PendingRecCrop> = Mutex::new(None);
 static REC_CROP_CANCEL: AtomicBool = AtomicBool::new(false);
 
 // Every part a "finish and continue" chain has already closed, oldest first
@@ -34163,7 +34179,14 @@ mod tests {
         let audio = recording::AudioConfig {
             system: true, mic: false, mic_device_id: String::new(), kbps: 192,
         };
-        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320), 500.0, 0.0, 0.0).expect("start");
+        let session = recording::start(
+            recording::RecTarget::Monitor(0), out, audio, "all",
+            recording::RecStartOptions {
+                show_cursor: true, video_kbps: 12000, video_fps: 30, canvas_ceiling: (8192, 4320),
+                disk_warn_mb: 500.0, max_min: 0.0, max_mb: 0.0,
+            },
+        )
+        .expect("start");
         std::thread::sleep(std::time::Duration::from_secs(4));
         let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
@@ -34187,7 +34210,14 @@ mod tests {
         let audio = recording::AudioConfig {
             system: false, mic: true, mic_device_id: String::new(), kbps: 192,
         };
-        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320), 500.0, 0.0, 0.0).expect("start");
+        let session = recording::start(
+            recording::RecTarget::Monitor(0), out, audio, "all",
+            recording::RecStartOptions {
+                show_cursor: true, video_kbps: 12000, video_fps: 30, canvas_ceiling: (8192, 4320),
+                disk_warn_mb: 500.0, max_min: 0.0, max_mb: 0.0,
+            },
+        )
+        .expect("start");
         std::thread::sleep(std::time::Duration::from_secs(4));
         let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
@@ -34208,7 +34238,14 @@ mod tests {
         let audio = recording::AudioConfig {
             system: true, mic: true, mic_device_id: String::new(), kbps: 192,
         };
-        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320), 500.0, 0.0, 0.0).expect("start");
+        let session = recording::start(
+            recording::RecTarget::Monitor(0), out, audio, "all",
+            recording::RecStartOptions {
+                show_cursor: true, video_kbps: 12000, video_fps: 30, canvas_ceiling: (8192, 4320),
+                disk_warn_mb: 500.0, max_min: 0.0, max_mb: 0.0,
+            },
+        )
+        .expect("start");
         std::thread::sleep(std::time::Duration::from_secs(4));
         let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
@@ -34233,7 +34270,14 @@ mod tests {
             system: true, mic: false, mic_device_id: String::new(), kbps: 192,
         };
         let wall_start = std::time::Instant::now();
-        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320), 500.0, 0.0, 0.0).expect("start");
+        let session = recording::start(
+            recording::RecTarget::Monitor(0), out, audio, "all",
+            recording::RecStartOptions {
+                show_cursor: true, video_kbps: 12000, video_fps: 30, canvas_ceiling: (8192, 4320),
+                disk_warn_mb: 500.0, max_min: 0.0, max_mb: 0.0,
+            },
+        )
+        .expect("start");
         std::thread::sleep(std::time::Duration::from_secs(600));
         let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session).expect("stop");
         let wall_elapsed = wall_start.elapsed().as_secs_f64();
@@ -34273,7 +34317,14 @@ mod tests {
         let audio = recording::AudioConfig {
             system: false, mic: false, mic_device_id: String::new(), kbps: 192,
         };
-        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320), 500.0, 0.0, 0.0).expect("start");
+        let session = recording::start(
+            recording::RecTarget::Monitor(0), out, audio, "all",
+            recording::RecStartOptions {
+                show_cursor: true, video_kbps: 12000, video_fps: 30, canvas_ceiling: (8192, 4320),
+                disk_warn_mb: 500.0, max_min: 0.0, max_mb: 0.0,
+            },
+        )
+        .expect("start");
         std::thread::sleep(std::time::Duration::from_secs(2));
         let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
@@ -34325,7 +34376,8 @@ mod tests {
             (true, 12000u32, 30u32, "all", (8192u32, 4320u32), 500.0f64, 0.0f64, 0.0f64);
 
         let session1 = recording::start(
-            target, part1_path.clone(), show_cursor, audio.clone(), video_kbps, video_fps, canvas_mode, canvas_ceiling, disk_warn_mb, max_min, max_mb,
+            target, part1_path.clone(), audio.clone(), canvas_mode,
+            recording::RecStartOptions { show_cursor, video_kbps, video_fps, canvas_ceiling, disk_warn_mb, max_min, max_mb },
         )
         .expect("start part 1");
         // The session retains exactly what it was built with -- this is what
@@ -34345,7 +34397,8 @@ mod tests {
 
         let part2_path = recording::continuation_output_path(&part1_path, 2);
         let session2 = recording::start(
-            target, part2_path.clone(), show_cursor, audio, video_kbps, video_fps, canvas_mode, canvas_ceiling, disk_warn_mb, max_min, max_mb,
+            target, part2_path.clone(), audio, canvas_mode,
+            recording::RecStartOptions { show_cursor, video_kbps, video_fps, canvas_ceiling, disk_warn_mb, max_min, max_mb },
         )
         .expect("start part 2 with the SAME settings as part 1");
         std::thread::sleep(std::time::Duration::from_secs(2));
@@ -37224,7 +37277,7 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         let src = dir.join("rec-2026-01-01-00-00-00.mp4");
         fs::write(&src, b"video").unwrap();
-        let moved = discard_recording_file_in(&[dir.clone()], &src).expect("must move, not fail");
+        let moved = discard_recording_file_in(std::slice::from_ref(&dir), &src).expect("must move, not fail");
         // discard_recording_file_in canonicalizes the parent internally (the \\?\
         // extended-length form on Windows) -- canonicalize the expected side too
         // rather than comparing a canonical path against a plain one.
@@ -37241,7 +37294,7 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         let src = dir.join("not-a-recording.mp4");
         fs::write(&src, b"video").unwrap();
-        assert!(discard_recording_file_in(&[dir.clone()], &src).is_none());
+        assert!(discard_recording_file_in(std::slice::from_ref(&dir), &src).is_none());
         assert!(src.is_file(), "a refused discard must leave the file untouched");
         let _ = fs::remove_dir_all(&dir);
     }
@@ -37642,7 +37695,7 @@ mod tests {
         backdate(&active, Duration::from_secs(3600));
 
         let empty = std::collections::HashSet::new();
-        let (count, bytes) = sweep_stale_recordings_in(&dir, &empty, &[active.clone()], true, Duration::from_secs(60), None);
+        let (count, bytes) = sweep_stale_recordings_in(&dir, &empty, std::slice::from_ref(&active), true, Duration::from_secs(60), None);
 
         assert_eq!(count, 0);
         assert_eq!(bytes, 0);
@@ -44464,8 +44517,10 @@ mod tests {
         // order they arrived in. Each job owns its own thread, so nothing bounds
         // how far apart two due times must be to survive real OS scheduling
         // jitter under load; wide gaps keep this a scheduling-order test rather
-        // than a thread-wakeup-latency test.
-        for (name, delay_ms) in [("third", 450u64), ("first", 150), ("second", 300)] {
+        // than a thread-wakeup-latency test. The full suite runs many tests
+        // concurrently, so the gaps are wide (600ms) rather than the original
+        // 150ms — a 150ms gap measurably flaked under that contention.
+        for (name, delay_ms) in [("third", 1800u64), ("first", 600), ("second", 1200)] {
             let log = log.clone();
             s.register_periodic(name, Duration::from_millis(delay_ms), NEVER_AGAIN, move || {
                 log.lock().unwrap_or_else(|e| e.into_inner()).push(name);
@@ -44582,6 +44637,12 @@ mod tests {
     // The census sees every thread in the process, the test harness's own
     // included, so each attempt brackets its measurement with a baseline reading
     // and only accepts a round where the baseline did not move underneath it.
+    // A round is also rejected outright when `with_jobs` itself is off by more
+    // than the four chores: cargo runs every test in this binary concurrently,
+    // so another test's own thread can start or stop in the narrow window
+    // between the two `live_threads()` reads even when the before/after
+    // baseline matches — that used to flake this test under load rather than
+    // prove anything about the Scheduler.
     #[cfg(windows)]
     #[test]
     fn four_chores_cost_four_dedicated_threads() {
@@ -44602,7 +44663,7 @@ mod tests {
             wait_until(|| live_threads() <= before, Duration::from_secs(5));
             let after = live_threads();
 
-            if before == after {
+            if before == after && with_jobs.saturating_sub(before) == CHORES {
                 measured = Some((before, with_jobs));
                 break;
             }

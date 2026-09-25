@@ -38,6 +38,19 @@ export function fileUri(path) {
   return p.startsWith("//") ? `file:${p}` : `file:///${p}`;
 }
 
+// Keyboard focus trap for a modal's Tab handler: wraps focus at the first/last
+// focusable element instead of letting it escape into whatever sits behind the
+// modal. Shared by the main window's dialogs and the video editor's own.
+export function trapTabWithin(container, e) {
+  const list = [...container.querySelectorAll('button, input, [tabindex]:not([tabindex="-1"]), select, textarea, a[href]')]
+    .filter((el) => !el.disabled && el.offsetParent !== null);
+  if (!list.length) return;
+  const first = list[0], last = list[list.length - 1];
+  if (!container.contains(document.activeElement)) { e.preventDefault(); first.focus(); return; }
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+}
+
 // Which of the 7 built-in themes render dark, so every window can set the
 // standard `color-scheme` CSS property from the active theme name. Without it
 // a WebView2 native control that isn't styled by our own CSS -- the video
@@ -103,6 +116,26 @@ export function fmtBytes(n) {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+// mm:ss for an elapsed-time readout. Shared by the camera bar and the
+// recording control bar, both of which show a running clock; the video
+// editor's own fmtTime needs millisecond precision and stays separate.
+export function fmtTimeMMSS(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const m = Math.floor(s / 60);
+  const ss = s % 60;
+  return `${String(m).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
+}
+
+// Compact whole-KB / one-decimal-MB size readout, empty string below zero
+// bytes. Shared by the recording control bar and the video editor's scale
+// preview; fmtBytes above is a different, more precise format for a size
+// estimate range and is not interchangeable with this one.
+export function fmtSizeCompact(bytes) {
+  if (!bytes) return "";
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 // Turns an estimate() result into the localized display string, or "" once

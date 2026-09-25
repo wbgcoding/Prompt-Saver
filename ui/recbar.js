@@ -2,6 +2,8 @@
 // elapsed time, live file size, Pause/Resume, Stop and Cancel. The window
 // itself carries WDA_EXCLUDEFROMCAPTURE (set on the Rust side, unconditionally
 // -- it must never appear in the recording it controls).
+import { fmtTimeMMSS, fmtSizeCompact } from "./floatShared.js";
+
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
 const { getCurrentWebviewWindow } = window.__TAURI__.webviewWindow;
@@ -24,18 +26,6 @@ const audioMicEl = document.getElementById("audio-mic");
 const hotkeyWarnEl = document.getElementById("hotkey-warn");
 const diskWarnEl = document.getElementById("disk-warn");
 
-function fmtTime(ms) {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  const m = Math.floor(s / 60);
-  const ss = s % 60;
-  return `${String(m).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
-}
-function fmtSize(bytes) {
-  if (!bytes) return "";
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 // recBarSize gates the whole readout, shown from recBarSizeFromMb onward
 // so the narrow bar stays narrow in the normal case -- the threshold decision
 // itself lives in recording_status (rec_bar_size_state), this only renders
@@ -43,9 +33,9 @@ function fmtSize(bytes) {
 // recMaxMb, where the text turns into a warm color and gets a tooltip with
 // the estimated time left at the recording's own observed rate so far.
 function applySize(bytes, etaSecs) {
-  sizeEl.textContent = fmtSize(bytes);
+  sizeEl.textContent = fmtSizeCompact(bytes);
   sizeEl.classList.toggle("rec-size-warn", etaSecs != null);
-  sizeEl.title = etaSecs != null && i18nDict ? (i18nDict.recBarSizeEta || "").replace("{time}", fmtTime(etaSecs * 1000)) : "";
+  sizeEl.title = etaSecs != null && i18nDict ? (i18nDict.recBarSizeEta || "").replace("{time}", fmtTimeMMSS(etaSecs * 1000)) : "";
 }
 
 // recTargetSwitch's own button: stays visible even when it cannot do
@@ -76,7 +66,7 @@ function applyContinueEnabled(elapsedMs) {
 // A successful continue's own gap (ms the switch itself took, start to
 // finish) is shown for a few seconds right where the file size normally
 // sits, so the missing moment between the two files is never silently
-// hidden from the user -- not localized, same as fmtSize's "KB"/"MB".
+// hidden from the user -- not localized, same as fmtSizeCompact's "KB"/"MB".
 let gapHideTimer = 0;
 function showContinueGap(gapMs) {
   clearTimeout(gapHideTimer);
@@ -208,7 +198,7 @@ async function poll() {
       return;
     }
     applyPaused(status.paused);
-    timeEl.textContent = fmtTime(status.elapsed_ms);
+    timeEl.textContent = fmtTimeMMSS(status.elapsed_ms);
     applySize(status.show_size ? status.bytes : 0, status.size_eta_secs);
     applyTargetSwitch(status.target_switch_enabled);
     applyContinueEnabled(status.elapsed_ms);
