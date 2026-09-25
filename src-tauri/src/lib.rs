@@ -3013,7 +3013,7 @@ fn write_sealed_json<T: Serialize>(path: &PathBuf, data: &T) -> bool {
     false
 }
 
-// Never truncate an existing file in place — a crash or a cloud-sync client
+// Never truncate an existing file in place: a crash or a cloud-sync client
 // reading mid-write would otherwise see a valid frontmatter head with a truncated
 // body, and a later poll then imports that as truth. Temp-then-rename next to the
 // target, same pattern write_sealed_json already uses. The temp name deliberately
@@ -3107,12 +3107,12 @@ mod store_crypt {
 // disk untouched; leaving it sticky for the rest of the session is the honest answer.
 static STORE_SEALED: AtomicBool = AtomicBool::new(true);
 // Set once the app handle exists; None while the store is still being loaded, which
-// is fine — no window exists yet to receive an event, and the flag above already
+// is fine: no window exists yet to receive an event, and the flag above already
 // carries the state for the startup question.
 //
 // A closure rather than the AppHandle itself, deliberately: `enc_str` is linked into
 // the unit-test binary, and a direct `handle.emit(...)` in its body pulls the whole
-// webview event path — and the WebView2 import that comes with it — into a binary
+// webview event path (and the WebView2 import that comes with it) into a binary
 // that has no webview beside it, which then fails to LOAD at all (every test
 // "fails" before one of them runs). Behind this indirection the emit lives in the
 // closure built in `run()`, which no test links.
@@ -3123,7 +3123,7 @@ static SEAL_NOTIFY: Mutex<Option<SealNotifier>> = Mutex::new(None);
 //
 // A DPAPI failure falls back to plaintext rather than refusing the write: hard-failing
 // here would mean the user cannot save at all, trading a confidentiality problem for
-// guaranteed data loss. It must never be SILENT though — a broken Windows profile
+// guaranteed data loss. It must never be SILENT though: a broken Windows profile
 // would otherwise downgrade the whole store from sealed to readable with nothing to
 // show for it. Logged and announced once per run (this runs per row; a full save
 // would otherwise flood both the log and the window).
@@ -3432,7 +3432,7 @@ fn dec_str(stored: &str) -> String {
 
 // Schema + migration probe for a data.db connection, run at most ONCE per process
 // (see db_conn below). Returns false on any failure; db_conn then fails closed for
-// every call for the rest of the process, same as it already did per-call before —
+// every call for the rest of the process, same as it already did per-call before:
 // a schema/migration failure here means the DB file itself is unusable, which no
 // retry on a later call would fix differently.
 fn db_conn_init_schema(conn: &Connection) -> bool {
@@ -3455,18 +3455,18 @@ fn db_conn_init_schema(conn: &Connection) -> bool {
     {
         return false;
     }
-    // First-ever schema migration in this app — `prompt_versions` predates
+    // First-ever schema migration in this app: `prompt_versions` predates
     // `variants`. `CREATE TABLE IF NOT EXISTS` above already gives a brand-new
     // install the column; an EXISTING data.db still has the old 5-column table.
     // Checked via PRAGMA table_info rather than blindly firing ALTER TABLE and
-    // swallowing whatever comes back — that would also swallow a REAL failure
+    // swallowing whatever comes back: that would also swallow a REAL failure
     // (locked/full/corrupt disk), silently leaving the column missing with no way
     // to tell the difference from "already migrated".
     let has_variants_column = conn
         .prepare("SELECT 1 FROM pragma_table_info('prompt_versions') WHERE name = 'variants'")
         .and_then(|mut s| s.exists([]))
         .unwrap_or(true); // a PRAGMA query failing here means something is already
-                           // badly wrong with the connection — do not also spam an
+                           // badly wrong with the connection: do not also spam an
                            // ALTER TABLE into that same broken state.
     if !has_variants_column {
         // The whole point of checking has_variants_column first (rather than
@@ -3507,7 +3507,7 @@ fn db_conn_at(dir: &Path) -> Option<Connection> {
     // busy_timeout is connection-scoped (NOT persisted in the DB file, unlike
     // journal_mode below) so it must be set on every connection, but the schema
     // batch + migration probe are idempotent and only ever need to run once per
-    // process — every call used to pay for a 10-statement execute_batch plus a
+    // process: every call used to pay for a 10-statement execute_batch plus a
     // pragma_table_info probe just to open a connection for one write.
     conn.execute_batch("PRAGMA busy_timeout=3000;").ok()?;
     static SCHEMA_READY: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
@@ -3520,13 +3520,13 @@ fn db_conn_at(dir: &Path) -> Option<Connection> {
 // What the prompts/trash tables are known to hold: "<table>\u{1}<id>" → a hash of
 // that row's PLAINTEXT json. Every row is sealed before it is stored and sealing
 // the same text twice gives different bytes, so a stored blob cannot be compared
-// against a new one directly — and decrypting the whole table to compare would
+// against a new one directly: and decrypting the whole table to compare would
 // cost exactly what this map exists to save. An entry means "the row with this id
 // currently in that table decodes to content hashing to this value", which is what
 // lets a save skip re-sealing every untouched row.
 //
-// Anything that changes those tables from OUTSIDE write_rows — a restored or
-// swapped data.db, a raw DELETE, a move to a different data folder — must clear
+// Anything that changes those tables from OUTSIDE write_rows: a restored or
+// swapped data.db, a raw DELETE, a move to a different data folder: must clear
 // the map (Store::forget_written_rows), or the next save trusts an entry that no
 // longer describes the disk and skips a row that really did need writing.
 type WrittenRows = HashMap<String, u64>;
@@ -3555,7 +3555,7 @@ fn duplicate_row_id_error(table: &str) -> rusqlite::Error {
 
 // Bring one table in line with `rows`, touching as little as possible: rows that
 // disappeared are deleted, rows whose content changed are re-sealed and rewritten,
-// and rows that merely moved get their `ord` corrected — reordering costs no
+// and rows that merely moved get their `ord` corrected: reordering costs no
 // encryption at all. Always inside the caller's own transaction. `table` is always
 // one of our own two hardcoded table names below, never user input, so
 // interpolating it into the SQL text is safe.
@@ -3575,7 +3575,7 @@ fn write_rows(
             return Err(duplicate_row_id_error(table));
         }
     }
-    // What the table holds right now — ids and positions only, nothing decrypted.
+    // What the table holds right now: ids and positions only, nothing decrypted.
     // Row PRESENCE is taken from here rather than from the map, so a row that is
     // missing from the table is re-inserted even if the map still lists it.
     let mut present: HashMap<String, i64> = HashMap::new();
@@ -3649,7 +3649,7 @@ fn db_write_prompts(conn: &mut Connection, prompts: &[Prompt], written: &mut Wri
 // Same schema and shape as db_write_prompts/db_load's prompt half, but its own
 // table. A prompt "in the trash" simply isn't in `prompts` any more, so every
 // existing read of store.prompts (grid, library, tray, hotkeys, export, stats,
-// duplicate finder...) stays correct with zero changes — the alternative, a
+// duplicate finder...) stays correct with zero changes: the alternative, a
 // deleted_at flag on Prompt filtered everywhere, would have needed every one of
 // those call sites found and fixed, with real risk of missing one.
 fn db_write_trash(conn: &mut Connection, trash: &[Prompt], written: &mut WrittenRows) -> rusqlite::Result<()> {
@@ -3682,12 +3682,12 @@ fn db_write_prompts_and_trash(
 
 // `written` collects what the table was found to hold (see WrittenRows) so the
 // first save of the session already only writes what actually changed. Recorded
-// straight from the rows as they were read — never from a later, migrated or
+// straight from the rows as they were read: never from a later, migrated or
 // replaced list, which would claim content for the disk that never reached it.
 //
 // Second return value is a failure count, same convention as db_load: a row
 // that could not be read back, or an encrypted row that would not decrypt or
-// parse, is present-but-unaccounted-for, not simply absent — the caller must
+// parse, is present-but-unaccounted-for, not simply absent: the caller must
 // fold it into the same write-lock decision as db_load's own failures, or a
 // trash mutation could permanently erase whatever this omitted.
 fn db_load_trash(conn: &Connection, written: &mut WrittenRows) -> (Vec<Prompt>, usize) {
@@ -3741,7 +3741,7 @@ fn db_write_settings(conn: &Connection, settings: &Settings) -> rusqlite::Result
 // Returns (prompts, settings, any_plaintext, load_failures). `load_failures`
 // counts rows that are present-but-unaccounted-for: an encrypted row that
 // would not decrypt/parse, a row the SQLite driver could not read back at all,
-// or the SELECT itself failing to prepare/run (corrupt table, locked file) —
+// or the SELECT itself failing to prepare/run (corrupt table, locked file):
 // every one of them means the true prompt count is NOT known to be what this
 // function returned, so the caller must avoid any destructive rewrite of the
 // prompts table rather than treat a partial result as the whole truth.
@@ -3815,7 +3815,7 @@ fn db_load(conn: &Connection, written: &mut WrittenRows) -> (Vec<Prompt>, Option
 
 // Peeks the "allowMultipleInstances" flag before the Tauri builder exists. The
 // single-instance plugin has to be attached (or not) at builder time, before any
-// AppHandle exists to resolve settings the normal way — so this mirrors
+// AppHandle exists to resolve settings the normal way: so this mirrors
 // default_data_dir()'s portable/APPDATA resolution and opens the DB directly. Any
 // failure (first run, missing DB, undecryptable row) yields false: single instance,
 // the safe default that matches every install before this option existed.
@@ -3844,12 +3844,12 @@ fn early_allow_multiple_instances() -> bool {
 // Append one copy event, then trim to the cap and the retention window. The cap
 // trim uses the rowid (monotonic insertion order): "keep rows whose rowid is
 // within `cap` of the newest" deletes at most one row per call in steady state
-// and touches nothing during growth — O(log n), so a million-entry history is
+// and touches nothing during growth: O(log n), so a million-entry history is
 // still cheap on every copy.
 // Trim the history to the cap (newest `cap` rows) and the retention window. Rows
 // kept are exactly those with rowid in (MAX-cap, MAX], i.e. at most `cap`, and
 // age-prune only ever deletes from the old (low-rowid) end, so the kept block
-// stays a contiguous newest-N — the cap can never be exceeded.
+// stays a contiguous newest-N: the cap can never be exceeded.
 fn db_trim_copy(conn: &Connection, cap: usize, cutoff: Option<u64>) -> rusqlite::Result<()> {
     if cap == 0 {
         conn.execute("DELETE FROM copy_log", [])?;
@@ -3870,7 +3870,7 @@ fn db_append_copy(conn: &Connection, entry: &CopyEntry, cap: usize, cutoff: Opti
     db_trim_copy(conn, cap, cutoff)
 }
 
-// One journal row as shown/deletable in the UI — unlike CopyEntry (insert/trim/
+// One journal row as shown/deletable in the UI: unlike CopyEntry (insert/trim/
 // legacy-migration only), this carries the rowid a delete needs to target the exact
 // row, even in grouped mode where several rows share the same prompt id.
 #[derive(Serialize)]
@@ -3880,7 +3880,7 @@ struct JournalEntry {
     ts: u64,
 }
 
-// Copy counts for the last `days` UTC days, oldest first, zero-filled — a
+// Copy counts for the last `days` UTC days, oldest first, zero-filled: a
 // single GROUP BY query bucketed by day-since-epoch, merged against a dense day
 // range in Rust (cheaper than one query per day, and never skips an empty day).
 fn db_daily_copies(conn: &Connection, days: u32) -> Vec<DayCount> {
@@ -3937,7 +3937,7 @@ struct PromptVersion {
     ts: u64,
     name: String,
     text: String,
-    // Entries ARE content — a version snapshot without them would let a
+    // Entries ARE content: a version snapshot without them would let a
     // restore silently drop entries 2..n. JSON-encoded in its own DB column
     // (unlike the export formats, nothing here needs to stay human-editable).
     variants: Vec<String>,
@@ -3987,10 +3987,10 @@ fn db_list_versions(conn: &Connection, prompt_id: &str) -> Vec<PromptVersion> {
     }
     out
 }
-// One prompt's last real content edit (name or text change — the only kind
+// One prompt's last real content edit (name or text change: the only kind
 // that gets a version row, see update_prompt) is the newest `ts` it has in
 // prompt_versions. Bundled for every prompt at once (one GROUP BY, not an N+1
-// query per prompt) — a prompt absent from the result has never had a version
+// query per prompt): a prompt absent from the result has never had a version
 // row: history was off for all its edits, or it was never edited since creation.
 fn db_last_edited(conn: &Connection) -> std::collections::HashMap<String, u64> {
     let mut out = std::collections::HashMap::new();
@@ -4095,7 +4095,7 @@ fn resolve_relative_file_paths(dir: &Path, rows: &mut [Prompt]) {
 // review finding): in portable mode the data dir IS the exe folder, and a
 // custom data dir is common too, so a real user's file picked from directly
 // inside that folder has an absolute path whose parent legitimately equals
-// `dir` — stripping it unconditionally turned a real attachment into a bare
+// `dir`: stripping it unconditionally turned a real attachment into a bare
 // filename that broke after any later data-dir move or portable/installed
 // takeover. The first attempt at this gate compared `dir`'s folder NAME
 // against `DEMO_SUBFOLDER`, which still fires for a real (if unlikely) data
@@ -4129,7 +4129,7 @@ fn strip_data_dir_prefix<'a>(dir: &Path, is_demo: bool, prompts: &'a [Prompt]) -
     std::borrow::Cow::Owned(out)
 }
 
-// Returns whether the prompts made it to durable storage (DB or JSON fallback) —
+// Returns whether the prompts made it to durable storage (DB or JSON fallback):
 // callers that follow a save with a destructive step (deleting an orphaned
 // attachment file) must skip that step when this is false, or the deletion can
 // outlive the very change that made the file orphaned.
@@ -4139,7 +4139,7 @@ fn save_prompts(app: &AppHandle, store: &Store) -> bool {
     }
     // Safety valve: if some rows failed to decrypt at load, the in-memory list is a
     // SUBSET of what's on disk. Rewriting the table (DELETE + re-INSERT) would delete
-    // the unreadable rows permanently — so we refuse to persist prompt changes at all
+    // the unreadable rows permanently: so we refuse to persist prompt changes at all
     // until the situation is resolved. Prompt edits this session simply won't stick.
     if store.prompts_locked {
         return false;
@@ -4148,7 +4148,7 @@ fn save_prompts(app: &AppHandle, store: &Store) -> bool {
     let prompts = strip_data_dir_prefix(&dir, data_dir_is_demo(app, &dir), &store.prompts);
     if let Some(mut conn) = db_conn(app) {
         // The map is only advanced by a committed write, so a failure here leaves it
-        // describing exactly what the (rolled-back) table still holds — the JSON
+        // describing exactly what the (rolled-back) table still holds: the JSON
         // fallback below must not touch it either, or the row would count as saved.
         let ok = {
             let mut written = store.written.borrow_mut();
@@ -4161,7 +4161,7 @@ fn save_prompts(app: &AppHandle, store: &Store) -> bool {
     }
     // Last resort: JSON fallback. load_store() reads this back and retries the
     // DB write on next launch, so a fallback here is not itself data loss. If even
-    // this fails (disk full / permission), the change really is lost — leave a
+    // this fails (disk full / permission), the change really is lost: leave a
     // diagnosable trace instead of failing silently.
     if !write_sealed_json(&dir.join("prompts.json"), &prompts) {
         append_crash_log("persist failed: prompts could not be written to the database or the JSON fallback");
@@ -4236,7 +4236,7 @@ fn save_settings(app: &AppHandle, settings: &Settings) -> bool {
     write_settings_now(app, settings)
 }
 
-// The write itself, without the "cancel a collected write" step — the collecting
+// The write itself, without the "cancel a collected write" step: the collecting
 // path below calls this one so it does not clear its own mark twice.
 fn write_settings_now(app: &AppHandle, settings: &Settings) -> bool {
     if data_dir_write_blocked(app) {
@@ -4276,8 +4276,8 @@ fn write_settings_now(app: &AppHandle, settings: &Settings) -> bool {
 //
 // save_settings re-encrypts and rewrites the WHOLE settings block (themes,
 // layouts, window geometry, every toggle) each time it is called. Rotation
-// pointers, usage counters and "last used" stamps move on every copy — and on a
-// rotating prompt with auto-advance, on every single paste — so they used to buy
+// pointers, usage counters and "last used" stamps move on every copy: and on a
+// rotating prompt with auto-advance, on every single paste: so they used to buy
 // one full settings write per Ctrl+V. They mark the block dirty instead, and the
 // shared timer thread writes it once the marking has been quiet for a moment.
 //
@@ -4285,8 +4285,8 @@ fn write_settings_now(app: &AppHandle, settings: &Settings) -> bool {
 // store.settings under the store lock before it marks, so the next copy of that
 // prompt still serves the right entry no matter when the write lands.
 //
-// What this costs in the worst case: if the process is killed outright — task
-// manager, a power cut, a crash — up to one second of counter state is lost: a
+// What this costs in the worst case: if the process is killed outright; task
+// manager, a power cut, a crash: up to one second of counter state is lost: a
 // rotation pointer that stays where it was, a use count one short, a "last used"
 // stamp from the previous copy. It can never cost a prompt, any text, or a
 // setting the user just changed. Everything the user edits still writes through
@@ -4325,7 +4325,7 @@ impl SettingsDelay {
 
     // The ONE place that decides whether a collected write happens, so the number
     // of `true` answers is exactly the number of disk writes on this path.
-    // `force` skips the quiet window — an exit or a backup cannot wait it out.
+    // `force` skips the quiet window: an exit or a backup cannot wait it out.
     fn take(&self, force: bool) -> bool {
         let quiet = *self.quiet.lock().unwrap_or_else(|e| e.into_inner());
         let mut marked = self.marked.lock().unwrap_or_else(|e| e.into_inner());
@@ -4338,7 +4338,7 @@ impl SettingsDelay {
         }
     }
 
-    // An immediate write of the same block has just happened — nothing left owed.
+    // An immediate write of the same block has just happened: nothing left owed.
     fn discard(&self) {
         *self.marked.lock().unwrap_or_else(|e| e.into_inner()) = None;
     }
@@ -4348,7 +4348,7 @@ static SETTINGS_DELAY: SettingsDelay = SettingsDelay::new(SETTINGS_QUIET_MS);
 
 // Serializes the writes themselves, so a collected write started on the timer
 // thread can never land on top of a newer immediate one. Lock order is always
-// the store lock first, this one second — nothing under this lock ever takes it.
+// the store lock first, this one second: nothing under this lock ever takes it.
 static SETTINGS_WRITE: Mutex<()> = Mutex::new(());
 
 fn settings_write_lock() -> std::sync::MutexGuard<'static, ()> {
@@ -4406,7 +4406,7 @@ const DYN_NAMES: [&str; 16] = [
 
 // Reserved names are now written {#{/date\}#} instead of {#{date}#}, which frees the
 // plain word for a variable of the user's own. Rewrite the old spelling so an existing
-// prompt keeps filling itself in. Idempotent — the new form no longer matches.
+// prompt keeps filling itself in. Idempotent: the new form no longer matches.
 fn fence_dyn_vars(text: &str) -> String {
     if !text.contains("{#{") {
         return text.to_string();
@@ -4423,7 +4423,7 @@ fn fence_dyn_vars(text: &str) -> String {
 
 fn migrate_prompts(prompts: &mut [Prompt]) {
     // `id` is the prompts table's PRIMARY KEY, so a duplicate makes the whole
-    // DELETE+INSERT rewrite fail — and save_prompts then quietly writes the JSON
+    // DELETE+INSERT rewrite fail: and save_prompts then quietly writes the JSON
     // fallback that the database path ignores, so the import looks like it worked and
     // the old prompts are back after a restart. An import (or a hand-edited backup) is
     // the only way two prompts can share an id; the second one gets a fresh one.
@@ -4482,7 +4482,7 @@ fn load_store(app: &AppHandle) -> Store {
             let j_settings_r: SealedRead<Settings> = read_sealed_json(&dir.join("settings.json"));
             let j_prompts_r: SealedRead<Vec<Prompt>> = read_sealed_json(&dir.join("prompts.json"));
             // An unreadable legacy file (wrong Windows account, corruption) must never be
-            // treated as "nothing to import" — that would both skip real data AND, below,
+            // treated as "nothing to import": that would both skip real data AND, below,
             // still be eligible for the empty-DB path to run again forever, or worse, look
             // imported. Skip the whole import this launch and leave the file for inspection.
             if matches!(j_settings_r, SealedRead::Unreadable) || matches!(j_prompts_r, SealedRead::Unreadable) {
@@ -4517,7 +4517,7 @@ fn load_store(app: &AppHandle) -> Store {
         } else {
             // prompts.json/settings.json otherwise only exist as a save_prompts/
             // save_settings fallback from a failed DB write earlier this session (they
-            // are deleted the moment the DB accepts the data again) — their presence
+            // are deleted the moment the DB accepts the data again): their presence
             // here means the DB never received that change, so the file, not the DB,
             // is the truth. Retry the write; keep the file (and the loaded data) if the
             // DB still refuses, so this keeps retrying every launch instead of quietly
@@ -4561,7 +4561,7 @@ fn load_store(app: &AppHandle) -> Store {
             }
         }
         // Force a resave when the "ai" theme is about to be rewritten to
-        // "neon" — otherwise the fix only lives in memory until some unrelated
+        // "neon": otherwise the fix only lives in memory until some unrelated
         // setting change happens to persist it.
         let theme_ai_before =
             settings.theme == "ai" || settings.custom_themes.iter().any(|c| c.base == "ai");
@@ -4599,7 +4599,7 @@ fn load_store(app: &AppHandle) -> Store {
                     }
                 }
             } else {
-                // No legacy history to move — mark done so we never re-check.
+                // No legacy history to move: mark done so we never re-check.
                 let _ = conn.execute(
                     "INSERT OR REPLACE INTO meta(key, value) VALUES('copy_log_migrated', '1')",
                     [],
@@ -4666,7 +4666,7 @@ fn data_dir_lock_enabled(settings: &Settings) -> bool {
 // without an AppHandle around it: everything here depends only on the folder.
 // There is no second source to fall back to on this path, so an unreadable file
 // must lock writes (like load_store's decrypt_fails case) rather than silently
-// present — and then save — an empty store.
+// present (and then save) an empty store.
 fn load_store_from_json(dir: &Path) -> Store {
     let mut unreadable = false;
     let mut settings = match read_sealed_json::<Settings>(&dir.join("settings.json")) {
@@ -4693,16 +4693,16 @@ fn load_store_from_json(dir: &Path) -> Store {
         }
     };
     migrate_prompts(&mut prompts);
-    // A previous session already wrote data.db, so its rows still exist on disk —
+    // A previous session already wrote data.db, so its rows still exist on disk:
     // db_conn just could not open it this time (e.g. a transient ALTER failure).
     // Without prompts.json either, this launch has literally no way to see the real
     // prompts; presenting an empty-but-unlocked store would let the very next save
-    // (or a stray auto-save) write that emptiness over the table — and to
+    // (or a stray auto-save) write that emptiness over the table: and to
     // prompts.json, which load_store's own "101" rule then trusts over the DB on the
     // next launch, wiping it for good the moment data.db is reachable again.
     // What settings.json happens to be doing is irrelevant here: it says nothing
     // about the prompts, and a session whose settings write once fell back to the
-    // file leaves exactly that combination behind — settings.json present,
+    // file leaves exactly that combination behind: settings.json present,
     // prompts.json not.
     if !unreadable && prompts_missing && dir.join("data.db").exists() {
         unreadable = true;
@@ -4746,7 +4746,7 @@ fn lock<'a>(state: &'a State<'a, Db>) -> std::sync::MutexGuard<'a, Store> {
 // resolves to light/dark at runtime, and it is not a valid custom-theme base.
 const BUILTIN_THEMES: [&str; 7] =
     ["light", "dark", "programmer", "neon", "ocean", "cyberpunk", "mono"];
-// The colour variables a custom theme may override — the `:root` colour tokens of
+// The colour variables a custom theme may override: the `:root` colour tokens of
 // main.css. Everything else (shadow, radius, timings) stays with the base theme.
 const THEME_VAR_KEYS: [&str; 9] = [
     "bg", "surface", "surface-2", "fg", "muted", "border", "accent", "accent-fg", "danger",
@@ -4780,7 +4780,7 @@ fn valid_theme_name(name: &str) -> Result<String, String> {
     Ok(name.to_string())
 }
 
-// A custom theme may only inherit from a built-in one — never from another custom
+// A custom theme may only inherit from a built-in one: never from another custom
 // theme, so inheritance can never chain or form a cycle.
 fn valid_theme_base(base: &str) -> Result<String, String> {
     let base = base.trim();
@@ -4822,7 +4822,7 @@ fn theme_base_of(settings: &Settings, pref: &str) -> String {
 }
 
 // A theme that was dropped from the product (or a hand-edited settings file) must
-// not leave the app with no colour tokens at all — an unknown name resolves to the
+// not leave the app with no colour tokens at all: an unknown name resolves to the
 // default, exactly like a missing one.
 fn known_theme(name: &str) -> String {
     if name == "system" || BUILTIN_THEMES.contains(&name) {
@@ -5081,7 +5081,7 @@ fn open_floating(app: &AppHandle, prompt: &Prompt, taken: &mut Vec<Rect>) {
         let pid = prompt.id.clone();
         win.on_window_event(move |event| match event {
             WindowEvent::Moved(p) => {
-                // Fires for every pixel during a drag — never block the move
+                // Fires for every pixel during a drag: never block the move
                 // loop on a busy store; the next event carries the position.
                 // A drag is the user placing the pill themselves, so it
                 // always becomes the new real position AND ends parking --
@@ -5127,7 +5127,7 @@ fn folders_on(settings: &Settings) -> bool {
 
 // Pill and folder windows read the settings ONCE, when they open. Without this every
 // expert change (pill folders, drag-out, opacity, cooldown …) would only reach the
-// windows opened afterwards — i.e. a feature switched on while pills are on screen
+// windows opened afterwards: i.e. a feature switched on while pills are on screen
 // looked dead until a restart.
 fn notify_float_settings(app: &AppHandle) {
     for label in app.webview_windows().keys() {
@@ -5155,7 +5155,7 @@ fn folder_cols(settings: &Settings) -> u32 {
         .clamp(2.0, 5.0) as u32
 }
 
-// A box in PHYSICAL desktop pixels — the one coordinate space every monitor shares,
+// A box in PHYSICAL desktop pixels: the one coordinate space every monitor shares,
 // whatever its DPI. Sizes are converted per window with its own scale factor, so a
 // mixed-DPI setup stays correct.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -5182,7 +5182,7 @@ impl Rect {
 }
 
 // Which pill the just-dropped one landed on: the NEAREST centre within `radius` whose
-// box ALSO really overlaps. Both conditions matter — the radius alone would fire for a
+// box ALSO really overlaps. Both conditions matter: the radius alone would fire for a
 // pill that merely sits nearby, the overlap alone for a long text pill whose far end
 // happens to touch. A short drag ends up far from every other pill and matches
 // nothing, which is what keeps a normal nudge from creating a folder. A centre
@@ -5235,8 +5235,8 @@ struct FolderLayout {
     pop: (f64, f64),  // popover offset inside the window
 }
 
-// Grow the folder window around its icon. The icon NEVER moves — it is what the user
-// clicked — so the popover goes on the first side with room (below, above, right,
+// Grow the folder window around its icon. The icon NEVER moves: it is what the user
+// clicked: so the popover goes on the first side with room (below, above, right,
 // left) and is then slid along its free axis until it lies inside the work area.
 // Everything is physical pixels of ONE monitor: pass that monitor's work rect and the
 // sizes already scaled by its factor, and edge flipping works the same on a second
@@ -5261,7 +5261,7 @@ fn folder_layout(icon: Rect, pop_w: f64, pop_h: f64, gap: f64, work: Rect) -> Fo
     let fit = |v: f64, lo: f64, hi: f64| if hi < lo { lo } else { v.max(lo).min(hi) };
     // The popover is ALIGNED with the icon's leading edge, never centred on it. A
     // centred popover is wider than the icon on both sides, so the window ORIGIN moves
-    // left — and the icon has to be pushed right by the same amount inside it, one
+    // left: and the icon has to be pushed right by the same amount inside it, one
     // frame later. That one frame is the sideways jump on right-click. Aligned, the
     // origin stays exactly where it was whenever the popover fits below/right, which
     // is the normal case.
@@ -5453,7 +5453,7 @@ fn ids_past_park_cleanup(parked: &HashMap<String, std::time::Duration>, cleanup_
 
 // Bring the folder list back to its invariants: only real prompt ids, no prompt in two
 // folders (the first folder listing it wins), a sane scale, and no folder left with
-// fewer than two members — that one dissolves, and its pill simply reappears at the
+// fewer than two members: that one dissolves, and its pill simply reappears at the
 // free position it kept all along. Runs on load and after every mutation. Idempotent.
 fn normalize_float_folders(folders: &mut Vec<FloatFolder>, prompt_ids: &[String]) {
     let mut taken: Vec<String> = Vec::new();
@@ -5521,7 +5521,7 @@ fn folder_name_of(name: &str) -> Result<String, String> {
 struct FolderExpand(Mutex<HashMap<String, Rect>>);
 
 // Pill/folder windows dismissed "for now" (their own context menu, not the
-// permanent Remove/Dissolve). In memory only, like FolderExpand above — cleared
+// permanent Remove/Dissolve). In memory only, like FolderExpand above: cleared
 // on restart, never written to settings.
 struct HiddenFloats(Mutex<std::collections::HashSet<String>>);
 
@@ -5729,7 +5729,7 @@ fn open_folder_window(app: &AppHandle, folder: &FloatFolder, taken: &mut Vec<Rec
                 let icon_y = p.y + off.y.round() as i32;
                 let screen = screen_id_at(&app2, icon_x, icon_y);
                 if let Some(state) = app2.try_state::<Db>() {
-                    // Fires for every pixel of a drag — never block the move loop.
+                    // Fires for every pixel of a drag: never block the move loop.
                     if let Ok(mut store) = state.try_lock() {
                         if let Some(f) = store.settings.float_folders.iter_mut().find(|f| f.id == fid) {
                             f.pos = Pos { x: icon_x, y: icon_y, screen };
@@ -5752,7 +5752,7 @@ fn open_folder_window(app: &AppHandle, folder: &FloatFolder, taken: &mut Vec<Rec
 
 // Open/close pill and folder windows until the desktop matches the stored plan. The
 // single place that turns settings into windows, so every mutation just calls it.
-// MUST NOT run while the store mutex is held — it creates and closes windows.
+// MUST NOT run while the store mutex is held: it creates and closes windows.
 fn sync_float_windows(app: &AppHandle) {
     let (want_pills, want_folders, pills, folders) = {
         let state: State<Db> = app.state();
@@ -5760,7 +5760,7 @@ fn sync_float_windows(app: &AppHandle) {
         let ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
         let (mut want_pills, mut want_folders) = float_window_plan(&store.settings, &ids);
         // "Hide for now" drops the id from the plan, which the stale-window
-        // loop below then closes if it was already open — the same one filter
+        // loop below then closes if it was already open: the same one filter
         // both closes it now and keeps it from reopening until the next launch.
         if let Some(hidden) = app.try_state::<HiddenFloats>() {
             let hidden = hidden.0.lock().unwrap_or_else(|e| e.into_inner());
@@ -5815,7 +5815,7 @@ const B64_ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst
 
 // Reverse lookup built once at compile time: base64_decode runs over whole images and
 // every sealed settings/prompt line at startup, so an O(64) scan per byte (the linear
-// alphabet search this replaced) was real, measurable work — this makes it O(1).
+// alphabet search this replaced) was real, measurable work: this makes it O(1).
 const fn build_b64_decode_table() -> [u8; 256] {
     let mut table = [0xFFu8; 256];
     let mut i = 0;
@@ -5914,7 +5914,7 @@ fn scale_and_encode(img: image::DynamicImage) -> String {
     }
 }
 
-// Async: dialogs and clipboard reads run off the main thread — the window
+// Async: dialogs and clipboard reads run off the main thread; the window
 // stays responsive and the pickers open without a noticeable delay; the read
 // and image conversion below run on a blocking worker so they never occupy
 // the async runtime.
