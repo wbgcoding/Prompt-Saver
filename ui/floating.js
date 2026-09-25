@@ -646,8 +646,24 @@ window.addEventListener("contextmenu", (e) => {
   e.preventDefault();
   openMenu();
 });
-window.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") closeMenu();
+window.addEventListener("keydown", async (e) => {
+  if (e.key === "Escape") { closeMenu(); return; }
+  // Moves the whole pill window, the same way a mouse drag does -- the pill
+  // itself is a plain OS window with no keyboard drag gesture otherwise.
+  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key) && !menuOpen && !resizing) {
+    e.preventDefault();
+    const step = e.shiftKey ? 20 : 4;
+    const dx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
+    const dy = e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0;
+    try {
+      const p = await appWin.outerPosition();
+      const d = window.devicePixelRatio || 1;
+      await invoke("set_float_bounds", {
+        id: promptId, x: p.x / d + dx, y: p.y / d + dy,
+        width: window.innerWidth, height: window.innerHeight, clamp: true,
+      });
+    } catch {}
+  }
 });
 // Closing on blur, but not while dragging (a drag must keep the menu attached).
 window.addEventListener("blur", () => { if (!drag) closeMenu(); });

@@ -7310,6 +7310,11 @@ function openCtx(id, x, y) {
   ctxEl.querySelector('[data-act="hide"]').classList.toggle("hidden", favView);
   // Nothing to place this prompt into besides the view it is already on.
   ctxEl.querySelector('[data-act="views"]').classList.toggle("hidden", !optFlag("multiViewPrompt") || settings.views.length < 2);
+  // Keyboard path for the mouse drag-onto-a-folder move: only makes sense once
+  // at least one folder already exists in this view (making the very first one
+  // still needs a drag, same as elsewhere in this menu).
+  const moveFolderBtn = ctxEl.querySelector('[data-act="moveToFolder"]');
+  moveFolderBtn.classList.toggle("hidden", !tileFoldersOn() || favView || foldersOfView(activeView().id).length === 0);
   // Only visible when this prompt actually rotates and both auto gates are on —
   // grey-and-disabled would still be a control the user cannot act on.
   const rmenuBtn = ctxEl.querySelector('[data-act="rotateAutoMenu"]');
@@ -7358,6 +7363,39 @@ function renderViewsPop(id) {
 function openViewsPop(id, rect) {
   renderViewsPop(id);
   placePopover(viewsPop, rect);
+}
+
+// ---- Move a tile into an existing folder by keyboard (the mouse path is a
+// drag onto an armed cell, see dropIntoFolder above) ----
+const moveToFolderPop = document.createElement("div");
+moveToFolderPop.className = "ctx move-to-folder-pop hidden";
+moveToFolderPop.setAttribute("role", "menu");
+document.body.appendChild(moveToFolderPop);
+function closeMoveToFolderPop() {
+  moveToFolderPop.classList.add("hidden");
+}
+function renderMoveToFolderPop(id) {
+  moveToFolderPop.innerHTML = "";
+  for (const f of foldersOfView(activeView().id)) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.setAttribute("role", "menuitem");
+    row.textContent = folderTitle(f);
+    row.disabled = f.members.includes(id);
+    row.addEventListener("click", async () => {
+      if (row.disabled) return;
+      closeMoveToFolderPop();
+      if (await saveFolder(f, { members: [...f.members, id] })) {
+        await renderGrid(true);
+        toast(t("movedToFolderToast").replace("{folder}", folderTitle(f)));
+      }
+    });
+    moveToFolderPop.appendChild(row);
+  }
+}
+function openMoveToFolderPop(id, rect) {
+  renderMoveToFolderPop(id);
+  placePopover(moveToFolderPop, rect);
 }
 
 // ---- Grid tag filter — header toolbar popover, own Set from the library's ----
@@ -19918,6 +19956,12 @@ function bind() {
       openViewsPop(id, rect);
       return;
     }
+    if (act === "moveToFolder") {
+      const rect = ctxEl.getBoundingClientRect();
+      closeCtx();
+      openMoveToFolderPop(id, rect);
+      return;
+    }
     closeCtx();
     if (act === "edit") {
       await editPrompt(id);
@@ -19981,6 +20025,7 @@ function bind() {
         !e.target.closest(".folder-tile")) closeTileFolderPop();
     // Opened from the (already-closed) tile context menu, so nothing else needs excluding.
     if (!viewsPop.classList.contains("hidden") && !viewsPop.contains(e.target)) closeViewsPop();
+    if (!moveToFolderPop.classList.contains("hidden") && !moveToFolderPop.contains(e.target)) closeMoveToFolderPop();
     // The toolbar button toggles its own popover, so let its own press through.
     if (!gridTagPop.classList.contains("hidden") && !gridTagPop.contains(e.target) &&
         !e.target.closest("#grid-tag-btn")) closeGridTagPop();
@@ -20028,6 +20073,7 @@ function bind() {
     if (!viewGroupPop.classList.contains("hidden")) { trapTabWithin(viewGroupPop, e); return; }
     if (!tileFolderPop.classList.contains("hidden")) { trapTabWithin(tileFolderPop, e); return; }
     if (!viewsPop.classList.contains("hidden")) { trapTabWithin(viewsPop, e); return; }
+    if (!moveToFolderPop.classList.contains("hidden")) { trapTabWithin(moveToFolderPop, e); return; }
     if (!gridTagPop.classList.contains("hidden")) { trapTabWithin(gridTagPop, e); return; }
     if (!openEditorPop.classList.contains("hidden")) { trapTabWithin(openEditorPop, e); return; }
     if (!$("lightbox").classList.contains("hidden")) { trapTabWithin($("lightbox"), e); return; }
@@ -20062,6 +20108,7 @@ function bind() {
     if (!viewGroupPop.classList.contains("hidden")) { closeViewGroupPop(); return; }
     if (!tileFolderPop.classList.contains("hidden")) { closeTileFolderPop(); return; }
     if (!viewsPop.classList.contains("hidden")) { closeViewsPop(); return; }
+    if (!moveToFolderPop.classList.contains("hidden")) { closeMoveToFolderPop(); return; }
     if (!gridTagPop.classList.contains("hidden")) { closeGridTagPop(); return; }
     if (!openEditorPop.classList.contains("hidden")) { closeOpenEditorPop(); return; }
     if (!$("lightbox").classList.contains("hidden")) closeLightbox();

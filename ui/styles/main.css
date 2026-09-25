@@ -418,6 +418,7 @@ body.noflag-showJournal #journal-btn { display: none; }
 .view-group-item { display: flex; align-items: center; gap: 8px; }
 /* Same list-of-views look as the group popover, same row cap. */
 .views-pop { min-width: 210px; z-index: 90; max-height: calc(var(--view-group-rows, 8) * 34px + 12px); overflow-y: auto; }
+.move-to-folder-pop { min-width: 180px; z-index: 90; max-height: 280px; overflow-y: auto; }
 .view-group-item-name {
   flex: 1 1 auto;
   display: flex;
