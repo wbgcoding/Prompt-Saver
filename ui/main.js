@@ -1383,6 +1383,10 @@ const FLAG_LABELS = {
   // Trims the black border the larger-than-window recording area leaves.
   // Ships ON, matching today's unconditional automatic crop exactly.
   recAutoCrop: "flagRecAutoCrop",
+  // System-wide key capture for the video editor's "keys" overlay. Ships
+  // OFF -- a low-level keyboard hook exists nowhere in this app unless the
+  // user turns this on for a specific recording.
+  keyOverlay: "flagKeyOverlay",
   numFieldWheel: "flagNumFieldWheel",
   editStateKeep: "flagEditStateKeep",
   recStopHotkey: "flagRecStopHotkey",
@@ -1763,6 +1767,7 @@ const EXPERT_VALUES = {
   // Matches resolve_recording_settings' own existing default of 500 -- adding
   // this row must not change what already happens today.
   recDiskWarnMb: { label: "valRecDiskWarnMb", min: 200, max: 20000, step: 100, def: 500, unit: "MB", gate: "screenRecord" },
+  keyOverlayHoldMs: { label: "valKeyOverlayHoldMs", min: 100, max: 2000, step: 50, def: 400, unit: "ms", gate: "keyOverlay" },
   recMaxMin: { label: "valRecMaxMin", min: 0, max: 600, step: 5, def: 0, unit: "min", zeroLabel: "valUnlimited", gate: "screenRecord" },
   recMaxMb: { label: "valRecMaxMb", min: 0, max: 100000, step: 500, def: 0, unit: "MB", zeroLabel: "valUnlimited", gate: "screenRecord" },
   // How many recordings the "export selected" batch dialog encodes at once --
@@ -2235,7 +2240,7 @@ const EXPERT_TABS = [
     // The recording hotkeys render their own capture row directly (hotkeyRow())
     // instead of a button that jumps to a settings field -- see actionRow()'s
     // "hotkey" branch.
-    { title: "expGroupRecording", flags: ["screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, { key: "recCropNotice", gate: "screenRecord" }, { key: "recBarSize", gate: "screenRecord" }, { key: "recTargetSwitch", gate: "screenRecord" }, { key: "recAutoCrop", gate: "screenRecord" }], values: ["recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "recCanvasMaxPx", "recDiskWarnMb", "recMaxMin", "recMaxMb", "exportParallel"], dropdowns: ["recMicDevice", "recQuality", "recFormat", "recCanvasMode"], paths: ["recordingDir"],
+    { title: "expGroupRecording", flags: ["screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, { key: "recCropNotice", gate: "screenRecord" }, { key: "recBarSize", gate: "screenRecord" }, { key: "recTargetSwitch", gate: "screenRecord" }, { key: "recAutoCrop", gate: "screenRecord" }, { key: "keyOverlay", gate: "screenRecord" }], values: ["recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "recCanvasMaxPx", "recDiskWarnMb", "recMaxMin", "recMaxMb", "exportParallel", "keyOverlayHoldMs"], dropdowns: ["recMicDevice", "recQuality", "recFormat", "recCanvasMode"], paths: ["recordingDir"],
       actions: [{ id: "rec-stop-hotkey-row", type: "hotkey", hotkeyKey: "recStopHotkey", label: "recStopHotkeyLabel", gate: "recStopHotkey" }, { id: "rec-pause-hotkey-row", type: "hotkey", hotkeyKey: "recPauseHotkey", label: "recPauseHotkeyLabel", gate: "recPauseHotkey" }] },
     { title: "expGroupVideoEditor", flags: ["videoEditor", { key: "veOvRemember", gate: "videoEditor" }, { key: "videoEditSnap", gate: "videoEditor" }], values: ["videoEditUndoMax", "veExportKbpsHigh", "veExportKbpsSmall", "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "veExtraClipsMax"], dropdowns: ["veDefaultFormat", "veDefaultQuality", "veDefaultScale", "veOvFont", "veDefaultPanel"], colors: ["veOvColor"], paths: ["videoExportDir"] },
     // What the screenshot editor and the video editor share -- created here so
@@ -2495,6 +2500,7 @@ const EXPERT_TIPS = [
   "recQuality", "recBitrateKbps", "recFormat", "recordingDir",
   "recStopHotkey", "recPauseHotkey", "recTrayEntries", "recCropNotice", "recBarSize", "recTargetSwitch",
   "recAutoCrop", "recCanvasMode", "recCanvasMaxPx", "recMaxMin", "recMaxMb", "recDiskWarnMb", "exportParallel",
+  "keyOverlay", "keyOverlayHoldMs",
   "videoEditor", "videoEditUndoMax", "veOvRemember", "videoEditSnap",
   "veDefaultFormat", "veDefaultQuality", "veDefaultScale", "veExportKbpsHigh", "veExportKbpsSmall",
   "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "veOvColor", "veOvFont",

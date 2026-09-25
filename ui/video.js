@@ -126,6 +126,10 @@ const VE = {
   audio: { sys: { mute: false, vol: 100 }, mic: { mute: true, vol: 100 } },
   hasSys: true,
   hasMic: false,
+  // The recording's key-overlay sidecar (events/gaps/hold_ms), or null when
+  // it never captured one -- loaded once per source in loadRecording(), see
+  // applyProbe()'s has_keys_sidecar check.
+  keySidecar: null,
   // The source file's own size/mtime as of the last successful load or save,
   // stamped once per loadRecording() -- edit_state matches on this exact triple,
   // never re-stat'd mid-session so a transient touch elsewhere cannot invalidate it.
@@ -491,6 +495,7 @@ function opLabel(op) {
 const overlayLabelKey = (kind) => ({
   image: "veOvImage", frame: "veOvFrame", text: "veOvText",
   pixelate: "veOvPixelate", spotlight: "veOvSpotlight", video: "veOvVideo",
+  keys: "veOvKeys",
 }[kind] || "veOpOverlay");
 
 function extraClipCount() {
@@ -1287,8 +1292,24 @@ function buildLiveOverlayEl(op, vb, reuse) {
     el.style.boxShadow = `0 0 0 9999px rgba(0, 0, 0, ${clamp(op.dim, 0, 1).toFixed(2)})`;
     return el;
   }
+  if (op.kind === "keys") {
+    // A plain outline plus its preset name -- the actual per-key layout and
+    // press highlighting is what the export's ffmpeg filters draw; the live
+    // preview only needs to show where and how big the overlay sits.
+    const el = reuse instanceof HTMLElement && reuse.classList.contains("ve-live-keys") ? reuse : document.createElement("div");
+    el.className = "ve-live ve-live-keys";
+    rectStyle(el, op.rect);
+    el.style.borderColor = op.color;
+    el.style.opacity = String(clamp(op.opacity, 5, 100) / 100);
+    el.textContent = t(overlayLabelKeysPresetKey(op.preset));
+    return el;
+  }
   return null;
 }
+
+const overlayLabelKeysPresetKey = (preset) => ({
+  pressed: "veOvKeysPressed", half: "veOvKeysHalf", full: "veOvKeysFull", game: "veOvKeysGame", custom: "veOvKeysCustom",
+}[preset] || "veOvKeys");
 
 function resizeRect(orig, handle, point, keepRatio) {
   let x1 = orig.x, y1 = orig.y, x2 = orig.x + orig.w, y2 = orig.y + orig.h;
@@ -1815,6 +1836,11 @@ async function addOverlay(kind) {
     op = { ...base, rect: centeredRect(0.35), blockPx: VE.ovPixelateBlockDefault ?? 16 };
   } else if (kind === "spotlight") {
     op = { ...base, rect: centeredRect(0.45), dim: VE.ovSpotlightDimDefault ?? 0.6 };
+  } else if (kind === "keys") {
+    op = {
+      ...base, rect: centeredRect(0.3), preset: "pressed", keys: [],
+      color: VE.ovColorDefault, activeColor: "#3fa7ff", opacity: 100,
+    };
   }
   if (!op) return;
   VE.selOv = op.id;
@@ -2350,6 +2376,23 @@ function renderOverlayEditor() {
     box.appendChild(fieldRow(t("veOvDim"), ovTrack("dim", numberInput(Math.round(op.dim * 100), 10, 95, 5, (v) => commitOverlay(op, { dim: v / 100 })), (o) => String(Math.round(o.dim * 100)))));
   }
 
+  if (op.kind === "keys") {
+    if (!VE.keySidecar) {
+      const note = document.createElement("p");
+      note.className = "modal-hint";
+      note.textContent = t("veOvKeysNoData");
+      box.appendChild(note);
+    }
+    box.appendChild(fieldRow(t("veOvKeysPreset"), selectInput(
+      [["pressed", t("veOvKeysPressed")], ["half", t("veOvKeysHalf")], ["full", t("veOvKeysFull")],
+        ["game", t("veOvKeysGame")], ["custom", t("veOvKeysCustom")]],
+      op.preset, (v) => { commitOverlay(op, { preset: v }); renderOverlayEditor(); })));
+    if (op.preset === "custom") box.appendChild(fieldRow(t("veOvKeysPick"), keysPickerRow(op)));
+    box.appendChild(fieldRow(t("veOvColor"), colorRow(op.color, (hex) => { commitOverlay(op, { color: hex }); renderOverlayEditor(); })));
+    box.appendChild(fieldRow(t("veOvActiveColor"), colorRow(op.activeColor, (hex) => { commitOverlay(op, { activeColor: hex }); renderOverlayEditor(); })));
+    box.appendChild(fieldRow(t("veOvOpacity"), ovTrack("opacity", numberInput(op.opacity, 5, 100, 5, (v) => commitOverlay(op, { opacity: v }), [25, 50, 75, 100]), (o) => String(o.opacity))));
+  }
+
   if (op.rect) {
     const grid = document.createElement("div");
     grid.className = "ve-row4";
@@ -2469,6 +2512,197 @@ function clipVideoLabel(op, label, parts, fps) {
   return out;
 }
 
+// ---------------------------------------------------------------- keys overlay
+//
+// The "keys" overlay burns VE.keySidecar's timestamped key-down/key-up
+// events into a static or semi-static keyboard picture. Every physical key
+// gets equal width here (no attempt at real keycap proportions) -- close
+// enough for "which key", which is all a viewer needs.
+
+function keyLabel(vk) {
+  if (vk >= 0x41 && vk <= 0x5a) return String.fromCharCode(vk);
+  if (vk >= 0x30 && vk <= 0x39) return String.fromCharCode(vk);
+  if (vk >= 0x70 && vk <= 0x7b) return `F${vk - 0x6f}`;
+  const named = {
+    0x08: "Back", 0x09: "Tab", 0x0d: "Enter", 0x10: "Shift", 0x11: "Ctrl", 0x12: "Alt",
+    0x14: "Caps", 0x1b: "Esc", 0x20: "Space", 0x25: "←", 0x26: "↑", 0x27: "→", 0x28: "↓",
+    0x2e: "Del", 0xa0: "Shift", 0xa1: "Shift", 0xa2: "Ctrl", 0xa3: "Ctrl", 0xa4: "Alt", 0xa5: "Alt",
+    0xba: ";", 0xbb: "=", 0xbc: ",", 0xbd: "-", 0xbe: ".", 0xbf: "/", 0xc0: "`",
+    0xdb: "[", 0xdc: "\\", 0xdd: "]", 0xde: "'",
+  };
+  return named[vk] || `#${vk}`;
+}
+
+// Rows of virtual-key codes. "half" and "game" are proper subsets of "full"
+// so a key highlighted in one is recognisable in the others too.
+const KEY_LAYOUT_FULL = [
+  [0x1b, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7a, 0x7b],
+  [0xc0, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x30, 0xbd, 0xbb, 0x08],
+  [0x09, 0x51, 0x57, 0x45, 0x52, 0x54, 0x59, 0x55, 0x49, 0x4f, 0x50, 0xdb, 0xdd],
+  [0x14, 0x41, 0x53, 0x44, 0x46, 0x47, 0x48, 0x4a, 0x4b, 0x4c, 0xba, 0xde, 0x0d],
+  [0x10, 0x5a, 0x58, 0x43, 0x56, 0x42, 0x4e, 0x4d, 0xbc, 0xbe, 0xbf],
+  [0x11, 0x12, 0x20, 0x25, 0x26, 0x27, 0x28],
+];
+const KEY_LAYOUT_HALF = [
+  [0xc0, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x30, 0xbd, 0xbb, 0x08],
+  [0x09, 0x51, 0x57, 0x45, 0x52, 0x54, 0x59, 0x55, 0x49, 0x4f, 0x50],
+  [0x41, 0x53, 0x44, 0x46, 0x47, 0x48, 0x4a, 0x4b, 0x4c, 0x0d],
+  [0x10, 0x5a, 0x58, 0x43, 0x56, 0x42, 0x4e, 0x4d, 0x20],
+];
+const KEY_LAYOUT_GAME = [
+  [0x31, 0x32, 0x33, 0x34, 0x35],
+  [0x51, 0x57, 0x45, 0x52],
+  [0x41, 0x53, 0x44, 0x46],
+  [0x10, 0x20, 0x11],
+  [0x25, 0x26, 0x27, 0x28],
+];
+
+function keysLayoutRows(op) {
+  if (op.preset === "half") return KEY_LAYOUT_HALF;
+  if (op.preset === "full") return KEY_LAYOUT_FULL;
+  if (op.preset === "game") return KEY_LAYOUT_GAME;
+  if (op.preset === "custom") return [op.keys && op.keys.length ? op.keys : [0x41]];
+  return null; // "pressed" has no fixed grid
+}
+
+// Every key rendered at equal width, rows centered against the widest one.
+function keysGridRects(rows, rect) {
+  const maxCols = Math.max(...rows.map((r) => r.length));
+  const cellW = rect.w / maxCols;
+  const cellH = rect.h / rows.length;
+  const out = [];
+  rows.forEach((row, ri) => {
+    const rowW = row.length * cellW;
+    const xOff = rect.x + (rect.w - rowW) / 2;
+    row.forEach((vk, ci) => {
+      out.push({ vk, x: Math.round(xOff + ci * cellW), y: Math.round(rect.y + ri * cellH), w: Math.round(cellW) - 2, h: Math.round(cellH) - 2 });
+    });
+  });
+  return out;
+}
+
+// Every [down, up] span for one key across the whole sidecar, held visible
+// for holdMs past release -- a key still down when the recording ends (or
+// the sidecar's own log simply stops) stays visible until the last known
+// timestamp plus the hold, never forever.
+function keyPressSpans(vk, holdMs) {
+  const events = (VE.keySidecar && VE.keySidecar.events) || [];
+  const spans = [];
+  let downT = null;
+  for (const e of events) {
+    if (e.vk !== vk) continue;
+    if (e.down) { if (downT == null) downT = e.t_ms; } else if (downT != null) { spans.push([downT, e.t_ms + holdMs]); downT = null; }
+  }
+  if (downT != null) {
+    const lastMs = events.length ? events[events.length - 1].t_ms : downT;
+    spans.push([downT, lastMs + holdMs]);
+  }
+  return spans;
+}
+
+// Clips every span into this overlay's own active range and onto the OUTPUT
+// timeline, exactly like enableExpr() does for every other overlay kind --
+// the sidecar's timestamps are source-relative, the same space op.startMs/
+// op.endMs already live in.
+function keysEnable(op, spans) {
+  const clipped = spans
+    .map(([s, e]) => [Math.max(s, op.startMs), Math.min(e, op.endMs)])
+    .filter(([s, e]) => e > s)
+    .map(([s, e]) => [outMs(s) / 1000, outMs(e) / 1000]);
+  if (!clipped.length) return null;
+  return `enable='${clipped.map(([a, b]) => `between(t,${a.toFixed(3)},${b.toFixed(3)})`).join("+")}'`;
+}
+
+function keysFontFile() {
+  const font = FONT_FILES.find(([id]) => id === (VE.ovFontDefault || FONT_FILES[0][0])) || FONT_FILES[0];
+  return ffPath(`${fontsDir}/${font[1]}`);
+}
+
+// Greedy interval assignment: each press span gets the first slot free since
+// its own start, or (an overlapping run past maxSlots) the oldest slot again
+// rather than being dropped -- a real, if occasionally crowded, timeline
+// instead of missing keys.
+function pressedSpans(op, maxSlots) {
+  const holdMs = (VE.keySidecar && VE.keySidecar.hold_ms) || 400;
+  const events = (VE.keySidecar && VE.keySidecar.events) || [];
+  const open = new Map();
+  const spans = [];
+  for (const e of events) {
+    if (e.down) { if (!open.has(e.vk)) open.set(e.vk, e.t_ms); } else if (open.has(e.vk)) {
+      spans.push({ vk: e.vk, start: open.get(e.vk), end: e.t_ms + holdMs });
+      open.delete(e.vk);
+    }
+  }
+  const lastMs = events.length ? events[events.length - 1].t_ms : 0;
+  for (const [vk, start] of open) spans.push({ vk, start, end: lastMs + holdMs });
+  spans.sort((a, b) => a.start - b.start);
+  const slotEnd = new Array(maxSlots).fill(-Infinity);
+  for (const s of spans) {
+    let slot = slotEnd.findIndex((end) => end <= s.start);
+    if (slot === -1) slot = 0;
+    s.slot = slot;
+    slotEnd[slot] = s.end;
+  }
+  return spans;
+}
+
+// Produces the plain drawbox/drawtext filter strings this overlay adds to
+// the chain -- called once per op from buildVideoChain(), same as every
+// other overlay kind's own inline branch, just factored out for length.
+function buildKeysFilters(op) {
+  const filters = [];
+  const font = keysFontFile();
+  const color = hexToFf(op.color, op.opacity ?? 100);
+  const activeColor = hexToFf(op.activeColor, op.opacity ?? 100);
+  const textColor = hexToFf("#ffffff", 100);
+  if (op.preset === "pressed") {
+    const maxSlots = Math.max(1, Math.floor(op.rect.h / 28)) || 4;
+    const rowH = op.rect.h / Math.min(maxSlots, 4);
+    for (const s of pressedSpans(op, Math.min(maxSlots, 4))) {
+      const enable = keysEnable(op, [[s.start, s.end]]);
+      if (!enable) continue;
+      const y = Math.round(op.rect.y + s.slot * rowH);
+      const h = Math.max(12, Math.round(rowH) - 4);
+      filters.push(`drawbox=x=${op.rect.x}:y=${y}:w=${op.rect.w}:h=${h}:color=${activeColor}:t=fill:${enable}`);
+      filters.push(`drawtext=fontfile='${font}':x=${op.rect.x + 8}:y=${y + Math.round(h / 4)}:fontsize=${Math.max(10, Math.round(h * 0.6))}:fontcolor=${textColor}:expansion=none:${enable}:text='${ffText(keyLabel(s.vk))}'`);
+    }
+    return filters;
+  }
+  const rows = keysLayoutRows(op);
+  const holdMs = (VE.keySidecar && VE.keySidecar.hold_ms) || 400;
+  for (const k of keysGridRects(rows, op.rect)) {
+    filters.push(`drawbox=x=${k.x}:y=${k.y}:w=${k.w}:h=${k.h}:color=${color}:t=2`);
+    filters.push(`drawtext=fontfile='${font}':x=${k.x + k.w / 2 - 6}:y=${k.y + k.h / 2 - 8}:fontsize=${Math.max(10, Math.round(k.h * 0.4))}:fontcolor=${color}:expansion=none:text='${ffText(keyLabel(k.vk))}'`);
+    const enable = keysEnable(op, keyPressSpans(k.vk, holdMs));
+    if (enable) filters.push(`drawbox=x=${k.x}:y=${k.y}:w=${k.w}:h=${k.h}:color=${activeColor}:t=fill:${enable}`);
+  }
+  return filters;
+}
+
+// The free-selection field for the "custom" preset: one checkbox per key of
+// the full layout, toggling membership in op.keys.
+function keysPickerRow(op) {
+  const wrap = document.createElement("div");
+  wrap.className = "ve-keys-picker";
+  for (const row of KEY_LAYOUT_FULL) {
+    for (const vk of row) {
+      const label = document.createElement("label");
+      label.className = "ve-keys-pick-item";
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.checked = (op.keys || []).includes(vk);
+      box.addEventListener("change", () => {
+        const keys = new Set(op.keys || []);
+        if (box.checked) keys.add(vk); else keys.delete(vk);
+        commitOverlay(op, { keys: [...keys] });
+      });
+      label.append(box, document.createTextNode(keyLabel(vk)));
+      wrap.appendChild(label);
+    }
+  }
+  return wrap;
+}
+
 // The one place the operation list becomes ffmpeg. Produces a complete graph
 // consuming [0:v] and ending on [vout]; the audio half is built separately below
 // and ends on [aout], so the backend joins the two with ";" into a single
@@ -2585,6 +2819,8 @@ function buildVideoChain() {
       parts.push(`[${a}]drawbox=x=0:y=0:w=iw:h=ih:color=black@${op.dim.toFixed(2)}:t=fill:${enable}[${dark}]`);
       parts.push(`[${dark}][${clear}]overlay=${op.rect.x}:${op.rect.y}:${enable}[${out}]`);
       cur = out;
+    } else if (op.kind === "keys") {
+      for (const filter of buildKeysFilters(op)) chain(filter);
     }
   }
 
@@ -3227,6 +3463,7 @@ $("ve-ov-add-frame").addEventListener("click", () => addOverlay("frame"));
 $("ve-ov-add-text").addEventListener("click", () => addOverlay("text"));
 $("ve-ov-add-pixelate").addEventListener("click", () => addOverlay("pixelate"));
 $("ve-ov-add-spotlight").addEventListener("click", () => addOverlay("spotlight"));
+$("ve-ov-add-keys").addEventListener("click", () => addOverlay("keys"));
 $("ve-add-video").addEventListener("click", (e) => {
   const r = e.currentTarget.getBoundingClientRect();
   startAddVideo(r.left, r.bottom);
@@ -3491,6 +3728,7 @@ function resetForNewSource() {
   // crop bounds, wrong duration/frame math, wrong audio-track availability,
   // all attributed to a source they no longer describe.
   VE.probe = null;
+  VE.keySidecar = null;
   VE.dur = 0;
   VE.fps = 30;
   VE.w = 0;
@@ -3672,6 +3910,18 @@ async function loadRecording(path, originDir) {
   if (VE.loadGen !== myGen) return;
 
   applyProbe(probe);
+  // The key-overlay sidecar, when this recording captured one -- fetched
+  // once per load, same shape as the probe itself. Failing to read it just
+  // leaves the "keys" overlay with nothing to show, never a hard error.
+  VE.keySidecar = null;
+  if (probe && probe.has_keys_sidecar) {
+    try {
+      VE.keySidecar = await invoke("read_key_sidecar", { path });
+    } catch {
+      VE.keySidecar = null;
+    }
+    if (VE.loadGen !== myGen) return;
+  }
   $("ve-stage-msg").classList.add("hidden");
   setZoom(fitZoom());
   afterOpsChanged();

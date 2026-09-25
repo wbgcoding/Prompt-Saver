@@ -9844,6 +9844,7 @@ VIDEO_PROBE = """
       ['ve-ov-add-text', 've-live-text'],
       ['ve-ov-add-pixelate', 've-live-pixelate'],
       ['ve-ov-add-spotlight', 've-live-spotlight'],
+      ['ve-ov-add-keys', 've-live-keys'],
     ];
     for (const [btnId, liveClass] of overlayKinds) {
       document.getElementById(btnId).click();
@@ -9923,6 +9924,32 @@ VIDEO_PROBE = """
         const hint = document.querySelector('#ve-ov-editor .modal-hint');
         if (hint && hint.hasAttribute('title')) {
           errs.push('355: the pixelate/spotlight hint still repeats itself as a tooltip');
+        }
+      }
+    }
+
+    // ---- 463: the keys overlay offers all four presets plus a free
+    // selection, and switching to the free selection reveals its picker ----
+    {
+      const keysRowIdx = overlayKinds.findIndex(([id]) => id === 've-ov-add-keys');
+      if (!ovRows[keysRowIdx]) {
+        errs.push('could not find the keys overlay row in the overlay list');
+      } else {
+        ovRows[keysRowIdx].click();
+        await sleep(30);
+        const presetSelect = document.querySelector('#ve-ov-editor select');
+        const values = presetSelect ? [...presetSelect.options].map((o) => o.value) : [];
+        const expected = ['pressed', 'half', 'full', 'game', 'custom'];
+        if (!presetSelect || expected.some((v) => !values.includes(v))) {
+          errs.push('463: the keys overlay preset dropdown is missing one of ' + expected.join(', ') + ', got ' + values.join(', '));
+        } else {
+          presetSelect.value = 'custom';
+          presetSelect.dispatchEvent(new Event('change'));
+          await sleep(30);
+          const picker = document.querySelector('#ve-ov-editor .ve-keys-picker');
+          if (!picker || !picker.querySelector('input[type="checkbox"]')) {
+            errs.push('463: choosing the custom preset did not reveal the free-selection key picker');
+          }
         }
       }
     }

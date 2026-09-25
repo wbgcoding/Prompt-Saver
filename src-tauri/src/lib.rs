@@ -24215,6 +24215,10 @@ struct RecordingProbe {
     // dragged in from elsewhere (e.g. a webm/VP9 file) fails ffmpeg outright
     // when the export path blindly assumes "trim-only" means "safe to copy".
     stream_copy_safe: bool,
+    // Whether this recording has a key-overlay sidecar (see `keylog`) --
+    // the video editor only offers the "keys" overlay's presets once it
+    // knows there is something to show.
+    has_keys_sidecar: bool,
 }
 
 // The text-overlay font list used to hardcode "C:/Windows/Fonts/..." --
@@ -24306,6 +24310,10 @@ fn probe_recording_blocking(ffprobe: &Path, src: &Path) -> Result<RecordingProbe
     let non_aac_audio =
         streams.iter().any(|s| s["codec_type"] == "audio" && s["codec_name"].as_str() != Some("aac"));
     let stream_copy_safe = matches!(video_codec, "h264" | "hevc") && !non_aac_audio;
+    #[cfg(windows)]
+    let has_keys_sidecar = keylog::sidecar_path(src).is_file();
+    #[cfg(not(windows))]
+    let has_keys_sidecar = false;
     Ok(RecordingProbe {
         duration_ms,
         width,
@@ -24315,7 +24323,26 @@ fn probe_recording_blocking(ffprobe: &Path, src: &Path) -> Result<RecordingProbe
         has_mic_track: audio_count >= 2,
         mic_sidecar,
         stream_copy_safe,
+        has_keys_sidecar,
     })
+}
+
+// The key-overlay editor's own data fetch -- a plain read of the sidecar
+// JSON `keylog::write_sidecar` produced, or None when this recording never
+// captured one (the setting was off, or it predates this feature). Read via
+// a command like every other file access the frontend makes, never a direct
+// filesystem call from the webview.
+#[cfg(windows)]
+#[tauri::command]
+fn read_key_sidecar(path: String) -> Option<keylog::KeySidecar> {
+    let data = fs::read_to_string(keylog::sidecar_path(Path::new(&path))).ok()?;
+    serde_json::from_str(&data).ok()
+}
+#[cfg(not(windows))]
+#[tauri::command]
+fn read_key_sidecar(path: String) -> Option<()> {
+    let _ = path;
+    None
 }
 
 // Duration/width/height/size for a media attachment (file_path or icon_path),
@@ -29504,6 +29531,7 @@ pub fn run() {
             video_editor_source,
             probe_recording,
             probe_extra_video_source,
+            read_key_sidecar,
             windows_fonts_dir,
             mux_mic_track,
             generate_filmstrip,
