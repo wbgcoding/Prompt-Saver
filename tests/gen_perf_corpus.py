@@ -22,7 +22,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 
-# 320x320 of noise deflates to roughly 300 KB, which is ~400 KB once base64'd —
+# 320x320 of noise deflates to roughly 300 KB, which is ~400 KB once base64'd:
 # the size range a real pasted screenshot lands in. A solid colour would compress
 # to a few KB and measure nothing.
 IMG_SIDE = 320

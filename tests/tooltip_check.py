@@ -18,7 +18,7 @@ BUTTON = re.compile(r"<button\b(?P<attrs>[^>]*)>(?P<body>.*?)</button>", re.S | 
 TAG = re.compile(r"<[^>]+>")
 
 # Dynamically created buttons: ui/*.js builds ~60 of them via createElement rather
-# than static markup. Each one is scoped to the enclosing block — from its own
+# than static markup. Each one is scoped to the enclosing block: from its own
 # creation line to wherever the brace depth first drops below where it started,
 # i.e. the rest of the function/arrow body it was created in.
 CREATE_BTN = re.compile(r'(?:const|let|var)\s+(\w+)\s*=\s*document\.createElement\("button"\)')
@@ -77,7 +77,7 @@ def dynamic_button_findings():
                 or re.search(rf"\b{re.escape(var)}\.(?:append|appendChild)\(", scope)
                 or re.search(rf'\b{re.escape(var)}\.(?:dataset\.i18n\w*|setAttribute\(\s*["\']data-i18n)', scope)
                 # A factory that returns the bare element hands naming duty to
-                # its caller (e.g. mkBtn(svg) in media.js) — out of this check's reach.
+                # its caller (e.g. mkBtn(svg) in media.js), out of this check's reach.
                 or re.search(rf"return\s+{re.escape(var)}\s*;", scope)
             )
             icon_only = re.search(rf"\b{re.escape(var)}\.innerHTML\s*=", scope)
