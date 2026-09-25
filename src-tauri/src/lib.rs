@@ -21089,8 +21089,19 @@ mod keylog {
             // path instead -- one source of truth, and it also picks up
             // the ES_PASSWORD legacy fallback that a bare element
             // reference cannot.
-            let arrived_at = mono_ms();
-            self.ledger.lock().unwrap_or_else(|e| e.into_inner()).push_arrival(arrived_at);
+            //
+            // The timestamp itself is read while the ledger lock is
+            // already held, and pushed before it is released -- otherwise
+            // this thread could be preempted between reading the time and
+            // making the arrival visible, and the consumer could resolve a
+            // key against a check that started after that instant while
+            // the arrival itself was still missing from the ledger.
+            let arrived_at = {
+                let mut guard = self.ledger.lock().unwrap_or_else(|e| e.into_inner());
+                let now = mono_ms();
+                guard.push_arrival(now);
+                now
+            };
             let password = focused_password(&Some(self.uia.clone()));
             // This check is recorded as having STARTED at the arrival
             // instant, not whenever it happened to finish -- it
