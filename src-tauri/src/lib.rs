@@ -20695,22 +20695,41 @@ mod keylog {
         400
     }
 
-    // Pure state machine turning a raw (vk, down, t_ms, blocked-at-that-
-    // instant) stream into the stored sidecar shape. Deliberately free of any
-    // Windows API so it is directly unit-testable without a real hook or a
-    // real focused control. `blocked` covers both reasons a key must never be
-    // stored: a password field was focused at that instant, or the key was
-    // synthetic (OS-injected) input rather than something a person typed --
-    // either one lands in a gap, never as an event.
+    // Pure state machine turning a raw (vk, scan, down, t_ms, blocked-at-
+    // that-instant) stream into the stored sidecar shape. Deliberately free
+    // of any Windows API so it is directly unit-testable without a real
+    // hook or a real focused control. `blocked` covers both reasons a key
+    // must never be stored: a password field was focused at that instant,
+    // or the key was synthetic (OS-injected) input rather than something a
+    // person typed -- either one lands in a gap, never as an event.
     #[derive(Default)]
     struct Recorder {
         sidecar: KeySidecar,
         in_gap: bool,
+        // Whether the most recent DOWN seen for a given (vk, scan code) was
+        // itself accepted (not blocked). A key-up is judged independently
+        // of its down by nothing but its own timestamp otherwise -- which
+        // lets a gapped down (password key held, focus moves to a clean
+        // field, key released later) hand off a clean-looking up that was
+        // never actually typed anywhere safe. An up is only ever stored
+        // alongside a down this same Recorder actually accepted; one for a
+        // (vk, scan) pair never seen here at all (held from before this
+        // capture, or from before this part) is treated the same as a
+        // tainted one. Removed on the matching up, so key repeat (several
+        // downs, one eventual up) tracks only the most recent down's state.
+        open_downs: std::collections::HashMap<(u32, u32), bool>,
     }
 
     impl Recorder {
-        fn record(&mut self, vk: u32, down: bool, t_ms: u64, blocked: bool) {
-            if blocked {
+        fn record(&mut self, vk: u32, scan: u32, down: bool, t_ms: u64, blocked: bool) {
+            let final_blocked = if down {
+                self.open_downs.insert((vk, scan), !blocked);
+                blocked
+            } else {
+                let down_accepted = self.open_downs.remove(&(vk, scan)).unwrap_or(false);
+                blocked || !down_accepted
+            };
+            if final_blocked {
                 if self.in_gap {
                     if let Some(last) = self.sidecar.gaps.last_mut() {
                         last.end_ms = t_ms;
@@ -20980,6 +20999,11 @@ mod keylog {
 
     struct RawKey {
         vk: u32,
+        // The hardware scan code alongside the virtual key -- left/right
+        // Ctrl, Shift and Alt can share a VK code while remaining genuinely
+        // different physical keys, so down/up matching (see Recorder)
+        // identifies a key by the pair, not the VK alone.
+        scan: u32,
         down: bool,
         t_ms: u64,
         // LLKHF_INJECTED: a password manager's auto-type, a
@@ -21037,7 +21061,7 @@ mod keylog {
                     if let Some(tx) = guard.as_ref() {
                         // try_send: this callback must never block, a full
                         // channel just means the newest event is dropped.
-                        let _ = tx.try_send(RawKey { vk: info.vkCode, down, t_ms, injected });
+                        let _ = tx.try_send(RawKey { vk: info.vkCode, scan: info.scanCode, down, t_ms, injected });
                     }
                 }
             }
@@ -21236,7 +21260,7 @@ mod keylog {
             let Some(gap) = gap else { break };
             let raw = pending.pop_front().expect("front already confirmed present above");
             let t_ms = clock.lock().unwrap_or_else(|e| e.into_inner()).active_ms(raw.t_ms);
-            rec.record(raw.vk, raw.down, t_ms, gap);
+            rec.record(raw.vk, raw.scan, raw.down, t_ms, gap);
         }
     }
 
@@ -21425,7 +21449,7 @@ mod keylog {
             let gap = verdict_at_stop(&ledger, raw.t_ms, raw.injected);
             drop(ledger);
             let t_ms = clock.lock().unwrap_or_else(|e| e.into_inner()).active_ms(raw.t_ms);
-            rec.record(raw.vk, raw.down, t_ms, gap);
+            rec.record(raw.vk, raw.scan, raw.down, t_ms, gap);
         }
         if let (Some(uia), Some(handler)) = (&uia, &focus_handler) {
             if unsafe { uia.RemoveFocusChangedEventHandler(handler) }.is_err() {
@@ -21676,8 +21700,8 @@ mod keylog {
         #[test]
         fn recorder_stores_identifiers_with_timestamps_only() {
             let mut rec = Recorder::default();
-            rec.record(0x41, true, 0, false);
-            rec.record(0x41, false, 120, false);
+            rec.record(0x41, 0, true, 0, false);
+            rec.record(0x41, 0, false, 120, false);
             assert_eq!(
                 rec.sidecar.events,
                 vec![KeyEvent { vk: 0x41, down: true, t_ms: 0 }, KeyEvent { vk: 0x41, down: false, t_ms: 120 }]
@@ -21688,10 +21712,10 @@ mod keylog {
         #[test]
         fn a_password_field_produces_a_gap_instead_of_events() {
             let mut rec = Recorder::default();
-            rec.record(0x41, true, 0, false);
-            rec.record(0x42, true, 100, true); // focus moves into a password field
-            rec.record(0x42, false, 150, true);
-            rec.record(0x43, true, 400, false); // focus leaves it again
+            rec.record(0x41, 0, true, 0, false);
+            rec.record(0x42, 0, true, 100, true); // focus moves into a password field
+            rec.record(0x42, 0, false, 150, true);
+            rec.record(0x43, 0, true, 400, false); // focus leaves it again
             assert_eq!(rec.sidecar.events.len(), 2);
             assert_eq!(rec.sidecar.gaps, vec![Gap { start_ms: 100, end_ms: 150 }]);
         }
@@ -21699,17 +21723,17 @@ mod keylog {
         #[test]
         fn back_to_back_password_periods_extend_one_gap_rather_than_opening_a_new_one() {
             let mut rec = Recorder::default();
-            rec.record(0x41, true, 0, true);
-            rec.record(0x41, false, 10, true);
-            rec.record(0x42, true, 20, true);
+            rec.record(0x41, 0, true, 0, true);
+            rec.record(0x41, 0, false, 10, true);
+            rec.record(0x42, 0, true, 20, true);
             assert_eq!(rec.sidecar.gaps, vec![Gap { start_ms: 0, end_ms: 20 }]);
         }
 
         #[test]
         fn a_recording_entirely_in_a_password_field_writes_no_events_at_all() {
             let mut rec = Recorder::default();
-            rec.record(0x41, true, 0, true);
-            rec.record(0x41, false, 50, true);
+            rec.record(0x41, 0, true, 0, true);
+            rec.record(0x41, 0, false, 50, true);
             assert!(rec.sidecar.events.is_empty());
             assert_eq!(rec.sidecar.gaps, vec![Gap { start_ms: 0, end_ms: 50 }]);
         }
@@ -21776,13 +21800,61 @@ mod keylog {
         #[test]
         fn an_injected_key_is_gapped_the_same_way_a_password_field_is() {
             let mut rec = Recorder::default();
-            rec.record(0x41, true, 0, false);
+            rec.record(0x41, 0, true, 0, false);
             let injected_or_password = true; // stands for verdict()'s Some(true)
-            rec.record(0x56, true, 50, injected_or_password); // a password-manager auto-type
-            rec.record(0x56, false, 55, injected_or_password);
-            rec.record(0x42, true, 200, false);
+            rec.record(0x56, 0, true, 50, injected_or_password); // a password-manager auto-type
+            rec.record(0x56, 0, false, 55, injected_or_password);
+            rec.record(0x42, 0, true, 200, false);
             assert_eq!(rec.sidecar.events.len(), 2);
             assert_eq!(rec.sidecar.gaps, vec![Gap { start_ms: 50, end_ms: 55 }]);
+        }
+
+        // --- Down/up taint (Recorder::open_downs): an up is only ever
+        // stored alongside a down this same Recorder actually accepted.
+
+        #[test]
+        fn an_up_is_dropped_when_its_matching_down_was_gapped_even_if_the_up_itself_looks_clean() {
+            // The scenario: a password key's down gets gapped, then a
+            // pause/part switch moves focus to a normal field, and the up
+            // -- released well after, its OWN verdict now clean -- must
+            // still be dropped, tainted by the down it belongs to.
+            let mut rec = Recorder::default();
+            rec.record(0x41, 0x1E, true, 100, true); // down, gapped (password)
+            rec.record(0x41, 0x1E, false, 900, false); // up, its own verdict now clean
+            assert!(rec.sidecar.events.is_empty(), "a tainted down must take its up down with it");
+            assert_eq!(rec.sidecar.gaps, vec![Gap { start_ms: 100, end_ms: 900 }]);
+        }
+
+        #[test]
+        fn an_up_with_no_matching_down_in_this_capture_is_dropped_too() {
+            // A key already held before this capture (or this part) began:
+            // no down was ever accepted here, so the up alone proves
+            // nothing about how it was typed.
+            let mut rec = Recorder::default();
+            rec.record(0x41, 0x1E, false, 100, false); // up only, own verdict clean
+            assert!(rec.sidecar.events.is_empty());
+            assert_eq!(rec.sidecar.gaps, vec![Gap { start_ms: 100, end_ms: 100 }]);
+        }
+
+        #[test]
+        fn a_clean_down_and_its_matching_up_are_both_stored_normally() {
+            let mut rec = Recorder::default();
+            rec.record(0x41, 0x1E, true, 0, false);
+            rec.record(0x41, 0x1E, false, 120, false);
+            assert_eq!(rec.sidecar.events.len(), 2);
+            assert!(rec.sidecar.gaps.is_empty());
+        }
+
+        #[test]
+        fn different_scan_codes_under_the_same_vk_are_tainted_independently() {
+            // Left and right Ctrl can share a VK code while being genuinely
+            // different physical keys -- one being gapped must never taint
+            // the other's own down/up pair.
+            let mut rec = Recorder::default();
+            rec.record(0x11, 0x1D, true, 0, true); // left ctrl down, gapped
+            rec.record(0x11, 0x9D, true, 10, false); // right ctrl down, clean
+            rec.record(0x11, 0x9D, false, 20, false); // right ctrl up, clean, matches its own down
+            assert_eq!(rec.sidecar.events.len(), 2, "the clean scan code's pair must record despite the other one being gapped");
         }
 
         // --- The binding verdict algorithm (Ledger + verdict): a delayed
