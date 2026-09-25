@@ -41,6 +41,12 @@ let recPath = null;
 let recExt = "webm";
 let paused = false;
 let recStartWall = 0;
+// The screen recording's own pause-aware position at the exact moment this
+// take's recorder.start() actually ran -- read live (camera_screen_elapsed_ms)
+// right before that call, never reconstructed later from wall-clock stamps
+// alone, or a pause in the screen recording between the two starts would
+// silently inflate the overlay's placement by however long it lasted.
+let recScreenElapsedAtStart = null;
 let recTimer = 0;
 // The two expert-menu settings this window has no control of its own for
 // (device, framerate) -- read once at boot, applied to every getUserMedia
@@ -184,6 +190,7 @@ async function startRecording() {
   }
   recPath = begin.path;
   recStartWall = Date.now();
+  recScreenElapsedAtStart = null;
   pendingAppends = [];
   recorder = new MediaRecorder(stream, { mimeType });
   recorder.ondataavailable = (e) => {
@@ -206,22 +213,26 @@ async function startRecording() {
     resSelect.disabled = false;
     const path = recPath;
     const startedAtMs = recStartWall;
+    const screenElapsedMs = recScreenElapsedAtStart;
     recPath = null;
     if (!path) return;
+    // Marks the session finishing before the (possibly slow) chunk-upload
+    // wait below -- Alt+F4/taskbar-close/app-quit landing in that window
+    // must finish this take, not delete it as if it were still an active,
+    // abandoned recording (see camera::CamSession::finishing).
+    await invoke("camera_mark_finishing", { path, camStartMs: startedAtMs, screenElapsedMs }).catch(() => {});
     await Promise.allSettled(pendingAppends);
     pendingAppends = [];
     try {
-      const finished = await invoke("camera_finish_recording", { path, camStartMs: startedAtMs });
+      const finished = await invoke("camera_finish_recording", { path, camStartMs: startedAtMs, screenElapsedMs });
       // A companion screen recording that has ALREADY stopped by now opens
       // as the primary source, with this camera take added as an aligned
       // overlay when one is ready -- otherwise the camera file just opens on
-      // its own, same as any other recording.
+      // its own, same as any other recording. The overlay's own alignment
+      // lives in its sidecar (just written above), not in anything passed
+      // through open_video_editor.
       if (finished && finished.companion_path) {
-        await invoke("open_video_editor", {
-          srcPath: finished.companion_path,
-          overlayPath: path,
-          overlayStartMs: finished.companion_start_ms,
-        });
+        await invoke("open_video_editor", { srcPath: finished.companion_path, overlayPath: path });
       } else {
         await invoke("open_video_editor", { srcPath: path });
       }
@@ -231,6 +242,11 @@ async function startRecording() {
     }
     refreshPreview();
   };
+  // Read live, right before the recorder actually starts -- this is the one
+  // moment that matters for alignment, not begin time (which can sit open
+  // for a while with the camera preview idle) and not finish time (the
+  // screen recording may have moved on, paused again, or stopped by then).
+  recScreenElapsedAtStart = await invoke("camera_screen_elapsed_ms").catch(() => null);
   recorder.start(1000);
   paused = false;
   setStatus("recording");

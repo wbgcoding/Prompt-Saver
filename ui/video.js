@@ -1877,14 +1877,13 @@ async function pickExtraVideo() {
 // (createVideoOverlay above). Placed as a bottom-right picture-in-picture
 // rather than centered, the usual spot for a webcam layer.
 //
-// Alignment: the camera's own real start comes back from its sidecar (the
-// durable, on-disk value camera_finish_recording just wrote), never from a
-// value threaded across the whole open_video_editor call chain -- the
-// screen recording's own start (companionStartMs) is the one piece that has
-// no sidecar of its own to re-read, so it still travels through
-// VideoEditorSource.overlay_start_ms. camera_overlay_start_ms does the
-// subtraction and clamps a camera that somehow started first to 0.
-async function addAlignedCameraOverlay(path, companionStartMs) {
+// Alignment: the camera's own sidecar (the durable, on-disk value
+// camera_finish_recording wrote) already carries the final overlay offset --
+// the screen recording's own pause-aware position at the moment the camera
+// started, read live by the Rust side rather than reconstructed here from
+// two wall-clock stamps (a paused span between the two starts would
+// otherwise inflate the offset by however long it lasted).
+async function addAlignedCameraOverlay(path) {
   if (!path) return;
   if (VE.ops.some((o) => o.tool === "overlay" && o.kind === "video" && o.path === path)) return;
   let probe;
@@ -1896,16 +1895,12 @@ async function addAlignedCameraOverlay(path, companionStartMs) {
     return;
   }
   let startMs = 0;
-  if (companionStartMs != null) {
-    try {
-      const sidecar = await invoke("read_camera_sidecar", { path });
-      if (sidecar && sidecar.start_ms != null) {
-        startMs = await invoke("camera_overlay_start_ms", { camStartMs: sidecar.start_ms, companionStartMs });
-      }
-    } catch {
-      // No sidecar, or the alignment call failed -- 0 (both at the same
-      // point) is still a sane fallback, never a missing overlay.
-    }
+  try {
+    const sidecar = await invoke("read_camera_sidecar", { path });
+    if (sidecar && sidecar.overlay_start_ms != null) startMs = sidecar.overlay_start_ms;
+  } catch {
+    // No sidecar -- 0 (both at the same point) is still a sane fallback,
+    // never a missing overlay.
   }
   const durationMs = Number(probe.duration_ms) || 0;
   const w = even(VE.w * 0.3), h = even(VE.h * 0.3);
@@ -3912,7 +3907,7 @@ function askRestoreEditState(opCount) {
   });
 }
 
-async function loadRecording(path, originDir, overlayPath, overlayStartMs) {
+async function loadRecording(path, originDir, overlayPath) {
   if (!path) return;
   // Two "Edit video" clicks in quick succession (this recording, then
   // another before the first has finished probing/muxing) had no way to tell
@@ -3978,7 +3973,7 @@ async function loadRecording(path, originDir, overlayPath, overlayStartMs) {
   loadStrip();
   scheduleWaves();
   await checkEditState(path, myGen);
-  if (VE.loadGen === myGen) await addAlignedCameraOverlay(overlayPath, overlayStartMs);
+  if (VE.loadGen === myGen) await addAlignedCameraOverlay(overlayPath);
   armEditStateAutosave();
 }
 
@@ -4041,7 +4036,6 @@ listen("video-editor-load", async (e) => {
   const path = typeof e.payload === "string" ? e.payload : e.payload?.path;
   const originDir = typeof e.payload === "object" ? e.payload?.origin_dir : "";
   const overlayPath = typeof e.payload === "object" ? e.payload?.overlay_path : "";
-  const overlayStartMs = typeof e.payload === "object" ? e.payload?.overlay_start_ms : undefined;
   if (!path || path === VE.src) return;
   // Switching source (clicking "Edit video" on another tile while this
   // window is already open) used to jump straight to loadRecording(), silently
@@ -4051,7 +4045,7 @@ listen("video-editor-load", async (e) => {
     const ok = await veConfirm(t("veCloseTitle"), t("veCloseUnsaved"), t("veDiscard"));
     if (!ok) return;
   }
-  loadRecording(path, originDir, overlayPath, overlayStartMs);
+  loadRecording(path, originDir, overlayPath);
 });
 listen(EXPORT_PROGRESS_EVENT, (e) => {
   if (!VE.exporting) return;
@@ -4179,18 +4173,16 @@ function applySettings(settings) {
   let path = "";
   let originDir = "";
   let overlayPath = "";
-  let overlayStartMs;
   try {
     const source = await invoke("video_editor_source");
     path = source?.path || "";
     originDir = source?.origin_dir || "";
     overlayPath = source?.overlay_path || "";
-    overlayStartMs = source?.overlay_start_ms;
   } catch (_) {
     // No source command yet, or none set: wait for the event instead of showing
     // an error for what is a normal startup order.
   }
-  if (path) await loadRecording(path, originDir, overlayPath, overlayStartMs);
+  if (path) await loadRecording(path, originDir, overlayPath);
   else $("ve-stage-msg").textContent = t("veNoRecording");
   requestAnimationFrame(tick);
 })();

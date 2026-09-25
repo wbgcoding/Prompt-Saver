@@ -6758,7 +6758,7 @@ fn protected_recording_paths(app: &AppHandle) -> Vec<PathBuf> {
         out.push(p);
     }
     if let Some(state) = app.try_state::<VideoEditorPending>() {
-        let (src, _origin_dir, overlay, _overlay_start) = state.lock().clone();
+        let (src, _origin_dir, overlay) = state.lock().clone();
         if !src.is_empty() {
             let src = PathBuf::from(src);
             out.push(src.with_extension("mic.wav"));
@@ -25447,20 +25447,19 @@ const VIDEO_WIN_MIN_H: u32 = 520;
 // time would race the webview's first frame, so the window asks for its own
 // target once booted (video_editor_source), and again whenever
 // "video-editor-load" fires for an already-open window.
-// The third slot (overlay_path) is the camera dual-open: a camera recording whose
-// companion screen recording has already finished lands here instead of
-// staying empty, so the editor can add it as a video overlay itself instead
-// of asking the user to pick it by hand. The fourth slot (overlay_start_ms,
-// decimal string, empty = none) is the screen recording's own real start,
-// which the editor subtracts from the camera sidecar's own real start to
-// place the overlay -- see camera::overlay_start_ms and
-// ui/video.js's addAlignedCameraOverlay.
-struct VideoEditorPending(Mutex<(String, String, String, String)>);
+// The third slot (overlay_path) is the camera dual-open: a camera recording
+// whose companion screen recording has already finished lands here instead
+// of staying empty, so the editor can add it as a video overlay itself
+// instead of asking the user to pick it by hand. Its alignment offset is
+// never carried alongside it here -- it lives in the camera recording's own
+// sidecar (camera::CamSidecar::overlay_start_ms), which
+// ui/video.js's addAlignedCameraOverlay reads directly.
+struct VideoEditorPending(Mutex<(String, String, String)>);
 impl VideoEditorPending {
     fn new() -> Self {
-        Self(Mutex::new((String::new(), String::new(), String::new(), String::new())))
+        Self(Mutex::new((String::new(), String::new(), String::new())))
     }
-    fn lock(&self) -> std::sync::MutexGuard<'_, (String, String, String, String)> {
+    fn lock(&self) -> std::sync::MutexGuard<'_, (String, String, String)> {
         self.0.lock().unwrap_or_else(|e| e.into_inner())
     }
 }
@@ -25471,8 +25470,6 @@ struct VideoEditorSource {
     origin_dir: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     overlay_path: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    overlay_start_ms: Option<u64>,
 }
 
 // Opens the editor for one recording. A second call while it is already open
@@ -25486,7 +25483,6 @@ async fn open_video_editor(
     src_path: String,
     origin_dir: Option<String>,
     overlay_path: Option<String>,
-    overlay_start_ms: Option<u64>,
 ) -> Result<(), String> {
     if !PathBuf::from(&src_path).is_file() {
         return Err("recording file not found".to_string());
@@ -25496,15 +25492,13 @@ async fn open_video_editor(
     // simply never really there) is silently dropped rather than handed to
     // the editor, which would otherwise show it as a broken overlay op.
     let overlay_path = overlay_path.filter(|p| PathBuf::from(p).is_file()).unwrap_or_default();
-    let overlay_start_str = if overlay_path.is_empty() { String::new() } else { overlay_start_ms.unwrap_or(0).to_string() };
-    *pending.lock() = (src_path.clone(), origin_dir.clone(), overlay_path.clone(), overlay_start_str);
+    *pending.lock() = (src_path.clone(), origin_dir.clone(), overlay_path.clone());
     let overlay_opt = if overlay_path.is_empty() { None } else { Some(overlay_path) };
-    let overlay_start_opt = if overlay_opt.is_some() { overlay_start_ms } else { None };
     if let Some(win) = app.get_webview_window(VIDEO_WIN_LABEL) {
         let _ = app.emit_to(
             VIDEO_WIN_LABEL,
             "video-editor-load",
-            &VideoEditorSource { path: src_path, origin_dir, overlay_path: overlay_opt, overlay_start_ms: overlay_start_opt },
+            &VideoEditorSource { path: src_path, origin_dir, overlay_path: overlay_opt },
         );
         let _ = win.show();
         let _ = win.set_focus();
@@ -25537,10 +25531,9 @@ async fn open_video_editor(
 
 #[tauri::command]
 fn video_editor_source(pending: State<VideoEditorPending>) -> Option<VideoEditorSource> {
-    let (path, origin_dir, overlay_path, overlay_start_str) = pending.lock().clone();
+    let (path, origin_dir, overlay_path) = pending.lock().clone();
     let overlay_path = if overlay_path.is_empty() { None } else { Some(overlay_path) };
-    let overlay_start_ms = if overlay_path.is_some() { overlay_start_str.parse::<u64>().ok() } else { None };
-    if path.is_empty() { None } else { Some(VideoEditorSource { path, origin_dir, overlay_path, overlay_start_ms }) }
+    if path.is_empty() { None } else { Some(VideoEditorSource { path, origin_dir, overlay_path }) }
 }
 
 // ---- Open an existing file (not a fresh capture/recording) in whichever
@@ -29850,9 +29843,10 @@ pub fn run() {
             camera::camera_begin_recording,
             camera::camera_append_chunk,
             camera::camera_finish_recording,
+            camera::camera_mark_finishing,
             camera::camera_discard_recording,
             camera::read_camera_sidecar,
-            camera::camera_overlay_start_ms,
+            camera::camera_screen_elapsed_ms,
             windows_fonts_dir,
             mux_mic_track,
             generate_filmstrip,
@@ -33500,6 +33494,39 @@ mod tests {
         clock.resume();
         std::thread::sleep(std::time::Duration::from_millis(10));
         assert!(clock.now_ticks() > frozen, "ticks must advance again after resume");
+    }
+
+    #[test]
+    fn a_paused_span_before_a_later_reader_joins_never_inflates_its_position() {
+        // camera_screen_elapsed_ms (camera.rs) reads this same clock live, at
+        // the moment a camera take starts, to place it on the screen
+        // recording's own timeline. A screen recording paused for a while
+        // before the camera joins must not push that position later than
+        // where the screen recording's own output actually is -- only the
+        // active segments may count, exactly like the ticks assertions
+        // above, just phrased at the "another reader joins later" level this
+        // bug was found at.
+        let clock = RecordClock::new();
+        let t0 = std::time::Instant::now();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        clock.pause();
+        let pause_start = std::time::Instant::now();
+        std::thread::sleep(std::time::Duration::from_millis(200)); // the paused span
+        clock.resume();
+        // Measured, not assumed: a loaded machine can make thread::sleep
+        // overshoot its nominal duration by far more than the two short
+        // active segments below ever could on their own, so the real paused
+        // wall time (however long it actually took) is what gets subtracted,
+        // not the 200ms asked for.
+        let real_pause_ms = pause_start.elapsed().as_millis() as i64;
+        std::thread::sleep(std::time::Duration::from_millis(20)); // the camera joins here
+        let elapsed_ms = clock.now_ticks() / 10_000;
+        let wall_ms = t0.elapsed().as_millis() as i64;
+        assert!(
+            elapsed_ms <= wall_ms - real_pause_ms + 50,
+            "the paused span (~{real_pause_ms}ms of {wall_ms}ms wall time) must not count toward \
+             the camera's join position, got {elapsed_ms}ms"
+        );
     }
 
     #[test]
