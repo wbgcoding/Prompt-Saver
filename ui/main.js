@@ -8,7 +8,7 @@ import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT,
 import { EXAMPLE_IMAGE_DATA_URL } from "./exampleAssets.js";
 import { HELP_CONTENT } from "./help.js";
 import { HELP_SKETCHES } from "./helpSketches.js";
-import { DRAG_OUT_MODS, FOLDER_SVG, fileUri, resolveLang, ffmpegDownloadPct, themeColorScheme, playCopySound, numberField, makeEtaEstimator, formatEta, parseFfmpegError, fmtBytes, makeHoldOrTapToggle } from "./floatShared.js";
+import { DRAG_OUT_MODS, FOLDER_SVG, fileUri, resolveLang, ffmpegDownloadPct, themeColorScheme, playCopySound, numberField, makeEtaEstimator, formatEta, a11yProgressText, parseFfmpegError, fmtBytes, makeHoldOrTapToggle } from "./floatShared.js";
 import { placePopover, placePopoverAt, setPopoverPad } from "./popover.js";
 import { createColorPop } from "./colorpop.js";
 import { snapMove } from "./snap.js";
@@ -871,7 +871,15 @@ function renderBgOpsPop(ops) {
     label.textContent = bgOpLabel(op.kind);
     const pct = document.createElement("span");
     pct.className = "bg-ops-pct";
+    const pctNum = op.state === "done" ? 100 : op.pct != null ? op.pct : null;
     pct.textContent = op.state === "error" ? "—" : op.state === "done" ? "100%" : (op.pct != null ? `${op.pct}%` : "…");
+    if (pctNum != null) {
+      pct.setAttribute("role", "progressbar");
+      pct.setAttribute("aria-valuemin", "0");
+      pct.setAttribute("aria-valuemax", "100");
+      pct.setAttribute("aria-valuenow", String(pctNum));
+      pct.setAttribute("aria-valuetext", t("a11yPctOnly").replace("{pct}", String(pctNum)));
+    }
     row.append(label, pct);
     if (op.target) {
       const openBtn = document.createElement("button");
@@ -6922,7 +6930,7 @@ async function saveFolder(f, patch) {
 }
 
 // Two tiles dropped on each other become a folder on the target's cell.
-async function newTileFolder(targetId, dropId, cell) {
+async function newTileFolder(memberIds, cell) {
   const name = await confirmDialog({
     title: t("tileFolderNew"),
     message: t("tileFolderNameMsg"),
@@ -6934,7 +6942,7 @@ async function newTileFolder(targetId, dropId, cell) {
   const view = activeView();
   const ok = await saveFolder(
     { id: "", view_id: view.id },
-    { name: String(name).trim(), cell, members: [targetId, dropId] }
+    { name: String(name).trim(), cell, members: memberIds }
   );
   if (ok) {
     recordToolUsage("folder_create");
@@ -7262,7 +7270,7 @@ async function dropIntoFolder(id, host, cell) {
     return;
   }
   if (!host.dataset.id) return;
-  await newTileFolder(host.dataset.id, id, [Number(cell.dataset.col), Number(cell.dataset.row)]);
+  await newTileFolder([host.dataset.id, id], [Number(cell.dataset.col), Number(cell.dataset.row)]);
 }
 
 // `settings.floating` maps every pinned prompt to its pill position, and the backend
@@ -7302,6 +7310,11 @@ function openCtx(id, x, y) {
   ctxEl.querySelector('[data-act="hide"]').classList.toggle("hidden", favView);
   // Nothing to place this prompt into besides the view it is already on.
   ctxEl.querySelector('[data-act="views"]').classList.toggle("hidden", !optFlag("multiViewPrompt") || settings.views.length < 2);
+  // Keyboard path for the mouse drag-onto-a-folder move: favorites' free-form
+  // layout has no grid cell for a folder to occupy, so it stays out of scope
+  // there the same way the mouse gesture already is.
+  const moveFolderBtn = ctxEl.querySelector('[data-act="moveToFolder"]');
+  moveFolderBtn.classList.toggle("hidden", !tileFoldersOn() || favView);
   // Only visible when this prompt actually rotates and both auto gates are on —
   // grey-and-disabled would still be a control the user cannot act on.
   const rmenuBtn = ctxEl.querySelector('[data-act="rotateAutoMenu"]');
@@ -7350,6 +7363,50 @@ function renderViewsPop(id) {
 function openViewsPop(id, rect) {
   renderViewsPop(id);
   placePopover(viewsPop, rect);
+}
+
+// ---- Move a tile into an existing folder by keyboard (the mouse path is a
+// drag onto an armed cell, see dropIntoFolder above) ----
+const moveToFolderPop = document.createElement("div");
+moveToFolderPop.className = "ctx move-to-folder-pop hidden";
+moveToFolderPop.setAttribute("role", "menu");
+document.body.appendChild(moveToFolderPop);
+function closeMoveToFolderPop() {
+  moveToFolderPop.classList.add("hidden");
+}
+function renderMoveToFolderPop(id) {
+  moveToFolderPop.innerHTML = "";
+  const newRow = document.createElement("button");
+  newRow.type = "button";
+  newRow.setAttribute("role", "menuitem");
+  newRow.textContent = t("tileFolderNew");
+  newRow.addEventListener("click", async () => {
+    closeMoveToFolderPop();
+    const cell = layoutOf(activeView())[id];
+    if (!cell) return; // favorites' free-form layout has no cell to replace
+    await newTileFolder([id], cell);
+  });
+  moveToFolderPop.appendChild(newRow);
+  for (const f of foldersOfView(activeView().id)) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.setAttribute("role", "menuitem");
+    row.textContent = folderTitle(f);
+    row.disabled = f.members.includes(id);
+    row.addEventListener("click", async () => {
+      if (row.disabled) return;
+      closeMoveToFolderPop();
+      if (await saveFolder(f, { members: [...f.members, id] })) {
+        await renderGrid(true);
+        toast(t("movedToFolderToast").replace("{folder}", folderTitle(f)));
+      }
+    });
+    moveToFolderPop.appendChild(row);
+  }
+}
+function openMoveToFolderPop(id, rect) {
+  renderMoveToFolderPop(id);
+  placePopover(moveToFolderPop, rect);
 }
 
 // ---- Grid tag filter — header toolbar popover, own Set from the library's ----
@@ -18578,6 +18635,13 @@ function bind() {
       if (e.key === "Escape") { e.preventDefault(); closeShortcutsModal(); return; }
       return;
     }
+    // Appended straight to document.body (see its own declaration), so it sits
+    // outside snipEdit's own DOM subtree -- the plain trap below would let Tab
+    // walk back into the editor underneath while this menu is still open.
+    if (!snipCtxPop.classList.contains("hidden")) {
+      if (e.key === "Tab") { trapTabWithin(snipCtxPop, e); return; }
+      if (e.key === "Escape") { e.preventDefault(); closeSnipCtxPop(); return; }
+    }
     if (e.key === "Tab") { trapTabWithin(snipEdit, e); return; }
     if (e.key === "Escape") {
       e.preventDefault();
@@ -19910,6 +19974,12 @@ function bind() {
       openViewsPop(id, rect);
       return;
     }
+    if (act === "moveToFolder") {
+      const rect = ctxEl.getBoundingClientRect();
+      closeCtx();
+      openMoveToFolderPop(id, rect);
+      return;
+    }
     closeCtx();
     if (act === "edit") {
       await editPrompt(id);
@@ -19973,6 +20043,7 @@ function bind() {
         !e.target.closest(".folder-tile")) closeTileFolderPop();
     // Opened from the (already-closed) tile context menu, so nothing else needs excluding.
     if (!viewsPop.classList.contains("hidden") && !viewsPop.contains(e.target)) closeViewsPop();
+    if (!moveToFolderPop.classList.contains("hidden") && !moveToFolderPop.contains(e.target)) closeMoveToFolderPop();
     // The toolbar button toggles its own popover, so let its own press through.
     if (!gridTagPop.classList.contains("hidden") && !gridTagPop.contains(e.target) &&
         !e.target.closest("#grid-tag-btn")) closeGridTagPop();
@@ -20020,6 +20091,7 @@ function bind() {
     if (!viewGroupPop.classList.contains("hidden")) { trapTabWithin(viewGroupPop, e); return; }
     if (!tileFolderPop.classList.contains("hidden")) { trapTabWithin(tileFolderPop, e); return; }
     if (!viewsPop.classList.contains("hidden")) { trapTabWithin(viewsPop, e); return; }
+    if (!moveToFolderPop.classList.contains("hidden")) { trapTabWithin(moveToFolderPop, e); return; }
     if (!gridTagPop.classList.contains("hidden")) { trapTabWithin(gridTagPop, e); return; }
     if (!openEditorPop.classList.contains("hidden")) { trapTabWithin(openEditorPop, e); return; }
     if (!$("lightbox").classList.contains("hidden")) { trapTabWithin($("lightbox"), e); return; }
@@ -20054,6 +20126,7 @@ function bind() {
     if (!viewGroupPop.classList.contains("hidden")) { closeViewGroupPop(); return; }
     if (!tileFolderPop.classList.contains("hidden")) { closeTileFolderPop(); return; }
     if (!viewsPop.classList.contains("hidden")) { closeViewsPop(); return; }
+    if (!moveToFolderPop.classList.contains("hidden")) { closeMoveToFolderPop(); return; }
     if (!gridTagPop.classList.contains("hidden")) { closeGridTagPop(); return; }
     if (!openEditorPop.classList.contains("hidden")) { closeOpenEditorPop(); return; }
     if (!$("lightbox").classList.contains("hidden")) closeLightbox();
@@ -20442,12 +20515,18 @@ function bind() {
     const label = btn.textContent;
     const origTitle = btn.title;
     btn.title = t("ffmpegCancelHint");
+    btn.setAttribute("role", "progressbar");
+    btn.setAttribute("aria-valuemin", "0");
+    btn.setAttribute("aria-valuemax", "100");
     const dlEta = makeEtaEstimator();
     const unlisten = await listen("ffmpeg-download-progress", (e) => {
       const pct = ffmpegDownloadPct(e.payload);
       dlEta.feed(pct);
-      const eta = flag("etaShow") ? formatEta(dlEta.estimate(val("etaMinPct"), val("etaMinSecs")), t) : "";
+      const estimate = dlEta.estimate(val("etaMinPct"), val("etaMinSecs"));
+      const eta = flag("etaShow") ? formatEta(estimate, t) : "";
       btn.textContent = t("ffmpegDownloading").replace("{pct}", String(pct)) + (eta ? ` (${eta})` : "");
+      btn.setAttribute("aria-valuenow", String(pct));
+      btn.setAttribute("aria-valuetext", a11yProgressText(t, pct, estimate));
     });
     try {
       await invoke("download_ffmpeg");
@@ -20461,6 +20540,11 @@ function bind() {
       ffmpegBusy = false;
       btn.textContent = label;
       btn.title = origTitle || "";
+      btn.removeAttribute("role");
+      btn.removeAttribute("aria-valuemin");
+      btn.removeAttribute("aria-valuemax");
+      btn.removeAttribute("aria-valuenow");
+      btn.removeAttribute("aria-valuetext");
     }
   };
 

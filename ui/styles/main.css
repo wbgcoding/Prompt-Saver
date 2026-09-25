@@ -418,6 +418,7 @@ body.noflag-showJournal #journal-btn { display: none; }
 .view-group-item { display: flex; align-items: center; gap: 8px; }
 /* Same list-of-views look as the group popover, same row cap. */
 .views-pop { min-width: 210px; z-index: 90; max-height: calc(var(--view-group-rows, 8) * 34px + 12px); overflow-y: auto; }
+.move-to-folder-pop { min-width: 180px; z-index: 90; max-height: 280px; overflow-y: auto; }
 .view-group-item-name {
   flex: 1 1 auto;
   display: flex;
@@ -5274,3 +5275,16 @@ body.noflag-customThemes .theme-edit-btn { display: none; }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes pop-in { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* Screen-reader-only text: present for assistive tech, invisible on screen. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

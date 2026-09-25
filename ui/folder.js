@@ -315,6 +315,9 @@ function flash(id) {
     setTimeout(() => tile.classList.remove("copied"), COPIED_MS);
   }
   if (copySoundOn) playCopySound(copySoundVolume);
+  const live = document.getElementById("live");
+  live.textContent = "";
+  live.textContent = TXT.copied;
 }
 
 async function copyMember(id) {
@@ -563,8 +566,24 @@ iconEl.addEventListener("contextmenu", (e) => {
 });
 
 window.addEventListener("contextmenu", (e) => e.preventDefault());
-window.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") closePopover();
+window.addEventListener("keydown", async (e) => {
+  if (e.key === "Escape") { closePopover(); return; }
+  // Same arrow/Shift+arrow move as the floating pill (floating.js) -- the
+  // folder window has no keyboard drag gesture of its own otherwise, only
+  // startDragging()'s native OS move.
+  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key) &&
+      menuEl.classList.contains("hidden") && popEl.classList.contains("hidden") &&
+      !iconDrag && !memberDrag && !gripDrag) {
+    e.preventDefault();
+    const step = e.shiftKey ? 20 : 4;
+    const dx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
+    const dy = e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0;
+    try {
+      const p = await appWin.outerPosition();
+      const d = window.devicePixelRatio || 1;
+      await invoke("set_folder_position", { id: folderId, x: p.x / d + dx, y: p.y / d + dy, clamp: true });
+    } catch {}
+  }
 });
 // A click anywhere else takes the focus away, which is what closes the folder.
 window.addEventListener("blur", () => {

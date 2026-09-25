@@ -14133,6 +14133,31 @@ async fn set_float_bounds(
 
 // ---------- folder commands ----------
 
+// Repositions a folder pill the same way a mouse drag does -- used by the
+// folder window's own arrow-key move (folder.js), which has no native OS drag
+// gesture to hand this off to the way startDragging() does for a mouse. The
+// existing Moved handler on the folder window (see build_folder_window) is
+// what actually persists the new position, exactly as it does for a drag;
+// this only has to move the window and let that handler fire.
+#[tauri::command]
+async fn set_folder_position(app: AppHandle, id: String, x: f64, y: f64, clamp: Option<bool>) -> Result<(), String> {
+    if [x, y].iter().all(|v: &f64| v.is_finite()) {
+        if let Some(win) = app.get_webview_window(&folder_label(&id)) {
+            let (x, y) = if clamp.unwrap_or(false) {
+                let dpi = win.scale_factor().unwrap_or(1.0);
+                let size = window_rect(&win).map(|r| (r.w, r.h)).unwrap_or((0.0, 0.0));
+                let work = work_rect_at(&app, x * dpi, y * dpi);
+                let (cx, cy) = clamp_to_work(work, size.0, size.1, x * dpi, y * dpi);
+                (cx / dpi, cy / dpi)
+            } else {
+                (x, y)
+            };
+            let _ = win.set_position(tauri::LogicalPosition::new(x, y));
+        }
+    }
+    Ok(())
+}
+
 // What the dragged pill covers: the id it would merge into, every other pill/folder
 // box (for the live highlight), and the dragged pill's own rect.
 type DragHit = (String, Vec<(String, Rect)>, Rect);
@@ -30082,6 +30107,7 @@ pub fn run() {
             resize_float_pill,
             resize_float_media,
             set_float_bounds,
+            set_folder_position,
             float_folder_drop,
             float_drag_hint,
             float_folder_state,

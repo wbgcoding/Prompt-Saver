@@ -1602,6 +1602,10 @@
     <button data-act="hide" role="menuitem" data-i18n="hideInView">Hide in this view</button>
     <!-- Hidden unless multiViewPrompt is on and there is another view to place this into. -->
     <button data-act="views" role="menuitem" data-i18n="alsoShowIn">Also show in…</button>
+    <!-- Only shown when tile folders are on (openCtx toggles .hidden) -- opens a
+         popover to join an existing folder in this view or start a new one, the
+         keyboard equivalent of dragging this tile onto another. -->
+    <button data-act="moveToFolder" role="menuitem" class="hidden" data-i18n="moveToFolderMenu">Move to folder…</button>
     <!-- Label set in openCtx() -- it names the action ("Show"/"Remove"), not a state-less "Toggle". -->
     <button data-act="pin" role="menuitem"></button>
     <!-- Only shown when the archive feature is on (openCtx toggles .hidden); label
@@ -1630,7 +1634,7 @@
     </div>
   </div>
 
-  <div id="toast" class="toast hidden"></div>
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
   <script src="voice.js"></script>
   <script src="search.js"></script>
   <script src="chainvars.js"></script>

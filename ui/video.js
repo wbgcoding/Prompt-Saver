@@ -6,7 +6,7 @@
 // an ordered operation list (VE.ops), exactly like the screenshot editor's own
 // list, and the export compiles that list into ONE ffmpeg filter graph. That is
 // what makes undo/redo cheap, the preview honest and the export a single pass.
-import { resolveLang, ffmpegDownloadPct, numberField, makeEtaEstimator, formatEta, parseFfmpegError, fmtBytes, makeHoldOrTapToggle } from "./floatShared.js";
+import { resolveLang, ffmpegDownloadPct, numberField, makeEtaEstimator, formatEta, a11yProgressText, parseFfmpegError, fmtBytes, makeHoldOrTapToggle } from "./floatShared.js";
 import { withShortcut as withShortcutRaw, rowsForScope as rowsForScopeRaw } from "./shortcuts.js";
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
@@ -761,6 +761,8 @@ function renderRegions() {
   $("ve-dim-b").style.width = `${Math.max(0, trackWidth() - msToPx(b))}px`;
   $("ve-trim-a").style.left = `${msToPx(a)}px`;
   $("ve-trim-b").style.left = `${msToPx(b)}px`;
+  setTimeValue($("ve-trim-a"), a, VE.dur);
+  setTimeValue($("ve-trim-b"), b, VE.dur);
 
   const cuts = $("ve-cuts");
   cuts.innerHTML = "";
@@ -801,10 +803,20 @@ function renderRegions() {
   document.querySelectorAll(".ve-use-sel").forEach((btn) => { btn.disabled = !VE.sel; });
 }
 
+// Shared by the timeline itself and its two trim handles: a screen reader gets
+// the plain time it would otherwise have to infer from a bare pixel position.
+function setTimeValue(el, ms, durMs) {
+  el.setAttribute("aria-valuemin", "0");
+  el.setAttribute("aria-valuemax", String(Math.round(durMs / 1000)));
+  el.setAttribute("aria-valuenow", String(Math.round(ms / 1000)));
+  el.setAttribute("aria-valuetext", t("a11yTimeOfTotal").replace("{time}", fmtTime(ms)).replace("{total}", fmtTime(durMs)));
+}
+
 function renderPlayhead() {
   $("ve-playhead").style.left = `${msToPx(VE.playhead)}px`;
   $("ve-time").textContent = fmtTime(VE.playhead);
   $("ve-frame").textContent = `#${frameOf(VE.playhead)}`;
+  setTimeValue($("ve-timeline"), VE.playhead, VE.dur);
 }
 
 // ---------------------------------------------------------------- filmstrip + waveform
@@ -1610,6 +1622,8 @@ regionsEl.addEventListener("pointermove", (e) => {
     else drag.live.endMs = clamp(ms, drag.live.startMs + MIN_CLIP_MS, VE.dur);
     $("ve-trim-a").style.left = `${msToPx(drag.live.startMs)}px`;
     $("ve-trim-b").style.left = `${msToPx(drag.live.endMs)}px`;
+    setTimeValue($("ve-trim-a"), drag.live.startMs, VE.dur);
+    setTimeValue($("ve-trim-b"), drag.live.endMs, VE.dur);
     $("ve-dim-a").style.width = `${msToPx(drag.live.startMs)}px`;
     $("ve-dim-b").style.left = `${msToPx(drag.live.endMs)}px`;
     $("ve-dim-b").style.width = `${Math.max(0, trackWidth() - msToPx(drag.live.endMs))}px`;
@@ -3164,8 +3178,10 @@ function setProgress(pct) {
   $("ve-export-progress").value = clamped;
   $("ve-export-pct").textContent = `${Math.round(clamped)}%`;
   exportEta.feed(clamped);
+  const estimate = exportEta.estimate(VE.etaMinPct, VE.etaMinSecs);
   const etaSpan = $("ve-export-eta");
-  etaSpan.textContent = VE.etaShow ? formatEta(exportEta.estimate(VE.etaMinPct, VE.etaMinSecs), t) : "";
+  etaSpan.textContent = VE.etaShow ? formatEta(estimate, t) : "";
+  $("ve-export-progress").setAttribute("aria-valuetext", a11yProgressText(t, clamped, estimate));
 }
 
 // toClipboard runs the very same export into a throwaway temp file
@@ -3297,12 +3313,18 @@ function noteFfmpeg(err) {
 $("ve-ffmpeg-get").addEventListener("click", async (e) => {
   const btn = e.currentTarget;
   btn.disabled = true;
+  btn.setAttribute("role", "progressbar");
+  btn.setAttribute("aria-valuemin", "0");
+  btn.setAttribute("aria-valuemax", "100");
   const dlEta = makeEtaEstimator();
   const unlisten = await listen("ffmpeg-download-progress", (ev) => {
     const pct = ffmpegDownloadPct(ev.payload);
     dlEta.feed(pct);
-    const eta = VE.etaShow ? formatEta(dlEta.estimate(VE.etaMinPct, VE.etaMinSecs), t) : "";
+    const estimate = dlEta.estimate(VE.etaMinPct, VE.etaMinSecs);
+    const eta = VE.etaShow ? formatEta(estimate, t) : "";
     btn.textContent = t("ffmpegDownloading").replace("{pct}", String(pct)) + (eta ? ` (${eta})` : "");
+    btn.setAttribute("aria-valuenow", String(pct));
+    btn.setAttribute("aria-valuetext", a11yProgressText(t, pct, estimate));
   });
   try {
     await invoke("download_ffmpeg");
@@ -3317,6 +3339,11 @@ $("ve-ffmpeg-get").addEventListener("click", async (e) => {
     toast(String(err));
   } finally {
     btn.disabled = false;
+    btn.removeAttribute("role");
+    btn.removeAttribute("aria-valuemin");
+    btn.removeAttribute("aria-valuemax");
+    btn.removeAttribute("aria-valuenow");
+    btn.removeAttribute("aria-valuetext");
     btn.textContent = t("ffmpegOfferConfirm");
     unlisten();
   }
@@ -3589,11 +3616,17 @@ function updateAudioLabels() {
 // Reflects VE.audio in the two mute buttons/sliders -- needed on every load
 // since resetForNewSource() changes the state without any click happening to
 // trigger audioControl()'s own listener.
+function updateVolumeValueText(volId) {
+  $(volId).setAttribute("aria-valuetext", t("a11yPctOnly").replace("{pct}", $(volId).value));
+}
+
 function syncAudioButtons() {
   $("ve-mute-sys").classList.toggle("ve-muted-btn", VE.audio.sys.mute);
   $("ve-mute-mic").classList.toggle("ve-muted-btn", VE.audio.mic.mute);
   $("ve-vol-sys").value = VE.audio.sys.vol;
   $("ve-vol-mic").value = VE.audio.mic.vol;
+  updateVolumeValueText("ve-vol-sys");
+  updateVolumeValueText("ve-vol-mic");
 }
 
 function audioControl(kind, muteId, volId) {
@@ -3605,6 +3638,7 @@ function audioControl(kind, muteId, volId) {
   });
   $(volId).addEventListener("input", () => {
     VE.audio[kind].vol = Number($(volId).value);
+    updateVolumeValueText(volId);
     applyPreviewSpeed();
     updateExportNote();
   });
@@ -3728,6 +3762,10 @@ document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") { e.preventDefault(); closeOvCtxPop(); return; }
     if (e.key === "Tab") { trapTabWithin(ovCtxPop, e); return; }
   }
+  if (!addVideoPop.classList.contains("hidden")) {
+    if (e.key === "Escape") { e.preventDefault(); closeAddVideoPop(); return; }
+    if (e.key === "Tab") { trapTabWithin(addVideoPop, e); return; }
+  }
   const typing = TYPING.has(document.activeElement?.tagName);
   if (e.key === "Escape") {
     e.preventDefault();
@@ -3751,6 +3789,22 @@ document.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && (e.key === "+" || e.key === "=")) { e.preventDefault(); setPreviewZoom(VE.previewZoom * VE.zoomStepFactor); return; }
   if ((e.ctrlKey || e.metaKey) && e.key === "-") { e.preventDefault(); setPreviewZoom(VE.previewZoom / VE.zoomStepFactor); return; }
   if ((e.ctrlKey || e.metaKey) && e.key === "0") { e.preventDefault(); resetPreviewZoom(); return; }
+
+  // A focused trim handle takes its own arrow keys instead of stepping the
+  // playhead -- otherwise the two handles below would be reachable by Tab but
+  // never actually movable without a mouse.
+  const focusedId = document.activeElement && document.activeElement.id;
+  if (focusedId === "ve-trim-a" || focusedId === "ve-trim-b") {
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      e.preventDefault();
+      const dir = e.key === "ArrowLeft" ? -1 : 1;
+      const step = (e.shiftKey ? 1000 : frameMs()) * dir;
+      const trim = opOf("trim") || { startMs: 0, endMs: VE.dur };
+      if (focusedId === "ve-trim-a") setTrim(trim.startMs + step, trim.endMs);
+      else setTrim(trim.startMs, trim.endMs + step);
+      return;
+    }
+  }
 
   // While an overlay is selected the arrow keys move/resize it instead of
   // stepping frames -- frame-stepping moves to comma/period instead, the way

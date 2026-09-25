@@ -93,12 +93,20 @@ function pauseBtnLabel() {
   return i18nDict[key] ?? i18nDict.recBarPause;
 }
 function applyPaused(p) {
+  const changed = paused !== p;
   paused = p;
   bar.classList.toggle("paused", p);
   pauseIcon.classList.toggle("hidden", p);
   resumeIcon.classList.toggle("hidden", !p);
   const label = pauseBtnLabel();
   if (label) { pauseBtn.title = label; pauseBtn.setAttribute("aria-label", label); }
+  // Reuses the same button label a sighted user just saw change (Pause/Resume) —
+  // that already names which state the recording is in now.
+  if (changed && label) {
+    const live = document.getElementById("live");
+    live.textContent = "";
+    live.textContent = label;
+  }
 }
 
 // System-audio / mic buttons, shown for the whole recording (never hidden) so
@@ -319,6 +327,11 @@ Promise.all([invoke("get_settings"), import("./i18n.js"), import("./floatShared.
       const key = el.getAttribute("data-i18n-title");
       const text = d[key] ?? I18N.en[key];
       if (text) { el.title = text; el.setAttribute("aria-label", text); }
+    }
+    for (const el of document.querySelectorAll("[data-i18n]")) {
+      const key = el.getAttribute("data-i18n");
+      const text = d[key] ?? I18N.en[key];
+      if (text) el.textContent = text;
     }
     const label = pauseBtnLabel();
     if (label) { pauseBtn.title = label; pauseBtn.setAttribute("aria-label", label); }

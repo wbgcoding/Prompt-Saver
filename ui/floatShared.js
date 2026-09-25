@@ -114,6 +114,18 @@ export function formatEta(result, t) {
   return t("etaAbout").replace("{time}", t(result.key).replace("{n}", String(result.value)));
 }
 
+// A screen reader's aria-valuetext for the same progress + estimate() result
+// formatEta() renders visually. "etaOverHour" and "no estimate yet" both count
+// as "no known rest" here (see a11yPctOnly) -- neither one is a real duration,
+// and etaAbout's own "left" wording would double up with a11yPctLeft's.
+export function a11yProgressText(t, pct, estimate) {
+  if (estimate && estimate.key !== "etaOverHour") {
+    const rest = t(estimate.key).replace("{n}", String(estimate.value));
+    return t("a11yPctLeft").replace("{pct}", String(Math.round(pct))).replace("{rest}", rest);
+  }
+  return t("a11yPctOnly").replace("{pct}", String(Math.round(pct)));
+}
+
 // Turns a rejected export_video/convert_recording call into what a person
 // should actually see. The backend wraps a classified ffmpeg (or ffmpeg-
 // adjacent Windows IO) failure as `{"key":..., "code":..., "raw":...}` JSON
