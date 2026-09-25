@@ -89,7 +89,7 @@ html, body {
 
 /* Image pill: the window is sized to the image's aspect ratio. The media uses
    object-fit:contain, so even if the OS forces a slightly different window box
-   the whole picture always shows — never cropped, never under the frame. */
+   the whole picture always shows, never cropped, never under the frame. */
 .pill.has-image {
   background: transparent;
   border: none;
@@ -227,7 +227,7 @@ body.menu-open .pill { flex: 0 0 auto; }
   display: flex;
   flex-direction: column;
   gap: 4px;
-  /* Fixed width (matches the backend menu width). NOT width:100% — the menu is
+  /* Fixed width (matches the backend menu width). NOT width:100%: the menu is
      measured (offsetWidth) while the window is still the pill's size, so on a tiny
      pill a 100%-width menu would measure ~pill-wide and clip its own labels. */
   width: 230px;
@@ -297,11 +297,11 @@ body.menu-open .pill { flex: 0 0 auto; }
    Above the menu (z 10) so the edges/corners on the menu's side stay grabbable;
    the 7px strips sit within the menu's 8px padding, so its buttons stay clickable
    (grabbing a grip collapses the menu and resizes the pill). */
-/* Stadium-shaped resize ring that hugs the pill outline at ANY size — so the resize
+/* Stadium-shaped resize ring that hugs the pill outline at ANY size, so the resize
    hitbox sits exactly on the rounded edge instead of drifting out to the bounding
    rectangle's corners as the pill grows. rz-catch is the full pill shape; rz-hole
    (a smaller pill, on top) punches out the centre, leaving only the --rz-wide edge
-   ring to resize — the centre and the transparent corners stay draggable. --rz is
+   ring to resize; the centre and the transparent corners stay draggable. --rz is
    set from JS in proportion to the pill; the radius matches the pill (a pill for
    text, 10px for media). */
 .resize { position: fixed; inset: 0; z-index: 11; pointer-events: none; --rz: 12px; }
@@ -342,12 +342,12 @@ body.menu-open .pill { flex: 0 0 auto; }
   transition: none;
 }
 
-/* Merge preview — this pill or folder is what the dragged pill would be dropped
+/* Merge preview: this pill or folder is what the dragged pill would be dropped
    into. The WINDOW grows a little (floating.js), so the pill really does swell; the
    ring and the folder watermark are drawn inside that grown box. Everything here is a
    transition, never a keyframe loop, so it follows the animation-speed setting and
    stops dead when animations are switched off. */
-/* Merge preview — the same scrim, mark and timing as the tabs and tiles in the main
+/* Merge preview: the same scrim, mark and timing as the tabs and tiles in the main
    window. A pill is always saturated, so the scrim is a fixed dark and the mark a
    fixed white: that reads on every theme without guessing a contrast. The WINDOW
    itself also grows a little (floating.js), which is the part a pill can do and a
@@ -411,7 +411,7 @@ body.menu-open .pill { flex: 0 0 auto; }
 .folder-rz .rz-hole { inset: var(--rz); cursor: inherit; }
 .folder-body.pop-open .folder-rz { display: none; }
 /* D3: the ring itself is unmarked, so a thin accent edge on the icon is the only sign
-   it exists — folder.js toggles this class on window mousemove the instant the pointer
+   it exists; folder.js toggles this class on window mousemove the instant the pointer
    is over #rz-catch, gone again over the centre hole or once the pointer leaves. */
 .folder-icon.rz-hover { box-shadow: inset 0 0 0 2px var(--pill-bg); }
 .folder-preview {
@@ -432,7 +432,7 @@ body.menu-open .pill { flex: 0 0 auto; }
   color: var(--pill-fg);
   text-shadow: var(--pill-ink-shadow, none);
   font-weight: 700;
-  /* No carrier surface behind the folder any more — each tile gets its
+  /* No carrier surface behind the folder any more: each tile gets its
      own soft glow + hairline contour so it stays visible on light backgrounds. */
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25), inset 0 0 0 1px rgba(255, 255, 255, 0.12);
 }
@@ -471,7 +471,7 @@ body.menu-open .pill { flex: 0 0 auto; }
   text-overflow: ellipsis;
 }
 
-/* Popover — the member grid or the folder menu. The window is already the right size
+/* Popover: the member grid or the folder menu. The window is already the right size
    when this appears, so only the content fades and scales in (animSpeed). */
 .folder-pop,
 .folder-menu {
@@ -482,7 +482,7 @@ body.menu-open .pill { flex: 0 0 auto; }
 }
 .folder-pop.shown,
 .folder-menu.shown { opacity: 1; transform: none; }
-/* The member menu opens and closes through .hidden alone — it never gets .shown,
+/* The member menu opens and closes through .hidden alone; it never gets .shown,
    so it stays out of the fade above instead of being animated back to full. */
 .member-menu { position: absolute; }
 .folder-body[data-side="below"] .folder-pop,
@@ -535,13 +535,13 @@ body.menu-open .pill { flex: 0 0 auto; }
 }
 .folder-member.copied .member-ok { opacity: 1; }
 
-/* Rotating-prompt "next entry" badge — small dot in the corner, independent of
+/* Rotating-prompt "next entry" badge: small dot in the corner, independent of
    the pill/theme colour so it reads the same in every theme; shared by the pill
    (floating.html) and folder member tiles. A POSITIVE inset, not a negative
    "notification dot" offset: `html, body { overflow: hidden }` clips the pill
    window at its own edge (the window is sized exactly to the pill, no margin to
    spill into), and .folder-member separately clips overflow for its rounded image
-   corners — a negative offset would be invisible in both places. */
+   corners; a negative offset would be invisible in both places. */
 .rotate-badge {
   position: absolute;
   top: 3px;
@@ -558,7 +558,7 @@ body.menu-open .pill { flex: 0 0 auto; }
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 }
 /* Folder members render the badge without an initial "hidden" class (unlike the
-   pill, which toggles it explicitly) — empty until primeMemberRotate's peek lands. */
+   pill, which toggles it explicitly); empty until primeMemberRotate's peek lands. */
 .rotate-badge:empty { display: none; }
 
 /* Parked marker: a button (or folder icon) whose saved position's screen is
@@ -717,7 +717,7 @@ body.vars-body {
 
 /* ---- Standalone quick-launcher (launcher.html) ----
    Same tokens as the pill menus and vars.html. A search field and a result list,
-   nothing else — picking a result hands off to the exact same "copy from outside
+   nothing else: picking a result hands off to the exact same "copy from outside
    the grid" path the tray menu already uses. */
 body.launcher-body {
   display: flex;

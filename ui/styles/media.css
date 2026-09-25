@@ -40,7 +40,7 @@
 .media-sound.dragging .media-vol-pop { visibility: visible; }
 /* No room above (video sitting at the top window edge): open downwards. */
 .media-sound.below .media-vol-pop { top: 100%; bottom: auto; }
-/* Generous invisible hitbox so the popup doesn't vanish on small detours —
+/* Generous invisible hitbox so the popup doesn't vanish on small detours,
    top/sides only, so it never covers the sound button below. */
 .media-vol-pop::before {
   content: "";
