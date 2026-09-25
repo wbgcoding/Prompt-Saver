@@ -3749,6 +3749,10 @@ document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") { e.preventDefault(); closeOvCtxPop(); return; }
     if (e.key === "Tab") { trapTabWithin(ovCtxPop, e); return; }
   }
+  if (!addVideoPop.classList.contains("hidden")) {
+    if (e.key === "Escape") { e.preventDefault(); closeAddVideoPop(); return; }
+    if (e.key === "Tab") { trapTabWithin(addVideoPop, e); return; }
+  }
   const typing = TYPING.has(document.activeElement?.tagName);
   if (e.key === "Escape") {
     e.preventDefault();

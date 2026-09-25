@@ -18624,6 +18624,13 @@ function bind() {
       if (e.key === "Escape") { e.preventDefault(); closeShortcutsModal(); return; }
       return;
     }
+    // Appended straight to document.body (see its own declaration), so it sits
+    // outside snipEdit's own DOM subtree -- the plain trap below would let Tab
+    // walk back into the editor underneath while this menu is still open.
+    if (!snipCtxPop.classList.contains("hidden")) {
+      if (e.key === "Tab") { trapTabWithin(snipCtxPop, e); return; }
+      if (e.key === "Escape") { e.preventDefault(); closeSnipCtxPop(); return; }
+    }
     if (e.key === "Tab") { trapTabWithin(snipEdit, e); return; }
     if (e.key === "Escape") {
       e.preventDefault();
