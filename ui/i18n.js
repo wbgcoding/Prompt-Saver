@@ -79,6 +79,7 @@ export const I18N = {
     importAllDone: "Backup “{f}” was imported. {n} prompts restored.",
     cancel: "Cancel",
     close: "Close",
+    shortcutsTitle: "Keyboard shortcuts",
     save: "Save",
     // Screenshot editor
     snipToolCrop: "Crop",
@@ -2250,6 +2251,7 @@ export const I18N = {
     importAllDone: "Backup „{f}“ wurde importiert. {n} Prompts wiederhergestellt.",
     cancel: "Abbrechen",
     close: "Schließen",
+    shortcutsTitle: "Tastenkürzel",
     save: "Speichern",
     // Screenshot editor
     snipToolCrop: "Zuschneiden",
@@ -4448,6 +4450,7 @@ export const I18N = {
     importAllDone: "Copia de seguridad «{f}» importada. {n} prompts restaurados.",
     cancel: "Cancelar",
     close: "Cerrar",
+    shortcutsTitle: "Atajos de teclado",
     save: "Guardar",
     // Screenshot editor
     snipToolCrop: "Recortar",
@@ -6619,6 +6622,7 @@ export const I18N = {
     importAllDone: "Backup «{f}» importato. {n} prompt ripristinati.",
     cancel: "Annulla",
     close: "Chiudi",
+    shortcutsTitle: "Scorciatoie da tastiera",
     save: "Salva",
     // Screenshot editor
     snipToolCrop: "Ritaglia",
@@ -8790,6 +8794,7 @@ export const I18N = {
     importAllDone: "Backup «{f}» importado. {n} prompts restaurados.",
     cancel: "Cancelar",
     close: "Fechar",
+    shortcutsTitle: "Atalhos de teclado",
     save: "Salvar",
     // Screenshot editor
     snipToolCrop: "Cortar",
@@ -10961,6 +10966,7 @@ export const I18N = {
     importAllDone: "Kopia zapasowa „{f}” zaimportowana. {n} promptów przywrócono.",
     cancel: "Anuluj",
     close: "Zamknij",
+    shortcutsTitle: "Skróty klawiszowe",
     save: "Zapisz",
     // Screenshot editor
     snipToolCrop: "Przytnij",
@@ -13143,6 +13149,7 @@ export const I18N = {
     importAllDone: "备份“{f}”已导入。已还原 {n} 个提示词。",
     cancel: "取消",
     close: "关闭",
+    shortcutsTitle: "键盘快捷键",
     save: "保存",
     // Screenshot editor
     snipToolCrop: "裁剪",
@@ -15314,6 +15321,7 @@ export const I18N = {
     importAllDone: "バックアップ「{f}」をインポートしました。{n} 件のプロンプトを復元しました。",
     cancel: "キャンセル",
     close: "閉じる",
+    shortcutsTitle: "キーボードショートカット",
     save: "保存",
     // Screenshot editor
     snipToolCrop: "トリミング",
@@ -17485,6 +17493,7 @@ export const I18N = {
     importAllDone: "Back-up “{f}” is geïmporteerd. {n} prompts hersteld.",
     cancel: "Annuleren",
     close: "Sluiten",
+    shortcutsTitle: "Sneltoetsen",
     save: "Opslaan",
     // Screenshot editor
     snipToolCrop: "Bijsnijden",
@@ -19656,6 +19665,7 @@ export const I18N = {
     importAllDone: "Yedek “{f}” içe aktarıldı. {n} istem geri yüklendi.",
     cancel: "İptal",
     close: "Kapat",
+    shortcutsTitle: "Klavye kısayolları",
     save: "Kaydet",
     // Screenshot editor
     snipToolCrop: "Kırp",
@@ -21827,6 +21837,7 @@ export const I18N = {
     importAllDone: "Copia de rezervă „{f}” a fost importată. {n} prompturi restabilite.",
     cancel: "Anulează",
     close: "Închide",
+    shortcutsTitle: "Comenzi rapide de la tastatură",
     save: "Salvează",
     // Screenshot editor
     snipToolCrop: "Decupare",
