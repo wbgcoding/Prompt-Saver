@@ -992,6 +992,10 @@ body.flag-chainStartAlwaysVisible .tile-chain-start { opacity: 0.65; }
 /* Any chain already running takes over the corner with its order badge --
    the start button never competes with it, on ANY tile, not just the picked one. */
 body.chain-mode .tile-chain-start { opacity: 0; pointer-events: none; }
+/* While a chain runs, the corner belongs to the order badge: the menu button
+   and the select box stay hidden on hover too, unless multi-select is on. */
+body.chain-mode:not(.grid-selecting) .tile .tile-menu,
+body.chain-mode:not(.grid-selecting) .tile .tile-select { opacity: 0; pointer-events: none; }
 /* Gate first: a switched-off chain feature must make the button gone
    entirely, not merely inert -- main.js also skips building the element. */
 body.noflag-chainPrompts .tile-chain-start,

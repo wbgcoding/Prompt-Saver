@@ -1123,6 +1123,9 @@ the video editor and the introduction tour ship on).
   Escape reach it first.
 - **The chain overview strip kept extra space above its title.** The padding
   above the steps is trimmed to match the space it already kept below them.
+- **A tile's menu and select button still popped up on hover while a chain
+  was running**, competing with the order badge in the same corner. They now
+  stay hidden on every tile until the chain ends, unless multi-select is on.
 
 ### Security
 

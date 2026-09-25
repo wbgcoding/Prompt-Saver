@@ -1750,8 +1750,27 @@ PROBE = """
           startBtn.click();
           await sleep(150);
           checkOverlap('picked mid-chain', ['.tile-chain-badge', '.tile-rotate-badge', '.tile-menu']);
+          // 491: the corner belongs to the order badge while a chain runs -- the
+          // menu button and the select box stay hidden on hover too, on both the
+          // picked tile and any other one, unless multi-select is on.
+          const otherTile = [...document.querySelectorAll('#grid .tile')].find((el) => el !== rotTile);
+          for (const [label, tile] of [['picked', rotTile], ['other', otherTile]]) {
+            if (!tile) continue;
+            for (const name of ['tile-menu', 'tile-select']) {
+              const el = tile.querySelector('.' + name);
+              if (!el) continue;
+              const cs = getComputedStyle(el);
+              if (cs.pointerEvents !== 'none' || cs.opacity !== '0') {
+                out.errors.push('491: the ' + name + ' stayed reachable on the ' + label + ' tile during a chain');
+              }
+            }
+          }
           for (let i = 0; i < 3 && document.body.classList.contains('chain-mode'); i++) await click('chain-btn');
           await sleep(100);
+          const afterMenu = rotTile.querySelector('.tile-menu');
+          if (afterMenu && getComputedStyle(afterMenu).pointerEvents !== 'auto') {
+            out.errors.push('491: the tile menu stayed unreachable after the chain ended');
+          }
         }
       }
     }
