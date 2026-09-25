@@ -20801,6 +20801,13 @@ mod keylog {
     const SETTLE_MS: u64 = 300;
     const GUARD_MS: u64 = 300;
 
+    // How often the consumer re-checks focus identity while any key is
+    // still pending, so a focus change UI Automation's own event missed (or
+    // never fires at all, see the handler-registration failure path) is
+    // still caught inside a fraction of the settle window rather than only
+    // once that window's own deadline finally arrives.
+    const FOCUS_POLL_MS: u64 = 50;
+
     // Ordered log of every completed focus check (`checks`, each stamped by
     // the instant it STARTED, not when it finished) and every focus-change
     // event's own arrival (`arrivals`), both on the `mono_ms()` clock.
@@ -20815,6 +20822,10 @@ mod keylog {
     struct Ledger {
         checks: Vec<(u64, bool)>, // (start_ms, is_password)
         arrivals: Vec<u64>,
+        // Set once and never cleared for the lifetime of a capture: the
+        // focus-changed handler could not be registered, so no event will
+        // ever arrive to invalidate a stale check. See `gap_everything`.
+        fail_closed: bool,
     }
 
     impl Ledger {
@@ -20826,6 +20837,14 @@ mod keylog {
         fn push_arrival(&mut self, arrival_ms: u64) {
             let pos = self.arrivals.partition_point(|t| *t <= arrival_ms);
             self.arrivals.insert(pos, arrival_ms);
+        }
+
+        // Called once, the moment registering the focus-changed handler is
+        // known to have failed: from here on every key of this session is
+        // gapped outright, the same fate as a confirmed password field,
+        // because nothing can ever again prove a key clean.
+        fn gap_everything(&mut self) {
+            self.fail_closed = true;
         }
 
         // The EARLIEST completed check that started late enough (t +
@@ -20869,7 +20888,7 @@ mod keylog {
     // "record", only ever eventually resolved to a gap if nothing ever
     // qualifies (see `verdict_at_stop`).
     fn verdict(ledger: &Ledger, t: u64, injected: bool) -> Option<bool> {
-        if injected {
+        if injected || ledger.fail_closed {
             return Some(true);
         }
         if ledger.in_blind_window(t) {
@@ -20906,6 +20925,21 @@ mod keylog {
         // that check anyway; injected input skips straight to being gapped
         // here since it never went through a person's fingers at all.
         injected: bool,
+    }
+
+    // Tab, Shift+Tab (same VK code as Tab -- the shift state never changes
+    // it), Enter and Esc all commonly move focus on their own, without
+    // UI Automation firing its own notification for it right away: a form
+    // submitting on Enter, a dialog closing on Esc, a field-to-field Tab.
+    // The consumer counts the key-down itself as an arrival, at the hook's
+    // own timestamp, so its blind window covers the moment focus actually
+    // moves instead of only whenever UI Automation gets around to saying so.
+    const VK_TAB: u32 = 0x09;
+    const VK_RETURN: u32 = 0x0D;
+    const VK_ESCAPE: u32 = 0x1B;
+
+    fn is_focus_moving_key(vk: u32) -> bool {
+        matches!(vk, VK_TAB | VK_RETURN | VK_ESCAPE)
     }
 
     // The hook callback is a bare extern "system" fn -- it cannot capture a
@@ -20956,6 +20990,21 @@ mod keylog {
         }
     }
 
+    // The currently focused HWND, resolved the same way for both the
+    // password check below and the focus-identity poll: `hwndFocus` from
+    // the foreground thread's own GUI info when it has one, the foreground
+    // window itself otherwise.
+    fn focused_hwnd() -> HWND {
+        let fg = unsafe { GetForegroundWindow() };
+        let mut gti = GUITHREADINFO { cbSize: std::mem::size_of::<GUITHREADINFO>() as u32, ..Default::default() };
+        let tid = unsafe { GetWindowThreadProcessId(fg, None) };
+        if unsafe { GetGUIThreadInfo(tid, &mut gti) }.is_ok() && !gti.hwndFocus.is_invalid() {
+            gti.hwndFocus
+        } else {
+            fg
+        }
+    }
+
     // The CURRENT focused-control password state, resolved fresh every call
     // -- no cache of any kind, HWND-keyed or otherwise (see Ledger's doc for
     // why that used to be unsafe). Called both by the UIA focus-changed
@@ -20963,15 +21012,37 @@ mod keylog {
     // exactly one code path deciding "is this a password field" no matter
     // which of the two triggered it.
     fn focused_password(uia: &Option<IUIAutomation>) -> bool {
-        let fg = unsafe { GetForegroundWindow() };
-        let mut gti = GUITHREADINFO { cbSize: std::mem::size_of::<GUITHREADINFO>() as u32, ..Default::default() };
-        let tid = unsafe { GetWindowThreadProcessId(fg, None) };
-        let focus_hwnd = if unsafe { GetGUIThreadInfo(tid, &mut gti) }.is_ok() && !gti.hwndFocus.is_invalid() {
-            gti.hwndFocus
-        } else {
-            fg
-        };
-        detect_password(focus_hwnd, uia)
+        detect_password(focused_hwnd(), uia)
+    }
+
+    // A focus "identity" cheap enough to poll every FOCUS_POLL_MS while keys
+    // are pending: the currently focused HWND alongside the UI Automation
+    // element behind it, if any. Compared through `focus_identity_changed`
+    // using UI Automation's own CompareElements -- its documented way to
+    // tell whether two references name the same underlying control, a true
+    // runtime-id comparison rather than a property one two different
+    // controls could share.
+    fn focus_identity(uia: &Option<IUIAutomation>) -> (HWND, Option<IUIAutomationElement>) {
+        let element = uia.as_ref().and_then(|uia| unsafe { uia.GetFocusedElement() }.ok());
+        (focused_hwnd(), element)
+    }
+
+    fn focus_identity_changed(
+        uia: &Option<IUIAutomation>,
+        prev: &(HWND, Option<IUIAutomationElement>),
+        cur: &(HWND, Option<IUIAutomationElement>),
+    ) -> bool {
+        if prev.0 != cur.0 {
+            return true;
+        }
+        match (&prev.1, &cur.1, uia) {
+            (None, None, _) => false,
+            (Some(_), None, _) | (None, Some(_), _) => true,
+            (Some(a), Some(b), Some(uia)) => !unsafe { uia.CompareElements(a, b) }.map(|same| same.as_bool()).unwrap_or(false),
+            // No UI Automation object at all to compare elements with --
+            // the HWND check above is already everything available.
+            (Some(_), Some(_), None) => false,
+        }
     }
 
     // FAIL CLOSED throughout: any doubt (UI Automation unreachable, the call
@@ -21085,12 +21156,17 @@ mod keylog {
             uia.as_ref().map(|uia| FocusHandler { ledger: ledger.clone(), uia: uia.clone() }.into());
         if let (Some(uia), Some(handler)) = (&uia, &focus_handler) {
             if unsafe { uia.AddFocusChangedEventHandler(None, handler) }.is_err() {
-                // Not fatal: the loop below still schedules its own checks
-                // on a timer regardless of whether any focus-changed event
-                // ever arrives, so this only loses the event-driven half
-                // (and the extra blind windows it would have added), not
-                // fail-closed correctness -- but it is worth knowing about.
-                append_crash_log("key overlay: could not register the UI Automation focus-changed handler, relying on scheduled checks only");
+                // With no focus-changed event ever going to arrive, a check
+                // that happens to land in the quiet stretch between two
+                // real focus moves has nothing left to invalidate it -- the
+                // scheduled checks and the focus poll below both still run,
+                // but neither is a substitute for the event itself catching
+                // an in-page field switch the instant it happens. Gapping
+                // every key for the rest of this session is the only answer
+                // that never depends on a signal already known to be
+                // unavailable.
+                ledger.lock().unwrap_or_else(|e| e.into_inner()).gap_everything();
+                append_crash_log("key overlay: could not register the UI Automation focus-changed handler, gapping every key this session");
             }
         }
 
@@ -21100,17 +21176,24 @@ mod keylog {
         // least SETTLE_MS after it, which is inherently a delay: the
         // consumer cannot decide a key's fate the instant it arrives.
         let mut pending: VecDeque<RawKey> = VecDeque::new();
+        // The focus identity as of the last poll tick, so the tick after a
+        // real change can tell it happened. Established fresh here, before
+        // any key can possibly be pending, so the very first poll compares
+        // against a real baseline rather than an assumed one.
+        let mut last_focus = focus_identity(&uia);
         loop {
-            // Block until either the next raw key, or -- if a pending key's
-            // own SETTLE_MS deadline arrives first with no fresh
-            // focus-changed event to show for it -- a timeout, so a quiet
-            // stretch of typing still resolves instead of waiting forever
-            // for an event that may never come.
+            // Block until either the next raw key, or a timeout -- while
+            // keys are pending the timeout is also the ~50ms focus poll
+            // below, never longer, so a focus change UI Automation's own
+            // event missed is still caught quickly; with nothing pending
+            // there is nothing to poll for and this simply waits for the
+            // next key.
             let recv_result = match pending.front() {
                 Some(front) => {
                     let need = front.t_ms.saturating_add(SETTLE_MS);
-                    let wait = Duration::from_millis(need.saturating_sub(mono_ms()));
-                    rx.recv_timeout(wait)
+                    let deadline_wait = need.saturating_sub(mono_ms());
+                    let wait = deadline_wait.min(FOCUS_POLL_MS);
+                    rx.recv_timeout(Duration::from_millis(wait))
                 }
                 None => rx.recv().map_err(|_| RecvTimeoutError::Disconnected),
             };
@@ -21127,16 +21210,43 @@ mod keylog {
                         // only ever catches the sliver of events already in
                         // flight the instant pause() tore it down.
                     } else {
+                        // See `is_focus_moving_key`: a Tab, Shift+Tab, Enter
+                        // or Esc key-down is itself treated as a focus
+                        // arrival, stamped at the hook's own timestamp
+                        // rather than whenever this thread gets around to
+                        // seeing it.
+                        if raw.down && is_focus_moving_key(raw.vk) {
+                            ledger.lock().unwrap_or_else(|e| e.into_inner()).push_arrival(raw.t_ms);
+                        }
                         pending.push_back(raw);
                     }
                 }
                 Err(RecvTimeoutError::Timeout) => {
-                    // Nobody else is going to check for us -- run one so the
-                    // pending key whose deadline just arrived (and anything
-                    // else waiting behind it) can actually be resolved.
-                    let start = mono_ms();
-                    let password = focused_password(&uia);
-                    ledger.lock().unwrap_or_else(|e| e.into_inner()).push_check(start, password);
+                    let now = mono_ms();
+                    // Only run the settle check itself once a pending key's
+                    // own deadline has actually arrived -- an earlier
+                    // timeout tick was only the focus poll below, not yet
+                    // due for this.
+                    if pending.front().is_some_and(|front| now >= front.t_ms.saturating_add(SETTLE_MS)) {
+                        let password = focused_password(&uia);
+                        ledger.lock().unwrap_or_else(|e| e.into_inner()).push_check(now, password);
+                    }
+                    // The ~50ms focus poll: while any key is still waiting
+                    // on a verdict, check whether the focused HWND or
+                    // element has moved since the last tick and, if so,
+                    // record it as an arrival the same as a UI Automation
+                    // notification would be. This is what catches a focus
+                    // change during a quiet stretch with no key at all
+                    // driving a settle check, and it is also the fallback
+                    // for whenever AddFocusChangedEventHandler never fired
+                    // to begin with.
+                    if !pending.is_empty() {
+                        let cur = focus_identity(&uia);
+                        if focus_identity_changed(&uia, &last_focus, &cur) {
+                            ledger.lock().unwrap_or_else(|e| e.into_inner()).push_arrival(mono_ms());
+                        }
+                        last_focus = cur;
+                    }
                 }
                 Err(RecvTimeoutError::Disconnected) => break,
             }
@@ -21558,6 +21668,39 @@ mod keylog {
             ledger.push_check(0, false);
             ledger.push_check(400, false);
             assert!(!verdict_at_stop(&ledger, 50, false), "a real, already-completed answer is not thrown away just because the capture is stopping");
+        }
+
+        #[test]
+        fn a_tab_key_down_counts_as_a_synthetic_arrival_that_gaps_a_key_with_no_uia_event_at_all() {
+            // Tab into a password field, type, Tab out within 300ms -- and
+            // UI Automation never raises a focus-changed event for either
+            // move at all (no handler, or the app just never fires one).
+            // The consumer treats the Tab-out key-down itself as the
+            // arrival, stamped at the hook's own timestamp, so its blind
+            // window still gaps the key exactly as a real UIA notification
+            // would have.
+            assert!(is_focus_moving_key(VK_TAB));
+            assert!(is_focus_moving_key(VK_RETURN));
+            assert!(is_focus_moving_key(VK_ESCAPE));
+            assert!(!is_focus_moving_key(0x41)); // an ordinary letter key never counts
+            let mut ledger = Ledger::default();
+            ledger.push_check(0, false); // the field looked clean before any of this
+            let key_t = 100;
+            let tab_out_t = 150; // well within 300ms of the key
+            ledger.push_arrival(tab_out_t); // what the hook-time synthetic arrival does
+            ledger.push_check(700, false); // the consumer's own later recheck, also clean
+            assert_eq!(verdict(&ledger, key_t, false), Some(true), "the synthetic arrival's blind window must still gap the key");
+        }
+
+        #[test]
+        fn handler_registration_failure_gaps_every_key_regardless_of_checks() {
+            let mut ledger = Ledger::default();
+            ledger.push_check(0, false);
+            ledger.push_check(400, false);
+            assert_eq!(verdict(&ledger, 50, false), Some(false), "before the failure, a clean qualifying check still records");
+            ledger.gap_everything();
+            assert_eq!(verdict(&ledger, 50, false), Some(true), "once the handler failed to register, nothing gets recorded again");
+            assert_eq!(verdict(&ledger, 1_000_000, false), Some(true), "including any key far later, however clean its own checks look");
         }
 
         // --- ActiveClock: pause drops events, and offsets use the
