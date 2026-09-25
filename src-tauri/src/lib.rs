@@ -27316,7 +27316,7 @@ fn parse_txt(content: &str) -> ImportData {
             Some((t, c)) => (t.to_string(), c.trim().to_string()),
             None => (body, String::new()),
         };
-        // Entries 2..n still ride along inside `text` at this point — split
+        // Entries 2..n still ride along inside `text` at this point: split
         // them back out now that every trailing @key line is gone.
         let (text, variants) = split_variants(&text);
         data.prompts.push(ImportedPrompt {
@@ -27402,14 +27402,14 @@ fn parse_csv_data(content: &str) -> ImportData {
 }
 
 // The signature a prompt is de-duplicated by, on both the preview and the real
-// import — the two must always agree, or the preview's "new"/"duplicate" label
+// import: the two must always agree, or the preview's "new"/"duplicate" label
 // could lie about what actually happens on confirm.
 fn import_sig(name: &str, text: &str, file: &str, image: &str, copy: bool) -> String {
     format!("{name}\u{1}{text}\u{1}{file}\u{1}{image}\u{1}{copy}")
 }
 
 // Parse already-read file bytes (the caller reads once, hashes those same
-// bytes for the changed-since-preview check, and parses them here — never a
+// bytes for the changed-since-preview check, and parses them here: never a
 // second read of the file).
 fn parse_import_bytes(bytes: &[u8], path: &std::path::Path) -> Result<ImportData, String> {
     let content = String::from_utf8(bytes.to_vec()).map_err(|_| "the file is not valid UTF-8 text".to_string())?;
@@ -27430,7 +27430,7 @@ fn import_file_hash(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
-// What an import WOULD do, without touching the store — the file is picked
+// What an import WOULD do, without touching the store: the file is picked
 // here, and its path travels back so the confirm step (import_prompts) can
 // re-read the SAME file without a second file dialog. `hash` lets the confirm
 // step detect the file changing underneath the preview (someone editing or
@@ -27522,12 +27522,12 @@ fn append_imported_prompts(store: &mut Store, items: Vec<ImportedPrompt>) -> usi
             // A note from a foreign file must not abort the import either.
             notes: sanitize_notes(&item.notes).unwrap_or_default(),
             // A CSV/TXT file carries prompt content, never machine-local bindings
-            // — nor the per-binding paste choice that belongs to one.
+            //: nor the per-binding paste choice that belongs to one.
             hotkey: String::new(),
             hotkey_paste: String::new(),
             variants,
             rotate_mode,
-            // A CSV/TXT file never carries the auto-session state either — it is a
+            // A CSV/TXT file never carries the auto-session state either: it is a
             // per-machine live behaviour, not portable prompt content.
             rotate_auto: false,
             // Never measured here -- an imported attachment path is often not even
@@ -27555,7 +27555,7 @@ fn append_imported_prompts(store: &mut Store, items: Vec<ImportedPrompt>) -> usi
 }
 
 // Async: parsing + persisting an import stays off the UI thread. `path` comes
-// from a prior preview_import call — never a fresh file dialog here, so
+// from a prior preview_import call: never a fresh file dialog here, so
 // confirming a preview can never silently import a DIFFERENT file. `hash` is
 // that same preview's digest of the file it showed; a mismatch here means the
 // file changed after the preview was shown, and the import is refused rather
@@ -27574,7 +27574,7 @@ async fn import_prompts(app: AppHandle, state: State<'_, Db>, path: String, hash
     let before_len = store.prompts.len(); // everything imported is appended after this
     let count = append_imported_prompts(&mut store, data.prompts);
     // A failed save must not report N prompts imported for a write that never
-    // reached disk — an appended tail is trivial to roll back exactly.
+    // reached disk: an appended tail is trivial to roll back exactly.
     if !save_prompts(&app, &store) {
         store.prompts.truncate(before_len);
         return Err("save-failed".into());
@@ -27820,7 +27820,7 @@ struct Backup {
 // (Argon2id(password + pepper, salt)); 2/3 additionally deflate the JSON before
 // encrypting. Old plaintext .json backups are still read.
 const BACKUP_MAGIC: &[u8; 4] = b"PSB1";
-// Fixed obfuscation key — MUST stay identical across all versions or old fixed-key
+// Fixed obfuscation key: MUST stay identical across all versions or old fixed-key
 // backups become unreadable. Not a secret (open source); it only keeps backups from
 // being plainly readable while staying restorable on any machine.
 const BACKUP_FIXED_KEY: [u8; 32] = [
@@ -27845,7 +27845,7 @@ fn backup_derive_key(password: &str, salt: &[u8]) -> Result<[u8; 32], String> {
 }
 
 // A backup is JSON, so deflating it before encryption shrinks the file to a
-// fraction. Compression must happen BEFORE encryption — ciphertext does not
+// fraction. Compression must happen BEFORE encryption: ciphertext does not
 // compress. Modes 2/3 mark a deflated payload; 0/1 stay readable forever.
 fn deflate(raw: &[u8]) -> Result<Vec<u8>, String> {
     use flate2::{write::DeflateEncoder, Compression};
@@ -27855,7 +27855,7 @@ fn deflate(raw: &[u8]) -> Result<Vec<u8>, String> {
 }
 
 // Ceiling for anything we decompress. The default backup key ships inside the exe, so
-// a valid-looking .psb is something anyone can craft — without a cap a few KB of
+// a valid-looking .psb is something anyone can craft: without a cap a few KB of
 // deflate expands until the process is killed. Far above any real library.
 const MAX_INFLATED: u64 = 512 * 1024 * 1024;
 
@@ -27958,7 +27958,7 @@ fn backup_decrypt(data: &[u8], password: Option<&str>) -> Result<Option<Vec<u8>>
 
 // ---------- Confidential entries (per-prompt encryption) ----------
 // Same derivation and cipher as the encrypted backups above (Argon2id + AES-256-GCM),
-// with its own pepper, salt and verification value — this feature has nothing to do
+// with its own pepper, salt and verification value: this feature has nothing to do
 // with a backup password and must not accept one as a substitute. Format: b"PSE1" |
 // nonce(12) | AES-256-GCM ciphertext, base64. No compression: a prompt's text is far
 // too small for it to matter, and it would only add a length side channel.
@@ -27966,7 +27966,7 @@ const SECRET_MAGIC: &[u8; 4] = b"PSE1";
 const SECRET_PEPPER: &[u8] = b"prompt-saver::secret::pepper::v1";
 const SECRET_PW_MAX: usize = 128;
 // ui_texts slots: the vault's own salt and a ciphertext of a known marker, used to
-// check a password before trusting it — never the password itself, and never
+// check a password before trusting it: never the password itself, and never
 // DPAPI-sealed on top, since neither value is a secret on its own.
 const SECRET_SALT_KEY: &str = "secretVaultSalt";
 const SECRET_VERIFY_KEY: &str = "secretVaultVerify";
@@ -28002,7 +28002,7 @@ fn secret_encrypt(plain: &str, key: &[u8; 32]) -> String {
 }
 
 // Wrong password and corrupt ciphertext fail the exact same way (AEAD tag
-// mismatch) — there is no separate "wrong password" code path to get subtly
+// mismatch): there is no separate "wrong password" code path to get subtly
 // wrong, the cipher itself is the check.
 fn secret_decrypt(stored: &str, key: &[u8; 32]) -> Result<String, String> {
     use aes_gcm::aead::{Aead, KeyInit};
@@ -28112,7 +28112,7 @@ fn secret_vault_status(state: State<Db>) -> SecretVaultStatus {
 }
 
 // First call ever (no salt stored yet) sets the password up as the vault's
-// password. Every later call verifies against the stored salt/marker instead —
+// password. Every later call verifies against the stored salt/marker instead:
 // there is no way to change it short of turning secretPrompts off, which is a
 // deliberate consequence of "forgetting it means total loss", never a shortcut
 // around that promise.
@@ -28160,7 +28160,7 @@ async fn secret_vault_unlock(app: AppHandle, state: State<'_, Db>, password: Str
     })
 }
 
-// Explicit re-lock (settings menu action) — the automatic paths (quit, idle
+// Explicit re-lock (settings menu action): the automatic paths (quit, idle
 // timeout) never call this; they simply stop having a session at all.
 #[tauri::command]
 async fn secret_vault_lock(state: State<'_, Db>) -> Result<AppState, String> {
@@ -28227,7 +28227,7 @@ async fn set_backup_password(app: AppHandle, state: State<'_, Db>, password: Str
                 .ui_texts
                 .insert(BACKUP_PW_KEY.to_string(), enc_str(&password));
         }
-        // A failed save must not report the new backup password as set — the
+        // A failed save must not report the new backup password as set: the
         // very next export would otherwise silently use the OLD (or no) password
         // while the UI believes it changed.
         if !save_settings(&app, &store.settings) {
@@ -28266,7 +28266,7 @@ fn stored_backup_password(store: &Store) -> Option<String> {
 async fn export_all(app: AppHandle, state: State<'_, Db>) -> Result<usize, String> {
     let (json, count, password) = {
         let store = lock(&state);
-        // The export itself takes the live block, so it is right either way — but
+        // The export itself takes the live block, so it is right either way: but
         // an export is also the moment the store on disk should agree with it.
         flush_settings(&app, &store.settings);
         let backup = Backup {
@@ -28291,7 +28291,7 @@ async fn export_all(app: AppHandle, state: State<'_, Db>) -> Result<usize, Strin
     }
 }
 
-// What a full import restored — the UI names the file in its confirmation.
+// What a full import restored: the UI names the file in its confirmation.
 #[derive(Serialize)]
 struct ImportSummary {
     name: String,
@@ -28471,7 +28471,7 @@ fn apply_import(store: &mut Store, backup: Backup, want_data: bool, want_setting
         // after the next restart. The prompts this process already loaded are
         // exactly the ones `written` must keep so their removal still lands.
     }
-    // The imported backupPw is DPAPI-sealed on a DIFFERENT machine — it
+    // The imported backupPw is DPAPI-sealed on a DIFFERENT machine: it
     // decrypts to "" here, and a following export_all would then silently write
     // UNPROTECTED with the fixed key, with nothing telling the user their
     // password stopped applying. Keep THIS machine's own password across the
@@ -28482,7 +28482,7 @@ fn apply_import(store: &mut Store, backup: Backup, want_data: bool, want_setting
         let local_backup_pw = store.settings.ui_texts.get(BACKUP_PW_KEY).cloned();
         store.settings = backup.settings;
         SETTINGS_LOCKED.store(false, Ordering::Relaxed); // a full settings import supersedes any corrupt-row lock
-        // migrate() fills defaults and guarantees at least one view — without it a
+        // migrate() fills defaults and guarantees at least one view: without it a
         // hand-edited backup with "views": [] makes active_view_mut index [0] panic
         // on the next mutation (and poisons the Db mutex).
         store.settings.migrate();
@@ -28492,7 +28492,7 @@ fn apply_import(store: &mut Store, backup: Backup, want_data: bool, want_setting
         }
         load_pick_history(&store.settings); // restore brings its own history mirror
     }
-    // A colliding or unusable accelerator must not fail the restore — drop
+    // A colliding or unusable accelerator must not fail the restore: drop
     // it and let the summary say so. Runs regardless of scope: an imported
     // app-level hotkey can collide with untouched prompts, and imported prompts
     // can collide with an untouched app-level hotkey.
@@ -28520,7 +28520,7 @@ async fn import_all(
     scope: String,
 ) -> Result<ImportSummary, String> {
     // An import replaces the store wholesale and rolls the whole thing back if a
-    // write fails, so the disk has to hold the exact state it is replacing first —
+    // write fails, so the disk has to hold the exact state it is replacing first:
     // otherwise a rollback lands on a store missing the last collected counters.
     valid_scope(&scope)?;
     flush_settings_now(&app);
@@ -28543,7 +28543,7 @@ async fn import_all(
 
     let (settings, count, dropped_hotkeys, backup_pw_dropped) = {
         let mut store = lock(&state);
-        // This wholesale-replaces prompts AND settings — a failed write must put
+        // This wholesale-replaces prompts AND settings: a failed write must put
         // the ENTIRE previous store back, not just leave the imported data sitting
         // unsaved in memory while the UI reports the import as done.
         let original_prompts = store.prompts.clone();
@@ -28600,13 +28600,13 @@ fn point_on_monitor(monitors: &[tauri::Monitor], x: i32, y: i32) -> bool {
     })
 }
 
-// NOTE: WindowGeom.width/height are LOGICAL pixels (DPI-independent) — a
+// NOTE: WindowGeom.width/height are LOGICAL pixels (DPI-independent); a
 // physically stored size grew by the monitor's scale factor on every start.
 // Position stays physical (global desktop coordinates).
 
 // Keep in sync with tauri.conf.json's main-window minWidth/minHeight. The OS/WebView2
 // minSize constraint only guards interactive resize-dragging, not a programmatic
-// set_size() call — resolve_geometry's first-start branch has to floor itself.
+// set_size() call: resolve_geometry's first-start branch has to floor itself.
 const MAIN_WIN_MIN_W: u32 = 680;
 const MAIN_WIN_MIN_H: u32 = 460;
 
@@ -28625,7 +28625,7 @@ fn centered_on_primary(main: &tauri::WebviewWindow, width: u32, height: u32) -> 
 }
 
 // A monitor's usable size in logical (DPI-independent) pixels, or effectively
-// "no cap" if none is given (lookup failed) — the multiplication that feeds
+// "no cap" if none is given (lookup failed): the multiplication that feeds
 // zoom_min_size is already bounded by the 75-300% zoom clamp, so an unread
 // monitor never produces a runaway size, just an un-clamped (bounded) one.
 fn monitor_cap(monitor: Option<tauri::window::Monitor>) -> (u32, u32) {
@@ -28669,7 +28669,7 @@ fn update_geom<F: FnOnce(&mut WindowGeom)>(handle: &AppHandle, f: F) {
     if let Some(state) = handle.try_state::<Db>() {
         // try_lock, never block: this runs on the event-loop thread for every move/
         // resize tick. If the store is busy (e.g. a backup VACUUM holds the lock), skip
-        // this update — the next move/resize event carries the current geometry anyway.
+        // this update: the next move/resize event carries the current geometry anyway.
         let mut store = match state.try_lock() {
             Ok(g) => g,
             Err(std::sync::TryLockError::Poisoned(e)) => e.into_inner(),
@@ -28688,7 +28688,7 @@ fn update_geom<F: FnOnce(&mut WindowGeom)>(handle: &AppHandle, f: F) {
 
 // The error log's rotation cap in bytes, configurable via `errorLogKeepKb`
 // (expert menu). A global, since dozens of `append_crash_log` call sites
-// throughout this file have no `State<Db>` handy — set once at startup from
+// throughout this file have no `State<Db>` handy: set once at startup from
 // the persisted setting (see `load_store`'s caller) and again on every
 // `set_ui_value("errorLogKeepKb", ..)`, read here without touching the DB.
 static ERROR_LOG_KEEP_BYTES: AtomicU64 = AtomicU64::new(256 * 1024);
@@ -28829,7 +28829,7 @@ fn append_line_locked(path: &Path, cap: usize, line: &str) {
 // Append one line to a local crash log so a hard failure on a user's machine
 // leaves something diagnosable. Privacy: the message is only the panic location
 // and our own static panic text (never prompt content or other user data), and
-// the file is local — never uploaded. Rotates past `errorLogKeepKb` (default
+// the file is local: never uploaded. Rotates past `errorLogKeepKb` (default
 // 256 KB) so it can't grow without bound -- trims the OLDEST bytes and keeps the
 // newest, rather than deleting the whole file, so a real failure a user just hit
 // is never the one line that gets thrown away. Best-effort: every step is ignored
@@ -29094,7 +29094,7 @@ fn ensure_webview2() -> bool {
         // Try a silent download + install of the official Evergreen runtime; if
         // that fails (offline/blocked), fall back to opening the download page.
         if install_webview2_runtime() {
-            // The runtime exists now, but this process started without it —
+            // The runtime exists now, but this process started without it:
             // relaunch so a fresh instance loads the webview.
             if let Ok(exe) = std::env::current_exe() {
                 let _ = std::process::Command::new(exe).spawn();
@@ -29189,14 +29189,14 @@ fn install_webview2_runtime() -> bool {
     }
     // Same two guards the update download uses: a file that exactly hit the cap was
     // almost certainly truncated, and whatever we are about to execute has to at least
-    // be a Windows executable. (Not cryptographic authentication — the bootstrapper
+    // be a Windows executable. (Not cryptographic authentication: the bootstrapper
     // comes from Microsoft's own pinned fwlink over TLS, and only after the user
     // agreed to install it.)
     if bytes.len() as u64 >= CAP || bytes.len() < 2 || &bytes[0..2] != b"MZ" {
         return false;
     }
     // Stage into a unique temp subdir so a local attacker can't pre-plant the
-    // installer at a predictable path (TOCTOU) — matching install_update.
+    // installer at a predictable path (TOCTOU): matching install_update.
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos())
@@ -29227,12 +29227,12 @@ fn install_webview2_runtime() -> bool {
 //
 // Each recurring chore (settings flush, auto-backup, update check, a
 // language-pack watcher, ...) gets its own thread that spends its idle time
-// inside `recv_timeout` on a private control channel — woken early only by its
+// inside `recv_timeout` on a private control channel: woken early only by its
 // own re-time/stop message, never by another job's. A chore that hangs (a
 // stuck PowerShell capability query, a slow disk) therefore blocks only itself;
 // every other chore keeps firing on its own schedule regardless.
 //
-// Only genuinely periodic work belongs here — the `loop { sleep(fixed); work(); }`
+// Only genuinely periodic work belongs here: the `loop { sleep(fixed); work(); }`
 // shape, with nothing else feeding it. Event-driven threads stay where they are:
 // the clipboard watcher runs a Win32 message pump and has to own its thread, and
 // the tray rebuild is a one-shot debounce that fires per burst, not on a cadence.
@@ -29240,7 +29240,7 @@ fn install_webview2_runtime() -> bool {
 // Registering is a `register_periodic(name, first_delay, interval, job)` call
 // from anywhere; it spawns the job's thread. A job that reads its own interval
 // out of the settings calls `retime(name, interval)` at the end of each run, so
-// a changed setting takes effect from the next wait onward — the new interval
+// a changed setting takes effect from the next wait onward: the new interval
 // still counts from the job's last run, exactly as before this was split across
 // threads.
 mod scheduler {
@@ -29496,7 +29496,7 @@ pub fn run() {
     let mut builder = tauri::Builder::default();
     // Only one instance app-wide (keyed by app identifier, independent of the exe
     // location) unless the user opted into "Allow multiple instances" (expert menu,
-    // default off) — then this plugin is left out entirely, since it enforces the
+    // default off): then this plugin is left out entirely, since it enforces the
     // limit itself before .setup() ever runs (there is no AppHandle yet to consult
     // the setting the normal way; early_allow_multiple_instances() peeks the DB
     // directly for exactly this reason). A second launch, when the plugin IS
@@ -29526,7 +29526,7 @@ pub fn run() {
                     if event.state() != tauri_plugin_global_shortcut::ShortcutState::Pressed {
                         return;
                     }
-                    // Read the owner out first — the handler must not call back into
+                    // Read the owner out first: the handler must not call back into
                     // the app while the lookup lock is held.
                     let owner = app.try_state::<HotkeyTargets>().and_then(|targets| {
                         let list = targets.0.lock().unwrap_or_else(|e| e.into_inner());
@@ -29634,7 +29634,7 @@ pub fn run() {
             autopaste::install_hook();
 
             // The message-only window is harmless to run unconditionally (same
-            // reasoning as the sync poll below) — on_clipboard_update itself checks the
+            // reasoning as the sync poll below): on_clipboard_update itself checks the
             // clipWatcher opt-in on every event, and 91's auto-advance session needs this
             // window regardless of that flag.
             #[cfg(windows)]
@@ -29665,7 +29665,7 @@ pub fn run() {
                 }
             }
 
-            // Prompt-folders-as-Markdown: harmless to call unconditionally at setup —
+            // Prompt-folders-as-Markdown: harmless to call unconditionally at setup;
             // if the feature is off this loop checks once and ends itself immediately
             // rather than ticking forever for nothing. set_ui_flag starts a fresh one
             // when the feature is switched back on.
@@ -29796,7 +29796,7 @@ pub fn run() {
 
             // Re-arm the app hotkey plus every prompt accelerator. Each
             // registration is a round trip to the main thread, so this runs on a
-            // worker — the first paint never waits for it, however many prompts
+            // worker: the first paint never waits for it, however many prompts
             // carry a hotkey.
             {
                 let h = handle.clone();
@@ -29822,14 +29822,14 @@ pub fn run() {
                 // build_main_window, so a rebuilt window arrives dressed the
                 // same way this one does.
                 // The window is revealed by the frontend (show_main_window) once
-                // the first layout pass is done — no visible text re-sizing.
+                // the first layout pass is done: no visible text re-sizing.
                 // Safety net: show after 1.5s even if the frontend never calls.
                 if !start_hidden {
                     let h = handle.clone();
                     std::thread::spawn(move || {
                         std::thread::sleep(std::time::Duration::from_millis(1500));
                         if let Some(w) = h.get_webview_window("main") {
-                            // Show on uncertainty too — this is the safety net.
+                            // Show on uncertainty too: this is the safety net.
                             if !w.is_visible().unwrap_or(false) {
                                 let _ = w.show();
                             }
@@ -29920,7 +29920,7 @@ pub fn run() {
             sync_float_windows(&handle);
 
             // Pre-warm the snip overlay shortly after launch (off the startup hot
-            // path) so even the FIRST screenshot opens instantly — the WebView2
+            // path) so even the FIRST screenshot opens instantly: the WebView2
             // cold-start is paid here in the background, not on first use.
             let h_pw = handle.clone();
             tauri::async_runtime::spawn(async move {
@@ -29965,7 +29965,7 @@ pub fn run() {
                 );
             }
 
-            // Sweep the temp dir again now and then, not only at launch — an
+            // Sweep the temp dir again now and then, not only at launch: an
             // instance left running for days otherwise never collects the
             // leftovers a crashed sibling dropped after it started.
             scheduler::register_periodic(
