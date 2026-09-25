@@ -20817,6 +20817,12 @@ mod keylog {
     // queue (and the memory behind it) grow without bound.
     const PENDING_CAP: usize = 2_000;
 
+    // How long the consumer can sit idle (nothing pending) before waking up
+    // on its own just to prune the ledger. Keeps an idle or paused capture
+    // from silently accumulating focus-changed churn for the rest of the
+    // recording with nothing ever shrinking it back down.
+    const IDLE_PRUNE_MS: u64 = 1_000;
+
     // Ordered log of every completed focus check (`checks`, each stamped by
     // the instant it STARTED, not when it finished) and every focus-change
     // event's own arrival (`arrivals`), both on the `mono_ms()` clock.
@@ -20837,15 +20843,26 @@ mod keylog {
         fail_closed: bool,
     }
 
+    // A hard ceiling on the ledger's combined size, on top of the ordinary
+    // GUARD_MS-based pruning. Pruning alone assumes the loop keeps running
+    // it regularly; an automated or malicious flood of focus changes (or
+    // pruning simply losing that race for any other reason) could still
+    // grow the ledger without bound in between. Reaching this cap is
+    // treated exactly like any other source of doubt: gap everything and
+    // throw the history away, rather than let memory keep growing.
+    const LEDGER_HARD_CAP: usize = 20_000;
+
     impl Ledger {
         fn push_check(&mut self, start_ms: u64, is_password: bool) {
             let pos = self.checks.partition_point(|(t, _)| *t <= start_ms);
             self.checks.insert(pos, (start_ms, is_password));
+            self.enforce_cap();
         }
 
         fn push_arrival(&mut self, arrival_ms: u64) {
             let pos = self.arrivals.partition_point(|t| *t <= arrival_ms);
             self.arrivals.insert(pos, arrival_ms);
+            self.enforce_cap();
         }
 
         // Called once, the moment registering the focus-changed handler is
@@ -20854,6 +20871,24 @@ mod keylog {
         // because nothing can ever again prove a key clean.
         fn gap_everything(&mut self) {
             self.fail_closed = true;
+        }
+
+        // Checked on every push, from either thread that can add to the
+        // ledger (the consumer's own scheduled checks and the UI Automation
+        // focus-changed handler both call push_check/push_arrival) -- not
+        // just once per consumer loop tick, so a flood of focus-changed
+        // events alone, with no keys pending and nothing driving the main
+        // loop, still gets caught. Once fail_closed is set, nothing here is
+        // ever read again (see `verdict`), so dropping it outright is safe,
+        // not just convenient.
+        fn enforce_cap(&mut self) {
+            if self.checks.len() + self.arrivals.len() > LEDGER_HARD_CAP {
+                self.gap_everything();
+                self.checks.clear();
+                self.checks.shrink_to_fit();
+                self.arrivals.clear();
+                self.arrivals.shrink_to_fit();
+            }
         }
 
         // The EARLIEST completed check that started late enough (t +
@@ -21286,15 +21321,21 @@ mod keylog {
             // Block until either the next raw key, or a timeout -- while
             // keys are pending the timeout is also the ~50ms focus poll
             // below, never longer, so a focus change UI Automation's own
-            // event missed is still caught quickly; with nothing pending
-            // there is nothing to poll for and this simply waits for the
-            // next key.
+            // event missed is still caught quickly. With nothing pending
+            // there is nothing to poll for, but the wait still cannot be
+            // unbounded: the focus-changed handler keeps firing on its own
+            // thread regardless of pause state or whether any key is
+            // waiting, so the loop still needs to wake up periodically
+            // purely to prune what it has added (see the prune call at the
+            // bottom of this loop) -- otherwise an idle or paused capture
+            // sitting through a lot of automated focus churn would grow the
+            // ledger for as long as nothing else woke this thread up.
             let recv_result = match pending.front() {
                 Some(front) => {
                     let wait = recv_wait_ms(mono_ms(), front.t_ms, next_poll_due);
                     rx.recv_timeout(Duration::from_millis(wait))
                 }
-                None => rx.recv().map_err(|_| RecvTimeoutError::Disconnected),
+                None => rx.recv_timeout(Duration::from_millis(IDLE_PRUNE_MS)),
             };
             match recv_result {
                 Ok(raw) => {
@@ -21948,6 +21989,26 @@ mod keylog {
             // Both deadlines already passed -- an immediate wake, never a
             // panic from an underflowing subtraction.
             assert_eq!(recv_wait_ms(10_000, 0, 0), 0);
+        }
+
+        #[test]
+        fn exceeding_the_ledger_hard_cap_fails_closed_and_drops_history() {
+            let mut ledger = Ledger::default();
+            // A clean check well within the settle window, so a key right
+            // now would otherwise record normally -- proving the eventual
+            // gap comes from the cap, not from an ordinary dirty window.
+            ledger.push_check(0, false);
+            assert_eq!(verdict(&ledger, 0, false), None, "not yet, no qualifying check exists"); // sanity: still pure, unaffected by the flood below
+            for i in 0..LEDGER_HARD_CAP {
+                // Arrivals far enough apart that none of them land in each
+                // other's blind window and mask the point being tested --
+                // only the cap itself should be doing anything here.
+                ledger.push_arrival((i as u64) * 10_000);
+            }
+            assert!(ledger.fail_closed, "the cap must have tripped fail_closed");
+            assert!(ledger.checks.is_empty() && ledger.arrivals.is_empty(), "history must actually be dropped, not just capped");
+            assert_eq!(verdict(&ledger, 0, false), Some(true), "every verdict from here on must gap, regardless of any earlier clean check");
+            assert_eq!(verdict(&ledger, 50_000_000, false), Some(true), "including a key far outside every arrival's own window");
         }
 
         // --- ActiveClock: pause drops events, and offsets use the
