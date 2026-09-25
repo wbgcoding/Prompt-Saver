@@ -1,7 +1,7 @@
 # Help
 
 The same content shown in the app's own **Help** menu (Settings → Help), kept here so
-it's readable without installing anything. English and German only, and the in-app
+it's readable without installing anything. English and German only. The in-app
 version follows the same rule and falls back to English in every other language.
 
 ## Basics
@@ -139,8 +139,8 @@ A format setting picks what the finished file ends up as: MP4 needs nothing
 further; WebM, AVI, MOV and MKV are produced by converting the MP4 afterward,
 keeping its audio. GIF, animated WebP and APNG are converted the same way but
 capped at 30 seconds and without audio. Converting to anything other than
-MP4, or to lossless MP4, needs ffmpeg, a separate, GPL-licensed tool the app
-does not ship with its portable build. If it is missing, the format and
+MP4, or to lossless MP4, needs ffmpeg (a separate, GPL-licensed tool the app
+does not ship with its portable build). If it is missing, the format and
 quality controls say so directly and offer to fetch it (a one-time download,
 only ever with your consent); an installed build already carries it and never
 needs to download anything. A failed or cancelled conversion always leaves
@@ -184,8 +184,8 @@ original recording rather than losing it. If the window being recorded
 closes on its own, the recording stops automatically and keeps whatever was
 captured up to that point.
 
-A recording that never reached its own stop path, a crash, a forced
-shutdown, leaves behind a file with no usable video track. The app checks
+A recording that never reached its own stop path (a crash, a forced
+shutdown) leaves behind a file with no usable video track. The app checks
 for these in the background and removes them once they clear a short grace
 period, so a just-stopped recording that is still finalising is never
 touched; both the grace period and the check interval are adjustable in the
@@ -229,13 +229,13 @@ opens the clip in its own window with a live preview and no processing until
 you actually export: trim and cut (frame-exact, keeps the original quality
 when nothing else changes), crop, change speed, fade in/out, resize (typed
 width/height or a percentage, an aspect-ratio lock, and quick presets from
-4K down to 25%, a preset never enlarges past the source, but the percent
+4K down to 25%; a preset never enlarges past the source, but the percent
 field and free typing can, for upscaling on purpose), and overlay images,
 freeze-frames, text, pixelation, a spotlight or a keys overlay (four
 keyboard-layout presets plus a free selection of keys, filled from a
 recording's own key data if it captured any) anywhere on the timeline. A
 filmstrip and waveform give you a zoomable overview to navigate by. The preview itself also zooms (scroll wheel, up to 8×) and pans by
-dragging, the middle mouse button always, the left button once zoomed in,
+dragging (the middle mouse button always, the left button once zoomed in)
 for placing a small overlay precisely on a large recording. Exporting
 re-encodes once, with a few ready-made presets (unchanged
 quality, a smaller size for chat, or an animated GIF) that remember your last
@@ -268,7 +268,7 @@ timeline needs the room the screenshot editor doesn't.
 Right-clicking a shape (screenshot editor) or an overlay's row (video editor)
 opens a small menu to duplicate or delete it. A duplicate keeps the same
 values and time range and is offset a little so it sits next to the
-original instead of exactly on top of it, how far set in an expert setting
+original instead of exactly on top of it; how far is set in an expert setting
 shared by both editors. In the video editor, the colour, thickness, opacity
 and font size a new overlay starts with also follow whatever was last used
 for that same kind (image, frame, text, pixelation or spotlight), across
@@ -693,7 +693,7 @@ it has run for the guess to mean something, both switchable off.
 ### Data maintenance
 
 Duplicate finder, trash (with its own retention setting), CSV/TXT export, and
-full backup export/import: reached from the expert menu's data group. The
+full backup export/import, all reached from the expert menu's data group. The
 duplicate finder also has shortcuts in the settings dialog, next to import
 and export, and in the header of All prompts, so it does not take opening the
 expert menu to find it.
@@ -929,8 +929,8 @@ with a short list of the ones never used, all counted locally and included in
 the export.
 
 A retention section lists one row per kind of data this app keeps around on
-its own: trash, copy history, the clipboard inbox, recordings, discarded
-recordings, temporary exports, and unfinished-edit states, with how much is
+its own (trash, copy history, the clipboard inbox, recordings, discarded
+recordings, temporary exports, and unfinished-edit states), with how much is
 there right now, how long it is kept, a button to clean it up on the spot, and
 a button that jumps straight to the matching expert-menu setting. The numbers
 are measured in the background and labelled with when that happened, the same
@@ -949,7 +949,7 @@ snapshot.
 ## Hilfe (Deutsch)
 
 Derselbe Inhalt wie oben, wie er auch im Hilfe-Menü der App steht (Einstellungen →
-Hilfe). Nur Englisch und Deutsch, jede andere Sprache in der App fällt auf
+Hilfe). Nur Englisch und Deutsch. Jede andere Sprache in der App fällt auf
 Englisch zurück.
 
 **Erste Schritte**: Eine Kachel ist ein gespeicherter Eintrag im Raster. Doppelklick
@@ -1106,8 +1106,8 @@ später verschoben oder gelöscht wird, bis zu einer Höchstzahl je Projekt
 Ein Rechtsklick auf eine Form (Screenshot-Editor) oder die Zeile einer
 Überlagerung (Video-Editor) öffnet ein kleines Menü zum Duplizieren oder
 Löschen. Ein Duplikat behält Werte und Zeitbereich und wird ein Stück
-verschoben, damit es neben dem Original liegt statt genau darauf, wie weit
-in einer Expertenzeile, die sich beide Editoren teilen. Im Video-Editor
+verschoben, damit es neben dem Original liegt statt genau darauf. Wie weit, legt
+eine Expertenzeile fest, die sich beide Editoren teilen. Im Video-Editor
 richten sich Farbe, Stärke, Deckkraft und Schriftgröße einer neuen
 Überlagerung außerdem nach dem, was für dieselbe Art (Bild, Rahmen, Text,
 Verpixeln oder Spotlight) zuletzt benutzt wurde, auch über einen Neustart
@@ -1156,8 +1156,8 @@ im Screenshot-Dialog Text aus einem Screenshot oder einer Bilddatei, komplett
 offline über die eigene Texterkennung von Windows. Der Knopf in der Leiste öffnet
 ein kleines Menü: aus einer Bilddatei oder aus einem Screenshot. Erkannter Text
 kann automatisch kopiert und umgebrochene Zeilen zu ganzen Sätzen zusammengefügt
-werden, beides einstellbar. Braucht ein Windows-Sprachpaket, siehe
-„Sprachpakete" unten.
+werden, beides einstellbar. Braucht ein Windows-Sprachpaket (siehe
+„Sprachpakete" unten).
 
 **Spracheingabe**: standardmäßig an; der Mikrofon-Knopf neben der Eingabeleiste
 und im Kachel-Editor verwandelt Sprache in Text, komplett auf dem Gerät über die
@@ -1165,7 +1165,7 @@ eigene Spracherkennung von Windows. Gesprochene Satzzeichen-Wörter („Komma",
 „neue Zeile" …) werden zu echten Zeichen; „wörtlich" vor einem Wort tippt es
 statt es als Befehl zu erkennen. Ein optionaler globaler Kurzbefehl startet und
 stoppt eine Aufnahme, ohne das Fenster zu öffnen. Braucht ebenfalls ein
-Windows-Sprachpaket, derselbe Dialog wie bei OCR.
+Windows-Sprachpaket (derselbe Dialog wie bei OCR).
 
 **Sprachpakete**: Texterkennung und Spracheingabe teilen sich Windows' eigene
 Sprachpakete und denselben Installationsdialog. Die App bietet den Download beim
@@ -1567,7 +1567,7 @@ Einstellung nicht gefunden? Die Suche im Experten-Menü durchsucht alle Tabs
 auf einmal. Hotkey tut nichts? Eine andere App hält die Kombination
 vermutlich schon.
 
-**Eigenständig: Backup-Manager**: verschlüsselte Backups, GFS-Aufbewahrung,
+**Eigenständig: Backup-Manager.** Verschlüsselte Backups, GFS-Aufbewahrung,
 gezieltes Wiederherstellen. Im selben Fenster außerdem eine
 Nutzungsstatistik (Summen, 14-Tage-Diagramm, meistgenutzte Kacheln),
 unabhängig von den Backups selbst, mit einem eigenen Knopf, um die Statistik
@@ -1578,9 +1578,9 @@ um einen aufgeführten Ordner zu öffnen. Die Nutzungsstatistik listet außerdem
 die meistgenutzten Werkzeuge auf, von Bildschirmfotos bis Sicherungen, mit
 einer kurzen Liste der noch nie benutzten. Alles wird rein lokal gezählt und
 ist im Export enthalten. Ein Aufbewahrungsbereich listet eine Zeile je Art
-von Daten, die diese App selbst aufhebt: Papierkorb, Kopierverlauf,
+von Daten, die diese App selbst aufhebt (Papierkorb, Kopierverlauf,
 Zwischenablage-Eingang, Aufnahmen, verworfene Aufnahmen, temporäre Exporte
-und unfertige Bearbeitungsstände, mit dem aktuellen Stand, wie lange er
+und unfertige Bearbeitungsstände), mit dem aktuellen Stand, wie lange er
 bleibt, einem Knopf zum sofortigen Aufräumen und einem Knopf, der direkt zur
 zugehörigen Einstellung im Experten-Menü springt. Die Zahlen werden im
 Hintergrund ermittelt und mit dem Zeitpunkt der Messung beschriftet, genau
@@ -1594,8 +1594,8 @@ nach Namen und nach jeder Spalte sortierbar, mit einem Knopf, um genau
 diesen einen Prompt direkt aus der Liste wiederherzustellen statt der
 ganzen Sicherung.
 
-**Eigenständig: Schnellstarter**: Strg+Alt+P, unscharfe Suche, sofortiges Kopieren.
+**Eigenständig: Schnellstarter.** Strg+Alt+P, unscharfe Suche, sofortiges Kopieren.
 
-**Eigenständig: Mehrfachansichten**: mehrere Rasterseiten, Ansichtsgruppen als Reiter.
+**Eigenständig: Mehrfachansichten.** Mehrere Rasterseiten, Ansichtsgruppen als Reiter.
 
-**Eigenständig: Theme-Editor**: eigene Farbvarianten bestehender Themes.
+**Eigenständig: Theme-Editor.** Eigene Farbvarianten bestehender Themes.

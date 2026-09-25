@@ -23,7 +23,7 @@ export const HELP_CONTENT = {
         "Click any tile to copy it.",
       ],
       whatHappens:
-        "Three sample tiles, an email with placeholders, an image, and a Markdown template, ship on first launch; remove them with one click above the grid once they are no longer needed.",
+        "Three sample tiles ship on first launch: an email with placeholders, an image, and a Markdown template. Remove them with one click above the grid once they are no longer needed.",
       settings: [],
     },
     {
@@ -51,7 +51,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens: "The attached file, screenshot, or colour becomes the tile's content; a later copy delivers that file, image, or colour, never text.",
       settings: ["File attach, screenshot tool, colour picker, drag and drop: Expert menu → Features → Create prompts", "Keep a copy of an attached file, and delete that copy with its tile: Expert menu → Features → Create prompts"],
-      tip: "Pick a colour format, hex, RGB, or HSL, from the toast that appears right after a pick.",
+      tip: "Pick a colour format (hex, RGB, or HSL) from the toast that appears right after a pick.",
     },
     {
       section: "basics",
@@ -90,7 +90,7 @@ export const HELP_CONTENT = {
       whatItIs: "Copying is the sequence between clicking a tile and its text landing on the clipboard.",
       howTo: [
         "Click a tile once to copy.",
-        "Click again quickly, or press Enter, to also paste, if auto-paste is on.",
+        "If auto-paste is on, click again quickly or press Enter to also paste.",
         "Ctrl-drag a tile onto another window to drop its text directly, with no clipboard round-trip.",
       ],
       whatHappens:
@@ -220,7 +220,7 @@ export const HELP_CONTENT = {
         "Use the tag filter row in the library to narrow the list.",
       ],
       whatHappens: "Renaming, recolouring, or deleting a tag from the tag manager applies everywhere it is used, in one step.",
-      settings: ["Tag filter mode, matching any selected tag or all of them: Expert menu → Library & History → Tags"],
+      settings: ["Tag filter mode (match any selected tag, or all of them): Expert menu → Library & History → Tags"],
     },
     {
       section: "copying",
@@ -231,7 +231,7 @@ export const HELP_CONTENT = {
         "Search, filter by type or colour, or star a favourite from the list.",
         "Delete a single row, or clear the whole history.",
       ],
-      whatHappens: "Grouped view shows one row per tile, its most recent copy, instead of every event. History older than the retention setting is dropped automatically.",
+      whatHappens: "Grouped view shows one row per tile (its most recent copy) instead of every event. History older than the retention setting is dropped automatically.",
       settings: ["Grouped view, retention: Expert menu → Library & History → Copy history", "Skip an entry that repeats the copy before it: Expert menu → Library & History → Copy history"],
     },
     {
@@ -242,7 +242,7 @@ export const HELP_CONTENT = {
         "Attach a video or image to a tile: file attach, paste, or drag and drop.",
         "Adjust playback and privacy-leaning looks in the expert menu.",
       ],
-      whatHappens: "Video settings, autoplay, mute, loop, volume, apply to every video tile; grayscale or dim-until-hovered only changes how media looks, never what gets copied. The library and copy history also show a video's length on its thumbnail, and its resolution and file size in the tooltip; the main grid never shows either.",
+      whatHappens: "Video settings (autoplay, mute, loop, volume) apply to every video tile; grayscale or dim-until-hovered only changes how media looks, never what gets copied. The library and copy history also show a video's length on its thumbnail, and its resolution and file size in the tooltip; the main grid never shows either.",
       settings: ["Video controls, autoplay, mute, loop: Expert menu → Media → Media", "Grayscale, or dim until hovered: Expert menu → Media → Media", "Accent border and rounded corners around media: Expert menu → Media → Media", "Duration/resolution/size in the library and copy history: Expert menu → Media → Media", "Fill in media info for older attachments: Expert menu → Media → Media"],
     },
     {
@@ -294,7 +294,7 @@ export const HELP_CONTENT = {
         "Restore from the snapshot list, choosing data only, settings only, or both.",
       ],
       whatHappens:
-        "Retention tiers, daily, weekly, monthly, yearly, thin out older snapshots automatically instead of keeping every one forever. A backup is either whole or absent; a failed one leaves nothing behind. The same window also has a usage-statistics section, totals, a 14-day activity chart, most-used tiles, most-used tools with a list of the ones never touched, unrelated to the backups themselves, plus a storage breakdown of what is taking up disk space.",
+        "Retention tiers (daily, weekly, monthly, yearly) thin out older snapshots automatically instead of keeping every one forever. A backup is either whole or absent; a failed one leaves nothing behind. The same window also has a usage-statistics section (totals, a 14-day activity chart, most-used tiles, most-used tools with a list of the ones never touched), unrelated to the backups themselves, plus a storage breakdown of what is taking up disk space.",
       settings: [
         "Interval, retention tiers, password, restore scope: Backup manager (its own window, opened from Settings)",
         "Usage statistics, how many tiles it lists: same window, below the backups",
@@ -319,7 +319,7 @@ export const HELP_CONTENT = {
         "Right-click a tab to rename, resize, recolour, or delete it.",
         "Drag one view tab onto another to merge them into a group.",
       ],
-      whatHappens: "A tile normally sits in exactly one view, adding it elsewhere moves it there, unless \"Tile in several views\" is on, which ships off. Deleting a view does not delete the tiles placed on it; a tile also shown in another view keeps working there.",
+      whatHappens: "A tile normally sits in exactly one view (adding it elsewhere moves it there) unless \"Tile in several views\" is on, which ships off. Deleting a view does not delete the tiles placed on it; a tile also shown in another view keeps working there.",
       settings: ["Multiple views, view groups, tile in several views: Expert menu → System & data → Toolbar"],
     },
     {
@@ -356,7 +356,7 @@ export const HELP_CONTENT = {
       whatItIs:
         "Two independent hotkey types exist: one global combination that opens the quick launcher, and one combination per tile.",
       howTo: [
-        "Set the global hotkey in Settings: default Ctrl+Alt+P.",
+        "Set the global hotkey in Settings (default Ctrl+Alt+P).",
         "Give a tile its own hotkey from its editor.",
         "Choose whether it should paste as well as copy.",
         "\"All hotkeys\", next to the global hotkey field, opens every hotkey in one searchable list.",
@@ -394,7 +394,7 @@ export const HELP_CONTENT = {
         "Keep one, or mark the pair as not a duplicate to stop it being flagged again.",
       ],
       whatHappens:
-        "Matching compares each tile's main text, its name if it has no text, by similarity, not an exact match; the threshold controls how close counts as close enough. A rotating tile is only compared on its first entry. Shortcuts in the settings dialog, next to import and export, and in the header of All prompts open it directly too, so it does not take the expert menu to find.",
+        "Matching compares each tile's main text (or its name, if it has no text) by similarity, not by exact match; the threshold controls how close counts as close enough. A rotating tile is only compared on its first entry. Shortcuts in the settings dialog, next to import and export, and in the header of All prompts open it directly too, so it does not take the expert menu to find.",
       settings: ["Duplicate finder, similarity threshold: Expert menu → System & data → Data & maintenance"],
     },
     {
@@ -470,13 +470,13 @@ export const HELP_CONTENT = {
       id: "screenRecording",
       whatItIs: "Records a window, a monitor, or a dragged region as a video, next to the screenshot tool.",
       howTo: [
-        "Click the record button {icon:record}; pick a window, drag a region, or click empty desktop for the whole screen: same overlay as the screenshot tool.",
+        "Click the record button {icon:record}; pick a window, drag a region, or click empty desktop for the whole screen. It is the same overlay as the screenshot tool.",
         "An optional countdown toast counts down before capture actually starts.",
         "A small floating control bar shows elapsed time and file size, and offers Pause/Resume, Stop and Discard; two optional global hotkeys and the tray menu can stop or pause/resume it too, live only while it is actually running. A window recording using the every-display or current-display canvas also gets a switch-target button, to swap what it is capturing without starting over.",
         "Stopping offers Save, Save as…, Copy, Edit or Discard.",
       ],
       whatHappens:
-        "MP4 (H.264) is always what gets written while recording; three quality steps (Small/High/Lossless) trade file size for detail, and a format setting can turn the result into WebM, AVI, MOV, MKV, animated WebP or APNG afterward; the last three carry no audio and are capped at 30 seconds. Anything other than plain MP4, or the Lossless step, needs ffmpeg (a separate download, offered inline when missing); a failed or cancelled conversion always falls back to the untouched original recording. System audio and microphone audio both record on by default, each into its own track: the microphone track is captured but not mixed in audibly until you bring it in yourself from the video editor; unplugging the microphone mid-recording keeps picture and system audio going and just marks that track as lost. Save and Copy share one recording folder; Edit opens the clip in the video editor without deciding its fate, so closing the dialog afterward without saving or copying still discards the file. The control bar follows a moved recorded window and is itself never part of the recording. If the recorded window closes on its own, the recording stops automatically and keeps what was captured so far. A recording that never reached its own stop path (a crash, a forced shutdown) is removed automatically once it clears a grace period, so a just-stopped recording that is still finalising is never touched.",
+        "MP4 (H.264) is always what gets written while recording; three quality steps (Small/High/Lossless) trade file size for detail, and a format setting can turn the result into WebM, AVI, MOV, MKV, animated WebP or APNG afterward (the last three carry no audio and are capped at 30 seconds). Anything other than plain MP4, or the Lossless step, needs ffmpeg (a separate download, offered inline when missing); a failed or cancelled conversion always falls back to the untouched original recording. System audio and microphone audio both record on by default, each into its own track: the microphone track is captured but not mixed in audibly until you bring it in yourself from the video editor; unplugging the microphone mid-recording keeps picture and system audio going and just marks that track as lost. Save and Copy share one recording folder; Edit opens the clip in the video editor without deciding its fate, so closing the dialog afterward without saving or copying still discards the file. The control bar follows a moved recorded window and is itself never part of the recording. If the recorded window closes on its own, the recording stops automatically and keeps what was captured so far. A recording that never reached its own stop path (a crash, a forced shutdown) is removed automatically once it clears a grace period, so a just-stopped recording that is still finalising is never touched.",
       settings: ["Screen recording, cursor, countdown, audio sources and device, bitrate, quality, format, recording folder, stop/pause hotkeys, tray entries, auto-remove broken recordings: Expert menu → Features → Create prompts"],
     },
     {
@@ -487,10 +487,10 @@ export const HELP_CONTENT = {
         "From a fresh recording: click Edit in the result dialog.",
         "From any video already saved as a prompt: right-click it and choose \"Edit video\".",
         "Trim, crop, change speed, fade in/out, resize (typed dimensions, a percentage, or a quick preset), and add image, freeze-frame, text, pixelate or spotlight overlays on the timeline.",
-        "Export: a lossless fast path applies when only trimming, otherwise the whole clip re-encodes once.",
+        "Export: a lossless fast path applies when only trimming; otherwise the whole clip re-encodes once.",
       ],
       whatHappens:
-        "Nothing is processed until you export: the live preview plays your edits directly. A filmstrip and waveform give a zoomable overview of the whole clip for frame-exact navigation. The preview itself also zooms with the scroll wheel (up to 8×) and pans by dragging, the middle mouse button always, the left button once zoomed in, for placing a small overlay precisely on a large recording. A few ready-made export presets (unchanged quality, a smaller size for chat, an animated GIF) remember your last choice. Besides MP4, WebM and GIF, the export format list also offers AVI, MOV, MKV, animated WebP and APNG, each with a short note on what it's for; GIF, WebP and APNG never carry audio, warn once the clip runs past ten seconds, and are capped to a maximum resolution since all three grow large fast. Undo/redo covers every editing step, capped by an adjustable limit.",
+        "Nothing is processed until you export: the live preview plays your edits directly. A filmstrip and waveform give a zoomable overview of the whole clip for frame-exact navigation. The preview itself also zooms with the scroll wheel (up to 8×) and pans by dragging (the middle mouse button always, the left button once zoomed in) for placing a small overlay precisely on a large recording. A few ready-made export presets (unchanged quality, a smaller size for chat, an animated GIF) remember your last choice. Besides MP4, WebM and GIF, the export format list also offers AVI, MOV, MKV, animated WebP and APNG, each with a short note on what it's for; GIF, WebP and APNG never carry audio, warn once the clip runs past ten seconds, and are capped to a maximum resolution since all three grow large fast. Undo/redo covers every editing step, capped by an adjustable limit.",
       settings: ["Video editor, undo limit: Expert menu → Features → Create prompts"],
       sketches: ["editorTimeline"],
     },
@@ -498,7 +498,7 @@ export const HELP_CONTENT = {
       section: "basics",
       title: "Text recognition (OCR)",
       id: "ocr",
-      whatItIs: "Pulls text out of a screenshot or an image file using Windows' own on-device recognizer, fully offline, nothing leaves the machine.",
+      whatItIs: "Pulls text out of a screenshot or an image file using Windows' own on-device recognizer. It runs fully offline and nothing leaves the machine.",
       howTo: [
         "From the composer: the OCR button {icon:ocr} offers a screenshot or an existing image file.",
         "From a screenshot already taken: the snip dialog's \"Recognize text\" button.",
@@ -519,7 +519,7 @@ export const HELP_CONTENT = {
         "Click the icon again, press Escape, or save/close to stop.",
       ],
       whatHappens:
-        "Recognition runs locally through Windows' own speech engine, nothing leaves the machine unless online recognition is explicitly allowed. Spoken punctuation words (\"comma\", \"new line\", …) turn into real punctuation; say \"literal\" before a word to type it instead of triggering it as a command. A missing language pack opens the language dialog directly, shared with text recognition (OCR). An optional global hotkey starts and stops a session without opening the window at all, delivering the text to the clipboard, pasted, or straight into the composer; the tray icon's tooltip shows \"recording\" for as long as it runs.",
+        "Recognition runs locally through Windows' own speech engine; nothing leaves the machine unless online recognition is explicitly allowed. Spoken punctuation words (\"comma\", \"new line\", …) turn into real punctuation; say \"literal\" before a word to type it instead of triggering it as a command. A missing language pack opens the language dialog directly, shared with text recognition (OCR). An optional global hotkey starts and stops a session without opening the window at all, delivering the text to the clipboard, pasted, or straight into the composer; the tray icon's tooltip shows \"recording\" for as long as it runs.",
       settings: ["Voice dictation, punctuation commands, auto-capitalise, silence auto-stop, insert position, global hotkey: Expert menu → Features → Create prompts"],
     },
     {
@@ -548,14 +548,14 @@ export const HELP_CONTENT = {
       whatHappens:
         "Nothing is ever saved to a tile automatically; a pick only reaches the clipboard. The pick history holds the last few colours and survives a restart, capped by its own setting.",
       settings: ["Colour picker, zoom, format, pick-history length: Expert menu → Features → Create prompts"],
-      tip: "Pick a colour format, hex, RGB, or HSL, from the toast that appears right after a pick.",
+      tip: "Pick a colour format (hex, RGB, or HSL) from the toast that appears right after a pick.",
     },
     {
       section: "basics",
       title: "Rotating tiles",
       whatItIs: "A tile can hold a list of texts instead of one; each copy serves the next entry.",
       howTo: [
-        "Rotating tiles are on by default: turn them off in the expert menu if unused.",
+        "Rotating tiles are on by default; turn them off in the expert menu if unused.",
         "In a tile's editor, open Advanced options and turn on \"Rotating texts\".",
         "The entry list then replaces the plain text field.",
         "Add more entries with \"+ Entry\"; icons beside each one reorder or remove it.",
@@ -640,7 +640,7 @@ export const HELP_CONTENT = {
         "Klick auf eine beliebige Kachel kopiert sie.",
       ],
       whatHappens:
-        "Drei Beispielkacheln, eine E-Mail mit Platzhaltern, ein Bild und eine Markdown-Vorlage, sind beim ersten Start bereits da; ein Button über dem Raster entfernt sie mit einem Klick, sobald sie nicht mehr gebraucht werden.",
+        "Drei Beispielkacheln sind beim ersten Start bereits da: eine E-Mail mit Platzhaltern, ein Bild und eine Markdown-Vorlage. Ein Button über dem Raster entfernt sie mit einem Klick, sobald sie nicht mehr gebraucht werden.",
       settings: [],
     },
     {
@@ -668,7 +668,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens: "Die angehängte Datei, der Screenshot oder die Farbe wird zum Inhalt der Kachel; ein späteres Kopieren liefert diese Datei, dieses Bild oder diese Farbe, nie Text.",
       settings: ["Dateianhang, Screenshot-Tool, Farbpipette, Ziehen und Ablegen: Experten-Menü → Funktionen → Prompts erstellen", "Kopie einer angehängten Datei behalten und diese Kopie mit der Kachel löschen: Experten-Menü → Funktionen → Prompts erstellen"],
-      tip: "Farbformat, Hex, RGB oder HSL, im Hinweis wählen, der direkt nach der Auswahl erscheint.",
+      tip: "Farbformat (Hex, RGB oder HSL) im Hinweis wählen, der direkt nach der Auswahl erscheint.",
     },
     {
       section: "basics",
@@ -838,7 +838,7 @@ export const HELP_CONTENT = {
         "Die Tag-Filterleiste in der Bibliothek nutzen, um die Liste auf ein oder mehrere Tags einzugrenzen.",
       ],
       whatHappens: "Umbenennen, Umfärben oder Löschen eines Tags im Tag-Manager wirkt überall dort, wo er genutzt wird, in einem Schritt.",
-      settings: ["Tag-Filter-Modus, jeden ausgewählten Tag treffen oder alle: Experten-Menü → Bibliothek & Verlauf → Tags"],
+      settings: ["Tag-Filter-Modus (irgendeinen der ausgewählten Tags treffen oder alle): Experten-Menü → Bibliothek & Verlauf → Tags"],
     },
     {
       section: "copying",
@@ -849,7 +849,7 @@ export const HELP_CONTENT = {
         "Suchen, nach Typ oder Farbe filtern, oder einen Favoriten aus der Liste markieren.",
         "Eine einzelne Zeile löschen oder den gesamten Verlauf leeren.",
       ],
-      whatHappens: "Die gruppierte Ansicht zeigt eine Zeile pro Kachel, ihre letzte Kopie, statt jedes einzelnen Ereignisses. Älterer Verlauf als die Aufbewahrungs-Einstellung wird automatisch gelöscht.",
+      whatHappens: "Die gruppierte Ansicht zeigt eine Zeile pro Kachel (ihre letzte Kopie) statt jedes einzelnen Ereignisses. Älterer Verlauf als die Aufbewahrungs-Einstellung wird automatisch gelöscht.",
       settings: ["Gruppierte Ansicht, Aufbewahrungsdauer: Experten-Menü → Bibliothek & Verlauf → Kopierverlauf", "Einen Eintrag überspringen, der die Kopie davor wiederholt: Experten-Menü → Bibliothek & Verlauf → Kopierverlauf"],
     },
     {
@@ -860,7 +860,7 @@ export const HELP_CONTENT = {
         "Ein Video oder Bild an eine Kachel anhängen: Dateianhang, Screenshot, Einfügen oder Ziehen und Ablegen.",
         "Wiedergabe und privatsphärefreundliche Optiken im Experten-Menü anpassen.",
       ],
-      whatHappens: "Video-Einstellungen, Autoplay, Stumm, Schleife, Lautstärke, gelten für jede Video-Kachel; Graustufen oder Abgedunkelt-bis-Hover ändert nur das Aussehen, nie den kopierten Inhalt. Bibliothek und Kopierverlauf zeigen außerdem die Länge eines Videos auf dem Vorschaubild sowie Auflösung und Dateigröße in der Kurzhilfe; das Hauptraster zeigt keins von beidem.",
+      whatHappens: "Video-Einstellungen (Autoplay, Stumm, Schleife, Lautstärke) gelten für jede Video-Kachel; Graustufen oder Abgedunkelt-bis-Hover ändert nur das Aussehen, nie den kopierten Inhalt. Bibliothek und Kopierverlauf zeigen außerdem die Länge eines Videos auf dem Vorschaubild sowie Auflösung und Dateigröße in der Kurzhilfe; das Hauptraster zeigt keins von beidem.",
       settings: ["Video-Steuerung, Autoplay, Stumm, Schleife: Experten-Menü → Medien → Medien", "Graustufen oder abgedunkelt bis gehovert: Experten-Menü → Medien → Medien", "Akzentrahmen und abgerundete Ecken um Medien: Experten-Menü → Medien → Medien", "Dauer/Auflösung/Größe in Bibliothek und Kopierverlauf: Experten-Menü → Medien → Medien", "Medienangaben bei älteren Anhängen nachtragen: Experten-Menü → Medien → Medien"],
     },
     {
@@ -880,7 +880,7 @@ export const HELP_CONTENT = {
         "Bei Bedarf Unschärfe für Kacheln oder Medien, versteckte Namen oder abgedunkelte inaktive Elemente im Experten-Menü aktivieren.",
       ],
       whatHappens:
-        "Der Ausschluss von Bildschirmaufnahmen macht das Fenster für Screenshot- und Aufnahmeprogramme unsichtbar, auch für die eigenen, bleibt eine Aufnahme also leer, zuerst diese Einstellung prüfen. Eine optionale, standardmäßig ausgeschaltete Einstellung liest Text aus einem angehängten Bild, damit die Bibliothekssuche ihn auch findet; ein Treffer nur dort trägt die Kennzeichnung \"im Bild gefunden\", damit er nie wie ein zufälliger Treffer wirkt. Dieser erkannte Text bleibt sonst außerhalb der App: nirgends angezeigt, nie exportiert, nie synchronisiert, und in der Länge begrenzt. Entfernen oder Ersetzen des Bilds löscht ihn sofort. Eine einzelne Kachel lässt sich im Editor auch als vertraulich markieren; ihr Text wird dann mit einem Tresor-Passwort verschlüsselt, das einmal je Sitzung abgefragt wird, und ein vergessenes Passwort bedeutet den endgültigen Verlust dieser Kacheln, es gibt keine Wiederherstellung.",
+        "Der Ausschluss von Bildschirmaufnahmen macht das Fenster für Screenshot- und Aufnahmeprogramme unsichtbar, auch für die eigenen. Bleibt eine Aufnahme also leer, zuerst diese Einstellung prüfen. Eine optionale, standardmäßig ausgeschaltete Einstellung liest Text aus einem angehängten Bild, damit die Bibliothekssuche ihn auch findet; ein Treffer nur dort trägt die Kennzeichnung \"im Bild gefunden\", damit er nie wie ein zufälliger Treffer wirkt. Dieser erkannte Text bleibt sonst außerhalb der App: nirgends angezeigt, nie exportiert, nie synchronisiert, und in der Länge begrenzt. Entfernen oder Ersetzen des Bilds löscht ihn sofort. Eine einzelne Kachel lässt sich im Editor auch als vertraulich markieren; ihr Text wird dann mit einem Tresor-Passwort verschlüsselt, das einmal je Sitzung abgefragt wird, und ein vergessenes Passwort bedeutet den endgültigen Verlust dieser Kacheln, es gibt keine Wiederherstellung.",
       settings: ["Von Bildschirmaufnahmen ausschließen, Kacheln oder Medien unscharf machen, Namen verbergen, ungehoverte Kacheln abdunkeln: Experten-Menü → System & Daten → Datenschutz", "Text in angehängten Bildern für die Suche erfassen, Bildtext-Grenze: Experten-Menü → Bibliothek & Verlauf → Bibliothek", "Eine Kachel als vertraulich markieren, Sperr-Zeit des Tresors: Experten-Menü → System & Daten → Datenschutz"],
       tip: "Der Ausschluss von Bildschirmaufnahmen ist standardmäßig an: für normale Screenshots oder Aufnahmen dieses Fensters ausschalten.",
     },
@@ -912,7 +912,7 @@ export const HELP_CONTENT = {
         "Aus der Snapshot-Liste wiederherstellen und dabei nur Daten, nur Einstellungen oder beides wählen.",
       ],
       whatHappens:
-        "Aufbewahrungsstufen, täglich, wöchentlich, monatlich, jährlich, dünnen ältere Snapshots automatisch aus, statt jeden für immer zu behalten. Ein Backup ist entweder vollständig oder gar nicht vorhanden; ein fehlgeschlagenes hinterlässt nichts. Dasselbe Fenster enthält außerdem eine Nutzungsstatistik, Gesamtzahlen, ein 14-Tage-Diagramm, meistgenutzte Kacheln, meistgenutzte Werkzeuge mit einer Liste der nie benutzten, unabhängig von den Backups selbst, dazu einen Speicherüberblick, was auf der Festplatte wie viel Platz belegt.",
+        "Aufbewahrungsstufen (täglich, wöchentlich, monatlich, jährlich) dünnen ältere Snapshots automatisch aus, statt jeden für immer zu behalten. Ein Backup ist entweder vollständig oder gar nicht vorhanden; ein fehlgeschlagenes hinterlässt nichts. Dasselbe Fenster enthält außerdem eine Nutzungsstatistik (Gesamtzahlen, ein 14-Tage-Diagramm, meistgenutzte Kacheln, meistgenutzte Werkzeuge mit einer Liste der nie benutzten), unabhängig von den Backups selbst, dazu einen Speicherüberblick, was auf der Festplatte wie viel Platz belegt.",
       settings: [
         "Intervall, Aufbewahrungsstufen, Passwort, Wiederherstellungsumfang: Backup-Manager (eigenes Fenster, geöffnet aus Einstellungen)",
         "Nutzungsstatistiken, wie viele Kacheln dort gelistet werden: selbes Fenster, unter den Backups",
@@ -937,7 +937,7 @@ export const HELP_CONTENT = {
         "Rechtsklick auf einen Tab zum Umbenennen, Größenändern, Umfärben oder Löschen.",
         "Einen Ansichts-Tab auf einen anderen ziehen, um sie zu einer Gruppe zusammenzufassen.",
       ],
-      whatHappens: "Eine Kachel sitzt normalerweise in genau einer Ansicht, wird sie woanders abgelegt, wandert sie dorthin, außer \"Kachel in mehreren Ansichten\" ist aktiv, was ab Werk aus ist. Das Löschen einer Ansicht löscht nicht die dort platzierten Kacheln; eine auch anderswo gezeigte Kachel funktioniert dort weiter.",
+      whatHappens: "Eine Kachel sitzt normalerweise in genau einer Ansicht (wird sie woanders abgelegt, wandert sie dorthin), außer \"Kachel in mehreren Ansichten\" ist aktiv, was ab Werk aus ist. Das Löschen einer Ansicht löscht nicht die dort platzierten Kacheln; eine auch anderswo gezeigte Kachel funktioniert dort weiter.",
       settings: ["Mehrere Ansichten, Ansichtsgruppen, Kachel in mehreren Ansichten: Experten-Menü → System & Daten → Werkzeugleiste"],
     },
     {
@@ -974,7 +974,7 @@ export const HELP_CONTENT = {
       whatItIs:
         "Zwei unabhängige Hotkey-Arten: eine globale Kombination, die den schnellen Launcher öffnet, und eine Kombination pro Kachel.",
       howTo: [
-        "Den globalen Hotkey in den Einstellungen festlegen: Standard Strg+Alt+P.",
+        "Den globalen Hotkey in den Einstellungen festlegen (Standard: Strg+Alt+P).",
         "Einer Kachel im Editor einen eigenen Hotkey geben.",
         "Wählen, ob er nach dem Kopieren auch einfügen soll.",
         "\"Alle Hotkeys\" neben dem globalen Feld öffnet jeden Hotkey in einer durchsuchbaren Liste.",
@@ -1012,7 +1012,7 @@ export const HELP_CONTENT = {
         "Eine Kachel behalten, oder das Paar als kein Duplikat markieren, damit es nicht erneut markiert wird.",
       ],
       whatHappens:
-        "Der Abgleich vergleicht den Haupttext jeder Kachel, oder ihren Namen, falls sie keinen Text hat, nach Ähnlichkeit, nicht nach exakter Übereinstimmung; der Schwellenwert steuert, wie nah als nah genug gilt. Eine rotierende Kachel wird nur nach ihrem ersten Eintrag verglichen. Abkürzungen im Einstellungsdialog, neben Import und Export, und in der Kopfleiste von „Alle Prompts“ öffnen ihn auch direkt, sodass dafür nicht erst das Experten-Menü nötig ist.",
+        "Der Abgleich vergleicht den Haupttext jeder Kachel (oder ihren Namen, falls sie keinen Text hat) nach Ähnlichkeit, nicht nach exakter Übereinstimmung; der Schwellenwert steuert, wie nah als nah genug gilt. Eine rotierende Kachel wird nur nach ihrem ersten Eintrag verglichen. Abkürzungen im Einstellungsdialog, neben Import und Export, und in der Kopfleiste von „Alle Prompts“ öffnen ihn auch direkt, sodass dafür nicht erst das Experten-Menü nötig ist.",
       settings: ["Duplikat-Finder, Ähnlichkeitsschwelle: Experten-Menü → System & Daten → Daten & Wartung"],
     },
     {
@@ -1088,13 +1088,13 @@ export const HELP_CONTENT = {
       id: "screenRecording",
       whatItIs: "Nimmt ein Fenster, einen Monitor oder einen gezogenen Bereich als Video auf, neben dem Screenshot-Werkzeug.",
       howTo: [
-        "Auf den Aufnahme-Knopf {icon:record} klicken; ein Fenster anklicken, einen Bereich ziehen oder auf den freien Desktop klicken für den ganzen Bildschirm: dieselbe Übersicht wie beim Screenshot-Werkzeug.",
+        "Auf den Aufnahme-Knopf {icon:record} klicken; ein Fenster anklicken, einen Bereich ziehen oder auf den freien Desktop klicken für den ganzen Bildschirm. Das ist dieselbe Übersicht wie beim Screenshot-Werkzeug.",
         "Ein Countdown zählt optional herunter, bevor die Aufnahme wirklich startet.",
         "Eine kleine Bedienleiste zeigt Laufzeit und Dateigröße und bietet Pause/Fortsetzen, Stopp und Verwerfen; zwei optionale globale Hotkeys sowie das Tray-Menü können sie ebenfalls stoppen oder pausieren/fortsetzen, aber nur, solange die Aufnahme wirklich läuft. Eine Fensteraufnahme mit der Leinwand für alle Bildschirme oder den aktuellen Bildschirm bekommt zusätzlich einen Knopf zum Wechseln des Aufnahmeziels, ohne von vorn zu beginnen.",
         "Stopp bietet Speichern, Speichern unter…, Kopieren, Bearbeiten oder Verwerfen an.",
       ],
       whatHappens:
-        "Aufgenommen wird immer MP4 (H.264); drei Qualitätsstufen (Klein/Hoch/Verlustfrei) tauschen Dateigröße gegen Bildschärfe, ein Format-Feld kann das Ergebnis danach in WebM, AVI, MOV, MKV, animiertes WebP oder APNG umwandeln; die letzten drei ohne Ton und auf 30 Sekunden begrenzt. Alles außer reinem MP4 sowie die Stufe Verlustfrei braucht ffmpeg (ein separater Download, direkt angeboten, wenn es fehlt); eine fehlgeschlagene oder abgebrochene Umwandlung fällt immer auf die unangetastete Originalaufnahme zurück. Systemton und Mikrofon werden beide standardmäßig aufgenommen, je als eigene Spur: die Mikrofonspur wird zwar aufgezeichnet, aber erst hörbar, wenn man sie später selbst im Video-Editor dazumischt; zieht man das Mikrofon während der Aufnahme ab, laufen Bild und Systemton weiter, nur diese Spur gilt als verloren. Speichern und Kopieren teilen sich einen Aufnahme-Ordner; Bearbeiten öffnet den Clip im Video-Editor, ohne über sein Schicksal zu entscheiden; schließt man den Dialog danach, ohne gespeichert oder kopiert zu haben, wird die Datei trotzdem verworfen. Die Bedienleiste folgt einem verschobenen Aufnahmefenster und ist selbst nie Teil der Aufnahme. Schließt sich das aufgenommene Fenster von selbst, stoppt die Aufnahme automatisch und behält, was bis dahin aufgenommen wurde. Eine Aufnahme, die nie ordnungsgemäß gestoppt wurde (Absturz, erzwungenes Beenden), wird automatisch entfernt, sobald sie eine Schonfrist überschreitet; eine gerade gestoppte Aufnahme, die noch abgeschlossen wird, bleibt dabei unangetastet.",
+        "Aufgenommen wird immer MP4 (H.264); drei Qualitätsstufen (Klein/Hoch/Verlustfrei) tauschen Dateigröße gegen Bildschärfe, ein Format-Feld kann das Ergebnis danach in WebM, AVI, MOV, MKV, animiertes WebP oder APNG umwandeln (die letzten drei ohne Ton und auf 30 Sekunden begrenzt). Alles außer reinem MP4 sowie die Stufe Verlustfrei braucht ffmpeg (ein separater Download, direkt angeboten, wenn es fehlt); eine fehlgeschlagene oder abgebrochene Umwandlung fällt immer auf die unangetastete Originalaufnahme zurück. Systemton und Mikrofon werden beide standardmäßig aufgenommen, je als eigene Spur: die Mikrofonspur wird zwar aufgezeichnet, aber erst hörbar, wenn man sie später selbst im Video-Editor dazumischt; zieht man das Mikrofon während der Aufnahme ab, laufen Bild und Systemton weiter, nur diese Spur gilt als verloren. Speichern und Kopieren teilen sich einen Aufnahme-Ordner; Bearbeiten öffnet den Clip im Video-Editor, ohne über sein Schicksal zu entscheiden; schließt man den Dialog danach, ohne gespeichert oder kopiert zu haben, wird die Datei trotzdem verworfen. Die Bedienleiste folgt einem verschobenen Aufnahmefenster und ist selbst nie Teil der Aufnahme. Schließt sich das aufgenommene Fenster von selbst, stoppt die Aufnahme automatisch und behält, was bis dahin aufgenommen wurde. Eine Aufnahme, die nie ordnungsgemäß gestoppt wurde (Absturz, erzwungenes Beenden), wird automatisch entfernt, sobald sie eine Schonfrist überschreitet; eine gerade gestoppte Aufnahme, die noch abgeschlossen wird, bleibt dabei unangetastet.",
       settings: ["Bildschirmaufnahme, Mauszeiger, Countdown, Tonquellen und -gerät, Bitrate, Qualität, Format, Aufnahme-Ordner, Stopp-/Pause-Hotkeys, Tray-Einträge, defekte Aufnahmen automatisch entfernen: Experten-Menü → Funktionen → Prompts erstellen"],
     },
     {
@@ -1108,7 +1108,7 @@ export const HELP_CONTENT = {
         "Exportieren: bei reinem Kürzen greift ein verlustfreier Schnellpfad, sonst wird der ganze Clip einmal neu kodiert.",
       ],
       whatHappens:
-        "Bis zum Export wird nichts verarbeitet: Die Live-Vorschau spielt die Bearbeitungen direkt ab. Filmstreifen und Wellenform geben eine zoombare Übersicht über den ganzen Clip für bildgenaue Navigation. Die Vorschau selbst zoomt außerdem mit dem Mausrad (bis 8×) und lässt sich durch Ziehen verschieben, mit der mittleren Maustaste immer, mit der linken sobald hineingezoomt ist, um ein kleines Overlay bei einer großen Aufnahme genau zu platzieren. Ein paar fertige Export-Voreinstellungen (unveränderte Qualität, kleiner für Chat, animiertes GIF) merken sich die letzte Wahl. Neben MP4, WebM und GIF bietet die Formatauswahl beim Export auch AVI, MOV, MKV, animiertes WebP und APNG, jeweils mit einem kurzen Hinweis, wofür es gedacht ist; GIF, WebP und APNG haben nie Ton, warnen ab zehn Sekunden Länge und sind auf eine Höchstauflösung begrenzt, da alle drei schnell groß werden. Rückgängig/Wiederholen deckt jeden Bearbeitungsschritt ab, begrenzt durch ein einstellbares Limit.",
+        "Bis zum Export wird nichts verarbeitet: Die Live-Vorschau spielt die Bearbeitungen direkt ab. Filmstreifen und Wellenform geben eine zoombare Übersicht über den ganzen Clip für bildgenaue Navigation. Die Vorschau selbst zoomt außerdem mit dem Mausrad (bis 8×) und lässt sich durch Ziehen verschieben (mit der mittleren Maustaste immer, mit der linken, sobald hineingezoomt ist), um ein kleines Overlay bei einer großen Aufnahme genau zu platzieren. Ein paar fertige Export-Voreinstellungen (unveränderte Qualität, kleiner für Chat, animiertes GIF) merken sich die letzte Wahl. Neben MP4, WebM und GIF bietet die Formatauswahl beim Export auch AVI, MOV, MKV, animiertes WebP und APNG, jeweils mit einem kurzen Hinweis, wofür es gedacht ist; GIF, WebP und APNG haben nie Ton, warnen ab zehn Sekunden Länge und sind auf eine Höchstauflösung begrenzt, da alle drei schnell groß werden. Rückgängig/Wiederholen deckt jeden Bearbeitungsschritt ab, begrenzt durch ein einstellbares Limit.",
       settings: ["Video-Editor, Rückgängig-Limit: Experten-Menü → Funktionen → Prompts erstellen"],
       sketches: ["editorTimeline"],
     },
@@ -1116,7 +1116,7 @@ export const HELP_CONTENT = {
       section: "basics",
       title: "Texterkennung (OCR)",
       id: "ocr",
-      whatItIs: "Liest mit der geräteeigenen Erkennung von Windows Text aus einem Screenshot oder einer Bilddatei, vollständig offline, nichts verlässt das Gerät.",
+      whatItIs: "Liest mit der geräteeigenen Erkennung von Windows Text aus einem Screenshot oder einer Bilddatei. Das läuft vollständig offline und nichts verlässt das Gerät.",
       howTo: [
         "Über die Eingabeleiste: der OCR-Button {icon:ocr} bietet einen Screenshot oder eine vorhandene Bilddatei an.",
         "Bei einem bereits aufgenommenen Screenshot: über den Button „Text erkennen“ im Aufnahme-Dialog.",
@@ -1130,14 +1130,14 @@ export const HELP_CONTENT = {
       section: "basics",
       title: "Spracheingabe",
       id: "voiceDictation",
-      whatItIs: "Der Mikrofon-Button {icon:mic} verwandelt Sprache in Text, die Erkennung läuft komplett auf dem Gerät.",
+      whatItIs: "Der Mikrofon-Button {icon:mic} verwandelt Sprache in Text. Die Erkennung läuft komplett auf dem Gerät.",
       howTo: [
         "Auf das Mikrofon-Icon neben der Eingabeleiste klicken, oder im Editor einer Kachel.",
         "Sprechen; der Text erscheint, während er erkannt wird.",
         "Erneut klicken, Escape drücken, oder speichern/schließen, um zu stoppen.",
       ],
       whatHappens:
-        "Die Erkennung läuft lokal über die eigene Spracherkennung von Windows: es verlässt nichts das Gerät, außer die Online-Erkennung wird ausdrücklich erlaubt. Gesprochene Satzzeichen-Wörter (\"Komma\", \"neue Zeile\", …) werden zu echten Satzzeichen; \"wörtlich\" vor einem Wort tippt es statt es als Befehl auszulösen. Ein fehlendes Sprachpaket öffnet direkt den Sprachpaket-Dialog, gemeinsam mit der Texterkennung (OCR). Ein optionaler globaler Kurzbefehl startet und stoppt eine Aufnahme, ohne das Fenster zu öffnen; der Text landet in der Zwischenablage, wird eingefügt, oder geht direkt in die Eingabeleiste; das Taskleisten-Symbol zeigt währenddessen \"Nimmt auf …\" im Tooltip.",
+        "Die Erkennung läuft lokal über die eigene Spracherkennung von Windows: es verlässt nichts das Gerät, außer die Online-Erkennung wird ausdrücklich erlaubt. Gesprochene Satzzeichen-Wörter (\"Komma\", \"neue Zeile\", …) werden zu echten Satzzeichen; \"wörtlich\" vor einem Wort tippt es statt es als Befehl auszulösen. Ein fehlendes Sprachpaket öffnet direkt den Sprachpaket-Dialog, gemeinsam mit der Texterkennung (OCR). Ein optionaler globaler Kurzbefehl startet und stoppt eine Aufnahme, ohne das Fenster zu öffnen. Der Text landet in der Zwischenablage, wird eingefügt oder geht direkt in die Eingabeleiste; das Taskleisten-Symbol zeigt währenddessen \"Nimmt auf …\" im Tooltip.",
       settings: ["Spracheingabe, Satzzeichen-Befehle, automatische Großschreibung, Stille-Auto-Stopp, Einfügeposition, globaler Hotkey: Experten-Menü → Funktionen → Prompts erstellen"],
     },
     {
@@ -1166,14 +1166,14 @@ export const HELP_CONTENT = {
       whatHappens:
         "Es wird nie automatisch etwas in einer Kachel gespeichert; eine Auswahl landet nur in der Zwischenablage. Der Auswahlverlauf hält die letzten paar Farben und übersteht einen Neustart, begrenzt durch eine eigene Einstellung.",
       settings: ["Farbpipette, Zoom, Format, Länge des Auswahlverlaufs: Experten-Menü → Funktionen → Prompts erstellen"],
-      tip: "Farbformat, Hex, RGB oder HSL, im Hinweis wählen, der direkt nach der Auswahl erscheint.",
+      tip: "Farbformat (Hex, RGB oder HSL) im Hinweis wählen, der direkt nach der Auswahl erscheint.",
     },
     {
       section: "basics",
       title: "Wechselnde Kacheln",
       whatItIs: "Eine Kachel kann eine Liste von Texten statt nur einem tragen; jede Kopie liefert den nächsten Eintrag.",
       howTo: [
-        "Wechselnde Kacheln sind standardmäßig an: die Funktion im Experten-Menü ausschalten, falls nie genutzt.",
+        "Wechselnde Kacheln sind standardmäßig an; die Funktion im Experten-Menü ausschalten, falls nie genutzt.",
         "Im Editor einer Kachel Erweiterte Optionen öffnen und \"Wechselnde Texte\" einschalten.",
         "Die Eintragsliste ersetzt dann das normale Textfeld.",
         "Mit \"+ Eintrag\" weitere Texteinträge hinzufügen; Icons daneben sortieren um oder entfernen sie.",
