@@ -328,6 +328,13 @@ the video editor and the introduction tour ship on).
   sort order, or a setting in the backup manager. A match appears in its own
   section with a small badge saying where it lives; clicking it opens the
   right place and briefly highlights the row.
+- **Search everything**: a magnifier icon in the toolbar, or Ctrl+K, opens
+  an overlay searching prompts, copy history, attachments, views, settings
+  and help all at once, each in its own group with up to five hits and a
+  "show more". Arrow keys move the highlight across group boundaries; Enter
+  runs the fitting action for whatever is highlighted. The field remembers
+  the last five searches. Expert menu switch, on by default, with a value
+  for how many hits each group shows.
 - **Duplicate a shape or overlay** — right-click a rectangle, ellipse, line,
   arrow, spotlight or pixelation in the screenshot editor, or an overlay's row
   in the video editor, for a menu to duplicate or delete it. A duplicate keeps

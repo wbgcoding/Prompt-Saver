@@ -451,6 +451,19 @@ the list, it is the same selection drawn differently. The toggle remembers
 its last choice per type filter, so switching to "only images" brings tiles
 back on its own next time.
 
+### Search everything
+
+The magnifier icon in the toolbar, or Ctrl+K, opens an overlay that searches
+prompts, copy history, attachments, views, settings and help all at once,
+each in its own group with up to five hits and a "show more". Arrow keys
+move the highlight across group boundaries; Enter runs the fitting action for
+whatever is highlighted — copies a prompt or history entry, opens an
+attachment, switches to a view, opens and highlights a setting, or opens the
+matching help topic. The field remembers the last five searches and shows
+them when it is empty. Escape, a click outside the card, or the icon again
+all close it. A flag in the expert menu turns it off, with a value setting
+for how many hits each group shows before "show more".
+
 ### Tags
 
 Free-form labels assigned to tiles; filter the library or the grid down to a set
@@ -1162,6 +1175,18 @@ Typfilter stellt die Liste als Kacheln dar: großes Vorschaubild, Name
 darunter, sonst nichts. Klick, Doppelklick, Rechtsklickmenü und
 Mehrfachauswahl verhalten sich genau wie in der Liste. Der Umschalter merkt
 sich seinen Stand je Filter.
+
+**Alles durchsuchen**: Lupensymbol in der Werkzeugleiste oder Strg+K öffnet
+eine Überlagerung, die Prompts, Kopierverlauf, Anhänge, Ansichten,
+Einstellungen und Hilfe zugleich durchsucht, jede Quelle in ihrer eigenen
+Gruppe mit bis zu fünf Treffern und „weitere anzeigen". Pfeiltasten bewegen
+die Markierung über Gruppengrenzen hinweg; Eingabetaste löst die passende
+Aktion aus — kopiert einen Prompt oder Verlaufseintrag, öffnet einen Anhang,
+wechselt die Ansicht, öffnet und markiert eine Einstellung, oder öffnet das
+passende Hilfethema. Das Feld merkt sich die letzten fünf Suchen und zeigt
+sie, wenn es leer ist. Escape, ein Klick daneben oder das Symbol schließen
+die Überlagerung wieder. Ein Schalter im Experten-Menü stellt sie ab, dazu
+ein Wert für die Trefferzahl je Gruppe vor „weitere anzeigen".
 
 **Tags** — freie Schlagwörter, UND/ODER-Filter.
 

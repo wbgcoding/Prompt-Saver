@@ -1598,6 +1598,174 @@ PROBE = """
       }
     }
     await click('journal-close');
+    // Search everything: the toolbar icon and Ctrl+K both open the overlay, all
+    // six source groups can each turn up a hit, arrow keys move the highlight
+    // across group boundaries, and Enter runs the right action per source.
+    {
+      const gsInput = document.getElementById('gs-input');
+      const gsResults = document.getElementById('gs-results');
+      const groupLabelBefore = (row) => {
+        let el = row.previousElementSibling;
+        while (el && !el.classList.contains('gs-group-head')) el = el.previousElementSibling;
+        return el ? el.textContent : '';
+      };
+      // The group-head carries a stable data-group marker (see gsGroupHead in
+      // main.js) -- a query can hit more than one group at once (e.g. a file
+      // path substring also matching the prompt body scorer), so picking a
+      // result by group identity rather than by "whatever is highlighted
+      // first" is what actually exercises each source's own action.
+      const firstRowOfGroup = (key) => {
+        const head = gsResults.querySelector(`.gs-group-head[data-group="${key}"]`);
+        return head ? head.nextElementSibling : null;
+      };
+      // Ctrl+K always works, at every window size; the icon itself drops below
+      // 760px (see main.css) since the header has no spare width left there --
+      // that specific trade-off is checked once below, separately from the
+      // reopens the rest of this block needs.
+      const openGS = () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }));
+
+      if (window.innerWidth >= 760) {
+        document.getElementById('global-search-btn').click();
+        await sleep(150);
+        if (document.getElementById('global-search').classList.contains('hidden')) {
+          out.errors.push('the search-everything icon did not open the overlay');
+        }
+        layoutScan('search everything');
+        gsInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        await sleep(100);
+        if (!document.getElementById('global-search').classList.contains('hidden')) {
+          out.errors.push('Escape did not close the search-everything overlay');
+        }
+      }
+      // Opens via Ctrl+K.
+      openGS();
+      await sleep(150);
+      if (document.getElementById('global-search').classList.contains('hidden')) {
+        out.errors.push('Ctrl+K did not open the search-everything overlay');
+      }
+      layoutScan('search everything');
+
+      // A query hitting a name shared by a prompt and its own copy-history entry
+      // (tauri_stub.js logs the first four prompts as recently copied).
+      gsInput.value = 'Prompt 1';
+      gsInput.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(200);
+      const rowsAfterPrompt1 = [...gsResults.querySelectorAll('.gs-row')];
+      if (!rowsAfterPrompt1.length) out.errors.push('searching a prompt name in search-everything found nothing');
+      const groupHeads1 = [...gsResults.querySelectorAll('.gs-group-head')].map((h) => h.textContent);
+      if (!groupHeads1.length) out.errors.push('search-everything results show no group headings');
+      // Arrow keys must cross from one group into the next, not just within one.
+      if (rowsAfterPrompt1.length > 1) {
+        const firstGroup = groupLabelBefore(rowsAfterPrompt1[0]);
+        let crossed = false;
+        for (let i = 0; i < rowsAfterPrompt1.length; i++) {
+          gsInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+          const active = gsResults.querySelector('.gs-row.active');
+          if (active && groupLabelBefore(active) !== firstGroup) { crossed = true; break; }
+        }
+        if (!crossed) out.errors.push('arrow keys in search-everything never crossed a group boundary');
+      }
+      // Enter on the highlighted (first) prompt result copies it and closes the overlay.
+      window.__SMOKE_CALLS__ = [];
+      gsInput.value = 'Prompt 1';
+      gsInput.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(200);
+      gsInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      await sleep(150);
+      if (!document.getElementById('global-search').classList.contains('hidden')) {
+        out.errors.push('Enter in search-everything did not close the overlay');
+      }
+      if (!window.__SMOKE_CALLS__.some((c) => c === 'copy_prompt' || c === 'copy_text')) {
+        out.errors.push('Enter on a search-everything prompt result did not copy it');
+      }
+
+      // Attachment group: a query matching the seeded file_path (index 9/11).
+      openGS();
+      await sleep(150);
+      gsInput.value = 'brief';
+      gsInput.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(200);
+      const attachRow = firstRowOfGroup('attachments');
+      if (!attachRow) out.errors.push('searching an attachment file name in search-everything found nothing in the attachments group');
+      else {
+        window.__SMOKE_CALLS__ = [];
+        attachRow.click();
+        await sleep(150);
+        if (!document.getElementById('modal') || document.getElementById('modal').classList.contains('hidden')) {
+          out.errors.push('picking a search-everything attachment result did not open the edit dialog');
+        }
+        document.getElementById('modal-close-x')?.click();
+        await sleep(150);
+      }
+
+      // Views group: a query matching the seeded "Work" view.
+      openGS();
+      await sleep(150);
+      gsInput.value = 'Work';
+      gsInput.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(200);
+      const viewRow = firstRowOfGroup('views');
+      if (!viewRow) out.errors.push('searching a view name in search-everything found nothing in the views group');
+      else {
+        window.__SMOKE_ARGS__ = [];
+        viewRow.click();
+        await sleep(200);
+        if (!window.__SMOKE_ARGS__.some(([cmd, a]) => cmd === 'set_active_view' && a.id === 'work')) {
+          out.errors.push('picking a search-everything view result did not switch to it');
+        }
+      }
+      // Back to the Home view so every later grid-based check in this probe
+      // still finds its fixture prompts.
+      document.querySelector('.view-btn[data-view-id="home"]')?.click();
+      await sleep(150);
+
+      // Settings group: a query matching the theme setting outside the expert menu.
+      openGS();
+      await sleep(150);
+      gsInput.value = 'theme';
+      gsInput.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(200);
+      const settingsRow = firstRowOfGroup('settings');
+      if (!settingsRow) out.errors.push('searching a settings label in search-everything found nothing in the settings group');
+      else {
+        settingsRow.click();
+        await sleep(200);
+        if (document.getElementById('settings').classList.contains('hidden')) {
+          out.errors.push('picking a search-everything settings result did not open settings');
+        }
+        if (!document.querySelector('.settings-search-hit')) {
+          out.errors.push('picking a search-everything settings result did not flash the matching row');
+        }
+        document.getElementById('settings').classList.add('hidden');
+      }
+
+      // Help group: a query matching a help article that exists in English.
+      openGS();
+      await sleep(150);
+      gsInput.value = 'tile';
+      gsInput.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(200);
+      const helpRow = firstRowOfGroup('help');
+      if (!helpRow) out.errors.push('searching a help topic in search-everything found nothing in the help group');
+      else {
+        helpRow.click();
+        await sleep(200);
+        if (document.getElementById('help').classList.contains('hidden')) {
+          out.errors.push('picking a search-everything help result did not open the help dialog');
+        }
+        document.getElementById('help-close').click();
+        await sleep(150);
+      }
+
+      // Clicking the backdrop closes it, same as every other dialog here.
+      openGS();
+      await sleep(150);
+      document.getElementById('global-search').dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      await sleep(150);
+      if (!document.getElementById('global-search').classList.contains('hidden')) {
+        out.errors.push('clicking outside the search-everything card did not close it');
+      }
+    }
     // 439: recent-messages window -- reachable from the expert menu, shows an
     // error toast's own text, "copy all" puts it on the clipboard, "clear"
     // empties the list and the empty state says so.
