@@ -6930,7 +6930,7 @@ async function saveFolder(f, patch) {
 }
 
 // Two tiles dropped on each other become a folder on the target's cell.
-async function newTileFolder(targetId, dropId, cell) {
+async function newTileFolder(memberIds, cell) {
   const name = await confirmDialog({
     title: t("tileFolderNew"),
     message: t("tileFolderNameMsg"),
@@ -6942,7 +6942,7 @@ async function newTileFolder(targetId, dropId, cell) {
   const view = activeView();
   const ok = await saveFolder(
     { id: "", view_id: view.id },
-    { name: String(name).trim(), cell, members: [targetId, dropId] }
+    { name: String(name).trim(), cell, members: memberIds }
   );
   if (ok) {
     recordToolUsage("folder_create");
@@ -7270,7 +7270,7 @@ async function dropIntoFolder(id, host, cell) {
     return;
   }
   if (!host.dataset.id) return;
-  await newTileFolder(host.dataset.id, id, [Number(cell.dataset.col), Number(cell.dataset.row)]);
+  await newTileFolder([host.dataset.id, id], [Number(cell.dataset.col), Number(cell.dataset.row)]);
 }
 
 // `settings.floating` maps every pinned prompt to its pill position, and the backend
@@ -7310,11 +7310,11 @@ function openCtx(id, x, y) {
   ctxEl.querySelector('[data-act="hide"]').classList.toggle("hidden", favView);
   // Nothing to place this prompt into besides the view it is already on.
   ctxEl.querySelector('[data-act="views"]').classList.toggle("hidden", !optFlag("multiViewPrompt") || settings.views.length < 2);
-  // Keyboard path for the mouse drag-onto-a-folder move: only makes sense once
-  // at least one folder already exists in this view (making the very first one
-  // still needs a drag, same as elsewhere in this menu).
+  // Keyboard path for the mouse drag-onto-a-folder move: favorites' free-form
+  // layout has no grid cell for a folder to occupy, so it stays out of scope
+  // there the same way the mouse gesture already is.
   const moveFolderBtn = ctxEl.querySelector('[data-act="moveToFolder"]');
-  moveFolderBtn.classList.toggle("hidden", !tileFoldersOn() || favView || foldersOfView(activeView().id).length === 0);
+  moveFolderBtn.classList.toggle("hidden", !tileFoldersOn() || favView);
   // Only visible when this prompt actually rotates and both auto gates are on —
   // grey-and-disabled would still be a control the user cannot act on.
   const rmenuBtn = ctxEl.querySelector('[data-act="rotateAutoMenu"]');
@@ -7376,6 +7376,17 @@ function closeMoveToFolderPop() {
 }
 function renderMoveToFolderPop(id) {
   moveToFolderPop.innerHTML = "";
+  const newRow = document.createElement("button");
+  newRow.type = "button";
+  newRow.setAttribute("role", "menuitem");
+  newRow.textContent = t("tileFolderNew");
+  newRow.addEventListener("click", async () => {
+    closeMoveToFolderPop();
+    const cell = layoutOf(activeView())[id];
+    if (!cell) return; // favorites' free-form layout has no cell to replace
+    await newTileFolder([id], cell);
+  });
+  moveToFolderPop.appendChild(newRow);
   for (const f of foldersOfView(activeView().id)) {
     const row = document.createElement("button");
     row.type = "button";
