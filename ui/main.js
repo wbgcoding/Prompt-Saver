@@ -18905,7 +18905,7 @@ function bind() {
   });
   // Esc leaves selection mode before it closes the library (capture beats the overlay).
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && libSelectMode && !libraryEl.classList.contains("hidden")) {
+    if (e.key === "Escape" && libSelectMode && !libraryEl.classList.contains("hidden") && $("compare-modal").classList.contains("hidden")) {
       e.stopPropagation();
       setLibSelectMode(false);
     }
@@ -18922,7 +18922,7 @@ function bind() {
     });
   });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && gridSelected.size) {
+    if (e.key === "Escape" && gridSelected.size && $("compare-modal").classList.contains("hidden")) {
       e.stopPropagation();
       clearGridSelection();
     }
@@ -19462,6 +19462,7 @@ function bind() {
     if (!$("confirm-modal").classList.contains("hidden")) { trapTabWithin($("confirm-modal"), e); return; }
     if (!colorPop.classList.contains("hidden")) { trapTabWithin(colorPop, e); return; }
     if (!tagPop.classList.contains("hidden")) { trapTabWithin(tagPop, e); return; }
+    if (!$("compare-modal").classList.contains("hidden")) { trapTabWithin($("compare-modal"), e); return; }
     if (!$("tag-modal").classList.contains("hidden")) { trapTabWithin($("tag-modal"), e); return; }
     if (!ctxEl.classList.contains("hidden")) { trapTabWithin(ctxEl, e); return; }
     if (!$("update-modal").classList.contains("hidden")) { trapTabWithin($("update-modal"), e); return; }
@@ -19497,6 +19498,7 @@ function bind() {
     else if (varsCleanup) { /* vars dialog closes itself */ }
     else if (!colorPop.classList.contains("hidden")) closeColorPop();
     else if (!tagPop.classList.contains("hidden")) closeTagPop();
+    else if (!$("compare-modal").classList.contains("hidden")) closeCompareView();
     else if (!$("tag-modal").classList.contains("hidden")) closeTagManager();
     else if (!ctxEl.classList.contains("hidden")) closeCtx();
     else if (!$("update-modal").classList.contains("hidden")) $("update-modal").classList.add("hidden");

@@ -4063,8 +4063,16 @@ PROBE = """
             }
             layoutScan('duplicates compare view');
             mustReach('duplicates compare view', '#compare-actions button');
+            if (!(Number(getComputedStyle(cmpModal).zIndex) > Number(getComputedStyle(dm).zIndex))) {
+              out.errors.push('the compare view opens behind the duplicates dialog');
+            }
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+            await sleep(200);
+            if (!cmpModal.classList.contains('hidden') || dm.classList.contains('hidden')) {
+              out.errors.push('Escape does not close the compare view first, over the duplicates dialog');
+            }
           }
-          await click('compare-close');
+          if (!cmpModal.classList.contains('hidden')) await click('compare-close');
           await sleep(200);
         }
         await click('dupes-close');
@@ -4194,6 +4202,13 @@ PROBE = """
         }
         layoutScan('compare view');
         mustReach('compare view', '#compare-actions button');
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        await sleep(200);
+        if (!cmpModal.classList.contains('hidden') || document.getElementById('library').classList.contains('hidden')) {
+          out.errors.push('Escape does not close the compare view detached from the library first');
+        }
+        cmpBtn.click();
+        await sleep(300);
         // Position, not text, so this still finds the button under the Italian
         // pass below (takeLeft, takeRight, close, in that fixed append order).
         const takeRightBtn = document.querySelectorAll('#compare-actions button')[1];

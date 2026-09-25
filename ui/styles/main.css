@@ -1382,6 +1382,10 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
    was opened from, without closing it — the edit dialog keeps its place on top. */
 body.library-front #library.overlay { z-index: 66; }
 body.library-front #modal.overlay { z-index: 67; }
+/* The compare view opens from the duplicate finder at 65, the raised library
+   at 66 and the edit dialog's similar-prompt hint at 67, so it sits above all
+   three, and below vars, hotkeys and confirm, which can appear over it. */
+#compare-modal.overlay { z-index: 69; }
 /* Variable-fill dialog stacks above the library/journal it was opened from. */
 #vars-modal.overlay { z-index: 70; }
 /* The all-hotkeys list can now also be opened from inside the edit dialog's own
