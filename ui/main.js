@@ -727,6 +727,7 @@ const ERROR_MSG_KEYS = {
   "recording-target-switch-timeout": "recTargetSwitchTimeout",
   "file-missing": "openFileMissing",
   "ffmpeg-missing": "recFfmpegMissingHint",
+  "demo-mode-multiple-instances": "demoModeMultipleInstances",
 };
 function errToast(err) {
   const s = String(err);
