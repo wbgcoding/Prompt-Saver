@@ -16373,7 +16373,12 @@ function bind() {
   const openEditorPop = document.createElement("div");
   openEditorPop.className = "ctx open-editor-pop hidden";
   openEditorPop.setAttribute("role", "menu");
-  openEditorPop.innerHTML = '<button type="button" role="menuitem"></button>';
+  openEditorPop.innerHTML =
+    '<button type="button" role="menuitem" id="open-editor-pop-item"></button>' +
+    // A second, camera-only entry on the SAME popover the record button
+    // already opens on right-click -- shown only when cameraRecord is on, so
+    // the default-off feature stays invisible until someone actually enables it.
+    '<button type="button" role="menuitem" id="camera-menu-item" class="hidden"></button>';
   document.body.appendChild(openEditorPop);
   function closeOpenEditorPop() {
     openEditorPop.classList.add("hidden");
@@ -16382,15 +16387,22 @@ function bind() {
   // library's own right-click, below); left empty it means "let the user
   // pick a file", which is what the composer buttons always do.
   let openEditorPopPath = "";
-  function openOpenEditorPopAt(anchorEl, path) {
+  function openOpenEditorPopAt(anchorEl, path, showCamera) {
     openEditorPopPath = path || "";
-    openEditorPop.querySelector("button").textContent = t("openFileInEditor");
+    openEditorPop.querySelector("#open-editor-pop-item").textContent = t("openFileInEditor");
+    const camItem = openEditorPop.querySelector("#camera-menu-item");
+    camItem.classList.toggle("hidden", !showCamera);
+    if (showCamera) camItem.textContent = t("cameraMenuItem");
     placePopover(openEditorPop, anchorEl.getBoundingClientRect());
   }
-  openEditorPop.querySelector("button").addEventListener("click", () => {
+  openEditorPop.querySelector("#open-editor-pop-item").addEventListener("click", () => {
     const path = openEditorPopPath;
     closeOpenEditorPop();
     openExternalFileInEditor(path || undefined);
+  });
+  openEditorPop.querySelector("#camera-menu-item").addEventListener("click", () => {
+    closeOpenEditorPop();
+    invoke("open_camera_window").catch((e) => errToast(e));
   });
   $("snip-btn").addEventListener("contextmenu", (e) => {
     e.preventDefault();
@@ -16398,7 +16410,7 @@ function bind() {
   });
   $("record-btn").addEventListener("contextmenu", (e) => {
     e.preventDefault();
-    openOpenEditorPopAt($("record-btn"));
+    openOpenEditorPopAt($("record-btn"), undefined, optFlag("cameraRecord"));
   });
   // Shared by the composer menu above and the library's own "Open in editor"
   // right-click on an image/video attachment -- existingPath lets the caller

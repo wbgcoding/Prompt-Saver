@@ -3579,6 +3579,7 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tokio",
  "ureq",
+ "webview2-com",
  "windows 0.58.0",
  "windows-capture",
  "winreg 0.52.0",

@@ -23,6 +23,7 @@
 // blocking-call audit rather than by a lint sweep.
 
 pub mod brand;
+mod camera;
 mod cli;
 mod remote;
 
@@ -29108,6 +29109,7 @@ pub fn run() {
             app.manage(SyncWriteQueue(Mutex::new(SyncWriteState::default())));
             app.manage(VoiceState(Mutex::new(None), std::sync::atomic::AtomicBool::new(false))); // live dictation session
             app.manage(RecordingState(Mutex::new(None))); // live screen-recording session
+            app.manage(camera::CameraState(Mutex::new(None))); // live camera-recording session
             app.manage(remote::RemoteApiState::new());
             app.manage(remote::PendingLaunchUrl(Default::default()));
             // Same "never starts without a password" rule start() enforces on
@@ -29777,6 +29779,12 @@ pub fn run() {
             probe_recording,
             probe_extra_video_source,
             read_key_sidecar,
+            camera::open_camera_window,
+            camera::camera_begin_recording,
+            camera::camera_append_chunk,
+            camera::camera_finish_recording,
+            camera::camera_discard_recording,
+            camera::read_camera_sidecar,
             windows_fonts_dir,
             mux_mic_track,
             generate_filmstrip,

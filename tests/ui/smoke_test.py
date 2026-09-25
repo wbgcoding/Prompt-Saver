@@ -9897,6 +9897,58 @@ RECBAR_PROBE = """
 """
 
 
+# Stubs getUserMedia to reject deterministically -- this host's own headless
+# Chrome actually resolves a stream (a virtual device the CI image ships),
+# so the "no camera" acceptance check has to force the rejection itself
+# rather than lean on real hardware absence, which a stub is the documented
+# way to do. This inline script runs synchronously during parsing, BEFORE
+# camera.js's own module script (deferred by the HTML spec like every
+# type="module" tag), so the override is in place before camera.js ever
+# calls getUserMedia.
+CAMERA_STUB = """
+<script>
+if (!navigator.mediaDevices) { navigator.mediaDevices = {}; }
+navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException('no camera', 'NotFoundError'));
+navigator.mediaDevices.enumerateDevices = () => Promise.resolve([]);
+</script>
+"""
+
+# The window opening at all and the message replacing the preview instead of
+# a crash is the whole test -- CAMERA_STUB above forces the one path a real
+# device-less machine would also take.
+CAMERA_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const until = async (fn, tries) => {
+    for (let i = 0; i < (tries || 60) && !fn(); i++) await sleep(50);
+    return fn();
+  };
+  try {
+    const noDeviceEl = document.getElementById('cam-no-device');
+    const startBtn = document.getElementById('cam-start-btn');
+    const ok = await until(() => !noDeviceEl.classList.contains('hidden'));
+    if (!ok) errs.push('no-camera message never appeared for a device-less getUserMedia rejection');
+    else if (!noDeviceEl.textContent.trim()) errs.push('no-camera message element is empty');
+    if (!startBtn.disabled) errs.push('start button stayed enabled with no camera available');
+    // The window itself must still be a normal, usable window around the
+    // message -- the titlebar, close button and the three control rows.
+    if (!document.getElementById('cam-close')) errs.push('close button is missing');
+    if (!document.getElementById('cam-audio-select')) errs.push('audio source control is missing');
+    if (!document.getElementById('cam-res-select')) errs.push('resolution control is missing');
+    if (!document.getElementById('cam-folder-path')) errs.push('target folder control is missing');
+    errs.push(...(window.__SMOKE_ERRORS__ || []));
+  } catch (e) { errs.push('probe: ' + e.message); }
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
 # The video editor: the recording is PULLED at boot (video_editor_source), not
 # pushed, so the probe only has to wait -- tauri_stub.js's own fixture is a
 # 10-minute 1080p30 clip with both a system and a mic track, real enough that a
@@ -13336,7 +13388,8 @@ def main():
                 ("vars.html", (340, 250), VARS_PROBE, 15000),
                 ("launcher.html", (560, 420), LAUNCHER_PROBE, 15000),
                 ("tray.html", (240, 360), TRAY_PROBE, 15000),
-                ("recbar.html", (320, 56), RECBAR_PROBE, 15000)):
+                ("recbar.html", (320, 56), RECBAR_PROBE, 15000),
+                ("camera.html", (420, 620), CAMERA_STUB + CAMERA_PROBE, 15000)):
             side = tmp / "ui" / name
             side.write_text(
                 side.read_text(encoding="utf-8")
