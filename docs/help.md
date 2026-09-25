@@ -198,6 +198,14 @@ then encodes every checked recording and reports how many finished and how
 many failed. How many export at the same time is adjustable in the expert
 menu.
 
+An optional keys overlay (off by default, in the expert menu) records which
+keys are pressed anywhere on the screen while a recording runs, so a tutorial
+can show them afterward with the video editor's own "Keys" overlay. Only key
+identifiers and their timestamps are ever recorded, never any text — a
+focused password field is skipped for as long as it stays focused and shows
+as a gap instead. How long a released key stays visible is adjustable in the
+expert menu.
+
 ### Video editor
 
 On by default, reachable from a recording's own result dialog (the Edit
@@ -208,7 +216,9 @@ when nothing else changes), crop, change speed, fade in/out, resize (typed
 width/height or a percentage, an aspect-ratio lock, and quick presets from
 4K down to 25% — a preset never enlarges past the source, but the percent
 field and free typing can, for upscaling on purpose), and overlay images,
-freeze-frames, text, pixelation or a spotlight anywhere on the timeline. A
+freeze-frames, text, pixelation, a spotlight or a keys overlay (four
+keyboard-layout presets plus a free selection of keys, filled from a
+recording's own key data if it captured any) anywhere on the timeline. A
 filmstrip and waveform give you a zoomable overview to navigate by. The preview itself also zooms (scroll wheel, up to 8×) and pans by
 dragging — the middle mouse button always, the left button once zoomed in —
 for placing a small overlay precisely on a large recording. Exporting
@@ -1029,7 +1039,14 @@ automatisch und behält, was bis dahin aufgenommen wurde. Der
 Aufräumen-Dialog im Aufnahmeordner (Experten-Menü) kann mehrere fertige
 Aufnahmen auch in einem Rutsch exportieren: Häkchen setzen, dann Format,
 Qualität und Zielordner für alle zusammen wählen. Wie viele davon
-gleichzeitig laufen, ist im Experten-Menü einstellbar.
+gleichzeitig laufen, ist im Experten-Menü einstellbar. Eine Tastenanzeige
+(Standard aus, im Expertenmenü) zeichnet während einer Aufnahme systemweit
+mit, welche Tasten gedrückt werden, damit eine Anleitung sie hinterher über
+die „Tasten"-Überlagerung des Video-Editors zeigen kann. Aufgezeichnet werden
+nur Tastenkennungen mit Zeitstempeln, nie ein Textinhalt — ein fokussiertes
+Passwortfeld wird für diese Zeit ausgelassen und erscheint als Lücke. Wie
+lange eine losgelassene Taste sichtbar bleibt, ist im Expertenmenü
+einstellbar.
 
 **Screenshot- und Video-Editor** — arbeiten bei den gemeinsamen Werkzeugen
 gleich: Strg+Plus, Strg+Minus und Strg+0 zoomen in beiden hinein, heraus und
