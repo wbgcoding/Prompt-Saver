@@ -42005,7 +42005,7 @@ mod tests {
 
     #[test]
     fn markdown_sync_survives_a_hand_edit_that_removes_every_entry() {
-        // The sync folder is the user's to hand-edit — deleting
+        // The sync folder is the user's to hand-edit: deleting
         // every "<!-- next -->" marker must degrade to a plain prompt, never crash,
         // and never leave rotate_mode stranded on an empty list.
         let mut p = sample_prompts().remove(0);
@@ -42481,7 +42481,7 @@ mod tests {
         assert!(sanitize_notes(&"x".repeat(MAX_NOTES_LEN + 1)).is_err());
     }
 
-    // The whole point of private notes: a note must never reach the clipboard —
+    // The whole point of private notes: a note must never reach the clipboard;
     // not through a single copy, and not through a chained multi-prompt copy.
     #[test]
     fn notes_never_reach_the_copied_payload() {
@@ -42748,7 +42748,7 @@ mod tests {
             HashMap::from([("a".to_string(), [0, 0])]),
         );
         assert_eq!(first_free_cell(&view), Some([1, 0]));
-        // A folder sits on [1,0] (outside view.layouts) — the scan must skip it, or a
+        // A folder sits on [1,0] (outside view.layouts): the scan must skip it, or a
         // dissolved member handed that cell would save fine but never render.
         assert_eq!(first_free_cell_excluding(&view, &[[1, 0]]), Some([2, 0]));
         assert_eq!(first_free_cell_excluding(&view, &[[1, 0], [2, 0]]), None);
@@ -43494,7 +43494,7 @@ mod tests {
     #[test]
     fn an_imported_view_cannot_exceed_the_grid_ceiling() {
         // A hand-edited backup used to be able to ask for a grid of u32::MAX cells,
-        // which the renderer then tried to build — the window never painted again.
+        // which the renderer then tried to build: the window never painted again.
         let mut s = Settings {
             views: vec![test_view("v1"), test_view("v2")],
             ..Default::default()
@@ -44000,7 +44000,7 @@ mod tests {
 
     #[test]
     fn a_small_drag_never_merges() {
-        // The pill moved four pixels and touches nothing else — the case that must
+        // The pill moved four pixels and touches nothing else: the case that must
         // never turn a nudge into a folder.
         let others = vec![
             ("a".to_string(), pill_at(600.0, 100.0)),
@@ -44119,7 +44119,7 @@ mod tests {
         assert_eq!(pills, ids(&["c"]));
         assert_eq!(folders, ids(&["f1"]));
 
-        // Off: every member is a plain pill again, no folder — switching the feature
+        // Off: every member is a plain pill again, no folder; switching the feature
         // off must put every pill back.
         settings.ui_flags.insert("pillFolders".into(), false);
         let (pills, folders) = float_window_plan(&settings, &known);
@@ -44178,7 +44178,7 @@ mod tests {
         assert_eq!(l.win.x + l.icon.0, icon.x);
         assert_eq!(l.win.y + l.icon.1, icon.y);
         // The popover hangs under it with the gap in between, aligned with the icon's
-        // left edge — so the window origin IS the icon and nothing shifts sideways
+        // left edge: so the window origin IS the icon and nothing shifts sideways
         // when it opens.
         assert_eq!(l.win.y + l.pop.1, icon.bottom() + 6.0);
         assert_eq!(l.win.x + l.pop.0, icon.x);
@@ -44253,7 +44253,7 @@ mod tests {
         assert_eq!(l.side, FolderSide::Above);
         assert!(l.win.x >= work.x && l.win.right() <= work.right());
         assert!(l.win.y >= work.y && l.win.bottom() <= work.bottom());
-        // A folder in that screen's top-left corner opens below and stays on it —
+        // A folder in that screen's top-left corner opens below and stays on it:
         // the primary monitor to the left is never used as spare room.
         let icon = Rect { x: 1930.0, y: 20.0, w: ICON * 1.5, h: ICON * 1.5 };
         let l = folder_layout(icon, 600.0, 200.0, 9.0, work);
@@ -44273,7 +44273,7 @@ mod tests {
     fn dissolving_a_folder_never_stacks_its_pills() {
         let work = primary_work();
         let pill = |x: f64, y: f64| Rect { x, y, w: 200.0, h: 80.0 };
-        // Two members whose stored position is the SAME spot — exactly what merging
+        // Two members whose stored position is the SAME spot: exactly what merging
         // one pill onto another leaves behind.
         let out = spread_free_positions(&[pill(500.0, 400.0), pill(500.0, 400.0)], &[], work);
         assert_eq!(out[0], (500.0, 400.0), "the first one keeps its wish");
@@ -44384,7 +44384,7 @@ mod tests {
 
     // A stitched frozen desktop for a mixed-DPI pair: a 2560x1440 monitor scaled to
     // 150% sits LEFT of the 1920x1080 primary, so the virtual origin is negative.
-    // Physical pixels are what the capture holds — the scale factor never enters the
+    // Physical pixels are what the capture holds: the scale factor never enters the
     // mapping, which is exactly why the picker stays exact on either monitor.
     fn mixed_dpi_desktop() -> (Vec<MonitorCap>, i64, i64) {
         let (left_x, left_w, left_h) = (-2560i32, 2560u32, 1440u32);
@@ -44424,7 +44424,7 @@ mod tests {
         assert_eq!(sample_frozen(&caps, lx as i32, 0), Some([26, 43, 60]));
         assert_eq!(sample_frozen(&caps, rx as i32, 0), Some([255, 128, 0]));
         assert_eq!(sample_frozen(&caps, rx as i32 + 1919, 1079), Some([1, 2, 3]));
-        // The neighbouring pixel is a different colour — no off-by-one smearing.
+        // The neighbouring pixel is a different colour: no off-by-one smearing.
         assert_eq!(sample_frozen(&caps, rx as i32 - 1, 0), Some([0, 0, 0]));
         // Outside the desktop nothing is sampled at all (never a clamped neighbour).
         assert_eq!(sample_frozen(&caps, -1, 0), None);
@@ -44513,13 +44513,13 @@ mod tests {
     fn every_registered_job_fires_in_due_order() {
         let log: Arc<Mutex<Vec<&'static str>>> = Arc::new(Mutex::new(Vec::new()));
         let s = Scheduler::start();
-        // Deliberately registered out of order — the due time decides, not the
+        // Deliberately registered out of order: the due time decides, not the
         // order they arrived in. Each job owns its own thread, so nothing bounds
         // how far apart two due times must be to survive real OS scheduling
         // jitter under load; wide gaps keep this a scheduling-order test rather
         // than a thread-wakeup-latency test. The full suite runs many tests
         // concurrently, so the gaps are wide (600ms) rather than the original
-        // 150ms — a 150ms gap measurably flaked under that contention.
+        // 150ms: a 150ms gap measurably flaked under that contention.
         for (name, delay_ms) in [("third", 1800u64), ("first", 600), ("second", 1200)] {
             let log = log.clone();
             s.register_periodic(name, Duration::from_millis(delay_ms), NEVER_AGAIN, move || {
@@ -44630,7 +44630,7 @@ mod tests {
     }
 
     // Each registered job gets its own dedicated thread on purpose (a hung job
-    // must not block any other job's timer) — so four chores now cost exactly
+    // must not block any other job's timer): so four chores now cost exactly
     // four threads, same as four hand-rolled `loop { sleep(); work(); }` threads
     // would. This proves the Scheduler is not secretly sharing one thread again.
     //
@@ -44641,7 +44641,7 @@ mod tests {
     // than the four chores: cargo runs every test in this binary concurrently,
     // so another test's own thread can start or stop in the narrow window
     // between the two `live_threads()` reads even when the before/after
-    // baseline matches — that used to flake this test under load rather than
+    // baseline matches: that used to flake this test under load rather than
     // prove anything about the Scheduler.
     #[cfg(windows)]
     #[test]
