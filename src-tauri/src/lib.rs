@@ -30348,26 +30348,26 @@ pub fn run() {
 
 // ---- Prompt folders as Markdown (opt-in expert feature, default off) ----
 //
-// A text-only prompt (no attached file/image/icon — those stay DB-only, binary
+// A text-only prompt (no attached file/image/icon: those stay DB-only, binary
 // content does not belong in a git-friendly text file) round-trips through one
 // `<id>.md` per prompt in a chosen folder (default `<data dir>/<slug>-sync`). The id is
 // the filename, so renaming a prompt in the app never orphans its file. Hooked at
-// save_prompts() — the single choke point every prompt mutation already funnels
-// through — so no individual command (add/update/delete/batch/import) needs to know
+// save_prompts(): the single choke point every prompt mutation already funnels
+// through: so no individual command (add/update/delete/batch/import) needs to know
 // this feature exists.
 //
 // Deliberately simplified vs. a fuller original ambition:
-//   - polling (SYNC_POLL_SECS) instead of a filesystem-watcher crate — no new
+//   - polling (SYNC_POLL_SECS) instead of a filesystem-watcher crate: no new
 //     dependency, and a few seconds of latency is fine for a background sync;
-//   - no per-view position sync — a prompt imported from a new file lands in the
+//   - no per-view position sync: a prompt imported from a new file lands in the
 //     first free cell of the active view, exactly like a normal add;
-//   - no hotkey sync — keeps a background task from re-running hotkey conflict/
+//   - no hotkey sync: keeps a background task from re-running hotkey conflict/
 //     registration logic, which has its own careful invariants elsewhere;
 //   - conflict handling is "whichever side changed since the last successful sync
 //     wins this cycle, the other is retried next cycle" rather than an interactive
 //     merge dialog with per-conflict choices.
-// None of these lose data outright — worst case a change waits one more poll
-// interval — but this has NOT had the multi-instance crash-simulation stress test
+// None of these lose data outright: worst case a change waits one more poll
+// interval: but this has NOT had the multi-instance crash-simulation stress test
 // the original spec calls for as a "done" gate. Treat it as a beta feature.
 const SYNC_POLL_SECS: u64 = 5;
 
@@ -30459,7 +30459,7 @@ fn sync_adopt_legacy_dir(settings: &mut Settings, legacy: &Path) -> Option<Strin
 // carry the paths the user picked, so the button keeps its name, colour, tags, notes
 // and placement in step across machines while whoever set it up makes sure the paths
 // resolve there. Embedded binary data (a pasted screenshot lives base64-encoded in
-// `Prompt.image`) has no path to write and is never put in the file — it stays
+// `Prompt.image`) has no path to write and is never put in the file: it stays
 // DB-only and survives untouched, since apply_md_to_prompt only ever overwrites the
 // fields the header actually carries.
 // A prompt whose id is not a plain, filename-safe token stays out entirely: the id
@@ -30467,7 +30467,7 @@ fn sync_adopt_legacy_dir(settings: &mut Settings, legacy: &Path) -> Option<Strin
 // outside this app.
 // A confidential entry never leaves an unencrypted trace outside the app, and
 // the Markdown sync folder is a plain text file with no dialog moment to ask
-// "encrypted or left out" the way a one-shot export has — so it is always left
+// "encrypted or left out" the way a one-shot export has: so it is always left
 // out, never written encrypted. An entry that was already synced and is later
 // marked confidential drops out of `wanted` the same way a deleted prompt does,
 // so sync_sweep_orphans removes the stale plaintext file on the next sync.
@@ -30489,13 +30489,13 @@ fn sync_safe_id(id: &str) -> bool {
         && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
-// Header fields are one line each — flattening a stray newline is simpler and safer
+// Header fields are one line each: flattening a stray newline is simpler and safer
 // than a real multi-line frontmatter parser for what are normally short values.
 fn md_escape_line(s: &str) -> String {
     s.replace(['\n', '\r'], " ")
 }
 
-// What a prompt's synced .md file's placement header lines should say —
+// What a prompt's synced .md file's placement header lines should say:
 // derived from Settings (view.layouts / tile_folders / float_folders), never
 // stored on Prompt itself. An empty field means "not applicable".
 #[derive(Default)]
@@ -30508,14 +30508,14 @@ struct SyncPlacement {
     float_folder: String,
 }
 
-// A grid-folder member has no view.layouts entry of its own — save_tile_folder
-// drops it the moment it joins — so its view/grid/cell describe the
+// A grid-folder member has no view.layouts entry of its own: save_tile_folder
+// drops it the moment it joins: so its view/grid/cell describe the
 // FOLDER's own placement instead. Every member's file ends up saying the same
 // (redundant, but self-consistent and self-healing: sync_write_all_impl rewrites
 // EVERY member's file the moment the folder moves, since prompt_to_md's output
-// changes for each of them). Float-folder membership is a fully separate axis —
+// changes for each of them). Float-folder membership is a fully separate axis:
 // a prompt can be a floating pill grouped into a pill-folder independently of
-// whatever grid tile it also is — and only membership syncs there, never the
+// whatever grid tile it also is: and only membership syncs there, never the
 // folder's own desktop pixel position/scale, which is inherently per-machine
 // (a coordinate valid on one monitor layout can be off-screen on another).
 fn sync_placement_for(p: &Prompt, settings: &Settings) -> SyncPlacement {
@@ -30536,7 +30536,7 @@ fn sync_placement_for(p: &Prompt, settings: &Settings) -> SyncPlacement {
             float_folder,
         };
     }
-    // Only the CURRENT grid size's saved layout — a view can hold one placement
+    // Only the CURRENT grid size's saved layout: a view can hold one placement
     // per size it has ever been resized to, but only the one matching its live
     // cols/rows is "where the user sees it right now."
     for view in &settings.views {
@@ -30565,7 +30565,7 @@ fn sync_placement_for(p: &Prompt, settings: &Settings) -> SyncPlacement {
 fn prompt_to_md(p: &Prompt, placement: &SyncPlacement) -> String {
     let tags = p.tags.iter().map(|t| md_escape_line(t)).collect::<Vec<_>>().join(", ");
     // `variants` is informational only (a human glancing at the header sees the
-    // entry count at a glance) — NEVER read back by apply_md_to_prompt, which always
+    // entry count at a glance): NEVER read back by apply_md_to_prompt, which always
     // re-derives the real list from the body's own VARIANT_SEP markers. The four
     // REQUIRED fields (name/color/tags/notes, md_is_ours()) are unchanged; `variants`
     // and the six placement fields below (2) are additive, which md_is_ours()
@@ -30595,7 +30595,7 @@ fn prompt_to_md(p: &Prompt, placement: &SyncPlacement) -> String {
     out
 }
 
-// `None` means "not a file this feature wrote" (no opening `---` header) — the
+// `None` means "not a file this feature wrote" (no opening `---` header): the
 // caller leaves such files alone rather than guessing at a malformed one.
 fn parse_frontmatter(content: &str) -> Option<(HashMap<String, String>, String)> {
     let mut lines = content.split('\n');
@@ -30661,7 +30661,7 @@ fn apply_md_to_prompt(base: &Prompt, content: &str) -> Option<Prompt> {
         p.notes.clone_from(v);
     }
     // Media by reference. Absent field = an older or hand-written file that does not
-    // describe media at all — leave whatever the prompt already has. Present but
+    // describe media at all: leave whatever the prompt already has. Present but
     // empty = "this button carries no file", which really does clear it. `image`
     // (embedded binary) is deliberately not in this list; nothing here can express it.
     if let Some(v) = fields.get("file") {
@@ -30680,7 +30680,7 @@ fn apply_md_to_prompt(base: &Prompt, content: &str) -> Option<Prompt> {
     // The writer closes the body with a newline; keeping it out of the stored text is
     // what stops every round trip through the folder from adding another blank line.
     let body = body.strip_suffix('\n').unwrap_or(&body);
-    // Entries 2..n ride along inside the body, split back out here — the
+    // Entries 2..n ride along inside the body, split back out here: the
     // `variants:` header count above is never consulted, so a stale count left by a
     // hand-edit (added/removed an entry without touching the header) is harmless.
     // `rotate_mode` is deliberately NOT part of this sync (same partial-field
@@ -30689,7 +30689,7 @@ fn apply_md_to_prompt(base: &Prompt, content: &str) -> Option<Prompt> {
     p.text = text;
     p.variants = sanitize_variants(variants);
     // A hand-edit that removed every `<!-- next -->` marker must not leave a
-    // "random" mode stranded on an empty list — the same invariant
+    // "random" mode stranded on an empty list: the same invariant
     // sanitize_rotate_mode already enforces for every other entry point.
     p.rotate_mode = sanitize_rotate_mode(p.rotate_mode.clone(), &p.variants);
     p.rotate_auto = sanitize_rotate_auto(p.rotate_auto, &p.variants);
@@ -30697,20 +30697,20 @@ fn apply_md_to_prompt(base: &Prompt, content: &str) -> Option<Prompt> {
 }
 
 // The incoming half of the six placement fields. Unlike
-// apply_md_to_prompt (Prompt fields), these land on Settings — a view/folder is
+// apply_md_to_prompt (Prompt fields), these land on Settings: a view/folder is
 // found by NAME (an id is meaningless across machines) and created here if this
 // machine has never seen it. Every part below is independently best-effort, same
-// "never lose data outright" philosophy as content sync — nothing here aborts the
+// "never lose data outright" philosophy as content sync: nothing here aborts the
 // whole file over one malformed field. Returns (grid_placed, folders_touched):
 // grid_placed tells the caller whether to skip today's "active view, first free
-// cell" fallback (only when the grid fields were absent or unusable — an older
+// cell" fallback (only when the grid fields were absent or unusable: an older
 // version's file, a hand-created one, or a folder name this machine rejected);
 // folders_touched tells it whether a tile/float folder was created, joined or
-// LEFT, which needs a normalize pass — the two are independent, since a
+// LEFT, which needs a normalize pass: the two are independent, since a
 // float_folder join/leave carries no grid fields at all.
 //
 // A field that is PRESENT but empty ("tile_folder: ") is a deliberate "not in a
-// folder any more" from the writer — prompt_to_md always writes all six fields,
+// folder any more" from the writer: prompt_to_md always writes all six fields,
 // so an empty one is never ambiguous with "this file predates the feature." That
 // case must actively leave whatever folder this machine still has the prompt in,
 // or a folder left on one machine reappears there forever: this machine's own
@@ -30797,11 +30797,11 @@ fn folder_members_in_view(settings: &Settings, view_id: &str) -> std::collection
 // The exact incoming cell wins when nothing ELSE sits there yet on THIS machine;
 // otherwise the first free cell stands in, the same fallback a brand-new tile
 // gets today. `prompt_id`'s OWN existing entry at that cell never counts as a
-// collision — without this, re-importing a placement that already matches
+// collision: without this, re-importing a placement that already matches
 // (e.g. only the prompt's text changed on the other machine) would read as
 // "occupied by ourselves" and bounce the tile to a different free cell on every
 // unrelated content edit. Bounds-checks against the view's OWN size, which may
-// differ from the machine that sent the file — a view only takes its incoming
+// differ from the machine that sent the file: a view only takes its incoming
 // grid size once, at creation (sync_find_or_create_view), never a forced resize
 // afterward.
 fn sync_resolve_cell(settings: &Settings, view_id: &str, prompt_id: &str, wanted: [u32; 2]) -> Option<[u32; 2]> {
@@ -30819,7 +30819,7 @@ fn sync_resolve_cell(settings: &Settings, view_id: &str, prompt_id: &str, wanted
     if fits { Some(wanted) } else { first_free_cell_excluding(view, &folder_cells) }
 }
 
-// Mirrors the frontend's placeTile() — with multiViewPrompt off (default), a prompt lives in exactly
+// Mirrors the frontend's placeTile(): with multiViewPrompt off (default), a prompt lives in exactly
 // ONE view. Without stripping the others here, a machine re-importing a placement
 // that already matches (only the prompt's content changed elsewhere) left the
 // prompt duplicated across every view it was ever placed in on ANY machine. With
@@ -30846,7 +30846,7 @@ fn sync_place_in_view(settings: &mut Settings, prompt_id: &str, view_id: &str, w
 }
 
 // Finds a view by NAME or creates one at the incoming grid size (clamped like
-// every other view creation). Ids never travel between machines — the name is the
+// every other view creation). Ids never travel between machines: the name is the
 // only thing an incoming file and a local view can agree on.
 fn sync_find_or_create_view(settings: &mut Settings, name: &str, cols: u32, rows: u32) -> String {
     if let Some(v) = settings.views.iter().find(|v| v.name == name) {
@@ -30868,7 +30868,7 @@ fn sync_find_or_create_view(settings: &mut Settings, name: &str, cols: u32, rows
     id
 }
 
-// Removes a prompt from every grid folder it happens to be in — the "leave" half
+// Removes a prompt from every grid folder it happens to be in: the "leave" half
 // of an explicit-empty tile_folder field, and the shared first step both a leave
 // and a re-join take (moving folders is a leave-then-join). Returns whether it
 // actually removed anything, so a no-op leave (never was a member) doesn't count
@@ -30897,7 +30897,7 @@ fn sync_leave_float_folder(settings: &mut Settings, prompt_id: &str) -> bool {
     removed
 }
 
-// Finds a grid folder by NAME or creates one — every member's file redundantly
+// Finds a grid folder by NAME or creates one: every member's file redundantly
 // carries the same name/color/place, so any one of them can recreate it. Mirrors
 // save_tile_folder: pulled out of every OTHER folder first, and a folder member is
 // not a tile of its own, so its own layout entry is dropped the moment it joins.
@@ -30907,7 +30907,7 @@ fn sync_join_tile_folder(settings: &mut Settings, prompt_id: &str, name: &str, c
         return false;
     }
     let color = valid_tag_color(color).unwrap_or_default();
-    // Match on (name, view_id) — a bare name match merges same-named folders
+    // Match on (name, view_id): a bare name match merges same-named folders
     // from DIFFERENT views into whichever one the scan happens to find first.
     let exists = settings.tile_folders.iter().any(|f| f.name == name && f.view_id == view_id);
     let cell = if exists { cell } else { sync_resolve_cell(settings, view_id, prompt_id, cell).unwrap_or(cell) };
@@ -30933,7 +30933,7 @@ fn sync_join_tile_folder(settings: &mut Settings, prompt_id: &str, name: &str, c
 }
 
 // Same for pill folders, but only ever joins a prompt that is ALREADY a floating
-// pill on this machine (has a `floating` entry) — a folder can group pills, but
+// pill on this machine (has a `floating` entry): a folder can group pills, but
 // conjuring a brand-new OS pill window out of a background sync poll is exactly
 // the kind of machine-specific side effect the sync deliberately keeps out of scope
 // (position/monitor layout differ per machine, and so does whether the feature is
@@ -30961,23 +30961,23 @@ fn sync_join_float_folder(settings: &mut Settings, prompt_id: &str, name: &str) 
 }
 
 // The general normalize_tile_folders/normalize_float_folders dissolve any folder
-// under 2 members — correct after a UI-driven removal (the user just took the
+// under 2 members: correct after a UI-driven removal (the user just took the
 // last-but-one member out), but wrong straight after an INCOMING sync batch: a
 // folder's members can legitimately arrive across SEPARATE poll cycles (a cloud
 // provider propagates several file writes with no ordering or batching guarantee
 // between machines). Dissolving a still-forming folder the moment it has only 1
-// member means it can never reach 2 at all — the next member's file finds no
+// member means it can never reach 2 at all: the next member's file finds no
 // folder to join, creates its own 1-member one, that gets dissolved too, forever.
 // These run every other invariant the general versions do (drop unknown/duplicate
 // members, drop a folder whose view no longer exists, resolve cell collisions,
-// cap the count) but only dissolve at 0 members, not 1 — a folder that genuinely
+// cap the count) but only dissolve at 0 members, not 1: a folder that genuinely
 // never grows past 1 still gets cleaned up the next time a NON-sync path (any
 // UI-driven folder command) touches it, since those keep calling the general,
 // stricter version.
 fn sync_normalize_tile_folders(folders: &mut Vec<TileFolder>, prompt_ids: &[String], view_ids: &[String]) {
     let mut taken: Vec<String> = Vec::new();
     for folder in folders.iter_mut() {
-        // See normalize_tile_folders — an incoming sync file's `cell:` header is
+        // See normalize_tile_folders: an incoming sync file's `cell:` header is
         // exactly as untrusted as a hand-edited backup.
         folder.cell[0] = folder.cell[0].min(GRID_MAX);
         folder.cell[1] = folder.cell[1].min(GRID_MAX);
@@ -31257,13 +31257,13 @@ fn sync_lock_is_stale(lock_path: &Path) -> bool {
     }
     match pid_from_lock(lock_path) {
         Some(pid) => !pid_is_alive(pid),
-        None => true, // unreadable/garbage lock content — treat as abandoned
+        None => true, // unreadable/garbage lock content: treat as abandoned
     }
 }
 
-// Atomic create (never "check then create" — that would race between two
+// Atomic create (never "check then create": that would race between two
 // instances). A held, non-stale lock means "leave this file for the next poll
-// cycle", never a blocking wait — this runs in a background task with no UI to
+// cycle", never a blocking wait: this runs in a background task with no UI to
 // block, so retrying later is the safe choice over hanging the poll loop.
 fn sync_lock_acquire(md_path: &Path) -> bool {
     let lock_path = sync_lock_path(md_path);
@@ -31438,7 +31438,7 @@ fn spawn_sync_write_all(app: &AppHandle, store: &Store) {
 }
 
 // A prompt that left the library (deleted, trashed, or given an id this feature
-// refuses) takes its file with it — otherwise a stale file would come back as a "new"
+// refuses) takes its file with it: otherwise a stale file would come back as a "new"
 // prompt on the next inbound poll. ONLY files this feature could have written are
 // swept: the sync folder is a directory the USER picks, so it can hold their own
 // documents. A document without our `---` frontmatter is never imported by
@@ -31559,7 +31559,7 @@ fn sync_poll_once(app: &AppHandle) {
         }
         let Some(stem) = path.file_stem().and_then(|s| s.to_str()).map(str::to_string) else { continue };
         // The stem becomes a prompt id, and every id is written back out as a file
-        // name — so it has to pass the same gate an outgoing id does.
+        // name: so it has to pass the same gate an outgoing id does.
         if !sync_safe_id(&stem) {
             continue;
         }
@@ -31609,7 +31609,7 @@ fn sync_poll_once(app: &AppHandle) {
         if let Some(idx) = snapshot.iter().position(|p| p.id == stem) {
             let placement = sync_placement_for(&snapshot[idx], &settings_snapshot);
             if prompt_to_md(&snapshot[idx], &placement) == content {
-                continue; // matches what we would write ourselves — not a real change
+                continue; // matches what we would write ourselves: not a real change
             }
             candidates.push((stem, content, false));
         } else {
@@ -31634,7 +31634,7 @@ fn sync_poll_once(app: &AppHandle) {
     let mut settings_changed = false;
     let mut placements_touched = false;
     for (stem, content, is_new) in candidates {
-        // Fields lives alongside content/name/etc — parse_frontmatter is cheap
+        // Fields lives alongside content/name/etc: parse_frontmatter is cheap
         // (string splitting) and apply_md_to_prompt already re-parses it itself, so
         // a second pass here isn't worth threading through that function's own
         // signature just to share one HashMap.
@@ -31704,7 +31704,7 @@ fn sync_poll_once(app: &AppHandle) {
                     settings_changed = true;
                 }
             }
-        } // else: deleted while we were reading files — nothing left to update
+        } // else: deleted while we were reading files; nothing left to update
     }
     if placements_touched {
         let prompt_ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
@@ -31713,7 +31713,7 @@ fn sync_poll_once(app: &AppHandle) {
         sync_normalize_float_folders(&mut store.settings.float_folders, &prompt_ids);
     }
     // Prompts and Settings are separate tables/files (save_prompts never touches
-    // settings) — a placement-only change with no content change would otherwise be
+    // settings): a placement-only change with no content change would otherwise be
     // applied in memory, echoed straight back out to the sync folder by
     // save_prompts' own spawn_sync_write_all, and then silently lost on the next
     // restart while the file on disk kept claiming the new placement forever.
