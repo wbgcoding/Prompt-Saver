@@ -8,7 +8,7 @@ import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT,
 import { EXAMPLE_IMAGE_DATA_URL } from "./exampleAssets.js";
 import { HELP_CONTENT } from "./help.js";
 import { HELP_SKETCHES } from "./helpSketches.js";
-import { DRAG_OUT_MODS, FOLDER_SVG, fileUri, resolveLang, ffmpegDownloadPct, themeColorScheme, playCopySound, numberField, makeEtaEstimator, formatEta, parseFfmpegError, fmtBytes, makeHoldOrTapToggle } from "./floatShared.js";
+import { DRAG_OUT_MODS, FOLDER_SVG, fileUri, resolveLang, ffmpegDownloadPct, themeColorScheme, playCopySound, numberField, makeEtaEstimator, formatEta, a11yProgressText, parseFfmpegError, fmtBytes, makeHoldOrTapToggle } from "./floatShared.js";
 import { placePopover, placePopoverAt, setPopoverPad } from "./popover.js";
 import { createColorPop } from "./colorpop.js";
 import { snapMove } from "./snap.js";
@@ -20504,12 +20504,18 @@ function bind() {
     const label = btn.textContent;
     const origTitle = btn.title;
     btn.title = t("ffmpegCancelHint");
+    btn.setAttribute("role", "progressbar");
+    btn.setAttribute("aria-valuemin", "0");
+    btn.setAttribute("aria-valuemax", "100");
     const dlEta = makeEtaEstimator();
     const unlisten = await listen("ffmpeg-download-progress", (e) => {
       const pct = ffmpegDownloadPct(e.payload);
       dlEta.feed(pct);
-      const eta = flag("etaShow") ? formatEta(dlEta.estimate(val("etaMinPct"), val("etaMinSecs")), t) : "";
+      const estimate = dlEta.estimate(val("etaMinPct"), val("etaMinSecs"));
+      const eta = flag("etaShow") ? formatEta(estimate, t) : "";
       btn.textContent = t("ffmpegDownloading").replace("{pct}", String(pct)) + (eta ? ` (${eta})` : "");
+      btn.setAttribute("aria-valuenow", String(pct));
+      btn.setAttribute("aria-valuetext", a11yProgressText(t, pct, estimate));
     });
     try {
       await invoke("download_ffmpeg");
@@ -20523,6 +20529,11 @@ function bind() {
       ffmpegBusy = false;
       btn.textContent = label;
       btn.title = origTitle || "";
+      btn.removeAttribute("role");
+      btn.removeAttribute("aria-valuemin");
+      btn.removeAttribute("aria-valuemax");
+      btn.removeAttribute("aria-valuenow");
+      btn.removeAttribute("aria-valuetext");
     }
   };
 

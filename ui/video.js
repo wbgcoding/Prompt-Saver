@@ -6,7 +6,7 @@
 // an ordered operation list (VE.ops), exactly like the screenshot editor's own
 // list, and the export compiles that list into ONE ffmpeg filter graph. That is
 // what makes undo/redo cheap, the preview honest and the export a single pass.
-import { resolveLang, ffmpegDownloadPct, numberField, makeEtaEstimator, formatEta, parseFfmpegError, fmtBytes, makeHoldOrTapToggle } from "./floatShared.js";
+import { resolveLang, ffmpegDownloadPct, numberField, makeEtaEstimator, formatEta, a11yProgressText, parseFfmpegError, fmtBytes, makeHoldOrTapToggle } from "./floatShared.js";
 import { withShortcut as withShortcutRaw, rowsForScope as rowsForScopeRaw } from "./shortcuts.js";
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
@@ -3178,8 +3178,10 @@ function setProgress(pct) {
   $("ve-export-progress").value = clamped;
   $("ve-export-pct").textContent = `${Math.round(clamped)}%`;
   exportEta.feed(clamped);
+  const estimate = exportEta.estimate(VE.etaMinPct, VE.etaMinSecs);
   const etaSpan = $("ve-export-eta");
-  etaSpan.textContent = VE.etaShow ? formatEta(exportEta.estimate(VE.etaMinPct, VE.etaMinSecs), t) : "";
+  etaSpan.textContent = VE.etaShow ? formatEta(estimate, t) : "";
+  $("ve-export-progress").setAttribute("aria-valuetext", a11yProgressText(t, clamped, estimate));
 }
 
 // toClipboard runs the very same export into a throwaway temp file
@@ -3311,12 +3313,18 @@ function noteFfmpeg(err) {
 $("ve-ffmpeg-get").addEventListener("click", async (e) => {
   const btn = e.currentTarget;
   btn.disabled = true;
+  btn.setAttribute("role", "progressbar");
+  btn.setAttribute("aria-valuemin", "0");
+  btn.setAttribute("aria-valuemax", "100");
   const dlEta = makeEtaEstimator();
   const unlisten = await listen("ffmpeg-download-progress", (ev) => {
     const pct = ffmpegDownloadPct(ev.payload);
     dlEta.feed(pct);
-    const eta = VE.etaShow ? formatEta(dlEta.estimate(VE.etaMinPct, VE.etaMinSecs), t) : "";
+    const estimate = dlEta.estimate(VE.etaMinPct, VE.etaMinSecs);
+    const eta = VE.etaShow ? formatEta(estimate, t) : "";
     btn.textContent = t("ffmpegDownloading").replace("{pct}", String(pct)) + (eta ? ` (${eta})` : "");
+    btn.setAttribute("aria-valuenow", String(pct));
+    btn.setAttribute("aria-valuetext", a11yProgressText(t, pct, estimate));
   });
   try {
     await invoke("download_ffmpeg");
@@ -3331,6 +3339,11 @@ $("ve-ffmpeg-get").addEventListener("click", async (e) => {
     toast(String(err));
   } finally {
     btn.disabled = false;
+    btn.removeAttribute("role");
+    btn.removeAttribute("aria-valuemin");
+    btn.removeAttribute("aria-valuemax");
+    btn.removeAttribute("aria-valuenow");
+    btn.removeAttribute("aria-valuetext");
     btn.textContent = t("ffmpegOfferConfirm");
     unlisten();
   }
