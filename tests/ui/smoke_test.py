@@ -631,6 +631,12 @@ PROBE = """
         const dupItem = menuItem('Duplicate');
         if (!dupItem) {
           out.errors.push('the view tab context menu has no Duplicate entry');
+          // English-only lookup above: under another language this never matches,
+          // so the menu has to be closed by hand (its own dismiss listens for a
+          // pointerdown outside it) or it leaks into later layout checks, sitting
+          // wherever it was opened.
+          document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+          await sleep(100);
         } else {
           dupItem.click();
           await sleep(300);
@@ -4181,6 +4187,36 @@ PROBE = """
     // Compare view detached from the duplicate finder: the library's own
     // selection reaches it too, for two entries the finder never flagged.
     await click('library-btn');
+    // The duplicate finder also has its own shortcut in the library's own
+    // header now, next to sort — reachable without the expert menu or the
+    // settings dialog, and correctly gated and layered like the other two.
+    const libDupesBtn = document.getElementById('library-dupes');
+    if (!libDupesBtn || libDupesBtn.offsetParent === null) {
+      out.errors.push('the library header has no visible duplicate finder shortcut');
+    } else {
+      libDupesBtn.click();
+      await sleep(300);
+      const libDupesModal = document.getElementById('dupes-modal');
+      if (libDupesModal.classList.contains('hidden')) {
+        out.errors.push('the library header shortcut did not open the duplicate finder');
+      }
+      await click('dupes-close');
+      await sleep(150);
+    }
+    document.body.classList.add('library-front');
+    libDupesBtn.click();
+    await sleep(300);
+    if (!(Number(getComputedStyle(document.getElementById('dupes-modal')).zIndex) > Number(getComputedStyle(document.getElementById('library')).zIndex))) {
+      out.errors.push('the duplicate finder opens behind the raised library');
+    }
+    await click('dupes-close');
+    document.body.classList.remove('library-front');
+    await sleep(150);
+    document.body.classList.add('noflag-dupFinder');
+    if (libDupesBtn.offsetParent !== null) {
+      out.errors.push('the library header duplicate finder shortcut ignores its dupFinder gate');
+    }
+    document.body.classList.remove('noflag-dupFinder');
     document.getElementById('library-select-btn').click();
     await sleep(150);
     document.querySelector('#library-list .lib-item[data-id="p0"]')?.click();

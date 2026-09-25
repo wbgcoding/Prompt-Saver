@@ -19253,6 +19253,7 @@ function bind() {
   $("delete-data").addEventListener("click", deleteData);
   $("settings-backup-btn").addEventListener("click", openBackups);
   $("settings-dupes-btn").addEventListener("click", openDupes);
+  $("library-dupes").addEventListener("click", openDupes);
   $("backup-close").addEventListener("click", closeBackups);
   $("backup-modal").addEventListener("pointerdown", (e) => {
     if (e.target === $("backup-modal")) closeBackups();

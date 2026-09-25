@@ -1386,6 +1386,9 @@ body.library-front #modal.overlay { z-index: 67; }
    at 66 and the edit dialog's similar-prompt hint at 67, so it sits above all
    three, and below vars, hotkeys and confirm, which can appear over it. */
 #compare-modal.overlay { z-index: 69; }
+/* Opened from the library's own header while the library is raised at 66,
+   the duplicate finder has to clear it too; compare at 69 stays above. */
+body.library-front #dupes-modal.overlay { z-index: 68; }
 /* Variable-fill dialog stacks above the library/journal it was opened from. */
 #vars-modal.overlay { z-index: 70; }
 /* The all-hotkeys list can now also be opened from inside the edit dialog's own
@@ -1646,7 +1649,7 @@ body.library-front #modal.overlay { z-index: 67; }
 .noflag-screenshot #snip-btn { display: none; }
 .noflag-colorPicker #picker-btn { display: none; }
 .noflag-screenRecord #record-btn { display: none; }
-.noflag-dupFinder #settings-dupes-btn { display: none; }
+.noflag-dupFinder #settings-dupes-btn, .noflag-dupFinder #library-dupes { display: none; }
 /* OCR ships on -- a default-on flag only ever sets noflag-<key>, never flag-<key>,
    so both entry points hide via noflag-ocr. */
 .noflag-ocr #ocr-btn,

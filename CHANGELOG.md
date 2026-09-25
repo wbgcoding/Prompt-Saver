@@ -1268,6 +1268,9 @@ the video editor and the introduction tour ship on).
   separate hardcoded values.
 - **The duplicate finder's compare view now shows one "keep this one" button
   under each entry** instead of a row of identical buttons below both columns.
+- **The duplicate finder also has a shortcut in the header of All prompts**,
+  next to sort, alongside its existing shortcuts in the settings dialog and
+  the expert menu.
 
 ## 2.6.3 (2026-07-26)
 

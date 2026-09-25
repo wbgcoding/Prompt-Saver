@@ -386,7 +386,7 @@ export const HELP_CONTENT = {
         "Keep one, or mark the pair as not a duplicate to stop it being flagged again.",
       ],
       whatHappens:
-        "Matching compares each tile's main text — its name, if it has no text — by similarity, not an exact match; the threshold controls how close counts as close enough. A rotating tile is only compared on its first entry. A shortcut in the settings dialog opens it directly too, next to import and export, so it does not take the expert menu to find.",
+        "Matching compares each tile's main text — its name, if it has no text — by similarity, not an exact match; the threshold controls how close counts as close enough. A rotating tile is only compared on its first entry. Shortcuts in the settings dialog, next to import and export, and in the header of All prompts open it directly too, so it does not take the expert menu to find.",
       settings: ["Duplicate finder, similarity threshold — Expert menu → System & data → Data & maintenance"],
     },
     {
@@ -995,7 +995,7 @@ export const HELP_CONTENT = {
         "Eine Kachel behalten, oder das Paar als kein Duplikat markieren, damit es nicht erneut markiert wird.",
       ],
       whatHappens:
-        "Der Abgleich vergleicht den Haupttext jeder Kachel — oder ihren Namen, falls sie keinen Text hat — nach Ähnlichkeit, nicht nach exakter Übereinstimmung; der Schwellenwert steuert, wie nah als nah genug gilt. Eine rotierende Kachel wird nur nach ihrem ersten Eintrag verglichen. Eine Abkürzung im Einstellungsdialog öffnet ihn auch direkt, neben Import und Export, sodass dafür nicht erst das Experten-Menü nötig ist.",
+        "Der Abgleich vergleicht den Haupttext jeder Kachel — oder ihren Namen, falls sie keinen Text hat — nach Ähnlichkeit, nicht nach exakter Übereinstimmung; der Schwellenwert steuert, wie nah als nah genug gilt. Eine rotierende Kachel wird nur nach ihrem ersten Eintrag verglichen. Abkürzungen im Einstellungsdialog, neben Import und Export, und in der Kopfleiste von „Alle Prompts“ öffnen ihn auch direkt, sodass dafür nicht erst das Experten-Menü nötig ist.",
       settings: ["Duplikat-Finder, Ähnlichkeitsschwelle — Experten-Menü → System & Daten → Daten & Wartung"],
     },
     {
