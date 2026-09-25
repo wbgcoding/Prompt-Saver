@@ -23106,7 +23106,7 @@ async fn cancel_recording(app: AppHandle, rstate: State<'_, RecordingState>) -> 
 
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-// The project's own GitHub repo — the only host any of this ever talks to.
+// The project's own GitHub repo: the only host any of this ever talks to.
 fn repo_url() -> String {
     format!("https://github.com/{}", brand::REPO)
 }
@@ -23131,7 +23131,7 @@ struct UpdateInfo {
 }
 
 // Latest release tag, installer asset URL and changelog body. None on any
-// failure (offline, private repo, rate limit) — checks never disturb the app.
+// failure (offline, private repo, rate limit): checks never disturb the app.
 fn fetch_latest() -> Option<(String, String, String)> {
     let body = ureq::get(&update_api())
         .set("User-Agent", brand::USER_AGENT)
@@ -23273,7 +23273,7 @@ async fn check_update(state: State<'_, Db>) -> Result<UpdateInfo, String> {
 
 // Toggle an expert feature flag (enabled = feature on).
 // Returns Err only where switching the feature ON has a hard precondition that
-// failed (today: the safety backup prompt-sync takes before it first writes) — the
+// failed (today: the safety backup prompt-sync takes before it first writes); the
 // flag is then left OFF, so the UI and the store never disagree.
 #[tauri::command]
 fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> Result<(), String> {
@@ -23309,7 +23309,7 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
     // The activation work below (a full backup, then one file per prompt) takes
     // as long as the library is large. It runs on a SNAPSHOT taken under a short
     // lock rather than with the lock held, the way spawn_sync_write_all already
-    // does — otherwise every copy, every save and every other window waits for
+    // does: otherwise every copy, every save and every other window waits for
     // the whole thing to finish.
     let snapshot = {
         let mut store = lock(&state);
@@ -23325,7 +23325,7 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
             store.settings.ui_flags.insert("promptSync".to_string(), false);
             save_settings(app, &store.settings);
         };
-        // Safety net before the very first sync run ever touches this library —
+        // Safety net before the very first sync run ever touches this library:
         // same shape a manual backup would take, so a bad first sync is always
         // recoverable. Without it there is nothing to fall back on, so a failure
         // here ABORTS the activation instead of syncing unprotected.
@@ -23353,7 +23353,7 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
     }
     // Capture exclusion applies live to every open window. Never hold the store
     // lock across window API calls (deadlock risk). The flag says "allow
-    // screenshots", so the exclusion is its OPPOSITE — passing it straight through
+    // screenshots", so the exclusion is its OPPOSITE: passing it straight through
     // is what made the switch work backwards.
     if is_capture {
         for (_label, win) in app.webview_windows() {
@@ -23379,7 +23379,7 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
     }
     // Switching folders off puts every member back on screen as its own pill (the
     // folders themselves are kept, so switching it on again restores them). This is a
-    // SYNC command, so it runs on the main thread — opening and closing windows there
+    // SYNC command, so it runs on the main thread: opening and closing windows there
     // is the documented way to deadlock WebView2, hence the hop onto the runtime.
     if is_folders {
         let handle = app.clone();
@@ -23461,7 +23461,7 @@ fn set_ui_text(app: AppHandle, state: State<Db>, key: String, value: String) {
         store.settings.ui_texts.insert(key, value);
         save_settings(&app, &store.settings);
         // Pointing the sync at a different folder used to change nothing until the
-        // next prompt save happened to flush it — the folder the user just picked
+        // next prompt save happened to flush it: the folder the user just picked
         // stayed empty and the feature looked broken. Same synchronous, one-off
         // treatment activation gets: when this returns, the files are there. Files
         // in the PREVIOUS folder are deliberately left alone; that folder is the
@@ -23487,7 +23487,7 @@ fn reset_expert(app: AppHandle, state: State<Db>) {
     }
     ERROR_LOG_KEEP_BYTES.store(256 * 1024, Ordering::Relaxed);
     // Cleared flags put the screenshot permission back to its default (off), which
-    // means the exclusion is on — re-assert it on every window so it is immediate.
+    // means the exclusion is on: re-assert it on every window so it is immediate.
     for (_label, win) in app.webview_windows() {
         set_capture_exclusion(&win, true);
     }
@@ -23495,7 +23495,7 @@ fn reset_expert(app: AppHandle, state: State<Db>) {
     notify_float_settings(&app);
 }
 
-// Add a version to the skip list — it will not be offered again.
+// Add a version to the skip list: it will not be offered again.
 #[tauri::command]
 fn skip_version(app: AppHandle, state: State<Db>, version: String) {
     let mut store = lock(&state);
@@ -23683,12 +23683,12 @@ fn update_url_is_newer_release(url: &str) -> bool {
 // app afterwards and quit so the installer can replace the binaries.
 #[tauri::command]
 async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
-    // Only our own release assets under the exact pinned repo path — not any github.com URL.
+    // Only our own release assets under the exact pinned repo path: not any github.com URL.
     if !valid_update_url(&url) {
         return Err("invalid update source".to_string());
     }
     // The URL shape check above only proves the download stays inside our own repo's
-    // release path — it says nothing about the version. Re-assert the release tag
+    // release path: it says nothing about the version. Re-assert the release tag
     // embedded in that same pinned path is actually newer than what's installed, so
     // an older release reachable at a valid, pinned-repo URL (a stale link, a rolled-back
     // asset) can never be installed as an "update".
@@ -23730,20 +23730,20 @@ fn install_update_blocking(url: String) -> Result<(), String> {
         .take(UPDATE_MAX_BYTES)
         .read_to_end(&mut bytes)
         .map_err(|e| format!("read: {}", e))?;
-    // A file that exactly hit the cap was almost certainly truncated — never run a
+    // A file that exactly hit the cap was almost certainly truncated: never run a
     // partial installer.
     if bytes.len() as u64 >= UPDATE_MAX_BYTES {
         return Err("installer too large / truncated".to_string());
     }
     // Sanity-check the download is actually a Windows executable (PE "MZ" header)
-    // before we ever run it — a corruption/wrong-format guard, not authentication
+    // before we ever run it: a corruption/wrong-format guard, not authentication
     // on its own. The real integrity check is the SHA-256 verification directly
     // below.
     if bytes.len() < 2 || &bytes[0..2] != b"MZ" {
         return Err("downloaded file is not a valid installer".to_string());
     }
     // Integrity: the SHA-256 published beside the installer in the release
-    // (`<installer>.sha256`, same pinned path) must be present AND match. Fail closed —
+    // (`<installer>.sha256`, same pinned path) must be present AND match. Fail closed:
     // an installer we cannot authenticate is never executed, so a hash file that is
     // missing, unreadable or malformed aborts the update just like a mismatch does.
     // Every release publishes the hash (see `release:publish` in package.json); if one
