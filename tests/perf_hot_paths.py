@@ -53,6 +53,9 @@ CHROME_CANDIDATES = [
 # either multiplier, an O(n^2) one blows straight through it.
 BASE_TARGETS_MS = {
     "librarySearch": 400,
+    # Same budget as librarySearch above -- the overlay's prompt group reuses
+    # that exact scoring pass, just capped to a handful of rows per group.
+    "globalSearch": 400,
     "libraryOpen": 800,
     "viewSwitch": 800,
     "expertMenuOpen": 800,
@@ -171,6 +174,23 @@ PROBE = """
 
   document.getElementById("library-close").click();
   await sleep(150);
+
+  // 2c) Search everything, opened over N prompts -- typing a query and having
+  // the overlay's own prompt group settle, same target budget as the library
+  // search above (it reuses the very same scoring pass, just over a smaller
+  // per-group cap).
+  document.getElementById("global-search-btn").click();
+  await sleep(50);
+  const gsInput = document.getElementById("gs-input");
+  const gsRowCount = () => document.querySelectorAll("#gs-results .gs-row").length;
+  t0 = performance.now();
+  nativeSetter.call(gsInput, "Sample body number 5");
+  gsInput.dispatchEvent(new Event("input", { bubbles: true }));
+  await waitFor(() => gsRowCount() > 0, 15000);
+  out.timings.globalSearch = performance.now() - t0;
+  out.counts.globalSearch = gsRowCount();
+  document.getElementById("gs-close").click();
+  await sleep(100);
 
   // 3) Grid re-render via a view switch (N-prompt store, up to 150-tile grid).
   t0 = performance.now();

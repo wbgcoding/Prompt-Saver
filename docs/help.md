@@ -467,6 +467,19 @@ the list, it is the same selection drawn differently. The toggle remembers
 its last choice per type filter, so switching to "only images" brings tiles
 back on its own next time.
 
+### Search everything
+
+The magnifier icon in the toolbar, or Ctrl+K, opens an overlay that searches
+prompts, copy history, attachments, views, settings and help all at once,
+each in its own group with up to five hits and a "show more". Arrow keys
+move the highlight across group boundaries; Enter runs the fitting action for
+whatever is highlighted — copies a prompt or history entry, opens an
+attachment, switches to a view, opens and highlights a setting, or opens the
+matching help topic. The field remembers the last five searches and shows
+them when it is empty. Escape, a click outside the card, or the icon again
+all close it. A flag in the expert menu turns it off, with a value setting
+for how many hits each group shows before "show more".
+
 ### Tags
 
 Free-form labels assigned to tiles; filter the library or the grid down to a set
@@ -627,6 +640,22 @@ write permission), changes stay active for the rest of the session but are
 lost on restart. The app says so the same way: once in a dialog, and as a
 permanent row in this privacy group for as long as the last save is still
 failing — it clears itself the moment a save reaches disk again.
+
+### Demo mode
+
+An expert-menu switch (System tab) swaps the whole window to a bundled sample
+library covering most features at once: prompts with and without an image, a
+rotating prompt, a couple of plain prompts to start a chain with, a
+placeholder, tags, a favorite, two views, a folder, an attachment and (when
+available) a video. Turning it on rebuilds the sample library fresh every
+time and restarts the app into it; the real library is never opened, written
+or even read while any of this happens. A permanent marker stays visible in
+the window for as long as demo mode is on, so nobody mistakes the sample data
+for their own. Turning it back off asks for confirmation, since anything
+changed during the session is discarded, then restarts back into the real
+library exactly as it was. The same sample library is also the source for
+this help window's own picture and for `docs/screenshot.png`: see the
+README's "Building from source" section for the exact steps.
 
 ### System
 
@@ -1203,6 +1232,18 @@ darunter, sonst nichts. Klick, Doppelklick, Rechtsklickmenü und
 Mehrfachauswahl verhalten sich genau wie in der Liste. Der Umschalter merkt
 sich seinen Stand je Filter.
 
+**Alles durchsuchen**: Lupensymbol in der Werkzeugleiste oder Strg+K öffnet
+eine Überlagerung, die Prompts, Kopierverlauf, Anhänge, Ansichten,
+Einstellungen und Hilfe zugleich durchsucht, jede Quelle in ihrer eigenen
+Gruppe mit bis zu fünf Treffern und „weitere anzeigen". Pfeiltasten bewegen
+die Markierung über Gruppengrenzen hinweg; Eingabetaste löst die passende
+Aktion aus — kopiert einen Prompt oder Verlaufseintrag, öffnet einen Anhang,
+wechselt die Ansicht, öffnet und markiert eine Einstellung, oder öffnet das
+passende Hilfethema. Das Feld merkt sich die letzten fünf Suchen und zeigt
+sie, wenn es leer ist. Escape, ein Klick daneben oder das Symbol schließen
+die Überlagerung wieder. Ein Schalter im Experten-Menü stellt sie ab, dazu
+ein Wert für die Trefferzahl je Gruppe vor „weitere anzeigen".
+
 **Tags** — freie Schlagwörter, UND/ODER-Filter.
 
 **Archiv** — Standardmäßig aus. Markiert eine Kachel als archiviert statt sie zu
@@ -1275,6 +1316,22 @@ für den Rest der Sitzung aktiv, gehen aber beim Neustart verloren. Die App
 sagt das genauso: einmal als Hinweis, und als dauerhafte Zeile in dieser
 Datenschutz-Gruppe, solange der letzte Speichervorgang fehlschlägt — sie
 verschwindet von selbst, sobald wieder erfolgreich gespeichert wird.
+
+**Vorführung**: Ein Schalter im Experten-Menü (Reiter System) schaltet das
+ganze Fenster auf einen mitgelieferten Beispielbestand um, der möglichst
+viele Funktionen auf einmal zeigt: Prompts mit und ohne Bild, ein
+rotierender, zwei einfache Prompts für den Anfang einer Kette, ein
+Platzhalter, Tags, ein Favorit, zwei Ansichten, ein Ordner, ein Anhang und
+(wenn vorhanden) ein Video. Das Einschalten baut den Beispielbestand jedes
+Mal frisch auf und startet die App darin neu; der echte Bestand wird dabei
+nie geöffnet, geschrieben oder auch nur gelesen. Eine dauerhafte Marke bleibt
+im Fenster sichtbar, solange die Vorführung läuft, damit niemand den
+Beispielbestand für den eigenen hält. Das Zurückschalten fragt zuerst nach,
+weil alles, was während der Vorführung geändert wurde, dabei verloren geht,
+und startet dann genau in den echten Bestand zurück. Derselbe
+Beispielbestand ist auch die Vorlage für das Bild in diesem Hilfefenster und
+für `docs/screenshot.png`: der genaue Ablauf steht im Abschnitt „Building
+from source" der README.
 
 **System** — Updates, Tastatur-Navigation, mehrere Instanzen, Datenordner.
 Lange Vorgänge (Export, Umwandlung, ffmpeg-Download, Sicherung, Import) füllen

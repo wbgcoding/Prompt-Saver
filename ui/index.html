@@ -42,6 +42,13 @@
           <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 2M21 12a9 9 0 1 1-2.6-6.3M21 4v4h-4"/>
         </svg>
       </button>
+      <!-- Search everything: prompts, copy history, attachments, views,
+           settings and help in one overlay. Also opened with Ctrl+K. -->
+      <button id="global-search-btn" class="icon-btn" data-i18n-title="globalSearchBtn" data-i18n-aria="globalSearchBtn">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14Zm10 17-5.6-5.6"/>
+        </svg>
+      </button>
       <!-- Clipboard inbox (shown only while the watcher is on and non-empty) -->
       <button id="clip-btn" class="icon-btn clip-inbox-btn hidden" data-i18n-title="clipInbox" data-i18n-aria="clipInbox">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
@@ -147,6 +154,11 @@
     <div id="data-dir-readonly-banner" class="data-dir-readonly-banner hidden">
       <span id="data-dir-readonly-text"></span>
     </div>
+    <!-- Visible for as long as demo mode is on -- gated purely by the demoMode
+         flag in CSS (.noflag-demoMode hides it), since that flag IS the mode:
+         a demo session's own settings ship with it true, the real profile's
+         never do. -->
+    <div id="demo-mode-banner" class="demo-mode-banner" data-i18n="demoModeBanner"></div>
     <!-- Shown for as long as the local remote-access receiver is actually running -->
     <div id="remote-api-banner" class="remote-api-banner hidden">
       <span id="remote-api-banner-text"></span>
@@ -943,6 +955,25 @@
       <!-- Tab bar stays fixed; only the topics below scroll. Both built by JS. -->
       <div id="help-tabs-bar"></div>
       <div id="help-body" class="help-body"></div>
+    </div>
+  </div>
+
+  <!-- Search everything: prompts, copy history, attachments, views, settings
+       and help in one overlay over the main window. Looks like the quick
+       launcher, but lives in this window's own DOM, not a second webview --
+       see gsRender() in main.js. -->
+  <div id="global-search" class="overlay gs-overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal gs-modal">
+      <div class="gs-head">
+        <input id="gs-input" class="modal-input" type="text" autocomplete="off" spellcheck="false" data-i18n-ph="globalSearchPh" data-i18n-aria="globalSearchPh" />
+        <button id="gs-close" class="icon-btn" data-i18n-aria="close">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
+          </svg>
+        </button>
+      </div>
+      <div id="gs-results" class="gs-results"></div>
+      <div id="gs-empty" class="gs-empty hidden"></div>
     </div>
   </div>
 

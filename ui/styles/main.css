@@ -2392,6 +2392,40 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .help-sec-badge { margin-left: auto; flex: 0 0 auto; font-size: 11px; color: var(--muted); }
 .help-hits { margin: 0; }
 .help-mark { background: var(--accent); color: var(--accent-fg); border-radius: 3px; padding: 0 2px; }
+
+/* ---- Search everything ----
+   Same card/row proportions as the standalone quick launcher (launcher.html /
+   styles/floating.css), rebuilt on this window's own surface/border/accent
+   tokens instead of the floating-window menu tokens -- it lives in the main
+   window's DOM, not a second webview. High z-index: reachable with Ctrl+K
+   regardless of whatever else is open behind it. */
+#global-search.overlay { z-index: 85; align-items: flex-start; padding-top: 12vh; }
+.gs-modal { width: min(480px, 92vw); max-height: 70vh; padding: 10px; gap: 6px; }
+.gs-head { display: flex; align-items: center; gap: 8px; }
+.gs-head .modal-input { flex: 1 1 auto; font-size: 16px; }
+.gs-results { display: flex; flex-direction: column; gap: 2px; min-height: 0; overflow-y: auto; }
+.gs-group-head { padding: 8px 9px 2px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
+.gs-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  border-left: 3px solid var(--row-color, transparent);
+  cursor: pointer;
+}
+.gs-row.active,
+.gs-row:hover { background: var(--surface-hover, var(--border)); }
+.gs-row-name { flex: 0 1 auto; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gs-row-sub { flex: 1 1 auto; min-width: 0; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gs-more-row { color: var(--muted); font-size: 12px; justify-content: center; }
+.gs-empty { padding: 14px 9px; font-size: 13px; color: var(--muted); text-align: center; }
+.noflag-globalSearch #global-search-btn { display: none; }
+/* The header has no spare width left at the app's own minimum size -- below
+   this, the icon drops and Ctrl+K stays the only way in, same trade-off the
+   clipboard-inbox and background-jobs icons already make when they are not
+   needed. */
+@media (max-width: 760px) { #global-search-btn { display: none; } }
 .help-overview { margin: 0; font-size: 13px; line-height: 1.5; color: var(--fg); }
 /* 22-A: numbered "how to" steps — same weight as the overview since these are the
    actual instructions, not secondary detail. */
@@ -4081,6 +4115,29 @@ body.drag-over::after {
   background: var(--surface-2);
   color: var(--danger);
   font-size: 12.5px;
+  flex: 0 0 auto;
+}
+/* The demo-mode marker -- an accent bar across the top, deliberately louder
+   and more permanent-looking than the other banners here, since its entire
+   job is to be impossible to miss while working in the sample library.
+   demoMode is an OPT_FLAG_LABELS entry (default off), so applyFlags() only
+   ever adds flag-demoMode when it is actually on -- hidden by default here,
+   shown by that class, the reverse of a default-on flag's noflag-<key>. */
+.demo-mode-banner {
+  display: none;
+}
+.flag-demoMode .demo-mode-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accent-fg, #fff);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   flex: 0 0 auto;
 }
 /* Stays visible for as long as the local remote-access receiver is running --

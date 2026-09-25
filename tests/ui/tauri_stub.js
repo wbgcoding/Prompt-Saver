@@ -229,6 +229,9 @@ const SETTINGS = {
     // copy-then-paste double-click gesture.
     secretPrompts: !!window.__SECRET_TEST__,
     ...(window.__SECRET_TEST__ ? { autoPaste: false } : {}),
+    // 459: models booting straight into an already-active demo session (what a
+    // real restart into the sample library looks like from the window's side).
+    demoMode: !!window.__DEMO_TEST__,
   },
   ui_values: {}, ui_texts: {}, dup_ignored: [],
   // 428: p1 also has a canned entry in last_edited_map below, so it is the one
