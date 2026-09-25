@@ -168,3 +168,7 @@ body.pick { cursor: none; }
   from { opacity: 0.5; }
   to { opacity: 1; }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
