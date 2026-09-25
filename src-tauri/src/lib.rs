@@ -36114,7 +36114,7 @@ mod tests {
 
     #[test]
     fn parse_frontmatter_rejects_an_unclosed_header() {
-        // Opens with --- but never closes it — must not silently swallow the rest
+        // Opens with --- but never closes it: must not silently swallow the rest
         // of the file as a giant, wrong "field".
         assert!(parse_frontmatter("---\nname: x\nstill going...").is_none());
     }
@@ -36131,7 +36131,7 @@ mod tests {
     fn sync_eligible_takes_media_prompts_but_still_refuses_an_unsafe_id() {
         let mut p = sync_test_prompt();
         assert!(sync_eligible(&p));
-        // Attachments no longer disqualify a prompt — they sync as path references.
+        // Attachments no longer disqualify a prompt: they sync as path references.
         p.image = "data:image/png;base64,x".into();
         p.file_path = "C:\\x.pdf".into();
         p.icon_path = "C:\\x.gif".into();
@@ -36149,7 +36149,7 @@ mod tests {
         p.icon_path = "C:\\icons\\book.png".into();
         p.pdf_page = 7;
         // The embedded copy has no path to write, so it must not appear in the file
-        // at all — and must survive the round trip untouched.
+        // at all: and must survive the round trip untouched.
         p.image = "data:image/png;base64,AAA".into();
         let md = prompt_to_md(&p, &SyncPlacement::default());
         assert!(md.contains("\nfile: C:\\docs\\manual.pdf\n"));
@@ -36197,7 +36197,7 @@ mod tests {
             written: Default::default(),
         };
         // No AppHandle in a unit test, so exercise the same guard sync_write_all()
-        // itself checks first — this is what keeps every non-sync-user's save_prompts
+        // itself checks first: this is what keeps every non-sync-user's save_prompts
         // call free of any filesystem work.
         assert!(!sync_enabled(&store.settings));
         assert!(!dir.exists());
@@ -36223,7 +36223,7 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         sync_write_agents_md(&dir);
         let first = fs::read_to_string(dir.join("AGENTS.md")).unwrap();
-        // Whatever this build is called — a literal here would have to be rewritten
+        // Whatever this build is called: a literal here would have to be rewritten
         // for every fork, which is exactly what the brand layer exists to avoid.
         assert!(first.contains(brand::DISPLAY_NAME));
         assert!(first.contains(brand::ITEM));
@@ -36514,7 +36514,7 @@ mod tests {
 
     #[test]
     fn sync_lock_is_stale_once_the_holder_pid_is_dead() {
-        // Bypasses the age check by asserting the pid-liveness half directly —
+        // Bypasses the age check by asserting the pid-liveness half directly:
         // the age half needs real elapsed wall-clock time, not worth a sleeping test.
         assert!(pid_is_alive(std::process::id()), "this test's own process is alive");
     }
@@ -36766,7 +36766,7 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
-    // A sync file write must never be an in-place truncate — a reader (this
+    // A sync file write must never be an in-place truncate: a reader (this
     // machine's own next poll, or a cloud-sync client) must only ever see either the
     // old content or the new content, never a partial body.
     #[test]
@@ -36784,7 +36784,7 @@ mod tests {
             "must be fully replaced, never a partial write"
         );
 
-        // The temp name must not collide with sync_sweep_orphans' ".md" filter — a
+        // The temp name must not collide with sync_sweep_orphans' ".md" filter: a
         // leftover temp file from an interrupted rename must never be treated as a
         // real synced document.
         let tmp = path.with_extension("tmp");
@@ -37755,7 +37755,7 @@ mod tests {
 
     // A fallback file that exists but cannot be decrypted/parsed (DPAPI from a
     // different Windows account, truncated write) must never be silently treated as
-    // "nothing here" — that used to erase the whole DB on the next load_store.
+    // "nothing here": that used to erase the whole DB on the next load_store.
     #[test]
     fn sealed_json_distinguishes_missing_from_unreadable() {
         let dir = std::env::temp_dir().join(format!("ps-sealed-missing-{}", std::process::id()));
@@ -37775,7 +37775,7 @@ mod tests {
         ));
 
         // A prefixed value that fails to decrypt yields "" from dec_str, which is
-        // likewise not valid JSON — the exact path that used to silently default.
+        // likewise not valid JSON: the exact path that used to silently default.
         let sealed_garbage = dir.join("sealed.json");
         fs::write(&sealed_garbage, format!("{}not-real-base64!!", ENC_PREFIX)).expect("write");
         assert!(matches!(
@@ -37898,7 +37898,7 @@ mod tests {
         assert!(!dropped.contains(&names[0]), "third-newest year kept");
         assert_eq!(dropped, vec![names[2].clone(), names[3].clone()], "no tier asks for these");
 
-        // Every tier at zero must not wipe the lot — the newest one stays.
+        // Every tier at zero must not wipe the lot: the newest one stays.
         let empty = GfsConfig { daily: 0, weekly: 0, monthly: 0, yearly: 0 };
         let dropped = backups_to_drop(&names, 1, Some(&empty));
         assert_eq!(dropped.len(), names.len() - 1);
@@ -38435,7 +38435,7 @@ mod tests {
         conn
     }
 
-    // (id, ord, stored blob) in stored order — the blob byte-for-byte, which is how
+    // (id, ord, stored blob) in stored order: the blob byte-for-byte, which is how
     // these tests tell a rewritten row from an untouched one.
     fn stored_rows(conn: &Connection, table: &str) -> Vec<(String, i64, String)> {
         conn.prepare(&format!("SELECT id, ord, data FROM {table} ORDER BY ord"))
@@ -38464,7 +38464,7 @@ mod tests {
 
     // Comparing blobs only proves nothing was re-sealed because sealing is
     // randomised: the same text sealed twice comes out as different bytes. Assert
-    // that rather than assume it — where sealing is unavailable the rows are stored
+    // that rather than assume it: where sealing is unavailable the rows are stored
     // as plain text and the comparison is weaker, so the check is skipped there.
     fn sealing_is_randomised() -> bool {
         enc_str("probe").starts_with(ENC_PREFIX)
