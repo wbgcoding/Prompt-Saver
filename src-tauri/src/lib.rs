@@ -12626,29 +12626,47 @@ fn rec_bar_size_state(bytes: u64, elapsed_ms: i64, show_from_mb: f64, max_mb: f6
     (true, Some((remaining_bytes / rate) as u64))
 }
 
+// The four recording-bar settings recording_status needs, read out of an
+// already-held store guard so the try_lock fallback below can share the code
+// with the normal path instead of duplicating the field list.
+fn rec_bar_settings(store: &Store) -> (bool, f64, f64, bool) {
+    (
+        store.settings.ui_flags.get("recBarSize") != Some(&false),
+        store.settings.ui_values.get("recBarSizeFromMb").copied().unwrap_or(500.0),
+        store.settings.ui_values.get("recMaxMb").copied().unwrap_or(8000.0),
+        store.settings.ui_flags.get("recTargetSwitch") != Some(&false),
+    )
+}
+
 // Read-only status for the control bar's live timer + file-size readout;
 // polled from the frontend rather than pushed, so a bar that briefly misses a
 // tick self-corrects on the next one instead of drifting.
+//
+// Async and never waiting on the store: the recording bar polls this twice a
+// second; as a sync command waiting on the store lock it froze every window
+// while a backup ran.
 #[cfg(windows)]
 #[tauri::command]
-fn recording_status(rstate: State<'_, RecordingState>, db: State<'_, Db>) -> Option<RecordingStatus> {
+async fn recording_status(
+    rstate: State<'_, RecordingState>,
+    db: State<'_, Db>,
+) -> Result<Option<RecordingStatus>, String> {
+    // Read first, and never block: a backup holds the store lock across its
+    // whole snapshot, and waiting for it here would freeze every window right
+    // along with the poll that used to wait on it.
+    let (bar_size_on, show_from_mb, max_mb, target_switch_on) = match db.try_lock() {
+        Ok(g) => rec_bar_settings(&g),
+        Err(std::sync::TryLockError::Poisoned(e)) => rec_bar_settings(&e.into_inner()),
+        Err(std::sync::TryLockError::WouldBlock) => (true, 500.0, 8000.0, true),
+    };
     let guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
-    let session = guard.as_ref()?;
+    let Some(session) = guard.as_ref() else { return Ok(None) };
     let bytes = std::fs::metadata(&session.output_path).map(|m| m.len()).unwrap_or(0);
     let elapsed_ms = recording::elapsed_ms(session);
-    let (bar_size_on, show_from_mb, max_mb, target_switch_on) = {
-        let g = lock(&db);
-        (
-            g.settings.ui_flags.get("recBarSize") != Some(&false),
-            g.settings.ui_values.get("recBarSizeFromMb").copied().unwrap_or(500.0),
-            g.settings.ui_values.get("recMaxMb").copied().unwrap_or(8000.0),
-            g.settings.ui_flags.get("recTargetSwitch") != Some(&false),
-        )
-    };
     let (show_size, size_eta_secs) =
         if bar_size_on { rec_bar_size_state(bytes, elapsed_ms, show_from_mb, max_mb) } else { (false, None) };
     let target_switch_enabled = target_switch_on && recording::can_switch_target(session);
-    Some(RecordingStatus {
+    Ok(Some(RecordingStatus {
         paused: session.phase == RecPhase::Paused,
         elapsed_ms,
         bytes,
@@ -12664,13 +12682,16 @@ fn recording_status(rstate: State<'_, RecordingState>, db: State<'_, Db>) -> Opt
         size_eta_secs,
         target_switch_enabled,
         disk_low: recording::take_disk_low(session),
-    })
+    }))
 }
 #[cfg(not(windows))]
 #[tauri::command]
-fn recording_status(rstate: State<'_, RecordingState>, db: State<'_, Db>) -> Option<RecordingStatus> {
+async fn recording_status(
+    rstate: State<'_, RecordingState>,
+    db: State<'_, Db>,
+) -> Result<Option<RecordingStatus>, String> {
     let _ = (rstate, db);
-    None
+    Ok(None)
 }
 
 #[derive(serde::Serialize)]

@@ -1119,6 +1119,7 @@ the video editor and the introduction tour ship on).
 - **A promptsaver:// link ended without doing anything.** Since a recent
   startup change, every link exited the process before it could reach the
   window that was supposed to open or copy it.
+- **The app no longer freezes during a recording while a backup runs.**
 
 ### Security
 
