@@ -21,6 +21,13 @@ const { getCurrentWebviewWindow } = window.__TAURI__.webviewWindow;
 const appWin = getCurrentWebviewWindow();
 const folderId = appWin.label.replace(/^folder-/, "");
 
+// Started here, at module evaluation time, rather than inside applyTexts()
+// below: the lazily imported translations must never hold up behaviour, so
+// the (large) fetch must not sit behind the get_settings invoke it used to be
+// nested under. applyTexts() awaits this same promise, so it resolves
+// instantly once already in flight.
+const textsImportPromise = Promise.all([import("./i18n.js"), import("./terms.js")]);
+
 const iconEl = document.getElementById("icon");
 const previewEl = document.getElementById("preview");
 const nameEl = document.getElementById("fname");
@@ -365,9 +372,8 @@ async function applySettings() {
 }
 
 async function applyTexts(s) {
-  const i18n = await import("./i18n.js");
+  const [i18n, { applyTerms }] = await textsImportPromise;
   const lang = resolveLang(s.language, i18n.LANGS);
-  const { applyTerms } = await import("./terms.js");
   TXT = Object.fromEntries(
     Object.entries(i18n.FLOAT_TXT[lang]).map(([k, v]) => [k, applyTerms(v, lang)]));
   document.getElementById("size-label").textContent = TXT.size;

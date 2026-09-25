@@ -179,6 +179,15 @@ let LANG = "en";
 let textsReady = null;
 let applyTermsFn = (s) => s;
 
+// i18n.js is a multi-megabyte dictionary for every language, so fetching and
+// parsing it is the slowest thing this window does at boot. Kicking both
+// imports off here, at module evaluation time and in parallel, means the
+// fetch is already in flight while the two startup invokes below are still
+// on the wire, instead of only starting once they land. video.html also
+// carries a modulepreload for both files so the browser can start fetching
+// them during HTML parsing, before this script even runs.
+const textsImportPromise = Promise.all([import("./i18n.js"), import("./terms.js")]);
+
 // ---------------------------------------------------------------- i18n
 
 // Same contract as everywhere else: {app} stands for the product name, and a
@@ -216,8 +225,7 @@ function applyI18n() {
 }
 
 async function loadTexts(settings) {
-  const i18n = await import("./i18n.js");
-  const terms = await import("./terms.js");
+  const [i18n, terms] = await textsImportPromise;
   applyTermsFn = terms.applyTerms;
   I18N_DICT = i18n.I18N;
   LANG = resolveLang(settings?.language, i18n.LANGS);
