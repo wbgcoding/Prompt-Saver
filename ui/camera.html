@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title></title>
+  <!-- Same shared control system every other satellite window uses --
+       no second theme or button implementation just for this one. -->
+  <link rel="stylesheet" href="styles/main.css" />
+  <link rel="stylesheet" href="styles/camera.css" />
+</head>
+<body class="camera-body">
+  <div class="cam-titlebar" data-tauri-drag-region>
+    <span id="cam-status-dot" class="cam-status-dot"></span>
+    <span id="cam-status-text" class="cam-titlebar-label"></span>
+    <button id="cam-close" class="icon-btn cam-close" type="button" data-tauri-drag-region="false" data-i18n-title="close" data-i18n-aria="close">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/></svg>
+    </button>
+  </div>
+
+  <div class="cam-stage">
+    <video id="cam-preview" class="cam-preview" autoplay muted playsinline></video>
+    <div id="cam-no-device" class="cam-no-device hidden"></div>
+    <div id="cam-rec-badge" class="cam-rec-badge hidden">
+      <span class="cam-rec-dot"></span>
+      <span id="cam-rec-time">00:00</span>
+    </div>
+  </div>
+
+  <div class="cam-controls">
+    <label class="cam-field">
+      <span id="cam-audio-label" class="cam-field-label"></span>
+      <select id="cam-audio-select" class="field"></select>
+    </label>
+    <label class="cam-field">
+      <span id="cam-res-label" class="cam-field-label"></span>
+      <select id="cam-res-select" class="field">
+        <option value="480">480p</option>
+        <option value="720" selected>720p</option>
+        <option value="1080">1080p</option>
+      </select>
+    </label>
+    <label class="cam-field">
+      <span id="cam-folder-label" class="cam-field-label"></span>
+      <div class="cam-folder-row">
+        <span id="cam-folder-path" class="cam-folder-path"></span>
+        <button id="cam-folder-btn" class="ghost-btn" type="button">…</button>
+      </div>
+    </label>
+  </div>
+
+  <div class="cam-transport">
+    <button id="cam-start-btn" class="primary-btn" type="button"></button>
+    <button id="cam-pause-btn" class="icon-btn cam-btn hidden" type="button">
+      <svg id="cam-pause-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+        <path fill="currentColor" d="M8 5h3v14H8V5Zm5 0h3v14h-3V5Z"/>
+      </svg>
+      <svg id="cam-resume-icon" class="hidden" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+        <path fill="currentColor" d="M8 5v14l11-7L8 5Z"/>
+      </svg>
+    </button>
+    <button id="cam-stop-btn" class="icon-btn cam-btn cam-btn-danger hidden" type="button">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+        <rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor"/>
+      </svg>
+    </button>
+  </div>
+
+  <script type="module" src="camera.js"></script>
+</body>
+</html>

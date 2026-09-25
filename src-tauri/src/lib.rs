@@ -23,6 +23,7 @@
 // blocking-call audit rather than by a lint sweep.
 
 pub mod brand;
+mod camera;
 mod cli;
 mod remote;
 
@@ -6687,8 +6688,13 @@ fn sweep_stale_recordings_in(
         // A "<name>.mic.wav" sidecar is referenced whenever its own
         // recording is -- the mp4 may already be attached to a prompt while
         // the editor has not yet consolidated the two into one two-track file.
+        // A "<name>.cam.json" sidecar follows the same rule for its own
+        // video (webm or mp4) -- without this, a camera recording's sidecar
+        // aged out and vanished an hour after it was taken even though the
+        // recording itself was still attached to a saved prompt.
         let is_referenced = referenced.contains(&norm(&path.to_string_lossy()))
-            || mic_sidecar_video_path(&path).is_some_and(|v| referenced.contains(&norm(&v.to_string_lossy())));
+            || mic_sidecar_video_path(&path).is_some_and(|v| referenced.contains(&norm(&v.to_string_lossy())))
+            || camera::sidecar_video_path(&path).is_some_and(|v| referenced.contains(&norm(&v.to_string_lossy())));
         let Ok(meta) = e.metadata() else { continue };
         let age = meta.modified().ok().and_then(|t| SystemTime::now().duration_since(t).ok());
         let stale_undecided = !is_referenced && age.is_some_and(|a| a >= STALE_TEMP_FILE_AGE);
@@ -6837,6 +6843,7 @@ fn discarded_stale_in(dir: &Path, age: Duration) -> (u32, u64) {
             count += 1;
             bytes += size;
             let _ = fs::remove_file(path.with_extension("mic.wav"));
+            let _ = fs::remove_file(camera::sidecar_path(&path));
         }
     }
     (count, bytes)
@@ -6866,13 +6873,18 @@ fn protected_recording_paths(app: &AppHandle) -> Vec<PathBuf> {
         out.push(p);
     }
     if let Some(state) = app.try_state::<VideoEditorPending>() {
-        let (src, _origin_dir) = state.lock().clone();
+        let (src, _origin_dir, overlay) = state.lock().clone();
         if !src.is_empty() {
             let src = PathBuf::from(src);
             out.push(src.with_extension("mic.wav"));
             #[cfg(windows)]
             out.push(keylog::sidecar_path(&src));
             out.push(src);
+        }
+        if !overlay.is_empty() {
+            let overlay = PathBuf::from(overlay);
+            out.push(camera::sidecar_path(&overlay));
+            out.push(overlay);
         }
     }
     out
@@ -25829,12 +25841,19 @@ const VIDEO_WIN_MIN_H: u32 = 520;
 // time would race the webview's first frame, so the window asks for its own
 // target once booted (video_editor_source), and again whenever
 // "video-editor-load" fires for an already-open window.
-struct VideoEditorPending(Mutex<(String, String)>);
+// The third slot (overlay_path) is the camera dual-open: a camera recording
+// whose companion screen recording has already finished lands here instead
+// of staying empty, so the editor can add it as a video overlay itself
+// instead of asking the user to pick it by hand. Its alignment offset is
+// never carried alongside it here -- it lives in the camera recording's own
+// sidecar (camera::CamSidecar::overlay_start_ms), which
+// ui/video.js's addAlignedCameraOverlay reads directly.
+struct VideoEditorPending(Mutex<(String, String, String)>);
 impl VideoEditorPending {
     fn new() -> Self {
-        Self(Mutex::new((String::new(), String::new())))
+        Self(Mutex::new((String::new(), String::new(), String::new())))
     }
-    fn lock(&self) -> std::sync::MutexGuard<'_, (String, String)> {
+    fn lock(&self) -> std::sync::MutexGuard<'_, (String, String, String)> {
         self.0.lock().unwrap_or_else(|e| e.into_inner())
     }
 }
@@ -25843,6 +25862,8 @@ impl VideoEditorPending {
 struct VideoEditorSource {
     path: String,
     origin_dir: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    overlay_path: Option<String>,
 }
 
 // Opens the editor for one recording. A second call while it is already open
@@ -25850,14 +25871,29 @@ struct VideoEditorSource {
 // origin_dir is Some only for a copy made of an externally opened file --
 // see open_file_in_editor.
 #[tauri::command]
-async fn open_video_editor(app: AppHandle, pending: State<'_, VideoEditorPending>, src_path: String, origin_dir: Option<String>) -> Result<(), String> {
+async fn open_video_editor(
+    app: AppHandle,
+    pending: State<'_, VideoEditorPending>,
+    src_path: String,
+    origin_dir: Option<String>,
+    overlay_path: Option<String>,
+) -> Result<(), String> {
     if !PathBuf::from(&src_path).is_file() {
         return Err("recording file not found".to_string());
     }
     let origin_dir = origin_dir.unwrap_or_default();
-    *pending.lock() = (src_path.clone(), origin_dir.clone());
+    // An overlay path that no longer exists (a race with its own cleanup, or
+    // simply never really there) is silently dropped rather than handed to
+    // the editor, which would otherwise show it as a broken overlay op.
+    let overlay_path = overlay_path.filter(|p| PathBuf::from(p).is_file()).unwrap_or_default();
+    *pending.lock() = (src_path.clone(), origin_dir.clone(), overlay_path.clone());
+    let overlay_opt = if overlay_path.is_empty() { None } else { Some(overlay_path) };
     if let Some(win) = app.get_webview_window(VIDEO_WIN_LABEL) {
-        let _ = app.emit_to(VIDEO_WIN_LABEL, "video-editor-load", &VideoEditorSource { path: src_path, origin_dir });
+        let _ = app.emit_to(
+            VIDEO_WIN_LABEL,
+            "video-editor-load",
+            &VideoEditorSource { path: src_path, origin_dir, overlay_path: overlay_opt },
+        );
         let _ = win.show();
         let _ = win.set_focus();
         return Ok(());
@@ -25889,8 +25925,9 @@ async fn open_video_editor(app: AppHandle, pending: State<'_, VideoEditorPending
 
 #[tauri::command]
 fn video_editor_source(pending: State<VideoEditorPending>) -> Option<VideoEditorSource> {
-    let (path, origin_dir) = pending.lock().clone();
-    if path.is_empty() { None } else { Some(VideoEditorSource { path, origin_dir }) }
+    let (path, origin_dir, overlay_path) = pending.lock().clone();
+    let overlay_path = if overlay_path.is_empty() { None } else { Some(overlay_path) };
+    if path.is_empty() { None } else { Some(VideoEditorSource { path, origin_dir, overlay_path }) }
 }
 
 // ---- Open an existing file (not a fresh capture/recording) in whichever
@@ -26169,6 +26206,17 @@ fn move_mic_sidecar_alongside(old_video: &std::path::Path, new_video: &std::path
             }
         }
     }
+    // Same again for the camera sidecar, on whichever of the two recordings
+    // (screen or camera) is the one actually being relocated here.
+    let old_cam = camera::sidecar_path(old_video);
+    if old_cam.is_file() {
+        let new_cam = camera::sidecar_path(new_video);
+        if old_cam != new_cam {
+            if let Err(e) = move_file(&old_cam, &new_cam) {
+                eprintln!("failed to relocate camera sidecar: {e}");
+            }
+        }
+    }
 }
 
 // Shared by Save/Copy: if the file already sits in the target folder
@@ -26343,7 +26391,8 @@ fn discard_recording_file_in(allowed: &[PathBuf], path: &std::path::Path) -> Opt
     let dest = trash.join(name);
     move_file(path, &dest).ok()?;
     // A discarded recording takes its mic and key-overlay sidecars (if any)
-    // with it -- best-effort, since most recordings have neither.
+    // with it -- best-effort, since most recordings have neither. Both only
+    // ever exist next to an mp4 (the screen recorder's own container).
     if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
         if ext.eq_ignore_ascii_case("mp4") {
             let sidecar = path.with_extension("mic.wav");
@@ -26358,6 +26407,13 @@ fn discard_recording_file_in(allowed: &[PathBuf], path: &std::path::Path) -> Opt
                 }
             }
         }
+    }
+    // The camera sidecar takes the same trip, regardless of container --
+    // camera recordings are webm, not mp4, so this cannot sit inside the
+    // ext-gated block above.
+    let cam_sidecar = camera::sidecar_path(path);
+    if cam_sidecar.is_file() {
+        let _ = move_file(&cam_sidecar, &camera::sidecar_path(&dest));
     }
     Some(dest)
 }
@@ -26423,6 +26479,10 @@ fn restore_discarded_recording(dir: String, name: String) -> bool {
     if sidecar_src.is_file() {
         let _ = move_file(&sidecar_src, &dst.with_extension("mic.wav"));
     }
+    let cam_sidecar_src = camera::sidecar_path(&src);
+    if cam_sidecar_src.is_file() {
+        let _ = move_file(&cam_sidecar_src, &camera::sidecar_path(&dst));
+    }
     true
 }
 
@@ -26437,6 +26497,7 @@ fn delete_discarded_recording_now(dir: String, name: String) -> bool {
         return false;
     }
     let _ = fs::remove_file(path.with_extension("mic.wav"));
+    let _ = fs::remove_file(camera::sidecar_path(&path));
     fs::remove_file(&path).is_ok()
 }
 
@@ -29512,6 +29573,7 @@ pub fn run() {
             app.manage(SyncWriteQueue(Mutex::new(SyncWriteState::default())));
             app.manage(VoiceState(Mutex::new(None), std::sync::atomic::AtomicBool::new(false))); // live dictation session
             app.manage(RecordingState(Mutex::new(None))); // live screen-recording session
+            app.manage(camera::CameraState(Mutex::new(None))); // live camera-recording session
             app.manage(remote::RemoteApiState::new());
             app.manage(remote::PendingLaunchUrl(Default::default()));
             // Same "never starts without a password" rule start() enforces on
@@ -30181,6 +30243,14 @@ pub fn run() {
             probe_recording,
             probe_extra_video_source,
             read_key_sidecar,
+            camera::open_camera_window,
+            camera::camera_begin_recording,
+            camera::camera_append_chunk,
+            camera::camera_finish_recording,
+            camera::camera_mark_finishing,
+            camera::camera_discard_recording,
+            camera::read_camera_sidecar,
+            camera::camera_screen_elapsed_ms,
             windows_fonts_dir,
             mux_mic_track,
             generate_filmstrip,
@@ -33838,6 +33908,39 @@ mod tests {
         clock.resume();
         std::thread::sleep(std::time::Duration::from_millis(10));
         assert!(clock.now_ticks() > frozen, "ticks must advance again after resume");
+    }
+
+    #[test]
+    fn a_paused_span_before_a_later_reader_joins_never_inflates_its_position() {
+        // camera_screen_elapsed_ms (camera.rs) reads this same clock live, at
+        // the moment a camera take starts, to place it on the screen
+        // recording's own timeline. A screen recording paused for a while
+        // before the camera joins must not push that position later than
+        // where the screen recording's own output actually is -- only the
+        // active segments may count, exactly like the ticks assertions
+        // above, just phrased at the "another reader joins later" level this
+        // bug was found at.
+        let clock = RecordClock::new();
+        let t0 = std::time::Instant::now();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        clock.pause();
+        let pause_start = std::time::Instant::now();
+        std::thread::sleep(std::time::Duration::from_millis(200)); // the paused span
+        clock.resume();
+        // Measured, not assumed: a loaded machine can make thread::sleep
+        // overshoot its nominal duration by far more than the two short
+        // active segments below ever could on their own, so the real paused
+        // wall time (however long it actually took) is what gets subtracted,
+        // not the 200ms asked for.
+        let real_pause_ms = pause_start.elapsed().as_millis() as i64;
+        std::thread::sleep(std::time::Duration::from_millis(20)); // the camera joins here
+        let elapsed_ms = clock.now_ticks() / 10_000;
+        let wall_ms = t0.elapsed().as_millis() as i64;
+        assert!(
+            elapsed_ms <= wall_ms - real_pause_ms + 50,
+            "the paused span (~{real_pause_ms}ms of {wall_ms}ms wall time) must not count toward \
+             the camera's join position, got {elapsed_ms}ms"
+        );
     }
 
     #[test]
