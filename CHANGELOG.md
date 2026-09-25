@@ -1116,6 +1116,9 @@ the video editor and the introduction tour ship on).
   complete the same prompt, so a one-off decline now offers "try again"; only
   a computer whose policy blocks the prompt outright shows the "blocked"
   message with no retry button.
+- **A promptsaver:// link ended without doing anything.** Since a recent
+  startup change, every link exited the process before it could reach the
+  window that was supposed to open or copy it.
 
 ### Security
 

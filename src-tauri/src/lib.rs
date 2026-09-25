@@ -28245,9 +28245,8 @@ pub fn run() {
     if let Some(code) = cli::dispatch_from_launch_args() {
         std::process::exit(code);
     }
-    // A plain second launch (double-click, autostart, the tray shortcut --
-    // anything that is not one of the subcommands above and not a
-    // promptsaver:// link) settles here instead of trusting the
+    // A plain second launch (double-click, autostart, the tray shortcut) or a
+    // promptsaver:// link settles here instead of trusting the
     // single-instance plugin below to notice on its own: that plugin forwards
     // and exits unconditionally, with no way to tell "the running instance
     // brought up a window" from "the running instance is hung and never will"
@@ -28255,8 +28254,10 @@ pub fn run() {
     // top-level windows and no way back short of killing it by hand. This
     // pings the same pipe cli.rs answers CLI commands on, with its own short
     // timeout, and only falls through to the plugin's mutex-based detection
-    // for cases it deliberately leaves alone (a deep link, or nothing
-    // listening at all).
+    // (or, with nothing listening at all, straight into this process's own
+    // setup) for a live instance to actually forward the link to. A link's
+    // own ping never raises a window and its HandedOff is turned back into
+    // Primary, so it can never end this launch here on its own.
     if !early_allow_multiple_instances() {
         let argv: Vec<String> = std::env::args().skip(1).collect();
         if let cli::LaunchDecision::HandedOff = cli::resolve_second_launch(&argv) {
@@ -28390,14 +28391,17 @@ pub fn run() {
             app.manage(VoiceState(Mutex::new(None), std::sync::atomic::AtomicBool::new(false))); // live dictation session
             app.manage(RecordingState(Mutex::new(None))); // live screen-recording session
             app.manage(remote::RemoteApiState::new());
+            app.manage(remote::PendingLaunchUrl(Default::default()));
             // Same "never starts without a password" rule start() enforces on
             // every caller; harmless to call unconditionally at every boot.
             remote::start(handle.clone());
             // A promptsaver:// link that started this very process (the app was
-            // not already running yet) takes the same route the single-instance
-            // plugin above gives a SECOND launch's own copy of the same link.
+            // not already running yet) waits in PendingLaunchUrl until the main
+            // window's script asks for it -- see run_pending_launch_url.
             if let Some(url) = std::env::args().skip(1).find(|a| a.starts_with("promptsaver://")) {
-                remote::handle_launch_url(&handle, &url);
+                if let Ok(mut g) = handle.state::<remote::PendingLaunchUrl>().0.lock() {
+                    *g = Some(url);
+                }
             }
 
             // Auto-paste: start tracking the last external foreground window.
@@ -28939,6 +28943,7 @@ pub fn run() {
             remote::remote_api_status,
             remote::remote_api_stop_now,
             remote::set_remote_allowed_ranges,
+            remote::run_pending_launch_url,
             skip_version,
             whats_new_check,
             whats_new_current,

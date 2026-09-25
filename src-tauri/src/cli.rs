@@ -249,7 +249,11 @@ async fn handle_connection(mut pipe: tokio::net::windows::named_pipe::NamedPipeS
     let Ok(req_bytes) = read_frame(&mut pipe, MAX_FRAME_BYTES).await else { return };
     let Ok(req) = serde_json::from_slice::<PipeRequest>(&req_bytes) else { return };
     if req.argv == [SHOW_PING.to_string()] {
-        respond_to_show_ping(&mut pipe, &app).await;
+        respond_to_show_ping(&mut pipe, &app, true).await;
+        return;
+    }
+    if req.argv == [ALIVE_PING.to_string()] {
+        respond_to_show_ping(&mut pipe, &app, false).await;
         return;
     }
     let (code, stdout, stderr) = run_in_process(&app, req.argv, PathBuf::from(req.cwd)).await;
@@ -266,14 +270,22 @@ async fn handle_connection(mut pipe: tokio::net::windows::named_pipe::NamedPipeS
 // comment above on the same hazard). It is sent BEFORE show_main does its
 // work, because raising a window -- and rebuilding a missing one, webview and
 // all -- can easily outlast the launch side's patience, and a slow window is
-// not a hung process. Reaching the closure at all is the liveness proof.
-async fn respond_to_show_ping(pipe: &mut tokio::net::windows::named_pipe::NamedPipeServer, app: &AppHandle) {
+// not a hung process. Reaching the closure at all is the liveness proof. A
+// promptsaver:// link pings with `raise` false: the link's own point is to
+// copy or open quietly, never to pull a window to the front.
+async fn respond_to_show_ping(
+    pipe: &mut tokio::net::windows::named_pipe::NamedPipeServer,
+    app: &AppHandle,
+    raise: bool,
+) {
     let (tx, rx) = tokio::sync::oneshot::channel();
     let app2 = app.clone();
     if app
         .run_on_main_thread(move || {
             let _ = tx.send(());
-            show_main(&app2);
+            if raise {
+                show_main(&app2);
+            }
         })
         .is_ok()
     {
@@ -287,16 +299,20 @@ async fn respond_to_show_ping(pipe: &mut tokio::net::windows::named_pipe::NamedP
 
 // ---------- Second-launch handshake (a plain GUI start, not a CLI command) ----------
 //
-// A second launch that is not a CLI command and not a promptsaver:// link
-// pings the same pipe a CLI launch uses instead of trusting the
-// single-instance plugin's own unconditional forward-and-exit -- see run()'s
-// own comment on why. `argv` is the launch's raw arguments (already known not
-// to look like a CLI command by the time run() calls this) so a deep link
-// stays on the plugin's existing path unchanged.
+// A second launch that is not a CLI command pings the same pipe a CLI launch
+// uses instead of trusting the single-instance plugin's own unconditional
+// forward-and-exit -- see run()'s own comment on why. `argv` is the launch's
+// raw arguments (already known not to look like a CLI command by the time
+// run() calls this). A promptsaver:// link runs the exact same handshake,
+// with a ping that never raises a window: the answer still has to reach the
+// single-instance plugin (a live instance) or this process's own setup (a
+// takeover, or nobody running) -- it never ends the launch here on its own.
 
 const SHOW_PING: &str = "\0show-ping\0"; // never a valid subcommand, path or link
+const ALIVE_PING: &str = "\0alive-ping\0"; // liveness only, never raises a window
 const SECOND_LAUNCH_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(1500);
 
+#[derive(Debug, PartialEq)]
 pub(crate) enum LaunchDecision {
     // Nothing is listening -- this launch is the primary instance.
     Primary,
@@ -308,20 +324,36 @@ pub(crate) enum LaunchDecision {
     TookOver,
 }
 
-pub(crate) fn resolve_second_launch(argv: &[String]) -> LaunchDecision {
-    // A deep link still needs the plugin's own forwarding (it hands the URL
-    // itself to remote::handle_launch_url, which this ping knows nothing
-    // about), so it is deliberately left on the existing path.
-    if argv.iter().any(|a| a.starts_with("promptsaver://")) {
-        return LaunchDecision::HandedOff;
-    }
-    let Ok(rt) = tokio::runtime::Builder::new_current_thread().enable_io().enable_time().build() else {
-        return LaunchDecision::HandedOff; // could not even try -- behave as before
-    };
-    rt.block_on(resolve_second_launch_async())
+// The one-shot runtime the handshake runs on, shared by both branches below.
+fn runtime() -> std::io::Result<tokio::runtime::Runtime> {
+    tokio::runtime::Builder::new_current_thread().enable_io().enable_time().build()
 }
 
-async fn resolve_second_launch_async() -> LaunchDecision {
+// A link must reach the single-instance plugin (a live instance) or this
+// process's own setup (a takeover, or nobody running) -- it never ends here.
+fn link_decision(handshake: LaunchDecision) -> LaunchDecision {
+    match handshake {
+        LaunchDecision::HandedOff => LaunchDecision::Primary,
+        other => other,
+    }
+}
+
+pub(crate) fn resolve_second_launch(argv: &[String]) -> LaunchDecision {
+    // A link never ends this launch silently: HandedOff (the running instance
+    // is alive) is turned back into Primary, so the caller falls through to
+    // the single-instance plugin, which forwards the link and exits this
+    // process, or to this process's own first-launch setup.
+    if argv.iter().any(|a| a.starts_with("promptsaver://")) {
+        let Ok(rt) = runtime() else { return LaunchDecision::Primary };
+        return link_decision(rt.block_on(resolve_second_launch_async(ALIVE_PING)));
+    }
+    let Ok(rt) = runtime() else {
+        return LaunchDecision::HandedOff; // could not even try -- behave as before
+    };
+    rt.block_on(resolve_second_launch_async(SHOW_PING))
+}
+
+async fn resolve_second_launch_async(ping: &str) -> LaunchDecision {
     use tokio::net::windows::named_pipe::ClientOptions;
     let name = pipe_name();
     // Only two outcomes end this launch: a clear answer (hand off) or a proven
@@ -346,7 +378,7 @@ async fn resolve_second_launch_async() -> LaunchDecision {
     // The pid is read off the still-connected handle, before anything can end
     // the server and let Windows hand the number to someone else.
     let server_pid = named_pipe_server_pid(&client);
-    let req = PipeRequest { argv: vec![SHOW_PING.to_string()], cwd: String::new() };
+    let req = PipeRequest { argv: vec![ping.to_string()], cwd: String::new() };
     let Ok(bytes) = serde_json::to_vec(&req) else { return LaunchDecision::Primary };
     // Its own full budget: time already spent waiting for a busy pipe must not
     // shrink the window the running instance gets to prove it is alive.
@@ -1918,6 +1950,23 @@ mod tests {
     #[test]
     fn a_different_user_is_never_taken_over_even_at_the_same_path() {
         assert!(!should_take_over_hung_instance(false, false, true));
+    }
+
+    // ---- a link's own handshake never ends the launch by itself ----
+
+    #[test]
+    fn a_live_instance_falls_through_to_the_plugin_instead_of_ending_the_link() {
+        assert_eq!(link_decision(LaunchDecision::HandedOff), LaunchDecision::Primary);
+    }
+
+    #[test]
+    fn no_running_instance_stays_primary() {
+        assert_eq!(link_decision(LaunchDecision::Primary), LaunchDecision::Primary);
+    }
+
+    #[test]
+    fn a_taken_over_hang_stays_a_takeover() {
+        assert_eq!(link_decision(LaunchDecision::TookOver), LaunchDecision::TookOver);
     }
 
     // The Win32 half of the same decision, against real processes: without

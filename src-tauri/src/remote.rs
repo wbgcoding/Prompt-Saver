@@ -691,6 +691,21 @@ pub(crate) fn is_copy_link(url: &str) -> bool {
     matches!(parse_scheme_url(url), Some(SchemeAction::Copy(_)))
 }
 
+// A promptsaver:// link that started this process itself (nobody was running
+// yet) has nowhere to go until the main window's script has its listeners in
+// place -- emitting straight into .setup() lands before ui/main.js calls
+// listen("edit-prompt", ...) and the event is simply gone. The link waits
+// here instead, and the script asks for it once it is ready.
+pub(crate) struct PendingLaunchUrl(pub Mutex<Option<String>>);
+
+#[tauri::command]
+pub(crate) fn run_pending_launch_url(app: AppHandle, pending: State<'_, PendingLaunchUrl>) {
+    let url = pending.0.lock().ok().and_then(|mut g| g.take());
+    if let Some(url) = url {
+        handle_launch_url(&app, &url);
+    }
+}
+
 pub(crate) fn handle_launch_url(app: &AppHandle, url: &str) {
     let settings = {
         let state: State<Db> = app.state();
