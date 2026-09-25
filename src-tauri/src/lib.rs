@@ -21111,7 +21111,7 @@ mod keylog {
     const VK_PRIOR: u32 = 0x21; // Page Up
     const VK_NEXT: u32 = 0x22; // Page Down
     const VK_F1: u32 = 0x70;
-    const VK_F24: u32 = 0x87; // F1..=F24 is contiguous in Windows' VK space
+    const VK_F24: u32 = 0x87; // VK_F1..=VK_F24 is contiguous in Windows' VK space
 
     fn is_nav_or_edit_key(vk: u32) -> bool {
         matches!(vk, VK_RETURN | VK_TAB | VK_ESCAPE | VK_BACK | VK_DELETE | VK_INSERT | VK_LEFT | VK_UP | VK_RIGHT | VK_DOWN | VK_HOME | VK_END | VK_PRIOR | VK_NEXT)
