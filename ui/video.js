@@ -761,6 +761,8 @@ function renderRegions() {
   $("ve-dim-b").style.width = `${Math.max(0, trackWidth() - msToPx(b))}px`;
   $("ve-trim-a").style.left = `${msToPx(a)}px`;
   $("ve-trim-b").style.left = `${msToPx(b)}px`;
+  setTimeValue($("ve-trim-a"), a, VE.dur);
+  setTimeValue($("ve-trim-b"), b, VE.dur);
 
   const cuts = $("ve-cuts");
   cuts.innerHTML = "";
@@ -801,10 +803,20 @@ function renderRegions() {
   document.querySelectorAll(".ve-use-sel").forEach((btn) => { btn.disabled = !VE.sel; });
 }
 
+// Shared by the timeline itself and its two trim handles: a screen reader gets
+// the plain time it would otherwise have to infer from a bare pixel position.
+function setTimeValue(el, ms, durMs) {
+  el.setAttribute("aria-valuemin", "0");
+  el.setAttribute("aria-valuemax", String(Math.round(durMs / 1000)));
+  el.setAttribute("aria-valuenow", String(Math.round(ms / 1000)));
+  el.setAttribute("aria-valuetext", t("a11yTimeOfTotal").replace("{time}", fmtTime(ms)).replace("{total}", fmtTime(durMs)));
+}
+
 function renderPlayhead() {
   $("ve-playhead").style.left = `${msToPx(VE.playhead)}px`;
   $("ve-time").textContent = fmtTime(VE.playhead);
   $("ve-frame").textContent = `#${frameOf(VE.playhead)}`;
+  setTimeValue($("ve-timeline"), VE.playhead, VE.dur);
 }
 
 // ---------------------------------------------------------------- filmstrip + waveform
@@ -1610,6 +1622,8 @@ regionsEl.addEventListener("pointermove", (e) => {
     else drag.live.endMs = clamp(ms, drag.live.startMs + MIN_CLIP_MS, VE.dur);
     $("ve-trim-a").style.left = `${msToPx(drag.live.startMs)}px`;
     $("ve-trim-b").style.left = `${msToPx(drag.live.endMs)}px`;
+    setTimeValue($("ve-trim-a"), drag.live.startMs, VE.dur);
+    setTimeValue($("ve-trim-b"), drag.live.endMs, VE.dur);
     $("ve-dim-a").style.width = `${msToPx(drag.live.startMs)}px`;
     $("ve-dim-b").style.left = `${msToPx(drag.live.endMs)}px`;
     $("ve-dim-b").style.width = `${Math.max(0, trackWidth() - msToPx(drag.live.endMs))}px`;
@@ -3589,11 +3603,17 @@ function updateAudioLabels() {
 // Reflects VE.audio in the two mute buttons/sliders -- needed on every load
 // since resetForNewSource() changes the state without any click happening to
 // trigger audioControl()'s own listener.
+function updateVolumeValueText(volId) {
+  $(volId).setAttribute("aria-valuetext", t("a11yPctOnly").replace("{pct}", $(volId).value));
+}
+
 function syncAudioButtons() {
   $("ve-mute-sys").classList.toggle("ve-muted-btn", VE.audio.sys.mute);
   $("ve-mute-mic").classList.toggle("ve-muted-btn", VE.audio.mic.mute);
   $("ve-vol-sys").value = VE.audio.sys.vol;
   $("ve-vol-mic").value = VE.audio.mic.vol;
+  updateVolumeValueText("ve-vol-sys");
+  updateVolumeValueText("ve-vol-mic");
 }
 
 function audioControl(kind, muteId, volId) {
@@ -3605,6 +3625,7 @@ function audioControl(kind, muteId, volId) {
   });
   $(volId).addEventListener("input", () => {
     VE.audio[kind].vol = Number($(volId).value);
+    updateVolumeValueText(volId);
     applyPreviewSpeed();
     updateExportNote();
   });
@@ -3751,6 +3772,22 @@ document.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && (e.key === "+" || e.key === "=")) { e.preventDefault(); setPreviewZoom(VE.previewZoom * VE.zoomStepFactor); return; }
   if ((e.ctrlKey || e.metaKey) && e.key === "-") { e.preventDefault(); setPreviewZoom(VE.previewZoom / VE.zoomStepFactor); return; }
   if ((e.ctrlKey || e.metaKey) && e.key === "0") { e.preventDefault(); resetPreviewZoom(); return; }
+
+  // A focused trim handle takes its own arrow keys instead of stepping the
+  // playhead -- otherwise the two handles below would be reachable by Tab but
+  // never actually movable without a mouse.
+  const focusedId = document.activeElement && document.activeElement.id;
+  if (focusedId === "ve-trim-a" || focusedId === "ve-trim-b") {
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      e.preventDefault();
+      const dir = e.key === "ArrowLeft" ? -1 : 1;
+      const step = (e.shiftKey ? 1000 : frameMs()) * dir;
+      const trim = opOf("trim") || { startMs: 0, endMs: VE.dur };
+      if (focusedId === "ve-trim-a") setTrim(trim.startMs + step, trim.endMs);
+      else setTrim(trim.startMs, trim.endMs + step);
+      return;
+    }
+  }
 
   // While an overlay is selected the arrow keys move/resize it instead of
   // stepping frames -- frame-stepping moves to comma/period instead, the way

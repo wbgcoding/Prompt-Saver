@@ -871,7 +871,15 @@ function renderBgOpsPop(ops) {
     label.textContent = bgOpLabel(op.kind);
     const pct = document.createElement("span");
     pct.className = "bg-ops-pct";
+    const pctNum = op.state === "done" ? 100 : op.pct != null ? op.pct : null;
     pct.textContent = op.state === "error" ? "–" : op.state === "done" ? "100%" : (op.pct != null ? `${op.pct}%` : "…");
+    if (pctNum != null) {
+      pct.setAttribute("role", "progressbar");
+      pct.setAttribute("aria-valuemin", "0");
+      pct.setAttribute("aria-valuemax", "100");
+      pct.setAttribute("aria-valuenow", String(pctNum));
+      pct.setAttribute("aria-valuetext", t("a11yPctOnly").replace("{pct}", String(pctNum)));
+    }
     row.append(label, pct);
     if (op.target) {
       const openBtn = document.createElement("button");
