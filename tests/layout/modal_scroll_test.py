@@ -29,7 +29,7 @@ REPO = Path(__file__).resolve().parents[2]
 STYLES = REPO / "ui" / "styles"
 
 # A row is only as tight as its longest label, so every measurement runs three
-# times: English, Polish and Romanian — the two wordiest of the eleven UI
+# times: English, Polish and Romanian, the two wordiest of the eleven UI
 # languages. The texts are read out of ui/i18n.js instead of being copied here,
 # so a retranslation cannot leave this test measuring words the app dropped.
 LANGS = ["en", "pl", "ro"]
@@ -45,7 +45,7 @@ def strings(lang: str) -> dict:
             try:
                 out[key] = json.loads(raw)
             except ValueError:
-                pass  # a value built from pieces — no plain label, not needed here
+                pass  # a value built from pieces: no plain label, not needed here
         return out
     return {**block("en"), **block(lang)}
 
@@ -270,7 +270,7 @@ def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html", vars_op
     return page
 
 
-# 80: two-column colour grid in the theme editor — a narrow window falls back to one
+# 80: two-column colour grid in the theme editor: a narrow window falls back to one
 # column (auto-fit), a wide one gets two, and Save must stay reachable either way.
 THEME_SIZES = [(520, 600), (900, 600)]
 MEASURE_THEME = """
@@ -311,7 +311,7 @@ def build_theme_page(out_dir: Path, name: str = "theme.html", n_groups: int = 4,
     def L(key: str) -> str:
         return escape(txt[key])
 
-    # The colour rows carry the real token names, cycled to fill the grid — their
+    # The colour rows carry the real token names, cycled to fill the grid; their
     # length is what a narrow column has to cope with.
     groups = ["themeGroupBg", "themeGroupSurface", "themeGroupText", "themeGroupAccent"]
     names = ["themeVarBg", "themeVarSurface", "themeVarSurface2", "themeVarFg", "themeVarMuted",
@@ -358,7 +358,7 @@ _run = 0
 
 def measure(browser, tmp, page, size):
     # An isolated profile is required or Chrome hands the URL to a running
-    # instance and prints nothing — and a FRESH one per run, or a still-closing
+    # instance and prints nothing, and a FRESH one per run, or a still-closing
     # instance holds the lock and the next run comes back empty.
     global _run
     _run += 1
@@ -381,7 +381,7 @@ def measure(browser, tmp, page, size):
 def main() -> int:
     browser = next((p for p in CHROME_CANDIDATES if Path(p).exists()), None)
     if not browser:
-        # CI's runner image always ships Chrome (see ci.yml) — a missing browser there
+        # CI's runner image always ships Chrome (see ci.yml); a missing browser there
         # means this job silently stopped covering anything, which must fail loudly
         # instead of passing green with zero coverage.
         if os.environ.get("CI"):
@@ -398,7 +398,7 @@ def main() -> int:
             # Same dialog with the variables helper expanded: opening it must push the
             # rows below it down, not land on top of them.
             page_vars = build_page(tmp, name=f"modal-vars-{lang}.html", vars_open=True, lang=lang)
-            # Same again with the version history COLLAPSED — the normal state of the
+            # Same again with the version history COLLAPSED: the normal state of the
             # editor. Only that branch leaves the textarea's flex wrapper without a floor,
             # so the field could shrink past its own min-height and draw over the colour
             # row. The history-open variant above never reproduced it.
@@ -443,7 +443,7 @@ def main() -> int:
                 if not ok:
                     failed += 1
 
-            # 80: theme editor colour grid — one column on a narrow window, two on a wide
+            # 80: theme editor colour grid: one column on a narrow window, two on a wide
             # one, Save reachable either way. The colour names are the widest thing in a
             # column, so the fallback has to hold in a wordy language as well.
             theme_page = build_theme_page(tmp, name=f"theme-{lang}.html", lang=lang)

@@ -52,7 +52,7 @@ let foldersOn = false; // pill folders (default off)
 let pText = "", pFile = "";
 const dragOutHeld = (e) => dragOutOn && e[dragOutMod] === true;
 
-// Rotating prompt — "next entry" badge. Only ever one prompt per pill window,
+// Rotating prompt: "next entry" badge. Only ever one prompt per pill window,
 // so a single cached {index,total} (not a Map keyed by id, as the main grid needs)
 // is enough; kept live by the backend's rotation-changed event.
 let rotateBadgeOn = true; // mirrors flag("rotateBadge"), which ships on
@@ -67,7 +67,7 @@ const rotateBadgeEl = document.getElementById("rotate-badge");
 function renderRotateBadge() {
   const show = rotateBadgeOn && rotateVariants > 0 && !!rotateInfo;
   rotateBadgeEl.classList.toggle("hidden", !show);
-  // Pos (not index + 1) — in random mode index is the absolute entry that
+  // Pos (not index + 1): in random mode index is the absolute entry that
   // will be drawn next (jumps around); pos is the 1-based draw number within
   // the current shuffle cycle, counting up and restarting on reshuffle.
   if (show) rotateBadgeEl.textContent = `${rotateInfo.pos}/${rotateInfo.total}`;
@@ -106,7 +106,7 @@ let pillTextMinW = PILL_TEXT_MIN_W_DEFAULT;
 let pillBorderW = PILL_BORDER_W_DEFAULT;
 let pillRingFrac = PILL_RING_FRAC_DEFAULT;
 
-// Resizes and visibility flips can leave the looping video paused — make
+// Resizes and visibility flips can leave the looping video paused; make
 // sure a visible video is always playing again afterwards. Only a pause made
 // through the control bar (or play-once ending) is respected.
 function ensureVideoPlaying() {
@@ -147,7 +147,7 @@ function pillBox() {
   const h = PILL_H * scale;
   // Font tracks the ACTUAL window height, not the raw scale. If the window is ever
   // capped so it can't grow any further (OS size limit, DPI handoff), the text
-  // stops growing with it instead of ballooning on past the frozen pill edge — the
+  // stops growing with it instead of ballooning on past the frozen pill edge: the
   // reported "only the text keeps getting bigger" bug. When the box grows normally
   // innerHeight equals h, so this is exactly the old base*scale. min() guards a
   // stale-large innerHeight (mid-shrink) from oversizing the font.
@@ -166,7 +166,7 @@ function pillBox() {
 function applyPillSize() {
   if (menuOpen) return;
   if (pill.classList.contains("has-image")) {
-    // The window hugs the visible media — no oversized invisible button.
+    // The window hugs the visible media: no oversized invisible button.
     if (!imgRatio) return;
     const box = pillBox();
     invoke("resize_float_media", { id: promptId, width: box.w, height: box.h }).catch(() => {});
@@ -229,7 +229,7 @@ function applyPrefs(s) {
   videoAutoplayOn = s.ui_flags?.videoAutoplay !== false; // default on, matches flag("videoAutoplay")
   videoControlsOn = s.ui_flags?.videoControls !== false; // default on, matches flag("videoControls")
   if (!videoControlsOn) mediaBar.classList.add("hidden"); // off mid-hover must not leave it stuck open
-  // Clamp to the backend's stored range (SCALE_MIN–SCALE_MAX): a corrupt
+  // Clamp to the backend's stored range (SCALE_MIN to SCALE_MAX): a corrupt
   // 0/negative/NaN factor would otherwise produce a degenerate window. The range
   // must match the backend's, or the "L" preset and every freely resized pill
   // would snap back on the next start.
@@ -254,7 +254,7 @@ function applyPrefs(s) {
   dragOutOn = s.ui_flags?.dragOut === true;
   dragOutMod = DRAG_OUT_MODS[s.ui_texts?.dragOutModifier] || "ctrlKey";
   foldersOn = s.ui_flags?.pillFolders !== false; // default ON, mirrors folders_on() in lib.rs
-  // rotateBadge is a sub-toggle of rotatingPrompts — the parent off must freeze
+  // rotateBadge is a sub-toggle of rotatingPrompts: the parent off must freeze
   // the whole feature, not just the badge (gating rule: nothing dependent stays
   // visible/active with its parent off).
   rotateBadgeOn = s.ui_flags?.rotateBadge !== false && s.ui_flags?.rotatingPrompts !== false;
@@ -284,7 +284,7 @@ function applyPrefs(s) {
 }
 
 // Self-healing size: DPI handoffs during cross-monitor drags can leave the
-// window at a wrong size — whenever it differs from the pill's real box,
+// window at a wrong size; whenever it differs from the pill's real box,
 // snap it back. The ±2px tolerance ends the loop once it matches.
 function enforcePillSize() {
   // No resize ping-pong while the OS moves the window, the user resizes it, or the
@@ -299,8 +299,8 @@ function enforcePillSize() {
 }
 
 // Size the resize-grip band in proportion to the pill so the resize hitbox always
-// sits right at the (rounded) edge — thin on a small pill, a comfortable ring on a
-// big one — while the inner area stays free for dragging/copying.
+// sits right at the (rounded) edge: thin on a small pill, a comfortable ring on a
+// big one, while the inner area stays free for dragging/copying.
 function updateResizeRing() {
   const ring = Math.max(RING_MIN, Math.min(RING_MAX, Math.round(Math.min(window.innerWidth, window.innerHeight) * pillRingFrac)));
   resizeEl.style.setProperty("--rz", `${ring}px`);
@@ -333,11 +333,11 @@ videoEl.removeAttribute("autoplay");
 
 // ---- Video controls + freeze watchdog ----
 // Pause bookkeeping: only pauses made through the control bar (or a video
-// that finished in play-once mode) stay paused — every pause the app makes
+// that finished in play-once mode) stay paused; every pause the app makes
 // itself (drag, hidden window) is resumed automatically.
 let appPause = false;
 let userPaused = false;
-// True once THIS loaded source has actually started playing at least once —
+// True once THIS loaded source has actually started playing at least once:
 // distinguishes "never started because autoplay is off" (must stay paused) from
 // "already playing/was app-paused" (app-driven pauses keep auto-resuming
 // regardless of the autoplay setting, same as before this fix).
@@ -352,7 +352,7 @@ function pauseByApp() {
   }
 }
 
-// Hover control bar (shared with the grid tiles). Lives next to the pill —
+// Hover control bar (shared with the grid tiles). Lives next to the pill:
 // nesting it inside the <button> pill would be invalid HTML.
 const mediaBar = buildMediaBar(videoEl, {
   onChange: (prefs) => invoke("set_video_prefs", { id: promptId, ...prefs }).catch(() => {}),
@@ -385,7 +385,7 @@ window.addEventListener("mouseout", (e) => {
 const STALL_POLL_MS = 3000;
 let lastVideoTime = -1;
 setInterval(() => {
-  // Never touch the video while the window is being dragged — resuming
+  // Never touch the video while the window is being dragged: resuming
   // playback mid-drag is exactly what makes the drag stutter.
   if (videoEl.classList.contains("hidden") || document.hidden || userPaused || menuOpen || drag || resizing) {
     lastVideoTime = -1;
@@ -536,10 +536,10 @@ function lockPillBox(w, h) {
 
 const MENU_GAP_DEFAULT = 6;
 let MENU_GAP = MENU_GAP_DEFAULT;
-let menuState = null; // { px, py, side } — pill screen pos + chosen side
+let menuState = null; // { px, py, side }: pill screen pos + chosen side
 
 // With the menu open the window grows past the pill, so pin the resize grips to
-// the pill's box (offset offX/offY inside the window) — the edges/corners stay on
+// the pill's box (offset offX/offY inside the window); the edges/corners stay on
 // the pill itself, never on the menu's far edge. Reset to full-window on close.
 function confineResizeToPill(offX, offY, w, h) {
   const s = resizeEl.style;
@@ -599,7 +599,7 @@ async function openMenu() {
     px = p.x / d;
     py = p.y / d;
   } catch {}
-  // closeMenu() may have run while we awaited outerPosition (Escape/blur) — respect
+  // closeMenu() may have run while we awaited outerPosition (Escape/blur); respect
   // it instead of reopening what it just closed with a stale menuState.
   if (!menuOpen) return;
   menu.classList.remove("hidden");
@@ -720,12 +720,12 @@ pill.addEventListener("dragstart", (e) => {
 });
 pill.addEventListener("dragend", () => { pill.draggable = false; });
 
-// ONE call per drag END — the pills are separate windows, so only the backend
+// ONE call per drag END: the pills are separate windows, so only the backend
 // can tell whether this drop landed on another one. Nothing is sent while dragging,
 // and a drag that ends nowhere near a pill simply gets `false`.
 const mergeAfterDrop = () => {
   if (!foldersOn) return;
-  // With the menu open nothing merges — but the highlight still has to go out.
+  // With the menu open nothing merges, but the highlight still has to go out.
   if (menuOpen) {
     invoke("float_drag_hint", { id: promptId, active: false }).catch(() => {});
     return;
@@ -734,7 +734,7 @@ const mergeAfterDrop = () => {
 };
 
 // startDragging() hands the window to the OS move loop, and that loop CONSUMES the
-// button release — a dragged pill never sees `mouseup`. So the release is also
+// button release: a dragged pill never sees `mouseup`. So the release is also
 // recognised from the first later event that reports no button held, and the drag
 // ends (and merges) there instead.
 function pointerReleased(e) {
@@ -760,13 +760,13 @@ window.addEventListener("mousemove", async (e) => {
   drag.moved = true;
   pill.classList.add("dragging");
   // The backend follows this window while the OS moves it and lights up
-  // whatever letting go would merge into. Nothing is computed here — the pointer
+  // whatever letting go would merge into. Nothing is computed here; the pointer
   // belongs to the move loop from the next line on.
   if (foldersOn) invoke("float_drag_hint", { id: promptId, active: true }).catch(() => {});
   // Decoding video frames while the OS moves the window makes the drag
-  // stutter — pause for the duration of the drag.
+  // stutter; pause for the duration of the drag.
   if (!videoEl.classList.contains("hidden")) pauseByApp();
-  // The whole window moves — an open menu rides along with the pill.
+  // The whole window moves: an open menu rides along with the pill.
   await appWin.startDragging();
 });
 
@@ -786,7 +786,7 @@ window.addEventListener("mouseup", async () => {
     lastPillTs = 0;
     invoke("paste_into_previous", { delayMs: apDelay, enter: apEnter }).catch(() => {});
   } else if (cooldownMs && Date.now() - lastCopyTs < cooldownMs) {
-    // Same pill copied moments ago — throttle to avoid accidental repeats.
+    // Same pill copied moments ago: throttle to avoid accidental repeats.
   } else {
     // Stamp BEFORE the await, not after -- a fast second click while
     // copy_prompt's IPC is still in flight must see the fresh timestamps right
@@ -858,7 +858,7 @@ function rzDir(e) {
   return { dx, dy };
 }
 // Cursor matches the grabbed segment: straight edges get the axis arrow (ns/ew),
-// only the rounded corners get a diagonal one — no diagonal arrow on a flat edge.
+// only the rounded corners get a diagonal one: no diagonal arrow on a flat edge.
 function rzCursor(dx, dy) {
   if (dx && dy) return dx * dy > 0 ? "nwse-resize" : "nesw-resize";
   if (dy) return "ns-resize";
@@ -931,7 +931,7 @@ listen("prompt-updated", (e) => {
   if (e.payload && e.payload.id === promptId) applyPrompt(e.payload);
 });
 // This pill's own rotation pointer moved (any window may have copied it). A
-// pushed event is always fresher than any in-flight peek — bump rotateReq so a
+// pushed event is always fresher than any in-flight peek; bump rotateReq so a
 // slow primeRotateBadge() peek from before this event can't overwrite it later.
 listen("rotation-changed", (e) => {
   if (e.payload && e.payload.id === promptId) {
@@ -948,7 +948,7 @@ document.addEventListener("visibilitychange", () => {
   else ensureVideoPlaying();
 });
 
-// Another pill is being dragged over this one — show what letting go would do.
+// Another pill is being dragged over this one: show what letting go would do.
 // The window itself grows a little, so the pill visibly swells as the target instead
 // of only changing colour. It grows DOWN-RIGHT: moving the origin would fire a window
 // Moved event and the pill's stored position would creep with every hint. The exact
@@ -972,7 +972,7 @@ listen("merge-hint", async (e) => {
       x = p.x / d;
       y = p.y / d;
     } catch { mergeHint = false; return; }
-    // A merge-hint-off event may have landed while we awaited outerPosition — respect
+    // A merge-hint-off event may have landed while we awaited outerPosition; respect
     // it instead of growing the window into a state nothing will ever shrink back
     // from (the "off" branch above already ran with mergeHintBox still null).
     if (!mergeHint) return;
@@ -991,13 +991,13 @@ listen("merge-hint", async (e) => {
 });
 
 listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars));
-// Language switched in the settings — re-translate the pill texts in place.
+// Language switched in the settings: re-translate the pill texts in place.
 listen("language-changed", () => applySettings().catch(() => {}));
 // An expert setting changed: re-read it here too, or a feature switched on while
 // this pill is already on screen would stay off until the next restart.
 listen("settings-changed", () => applySettings().catch(() => {}));
 
-// Moving onto a monitor with a different DPI can leave a stale frame —
+// Moving onto a monitor with a different DPI can leave a stale frame:
 // re-apply the size so the window repaints at the new scale factor.
 appWin.onScaleChanged(() => {
   applyPillSize();
@@ -1005,7 +1005,7 @@ appWin.onScaleChanged(() => {
 });
 
 (async () => {
-  // A transient IPC failure must not leave the pill blank/unstyled — guard each
+  // A transient IPC failure must not leave the pill blank/unstyled: guard each
   // step independently so the rest still runs.
   try {
     applyFloatTheme(await invoke("current_theme"), await invoke("theme_vars"));

@@ -1,4 +1,4 @@
-// Brand generator — stamps the product identity from brands/<slug>.json onto the
+// Brand generator: stamps the product identity from brands/<slug>.json onto the
 // files that carry it, so a rebrand is one command instead of ~100 hand edits.
 //
 //   node tools/brand.js <slug>                 apply in place (working tree)
@@ -35,12 +35,12 @@ function fail(msg) {
 }
 
 // String.replace treats $&, $`, $', $$ and $<n> specially in the replacement even
-// when it came from data, not a capture group — escape a free-text value before
+// when it came from data, not a capture group: escape a free-text value before
 // splicing it into a sub() replacement string.
 const escDollar = (s) => String(s).replace(/\$/g, "$$$$");
 
 // Replace exactly one anchored occurrence. Anything else means the file drifted
-// away from what this generator knows how to stamp — that must be loud, not silent.
+// away from what this generator knows how to stamp: that must be loud, not silent.
 function sub(text, re, replacement, what) {
   const hits = text.match(new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g"));
   if (!hits || hits.length !== 1) {
@@ -70,7 +70,7 @@ const RULES = {
   icon: { asset: true, req: true },
   installerIcon: { asset: true, req: true },
   // Feature switches this brand ships the other way round than the app does, e.g.
-  // { "mdPreview": false }. Only the shipped default moves — a stored user choice
+  // { "mdPreview": false }. Only the shipped default moves; a stored user choice
   // still wins. Absent means "every feature ships the way the app defines it".
   flagDefaults: { flags: true, req: false },
   // Fork vocabulary. The app's own texts keep saying "prompt"; a brand that calls
@@ -306,7 +306,7 @@ function stampManifests(root, b, current) {
   );
   write(pkgPath, pkg);
 
-  // Cargo.toml — package name, lib name and description.
+  // Cargo.toml: package name, lib name and description.
   const cargoPath = path.join(root, "src-tauri", "Cargo.toml");
   let cargo = read(cargoPath);
   cargo = sub(cargo, /^name = "[a-z0-9-]+"$/m, `name = "${b.slug}"`, "Cargo.toml package name");
@@ -320,7 +320,7 @@ function stampManifests(root, b, current) {
   mainRs = sub(mainRs, /^    [a-z0-9_]+_lib::run\(\);$/m, `    ${b.slug.replace(/-/g, "_")}_lib::run();`, "main.rs");
   write(mainPath, mainRs);
 
-  // tauri.conf.json — product name, identifier, window title, asset-protocol denies.
+  // tauri.conf.json: product name, identifier, window title, asset-protocol denies.
   const confPath = path.join(root, "src-tauri", "tauri.conf.json");
   let conf = read(confPath);
   conf = sub(conf, /^(  "productName": ")[^"]*(")/m, `$1${b.displayName}$2`, "tauri.conf productName");
@@ -380,13 +380,13 @@ function stampBuildFiles(root, b) {
   write(nsiPath, nsi);
 }
 
-// The pin test duplicates the brand literals on purpose — a refactor that moves a
+// The pin test duplicates the brand literals on purpose: a refactor that moves a
 // user's data must break a test, not an installation.
 function stampPinTest(root, b) {
   const libPath = path.join(root, "src-tauri", "src", "lib.rs");
   const src = read(libPath);
   // lib.rs is checked out with CRLF on Windows, so the markers cannot be matched
-  // against a hardcoded "\n" — find the real terminator and write the generated
+  // against a hardcoded "\n": find the real terminator and write the generated
   // block with the SAME one, or the file ends up with mixed endings.
   const eol = src.includes("\r\n") ? "\r\n" : "\n";
   const start = `        // BRAND-PIN-START${eol}`;
@@ -424,7 +424,7 @@ function stampPinTest(root, b) {
 // This step is NOT reversible in general: two of a brand's tokens may be the same
 // word (Clipboard-Saver's display name and store folder are), and once both have
 // been written the way back cannot tell them apart. That is why in-place switching
-// leaves prose alone unless --docs is passed — see stampDocs.
+// leaves prose alone unless --docs is passed; see stampDocs.
 function tokenMap(oldB, newB) {
   const pairs = [
     [oldB.identifier, newB.identifier],
@@ -453,7 +453,7 @@ function stampDocs(root, oldB, b, withChangelog, enabled) {
   }
   const map = tokenMap(oldB, b);
   // The prose also spells out the word for the thing the app stores, which the
-  // identifier tokens above do not cover — a fork that calls it something else
+  // identifier tokens above do not cover: a fork that calls it something else
   // would otherwise ship a README about "prompts". The brand's own per-language
   // surface forms are the same ones the UI uses (ui/terms.js).
   const forms = (lang) => Object.entries(b.terms?.forms?.[lang] || {}).filter(([o, n]) => o && n && o !== n);
@@ -480,7 +480,7 @@ function stampDocs(root, oldB, b, withChangelog, enabled) {
     if (fs.existsSync(f)) write(f, apply(read(f), pairs));
   }
   // help.md carries an English half and a German one in the same file, and a single
-  // flat token list cannot tell them apart — "Prompt" is a source token in both
+  // flat token list cannot tell them apart: "Prompt" is a source token in both
   // languages, so whichever set ran first would win in both halves. Split at the
   // German heading and map each half with its own language's forms.
   const helpPath = path.join(root, "docs", "help.md");
@@ -529,7 +529,7 @@ function copyTree(dst) {
   }
 }
 
-// A product repo carries its own brand only — the other configs stay behind.
+// A product repo carries its own brand only: the other configs stay behind.
 function pruneBrands(dst, b) {
   const dir = path.join(dst, "brands");
   if (!fs.existsSync(dir)) return;
@@ -566,7 +566,7 @@ function stampIcons(root, b, regenerate) {
     console.log("  icons     ui/assets/*.svg swapped (pass --icons to rebuild src-tauri/icons)");
     return;
   }
-  // Always driven from this repo — an --out copy has no node_modules of its own.
+  // Always driven from this repo: an --out copy has no node_modules of its own.
   // The Tauri CLI is invoked through node directly (not `npm run tauri`): no shell
   // is involved, so nothing from the config can be read as a command, and there is
   // no `--` for npm to swallow the path argument with.

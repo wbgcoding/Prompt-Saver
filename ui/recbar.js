@@ -90,7 +90,7 @@ function applyPaused(p) {
   resumeIcon.classList.toggle("hidden", !p);
   const label = pauseBtnLabel();
   if (label) { pauseBtn.title = label; pauseBtn.setAttribute("aria-label", label); }
-  // Reuses the same button label a sighted user just saw change (Pause/Resume) —
+  // Reuses the same button label a sighted user just saw change (Pause/Resume):
   // that already names which state the recording is in now.
   if (changed && label) {
     const live = document.getElementById("live");

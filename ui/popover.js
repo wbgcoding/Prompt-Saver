@@ -34,7 +34,7 @@ export function placePopover(el, rect, gap = 4) {
   if (h <= below || below >= above) { top = rect.bottom + gap; room = below; }
   else { top = rect.top - gap - Math.min(h, above); room = above; }
   // Too tall for either side: keep it inside and let it scroll rather than cut it.
-  // Everything below reasons about the height it will ACTUALLY have — clamping with
+  // Everything below reasons about the height it will ACTUALLY have: clamping with
   // the unshrunk height would drag a tall popover to the top of the window and over
   // the very thing it belongs to.
   let shown = h;

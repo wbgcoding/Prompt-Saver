@@ -27,7 +27,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).parent
 
-# The floor is the app's own minimum window size — read it, so this sweep follows
+# The floor is the app's own minimum window size: read it, so this sweep follows
 # tauri.conf.json instead of drifting away from it.
 _WIN = json.loads((REPO / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8"))["app"]["windows"][0]
 MIN_W, MIN_H = _WIN["minWidth"], _WIN["minHeight"]
@@ -9462,7 +9462,7 @@ PICK_PROBE = """
 """
 
 
-# F25: the folder window is the only place its UI is observable — the closed icon
+# F25: the folder window is the only place its UI is observable: the closed icon
 # (previews + count + label), the grid the window grows into, and Esc collapsing it.
 FOLDER_PROBE = """
 <script>
@@ -11384,8 +11384,8 @@ EDIT_STATE_PROBE = """
 
 # A DPAPI failure makes the backend write the store in plaintext instead of
 # refusing the save. That used to be reported in the error log and nowhere else.
-# The same page is booted twice — once with the backend reporting a sealed store,
-# once unsealed — and the run asserts BOTH directions: the warning appears when it
+# The same page is booted twice: once with the backend reporting a sealed store,
+# once unsealed, and the run asserts BOTH directions: the warning appears when it
 # should, and leaves nothing behind (no leftover box, no empty gap in the settings
 # page) when it should not.
 SEAL_PROBE = """
@@ -13397,7 +13397,7 @@ def unescape(s):
 def main():
     browser = next((p for p in CHROME_CANDIDATES if Path(p).exists()), None)
     if not browser:
-        # CI's runner image always ships Chrome (see ci.yml) — a missing browser there
+        # CI's runner image always ships Chrome (see ci.yml); a missing browser there
         # means the whole UI-smoke job silently stopped covering anything, which must
         # fail loudly instead of passing green with zero coverage.
         if os.environ.get("CI"):
@@ -13427,7 +13427,7 @@ def main():
                 [browser, "--headless=new", "--disable-gpu", "--no-first-run",
                  f"--user-data-dir={tmp / ('profile-%s' % size_tag)}", "--allow-file-access-from-files",
                  # The probe walks more UI than it used to; 30s of virtual time ran
-                 # out mid-run on the smallest window and produced no result at all —
+                 # out mid-run on the smallest window and produced no result at all;
                  # raised to 60s, then to 75s once the P10 quick-grid hover-only check
                  # (two more expert-menu round trips) pushed past that too, then to 95s
                  # once 91/51/70's regressions (trash dialog, multi-view popover, three
@@ -13478,7 +13478,7 @@ def main():
             if not (r["errors"] or r["overflow"] or r["rawKeys"] or r.get("layout")):
                 print("   ok")
 
-        # 221: a pass in the longest-running UI language (Italian — averages ~42
+        # 221: a pass in the longest-running UI language (Italian: averages ~42
         # chars/string across all 1231 keys, the longest of the 11 by total
         # character count) at the two tightest window sizes, where a long
         # translation is most likely to overflow, overlap or push a button
@@ -13540,7 +13540,7 @@ def main():
             if not (uncaught or r["overflow"] or r["rawKeys"] or r.get("layout")):
                 print("   ok")
 
-        # Each secondary window carries the only coverage its own UI can get — the
+        # Each secondary window carries the only coverage its own UI can get: the
         # pill drag/merge, the colour picker and the whole folder window live here
         # and nowhere else.
         for name, size, probe, budget in (
@@ -13674,7 +13674,7 @@ def main():
         # The store-sealing warning, both ways round. Its own boot each time: the
         # dialog only ever opens during startup, so it cannot be reached by walking
         # an already-running page. Wide enough that the settings dialog is not also
-        # fighting for room — the small-window layout is the main sweep's job.
+        # fighting for room; the small-window layout is the main sweep's job.
         for sealed in (False, True):
             tag = "sealed" if sealed else "unsealed"
             side = tmp / "ui" / f"seal-{tag}.html"
