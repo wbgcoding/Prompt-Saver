@@ -3282,6 +3282,18 @@ fn lock_is_stale(existing: &DataDirLockInfo) -> bool {
 static DATA_DIR_READONLY: AtomicBool = AtomicBool::new(false);
 static DATA_DIR_LOCK_HOST: Mutex<Option<String>> = Mutex::new(None);
 
+// Set by disable_demo_mode() once it has flushed the pending demo settings to
+// the (still-demo) data dir and is about to flip the "datapath" redirect back
+// to the real one and call app.restart(). Between that flip and the process
+// actually exiting, the exit's own RunEvent::Exit flush (or a 250ms
+// settings_flush_tick landing in the same window) must not be allowed to
+// write anything: at that point db_conn()/data_dir() already resolve to the
+// REAL store, and a write there would overwrite real settings with demo ones
+// (views, sample folder, demoMode=true). Never cleared explicitly -- the
+// process the flip belongs to is about to be replaced by app.restart(), and
+// the fresh process starts with the default `false` again.
+static DEMO_EXIT_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
+
 // Decides read-only vs. owned for `dir` and, if owned, claims it. Called once at
 // load_store() and again after set_data_dir() points the app at a different
 // folder. The `dataDirLock` toggle (default on) skips all of this when off,
@@ -3337,6 +3349,12 @@ fn data_dir_lock_status() -> DataDirLockStatus {
 // blocked write emits the same event with the same host name, so the window
 // can show the same clear message no matter which action triggered it.
 fn data_dir_write_blocked(app: &AppHandle) -> bool {
+    // No event emitted here (unlike the readonly case below): the window is
+    // already on its way down for app.restart(), and this is not a condition
+    // the user needs a banner about.
+    if DEMO_EXIT_IN_PROGRESS.load(Ordering::Relaxed) {
+        return true;
+    }
     if !DATA_DIR_READONLY.load(Ordering::Relaxed) {
         return false;
     }
@@ -4503,6 +4521,15 @@ fn load_store(app: &AppHandle) -> Store {
         let (cap, cutoff) = history_cap_and_cutoff(&settings);
         let _ = db_trim_copy(&conn, cap, cutoff);
         migrate_prompts(&mut prompts);
+        // A relative file_path (only ever produced by demo_prompts(), never by the
+        // real attachment picker, which always yields an absolute path) is resolved
+        // against the live data dir here instead of being stored absolute on disk --
+        // see the comment on demo_prompts()'s attachment row.
+        for p in prompts.iter_mut() {
+            if !p.file_path.is_empty() && Path::new(&p.file_path).is_relative() {
+                p.file_path = dir.join(&p.file_path).to_string_lossy().to_string();
+            }
+        }
         let mut store = Store {
             prompts,
             trash,
@@ -16267,7 +16294,16 @@ async fn delete_data_dir(path: String) -> bool {
 // read by any of this: switching demo mode on or off only ever touches the
 // "datapath" redirect file and the demo subfolder next to it.
 
-const DEMO_SUBFOLDER: &str = "demo";
+// An app-specific name, not a generic "demo" -- a folder that name would
+// collide with something a user (portable mode especially) already has
+// beside their data, and build_demo_store's wipe-and-rebuild must never
+// touch a folder it did not create itself (see DEMO_MARKER_FILE).
+const DEMO_SUBFOLDER: &str = "prompt-saver-demo";
+// Written into DEMO_SUBFOLDER the first time this app builds it there;
+// build_demo_store refuses to wipe an existing folder at that path unless
+// this marker is present, so an unrelated folder that merely happens to
+// share the name survives untouched.
+const DEMO_MARKER_FILE: &str = ".prompt-saver-demo-marker";
 const DEMO_POINTER_BACKUP: &str = "datapath.before-demo";
 
 // A small solid-colour picture, generated once and kept as a literal instead
@@ -16321,7 +16357,11 @@ fn demo_prompts(dir: &Path, ffmpeg: Option<&Path>) -> Vec<Prompt> {
         demo_prompt("demo-chain-a", "Erster Baustein", "Der erste Teil einer möglichen Kette."),
         demo_prompt("demo-chain-b", "Zweiter Baustein", "Der zweite Teil einer möglichen Kette."),
         Prompt {
-            file_path: dir.join("Anhang.txt").to_string_lossy().to_string(),
+            // Relative, not dir.join(...): an absolute path here would bake the
+            // Windows account name (part of %APPDATA%) into a row shown in demo
+            // mode's own screenshots. load_store() resolves it back to a real
+            // path at read time.
+            file_path: "Anhang.txt".to_string(),
             ..demo_prompt("demo-attachment", "Angehängte Datei", "")
         },
         demo_prompt("demo-folder-a", "Ordner-Eintrag 1", "Erster Eintrag im Beispielordner."),
@@ -16343,7 +16383,9 @@ fn demo_prompts(dir: &Path, ffmpeg: Option<&Path>) -> Vec<Prompt> {
                 .unwrap_or(false);
             if ok {
                 list.push(Prompt {
-                    file_path: video.to_string_lossy().to_string(),
+                    // Same reasoning as the attachment row above: relative, resolved
+                    // back to a real path by load_store().
+                    file_path: "Videoaufnahme.mp4".to_string(),
                     ..demo_prompt("demo-video", "Videoaufnahme", "")
                 });
             }
@@ -16410,10 +16452,17 @@ fn demo_settings(has_video: bool) -> Settings {
 }
 
 // Wipes and rebuilds the sample store at `dir` from nothing. Never touches
-// anything outside `dir`.
+// anything outside `dir`, and never wipes `dir` itself unless it is either
+// absent or already carries the marker this function itself writes below --
+// a pre-existing, unrelated folder that merely happens to sit at that path
+// is left completely alone.
 fn build_demo_store(dir: &Path, ffmpeg: Option<&Path>) -> Result<(), String> {
+    if dir.is_dir() && !dir.join(DEMO_MARKER_FILE).is_file() {
+        return Err("a folder already exists at the demo data path and was not created by demo mode; refusing to touch it".to_string());
+    }
     let _ = fs::remove_dir_all(dir);
     fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    fs::write(dir.join(DEMO_MARKER_FILE), b"").map_err(|e| e.to_string())?;
     // Not db_conn_at(): its schema-init guard runs only once per process (see
     // its own comment), which is exactly right for the app's single real
     // connection but would silently skip creating the tables here whenever
@@ -16440,10 +16489,22 @@ fn enter_demo_mode(canonical: &Path, ffmpeg: Option<&Path>) -> Result<PathBuf, S
     build_demo_store(&demo, ffmpeg)?;
     let pointer = canonical.join("datapath");
     let backup = canonical.join(DEMO_POINTER_BACKUP);
-    if pointer.exists() {
-        fs::copy(&pointer, &backup).map_err(|e| e.to_string())?;
-    } else {
-        fs::write(&backup, b"").map_err(|e| e.to_string())?; // marker: no redirect before
+    // Never overwrite an existing backup: one is already there only when a
+    // previous enable never got a matching exit (a crash, or a restart that
+    // landed mid-demo), and it still holds the one pointer value that came
+    // from before demo mode -- the only thing exit_demo_mode must restore.
+    if !backup.exists() {
+        let already_demo = fs::read_to_string(&pointer)
+            .map(|s| Path::new(s.trim()) == demo)
+            .unwrap_or(false);
+        if pointer.exists() && !already_demo {
+            fs::copy(&pointer, &backup).map_err(|e| e.to_string())?;
+        } else {
+            // Either no redirect existed, or the redirect already pointed at the
+            // demo folder itself (nothing legitimate to preserve) -- record "no
+            // redirect before" rather than saving the demo path as the backup.
+            fs::write(&backup, b"").map_err(|e| e.to_string())?;
+        }
     }
     fs::write(&pointer, demo.to_string_lossy().as_bytes()).map_err(|e| e.to_string())?;
     Ok(demo)
@@ -16456,10 +16517,17 @@ fn enter_demo_mode(canonical: &Path, ffmpeg: Option<&Path>) -> Result<PathBuf, S
 fn exit_demo_mode(canonical: &Path) -> Result<(), String> {
     let pointer = canonical.join("datapath");
     let backup = canonical.join(DEMO_POINTER_BACKUP);
+    let demo = canonical.join(DEMO_SUBFOLDER);
     if !backup.exists() {
-        // Nothing recorded (a restart mid-demo, or exit called twice): the
-        // safest fallback is no redirect at all, never leaving demo active.
-        let _ = fs::remove_file(&pointer);
+        // Nothing recorded (a restart mid-demo, or exit called twice). Only clear
+        // the redirect when it is actually still pointing at the demo folder --
+        // an unrelated custom redirect the backup logic above did not touch must
+        // never be deleted just because the backup happens to be missing, or the
+        // app falls back to opening the canonical (empty) store instead of the
+        // user's real custom folder.
+        if fs::read_to_string(&pointer).map(|s| Path::new(s.trim()) == demo).unwrap_or(false) {
+            let _ = fs::remove_file(&pointer);
+        }
         return Ok(());
     }
     let prev = fs::read_to_string(&backup).map_err(|e| e.to_string())?;
@@ -16480,6 +16548,17 @@ fn exit_demo_mode(canonical: &Path) -> Result<(), String> {
 async fn enable_demo_mode(app: AppHandle, state: State<'_, Db>) -> Result<(), String> {
     {
         let store = lock(&state);
+        // With multiple instances allowed, a second running instance keeps
+        // resolving data_dir()/db_conn() fresh on every write of its own; once
+        // this redirect flips, that other instance's ordinary writes would land
+        // in the sample store instead of the real one (and be wiped on the next
+        // demo rebuild). Detecting a SPECIFIC other process cheaply is not
+        // available here, so this refuses demo mode for the whole setting
+        // instead: with it off (the default), the single-instance plugin
+        // already guarantees no such second writer can exist.
+        if store.settings.ui_flags.get("allowMultipleInstances").copied().unwrap_or(false) {
+            return Err("demo-mode-multiple-instances".to_string());
+        }
         if !store.prompts_locked {
             save_prompts(&app, &store);
         }
@@ -16494,7 +16573,24 @@ async fn enable_demo_mode(app: AppHandle, state: State<'_, Db>) -> Result<(), St
 // during the demo session simply stops being read from anywhere: the demo
 // folder is not deleted, only abandoned until the next enable overwrites it.
 #[tauri::command]
-async fn disable_demo_mode(app: AppHandle) -> Result<(), String> {
+async fn disable_demo_mode(app: AppHandle, state: State<'_, Db>) -> Result<(), String> {
+    {
+        let store = lock(&state);
+        if store.settings.ui_flags.get("allowMultipleInstances").copied().unwrap_or(false) {
+            return Err("demo-mode-multiple-instances".to_string());
+        }
+        // Flush whatever demo-session settings are still only collected in memory
+        // to disk NOW, under the store lock and while the "datapath" redirect
+        // still points at the demo folder -- so they land in the demo store, not
+        // the real one. Then block every further store write for the rest of
+        // this (about to be replaced) process: exit_demo_mode below flips the
+        // redirect back to the real store, and after that point RunEvent::Exit's
+        // own flush (app.restart() below triggers it) or the 250ms
+        // settings_flush_tick must not be allowed to write demo settings
+        // (views, sample folder, demoMode=true) over the real ones.
+        flush_settings(&app, &store.settings);
+        DEMO_EXIT_IN_PROGRESS.store(true, Ordering::Relaxed);
+    }
     exit_demo_mode(&default_data_dir(&app))?;
     app.restart();
 }
@@ -38531,6 +38627,195 @@ mod tests {
         assert_eq!(settings.tile_folders.len(), 1, "one grid folder");
         assert_eq!(settings.tile_folders[0].members.len(), 2);
         assert_eq!(settings.ui_flags.get("demoMode"), Some(&true));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // Finding 1 (HIGH, adversarial audit): disable_demo_mode flushes pending
+    // demo settings into the demo dir, under the store lock, BEFORE it flips
+    // the "datapath" redirect back to the real one -- otherwise app.restart()'s
+    // own RunEvent::Exit flush (or the 250ms settings_flush_tick) can resolve
+    // data_dir() AFTER the flip and overwrite the real data.db with demo
+    // settings. This proves the write-then-flip half directly: a settings
+    // write made while the redirect still points at the demo dir lands there,
+    // never in the real store sitting right next to it.
+    #[test]
+    fn demo_settings_written_before_the_flip_land_in_the_demo_dir_not_the_real_one() {
+        let canonical = std::env::temp_dir().join(format!("{}-test-demo-exit-flush", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&canonical);
+        std::fs::create_dir_all(&canonical).unwrap();
+        let real_db = canonical.join("data.db");
+        std::fs::write(&real_db, b"the real store, byte for byte").unwrap();
+        let real_bytes_before = std::fs::read(&real_db).unwrap();
+
+        let demo = enter_demo_mode(&canonical, None).unwrap();
+
+        // Simulate the flush disable_demo_mode does before it calls
+        // exit_demo_mode: at this point the redirect still points at `demo`.
+        let conn = db_conn_at(&demo).unwrap();
+        let changed = Settings { theme: "changed-during-demo".into(), ..Default::default() };
+        db_write_settings(&conn, &changed).unwrap();
+
+        exit_demo_mode(&canonical).unwrap();
+
+        assert_eq!(
+            std::fs::read(&real_db).unwrap(),
+            real_bytes_before,
+            "a settings write made before the redirect flip must never reach the real data.db"
+        );
+        let demo_conn = db_conn_at(&demo).unwrap();
+        let mut written = WrittenRows::new();
+        let (_p, settings, ..) = db_load(&demo_conn, &mut written);
+        assert_eq!(
+            settings.map(|s| s.theme),
+            Some("changed-during-demo".to_string()),
+            "the flush must have actually landed in the demo store"
+        );
+
+        let _ = std::fs::remove_dir_all(&canonical);
+    }
+
+    // The other half of finding 1: DEMO_EXIT_IN_PROGRESS is the flag
+    // data_dir_write_blocked() checks first (before the DATA_DIR_READONLY
+    // case), the same choke point save_prompts/save_trash/
+    // save_prompts_and_trash/write_settings_now all already call -- this reads
+    // it back exactly like settings_locked_command_reports_the_flag and
+    // settings_write_failed_command_reports_the_flag do for their own flags
+    // (data_dir_write_blocked itself needs a real AppHandle, which no unit
+    // test in this file constructs).
+    #[test]
+    fn demo_exit_in_progress_flag_round_trips() {
+        let before = DEMO_EXIT_IN_PROGRESS.load(Ordering::Relaxed);
+        DEMO_EXIT_IN_PROGRESS.store(true, Ordering::Relaxed);
+        assert!(DEMO_EXIT_IN_PROGRESS.load(Ordering::Relaxed));
+        DEMO_EXIT_IN_PROGRESS.store(false, Ordering::Relaxed);
+        assert!(!DEMO_EXIT_IN_PROGRESS.load(Ordering::Relaxed));
+        DEMO_EXIT_IN_PROGRESS.store(before, Ordering::Relaxed);
+    }
+
+    // Finding 2 (HIGH, portable mode): build_demo_store must never delete a
+    // pre-existing folder at the demo subfolder's path unless it carries the
+    // marker this function itself writes -- portable installs put the demo
+    // subfolder beside the exe, where a user could already have an unrelated
+    // folder there (named "demo" under the old, generic subfolder name; the
+    // marker check protects the new app-specific name just as well against
+    // any other collision).
+    #[test]
+    fn build_demo_store_refuses_to_wipe_an_unmarked_existing_folder() {
+        let dir = std::env::temp_dir().join(format!("{}-test-demo-unmarked-folder", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let sentinel = dir.join("not-mine.txt");
+        std::fs::write(&sentinel, b"a user's own file, nothing to do with demo mode").unwrap();
+
+        let result = build_demo_store(&dir, None);
+        assert!(result.is_err(), "an existing, unmarked folder must never be wiped: {result:?}");
+        assert!(sentinel.exists(), "the user's own file must survive");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // A folder build_demo_store itself created (carries the marker) must still
+    // be rebuildable, or every enable after the very first would fail outright.
+    #[test]
+    fn build_demo_store_rebuilds_its_own_marked_folder() {
+        let dir = std::env::temp_dir().join(format!("{}-test-demo-marked-folder", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&dir);
+        build_demo_store(&dir, None).unwrap();
+        std::fs::write(dir.join("left-over.txt"), b"session leftover").unwrap();
+
+        build_demo_store(&dir, None).unwrap();
+        assert!(!dir.join("left-over.txt").exists(), "a marked folder must still be wiped and rebuilt");
+        assert!(dir.join(DEMO_MARKER_FILE).is_file(), "the rebuild must leave the marker in place");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // Finding 3 (MEDIUM): entering demo mode a second time without an exit in
+    // between (a crash mid-session, or a relaunch that never reached
+    // exit_demo_mode) must never overwrite an already-recorded backup with the
+    // demo path itself -- once that happens there is nothing left to restore
+    // the real custom redirect from.
+    #[test]
+    fn demo_pointer_backup_survives_a_second_enable_without_an_exit() {
+        let canonical = std::env::temp_dir().join(format!("{}-test-demo-backup-vanish", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&canonical);
+        std::fs::create_dir_all(&canonical).unwrap();
+        let custom = canonical.join("elsewhere");
+        std::fs::create_dir_all(&custom).unwrap();
+        std::fs::write(canonical.join("datapath"), custom.to_string_lossy().as_bytes()).unwrap();
+
+        enter_demo_mode(&canonical, None).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(canonical.join(DEMO_POINTER_BACKUP)).unwrap(),
+            custom.to_string_lossy(),
+            "the first enable must save the real custom redirect as the backup"
+        );
+
+        // Re-enter without exiting first: the pointer already points at the
+        // demo folder itself.
+        enter_demo_mode(&canonical, None).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(canonical.join(DEMO_POINTER_BACKUP)).unwrap(),
+            custom.to_string_lossy(),
+            "a second enable must never overwrite the backup with the demo path itself"
+        );
+
+        exit_demo_mode(&canonical).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(canonical.join("datapath")).unwrap(),
+            custom.to_string_lossy(),
+            "switching off must restore the real custom redirect, not the canonical (empty) store"
+        );
+
+        let _ = std::fs::remove_dir_all(&canonical);
+    }
+
+    // The other half of finding 3: if the backup is missing (an exit already
+    // ran, or nothing ever wrote one) and the redirect points somewhere that is
+    // NOT the demo folder, exit_demo_mode must leave it alone rather than
+    // deleting it and falling back to the canonical (empty) store.
+    #[test]
+    fn exit_demo_mode_leaves_an_unrelated_redirect_alone_when_the_backup_is_missing() {
+        let canonical = std::env::temp_dir().join(format!("{}-test-demo-no-backup", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&canonical);
+        std::fs::create_dir_all(&canonical).unwrap();
+        let custom = canonical.join("elsewhere");
+        std::fs::create_dir_all(&custom).unwrap();
+        std::fs::write(canonical.join("datapath"), custom.to_string_lossy().as_bytes()).unwrap();
+        assert!(!canonical.join(DEMO_POINTER_BACKUP).exists());
+
+        exit_demo_mode(&canonical).unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(canonical.join("datapath")).unwrap(),
+            custom.to_string_lossy(),
+            "an unrelated redirect must survive when there is no demo backup to restore"
+        );
+
+        let _ = std::fs::remove_dir_all(&canonical);
+    }
+
+    // Finding 5 (LOW): the sample attachment row must never store an absolute
+    // path -- an installed build's data dir sits under
+    // %APPDATA%\<Windows account name>, and demo mode's whole point is to be
+    // shown to other people (screenshots, exports).
+    #[test]
+    fn demo_attachment_path_is_relative_not_absolute() {
+        let dir = std::env::temp_dir().join(format!("{}-test-demo-relative-path", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&dir);
+        build_demo_store(&dir, None).unwrap();
+
+        let conn = db_conn_at(&dir).unwrap();
+        let mut written = WrittenRows::new();
+        let (prompts, ..) = db_load(&conn, &mut written);
+        let attachment = prompts.iter().find(|p| p.id == "demo-attachment").unwrap();
+        assert!(!attachment.file_path.is_empty());
+        assert!(
+            Path::new(&attachment.file_path).is_relative(),
+            "the stored file_path must be relative, not an absolute path containing the user's own account name: {}",
+            attachment.file_path
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }
