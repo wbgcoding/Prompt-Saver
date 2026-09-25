@@ -15348,6 +15348,18 @@ function openHelp() {
   $("help").classList.remove("hidden");
 }
 
+// Opens the help dialog pre-filtered to one article by its stable `id` (see
+// ui/help.js), through the same search field gsOpenHelp uses for a global-search
+// hit -- an anchor is a lookup key, never the (per-language) title text itself.
+function openHelpAt(id) {
+  const cat = helpCategories().find((c) => c.id === id);
+  helpQuery = cat ? cat.title : "";
+  $("help-search").value = helpQuery;
+  helpCollapsed = new Set();
+  renderHelp();
+  $("help").classList.remove("hidden");
+}
+
 async function openJournal() {
   settings = await invoke("get_settings");
   journalQuery = "";
@@ -20629,11 +20641,13 @@ function setupDragDrop() {
 // ---- First-run tour ----
 // Five fixed steps in one shared frame (#tour-modal), content swapped per step.
 // Steps 1-4 are a small hand-drawn illustration + up to three lines of text; step 5
-// is the "optional features" settings table (TOUR_OPTIONS below). Opened two ways:
+// is what else the program can do (TOUR_FEATURES below) plus what is already set
+// up (TOUR_SETUP below). Opened two ways:
 //  - Automatically once, right after the example prompts are seeded on a genuinely
 //    fresh install (maybeOpenFirstRunTour, called from init()'s reveal()). Step 5
 //    buffers its switches in a local draft and only writes what differs from the
-//    shipped default, on Finish. Skip writes nothing but tourSeen.
+//    shipped default (features) or the value the tour opened with (setup), on
+//    Finish. Skip writes nothing but tourSeen.
 //  - Manually via the expert menu's gated "tour-open" action (EXPERT_ACTIONS). Step 5
 //    then writes live, exactly like a normal expert-menu flag row — nothing is
 //    buffered or reset just from reopening it this way.
@@ -20711,18 +20725,34 @@ const TOUR_STEPS = [
 const TOUR_STEP_COUNT = TOUR_STEPS.length + 1; // + the settings step
 const TOUR_LAST_STEP = TOUR_STEP_COUNT - 1;
 
-// Step 5's table — written so a later point (the announced screenshot
-// recording feature) can add its own row with exactly one new line.
-const TOUR_OPTIONS = [
-  { key: "screenshot", labelKey: "flagScreenshot", descKey: "tourOptScreenshot" },
-  { key: "colorPicker", labelKey: "flagColorPicker", descKey: "tourOptPicker" },
-  { key: "ocr", labelKey: "flagOcr", descKey: "tourOptOcr" },
-  { key: "voice", labelKey: "flagVoice", descKey: "tourOptVoice" },
+// Step 5's table — a data structure, not markup, so a later feature is one new
+// row. Each row names the flag it switches, the text describing it, and the
+// help article it points at (ui/help.js, matched by `id`).
+const TOUR_FEATURES = [
+  { flagKey: "screenshot", labelKey: "flagScreenshot", textKey: "tourOptScreenshot", helpAnchor: "screenshotEditor" },
+  { flagKey: "ocr", labelKey: "flagOcr", textKey: "tourOptOcr", helpAnchor: "ocr" },
+  { flagKey: "screenRecord", labelKey: "flagScreenRecord", textKey: "tourOptRecord", helpAnchor: "screenRecording" },
+  { flagKey: "voice", labelKey: "flagVoice", textKey: "tourOptVoice", helpAnchor: "voiceDictation" },
+  { flagKey: "colorPicker", labelKey: "flagColorPicker", textKey: "tourOptPicker", helpAnchor: "colorPicker" },
+];
+
+// Step 5's second section: three things already decided on first launch, shown
+// read-only except a plain switch flip. Not feature flags -- real settings with
+// their own invoke commands, so each row carries its own live-write function.
+const TOUR_SETUP = [
+  { key: "autostart", labelKey: "autostart", textKey: "tourSetAutostart",
+    get: () => settings.autostart === true,
+    setLive: (v) => tourSetSettingLive("set_autostart", "autostart", v) },
+  { key: "autoUpdate", labelKey: "autoUpdate", textKey: "tourSetUpdate",
+    get: () => settings.auto_update !== false,
+    setLive: (v) => tourSetSettingLive("set_auto_update", "auto_update", v) },
 ];
 
 let tourStep = 0;
 let tourFirstRun = false; // draft-buffered (true) vs. live-writing (false) step 5
-let tourDraft = {}; // key -> bool, only meaningful while tourFirstRun is true
+let tourDraft = {}; // flagKey -> bool, only meaningful while tourFirstRun is true
+let tourSetupDraft = {}; // TOUR_SETUP key -> bool, only meaningful while tourFirstRun is true
+let tourSetupInitial = {}; // snapshot of tourSetupDraft at open, to know what actually changed
 
 // Shared by both step-5 modes' "write it now" path: identical to flagRow()'s own
 // change handler (minus the promptSync confirmation, which none of these three need).
@@ -20730,6 +20760,12 @@ async function tourSetFlagLive(key, enabled) {
   settings.ui_flags = { ...(settings.ui_flags || {}), [key]: enabled };
   try { await invoke("set_ui_flag", { key, enabled }); } catch (err) { errToast(err); }
   applyFlags();
+}
+
+// Live-write for a TOUR_SETUP row -- these are real settings fields (autostart,
+// auto_update), each with its own invoke command, not ui_flags.
+async function tourSetSettingLive(cmd, field, enabled) {
+  try { await invoke(cmd, { enabled }); settings[field] = enabled; } catch (err) { errToast(err); }
 }
 
 function renderTourDrawingStep(step) {
@@ -20750,10 +20786,30 @@ function renderTourDrawingStep(step) {
   return wrap;
 }
 
+// Small "?" button next to a feature row, opening the in-app help at the
+// article matching that row's helpAnchor. Lives inside the row's own <label>
+// (same trick as the expert menu's per-row reset button, e.g. valScreenshotDir):
+// stopPropagation keeps the click from also toggling the row's switch.
+function tourHelpButton(anchor) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "icon-btn tour-help-btn";
+  btn.title = t("tourHelpBtn");
+  btn.setAttribute("aria-label", t("tourHelpBtn"));
+  btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 1a5 5 0 0 0-1 9.9V12h2v-1.1A5 5 0 0 0 8 1zm0 12.5a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2z"/></svg>';
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    closeTour();
+    openHelpAt(anchor);
+  });
+  return btn;
+}
+
 function renderTourOptionsStep() {
   const wrap = document.createElement("div");
   wrap.className = "tour-options";
-  for (const opt of TOUR_OPTIONS) {
+  for (const opt of TOUR_FEATURES) {
     const row = document.createElement("label");
     row.className = "field switch-field tour-opt-row";
     const label = document.createElement("span");
@@ -20762,20 +20818,20 @@ function renderTourOptionsStep() {
     name.textContent = t(opt.labelKey);
     const desc = document.createElement("span");
     desc.className = "tour-opt-desc";
-    desc.textContent = t(opt.descKey);
+    desc.textContent = t(opt.textKey);
     label.append(name, desc);
     const note = document.createElement("span");
     note.className = "tour-opt-default";
-    note.textContent = shipsOn(opt.key) ? t("tourDefaultOn") : t("tourDefaultOff");
+    note.textContent = shipsOn(opt.flagKey) ? t("tourDefaultOn") : t("tourDefaultOff");
     const input = document.createElement("input");
     input.type = "checkbox";
     input.className = "switch";
-    input.checked = tourFirstRun ? tourDraft[opt.key] : flagState(opt.key);
+    input.checked = tourFirstRun ? tourDraft[opt.flagKey] : flagState(opt.flagKey);
     input.addEventListener("change", () => {
-      if (tourFirstRun) tourDraft[opt.key] = input.checked;
-      else tourSetFlagLive(opt.key, input.checked);
+      if (tourFirstRun) tourDraft[opt.flagKey] = input.checked;
+      else tourSetFlagLive(opt.flagKey, input.checked);
     });
-    row.append(label, note, input);
+    row.append(label, tourHelpButton(opt.helpAnchor), note, input);
     wrap.appendChild(row);
   }
   const restore = document.createElement("button");
@@ -20784,18 +20840,81 @@ function renderTourOptionsStep() {
   restore.textContent = t("tourRestoreDefaults");
   restore.addEventListener("click", async () => {
     if (tourFirstRun) {
-      tourDraft = Object.fromEntries(TOUR_OPTIONS.map((o) => [o.key, shipsOn(o.key)]));
+      tourDraft = Object.fromEntries(TOUR_FEATURES.map((o) => [o.flagKey, shipsOn(o.flagKey)]));
     } else {
-      for (const opt of TOUR_OPTIONS) await tourSetFlagLive(opt.key, shipsOn(opt.key));
+      for (const opt of TOUR_FEATURES) await tourSetFlagLive(opt.flagKey, shipsOn(opt.flagKey));
     }
     renderTourStep(); // reflect the reset switches (and re-focus Next)
   });
   wrap.appendChild(restore);
+  wrap.appendChild(renderTourSetupSection());
   const foot = document.createElement("p");
   foot.className = "hint tour-options-foot";
   foot.textContent = t("tourFooterNote");
   wrap.appendChild(foot);
   return wrap;
+}
+
+// The second section of step 5: three things already decided on first launch.
+// Autostart and the update check are plain switches sharing the feature rows'
+// buffering; the data folder is read-only here on purpose -- moving it is a
+// multi-step flow of its own, out of place inside the tour.
+function renderTourSetupSection() {
+  const section = document.createElement("div");
+  section.className = "tour-setup";
+  const heading = document.createElement("div");
+  heading.className = "tour-setup-heading";
+  heading.textContent = t("tourSetupHeading");
+  section.appendChild(heading);
+  // Autostart and the update check side by side -- two switches sharing one
+  // row's height instead of two, the difference that keeps step 5 within the
+  // measured min-height budget every other step already fits.
+  const pair = document.createElement("div");
+  pair.className = "tour-setup-pair";
+  for (const opt of TOUR_SETUP) {
+    const row = document.createElement("label");
+    row.className = "field switch-field tour-setup-row";
+    const label = document.createElement("span");
+    label.className = "tour-opt-label";
+    const name = document.createElement("b");
+    name.textContent = t(opt.labelKey);
+    const desc = document.createElement("span");
+    desc.className = "tour-opt-desc";
+    desc.textContent = t(opt.textKey);
+    label.append(name, desc);
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.className = "switch";
+    input.checked = tourFirstRun ? tourSetupDraft[opt.key] : opt.get();
+    input.addEventListener("change", () => {
+      if (tourFirstRun) tourSetupDraft[opt.key] = input.checked;
+      else opt.setLive(input.checked);
+    });
+    row.append(label, input);
+    pair.appendChild(row);
+  }
+  section.appendChild(pair);
+  const dataRow = document.createElement("div");
+  dataRow.className = "field tour-setup-row tour-setup-datadir";
+  const dataLabel = document.createElement("span");
+  dataLabel.className = "tour-opt-label";
+  const dataName = document.createElement("b");
+  dataName.textContent = t("tourSetDataDir");
+  const dataPath = document.createElement("span");
+  dataPath.className = "tour-opt-desc";
+  dataPath.textContent = currentDataDir;
+  dataLabel.append(dataName, dataPath);
+  const dataChange = document.createElement("button");
+  dataChange.type = "button";
+  dataChange.className = "ghost-btn tour-setup-change-btn";
+  dataChange.textContent = t("tourSetDataDirChange");
+  dataChange.addEventListener("click", () => {
+    closeTour();
+    jumpToExpertSetting("dataDir", "paths");
+  });
+  dataRow.append(dataLabel, dataChange);
+  section.appendChild(dataRow);
+  return section;
 }
 
 function renderTourStep() {
@@ -20879,7 +20998,9 @@ function tourMeasureMaxStepHeight() {
 async function openTour({ firstRun }) {
   tourFirstRun = firstRun;
   tourStep = 0;
-  tourDraft = firstRun ? Object.fromEntries(TOUR_OPTIONS.map((o) => [o.key, shipsOn(o.key)])) : {};
+  tourDraft = firstRun ? Object.fromEntries(TOUR_FEATURES.map((o) => [o.flagKey, shipsOn(o.flagKey)])) : {};
+  tourSetupDraft = firstRun ? Object.fromEntries(TOUR_SETUP.map((o) => [o.key, o.get()])) : {};
+  tourSetupInitial = firstRun ? { ...tourSetupDraft } : {};
   $("tour-modal").classList.remove("hidden");
   const maxH = tourMeasureMaxStepHeight();
   document.documentElement.style.setProperty("--tour-step-min-h", `${Math.ceil(maxH)}px`);
@@ -20913,11 +21034,16 @@ async function tourAskSkip() {
 
 // Only the switches that differ from the shipped default get written — an
 // untouched draft leaves ui_flags exactly as it was, so a later default change
-// still reaches this install.
+// still reaches this install. The setup rows have no shipped default to compare
+// against (autostart/auto_update are real settings) — they compare against
+// whatever they actually were when the tour opened instead.
 async function tourFinishDraft() {
-  for (const opt of TOUR_OPTIONS) {
-    const shipped = shipsOn(opt.key);
-    if (tourDraft[opt.key] !== shipped) await tourSetFlagLive(opt.key, tourDraft[opt.key]);
+  for (const opt of TOUR_FEATURES) {
+    const shipped = shipsOn(opt.flagKey);
+    if (tourDraft[opt.flagKey] !== shipped) await tourSetFlagLive(opt.flagKey, tourDraft[opt.flagKey]);
+  }
+  for (const opt of TOUR_SETUP) {
+    if (tourSetupDraft[opt.key] !== tourSetupInitial[opt.key]) await opt.setLive(tourSetupDraft[opt.key]);
   }
 }
 

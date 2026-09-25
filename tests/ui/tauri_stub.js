@@ -221,7 +221,10 @@ const SETTINGS = {
   // setting must convert to "none" on read without the user touching anything.
   ui_flags: {
     tags: true, customThemes: true, viewGroups: true, promptNotes: true, pillFolders: true,
-    colorPicker: true, tourSeen: true, snipTextPlate: false, archiveTag: true,
+    // 455/390: the dedicated first-run-tour probe boots with tourSeen unset so
+    // maybeOpenFirstRunTour actually opens the draft-buffered path -- every other
+    // boot keeps it true, same reasoning as secretPrompts/demoMode above.
+    colorPicker: true, tourSeen: !window.__TOUR_FIRSTRUN_TEST__, snipTextPlate: false, archiveTag: true,
     // 458: off by default like the real flag -- the dedicated secret-vault probe
     // turns it on to reach the editor's confidential toggle. It also turns
     // autoPaste off there: two clicks close together on the same still-locked

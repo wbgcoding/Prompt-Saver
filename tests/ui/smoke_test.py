@@ -8739,18 +8739,29 @@ PROBE = """
             if (lines.length > 3) out.errors.push('Tour step ' + step + ': more than three text lines');
           } else {
             const rows = [...document.querySelectorAll('.tour-opt-row')];
-            if (rows.length !== 4) out.errors.push('Tour step 5: expected 4 option rows, found ' + rows.length);
-            const wantOn = { screenshot: true, colorPicker: true, ocr: true, voice: true };
+            if (rows.length !== 5) out.errors.push('Tour step 5: expected 5 feature rows, found ' + rows.length);
             for (const row of rows) {
               const cb = row.querySelector('input.switch');
               const note = row.querySelector('.tour-opt-default').textContent.trim();
               if (isRawKey(note)) out.errors.push('Tour step 5: default-note renders a raw key (' + note + ')');
               const desc = row.querySelector('.tour-opt-desc').textContent.trim();
               if (!desc || isRawKey(desc)) out.errors.push('Tour step 5: option description missing or raw key');
+              // 390: every feature row carries its own help button, with a real
+              // (translated) accessible name -- the button's own click behaviour
+              // (close the tour, open help at the row's article) is covered by
+              // inspection rather than a second live open/close cycle in this
+              // probe, same reasoning as the Skip button below.
+              const helpBtn = row.querySelector('.tour-help-btn');
+              if (!helpBtn) {
+                out.errors.push('Tour step 5: feature row has no help button');
+              } else {
+                const aria = (helpBtn.getAttribute('aria-label') || '').trim();
+                if (!aria || isRawKey(aria)) out.errors.push('Tour step 5: help button has no real accessible name');
+              }
             }
             const boxes = rows.map((r) => r.querySelector('input.switch').checked);
-            if (JSON.stringify(boxes) !== JSON.stringify([true, true, true, true])) {
-              out.errors.push('Tour step 5: default switch states are ' + JSON.stringify(boxes) + ', expected [true,true,true,true] (shipsOn defaults)');
+            if (JSON.stringify(boxes) !== JSON.stringify([true, true, true, true, true])) {
+              out.errors.push('Tour step 5: default switch states are ' + JSON.stringify(boxes) + ', expected all-true (shipsOn defaults)');
             }
             // Flip every switch, then Restore defaults should bring them all back.
             for (const row of rows) {
@@ -8762,7 +8773,7 @@ PROBE = """
             document.querySelector('.tour-restore-btn').click();
             await sleep(50);
             const restored = [...document.querySelectorAll('.tour-opt-row')].map((r) => r.querySelector('input.switch').checked);
-            if (JSON.stringify(restored) !== JSON.stringify([true, true, true, true])) {
+            if (JSON.stringify(restored) !== JSON.stringify([true, true, true, true, true])) {
               out.errors.push('Tour step 5: Restore defaults left switches at ' + JSON.stringify(restored));
             }
           }
@@ -11448,6 +11459,103 @@ SEAL_PROBE = """
 """
 
 
+# 390/455: the first-run tour's draft-buffered write path (openTour({firstRun:
+# true})), which the main sweep above never exercises -- there it is only ever
+# reopened manually (firstRun: false, live writes), because the fixture ships
+# tourSeen: true so the automatic open never interferes with any other check.
+# Its own boot, same reasoning as SEAL_PROBE: the automatic open only ever
+# happens once, right at startup. window.__TOUR_FIRSTRUN_MODE__ picks Finish or
+# Skip so one probe body covers both directions of the buffering rule: Finish
+# writes only what was actually touched, Skip writes nothing but tourSeen.
+TOUR_FIRSTRUN_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const mode = window.__TOUR_FIRSTRUN_MODE__;
+  const beat = setInterval(() => {
+    document.documentElement.style.setProperty('--tour-fr-tick', String(Date.now()));
+    document.body.getBoundingClientRect();
+  }, 40);
+  const visible = (el) => !!el && !el.classList.contains('hidden');
+  try {
+    const cm = document.getElementById('confirm-modal');
+    for (let i = 0; i < 80 && !visible(cm); i++) await sleep(100);
+    if (visible(cm)) { document.getElementById('confirm-cancel').click(); await sleep(200); }
+    const tourEl = document.getElementById('tour-modal');
+    for (let i = 0; i < 80 && !visible(tourEl); i++) await sleep(100);
+    if (!visible(tourEl)) {
+      errs.push(mode + ': the tour did not open automatically with tourSeen unset');
+    } else {
+      const dots = [...document.querySelectorAll('.tour-dot')];
+      dots[dots.length - 1].click(); // step 5, the settings step
+      await sleep(150);
+      window.__SMOKE_ARGS__ = [];
+      // One feature switch, one setup switch -- both start on (shipsOn / the
+      // fixture's autostart:false, so flip autostart on instead of a switch row).
+      const featureRows = [...document.querySelectorAll('.tour-opt-row')];
+      if (!featureRows.length) errs.push(mode + ': step 5 has no feature rows');
+      const flippedFeatureCb = featureRows[0].querySelector('input.switch');
+      const featureWasOn = flippedFeatureCb.checked;
+      flippedFeatureCb.checked = !featureWasOn;
+      flippedFeatureCb.dispatchEvent(new Event('change'));
+      const setupRows = [...document.querySelectorAll('.tour-setup-row')].filter((r) => r.querySelector('input.switch'));
+      if (!setupRows.length) errs.push(mode + ': step 5 has no setup switch rows');
+      const setupCb = setupRows.length ? setupRows[0].querySelector('input.switch') : null;
+      const setupWasOn = setupCb ? setupCb.checked : null;
+      if (setupCb) {
+        setupCb.checked = !setupWasOn;
+        setupCb.dispatchEvent(new Event('change'));
+      }
+      // A draft must not write anything live while the tour is still open.
+      if (window.__SMOKE_ARGS__.length) {
+        errs.push(mode + ': flipping a switch during the draft-buffered open wrote immediately: ' +
+          JSON.stringify(window.__SMOKE_ARGS__.map((c) => c[0])));
+      }
+      window.__SMOKE_ARGS__ = [];
+      if (mode === 'finish') {
+        document.getElementById('tour-next').click(); // last step's button is Finish
+      } else {
+        document.getElementById('tour-skip').click(); // top-right Skip, no confirmation
+      }
+      await sleep(200);
+      if (visible(tourEl)) errs.push(mode + ': the tour did not close');
+      const calls = window.__SMOKE_ARGS__ || [];
+      const flagCalls = calls.filter((c) => c[0] === 'set_ui_flag');
+      const tourSeenCall = flagCalls.find((c) => c[1] && c[1].key === 'tourSeen');
+      if (!tourSeenCall || tourSeenCall[1].enabled !== true) {
+        errs.push(mode + ': tourSeen was not written on close');
+      }
+      const otherFlagCalls = flagCalls.filter((c) => c[1] && c[1].key !== 'tourSeen');
+      const autostartCalls = calls.filter((c) => c[0] === 'set_autostart');
+      const autoUpdateCalls = calls.filter((c) => c[0] === 'set_auto_update');
+      if (mode === 'finish') {
+        if (!otherFlagCalls.length) {
+          errs.push('finish: the flipped feature switch was not written');
+        } else {
+          const fc = otherFlagCalls[0][1];
+          if (fc.enabled !== !featureWasOn) errs.push('finish: the feature flag was written with the wrong value');
+        }
+        if (otherFlagCalls.length > 1) errs.push('finish: an untouched feature flag was written too: ' + JSON.stringify(otherFlagCalls));
+        if (!autostartCalls.length && !autoUpdateCalls.length) {
+          errs.push('finish: the flipped setup switch was not written');
+        }
+      } else {
+        if (otherFlagCalls.length) errs.push('skip: a feature flag was written even though the tour was skipped: ' + JSON.stringify(otherFlagCalls));
+        if (autostartCalls.length || autoUpdateCalls.length) errs.push('skip: a setup switch was written even though the tour was skipped');
+      }
+    }
+  } catch (e) { errs.push(mode + ': probe: ' + e.message); }
+  clearInterval(beat);
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
 # 458: a confidential entry, both while locked and after unlocking it with the
 # right password (plus a wrong one in between). Its own boot -- window.__SECRET_TEST__
 # adds one confidential fixture (id "psecret") and turns the secretPrompts flag on,
@@ -13533,6 +13641,34 @@ def main():
             m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
             errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
             print(f"-- store sealing ({tag} store)")
+            for e in errs:
+                print(f"   FAIL: {e}")
+            failed += len(errs)
+            if not errs:
+                print("   ok")
+
+        # 390/455: the first-run tour's draft-buffered write path, both ways round
+        # (Finish writes only what was touched, Skip writes nothing but tourSeen).
+        # Its own boot each time, same reasoning as the store-sealing pair above.
+        for mode in ("finish", "skip"):
+            side = tmp / "ui" / f"tour-firstrun-{mode}.html"
+            side.write_text(
+                (REPO / "ui" / "index.html").read_text(encoding="utf-8")
+                .replace("<script",
+                         f'<script>window.__TOUR_FIRSTRUN_TEST__ = true; window.__TOUR_FIRSTRUN_MODE__ = "{mode}";</script>\n'
+                         '<script src="tauri_stub.js"></script>\n<script', 1)
+                .replace("</body>", TOUR_FIRSTRUN_PROBE + "</body>"),
+                encoding="utf-8")
+            proc = subprocess.run(
+                [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+                 f"--user-data-dir={tmp / ('profile-tour-firstrun-%s' % mode)}", "--allow-file-access-from-files",
+                 "--window-size=1000,780", "--virtual-time-budget=45000",
+                 "--dump-dom", side.as_uri()],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=180)
+            m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+            errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+            print(f"-- first-run tour draft buffering ({mode})")
             for e in errs:
                 print(f"   FAIL: {e}")
             failed += len(errs)
