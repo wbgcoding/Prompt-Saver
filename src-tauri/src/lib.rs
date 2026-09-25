@@ -44,7 +44,7 @@ use tauri::{
     WebviewWindowBuilder, WindowEvent,
 };
 
-// Bring the main window back from the tray — always at the saved size/position.
+// Bring the main window back from the tray: always at the saved size/position.
 // Routed through resolve_geometry() (the same validation the startup path
 // uses) instead of trusting the saved geometry raw -- a monitor unplugged
 // while the app sat minimized in the tray must not be able to restore the
@@ -138,7 +138,7 @@ fn build_main_window(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow> {
         }
         WindowEvent::Resized(s) => {
             if s.width > 0 && s.height > 0 {
-                // Store LOGICAL pixels — physical values re-scaled
+                // Store LOGICAL pixels: physical values re-scaled
                 // by the monitor factor on every start.
                 let scale = handle2
                     .get_webview_window("main")
@@ -181,7 +181,7 @@ fn build_main_window(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow> {
                 // A hidden window never keeps listening.
                 voice_shutdown(&handle2);
                 // The very first time, explain that the tray menu
-                // still copies while hidden — JS shows it, then hides
+                // still copies while hidden: JS shows it, then hides
                 // itself once dismissed. Every later close hides at once.
                 let first_time = handle2
                     .try_state::<Db>()
@@ -261,7 +261,7 @@ fn watchdog_deadline_reached(now: SystemTime, deadline: SystemTime) -> bool {
     now >= deadline
 }
 
-// Global-hotkey action — open the standalone quick-launcher (fuzzy search,
+// Global-hotkey action: open the standalone quick-launcher (fuzzy search,
 // instant copy) instead of raising the main window. Replaces any launcher already
 // open, so a second hotkey press never leaves two fighting over the same focus.
 fn summon_launcher(app: &AppHandle) {
@@ -339,7 +339,7 @@ const RESERVED_KEYS: &[Code] = &[
 
 // Ctrl+<key> combinations every Windows application implements the same way. Taking
 // one globally means the user loses copy, paste or save in EVERY program. Only the
-// plain Ctrl form is blocked — adding Shift or Alt makes a distinct combination that
+// plain Ctrl form is blocked: adding Shift or Alt makes a distinct combination that
 // no longer belongs to anyone in particular, and that is the namespace users pick
 // their own shortcuts from.
 const UNIVERSAL_CTRL: &[Code] = &[
@@ -561,7 +561,7 @@ struct HotkeyTargets(Mutex<Vec<(Accel, HotkeyOwner)>>);
 
 // The single owner of the registered shortcut set: drop everything, then register
 // the app hotkey plus one accelerator per prompt. A combination the OS refuses is
-// owned by another app — it is cleared from the store instead of leaving a binding
+// owned by another app: it is cleared from the store instead of leaving a binding
 // the user believes in. Returns false when the APP hotkey was the refused one.
 // Must never run while the store mutex is held: registering hops to the main
 // thread, and the shortcut handler reads the store.
@@ -600,7 +600,7 @@ fn rearm_hotkeys(app: &AppHandle) -> bool {
     use tauri_plugin_global_shortcut::GlobalShortcutExt;
     let rec_active = recording_active(app);
     // A binding stored by an older version can be one the blocklist now refuses.
-    // It is never registered again, so the stored string is cleared here — otherwise
+    // It is never registered again, so the stored string is cleared here: otherwise
     // the editor keeps showing a hotkey that does nothing.
     let (plan, mut dropped, mut app_ok, mut voice_ok, mut rec_stop_ok, mut rec_pause_ok) = match app.try_state::<Db>() {
         Some(state) => {
@@ -768,7 +768,7 @@ fn trigger_rec_pause_hotkey(_app: &AppHandle) {}
 
 // While a hotkey field is capturing, every global hotkey has to be off. Windows
 // delivers a registered combination to the owning process instead of the focused
-// window, so the field would never see the key press — the user just watches the
+// window, so the field would never see the key press: the user just watches the
 // prompt behind it get copied and gets no error at all.
 #[tauri::command]
 async fn set_hotkey_capture(app: AppHandle, active: bool) -> Result<(), String> {
@@ -982,7 +982,7 @@ fn focus_main_window(app: AppHandle) {
 // A copy started from OUTSIDE the app must not drag the whole window forward just to
 // ask for a placeholder. This small always-on-top window asks, and nothing else moves.
 // The main window still owns every variable rule (which tokens need asking, what the
-// reserved names resolve to, what happens after the copy) — this window is a form:
+// reserved names resolve to, what happens after the copy): this window is a form:
 // it pulls the pending payload, hands back the typed values, and closes.
 const VAR_WIN_LABEL: &str = "vars-0";
 const VAR_WIN_W: f64 = 340.0; // logical px; keep in sync with .vars-card in floating.css
@@ -1031,7 +1031,7 @@ fn work_and_dpi_at_cursor(app: &AppHandle) -> (Rect, f64, PhysicalPosition<f64>)
 }
 
 // Centred horizontally on the cursor's monitor, sitting in the upper third the way
-// every other quick-launcher (Spotlight, PowerToys Run, Alfred) does — a search box
+// every other quick-launcher (Spotlight, PowerToys Run, Alfred) does: a search box
 // that pops up at screen centre reads as a dialog, not a launcher.
 fn launcher_rect(app: &AppHandle) -> Rect {
     let (work, dpi, _cursor) = work_and_dpi_at_cursor(app);
@@ -1145,7 +1145,7 @@ fn var_window_result(app: AppHandle, pending: State<VarPrompt>, values: Option<S
     Ok(())
 }
 
-// The {#{username}#} placeholder. The account name never reaches a log — it is
+// The {#{username}#} placeholder. The account name never reaches a log: it is
 // resolved straight into the copied text.
 #[tauri::command]
 fn os_user_name() -> String {
@@ -1218,7 +1218,7 @@ fn tray_search_max(settings: &Settings) -> usize {
 
 // Menu text for a prompt. Control characters (a pasted newline lands in the name)
 // collapse to spaces, `&` is doubled because a Win32 menu reads a single one as a
-// mnemonic, and the cut counts CHARACTERS — a byte cut would split a multi-byte
+// mnemonic, and the cut counts CHARACTERS: a byte cut would split a multi-byte
 // name in the middle of a character. An over-long name is cut back to the last word
 // break in the tail rather than mid-word, so the entry still reads as words.
 fn tray_label(name: &str, max: usize) -> String {
@@ -1227,7 +1227,7 @@ fn tray_label(name: &str, max: usize) -> String {
     if text.chars().count() > max {
         let mut cut: String = text.chars().take(max - 1).collect();
         if let Some(space) = cut.rfind(' ') {
-            // Only when the break is near the end — otherwise a single long word
+            // Only when the break is near the end: otherwise a single long word
             // would shrink the label to almost nothing.
             if cut[..space].chars().count() >= max.saturating_sub(TRAY_LABEL_WORD_BACK) {
                 cut.truncate(space);
@@ -1267,7 +1267,7 @@ enum TrayKind {
 
 // The image fields are not exclusive: a picture can be the payload (copy_image), the
 // tile's face (show_image) or just a decoration next to the text. Only the first two
-// make the entry a picture — a decorated text prompt still copies text.
+// make the entry a picture: a decorated text prompt still copies text.
 fn tray_kind(p: &Prompt) -> TrayKind {
     if !p.file_path.trim().is_empty() {
         TrayKind::File
@@ -1297,10 +1297,10 @@ enum TraySection {
 }
 
 // The menu's dynamic part, in the order it is drawn: pinned favourites first, then
-// recents — the Windows jump-list idiom, so the curated section never moves under
+// recents: the Windows jump-list idiom, so the curated section never moves under
 // the user while the recents below it churn. A favourite is not repeated in the
 // recents; those backfill with the next unlisted prompt instead of leaving a gap.
-// Pure, so ordering, caps, dedupe and truncation stay testable — the menu API cannot.
+// Pure, so ordering, caps, dedupe and truncation stay testable: the menu API cannot.
 fn tray_plan(
     prompts: &[Prompt],
     last_used: &HashMap<String, u64>,
@@ -1392,7 +1392,7 @@ fn hex_rgb(hex: &str) -> Option<[u8; 3]> {
     Some([c.0, c.1, c.2])
 }
 
-// Perceived brightness, 0..255 — decides whether the glyph is drawn light or dark.
+// Perceived brightness, 0..255: decides whether the glyph is drawn light or dark.
 fn tray_luma(c: [u8; 3]) -> u32 {
     (c[0] as u32 * 299 + c[1] as u32 * 587 + c[2] as u32 * 114) / 1000
 }
@@ -1467,7 +1467,7 @@ fn tray_icon_pixels(kind: TrayKind, color: &str) -> Vec<u8> {
     let mut chip = TrayChip::new(fill);
     chip.frame(0, 0, 15, 15, edge);
     match kind {
-        // Three text lines, the last one short — a paragraph at 16 px.
+        // Three text lines, the last one short: a paragraph at 16 px.
         TrayKind::Text => {
             chip.bar(4, 11, 4, 5, ink);
             chip.bar(4, 11, 7, 8, ink);
@@ -1548,7 +1548,7 @@ fn tray_custom_menu_on(settings: &Settings) -> bool {
 }
 
 // Build the tray menu from the current store and install it. The store lock is
-// dropped before the first menu call — building a menu while holding it is the
+// dropped before the first menu call: building a menu while holding it is the
 // classic deadlock shape here.
 fn apply_tray_menu(app: &AppHandle) {
     let (lang, plan, custom, rec_entries_on) = match app.try_state::<Db>() {
@@ -1564,7 +1564,7 @@ fn apply_tray_menu(app: &AppHandle) {
     };
     if custom {
         // The custom window builds its own content live from tray_window_plan()
-        // on every right-click, so there is nothing to precompute here — just
+        // on every right-click, so there is nothing to precompute here: just
         // make sure no native popup is left attached to fight it for the
         // right-click. Detaching also skips every rebuild this function would
         // otherwise do while the toggle stays on.
@@ -1642,7 +1642,7 @@ fn rebuild_tray(app: &AppHandle) {
 }
 
 // A tray entry runs the very same activation a tile click does (copy, usage,
-// chains, placeholder dialog) — but never the hotkey auto-paste: the click leaves
+// chains, placeholder dialog): but never the hotkey auto-paste: the click leaves
 // the tray in the foreground, so there is no text field to paste into.
 fn fire_tray_copy(app: &AppHandle, id: &str) {
     let _ = app.emit_to("main", "prompt-tray-copy", id.to_string());
@@ -1939,11 +1939,11 @@ struct Prompt {
     file_path: String,
     // Which page of an attached PDF the preview shows (0-based). Ignored for
     // any other attachment type. Clamped against the actual page count at render
-    // time (pdf_preview), never here — the file can change independently of this
+    // time (pdf_preview), never here: the file can change independently of this
     // number (a replaced attachment, or a shorter PDF at the same path).
     #[serde(default)]
     pdf_page: u32,
-    // Gif/video used as the tile icon only — shown, never copied.
+    // Gif/video used as the tile icon only: shown, never copied.
     #[serde(default)]
     icon_path: String,
     // Optional caption shown over media tiles (size 0 = default).
@@ -1964,32 +1964,32 @@ struct Prompt {
     #[serde(default)]
     tags: Vec<String>,
     // Private context for the user. Shown in the editor and (optionally) in the
-    // tile tooltip — never part of anything that reaches the clipboard.
+    // tile tooltip: never part of anything that reaches the clipboard.
     #[serde(default)]
     notes: String,
     // Global accelerator that copies this prompt from anywhere ("" = none).
     #[serde(default)]
     hotkey: String,
-    // What THIS hotkey does — "copy", "paste" (copy and paste into the app the
+    // What THIS hotkey does: "copy", "paste" (copy and paste into the app the
     // user was in), or "" = follow the global promptHotkeyPaste setting.
     #[serde(default)]
     hotkey_paste: String,
     // Unix seconds set the moment a prompt moves into the trash table; unused
     // (0) for every prompt still in store.prompts. Drives both the trash list's
-    // "deleted N days ago" and the retention sweep — never touched for anything
+    // "deleted N days ago" and the retention sweep: never touched for anything
     // else, so it never appears in an export or a fresh add_prompt/update_prompt.
     #[serde(default)]
     trashed_at: u64,
-    // "Rotating prompts" — `text` is entry 1, `variants` holds entries 2..n, so
+    // "Rotating prompts": `text` is entry 1, `variants` holds entries 2..n, so
     // every existing consumer (tile preview, search, export, dup-finder, tooltip,
     // Markdown sync) stays correct without a single change, and "rotation is on" is
-    // exactly `!variants.is_empty()` — no separate bool that could drift from the data.
+    // exactly `!variants.is_empty()`: no separate bool that could drift from the data.
     #[serde(default)]
     variants: Vec<String>,
     // "" = in order, "random" = shuffled bag (see rotation_next).
     #[serde(default)]
     rotate_mode: String,
-    // Auto-Wechsel — nach jedem Einfügen rückt die Zwischenablage auf den
+    // Auto-Wechsel: nach jedem Einfügen rückt die Zwischenablage auf den
     // nächsten Eintrag vor. Ohne variants bedeutungslos (wie rotate_mode).
     #[serde(default)]
     rotate_auto: bool,
@@ -2112,7 +2112,7 @@ struct TileFolder {
 
 // An Android-style folder holding several floating pills. It owns ONE window
 // (the folder icon; expanding only resizes it), so `pos` is the icon's top-left in
-// physical desktop pixels — the same space `Settings.floating` uses. A member keeps
+// physical desktop pixels: the same space `Settings.floating` uses. A member keeps
 // its own `floating` entry so switching the feature off puts every pill back where
 // it was.
 #[derive(Serialize, Deserialize, Clone)]
@@ -2207,7 +2207,7 @@ struct Settings {
     rec_pause_hotkey: String,
     #[serde(default = "default_on")]
     auto_update: bool,
-    // Update versions the user chose to skip — never offered again.
+    // Update versions the user chose to skip: never offered again.
     #[serde(default)]
     skipped_versions: Vec<String>,
     // Highest app version the "what's new" list has already shown. Empty means
@@ -2225,7 +2225,7 @@ struct Settings {
     #[serde(default)]
     ui_texts: HashMap<String, String>,
     // Seeded once on a genuinely fresh install (empty library, never seeded
-    // before) — never re-seeded just because the user later deletes everything.
+    // before): never re-seeded just because the user later deletes everything.
     #[serde(default)]
     examples_seeded: bool,
     // Ids of the seeded example prompts, so "remove examples" can find exactly
@@ -2234,7 +2234,7 @@ struct Settings {
     example_prompt_ids: Vec<String>,
     // Content fingerprint of each seeded example at the moment it was created
     // (example_seed_fingerprint). "Remove examples" only deletes an id whose
-    // current fingerprint still matches — one the user has since edited is now
+    // current fingerprint still matches: one the user has since edited is now
     // theirs and is left alone. An id with no entry here (old installs seeded
     // before this field existed) is treated as unchanged, matching the
     // previous unconditional-delete behaviour.
@@ -2267,12 +2267,12 @@ struct Settings {
     usage: HashMap<String, u32>,
     #[serde(default)]
     last_used: HashMap<String, u64>,
-    // Rotation pointer for "variants" prompts — kept out of Prompt itself (see
+    // Rotation pointer for "variants" prompts: kept out of Prompt itself (see
     // rotation_next) so every copy doesn't rewrite prompts.json / bump the version
     // history / touch the Markdown sync file. Index of the NEXT entry to serve.
     #[serde(default)]
     rotate_pos: HashMap<String, u32>,
-    // Shuffled remaining indices for "random" mode (the "bag" — drawn without
+    // Shuffled remaining indices for "random" mode (the "bag": drawn without
     // repetition, reshuffled once empty). Absent/empty means "reshuffle on next use".
     #[serde(default)]
     rotate_bag: HashMap<String, Vec<u32>>,
@@ -2294,7 +2294,7 @@ struct Settings {
     // back on restores the folders instead of losing them.
     #[serde(default)]
     view_groups: Vec<ViewGroup>,
-    // Grid folders. Kept while the feature is off as well — the members simply
+    // Grid folders. Kept while the feature is off as well: the members simply
     // show as their own tiles again until it comes back on.
     #[serde(default)]
     tile_folders: Vec<TileFolder>,
@@ -2427,7 +2427,7 @@ fn grid_key(cols: u32, rows: u32) -> String {
 
 // WebView2-missing dialog texts; shown before settings exist, so the OS
 // locale decides (same language set as the UI). `{app}` is filled with the
-// product name once, in webview2_dialog — the translations never spell it.
+// product name once, in webview2_dialog: the translations never spell it.
 fn webview2_texts(lang: &str) -> (&'static str, &'static str) {
     match lang {
         "de" => ("WebView2 Runtime fehlt", "{app} benötigt die Microsoft WebView2 Runtime.\n\nJetzt herunterladen und installieren? Danach {app} einfach erneut starten."),
@@ -2758,7 +2758,7 @@ struct Store {
     prompts_locked: bool,
     // What the prompts/trash tables already hold, so a save only re-seals the rows
     // that really changed (see WrittenRows). It belongs to the prompt list and sits
-    // under the same lock rather than beside it — a second lock could be taken apart
+    // under the same lock rather than beside it: a second lock could be taken apart
     // from this one, letting one window update the map for a list another window is
     // still writing. A RefCell, not a Mutex: it is a detail of the write path, and
     // every save_* takes a shared &Store.
@@ -2775,7 +2775,7 @@ impl Store {
         self.written.borrow_mut().clear();
     }
 
-    // Keep both folder lists valid against the CURRENT prompt list — one call
+    // Keep both folder lists valid against the CURRENT prompt list: one call
     // after every mutation that can remove a prompt. Idempotent.
     fn normalize_folders(&mut self) {
         let ids: Vec<String> = self.prompts.iter().map(|p| p.id.clone()).collect();
@@ -2925,13 +2925,13 @@ fn data_dir_headless() -> PathBuf {
     resolve_datapath_redirect(default_data_dir_headless())
 }
 
-// The store's JSON files (prompts.json / settings.json — the DB-write fallback and the
+// The store's JSON files (prompts.json / settings.json: the DB-write fallback and the
 // legacy pre-SQLite format) hold full prompt bodies and private notes, so they are
 // DPAPI-sealed exactly like the SQLite rows. `dec_str` passes an un-prefixed value
 // through unchanged, which is what still lets a genuinely old plaintext install be
 // migrated in; it is re-sealed the next time it is written.
 // "Missing" (nothing there yet, safe to treat as empty) and "unreadable" (a file IS
-// there but DPAPI/JSON decoding failed — wrong Windows account, corruption) are
+// there but DPAPI/JSON decoding failed: wrong Windows account, corruption) are
 // different situations: a caller that folds both into a bare default silently
 // replaces real, still-present data with an empty one.
 enum SealedRead<T> {
@@ -2951,7 +2951,7 @@ fn read_sealed_json<T: for<'de> Deserialize<'de>>(path: &PathBuf) -> SealedRead<
     }
 }
 
-// Every import reads a file the user picked — which may have come from someone else —
+// Every import reads a file the user picked (which may have come from someone else)
 // fully into memory before parsing, so a wrong pick (a disk image, a video) has to fail
 // with a clear message instead of exhausting memory. Mirrors the cap the decompression
 // path already applies via `inflate_capped`.
@@ -2964,7 +2964,7 @@ fn size_error(max: u64) -> String {
 
 // For the one case that cannot read the bytes itself: the image handed to Windows'
 // text recognizer is opened by Windows, so measuring it up front is the only check
-// available — and a plausible reject message is worth more there than none.
+// available: and a plausible reject message is worth more there than none.
 fn check_import_size(path: &std::path::Path, max: u64) -> Result<(), String> {
     let len = fs::metadata(path).map_err(|e| e.to_string())?.len();
     if len > max {
@@ -2978,7 +2978,7 @@ fn check_import_size(path: &std::path::Path, max: u64) -> Result<(), String> {
 }
 
 // One open, one read, one decision. Measuring the file and then reading it means
-// two separate opens: the file can grow — or be swapped for a different one —
+// two separate opens: the file can grow (or be swapped for a different one)
 // in between, and the limit then describes a file that is no longer the one being
 // read. Reading one byte past the limit is what makes "too large" provable from
 // the bytes actually in hand.
