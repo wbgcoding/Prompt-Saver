@@ -6752,13 +6752,18 @@ fn protected_recording_paths(app: &AppHandle) -> Vec<PathBuf> {
         out.push(p);
     }
     if let Some(state) = app.try_state::<VideoEditorPending>() {
-        let (src, _origin_dir) = state.lock().clone();
+        let (src, _origin_dir, overlay) = state.lock().clone();
         if !src.is_empty() {
             let src = PathBuf::from(src);
             out.push(src.with_extension("mic.wav"));
             #[cfg(windows)]
             out.push(keylog::sidecar_path(&src));
             out.push(src);
+        }
+        if !overlay.is_empty() {
+            let overlay = PathBuf::from(overlay);
+            out.push(camera::sidecar_path(&overlay));
+            out.push(overlay);
         }
     }
     out
@@ -25436,12 +25441,16 @@ const VIDEO_WIN_MIN_H: u32 = 520;
 // time would race the webview's first frame, so the window asks for its own
 // target once booted (video_editor_source), and again whenever
 // "video-editor-load" fires for an already-open window.
-struct VideoEditorPending(Mutex<(String, String)>);
+// The third slot (overlay_path) is the camera dual-open: a camera recording whose
+// companion screen recording has already finished lands here instead of
+// staying empty, so the editor can add it as a video overlay itself instead
+// of asking the user to pick it by hand.
+struct VideoEditorPending(Mutex<(String, String, String)>);
 impl VideoEditorPending {
     fn new() -> Self {
-        Self(Mutex::new((String::new(), String::new())))
+        Self(Mutex::new((String::new(), String::new(), String::new())))
     }
-    fn lock(&self) -> std::sync::MutexGuard<'_, (String, String)> {
+    fn lock(&self) -> std::sync::MutexGuard<'_, (String, String, String)> {
         self.0.lock().unwrap_or_else(|e| e.into_inner())
     }
 }
@@ -25450,6 +25459,8 @@ impl VideoEditorPending {
 struct VideoEditorSource {
     path: String,
     origin_dir: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    overlay_path: Option<String>,
 }
 
 // Opens the editor for one recording. A second call while it is already open
@@ -25457,14 +25468,25 @@ struct VideoEditorSource {
 // origin_dir is Some only for a copy made of an externally opened file --
 // see open_file_in_editor.
 #[tauri::command]
-async fn open_video_editor(app: AppHandle, pending: State<'_, VideoEditorPending>, src_path: String, origin_dir: Option<String>) -> Result<(), String> {
+async fn open_video_editor(
+    app: AppHandle,
+    pending: State<'_, VideoEditorPending>,
+    src_path: String,
+    origin_dir: Option<String>,
+    overlay_path: Option<String>,
+) -> Result<(), String> {
     if !PathBuf::from(&src_path).is_file() {
         return Err("recording file not found".to_string());
     }
     let origin_dir = origin_dir.unwrap_or_default();
-    *pending.lock() = (src_path.clone(), origin_dir.clone());
+    // An overlay path that no longer exists (a race with its own cleanup, or
+    // simply never really there) is silently dropped rather than handed to
+    // the editor, which would otherwise show it as a broken overlay op.
+    let overlay_path = overlay_path.filter(|p| PathBuf::from(p).is_file()).unwrap_or_default();
+    *pending.lock() = (src_path.clone(), origin_dir.clone(), overlay_path.clone());
+    let overlay_opt = if overlay_path.is_empty() { None } else { Some(overlay_path) };
     if let Some(win) = app.get_webview_window(VIDEO_WIN_LABEL) {
-        let _ = app.emit_to(VIDEO_WIN_LABEL, "video-editor-load", &VideoEditorSource { path: src_path, origin_dir });
+        let _ = app.emit_to(VIDEO_WIN_LABEL, "video-editor-load", &VideoEditorSource { path: src_path, origin_dir, overlay_path: overlay_opt });
         let _ = win.show();
         let _ = win.set_focus();
         return Ok(());
@@ -25496,8 +25518,9 @@ async fn open_video_editor(app: AppHandle, pending: State<'_, VideoEditorPending
 
 #[tauri::command]
 fn video_editor_source(pending: State<VideoEditorPending>) -> Option<VideoEditorSource> {
-    let (path, origin_dir) = pending.lock().clone();
-    if path.is_empty() { None } else { Some(VideoEditorSource { path, origin_dir }) }
+    let (path, origin_dir, overlay_path) = pending.lock().clone();
+    let overlay_path = if overlay_path.is_empty() { None } else { Some(overlay_path) };
+    if path.is_empty() { None } else { Some(VideoEditorSource { path, origin_dir, overlay_path }) }
 }
 
 // ---- Open an existing file (not a fresh capture/recording) in whichever

@@ -1,4 +1,4 @@
-/* Camera recording window (462): a getUserMedia preview plus the same
+/* Camera recording window: a getUserMedia preview plus the same
    transport shape the recording bar uses (pause/resume, stop), scaled up to
    a real window instead of a narrow strip since this one shows a picture. */
 

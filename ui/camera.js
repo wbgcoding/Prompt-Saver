@@ -159,8 +159,16 @@ async function startRecording() {
     recPath = null;
     if (!path) return;
     try {
-      await invoke("camera_finish_recording", { path });
-      await invoke("open_video_editor", { srcPath: path });
+      const finished = await invoke("camera_finish_recording", { path });
+      // A companion screen recording that has ALREADY stopped by now opens
+      // as the primary source, with this camera take added as an aligned
+      // overlay when one is ready -- otherwise the camera file just opens on
+      // its own, same as any other recording.
+      if (finished && finished.companion_path) {
+        await invoke("open_video_editor", { srcPath: finished.companion_path, overlayPath: path });
+      } else {
+        await invoke("open_video_editor", { srcPath: path });
+      }
     } catch {
       // A finish that fails leaves the raw file in place, still playable --
       // the same fallback the screen recorder's own encode-error path uses.
