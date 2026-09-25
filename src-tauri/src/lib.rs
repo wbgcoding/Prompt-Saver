@@ -20618,7 +20618,7 @@ struct RecordingContinuedPayload {
 // events for as long as it stays focused.
 #[cfg(windows)]
 mod keylog {
-    use super::now_ms;
+    use super::{append_crash_log, now_ms};
     use serde::{Deserialize, Serialize};
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -20816,6 +20816,26 @@ mod keylog {
         }
     }
 
+    // The both-sides rule: a key is only ever treated as "not password" when
+    // BOTH the state confirmed before it and the state confirmed right after
+    // it (this key's own synchronous recheck, at the latest) agree it was
+    // not a password field. A single-sided check -- trusting only whichever
+    // side happened to be available -- let a key typed right after a real
+    // focus change inherit a stale answer from before the change, since a
+    // slow focus-changed event or a recheck that only informs the NEXT key
+    // can each leave one side unconfirmed exactly when it matters most.
+    // Either side missing or true is enough to gap: doubt never records.
+    fn should_gap(entry_before: bool, entry_after: bool, injected: bool) -> bool {
+        entry_before || entry_after || injected
+    }
+
+    // finish_and_continue_recording's cutoff: once a switch instant has been
+    // set, everything at or after it belongs to the switch itself or to the
+    // next part, never to this capture.
+    fn past_cutoff(t_ms: u64, cutoff: Option<u64>) -> bool {
+        cutoff.is_some_and(|c| t_ms >= c)
+    }
+
     struct RawKey {
         vk: u32,
         down: bool,
@@ -20928,17 +20948,25 @@ mod keylog {
 
     impl IUIAutomationFocusChangedEventHandler_Impl for FocusHandler_Impl {
         fn HandleFocusChangedEvent(&self, _sender: Option<&IUIAutomationElement>) -> windows::core::Result<()> {
-            // Deliberately ignores `_sender` and re-derives through the
+            // Stamp the instant the OS actually told us focus changed,
+            // BEFORE spending any time on the check itself, with a
+            // fail-closed placeholder -- a key struck while this check is
+            // still running (it can take up to UIA_TIMEOUT_MS) must see
+            // "password" for that whole window, not for a window that only
+            // starts once the check happens to return. Deliberately ignores
+            // `_sender` and re-derives through the
             // GetForegroundWindow/GetGUIThreadInfo path instead -- one
             // source of truth, and it also picks up the ES_PASSWORD legacy
             // fallback that a bare element reference cannot.
+            let arrived_at = now_ms();
+            self.timeline.lock().unwrap_or_else(|e| e.into_inner()).push(arrived_at, true);
             let password = focused_password(&Some(self.uia.clone()));
-            self.timeline.lock().unwrap_or_else(|e| e.into_inner()).push(now_ms(), password);
+            self.timeline.lock().unwrap_or_else(|e| e.into_inner()).push(arrived_at, password);
             Ok(())
         }
     }
 
-    fn consumer_thread_main(rx: Receiver<RawKey>, clock: Arc<Mutex<ActiveClock>>) -> KeySidecar {
+    fn consumer_thread_main(rx: Receiver<RawKey>, clock: Arc<Mutex<ActiveClock>>, cutoff: Arc<Mutex<Option<u64>>>) -> KeySidecar {
         unsafe {
             // MTA, not STA: an apartment-threaded COM object needs its own
             // message pump for cross-thread calls (the focus-changed event
@@ -20967,8 +20995,12 @@ mod keylog {
         let focus_handler: Option<IUIAutomationFocusChangedEventHandler> =
             uia.as_ref().map(|uia| FocusHandler { timeline: timeline.clone(), uia: uia.clone() }.into());
         if let (Some(uia), Some(handler)) = (&uia, &focus_handler) {
-            unsafe {
-                let _ = uia.AddFocusChangedEventHandler(None, handler);
+            if unsafe { uia.AddFocusChangedEventHandler(None, handler) }.is_err() {
+                // Not fatal: every key still gets its own synchronous
+                // recheck below (the "entry after" half of the both-sides
+                // rule), so this only loses the event-driven half, not
+                // fail-closed correctness -- but it is worth knowing about.
+                append_crash_log("key overlay: could not register the UI Automation focus-changed handler, relying on per-key rechecks only");
             }
         }
 
@@ -20982,86 +21014,144 @@ mod keylog {
                 // Nothing happened here as far as the recording is
                 // concerned -- dropped outright, not even a gap (a gap means
                 // doubt; a pause means certainty that this moment is not
-                // part of the active recording at all).
+                // part of the active recording at all). In practice the
+                // hook is uninstalled for the whole pause too (see
+                // KeyCapture::hook), so this only ever catches the sliver of
+                // events already in flight the instant pause() tore it down.
                 continue;
             }
-            if raw.down {
-                // Cheap per-key-down recheck (an "if cheap"
-                // robustness leg): confirms the timeline even if a
-                // focus-changed event was missed, delayed, or UIA never
-                // initialized at all (uia is None, so this and the event
-                // handler both fail closed via detect_password's own
-                // doubt-means-password rule).
-                timeline.lock().unwrap_or_else(|e| e.into_inner()).push(now_ms(), focused_password(&uia));
+            let cutoff_ms = *cutoff.lock().unwrap_or_else(|e| e.into_inner());
+            if past_cutoff(raw.t_ms, cutoff_ms) {
+                // finish_and_continue_recording told this capture the exact
+                // instant it was about to close this file -- a key at or
+                // after that instant belongs to the switch itself (or to the
+                // next part), not to this one, so it is gapped without
+                // spending a UIA call on it.
+                rec.record(raw.vk, raw.down, t_ms, true);
+                continue;
             }
-            let password = timeline.lock().unwrap_or_else(|e| e.into_inner()).state_at(raw.t_ms).unwrap_or(true);
-            rec.record(raw.vk, raw.down, t_ms, password || raw.injected);
+            let stopping = raw_tx_slot().lock().map(|g| g.is_none()).unwrap_or(true);
+            if stopping {
+                // stop() has already cleared the sender -- only the handful
+                // of events already queued when it did still arrive here.
+                // A hung target app must not turn each leftover event into
+                // its own ~2s UIA timeout right when the user is waiting for
+                // the recording to actually stop, so everything past this
+                // point is gapped outright instead of rechecked.
+                rec.record(raw.vk, raw.down, t_ms, true);
+                continue;
+            }
+            // Both-sides rule: gap the key unless the state confirmed
+            // BEFORE it (an earlier focus-changed event or an earlier key's
+            // own recheck) AND the state confirmed immediately AFTER it
+            // (this key's own recheck, run right now) both say "not
+            // password". A single-sided check let a key typed right after a
+            // real focus change -- before the focus-changed event had
+            // arrived, or before this same key's own recheck had happened
+            // -- inherit a stale "not password" answer left over from
+            // before the change; the recheck used to be stamped strictly
+            // after the key it was judging, so it could never inform that
+            // key's own verdict, only a later one's.
+            let entry_before = timeline.lock().unwrap_or_else(|e| e.into_inner()).state_at(raw.t_ms).unwrap_or(true);
+            let entry_after = focused_password(&uia);
+            timeline.lock().unwrap_or_else(|e| e.into_inner()).push(now_ms(), entry_after);
+            rec.record(raw.vk, raw.down, t_ms, should_gap(entry_before, entry_after, raw.injected));
         }
         if let (Some(uia), Some(handler)) = (&uia, &focus_handler) {
-            unsafe {
-                let _ = uia.RemoveFocusChangedEventHandler(handler);
+            if unsafe { uia.RemoveFocusChangedEventHandler(handler) }.is_err() {
+                append_crash_log("key overlay: could not remove the UI Automation focus-changed handler cleanly");
             }
         }
+        // Both COM objects must release while the apartment they were
+        // created in is still alive -- dropping them only implicitly, after
+        // CoUninitialize below, would run their Release() against an
+        // already-torn-down apartment.
+        drop(focus_handler);
+        drop(uia);
         unsafe {
             CoUninitialize();
         }
         rec.sidecar
     }
 
-    pub struct KeyCapture {
-        hook_thread: JoinHandle<()>,
-        consumer_thread: JoinHandle<KeySidecar>,
+    // The hook half of a capture, torn down on pause and rebuilt on resume
+    // -- see KeyCapture::hook.
+    struct HookHandle {
+        thread: JoinHandle<()>,
         thread_id: u32,
-        hold_ms: u32,
-        clock: Arc<Mutex<ActiveClock>>,
     }
 
-    fn start(hold_ms: u32) -> Option<KeyCapture> {
+    fn install_hook() -> Option<HookHandle> {
+        let (ready_tx, ready_rx) = channel::<Result<u32, String>>();
+        let thread = thread::Builder::new().name("key-overlay-hook".into()).spawn(move || hook_thread_main(ready_tx)).ok()?;
+        match ready_rx.recv() {
+            Ok(Ok(thread_id)) => Some(HookHandle { thread, thread_id }),
+            _ => {
+                let _ = thread.join();
+                None
+            }
+        }
+    }
+
+    fn uninstall_hook(hook: HookHandle) {
+        unsafe {
+            let _ = PostThreadMessageW(hook.thread_id, WM_QUIT, WPARAM(0), LPARAM(0));
+        }
+        let _ = hook.thread.join();
+    }
+
+    pub struct KeyCapture {
+        // None while paused: pausing UNINSTALLS the low-level hook rather
+        // than merely dropping events past it, so nothing about the pause
+        // window ever depends on the consumer catching everything the OS
+        // still delivers -- the OS delivers nothing at all. The consumer
+        // thread, its Recorder-in-progress, the FocusTimeline and the UIA
+        // focus-changed registration all stay alive across a pause/resume,
+        // untouched; only the hook comes down and goes back up.
+        hook: Option<HookHandle>,
+        consumer_thread: JoinHandle<KeySidecar>,
+        hold_ms: u32,
+        clock: Arc<Mutex<ActiveClock>>,
+        cutoff: Arc<Mutex<Option<u64>>>,
+    }
+
+    fn start(hold_ms: u32, start_abs_ms: u64) -> Option<KeyCapture> {
         let (raw_tx, raw_rx) = channel::<RawKey>();
         *raw_tx_slot().lock().unwrap_or_else(|e| e.into_inner()) = Some(raw_tx);
-        let start_abs_ms = now_ms();
         let clock = Arc::new(Mutex::new(ActiveClock::new(start_abs_ms)));
-        let (ready_tx, ready_rx) = channel::<Result<u32, String>>();
-        let hook_thread = match thread::Builder::new().name("key-overlay-hook".into()).spawn(move || hook_thread_main(ready_tx)) {
-            Ok(t) => t,
-            Err(_) => {
-                *raw_tx_slot().lock().unwrap_or_else(|e| e.into_inner()) = None;
-                return None;
-            }
-        };
-        let thread_id = match ready_rx.recv() {
-            Ok(Ok(tid)) => tid,
-            _ => {
-                let _ = hook_thread.join();
+        let cutoff = Arc::new(Mutex::new(None));
+        let hook = match install_hook() {
+            Some(h) => h,
+            None => {
                 *raw_tx_slot().lock().unwrap_or_else(|e| e.into_inner()) = None;
                 return None;
             }
         };
         let clock2 = clock.clone();
+        let cutoff2 = cutoff.clone();
         // A failure here used to leave the hook installed and
         // running forever (its thread detached with no way back to it,
         // RAW_TX still set) while the caller saw no capture at all -- the
         // hook must come down the same way stop() brings it down whenever
         // the consumer that was supposed to read it never gets to exist.
-        let consumer_thread = match thread::Builder::new().name("key-overlay-consumer".into()).spawn(move || consumer_thread_main(raw_rx, clock2)) {
+        let consumer_thread = match thread::Builder::new().name("key-overlay-consumer".into()).spawn(move || consumer_thread_main(raw_rx, clock2, cutoff2)) {
             Ok(t) => t,
             Err(_) => {
-                unsafe {
-                    let _ = PostThreadMessageW(thread_id, WM_QUIT, WPARAM(0), LPARAM(0));
-                }
-                let _ = hook_thread.join();
+                uninstall_hook(hook);
                 *raw_tx_slot().lock().unwrap_or_else(|e| e.into_inner()) = None;
                 return None;
             }
         };
-        Some(KeyCapture { hook_thread, consumer_thread, thread_id, hold_ms, clock })
+        Some(KeyCapture { hook: Some(hook), consumer_thread, hold_ms, clock, cutoff })
     }
 
-    fn stop(capture: KeyCapture) -> KeySidecar {
-        unsafe {
-            let _ = PostThreadMessageW(capture.thread_id, WM_QUIT, WPARAM(0), LPARAM(0));
+    fn stop(mut capture: KeyCapture) -> KeySidecar {
+        // Already unhooked when stop() catches a still-paused capture --
+        // nothing to tear down there, the consumer is just blocked on
+        // recv() waiting for the channel to close, which the next line does.
+        if let Some(hook) = capture.hook.take() {
+            uninstall_hook(hook);
         }
-        let _ = capture.hook_thread.join();
         // Dropping the sender (clearing the slot) closes the channel, which
         // ends the consumer thread's recv() loop so it returns the finished
         // sidecar below.
@@ -21071,18 +21161,46 @@ mod keylog {
         sidecar
     }
 
-    // The pause/resume hotkeys and buttons drive these -- see ActiveClock's
-    // own doc for why a paused stretch must never reach the sidecar. A no-op
-    // when no capture is running (keyOverlay off, or nothing to pause yet).
+    // The pause/resume hotkeys and buttons drive these, all through one
+    // shared path (see do_pause_recording/do_resume_recording) so no pause
+    // trigger can ever forget to call them. A no-op when no capture is
+    // running (keyOverlay off, or nothing to pause yet). Pausing actually
+    // UNINSTALLS the keyboard hook rather than just filtering its output --
+    // "no hook while paused" is a stronger, simpler guarantee than "hook
+    // installed but promised to drop everything".
     pub fn pause() {
-        if let Some(cap) = slot().lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+        let mut guard = slot().lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(cap) = guard.as_mut() {
             cap.clock.lock().unwrap_or_else(|e| e.into_inner()).pause(now_ms());
+            if let Some(hook) = cap.hook.take() {
+                uninstall_hook(hook);
+            }
         }
     }
 
     pub fn resume() {
-        if let Some(cap) = slot().lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+        let mut guard = slot().lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(cap) = guard.as_mut() {
             cap.clock.lock().unwrap_or_else(|e| e.into_inner()).resume(now_ms());
+            if cap.hook.is_none() {
+                cap.hook = install_hook();
+                if cap.hook.is_none() {
+                    // Fails safe: no hook means no keys at all get recorded
+                    // from here on, same as still being paused, rather than
+                    // recording resuming silently half-broken.
+                    append_crash_log("key overlay: could not reinstall the keyboard hook on resume");
+                }
+            }
+        }
+    }
+
+    // finish_and_continue_recording's own boundary marker: every key from
+    // `t_ms` onward belongs to the switch itself, or to the part about to
+    // open, never to the part this capture is still finishing up for. A
+    // no-op when no capture is running.
+    pub fn cut_off_at(t_ms: u64) {
+        if let Some(cap) = slot().lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+            *cap.cutoff.lock().unwrap_or_else(|e| e.into_inner()) = Some(t_ms);
         }
     }
 
@@ -21111,8 +21229,13 @@ mod keylog {
     }
 
     // Never a second hook: a capture already running for this process is left
-    // alone rather than layering a new one on top.
-    pub fn maybe_start(is_enabled: bool, hold_ms: u32) {
+    // alone rather than layering a new one on top. `start_abs_ms` is the
+    // clock's zero point -- ordinary starts pass `now_ms()`, but
+    // finish_and_continue_recording passes the exact switch instant instead,
+    // so the new part's offsets start counting from the same instant the old
+    // part was told to stop claiming keys (see cut_off_at), not from
+    // whenever this call happens to run a little later.
+    pub fn maybe_start(is_enabled: bool, hold_ms: u32, start_abs_ms: u64) {
         if !is_enabled {
             return;
         }
@@ -21120,7 +21243,7 @@ mod keylog {
         if guard.is_some() {
             return;
         }
-        *guard = start(hold_ms);
+        *guard = start(hold_ms, start_abs_ms);
     }
 
     pub fn maybe_stop_and_write(output_path: &Path) {
@@ -21188,7 +21311,7 @@ mod keylog {
         fn the_switch_off_default_never_starts_a_capture() {
             let flags = std::collections::HashMap::new();
             assert!(!enabled(&flags)); // absent -- "aus" is the shipped default
-            maybe_start(enabled(&flags), 400);
+            maybe_start(enabled(&flags), 400, now_ms());
             assert!(slot().lock().unwrap().is_none());
         }
 
@@ -21228,6 +21351,29 @@ mod keylog {
         fn sidecar_path_sits_next_to_the_recording_as_its_own_extension() {
             let p = sidecar_path(Path::new("C:/data/recordings/rec-1.mp4"));
             assert_eq!(p, PathBuf::from("C:/data/recordings/rec-1.keys.json"));
+        }
+
+        // The both-sides rule: only "not password" on BOTH sides clears
+        // a key. Any single side saying "password", or an injected key, gaps
+        // it -- this is what stops a key typed right after a real focus
+        // change from inheriting a stale "not password" answer left over
+        // from before the change, since the old, single-sided check could
+        // clear a key on whichever side happened to already be confirmed.
+        #[test]
+        fn should_gap_requires_both_sides_to_agree_it_was_not_a_password_field() {
+            assert!(!should_gap(false, false, false)); // both sides confirm: recorded
+            assert!(should_gap(true, false, false)); // before says password
+            assert!(should_gap(false, true, false)); // after says password
+            assert!(should_gap(true, true, false)); // both say password
+            assert!(should_gap(false, false, true)); // injected, regardless of focus
+        }
+
+        #[test]
+        fn past_cutoff_only_fires_once_a_cutoff_is_actually_set() {
+            assert!(!past_cutoff(1_000, None)); // no switch in progress: nothing is cut off
+            assert!(!past_cutoff(999, Some(1_000))); // strictly before the switch instant
+            assert!(past_cutoff(1_000, Some(1_000))); // AT the switch instant: already cut off
+            assert!(past_cutoff(1_500, Some(1_000))); // after the switch instant
         }
 
         // An injected (synthetic) key is gapped exactly like a
@@ -22639,7 +22785,7 @@ async fn start_recording(
     .await
     .map_err(|e| e.to_string())??;
     *rstate.0.lock().unwrap_or_else(|e| e.into_inner()) = Some(session);
-    keylog::maybe_start(key_overlay_on, key_overlay_hold_ms);
+    keylog::maybe_start(key_overlay_on, key_overlay_hold_ms, now_ms());
     // A fresh recording never inherits an earlier chain's already-closed
     // parts -- only finish_and_continue_recording ever adds to this list.
     REC_SESSION_PARTS.lock().unwrap_or_else(|e| e.into_inner()).clear();
@@ -22794,6 +22940,15 @@ async fn finish_and_continue_recording(
     let app2 = app.clone();
     let closure_result: Result<ContinueOutcome, String> = tauri::async_runtime::spawn_blocking(move || {
         let switch_start = std::time::Instant::now();
+        // Mark the switch instant before touching the old capture at all --
+        // every key from here on belongs to the switch itself or to the part
+        // about to open, never to the part that is about to close. Fixing
+        // this at the exact instant it happens (rather than after
+        // recording::stop returns, which can take a moment to flush the
+        // encoder) is what keeps the old part's own last keys from bleeding
+        // in and the new part's clock from starting late.
+        let switch_instant_ms = now_ms();
+        keylog::cut_off_at(switch_instant_ms);
         let (path, dropped, encode_error, mic_wav_path, canvas_note, crop_rect, canvas_size, resize_crop_at_ms) =
             recording::stop(session)?;
         let needs_crop = crop_rect.is_some_and(|(x, y, w, h)| x > 0 || y > 0 || w < canvas_size.0 || h < canvas_size.1);
@@ -22813,7 +22968,12 @@ async fn finish_and_continue_recording(
                 // ended up holding the whole chain's keys, timed from the
                 // FIRST part's start.
                 keylog::maybe_stop_and_write(&path);
-                keylog::maybe_start(key_overlay_on, key_overlay_hold_ms);
+                // The new part's clock starts at the same switch instant the
+                // old part was cut off at, not at whenever this line happens
+                // to run after recording::start's own setup work -- so the
+                // two parts' offsets meet exactly at the switch with no gap
+                // and no overlap.
+                keylog::maybe_start(key_overlay_on, key_overlay_hold_ms, switch_instant_ms);
                 // The switch worked -- this part is now an interim one with no
                 // result dialog of its own, so its crop (if any) runs right away
                 // in the background instead of waiting on
