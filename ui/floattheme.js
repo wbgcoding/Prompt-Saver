@@ -27,12 +27,23 @@ let applied = false; // true once applyFloatTheme has run at least once
 // Relative luminance -> the ink that stays readable on `hex`. Duplicated from
 // main.js's own readableInk rather than shared: this module ships to every
 // satellite window, none of which load main.js.
-function readableInk(hex) {
-  if (!INK.auto) return "#fff";
+function hexLuminance(hex) {
   const n = parseInt(hex.slice(1), 16);
   const lin = (c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
-  const l = 0.2126 * lin(((n >> 16) & 255) / 255) + 0.7152 * lin(((n >> 8) & 255) / 255) + 0.0722 * lin((n & 255) / 255);
-  return l > INK.threshold / 100 ? "#000" : "#fff";
+  return 0.2126 * lin(((n >> 16) & 255) / 255) + 0.7152 * lin(((n >> 8) & 255) / 255) + 0.0722 * lin((n & 255) / 255);
+}
+
+function readableInk(hex) {
+  if (!INK.auto) return "#fff";
+  return hexLuminance(hex) > INK.threshold / 100 ? "#000" : "#fff";
+}
+
+// White ink stays white up to the user's threshold (a deliberate look), but
+// on a colour past the contrast crossover it gets a dark halo so it reads.
+const INK_HALO = "0 0 2px rgba(0, 0, 0, 0.85), 0 1px 3px rgba(0, 0, 0, 0.7)";
+function inkShadow(hex) {
+  const l = hexLuminance(hex);
+  return l > 0.179 && readableInk(hex) === "#fff" ? INK_HALO : "none";
 }
 
 export function applyFloatTheme(theme, vars) {
@@ -53,6 +64,7 @@ export function applyFloatTheme(theme, vars) {
   // WCAG's 4.5:1 minimum.
   const pillBg = style.getPropertyValue("--pill-bg").trim();
   if (FLOAT_HEX.test(pillBg)) style.setProperty("--pill-fg", readableInk(pillBg));
+  style.setProperty("--pill-ink-shadow", FLOAT_HEX.test(pillBg) ? inkShadow(pillBg) : "none");
 }
 
 // Keep INK current without waiting for the next theme change, and re-paint

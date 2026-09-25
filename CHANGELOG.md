@@ -1125,6 +1125,16 @@ the video editor and the introduction tour ship on).
   startup change, every link exited the process before it could reach the
   window that was supposed to open or copy it.
 - **The app no longer freezes during a recording while a backup runs.**
+- **The compare view could open behind the duplicate finder, the raised
+  library or the edit dialog's similar-prompt hint**, and Escape closed
+  whichever of those sat underneath it instead of the compare view itself.
+  It now always stacks above the dialog it was opened from, and both Tab and
+  Escape reach it first.
+- **The chain overview strip kept extra space above its title.** The padding
+  above the steps is trimmed to match the space it already kept below them.
+- **A tile's menu and select button still popped up on hover while a chain
+  was running**, competing with the order badge in the same corner. They now
+  stay hidden on every tile until the chain ends, unless multi-select is on.
 
 ### Security
 
@@ -1270,6 +1280,18 @@ the video editor and the introduction tour ship on).
 - **The screenshot editor's zoom step and maximum zoom are now tunable in the
   expert menu** and match the video editor's own defaults, replacing its
   separate hardcoded values.
+- **The duplicate finder's compare view now shows one "keep this one" button
+  under each entry** instead of a row of identical buttons below both columns.
+- **The duplicate finder also has a shortcut in the header of All prompts**,
+  next to sort, alongside its existing shortcuts in the settings dialog and
+  the expert menu.
+- The three export format entries now just read "CSV", "TXT" and "JSON",
+  each already sitting next to its own export button.
+- **Chaining moved from the Copying group to Tiles & copying in the expert
+  menu**, next to the other tile settings, so the chain icon on a tile is
+  easier to find. No setting was removed or renamed, only regrouped.
+- White text on light colours gets a dark halo so it stays readable; the
+  threshold for black text is unchanged.
 
 ## 2.6.3 (2026-07-26)
 

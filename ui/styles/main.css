@@ -309,6 +309,7 @@ body.noflag-showJournal #journal-btn { display: none; }
   background: var(--view-color);
   border-color: var(--view-color);
   color: var(--view-ink, #fff);
+  text-shadow: var(--ink-shadow, none);
   box-shadow: none;
 }
 /* The grid itself outlined in the active view's color (expert opt, off
@@ -992,6 +993,10 @@ body.flag-chainStartAlwaysVisible .tile-chain-start { opacity: 0.65; }
 /* Any chain already running takes over the corner with its order badge --
    the start button never competes with it, on ANY tile, not just the picked one. */
 body.chain-mode .tile-chain-start { opacity: 0; pointer-events: none; }
+/* While a chain runs, the corner belongs to the order badge: the menu button
+   and the select box stay hidden on hover too, unless multi-select is on. */
+body.chain-mode:not(.grid-selecting) .tile .tile-menu,
+body.chain-mode:not(.grid-selecting) .tile .tile-select { opacity: 0; pointer-events: none; }
 /* Gate first: a switched-off chain feature must make the button gone
    entirely, not merely inert -- main.js also skips building the element. */
 body.noflag-chainPrompts .tile-chain-start,
@@ -1382,6 +1387,13 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
    was opened from, without closing it — the edit dialog keeps its place on top. */
 body.library-front #library.overlay { z-index: 66; }
 body.library-front #modal.overlay { z-index: 67; }
+/* The compare view opens from the duplicate finder at 65, the raised library
+   at 66 and the edit dialog's similar-prompt hint at 67, so it sits above all
+   three, and below vars, hotkeys and confirm, which can appear over it. */
+#compare-modal.overlay { z-index: 69; }
+/* Opened from the library's own header while the library is raised at 66,
+   the duplicate finder has to clear it too; compare at 69 stays above. */
+body.library-front #dupes-modal.overlay { z-index: 68; }
 /* Variable-fill dialog stacks above the library/journal it was opened from. */
 #vars-modal.overlay { z-index: 70; }
 /* The all-hotkeys list can now also be opened from inside the edit dialog's own
@@ -1642,7 +1654,7 @@ body.library-front #modal.overlay { z-index: 67; }
 .noflag-screenshot #snip-btn { display: none; }
 .noflag-colorPicker #picker-btn { display: none; }
 .noflag-screenRecord #record-btn { display: none; }
-.noflag-dupFinder #settings-dupes-btn { display: none; }
+.noflag-dupFinder #settings-dupes-btn, .noflag-dupFinder #library-dupes { display: none; }
 /* OCR ships on -- a default-on flag only ever sets noflag-<key>, never flag-<key>,
    so both entry points hide via noflag-ocr. */
 .noflag-ocr #ocr-btn,
@@ -1768,7 +1780,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   flex-direction: column;
   gap: 6px;
   margin: 0 0 8px;
-  padding: 8px 2px 10px;
+  padding: 2px 2px 10px;
   border-bottom: 1px solid var(--border);
   flex: 0 0 auto;
 }
@@ -1837,6 +1849,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .flag-editorMonospace .modal-text { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; }
 .flag-toolbarHoverDim .header { opacity: 0.5; transition: opacity var(--transition); }
 .flag-toolbarHoverDim .header:hover, .flag-toolbarHoverDim .header:focus-within { opacity: 1; }
+.tile-name, .folder-mini-cell { text-shadow: var(--ink-shadow, none); }
 .flag-tileTextShadow .tile-name { text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
 /* Appearance extras */
 .flag-compactTiles .tile { padding: 2px; }
@@ -3404,6 +3417,9 @@ select.modal-input { padding-right: 30px; }
 .compare-swatch { width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--border); flex: 0 0 auto; }
 .compare-image { max-width: 100%; max-height: 120px; object-fit: contain; border-radius: 6px; }
 .compare-actions { gap: 8px; }
+/* Each column's own keep button sits at the column's foot, so buttons in
+   columns of different text length still line up. */
+.compare-col .dup-keep { margin-top: auto; }
 /* Same flow-root reasoning as .dup-text above, one level down: each rotation
    entry is its own block (stacked on purpose), but a block's OWN diff spans
    must not be read as further stacked rows by the layout scan either. */

@@ -586,14 +586,27 @@ const TOAST_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden=
 // (autoInk), the text is always white; switched on, black only above the
 // expert-tunable inkThreshold (a plain WCAG 0.179 split flipped black text
 // onto medium colors that read as too dark for black text).
-function readableInk(hex) {
+function hexLuminance(hex) {
   const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || ""));
-  if (!m) return "#fff";
-  if (!flag("autoInk")) return "#fff";
+  if (!m) return null;
   const n = parseInt(m[1], 16);
   const lin = (c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
-  const l = 0.2126 * lin(((n >> 16) & 255) / 255) + 0.7152 * lin(((n >> 8) & 255) / 255) + 0.0722 * lin((n & 255) / 255);
+  return 0.2126 * lin(((n >> 16) & 255) / 255) + 0.7152 * lin(((n >> 8) & 255) / 255) + 0.0722 * lin((n & 255) / 255);
+}
+
+function readableInk(hex) {
+  const l = hexLuminance(hex);
+  if (l === null) return "#fff";
+  if (!flag("autoInk")) return "#fff";
   return l > val("inkThreshold") / 100 ? "#000" : "#fff";
+}
+
+// White ink stays white up to the user's threshold (a deliberate look), but
+// on a colour past the contrast crossover it gets a dark halo so it reads.
+const INK_HALO = "0 0 2px rgba(0, 0, 0, 0.85), 0 1px 3px rgba(0, 0, 0, 0.7)";
+function inkShadow(hex) {
+  const l = hexLuminance(hex);
+  return l !== null && l > 0.179 && readableInk(hex) === "#fff" ? INK_HALO : "none";
 }
 
 // Optional action: { label, onClick } adds a button and keeps the toast longer.
@@ -2191,7 +2204,7 @@ const EXPERT_TABS = [
     // highlighter only ever paints inside the preview.
     { title: "expGroupEditor", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }, { key: "copyFormatted", gate: "mdPreview" }, "lengthCounter", "promptHistory", { key: "historyDiff", gate: "promptHistory" }, "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace", "confirmDiscard", "editorDraft"], values: ["hlFontPx", "historyPerPrompt", "notesTipLen", "mdMaxChars", "hlMaxChars", "diffWordCap", "historyPreviewLen", "editorDraftSecs"], dropdowns: ["counterUnits"] },
     // Everything that happens between a click and the clipboard.
-    { title: "expGroupCopy", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "chainQuickStart", gate: "chainPrompts" }, { key: "chainStartAlwaysVisible", gate: "chainQuickStart" }, { key: "chainVarCheck", gate: "chainPrompts" }, "promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, { key: "autoPasteEnter", gate: "autoPaste" }, "hideWindowOnCopy", "copyBubble", "copyFlash", "copySound"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs", "bubbleMs", "copySoundVolume"], dropdowns: ["dragOutModifier", "copySize", "copyFont"] },
+    { title: "expGroupCopy", flags: ["promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, { key: "autoPasteEnter", gate: "autoPaste" }, "hideWindowOnCopy", "copyBubble", "copyFlash", "copySound"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs", "bubbleMs", "copySoundVolume"], dropdowns: ["dragOutModifier", "copySize", "copyFont"] },
     // Floating buttons and the two kinds of folder they can form.
     { title: "expGroupFolders", flags: ["floating", { key: "floatPark", gate: "floating" }, { key: "pillFolders", gate: "floating" }, "tileFolders"], values: ["floatOpacity", "pillFontSize", "pillTextMinW", "pillBorderW", "pillRingFrac", "pillMenuGap", "floatParkCleanupH", "pillMergeRadius", "pillMergeGrow", "pillFolderTileSize", "pillFolderTileGap", "pillFolderPad", "pillFolderPopGap", "folderGridCols", "tileFolderZone", "tileFolderHoverMs", "tileFolderCols"] },
     // The quick-copy sections of the tray menu, each with its own entry count.
@@ -2229,7 +2242,7 @@ const EXPERT_TABS = [
   { title: "expTabTiles", groups: [
     // Split by what a setting actually does: acting on a tile, the hover tooltip,
     // and pure looks. One 26-entry blob made everything hard to find.
-    { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "dragToView", "tileHover", { key: "tileHoverLift", gate: "tileHover" }, "tilePressScale", "tileHotkeyBadge"], values: ["hoverLift", "dragThreshold", "viewDropHoverMs", "tileHotkeyBadgeOpacity"] },
+    { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "dragToView", "tileHover", { key: "tileHoverLift", gate: "tileHover" }, "tilePressScale", "tileHotkeyBadge", "chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "chainQuickStart", gate: "chainPrompts" }, { key: "chainStartAlwaysVisible", gate: "chainQuickStart" }, { key: "chainVarCheck", gate: "chainPrompts" }], values: ["hoverLift", "dragThreshold", "viewDropHoverMs", "tileHotkeyBadgeOpacity"] },
     { title: "expGroupTooltips", flags: ["tilePreview", "iconTooltips", "tooltipDelay", "tooltipTimeout", "tileTimeTip"], values: ["tooltipWidth", "tooltipDelayMs", "tooltipTimeoutMs"] },
     { title: "expGroupTileLook", flags: ["tileShadow", "typeBadges", "captions", "compactTiles", "tileGradient", "gridLines", "uppercaseTiles", "boldTileNames", "monospaceTiles", "italicTiles", "tileTextShadow", "autoInk"], values: ["tileRadius", "tileBorderWidth", "inkThreshold"] },
     { title: "expGroupFavorites", flags: ["favorites", { key: "favViewButton", gate: "favorites" }, { key: "favViewReorder", gate: "favViewButton" }], values: ["favStarSize", "favMaxCols"] },
@@ -4605,6 +4618,7 @@ function viewTabEl(v) {
     btn.classList.add("colored");
     btn.style.setProperty("--view-color", v.color);
     btn.style.setProperty("--view-ink", readableInk(v.color));
+    btn.style.setProperty("--ink-shadow", inkShadow(v.color));
   }
   // The name lives in its own span so the merge preview can shrink it back into the
   // tab the way a folder tab's spans already do.
@@ -6215,6 +6229,7 @@ function buildTile(p) {
     tile.style.background = p.color;
     tile.style.borderColor = p.color;
     tile.style.color = readableInk(p.color);
+    tile.style.setProperty("--ink-shadow", inkShadow(p.color));
   }
 
   const name = document.createElement("span");
@@ -6870,6 +6885,8 @@ function pickTileFolderColor(f, anchor) {
       tile.style.background = hex;
       tile.style.borderColor = hex;
       tile.style.color = hex ? readableInk(hex) : "";
+      if (hex) tile.style.setProperty("--ink-shadow", inkShadow(hex));
+      else tile.style.removeProperty("--ink-shadow");
     }
     clearTimeout(folderColorTimer);
     // Re-read the folder on write: the settings object was replaced in between.
@@ -6920,6 +6937,7 @@ function buildFolderTile(f) {
     tile.style.background = f.color;
     tile.style.borderColor = f.color;
     tile.style.color = readableInk(f.color);
+    tile.style.setProperty("--ink-shadow", inkShadow(f.color));
   }
   const mini = document.createElement("span");
   mini.className = "folder-mini";
@@ -6930,7 +6948,8 @@ function buildFolderTile(f) {
     if (p.color) {
       face.style.background = p.color;
       face.style.color = readableInk(p.color);
-    }
+      face.style.setProperty("--ink-shadow", inkShadow(p.color));
+    } else face.style.setProperty("--ink-shadow", "none");
     const faceImg = imageOf(p);
     if (faceImg) {
       const img = document.createElement("img");
@@ -9988,21 +10007,22 @@ function renderCompareView() {
       txt.textContent = p.text;
     }
     col.appendChild(txt);
+    if (dupGroup) {
+      const keep = document.createElement("button");
+      keep.type = "button";
+      keep.className = "ghost-btn dup-keep";
+      keep.textContent = t("dupKeep");
+      keep.addEventListener("click", () => keepOneDup(dupGroup, p.id));
+      col.appendChild(keep);
+    }
     body.appendChild(col);
   });
   const actions = $("compare-actions");
   actions.innerHTML = "";
   if (dupGroup) {
     // The finder's own actions: keep exactly one of the group, deleting the
-    // rest (same keepOneDup as before, just reached from here now).
-    for (const p of ps) {
-      const keep = document.createElement("button");
-      keep.type = "button";
-      keep.className = "ghost-btn dup-keep";
-      keep.textContent = t("dupKeep");
-      keep.addEventListener("click", () => keepOneDup(dupGroup, p.id));
-      actions.appendChild(keep);
-    }
+    // rest (same keepOneDup as before, just reached from here now). Each
+    // column now carries its own keep button; only "ignore" stays here.
     const ignore = document.createElement("button");
     ignore.type = "button";
     ignore.className = "ghost-btn";
@@ -18905,7 +18925,7 @@ function bind() {
   });
   // Esc leaves selection mode before it closes the library (capture beats the overlay).
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && libSelectMode && !libraryEl.classList.contains("hidden")) {
+    if (e.key === "Escape" && libSelectMode && !libraryEl.classList.contains("hidden") && $("compare-modal").classList.contains("hidden")) {
       e.stopPropagation();
       setLibSelectMode(false);
     }
@@ -18922,7 +18942,7 @@ function bind() {
     });
   });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && gridSelected.size) {
+    if (e.key === "Escape" && gridSelected.size && $("compare-modal").classList.contains("hidden")) {
       e.stopPropagation();
       clearGridSelection();
     }
@@ -19252,6 +19272,7 @@ function bind() {
   $("delete-data").addEventListener("click", deleteData);
   $("settings-backup-btn").addEventListener("click", openBackups);
   $("settings-dupes-btn").addEventListener("click", openDupes);
+  $("library-dupes").addEventListener("click", openDupes);
   $("backup-close").addEventListener("click", closeBackups);
   $("backup-modal").addEventListener("pointerdown", (e) => {
     if (e.target === $("backup-modal")) closeBackups();
@@ -19462,6 +19483,7 @@ function bind() {
     if (!$("confirm-modal").classList.contains("hidden")) { trapTabWithin($("confirm-modal"), e); return; }
     if (!colorPop.classList.contains("hidden")) { trapTabWithin(colorPop, e); return; }
     if (!tagPop.classList.contains("hidden")) { trapTabWithin(tagPop, e); return; }
+    if (!$("compare-modal").classList.contains("hidden")) { trapTabWithin($("compare-modal"), e); return; }
     if (!$("tag-modal").classList.contains("hidden")) { trapTabWithin($("tag-modal"), e); return; }
     if (!ctxEl.classList.contains("hidden")) { trapTabWithin(ctxEl, e); return; }
     if (!$("update-modal").classList.contains("hidden")) { trapTabWithin($("update-modal"), e); return; }
@@ -19497,6 +19519,7 @@ function bind() {
     else if (varsCleanup) { /* vars dialog closes itself */ }
     else if (!colorPop.classList.contains("hidden")) closeColorPop();
     else if (!tagPop.classList.contains("hidden")) closeTagPop();
+    else if (!$("compare-modal").classList.contains("hidden")) closeCompareView();
     else if (!$("tag-modal").classList.contains("hidden")) closeTagManager();
     else if (!ctxEl.classList.contains("hidden")) closeCtx();
     else if (!$("update-modal").classList.contains("hidden")) $("update-modal").classList.add("hidden");

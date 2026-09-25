@@ -384,7 +384,8 @@ fast too often pauses the session with a toast instead of looping.
   what it holds. Click several tiles in a row, they combine into one clipboard
   copy. Hovering a text tile also shows a small chain icon next to its
   selection checkbox that starts a chain with that tile as the first entry
-  directly, switchable off on its own in the expert menu.
+  directly, switchable off on its own in the expert menu under Tiles &
+  copying, alongside the rest of the chain settings.
 - Chain overview: while chaining, a strip above the grid lists the picked
   steps in order, with small marks for the placeholders each step needs and
   the reserved names it fills by itself. A step turns red when nothing
@@ -619,8 +620,9 @@ it has run for the guess to mean something — both switchable off.
 
 Duplicate finder, trash (with its own retention setting), CSV/TXT export, and
 full backup export/import — reached from the expert menu's data group. The
-duplicate finder also has a shortcut in the settings dialog, next to import
-and export, so it does not take opening the expert menu to find it.
+duplicate finder also has shortcuts in the settings dialog, next to import
+and export, and in the header of All prompts, so it does not take opening the
+expert menu to find it.
 
 ### Trash & restoring tiles
 
@@ -1101,7 +1103,8 @@ zu häufiges Einfügen pausiert die Sitzung mit einem Hinweis statt zu wiederhol
 
 **Kopieren** — Verketten (mehrere verschiedene Kacheln als ein Text, anders als
 Rotation oben; auch direkt über ein Kettensymbol an der Kachel, einzeln
-abschaltbar). Beim Verketten zeigt eine Leiste über dem Raster die gewählten
+abschaltbar unter Kacheln & Kopieren im Experten-Menü). Beim Verketten zeigt
+eine Leiste über dem Raster die gewählten
 Schritte der Reihe nach, mit Marken für die Platzhalter, die jeder Schritt
 braucht und die er selbst füllt; ein Schritt ohne Antwort aus einem früheren
 Schritt wird rot markiert, lässt sich aber trotzdem starten. Die Zeilen lassen
@@ -1239,8 +1242,9 @@ das Taskleistensymbol und zeigen ab einer eingestellten Schwelle „noch etwa �
 beides abschaltbar.
 
 **Datenwartung** — Duplikatfinder, Papierkorb, Import/Export. Der Duplikatfinder
-hat zusätzlich eine Abkürzung im Einstellungsdialog, direkt neben Import und
-Export, damit man dafür nicht erst das Expertenmenü öffnen muss.
+hat zusätzlich Abkürzungen im Einstellungsdialog, direkt neben Import und
+Export, und in der Kopfleiste von „Alle Prompts“, damit man dafür nicht erst
+das Expertenmenü öffnen muss.
 
 **Papierkorb & Kacheln wiederherstellen** — gelöschte Kacheln landen zuerst im
 Papierkorb (Aufbewahrung in Tagen, 0 = für immer). Wiederherstellen legt in die

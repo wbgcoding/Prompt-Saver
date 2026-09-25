@@ -631,6 +631,12 @@ PROBE = """
         const dupItem = menuItem('Duplicate');
         if (!dupItem) {
           out.errors.push('the view tab context menu has no Duplicate entry');
+          // English-only lookup above: under another language this never matches,
+          // so the menu has to be closed by hand (its own dismiss listens for a
+          // pointerdown outside it) or it leaks into later layout checks, sitting
+          // wherever it was opened.
+          document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+          await sleep(100);
         } else {
           dupItem.click();
           await sleep(300);
@@ -1744,8 +1750,27 @@ PROBE = """
           startBtn.click();
           await sleep(150);
           checkOverlap('picked mid-chain', ['.tile-chain-badge', '.tile-rotate-badge', '.tile-menu']);
+          // 491: the corner belongs to the order badge while a chain runs -- the
+          // menu button and the select box stay hidden on hover too, on both the
+          // picked tile and any other one, unless multi-select is on.
+          const otherTile = [...document.querySelectorAll('#grid .tile')].find((el) => el !== rotTile);
+          for (const [label, tile] of [['picked', rotTile], ['other', otherTile]]) {
+            if (!tile) continue;
+            for (const name of ['tile-menu', 'tile-select']) {
+              const el = tile.querySelector('.' + name);
+              if (!el) continue;
+              const cs = getComputedStyle(el);
+              if (cs.pointerEvents !== 'none' || cs.opacity !== '0') {
+                out.errors.push('491: the ' + name + ' stayed reachable on the ' + label + ' tile during a chain');
+              }
+            }
+          }
           for (let i = 0; i < 3 && document.body.classList.contains('chain-mode'); i++) await click('chain-btn');
           await sleep(100);
+          const afterMenu = rotTile.querySelector('.tile-menu');
+          if (afterMenu && getComputedStyle(afterMenu).pointerEvents !== 'auto') {
+            out.errors.push('491: the tile menu stayed unreachable after the chain ended');
+          }
         }
       }
     }
@@ -2036,6 +2061,14 @@ PROBE = """
         if (!bar || bar.classList.contains('hidden')) {
           out.errors.push('445: the chain overview strip did not appear for a running chain');
         } else {
+          const ovTitle = bar.querySelector('.chain-ov-title');
+          if (ovTitle && ovTitle.getBoundingClientRect().top - bar.getBoundingClientRect().top > 3) {
+            out.errors.push('445: the chain overview keeps extra space above its title');
+          }
+          const firstTile = document.querySelector('#grid .tile');
+          if (firstTile && bar.getBoundingClientRect().bottom > firstTile.getBoundingClientRect().top) {
+            out.errors.push('445: the chain overview overlaps the grid below it');
+          }
           let rows = [...bar.querySelectorAll('.chain-ov-row')];
           if (rows.length !== 3) {
             out.errors.push('445: the overview shows ' + rows.length + ' rows instead of 3');
@@ -4058,13 +4091,24 @@ PROBE = """
             if (!document.querySelector('#compare-body .diff-add, #compare-body .diff-del')) {
               out.errors.push('a duplicate pair does not highlight its word differences');
             }
-            if (document.querySelectorAll('#compare-actions .dup-keep').length !== 2) {
-              out.errors.push('the compare view opened from the duplicate finder is missing its "keep one side" actions');
+            if ([...document.querySelectorAll('#compare-body .dup-col')].some((col) => col.querySelectorAll('.dup-keep').length !== 1)) {
+              out.errors.push('the compare view opened from the duplicate finder is missing a per-column "keep this one" action');
+            }
+            if (document.querySelectorAll('#compare-actions .dup-keep').length !== 0) {
+              out.errors.push('the compare view opened from the duplicate finder still has "keep one side" actions in the action bar');
             }
             layoutScan('duplicates compare view');
-            mustReach('duplicates compare view', '#compare-actions button');
+            mustReach('duplicates compare view', '#compare-actions button, #compare-body .dup-keep');
+            if (!(Number(getComputedStyle(cmpModal).zIndex) > Number(getComputedStyle(dm).zIndex))) {
+              out.errors.push('the compare view opens behind the duplicates dialog');
+            }
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+            await sleep(200);
+            if (!cmpModal.classList.contains('hidden') || dm.classList.contains('hidden')) {
+              out.errors.push('Escape does not close the compare view first, over the duplicates dialog');
+            }
           }
-          await click('compare-close');
+          if (!cmpModal.classList.contains('hidden')) await click('compare-close');
           await sleep(200);
         }
         await click('dupes-close');
@@ -4170,6 +4214,36 @@ PROBE = """
     // Compare view detached from the duplicate finder: the library's own
     // selection reaches it too, for two entries the finder never flagged.
     await click('library-btn');
+    // The duplicate finder also has its own shortcut in the library's own
+    // header now, next to sort — reachable without the expert menu or the
+    // settings dialog, and correctly gated and layered like the other two.
+    const libDupesBtn = document.getElementById('library-dupes');
+    if (!libDupesBtn || libDupesBtn.offsetParent === null) {
+      out.errors.push('the library header has no visible duplicate finder shortcut');
+    } else {
+      libDupesBtn.click();
+      await sleep(300);
+      const libDupesModal = document.getElementById('dupes-modal');
+      if (libDupesModal.classList.contains('hidden')) {
+        out.errors.push('the library header shortcut did not open the duplicate finder');
+      }
+      await click('dupes-close');
+      await sleep(150);
+    }
+    document.body.classList.add('library-front');
+    libDupesBtn.click();
+    await sleep(300);
+    if (!(Number(getComputedStyle(document.getElementById('dupes-modal')).zIndex) > Number(getComputedStyle(document.getElementById('library')).zIndex))) {
+      out.errors.push('the duplicate finder opens behind the raised library');
+    }
+    await click('dupes-close');
+    document.body.classList.remove('library-front');
+    await sleep(150);
+    document.body.classList.add('noflag-dupFinder');
+    if (libDupesBtn.offsetParent !== null) {
+      out.errors.push('the library header duplicate finder shortcut ignores its dupFinder gate');
+    }
+    document.body.classList.remove('noflag-dupFinder');
     document.getElementById('library-select-btn').click();
     await sleep(150);
     document.querySelector('#library-list .lib-item[data-id="p0"]')?.click();
@@ -4194,6 +4268,13 @@ PROBE = """
         }
         layoutScan('compare view');
         mustReach('compare view', '#compare-actions button');
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        await sleep(200);
+        if (!cmpModal.classList.contains('hidden') || document.getElementById('library').classList.contains('hidden')) {
+          out.errors.push('Escape does not close the compare view detached from the library first');
+        }
+        cmpBtn.click();
+        await sleep(300);
         // Position, not text, so this still finds the button under the Italian
         // pass below (takeLeft, takeRight, close, in that fixed append order).
         const takeRightBtn = document.querySelectorAll('#compare-actions button')[1];
@@ -12141,19 +12222,26 @@ PARKED_BADGE_PROBE = """
 # 411: the float-recall expert action reaches the backend. Its own boot (a
 # plain index.html start is enough; the action does not depend on any pill or
 # folder actually being parked, only on the floating feature being on, which
-# ships on by default).
+# ships on by default). expert-open's click handler only attaches once init()'s
+# async settings fetch resolves; a fixed short wait can lose that race under
+# load, so the open is retried instead of assumed.
 FLOAT_RECALL_PROBE = """
 <script>
 (async () => {
   const errs = [];
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-  const click = async (id) => { const e = document.getElementById(id); if (e) { e.click(); await sleep(200); } };
   const calls = () => (window.__SMOKE_CALLS__ = window.__SMOKE_CALLS__ || []);
   try {
     document.getElementById('settings').classList.remove('hidden');
     await sleep(50);
     const findBtn = () => document.querySelector('.expert-action[data-action="float-recall"]');
-    await click('expert-open');
+    let opened = false;
+    for (let i = 0; i < 40 && !opened; i++) {
+      document.getElementById('expert-open').click();
+      await sleep(100);
+      opened = !document.getElementById('settings-expert').classList.contains('hidden');
+    }
+    if (!opened) errs.push('411: the expert menu never opened');
     let btn = findBtn();
     for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
       if (btn) break;

@@ -227,7 +227,17 @@ window.__CONTRAST_RING_TOKENS__ = %(ring_tokens_json)s;
       const weight = parseInt(st.fontWeight, 10) || 400;
       const large = px >= 24 || (weight >= 700 && px >= 19);
       const min = large ? %(large_min)s : %(normal_min)s;
-      const r = ratio(fg, bg);
+      let r = ratio(fg, bg);
+      // A dark text-shadow halo is what the text is actually read against --
+      // a strong enough one (alpha >= 0.6) bridges a colour that fails flat.
+      if (st.textShadow && st.textShadow !== 'none') {
+        const halo = parseColor(st.textShadow);
+        if (halo && halo[3] >= 0.6) {
+          const a = halo[3];
+          const haloBg = [halo[0] * a + bg[0] * (1 - a), halo[1] * a + bg[1] * (1 - a), halo[2] * a + bg[2] * (1 - a)];
+          r = Math.max(r, ratio(fg, haloBg));
+        }
+      }
       if (r < min) findings.push({ kind: 'text', element: describe(el), ratio: round2(r), min });
     }
     for (const el of document.querySelectorAll(CONTROL_SEL)) {

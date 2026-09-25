@@ -89,7 +89,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "A short confirmation bubble or flash confirms the copy. Chaining, clicking several tiles in a row, combines them into one clipboard entry instead of overwriting each other; hovering a text tile also shows a small chain icon next to its selection checkbox that starts a chain with that tile first. Chaining is not the same as rotation: chaining combines several different tiles, rotation changes what a single tile holds from copy to copy (see Rotating tiles).",
-      settings: ["Chaining, per-tile hotkeys, auto-paste, drag-out, close-on-copy — Expert menu → Features → Copying", "Which key drags a tile out, and whether that key drags out or moves it — Expert menu → Features → Copying"],
+      settings: ["Chaining, and the chain icon shown on a tile: Expert menu → Features → Tiles & copying", "Per-tile hotkeys, auto-paste, drag-out, close-on-copy: Expert menu → Features → Copying", "Which key drags a tile out, and whether that key drags out or moves it — Expert menu → Features → Copying"],
     },
     {
       section: "alwaysOnTop",
@@ -386,7 +386,7 @@ export const HELP_CONTENT = {
         "Keep one, or mark the pair as not a duplicate to stop it being flagged again.",
       ],
       whatHappens:
-        "Matching compares each tile's main text — its name, if it has no text — by similarity, not an exact match; the threshold controls how close counts as close enough. A rotating tile is only compared on its first entry. A shortcut in the settings dialog opens it directly too, next to import and export, so it does not take the expert menu to find.",
+        "Matching compares each tile's main text — its name, if it has no text — by similarity, not an exact match; the threshold controls how close counts as close enough. A rotating tile is only compared on its first entry. Shortcuts in the settings dialog, next to import and export, and in the header of All prompts open it directly too, so it does not take the expert menu to find.",
       settings: ["Duplicate finder, similarity threshold — Expert menu → System & data → Data & maintenance"],
     },
     {
@@ -697,7 +697,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Eine kurze Bestätigungsblase oder ein Aufblinken bestätigt den Kopiervorgang. Verketten, mehrere Kacheln hintereinander anklicken, fasst sie zu einem Eintrag in der Zwischenablage zusammen, statt sie zu überschreiben; beim Überfahren einer Text-Kachel erscheint zusätzlich ein kleines Ketten-Symbol neben ihrer Auswahlbox, das direkt eine Kette mit dieser Kachel beginnt. Verketten ist nicht dasselbe wie Rotation: Verketten fasst mehrere verschiedene Kacheln zusammen, Rotation ändert, was eine einzelne Kachel von Kopie zu Kopie enthält (siehe Wechselnde Kacheln).",
-      settings: ["Verketten, eigene Hotkeys pro Kachel, Auto-Paste, Drag-out, Schließen-nach-Kopieren — Experten-Menü → Funktionen → Kopieren", "Welche Taste eine Kachel herauszieht und ob diese Taste herauszieht oder sie verschiebt — Experten-Menü → Funktionen → Kopieren"],
+      settings: ["Verketten und das Ketten-Symbol an der Kachel: Experten-Menü → Funktionen → Kacheln & Kopieren", "Eigene Hotkeys pro Kachel, Auto-Paste, Drag-out, Schließen-nach-Kopieren: Experten-Menü → Funktionen → Kopieren", "Welche Taste eine Kachel herauszieht und ob diese Taste herauszieht oder sie verschiebt — Experten-Menü → Funktionen → Kopieren"],
     },
     {
       section: "alwaysOnTop",
@@ -995,7 +995,7 @@ export const HELP_CONTENT = {
         "Eine Kachel behalten, oder das Paar als kein Duplikat markieren, damit es nicht erneut markiert wird.",
       ],
       whatHappens:
-        "Der Abgleich vergleicht den Haupttext jeder Kachel — oder ihren Namen, falls sie keinen Text hat — nach Ähnlichkeit, nicht nach exakter Übereinstimmung; der Schwellenwert steuert, wie nah als nah genug gilt. Eine rotierende Kachel wird nur nach ihrem ersten Eintrag verglichen. Eine Abkürzung im Einstellungsdialog öffnet ihn auch direkt, neben Import und Export, sodass dafür nicht erst das Experten-Menü nötig ist.",
+        "Der Abgleich vergleicht den Haupttext jeder Kachel — oder ihren Namen, falls sie keinen Text hat — nach Ähnlichkeit, nicht nach exakter Übereinstimmung; der Schwellenwert steuert, wie nah als nah genug gilt. Eine rotierende Kachel wird nur nach ihrem ersten Eintrag verglichen. Abkürzungen im Einstellungsdialog, neben Import und Export, und in der Kopfleiste von „Alle Prompts“ öffnen ihn auch direkt, sodass dafür nicht erst das Experten-Menü nötig ist.",
       settings: ["Duplikat-Finder, Ähnlichkeitsschwelle — Experten-Menü → System & Daten → Daten & Wartung"],
     },
     {

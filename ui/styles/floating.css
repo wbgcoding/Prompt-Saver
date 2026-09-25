@@ -69,6 +69,7 @@ html, body {
   border-radius: 999px; /* fully rounded at any pill size */
   background: var(--pill-bg);
   color: var(--pill-fg);
+  text-shadow: var(--pill-ink-shadow, none);
   font: inherit;
   font-weight: 600;
   font-size: 16px;
@@ -278,6 +279,7 @@ body.menu-open .pill { flex: 0 0 auto; }
 .size-row button.sel {
   background: var(--pill-bg);
   color: var(--pill-fg);
+  text-shadow: var(--pill-ink-shadow, none);
 }
 /* X in the top row closing the menu. */
 .size-row .menu-close {
@@ -428,6 +430,7 @@ body.menu-open .pill { flex: 0 0 auto; }
   overflow: hidden;
   background: var(--pill-bg);
   color: var(--pill-fg);
+  text-shadow: var(--pill-ink-shadow, none);
   font-weight: 700;
   /* No carrier surface behind the folder any more — each tile gets its
      own soft glow + hairline contour so it stays visible on light backgrounds. */
@@ -709,6 +712,7 @@ body.vars-body {
   border-color: transparent;
   background: var(--pill-bg);
   color: var(--pill-fg);
+  text-shadow: var(--pill-ink-shadow, none);
 }
 
 /* ---- Standalone quick-launcher (launcher.html) ----
