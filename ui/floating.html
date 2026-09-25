@@ -5,6 +5,11 @@
   <title></title>
   <link rel="stylesheet" href="styles/floating.css" />
   <link rel="stylesheet" href="styles/media.css" />
+  <!-- i18n.js is a multi-megabyte dictionary; preloading it (and the small
+       terms.js it always loads alongside) lets the browser start fetching
+       both during HTML parsing, before floating.js even runs its first import. -->
+  <link rel="modulepreload" href="i18n.js" />
+  <link rel="modulepreload" href="terms.js" />
 </head>
 <body>
   <button id="pill" class="pill" type="button">

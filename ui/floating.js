@@ -21,6 +21,12 @@ const appWin = getCurrentWebviewWindow();
 let copiedText = ""; // localized "Copied!", re-announced on every copy (see showCopied)
 const promptId = appWin.label.replace(/^float-/, "");
 
+// Started here, at module evaluation time, rather than inside applyTexts()
+// below: the pill has to open fast, so the (large) translation fetch must not
+// sit behind the get_settings invoke it used to be nested under. applyTexts()
+// awaits this same promise, so it resolves instantly once already in flight.
+const textsImportPromise = Promise.all([import("./i18n.js"), import("./terms.js")]);
+
 const pill = document.getElementById("pill");
 const label = document.getElementById("label");
 const menu = document.getElementById("menu");
@@ -192,9 +198,8 @@ async function applySettings() {
 }
 
 async function applyTexts(s) {
-  const { FLOAT_TXT: TXT, LANGS } = await import("./i18n.js");
+  const [{ FLOAT_TXT: TXT, LANGS }, { applyTerms }] = await textsImportPromise;
   const lang = resolveLang(s.language, LANGS);
-  const { applyTerms } = await import("./terms.js");
   const t = Object.fromEntries(
     Object.entries(TXT[lang]).map(([k, v]) => [k, applyTerms(v, lang)]));
   copiedText = t.copied;

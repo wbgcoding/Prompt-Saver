@@ -8,6 +8,11 @@
        only adds this window's own layout. No second theme or button system. -->
   <link rel="stylesheet" href="styles/main.css" />
   <link rel="stylesheet" href="styles/video.css" />
+  <!-- i18n.js is a multi-megabyte dictionary; preloading it (and the small
+       terms.js it always loads alongside) lets the browser start fetching
+       both during HTML parsing, before video.js even runs its first import. -->
+  <link rel="modulepreload" href="i18n.js" />
+  <link rel="modulepreload" href="terms.js" />
 </head>
 <body class="video-body">
   <!-- The window has no OS titlebar, so this row is both the title and the drag
