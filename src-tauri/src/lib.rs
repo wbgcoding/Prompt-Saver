@@ -39279,7 +39279,7 @@ mod tests {
     fn a_replaced_prompt_set_is_written_in_full_once_the_row_map_is_cleared() {
         // The trap this guards: the map says "id X on disk holds this content", a
         // restore/import then replaces the table behind the writer's back, and the
-        // in-memory prompt still hashes to what the map remembers — so without
+        // in-memory prompt still hashes to what the map remembers: so without
         // clearing, the row is skipped and the user's data never reaches the disk.
         let mut conn = row_test_db();
         let mut written = WrittenRows::new();
@@ -39325,12 +39325,12 @@ mod tests {
     }
 
     // A settings write that once fell back to settings.json leaves that file behind
-    // while prompts.json — which nothing wrote — stays absent. If the database is
+    // while prompts.json (which nothing wrote) stays absent. If the database is
     // then unopenable for one launch, the prompts are invisible but very much still
     // on disk, so the store has to refuse prompt writes regardless: write_rows itself
     // now only deletes a row it can prove it once knew about (see the
     // allowMultipleInstances fix), so an empty `written` map on its own no longer
-    // wipes the table — but a partially-known list (some rows genuinely loaded, one
+    // wipes the table: but a partially-known list (some rows genuinely loaded, one
     // instance's own explicit delete mixed in) still relies entirely on the lock,
     // which is why it stays unconditional here. Whether settings.json happens to be
     // lying there says nothing about that, which is exactly what this used to hinge on.
@@ -40027,7 +40027,7 @@ mod tests {
     // already holds the adopted store while the process still has the empty one it
     // replaced. write_rows' "only delete a row I can prove I knew about" guard (the
     // allowMultipleInstances fix) now keeps a save with an empty `written` map from
-    // wiping those adopted rows either way — but the copy still has to report that
+    // wiping those adopted rows either way: but the copy still has to report that
     // something landed, so the caller reloads from what is really there instead of
     // silently carrying on with a stale, now-wrong in-memory empty list.
     #[test]
@@ -40451,14 +40451,14 @@ mod tests {
     // A full "data" import must actually delete the prompts it replaces ON DISK,
     // not just in the in-memory list apply_import mutates directly. The two tests
     // above only ever check store.prompts, which is always correct (apply_import
-    // assigns it outright) regardless of this bug — it takes a real write_rows
+    // assigns it outright) regardless of this bug: it takes a real write_rows
     // round-trip through a DB to see whether the OLD rows a smaller import leaves
     // behind actually get deleted, or silently survive to reappear after restart.
     #[test]
     fn import_all_data_scope_deletes_the_prompts_it_replaces_from_disk() {
         let mut conn = row_test_db();
         let mut written = WrittenRows::new();
-        // "This process" genuinely loaded two prompts before the import — the exact
+        // "This process" genuinely loaded two prompts before the import: the exact
         // condition write_rows' delete guard requires to treat their disappearance
         // as a real, user-initiated removal rather than another instance's unseen work.
         let original = numbered_prompts(2);
@@ -40510,7 +40510,7 @@ mod tests {
         gzip_to(&raw_a, &folder_a.join("data.db.gz")).unwrap();
         let _ = std::fs::remove_file(&raw_a);
 
-        // B: plain (pre-2.6, ungzipped) snapshot — also has clip_inbox rows.
+        // B: plain (pre-2.6, ungzipped) snapshot; also has clip_inbox rows.
         let folder_b = dir.join("20260102-000000");
         std::fs::create_dir_all(&folder_b).unwrap();
         {
@@ -40518,7 +40518,7 @@ mod tests {
             conn.execute_batch("INSERT INTO clip_inbox(ts, text) VALUES(3, 'secret-c');").unwrap();
         }
 
-        // C: nothing in its clip_inbox — must not be counted as purged.
+        // C: nothing in its clip_inbox; must not be counted as purged.
         let folder_c = dir.join("20260103-000000");
         std::fs::create_dir_all(&folder_c).unwrap();
         let raw_c = dir.join("raw_c.db");
@@ -40528,7 +40528,7 @@ mod tests {
         gzip_to(&raw_c, &folder_c.join("data.db.gz")).unwrap();
         let _ = std::fs::remove_file(&raw_c);
 
-        // D: a snapshot claiming to be gzipped that is not — gunzip must fail on
+        // D: a snapshot claiming to be gzipped that is not; gunzip must fail on
         // it, and that must be counted as a failure (it might hold clip_inbox
         // rows this run could never even look at), never silently skipped.
         let folder_d = dir.join("20260104-000000");
@@ -40594,7 +40594,7 @@ mod tests {
 
     // Every release before 2.7.0 wrote prompt_versions without its `variants`
     // column. Restoring only the data out of such a backup used to fail on the
-    // column count alone and roll the whole thing back — prompts, trash and all —
+    // column count alone and roll the whole thing back (prompts, trash and all),
     // leaving the user with a backup they could not get their prompts out of.
     #[test]
     fn restore_selective_accepts_a_backup_table_that_predates_a_column() {
@@ -40647,7 +40647,7 @@ mod tests {
     fn restore_selective_rolls_back_everything_if_one_table_fails() {
         // "prompts" comes first in the copy order and would succeed on its own;
         // "trash" is made incompatible (its `data` column, which the live table
-        // requires and has no default for, is missing) so its INSERT fails — proving
+        // requires and has no default for, is missing) so its INSERT fails: proving
         // the whole thing runs in ONE transaction, not one commit per table.
         let dir = std::env::temp_dir();
         let target = dir.join(format!("{}-test-restore-rollback-target.db", brand::SLUG));
@@ -40678,7 +40678,7 @@ mod tests {
 
     #[test]
     fn backup_decrypt_passes_through_legacy_plaintext() {
-        // Old .json backups have no PSB1 header — the caller falls back to plain JSON.
+        // Old .json backups have no PSB1 header: the caller falls back to plain JSON.
         assert!(backup_decrypt(br#"{"prompts":[]}"#, None).expect("no error").is_none());
     }
 
@@ -40751,7 +40751,7 @@ mod tests {
 
     #[test]
     fn daily_copies_are_zero_filled_and_bucketed() {
-        // A day with no copies must still appear (as 0), not be skipped —
+        // A day with no copies must still appear (as 0), not be skipped:
         // otherwise a gap in the chart would read as "the app broke that day"
         // instead of "nothing was copied".
         let conn = Connection::open_in_memory().unwrap();
@@ -40808,7 +40808,7 @@ mod tests {
 
     #[test]
     fn journal_rowid_deletes_exactly_one_entry() {
-        // The rowid db_recent_copies() now returns has to target the exact row —
+        // The rowid db_recent_copies() now returns has to target the exact row:
         // never "every copy of this prompt", in either view mode.
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(
@@ -40828,7 +40828,7 @@ mod tests {
         assert_eq!(after.len(), 2, "deleted the wrong number of rows");
         assert!(after.iter().any(|e| e.ts == 200), "the OTHER p1 copy must survive");
         assert!(after.iter().any(|e| e.ts == 150));
-        // Grouped: p1's rowid is its most-recent (ts=200) copy — deleting it must
+        // Grouped: p1's rowid is its most-recent (ts=200) copy; deleting it must
         // remove only that one row, not every copy_log row for p1.
         let grouped = db_recent_copies(&conn, 10, true);
         let p1 = grouped.iter().find(|e| e.id == "p1").unwrap();
@@ -40935,7 +40935,7 @@ mod tests {
         let mut settings = Settings::default();
         let total = 5;
         // Prime past the cold-start bootstrap: with no bag yet, rotation_next()
-        // falls back to (idx 0, pos 1) — the same "1" a freshly reshuffled bag
+        // falls back to (idx 0, pos 1): the same "1" a freshly reshuffled bag
         // also reports for its own first, still-untouched peek, so pos briefly
         // repeats once (1, 1, 2, 3, 4, 5) before this one-time double 1 settles
         // into a clean cycle. This one throwaway draw gets a real bag seeded so
@@ -40952,7 +40952,7 @@ mod tests {
             last_shown = Some(idx);
         }
         assert_eq!(first_cycle.len(), total, "the bag skipped an entry within one cycle");
-        // The draw-number badge counts 1..total across one cycle, in order —
+        // The draw-number badge counts 1..total across one cycle, in order:
         // even though the entries themselves are shuffled.
         assert_eq!(positions, vec![1, 2, 3, 4, 5]);
         let (next_idx, next_pos, _) = rotation_next(&p, &settings);
@@ -41031,7 +41031,7 @@ mod tests {
         }
         // Left to their own reading, restore_backup treated an unknown scope as
         // "change nothing and report success" while import_all treated it as
-        // "restore everything" — opposite answers to the same input.
+        // "restore everything": opposite answers to the same input.
         for bad in ["", "ALL", "prompts", "data ", "everything"] {
             assert!(valid_scope(bad).is_err(), "{bad:?} must not be accepted");
         }
@@ -41131,7 +41131,7 @@ mod tests {
         assert_eq!(settings.tag_colors.get("work"), Some(&"#ff0000".to_string()));
         assert_eq!(settings.tag_colors.get("home"), Some(&"#00ff00".to_string()));
 
-        // A single bad colour rejects the whole batch — nothing before it in the
+        // A single bad colour rejects the whole batch: nothing before it in the
         // list may already have been written.
         let before = settings.tag_colors.clone();
         let err = apply_tag_colors(&mut settings, vec![entry("Fresh", "#0000ff"), entry("Bad", "red")]);
@@ -41146,7 +41146,7 @@ mod tests {
 
     #[test]
     fn auto_eligible_rejects_placeholders_images_and_files() {
-        // "placeholders" (variable text) are explicitly ALLOWED — this test
+        // "placeholders" (variable text) are explicitly ALLOWED: this test
         // instead covers every gate auto_eligible actually enforces.
         let mut p = sample_prompts().remove(0);
         p.variants = vec!["b".into(), "c".into()];
@@ -41184,7 +41184,7 @@ mod tests {
     #[test]
     fn auto_session_order_matches_rotation_next() {
         // The auto flag must never change what rotation_next/rotation_advance
-        // themselves return — same order-mode and random-mode guarantee as the
+        // themselves return: same order-mode and random-mode guarantee as the
         // plain copy path, just proven again with rotate_auto set.
         let mut p = sample_prompts().remove(0);
         p.variants = vec!["b".into(), "c".into()];
@@ -41355,7 +41355,7 @@ mod tests {
     // ---- Collected settings writes ----
     //
     // The disk is stood in for by a Settings clone the "writer" copies into, and
-    // SettingsDelay::take is the one place that decides whether a write happens —
+    // SettingsDelay::take is the one place that decides whether a write happens;
     // so counting its `true` answers counts disk writes exactly.
 
     // One commit, exactly as rotation_commit does it: advance in memory, then mark.
@@ -41432,7 +41432,7 @@ mod tests {
                 disk = settings.clone();
             }
         }
-        // Nothing has landed yet — this is exactly the state a hard kill would leave.
+        // Nothing has landed yet: this is exactly the state a hard kill would leave.
         assert_ne!(
             disk.rotate_pos.get(&p.id).copied(),
             settings.rotate_pos.get(&p.id).copied(),
@@ -41462,8 +41462,8 @@ mod tests {
     fn stale_trash_ids_respects_the_retention_window() {
         let mut trash = sample_prompts(); // p1, p2
         let now = 10_000_000u64;
-        trash[0].trashed_at = now - 100; // just trashed — well inside any window
-        trash[1].trashed_at = now - 1_000_000; // trashed long ago — past a 1-day window
+        trash[0].trashed_at = now - 100; // just trashed: well inside any window
+        trash[1].trashed_at = now - 1_000_000; // trashed long ago: past a 1-day window
         let max_age = 86_400; // 1 day
         let stale = stale_trash_ids(&trash, max_age, now);
         assert_eq!(stale, vec!["p2".to_string()], "only the old entry should be stale");
@@ -41472,7 +41472,7 @@ mod tests {
     #[test]
     fn stale_trash_ids_never_touches_a_zero_timestamp() {
         // trashed_at == 0 is the "never trashed" sentinel every non-trashed Prompt
-        // carries — it must never be treated as "trashed an eternity ago".
+        // carries: it must never be treated as "trashed an eternity ago".
         let mut trash = sample_prompts();
         trash[0].trashed_at = 0;
         trash[1].trashed_at = 0;
@@ -41546,7 +41546,7 @@ mod tests {
         ] {
             assert_eq!(reason(s), Some(HK_SYSTEM), "not refused: {s}");
         }
-        // Shift alone is how a capital letter is typed — never a modifier here.
+        // Shift alone is how a capital letter is typed: never a modifier here.
         for s in ["Shift+A", "Shift+1", "Shift+F5"] {
             assert_eq!(reason(s), Some(HK_INVALID), "not refused: {s}");
         }
@@ -41712,7 +41712,7 @@ mod tests {
         assert_eq!(sanitize_hotkey("Ctrl+Alt+S", "", "", "", &others).unwrap(), "Ctrl+Alt+S");
     }
 
-    // A prompt stored before per-prompt hotkeys existed has no hotkey field at all — it must load with an
+    // A prompt stored before per-prompt hotkeys existed has no hotkey field at all: it must load with an
     // empty binding instead of failing the whole row.
     #[test]
     fn a_prompt_without_a_hotkey_field_still_loads() {
@@ -41723,7 +41723,7 @@ mod tests {
     }
 
     // Settings JSON from an older version: unknown/removed fields (copy_history,
-    // a future field) are ignored and every missing field defaults — never a total
+    // a future field) are ignored and every missing field defaults: never a total
     // parse failure that would wipe the user's settings.
     #[test]
     fn old_settings_json_migrates() {
@@ -41806,7 +41806,7 @@ mod tests {
     }
 
     // A choice variable is plain prompt text, so neither exporter may touch
-    // its `|` or its commas — a mangled token would silently lose the options.
+    // its `|` or its commas: a mangled token would silently lose the options.
     #[test]
     fn choice_variable_survives_txt_and_csv_export() {
         const BODY: &str = "Write a {#{tone|formal,casual,witty}#} note about {#{Topic}#}.";
@@ -41975,7 +41975,7 @@ mod tests {
     #[test]
     fn txt_roundtrip_keeps_rotating_entries_and_never_confuses_them_with_the_block_separator() {
         let mut prompts = sample_prompts();
-        // Deliberately contains a bare "---" line inside an entry — the whole point
+        // Deliberately contains a bare "---" line inside an entry: the whole point
         // of VARIANT_SEP being a distinct marker is that this must NOT be mistaken
         // for the "\n\n---\n\n" boundary between two DIFFERENT prompts.
         prompts[0].variants = vec![
