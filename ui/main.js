@@ -8,7 +8,7 @@ import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT,
 import { EXAMPLE_IMAGE_DATA_URL } from "./exampleAssets.js";
 import { HELP_CONTENT } from "./help.js";
 import { HELP_SKETCHES } from "./helpSketches.js";
-import { DRAG_OUT_MODS, FOLDER_SVG, fileUri, resolveLang, ffmpegDownloadPct, themeColorScheme, playCopySound, numberField, makeEtaEstimator, formatEta, a11yProgressText, parseFfmpegError, fmtBytes, makeHoldOrTapToggle } from "./floatShared.js";
+import { DRAG_OUT_MODS, FOLDER_SVG, fileUri, resolveLang, ffmpegDownloadPct, themeColorScheme, playCopySound, numberField, makeEtaEstimator, formatEta, a11yProgressText, parseFfmpegError, fmtBytes, makeHoldOrTapToggle, trapTabWithin } from "./floatShared.js";
 import { placePopover, placePopoverAt, setPopoverPad } from "./popover.js";
 import { createColorPop } from "./colorpop.js";
 import { snapMove } from "./snap.js";
@@ -21086,16 +21086,6 @@ function tourGoto(i) {
 // the container instead of escaping to the page behind it. Declared at top
 // level so both bind()'s screenshot-editor code and the tour code below can
 // call it without a second implementation.
-function trapTabWithin(container, e) {
-  const list = [...container.querySelectorAll('button, input, [tabindex]:not([tabindex="-1"]), select, textarea, a[href]')]
-    .filter((el) => !el.disabled && el.offsetParent !== null);
-  if (!list.length) return;
-  const first = list[0], last = list[list.length - 1];
-  if (!container.contains(document.activeElement)) { e.preventDefault(); first.focus(); return; }
-  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-}
-
 function tourKeydown(e) {
   // A confirmation dialog on top (tourAskSkip) owns every key while it is open --
   // otherwise Escape would close both it and the tour underneath on one press.

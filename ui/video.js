@@ -6,7 +6,7 @@
 // an ordered operation list (VE.ops), exactly like the screenshot editor's own
 // list, and the export compiles that list into ONE ffmpeg filter graph. That is
 // what makes undo/redo cheap, the preview honest and the export a single pass.
-import { resolveLang, ffmpegDownloadPct, numberField, makeEtaEstimator, formatEta, a11yProgressText, parseFfmpegError, fmtBytes, makeHoldOrTapToggle } from "./floatShared.js";
+import { resolveLang, ffmpegDownloadPct, numberField, makeEtaEstimator, formatEta, a11yProgressText, parseFfmpegError, fmtBytes, fmtSizeCompact, makeHoldOrTapToggle, trapTabWithin } from "./floatShared.js";
 import { withShortcut as withShortcutRaw, rowsForScope as rowsForScopeRaw } from "./shortcuts.js";
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
@@ -359,16 +359,6 @@ function closeShortcutsModal() {
 }
 
 // Keeps Tab inside the open dialog instead of letting it walk the editor behind it.
-function trapTabWithin(container, e) {
-  const list = [...container.querySelectorAll('button, input, [tabindex]:not([tabindex="-1"]), select, textarea, a[href]')]
-    .filter((el) => !el.disabled && el.offsetParent !== null);
-  if (!list.length) return;
-  const first = list[0], last = list[list.length - 1];
-  if (!container.contains(document.activeElement)) { e.preventDefault(); first.focus(); return; }
-  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-}
-
 $("ve-confirm-ok").addEventListener("click", () => closeConfirm(true));
 $("ve-confirm-cancel").addEventListener("click", () => closeConfirm(false));
 $("ve-confirm-third").addEventListener("click", () => closeConfirm("third"));
@@ -1828,7 +1818,7 @@ function updateScaleCurrent() {
     const kbps = videoKbps();
     const durS = totalOutMs() / 1000;
     let text = kbps != null && durS > 0
-      ? t("veScaleCurrent").replace("{size}", fmtSize(Math.round(((kbps + AUDIO_KBPS_ESTIMATE) * 1000 / 8) * durS)))
+      ? t("veScaleCurrent").replace("{size}", fmtSizeCompact(Math.round(((kbps + AUDIO_KBPS_ESTIMATE) * 1000 / 8) * durS)))
       : t("veScaleCurrentNoSize");
     text = text.replace("{sw}", VE.w).replace("{sh}", VE.h).replace("{tw}", scale.w).replace("{th}", scale.h);
     if (scale.w > VE.w || scale.h > VE.h) text += " " + t("veScaleUpscaleNote");
@@ -1842,12 +1832,6 @@ function updateScaleCurrent() {
   $("ve-export-scale-summary").textContent = scale
     ? t("veExportScaleSummary").replace("{w}", scale.w).replace("{h}", scale.h)
     : t("veScaleOff");
-}
-
-function fmtSize(bytes) {
-  if (!bytes) return "";
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 // ---------------------------------------------------------------- overlays

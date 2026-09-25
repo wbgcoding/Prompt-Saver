@@ -9,6 +9,8 @@
 // answered, which happens in Rust (camera.rs, install_permission_handler) --
 // this file waits for the camera-permission-ready event before ever calling
 // it, closing the race where the page could ask before the handler exists.
+import { fmtTimeMMSS } from "./floatShared.js";
+
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
 const { getCurrentWebviewWindow } = window.__TAURI__.webviewWindow;
@@ -64,13 +66,6 @@ let previewGen = 0;
 
 function t(key) {
   return (i18nDict && i18nDict[key]) || key;
-}
-
-function fmtTime(ms) {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  const m = Math.floor(s / 60);
-  const ss = s % 60;
-  return `${String(m).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
 }
 
 function setStatus(state) {
@@ -270,7 +265,7 @@ async function startRecording() {
   audioSelect.disabled = true;
   resSelect.disabled = true;
   recTimer = setInterval(() => {
-    recTimeEl.textContent = fmtTime(Date.now() - recStartWall);
+    recTimeEl.textContent = fmtTimeMMSS(Date.now() - recStartWall);
   }, 250);
 }
 
