@@ -44517,8 +44517,10 @@ mod tests {
         // order they arrived in. Each job owns its own thread, so nothing bounds
         // how far apart two due times must be to survive real OS scheduling
         // jitter under load; wide gaps keep this a scheduling-order test rather
-        // than a thread-wakeup-latency test.
-        for (name, delay_ms) in [("third", 450u64), ("first", 150), ("second", 300)] {
+        // than a thread-wakeup-latency test. The full suite runs many tests
+        // concurrently, so the gaps are wide (600ms) rather than the original
+        // 150ms — a 150ms gap measurably flaked under that contention.
+        for (name, delay_ms) in [("third", 1800u64), ("first", 600), ("second", 1200)] {
             let log = log.clone();
             s.register_periodic(name, Duration::from_millis(delay_ms), NEVER_AGAIN, move || {
                 log.lock().unwrap_or_else(|e| e.into_inner()).push(name);
@@ -44635,6 +44637,12 @@ mod tests {
     // The census sees every thread in the process, the test harness's own
     // included, so each attempt brackets its measurement with a baseline reading
     // and only accepts a round where the baseline did not move underneath it.
+    // A round is also rejected outright when `with_jobs` itself is off by more
+    // than the four chores: cargo runs every test in this binary concurrently,
+    // so another test's own thread can start or stop in the narrow window
+    // between the two `live_threads()` reads even when the before/after
+    // baseline matches — that used to flake this test under load rather than
+    // prove anything about the Scheduler.
     #[cfg(windows)]
     #[test]
     fn four_chores_cost_four_dedicated_threads() {
@@ -44655,7 +44663,7 @@ mod tests {
             wait_until(|| live_threads() <= before, Duration::from_secs(5));
             let after = live_threads();
 
-            if before == after {
+            if before == after && with_jobs.saturating_sub(before) == CHORES {
                 measured = Some((before, with_jobs));
                 break;
             }
