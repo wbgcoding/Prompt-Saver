@@ -180,12 +180,19 @@ let pendingAppends = [];
 
 async function startRecording() {
   if (!stream) return;
+  // Guards against a second click landing while the first is still awaiting
+  // camera_begin_recording or the live elapsed-time read below -- without
+  // this, that second call replaces the session mid-flight and leaves the
+  // first recorder.start() writing into a take that no longer exists.
+  if (startBtn.disabled) return;
+  startBtn.disabled = true;
   const mimeType = bestMimeType();
   recExt = mimeType.includes("mp4") ? "mp4" : "webm";
   let begin;
   try {
     begin = await invoke("camera_begin_recording", { ext: recExt });
   } catch {
+    startBtn.disabled = false;
     return;
   }
   recPath = begin.path;
@@ -206,6 +213,7 @@ async function startRecording() {
     clearInterval(recTimer);
     recBadge.classList.add("hidden");
     setStatus("idle");
+    startBtn.disabled = false;
     startBtn.classList.remove("hidden");
     pauseBtn.classList.add("hidden");
     stopBtn.classList.add("hidden");
@@ -247,7 +255,12 @@ async function startRecording() {
   // for a while with the camera preview idle) and not finish time (the
   // screen recording may have moved on, paused again, or stopped by then).
   recScreenElapsedAtStart = await invoke("camera_screen_elapsed_ms").catch(() => null);
-  recorder.start(1000);
+  try {
+    recorder.start(1000);
+  } catch {
+    startBtn.disabled = false;
+    return;
+  }
   paused = false;
   setStatus("recording");
   recBadge.classList.remove("hidden");
