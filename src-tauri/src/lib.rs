@@ -4064,6 +4064,21 @@ fn db_list_clips(conn: &Connection) -> Vec<ClipItem> {
     out
 }
 
+// load_store()'s half of the relative <-> absolute round trip (the other
+// half is strip_data_dir_prefix right below, its own comment has the full
+// story). Pulled out as its own function, run over both `prompts` and
+// `trash` (a third review finding: only `prompts` was resolved, so a demo
+// attachment that got deleted during the session restored from trash with a
+// bare, unresolvable filename), so it can be unit tested directly without an
+// AppHandle, the same way strip_data_dir_prefix already is.
+fn resolve_relative_file_paths(dir: &Path, rows: &mut [Prompt]) {
+    for p in rows.iter_mut() {
+        if !p.file_path.is_empty() && Path::new(&p.file_path).is_relative() {
+            p.file_path = dir.join(&p.file_path).to_string_lossy().to_string();
+        }
+    }
+}
+
 // The other half of load_store()'s relative -> absolute resolution for
 // `file_path` (see its own comment): reversed right before anything is
 // persisted or exported, so a demo prompt's attachment is never baked into a
@@ -4074,7 +4089,18 @@ fn db_list_clips(conn: &Connection) -> Vec<ClipItem> {
 // dir by the file picker) is never touched. Every caller of db_write_prompts/
 // db_write_prompts_and_trash, sync_write_all_impl and export_prompts must run
 // its prompts through this first.
+//
+// Gated to the demo folder itself (a third review finding): in portable mode
+// the data dir IS the exe folder, and a custom data dir is common too, so a
+// real user's file picked from directly inside that folder has an absolute
+// path whose parent legitimately equals `dir` — stripping it unconditionally
+// turned a real attachment into a bare filename that broke after any later
+// data-dir move or portable/installed takeover. Demo mode is the only caller
+// this needs to touch, so it only ever runs there.
 fn strip_data_dir_prefix<'a>(dir: &Path, prompts: &'a [Prompt]) -> std::borrow::Cow<'a, [Prompt]> {
+    if dir.file_name() != Some(std::ffi::OsStr::new(DEMO_SUBFOLDER)) {
+        return std::borrow::Cow::Borrowed(prompts);
+    }
     if !prompts.iter().any(|p| !p.file_path.is_empty() && Path::new(&p.file_path).parent() == Some(dir)) {
         return std::borrow::Cow::Borrowed(prompts);
     }
@@ -4412,7 +4438,7 @@ fn load_store(app: &AppHandle) -> Store {
         let mut written = WrittenRows::new();
         let (mut prompts, settings_opt, needs_mig, prompt_fails, settings_unreadable) =
             db_load(&conn, &mut written);
-        let (trash, trash_fails) = db_load_trash(&conn, &mut written);
+        let (mut trash, trash_fails) = db_load_trash(&conn, &mut written);
         let decrypt_fails = prompt_fails + trash_fails;
         // Some row (prompts, trash, or settings) could not be read back or decrypted →
         // preserve the raw DB and lock writes to whatever was affected (see
@@ -4574,12 +4600,10 @@ fn load_store(app: &AppHandle) -> Store {
         // A relative file_path (only ever produced by demo_prompts(), never by the
         // real attachment picker, which always yields an absolute path) is resolved
         // against the live data dir here instead of being stored absolute on disk --
-        // see the comment on demo_prompts()'s attachment row.
-        for p in prompts.iter_mut() {
-            if !p.file_path.is_empty() && Path::new(&p.file_path).is_relative() {
-                p.file_path = dir.join(&p.file_path).to_string_lossy().to_string();
-            }
-        }
+        // see the comment on demo_prompts()'s attachment row and on
+        // resolve_relative_file_paths itself.
+        resolve_relative_file_paths(&dir, &mut prompts);
+        resolve_relative_file_paths(&dir, &mut trash);
         let mut store = Store {
             prompts,
             trash,
@@ -16625,12 +16649,51 @@ fn unregister_running_instance(canonical: &Path) {
 
 // pid_is_alive() itself is shared with promptSync's own lock file (see
 // pid_from_lock/sync_lock_acquire below) -- same liveness probe, different
-// registry.
+// registry. It is not enough here on its own, though: Windows reuses a
+// freed pid, and the gap between a crash (or a task-killed process that
+// never reached RunEvent::Exit) and its stale entry getting pruned can span
+// an entire later session, so a stale entry that happens to name a pid some
+// unrelated later process now holds would read as "alive" forever, wrongly
+// and permanently refusing enable/disable_demo_mode for a user who is
+// actually alone (a third review finding). instance_pid_is_this_exe adds
+// the second check other_instance_running actually needs: not just "is
+// SOME process using this pid", but "is it specifically another running
+// copy of this exe".
+#[cfg(windows)]
+fn instance_pid_is_this_exe(pid: u32) -> bool {
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn OpenProcess(access: u32, inherit: i32, pid: u32) -> isize;
+        fn CloseHandle(h: isize) -> i32;
+        fn QueryFullProcessImageNameW(h: isize, flags: u32, buffer: *mut u16, size: *mut u32) -> i32;
+    }
+    const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+    unsafe {
+        let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if h == 0 {
+            return false;
+        }
+        let mut buf = [0u16; 512];
+        let mut size = buf.len() as u32;
+        let ok = QueryFullProcessImageNameW(h, 0, buf.as_mut_ptr(), &mut size) != 0;
+        CloseHandle(h);
+        if !ok {
+            return false;
+        }
+        let image = PathBuf::from(String::from_utf16_lossy(&buf[..size as usize]));
+        std::env::current_exe().map(|exe| exe == image).unwrap_or(false)
+    }
+}
+#[cfg(not(windows))]
+fn instance_pid_is_this_exe(_pid: u32) -> bool {
+    true // conservative off Windows: never treat a registered entry as a reused pid
+}
 
 // True when some OTHER process currently has this same install's canonical
 // data dir registered. Prunes any stale marker (a pid that is no longer
-// alive -- a crash, or task-killed process that never reached RunEvent::Exit)
-// it comes across along the way.
+// alive, or now belongs to an unrelated process after Windows reused it --
+// a crash, or task-killed process that never reached RunEvent::Exit) it
+// comes across along the way.
 fn other_instance_running(canonical: &Path) -> bool {
     let Ok(entries) = fs::read_dir(instances_dir(canonical)) else {
         return false;
@@ -16644,7 +16707,7 @@ fn other_instance_running(canonical: &Path) -> bool {
         if pid == me {
             continue;
         }
-        if pid_is_alive(pid) {
+        if pid_is_alive(pid) && instance_pid_is_this_exe(pid) {
             found = true;
         } else {
             let _ = fs::remove_file(entry.path());
@@ -16718,6 +16781,15 @@ async fn enable_demo_mode(app: AppHandle, state: State<'_, Db>) -> Result<(), St
         // can land a real write into the demo store just built, or clobber its
         // own demoMode=true.
         DEMO_TRANSITION_LOCKED.store(true, Ordering::Relaxed);
+    }
+    // Re-checked here, not only at the top: build_demo_store above can run
+    // ffmpeg and take real wall-clock time, during which a second instance
+    // could have started and registered itself (a third review finding) --
+    // the check at the top of this function only rules out one already
+    // running before the build began.
+    if other_instance_running(&canonical) {
+        DEMO_TRANSITION_LOCKED.store(false, Ordering::Relaxed);
+        return Err("demo-mode-multiple-instances".to_string());
     }
     // On failure the flag must come back off: left on, every save in this
     // process would silently fail forever even though demo mode never
@@ -38899,6 +38971,23 @@ mod tests {
     // setting. Uses this test binary's own pid (always alive) as the "other"
     // instance and a definitely-dead one (a huge pid unlikely to exist, plus
     // this process's own pid is excluded so it can never see itself).
+    // Kept alive a few seconds and spawned only as this same test binary re-
+    // invoking itself (see other_instance_running_detects_a_live_pid_and_prunes_a_dead_one
+    // below), so instance_pid_is_this_exe's image-path check has something
+    // genuinely matching current_exe() to find, not an unrelated process.
+    #[test]
+    #[ignore]
+    fn __sleep_helper_for_instance_test() {
+        std::thread::sleep(std::time::Duration::from_secs(3));
+    }
+
+    // other_instance_running must tell a real second live process apart from
+    // the allowMultipleInstances setting -- see its own comment for why the
+    // flag was not trustworthy evidence. This test is the ground-truth
+    // evidence of a second live process, not the allowMultipleInstances
+    // setting. Uses this test binary's own pid (always alive) as the "other"
+    // instance and a definitely-dead one (a huge pid unlikely to exist, plus
+    // this process's own pid is excluded so it can never see itself).
     #[test]
     #[cfg(windows)]
     fn other_instance_running_detects_a_live_pid_and_prunes_a_dead_one() {
@@ -38912,14 +39001,19 @@ mod tests {
             "a process must never count itself as a second instance"
         );
 
-        // A pid some other real process on this machine holds right now --
-        // this test process's own parent-independent liveness stand-in: use
-        // std::process::id() of a spawned short-lived child so it is
-        // definitely alive and definitely not `me`.
-        let mut child = std::process::Command::new("cmd").args(["/C", "ping -n 3 127.0.0.1 >NUL"]).spawn().unwrap();
+        // A pid a genuinely different copy of THIS exe holds right now -- a
+        // third review finding requires instance_pid_is_this_exe to confirm
+        // the pid's image path, not merely that some process holds it, so
+        // the "other" instance here must actually be this same test binary
+        // re-invoked as a child, kept alive by the sleep helper above.
+        let exe = std::env::current_exe().unwrap();
+        let mut child = std::process::Command::new(&exe)
+            .args(["tests::__sleep_helper_for_instance_test", "--exact", "--ignored", "--test-threads=1"])
+            .spawn()
+            .unwrap();
         let other_pid = child.id();
         std::fs::write(instances_dir(&canonical).join(other_pid.to_string()), b"").unwrap();
-        assert!(other_instance_running(&canonical), "a different LIVE pid must be detected");
+        assert!(other_instance_running(&canonical), "a different LIVE copy of this exe must be detected");
 
         // An obviously stale entry (not a real pid on this machine) must be
         // pruned rather than perma-blocking every future enable/disable.
@@ -38938,6 +39032,37 @@ mod tests {
             "unregister must remove this process's own marker"
         );
 
+        let _ = std::fs::remove_dir_all(&canonical);
+    }
+
+    // A pid reused by an unrelated process (Windows reuses freed pids; the
+    // window between a crash/task-kill and its stale entry getting pruned
+    // can span a whole later session) must not read as "still our instance"
+    // forever -- a third review finding. cmd.exe here stands in for that
+    // unrelated process: it is definitely alive, and definitely not a copy
+    // of this exe, so instance_pid_is_this_exe must refuse it even though
+    // pid_is_alive alone would accept it.
+    #[test]
+    #[cfg(windows)]
+    fn other_instance_running_refuses_a_pid_reused_by_an_unrelated_process() {
+        let canonical = std::env::temp_dir().join(format!("{}-test-instance-registry-reused-pid", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&canonical);
+        std::fs::create_dir_all(instances_dir(&canonical)).unwrap();
+
+        let mut child = std::process::Command::new("cmd").args(["/C", "ping -n 3 127.0.0.1 >NUL"]).spawn().unwrap();
+        let other_pid = child.id();
+        std::fs::write(instances_dir(&canonical).join(other_pid.to_string()), b"").unwrap();
+        assert!(
+            !other_instance_running(&canonical),
+            "a live pid that is not a copy of this exe must never count as another instance"
+        );
+        assert!(
+            !instances_dir(&canonical).join(other_pid.to_string()).exists(),
+            "the reused-pid entry must be pruned, the same as a dead one"
+        );
+
+        let _ = child.kill();
+        let _ = child.wait();
         let _ = std::fs::remove_dir_all(&canonical);
     }
 
@@ -39112,7 +39237,7 @@ mod tests {
     // the same relative value it started from, not the resolved one.
     #[test]
     fn strip_data_dir_prefix_reverses_load_stores_own_resolution() {
-        let dir = std::env::temp_dir().join(format!("{}-test-demo-strip-prefix", brand::SLUG));
+        let dir = std::env::temp_dir().join(format!("{}-test-demo-strip-prefix", brand::SLUG)).join(DEMO_SUBFOLDER);
         let _ = std::fs::remove_dir_all(&dir);
         build_demo_store(&dir, None).unwrap();
 
@@ -39156,6 +39281,38 @@ mod tests {
         let real = Prompt { file_path: "C:\\Users\\someone\\Documents\\report.pdf".to_string(), ..test_prompt("real") };
         let out = strip_data_dir_prefix(&dir, std::slice::from_ref(&real));
         assert_eq!(out[0].file_path, real.file_path);
+    }
+
+    // A trashed demo attachment must resolve to an absolute path exactly like
+    // a live one -- a third review finding: load_store used to only run this
+    // loop over `prompts`, so a demo attachment deleted during the session
+    // restored from trash with the bare, unresolvable filename db_load_trash
+    // handed back, instead of a path under the live data dir.
+    #[test]
+    fn resolve_relative_file_paths_covers_trash_rows_too() {
+        let dir = std::env::temp_dir().join(format!("{}-test-resolve-relative-trash", brand::SLUG));
+        let mut trash = vec![Prompt { file_path: "Anhang.txt".to_string(), ..test_prompt("trashed-attachment") }];
+        resolve_relative_file_paths(&dir, &mut trash);
+        assert_eq!(trash[0].file_path, dir.join("Anhang.txt").to_string_lossy().to_string());
+        assert!(Path::new(&trash[0].file_path).is_absolute());
+    }
+
+    // Portable mode's data dir is the exe folder; a custom data dir is common
+    // too. A real attachment the file picker placed directly inside either
+    // (its absolute path's parent equals the data dir, same as the demo
+    // sample row's) must never be stripped down to a bare filename outside
+    // demo mode -- it would resolve against the wrong folder after any later
+    // data-dir move or portable/installed takeover (a third review finding:
+    // the fix was gating on dir shape alone, so it fired for every user, not
+    // only in demo).
+    #[test]
+    fn strip_data_dir_prefix_leaves_a_real_attachment_alone_outside_demo() {
+        let dir = std::env::temp_dir().join(format!("{}-test-strip-prefix-non-demo", brand::SLUG));
+        let real = Prompt { file_path: dir.join("report.pdf").to_string_lossy().to_string(), ..test_prompt("real") };
+        assert!(Path::new(&real.file_path).parent() == Some(dir.as_path()), "sanity: parent must equal dir");
+        let out = strip_data_dir_prefix(&dir, std::slice::from_ref(&real));
+        assert_eq!(out[0].file_path, real.file_path, "a non-demo data dir must never be stripped");
+        assert!(Path::new(&out[0].file_path).is_absolute(), "the real attachment path must stay absolute");
     }
 
     // Adopting an installed store copies its files one by one. If the database
