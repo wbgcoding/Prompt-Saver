@@ -63,6 +63,10 @@ pdfium-render = "0.8"
 # Extract ffmpeg.exe from its downloaded release zip (point 246). Deflate only --
 # gyan.dev's archive needs no other compression method.
 zip = { version = "2", default-features = false, features = ["deflate"] }
+# Decodes the camera window's recorded chunks -- sent as base64 over IPC
+# instead of a JSON array of numbers, about a third bigger than raw instead
+# of three to four times bigger.
+base64 = "0.22"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
@@ -117,6 +121,11 @@ windows-capture = "2.0.1"
 # warning. Used only to answer the camera window's getUserMedia permission
 # prompt in Rust; WebView2 blocks the request forever otherwise.
 webview2-com = "=0.38.2"
+# Pinned to the exact release webview2-com itself resolves (checked against
+# Cargo.lock) -- needed directly, not just transitively, to read the
+# permission request's own PWSTR uri and to cast its args to the v3
+# interface for SetSavesInProfile.
+windows-core = "=0.61.2"
 
 # Small release binary, but tuned for much faster builds:
 # thin LTO + parallel codegen cut compile time a lot for a few KB more size.

@@ -48,6 +48,13 @@ let recTimer = 0;
 // value comes from settings.
 let videoDeviceId = "";
 let frameRate = 30;
+// Bumped on every refreshPreview() call; a getUserMedia that resolves after
+// a newer generation has already started stops its own tracks instead of
+// replacing `stream` out from under whatever is now current -- otherwise
+// the ready-event refresh and the 1500ms fallback refresh (see below) could
+// both resolve and leak the first stream's tracks (camera light stays on
+// with nothing showing it).
+let previewGen = 0;
 
 function t(key) {
   return (i18nDict && i18nDict[key]) || key;
@@ -109,6 +116,7 @@ function stopStream() {
 // MediaRecorder would just corrupt the file.
 async function refreshPreview() {
   if (recorder && recorder.state !== "inactive") return;
+  const gen = ++previewGen;
   stopStream();
   const height = Number(resSelect.value) || 720;
   const width = Math.round((height * 16) / 9);
@@ -123,11 +131,19 @@ async function refreshPreview() {
     audio: audioDeviceId ? { deviceId: { exact: audioDeviceId } } : false,
   };
   try {
-    stream = await navigator.mediaDevices.getUserMedia(constraints);
+    const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+    if (gen !== previewGen) {
+      // A newer refreshPreview() call (or a stop) already won the race --
+      // never let a late, now-stale stream take over the camera light.
+      for (const track of newStream.getTracks()) track.stop();
+      return;
+    }
+    stream = newStream;
     preview.srcObject = stream;
     noDeviceEl.classList.add("hidden");
     startBtn.disabled = false;
   } catch {
+    if (gen !== previewGen) return;
     preview.srcObject = null;
     noDeviceEl.textContent = t("cameraNoDevice");
     noDeviceEl.classList.remove("hidden");
@@ -135,9 +151,26 @@ async function refreshPreview() {
   }
 }
 
-function toArray(buf) {
-  return Array.from(new Uint8Array(buf));
+// Chunk-uploads a base64 string instead of a JSON array of numbers -- about
+// a third bigger than raw instead of three to four times bigger, over an
+// IPC channel that already pays a per-call and a serialization cost on top.
+function bufToBase64(buf) {
+  const bytes = new Uint8Array(buf);
+  let binary = "";
+  const chunkSize = 0x8000; // String.fromCharCode's own argument-count limit
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
 }
+
+// Every in-flight camera_append_chunk call for the CURRENT take -- onstop
+// awaits all of them before calling camera_finish_recording, or the very
+// last chunk (still mid-flight when MediaRecorder's own final
+// "dataavailable" fires right before "stop") loses its race against
+// finish's session.take() and is dropped on the floor, silently, with the
+// recording missing its last second or so.
+let pendingAppends = [];
 
 async function startRecording() {
   if (!stream) return;
@@ -151,11 +184,16 @@ async function startRecording() {
   }
   recPath = begin.path;
   recStartWall = Date.now();
+  pendingAppends = [];
   recorder = new MediaRecorder(stream, { mimeType });
-  recorder.ondataavailable = async (e) => {
+  recorder.ondataavailable = (e) => {
     if (!e.data || e.data.size === 0 || !recPath) return;
-    const buf = await e.data.arrayBuffer();
-    invoke("camera_append_chunk", { path: recPath, bytes: toArray(buf) }).catch(() => {});
+    const path = recPath;
+    const append = e.data
+      .arrayBuffer()
+      .then((buf) => invoke("camera_append_chunk", { path, bytesB64: bufToBase64(buf) }))
+      .catch((err) => console.error("camera chunk lost", err));
+    pendingAppends.push(append);
   };
   recorder.onstop = async () => {
     clearInterval(recTimer);
@@ -167,16 +205,23 @@ async function startRecording() {
     audioSelect.disabled = false;
     resSelect.disabled = false;
     const path = recPath;
+    const startedAtMs = recStartWall;
     recPath = null;
     if (!path) return;
+    await Promise.allSettled(pendingAppends);
+    pendingAppends = [];
     try {
-      const finished = await invoke("camera_finish_recording", { path });
+      const finished = await invoke("camera_finish_recording", { path, camStartMs: startedAtMs });
       // A companion screen recording that has ALREADY stopped by now opens
       // as the primary source, with this camera take added as an aligned
       // overlay when one is ready -- otherwise the camera file just opens on
       // its own, same as any other recording.
       if (finished && finished.companion_path) {
-        await invoke("open_video_editor", { srcPath: finished.companion_path, overlayPath: path });
+        await invoke("open_video_editor", {
+          srcPath: finished.companion_path,
+          overlayPath: path,
+          overlayStartMs: finished.companion_start_ms,
+        });
       } else {
         await invoke("open_video_editor", { srcPath: path });
       }
