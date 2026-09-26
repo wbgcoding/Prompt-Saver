@@ -7377,6 +7377,20 @@ PROBE = """
                 out.errors.push('screenshot editor: shortcuts overview did not close');
               }
             }
+            // 519: the opener button can be gone by the time the overlay closes
+            // (removed from the page while the overlay was still open) --
+            // closeShortcutsModal must not throw trying to focus it, and focus
+            // must land somewhere still in the document instead of nowhere.
+            shortcutsBtn.click();
+            await sleep(50);
+            shortcutsBtn.remove();
+            let threw = false;
+            try { document.getElementById('shortcuts-modal-close').click(); } catch (e) { threw = true; }
+            await sleep(50);
+            if (threw) out.errors.push('519: closing the shortcuts overview threw with its opener removed from the page');
+            if (!document.activeElement || !document.activeElement.isConnected) {
+              out.errors.push('519: focus was left on a detached element after closing the shortcuts overview');
+            }
           }
         }
         // 179: the overlay's own titlebar (move) and resize grip (resize) -- the

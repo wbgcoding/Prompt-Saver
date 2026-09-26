@@ -12384,7 +12384,13 @@ function openShortcutsModal(scope) {
 }
 function closeShortcutsModal() {
   $("shortcuts-modal").classList.add("hidden");
-  shortcutsModalOpener?.focus?.();
+  // Mirrors the video editor's own shortcuts overlay: the opener button is
+  // usually still there, but it can be gone by the time this runs (a right
+  // click that removed its own row, for example) -- focus falls back to the
+  // body rather than calling focus on a detached element or leaving the page
+  // with no focus at all.
+  const target = (shortcutsModalOpener?.isConnected && shortcutsModalOpener) || document.body;
+  if (typeof target.focus === "function") target.focus();
   shortcutsModalOpener = null;
 }
 
