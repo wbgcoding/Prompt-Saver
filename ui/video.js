@@ -575,23 +575,38 @@ function renderOps() {
 
 // ---------------------------------------------------------------- timeline maths
 
+// keptSegments()'s own scratch storage, reused across every call instead of
+// a fresh map/filter/sort array chain each time -- tick() (the playback
+// render loop) calls this at least once per frame and a second time through
+// nextKept() while stepping over a cut, so its garbage used to grow with how
+// long a session played, not with anything about the video itself. Every
+// caller only ever reads the numbers back synchronously within its own call
+// (nothing stores the array or a segment object past that), so reusing the
+// same storage across calls never leaks a stale value anywhere.
+const KEPT_CUTS_BUF = [];
+const KEPT_SEGMENTS_BUF = [];
+
 // The kept parts of the source, in order: the trim range minus every cut.
 function keptSegments() {
   const trim = opOf("trim");
   const a = trim ? clamp(trim.startMs, 0, VE.dur) : 0;
   const b = trim ? clamp(trim.endMs, a, VE.dur) : VE.dur;
-  const cuts = opsOf("cut")
-    .map((c) => ({ a: clamp(Math.min(c.startMs, c.endMs), a, b), b: clamp(Math.max(c.startMs, c.endMs), a, b) }))
-    .filter((c) => c.b - c.a > 0)
-    .sort((x, y) => x.a - y.a);
-  const segments = [];
+  KEPT_CUTS_BUF.length = 0;
+  for (const c of opsOf("cut")) {
+    const ca = clamp(Math.min(c.startMs, c.endMs), a, b);
+    const cb = clamp(Math.max(c.startMs, c.endMs), a, b);
+    if (cb - ca > 0) KEPT_CUTS_BUF.push({ a: ca, b: cb });
+  }
+  KEPT_CUTS_BUF.sort((x, y) => x.a - y.a);
+  KEPT_SEGMENTS_BUF.length = 0;
   let cursor = a;
-  for (const cut of cuts) {
-    if (cut.a > cursor) segments.push({ a: cursor, b: cut.a });
+  for (const cut of KEPT_CUTS_BUF) {
+    if (cut.a > cursor) KEPT_SEGMENTS_BUF.push({ a: cursor, b: cut.a });
     cursor = Math.max(cursor, cut.b);
   }
-  if (b > cursor) segments.push({ a: cursor, b });
-  return segments.length ? segments : [{ a, b: a }];
+  if (b > cursor) KEPT_SEGMENTS_BUF.push({ a: cursor, b });
+  if (!KEPT_SEGMENTS_BUF.length) KEPT_SEGMENTS_BUF.push({ a, b: a });
+  return KEPT_SEGMENTS_BUF;
 }
 
 const speedRate = () => {
