@@ -1203,9 +1203,10 @@ function renderRects() {
 
 // Every overlay actually active at the current playhead, drawn as close
 // to its real exported look as the browser can manage -- not just an edit
-// outline. Overlay time ranges are picked on the SOURCE timeline (same as
-// VE.playhead here), so no outMs() conversion is needed like buildVideoChain()
-// needs for ffmpeg's output-timeline `enable` clauses.
+// outline. The enable/disable check above compares against op.startMs and
+// op.endMs directly (both on the source timeline, same as VE.playhead), but
+// a video overlay's own clip position still needs the outMs() conversion:
+// see the comment where it is used below.
 //
 // VE.liveEls keeps one DOM node per overlay id across frames instead of
 // rebuilding the whole layer every tick: an image overlay used to mean a
@@ -1301,10 +1302,16 @@ function buildLiveOverlayEl(op, vb, reuse) {
     el.playsInline = true;
     const src = convertFileSrc(op.path);
     if (el.dataset.ovSrc !== src) { el.src = src; el.dataset.ovSrc = src; }
-    // Its own clock starts counting from op.startMs, the same zero point
-    // videoOverlayEnable() uses for the export, and wraps once a looping
-    // overlay's footage runs out.
-    let t = (VE.playhead - op.startMs) / 1000;
+    // The export's movie= source for this overlay is never delayed or
+    // trimmed to op.startMs -- it decodes in lockstep with the exported
+    // output from t=0, so the frame that lands on screen once the enable
+    // window opens is whatever the overlay file holds at that OUTPUT time,
+    // not at time zero of its own file. Confirmed against ffmpeg directly:
+    // overlaying a clip with enable=between(t,4,7) and no extra offset shows
+    // the overlay's own pts=4.08 at output pts=4.08, not pts=0.08. Matching
+    // that here means going through outMs() the same way videoOverlayEnable()
+    // does, with no further subtraction of op.startMs.
+    let t = outMs(clamp(VE.playhead, 0, VE.dur)) / 1000;
     if (op.loop && op.videoDurationMs) t %= op.videoDurationMs / 1000;
     if (Number.isFinite(t) && t >= 0 && Math.abs(el.currentTime - t) > 0.3) {
       try { el.currentTime = t; } catch {}

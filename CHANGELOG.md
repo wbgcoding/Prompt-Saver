@@ -1241,6 +1241,10 @@ the video editor and the introduction tour ship on).
   overlay kind had its own live-preview drawing, this one never did. It now
   plays in the preview too, muted, starting and looping in step with its own
   time range.
+- **That same inserted-video overlay could drift out of time with the
+  exported result once a cut or a speed change was also on the timeline.**
+  The live preview now follows the same output timeline the export itself
+  uses.
 
 ### Security
 
