@@ -2117,6 +2117,13 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
    collapsing into one tall column when the toolbar is squeezed. */
 .snip-edit-context .swatches { grid-auto-flow: column; grid-template-columns: repeat(auto-fit, 20px); max-width: none; margin: 0; gap: 6px; }
 .snip-edit-context .swatch { width: 20px; height: 20px; }
+/* Sized to match the neighbouring number field's height, not the app-wide
+   modal select, which runs taller than this compact toolbar row needs. */
+.snip-edit-select {
+  width: auto;
+  padding: 4px 30px 4px 10px;
+  font-size: 12px;
+}
 .snip-edit-color-trigger {
   display: inline-flex;
   align-items: center;
@@ -3886,7 +3893,18 @@ select,
   background-repeat: no-repeat;
   background-position: right 9px center;
   background-size: 14px;
+  /* Complete on its own so a bare <select> with no extra class never renders
+     with the plain OS look, only the chevron -- a select created without a
+     themed class used to have no border, background or text colour at all. */
+  background-color: var(--surface-2);
+  color: var(--fg);
+  border: 1px solid var(--control-border);
+  border-radius: 8px;
+  font: inherit;
 }
+select:focus { border-color: var(--accent); outline: none; }
+option, optgroup { background-color: var(--surface); color: var(--fg); }
+option:checked { background-color: var(--accent); color: var(--accent-fg); }
 .expert-select { border-radius: 10px; }
 /* Label to the LEFT of every expert dropdown (was stacked above). */
 /* Label left, control right. Both sides stretch to the row's height, so the label

@@ -18251,6 +18251,7 @@ function bind() {
     wrap.className = "snip-edit-field";
     wrap.append(Object.assign(document.createElement("span"), { textContent: labelText }));
     const select = document.createElement("select");
+    select.className = "modal-input snip-edit-select";
     for (const [v, label] of options) {
       select.appendChild(Object.assign(document.createElement("option"), { value: v, textContent: label }));
     }
