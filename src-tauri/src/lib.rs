@@ -29176,12 +29176,49 @@ fn scrub_log_line(line: &str) -> String {
 // in place rather than deleting the line it is on -- the rest of that line is
 // still a real, useful diagnostic. Its own function, taking an explicit path, for
 // the same testability reason as `rotate_log_file` above.
+// Reads the raw bytes and decodes each line separately (lossy) rather than
+// `fs::read_to_string`-ing the whole file: an older build's crash log is
+// exactly the kind of file that can carry one stray non-UTF-8 byte (a raw
+// OS error message, a truncated multi-byte character at a old rotation cut),
+// and reading the whole file as one string would fail closed on that single
+// byte and skip scrubbing every other line in the file along with it. A
+// broken byte here only turns into a replacement character on its own line;
+// every other line is still scrubbed normally.
+// Rewritten atomically (temp file + rename) under the same lock
+// `append_crash_log` uses, so this can never interleave with a concurrent
+// append and leave the file half old, half rewritten.
 fn strip_user_path_lines(path: &Path) {
-    let Ok(text) = fs::read_to_string(path) else { return };
-    let cleaned: String = text.lines().map(|line| format!("{}\n", scrub_log_line(line))).collect();
-    if cleaned != text {
-        let _ = fs::write(path, cleaned);
+    let Ok(bytes) = fs::read(path) else { return };
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut changed = false;
+    for raw_line in bytes.split_inclusive(|&b| b == b'\n') {
+        let (body, had_newline) = match raw_line.strip_suffix(b"\n") {
+            Some(b) => (b, true),
+            None => (raw_line, false),
+        };
+        let text = String::from_utf8_lossy(body);
+        let cleaned = scrub_log_line(&text);
+        if cleaned != text {
+            changed = true;
+        }
+        out.extend_from_slice(cleaned.as_bytes());
+        if had_newline {
+            out.push(b'\n');
+        }
     }
+    if !changed {
+        return;
+    }
+    with_crash_log_lock(path, || {
+        let tmp = path.with_extension("log.tmp");
+        let Ok(mut f) = fs::File::create(&tmp) else { return };
+        use std::io::Write;
+        let wrote = f.write_all(&out).and_then(|_| f.flush()).and_then(|_| f.sync_all());
+        drop(f);
+        if wrote.is_err() || fs::rename(&tmp, path).is_err() {
+            let _ = fs::remove_file(&tmp);
+        }
+    });
 }
 
 // One-time cleanup: an older build's crash log can carry the BUILD MACHINE's own
@@ -39186,6 +39223,30 @@ mod tests {
 
         let after = fs::read_to_string(&path).unwrap();
         assert_eq!(before, after, "a clean file must not be rewritten");
+        let _ = fs::remove_file(&path);
+    }
+
+    // A single invalid UTF-8 byte anywhere in the file (a raw OS error message,
+    // a rotation cut mid multi-byte character) used to make `fs::read_to_string`
+    // fail outright, which skipped scrubbing every other line in the file along
+    // with the broken one. Reading raw bytes and decoding line by line must keep
+    // scrubbing every well-formed line regardless of what one broken line holds.
+    #[test]
+    fn strip_user_path_lines_still_scrubs_other_lines_past_one_invalid_utf8_byte() {
+        let path = std::env::temp_dir().join(format!("ps-crashlog-scrub-badutf8-{}", std::process::id()));
+        let mut contents = Vec::new();
+        contents.extend_from_slice(b"[t=1 v1.0] broken byte follows: \xFF end of line\n");
+        contents.extend_from_slice(br"[t=2 v1.0] panicked at C:\Users\example\lib.rs:42");
+        contents.push(b'\n');
+        fs::write(&path, &contents).unwrap();
+
+        strip_user_path_lines(&path);
+
+        let cleaned = fs::read(&path).unwrap();
+        let cleaned_text = String::from_utf8_lossy(&cleaned);
+        assert_eq!(cleaned_text.lines().count(), 2, "both lines must survive, invalid byte and all: {cleaned_text:?}");
+        assert!(!cleaned_text.to_ascii_lowercase().contains(r"\users\"), "the profile path on the OTHER line must still be scrubbed: {cleaned_text:?}");
+        assert!(cleaned_text.contains("lib.rs:42"), "the rest of the second line must survive: {cleaned_text:?}");
         let _ = fs::remove_file(&path);
     }
 
