@@ -29287,6 +29287,37 @@ fn scrub_error_log_text(s: &str) -> String {
     }
 }
 
+// Every value `origin` is actually allowed to carry: every overlay/modal id
+// `currentErrorOrigin()` (main.js) can read off the open dialog, plus the two
+// non-modal screens it falls back to and the two backend-only origins
+// (`remoteApi`, the remote-access receiver; `test`, used only by this file's
+// own tests). `log_error` is a real IPC command, so its `origin` argument is
+// exactly as untrusted as any other string a caller passes it -- an allow-
+// list with a fixed "other" fallback for anything else keeps it from ever
+// becoming a free-text field, the same reasoning `scrub_error_log_text`
+// already applies to `text`/`raw`.
+const ERROR_LOG_ORIGINS: [&str; 38] = [
+    "about-modal", "backup-modal", "batch-export-modal", "clip-modal", "compare-modal",
+    "confirm-modal", "dupes-modal", "error-log-modal", "global-search", "help",
+    "hotkeys-modal", "import-folder-modal", "import-preview-modal", "journal", "library",
+    "licenses-modal", "lightbox", "modal", "ocr-langs-modal", "ocr-modal", "rec-modal",
+    "settings", "shortcuts-modal", "snip-edit", "snip-modal", "tag-modal", "theme-modal",
+    "tour-modal", "trash-modal", "update-modal", "vars-modal", "ve-confirm",
+    "ve-overlay-live", "video-cleanup-modal", "view-modal", "whats-new-modal",
+    "settings-expert", "main",
+];
+
+fn sanitize_error_log_origin(origin: &str) -> &'static str {
+    if let Some(&known) = ERROR_LOG_ORIGINS.iter().find(|&&known| known == origin) {
+        return known;
+    }
+    match origin {
+        "remoteApi" => "remoteApi",
+        "test" => "test",
+        _ => "other",
+    }
+}
+
 // Newest first; anything past `max` is dropped from the old end.
 fn record_error_log(text: &str, origin: &str, raw: Option<&str>, max: usize) {
     let mut log = ERROR_LOG.lock().unwrap_or_else(|e| e.into_inner());
@@ -29296,7 +29327,7 @@ fn record_error_log(text: &str, origin: &str, raw: Option<&str>, max: usize) {
         ErrorLogEntry {
             ts,
             text: scrub_error_log_text(text),
-            origin: origin.to_string(),
+            origin: sanitize_error_log_origin(origin).to_string(),
             raw: raw.map(scrub_error_log_text),
         },
     );
@@ -39050,6 +39081,24 @@ mod tests {
         assert_eq!(log.len(), 5, "the buffer must never grow past the configured cap");
         assert_eq!(log.first().unwrap().text, "message 6", "the newest entry must be first");
         assert_eq!(log.last().unwrap().text, "message 2", "the oldest entries beyond the cap must have been dropped");
+    }
+
+    #[test]
+    fn sanitize_error_log_origin_keeps_the_known_set_and_falls_back_to_other() {
+        assert_eq!(sanitize_error_log_origin("settings"), "settings");
+        assert_eq!(sanitize_error_log_origin("main"), "main");
+        assert_eq!(sanitize_error_log_origin("remoteApi"), "remoteApi");
+        assert_eq!(sanitize_error_log_origin("some prompt text smuggled in as an origin"), "other");
+        assert_eq!(sanitize_error_log_origin(""), "other");
+    }
+
+    #[test]
+    fn record_error_log_sanitizes_an_origin_outside_the_known_set() {
+        let _guard = ERROR_LOG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        ERROR_LOG.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        record_error_log("message", "not-a-real-modal-id", None, 5);
+        let log = ERROR_LOG.lock().unwrap_or_else(|e| e.into_inner());
+        assert_eq!(log.first().unwrap().origin, "other", "an origin outside the fixed set must never reach the stored entry as-is");
     }
 
     #[test]
