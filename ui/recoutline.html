@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title></title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: transparent;
+      overflow: hidden;
+    }
+    /* The whole window IS the outline: its rect is set to exactly the
+       recorded region (see show_rec_outline in lib.rs), so the border only
+       has to sit flush against its own edges. box-sizing keeps the 2px
+       stroke inside the window bounds instead of growing past them. */
+    #frame {
+      position: fixed;
+      inset: 0;
+      box-sizing: border-box;
+      border: 2px solid #2563eb;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="frame"></div>
+</body>
+</html>

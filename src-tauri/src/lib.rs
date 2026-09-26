@@ -12742,6 +12742,55 @@ fn hide_rec_bar(app: AppHandle) {
     }
 }
 
+// A region recording's own outline, standing in for the Windows capture
+// border a region target now switches off (recording::border_setting_for_target):
+// WGC captures the whole monitor and the app crops it down, so the OS border
+// would ring the entire screen rather than the recorded area. Click-through,
+// always-on-top and capture-excluded like the rec bar, but built fresh per
+// recording and destroyed rather than reused -- unlike the bar's fixed shape,
+// a region's rect is different every time. No-op (best-effort) on Monitor and
+// Window recordings, which keep the OS border and never call this at all.
+#[cfg(windows)]
+fn show_rec_outline(app: &AppHandle, rect: (i32, i32, u32, u32)) {
+    let label = "rec-outline";
+    if app.get_webview_window(label).is_some() {
+        return;
+    }
+    let win = match WebviewWindowBuilder::new(app, label, WebviewUrl::App("recoutline.html".into()))
+        .title("")
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .resizable(false)
+        .shadow(false)
+        .visible(false)
+        .build()
+    {
+        Ok(w) => w,
+        // A missing outline is a cosmetic loss, never worth failing an
+        // already-started recording over.
+        Err(_) => return,
+    };
+    let _ = win.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
+    let (x, y, w, h) = rect;
+    set_bounds_phys(&win, Rect { x: x as f64, y: y as f64, w: w as f64, h: h as f64 });
+    // Unconditional, like the rec bar: it must never appear in the recording
+    // no matter what the privacy screenshot-exclusion setting says.
+    set_capture_exclusion(&win, true);
+    let _ = win.set_ignore_cursor_events(true); // click-through: never steals input from whatever is under it
+    let _ = win.show();
+}
+
+// Torn down (not just hidden) on stop, cancel and auto-stop -- see
+// stop_recording_now and cancel_recording.
+#[cfg(windows)]
+fn hide_rec_outline(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("rec-outline") {
+        let _ = w.close();
+    }
+}
+
 #[derive(serde::Serialize)]
 struct RecordingStatus {
     paused: bool,
@@ -24137,6 +24186,10 @@ mod recording {
         MinimumUpdateIntervalSettings, SecondaryWindowSettings, Settings,
     };
     use windows_capture::window::Window;
+    // Re-exported so the top-level test module can assert on
+    // border_setting_for_target's result without its own separate import.
+    #[cfg(test)]
+    pub(crate) use windows_capture::settings::DrawBorderSettings as BorderSetting;
 
     pub type RecError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -24181,6 +24234,38 @@ mod recording {
     fn resolve_crop(target: RecTarget) -> Option<(u32, u32, u32, u32)> {
         match target {
             RecTarget::Region { x, y, w, h, .. } => Some((x.max(0) as u32, y.max(0) as u32, w, h)),
+            _ => None,
+        }
+    }
+
+    // A Region target crops a borderless whole-monitor capture down to the
+    // requested area (see resolve_crop), so the OS capture border would ring
+    // the entire monitor instead of the recorded area -- switched off for
+    // Region and replaced by the outline window below. Monitor and Window
+    // targets are untouched and keep today's OS-drawn border.
+    pub(crate) fn border_setting_for_target(target: RecTarget) -> DrawBorderSettings {
+        match target {
+            RecTarget::Region { .. } => DrawBorderSettings::WithoutBorder,
+            RecTarget::Monitor(_) | RecTarget::Window(_) => DrawBorderSettings::Default,
+        }
+    }
+
+    // Pure: the outline window's rect in absolute (physical) screen pixels
+    // for a region capture, given that region's own monitor's top-left --
+    // mirrors resolve_crop's monitor-relative (x, y) exactly, just without
+    // clamping it away against the monitor's own origin.
+    pub(crate) fn region_outline_rect(monitor_origin: (i32, i32), x: i32, y: i32, w: u32, h: u32) -> (i32, i32, u32, u32) {
+        (monitor_origin.0 + x.max(0), monitor_origin.1 + y.max(0), w, h)
+    }
+
+    // The outline window's rect for this target, or None for Monitor/Window
+    // targets, which keep the OS border and need no outline window at all.
+    pub(crate) fn outline_rect_for_target(target: RecTarget) -> Option<(i32, i32, u32, u32)> {
+        match target {
+            RecTarget::Region { monitor, x, y, w, h } => {
+                let origin = super::monitor_bounds(monitor).map(|(l, t, _, _)| (l, t)).unwrap_or((0, 0));
+                Some(region_outline_rect(origin, x, y, w, h))
+            }
             _ => None,
         }
     }
@@ -24851,6 +24936,7 @@ mod recording {
 
         let cursor = if show_cursor { CursorCaptureSettings::WithCursor } else { CursorCaptureSettings::WithoutCursor };
         let crop = resolve_crop(target);
+        let border = border_setting_for_target(target);
         let placement_flags = match (canvas.placement, target) {
             (true, RecTarget::Window(hwnd)) => Some((hwnd, canvas.origin, used_area.clone().unwrap())),
             _ => None,
@@ -24859,14 +24945,14 @@ mod recording {
         let control = match resolve_capture_item(target)? {
             CaptureItem::Monitor(m) => {
                 let settings = Settings::new(
-                    m, cursor, DrawBorderSettings::Default, SecondaryWindowSettings::Default,
+                    m, cursor, border, SecondaryWindowSettings::Default,
                     MinimumUpdateIntervalSettings::Default, DirtyRegionSettings::Default, ColorFormat::Bgra8, flags,
                 );
                 RecHandler::start_free_threaded(settings).map_err(|e| e.to_string())?
             }
             CaptureItem::Window(w) => {
                 let settings = Settings::new(
-                    w, cursor, DrawBorderSettings::Default, SecondaryWindowSettings::Default,
+                    w, cursor, border, SecondaryWindowSettings::Default,
                     MinimumUpdateIntervalSettings::Default, DirtyRegionSettings::Default, ColorFormat::Bgra8, flags,
                 );
                 RecHandler::start_free_threaded(settings).map_err(|e| e.to_string())?
@@ -25432,6 +25518,11 @@ async fn start_recording(
     // recording's own maybe_start then silently no-op'd against it, "never a
     // second hook" mistaking the orphan for an already-running one.
     keylog::maybe_start(key_overlay_on, key_overlay_hold_ms, keylog::mono_ms(), key_overlay_shortcuts_only);
+    // Region only -- Monitor/Window recordings keep the OS capture border
+    // and never get an outline window at all (see outline_rect_for_target).
+    if let Some(rect) = recording::outline_rect_for_target(target) {
+        show_rec_outline(&app, rect);
+    }
     *rstate.0.lock().unwrap_or_else(|e| e.into_inner()) = Some(session);
     // A fresh recording never inherits an earlier chain's already-closed
     // parts -- only finish_and_continue_recording ever adds to this list.
@@ -25837,6 +25928,9 @@ fn stop_recording_now(app: &AppHandle) -> Result<RecordingStoppedPayload, String
         resize_crop_at_ms,
         parts,
     };
+    // The outline window (region recordings only, see show_rec_outline) goes
+    // with it on every end path this function serves (button, hotkey, auto-stop).
+    hide_rec_outline(app);
     // The stop/pause hotkeys give up their combination the instant nothing
     // is recording, on every end path this function serves (button, hotkey,
     // auto-stop). Same for the tray's two extra rows.
@@ -25903,6 +25997,9 @@ async fn cancel_recording(app: AppHandle, rstate: State<'_, RecordingState>) -> 
     })
     .await
     .map_err(|e| e.to_string())??;
+    // Same as a normal stop: the outline window (if this was a region
+    // recording) never survives a cancel either.
+    hide_rec_outline(&app);
     // Give the stop/pause combination back up now that nothing is recording,
     // and drop the tray's two extra rows.
     rearm_hotkeys(&app);
@@ -36046,6 +36143,47 @@ mod tests {
     fn target_fits_canvas_never_offers_a_switch_on_the_window_size_canvas() {
         assert!(!recording::target_fits_canvas(Some("window"), (0, 0), (800, 600), Some((0, 0, 800, 600))));
         assert!(!recording::target_fits_canvas(None, (0, 0), (800, 600), Some((0, 0, 800, 600))));
+    }
+
+    // ---- Region recording's own outline instead of the OS capture border ----
+
+    #[test]
+    fn border_setting_only_switches_off_for_a_region_target() {
+        assert_eq!(
+            recording::border_setting_for_target(recording::RecTarget::Region { monitor: 1, x: 0, y: 0, w: 800, h: 600 }),
+            recording::BorderSetting::WithoutBorder,
+        );
+        assert_eq!(
+            recording::border_setting_for_target(recording::RecTarget::Monitor(0)),
+            recording::BorderSetting::Default,
+        );
+        assert_eq!(
+            recording::border_setting_for_target(recording::RecTarget::Window(123)),
+            recording::BorderSetting::Default,
+        );
+    }
+
+    #[test]
+    fn region_outline_rect_adds_the_monitor_origin_to_the_region_offset() {
+        // A region picked on a monitor to the right of the primary one: the
+        // outline must land at the monitor's own absolute position plus the
+        // region's offset within it, exactly what resolve_crop already crops
+        // each frame to.
+        assert_eq!(recording::region_outline_rect((1920, 0), 100, 50, 400, 300), (2020, 50, 400, 300));
+        assert_eq!(recording::region_outline_rect((0, 0), 0, 0, 1920, 1080), (0, 0, 1920, 1080));
+    }
+
+    #[test]
+    fn region_outline_rect_clamps_a_negative_offset_to_the_monitor_origin() {
+        // Same defensive clamp resolve_crop already applies to a region whose
+        // picker math ever hands back a negative offset.
+        assert_eq!(recording::region_outline_rect((0, 0), -10, -5, 200, 100), (0, 0, 200, 100));
+    }
+
+    #[test]
+    fn outline_rect_for_target_is_none_for_monitor_and_window_targets() {
+        assert_eq!(recording::outline_rect_for_target(recording::RecTarget::Monitor(0)), None);
+        assert_eq!(recording::outline_rect_for_target(recording::RecTarget::Window(123)), None);
     }
 
     #[test]
