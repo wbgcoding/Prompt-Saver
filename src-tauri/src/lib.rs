@@ -21266,13 +21266,16 @@ mod keylog {
     // shortcuts included). `Text` covers any other text-entry control --
     // an Edit or Document control type, an editable ValuePattern or
     // TextPattern, or plain doubt (UI Automation unreachable, the call
-    // erroring, an unrecognized or proxy element) -- and permits only
-    // shortcuts and navigation keys through (see `is_kept_in_text_context`).
-    // `NonText` is the narrowest tier: reached only by a POSITIVE
-    // classification that the control is neither a password field nor a
-    // text-entry one, and behaves exactly as the pre-existing "not
-    // password" verdict always did, recording everything not otherwise
-    // caught by a blind or dirty window.
+    // erroring, an unrecognized or proxy element). `NonText` is the
+    // narrowest tier: reached only by a POSITIVE classification that the
+    // control is neither a password field nor a text-entry one. Product
+    // decision (2026-09-26): `Text` and `NonText` now resolve to the exact
+    // same verdict (see `verdict` below) -- a text field is no longer
+    // restricted to shortcuts by default, only a confirmed password field
+    // still gaps. The distinction stays in the classifier because nothing
+    // downstream of `is_password_field` needs to change to keep proving
+    // "not a password field" the same rigorous way; it simply no longer
+    // changes what gets recorded.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum FieldClass {
         Password,
@@ -21280,17 +21283,17 @@ mod keylog {
         NonText,
     }
 
-    // The three shapes a resolved key's fate can take. `Gap` is
-    // unconditional (injected input, the ledger's own fail_closed flag, a
-    // blind window, a confirmed password field, or a dirty guard window).
-    // `Allow` is the NonText tier's unconditional record. `TextOnly` still
-    // needs the specific key (and its modifier state) run through
-    // `is_kept_in_text_context` before a final gap/record decision exists.
+    // The two shapes a resolved key's fate can take. `Gap` is unconditional
+    // (injected input, the ledger's own fail_closed flag, a blind window, a
+    // confirmed password field, or a dirty guard window). `Allow` covers
+    // both the Text and NonText tiers -- see FieldClass's own doc for why
+    // they no longer differ here. `resolve_verdict` still applies the
+    // separate, OPT-IN `keyOverlayShortcutsOnly` filter on top of an Allow,
+    // regardless of which tier produced it.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum Verdict {
         Gap,
         Allow,
-        TextOnly,
     }
 
     // Ordered log of every completed focus check (`checks`, each stamped by
@@ -21416,12 +21419,12 @@ mod keylog {
     }
 
     // The binding verdict algorithm. `Some(Verdict::Gap)` is unconditional,
-    // `Some(Verdict::Allow)` is an unconditional record (the NonText tier),
-    // `Some(Verdict::TextOnly)` still needs the key itself run through
-    // `resolve_verdict` before a final answer exists, and `None` means not
-    // enough information exists YET (the caller must keep the key pending
-    // and wait for a later check) -- never treated as a record, only ever
-    // eventually resolved to a gap if nothing ever qualifies (see
+    // `Some(Verdict::Allow)` is a record subject only to the opt-in
+    // shortcuts-only filter (see `resolve_verdict`) -- both the Text and
+    // NonText tiers reach it, see FieldClass's own doc -- and `None` means
+    // not enough information exists YET (the caller must keep the key
+    // pending and wait for a later check) -- never treated as a record,
+    // only ever eventually resolved to a gap if nothing ever qualifies (see
     // `verdict_at_stop`).
     fn verdict(ledger: &Ledger, t: u64, injected: bool) -> Option<Verdict> {
         if injected || ledger.fail_closed {
@@ -21438,42 +21441,45 @@ mod keylog {
             return Some(Verdict::Gap);
         }
         Some(match class {
-            FieldClass::NonText => Verdict::Allow,
-            FieldClass::Text => Verdict::TextOnly,
+            FieldClass::NonText | FieldClass::Text => Verdict::Allow,
             FieldClass::Password => unreachable!("handled above"),
         })
     }
 
-    // A key's VK/scan-code/extended-flag identity, bundled purely to keep
-    // resolve_verdict/verdict_at_stop's own argument count down -- see
-    // RawKey for what each field means and is_alt_numpad_entry for why scan
-    // and extended matter alongside the VK.
+    // A key's VK/scan-code/extended-flag identity plus the modifier state it
+    // carried, bundled purely to keep resolve_verdict/verdict_at_stop's own
+    // argument count down -- see RawKey for what each field means and
+    // is_alt_numpad_entry for why scan and extended matter alongside the VK.
     #[derive(Clone, Copy)]
     struct KeyId {
         vk: u32,
         scan: u32,
         extended: bool,
+        ctrl: bool,
+        alt: bool,
+        win: bool,
     }
 
     // Turns a `Verdict` into the final gap/record boolean `Recorder::record`
-    // takes, which for `Verdict::TextOnly` means running the specific key
-    // (and the modifier state it carried) through `is_kept_in_text_context`
-    // -- see that function's own doc for exactly what a text field's
-    // shortcut allow-list covers.
-    fn resolve_verdict(v: Verdict, id: KeyId, ctrl: bool, alt: bool, win: bool) -> bool {
+    // takes. `Gap` stays gapped no matter what. An `Allow` is still gapped
+    // when `keyOverlayShortcutsOnly` is on and this specific key (and the
+    // modifier state it carried) is not itself a shortcut or navigation key
+    // -- see `is_kept_by_shortcuts_only` for exactly what that allow-list
+    // covers. The setting is absolute: it applies on top of the field-class
+    // verdict, never instead of the password gap above it.
+    fn resolve_verdict(v: Verdict, shortcuts_only: bool, id: KeyId) -> bool {
         match v {
             Verdict::Gap => true,
-            Verdict::Allow => false,
-            Verdict::TextOnly => !is_kept_in_text_context(id.vk, id.scan, id.extended, ctrl, alt, win),
+            Verdict::Allow => shortcuts_only && !is_kept_by_shortcuts_only(id.vk, id.scan, id.extended, id.ctrl, id.alt, id.win),
         }
     }
 
     // Called only once the capture is stopping and no further check will
     // ever arrive: a key `verdict` still cannot decide is gapped, the same
     // as any other doubt, never assumed safe just because time ran out.
-    fn verdict_at_stop(ledger: &Ledger, t: u64, injected: bool, id: KeyId, ctrl: bool, alt: bool, win: bool) -> bool {
+    fn verdict_at_stop(ledger: &Ledger, t: u64, injected: bool, id: KeyId, shortcuts_only: bool) -> bool {
         match verdict(ledger, t, injected) {
-            Some(v) => resolve_verdict(v, id, ctrl, alt, win),
+            Some(v) => resolve_verdict(v, shortcuts_only, id),
             None => true,
         }
     }
@@ -21508,9 +21514,9 @@ mod keylog {
         // here since it never went through a person's fingers at all.
         injected: bool,
         // Ctrl/Alt/Win held at this exact key's own hook-time timestamp --
-        // see ModifierState. Used only by a text field's shortcut filter
-        // (is_kept_in_text_context); irrelevant, but always present, for a
-        // password or non-text field.
+        // see ModifierState. Used only by the opt-in shortcuts-only filter
+        // (is_kept_by_shortcuts_only); irrelevant, but always present, when
+        // that setting is off.
         ctrl: bool,
         alt: bool,
         win: bool,
@@ -21540,7 +21546,7 @@ mod keylog {
         matches!(vk, VK_TAB | VK_RETURN | VK_ESCAPE)
     }
 
-    // The non-character keys a text field's shortcut-only tier still keeps
+    // The non-character keys the shortcuts-only filter still keeps
     // regardless of any modifier: they navigate or edit structurally
     // (cursor movement, deleting, paging) rather than producing a
     // character, and F-keys are conventionally shortcuts even bare.
@@ -21566,7 +21572,7 @@ mod keylog {
     // Ctrl, Alt/Menu, Win and Shift, generic plus left/right variants --
     // used both to track live modifier state (see ModifierState) and to
     // keep a bare modifier key-press itself from ever counting as its own
-    // "combo" in `is_kept_in_text_context`.
+    // "combo" in `is_kept_by_shortcuts_only`.
     const VK_CONTROL: u32 = 0x11;
     const VK_LCONTROL: u32 = 0xA2;
     const VK_RCONTROL: u32 = 0xA3;
@@ -21631,19 +21637,21 @@ mod keylog {
         is_numpad_vk(vk) || is_numpad_scan(scan, extended)
     }
 
-    // A text field's shortcut-only allow-list (see FieldClass::Text and
-    // Verdict::TextOnly): a non-character key kept unconditionally, or a
-    // non-modifier key held together with Ctrl, Alt or Win -- EXCEPT bare
-    // Ctrl+Alt with no Win, which Windows uses to emulate AltGr (e.g.
-    // Ctrl+Alt+Q types "@" on a German keyboard) and must be treated as
-    // ordinary typing, not a shortcut, and EXCEPT Alt alone over a numpad
-    // key, which composes a character instead (see is_alt_numpad_entry) and
-    // is checked before the nav-key allow below so it cannot be shadowed by
-    // VK_INSERT/VK_LEFT/etc sharing those VK codes with NumLock off. A lone
-    // modifier press (no other key held with it) is never itself a
-    // shortcut. Everything else -- letters, digits, punctuation, space,
-    // Shift+char, dead keys -- falls through and is dropped.
-    fn is_kept_in_text_context(vk: u32, scan: u32, extended: bool, ctrl: bool, alt: bool, win: bool) -> bool {
+    // The `keyOverlayShortcutsOnly` allow-list: a non-character key kept
+    // unconditionally, or a non-modifier key held together with Ctrl, Alt
+    // or Win -- EXCEPT bare Ctrl+Alt with no Win, which Windows uses to
+    // emulate AltGr (e.g. Ctrl+Alt+Q types "@" on a German keyboard) and
+    // must be treated as ordinary typing, not a shortcut, and EXCEPT Alt
+    // alone over a numpad key, which composes a character instead (see
+    // is_alt_numpad_entry) and is checked before the nav-key allow below so
+    // it cannot be shadowed by VK_INSERT/VK_LEFT/etc sharing those VK codes
+    // with NumLock off. A lone modifier press (no other key held with it)
+    // is never itself a shortcut. Everything else -- letters, digits,
+    // punctuation, space, Shift+char, dead keys -- falls through and is
+    // dropped. Applied absolutely, regardless of which FieldClass produced
+    // the Allow this filters (see `resolve_verdict`) -- a password field is
+    // still gapped outright before this is ever reached.
+    fn is_kept_by_shortcuts_only(vk: u32, scan: u32, extended: bool, ctrl: bool, alt: bool, win: bool) -> bool {
         if alt && !ctrl && !win && is_alt_numpad_entry(vk, scan, extended) {
             return false;
         }
@@ -22145,7 +22153,14 @@ mod keylog {
     // even-later qualifying check than an earlier one (SETTLE_MS is added
     // to the key's OWN timestamp), so the front of this queue can never be
     // stuck behind a later key that happens to resolve first.
-    fn resolve_pending(pending: &mut VecDeque<RawKey>, rec: &mut Recorder, clock: &Mutex<ActiveClock>, cutoff: &Mutex<Option<u64>>, ledger: &Mutex<Ledger>) {
+    fn resolve_pending(
+        pending: &mut VecDeque<RawKey>,
+        rec: &mut Recorder,
+        clock: &Mutex<ActiveClock>,
+        cutoff: &Mutex<Option<u64>>,
+        ledger: &Mutex<Ledger>,
+        shortcuts_only: bool,
+    ) {
         while let Some(front) = pending.front() {
             let cutoff_ms = *cutoff.lock().unwrap_or_else(|e| e.into_inner());
             // A cutoff can be set AFTER a key was already queued here (the
@@ -22160,13 +22175,13 @@ mod keylog {
             };
             let Some(v) = v else { break };
             let raw = pending.pop_front().expect("front already confirmed present above");
-            let gap = resolve_verdict(v, KeyId { vk: raw.vk, scan: raw.scan, extended: raw.extended }, raw.ctrl, raw.alt, raw.win);
+            let gap = resolve_verdict(v, shortcuts_only, KeyId { vk: raw.vk, scan: raw.scan, extended: raw.extended, ctrl: raw.ctrl, alt: raw.alt, win: raw.win });
             let t_ms = clock.lock().unwrap_or_else(|e| e.into_inner()).active_ms(raw.t_ms);
             rec.record(raw.vk, raw.scan, raw.down, t_ms, gap);
         }
     }
 
-    fn consumer_thread_main(rx: Receiver<RawKey>, clock: Arc<Mutex<ActiveClock>>, cutoff: Arc<Mutex<Option<u64>>>) -> KeySidecar {
+    fn consumer_thread_main(rx: Receiver<RawKey>, clock: Arc<Mutex<ActiveClock>>, cutoff: Arc<Mutex<Option<u64>>>, shortcuts_only: bool) -> KeySidecar {
         // MTA, not STA: an apartment-threaded COM object needs its own
         // message pump for cross-thread calls (the focus-changed event
         // above fires from a different thread) to ever be delivered, and
@@ -22426,7 +22441,7 @@ mod keylog {
                 // doc and classify_idle_transition.
                 last_observed_at = now;
             }
-            resolve_pending(&mut pending, &mut rec, &clock, &cutoff, &ledger);
+            resolve_pending(&mut pending, &mut rec, &clock, &cutoff, &ledger, shortcuts_only);
             // Nothing before the oldest still-pending key's own GUARD_MS
             // lookback can ever be read again -- see Ledger::prune.
             let prune_before = pending.front().map(|k| k.t_ms).unwrap_or_else(mono_ms).saturating_sub(GUARD_MS);
@@ -22444,7 +22459,7 @@ mod keylog {
                 true
             } else {
                 let ledger = ledger.lock().unwrap_or_else(|e| e.into_inner());
-                verdict_at_stop(&ledger, raw.t_ms, raw.injected, KeyId { vk: raw.vk, scan: raw.scan, extended: raw.extended }, raw.ctrl, raw.alt, raw.win)
+                verdict_at_stop(&ledger, raw.t_ms, raw.injected, KeyId { vk: raw.vk, scan: raw.scan, extended: raw.extended, ctrl: raw.ctrl, alt: raw.alt, win: raw.win }, shortcuts_only)
             };
             let t_ms = clock.lock().unwrap_or_else(|e| e.into_inner()).active_ms(raw.t_ms);
             rec.record(raw.vk, raw.scan, raw.down, t_ms, gap);
@@ -22517,7 +22532,7 @@ mod keylog {
         cutoff: Arc<Mutex<Option<u64>>>,
     }
 
-    fn start(hold_ms: u32, start_abs_ms: u64) -> Option<KeyCapture> {
+    fn start(hold_ms: u32, start_abs_ms: u64, shortcuts_only: bool) -> Option<KeyCapture> {
         let (raw_tx, raw_rx) = sync_channel::<RawKey>(RAW_CHANNEL_CAP);
         *raw_tx_slot().lock().unwrap_or_else(|e| e.into_inner()) = Some(raw_tx);
         let clock = Arc::new(Mutex::new(ActiveClock::new(start_abs_ms)));
@@ -22536,7 +22551,7 @@ mod keylog {
         // RAW_TX still set) while the caller saw no capture at all -- the
         // hook must come down the same way stop() brings it down whenever
         // the consumer that was supposed to read it never gets to exist.
-        let consumer_thread = match thread::Builder::new().name("key-overlay-consumer".into()).spawn(move || consumer_thread_main(raw_rx, clock2, cutoff2)) {
+        let consumer_thread = match thread::Builder::new().name("key-overlay-consumer".into()).spawn(move || consumer_thread_main(raw_rx, clock2, cutoff2, shortcuts_only)) {
             Ok(t) => t,
             Err(_) => {
                 uninstall_hook(hook);
@@ -22661,6 +22676,13 @@ mod keylog {
         values.get("keyOverlayHoldMs").copied().unwrap_or(400.0).clamp(100.0, 2000.0) as u32
     }
 
+    // Ships off, like keyOverlay itself: absent means the plain default
+    // policy (everything but a password field recorded in full). Read once
+    // when a capture starts, same as enabled/hold_ms -- see maybe_start.
+    pub fn shortcuts_only(flags: &std::collections::HashMap<String, bool>) -> bool {
+        flags.get("keyOverlayShortcutsOnly") == Some(&true)
+    }
+
     // Never a second hook: a capture already running for this process is left
     // alone rather than layering a new one on top. `start_abs_ms` is the
     // clock's zero point, always on the `mono_ms()` clock -- ordinary
@@ -22668,7 +22690,7 @@ mod keylog {
     // passes the instant its OWN new capture actually started instead, so
     // the new part's offsets start counting from when video capture really
     // began, not from whenever this call happens to run relative to it.
-    pub fn maybe_start(is_enabled: bool, hold_ms: u32, start_abs_ms: u64) {
+    pub fn maybe_start(is_enabled: bool, hold_ms: u32, start_abs_ms: u64, shortcuts_only: bool) {
         if !is_enabled {
             return;
         }
@@ -22676,7 +22698,7 @@ mod keylog {
         if guard.is_some() {
             return;
         }
-        *guard = start(hold_ms, start_abs_ms);
+        *guard = start(hold_ms, start_abs_ms, shortcuts_only);
     }
 
     pub fn maybe_stop_and_write(output_path: &Path) {
@@ -22748,7 +22770,7 @@ mod keylog {
         fn the_switch_off_default_never_starts_a_capture() {
             let flags = std::collections::HashMap::new();
             assert!(!enabled(&flags)); // absent -- "aus" is the shipped default
-            maybe_start(enabled(&flags), 400, mono_ms());
+            maybe_start(enabled(&flags), 400, mono_ms(), shortcuts_only(&flags));
             assert!(slot().lock().unwrap().is_none());
         }
 
@@ -22934,7 +22956,7 @@ mod keylog {
             let mut ledger = Ledger::default();
             ledger.push_check(0, FieldClass::NonText); // far too early to qualify for a key at t=1000
             assert_eq!(verdict(&ledger, 1_000, false), None, "still pending under the normal algorithm");
-            assert!(verdict_at_stop(&ledger, 1_000, false, KeyId { vk: 0x41, scan: 0, extended: false }, false, false, false), "stopping must resolve doubt as a gap, never as recorded");
+            assert!(verdict_at_stop(&ledger, 1_000, false, KeyId { vk: 0x41, scan: 0, extended: false, ctrl: false, alt: false, win: false }, false), "stopping must resolve doubt as a gap, never as recorded");
         }
 
         #[test]
@@ -22942,7 +22964,7 @@ mod keylog {
             let mut ledger = Ledger::default();
             ledger.push_check(0, FieldClass::NonText);
             ledger.push_check(400, FieldClass::NonText);
-            assert!(!verdict_at_stop(&ledger, 50, false, KeyId { vk: 0x41, scan: 0, extended: false }, false, false, false), "a real, already-completed answer is not thrown away just because the capture is stopping");
+            assert!(!verdict_at_stop(&ledger, 50, false, KeyId { vk: 0x41, scan: 0, extended: false, ctrl: false, alt: false, win: false }, false), "a real, already-completed answer is not thrown away just because the capture is stopping");
         }
 
         // --- NEW-1: a modifier the hook tracked as held must still be
@@ -22976,87 +22998,95 @@ mod keylog {
             assert!(should_track_modifier_event(false), "a real modifier press must still be tracked");
         }
 
-        // --- Text-context filtering: a Text-classified field keeps
-        // shortcuts but drops the typed characters themselves.
+        // --- keyOverlayShortcutsOnly: an absolute allow-list filter, tested
+        // directly against is_kept_by_shortcuts_only (production code no
+        // longer restricts a Text-classified field on its own -- see
+        // FieldClass's own doc for the 2026-09-26 policy change).
 
         #[test]
-        fn plain_typing_in_a_text_field_is_dropped() {
-            assert!(resolve_verdict(Verdict::TextOnly, KeyId { vk: 0x41, scan: 0, extended: false }, false, false, false), "a plain letter key in a text field must be gapped");
+        fn shortcuts_only_drops_a_plain_letter() {
+            assert!(!is_kept_by_shortcuts_only(0x41, 0, false, false, false, false), "a plain letter key must be dropped under shortcuts-only");
         }
 
         #[test]
-        fn ctrl_c_in_a_text_field_is_kept() {
-            assert!(!resolve_verdict(Verdict::TextOnly, KeyId { vk: 0x43, scan: 0, extended: false }, true, false, false), "Ctrl+C is a shortcut, not typed text, so it must record");
+        fn shortcuts_only_keeps_ctrl_c() {
+            assert!(is_kept_by_shortcuts_only(0x43, 0, false, true, false, false), "Ctrl+C is a shortcut, not typed text, so it must record");
         }
 
         #[test]
-        fn altgr_in_a_text_field_is_dropped() {
+        fn shortcuts_only_drops_altgr() {
             // Ctrl+Alt with no Win is Windows' AltGr emulation (Ctrl+Alt+Q
             // types "@" on a German keyboard) -- it types a character and
-            // must be gapped exactly like plain typing, not treated as a
+            // must be dropped exactly like plain typing, not treated as a
             // Ctrl+Alt shortcut.
-            assert!(resolve_verdict(Verdict::TextOnly, KeyId { vk: 0x51, scan: 0, extended: false }, true, true, false), "AltGr must still be gapped, not treated as a shortcut");
+            assert!(!is_kept_by_shortcuts_only(0x51, 0, false, true, true, false), "AltGr must still be dropped, not treated as a shortcut");
         }
 
         // --- NEW-2: Alt+Numpad / EnableHexNumpad character entry must be
-        // dropped in a text field, never kept as an "Alt+key shortcut".
+        // dropped, never kept as an "Alt+key shortcut".
 
         #[test]
-        fn alt_numpad_digit_with_numlock_on_is_dropped_in_a_text_field() {
+        fn shortcuts_only_drops_alt_numpad_digit_with_numlock_on() {
             // NumLock on: Numpad 6 arrives as VK_NUMPAD6 (0x66).
-            assert!(resolve_verdict(Verdict::TextOnly, KeyId { vk: 0x66, scan: 0x4D, extended: false }, false, true, false), "an Alt+Numpad digit composes a character, it is not a shortcut");
+            assert!(!is_kept_by_shortcuts_only(0x66, 0x4D, false, false, true, false), "an Alt+Numpad digit composes a character, it is not a shortcut");
         }
 
         #[test]
-        fn alt_numpad_plus_with_numlock_on_is_dropped_in_a_text_field() {
-            assert!(resolve_verdict(Verdict::TextOnly, KeyId { vk: 0x6B, scan: 0x4E, extended: false }, false, true, false), "Numpad + starts EnableHexNumpad entry and must be dropped too");
+        fn shortcuts_only_drops_alt_numpad_plus_with_numlock_on() {
+            assert!(!is_kept_by_shortcuts_only(0x6B, 0x4E, false, false, true, false), "Numpad + starts EnableHexNumpad entry and must be dropped too");
         }
 
         #[test]
-        fn alt_numpad_digit_with_numlock_off_is_dropped_by_its_scan_code() {
+        fn shortcuts_only_drops_alt_numpad_digit_with_numlock_off_by_its_scan_code() {
             // NumLock off: the same physical Numpad 6 key now arrives as
             // VK_LEFT (0x25) with scan code 0x4B and NOT extended -- the
             // scan code is what actually identifies it, since VK_LEFT alone
             // is an ordinary, always-kept nav key.
-            assert!(resolve_verdict(Verdict::TextOnly, KeyId { vk: VK_LEFT, scan: 0x4B, extended: false }, false, true, false), "a numpad-origin nav VK with NumLock off must still be dropped under Alt");
+            assert!(!is_kept_by_shortcuts_only(VK_LEFT, 0x4B, false, false, true, false), "a numpad-origin nav VK with NumLock off must still be dropped under Alt");
         }
 
         #[test]
-        fn alt_numpad_digit_key_up_is_dropped_too() {
+        fn shortcuts_only_drops_alt_numpad_digit_key_up_too() {
             // The down/up pair must agree -- a kept down but dropped up (or
             // vice versa) would still leave a recoverable half of the key in
-            // the sidecar's own down/up matching.
-            assert!(resolve_verdict(Verdict::TextOnly, KeyId { vk: 0x66, scan: 0x4D, extended: false }, false, true, false), "the down is dropped");
-            assert!(resolve_verdict(Verdict::TextOnly, KeyId { vk: 0x66, scan: 0x4D, extended: false }, false, true, false), "and so is the matching up, same inputs either way");
+            // the sidecar's own down/up matching. Both a down and an up carry
+            // the same vk/scan/extended/ctrl/alt/win here, so one call proves
+            // both sides agree.
+            assert!(!is_kept_by_shortcuts_only(0x66, 0x4D, false, false, true, false), "the down is dropped");
+            assert!(!is_kept_by_shortcuts_only(0x66, 0x4D, false, false, true, false), "and so is the matching up, same inputs either way");
         }
 
         #[test]
-        fn the_real_nav_cluster_key_is_unaffected_by_the_numpad_check() {
+        fn shortcuts_only_keeps_the_real_nav_cluster_key_regardless_of_the_numpad_check() {
             // The genuine Insert/Delete/arrow cluster sends the same VKs as
             // the numpad's NumLock-off keys, but always with LLKHF_EXTENDED
             // set -- Alt+Left from the real arrow cluster must stay a kept
             // nav key exactly as before, not be swept up by NEW-2.
-            assert!(!resolve_verdict(Verdict::TextOnly, KeyId { vk: VK_LEFT, scan: 0x4B, extended: true }, false, true, false), "the real, extended arrow key must still be kept under Alt");
+            assert!(is_kept_by_shortcuts_only(VK_LEFT, 0x4B, true, false, true, false), "the real, extended arrow key must still be kept under Alt");
         }
 
         #[test]
-        fn alt_with_an_ordinary_letter_is_unaffected_by_the_numpad_check() {
-            assert!(!resolve_verdict(Verdict::TextOnly, KeyId { vk: 0x41, scan: 0x1E, extended: false }, false, true, false), "Alt+A is an ordinary shortcut, not a numpad scan or VK");
+        fn shortcuts_only_keeps_alt_with_an_ordinary_letter() {
+            assert!(is_kept_by_shortcuts_only(0x41, 0x1E, false, false, true, false), "Alt+A is an ordinary shortcut, not a numpad scan or VK");
         }
 
         #[test]
-        fn ctrl_alt_numpad_is_not_treated_as_numpad_entry() {
+        fn shortcuts_only_does_not_treat_ctrl_alt_numpad_as_numpad_entry() {
             // The numpad check only applies to Alt held ALONE -- Ctrl+Alt is
-            // AltGr territory (see altgr_in_a_text_field_is_dropped) and any
-            // other combination is an ordinary shortcut, not Alt+Numpad
-            // entry, so this must fall through to the normal ctrl/alt/win
-            // shortcut rule instead of the numpad-specific one.
-            assert!(!resolve_verdict(Verdict::TextOnly, KeyId { vk: 0x66, scan: 0x4D, extended: false }, true, true, true), "Ctrl+Alt+Win+Numpad6 is an ordinary shortcut combo, not character entry");
+            // AltGr territory (see shortcuts_only_drops_altgr) and any other
+            // combination is an ordinary shortcut, not Alt+Numpad entry, so
+            // this must fall through to the normal ctrl/alt/win shortcut
+            // rule instead of the numpad-specific one.
+            assert!(is_kept_by_shortcuts_only(0x66, 0x4D, false, true, true, true), "Ctrl+Alt+Win+Numpad6 is an ordinary shortcut combo, not character entry");
         }
 
         // --- NEW-3: only a structurally non-text UIA control type may ever
         // resolve to FieldClass::NonText; everything else, including a bare
         // Pane/Custom element such as PuTTY or an RDP/VNC session, is Text.
+        // Since 2026-09-26 both tiers reach the same Verdict::Allow (see
+        // FieldClass's own doc), so this distinction no longer changes what
+        // gets recorded by default -- it is kept only because the same UIA
+        // read pipeline still has to prove "not a password field" either way.
 
         #[test]
         fn every_allow_listed_control_type_is_non_text() {
@@ -23080,20 +23110,26 @@ mod keylog {
         }
 
         #[test]
-        fn a_putty_like_pane_or_custom_control_drops_typed_letters() {
+        fn a_putty_like_pane_or_custom_control_now_keeps_typed_letters() {
             // PuTTY/KiTTY, an RDP/VNC remote session window, or any
             // Qt/Java/game window with no accessibility provider at all
             // surfaces as a bare Pane or Custom element -- neither is
-            // allow-listed, so both must fall through to Text, not be
-            // (mis)classified NonText the way absence-of-evidence used to.
+            // allow-listed, so both fall through to FieldClass::Text.
             assert!(!is_non_text_control_type(UIA_PaneControlTypeId));
             assert!(!is_non_text_control_type(UIA_CustomControlTypeId));
-            // Which, through the same verdict pipeline every other Text
-            // field uses, means a typed letter -- an SSH or RDP password
-            // character -- is gapped, never stored.
+            // Which, through the same verdict pipeline every other field
+            // uses, now records a typed letter in full -- an SSH or RDP
+            // password character included. Turning on "Shortcuts only" is
+            // the answer for confidential input in a window UI Automation
+            // cannot see into, not a guess at which such windows exist.
+            let mut ledger = Ledger::default();
+            ledger.push_check(0, FieldClass::Text);
+            ledger.push_check(400, FieldClass::Text);
+            let v = verdict(&ledger, 50, false).expect("a qualifying check exists");
+            assert_eq!(v, Verdict::Allow);
             assert!(
-                resolve_verdict(Verdict::TextOnly, KeyId { vk: 0x41, scan: 0x1E, extended: false }, false, false, false),
-                "a PuTTY-like Pane/Custom window's typed letters must be gapped, not recorded"
+                !resolve_verdict(v, false, KeyId { vk: 0x41, scan: 0x1E, extended: false, ctrl: false, alt: false, win: false }),
+                "a PuTTY-like Pane/Custom window's typed letters are now kept, not gapped"
             );
         }
 
@@ -23188,7 +23224,7 @@ mod keylog {
             let clock = Mutex::new(ActiveClock::new(0));
             let cutoff: Mutex<Option<u64>> = Mutex::new(None);
             let ledger = Mutex::new(ledger);
-            resolve_pending(&mut pending, &mut rec, &clock, &cutoff, &ledger);
+            resolve_pending(&mut pending, &mut rec, &clock, &cutoff, &ledger, false);
 
             assert!(pending.is_empty());
             assert!(rec.sidecar.events.is_empty());
@@ -23278,7 +23314,7 @@ mod keylog {
             let clock = Mutex::new(ActiveClock::new(0));
             let cutoff: Mutex<Option<u64>> = Mutex::new(None);
             let ledger = Mutex::new(ledger);
-            resolve_pending(&mut pending, &mut rec, &clock, &cutoff, &ledger);
+            resolve_pending(&mut pending, &mut rec, &clock, &cutoff, &ledger, false);
 
             assert!(pending.is_empty());
             assert!(rec.sidecar.gaps.is_empty(), "an idle gap with a prompt receive must not turn into a recorded gap");
@@ -23306,7 +23342,7 @@ mod keylog {
             let clock = Mutex::new(ActiveClock::new(0));
             let cutoff: Mutex<Option<u64>> = Mutex::new(None);
             let ledger = Mutex::new(ledger);
-            resolve_pending(&mut pending, &mut rec, &clock, &cutoff, &ledger);
+            resolve_pending(&mut pending, &mut rec, &clock, &cutoff, &ledger, false);
 
             assert!(pending.is_empty());
             assert!(rec.sidecar.events.is_empty());
@@ -23357,7 +23393,7 @@ mod keylog {
             let clock = Mutex::new(ActiveClock::new(0));
             let cutoff: Mutex<Option<u64>> = Mutex::new(None);
             let ledger = Mutex::new(ledger);
-            resolve_pending(&mut pending, &mut rec, &clock, &cutoff, &ledger);
+            resolve_pending(&mut pending, &mut rec, &clock, &cutoff, &ledger, false);
 
             assert!(pending.is_empty());
             assert!(rec.sidecar.events.is_empty());
@@ -23402,7 +23438,7 @@ mod keylog {
             let clock = Mutex::new(ActiveClock::new(0));
             let cutoff: Mutex<Option<u64>> = Mutex::new(None);
             let ledger = Mutex::new(ledger);
-            resolve_pending(&mut pending, &mut rec, &clock, &cutoff, &ledger);
+            resolve_pending(&mut pending, &mut rec, &clock, &cutoff, &ledger, false);
 
             assert!(pending.is_empty());
             assert!(rec.sidecar.events.is_empty());
@@ -23438,7 +23474,7 @@ mod keylog {
             let clock = Mutex::new(ActiveClock::new(0));
             let cutoff: Mutex<Option<u64>> = Mutex::new(None);
             let ledger = Mutex::new(ledger);
-            resolve_pending(&mut pending, &mut rec, &clock, &cutoff, &ledger);
+            resolve_pending(&mut pending, &mut rec, &clock, &cutoff, &ledger, false);
 
             assert!(pending.is_empty());
             assert!(rec.sidecar.gaps.is_empty(), "a genuinely idle receive must not turn into a recorded gap");
@@ -23461,17 +23497,20 @@ mod keylog {
         }
 
         #[test]
-        fn an_unresolved_classification_defaults_to_text_and_drops_typing() {
+        fn an_unresolved_classification_defaults_to_text_and_now_keeps_typing() {
             // A failed or unknown classification resolves to FieldClass::Text,
-            // the fail-closed default -- proven here through the same
-            // verdict() pipeline the production code calls, not just the
-            // resolve_verdict helper alone.
+            // the fail-closed default for "is this a password field" -- but
+            // since 2026-09-26 Text no longer restricts to shortcuts, so a
+            // failed classification now keeps typing, same as a confirmed
+            // NonText field. Proven here through the same verdict() pipeline
+            // the production code calls, not just the resolve_verdict helper
+            // alone.
             let mut ledger = Ledger::default();
             ledger.push_check(0, FieldClass::Text);
             ledger.push_check(400, FieldClass::Text);
             let v = verdict(&ledger, 50, false).expect("a qualifying check exists");
-            assert_eq!(v, Verdict::TextOnly);
-            assert!(resolve_verdict(v, KeyId { vk: 0x41, scan: 0, extended: false }, false, false, false), "the fail-closed Text default must still drop plain typing");
+            assert_eq!(v, Verdict::Allow);
+            assert!(!resolve_verdict(v, false, KeyId { vk: 0x41, scan: 0, extended: false, ctrl: false, alt: false, win: false }), "the fail-closed Text default now keeps plain typing, not gaps it");
         }
 
         #[test]
@@ -23481,7 +23520,7 @@ mod keylog {
             ledger.push_check(400, FieldClass::NonText);
             let v = verdict(&ledger, 50, false).expect("a qualifying check exists");
             assert_eq!(v, Verdict::Allow);
-            assert!(!resolve_verdict(v, KeyId { vk: 0x41, scan: 0, extended: false }, false, false, false), "a NonText field's plain typing must keep recording as before");
+            assert!(!resolve_verdict(v, false, KeyId { vk: 0x41, scan: 0, extended: false, ctrl: false, alt: false, win: false }), "a NonText field's plain typing must keep recording as before");
         }
 
         #[test]
@@ -23491,7 +23530,57 @@ mod keylog {
             ledger.push_check(400, FieldClass::Password);
             let v = verdict(&ledger, 50, false).expect("a qualifying check exists");
             assert_eq!(v, Verdict::Gap);
-            assert!(resolve_verdict(v, KeyId { vk: 0x43, scan: 0, extended: false }, true, false, false), "shortcuts are blocked in password fields too, not just typed characters");
+            assert!(resolve_verdict(v, false, KeyId { vk: 0x43, scan: 0, extended: false, ctrl: true, alt: false, win: false }), "shortcuts are blocked in password fields too, not just typed characters");
+        }
+
+        // --- keyOverlayShortcutsOnly applied through resolve_verdict: an
+        // absolute filter on top of the verdict, regardless of which field
+        // class produced the Allow, and never relaxing a password gap.
+
+        #[test]
+        fn shortcuts_only_drops_a_letter_under_every_allow_producing_field_class() {
+            for class in [FieldClass::NonText, FieldClass::Text] {
+                let mut ledger = Ledger::default();
+                ledger.push_check(0, class);
+                ledger.push_check(400, class);
+                let v = verdict(&ledger, 50, false).expect("a qualifying check exists");
+                assert_eq!(v, Verdict::Allow);
+                assert!(
+                    resolve_verdict(v, true, KeyId { vk: 0x41, scan: 0x1E, extended: false, ctrl: false, alt: false, win: false }),
+                    "a plain letter must be dropped under shortcuts-only regardless of field class"
+                );
+            }
+        }
+
+        #[test]
+        fn shortcuts_only_keeps_ctrl_c_enter_and_f5_through_resolve_verdict() {
+            const VK_F5: u32 = 0x74;
+            assert!(!resolve_verdict(Verdict::Allow, true, KeyId { vk: 0x43, scan: 0, extended: false, ctrl: true, alt: false, win: false }), "Ctrl+C stays");
+            assert!(!resolve_verdict(Verdict::Allow, true, KeyId { vk: VK_RETURN, scan: 0, extended: false, ctrl: false, alt: false, win: false }), "Enter stays");
+            assert!(!resolve_verdict(Verdict::Allow, true, KeyId { vk: VK_F5, scan: 0, extended: false, ctrl: false, alt: false, win: false }), "F5 stays");
+        }
+
+        #[test]
+        fn shortcuts_only_never_relaxes_a_password_gap() {
+            assert!(
+                resolve_verdict(Verdict::Gap, true, KeyId { vk: 0x43, scan: 0, extended: false, ctrl: true, alt: false, win: false }),
+                "a password verdict stays gapped no matter what the shortcuts-only filter would otherwise allow"
+            );
+        }
+
+        #[test]
+        fn shortcuts_only_off_never_changes_the_base_verdict() {
+            assert!(!resolve_verdict(Verdict::Allow, false, KeyId { vk: 0x41, scan: 0, extended: false, ctrl: false, alt: false, win: false }), "the setting off must not change existing behavior at all");
+        }
+
+        #[test]
+        fn shortcuts_only_flag_round_trips_through_json_like_settings_storage() {
+            let mut flags = std::collections::HashMap::new();
+            flags.insert("keyOverlayShortcutsOnly".to_string(), true);
+            let json = serde_json::to_string(&flags).unwrap();
+            let restored: std::collections::HashMap<String, bool> = serde_json::from_str(&json).unwrap();
+            assert!(shortcuts_only(&restored));
+            assert!(!shortcuts_only(&std::collections::HashMap::new()), "absent -- default off");
         }
 
         #[test]
@@ -24977,9 +25066,9 @@ async fn start_recording(
     let (show_cursor, audio, video_kbps, video_fps, canvas_mode, canvas_ceiling, disk_warn_mb, max_min, max_mb) = resolve_recording_settings(&db);
     // Read once, before the blocking capture start -- keyOverlay's
     // default is off, so the common case installs no hook at all.
-    let (key_overlay_on, key_overlay_hold_ms) = {
+    let (key_overlay_on, key_overlay_hold_ms, key_overlay_shortcuts_only) = {
         let g = db.lock().unwrap_or_else(|e| e.into_inner());
-        (keylog::enabled(&g.settings.ui_flags), keylog::hold_ms(&g.settings.ui_values))
+        (keylog::enabled(&g.settings.ui_flags), keylog::hold_ms(&g.settings.ui_values), keylog::shortcuts_only(&g.settings.ui_flags))
     };
     let dir = data_dir(&app).join("recordings");
     let session = tauri::async_runtime::spawn_blocking(move || {
@@ -24998,7 +25087,7 @@ async fn start_recording(
     // no session-scoped capture to tear down its own way) and the NEXT
     // recording's own maybe_start then silently no-op'd against it, "never a
     // second hook" mistaking the orphan for an already-running one.
-    keylog::maybe_start(key_overlay_on, key_overlay_hold_ms, keylog::mono_ms());
+    keylog::maybe_start(key_overlay_on, key_overlay_hold_ms, keylog::mono_ms(), key_overlay_shortcuts_only);
     *rstate.0.lock().unwrap_or_else(|e| e.into_inner()) = Some(session);
     // A fresh recording never inherits an earlier chain's already-closed
     // parts -- only finish_and_continue_recording ever adds to this list.
@@ -25114,9 +25203,9 @@ async fn finish_and_continue_recording(
     // Read once, same as start_recording -- keyOverlay's setting is not
     // re-resolved off the closing session (it carries no copy of it), and
     // restarting capture for the continuation part needs it.
-    let (key_overlay_on, key_overlay_hold_ms) = {
+    let (key_overlay_on, key_overlay_hold_ms, key_overlay_shortcuts_only) = {
         let g = db.lock().unwrap_or_else(|e| e.into_inner());
-        (keylog::enabled(&g.settings.ui_flags), keylog::hold_ms(&g.settings.ui_values))
+        (keylog::enabled(&g.settings.ui_flags), keylog::hold_ms(&g.settings.ui_values), keylog::shortcuts_only(&g.settings.ui_flags))
     };
     let session = {
         let mut guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
@@ -25194,7 +25283,7 @@ async fn finish_and_continue_recording(
                 // ended up holding the whole chain's keys, timed from the
                 // FIRST part's start.
                 keylog::maybe_stop_and_write(&path);
-                keylog::maybe_start(key_overlay_on, key_overlay_hold_ms, new_start_ms);
+                keylog::maybe_start(key_overlay_on, key_overlay_hold_ms, new_start_ms, key_overlay_shortcuts_only);
                 // The switch worked -- this part is now an interim one with no
                 // result dialog of its own, so its crop (if any) runs right away
                 // in the background instead of waiting on
