@@ -442,6 +442,11 @@ const RESULTS = {
   // A probe that needs the picker to answer with a specific folder sets
   // window.__PICK_FOLDER__ first; everything else gets the export folder.
   pick_folder: () => window.__PICK_FOLDER__ || "C:\\Videos\\Exports",
+  // The export-only folder picker (video editor "choose folder", the
+  // batch-export dialog's "choose destination") -- same fixture as
+  // pick_folder above, since a probe driving either flow sets the same
+  // window.__PICK_FOLDER__ before clicking the button.
+  pick_export_folder: () => window.__PICK_FOLDER__ || "C:\\Videos\\Exports",
   // 336: "Copy to clipboard" export -- a temp path plus a clipboard write the
   // probe can observe without a real OS clipboard.
   clip_export_path: (a) => "C:\\Temp\\ps-clipexport-test." + ((a && a.ext) || "mp4"),
