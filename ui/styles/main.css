@@ -1775,12 +1775,16 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   box-shadow: 0 1px 5px rgba(0, 0, 0, 0.45);
 }
 
-/* Chain overview strip: sits above the grid, same slot pattern as the batch bar. */
+/* Chain overview strip: sits above the grid, same slot pattern as the batch bar.
+   The negative top margin only pulls the strip itself up (it is display:none
+   and contributes no layout at all while the chain is off, so the grid's own
+   top position never moves); it trims the strip's own combined gap down to
+   the grid area's own padding-top plus this element's title padding. */
 .chain-overview {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin: 0 0 8px;
+  margin: -8px 0 8px;
   padding: 2px 2px 10px;
   border-bottom: 1px solid var(--border);
   flex: 0 0 auto;

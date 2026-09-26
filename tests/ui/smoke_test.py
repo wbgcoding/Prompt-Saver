@@ -2263,6 +2263,9 @@ PROBE = """
         return null;
       };
       for (let i = 0; i < 3 && document.body.classList.contains('chain-mode'); i++) await click('chain-btn');
+      // 510: the grid's own top position with the chain off, to compare against
+      // once the chain overview strip has come and gone below.
+      const gridTopOff = document.getElementById('grid').getBoundingClientRect().top;
       const p0Tile = findGridTile('p0');
       const startBtn = p0Tile && p0Tile.querySelector('.tile-chain-start');
       if (!startBtn) {
@@ -2288,6 +2291,16 @@ PROBE = """
           const ovTitle = bar.querySelector('.chain-ov-title');
           if (ovTitle && ovTitle.getBoundingClientRect().top - bar.getBoundingClientRect().top > 3) {
             out.errors.push('445: the chain overview keeps extra space above its title');
+          }
+          // 510: total gap from the grid area's own top edge (its padding box,
+          // not the strip's) down to the title, so the padding the strip adds
+          // on top of the grid area's own padding is counted too.
+          if (ovTitle) {
+            const gridWrapTop = document.querySelector('.grid-wrap').getBoundingClientRect().top;
+            const gap510 = ovTitle.getBoundingClientRect().top - gridWrapTop;
+            if (gap510 > 4) {
+              out.errors.push('510: the gap above the chain overview title is ' + Math.round(gap510) + 'px, over the 4px target');
+            }
           }
           const firstTile = document.querySelector('#grid .tile');
           if (firstTile && bar.getBoundingClientRect().bottom > firstTile.getBoundingClientRect().top) {
@@ -2350,6 +2363,13 @@ PROBE = """
       }
       for (let i = 0; i < 3 && document.body.classList.contains('chain-mode'); i++) await click('chain-btn');
       await sleep(150);
+      // 510: with the chain off again, the grid must sit exactly where it did
+      // before the strip ever appeared.
+      const gridTopBack = document.getElementById('grid').getBoundingClientRect().top;
+      if (Math.abs(gridTopBack - gridTopOff) > 1) {
+        out.errors.push('510: the grid top moved from ' + Math.round(gridTopOff) + 'px to ' +
+          Math.round(gridTopBack) + 'px after the chain overview strip was shown and hidden again');
+      }
     }
     // Moving the window (a mousedown on a drag region, which starts the native
     // OS move loop and blurs then refocuses the webview) must never end a running
