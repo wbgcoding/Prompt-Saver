@@ -29102,24 +29102,65 @@ fn looks_like_a_path(s: &str) -> bool {
     drive_rooted || unc || unix_like
 }
 
+// Whether `line[at..]` starts a path, and if it is preceded by an ASCII
+// letter or digit (so a bare "D:\" is only ever recognised at a real word
+// boundary, never mid-word).
+fn path_starts_at(line: &str, at: usize) -> bool {
+    if at > 0 {
+        let prev = line[..at].chars().next_back().unwrap_or(' ');
+        if prev.is_ascii_alphanumeric() {
+            return false;
+        }
+    }
+    looks_like_a_path(&line[at..])
+}
+
 // Last, structural line of defence for `append_crash_log`: any drive-rooted,
 // UNC or Unix-style path that slipped past the named placeholders above (a data
 // or sync folder the user pointed the app at that this run never resolved, for
 // one) is cut down to its file name rather than left whole in the log.
+//
+// A path can legitimately contain spaces ("D:\Private Folder\x.mp4"), so this
+// can no longer just split on whitespace -- that used to leave every space-
+// separated component of such a path in the log untouched except the first.
+// Instead it scans the line once: a path inside matching quotes runs to the
+// closing quote (spaces and all); an unquoted path runs to the next quote
+// character or the end of the line, since nothing in a Windows path itself
+// ends it earlier than that.
 fn shorten_stray_paths(line: &str) -> String {
-    line.split(' ')
-        .map(|word| {
-            let trimmed = word.trim_end_matches(|c: char| ".,;:)]}\"'".contains(c));
-            let suffix = &word[trimmed.len()..];
-            if looks_like_a_path(trimmed) {
-                let name = trimmed.rsplit(['\\', '/']).find(|s| !s.is_empty()).unwrap_or(trimmed);
-                format!("{name}{suffix}")
-            } else {
-                word.to_string()
+    let mut out = String::with_capacity(line.len());
+    let mut i = 0;
+    while i < line.len() {
+        let rest = &line[i..];
+        let ch = rest.chars().next().unwrap();
+        if ch == '"' || ch == '\'' {
+            let after_quote = i + ch.len_utf8();
+            if let Some(rel_end) = line[after_quote..].find(ch) {
+                let inner = &line[after_quote..after_quote + rel_end];
+                if looks_like_a_path(inner) {
+                    let name = inner.rsplit(['\\', '/']).find(|s| !s.is_empty()).unwrap_or(inner);
+                    out.push(ch);
+                    out.push_str(name);
+                    out.push(ch);
+                    i = after_quote + rel_end + ch.len_utf8();
+                    continue;
+                }
             }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
+        } else if path_starts_at(line, i) {
+            let end = rest.find(['"', '\'']).map(|e| i + e).unwrap_or(line.len());
+            let raw = &line[i..end];
+            let trimmed = raw.trim_end_matches(|c: char| " .,;:)]}".contains(c));
+            let suffix = &raw[trimmed.len()..];
+            let name = trimmed.rsplit(['\\', '/']).find(|s| !s.is_empty()).unwrap_or(trimmed);
+            out.push_str(name);
+            out.push_str(suffix);
+            i = end;
+            continue;
+        }
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    out
 }
 
 // One line's worth of cleanup for the crash log: named folders first (readable
@@ -38921,6 +38962,40 @@ mod tests {
 
         let redirected = fs::read_to_string(crash_log_path()).unwrap_or_default();
         assert!(redirected.contains(&msg), "a path-free message must reach the log exactly as written: {redirected}");
+    }
+
+    // A folder name with a space in it used to survive scrubbing: splitting on
+    // spaces before deciding what looks like a path left every space-separated
+    // piece past the first one (here "Folder\x.mp4") sitting in the log in the
+    // clear. The whole path, spaces and all, must come out as just the file name.
+    #[test]
+    fn shorten_stray_paths_removes_a_folder_name_that_contains_a_space() {
+        let out = shorten_stray_paths(r"path=D:\Private Folder\x.mp4");
+        assert_eq!(out, "path=x.mp4");
+        assert!(!out.contains("Private"), "no fragment of the folder name may remain: {out}");
+        assert!(!out.contains("Folder"), "no fragment of the folder name may remain: {out}");
+    }
+
+    // The same path, quoted, must shorten to just the file name inside the
+    // quotes rather than treating the quote character as part of the path or
+    // leaving the quotes describing something that is no longer there.
+    #[test]
+    fn shorten_stray_paths_removes_a_quoted_path_with_spaces() {
+        let out = shorten_stray_paths(r#"could not open "D:\Private Folder\x.mp4" for writing"#);
+        assert_eq!(out, r#"could not open "x.mp4" for writing"#);
+    }
+
+    #[test]
+    fn append_crash_log_scrubs_a_folder_name_with_a_space_in_it() {
+        const MARKER: &str = "PROBE-crash-log-scrub-space-in-folder";
+        append_crash_log(&format!(r"{MARKER}: path=D:\Private Folder\x.mp4"));
+
+        let redirected = fs::read_to_string(crash_log_path()).unwrap_or_default();
+        assert!(!redirected.contains("Private Folder"), "a spaced folder name must never reach the log: {redirected}");
+        assert!(
+            redirected.contains(&format!("{MARKER}: path=x.mp4")),
+            "the file name itself may stay, only the folder must go: {redirected}"
+        );
     }
 
     // record_error_log/ERROR_LOG is a shared static -- serialise against other
