@@ -28290,6 +28290,17 @@ fn is_known_export_output(path: &Path) -> bool {
     EXPORT_OUTPUTS.lock().unwrap_or_else(|e| e.into_inner()).contains(&canon)
 }
 
+// What export_video should add to EXPORT_OUTPUTS once ffmpeg finishes: the
+// path export_video_blocking's own Ok result names, never the caller's
+// originally requested dest_path. When that name was already taken,
+// export_video_blocking's own unique_dest_path rename lands the real file at
+// a sibling instead -- recording the requested path there would remember a
+// file this export never wrote, while the file that actually exists stays
+// unrecognized by save_recording_as.
+fn export_output_to_remember(result: &Result<String, String>) -> Option<PathBuf> {
+    result.as_ref().ok().map(PathBuf::from)
+}
+
 // Whether `dest`'s containing folder is one this session is actually allowed
 // to export into: the folder from the last save dialog the backend ran for
 // this purpose, the standing `videoExportDir` preference (itself only ever
@@ -28436,7 +28447,6 @@ async fn export_video(app: AppHandle, state: State<'_, Db>, req: ExportRequest) 
     let progress_app = app.clone();
     let progress_target = target.clone();
     let progress_id = id.clone();
-    let dst_for_output = dst.clone();
     push_bg_op(&app, &id, "export", "running", Some(0), Some(target.clone()));
     let result = tauri::async_runtime::spawn_blocking(move || {
         export_video_blocking(&ffmpeg, &src, &dst, &req, my_gen, move |ms| {
@@ -28450,7 +28460,9 @@ async fn export_video(app: AppHandle, state: State<'_, Db>, req: ExportRequest) 
     match &result {
         Ok(_) => {
             push_bg_op(&app, &id, "export", "done", None, None);
-            remember_export_output(&dst_for_output);
+            if let Some(actual) = export_output_to_remember(&result) {
+                remember_export_output(&actual);
+            }
         }
         Err(e) if e == "cancelled" => push_bg_op(&app, &id, "export", "done", None, None),
         Err(_) => push_bg_op(&app, &id, "export", "error", None, None),
@@ -40800,6 +40812,26 @@ mod tests {
         remember_export_output(&exported);
         assert!(is_known_export_output(&exported), "a file export_video actually produced must be recognized");
         assert!(!is_known_export_output(&untouched), "a neighbour file never exported must stay refused");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn export_output_to_remember_records_the_written_sibling_not_the_requested_dst() {
+        let dir = std::env::temp_dir().join(format!("ps-exportout-sibling-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let requested = dir.join("clip-edit.mp4");
+        fs::write(&requested, b"pre-existing file the export must not overwrite").unwrap();
+        // The same unique_dest_path call export_video_blocking makes once it
+        // finds the requested name already taken, standing in for the file
+        // ffmpeg actually wrote for this test.
+        let sibling = unique_dest_path(&dir, "clip-edit", "mp4");
+        fs::write(&sibling, b"the file ffmpeg actually produced").unwrap();
+        let result: Result<String, String> = Ok(sibling.to_string_lossy().to_string());
+        if let Some(actual) = export_output_to_remember(&result) {
+            remember_export_output(&actual);
+        }
+        assert!(!is_known_export_output(&requested), "the pre-existing requested path was never written by this export");
+        assert!(is_known_export_output(&sibling), "the sibling ffmpeg actually wrote must be recognized");
         let _ = fs::remove_dir_all(&dir);
     }
 
