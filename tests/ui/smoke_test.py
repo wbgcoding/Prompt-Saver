@@ -4696,17 +4696,13 @@ PROBE = """
       const cmAttach = document.getElementById('confirm-modal');
       if (!cmAttach.classList.contains('hidden')) { await click('confirm-ok'); await sleep(200); }
     }
-    // Duplicates: its own dialog, reachable only from the expert menu, and the last
-    // window of the main surface that no scan had ever opened. Its group (147) lives
-    // in the "System & data" tab, not whatever tab was last active.
-    document.getElementById('settings').classList.remove('hidden');
-    await click('expert-open');
-    const sysTab = [...document.querySelectorAll('#expert-tabs-bar .expert-tab')].find(b => /system/i.test(b.textContent));
-    if (sysTab) { sysTab.click(); await sleep(200); }
-    const dupBtn = [...document.querySelectorAll('#expert-flags button')]
-      .find(b => /duplicat|duplik|dupli/i.test(b.textContent));
+    // Duplicates: its own dialog, reachable from the library header, and the last
+    // window of the main surface that no scan had ever opened.
+    await click('library-btn');
+    await sleep(150);
+    const dupBtn = document.getElementById('library-dupes');
     if (!dupBtn) {
-      out.errors.push('the expert menu has no way to open the duplicates dialog');
+      out.errors.push('the library header has no way to open the duplicates dialog');
     } else {
       dupBtn.click();
       await sleep(500);
@@ -4765,9 +4761,6 @@ PROBE = """
         await sleep(200);
       }
     }
-    await click('expert-back');
-    document.getElementById('settings').classList.add('hidden');
-    await sleep(150);
     // The save-time similar-prompt hint (its own switch, sharing similarThreshold
     // with the duplicate finder above -- same System & data group). Off first:
     // even with a fixture hit ready, saving must show nothing of the kind. Edits
@@ -13249,91 +13242,6 @@ CAP_NEEDS_ADMIN_PROBE = """
 </script>
 """
 
-SETTINGS_DUPES_PROBE = """
-<script>
-(async () => {
-  const errs = [];
-  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-  const beat = setInterval(() => {
-    document.documentElement.style.setProperty('--dup-settings-tick', String(Date.now()));
-    document.body.getBoundingClientRect();
-  }, 40);
-  const visible = (el) => !!el && getComputedStyle(el).display !== 'none';
-  // The row lives on whichever expert tab "expGroupData" lands on -- found
-  // fresh every time, since leaving and re-entering the expert page rebuilds it.
-  const findDupCheckbox = async () => {
-    for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
-      tb.click();
-      await sleep(80);
-      const row = [...document.querySelectorAll('#expert-flags .switch-field')]
-        .find(r => (r.querySelector('span') || {}).textContent === 'Duplicate finder');
-      if (row) return row.querySelector('input.switch');
-    }
-    return null;
-  };
-  try {
-    const cm = document.getElementById('confirm-modal');
-    for (let i = 0; i < 80 && cm.classList.contains('hidden'); i++) await sleep(100);
-    if (!cm.classList.contains('hidden')) { document.getElementById('confirm-cancel').click(); await sleep(300); }
-
-    document.getElementById('gear').click();
-    await sleep(200);
-
-    const dupBtn = document.getElementById('settings-dupes-btn');
-    if (!visible(dupBtn)) {
-      errs.push('379: the settings dialog "Find duplicates" entry is not visible while dupFinder ships on');
-    } else {
-      dupBtn.click();
-      await sleep(150);
-      const modal = document.getElementById('dupes-modal');
-      if (!modal || modal.classList.contains('hidden')) {
-        errs.push('379: clicking the settings dialog entry did not open the duplicate finder');
-      }
-      document.getElementById('dupes-close').click();
-      await sleep(100);
-    }
-
-    document.getElementById('expert-open').click();
-    await sleep(300);
-    let cb = await findDupCheckbox();
-    if (!cb) {
-      errs.push('379: no expert-menu switch found for the duplicate finder flag');
-    } else {
-      if (!cb.checked) errs.push('379: the duplicate finder flag does not ship on');
-      cb.checked = false;
-      cb.dispatchEvent(new Event('change'));
-      await sleep(200);
-      document.getElementById('expert-back').click();
-      await sleep(150);
-      if (visible(document.getElementById('settings-dupes-btn'))) {
-        errs.push('379: the settings dialog entry stayed visible after switching dupFinder off');
-      }
-
-      // Back on, so nothing else in this isolated boot is left changed.
-      document.getElementById('expert-open').click();
-      await sleep(300);
-      cb = await findDupCheckbox();
-      if (cb) {
-        cb.checked = true;
-        cb.dispatchEvent(new Event('change'));
-        await sleep(200);
-      }
-      document.getElementById('expert-back').click();
-      await sleep(150);
-      if (!visible(document.getElementById('settings-dupes-btn'))) {
-        errs.push('379: the settings dialog entry did not come back after switching dupFinder on again');
-      }
-    }
-  } catch (e) { errs.push('379 probe: ' + e.message); }
-  clearInterval(beat);
-  const pre = document.createElement('pre');
-  pre.id = 'SMOKE';
-  pre.textContent = JSON.stringify(errs);
-  document.body.appendChild(pre);
-})();
-</script>
-"""
-
 # 411: the parked marker on a pill/folder whose saved screen is gone. Its own
 # boot (window.__FLOAT_PARKED__ = true), same reasoning as the store-sealing
 # and drag-view fixtures above: is_float_parked is only ever asked once at
@@ -14603,30 +14511,6 @@ def main():
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- OCR/voice elevation: no admin rights vs transient failure")
-        for e in errs:
-            print(f"   FAIL: {e}")
-        failed += len(errs)
-        if not errs:
-            print("   ok")
-
-        # 379: the duplicate finder's settings-dialog entry follows dupFinder
-        # and opens the same modal as the expert action.
-        side = tmp / "ui" / "settings-dupes-entry.html"
-        side.write_text(
-            (REPO / "ui" / "index.html").read_text(encoding="utf-8")
-            .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
-            .replace("</body>", SETTINGS_DUPES_PROBE + "</body>"),
-            encoding="utf-8")
-        proc = subprocess.run(
-            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-             f"--user-data-dir={tmp / 'profile-settings-dupes-entry'}", "--allow-file-access-from-files",
-             "--window-size=1000,780", "--virtual-time-budget=45000",
-             "--dump-dom", side.as_uri()],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=180)
-        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
-        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
-        print("-- duplicate finder entry in the settings dialog")
         for e in errs:
             print(f"   FAIL: {e}")
         failed += len(errs)

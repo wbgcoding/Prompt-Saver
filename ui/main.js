@@ -2352,7 +2352,7 @@ const EXPERT_TABS = [
     { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "helpSketches", "firstRunTour"],
       actions: [{ id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
     { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "similarHint", "backupBeforeReset", "backupBeforeDelete", "importExport", "recSweepBroken", "undoToast", "errorLog"], values: ["similarThreshold", "importFolderDepth", "importFolderMax", "disarmMs", "recBrokenGraceMin", "recSweepEveryMin", "recDiscardKeepH", "videoClipTtlMin", "errorLogKeepKb", "undoToastMs", "errorLogMax"], selects: ["trashRetentionDays", "recordingRetentionDays"],
-      actions: [{ id: "dupes-open", label: "dupTitle", gate: "dupFinder" }, { id: "trash-open", label: "trashTitle" }, { id: "rec-sweep-now", label: "recSweepNowAction", gate: "recSweepBroken" }, { id: "settings-export", label: "settingsExportAction" }, { id: "settings-import", label: "settingsImportAction" }, { id: "ocr-index-backfill", label: "ocrIndexBackfillAction", gate: "ocrIndex" }, { id: "float-recall", label: "floatRecallAction", gate: "floating" }, { id: "error-log-open", label: "errorLogAction" }] },
+      actions: [{ id: "trash-open", label: "trashTitle" }, { id: "rec-sweep-now", label: "recSweepNowAction", gate: "recSweepBroken" }, { id: "settings-export", label: "settingsExportAction" }, { id: "settings-import", label: "settingsImportAction" }, { id: "ocr-index-backfill", label: "ocrIndexBackfillAction", gate: "ocrIndex" }, { id: "float-recall", label: "floatRecallAction", gate: "floating" }, { id: "error-log-open", label: "errorLogAction" }] },
     // The only new network surface in the app, off by default.
     // A link can only open or copy an entry; the receiver can do everything
     // the command line can, gated by its own password and network switch.
@@ -10340,8 +10340,6 @@ async function maybeDupImportToast() {
     if (groups.length) toast(t("dupImportToast").replace("{n}", String(groups.length)));
   } catch (_) {}
 }
-EXPERT_ACTIONS["dupes-open"] = openDupes;
-
 // The save-time cousin of maybeDupImportToast above: runs after EVERY save
 // (create or edit, called with no await from saveModal), never holds up
 // anything, and never asks a question -- ignoring the toast loses nothing.
@@ -20009,7 +20007,6 @@ function bind() {
   $("reset-settings").addEventListener("click", resetSettings);
   $("delete-data").addEventListener("click", deleteData);
   $("settings-backup-btn").addEventListener("click", openBackups);
-  $("settings-dupes-btn").addEventListener("click", openDupes);
   $("library-dupes").addEventListener("click", openDupes);
   $("backup-close").addEventListener("click", closeBackups);
   $("backup-modal").addEventListener("pointerdown", (e) => {
