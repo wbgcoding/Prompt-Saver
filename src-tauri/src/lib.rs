@@ -21115,6 +21115,14 @@ mod keylog {
         400
     }
 
+    // A hard ceiling on how many events one sidecar part can hold. Without
+    // it an unusually long recording (or a stuck key repeat flooding downs)
+    // grows `sidecar.events` without bound for as long as the capture runs.
+    // Reaching it stops adding events for the rest of this part and leaves
+    // one gap in their place instead, so the overlay still shows something
+    // happened here rather than silently truncating with no visible sign.
+    const EVENTS_CAP: usize = 200_000;
+
     // Pure state machine turning a raw (vk, scan, down, t_ms, blocked-at-
     // that-instant) stream into the stored sidecar shape. Deliberately free
     // of any Windows API so it is directly unit-testable without a real
@@ -21149,7 +21157,12 @@ mod keylog {
                 let down_accepted = self.open_downs.remove(&(vk, scan)).unwrap_or(false);
                 blocked || !down_accepted
             };
-            if final_blocked {
+            // Once the event cap is reached, treat every further key the
+            // same as a blocked one: extend the open gap (or open one)
+            // rather than push another event, so `sidecar.events` never
+            // grows past EVENTS_CAP no matter how long the part runs.
+            let at_cap = self.sidecar.events.len() >= EVENTS_CAP;
+            if final_blocked || at_cap {
                 if self.in_gap {
                     if let Some(last) = self.sidecar.gaps.last_mut() {
                         last.end_ms = t_ms;
@@ -22754,6 +22767,25 @@ mod keylog {
                 vec![KeyEvent { vk: 0x41, down: true, t_ms: 0 }, KeyEvent { vk: 0x41, down: false, t_ms: 120 }]
             );
             assert!(rec.sidecar.gaps.is_empty());
+        }
+
+        #[test]
+        fn events_stop_growing_past_the_cap_and_leave_a_gap_instead() {
+            let mut rec = Recorder::default();
+            for i in 0..(EVENTS_CAP / 2) {
+                let t = (i * 2) as u64;
+                rec.record(0x41, 0, true, t, false);
+                rec.record(0x41, 0, false, t + 1, false);
+            }
+            assert_eq!(rec.sidecar.events.len(), EVENTS_CAP, "must reach the cap exactly, not exceed it");
+            // One more key, past the cap: no new event, and it opens (or
+            // extends) a gap instead of growing the vector further.
+            rec.record(0x43, 0, true, EVENTS_CAP as u64, false);
+            assert_eq!(rec.sidecar.events.len(), EVENTS_CAP, "an event past the cap must never be stored");
+            assert_eq!(rec.sidecar.gaps.len(), 1, "the overlay must show a gap where events stopped, not silent truncation");
+            rec.record(0x43, 0, false, EVENTS_CAP as u64 + 10, false);
+            assert_eq!(rec.sidecar.events.len(), EVENTS_CAP);
+            assert_eq!(rec.sidecar.gaps.len(), 1, "further capped keys extend the same gap rather than opening new ones");
         }
 
         #[test]
