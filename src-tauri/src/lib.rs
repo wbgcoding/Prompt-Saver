@@ -29327,13 +29327,12 @@ async fn pick_export_folder(app: AppHandle, win: tauri::Window) -> Option<String
     let result = file_dialog_for(&app, win.label()).pick_folder();
     let _ = win.set_focus();
     if let Some(dir) = &result {
+        // remember_export_dest_dir is what actually authorizes exporting into
+        // this folder right away (export_dest_dir_is_authorized checks it
+        // directly, not a purpose-bound grant); the grant below is the
+        // separate, one-time authority set_video_export_dir needs if the
+        // caller goes on to save this folder as the standing preference.
         remember_export_dest_dir(dir);
-        // This one dialog result is legitimate for either downstream use it
-        // actually has: exporting into it right now (purpose "export") or
-        // saving it as the standing videoExportDir preference through
-        // set_video_export_dir (purpose "videoExport") -- both grants are
-        // left so whichever call follows can spend the matching one.
-        grant_picked_dir(dir, "export");
         grant_picked_dir(dir, "videoExport");
     }
     result.map(|p| p.to_string_lossy().to_string())
