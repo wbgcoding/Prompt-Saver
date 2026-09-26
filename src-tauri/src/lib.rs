@@ -21148,10 +21148,30 @@ mod keylog {
         open_downs: std::collections::HashMap<(u32, u32), bool>,
     }
 
+    // A defensive ceiling on `open_downs`. Ordinary typing never holds more
+    // than a handful of keys at once, so this is not a normal-use limit --
+    // it exists only so a flood of distinct (vk, scan) pairs (a malicious
+    // or malfunctioning injector, say) cannot grow the map without bound
+    // for the rest of the capture.
+    const OPEN_DOWNS_CAP: usize = 4_096;
+
     impl Recorder {
         fn record(&mut self, vk: u32, scan: u32, down: bool, t_ms: u64, blocked: bool) {
             let final_blocked = if down {
-                self.open_downs.insert((vk, scan), !blocked);
+                if blocked {
+                    // A blocked down never proves anything a later up could
+                    // rely on -- remove any stale entry instead of storing
+                    // one, so a flood of blocked (e.g. injected) downs never
+                    // grows the map at all. A missing entry already reads
+                    // back as tainted (see `open_downs`'s own doc), so this
+                    // changes nothing about how the eventual up resolves.
+                    self.open_downs.remove(&(vk, scan));
+                } else {
+                    self.open_downs.insert((vk, scan), true);
+                    if self.open_downs.len() > OPEN_DOWNS_CAP {
+                        self.open_downs.clear();
+                    }
+                }
                 blocked
             } else {
                 let down_accepted = self.open_downs.remove(&(vk, scan)).unwrap_or(false);
@@ -22767,6 +22787,38 @@ mod keylog {
                 vec![KeyEvent { vk: 0x41, down: true, t_ms: 0 }, KeyEvent { vk: 0x41, down: false, t_ms: 120 }]
             );
             assert!(rec.sidecar.gaps.is_empty());
+        }
+
+        #[test]
+        fn a_blocked_down_never_grows_open_downs() {
+            let mut rec = Recorder::default();
+            for scan in 0..(OPEN_DOWNS_CAP as u32 * 2) {
+                // Every one of these is a distinct (vk, scan) pair and every
+                // one is blocked (an injected flood, say) -- before this
+                // fix each one still inserted `false` into open_downs,
+                // growing it by one per blocked key with nothing ever
+                // removing the entry (no up ever follows a blocked down in
+                // this scenario). Now a blocked down removes instead of
+                // inserting, so the map must stay empty throughout.
+                rec.record(0x41, scan, true, scan as u64, true);
+            }
+            assert_eq!(rec.open_downs.len(), 0, "a blocked down must never be stored in open_downs");
+        }
+
+        #[test]
+        fn open_downs_past_its_cap_is_cleared_rather_than_growing_further() {
+            let mut rec = Recorder::default();
+            for scan in 0..(OPEN_DOWNS_CAP as u32) {
+                // Real, accepted downs (not blocked) for distinct keys, none
+                // followed by an up -- the only way open_downs actually
+                // grows. Stays right at the cap.
+                rec.record(0x41, scan, true, scan as u64, false);
+            }
+            assert_eq!(rec.open_downs.len(), OPEN_DOWNS_CAP);
+            // One more accepted down past the cap: defensively cleared
+            // rather than left to grow past it.
+            rec.record(0x41, OPEN_DOWNS_CAP as u32, true, OPEN_DOWNS_CAP as u64, false);
+            assert_eq!(rec.open_downs.len(), 0, "open_downs must be cleared once it grows past the defensive cap");
         }
 
         #[test]
