@@ -1256,6 +1256,17 @@ the video editor and the introduction tour ship on).
 - The recording canvas size limit and capture mode are now range-checked and
   restricted to known values in the app itself, not only in the expert menu,
   so an imported settings file cannot push either past what the menu allows.
+- Video export and the recordings-folder tools (cleanup, discard, restore) now
+  check every destination and folder argument against one the app itself
+  resolved (a save dialog it ran, the configured recording folder, or the
+  source file's own folder), instead of trusting that argument on its own.
+- The crash log's folder-name scrubbing now handles a folder name that
+  contains spaces and no longer skips the rest of an older log file over one
+  broken byte in a single line. The error log's per-entry origin label is now
+  restricted to a fixed, known set instead of accepting any text.
+- Corrected the help text's count of the app's own network activity: it now
+  also names the update download itself, the GitHub link from the logo or
+  version label, and the Windows language-pack install.
 
 ### Removed
 

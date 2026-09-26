@@ -887,15 +887,20 @@ error.
 
 ### Updates & security
 
-On by default, and, together with a first-run download of the Microsoft
-WebView2 installer if that runtime is missing, one of the only two kinds of
-network traffic the app makes on its own. A downloaded update is verified
-against a published checksum before it runs; a missing or mismatching checksum
-blocks the install instead of running an unverified file. The third and last
-kind is ffmpeg, used for video export/conversion: an installed build ships it
-and never touches the network for it, while a portable build offers a one-time
+On by default, and one of a short, fixed list of things that ever reach the
+network on their own: the update check itself, a first-run download of the
+Microsoft WebView2 installer if that runtime is missing, and the update
+download that follows once you choose to install one. A downloaded update is
+verified against a published checksum before it runs; a missing or
+mismatching checksum blocks the install instead of running an unverified
+file. Video export/conversion needs ffmpeg: an installed build ships it and
+never touches the network for it, while a portable build offers a one-time
 download only when a video feature actually needs it and only with your
-explicit consent, never automatically, never in the background.
+explicit consent, never automatically, never in the background. Two more
+things on that same short list are not update-related at all: opening the
+app's GitHub page from the logo or the version label hands the address to
+your default browser, and installing a text-recognition or dictation
+language pack (see below) has Windows itself fetch that pack online.
 
 A small "what's new" notice appears once after an update, listing what
 changed since the version you last saw; its list ships with the app, so
@@ -1550,10 +1555,20 @@ ist die vollständige Referenz: jeder Befehl mit seinen Argumenten und der Form
 seiner JSON-Antwort, die Fehlercodes, das Link-Schema und durchgerechnete
 Beispiele, nichts davon muss durch Ausprobieren herausgefunden werden.
 
-**Updates & Sicherheit**: standardmäßig an, einzige eigene
-Netzwerkaktivität außer einem einmaligen WebView2-Installer-Download, falls
-die Laufzeit fehlt. Ein heruntergeladenes Update wird vor der Installation
-gegen eine veröffentlichte Prüfsumme geprüft.
+**Updates & Sicherheit**: standardmäßig an, und eines von wenigen Dingen, die
+überhaupt von sich aus ins Netz gehen: die Update-Prüfung selbst, ein
+einmaliger WebView2-Installer-Download, falls die Laufzeit fehlt, und der
+eigentliche Update-Download, sobald eine gefundene Version installiert wird.
+Ein heruntergeladenes Update wird vor der Installation gegen eine
+veröffentlichte Prüfsumme geprüft; fehlt sie oder passt sie nicht, wird die
+Installation abgebrochen statt eine ungeprüfte Datei auszuführen. Für
+Videoexport/-umwandlung wird ffmpeg gebraucht (siehe oben); eine installierte
+Version bringt es bereits mit, eine portable bietet nur bei Bedarf und nur
+mit Zustimmung einen einmaligen Download an. Zwei weitere Dinge auf dieser
+kurzen Liste haben mit Updates nichts zu tun: Ein Klick auf das Logo oder die
+Versionsanzeige öffnet die GitHub-Seite des Projekts im Standardbrowser, und
+die Installation eines Sprachpakets für Texterkennung oder Diktat (siehe
+unten) lässt Windows selbst dieses Paket herunterladen.
 
 **Was ist neu**, eine kleine Meldung nach einem Update zeigt, was sich seit
 der zuletzt gesehenen Version geändert hat; die Liste liegt bereits im
