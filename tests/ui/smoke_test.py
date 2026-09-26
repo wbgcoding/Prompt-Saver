@@ -3234,6 +3234,73 @@ PROBE = """
         const remoteSwBack = remoteFlagRowBack && remoteFlagRowBack.querySelector('input.switch');
         if (remoteSwBack && remoteSwBack.checked) { remoteSwBack.click(); await sleep(200); }
       }
+      // 512: the dark halo behind white text is a live setting on the blue
+      // sample tile (p0, always white text under the shipped threshold) -
+      // default on at the current look, switch off clears it, a lower
+      // strength lightens it.
+      const inkShadowOf512 = () => {
+        const t = [...document.querySelectorAll('#grid .tile')].find((e) => (e.dataset.id || '') === 'p0');
+        return t ? t.style.getPropertyValue('--ink-shadow') : null;
+      };
+      const todayHalo512 = '0 0 2px rgba(0, 0, 0, 0.85), 0 1px 3px rgba(0, 0, 0, 0.7)';
+      const startHalo512 = inkShadowOf512();
+      if (startHalo512 === null) {
+        out.errors.push('512: could not find the blue sample tile (p0) to check the ink halo');
+      } else if (startHalo512 !== todayHalo512) {
+        out.errors.push('512: the default ink halo does not match the shipped look, got ' + startHalo512);
+      } else {
+        search514.value = 'Dark shadow behind white text';
+        search514.dispatchEvent(new Event('input'));
+        await sleep(200);
+        const findHaloSw512 = () => {
+          const row = findFlagRow('Dark shadow behind white text');
+          return row && row.querySelector('input.switch');
+        };
+        if (!findHaloSw512()) {
+          out.errors.push('512: could not find the ink halo switch');
+        } else {
+          // inkHalo gates the strength row, so toggling it re-renders the
+          // search results -- re-find the switch after every click instead
+          // of holding onto a row the re-render just replaced.
+          findHaloSw512().click();
+          await sleep(200);
+          if (inkShadowOf512() !== 'none') {
+            out.errors.push('512: switching the ink halo off did not clear the tile shadow, got ' + inkShadowOf512());
+          }
+          const haloSwBack = findHaloSw512();
+          if (!haloSwBack) {
+            out.errors.push('512: the ink halo switch disappeared after switching it off');
+          } else {
+            haloSwBack.click();
+            await sleep(200);
+            if (inkShadowOf512() !== todayHalo512) {
+              out.errors.push('512: switching the ink halo back on did not restore the shipped look, got ' + inkShadowOf512());
+            }
+          }
+          search514.value = 'Shadow strength';
+          search514.dispatchEvent(new Event('input'));
+          await sleep(200);
+          const strengthRow512 = document.querySelector('#expert-flags [data-setting-row="inkHaloStrength"]');
+          const strengthSlider512 = strengthRow512 && strengthRow512.querySelector('input[type=range]');
+          if (!strengthSlider512) {
+            out.errors.push('512: could not find the shadow strength slider');
+          } else {
+            strengthSlider512.value = '40';
+            strengthSlider512.dispatchEvent(new Event('input'));
+            strengthSlider512.dispatchEvent(new Event('change'));
+            await sleep(200);
+            const lowerHalo512 = '0 0 2px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.33)';
+            if (inkShadowOf512() !== lowerHalo512) {
+              out.errors.push('512: a lower shadow strength (40) did not lighten the tile halo, got ' + inkShadowOf512());
+            }
+            // Put the strength back to the shipped default for whatever runs after.
+            strengthSlider512.value = '85';
+            strengthSlider512.dispatchEvent(new Event('input'));
+            strengthSlider512.dispatchEvent(new Event('change'));
+            await sleep(150);
+          }
+        }
+      }
       search514.value = '';
       search514.dispatchEvent(new Event('input'));
       await sleep(150);

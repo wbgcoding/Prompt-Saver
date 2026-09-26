@@ -566,7 +566,9 @@ Tile menu, drag-to-reorder, hover lift, type badges, shadows, gradients, rounded
 corners, bold/uppercase/monospace text: behaviour and pure looks, all adjustable.
 Tile, folder, view-tab and message text on a coloured area picks black or white
 automatically; the expert menu can switch this off (always white) or move the
-brightness cutoff where black text starts.
+brightness cutoff where black text starts. White text on a light colour gets a
+dark shadow behind it so it stays readable; the expert menu can switch that
+shadow off or dial its strength.
 
 ### Media
 
@@ -1332,7 +1334,9 @@ System.
 **Kachel-Verhalten & -Aussehen**: Menü, Umsortieren, Hover-Anhebung, Optik. Die
 Schrift auf Kacheln, Ordnern, Ansichts-Reitern und Meldungen wählt automatisch
 Schwarz oder Weiß; im Expertenmenü lässt sich das abschalten (immer Weiß) oder
-die Helligkeitsschwelle für Schwarz verschieben.
+die Helligkeitsschwelle für Schwarz verschieben. Weiße Schrift auf einer hellen
+Farbe bekommt einen dunklen Schatten, damit sie lesbar bleibt; im Expertenmenü
+lässt sich der Schatten abschalten oder seine Stärke einstellen.
 
 **Tooltips**: Verzögerung, Ausblenden, Breite.
 

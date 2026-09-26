@@ -615,10 +615,18 @@ function readableInk(hex) {
 
 // White ink stays white up to the user's threshold (a deliberate look), but
 // on a colour past the contrast crossover it gets a dark halo so it reads.
-const INK_HALO = "0 0 2px rgba(0, 0, 0, 0.85), 0 1px 3px rgba(0, 0, 0, 0.7)";
+// The halo can be switched off (inkHalo) or dialed in strength
+// (inkHaloStrength, percent). At 85 percent, the default, both alphas match
+// the halo's original fixed look; the second value keeps the same ratio
+// between the two shadow layers at any strength.
+const INK_HALO_RATIO = 0.7 / 0.85;
 function inkShadow(hex) {
+  if (!flag("inkHalo")) return "none";
   const l = hexLuminance(hex);
-  return l !== null && l > 0.179 && readableInk(hex) === "#fff" ? INK_HALO : "none";
+  if (l === null || l <= 0.179 || readableInk(hex) !== "#fff") return "none";
+  const a1 = val("inkHaloStrength") / 100;
+  const a2 = Number((a1 * INK_HALO_RATIO).toFixed(2));
+  return `0 0 2px rgba(0, 0, 0, ${Number(a1.toFixed(2))}), 0 1px 3px rgba(0, 0, 0, ${a2})`;
 }
 
 // Optional action: { label, onClick } adds a button and keeps the toast longer.
@@ -1286,6 +1294,7 @@ const FLAG_LABELS = {
   favViewReorder: "flagFavViewReorder",
   tileShadow: "flagTileShadow",
   autoInk: "expAutoInk",
+  inkHalo: "flagInkHalo",
   tilePressScale: "flagTilePressScale",
   tileHoverLift: "flagTileHoverLift",
   copyFlash: "flagCopyFlash",
@@ -1923,6 +1932,8 @@ const EXPERT_VALUES = {
   viewGroupMaxRows: { label: "valViewGroupMaxRows", min: 4, max: 12, step: 1, def: 8, unit: "", gate: "viewGroups" },
   // Relative-luminance cutoff (/100) above which readableInk() picks black text.
   inkThreshold: { label: "valInkThreshold", min: 20, max: 90, step: 5, def: 60, unit: "%", gate: "autoInk" },
+  // How dark the halo behind white text gets; 85 reproduces the shadow's original fixed look.
+  inkHaloStrength: { label: "valInkHaloStrength", min: 10, max: 100, step: 5, def: 85, unit: "%", gate: "inkHalo" },
   // How much of a tab's outer edge counts as "drop here to reorder" rather than
   // "drop here to group" -- a wider tab needs a wider zone to stay easy to aim at.
   viewTabEdgeZone: { label: "valViewTabEdgeZone", min: 15, max: 45, step: 1, def: 33, unit: "%", gate: "multiView" },
@@ -2314,7 +2325,7 @@ const EXPERT_TABS = [
     // and pure looks. One 26-entry blob made everything hard to find.
     { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "dragToView", "tileHover", { key: "tileHoverLift", gate: "tileHover" }, "tilePressScale", "tileHotkeyBadge", "chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "chainQuickStart", gate: "chainPrompts" }, { key: "chainStartAlwaysVisible", gate: "chainQuickStart" }, { key: "chainVarCheck", gate: "chainPrompts" }], values: ["hoverLift", "dragThreshold", "viewDropHoverMs", "tileHotkeyBadgeOpacity"] },
     { title: "expGroupTooltips", flags: ["tilePreview", "iconTooltips", "tooltipDelay", "tooltipTimeout", "tileTimeTip"], values: ["tooltipWidth", "tooltipDelayMs", "tooltipTimeoutMs"] },
-    { title: "expGroupTileLook", flags: ["tileShadow", "typeBadges", "captions", "compactTiles", "tileGradient", "gridLines", "uppercaseTiles", "boldTileNames", "monospaceTiles", "italicTiles", "tileTextShadow", "autoInk"], values: ["tileRadius", "tileBorderWidth", "inkThreshold"] },
+    { title: "expGroupTileLook", flags: ["tileShadow", "typeBadges", "captions", "compactTiles", "tileGradient", "gridLines", "uppercaseTiles", "boldTileNames", "monospaceTiles", "italicTiles", "tileTextShadow", "autoInk", "inkHalo"], values: ["tileRadius", "tileBorderWidth", "inkThreshold", "inkHaloStrength"] },
     { title: "expGroupFavorites", flags: ["favorites", { key: "favViewButton", gate: "favorites" }, { key: "favViewReorder", gate: "favViewButton" }], values: ["favStarSize", "favMaxCols"] },
   ] },
   { title: "expTabAppearance", groups: [
@@ -2596,7 +2607,7 @@ const EXPERT_TIPS = [
   "tooltipDelay", "tooltipTimeout", "iconTooltips",
   "dragToView", "viewDropHoverMs",
   // Appearance
-  "hideScrollbars", "gridLines", "pausedIcons", "autoInk", "inkThreshold",
+  "hideScrollbars", "gridLines", "pausedIcons", "autoInk", "inkThreshold", "inkHalo", "inkHaloStrength",
   "customThemes", "customThemeMax",
   "dragThreshold", "composerMaxH", "popoverPad", "toastWidth", "toastPos", "modalMaxVh",
   // Library / privacy
@@ -2695,7 +2706,7 @@ async function resetOneExpertValue(kind, key, after) {
 // rotatingPrompts/rotateBadge gate a tile's own rotate-badge element -- without
 // a full rebuild here, an already-open grid keeps showing (or hiding) it until some
 // unrelated re-render happens to catch up.
-const TILE_DOM_FLAGS = new Set(["tilePreview", "captions", "promptNotes", "notesInTooltip", "tileTimeTip", "rotatingPrompts", "rotateBadge", "tileHotkeyBadge", "autoInk"]);
+const TILE_DOM_FLAGS = new Set(["tilePreview", "captions", "promptNotes", "notesInTooltip", "tileTimeTip", "rotatingPrompts", "rotateBadge", "tileHotkeyBadge", "autoInk", "inkHalo"]);
 
 function flagRow(key) {
   const row = document.createElement("label");
@@ -2813,12 +2824,12 @@ function flagRow(key) {
 // Almost every expert value only drives a CSS variable, so rebuilding the whole grid
 // for it threw away and recreated every tile: visible as a flash through the
 // translucent settings overlay. Only these actually change tile DOM.
-const GRID_DOM_VALUES = new Set(["previewLen", "gridMax", "notesTipLen", "inkThreshold"]);
+const GRID_DOM_VALUES = new Set(["previewLen", "gridMax", "notesTipLen", "inkThreshold", "inkHaloStrength"]);
 // Re-fit the tile text to the new box size without touching the DOM.
 const refreshTiles = (key) => {
   // A view tab paints its ink as an inline style, so it needs its own
   // re-render -- no CSS var carries the ink rule.
-  if (key === "inkThreshold") renderViews();
+  if (key === "inkThreshold" || key === "inkHaloStrength") renderViews();
   return GRID_DOM_VALUES.has(key) ? renderGrid(true) : (fitAllTiles(), undefined);
 };
 

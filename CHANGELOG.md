@@ -842,6 +842,9 @@ the video editor and the introduction tour ship on).
   so the two are easier to tell apart at a glance instead of only in the help.
 - The duplicate finder also has a shortcut in the settings dialog now, next to
   import and export, so it does not take opening the expert menu to find it.
+- The dark shadow behind white text on a coloured tile, folder or floating
+  button can now be switched off or dialed to a different strength in the
+  expert menu, next to the black/white text switch.
 
 ### Fixed
 

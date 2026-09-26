@@ -4870,6 +4870,9 @@ fn theme_vars_of(settings: &Settings) -> HashMap<String, String> {
 struct InkPrefs {
     auto: bool,
     threshold: f64,
+    halo: bool,
+    #[serde(rename = "haloStrength")]
+    halo_strength: f64,
 }
 
 // Expert-tunable ink rule for text on coloured areas (tiles, folders, view tabs,
@@ -4879,6 +4882,8 @@ fn ink_prefs_of(settings: &Settings) -> InkPrefs {
     InkPrefs {
         auto: settings.ui_flags.get("autoInk") != Some(&false), // on by default
         threshold: settings.ui_values.get("inkThreshold").copied().unwrap_or(60.0).clamp(20.0, 90.0),
+        halo: settings.ui_flags.get("inkHalo") != Some(&false), // on by default
+        halo_strength: settings.ui_values.get("inkHaloStrength").copied().unwrap_or(85.0).clamp(10.0, 100.0),
     }
 }
 
@@ -47787,6 +47792,26 @@ mod tests {
         let mut clamped_lo = Settings::default();
         clamped_lo.ui_values.insert("inkThreshold".into(), 0.0);
         assert_eq!(ink_prefs_of(&clamped_lo).threshold, 20.0);
+    }
+
+    #[test]
+    fn ink_halo_default_on_with_a_clamped_strength() {
+        let s = Settings::default();
+        let prefs = ink_prefs_of(&s);
+        assert!(prefs.halo, "the ink halo ships on");
+        assert_eq!(prefs.halo_strength, 85.0);
+
+        let mut off = Settings::default();
+        off.ui_flags.insert("inkHalo".into(), false);
+        assert!(!ink_prefs_of(&off).halo);
+
+        let mut clamped_hi = Settings::default();
+        clamped_hi.ui_values.insert("inkHaloStrength".into(), 999.0);
+        assert_eq!(ink_prefs_of(&clamped_hi).halo_strength, 100.0);
+
+        let mut clamped_lo = Settings::default();
+        clamped_lo.ui_values.insert("inkHaloStrength".into(), 0.0);
+        assert_eq!(ink_prefs_of(&clamped_lo).halo_strength, 10.0);
     }
 
     #[test]
