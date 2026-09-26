@@ -20396,6 +20396,9 @@ function bind() {
   // back to whats_new_refresh so its GitHub fetch reproduces the same range.
   // null means "current version only" (the About-triggered view).
   let whatsNewSince = null;
+  // Set only when the About dialog opened this modal, so closing it can
+  // return there instead of just closing everything.
+  let whatsNewOpenedFromAbout = false;
   const whatsNewModal = {
     root: $("whats-new-modal"),
     notes: $("whats-new-notes"),
@@ -20411,7 +20414,11 @@ function bind() {
     renderNotes(whatsNewModal.notes, combined || t("noChangelog"), "");
     whatsNewModal.root.classList.remove("hidden");
   };
-  const closeWhatsNewModal = () => whatsNewModal.root.classList.add("hidden");
+  const closeWhatsNewModal = () => {
+    whatsNewModal.root.classList.add("hidden");
+    if (whatsNewOpenedFromAbout) aboutEl.classList.remove("hidden");
+    whatsNewOpenedFromAbout = false;
+  };
   whatsNewModal.close.addEventListener("click", closeWhatsNewModal);
   whatsNewModal.ok.addEventListener("click", closeWhatsNewModal);
   whatsNewModal.root.addEventListener("pointerdown", (e) => {
@@ -20431,6 +20438,8 @@ function bind() {
   $("about-whats-new").addEventListener("click", async () => {
     try {
       const sections = await invoke("whats_new_current");
+      closeAbout();
+      whatsNewOpenedFromAbout = true;
       openWhatsNewModal(sections, null);
     } catch (err) {
       errToast(err);

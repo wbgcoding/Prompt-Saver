@@ -13121,6 +13121,7 @@ window.__WHATS_NEW_FIXTURE__ = {
     if (!aboutBtn) {
       errs.push('404: the About dialog has no whats-new button');
     } else {
+      const aboutModal = document.getElementById('about-modal');
       aboutBtn.click();
       await sleep(150);
       const modal = document.getElementById('whats-new-modal');
@@ -13129,6 +13130,14 @@ window.__WHATS_NEW_FIXTURE__ = {
       if (!modal || modal.classList.contains('hidden')) {
         errs.push('404: the About dialog button did not open the whats-new window');
       } else {
+        if (!aboutModal.classList.contains('hidden')) {
+          errs.push('517: the About dialog stays open behind the whats-new window');
+        }
+        const r = modal.getBoundingClientRect();
+        const topEl = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        if (!modal.contains(topEl)) {
+          errs.push('517: the whats-new window is not the topmost element at its own centre point');
+        }
         if (!text.includes('Current version only')) {
           errs.push('404: the About-triggered window does not show the current version own section');
         }
@@ -13143,6 +13152,12 @@ window.__WHATS_NEW_FIXTURE__ = {
           errs.push('404: the Update-from-GitHub button did not replace the list with the fetched one');
         }
         document.getElementById('whats-new-ok').click();
+        await sleep(150);
+        if (aboutModal.classList.contains('hidden')) {
+          errs.push('517: closing the whats-new window opened from About did not return to About');
+        }
+        document.getElementById('about-close').click();
+        await sleep(150);
       }
     }
   } catch (e) { errs.push('404 probe: ' + e.message); }
