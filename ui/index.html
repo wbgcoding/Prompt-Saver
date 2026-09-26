@@ -971,12 +971,15 @@
   <div id="global-search" class="overlay gs-overlay hidden" role="dialog" aria-modal="true">
     <div class="modal gs-modal">
       <div class="gs-head">
-        <input id="gs-input" class="modal-input" type="text" autocomplete="off" spellcheck="false" data-i18n-ph="globalSearchPh" data-i18n-aria="globalSearchPh" />
-        <button id="gs-close" class="icon-btn" data-i18n-aria="close">
-          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-            <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
-          </svg>
-        </button>
+        <div class="modal-titlebar">
+          <h2 class="modal-title" data-i18n="globalSearchBtn">Search everything</h2>
+          <button id="gs-close" class="icon-btn" data-i18n-aria="close">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
+            </svg>
+          </button>
+        </div>
+        <input id="gs-input" class="modal-input gs-input-full" type="text" autocomplete="off" spellcheck="false" data-i18n-ph="globalSearchPh" data-i18n-aria="globalSearchPh" />
       </div>
       <div id="gs-results" class="gs-results"></div>
       <div id="gs-empty" class="gs-empty hidden"></div>

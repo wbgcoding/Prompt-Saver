@@ -1822,6 +1822,116 @@ PROBE = """
         out.errors.push('clicking outside the search-everything card did not close it');
       }
     }
+    // 528: the search-everything head is a titlebar row (title left, close
+    // right) above a full-width input, and each recent term can be deleted
+    // on its own or all at once, keyboard reachable, focus surviving a delete.
+    {
+      const openGS528 = () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }));
+      openGS528();
+      await sleep(150);
+      const gsInput528 = document.getElementById('gs-input');
+      const head = document.querySelector('#global-search .gs-head');
+      const titlebar = head.querySelector('.modal-titlebar');
+      const title = titlebar.querySelector('.modal-title');
+      const closeBtn = document.getElementById('gs-close');
+      const titleR = title.getBoundingClientRect();
+      const closeR = closeBtn.getBoundingClientRect();
+      const titlebarR = titlebar.getBoundingClientRect();
+      if (!(titleR.left < closeR.left)) {
+        out.errors.push('528: search-everything title is not left of the close button');
+      }
+      // Both sit in the titlebar row, so both must fit inside its own bounds
+      // vertically -- a raw top-to-top compare is thrown off by the title text
+      // and the button icon having different natural heights.
+      if (closeR.top < titlebarR.top - 1 || closeR.bottom > titlebarR.bottom + 1 ||
+          titleR.top < titlebarR.top - 1 || titleR.bottom > titlebarR.bottom + 1) {
+        out.errors.push('528: search-everything title and close button are not on the same row');
+      }
+      const inputR = gsInput528.getBoundingClientRect();
+      if (Math.abs(inputR.width - titlebarR.width) > 1) {
+        out.errors.push('528: search-everything input width does not match the head content width');
+      }
+      if (inputR.top < titlebarR.bottom - 1) {
+        out.errors.push('528: search-everything input does not sit below the title row');
+      }
+      document.getElementById('gs-close').click();
+      await sleep(100);
+
+      // Build a real recent list through the same path a person would (type a
+      // term, press Enter): the stub backend has no memory of its own, so
+      // there is nothing to seed directly from outside the module.
+      const runTerm = async (term) => {
+        openGS528();
+        await sleep(150);
+        const inp = document.getElementById('gs-input');
+        inp.value = term;
+        inp.dispatchEvent(new Event('input', { bubbles: true }));
+        await sleep(200);
+        inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+        await sleep(150);
+      };
+      await runTerm('Prompt 1');
+      await runTerm('Prompt 2');
+      await runTerm('Prompt 3');
+
+      openGS528();
+      await sleep(150);
+      // Earlier steps in this same probe already remembered a term or two of
+      // their own, so the list can hold more than the three just added here --
+      // what matters is that the three newest are on top, in reverse order.
+      let recentRows = [...document.querySelectorAll('#gs-results .gs-recent-row')];
+      const recentNames = recentRows.map((r) => r.querySelector('.gs-row-name').textContent);
+      if (recentNames.slice(0, 3).join(',') !== 'Prompt 3,Prompt 2,Prompt 1') {
+        out.errors.push('528: the recent list top three are not the newest terms in order, got ' + recentNames.join(','));
+      }
+      const clearAllBtn = document.querySelector('#gs-results .gs-clear-all');
+      if (!clearAllBtn) out.errors.push('528: recent list has no clear-all button');
+
+      // Tab reachability: the delete button is a real <button>, so it takes
+      // focus in normal tab order without a special tabindex trick.
+      const firstDel = recentRows[0] && recentRows[0].querySelector('.gs-recent-del');
+      if (!firstDel) {
+        out.errors.push('528: a recent row has no delete button');
+      } else {
+        firstDel.focus();
+        if (document.activeElement !== firstDel) {
+          out.errors.push('528: the recent-term delete button cannot receive keyboard focus');
+        }
+        // Deleting one term shrinks the list by one and keeps focus on a
+        // delete button, so several terms can be cleared with Tab + Enter.
+        const beforeCount = recentRows.length;
+        firstDel.click();
+        await sleep(100);
+        let list528;
+        try { list528 = JSON.parse(SETTINGS.ui_texts.globalSearchRecent || '[]'); } catch (e) { list528 = null; }
+        if (!Array.isArray(list528) || list528.length !== beforeCount - 1) {
+          out.errors.push('528: deleting one recent term did not shrink globalSearchRecent by one');
+        }
+        recentRows = [...document.querySelectorAll('#gs-results .gs-recent-row')];
+        if (recentRows.length !== beforeCount - 1) {
+          out.errors.push('528: deleting one recent term did not update the DOM');
+        }
+        if (!document.activeElement || !document.activeElement.classList.contains('gs-recent-del')) {
+          out.errors.push('528: deleting a recent term did not keep focus on a delete button');
+        }
+      }
+
+      // Clear all empties both the stub setting and the DOM.
+      const clearBtn = document.querySelector('#gs-results .gs-clear-all');
+      if (clearBtn) clearBtn.click();
+      await sleep(100);
+      let list528b;
+      try { list528b = JSON.parse(SETTINGS.ui_texts.globalSearchRecent || '[]'); } catch (e) { list528b = null; }
+      if (!Array.isArray(list528b) || list528b.length !== 0) {
+        out.errors.push('528: clear all did not empty globalSearchRecent in the stub settings');
+      }
+      if (document.querySelectorAll('#gs-results .gs-recent-row').length !== 0) {
+        out.errors.push('528: clear all did not empty the recent list in the DOM');
+      }
+      layoutScan('search everything recent list');
+      document.getElementById('gs-close').click();
+      await sleep(100);
+    }
     // 439: recent-messages window -- reachable from the expert menu, shows an
     // error toast's own text, "copy all" puts it on the clipboard, "clear"
     // empties the list and the empty state says so.

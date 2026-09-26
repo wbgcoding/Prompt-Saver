@@ -2417,10 +2417,26 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
    regardless of whatever else is open behind it. */
 #global-search.overlay { z-index: 85; align-items: flex-start; padding-top: 12vh; }
 .gs-modal { width: min(480px, 92vw); max-height: 70vh; padding: 10px; gap: 6px; }
-.gs-head { display: flex; align-items: center; gap: 8px; }
-.gs-head .modal-input { flex: 1 1 auto; font-size: 16px; }
+.gs-head { display: flex; flex-direction: column; gap: 8px; }
+.gs-head .modal-titlebar { width: 100%; }
+.gs-head .modal-input,
+.gs-input-full { flex: 1 1 auto; width: 100%; font-size: 16px; }
 .gs-results { display: flex; flex-direction: column; gap: 2px; min-height: 0; overflow-y: auto; }
-.gs-group-head { padding: 8px 9px 2px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
+.gs-group-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 9px 2px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
+.gs-clear-all {
+  flex: 0 0 auto;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: none;
+  letter-spacing: normal;
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: 5px;
+}
+.gs-clear-all:hover,
+.gs-clear-all:focus-visible { color: var(--danger); background: var(--surface-hover, var(--border)); }
 .gs-row {
   display: flex;
   align-items: baseline;
@@ -2436,6 +2452,15 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .gs-row-sub { flex: 1 1 auto; min-width: 0; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gs-more-row { color: var(--muted); font-size: 12px; justify-content: center; }
 .gs-empty { padding: 14px 9px; font-size: 13px; color: var(--muted); text-align: center; }
+.gs-recent-row { align-items: center; }
+.gs-recent-row .gs-row-name { flex: 1 1 auto; }
+.gs-recent-del {
+  flex: 0 0 auto;
+  align-self: center;
+  opacity: 0;
+}
+.gs-recent-row:hover .gs-recent-del,
+.gs-recent-del:focus-visible { opacity: 1; }
 .noflag-globalSearch #global-search-btn { display: none; }
 /* The header has no spare width left at the app's own minimum size -- below
    this, the icon drops and Ctrl+K stays the only way in, same trade-off the
