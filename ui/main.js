@@ -16008,7 +16008,7 @@ const IMPORT_FOLDER_REASON_KEY = {
 async function runImportFolder() {
   let preview;
   try {
-    preview = await withDialog(() => invoke("preview_import_folder"));
+    preview = await withDialog(() => invoke("preview_import_folder", { title: t("importFolderTitle") }));
   } catch (err) {
     if (String(err) !== "canceled") toast(t("importFolderFailed"));
     return;

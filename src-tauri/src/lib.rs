@@ -30871,8 +30871,8 @@ fn scan_import_folder(base: &Path, max_depth: u32, max_files: usize) -> (Vec<Fol
 // settings. Never touches the store -- what actually gets imported is decided
 // later, by which checkboxes import_folder_files is called with.
 #[tauri::command]
-async fn preview_import_folder(app: AppHandle, state: State<'_, Db>) -> Result<FolderImportPreview, String> {
-    let Some(dir) = file_dialog(&app).pick_folder() else {
+async fn preview_import_folder(app: AppHandle, state: State<'_, Db>, title: String) -> Result<FolderImportPreview, String> {
+    let Some(dir) = file_dialog(&app).set_title(&title).pick_folder() else {
         return Err("canceled".to_string());
     };
     let (max_depth, max_files) = {

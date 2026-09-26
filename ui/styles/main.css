@@ -4010,6 +4010,10 @@ body.drag-over::after {
 .export-row { display: flex; flex-wrap: wrap; row-gap: 6px; gap: 8px; }
 .export-row + .export-row { margin-top: 6px; }
 .export-row .ghost-btn { flex: 1 1 88px; }
+/* Its own label never wraps to a second line -- at the narrowest supported
+   width the row above still has room to wrap this button onto its own line
+   instead, unlike letting the text itself break. */
+#import-folder-btn { white-space: nowrap; }
 /* The SAME four columns and gap as .settings-btn-row right below it, so the check
    button comes out exactly as wide as Help and the auto-update switch lines up with
    the last button in that row; the bottom of the dialog reads as one block. */

@@ -3994,6 +3994,13 @@ PROBE = """
         if (!modal || modal.classList.contains('hidden')) {
           out.errors.push('the folder import preview did not open');
         } else {
+          // 521: the dialog gets a real title instead of Windows' generic chrome.
+          const folderCalls521 = (window.__SMOKE_ARGS__ || [])
+            .filter(([cmd]) => cmd === 'preview_import_folder');
+          const lastCall521 = folderCalls521[folderCalls521.length - 1];
+          if (!lastCall521 || !lastCall521[1] || !lastCall521[1].title) {
+            out.errors.push('521: preview_import_folder was not called with a title');
+          }
           const rows = [...document.querySelectorAll('#import-folder-list .import-preview-row')];
           if (rows.length !== 3) out.errors.push('the folder import preview lists ' + rows.length + ' rows, expected 3');
           const badRows = rows.filter(r => r.classList.contains('dup'));
@@ -7549,6 +7556,29 @@ PROBE = """
       await click('library-close');
       layoutScan('settings in ' + lang);
       mustReach('settings in ' + lang, '#settings-main button, #settings-main select');
+      // 521: the shortened German label keeps the folder-import button's own
+      // text on one line -- a flex row with align-items stretch equalizes
+      // every button's box height regardless, so the box height alone (the
+      // first thing tried here) cannot tell a wrapped label from a plain one;
+      // only the text's own line count can.
+      if (lang === 'de') {
+        const folderBtn521 = document.getElementById('import-folder-btn');
+        if (!folderBtn521) {
+          out.errors.push('521: could not find the folder-import button in de');
+        } else {
+          const label521 = [...folderBtn521.childNodes].find((n) => n.nodeType === 3 && n.textContent.trim());
+          if (!label521) {
+            out.errors.push('521: the folder-import button has no text label to measure in de');
+          } else {
+            const range521 = document.createRange();
+            range521.selectNodeContents(label521);
+            const tops521 = new Set([...range521.getClientRects()].map((r) => Math.round(r.top)));
+            if (tops521.size > 1) {
+              out.errors.push('521: the folder-import button label wraps to ' + tops521.size + ' lines in de');
+            }
+          }
+        }
+      }
       // 516: the redesigned About dialog in the longest-label languages.
       document.getElementById('about-btn').click();
       await sleep(150);
