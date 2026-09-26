@@ -25789,6 +25789,7 @@ async fn finish_and_continue_recording(
             // recording::stop itself failed -- practically unreachable (it
             // folds every internal failure into encode_error instead), but if
             // it ever does, the old session is already gone either way.
+            hide_rec_outline(&app);
             rearm_hotkeys(&app);
             apply_tray_menu(&app);
             Err(e)
@@ -25798,6 +25799,8 @@ async fn finish_and_continue_recording(
             Ok(payload)
         }
         Ok(ContinueOutcome::StoppedInstead(err)) => {
+            // Nothing is recording any more, so the region outline goes too.
+            hide_rec_outline(&app);
             rearm_hotkeys(&app);
             apply_tray_menu(&app);
             sweep_recordings_and_notify(&app);
@@ -25901,6 +25904,10 @@ fn stop_recording_now(app: &AppHandle) -> Result<RecordingStoppedPayload, String
         }
         s
     };
+    // The outline window (region recordings only, see show_rec_outline) goes
+    // the moment the session is taken, on every end path this function serves
+    // (button, hotkey, auto-stop), even one where recording::stop fails below.
+    hide_rec_outline(app);
     let (path, dropped, encode_error, mic_wav_path, canvas_note, crop_rect, canvas_size, resize_crop_at_ms) = recording::stop(session)?;
     // Stops the key-overlay hook (if it was running at all) and writes
     // its sidecar next to this recording.
@@ -25928,9 +25935,6 @@ fn stop_recording_now(app: &AppHandle) -> Result<RecordingStoppedPayload, String
         resize_crop_at_ms,
         parts,
     };
-    // The outline window (region recordings only, see show_rec_outline) goes
-    // with it on every end path this function serves (button, hotkey, auto-stop).
-    hide_rec_outline(app);
     // The stop/pause hotkeys give up their combination the instant nothing
     // is recording, on every end path this function serves (button, hotkey,
     // auto-stop). Same for the tray's two extra rows.
@@ -25973,6 +25977,9 @@ async fn cancel_recording(app: AppHandle, rstate: State<'_, RecordingState>) -> 
         }
         s
     };
+    // Same as a normal stop: the outline window (if this was a region
+    // recording) never survives a cancel, even one whose cleanup fails below.
+    hide_rec_outline(&app);
     tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
         recording::cancel(session)?;
         // A cancelled take never gets a key-overlay sidecar either.
@@ -25997,9 +26004,6 @@ async fn cancel_recording(app: AppHandle, rstate: State<'_, RecordingState>) -> 
     })
     .await
     .map_err(|e| e.to_string())??;
-    // Same as a normal stop: the outline window (if this was a region
-    // recording) never survives a cancel either.
-    hide_rec_outline(&app);
     // Give the stop/pause combination back up now that nothing is recording,
     // and drop the tray's two extra rows.
     rearm_hotkeys(&app);
