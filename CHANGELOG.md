@@ -1181,6 +1181,13 @@ the video editor and the introduction tour ship on).
 - **A tile's menu and select button still popped up on hover while a chain
   was running**, competing with the order badge in the same corner. They now
   stay hidden on every tile until the chain ends, unless multi-select is on.
+- **The screenshot, recording and video-export folders could be redirected by
+  a settings import or a restored backup**, and the video editor's export
+  destination and recording cleanup could be pointed at a folder never
+  actually chosen through their own dialogs. These folders are now changed
+  only through their dedicated pickers, an import or restore can no longer
+  touch them, and cleanup only ever counts or removes this app's own
+  recordings.
 
 ### Security
 

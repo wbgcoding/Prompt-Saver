@@ -26262,7 +26262,16 @@ fn path_matches_configured_dir(candidate: &Path, configured: &Path) -> bool {
 const VIDEO_FOLDER_EXTS: [&str; 8] = ["mp4", "webm", "gif", "avi", "mov", "mkv", "webp", "apng"];
 
 fn is_video_folder_file(path: &std::path::Path) -> bool {
-    path.is_file()
+    // The extension check alone still leaves every OTHER file with a matching
+    // extension in a shared folder (a real video the user already had there,
+    // or one from some other app) open to being counted and swept up by the
+    // automatic cleanup below -- discard_recording_file_in already treats its
+    // "rec-" stem as the actual proof a file is this app's own recording;
+    // stats/cleanup/the discard trash listing now require the same proof,
+    // rather than trusting the extension on its own.
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    name.starts_with("rec-")
+        && path.is_file()
         && path
             .extension()
             .map(|e| VIDEO_FOLDER_EXTS.contains(&e.to_string_lossy().to_lowercase().as_str()))
@@ -37478,14 +37487,29 @@ mod tests {
     fn video_folder_stats_counts_only_known_video_extensions() {
         let dir = std::env::temp_dir().join(format!("ps-video-folder-stats-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
-        fs::write(dir.join("a.mp4"), b"1234").unwrap();
-        fs::write(dir.join("b.webm"), b"12").unwrap();
-        fs::write(dir.join("c.gif"), b"123").unwrap();
+        fs::write(dir.join("rec-a.mp4"), b"1234").unwrap();
+        fs::write(dir.join("rec-b.webm"), b"12").unwrap();
+        fs::write(dir.join("rec-c.gif"), b"123").unwrap();
         fs::write(dir.join("notes.txt"), b"ignored, wrong extension").unwrap();
         fs::create_dir_all(dir.join("MP4")).unwrap(); // a directory named like an extension is not a file
         let (count, bytes) = video_folder_stats_impl(&dir.to_string_lossy(), &dir);
         assert_eq!(count, 3, "only the three video files must be counted, not the txt or the subfolder");
         assert_eq!(bytes, 4 + 2 + 3);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // Finding 3 (security pass 348): the extension check alone let this count
+    // and clean up any matching file in a shared folder, not only the app's own
+    // recordings -- the same "rec-" naming proof discard already requires.
+    #[test]
+    fn video_folder_stats_ignores_a_video_file_without_the_rec_prefix() {
+        let dir = std::env::temp_dir().join(format!("ps-video-folder-noprefix-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("rec-mine.mp4"), b"1234").unwrap();
+        fs::write(dir.join("someone-elses-video.mp4"), b"999999").unwrap();
+        let (count, bytes) = video_folder_stats_impl(&dir.to_string_lossy(), &dir);
+        assert_eq!(count, 1, "only the app's own rec-prefixed file must be counted");
+        assert_eq!(bytes, 4);
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -37835,8 +37859,8 @@ mod tests {
     fn video_folder_cleanup_preview_and_cleanup_agree_and_only_touch_stale_video_files() {
         let dir = std::env::temp_dir().join(format!("ps-video-folder-cleanup-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
-        let stale = dir.join("old-recording.mp4");
-        let fresh = dir.join("new-recording.mp4");
+        let stale = dir.join("rec-old-recording.mp4");
+        let fresh = dir.join("rec-new-recording.mp4");
         let unrelated = dir.join("readme.txt");
         fs::write(&stale, b"old").unwrap();
         fs::write(&fresh, b"new").unwrap();
@@ -37847,7 +37871,7 @@ mod tests {
         let dir_s = dir.to_string_lossy().to_string();
         let preview = video_folder_cleanup_preview_impl(&dir_s, 30, &dir);
         assert_eq!(preview.len(), 1, "only the stale video file is older than 30 days");
-        assert_eq!(preview[0].name, "old-recording.mp4");
+        assert_eq!(preview[0].name, "rec-old-recording.mp4");
         assert_eq!(preview[0].size, 3);
 
         let deleted = video_folder_cleanup_impl(&dir_s, 30, &dir);
@@ -37855,6 +37879,25 @@ mod tests {
         assert!(!stale.exists(), "the stale video must be gone");
         assert!(fresh.exists(), "a fresh video must survive");
         assert!(unrelated.exists(), "a non-video file must never be deleted, however old");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // Finding 3 (security pass 348): a stale file with a matching extension but
+    // no "rec-" stem (some other app's video the user's chosen folder already
+    // had in it) must survive the cleanup that only ever meant to sweep this
+    // app's own recordings.
+    #[test]
+    fn video_folder_cleanup_never_touches_a_stale_file_without_the_rec_prefix() {
+        let dir = std::env::temp_dir().join(format!("ps-video-folder-cleanup-noprefix-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let foreign = dir.join("someone-elses-video.mp4");
+        fs::write(&foreign, b"not ours").unwrap();
+        backdate(&foreign, Duration::from_secs(40 * 24 * 3600));
+
+        let dir_s = dir.to_string_lossy().to_string();
+        assert!(video_folder_cleanup_preview_impl(&dir_s, 30, &dir).is_empty(), "a non-rec- file must never be previewed for cleanup");
+        assert_eq!(video_folder_cleanup_impl(&dir_s, 30, &dir), 0, "a non-rec- file must never be deleted by cleanup");
+        assert!(foreign.is_file(), "the foreign video must survive untouched");
         let _ = fs::remove_dir_all(&dir);
     }
 
