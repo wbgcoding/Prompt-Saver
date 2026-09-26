@@ -1221,7 +1221,11 @@ function renderOverlayLive(vb) {
   for (const op of opsOf("overlay")) {
     const prev = VE.liveEls.get(op.id);
     if (now < op.startMs || now > op.endMs) {
-      if (prev) prev.hidden = true;
+      if (prev) {
+        prev.hidden = true;
+        // A hidden inserted video would otherwise keep decoding off screen.
+        if (prev instanceof HTMLVideoElement && !prev.paused) prev.pause();
+      }
       continue;
     }
     const el = buildLiveOverlayEl(op, box, prev || null);
@@ -1237,7 +1241,12 @@ function renderOverlayLive(vb) {
   // keep their node alive in the map or the layer.
   const liveIds = new Set(opsOf("overlay").map((o) => o.id));
   for (const [id, el] of [...VE.liveEls]) {
-    if (!liveIds.has(id)) { el.remove(); VE.liveEls.delete(id); }
+    if (!liveIds.has(id)) {
+      // A detached <video> keeps playing until it is collected, so stop it first.
+      if (el instanceof HTMLVideoElement) el.pause();
+      el.remove();
+      VE.liveEls.delete(id);
+    }
   }
 }
 
