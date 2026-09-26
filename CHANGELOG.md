@@ -1220,6 +1220,10 @@ the video editor and the introduction tour ship on).
   only through their dedicated pickers, an import or restore can no longer
   touch them, and cleanup only ever counts or removes this app's own
   recordings.
+- **Search everything had no title and its recent searches could not be
+  removed.** The window now shows a proper title bar above the search field,
+  and each remembered search can be deleted on its own or cleared all at
+  once.
 
 ### Security
 

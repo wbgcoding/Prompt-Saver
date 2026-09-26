@@ -15741,11 +15741,22 @@ const GS_GROUPS = [
 // `groupKey` (e.g. "prompts", "settings") stamps a stable, language-independent
 // marker on the row -- tests/ui/smoke_test.py finds a specific source group by
 // this attribute instead of the translated heading text.
-function gsGroupHead(headerKey, groupKey) {
+function gsGroupHead(headerKey, groupKey, clearAll) {
   const head = document.createElement("div");
   head.className = "gs-group-head";
-  head.textContent = t(headerKey);
+  const label = document.createElement("span");
+  label.textContent = t(headerKey);
+  head.appendChild(label);
   if (groupKey) head.dataset.group = groupKey;
+  if (clearAll) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "gs-clear-all";
+    btn.textContent = t("gsRecentClearAll");
+    btn.addEventListener("mousedown", (e) => e.preventDefault());
+    btn.addEventListener("click", (e) => { e.stopPropagation(); gsClearRecent(); });
+    head.appendChild(btn);
+  }
   return head;
 }
 
@@ -15768,20 +15779,71 @@ function gsRow(label, sub, color, onActivate) {
   return row;
 }
 
+// A recent-search row: same look as gsRow plus a per-term delete button, since
+// the recent list (unlike a live search hit) is something the user may want
+// to prune one term at a time.
+function gsRecentRow(term) {
+  const row = document.createElement("div");
+  row.className = "gs-row gs-recent-row";
+  const name = document.createElement("span");
+  name.className = "gs-row-name";
+  name.textContent = term;
+  row.appendChild(name);
+  const del = document.createElement("button");
+  del.type = "button";
+  del.className = "search-suggest-del gs-recent-del";
+  del.textContent = "×";
+  del.title = t("delete");
+  del.setAttribute("aria-label", t("delete"));
+  del.addEventListener("mousedown", (e) => e.preventDefault());
+  del.addEventListener("click", (e) => {
+    e.stopPropagation();
+    gsForgetRecent(term);
+  });
+  row.appendChild(del);
+  row.addEventListener("mousedown", (e) => e.preventDefault());
+  row.addEventListener("click", () => { $("gs-input").value = term; gsQuery = term; gsRender(); });
+  return row;
+}
+
+function gsRecentList() {
+  let list;
+  try { list = JSON.parse(settings.ui_texts?.globalSearchRecent || "[]"); } catch { list = []; }
+  return Array.isArray(list) ? list : [];
+}
+
+function gsSaveRecent(list) {
+  const value = JSON.stringify(list);
+  settings.ui_texts = { ...(settings.ui_texts || {}), globalSearchRecent: value };
+  invoke("set_ui_text", { key: "globalSearchRecent", value }).catch(() => {});
+}
+
+// Deleting a term keeps keyboard focus on a delete button at (or near) the
+// same position so repeated Tab + Enter can clear several terms in a row.
+function gsForgetRecent(term) {
+  const list = gsRecentList();
+  const idx = list.findIndex((x) => x.toLowerCase() === term.toLowerCase());
+  gsSaveRecent(list.filter((x) => x.toLowerCase() !== term.toLowerCase()));
+  gsRender();
+  const dels = $("gs-results").querySelectorAll(".gs-recent-del");
+  if (dels.length) dels[Math.min(idx, dels.length - 1)].focus();
+  else $("gs-input").focus();
+}
+
+function gsClearRecent() {
+  gsSaveRecent([]);
+  gsRender();
+  $("gs-input").focus();
+}
+
 // Remembers a query for the "recent searches" list shown at rest -- capped at
 // five, newest first, deduped case-insensitively.
 function gsRemember(term) {
   term = term.trim();
   if (term.length < 2) return;
-  let list;
-  try { list = JSON.parse(settings.ui_texts?.globalSearchRecent || "[]"); } catch { list = []; }
-  if (!Array.isArray(list)) list = [];
-  list = list.filter((x) => x.toLowerCase() !== term.toLowerCase());
+  let list = gsRecentList().filter((x) => x.toLowerCase() !== term.toLowerCase());
   list.unshift(term);
-  list = list.slice(0, 5);
-  const value = JSON.stringify(list);
-  settings.ui_texts = { ...(settings.ui_texts || {}), globalSearchRecent: value };
-  invoke("set_ui_text", { key: "globalSearchRecent", value }).catch(() => {});
+  gsSaveRecent(list.slice(0, 5));
 }
 
 function gsSetActive(i) {
@@ -15806,9 +15868,7 @@ function gsRender() {
   gsFlatRows = [];
   const q = gsQuery.trim();
   if (q.length < 2) {
-    let list;
-    try { list = JSON.parse(settings.ui_texts?.globalSearchRecent || "[]"); } catch { list = []; }
-    if (!Array.isArray(list)) list = [];
+    const list = gsRecentList();
     if (!list.length) {
       empty.textContent = t("globalSearchHint");
       empty.classList.remove("hidden");
@@ -15816,10 +15876,10 @@ function gsRender() {
       return;
     }
     empty.classList.add("hidden");
-    box.appendChild(gsGroupHead("globalSearchRecentLabel", "recent"));
+    box.appendChild(gsGroupHead("globalSearchRecentLabel", "recent", true));
     for (const term of list) {
       const run = () => { $("gs-input").value = term; gsQuery = term; gsRender(); };
-      const row = gsRow(term, "", "", run);
+      const row = gsRecentRow(term);
       box.appendChild(row);
       gsFlatRows.push({ el: row, run });
     }
