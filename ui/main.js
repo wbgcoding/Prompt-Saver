@@ -740,6 +740,7 @@ const ERROR_MSG_KEYS = {
   "ffmpeg-missing": "recFfmpegMissingHint",
   "demo-mode-multiple-instances": "demoModeMultipleInstances",
   "dir-not-picked": "syncDirNotApplied",
+  "recording-busy": "recBusy",
 };
 function errToast(err) {
   const s = String(err);
@@ -12383,7 +12384,13 @@ function openShortcutsModal(scope) {
 }
 function closeShortcutsModal() {
   $("shortcuts-modal").classList.add("hidden");
-  shortcutsModalOpener?.focus?.();
+  // Mirrors the video editor's own shortcuts overlay: the opener button is
+  // usually still there, but it can be gone by the time this runs (a right
+  // click that removed its own row, for example) -- focus falls back to the
+  // body rather than calling focus on a detached element or leaving the page
+  // with no focus at all.
+  const target = (shortcutsModalOpener?.isConnected && shortcutsModalOpener) || document.body;
+  if (typeof target.focus === "function") target.focus();
   shortcutsModalOpener = null;
 }
 
@@ -16515,7 +16522,26 @@ function bind() {
   // mode. The backend resolves the click/drag into a window, monitor or region
   // and notifies us with "recorder-target-picked"; a short countdown (0 = none)
   // then the actual capture starts.
-  $("record-btn").addEventListener("click", () => {
+  $("record-btn").addEventListener("click", async () => {
+    const btn = $("record-btn");
+    // A glowing button always meant "start a second recording" before -- the
+    // click reached open_recorder regardless, which the backend now refuses
+    // with recording-busy, but the button itself should just stop the one
+    // already running instead of making the user find the control bar first.
+    // recording_status confirms a session is actually still live before
+    // acting, so a stale glow (a missed event) falls through to open_recorder
+    // like normal rather than trying to stop a recording that is already gone.
+    if (btn.classList.contains("is-recording") || btn.classList.contains("is-paused")) {
+      const status = await invoke("recording_status").catch(() => null);
+      if (status) {
+        // The control bar's own poll notices the session is gone and hides
+        // itself within its next tick (recording_status turning null) --
+        // nothing here has to close it directly.
+        try { await invoke("stop_recording"); } catch (err) { errToast(err); }
+        return;
+      }
+      setRecordBtnState("idle");
+    }
     invoke("open_recorder").catch((err) => errToast(err));
   });
 
@@ -16597,6 +16623,12 @@ function bind() {
     const btn = $("record-btn");
     btn.classList.toggle("is-recording", state === "recording");
     btn.classList.toggle("is-paused", state === "paused");
+    // Idle keeps its own data-i18n-title tooltip (recordTitle); the click now
+    // stops the recording instead of trying to start a second one while
+    // either indicator is glowing, so the tooltip has to say that.
+    const label = state === "idle" ? t(btn.dataset.i18nTitle) : t("recBtnStopTip");
+    btn.title = label;
+    btn.setAttribute("aria-label", label);
   }
   async function syncRecordBtnFromStatus() {
     // Skipped while the window is hidden (minimized to tray) -- the button

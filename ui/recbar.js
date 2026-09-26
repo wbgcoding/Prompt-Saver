@@ -175,6 +175,27 @@ function applyDiskLow(diskLow) {
   diskWarnEl.setAttribute("aria-label", label);
 }
 
+// The window itself is a fixed 320x56 canvas from show_rec_bar; the bar's
+// content now sizes to its own children (recbar.css's width: max-content), so
+// this is what keeps the window big enough to actually show every one of
+// them instead of clipping the last buttons off the right edge. Covers the
+// first paint and every later change (an audio icon or warning appearing,
+// the continue gap showing) through one ResizeObserver rather than a list of
+// events to remember to also call this from.
+const BAR_MARGIN = 8;
+let lastFitW = 0;
+let lastFitH = 0;
+function fitBar() {
+  const rect = bar.getBoundingClientRect();
+  const width = Math.ceil(rect.width) + BAR_MARGIN * 2;
+  const height = Math.ceil(rect.height) + BAR_MARGIN * 2;
+  if (width === lastFitW && height === lastFitH) return;
+  lastFitW = width;
+  lastFitH = height;
+  invoke("fit_rec_bar", { width, height }).catch(() => {});
+}
+new ResizeObserver(fitBar).observe(bar);
+
 let pollTimer = 0;
 async function poll() {
   try {
@@ -205,6 +226,12 @@ async function poll() {
     applyAudio(status);
     applyHotkeyWarn(status.stop_hotkey_ok, status.pause_hotkey_ok);
     applyDiskLow(status.disk_low);
+    // Belt and suspenders alongside the ResizeObserver above: every one of
+    // the applyX calls just above can show or hide an element, and this runs
+    // right after every one of them regardless, on the same 500ms cadence
+    // that already drives the rest of the bar -- fitBar()'s own width/height
+    // check is a no-op when nothing actually changed.
+    fitBar();
   } catch {
     // transient -- next tick self-corrects
   }

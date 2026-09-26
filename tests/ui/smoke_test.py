@@ -2865,6 +2865,27 @@ PROBE = """
         }
       }
     }
+    // 506: a record-btn click while a recording is already running must stop
+    // it instead of trying to open a second one -- recording_status's own
+    // fixture always reports an active recording, so forcing one resync
+    // through the same visibilitychange path the real app uses (rather than
+    // waiting out the real 5-second poll) is enough to reach that state.
+    window.__SMOKE_CALLS__ = [];
+    document.dispatchEvent(new Event('visibilitychange'));
+    await sleep(150);
+    if (!recordBtnEl.classList.contains('is-recording') && !recordBtnEl.classList.contains('is-paused')) {
+      out.errors.push('506: record button never picked up the active-recording state from recording_status');
+    } else {
+      window.__SMOKE_CALLS__ = [];
+      recordBtnEl.click();
+      await sleep(150);
+      if (!window.__SMOKE_CALLS__.includes('stop_recording')) {
+        out.errors.push('506: clicking the record button during an active recording did not call stop_recording');
+      }
+      if (window.__SMOKE_CALLS__.includes('open_recorder')) {
+        out.errors.push('506: clicking the record button during an active recording also called open_recorder');
+      }
+    }
     // P60: an automatic backup toasts the same way a manual one already did —
     // the backend has no other call site to toast from, so it fires this itself.
     window.__FIRE__('backup-done');
@@ -7408,6 +7429,20 @@ PROBE = """
                 out.errors.push('screenshot editor: shortcuts overview did not close');
               }
             }
+            // 519: the opener button can be gone by the time the overlay closes
+            // (removed from the page while the overlay was still open) --
+            // closeShortcutsModal must not throw trying to focus it, and focus
+            // must land somewhere still in the document instead of nowhere.
+            shortcutsBtn.click();
+            await sleep(50);
+            shortcutsBtn.remove();
+            let threw = false;
+            try { document.getElementById('shortcuts-modal-close').click(); } catch (e) { threw = true; }
+            await sleep(50);
+            if (threw) out.errors.push('519: closing the shortcuts overview threw with its opener removed from the page');
+            if (!document.activeElement || !document.activeElement.isConnected) {
+              out.errors.push('519: focus was left on a detached element after closing the shortcuts overview');
+            }
           }
         }
         // 179: the overlay's own titlebar (move) and resize grip (resize) -- the
@@ -10222,6 +10257,15 @@ RECBAR_PROBE = """
 (async () => {
   const errs = [];
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  // A small quiet headless frame stops producing rendering frames once
+  // nothing keeps invalidating it, and a ResizeObserver's notifications ride
+  // that same rendering step -- dirtying an unused custom property keeps
+  // frames coming without touching any real geometry (same trick the main
+  // window's own probe wrapper uses for its startup rAF).
+  const heartbeat = setInterval(() => {
+    document.documentElement.style.setProperty('--smoke-tick', String(Date.now()));
+    document.body.getBoundingClientRect();
+  }, 40);
   try {
     await sleep(300);
     const timeEl = document.getElementById('time');
@@ -10233,6 +10277,27 @@ RECBAR_PROBE = """
       for (let i = 0; i < (tries || 40) && !fn(); i++) await sleep(50);
       return fn();
     };
+    // 505: recbar.css now sizes the bar to its own content instead of a fixed
+    // 320x56 window, so stop-btn/cancel-btn must never fall outside the width
+    // fit_rec_bar was actually sent -- checked once both audio icons (always
+    // shown by applyAudio) and the hotkey warning (shown here since the
+    // fixture leaves stop_hotkey_ok/pause_hotkey_ok undefined) have settled,
+    // the widest this harness can reach (the disk warning needs the i18n
+    // module, which never finishes loading here, same limitation the eta
+    // tooltip check above already lives with).
+    const fitCalls = () => (window.__SMOKE_ARGS__ || []).filter((c) => c[0] === 'fit_rec_bar');
+    const hotkeyWarnEl = document.getElementById('hotkey-warn');
+    if (!await until(() => fitCalls().length > 0)) errs.push('fit_rec_bar was never called');
+    else if (!await until(() => !hotkeyWarnEl.classList.contains('hidden'))) errs.push('hotkey warning never showed for the undefined stop/pause hotkey state');
+    else {
+      await sleep(100);
+      const lastFit = fitCalls()[fitCalls().length - 1][1];
+      const barLeft = bar.getBoundingClientRect().left;
+      const stopRight = document.getElementById('stop-btn').getBoundingClientRect().right - barLeft;
+      const cancelRight = document.getElementById('cancel-btn').getBoundingClientRect().right - barLeft;
+      if (stopRight > lastFit.width) errs.push('stop-btn falls outside the fitted width: ' + stopRight + ' > ' + lastFit.width);
+      if (cancelRight > lastFit.width) errs.push('cancel-btn falls outside the fitted width: ' + cancelRight + ' > ' + lastFit.width);
+    }
     // Under the show threshold: the readout should go blank on the next poll.
     window.__REC_STATUS_OVERRIDE__ = { bytes: 50 * 1024 * 1024, show_size: false, size_eta_secs: null };
     if (!await until(() => sizeEl.textContent === '')) errs.push('size stayed visible under the show threshold: ' + sizeEl.textContent);
@@ -10289,6 +10354,8 @@ RECBAR_PROBE = """
     if (!window.__REC_STOPPED__) errs.push('stop button did not call stop_recording');
     if (!window.__REC_BAR_HIDDEN__) errs.push('stop did not hide the bar afterwards');
   } catch (e) { errs.push('probe: ' + e.message); }
+  clearInterval(heartbeat);
+  document.documentElement.style.removeProperty('--smoke-tick');
   const pre = document.createElement('pre');
   pre.id = 'SMOKE';
   pre.textContent = JSON.stringify(errs);

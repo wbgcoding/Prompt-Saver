@@ -2,7 +2,8 @@
    on the Rust side so it can never show up in the recording it controls. */
 
 .rec-bar {
-  display: flex;
+  display: inline-flex;
+  width: max-content;
   align-items: center;
   gap: 10px;
   height: 40px;
@@ -19,6 +20,7 @@
   cursor: grab;
 }
 .rec-bar:active { cursor: grabbing; }
+.rec-bar > * { flex: none; }
 
 .rec-dot {
   width: 10px;
