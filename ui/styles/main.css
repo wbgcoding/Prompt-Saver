@@ -2521,20 +2521,27 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 /* Release notes need a little more width than a plain confirm dialog: their tables
    and headings would otherwise wrap after every other word. */
 #update-modal .modal { width: min(580px, 94vw); }
-/* About dialog: logo, name, version, copyright, all centered like a splash.
-   Its own (smaller than modal-narrow's default) width keeps the box from reading as
-   an oversized card for this little content. */
-.modal.about-box { max-width: 340px; }
-.about-body { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
-.about-logo { width: 48px; height: 48px; }
+/* About dialog: logo, name, version, copyright, all centered like a splash,
+   then a full-width column of ghost link buttons above a single primary
+   Close. Wide enough that the longest locale never wraps a button label. */
+.modal.about-box { max-width: min(460px, 92vw); }
+.about-body { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.about-logo { width: 64px; height: 64px; }
 .about-name { font-size: 16px; font-weight: 700; }
 .about-version { color: var(--muted); font-size: 13px; }
 .about-copy { color: var(--muted); font-size: 12px; }
-/* Project-page and Close differ enough in text length that a left-aligned row
-   reads lopsided; center the pair and give both the same floor width so the gap
-   from each button to its nearest modal edge comes out equal. */
-.about-box .modal-actions { justify-content: center; }
-.about-box .modal-actions > button { flex: 0 1 auto; min-width: 100px; }
+.about-links { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.about-link-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  text-align: left;
+}
+.about-link-btn svg { flex: 0 0 auto; }
+.about-box .modal-actions { justify-content: center; margin-top: 8px; }
+.about-box .modal-actions > button { flex: 1 1 auto; }
 /* Third-party license list: wider than a plain confirm dialog since every row
    carries a name, a version and a license id side by side. */
 #licenses-modal .modal { width: min(640px, 94vw); }

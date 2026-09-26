@@ -341,23 +341,54 @@ PROBE = """
           const txt = (el.children.length ? '' : el.textContent || '').trim();
           if (/^about[A-Z][A-Za-z]+$/.test(txt)) out.errors.push('76: About dialog shows a raw i18n key: ' + txt);
         }
-        // 97: the button row is centered, so the FIRST button sits as far from the
-        // modal's left edge as the LAST button sits from its right edge -- checking
-        // .modal-actions itself would be wrong, that flex container always spans the
-        // full inner width regardless of justify-content; only its children move.
+        // 516: the three link buttons form a full-width column, so the Close
+        // button below them is the one centered on its own; the FIRST link
+        // button sits as far from the modal's left edge as the Close button's
+        // right edge sits from the modal's right edge -- checking .modal-actions
+        // itself would be wrong, that flex container always spans the full inner
+        // width regardless of justify-content; only its child moves.
         const aboutBox = aboutModal.querySelector('.modal');
         const firstBtn = document.getElementById('about-whats-new');
-        const lastBtn = document.getElementById('about-ok');
-        if (aboutBox && firstBtn && lastBtn) {
+        const closeBtn = document.getElementById('about-ok');
+        // Skipped once the box actually scrolls: a shown scrollbar eats into
+        // the content width on the right only, which shifts the centered
+        // button without the row itself being off center.
+        if (aboutBox && firstBtn && closeBtn && aboutBox.scrollHeight <= aboutBox.clientHeight + 1) {
           const mb = aboutBox.getBoundingClientRect();
           const fb = firstBtn.getBoundingClientRect();
-          const lb = lastBtn.getBoundingClientRect();
+          const cb = closeBtn.getBoundingClientRect();
           const leftGap = fb.left - mb.left;
-          const rightGap = mb.right - lb.right;
+          const rightGap = mb.right - cb.right;
           if (Math.abs(leftGap - rightGap) > 1) {
-            out.errors.push('97: About dialog buttons are not centered, left gap ' + Math.round(leftGap) + 'px vs right gap ' + Math.round(rightGap) + 'px');
+            out.errors.push('516: About dialog Close button is not centered, left gap ' + Math.round(leftGap) + 'px vs right gap ' + Math.round(rightGap) + 'px');
           }
         }
+        // 516: every link button fits its own text (no horizontal overflow),
+        // the box itself never grows wider than its column (a tall box just
+        // scrolls, same as the version-history and theme-editor dialogs), and
+        // Close stays reachable by scrolling to it -- in the current language
+        // and at the current window size (this probe runs at every SIZES
+        // entry, including the app minimum, and once more at 130% scale
+        // further down, and once in each of pl/ro/de below).
+        const aboutFitsCheck = (label) => {
+          for (const btn of aboutModal.querySelectorAll('.about-link-btn')) {
+            if (btn.scrollWidth > btn.clientWidth + 1) {
+              out.errors.push('516: an About link button overflows (' + label + '): ' + btn.textContent.trim());
+            }
+          }
+          if (aboutBox.scrollWidth > aboutBox.clientWidth + 1) {
+            out.errors.push('516: the About dialog is wider than its own box (' + label + ')');
+          }
+          const closeBtn2 = document.getElementById('about-ok');
+          closeBtn2.scrollIntoView({ block: 'nearest' });
+          const cr = closeBtn2.getBoundingClientRect();
+          const hit = document.elementFromPoint(cr.left + cr.width / 2, cr.top + cr.height / 2);
+          if (!closeBtn2.contains(hit)) {
+            out.errors.push('516: the About dialog Close button is not reachable (' + label + ')');
+          }
+        };
+        aboutFitsCheck('default');
+        window.__ABOUT_FITS_CHECK__ = aboutFitsCheck;
         document.getElementById('about-ok').click();
         await sleep(120);
         if (!aboutModal.classList.contains('hidden')) out.errors.push('76: the About dialog did not close');
@@ -7169,6 +7200,12 @@ PROBE = """
     // Clipped away by a dialog that cannot scroll counts as unreachable: elementFromPoint
     // respects the clip, and scrollIntoView has nothing to scroll.
     mustReach('settings at 130% scale', '#settings-main button, #settings-main select');
+    // 516: the redesigned About dialog at 130% scale.
+    document.getElementById('about-btn').click();
+    await sleep(150);
+    if (window.__ABOUT_FITS_CHECK__) window.__ABOUT_FITS_CHECK__('130% scale');
+    document.getElementById('about-ok').click();
+    await sleep(120);
     await click('expert-open');
     layoutScan('expert menu at 130% scale');
     // Indentation is the only thing that says which setting belongs to which
@@ -7233,6 +7270,12 @@ PROBE = """
       await click('library-close');
       layoutScan('settings in ' + lang);
       mustReach('settings in ' + lang, '#settings-main button, #settings-main select');
+      // 516: the redesigned About dialog in the longest-label languages.
+      document.getElementById('about-btn').click();
+      await sleep(150);
+      if (window.__ABOUT_FITS_CHECK__) window.__ABOUT_FITS_CHECK__(lang);
+      document.getElementById('about-ok').click();
+      await sleep(120);
       await click('expert-open');
       layoutScan('expert menu in ' + lang);
       await click('expert-back');
