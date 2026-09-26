@@ -592,7 +592,8 @@ the video editor and the introduction tour ship on).
 - **The video editor's export destination now has its own file name field**,
   separate from the folder path, with the extension shown beside it. A name
   with a path separator or a reserved Windows character is rejected on the
-  spot, with Export and Copy-to-clipboard disabled until it is fixed.
+  spot, with Export disabled until it is fixed. An existing file is never
+  replaced: the export takes the next free name.
 
 ### Improved
 
