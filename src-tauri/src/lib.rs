@@ -16326,20 +16326,46 @@ fn accept_dir_setting(dir: &str, default_dir: &Path, purpose: &str) -> Result<St
     Err("dir-not-picked".to_string())
 }
 
+// The native dialog's own title for each `purpose` pick_folder can be called
+// for, so the user always sees what the folder they are about to choose will
+// be used for -- the pick is informed consent, not a blind grant a renderer
+// could point at any purpose string it likes. An unknown purpose has no
+// title here on purpose: pick_folder below treats that as a reason to refuse
+// the pick outright, before any dialog opens.
+fn folder_picker_title(purpose: &str, lang: &str) -> Option<&'static str> {
+    let de = lang == "de";
+    match purpose {
+        "screenshot" => Some(if de { "Screenshot-Ordner wählen" } else { "Choose the screenshot folder" }),
+        "videoExport" => Some(if de { "Exportordner für Videos wählen" } else { "Choose the video export folder" }),
+        "recording" => Some(if de { "Aufnahmeordner wählen" } else { "Choose the recording folder" }),
+        "sync" => Some(if de { "Synchronisationsordner wählen" } else { "Choose the sync folder" }),
+        "data" => Some(if de { "Datenordner wählen" } else { "Choose the data folder" }),
+        _ => None,
+    }
+}
+
 // Native folder picker (used by the expert screenshot-dir + data-dir options).
 // `purpose` names the setting this pick is for (screenshot, videoExport,
 // recording, sync, data) so the grant it leaves behind can only be spent by
-// that one setter -- see PICKER_GRANTS above.
+// that one setter -- see PICKER_GRANTS above. An unknown purpose gets no
+// dialog and no grant at all: folder_picker_title is the only source of
+// truth for which purposes exist, so a renderer cannot invent a new one and
+// have the backend show a folder pick it never labeled for the user.
 #[tauri::command]
-async fn pick_folder(app: AppHandle, win: tauri::Window, purpose: String) -> Option<String> {
+async fn pick_folder(app: AppHandle, win: tauri::Window, state: State<'_, Db>, purpose: String) -> Result<Option<String>, String> {
+    let lang = resolve_lang(&lock(&state).settings.language);
+    let Some(title) = folder_picker_title(&purpose, lang) else {
+        return Ok(None);
+    };
     let result = file_dialog_for(&app, win.label())
+        .set_title(title)
         .pick_folder()
         .map(|p| p.to_string_lossy().to_string());
     let _ = win.set_focus();
     if let Some(dir) = &result {
         grant_picked_dir(Path::new(dir), &purpose);
     }
-    result
+    Ok(result)
 }
 
 // Current effective store location (shown in the expert menu).
@@ -40654,6 +40680,30 @@ mod tests {
     }
 
     // ---------- security pass: picker-capability grants (set_*_dir gate) ----------
+
+    #[test]
+    fn folder_picker_title_rejects_an_unknown_purpose() {
+        assert_eq!(folder_picker_title("exportVideoTypo", "en"), None);
+        assert_eq!(folder_picker_title("", "en"), None);
+        assert_eq!(folder_picker_title("data", "en"), Some("Choose the data folder"));
+    }
+
+    #[test]
+    fn folder_picker_title_maps_every_known_purpose_by_language() {
+        assert_eq!(folder_picker_title("screenshot", "en"), Some("Choose the screenshot folder"));
+        assert_eq!(folder_picker_title("screenshot", "de"), Some("Screenshot-Ordner wählen"));
+        assert_eq!(folder_picker_title("videoExport", "en"), Some("Choose the video export folder"));
+        assert_eq!(folder_picker_title("videoExport", "de"), Some("Exportordner für Videos wählen"));
+        assert_eq!(folder_picker_title("recording", "en"), Some("Choose the recording folder"));
+        assert_eq!(folder_picker_title("recording", "de"), Some("Aufnahmeordner wählen"));
+        assert_eq!(folder_picker_title("sync", "en"), Some("Choose the sync folder"));
+        assert_eq!(folder_picker_title("sync", "de"), Some("Synchronisationsordner wählen"));
+        assert_eq!(folder_picker_title("data", "en"), Some("Choose the data folder"));
+        assert_eq!(folder_picker_title("data", "de"), Some("Datenordner wählen"));
+        // Any other UI language falls back to English, same as the rest of
+        // the app's backend-side strings.
+        assert_eq!(folder_picker_title("sync", "fr"), Some("Choose the sync folder"));
+    }
 
     #[test]
     fn accept_dir_setting_rejects_a_path_that_was_never_picked() {
