@@ -15620,6 +15620,9 @@ async fn open_recorder(
     state: State<'_, SnipState>,
     preview: State<'_, SnipPreview>,
 ) -> Result<(), String> {
+    if recording_active(&app) {
+        return Err("recording-busy".to_string());
+    }
     REC_SWITCH_PICK.store(false, Ordering::SeqCst);
     begin_capture(app, state, preview, false, true).await
 }
@@ -25343,6 +25346,27 @@ fn resolve_recording_settings(db: &State<Db>) -> (bool, recording::AudioConfig, 
     (show_cursor, audio, video_kbps, video_fps, canvas_mode, canvas_ceiling, disk_warn_mb, max_min, max_mb)
 }
 
+// start_recording's own check-then-act window: rec_can_start passes while
+// RecordingState is still empty, then the actual capture start runs on a
+// blocking thread and only publishes the session into RecordingState once it
+// returns -- a second start racing through that gap used to see the same
+// empty state and pass the same check, so both requests ran the capture
+// start. Claimed together with the rec_can_start check, under the same
+// RecordingState lock, and released by RecStartingGuard on every exit path
+// (an early return, a panic, or a normal finish) so a refused or failed start
+// never leaves the next one locked out for good.
+#[cfg(windows)]
+static REC_STARTING: AtomicBool = AtomicBool::new(false);
+
+#[cfg(windows)]
+struct RecStartingGuard;
+#[cfg(windows)]
+impl Drop for RecStartingGuard {
+    fn drop(&mut self) {
+        REC_STARTING.store(false, Ordering::SeqCst);
+    }
+}
+
 #[cfg(windows)]
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
@@ -25363,7 +25387,11 @@ async fn start_recording(
         if !rec_can_start(phase) {
             return Err("recording-busy".to_string());
         }
+        if REC_STARTING.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+            return Err("recording-busy".to_string());
+        }
     }
+    let _rec_starting_guard = RecStartingGuard;
     let target = resolve_recording_target(&target_kind, target_id, region_x, region_y, region_w, region_h)?;
     let (show_cursor, audio, video_kbps, video_fps, canvas_mode, canvas_ceiling, disk_warn_mb, max_min, max_mb) = resolve_recording_settings(&db);
     // Read once, before the blocking capture start -- keyOverlay's
@@ -35917,6 +35945,28 @@ mod tests {
     #[test]
     fn estimate_recording_seconds_remaining_never_divides_by_zero() {
         assert_eq!(estimate_recording_seconds_remaining(10_000_000, 0, false), 0);
+    }
+
+    // ---- Recording start: a second claim during the check-then-act gap ----
+
+    #[cfg(windows)]
+    #[test]
+    fn rec_starting_guard_blocks_a_second_claim_until_dropped() {
+        // start_recording's own gap: rec_can_start passes while RecordingState
+        // is still empty, and the actual capture start only publishes a
+        // session once it returns from a blocking thread -- a second start
+        // racing through that window used to see the same empty state and
+        // pass too. REC_STARTING closes it: claimed alongside the phase
+        // check, released by RecStartingGuard's Drop on every exit path.
+        assert!(!REC_STARTING.load(Ordering::SeqCst), "a stray claim from another test left this dirty");
+        assert!(REC_STARTING.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_ok());
+        let guard = RecStartingGuard;
+        assert!(
+            REC_STARTING.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err(),
+            "a second start claimed the slot while the first one was still starting"
+        );
+        drop(guard);
+        assert!(!REC_STARTING.load(Ordering::SeqCst), "the guard did not release the slot on drop");
     }
 
     // ---- Recording bar file size ----

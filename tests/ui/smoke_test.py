@@ -2865,6 +2865,27 @@ PROBE = """
         }
       }
     }
+    // 506: a record-btn click while a recording is already running must stop
+    // it instead of trying to open a second one -- recording_status's own
+    // fixture always reports an active recording, so forcing one resync
+    // through the same visibilitychange path the real app uses (rather than
+    // waiting out the real 5-second poll) is enough to reach that state.
+    window.__SMOKE_CALLS__ = [];
+    document.dispatchEvent(new Event('visibilitychange'));
+    await sleep(150);
+    if (!recordBtnEl.classList.contains('is-recording') && !recordBtnEl.classList.contains('is-paused')) {
+      out.errors.push('506: record button never picked up the active-recording state from recording_status');
+    } else {
+      window.__SMOKE_CALLS__ = [];
+      recordBtnEl.click();
+      await sleep(150);
+      if (!window.__SMOKE_CALLS__.includes('stop_recording')) {
+        out.errors.push('506: clicking the record button during an active recording did not call stop_recording');
+      }
+      if (window.__SMOKE_CALLS__.includes('open_recorder')) {
+        out.errors.push('506: clicking the record button during an active recording also called open_recorder');
+      }
+    }
     // P60: an automatic backup toasts the same way a manual one already did —
     // the backend has no other call site to toast from, so it fires this itself.
     window.__FIRE__('backup-done');
