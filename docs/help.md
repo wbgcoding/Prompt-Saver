@@ -160,8 +160,7 @@ from the recording no matter what, even if the recording happens to include
 the monitor the bar sits on. Drag the bar itself (anywhere except its
 buttons) to move it, including onto another monitor; the moment you do, it
 stops following the recorded window and stays exactly where you put it for
-the rest of that recording and every one after, until an expert-menu action
-resets it back to following.
+the rest of that one recording. The next recording starts following again.
 
 System audio and microphone audio (pick a device in the expert menu) both
 record on by default, each into its own track. The microphone track is
@@ -1086,8 +1085,8 @@ verschobenen Aufnahmefenster und ist selbst niemals im Video zu sehen. Zieht
 man die Leiste selbst (nicht ihre Knöpfe), lässt sie sich frei verschieben,
 auch auf einen anderen Monitor; ab dem ersten Ziehen folgt sie dem
 Aufnahmefenster nicht mehr, sondern bleibt dort stehen, wo man sie
-hingezogen hat, für diese Aufnahme und jede weitere, bis eine Aktion im
-Expertenmenü sie wieder auf „folgt dem Fenster" zurücksetzt. Systemton
+hingezogen hat, für den Rest dieser einen Aufnahme. Die nächste Aufnahme
+folgt wieder von vorn. Systemton
 (Standard an) und Mikrofon (Standard aus, Gerät wählbar im Expertenmenü)
 werden je als eigene Spur aufgenommen; zieht man das Mikrofon während der
 Aufnahme ab, laufen Bild und Systemton weiter, das Mikrofon-Symbol zeigt nur
