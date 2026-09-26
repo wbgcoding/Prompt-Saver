@@ -29053,16 +29053,27 @@ fn export_video_blocking(
     // dest_path is the frontend's deterministic "<stem>-edit.<ext>" guess
     // -- exporting the same source in the same format twice must not silently
     // replace the first result, so the final name is only ever claimed if
-    // free, same as every other save path in the app (unique_dest_path).
+    // free. reserve_unique_dest_path (unlike the plain unique_dest_path used
+    // by the app's other save paths) makes that claim atomic: a file that
+    // shows up at the winning name between the free-name search and the
+    // rename below would otherwise get silently overwritten.
     let dir = dst.parent().unwrap_or_else(|| Path::new("."));
     let ext = dst.extension().and_then(|e| e.to_str()).unwrap_or("mp4");
     let stem = dst.file_stem().and_then(|e| e.to_str()).unwrap_or("export");
-    let final_dst = unique_dest_path(dir, stem, ext);
-    fs::rename(&staged, &final_dst).map_err(|e| {
+    let final_dst = reserve_unique_dest_path(dir, stem, ext).map_err(|e| {
         let _ = fs::remove_file(&staged);
         let text = e.to_string();
         ffmpeg_error_json(classify_ffmpeg_error(&text), None, &text)
     })?;
+    if let Err(e) = fs::rename(&staged, &final_dst) {
+        // Clean up our own empty placeholder, never a file some other writer
+        // might have claimed in its place -- reserve_unique_dest_path already
+        // ruled that out, so final_dst is still ours to remove here.
+        let _ = fs::remove_file(&final_dst);
+        let _ = fs::remove_file(&staged);
+        let text = e.to_string();
+        return Err(ffmpeg_error_json(classify_ffmpeg_error(&text), None, &text));
+    }
     Ok(final_dst.to_string_lossy().to_string())
 }
 
@@ -29508,6 +29519,28 @@ fn unique_dest_path(dir: &std::path::Path, stem: &str, ext: &str) -> PathBuf {
         n += 1;
     }
     candidate
+}
+
+// Same naming scheme as unique_dest_path, but the free name is claimed the
+// moment it is found instead of merely observed: unique_dest_path only checks
+// candidate.exists(), and a file that appears at that name between the check
+// and a later fs::rename onto it gets silently replaced, since rename onto an
+// existing file overwrites on Windows. create_new opens the name atomically
+// (the OS refuses if it already exists) and moves straight to the next
+// numbered candidate on that exact race, so the name this function returns is
+// always one nothing else could have claimed first. The empty placeholder
+// file it leaves behind still needs to be replaced (or removed on failure) by
+// the caller, same as before.
+fn reserve_unique_dest_path(dir: &std::path::Path, stem: &str, ext: &str) -> std::io::Result<PathBuf> {
+    let mut n: u32 = 1;
+    loop {
+        let candidate = if n == 1 { dir.join(format!("{stem}.{ext}")) } else { dir.join(format!("{stem} ({n}).{ext}")) };
+        match fs::OpenOptions::new().write(true).create_new(true).open(&candidate) {
+            Ok(_) => return Ok(candidate),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => n += 1,
+            Err(e) => return Err(e),
+        }
+    }
 }
 
 // fs::rename fails across drives (recordingDir can be anywhere the user
@@ -41263,6 +41296,39 @@ mod tests {
         }
         assert!(!is_known_export_output(&requested), "the pre-existing requested path was never written by this export");
         assert!(is_known_export_output(&sibling), "the sibling ffmpeg actually wrote must be recognized");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // ---------- export finalization: atomic name reservation ----------
+
+    #[test]
+    fn reserve_unique_dest_path_skips_to_the_next_free_name_and_claims_it() {
+        let dir = std::env::temp_dir().join(format!("ps-reserve-basic-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let taken = dir.join("clip-edit.mp4");
+        fs::write(&taken, b"already exported once").unwrap();
+        let reserved = reserve_unique_dest_path(&dir, "clip-edit", "mp4").unwrap();
+        assert_eq!(reserved, dir.join("clip-edit (2).mp4"));
+        // The name is claimed, not just picked: it exists the instant the
+        // call returns, before any caller has written or renamed into it.
+        assert!(reserved.is_file());
+        assert_eq!(fs::read(&taken).unwrap(), b"already exported once", "the original file must be untouched");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn reserve_unique_dest_path_never_replaces_a_file_that_wins_the_race() {
+        let dir = std::env::temp_dir().join(format!("ps-reserve-race-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        // Stands in for another export (or another app) claiming the first
+        // candidate name in the gap unique_dest_path's plain exists() check
+        // could not see -- reserve_unique_dest_path must fail that name
+        // outright and move on rather than overwrite it later.
+        let rival = dir.join("clip-edit.mp4");
+        fs::write(&rival, b"a different export wrote this first").unwrap();
+        let reserved = reserve_unique_dest_path(&dir, "clip-edit", "mp4").unwrap();
+        assert_ne!(reserved, rival, "the name already taken by another writer must never be reused");
+        assert_eq!(fs::read(&rival).unwrap(), b"a different export wrote this first", "the rival's file must survive untouched");
         let _ = fs::remove_dir_all(&dir);
     }
 
