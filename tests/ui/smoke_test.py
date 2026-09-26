@@ -3163,6 +3163,40 @@ PROBE = """
       document.getElementById('confirm-modal').classList.add('hidden');
       document.getElementById('settings').classList.add('hidden');
     }
+
+    // ---- 503: the "Shortcuts only" keys-overlay tooltip names every key the
+    // recorder actually keeps, not just the original shorter list ----
+    try {
+      document.getElementById('settings').classList.remove('hidden');
+      await click('expert-open');
+      const findRow = () => [...document.querySelectorAll('#expert-flags .switch-field')]
+        .find(r => ((r.querySelector('span') || {}).textContent || '').includes('Shortcuts only'));
+      let shortcutsRow = findRow();
+      for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+        if (shortcutsRow) break;
+        tb.click();
+        await sleep(150);
+        shortcutsRow = findRow();
+      }
+      if (!shortcutsRow) {
+        out.errors.push('503: the "Shortcuts only" keys-overlay row is missing from the expert menu');
+      } else {
+        const tip = shortcutsRow.title || '';
+        for (const word of ['Backspace', 'Delete', 'Insert', 'Home', 'End', 'Page Up', 'Page Down']) {
+          if (!tip.includes(word)) {
+            out.errors.push(`503: the "Shortcuts only" tooltip is missing "${word}", got ${JSON.stringify(tip)}`);
+          }
+        }
+      }
+      const tab0b = document.querySelector('#expert-tabs-bar .expert-tab');
+      if (tab0b) { tab0b.click(); await sleep(100); }
+      await click('expert-back');
+      document.getElementById('settings').classList.add('hidden');
+    } catch (e) {
+      out.errors.push('503: the shortcuts-only tooltip check broke off: ' + (e && (e.stack || e.message) || e));
+      document.getElementById('settings').classList.add('hidden');
+    }
+
     // 11: grid bulk selection — checkbox click must never fall through to the
     // tile's own copy/drag handling (same .tile-select guard as .tile-menu).
     {
