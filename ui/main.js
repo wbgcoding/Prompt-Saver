@@ -739,6 +739,7 @@ const ERROR_MSG_KEYS = {
   "file-missing": "openFileMissing",
   "ffmpeg-missing": "recFfmpegMissingHint",
   "demo-mode-multiple-instances": "demoModeMultipleInstances",
+  "dir-not-picked": "syncDirNotApplied",
 };
 function errToast(err) {
   const s = String(err);
@@ -3308,11 +3309,25 @@ async function applySyncDir(dir) {
     if (answer === false) return; // cancelled: the folder is not switched at all
     deleteOld = answer === true;
   }
+  const previous = settings.ui_texts?.syncDir || "";
   settings.ui_texts = { ...(settings.ui_texts || {}), syncDir: next };
   renderExpert();
   try {
     await invoke("set_sync_dir", { dir: next, deleteOld });
   } catch (e) {
+    // "dir-not-picked" means the switch never happened at all -- the backend
+    // refused before touching anything, so the folder shown here must go
+    // back to what it actually still is instead of the new one this call
+    // never actually applied. Any other error means the switch DID go
+    // through and only the old-folder delete afterwards refused, which is
+    // the unrelated case the "old folder kept" dialog below still covers.
+    if (String(e) === "dir-not-picked") {
+      settings.ui_texts = { ...(settings.ui_texts || {}), syncDir: previous };
+      renderExpert();
+      errToast(e);
+      refreshSyncStatus(true);
+      return;
+    }
     // The switch itself went through; only the delete refused. Name what is left
     // in the old folder and why nothing there was touched.
     await infoDialog(

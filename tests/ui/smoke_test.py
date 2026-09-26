@@ -3120,6 +3120,34 @@ PROBE = """
           if (!shown.includes('SyncB')) {
             out.errors.push('after cancelling, the folder shown is not the last one actually chosen: ' + shown);
           }
+          // ---- 503: the backend refusing the switch outright (never actually
+          // picked through the dialog) must not leave the new folder showing,
+          // and must say so instead of the unrelated "old folder kept" text ----
+          document.getElementById('toast').classList.add('hidden');
+          window.__SYNC_DIR_REFUSE__ = true;
+          window.__SYNC_DIR_CALL__ = null;
+          const refusedCm = await askFor('D:/SyncRefused');
+          if (refusedCm && !refusedCm.classList.contains('hidden')) {
+            await click('confirm-ok');
+            await sleep(300);
+          }
+          window.__SYNC_DIR_REFUSE__ = false;
+          if (window.__SYNC_DIR_CALL__) {
+            out.errors.push('503: a refused sync-dir switch still reached the backend as a success');
+          }
+          const keptModal = document.getElementById('confirm-modal');
+          if (keptModal && !keptModal.classList.contains('hidden')) {
+            out.errors.push('503: a refused switch showed the old-folder-kept dialog meant for the delete-failure case');
+            keptModal.classList.add('hidden');
+          }
+          const refusedToast = document.getElementById('toast');
+          if (refusedToast.classList.contains('hidden') || !refusedToast.textContent.includes('The folder was not applied')) {
+            out.errors.push(`503: the refusal did not show its own message, toast reads ${JSON.stringify(refusedToast.textContent)}`);
+          }
+          const shownAfterRefusal = ((await syncPathRow()).querySelector('.path-out') || {}).textContent || '';
+          if (!shownAfterRefusal.includes('SyncB') || shownAfterRefusal.includes('SyncRefused')) {
+            out.errors.push('503: after a refusal the row must keep showing the folder still actually in effect: ' + shownAfterRefusal);
+          }
         }
         // Back to the shipped default for everything after this.
         const off = await expertRow('Sync prompts as Markdown');

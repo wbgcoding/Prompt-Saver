@@ -740,7 +740,12 @@ const RESULTS = {
   // through.
   sync_dir_info: () => ({ path: "C:\\Data\\prompt-saver-sync", ours: 3, foreign: 0 }),
   sync_status: () => ({ enabled: true, last_ok: Math.floor(Date.now() / 1000) - 60, files: 3, paused: false, reason: "" }),
+  // 503: window.__SYNC_DIR_REFUSE__ lets a probe simulate the backend
+  // refusing the switch outright (a folder that was never actually picked
+  // through the dialog) -- the frontend must then show the picked folder as
+  // never having taken effect, not a misleading "old folder kept" dialog.
   set_sync_dir: (a) => {
+    if (window.__SYNC_DIR_REFUSE__) return Promise.reject("dir-not-picked");
     window.__SYNC_DIR_CALL__ = { dir: a ? a.dir : null, deleteOld: a ? a.deleteOld : null };
     return 0;
   },
