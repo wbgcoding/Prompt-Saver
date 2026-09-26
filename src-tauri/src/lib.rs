@@ -27165,7 +27165,7 @@ async fn convert_recording(app: AppHandle, src_path: String, format: String, los
     push_bg_op(&app, "convert", "convert", "indeterminate", None, Some(src_path.clone()));
     let app_done = app.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
-        convert_recording_blocking(&ffmpeg, &src, &format, lossless, |ms| {
+        convert_recording_blocking(&ffmpeg, &src, &format, lossless, || REC_CONVERT_CANCEL.load(Ordering::SeqCst), |ms| {
             let _ = app.emit("recording-convert-progress", ConvertProgressPayload { ms });
         })
     })
@@ -27410,12 +27410,13 @@ fn run_ffmpeg_to_staged(
     Ok(staged)
 }
 
-// `on_progress` is a plain closure rather than an `AppHandle` -- the only thing
-// this function does with progress is report it, so it takes no dependency on
-// Tauri's runtime at all and can be exercised in a unit test against a real
-// ffmpeg binary, with no app instance needed.
+// `is_cancelled` and `on_progress` are plain closures rather than the process-global
+// flag and an `AppHandle` -- the only things this function does with them is poll and
+// report, so it takes no dependency on Tauri's runtime or REC_CONVERT_CANCEL at all and
+// can be exercised in a unit test against a real ffmpeg binary, with its own local
+// cancel flag and no app instance needed.
 fn convert_recording_blocking(
-    ffmpeg: &Path, src: &Path, format: &str, lossless: bool, mut on_progress: impl FnMut(u32),
+    ffmpeg: &Path, src: &Path, format: &str, lossless: bool, is_cancelled: impl Fn() -> bool, mut on_progress: impl FnMut(u32),
 ) -> Result<String, String> {
     let same_extension = src.extension().is_some_and(|e| e.eq_ignore_ascii_case(video_format_ext(format)));
     if convert_is_noop(same_extension, format, lossless) {
@@ -27473,7 +27474,7 @@ fn convert_recording_blocking(
         }
         _ => unreachable!(),
     }
-    let staged = match run_ffmpeg_to_staged(ffmpeg, src, &dst, &[], &args, || REC_CONVERT_CANCEL.load(Ordering::SeqCst), &mut on_progress) {
+    let staged = match run_ffmpeg_to_staged(ffmpeg, src, &dst, &[], &args, is_cancelled, &mut on_progress) {
         Ok(p) => p,
         Err(e) => {
             append_crash_log(&format!("recording convert failed ({format}): {e}"));
@@ -34784,8 +34785,7 @@ mod tests {
     // bg_ops() registry against each other -- cargo test runs tests on
     // separate threads by default, and bg_ops_running_count() in particular
     // counts every entry in the map regardless of which test put it there, so
-    // two of these tests racing would inflate each other's counts (same
-    // reasoning as REC_CONVERT_TEST_LOCK above).
+    // two of these tests racing would inflate each other's counts.
     static BG_OPS_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
@@ -34996,12 +34996,11 @@ mod tests {
 
     #[test]
     fn convert_recording_real_ffmpeg_produces_a_playable_webm_and_removes_the_source() {
-        let _guard = REC_CONVERT_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let Some(ffmpeg) = test_ffmpeg() else { return };
         let dir = std::env::temp_dir().join(format!("ps-convtest-webm-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 1, "64x64");
-        let out = convert_recording_blocking(&ffmpeg, &src, "webm", false, |_| {}).expect("conversion should succeed");
+        let out = convert_recording_blocking(&ffmpeg, &src, "webm", false, || false, |_| {}).expect("conversion should succeed");
         let out = PathBuf::from(out);
         assert!(out.is_file(), "converted file missing");
         assert_eq!(out.extension().unwrap(), "webm");
@@ -35014,20 +35013,13 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
-    // Serializes every test that reads or flips the process-global REC_CONVERT_CANCEL
-    // flag against each other -- cargo test runs tests on separate threads by default,
-    // and the cancel test flipping that flag mid-run would otherwise cancel whatever
-    // unrelated conversion another thread happened to be running at the same moment.
-    static REC_CONVERT_TEST_LOCK: Mutex<()> = Mutex::new(());
-
     #[test]
     fn convert_recording_real_ffmpeg_gif_has_gif_magic_and_removes_the_source() {
-        let _guard = REC_CONVERT_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let Some(ffmpeg) = test_ffmpeg() else { return };
         let dir = std::env::temp_dir().join(format!("ps-convtest-gif-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 1, "64x64");
-        let out = convert_recording_blocking(&ffmpeg, &src, "gif", false, |_| {}).expect("conversion should succeed");
+        let out = convert_recording_blocking(&ffmpeg, &src, "gif", false, || false, |_| {}).expect("conversion should succeed");
         let bytes = fs::read(&out).unwrap();
         assert_eq!(&bytes[0..3], b"GIF");
         assert!(!src.is_file());
@@ -35036,13 +35028,12 @@ mod tests {
 
     #[test]
     fn convert_recording_real_ffmpeg_lossless_replaces_the_source_in_place() {
-        let _guard = REC_CONVERT_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let Some(ffmpeg) = test_ffmpeg() else { return };
         let dir = std::env::temp_dir().join(format!("ps-convtest-lossless-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 1, "64x64");
         let before = fs::read(&src).unwrap();
-        let out = convert_recording_blocking(&ffmpeg, &src, "mp4", true, |_| {}).expect("conversion should succeed");
+        let out = convert_recording_blocking(&ffmpeg, &src, "mp4", true, || false, |_| {}).expect("conversion should succeed");
         assert_eq!(PathBuf::from(&out), src, "lossless mp4 must replace the source path, not a new one");
         assert!(src.is_file());
         let after = fs::read(&src).unwrap();
@@ -35052,31 +35043,29 @@ mod tests {
 
     #[test]
     fn convert_recording_real_ffmpeg_cancel_leaves_the_source_untouched() {
-        let _guard = REC_CONVERT_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let Some(ffmpeg) = test_ffmpeg() else { return };
         let dir = std::env::temp_dir().join(format!("ps-convtest-cancel-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         // Long enough that the cancel flag is set well before ffmpeg finishes.
         let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 8, "960x720");
-        REC_CONVERT_CANCEL.store(false, Ordering::SeqCst);
-        std::thread::spawn(|| {
+        // A cancel flag local to this test -- never the process-global
+        // REC_CONVERT_CANCEL -- so flipping it can never race an unrelated
+        // conversion another test happens to be running in parallel.
+        let cancel = Arc::new(AtomicBool::new(false));
+        let cancel_writer = Arc::clone(&cancel);
+        std::thread::spawn(move || {
             std::thread::sleep(Duration::from_millis(150));
-            REC_CONVERT_CANCEL.store(true, Ordering::SeqCst);
+            cancel_writer.store(true, Ordering::SeqCst);
         });
-        let result = convert_recording_blocking(&ffmpeg, &src, "webm", false, |_| {});
+        let result = convert_recording_blocking(&ffmpeg, &src, "webm", false, || cancel.load(Ordering::SeqCst), |_| {});
         assert_eq!(result, Err("cancelled".to_string()));
         assert!(src.is_file(), "a cancelled conversion must never remove the source");
         assert!(!dir.join("src.webm").exists(), "a cancelled conversion must leave no destination file");
-        REC_CONVERT_CANCEL.store(false, Ordering::SeqCst);
         let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn convert_recording_real_ffmpeg_failure_leaves_the_source_untouched() {
-        // Guards against the cancel test's own thread flipping REC_CONVERT_CANCEL
-        // mid-run and turning this into a spurious "cancelled" result instead of
-        // the classified failure this test actually checks for.
-        let _guard = REC_CONVERT_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let Some(ffmpeg) = test_ffmpeg() else { return };
         let dir = std::env::temp_dir().join(format!("ps-convtest-fail-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
@@ -35089,7 +35078,7 @@ mod tests {
         // right below exists as its own separate case.
         let src = dir.join("src.mp4");
         fs::write(&src, b"this is not a video file").unwrap();
-        let result = convert_recording_blocking(&ffmpeg, &src, "webm", false, |_| {});
+        let result = convert_recording_blocking(&ffmpeg, &src, "webm", false, || false, |_| {});
         let Err(err) = result else { panic!("garbage input must fail") };
         let payload: serde_json::Value = serde_json::from_str(&err).expect("error must be the classified JSON shape");
         assert_eq!(payload["key"], "ffErrTruncated");
@@ -35105,7 +35094,6 @@ mod tests {
     // ffmpeg's own raw log line as the headline.
     #[test]
     fn convert_recording_real_ffmpeg_truncated_file_shows_the_friendly_incomplete_key() {
-        let _guard = REC_CONVERT_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let Some(ffmpeg) = test_ffmpeg() else { return };
         let dir = std::env::temp_dir().join(format!("ps-convtest-truncated-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
@@ -35113,7 +35101,7 @@ mod tests {
         let bytes = fs::read(&whole).unwrap();
         let src = dir.join("src.mp4");
         fs::write(&src, &bytes[..bytes.len() / 3]).unwrap();
-        let result = convert_recording_blocking(&ffmpeg, &src, "webm", false, |_| {});
+        let result = convert_recording_blocking(&ffmpeg, &src, "webm", false, || false, |_| {});
         let Err(err) = result else { panic!("a truncated file must fail to convert") };
         let payload: serde_json::Value = serde_json::from_str(&err).expect("error must be the classified JSON shape");
         assert_eq!(payload["key"], "ffErrTruncated");
@@ -35122,7 +35110,10 @@ mod tests {
     }
 
     // Serializes every test that reads or flips the process-global REC_CROP_CANCEL
-    // flag against each other, same reasoning as REC_CONVERT_TEST_LOCK above.
+    // flag against each other -- cargo test runs tests on separate threads by
+    // default, and one test flipping that flag mid-run would otherwise cancel
+    // whatever unrelated crop another thread happened to be running at the same
+    // moment.
     static REC_CROP_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
@@ -41740,8 +41731,8 @@ mod tests {
 
     // These tests all read and write the same two globals with real filesystem
     // I/O in between, so the default parallel test runner can interleave them.
-    // Serialize just this group, the same way BG_OPS_TEST_LOCK and
-    // REC_CONVERT_TEST_LOCK already do for their own shared state.
+    // Serialize just this group, the same way BG_OPS_TEST_LOCK already does
+    // for its own shared state.
     static DDLOCK_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     // Saves/restores the two globals the way settings_locked_command_reports_the_flag
