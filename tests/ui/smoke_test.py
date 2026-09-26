@@ -2320,6 +2320,50 @@ PROBE = """
       for (let i = 0; i < 3 && document.body.classList.contains('chain-mode'); i++) await click('chain-btn');
       await sleep(150);
     }
+    // 502: moving the window (a mousedown on a drag region, which starts the native
+    // OS move loop and blurs then refocuses the webview) must never end a running
+    // chain, locked or not -- only an explicit toggle, Escape or a finished chain may.
+    {
+      const findGridTile = (id) => [...document.querySelectorAll('#grid .tile')].find(e => (e.dataset.id || '') === id);
+      const p0Tile = findGridTile('p0');
+      const startBtn = p0Tile && p0Tile.querySelector('.tile-chain-start');
+      if (!startBtn) {
+        out.errors.push('502: fixture tile p0 has no chain-start button to begin the chain with');
+      } else {
+        startBtn.click();
+        await sleep(150);
+        if (!await clickTile('p3')) out.errors.push('502: could not pick p3 into the chain');
+        if (!document.body.classList.contains('chain-mode')) {
+          out.errors.push('502: the chain never started, cannot test the move path');
+        } else {
+          const header = document.querySelector('[data-tauri-drag-region]');
+          if (!header) {
+            out.errors.push('502: no drag region found on the main window to simulate a move from');
+          } else {
+            header.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }));
+            window.dispatchEvent(new Event('blur'));
+            await sleep(50);
+            window.dispatchEvent(new Event('focus'));
+            await sleep(50);
+            if (!document.body.classList.contains('chain-mode')) {
+              out.errors.push('502: moving the window (drag-region mousedown plus the resulting blur) switched an unlocked chain off');
+            }
+            const p3TileNow = findGridTile('p3');
+            if (!p3TileNow || !p3TileNow.classList.contains('chain-picked')) {
+              out.errors.push('502: moving the window dropped the chain picks');
+            }
+          }
+          // A real app switch with no window move must still end an unlocked chain.
+          window.dispatchEvent(new Event('blur'));
+          await sleep(50);
+          if (document.body.classList.contains('chain-mode')) {
+            out.errors.push('502: an unlocked chain survived a real blur with no window move');
+          }
+        }
+      }
+      for (let i = 0; i < 3 && document.body.classList.contains('chain-mode'); i++) await click('chain-btn');
+      await sleep(150);
+    }
     // F13: a mixed prompt asks only for the manual variable and offers the choice
     // as a themed dropdown; the pick lands in the copied text.
     window.__LAST_COPY__ = undefined;

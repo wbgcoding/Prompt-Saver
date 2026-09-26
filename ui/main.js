@@ -17116,10 +17116,25 @@ function bind() {
   // Keep the chain armed while a variable dialog is open: switching windows to
   // look something up must not abort the chain (it leaves the popup stranded). A
   // latched chain ignores blur entirely (that is the point of the lock).
-  window.addEventListener("blur", () => { if (chainMode && chainSel.length && !varsCleanup && !chainLock) setChainMode(false); });
+  //
+  // Dragging the window by its own drag region hands control to the OS move
+  // loop, which blurs and then refocuses the webview even though the user
+  // never left the app. That blur/focus pair must never be treated as a real
+  // window switch, or an active chain (locked or not) drops on every move.
+  let windowMoving = false;
+  document.addEventListener("mousedown", (e) => {
+    if (e.target?.closest?.("[data-tauri-drag-region]")) windowMoving = true;
+  }, true);
+  window.addEventListener("blur", () => {
+    if (windowMoving) return; // the window is being moved, not switched away from
+    if (chainMode && chainSel.length && !varsCleanup && !chainLock) setChainMode(false);
+  });
   // A latched chain survives the blur but starts fresh when we return: the
   // previous chain was already copied, so clear the picks (mode stays on).
-  window.addEventListener("focus", () => { if (chainLock && chainSel.length) { chainSel.length = 0; chainTexts.clear(); refreshChainUi(); } });
+  window.addEventListener("focus", () => {
+    if (windowMoving) { windowMoving = false; return; } // the move ended, chain untouched
+    if (chainLock && chainSel.length) { chainSel.length = 0; chainTexts.clear(); refreshChainUi(); }
+  });
   // ==== 117/118: screenshot editor ====
   // Opens right after a capture, before #snip-modal. Pure frontend: it receives a
   // data URL and hands back an edited one; everything downstream of #snip-modal is
