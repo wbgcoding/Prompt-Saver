@@ -12750,6 +12750,8 @@ fn hide_rec_bar(app: AppHandle) {
 // recording and destroyed rather than reused -- unlike the bar's fixed shape,
 // a region's rect is different every time. No-op (best-effort) on Monitor and
 // Window recordings, which keep the OS border and never call this at all.
+// Never focused: it has nothing to click or type into, and showing it must
+// not steal keyboard focus away from whatever app is being recorded.
 #[cfg(windows)]
 fn show_rec_outline(app: &AppHandle, rect: (i32, i32, u32, u32)) {
     let label = "rec-outline";
@@ -12765,6 +12767,7 @@ fn show_rec_outline(app: &AppHandle, rect: (i32, i32, u32, u32)) {
         .resizable(false)
         .shadow(false)
         .visible(false)
+        .focused(false)
         .build()
     {
         Ok(w) => w,
