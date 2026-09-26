@@ -25270,11 +25270,23 @@ async fn backfill_media_meta(app: AppHandle, state: State<'_, Db>, id: String) -
 // Non-fatal to the caller: the video keeps playing system-audio-only if this
 // fails, and the sidecar is left in place to retry on the next open.
 #[tauri::command]
-async fn mux_mic_track(app: AppHandle, video_path: String, sidecar_path: String) -> Result<(), String> {
+async fn mux_mic_track(app: AppHandle, state: State<'_, Db>, video_path: String, sidecar_path: String) -> Result<(), String> {
     let video = PathBuf::from(&video_path);
     let sidecar = PathBuf::from(&sidecar_path);
     if !video.is_file() || !sidecar.is_file() {
         return Err("recording or mic sidecar not found".to_string());
+    }
+    // mux_mic_track_blocking below replaces `video` in place and deletes
+    // `sidecar` on success -- both need to be proven to belong to this app
+    // before either is touched. The video must be one of our own
+    // recordings, and the sidecar must be exactly THAT video's own mic
+    // capture, never an unrelated second path that just happens to sit in
+    // the same allowed folder.
+    if !is_own_recording_source(&recording_source_dirs(&app, &state), &video) {
+        return Err("source-not-allowed".to_string());
+    }
+    if !is_own_mic_sidecar(&video, &sidecar) {
+        return Err("source-not-allowed".to_string());
     }
     let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
     let audio_kbps = app
@@ -26587,10 +26599,16 @@ fn place_in_dir(src: &std::path::Path, dir: &std::path::Path) -> std::io::Result
 // frontend updates its own pending-path to the new location afterwards, so
 // a later Attach/Copy on the same result still finds the file.
 #[tauri::command]
-async fn save_recording_as(app: AppHandle, win: tauri::Window, src_path: String) -> Result<Option<String>, String> {
+async fn save_recording_as(app: AppHandle, state: State<'_, Db>, win: tauri::Window, src_path: String) -> Result<Option<String>, String> {
     let src = PathBuf::from(&src_path);
     if !src.is_file() {
         return Err("recording file not found".to_string());
+    }
+    // move_file below relocates this file wherever the save dialog points --
+    // refuse to move anything that is not proven to be this app's own
+    // recording first.
+    if !is_own_recording_source(&recording_source_dirs(&app, &state), &src) {
+        return Err("source-not-allowed".to_string());
     }
     let ext = src.extension().and_then(|e| e.to_str()).unwrap_or("mp4").to_string();
     let name = src.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| format!("Recording.{ext}"));
@@ -26750,6 +26768,15 @@ fn is_own_recording_source(allowed: &[PathBuf], path: &Path) -> bool {
     }
     let Some(parent) = path.parent().and_then(|d| d.canonicalize().ok()) else { return false };
     allowed.iter().any(|d| d.canonicalize().map(|c| c == parent).unwrap_or(false))
+}
+
+// Whether `sidecar` is exactly the mic capture belonging to `video` -- the
+// only sidecar mux_mic_track may consume and delete. Checked apart from
+// is_own_recording_source (which only proves `video` itself is ours) so a
+// second, unrelated path cannot ride along just because it happens to sit in
+// an allowed folder too.
+fn is_own_mic_sidecar(video: &Path, sidecar: &Path) -> bool {
+    sidecar == video.with_extension("mic.wav")
 }
 
 // Discard a not-yet-saved recording. Scoped to the app's own recordings
@@ -37999,6 +38026,20 @@ mod tests {
         fs::write(&src, b"video").unwrap();
         assert!(!is_own_recording_source(std::slice::from_ref(&dir), &src), "a made-up name must not pass as proof");
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn is_own_mic_sidecar_accepts_only_the_matching_videos_own_sidecar() {
+        let video = PathBuf::from("C:/recs/rec-2026-01-01-00-00-00.mp4");
+        let own_sidecar = PathBuf::from("C:/recs/rec-2026-01-01-00-00-00.mic.wav");
+        assert!(is_own_mic_sidecar(&video, &own_sidecar));
+    }
+
+    #[test]
+    fn is_own_mic_sidecar_refuses_an_unrelated_sidecar_in_the_same_folder() {
+        let video = PathBuf::from("C:/recs/rec-2026-01-01-00-00-00.mp4");
+        let foreign_sidecar = PathBuf::from("C:/recs/rec-someone-elses-take.mic.wav");
+        assert!(!is_own_mic_sidecar(&video, &foreign_sidecar), "a sidecar for a different recording must not pass");
     }
 
     #[test]
