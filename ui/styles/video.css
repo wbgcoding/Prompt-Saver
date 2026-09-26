@@ -104,7 +104,10 @@ body.video-body {
 .ve-overlay-live { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .ve-live { position: absolute; box-sizing: border-box; }
 .ve-live-image { object-fit: fill; }
-.ve-live-video { object-fit: fill; }
+/* Export scales a video overlay with force_original_aspect_ratio=decrease and
+   pads the rest black rather than stretching it -- object-fit: fill used to
+   distort the footage in the preview instead of matching that letterbox. */
+.ve-live-video { object-fit: contain; background: #000; }
 .ve-live-frame { border-style: solid; }
 .ve-live-keys {
   border: 2px dashed currentColor;

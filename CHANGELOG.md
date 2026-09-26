@@ -1245,6 +1245,9 @@ the video editor and the introduction tour ship on).
   exported result once a cut or a speed change was also on the timeline.**
   The live preview now follows the same output timeline the export itself
   uses.
+- **An inserted video overlay was stretched to its box in the live preview**
+  instead of keeping its own proportions the way the export does. It is now
+  letterboxed in the preview too, with the same black bars export adds.
 
 ### Security
 
