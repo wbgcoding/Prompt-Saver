@@ -4993,6 +4993,52 @@ PROBE = """
         out.errors.push('select chevron: expected ' + BUILTIN_THEMES2.length + ' distinct colours across built-in themes, got ' + new Set(vals).size);
       }
     }
+    // 508: every select in the main window carries a real border and a
+    // themed, non-transparent background, and its option list uses the
+    // theme surface colour, in every built-in theme. A bare select used to
+    // fall back to the plain OS look because the global select rule left
+    // border and background unset.
+    {
+      const priorTheme3 = document.documentElement.getAttribute('data-theme');
+      const SELECT_THEMES = ['light', 'dark', 'programmer', 'neon', 'cyberpunk', 'mono', 'ocean'];
+      const mainSelects = [...document.querySelectorAll('select')].filter((s) => s.options.length > 0);
+      if (!mainSelects.length) out.errors.push('508: no populated select found in the main window to audit');
+      const swatch = document.createElement('div');
+      swatch.style.cssText = 'position:absolute;left:-9999px;top:-9999px;background-color:var(--surface)';
+      document.body.appendChild(swatch);
+      for (const theme of SELECT_THEMES) {
+        document.documentElement.setAttribute('data-theme', theme);
+        const surfaceRgb = getComputedStyle(swatch).backgroundColor;
+        for (const sel of mainSelects) {
+          const label = sel.id || sel.className || 'unnamed select';
+          const cs = getComputedStyle(sel);
+          if (parseFloat(cs.borderTopWidth) <= 0) {
+            out.errors.push('508: ' + label + ' has no border in theme ' + theme);
+          }
+          // batch-view-select is deliberately transparent (it sits inline with
+          // ghost-btn neighbours and its native list is replaced by a themed
+          // popup, see the comment above its rule) -- not the bare-select
+          // defect this point is about.
+          if (!sel.classList.contains('batch-view-select')) {
+            if (cs.backgroundColor === 'rgba(0, 0, 0, 0)' || cs.backgroundColor === 'transparent') {
+              out.errors.push('508: ' + label + ' has a transparent background in theme ' + theme);
+            }
+          }
+          // A selected option shows the accent colour (option:checked); pick
+          // an unselected one to check the plain surface colour instead.
+          const unselected = [...sel.options].find((o) => !o.selected);
+          if (unselected) {
+            const optBg = getComputedStyle(unselected).backgroundColor;
+            if (optBg !== surfaceRgb) {
+              out.errors.push('508: ' + label + ' option background is ' + optBg + ', expected the theme surface ' + surfaceRgb + ' in theme ' + theme);
+            }
+          }
+        }
+      }
+      swatch.remove();
+      if (priorTheme3) document.documentElement.setAttribute('data-theme', priorTheme3);
+      else document.documentElement.removeAttribute('data-theme');
+    }
     await click('theme-edit-open');
     const tmodal = document.getElementById('theme-modal');
     if (tmodal.classList.contains('hidden')) {
@@ -7256,8 +7302,14 @@ PROBE = """
         // is active -- a full inline swatch grid used to collapse into one tall
         // column here and blow the toolbar height up. This is the check that
         // would have caught that bug; a generic layoutScan alone did not.
+        // 507 raised the ceiling from 96 to 200: the context row now wraps
+        // its fields onto a second (and for the busiest tool, a third) line
+        // instead of scrolling them sideways, so two or three lines of real
+        // controls is expected height, not a regression. A collapsed swatch
+        // grid is still caught well below 200 -- that failure mode stacks a
+        // whole column of swatches, not two or three short field rows.
         const seToolbar = document.querySelector('.snip-edit-toolbar');
-        const SE_TOOLBAR_CEIL = 96;
+        const SE_TOOLBAR_CEIL = 200;
         for (const b of toolBtns) {
           b.click();
           await sleep(30);
@@ -8158,14 +8210,58 @@ PROBE = """
       const TINY_PNG2 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
       const priorTheme = document.documentElement.getAttribute('data-theme');
       const BUILTIN_THEMES = ['light', 'dark', 'programmer', 'neon', 'cyberpunk', 'mono', 'ocean'];
+      const swatch508 = document.createElement('div');
+      swatch508.style.cssText = 'position:absolute;left:-9999px;top:-9999px;background-color:var(--surface)';
+      document.body.appendChild(swatch508);
       for (const theme of BUILTIN_THEMES) {
         document.documentElement.setAttribute('data-theme', theme);
         window.__FIRE__('snip-captured', { data_url: TINY_PNG2, path: '', name: 'test.png' });
         await sleep(150);
         layoutScan('screenshot editor in theme ' + theme);
+        // 508: the text tool's shape-back select is the one bare select the
+        // screenshot editor owns; assert it picked up the themed look too.
+        const textToolBtn = document.querySelector('#snip-edit-tools button[data-tool="text"]');
+        if (textToolBtn) {
+          textToolBtn.click();
+          const seSel = document.querySelector('#snip-edit-context select.snip-edit-select');
+          if (!seSel) {
+            out.errors.push('508: the screenshot editor text-back select is missing in theme ' + theme);
+          } else {
+            const cs = getComputedStyle(seSel);
+            if (parseFloat(cs.borderTopWidth) <= 0) out.errors.push('508: snip editor select has no border in theme ' + theme);
+            if (cs.backgroundColor === 'rgba(0, 0, 0, 0)' || cs.backgroundColor === 'transparent') {
+              out.errors.push('508: snip editor select has a transparent background in theme ' + theme);
+            }
+            const surfaceRgb508 = getComputedStyle(swatch508).backgroundColor;
+            // A selected option shows the accent colour (option:checked); pick
+            // an unselected one to check the plain surface colour instead.
+            const unselected = [...seSel.options].find((o) => !o.selected);
+            if (unselected) {
+              const optBg = getComputedStyle(unselected).backgroundColor;
+              if (optBg !== surfaceRgb508) {
+                out.errors.push('508: snip editor select option background is ' + optBg + ', expected ' + surfaceRgb508 + ' in theme ' + theme);
+              }
+            }
+          }
+          // 507: with the text tool's full field set showing, the context
+          // row must wrap onto a second line rather than scroll sideways.
+          const ctxEl = document.querySelector('.snip-edit-context');
+          if (ctxEl && ctxEl.scrollWidth > ctxEl.clientWidth) {
+            out.errors.push('507: snip-edit-context scrolls horizontally with the text tool at ' + innerWidth + 'px, theme ' + theme);
+          }
+        }
+        const pixelateToolBtn = document.querySelector('#snip-edit-tools button[data-tool="pixelate"]');
+        if (pixelateToolBtn) {
+          pixelateToolBtn.click();
+          const ctxEl2 = document.querySelector('.snip-edit-context');
+          if (ctxEl2 && ctxEl2.scrollWidth > ctxEl2.clientWidth) {
+            out.errors.push('507: snip-edit-context scrolls horizontally with the pixelate tool at ' + innerWidth + 'px, theme ' + theme);
+          }
+        }
         document.getElementById('snip-edit-cancel').click();
         await sleep(100);
       }
+      swatch508.remove();
       if (priorTheme) document.documentElement.setAttribute('data-theme', priorTheme);
       else document.documentElement.removeAttribute('data-theme');
       // The page is left in German after the earlier lang loop (later OCR
@@ -8478,6 +8574,30 @@ PROBE = """
         if (!ocrModal.classList.contains('hidden')) {
           out.errors.push('OCR result dialog did not close');
         }
+      }
+      // 509: an image whose recognized lines are all empty must show a clear
+      // toast instead of opening the result dialog with nothing in it.
+      {
+        const toastEl509 = document.getElementById('toast');
+        window.__FIRE__('ocr-captured', { text: '\\n\\n', lang: 'en' });
+        await sleep(150);
+        if (!ocrModal.classList.contains('hidden')) {
+          out.errors.push('509: an all-blank OCR result opened the result dialog instead of a toast');
+        }
+        if (!toastEl509.classList.contains('show') || toastEl509.classList.contains('hidden')) {
+          out.errors.push('509: no toast appeared for an all-blank OCR result');
+        } else {
+          const manageBtn = toastEl509.querySelector('.toast-btn');
+          if (!manageBtn || !manageBtn.textContent.trim()) {
+            out.errors.push('509: the no-text-found toast is missing its manage-languages button');
+          }
+          const msgEl = toastEl509.querySelector('.toast-msg');
+          if (!msgEl || !msgEl.textContent.trim()) {
+            out.errors.push('509: the no-text-found toast has no message text');
+          }
+        }
+        toastEl509.classList.remove('show'); // don't linger into later blocks
+        await sleep(250);
       }
       await toggleOcrFlag(false);
       if (!hiddenNow(ocrBtn) || !hiddenNow(snipModalOcrBtn)) {
@@ -10219,6 +10339,39 @@ CAMERA_PROBE = """
     if (!document.getElementById('cam-audio-select')) errs.push('audio source control is missing');
     if (!document.getElementById('cam-res-select')) errs.push('resolution control is missing');
     if (!document.getElementById('cam-folder-path')) errs.push('target folder control is missing');
+    // 508: cam-res-select carries real options regardless of device
+    // availability; audit its themed look across every built-in theme.
+    {
+      const priorTheme = document.documentElement.getAttribute('data-theme');
+      const BUILTIN_THEMES = ['light', 'dark', 'programmer', 'neon', 'cyberpunk', 'mono', 'ocean'];
+      const swatch = document.createElement('div');
+      swatch.style.cssText = 'position:absolute;left:-9999px;top:-9999px;background-color:var(--surface)';
+      document.body.appendChild(swatch);
+      const resSel = document.getElementById('cam-res-select');
+      for (const theme of BUILTIN_THEMES) {
+        document.documentElement.setAttribute('data-theme', theme);
+        if (resSel) {
+          const cs = getComputedStyle(resSel);
+          if (parseFloat(cs.borderTopWidth) <= 0) errs.push('508: cam-res-select has no border in theme ' + theme);
+          if (cs.backgroundColor === 'rgba(0, 0, 0, 0)' || cs.backgroundColor === 'transparent') {
+            errs.push('508: cam-res-select has a transparent background in theme ' + theme);
+          }
+          const surfaceRgb = getComputedStyle(swatch).backgroundColor;
+          // A selected option shows the accent colour (option:checked); pick
+          // an unselected one to check the plain surface colour instead.
+          const unselected = [...resSel.options].find((o) => !o.selected);
+          if (unselected) {
+            const optBg = getComputedStyle(unselected).backgroundColor;
+            if (optBg !== surfaceRgb) {
+              errs.push('508: cam-res-select option background is ' + optBg + ', expected ' + surfaceRgb + ' in theme ' + theme);
+            }
+          }
+        }
+      }
+      swatch.remove();
+      if (priorTheme) document.documentElement.setAttribute('data-theme', priorTheme);
+      else document.documentElement.removeAttribute('data-theme');
+    }
     errs.push(...(window.__SMOKE_ERRORS__ || []));
   } catch (e) { errs.push('probe: ' + e.message); }
   const pre = document.createElement('pre');
@@ -11421,6 +11574,41 @@ VIDEO_PROBE = """
     await sleep(30);
 
     const formatSel = document.getElementById('ve-export-format');
+    // 508: the export format/quality selects, themed across every built-in
+    // theme -- a bare select used to fall back to the plain OS look.
+    {
+      const priorTheme = document.documentElement.getAttribute('data-theme');
+      const BUILTIN_THEMES508 = ['light', 'dark', 'programmer', 'neon', 'cyberpunk', 'mono', 'ocean'];
+      const swatch = document.createElement('div');
+      swatch.style.cssText = 'position:absolute;left:-9999px;top:-9999px;background-color:var(--surface)';
+      document.body.appendChild(swatch);
+      const qSel508 = document.getElementById('ve-export-quality');
+      for (const theme of BUILTIN_THEMES508) {
+        document.documentElement.setAttribute('data-theme', theme);
+        const surfaceRgb = getComputedStyle(swatch).backgroundColor;
+        for (const sel of [formatSel, qSel508]) {
+          if (!sel) continue;
+          const label = sel.id;
+          const cs = getComputedStyle(sel);
+          if (parseFloat(cs.borderTopWidth) <= 0) errs.push('508: ' + label + ' has no border in theme ' + theme);
+          if (cs.backgroundColor === 'rgba(0, 0, 0, 0)' || cs.backgroundColor === 'transparent') {
+            errs.push('508: ' + label + ' has a transparent background in theme ' + theme);
+          }
+          // A selected option shows the accent colour (option:checked); pick
+          // an unselected one to check the plain surface colour instead.
+          const unselected = [...sel.options].find((o) => !o.selected);
+          if (unselected) {
+            const optBg = getComputedStyle(unselected).backgroundColor;
+            if (optBg !== surfaceRgb) {
+              errs.push('508: ' + label + ' option background is ' + optBg + ', expected ' + surfaceRgb + ' in theme ' + theme);
+            }
+          }
+        }
+      }
+      swatch.remove();
+      if (priorTheme) document.documentElement.setAttribute('data-theme', priorTheme);
+      else document.documentElement.removeAttribute('data-theme');
+    }
     const otherOpt = formatSel && [...formatSel.options].find((o) => o.value !== formatSel.value);
     if (otherOpt) {
       const beforeFormatChange = destInput.value;

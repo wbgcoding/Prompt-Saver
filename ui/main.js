@@ -18251,6 +18251,7 @@ function bind() {
     wrap.className = "snip-edit-field";
     wrap.append(Object.assign(document.createElement("span"), { textContent: labelText }));
     const select = document.createElement("select");
+    select.className = "modal-input snip-edit-select";
     for (const [v, label] of options) {
       select.appendChild(Object.assign(document.createElement("option"), { value: v, textContent: label }));
     }
@@ -19170,8 +19171,11 @@ function bind() {
   // file) and the ocr-captured event below -- one place decides "empty -> toast
   // only" and "auto-copy -> copy now + footer note instead of a toast".
   function showOcrResult(result) {
-    const text = result?.text || "";
-    if (!text) { toast(t("ocrNoTextFound")); return; }
+    const text = (result?.text || "").trim();
+    if (!text) {
+      toast(t("ocrNoTextFound"), { label: t("ocrLangsManage"), onClick: openOcrLangsModal });
+      return;
+    }
     const autoCopy = flag("ocrAutoCopy");
     if (autoCopy) invoke("copy_text", { text }).catch(() => {});
     $("ocr-result-text").value = text;
