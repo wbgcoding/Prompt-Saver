@@ -20166,6 +20166,25 @@ fn canvas_within_ceiling(w: u32, h: u32, ceiling_w: u32, ceiling_h: u32) -> bool
     w <= ceiling_w && h <= ceiling_h
 }
 
+// A value from an imported settings file or a stray manual edit can carry
+// anything; fall back to the smallest, most conservative capture ("window")
+// for any string that is not one of the three modes this actually knows.
+fn sanitize_canvas_mode(raw: &str) -> &'static str {
+    match raw {
+        "monitor" => "monitor",
+        "all" => "all",
+        _ => "window",
+    }
+}
+
+// Clamped to the same range the expert menu itself offers (`recCanvasMaxPx`
+// in main.js) so a value written outside the menu, such as an imported
+// settings file, cannot push the recording canvas ceiling past what the UI
+// ever lets a user pick.
+fn clamp_canvas_max_px(raw: f64) -> u32 {
+    raw.clamp(2048.0, 15360.0) as u32
+}
+
 // Pure predicate for the two optional recording safety nets (recMaxMin and
 // recMaxMb, both 0 = off) -- kept free of the watch thread's sleep loop so it
 // is unit-testable without spinning up a real recording.
@@ -22586,13 +22605,16 @@ fn resolve_recording_settings(db: &State<Db>) -> (bool, recording::AudioConfig, 
     // offered reactively the first time a recording actually hits the resize
     // problem (see the recording-captured payload's resize_crop_at_ms). No
     // expert-menu row for this setting yet (a future menu writes it directly).
-    let canvas_mode = db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_texts.get("recCanvasMode").cloned().unwrap_or_else(|| "window".to_string());
+    let canvas_mode = {
+        let raw = db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_texts.get("recCanvasMode").cloned().unwrap_or_else(|| "window".to_string());
+        sanitize_canvas_mode(&raw).to_string()
+    };
     // One expert-menu row (`recCanvasMaxPx`) now governs both the width and
     // the height ceiling -- there was never a settings row for the two
     // separate constants this replaces, so no stored value can have relied
     // on them differing.
     let canvas_ceiling = {
-        let max_px = db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("recCanvasMaxPx").copied().unwrap_or(8192.0).max(1.0) as u32;
+        let max_px = clamp_canvas_max_px(db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("recCanvasMaxPx").copied().unwrap_or(8192.0));
         (max_px, max_px)
     };
     // The mid-recording disk-space watch's own threshold -- see
@@ -34528,6 +34550,24 @@ mod tests {
         assert!(canvas_within_ceiling(8192, 4320, 8192, 4320));
         assert!(!canvas_within_ceiling(8193, 4320, 8192, 4320));
         assert!(!canvas_within_ceiling(7680, 4321, 8192, 4320));
+    }
+
+    #[test]
+    fn sanitize_canvas_mode_keeps_the_two_known_alternatives_and_rejects_the_rest() {
+        assert_eq!(sanitize_canvas_mode("monitor"), "monitor");
+        assert_eq!(sanitize_canvas_mode("all"), "all");
+        assert_eq!(sanitize_canvas_mode("window"), "window");
+        assert_eq!(sanitize_canvas_mode(""), "window");
+        assert_eq!(sanitize_canvas_mode("Monitor"), "window");
+        assert_eq!(sanitize_canvas_mode("drop table settings"), "window");
+    }
+
+    #[test]
+    fn clamp_canvas_max_px_stays_inside_the_expert_menus_own_range() {
+        assert_eq!(clamp_canvas_max_px(8192.0), 8192);
+        assert_eq!(clamp_canvas_max_px(0.0), 2048);
+        assert_eq!(clamp_canvas_max_px(-1.0), 2048);
+        assert_eq!(clamp_canvas_max_px(1_000_000_000.0), 15360);
     }
 
     #[test]
