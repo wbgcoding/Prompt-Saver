@@ -3155,12 +3155,12 @@ const EXPERT_PATHS = {
       const dir = await invoke("pick_folder").catch(() => null);
       if (!dir) return;
       settings.ui_texts = { ...(settings.ui_texts || {}), screenshotDir: dir };
-      invoke("set_ui_text", { key: "screenshotDir", value: dir }).catch((e) => errToast(e));
+      invoke("set_screenshot_dir", { dir }).catch((e) => errToast(e));
       renderExpert();
     },
     onReset: () => {
       settings.ui_texts = { ...(settings.ui_texts || {}), screenshotDir: "" };
-      invoke("set_ui_text", { key: "screenshotDir", value: "" }).catch((e) => errToast(e));
+      invoke("set_screenshot_dir", { dir: "" }).catch((e) => errToast(e));
       renderExpert();
     },
   },
@@ -3178,12 +3178,12 @@ const EXPERT_PATHS = {
       const dir = await invoke("pick_folder").catch(() => null);
       if (!dir) return;
       settings.ui_texts = { ...(settings.ui_texts || {}), videoExportDir: dir };
-      invoke("set_ui_text", { key: "videoExportDir", value: dir }).catch((e) => errToast(e));
+      invoke("set_video_export_dir", { dir }).catch((e) => errToast(e));
       renderExpert();
     },
     onReset: () => {
       settings.ui_texts = { ...(settings.ui_texts || {}), videoExportDir: "" };
-      invoke("set_ui_text", { key: "videoExportDir", value: "" }).catch((e) => errToast(e));
+      invoke("set_video_export_dir", { dir: "" }).catch((e) => errToast(e));
       renderExpert();
     },
   },
@@ -3237,12 +3237,12 @@ const EXPERT_PATHS = {
       const dir = await invoke("pick_folder").catch(() => null);
       if (!dir) return;
       settings.ui_texts = { ...(settings.ui_texts || {}), recordingDir: dir };
-      invoke("set_ui_text", { key: "recordingDir", value: dir }).catch((e) => errToast(e));
+      invoke("set_recording_dir", { dir }).catch((e) => errToast(e));
       renderExpert();
     },
     onReset: () => {
       settings.ui_texts = { ...(settings.ui_texts || {}), recordingDir: "" };
-      invoke("set_ui_text", { key: "recordingDir", value: "" }).catch((e) => errToast(e));
+      invoke("set_recording_dir", { dir: "" }).catch((e) => errToast(e));
       renderExpert();
     },
     // The only path row that also shows how much space its folder holds, plus

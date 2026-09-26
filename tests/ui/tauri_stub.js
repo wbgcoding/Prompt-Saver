@@ -333,6 +333,12 @@ const RESULTS = {
   set_ui_flag: (a) => { SETTINGS.ui_flags[a.key] = a.enabled; return null; },
   set_ui_value: (a) => { SETTINGS.ui_values[a.key] = a.value; return null; },
   set_ui_text: (a) => { SETTINGS.ui_texts[a.key] = a.value; return null; },
+  // Security pass 348: the folder-authority settings moved off the generic
+  // set_ui_text path onto their own dedicated setters, each taking the folder
+  // string the pick_folder dialog already returned.
+  set_screenshot_dir: (a) => { SETTINGS.ui_texts.screenshotDir = a.dir; return null; },
+  set_video_export_dir: (a) => { SETTINGS.ui_texts.videoExportDir = a.dir; return null; },
+  set_recording_dir: (a) => { SETTINGS.ui_texts.recordingDir = a.dir; return null; },
   get_settings: () => JSON.parse(JSON.stringify(SETTINGS)),
   get_state: () => ({ prompts: PROMPTS.map(presentPrompt), settings: JSON.parse(JSON.stringify(SETTINGS)) }),
   // 458: the single in-memory session key model -- unlock/lock/status only,

@@ -23474,26 +23474,64 @@ fn set_ui_value(app: AppHandle, state: State<Db>, key: String, value: f64) {
     notify_float_settings(&app);
 }
 
+// Settings that name a folder the backend itself writes into or deletes from.
+// A generic setter (this one) or a settings/backup import must never be able
+// to point one of these at an arbitrary folder -- each is changed only
+// through its own dedicated command (set_screenshot_dir, set_video_export_dir,
+// set_recording_dir, set_sync_dir), so a subverted renderer calling the
+// generic string setter, or a hostile imported settings file, cannot grant
+// itself write or delete authority over a folder of its choosing.
+const PROTECTED_FOLDER_KEYS: [&str; 4] = ["screenshotDir", "videoExportDir", "recordingDir", "syncDir"];
+
+fn is_protected_folder_key(key: &str) -> bool {
+    PROTECTED_FOLDER_KEYS.contains(&key)
+}
+
 // Set an expert string option (e.g. the copy-feedback font key).
 #[tauri::command]
 fn set_ui_text(app: AppHandle, state: State<Db>, key: String, value: String) {
-    let is_sync_dir = key == "syncDir";
+    if is_protected_folder_key(&key) {
+        return;
+    }
     {
         let mut store = lock(&state);
         store.settings.ui_texts.insert(key, value);
         save_settings(&app, &store.settings);
-        // Pointing the sync at a different folder used to change nothing until the
-        // next prompt save happened to flush it: the folder the user just picked
-        // stayed empty and the feature looked broken. Same synchronous, one-off
-        // treatment activation gets: when this returns, the files are there. Files
-        // in the PREVIOUS folder are deliberately left alone; that folder is the
-        // user's own, and this app never deletes outside the folder it syncs to.
-        if is_sync_dir && sync_enabled(&store.settings) {
-            // Unlike the activation above this command has no error channel back to
-            // the window; sync_write_all_impl has already logged whatever failed.
-            let _ = sync_write_all_impl(&app, &store.prompts, &store.settings);
-        }
     }
+    notify_float_settings(&app);
+}
+
+// Dedicated setter for the screenshot save folder -- the expert menu's
+// "Change" button calls pick_folder for the dialog, then this with its
+// result. Kept out of the generic set_ui_text path; see PROTECTED_FOLDER_KEYS.
+#[tauri::command]
+fn set_screenshot_dir(app: AppHandle, state: State<Db>, dir: String) {
+    let mut store = lock(&state);
+    store.settings.ui_texts.insert("screenshotDir".to_string(), dir);
+    save_settings(&app, &store.settings);
+    drop(store);
+    notify_float_settings(&app);
+}
+
+// Dedicated setter for the video editor's export folder -- same shape as
+// set_screenshot_dir above, and for the same reason.
+#[tauri::command]
+fn set_video_export_dir(app: AppHandle, state: State<Db>, dir: String) {
+    let mut store = lock(&state);
+    store.settings.ui_texts.insert("videoExportDir".to_string(), dir);
+    save_settings(&app, &store.settings);
+    drop(store);
+    notify_float_settings(&app);
+}
+
+// Dedicated setter for the screen-recording save folder -- same shape as
+// set_screenshot_dir above, and for the same reason.
+#[tauri::command]
+fn set_recording_dir(app: AppHandle, state: State<Db>, dir: String) {
+    let mut store = lock(&state);
+    store.settings.ui_texts.insert("recordingDir".to_string(), dir);
+    save_settings(&app, &store.settings);
+    drop(store);
     notify_float_settings(&app);
 }
 
@@ -28571,10 +28609,22 @@ fn settings_import_diff(current: &Settings, incoming: &SettingsOnlyExport) -> (u
     (changed, total)
 }
 
+// A settings-only import file is untrusted (it could be a hostile file placed
+// where the user was talked into picking it, not necessarily their own
+// export), so the folder-authority keys never come along for the ride --
+// see PROTECTED_FOLDER_KEYS. Called on every incoming file before it is
+// diffed or applied, so preview and apply always agree on what would change.
+fn strip_protected_folder_keys(incoming: &mut SettingsOnlyExport) {
+    for key in PROTECTED_FOLDER_KEYS {
+        incoming.ui_texts.remove(key);
+    }
+}
+
 #[tauri::command]
 async fn preview_settings_import(state: State<'_, Db>, path: String) -> Result<(usize, usize), String> {
     let raw = read_file_capped(&PathBuf::from(path), MAX_SETTINGS_IMPORT_BYTES)?;
-    let incoming = parse_settings_only(&raw)?;
+    let mut incoming = parse_settings_only(&raw)?;
+    strip_protected_folder_keys(&mut incoming);
     let store = lock(&state);
     Ok(settings_import_diff(&store.settings, &incoming))
 }
@@ -28582,7 +28632,8 @@ async fn preview_settings_import(state: State<'_, Db>, path: String) -> Result<(
 #[tauri::command]
 async fn apply_settings_import(app: AppHandle, state: State<'_, Db>, path: String) -> Result<usize, String> {
     let raw = read_file_capped(&PathBuf::from(path), MAX_SETTINGS_IMPORT_BYTES)?;
-    let incoming = parse_settings_only(&raw)?;
+    let mut incoming = parse_settings_only(&raw)?;
+    strip_protected_folder_keys(&mut incoming);
     let changed = {
         let mut store = lock(&state);
         let (changed, _) = settings_import_diff(&store.settings, &incoming);
@@ -28654,6 +28705,14 @@ fn apply_import(store: &mut Store, backup: Backup, want_data: bool, want_setting
     let backup_pw_dropped = want_settings && backup.settings.ui_texts.contains_key(BACKUP_PW_KEY);
     if want_settings {
         let local_backup_pw = store.settings.ui_texts.get(BACKUP_PW_KEY).cloned();
+        // A full backup can come from another machine, or be a hostile file the
+        // user was talked into restoring, so its own folder-authority settings
+        // (PROTECTED_FOLDER_KEYS) must not land here either -- this machine's
+        // current folders are kept exactly like the backup password above.
+        let local_folders: Vec<(String, String)> = PROTECTED_FOLDER_KEYS
+            .iter()
+            .filter_map(|k| store.settings.ui_texts.get(*k).map(|v| (k.to_string(), v.clone())))
+            .collect();
         store.settings = backup.settings;
         SETTINGS_LOCKED.store(false, Ordering::Relaxed); // a full settings import supersedes any corrupt-row lock
         // migrate() fills defaults and guarantees at least one view: without it a
@@ -28663,6 +28722,12 @@ fn apply_import(store: &mut Store, backup: Backup, want_data: bool, want_setting
         store.settings.ui_texts.remove(BACKUP_PW_KEY);
         if let Some(pw) = local_backup_pw {
             store.settings.ui_texts.insert(BACKUP_PW_KEY.to_string(), pw);
+        }
+        for key in PROTECTED_FOLDER_KEYS {
+            store.settings.ui_texts.remove(key);
+        }
+        for (k, v) in local_folders {
+            store.settings.ui_texts.insert(k, v);
         }
         load_pick_history(&store.settings); // restore brings its own history mirror
     }
@@ -30446,6 +30511,9 @@ pub fn run() {
             set_ui_flag,
             set_ui_value,
             set_ui_text,
+            set_screenshot_dir,
+            set_video_export_dir,
+            set_recording_dir,
             reset_expert,
             remote::remote_api_take_shown_password,
             remote::remote_api_regenerate_password,
@@ -40889,6 +40957,88 @@ mod tests {
             !store.settings.ui_texts.contains_key(BACKUP_PW_KEY),
             "the foreign backup password must not survive — this machine had none to restore"
         );
+    }
+
+    // Finding 1 (security pass 348): a full backup restore used to overwrite
+    // the folder-authority settings outright, so a hostile backup file could
+    // point videoExportDir/recordingDir/screenshotDir/syncDir at any folder it
+    // liked and have export/cleanup/sync commands trust it from then on. This
+    // machine's own folders must survive a settings-scope import exactly like
+    // the backup password above.
+    #[test]
+    fn import_all_settings_scope_keeps_this_machines_own_folder_settings() {
+        let mut store = Store {
+            prompts: vec![test_prompt("live")],
+            trash: Vec::new(),
+            settings: Settings::default(),
+            prompts_locked: false,
+            written: Default::default(),
+        };
+        store.settings.ui_texts.insert("recordingDir".into(), "D:\\mine\\recordings".into());
+        store.settings.ui_texts.insert("videoExportDir".into(), "D:\\mine\\exports".into());
+        store.settings.ui_texts.insert("screenshotDir".into(), "D:\\mine\\shots".into());
+        store.settings.ui_texts.insert("syncDir".into(), "D:\\mine\\sync".into());
+        let mut backup_settings = Settings::default();
+        backup_settings.ui_texts.insert("recordingDir".into(), "C:\\Windows\\System32".into());
+        backup_settings.ui_texts.insert("videoExportDir".into(), "C:\\Windows\\System32".into());
+        backup_settings.ui_texts.insert("screenshotDir".into(), "C:\\Windows\\System32".into());
+        backup_settings.ui_texts.insert("syncDir".into(), "C:\\Windows\\System32".into());
+        backup_settings.ui_texts.insert("marker".into(), "BACKUP".into());
+        let backup = Backup { prompts: vec![test_prompt("backed-up")], settings: backup_settings };
+
+        apply_import(&mut store, backup, false, true);
+
+        assert_eq!(
+            store.settings.ui_texts.get("marker").map(String::as_str),
+            Some("BACKUP"),
+            "an ordinary setting must still come from the backup"
+        );
+        for (key, own_value) in [
+            ("recordingDir", "D:\\mine\\recordings"),
+            ("videoExportDir", "D:\\mine\\exports"),
+            ("screenshotDir", "D:\\mine\\shots"),
+            ("syncDir", "D:\\mine\\sync"),
+        ] {
+            assert_eq!(
+                store.settings.ui_texts.get(key).map(String::as_str),
+                Some(own_value),
+                "{key} must keep this machine's own folder, never the backup's",
+            );
+        }
+    }
+
+    // Finding 1 (security pass 348): set_ui_text is the generic string setter
+    // every ordinary expert-menu row uses -- a folder-authority key must never
+    // be reachable through it, only through its own dedicated command.
+    #[test]
+    fn is_protected_folder_key_covers_every_folder_setting_and_nothing_else() {
+        assert!(is_protected_folder_key("screenshotDir"));
+        assert!(is_protected_folder_key("videoExportDir"));
+        assert!(is_protected_folder_key("recordingDir"));
+        assert!(is_protected_folder_key("syncDir"));
+        assert!(!is_protected_folder_key("copyFont"), "an ordinary string setting must stay reachable");
+        assert!(!is_protected_folder_key("dataDir"), "dataDir has its own separate command and storage, not a ui_texts key");
+    }
+
+    // Finding 1 (security pass 348): a settings-only import file is untrusted
+    // (it could be a hostile file, not necessarily the user's own export) --
+    // its folder-authority rows must be dropped before the diff/apply ever see
+    // them, so neither preview nor apply can be talked into changing them.
+    #[test]
+    fn strip_protected_folder_keys_removes_every_folder_setting_and_nothing_else() {
+        let mut incoming = SettingsOnlyExport::default();
+        incoming.ui_texts.insert("screenshotDir".into(), "C:\\evil".into());
+        incoming.ui_texts.insert("videoExportDir".into(), "C:\\evil".into());
+        incoming.ui_texts.insert("recordingDir".into(), "C:\\evil".into());
+        incoming.ui_texts.insert("syncDir".into(), "C:\\evil".into());
+        incoming.ui_texts.insert("copyFont".into(), "Consolas".into());
+
+        strip_protected_folder_keys(&mut incoming);
+
+        for key in PROTECTED_FOLDER_KEYS {
+            assert!(!incoming.ui_texts.contains_key(key), "{key} must be stripped from an incoming settings file");
+        }
+        assert_eq!(incoming.ui_texts.get("copyFont").map(String::as_str), Some("Consolas"), "an ordinary setting must survive untouched");
     }
 
     // A full "data" import must actually delete the prompts it replaces ON DISK,

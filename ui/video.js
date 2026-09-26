@@ -3703,7 +3703,7 @@ function persistExportSettings() {
   // A custom free-typed size has no discrete preset to remember -- it falls
   // back to "keep original" as the safe default for the next session.
   invoke("set_ui_text", { key: "videoExportScale", value: currentScalePresetKey() || "" }).catch(() => {});
-  invoke("set_ui_text", { key: "videoExportDir", value: VE.destDir }).catch(() => {});
+  invoke("set_video_export_dir", { dir: VE.destDir }).catch(() => {});
 }
 
 // ---------------------------------------------------------------- keyboard
