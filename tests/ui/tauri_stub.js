@@ -124,10 +124,10 @@ const PROMPTS = Array.from({ length: 12 }, (_, i) => ({
   variants: i === 10 ? ["Example prompt body number 11, second entry.", "Example prompt body number 11, third entry."] : [],
   rotate_mode: "",
   // That same prompt has Auto switched on, so a probe can check that copying it
-  // hands the prompt id to copy_text — the thing the backend needs to open an
+  // hands the prompt id to copy_text: the thing the backend needs to open an
   // auto-advance session at all.
   rotate_auto: i === 10,
-  // One prompt carries a stored image — and carries it the way get_state really
+  // One prompt carries a stored image, and carries it the way get_state really
   // hands it over: the FACT plus a revision, never the base64 bytes. The picture
   // itself is fetched per prompt through prompt_image below, so a fixture entry
   // growing an `image` field again would be a regression, not a convenience.
@@ -169,11 +169,11 @@ function presentPrompt(p) {
   return { ...p, text: locked ? "" : p.text, variants: locked ? [] : (p.variants || []), locked };
 }
 
-// A valid 1x1 PNG — enough for an <img> to accept and for a probe to compare.
+// A valid 1x1 PNG: enough for an <img> to accept and for a probe to compare.
 const STUB_IMAGE = "data:image/png;base64," +
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 window.__STUB_IMAGE__ = STUB_IMAGE;
-// Where the bytes live in this fixture — id -> data URL, exactly like the backend
+// Where the bytes live in this fixture: id -> data URL, exactly like the backend
 // keeping them in the store and handing out one at a time.
 const STUB_IMAGES = new Map([["p11", STUB_IMAGE]]);
 // Counted so a probe can prove the window asks once per image and then reuses it.
@@ -182,10 +182,10 @@ window.__PROMPT_IMAGE_CALLS__ = 0;
 const LAYOUT = {};
 PROMPTS.forEach((p, i) => { LAYOUT[p.id] = [i % 4, Math.floor(i / 4)]; });
 
-// 32: mirrors Settings.rotate_pos — order-mode pointer per rotating prompt id.
+// 32: mirrors Settings.rotate_pos: order-mode pointer per rotating prompt id.
 const ROTATE_POS = new Map();
 
-// 91: trash — three items so restore, single purge and empty-all each get their own
+// 91: trash: three items so restore, single purge and empty-all each get their own
 // target; t2 is anonymous, exercising the libLabel() fallback.
 const TRASH = [
   { id: "t1", name: "Deleted idea", text: "Body of the deleted prompt.", trashed_at: 1750000000, color: "", tags: [], notes: "", hotkey: "", file_path: "" },
@@ -208,7 +208,7 @@ const SETTINGS = {
   auto_update: true, skipped_versions: [],
   // Tags, custom themes, view groups and private notes ship off; the stub turns them
   // on so the smoke run covers that UI too. The Markdown preview is deliberately NOT
-  // listed — it ships on, and the run proves that.
+  // listed; it ships on, and the run proves that.
   // F25 is on too, so the expert menu renders its gated sliders and the folder
   // window has something to draw.
   // F26 is on too, so the pipette shows in the composer bar and its gated expert
@@ -270,7 +270,7 @@ const SETTINGS = {
   active_view: "home",
 };
 // A member has no cell of its own while it sits in a folder (mirrors the backend
-// dropping it on join) — without this, dissolve would look like it worked even with
+// dropping it on join); without this, dissolve would look like it worked even with
 // a stub that never restored one, because the stale index-based cell was still there.
 for (const f of SETTINGS.tile_folders) for (const m of f.members) delete LAYOUT[m];
 
@@ -611,7 +611,7 @@ const RESULTS = {
   // 76: simulates the OS save dialog succeeding; a real "canceled" rejection is
   // never exercised here, since there is no real dialog for the harness to cancel.
   export_custom_theme: () => null,
-  // 76: simulates picking a file and it parsing into a new saved theme — same
+  // 76: simulates picking a file and it parsing into a new saved theme, same
   // shape save_custom_theme returns, so the caller's refresh path is identical.
   import_custom_theme: () => {
     const id = "ct" + (SETTINGS.custom_themes.length + 1);
@@ -723,11 +723,11 @@ const RESULTS = {
     return 0;
   },
   // One snapshot carries its prompt count and names (61), one is from an older
-  // build and has neither — the list has to show both without a gap in the row.
+  // build and has neither: the list has to show both without a gap in the row.
   open_backups_folder: () => null,
-  // 17: p3 edited most recently, then p1, then p9 — everything else has no
+  // 17: p3 edited most recently, then p1, then p9: everything else has no
   // version row (never content-edited, or history was off) and sorts last.
-  // None of these three are favorited (favorite: i % 5 === 0) — favorites float
+  // None of these three are favorited (favorite: i % 5 === 0); favorites float
   // to the top independently of this sort, which would otherwise confuse the test.
   last_edited_map: () => ({ p3: 3000, p1: 2000, p9: 1000 }),
   // 339: records the format/ids the caller asked for so a probe can assert on
@@ -792,7 +792,7 @@ const RESULTS = {
   restore_copy_history: () => null,
   delete_copy_entry: () => true,
   // 2: the fixture library is never empty, so the real seeding never actually
-  // triggers (matches the backend's own "already has prompts" guard) — the mock
+  // triggers (matches the backend's own "already has prompts" guard); the mock
   // just needs to exist so the call is tracked, not error out.
   seed_example_prompts: () => [],
   example_prompts_pending: () => examplePristineIds().length,
@@ -827,7 +827,7 @@ const RESULTS = {
   missing_files: () => [],
   has_backup_password: () => true,
   // One real group, so the duplicate cards actually render and the layout scan has
-  // something to measure — an empty list only ever proved the "none found" line.
+  // something to measure: an empty list only ever proved the "none found" line.
   find_duplicates: () => [{
     score: 0.94,
     members: [
@@ -898,7 +898,7 @@ const RESULTS = {
       "GPL-3.0-or-later": "GNU General Public License, version 3 or later (summary)...",
     },
   }),
-  // The FULL prompt, image bytes included — the editor's one fetch when it opens.
+  // The FULL prompt, image bytes included: the editor's one fetch when it opens.
   get_prompt: (a) => {
     const p = PROMPTS.find((x) => x.id === (a && a.id)) || PROMPTS[0];
     if (p.secret && !SECRET_UNLOCKED) throw "secret-locked";
@@ -937,7 +937,7 @@ const RESULTS = {
     PROMPTS.push(created);
     return created;
   },
-  // 91: trash — restore/purge mutate the shared TRASH/PROMPTS fixtures so the dialog
+  // 91: trash: restore/purge mutate the shared TRASH/PROMPTS fixtures so the dialog
   // reflects real effects, the way batch_prompts already mirrors "color" onto PROMPTS.
   list_trash: () => JSON.parse(JSON.stringify(TRASH)),
   restore_prompt: (a) => {
@@ -1046,7 +1046,7 @@ const RESULTS = {
     return prompt;
   },
   // Item 1: the popup's per-prompt rows write straight through this (no editor
-  // save step of their own) — mirrors the real backend's "hands back what it
+  // save step of their own); mirrors the real backend's "hands back what it
   // really stored" contract closely enough for the wiring the smoke test proves.
   update_prompt: (a) => {
     const p = PROMPTS.find((x) => x.id === (a && a.id));
@@ -1169,7 +1169,7 @@ const RESULTS = {
     SETTINGS.view_groups = SETTINGS.view_groups.filter((g) => g.id !== (a && a.id));
     return clone();
   },
-  // F27 grid folders: same answers as the backend — the settings blob, invariants
+  // F27 grid folders: same answers as the backend: the settings blob, invariants
   // applied (no prompt in two folders, under two members dissolves).
   save_tile_folder: (a) => {
     const members = (a && a.members) || [];
@@ -1200,7 +1200,7 @@ const RESULTS = {
     SETTINGS.tile_folders = SETTINGS.tile_folders.filter((x) => x.id !== (a && a.id));
     const view = f && SETTINGS.views.find((v) => v.id === f.view_id);
     if (view) {
-      // Other folders still on this view keep their own cell — a dissolved member
+      // Other folders still on this view keep their own cell: a dissolved member
       // must not be handed one of those, or it saves fine but never renders.
       const otherCells = SETTINGS.tile_folders.filter((g) => g.view_id === f.view_id).map((g) => g.cell);
       for (const member of f.members) {
@@ -1253,7 +1253,7 @@ const RESULTS = {
   // The copy commands report success; the UI skips everything that follows a copy
   // (feedback, history, auto-paste) when they come back falsy.
   // 32: order-mode only (random's shuffle-bag is covered by the 5 Rust unit tests,
-  // not re-proven here) — enough to exercise the peek→copy→commit wiring for real.
+  // not re-proven here); enough to exercise the peek→copy→commit wiring for real.
   copy_prompt: (a) => {
     const p = PROMPTS.find((x) => x.id === (a && a.id));
     if (p && p.secret && !SECRET_UNLOCKED) throw "secret-locked";
@@ -1279,7 +1279,7 @@ const RESULTS = {
     const total = 1 + (p.variants || []).length;
     const idx = (ROTATE_POS.get(p.id) || 0) % total;
     // 33: the stub only ever simulates sequential advance (real random-bag shuffling
-    // is a backend concern, proven in Rust unit tests) — pos = idx + 1 mirrors what
+    // is a backend concern, proven in Rust unit tests); pos = idx + 1 mirrors what
     // order mode itself returns, which is all the UI-side wiring needs to exercise.
     return { index: idx, pos: idx + 1, total, text: idx === 0 ? p.text : p.variants[idx - 1] };
   },
@@ -1303,14 +1303,14 @@ const RESULTS = {
   takeover_offer: () => ({ path: "C:\\Users\\Example\\AppData\\Roaming\\Example-Store", size: 812345, prompts: 7 }),
   takeover_apply: () => null,
   pick_backup_file: () => "C:\\Backups\\Backup 2026-07-25.psb",
-  // Refuses until a password is supplied — drives the retry prompt.
+  // Refuses until a password is supplied: drives the retry prompt.
   import_all: (a) => {
     if (!a || !a.password) throw new Error("password-required");
     if (a.password !== "letmein") throw new Error("wrong password or corrupt backup");
     return { name: "Backup 2026-07-25.psb", count: 12, dropped_hotkeys: 2 };
   },
   focus_main_window: () => null,
-  // 19: the picker's right-click history popover — a fixed, non-empty list so
+  // 19: the picker's right-click history popover: a fixed, non-empty list so
   // the happy path (list, click, copy) is exercised on every run.
   pick_history: () => ["#AABBCC", "#112233"],
   copy_pick_history_entry: (a) => { window.__LAST_COPY__ = a && a.hex; return (a && a.hex) || ""; },
@@ -1380,7 +1380,7 @@ const RESULTS = {
     top: [{ name: "Prompt 1", count: 9 }],
     never_used: [{ name: "Prompt 9", count: 0 }],
     per_view: [{ name: "Home", count: 12 }],
-    // 58: 14 days, newest last — a couple of zero days mixed in like a real history.
+    // 58: 14 days, newest last: a couple of zero days mixed in like a real history.
     daily: Array.from({ length: 14 }, (_, i) => ({
       ts: 1750000000 - (13 - i) * 86400,
       count: [0, 3, 1, 0, 5, 2, 4, 0, 1, 6, 2, 3, 1, 4][i],
@@ -1463,7 +1463,7 @@ const noopWindow = {
 };
 
 // Backend events are kept so the probe can deliver one (window.__FIRE__), which is
-// the only way to exercise a code path the backend normally starts — e.g. a prompt
+// the only way to exercise a code path the backend normally starts: e.g. a prompt
 // hotkey being pressed while the app sits in the tray.
 const LISTENERS = {};
 window.__FIRE__ = (event, payload) => {

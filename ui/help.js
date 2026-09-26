@@ -1,9 +1,9 @@
-// In-app documentation. EN + DE only (deliberate scope decision) —
+// In-app documentation. EN + DE only (deliberate scope decision):
 // every other language falls back to English. Kept out of i18n.js on purpose: that
 // file's parity check (tests/i18n_check.js) requires every key in all 11 languages,
 // which this content deliberately does not follow.
 //
-// Mirrored (structure, not word-for-word) in docs/help.md — keep both in sync when
+// Mirrored (structure, not word-for-word) in docs/help.md: keep both in sync when
 // a category changes.
 //
 // `id` is an optional stable key, present on the handful of articles something

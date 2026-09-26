@@ -333,7 +333,7 @@ body.video-body {
 .ve-steps { display: flex; flex-wrap: wrap; gap: 4px; }
 .ve-step { padding: 4px 8px; font-size: 12px; }
 .ve-step.sel { background: var(--accent-strong); border-color: var(--accent-strong); color: var(--accent-fg); }
-/* A switched-off group stays visible but plainly inert — a control the user
+/* A switched-off group stays visible but plainly inert: a control the user
    cannot act on must never look like one they can. */
 .ve-off { opacity: 0.45; }
 .ve-crop-fields, .ve-ov-editor { display: flex; flex-direction: column; gap: 8px; }

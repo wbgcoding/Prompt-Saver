@@ -56,7 +56,7 @@
   /* Select chevron: a data-URI SVG cannot hold a var(), so every theme bakes its
      own copy with that theme's --muted colour already baked in as the stroke.
      Template mirrored for a custom theme's runtime override in main.js
-     (selectChevronVar) — keep both in sync if the SVG ever changes. */
+     (selectChevronVar); keep both in sync if the SVG ever changes. */
   --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666d7a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
 }
 :root[data-theme="dark"] {
@@ -80,7 +80,7 @@
   --hl-fn: #79c0ff;
   --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
 }
-/* Programmer: terminal look — near-black panels, console green, monospace UI. */
+/* Programmer: terminal look, near-black panels, console green, monospace UI. */
 :root[data-theme="programmer"] {
   --bg: #0d1117;
   --surface: #161b22;
@@ -223,7 +223,7 @@ body.win-maximized { border-radius: 0; }
   border-bottom: 1px solid var(--border);
   flex: 0 0 auto;
 }
-/* A basis wide enough for the logo plus a readable tab strip — that is what decides
+/* A basis wide enough for the logo plus a readable tab strip: that is what decides
    when the header goes two-line. */
 .brand { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 210px; }
 .logo { display: block; border-radius: 7px; flex: 0 0 auto; cursor: pointer; }
@@ -256,7 +256,7 @@ body.noflag-showJournal #journal-btn { display: none; }
   border-radius: 8px;
   transition: color var(--transition), transform var(--transition), background var(--transition);
 }
-/* Just a colour change on hover/active, like the view tabs beside it — no lift,
+/* Just a colour change on hover/active, like the view tabs beside it, no lift,
    no glow. */
 .fav-view-toggle:hover { color: var(--accent); }
 .fav-view-toggle.active { color: var(--accent); }
@@ -275,7 +275,7 @@ body.noflag-showJournal #journal-btn { display: none; }
    strip no pointer can land on, so it scrolls sideways instead of being crushed. */
 /* Shrinks (so the tabs stay scrollable on a narrow window) but never grows: a
    stretched tab strip would cover the free part of the header, and that area is
-   what the user grabs to move the window — the strip itself is no drag region. */
+   what the user grabs to move the window; the strip itself is no drag region. */
 .views { display: flex; gap: 6px; margin-left: 0; min-width: 96px; flex: 0 1 auto; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
 .views::-webkit-scrollbar { display: none; }
 .view-btn {
@@ -313,7 +313,7 @@ body.noflag-showJournal #journal-btn { display: none; }
   box-shadow: none;
 }
 /* The grid itself outlined in the active view's color (expert opt, off
-   by default) — a view with no color set just gets no border, via the same
+   by default); a view with no color set just gets no border, via the same
    --active-view-color the tab already carries per-button. */
 .flag-gridViewBorder #grid {
   box-shadow: inset 0 0 0 calc(var(--view-border, 3px) * 0.95) var(--active-view-color, transparent);
@@ -341,7 +341,7 @@ body.noflag-showJournal #journal-btn { display: none; }
 }
 .view-group-chev { display: inline-flex; align-items: center; opacity: 0.7; }
 /* Drag feedback: the dragged tab fades, the tab under the cursor lights up.
-   Everything the drop target paints stays INSIDE its own box — an outer ring or a
+   Everything the drop target paints stays INSIDE its own box: an outer ring or a
    lift is cut off at the edge of the tab strip, which scrolls (overflow-x), and that
    half-drawn effect is the reported one. Same reasoning as the pill merge hint, which
    cannot leave its window either, so both folder gestures look alike. */
@@ -351,7 +351,7 @@ body.noflag-showJournal #journal-btn { display: none; }
   background: var(--accent);
   color: var(--accent-fg);
 }
-/* Merge preview — the same gesture as the tiles and the floating pills. Drawn as a
+/* Merge preview: the same gesture as the tiles and the floating pills. Drawn as a
    SCRIM, not a tint: a 16 % wash of the accent over an already-accent tab was almost
    invisible, which is what made it look broken. --fg/--bg invert together with the
    theme, so the mark always reads. Everything stays inside the button box: the tab
@@ -382,7 +382,7 @@ body.noflag-showJournal #journal-btn { display: none; }
   -webkit-mask: var(--folder-glyph) center / contain no-repeat;
   mask: var(--folder-glyph) center / contain no-repeat;
 }
-/* One keyframe for all three surfaces. Only a fade — a scaling scrim looked like a
+/* One keyframe for all three surfaces. Only a fade: a scaling scrim looked like a
    glitch at tab size. */
 @keyframes merge-in {
   from { opacity: 0; }
@@ -453,7 +453,7 @@ body.noflag-showJournal #journal-btn { display: none; }
 .view-group-item:hover .view-group-out { opacity: 1; }
 .view-group-out:hover { color: var(--accent); }
 
-/* Wraps within itself once the row no longer fits — the window controls must stay on
+/* Wraps within itself once the row no longer fits; the window controls must stay on
    screen at every window size the app allows. */
 .header-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; row-gap: 4px; gap: 4px; min-width: 0; flex: 0 1 auto; }
 /* Thin divider grouping the header actions. */
@@ -463,7 +463,7 @@ body.noflag-showJournal #journal-btn { display: none; }
 body.no-header .header { display: none; }
 body.no-composer .composer { display: none; }
 /* While a grid multi-selection is active, fold the composer away purely for
-   more room — this never touches the stored show_composer setting, so it comes
+   more room; this never touches the stored show_composer setting, so it comes
    back exactly as it was once the selection is cleared. */
 body.grid-selecting .composer { display: none; }
 .bar-toggle { opacity: 0.45; }
@@ -520,7 +520,7 @@ body.drag-active .bar-restore { opacity: 0.1; pointer-events: none; }
 .header-actions .icon-btn { padding: 4px; }
 .header-actions .icon-btn > svg { width: 22px; height: 22px; }
 /* Tag-filter glyph fills its viewBox almost edge-to-edge (unlike its
-   neighbours, drawn with more internal padding) — shrink it alone so it
+   neighbours, drawn with more internal padding); shrink it alone so it
    reads the same visual size instead of looking oversized. */
 #grid-tag-btn > svg { width: 19px; height: 19px; }
 /* Hide-bar chevrons (top + bottom + the restore buttons) share one bolder look. */
@@ -567,7 +567,7 @@ body.drag-active .bar-restore { opacity: 0.1; pointer-events: none; }
 .win-btn svg path, .win-btn svg rect { stroke-width: 2.3px; }
 .win-btn:hover { background: var(--surface-2); color: var(--fg); }
 .win-btn:active { background: color-mix(in srgb, var(--surface-2) 70%, var(--border)); }
-/* Close hovers like every other window control — no red wash. */
+/* Close hovers like every other window control, no red wash. */
 /* Maximize/restore icon swap driven by the window state class on <body>. */
 .win-ico-restore { display: none; }
 body.win-maximized .win-ico-max { display: none; }
@@ -618,7 +618,7 @@ body.win-maximized .win-ico-restore { display: inline; }
                     claiming 100% of .grid-wrap and clipping under them */
   /* grid-template set inline by JS: repeat(cols, 1fr) / repeat(rows, 1fr) */
 }
-/* First run, zero prompts anywhere — a centered hint over the grid so an empty
+/* First run, zero prompts anywhere: a centered hint over the grid so an empty
    window doesn't just look broken. Never blocks the cells under it (still usable
    for 9's double-click-to-create once that lands). */
 .grid-empty {
@@ -691,15 +691,15 @@ body.drag-active .cell.drag-over {
 .tile:hover { border-color: var(--accent); box-shadow: var(--shadow); }
 /* Hover lift and press scale compose through variables. A plain `transform` on the
    :hover rule outranks the :active rule (same specificity, later in the file), which
-   silently killed the press feedback for anyone hovering — i.e. always. */
+   silently killed the press feedback for anyone hovering, i.e. always. */
 .tile:hover { --tile-lift: calc(var(--hover-lift, 1px) * -1); }
 /* No press-scale while the pointer is in the video-control zone
-   (.media-hover) — works on every WebView2 build, unlike :has(). */
+   (.media-hover): works on every WebView2 build, unlike :has(). */
 .tile:active:not(.media-hover) { --tile-press: 0.97; }
 /* No press-scale while dragging, keeps the text steady. */
 .tile.dragging { opacity: 0.25; cursor: grabbing; z-index: 5; transform: none !important; }
 /* An armed drag-out source. The OS draws the drag image itself, so the cursor
-   is the only hint needed — and a cursor keyword carries no colour to clash with a theme. */
+   is the only hint needed, and a cursor keyword carries no colour to clash with a theme. */
 .tile[draggable="true"], .lib-item[draggable="true"] { cursor: copy; }
 
 /* Hover-revealed actions button. */
@@ -729,7 +729,7 @@ body.drag-active .cell.drag-over {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 16%, var(--surface));
 }
-/* A click the copy cooldown swallowed — a "no" shake, not silence. */
+/* A click the copy cooldown swallowed: a "no" shake, not silence. */
 @keyframes tile-cooldown-shake {
   0%, 100% { transform: translateX(0); }
   25% { transform: translateX(-3px); }
@@ -903,7 +903,7 @@ body.drag-active .cell.drag-over {
   filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.65));
 }
 
-/* Rotating-prompt "next entry" pill, bottom-left — free corner on a text tile
+/* Rotating-prompt "next entry" pill, bottom-left, free corner on a text tile
    (media caption/bar live bottom-right/full-width, never on a rotating prompt). */
 .tile-rotate-badge {
   position: absolute;
@@ -925,7 +925,7 @@ body.drag-active .cell.drag-over {
   color: var(--accent-fg);
 }
 
-/* Bulk-selection checkbox — same corner as the type badge, so the two never
+/* Bulk-selection checkbox: same corner as the type badge, so the two never
    compete: hovering (or once ANY tile is checked) swaps the badge out for it. */
 .tile-select {
   position: absolute;
@@ -950,7 +950,7 @@ body.drag-active .cell.drag-over {
 }
 .tile:hover .tile-select,
 body.grid-selecting .tile-select { opacity: 1; }
-/* The chain order badge (1, 2, 3 …) sits in the same corner — a picked tile shows
+/* The chain order badge (1, 2, 3 …) sits in the same corner: a picked tile shows
    the number, not the checkbox, so the two never overlap. */
 .tile.chain-picked .tile-select { opacity: 0; pointer-events: none; }
 .tile:hover .tile-type,
@@ -1012,15 +1012,15 @@ body.noflag-chainQuickStart .tile-chain-start { display: none; }
 
 /* ---- Grid folders ----
    A folder is a cell like any other: the four newest members as a 2x2 face, the name
-   under it and the member count in the corner. Everything is drawn INSIDE the tile —
+   under it and the member count in the corner. Everything is drawn INSIDE the tile;
    the grid clips its cells, so nothing may reach past the edge. */
 /* ---- Grid folder tile ----
    Reads like a folder on a desktop: a big preview of what is inside, a small label
    under it. The preview does the identifying, so it gets the room; the name is a
-   caption at a fixed size and never grows — it used to carry .tile-name, which the
+   caption at a fixed size and never grows; it used to carry .tile-name, which the
    tile auto-fitter scales to prompt size, and a two-word folder name then filled the
    whole cell. */
-/* The tile itself is not a card — a folder is just its preview + label floating on
+/* The tile itself is not a card: a folder is just its preview + label floating on
    the grid, same as the pill/grid-folder windows. Only .folder-mini reads as
    "the folder"; the cell it sits in stays visually part of the grid background. */
 .folder-tile {
@@ -1104,10 +1104,10 @@ body.noflag-chainQuickStart .tile-chain-start { display: none; }
   inherits: false;
   initial-value: 0turn;
 }
-/* The tile a dragged one would be dropped INTO — same scrim, same mark, same reason.
+/* The tile a dragged one would be dropped INTO: same scrim, same mark, same reason.
    Everything is drawn INSIDE the tile: the cell clips anything larger. */
 .tile.folder-arm { border-color: var(--accent); }
-/* The media children are already absolutely positioned — only the name needs a
+/* The media children are already absolutely positioned; only the name needs a
    position of its own so a z-index can lift it above the scrim. */
 .tile > .tile-name { position: relative; z-index: 1; }
 .tile > .tile-img,
@@ -1148,7 +1148,7 @@ body.noflag-chainQuickStart .tile-chain-start { display: none; }
   font-size: 12px;
   font-weight: 600;
 }
-/* ~30% bigger than the old 84x56 box in both dimensions — still comfortably
+/* ~30% bigger than the old 84x56 box in both dimensions, still comfortably
    inside the popover's own max-width (`min(420px, 92vw)`) at 5 columns, the
    most `tileFolderCols` allows. */
 .tile-folder-grid { display: grid; gap: 6px; }
@@ -1249,7 +1249,7 @@ body.noflag-chainQuickStart .tile-chain-start { display: none; }
   animation: capture-pulse 1.6s ease-out infinite;
 }
 /* Arming (clicked, waiting for the recognizer's first event): light up right
-   away with a soft static ring — dimming here read as "something broke"
+   away with a soft static ring; dimming here read as "something broke"
    instead of "starting up". is-listening's pulse takes over once the backend
    confirms. is-paused reuses the exact same static ring for the same
    reason recAudio's own bar draws its pause differently from recording: a
@@ -1344,7 +1344,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   transition: background var(--transition), border-color var(--transition);
 }
 .ghost-btn:hover { background: var(--surface-2); border-color: var(--accent); }
-/* Armed delete state adds a warning glyph before the label — without its
+/* Armed delete state adds a warning glyph before the label: without its
    own flex layout the SVG sits on the text baseline (too low/high). */
 .ghost-btn.confirm { display: inline-flex; align-items: center; gap: 6px; }
 .ghost-btn.confirm > svg { display: block; flex: 0 0 auto; }
@@ -1369,13 +1369,13 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 #modal.overlay { z-index: 55; }
 /* Feature modals opened from inside settings/expert must sit ABOVE the settings
    overlay (both were z-index 50, so they rendered behind it). Below vars/confirm.
-   Every dialog reached from EXPERT_ACTIONS belongs here — the expert menu leaves
+   Every dialog reached from EXPERT_ACTIONS belongs here: the expert menu leaves
    settings open behind it, so a base-z overlay opens invisible. */
 #dupes-modal.overlay,
 #trash-modal.overlay,
 #clip-modal.overlay { z-index: 65; }
 /* Help is opened from inside settings, but both shared the base z-index and
-   help sits earlier in the DOM — it rendered behind the dialog that opened it. */
+   help sits earlier in the DOM; it rendered behind the dialog that opened it. */
 #help.overlay { z-index: 60; }
 /* Wide enough that the title, the on/off switch and "Clear all" stay on one line. */
 #clip-modal .modal { width: min(580px, 92vw); }
@@ -1385,7 +1385,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .watch-toggle.active { color: var(--accent-fg); background: var(--accent); }
 .watch-toggle.active:hover { background: color-mix(in srgb, var(--accent) 85%, #000); color: var(--accent-fg); }
 /* Jumping from the statistics into the library raises it over the backups dialog it
-   was opened from, without closing it — the edit dialog keeps its place on top. */
+   was opened from, without closing it; the edit dialog keeps its place on top. */
 body.library-front #library.overlay { z-index: 66; }
 body.library-front #modal.overlay { z-index: 67; }
 /* The compare view opens from the duplicate finder at 65, the raised library
@@ -1425,7 +1425,7 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
 /* Prompt library always fills the window height (small even margin), so its
    size never jumps with the number of prompts; the list scrolls inside. */
 /* `hidden auto`, not `hidden`: on a short window the head + filter rows alone can eat
-   the whole dialog, and the list below keeps a minimum height (see .library-list) —
+   the whole dialog, and the list below keeps a minimum height (see .library-list);
    the dialog then scrolls to it instead of crushing it out of existence. */
 #library .modal { width: min(var(--lib-width, 900px), 95vw); height: var(--full-modal-h); max-height: var(--full-modal-h); overflow: hidden auto; }
 /* Copy history fills the window height too; the lists scroll inside it. */
@@ -1436,7 +1436,7 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
 /* Settings/expert fills the window height so switching expert tabs never resizes
    the popup (content scrolls inside instead). */
 /* Settings sizes to its content (no dead space on a tall window) but never taller than
-   the window — the inner body scrolls when it would overflow. Centred by the overlay. */
+   the window; the inner body scrolls when it would overflow. Centred by the overlay. */
 #settings .modal { width: min(760px, 94vw); height: auto; max-height: calc(100vh - 24px); }
 /* Expert page: single-line rows only need ~2 columns of width, not the full 3-across. */
 #settings.expert-active .modal { width: min(600px, 94vw); }
@@ -1452,17 +1452,17 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
    expanded list + Save row get pushed out of reach on short windows. Cap it and let
    the modal scroll to the history instead.
    The clear-X wrapper is the real flex item (wireClear moves the textarea into it),
-   so the cap must sit on the wrapper — a rule on .modal-text alone loses the cascade
+   so the cap must sit on the wrapper: a rule on .modal-text alone loses the cascade
    to the .clear-wrap-ta > .modal-text rule further down and does nothing. */
 #modal.tall.history-open .clear-wrap-ta,
 #modal.tall.history-open .clear-wrap-ta > .modal-text { flex: 0 1 auto; min-height: 96px; max-height: 26vh; }
 /* A flex item that has its own overflow gets an automatic minimum size of ZERO, so on
    a short window flexbox squeezed the open history down to a sliver instead of letting
-   the dialog scroll — which is why the list stayed out of reach. EVERY row of the
+   the dialog scroll, which is why the list stayed out of reach. EVERY row of the
    dialog keeps its natural height; the modal (overflow-y:auto) then scrolls to reach
    them. Only the textarea and the preview may flex, and those live inside
    #modal-text-wrap (display:contents), so this rule does not touch them. Listing the
-   rows one by one left the ones nobody thought of — the media block above all —
+   rows one by one left the ones nobody thought of (the media block above all)
    shrinking until their content was drawn over the colour row below. */
 #modal .modal > * { flex: 0 0 auto; }
 /* Themed scrollbar for the prompt textarea. */
@@ -1507,7 +1507,7 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
    applying to the textarea unchanged. */
 .modal-text-wrap { display: contents; }
 /* ONE field. The rendered pane and the textarea are the same box down to the type
-   metrics — a click swaps them, and that swap must not be visible as a jump or as a
+   metrics; a click swaps them, and that swap must not be visible as a jump or as a
    change of style. Every value here has a twin in .modal-input / .modal-text. */
 .md-preview {
   padding: 10px 32px 10px 12px;
@@ -1554,7 +1554,7 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
   color: var(--muted);
 }
 .md-preview hr { margin: 10px 0; border: none; border-top: 1px solid var(--border); }
-/* Links are shown, never followed — the renderer emits no href at all. */
+/* Links are shown, never followed: the renderer emits no href at all. */
 .md-preview .md-link { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
 .md-preview .md-trunc { color: var(--muted); font-style: italic; }
 .md-preview .md-inline-code, .md-preview .md-code {
@@ -1584,7 +1584,7 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
 .hl-fn { color: var(--hl-fn); }
 
 /* Search field + "only changed", one row. The filter is a pill next to the
-   search instead of a checkbox line of its own — same reach, no extra row. */
+   search instead of a checkbox line of its own: same reach, no extra row. */
 .expert-filter-row { display: flex; align-items: center; gap: 8px; }
 /* wireClear() wraps the search input at runtime, so the wrapper is the flex item. */
 .expert-filter-row > .clear-wrap, .expert-filter-row > #expert-search { flex: 1 1 auto; min-width: 0; }
@@ -1610,7 +1610,7 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
 /* The checkbox still holds the state every caller reads; the pill is the control.
    Kept in the DOM (not display:none) so it stays focusable and keyboard-operable. */
 .expert-chip > input { position: absolute; width: 1px; height: 1px; opacity: 0; }
-/* Toggled from JS — :has() is avoided everywhere in this file (see main.css:733). */
+/* Toggled from JS; :has() is avoided everywhere in this file (see main.css:733). */
 .expert-chip.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
 
 /* Expert menu: caution line on the left + reset button on the right. */
@@ -1630,7 +1630,7 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
   text-wrap: balance;
 }
 .expert-hint svg { flex: 0 0 auto; }
-/* Three one-click profiles, ahead of the tabs and not one of their own — a
+/* Three one-click profiles, ahead of the tabs and not one of their own: a
    profile writes its changed flags and is gone, never a state of its own. */
 .expert-presets { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .expert-presets-label { font-size: 12px; font-weight: 600; color: var(--muted); }
@@ -1700,15 +1700,15 @@ body:not(.flag-voiceHotkey) #voice-hotkey-row { display: none; }
   background: var(--accent);
 }
 .pin-toggle.active:hover { color: var(--accent-fg); background: var(--accent); filter: brightness(1.08); }
-/* Grid tag filter — same filled-look active state as the pin toggle. */
+/* Grid tag filter: same filled-look active state as the pin toggle. */
 .grid-tag-btn.active { color: var(--accent-fg); background: var(--accent); }
 .grid-tag-btn.active:hover { color: var(--accent-fg); background: var(--accent); filter: brightness(1.08); }
-/* Fixed column count instead of free wrap — a run of short tags no longer
+/* Fixed column count instead of free wrap: a run of short tags no longer
    trails off ragged on the right, it lines up in a grid like the expert menu's own
    two-column rows. --tag-pop-cols is set from the tagPopCols expert value. */
 .grid-tag-pop { display: grid; grid-template-columns: repeat(var(--tag-pop-cols, 2), minmax(0, 1fr)); gap: 6px; align-items: start; min-width: 200px; max-width: 420px; padding: 10px; z-index: 90; }
 /* .tag-action:last-child normally gets margin-left:auto to hug the right edge of a
-   flex row (the library tagbar) — inside this grid it must stretch full width instead. */
+   flex row (the library tagbar); inside this grid it must stretch full width instead. */
 .grid-tag-pop > .tag-action, .grid-tag-pop > .hint { grid-column: 1 / -1; }
 .grid-tag-pop > .tag-action { margin-left: 0; width: 100%; text-align: center; }
 .grid-tag-pop .tag-chip { min-width: 0; justify-content: flex-start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1857,7 +1857,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .flag-tileGradient .tile:not(.has-image) { background: linear-gradient(160deg, var(--surface), var(--surface-2)); }
 .flag-accentHeader .header { background: color-mix(in srgb, var(--accent) 8%, var(--bg)); }
 .flag-frostedModals .overlay { backdrop-filter: blur(var(--frosted-blur, 4px)); }
-/* GLOBAL themed scrollbar — every scrollable element gets the same look, so the
+/* GLOBAL themed scrollbar: every scrollable element gets the same look, so the
    browser's default ugly bar never appears anywhere. A transparent 3px border with
    background-clip keeps the thumb visually inset on ANY container background (surface,
    bg, surface-2 …). Elements that hide their scrollbar (.input, .views) win by their
@@ -1867,7 +1867,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 ::-webkit-scrollbar-thumb:hover { background: var(--muted); border: 3px solid transparent; background-clip: padding-box; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-corner { background: transparent; }
-/* Themed resize handle — WebView2 draws its own corner grip on every
+/* Themed resize handle: WebView2 draws its own corner grip on every
    `resize:` field (.modal-text, .modal-notes-text, …) and ignores theme
    variables, so it stayed a bright white square in dark themes. */
 ::-webkit-resizer { background-color: var(--surface); border: 1px solid var(--border); }
@@ -1936,16 +1936,16 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .tile-tip-name { font-weight: 700; }
 .tile-tip-body { margin-top: 5px; opacity: 0.9; }
 /* A {#{variable}#} token stands out in the preview instead of reading like the
-   rest of the prompt — the only hint, short of copying, that one is asked for. */
+   rest of the prompt; the only hint, short of copying, that one is asked for. */
 .var-token { color: var(--accent); font-weight: 600; }
-/* Length readout — same weight as the hint line below it, not the prompt text. */
+/* Length readout: same weight as the hint line below it, not the prompt text. */
 .tile-tip-len { margin-top: 5px; font-size: 11px; color: var(--muted); }
 /* Last-copied/last-edited lines -- one per line, muted like the length readout. */
 .tile-tip-times { margin-top: 5px; font-size: 11px; color: var(--muted); white-space: pre-line; }
 /* Resolution + file size -- same weight as the timestamps line above it,
    library/history rows only. */
 .tile-tip-media { margin-top: 5px; font-size: 11px; color: var(--muted); }
-/* Rotating-prompt line — accent-coloured, so it reads as live state rather
+/* Rotating-prompt line: accent-coloured, so it reads as live state rather
    than static metadata like the length readout next to it. */
 .tile-tip-rotate { margin-top: 5px; font-size: 11px; color: var(--accent); }
 .tile-tip-hint { margin-top: 7px; font-size: 11px; color: var(--muted); }
@@ -2314,7 +2314,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 }
 .expert-group-reset:hover { color: var(--accent); }
 /* Per-row reset icon, next to any single expert setting that differs from its
-   default — same look as the per-category button above, fixed footprint so it
+   default: same look as the per-category button above, fixed footprint so it
    doesn't reflow the row when it appears/disappears. */
 .expert-row-reset {
   display: flex;
@@ -2332,7 +2332,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 }
 .expert-row-reset:hover { color: var(--accent); }
 /* A search hit outside the expert menu (normal settings, toolbar, library,
-   backups) — a clickable row, same base look as a real expert row, with a
+   backups): a clickable row, same base look as a real expert row, with a
    small area badge on the right so it never reads as an actual setting. */
 .expert-foreign-row {
   flex-direction: row;
@@ -2371,10 +2371,10 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   100% { background: transparent; box-shadow: 0 0 0 0 transparent; }
 }
 /* In-app documentation. .help-group reuses .expert-group's own collapse
-   mechanic (unscoped rules, see above) — only the body typography is new here.
+   mechanic (unscoped rules, see above); only the body typography is new here.
    Section chips became a fixed tab bar (#help-tabs-bar, .expert-tabs reused),
    so only one section renders at a time and needs no jump nav or divider. */
-/* padding-right: 0 on the dialog, restored on every child EXCEPT the scroll body —
+/* padding-right: 0 on the dialog, restored on every child EXCEPT the scroll body;
    that puts the topic list's scrollbar flush against the window edge instead of
    floating 20px inside it, while the text column still ends where the head, the
    search field and the tab bar end. */
@@ -2386,7 +2386,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .help-body { display: flex; flex-direction: column; gap: 10px; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 #help .help-body { padding-right: 8px; }
 .help-group-body { display: flex; flex-direction: column; gap: 6px; padding-top: 6px; }
-/* Search mode adds a section-chapter badge after the title — flex row keeps it
+/* Search mode adds a section-chapter badge after the title: flex row keeps it
    pinned to the right regardless of title length, scoped to #help so the expert
    menu's own group headers (no badge, different children) stay untouched. */
 #help .expert-group-title.collapsible { display: flex; align-items: center; gap: 8px; }
@@ -2428,11 +2428,11 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
    needed. */
 @media (max-width: 760px) { #global-search-btn { display: none; } }
 .help-overview { margin: 0; font-size: 13px; line-height: 1.5; color: var(--fg); }
-/* 22-A: numbered "how to" steps — same weight as the overview since these are the
+/* 22-A: numbered "how to" steps; same weight as the overview since these are the
    actual instructions, not secondary detail. */
 .help-steps { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.5; color: var(--fg); }
 .help-steps li { margin-bottom: 2px; }
-/* "What happens" is detail (storage, side effects, limits), not the lead sentence —
+/* "What happens" is detail (storage, side effects, limits), not the lead sentence:
    muted like a settings row so the two paragraphs don't read as equally important. */
 .help-happens { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
 .help-settings { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.5; color: var(--fg); }
@@ -2467,7 +2467,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .value-range { width: 100%; accent-color: var(--accent); cursor: pointer; }
 .expert-reset { margin-top: 8px; align-self: flex-start; }
 
-/* Expert menu tabs (the menu grew large — tabs keep it tidy). */
+/* Expert menu tabs (the menu grew large; tabs keep it tidy). */
 .expert-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
 .expert-tab {
   padding: 6px 11px;
@@ -2482,7 +2482,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .expert-tab:hover { border-color: var(--accent); }
 .expert-tab.active { background: var(--accent-strong); color: var(--accent-fg); border-color: var(--accent-strong); }
 
-/* Appearance scales — CSS zoom on their own elements (1 = unchanged, the default).
+/* Appearance scales: CSS zoom on their own elements (1 = unchanged, the default).
    UI scale is the exception: it drives the WebView's native zoom from Rust instead. */
 .modal { zoom: var(--modal-zoom, 1); }
 .composer { zoom: var(--composer-zoom, 1); }
@@ -2497,7 +2497,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .view-btn,
 .view-add-top,
 .fav-view-toggle { zoom: var(--icon-zoom, 1); }
-/* Keyboard-only focus ring, themed — replaces WebView2's default blue outline that
+/* Keyboard-only focus ring, themed: replaces WebView2's default blue outline that
    clashes with most of the 16 themes. Mouse clicks don't trigger :focus-visible. */
 .icon-btn:focus-visible, .ghost-btn:focus-visible, .primary-btn:focus-visible,
 .view-btn:focus-visible, .view-add-top:focus-visible, .fav-view-toggle:focus-visible,
@@ -2521,7 +2521,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 /* Release notes need a little more width than a plain confirm dialog: their tables
    and headings would otherwise wrap after every other word. */
 #update-modal .modal { width: min(580px, 94vw); }
-/* About dialog — logo, name, version, copyright, all centered like a splash.
+/* About dialog: logo, name, version, copyright, all centered like a splash.
    Its own (smaller than modal-narrow's default) width keeps the box from reading as
    an oversized card for this little content. */
 .modal.about-box { max-width: 340px; }
@@ -2531,7 +2531,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .about-version { color: var(--muted); font-size: 13px; }
 .about-copy { color: var(--muted); font-size: 12px; }
 /* Project-page and Close differ enough in text length that a left-aligned row
-   reads lopsided — center the pair and give both the same floor width so the gap
+   reads lopsided; center the pair and give both the same floor width so the gap
    from each button to its nearest modal edge comes out equal. */
 .about-box .modal-actions { justify-content: center; }
 .about-box .modal-actions > button { flex: 0 1 auto; min-width: 100px; }
@@ -2577,7 +2577,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   user-select: text;
 }
 .licenses-empty { margin: 0; text-align: center; color: var(--muted); font-size: 13px; }
-/* The box takes the height of whatever the release brought — a two-line note stays
+/* The box takes the height of whatever the release brought: a two-line note stays
    two lines tall, a long one scrolls instead of pushing the buttons off screen. */
 .update-notes {
   margin: 0;
@@ -2815,7 +2815,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
    track cannot shrink below its content, so the row overflowed the dialog and the
    controls on the right were clipped out of reach. */
 .three-col { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-/* Inline field: label on the left (white, like the toggles), control on the right —
+/* Inline field: label on the left (white, like the toggles), control on the right;
    keeps single inputs from stretching to the full popup width. The `.field.` prefix is
    required: the base `.field { flex-direction: column }` rule sits LATER in the file, so
    without the extra class it would win on equal specificity and stack the row. */
@@ -2826,7 +2826,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
    before overflowing, and keep a readable floor under the field itself. */
 .field.field-inline .hotkey-row { flex: 1 1 460px; min-width: 0; }
 .field.field-inline .hotkey-row .clear-wrap { min-width: 150px; }
-/* Delete-all + expert-menu buttons share one row (delete left, expert right) — same
+/* Delete-all + expert-menu buttons share one row (delete left, expert right); same
    `.field.` specificity guard so the column default can't stack them. */
 .field.settings-btn-row { flex-direction: row; gap: 10px; }
 .field.settings-btn-row > button { flex: 1; }
@@ -2986,7 +2986,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .cp-hex:focus { border-color: var(--accent); }
 
 /* Tinted tiles: colored background, white text. The ⋯ menu keeps the themed look
-   (surface + accent) on every tile — independent of the tile's colour or type. */
+   (surface + accent) on every tile; independent of the tile's colour or type. */
 .tile.tinted { color: #fff; }
 .modal-input {
   width: 100%;
@@ -3028,7 +3028,7 @@ select.modal-input { padding-right: 30px; }
 .modal-img-wrap { display: flex; flex-direction: column; gap: 8px; }
 /* Media stage shrinks to the image so the caption sits only over the picture
    (as on a real tile), not across the whole dialog width. NOTE: no
-   container-type here — size containment collapses the auto-width stage to 0,
+   container-type here: size containment collapses the auto-width stage to 0,
    which hid the preview image entirely. */
 .modal-media-stage {
   position: relative;
@@ -3048,7 +3048,7 @@ select.modal-input { padding-right: 30px; }
   border: 1px solid var(--border);
   background: var(--surface-2);
 }
-/* Four buttons in a row — they wrap onto a second line rather than being pushed
+/* Four buttons in a row: they wrap onto a second line rather than being pushed
    past the dialog edge on a narrow window. */
 .modal-display-row { display: flex; flex-wrap: wrap; gap: 8px; }
 
@@ -3154,22 +3154,22 @@ select.modal-input { padding-right: 30px; }
 .expert-action.expert-sub { width: calc(100% - var(--expert-depth, 1) * 18px); }
 
 /* Clear-X inside text / number fields + textareas. The wrapper is block by default
-   (safe inside the column-flex modals — never grows vertically); flex rows opt in. */
+   (safe inside the column-flex modals, never grows vertically); flex rows opt in. */
 .clear-wrap { position: relative; display: block; min-width: 0; }
 .clear-wrap.clear-wrap-ta { display: flex; }
 .clear-wrap > input, .clear-wrap > textarea { width: 100%; }
 .clear-wrap > input { padding-right: 34px; }
 .clear-wrap > textarea { padding-right: 32px; }
 /* A wrapped field is sized by its wrapper. Row rules that size `.modal-input`
-   directly would otherwise leave the input short of the wrapper edge, and the X —
-   positioned against the wrapper — ends up floating beside the field. */
+   directly would otherwise leave the input short of the wrapper edge, and the X,
+   positioned against the wrapper, ends up floating beside the field. */
 .clear-wrap > input.modal-input { width: 100%; min-width: 0; }
-/* Wrapped number fields drop the native spinners — the X takes their place. */
+/* Wrapped number fields drop the native spinners: the X takes their place. */
 .clear-wrap > input[type=number]::-webkit-inner-spin-button,
 .clear-wrap > input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 /* wireClear() moves every text input into a .clear-wrap span at runtime, so the
    WRAPPER becomes the flex item and any flex sizing meant for the input has to sit
-   here — otherwise the wrapper shrinks to nothing and the field collapses. */
+   here; otherwise the wrapper shrinks to nothing and the field collapses. */
 .library-search .clear-wrap, #journal-search .clear-wrap, .caption-row .clear-wrap, .hotkey-row .clear-wrap { flex: 1 1 auto; }
 .vars-new > .clear-wrap { flex: 1 1 auto; min-width: 0; }
 /* Same field width as the statistics top-N field, so the two number fields of the
@@ -3180,7 +3180,7 @@ select.modal-input { padding-right: 30px; }
 /* The wrapper is the real flex item, so its floor MUST match the textarea's. With
    min-height:0 (copied from the row wrappers, where a zero floor is correct because
    their main axis is horizontal) the dialog could squeeze the wrapper to nothing
-   while the field inside kept its 120px — the textarea then spilled out of its own
+   while the field inside kept its 120px; the textarea then spilled out of its own
    box and was drawn over the colour row, which is what expanding the variable helper
    made obvious. */
 #modal.tall .clear-wrap-ta { flex: 1 1 auto; min-height: 120px; }
@@ -3278,7 +3278,7 @@ select.modal-input { padding-right: 30px; }
 .modal-collapse-head:hover { color: var(--accent); }
 .collapse-chevron { transition: transform var(--transition); flex: 0 0 auto; }
 .modal-collapse.open .collapse-chevron { transform: rotate(180deg); }
-/* Height follows the content — only the CAP is fixed, so a short list leaves no
+/* Height follows the content: only the CAP is fixed, so a short list leaves no
    empty band under it. The viewport fraction keeps a long list from pushing the
    Save row away, and the 120px floor stops the cap from collapsing to a sliver on
    a very short window (the dialog scrolls there instead). */
@@ -3315,7 +3315,7 @@ select.modal-input { padding-right: 30px; }
    itself hints there is more than one text before the user even expands it. */
 .hist-entries { flex: 0 0 auto; font-size: 10.5px; color: var(--muted); background: var(--surface-2); border-radius: 999px; padding: 1px 6px; }
 .hist-full { margin-top: 2px; padding: 8px 10px; border-radius: 6px; background: var(--bg); color: var(--fg); font-size: 12px; white-space: pre-wrap; word-break: break-word; max-height: 40vh; overflow-y: auto; }
-/* One bordered block per rotation entry (numbered) — only rendered at all when
+/* One bordered block per rotation entry (numbered); only rendered at all when
    a snapshot or its comparison side has more than one entry, so a plain text prompt
    keeps today's borderless single block. */
 .hist-entry-block { display: flex; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
@@ -3323,13 +3323,13 @@ select.modal-input { padding-right: 30px; }
 .hist-entry-num { flex: 0 0 auto; min-width: 14px; color: var(--muted); font-size: 11px; font-weight: 600; }
 .hist-name-change { margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--border); font-size: 12px; }
 .hist-name-label { color: var(--muted); }
-/* Word-diff against whatever this version turned into next — no themed
+/* Word-diff against whatever this version turned into next: no themed
    "success" colour exists yet, so added text gets a fixed, theme-independent
    green rather than inventing a 16-theme variable for one spot. */
 .diff-add { background: rgba(34, 197, 94, 0.22); border-radius: 3px; }
 .diff-del { background: color-mix(in srgb, var(--danger) 22%, transparent); text-decoration: line-through; text-decoration-color: var(--danger); border-radius: 3px; }
 
-/* Inline expert panels (backups + statistics) — lay their sub-widgets out in a
+/* Inline expert panels (backups + statistics): lay their sub-widgets out in a
    column; the expert menu's own scroll box handles overflow (no nested scroller). */
 .expert-custom { display: flex; flex-direction: column; gap: 12px; margin-top: 6px; }
 .expert-custom .switch-field { padding: 3px 0; }
@@ -3357,7 +3357,7 @@ select.modal-input { padding-right: 30px; }
 .stat-bar-track { flex: 1 1 auto; height: 12px; border-radius: 6px; background: var(--surface-2); overflow: hidden; }
 .stat-bar-fill { height: 100%; border-radius: 6px; background: var(--accent); }
 .stat-bar-count { flex: 0 0 auto; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 32px; text-align: right; }
-/* Last-14-days mini chart — bars grow from a shared baseline, height is the
+/* Last-14-days mini chart: bars grow from a shared baseline, height is the
    only encoding (exact count + date live in the hover tooltip). */
 .stat-daily-chart {
   display: flex;
@@ -3402,15 +3402,15 @@ select.modal-input { padding-right: 30px; }
 
 /* Duplicate finder. */
 .dupes-body { max-height: 70vh; overflow-y: auto; scrollbar-gutter: stable; display: flex; flex-direction: column; gap: 12px; }
-/* Backups dialog: wider than a plain popup — it holds the backup settings, the
-   diagnostics cards, the restore list and the usage statistics — and it scrolls
+/* Backups dialog: wider than a plain popup; it holds the backup settings, the
+   diagnostics cards, the restore list and the usage statistics, and it scrolls
    inside its body so the title row and the close X stay put. Above the settings
    overlay it was opened from, like the other feature dialogs. */
 #backup-modal.overlay { z-index: 65; }
 #backup-modal .modal { width: min(700px, 94vw); overflow: hidden; }
 /* The scroller reaches the modal's right + bottom edge (negative margin, inset
    re-added as padding) so the scrollbar hugs the far edge instead of floating in
-   a band of surface — same trick as the settings/expert lists. */
+   a band of surface: same trick as the settings/expert lists. */
 .backup-body {
   max-height: 74vh;
   overflow-y: auto;
@@ -3471,7 +3471,7 @@ select.modal-input { padding-right: 30px; }
 /* Backups & restore. */
 /* Date/time diagnostic card: date over time, no comma, a touch larger for legibility. */
 /* Diagnostics cards: the date is the value of the card, so it reads as large as any
-   other number, and none of these texts may wrap — a broken date is unreadable. */
+   other number, and none of these texts may wrap; a broken date is unreadable. */
 .stat-dt { display: flex; flex-direction: column; gap: 1px; line-height: 1.25; }
 .stat-dt .dt-date { font-size: 17px; font-weight: 700; white-space: nowrap; }
 .stat-dt .dt-time { font-size: 14px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -3492,7 +3492,7 @@ select.modal-input { padding-right: 30px; }
 /* The base `.field { flex-direction: column }` sits later in the file at equal
    specificity, so a plain `.backup-set-row` would still stack label-over-input.
    This higher-specificity rule keeps the label to the LEFT of the field.
-   (The GFS tier rule below re-sets column for its narrow inputs — it wins by order.) */
+   (The GFS tier rule below re-sets column for its narrow inputs; it wins by order.) */
 .field.backup-set-row { flex-direction: row; }
 .backup-set-row > span { font-size: 13px; }
 .backup-set-row .modal-input { flex: 0 0 auto; width: auto; min-width: 90px; }
@@ -3515,7 +3515,7 @@ select.modal-input { padding-right: 30px; }
 @media (max-width: 720px) { .backup-cols { grid-template-columns: minmax(0, 1fr); } }
 /* GFS tiers as a 2x2 block of small fields (day / week over month / year). */
 /* The slot takes its height from the tier grid itself, which is always rendered and
-   only parked when smart retention is off — that is what stops picking a preset tile
+   only parked when smart retention is off: that is what stops picking a preset tile
    from resizing anything below it, at any font size, UI scale or translation.
    `visibility: hidden` also keeps the parked fields out of the tab order. */
 .backup-tier-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; }
@@ -3523,7 +3523,7 @@ select.modal-input { padding-right: 30px; }
 .backup-tier-grid > .backup-set-row { justify-content: space-between; gap: 8px; }
 .backup-tier-grid .modal-input { flex: 0 0 auto; width: 64px; min-width: 0; text-align: center; }
 .backup-tier-grid .clear-wrap { flex: 0 0 auto; width: 64px; }
-/* The plain backup-count field greys out while smart retention (GFS) is on —
+/* The plain backup-count field greys out while smart retention (GFS) is on:
    the backend ignores it, but the stored value survives untouched underneath. */
 .backup-keep-row.is-disabled { opacity: 0.45; }
 /* Optional backup password: label left, field + eye button right. */
@@ -3544,7 +3544,7 @@ select.modal-input { padding-right: 30px; }
 .backup-pw-wrap .modal-input { padding-right: 36px; }
 .backup-pw-eye { position: absolute; right: 4px; width: 28px; height: 28px; }
 /* Saving the backup password is an explicit click, never a side effect of leaving
-   the field — so the button sits right next to it, with "remove" beside it. */
+   the field, so the button sits right next to it, with "remove" beside it. */
 .backup-pw-save, .backup-pw-remove { flex: 0 0 auto; }
 /* WebView2 draws its OWN reveal button inside password fields, which showed up as
    a second eye next to the themed one. */
@@ -3593,7 +3593,7 @@ input[type="password"]::-ms-clear { display: none; }
 .backup-row { display: flex; flex-wrap: wrap; row-gap: 6px; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
 .backup-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-variant-numeric: tabular-nums; }
 .backup-size { flex: 0 0 auto; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
-/* How many prompts are in that snapshot — its own column, right of the date. */
+/* How many prompts are in that snapshot: its own column, right of the date. */
 .backup-count { flex: 0 0 auto; min-width: 34px; text-align: right; font-size: 12px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
 .backup-row .ghost-btn { flex: 0 0 auto; padding: 3px 10px; font-size: 12px; }
 /* The count doubles as a click-to-expand toggle when names are available. */
@@ -3841,7 +3841,7 @@ input[type="password"]::-ms-clear { display: none; }
 .journal-col .lib-item + .lib-item { border-top: 1px solid var(--border); border-radius: 0; }
 .journal-name-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .journal-name-row > .lib-name { min-width: 0; }
-/* Names the type without repeating the thumbnail's job — text rows carry no chip. */
+/* Names the type without repeating the thumbnail's job: text rows carry no chip. */
 .journal-kind {
   flex: 0 0 auto;
   padding: 0 6px;
@@ -3874,7 +3874,7 @@ input[type="password"]::-ms-clear { display: none; }
 /* Expert preset dropdown + free-entry number */
 .expert-select { width: auto; min-width: 120px; align-self: flex-start; }
 /* Themed, rounded select with a custom chevron (drops the raw OS triangle so the
-   dropdowns match the rest of the layout). EVERY select in the app wears it — the
+   dropdowns match the rest of the layout). EVERY select in the app wears it: the
    look is defined once here and inherited by the library, backup and editor rows. */
 select,
 .expert-select {
@@ -3890,15 +3890,15 @@ select,
 /* Label to the LEFT of every expert dropdown (was stacked above). */
 /* Label left, control right. Both sides stretch to the row's height, so the label
    text is vertically CENTRED against the control it belongs to, while the control
-   itself hangs at the BOTTOM — that is what keeps two dropdowns side by side lined up
+   itself hangs at the BOTTOM: that is what keeps two dropdowns side by side lined up
    even when one label needs a second line in a longer language. */
 .field.expert-dropdown-row { flex-direction: row; align-items: stretch; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .expert-dropdown-row .value-head { flex: 1 1 auto; min-width: 0; align-items: center; }
 .expert-dropdown-row .expert-select { align-self: flex-end; flex: 0 0 auto; min-width: 140px; }
-/* Wide enough for four digits and nothing more — these fields hold days/hours. */
+/* Wide enough for four digits and nothing more: these fields hold days/hours. */
 .expert-dropdown-row .expert-num { margin-top: 0; flex: 0 0 68px; align-self: flex-end; text-align: right; }
 .expert-dropdown-row .expert-num-unit { align-self: center; }
-/* The unit next to a free-entry retention/interval field — the preset options show
+/* The unit next to a free-entry retention/interval field: the preset options show
    theirs on the option text ("7d"), so the number alone would look unit-less. */
 .expert-num-unit { flex: 0 0 auto; color: var(--muted); font-size: 13px; }
 /* Inline reason line under recQuality/recFormat -- always its own full-width row,
@@ -3921,7 +3921,7 @@ select,
 .expert-num { width: 90px; margin-top: 6px; }
 
 /* Header icons hidden when their feature flag is off */
-/* Hidden when copy history is off — unless the user keeps paused buttons around. */
+/* Hidden when copy history is off, unless the user keeps paused buttons around. */
 .noflag-copyHistory:not(.flag-pausedIcons) #journal-btn { display: none; }
 .noflag-colorFilter #library-colors { display: none; }
 
@@ -3982,14 +3982,14 @@ body.drag-over::after {
 .export-row .ghost-btn { flex: 1 1 88px; }
 /* The SAME four columns and gap as .settings-btn-row right below it, so the check
    button comes out exactly as wide as Help and the auto-update switch lines up with
-   the last button in that row — the bottom of the dialog reads as one block. */
+   the last button in that row; the bottom of the dialog reads as one block. */
 .update-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; align-items: center; }
 /* Wraps so the version label keeps a readable width on a narrow dialog instead of
    being ellipsised down to a couple of pixels beside the check button. */
 .update-actions { grid-column: span 3; display: flex; flex-wrap: wrap; row-gap: 6px; align-items: center; gap: 10px; min-width: 0; }
 .update-actions .ghost-btn { flex: 0 0 auto; }
 /* One column of the grid above: the box is 3 columns + 2 gaps wide, so one column is
-   (width - 2*gap) / 3 — the exact width a button in .settings-btn-row gets. About and
+   (width - 2*gap) / 3: the exact width a button in .settings-btn-row gets. About and
    Check-for-updates each take one, the version label takes the third. */
 .update-actions > #about-btn, .update-actions > #update-btn { flex: 0 0 calc((100% - 20px) / 3); min-width: 0; }
 /* Clickable version/status label (left of the check button) → releases page, or the
@@ -4053,7 +4053,7 @@ body.drag-over::after {
 /* Batch selection: checkbox + selected state + action bar. */
 .noflag-batchOps #library-select-btn { display: none; }
 /* Selection checkbox is a pure-CSS ::before shown only while the list is in select
-   mode — toggling the mode is a single class change, never a re-render. */
+   mode: toggling the mode is a single class change, never a re-render. */
 .library-list.selecting .lib-item::before {
   content: "";
   flex: 0 0 auto;
@@ -4086,7 +4086,7 @@ body.drag-over::after {
 .lib-batch-sep { width: 1px; height: 18px; background: var(--border); margin: 0 2px; }
 .lib-batch-colors { display: inline-flex; gap: 4px; }
 .lib-batch-bar .ghost-btn:disabled, .lib-batch-bar select:disabled { opacity: 0.4; pointer-events: none; }
-/* Onboarding-examples banner — same "sits above the grid" slot as the batch bar. */
+/* Onboarding-examples banner: same "sits above the grid" slot as the batch bar. */
 .examples-banner {
   display: flex;
   flex-wrap: wrap;
@@ -4356,7 +4356,7 @@ body.drag-over::after {
   overflow: hidden;
   overflow-wrap: anywhere;
 }
-/* Names which entry a rotating prompt's search hit came from — .lib-body is a
+/* Names which entry a rotating prompt's search hit came from: .lib-body is a
    flex column, so align-self keeps this from stretching to the row's full width. */
 .lib-rotate-tag {
   align-self: flex-start;
@@ -4449,7 +4449,7 @@ body.drag-over::after {
 .lib-type:hover { border-color: var(--accent); color: var(--fg); }
 .lib-type.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
 /* The favorites-only chip is also a .lib-type, whose later .active rule would win at
-   equal specificity — keep its gold highlight with a more specific selector. */
+   equal specificity; keep its gold highlight with a more specific selector. */
 .lib-type.lib-fav-chip.active { background: #f5b301; border-color: #f5b301; color: #1a1a1a; }
 
 /* Expert: copy text-size + font dropdowns share one row. */
@@ -4457,7 +4457,7 @@ body.drag-over::after {
 .hotkey-row .modal-input { flex: 1; min-width: 0; cursor: pointer; }
 .hotkey-row .ghost-btn { flex: 0 0 auto; }
 
-/* "All hotkeys" popup — global row pinned first, then every prompt with
+/* "All hotkeys" popup: global row pinned first, then every prompt with
    one, each row its own live hotkey-recording field (see bindHotkeyField). */
 #hotkeys-modal .modal { width: min(460px, 92vw); display: flex; flex-direction: column; gap: 10px; }
 .hotkeys-list { display: flex; flex-direction: column; gap: 4px; max-height: 400px; overflow-y: auto; min-height: 0; }
@@ -4476,7 +4476,7 @@ body.drag-over::after {
 .expert-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px 14px; align-items: stretch; }
 .expert-cols > .field { min-width: 0; margin: 0; }
 
-/* First-run tour — one shared frame, only the body content changes per step. */
+/* First-run tour: one shared frame, only the body content changes per step. */
 .tour-modal-box { width: min(560px, 92vw); }
 .tour-head { margin-bottom: 2px; }
 /* --tour-step-min-h is measured once per open (tallest of the 5 steps) so the
@@ -4535,7 +4535,7 @@ body.drag-over::after {
   flex: 0 0 auto;
 }
 /* A setting that hangs off a toggle is stepped in, so a feature and its parameters
-   read as one block. Indentation alone carries it — a rule down the left edge only
+   read as one block. Indentation alone carries it; a rule down the left edge only
    added noise. Each further level steps in again, so a parameter unlocked by an
    unlocked toggle sits deeper than its parent. */
 .expert-sub { margin-left: calc(var(--expert-depth, 1) * 18px); }
@@ -4748,10 +4748,10 @@ body.drag-over::after {
 .pop-clamped { overflow-y: auto; }
 /* The colour picker is a canvas plus a hue bar and a hex row: scrolling it would put
    the knob out of reach, and letting it spill would cut the hex field off. So it is
-   SIZED to fit — .cp-sv shrinks with the window and the whole popover stays well
+   SIZED to fit: .cp-sv shrinks with the window and the whole popover stays well
    inside even the app's smallest one. */
 .color-pop.pop-clamped { overflow: visible; max-height: none !important; }
-/* The picker's right-click history — same chrome as the other small popovers. */
+/* The picker's right-click history: same chrome as the other small popovers. */
 .pick-history-pop {
   position: fixed;
   z-index: 130;
@@ -4813,7 +4813,7 @@ body.drag-over::after {
 
 /* ---- Toast ---- */
 /* Toast: a compact themed card (icon badge + message), the same visual language as
-   the update notification — never the old flat accent pill. */
+   the update notification; never the old flat accent pill. */
 .toast {
   position: fixed;
   bottom: 76px;
@@ -4835,7 +4835,7 @@ body.drag-over::after {
   pointer-events: none;
   transition: opacity var(--transition), transform var(--transition);
   /* Above modals, context menus and popups so an error/feedback toast is always
-     visible — even when fired from inside a modal or confirmation flow. */
+     visible, even when fired from inside a modal or confirmation flow. */
   z-index: 200;
 }
 /* No composer bar: sit near the bottom edge instead of floating over empty grid. */
@@ -4874,7 +4874,7 @@ body.toast-top .toast.show { transform: translateX(-50%) translateY(0); }
   white-space: nowrap;
 }
 .toast-btn:hover { filter: brightness(1.08); }
-/* Colour-pick toast — three notations as separate copy-this-format chips, on the
+/* Colour-pick toast: three notations as separate copy-this-format chips, on the
    SAME line as the message. The card widens for them instead of the row breaking to a
    second line; only a genuinely too-narrow window still wraps (flex-wrap on the card),
    and then the whole row moves down together rather than splitting mid-row. */
@@ -4907,14 +4907,14 @@ body.toast-top .toast.show { transform: translateX(-50%) translateY(0); }
   transition: transform 0.12s;
 }
 .toast-chip:hover { border-color: var(--accent); }
-/* The notation that is already on the clipboard — filled, so the message does not
+/* The notation that is already on the clipboard: filled, so the message does not
    have to spell the value out a second time. */
 .toast-chip.is-current { border-color: var(--accent); background: var(--accent); color: var(--accent-fg); }
 .toast-chip.copied { transform: scale(1.08); border-color: var(--accent); color: var(--accent); }
 .toast-chip.is-current.copied { color: var(--accent-fg); }
 
 /* Update notification: a prominent, theme-aware card (icon badge + install
-   button) instead of the flat accent pill — more present, still theme-adapted. */
+   button) instead of the flat accent pill; more present, still theme-adapted. */
 .toast.update {
   align-items: center;
   gap: 12px;
@@ -4960,19 +4960,19 @@ body:not(.flag-archiveTag) #library-archive,
 body:not(.flag-archiveTag) #lib-batch-archive,
 body:not(.flag-archiveTag) #lib-batch-unarchive { display: none; }
 /* A private note reads like a different kind of field, not a second
-   prompt box — every .modal-input (including the prompt text) already uses
+   prompt box: every .modal-input (including the prompt text) already uses
    --surface-2, so the note gets the page's own --surface instead: a quieter,
    recessed fill that still keeps the same border and shape. */
 .modal-notes-text { resize: vertical; min-height: 64px; font-size: 13px; background: var(--surface); }
 
 .modal-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .modal-tags-label { flex: 0 0 auto; color: var(--muted); font-size: 12px; }
-/* Tags/hotkey/history sub-sections inside one "Advanced options" collapsible —
+/* Tags/hotkey/history sub-sections inside one "Advanced options" collapsible:
    a thin rule between them stands in for the collapse headers they lost. */
 .modal-advanced-sub + .modal-advanced-sub { padding-top: 10px; border-top: 1px solid var(--border); }
 .modal-advanced-sub-label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
 /* Hotkey/history used to be their own .modal-collapse-body (flex column, 4px gap)
-   before 28 merged them in — restore that spacing here so their own children
+   before 28 merged them in; restore that spacing here so their own children
    (row, inline error, action dropdown, hint) don't touch. Not applied to
    .modal-tags, which keeps its own single-row wrapping layout. */
 #modal-hotkey, #modal-history { display: flex; flex-direction: column; gap: 4px; }
@@ -5018,7 +5018,7 @@ body:not(.flag-archiveTag) #lib-batch-unarchive { display: none; }
   border-radius: 999px;
   background: var(--surface-2);
   color: var(--fg);
-  /* 600 like every other pill in the app (.lib-type, .expert-chip, .toast-chip) —
+  /* 600 like every other pill in the app (.lib-type, .expert-chip, .toast-chip);
      at 500 the tag chips were the one washed-out control among them. The taller
      line-height is what actually centres the label in the pill; 1.3 sat it high. */
   font-size: var(--tag-chip-px, 12px);
@@ -5072,11 +5072,11 @@ button.tag-chip:hover { border-color: var(--accent); }
   box-shadow: var(--shadow);
 }
 /* The palette stays a grid of swatches; the type-ahead is a LIST, like every other
-   dropdown in the app — chips floating in a box read as a stray tooltip. */
+   dropdown in the app; chips floating in a box read as a stray tooltip. */
 .tag-pop { z-index: 141; display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; }
 .tag-suggest { display: flex; flex-direction: column; gap: 2px; padding: 4px; }
 /* The row is full width so the whole line is clickable, but the HIGHLIGHT belongs to
-   the chip — a 40px tag lighting up a 200px band looked like the wrong thing was
+   the chip: a 40px tag lighting up a 200px band looked like the wrong thing was
    selected. */
 .tag-suggest-item {
   display: flex;
@@ -5114,7 +5114,7 @@ button.tag-chip:hover { border-color: var(--accent); }
 .tag-chip.tag-filter.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
 .tag-chip.tag-filter.tag-colored { border-color: var(--chip-color); }
 .tag-chip.tag-filter.tag-colored.active { background: var(--chip-color); border-color: var(--chip-color); }
-/* Clearing the filter and opening the manager are ACTIONS, not filters — they must
+/* Clearing the filter and opening the manager are ACTIONS, not filters: they must
    not look like one more tag to click. */
 .tag-action {
   padding: 4px 10px;
@@ -5151,7 +5151,7 @@ button.tag-chip:hover { border-color: var(--accent); }
 .tag-manage-count { flex: 0 0 auto; min-width: 22px; text-align: right; color: var(--muted); font-size: 12px; }
 .tag-manage-row .ghost-btn { flex: 0 0 auto; padding: 3px 10px; font-size: 12px; }
 
-/* Import preview — a plain scrollable list, duplicates dimmed and badged. */
+/* Import preview: a plain scrollable list, duplicates dimmed and badged. */
 .import-preview-list { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; min-height: 0; }
 .import-preview-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 6px; border-radius: 6px; }
 .import-preview-row.dup { opacity: 0.55; }
@@ -5179,7 +5179,7 @@ button.tag-chip:hover { border-color: var(--accent); }
 /* The editor button sits right of the theme dropdown, which gives up the width. */
 .theme-row { display: flex; align-items: center; gap: 6px; }
 .theme-row .modal-input { flex: 1 1 auto; min-width: 0; }
-/* Square, and exactly as tall as the dropdown beside it — a small icon next to a
+/* Square, and exactly as tall as the dropdown beside it: a small icon next to a
    full-height select reads as an afterthought. `stretch` keeps them equal even
    when the select grows with the font or the modal scale. */
 .theme-edit-btn {
@@ -5226,7 +5226,7 @@ body.noflag-customThemes .theme-edit-btn { display: none; }
 .theme-edit-body::-webkit-scrollbar { width: var(--sb-width, 12px); }
 .theme-edit-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; border: 3px solid var(--surface); }
 /* Two columns of colour rows on a wide window, falling back to one column on a
-   narrow one (auto-fit, same rule as .expert-cols — never forced from CSS). */
+   narrow one (auto-fit, same rule as .expert-cols; never forced from CSS). */
 .theme-var-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 4px 16px; align-items: start; }
 .theme-var-group {
   grid-column: 1 / -1;

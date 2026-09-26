@@ -6,7 +6,7 @@
 //
 // Contract, and what this enforces:
 //   * a language listed in terms.forms must cover EVERY form that appears in that
-//     language's strings — a half-translated language would ship a mixed sentence;
+//     language's strings: a half-translated language would ship a mixed sentence;
 //   * a form that must stay as it is (the "promt/prompt" typo example) is mapped to
 //     itself, so leaving it alone is a decision, not an oversight;
 //   * languages not listed are reported as still to do, and do not fail the run.
@@ -46,13 +46,13 @@ const FLOAT = sandbox.__FLOAT;
 // language regardless of its own native word family -- checked in ADDITION to
 // FAMILY, never instead of it. For en/de/es/it/pt/nl this is the same pattern
 // FAMILY already uses (harmless no-op); for pl/ro it is a subset of their own
-// broader stem match (also harmless); for tr/zh/ja it is genuinely new coverage —
+// broader stem match (also harmless); for tr/zh/ja it is genuinely new coverage:
 // tr's own family (istem-derived forms) and zh/ja's native-script patterns cannot
 // themselves match Latin "prompt" text, which is exactly how 62 went undetected.
 const LOANWORD_LEAK = /\bprompts?\b/gi;
 
 // tipFuzzySearch's whole point is the English "promt"/"prompt" typo pair as a
-// literal example — the one deliberate exception, not a translation gap. A
+// literal example: the one deliberate exception, not a translation gap. A
 // self-map entry ("prompt": "prompt") would "explain" it, but formsIn() below
 // only tracks distinct SURFACE FORMS across a whole language, not per string,
 // so a self-map for that one string would just as well hide any unrelated,
@@ -60,7 +60,7 @@ const LOANWORD_LEAK = /\bprompts?\b/gi;
 // instead, so the loanword scan still catches everything else.
 const LOANWORD_EXEMPT_KEYS = new Set(["tipFuzzySearch"]);
 
-// Drop the exempt keys once, up front — every scan below, FAMILY or
+// Drop the exempt keys once, up front: every scan below, FAMILY or
 // LOANWORD_LEAK alike, must skip them the same way, or a language whose own
 // FAMILY pattern happens to equal LOANWORD_LEAK (en/de/es/it/pt/nl, and a
 // superset for pl/ro) picks tipFuzzySearch's "prompt" straight back up.

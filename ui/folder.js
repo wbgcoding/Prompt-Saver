@@ -1,6 +1,6 @@
 // Pill folder window. The collapsed icon shows up to four member previews plus a
 // count; clicking it grows THIS window into a grid of the member pills. There is only
-// ever one window per folder — expanding resizes it, so z-order and focus stay as
+// ever one window per folder: expanding resizes it, so z-order and focus stay as
 // simple as a single pill's. All geometry (side, edge flipping, DPI) is decided in the
 // backend, which is the only place that knows the monitors.
 import { FONTS, fitText } from "./fonts.js";
@@ -20,6 +20,13 @@ const { getCurrentWebviewWindow } = window.__TAURI__.webviewWindow;
 
 const appWin = getCurrentWebviewWindow();
 const folderId = appWin.label.replace(/^folder-/, "");
+
+// Started here, at module evaluation time, rather than inside applyTexts()
+// below: the lazily imported translations must never hold up behaviour, so
+// the (large) fetch must not sit behind the get_settings invoke it used to be
+// nested under. applyTexts() awaits this same promise, so it resolves
+// instantly once already in flight.
+const textsImportPromise = Promise.all([import("./i18n.js"), import("./terms.js")]);
 
 const iconEl = document.getElementById("icon");
 const previewEl = document.getElementById("preview");
@@ -51,7 +58,7 @@ let open = null; // "grid" | "menu" | null
 let seq = 0;
 // Separate from `seq`: openPopover()'s own await of closePopover() can outlive a
 // newer openPopover() call that started in the meantime (its close finishes after
-// the newer one already opened something) — this catches that case specifically.
+// the newer one already opened something); this catches that case specifically.
 let openReq = 0;
 // "edit" starts empty, not a hardcoded English literal -- unlike every other
 // field here it spells the item word, which must only ever reach the screen
@@ -69,7 +76,7 @@ let animMs = 150;
 // the folder, so the two gestures never fight over the same drag.
 let dragOutOn = false, dragOutMod = "ctrlKey";
 
-// Rotating prompt — "next entry" badge per member, kept live by the backend's
+// Rotating prompt: "next entry" badge per member, kept live by the backend's
 // rotation-changed event (any window's copy can move another member's pointer).
 const rotateInfo = new Map(); // member id -> { index, pos, total }
 // Per-id request generation: a rotation-changed push can land while that id's
@@ -78,7 +85,7 @@ const rotateInfo = new Map(); // member id -> { index, pos, total }
 const rotateReqs = new Map(); // member id -> latest request number
 let rotateBadgeOn = true; // mirrors flag("rotateBadge"), which ships on
 
-// Pos (not index + 1) — in random mode index is the absolute entry that will
+// Pos (not index + 1): in random mode index is the absolute entry that will
 // be drawn next (jumps around); pos is the 1-based draw number within the current
 // shuffle cycle, counting up and restarting on reshuffle.
 function rotateBadgeLabel(id) {
@@ -135,7 +142,7 @@ function paintFace(el, p, withName) {
   }
 }
 
-// Ring thickness, in proportion to the icon — the same reasoning as the pill's:
+// Ring thickness, in proportion to the icon: the same reasoning as the pill's:
 // a fixed band is a hairline on a large folder and swallows a small one whole.
 function renderIcon() {
   const box = FOLDER_BOX * state.scale;
@@ -151,7 +158,7 @@ function renderIcon() {
   }
   nameEl.textContent = state.name;
   nameEl.classList.toggle("hidden", !state.name);
-  // The count lives in the tooltip only — a bare number stamped on the icon explains
+  // The count lives in the tooltip only: a bare number stamped on the icon explains
   // nothing and covers a preview cell. The 2x2 preview identifies IMAGE members; for
   // text pills it is four coloured squares, so the tooltip names the first two and
   // counts the rest.
@@ -204,11 +211,11 @@ function renderGrid() {
     tile.appendChild(ok);
     gridEl.appendChild(tile);
   }
-  // The tiles grow with the folder size, so the names have to as well — a fixed
+  // The tiles grow with the folder size, so the names have to as well; a fixed
   // small font left a large folder full of unreadable labels. Same auto-fit pass
   // the grid tiles and the pills use.
   const cap = Math.max(9, Math.round(t / 3));
-  // 0.86 gave away 14% of the edge length unused — raised to use nearly the
+  // 0.86 gave away 14% of the edge length unused; raised to use nearly the
   // whole face, matching the padding cut below.
   for (const el of gridEl.querySelectorAll(".member-face .face-text")) {
     fitText(el, t * 0.92, t * 0.92, cap);
@@ -296,7 +303,7 @@ async function closePopover(instant) {
   await invoke("collapse_float_folder", { id: folderId }).catch(() => {});
 }
 
-// Same popover, recomputed — after a member left, and when the monitor's scale factor
+// Same popover, recomputed: after a member left, and when the monitor's scale factor
 // changes (the known DPI trap: the physical box it was computed from is stale).
 async function reflow() {
   if (!open) return;
@@ -351,7 +358,7 @@ async function loadState() {
   state = data;
   renderIcon();
   // The stored scale arrives here, not through applyPrefs, and both run in
-  // parallel — without this the size menu keeps whatever applySettings marked.
+  // parallel; without this the size menu keeps whatever applySettings marked.
   markSelectedSize();
   if (open === "grid") await reflow();
 }
@@ -365,9 +372,8 @@ async function applySettings() {
 }
 
 async function applyTexts(s) {
-  const i18n = await import("./i18n.js");
+  const [i18n, { applyTerms }] = await textsImportPromise;
   const lang = resolveLang(s.language, i18n.LANGS);
-  const { applyTerms } = await import("./terms.js");
   TXT = Object.fromEntries(
     Object.entries(i18n.FLOAT_TXT[lang]).map(([k, v]) => [k, applyTerms(v, lang)]));
   document.getElementById("size-label").textContent = TXT.size;
@@ -420,7 +426,7 @@ function applyPrefs(s) {
   copySoundVolume = Number.isFinite(csv) ? csv : COPY_SOUND_VOLUME_DEFAULT;
   dragOutOn = s.ui_flags?.dragOut === true;
   dragOutMod = DRAG_OUT_MODS[s.ui_texts?.dragOutModifier] || "ctrlKey";
-  // rotateBadge is a sub-toggle of rotatingPrompts — the parent off must freeze
+  // rotateBadge is a sub-toggle of rotatingPrompts: the parent off must freeze
   // the whole feature (gating rule: nothing dependent stays visible with its parent
   // off), same fix as floating.js/main.js.
   rotateBadgeOn = s.ui_flags?.rotateBadge !== false && s.ui_flags?.rotatingPrompts !== false;
@@ -454,12 +460,12 @@ let iconDrag = null;
 
 // Exactly the pill's mechanic: the whole window is the drag surface (the popover and
 // the menus handle their own presses), and startDragging() hands the window to the OS
-// move loop, which CONSUMES the release — so the drag also ends on the first later
+// move loop, which CONSUMES the release: so the drag also ends on the first later
 // event that reports no button held.
 window.addEventListener("mousedown", (e) => {
   if (e.button !== 0) return;
   if (e.target.closest(".menu") || e.target.closest(".folder-pop")) return;
-  // The edge ring resizes instead of moving/opening — check it FIRST, or the icon's
+  // The edge ring resizes instead of moving/opening: check it FIRST, or the icon's
   // own press would swallow the gesture. rz-hole covers the centre, so only a press
   // on the edge lands here.
   if (e.target.closest("#rz-catch")) {
@@ -480,7 +486,7 @@ let gripDrag = null;
 let gripSave = 0;
 let gripPainted = 0;
 // A mouse reports far more often than a screen refreshes, and every report used to
-// rebuild the whole icon — previews included. One repaint per frame is all the eye
+// rebuild the whole icon, previews included. One repaint per frame is all the eye
 // can see, so the rest are skipped; the release below draws the final size.
 const GRIP_PAINT_MS = 16;
 
@@ -515,7 +521,7 @@ function gripReleased() {
   gripDrag = null;
   document.body.classList.remove("resizing");
   if (gripSave) { cancelAnimationFrame(gripSave); gripSave = 0; }
-  // Final exact value, in case the last frame was skipped — on screen and in the store.
+  // Final exact value, in case the last frame was skipped: on screen and in the store.
   gripPaint();
   invoke("set_float_folder_scale", { id: folderId, scale: state.scale }).catch(() => {});
 }
@@ -530,7 +536,7 @@ function iconReleased(e) {
 window.addEventListener("mouseout", (e) => iconReleased(e));
 
 window.addEventListener("mousemove", async (e) => {
-  // The ring is otherwise invisible until it is grabbed — a thin accent edge on
+  // The ring is otherwise invisible until it is grabbed: a thin accent edge on
   // the icon says "resize starts here" while the pointer sits in the band. e.target can
   // be the window itself for a synthetic event with no real target under the pointer.
   iconEl.classList.toggle("rz-hover", !!e.target?.closest?.("#rz-catch"));
@@ -612,7 +618,7 @@ document.getElementById("menu-close").addEventListener("click", () => closePopov
 
 document.getElementById("menu-rename").addEventListener("click", async () => {
   await closePopover();
-  // The folder window hosts no themed dialog — the main window asks for the name.
+  // The folder window hosts no themed dialog: the main window asks for the name.
   invoke("folder_rename_request", { id: folderId }).catch(() => {});
 });
 
@@ -730,7 +736,7 @@ document.getElementById("mm-out").addEventListener("click", async () => {
 // ---- backend events ----
 
 listen("folder-changed", () => loadState());
-// A pill is being dragged over this folder — show that letting go drops it in.
+// A pill is being dragged over this folder: show that letting go drops it in.
 listen("merge-hint", (e) => iconEl.classList.toggle("merge-hint", e.payload === true));
 listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars));
 listen("language-changed", () => applySettings().catch(() => {}));
@@ -747,7 +753,7 @@ listen("language-changed", () => applySettings().catch(() => {}));
 listen("settings-changed", () => { applySettings().catch(() => {}).then(() => loadState()); });
 listen("prompt-updated", (e) => {
   if (e.payload && state.members.some((p) => p.id === e.payload.id)) {
-    // An edit can change entry count/text — drop the cached rotation state so
+    // An edit can change entry count/text: drop the cached rotation state so
     // the reload below primes it fresh (primeMemberRotate only peeks once per id).
     rotateInfo.delete(e.payload.id);
     loadState();
@@ -767,7 +773,7 @@ listen("rotation-changed", (e) => {
 });
 
 // Moving onto a monitor with a different DPI invalidates the physical box the
-// expansion was computed from — recompute it (or re-assert the collapsed icon).
+// expansion was computed from; recompute it (or re-assert the collapsed icon).
 appWin.onScaleChanged(() => {
   if (open) reflow();
   else invoke("set_float_folder_scale", { id: folderId, scale: state.scale }).catch(() => {});

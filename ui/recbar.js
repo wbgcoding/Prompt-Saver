@@ -90,7 +90,7 @@ function applyPaused(p) {
   resumeIcon.classList.toggle("hidden", !p);
   const label = pauseBtnLabel();
   if (label) { pauseBtn.title = label; pauseBtn.setAttribute("aria-label", label); }
-  // Reuses the same button label a sighted user just saw change (Pause/Resume) —
+  // Reuses the same button label a sighted user just saw change (Pause/Resume):
   // that already names which state the recording is in now.
   if (changed && label) {
     const live = document.getElementById("live");
@@ -103,8 +103,8 @@ function applyPaused(p) {
 // the user can always see at a glance what is being captured -- dim when that
 // source is off or muted, lit when on. audio_system/audio_mic are each a
 // fixed per-session choice (set once when the recording starts) that decides
-// whether the button can be used at all; 332 added mid-recording muting on
-// top (audio_system_muted/audio_mic_muted), toggled by clicking the button.
+// whether the button can be used at all; mid-recording muting sits on top
+// (audio_system_muted/audio_mic_muted), toggled by clicking the button.
 // mic_lost can flip true mid-recording if the device gets unplugged, and latches.
 let lastAudio = { system: false, mic: false, systemMuted: false, micMuted: false, micLost: false };
 function applyAudio({ audio_system, audio_mic, audio_system_muted, audio_mic_muted, mic_lost }) {

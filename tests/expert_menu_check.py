@@ -28,7 +28,7 @@ SRC = "\n".join(l for l in SRC.splitlines() if not l.lstrip().startswith("//"))
 
 # Settings deliberately absent from the tab list: normal settings in the settings
 # dialog, and the ones the backups dialog renders itself (renderBackupPanel /
-# renderStatsPanel, opened from settings — not from the expert menu).
+# renderStatsPanel, opened from settings, not from the expert menu).
 NOT_IN_EXPERT = {
     "autoPaste",
     # Backup settings, rendered by renderBackupPanel.
@@ -42,7 +42,7 @@ NOT_IN_EXPERT = {
 # must carry ("!x" = only while x is OFF). Maintained by hand on purpose: whether one
 # feature needs another is a product decision, not something text matching can guess.
 # Adding a dependent setting without adding it here (and gating it) is the mistake
-# this file exists to catch — so add both together.
+# this file exists to catch: so add both together.
 DEPENDENCIES = {
     # Creating prompts
     "storeFiles": "fileAttach",
@@ -370,7 +370,7 @@ for gate in re.findall(r'gate:\s*"([^"]+)"', tabs):
         problems.append(f"gate: '{gate}' in a tab points at an unknown flag")
 
 # The "(default off)" suffix is appended at render time from the `defaultOff`
-# string, so no label may carry it inline — that would double up or, worse, stick
+# string, so no label may carry it inline: that would double up or, worse, stick
 # to a feature that is on by default.
 i18n = (Path(__file__).resolve().parents[1] / "ui" / "i18n.js").read_text(encoding="utf-8")
 for line in i18n.splitlines():
@@ -378,7 +378,7 @@ for line in i18n.splitlines():
         problems.append(f"i18n: label carries the default-off suffix inline: {line.strip()[:70]}")
 
 # A key listed in EXPERT_TIPS but without a tip<Key> string shows no tooltip at
-# all — withTip() drops it silently, so nothing on screen says the string is
+# all: withTip() drops it silently, so nothing on screen says the string is
 # missing. Listing a key is a promise to write the explanation.
 en = re.search(r"\n  en: \{(.*?)\n  [a-z]{2}: \{", i18n, re.S)
 en_keys = set(re.findall(r"^    ([A-Za-z0-9_]+):", en.group(1), re.M)) if en else set()
@@ -406,7 +406,7 @@ for kind, fn in (("flags", "flagRow"), ("values", "valueRow"), ("selects", "sele
         problems.append(f"reset: {fn}() does not call rowResetBtn(\"{kind}\", ...)")
 
 # A group with a colour palette has no single key for the generic per-kind loop to
-# diff — changedKeysInGroup()/resetExpertGroup() need their own explicit palette
+# diff: changedKeysInGroup()/resetExpertGroup() need their own explicit palette
 # branch, or that category can never show/act on its own reset button.
 if re.search(r'palette:\s*true', tabs):
     changed_src = block("function changedKeysInGroup", "{", "}")
@@ -419,7 +419,7 @@ if re.search(r'palette:\s*true', tabs):
 
 # ---- 83: EXPERT_DROPDOWNS def type vs get() return type -----------------------
 # isRowChanged() compares val()/cfg.get() to cfg.def with strict !==. A numeric def
-# on an entry whose get() returns a String() is permanently "changed" ("0" !== 0) —
+# on an entry whose get() returns a String() is permanently "changed" ("0" !== 0):
 # the copySize bug. Object-literal entries only (enumDropdown()'s default is a
 # positional arg, already a string there).
 for key in top_keys(dropdowns_src):
@@ -455,7 +455,7 @@ for kind_name, src in (("values", values_src), ("selects", selects_src)):
         if "def:" not in entry:
             problems.append(f"{kind_name}: '{key}' has no def — its reset button can never appear")
 
-# The backup/statistics panels (their own top-level window, not the expert menu —
+# The backup/statistics panels (their own top-level window, not the expert menu,
 # see NOT_IN_EXPERT above) reuse rowResetBtn()/resetOneExpertValue() through numRow()
 # and the hand-rolled backupIntervalH select, rather than a second implementation.
 numrow_body = block("function numRow(", "{", "}")
@@ -466,7 +466,7 @@ if 'rowResetBtn("selects", "backupIntervalH"' not in backup_panel_body:
     problems.append("reset: renderBackupPanel() does not wire a reset button for backupIntervalH")
 
 # The colour palette's reset button used to show unconditionally; it must now follow
-# the same "only while changed" rule every other row's rowResetBtn() already has —
+# the same "only while changed" rule every other row's rowResetBtn() already has:
 # i.e. the button element is only ever appended inside a conditional.
 palette_body = block("function paletteRow(", "{", "}")
 if not re.search(r'if\s*\(\s*\w+\s*\)\s*\{[^}]*palette-reset', palette_body, re.S):
@@ -474,8 +474,8 @@ if not re.search(r'if\s*\(\s*\w+\s*\)\s*\{[^}]*palette-reset', palette_body, re.
 
 # ---- notices ------------------------------------------------------------------
 # A notice reports a state the app is in (the store being written unencrypted),
-# not a setting. It has no default, nothing to reset and — the point of the whole
-# construct — no switch: a warning that describes what is on disk right now cannot
+# not a setting. It has no default, nothing to reset and (the point of the whole
+# construct) no switch: a warning that describes what is on disk right now cannot
 # be turned off, or the one user who needs it is the one who silenced it. So:
 # every id a group lists must be declared, every declared one must be placed, both
 # its strings must exist, and none of them may ever turn up as a flag.
