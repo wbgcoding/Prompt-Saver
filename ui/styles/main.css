@@ -2062,22 +2062,23 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
      though this row can shrink to fit just fine. A 0 basis tells the wrap
      algorithm to size this item from the remaining space, not its content. */
   flex: 1 1 0;
-  min-width: 0;
-  /* Never wrap to a second line here either -- the same wide content used
-     to wrap internally three deep at a narrow window width. Scroll instead;
-     the row always stays exactly as tall as one line of controls. */
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  overflow-y: hidden;
+  /* min-content, not a fixed guess: a tool with no fields (hand, crop) still
+     reads as near-zero wide, so it never forces the outer toolbar to push the
+     undo/zoom group onto its own line, while a tool whose widest single field
+     (e.g. pixelate's block-size number field) needs more room than the row
+     was about to get is never squeezed narrower than that field itself. */
+  min-width: min-content;
+  /* Wrap onto a second line instead of scrolling sideways -- a field such as
+     pixelate's block size used to slide out of view with no visible scrollbar
+     hint. Wrapping keeps every field reachable without hidden overflow. */
+  flex-wrap: wrap;
+  row-gap: 6px;
+  overflow: visible;
   padding-inline: 12px;
   margin-inline: 4px;
   border-inline: 1px solid var(--border);
   min-height: 30px;
 }
-/* A slim bar instead of the app-wide default -- this row is short, a full
-   12px scrollbar would eat a third of its own height. */
-.snip-edit-context::-webkit-scrollbar { height: 6px; }
-.snip-edit-context::-webkit-scrollbar-thumb { border: 1px solid transparent; }
 .snip-edit-view { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
 .snip-edit-sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
 .snip-edit-zoom-val { min-width: 42px; text-align: center; font-size: 12px; color: var(--muted); }

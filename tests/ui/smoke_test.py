@@ -7256,8 +7256,14 @@ PROBE = """
         // is active -- a full inline swatch grid used to collapse into one tall
         // column here and blow the toolbar height up. This is the check that
         // would have caught that bug; a generic layoutScan alone did not.
+        // 507 raised the ceiling from 96 to 200: the context row now wraps
+        // its fields onto a second (and for the busiest tool, a third) line
+        // instead of scrolling them sideways, so two or three lines of real
+        // controls is expected height, not a regression. A collapsed swatch
+        // grid is still caught well below 200 -- that failure mode stacks a
+        // whole column of swatches, not two or three short field rows.
         const seToolbar = document.querySelector('.snip-edit-toolbar');
-        const SE_TOOLBAR_CEIL = 96;
+        const SE_TOOLBAR_CEIL = 200;
         for (const b of toolBtns) {
           b.click();
           await sleep(30);
@@ -8158,14 +8164,58 @@ PROBE = """
       const TINY_PNG2 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
       const priorTheme = document.documentElement.getAttribute('data-theme');
       const BUILTIN_THEMES = ['light', 'dark', 'programmer', 'neon', 'cyberpunk', 'mono', 'ocean'];
+      const swatch508 = document.createElement('div');
+      swatch508.style.cssText = 'position:absolute;left:-9999px;top:-9999px;background-color:var(--surface)';
+      document.body.appendChild(swatch508);
       for (const theme of BUILTIN_THEMES) {
         document.documentElement.setAttribute('data-theme', theme);
         window.__FIRE__('snip-captured', { data_url: TINY_PNG2, path: '', name: 'test.png' });
         await sleep(150);
         layoutScan('screenshot editor in theme ' + theme);
+        // 508: the text tool's shape-back select is the one bare select the
+        // screenshot editor owns; assert it picked up the themed look too.
+        const textToolBtn = document.querySelector('#snip-edit-tools button[data-tool="text"]');
+        if (textToolBtn) {
+          textToolBtn.click();
+          const seSel = document.querySelector('#snip-edit-context select.snip-edit-select');
+          if (!seSel) {
+            out.errors.push('508: the screenshot editor text-back select is missing in theme ' + theme);
+          } else {
+            const cs = getComputedStyle(seSel);
+            if (parseFloat(cs.borderTopWidth) <= 0) out.errors.push('508: snip editor select has no border in theme ' + theme);
+            if (cs.backgroundColor === 'rgba(0, 0, 0, 0)' || cs.backgroundColor === 'transparent') {
+              out.errors.push('508: snip editor select has a transparent background in theme ' + theme);
+            }
+            const surfaceRgb508 = getComputedStyle(swatch508).backgroundColor;
+            // A selected option shows the accent colour (option:checked); pick
+            // an unselected one to check the plain surface colour instead.
+            const unselected = [...seSel.options].find((o) => !o.selected);
+            if (unselected) {
+              const optBg = getComputedStyle(unselected).backgroundColor;
+              if (optBg !== surfaceRgb508) {
+                out.errors.push('508: snip editor select option background is ' + optBg + ', expected ' + surfaceRgb508 + ' in theme ' + theme);
+              }
+            }
+          }
+          // 507: with the text tool's full field set showing, the context
+          // row must wrap onto a second line rather than scroll sideways.
+          const ctxEl = document.querySelector('.snip-edit-context');
+          if (ctxEl && ctxEl.scrollWidth > ctxEl.clientWidth) {
+            out.errors.push('507: snip-edit-context scrolls horizontally with the text tool at ' + innerWidth + 'px, theme ' + theme);
+          }
+        }
+        const pixelateToolBtn = document.querySelector('#snip-edit-tools button[data-tool="pixelate"]');
+        if (pixelateToolBtn) {
+          pixelateToolBtn.click();
+          const ctxEl2 = document.querySelector('.snip-edit-context');
+          if (ctxEl2 && ctxEl2.scrollWidth > ctxEl2.clientWidth) {
+            out.errors.push('507: snip-edit-context scrolls horizontally with the pixelate tool at ' + innerWidth + 'px, theme ' + theme);
+          }
+        }
         document.getElementById('snip-edit-cancel').click();
         await sleep(100);
       }
+      swatch508.remove();
       if (priorTheme) document.documentElement.setAttribute('data-theme', priorTheme);
       else document.documentElement.removeAttribute('data-theme');
       // The page is left in German after the earlier lang loop (later OCR
