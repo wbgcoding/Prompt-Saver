@@ -226,6 +226,12 @@ async function poll() {
     applyAudio(status);
     applyHotkeyWarn(status.stop_hotkey_ok, status.pause_hotkey_ok);
     applyDiskLow(status.disk_low);
+    // Belt and suspenders alongside the ResizeObserver above: every one of
+    // the applyX calls just above can show or hide an element, and this runs
+    // right after every one of them regardless, on the same 500ms cadence
+    // that already drives the rest of the bar -- fitBar()'s own width/height
+    // check is a no-op when nothing actually changed.
+    fitBar();
   } catch {
     // transient -- next tick self-corrects
   }
