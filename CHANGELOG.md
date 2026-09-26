@@ -566,6 +566,29 @@ the video editor and the introduction tour ship on).
   finished; with no screen recording running, the camera take is its own
   zero point and opens on its own. Default camera, resolution and frame
   rate are all adjustable in the expert menu.
+- **JSON export and import for prompts**, alongside CSV and TXT: one Export
+  button plus a format dropdown replaces the three separate buttons. JSON is
+  the only one of the three that can carry a rotating prompt's full entry
+  list, tags, notes, a hotkey and a colour without joining them into a
+  single field. Import decides CSV or JSON from the file's own content, never
+  its extension. Images stay out of all three, same as before.
+- **The recording control bar can be dragged to move it**, including onto
+  another monitor; the moment you drag it, it stops following the recorded
+  window for the rest of that recording, and follows again on the next one.
+  Its two audio buttons also mute system sound or the microphone instantly
+  while recording, without dropping the track: a muted source keeps
+  recording silence and can be unmuted again in the same recording.
+- **The recording folder's row in the expert menu now shows how many videos
+  are in it and how much space they use**, with a "Clean up..." button that
+  lists files older than 7, 30 or 90 days and the space it would free, for
+  confirmation before anything is deleted.
+- **The video editor's export destination is now an editable field**: type a
+  path directly, use "Save as..." for a full save dialog, or "Export to..."
+  to keep the file name and change only the folder; switching the format
+  only rewrites the extension. "Export and copy" skips naming a destination
+  entirely, exporting into a self-cleaning temporary copy (removed after an
+  hour, and again on the next launch, both adjustable) and putting the
+  finished file straight on the clipboard.
 
 ### Improved
 
