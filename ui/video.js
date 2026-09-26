@@ -3665,7 +3665,7 @@ $("ve-export-choose-file").addEventListener("click", async () => {
   updateExportNote();
 });
 $("ve-export-choose-folder").addEventListener("click", async () => {
-  const folder = await invoke("pick_folder").catch(() => null);
+  const folder = await invoke("pick_export_folder").catch(() => null);
   if (!folder) return;
   VE.destDir = folder;
   VE.destOverride = null; // the auto filename moves into the new folder

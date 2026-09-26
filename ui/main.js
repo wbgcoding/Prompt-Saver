@@ -3561,7 +3561,7 @@ async function runBatchExportRecordings(dir, names) {
   let destDir = "";
   destOut.textContent = "";
   chooseDestBtn.onclick = async () => {
-    const picked = await invoke("pick_folder").catch(() => null);
+    const picked = await invoke("pick_export_folder").catch(() => null);
     if (picked) { destDir = picked; destOut.textContent = destDir; }
   };
   modal.classList.remove("hidden");

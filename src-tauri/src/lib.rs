@@ -25453,6 +25453,57 @@ fn video_export_cancelled() -> &'static Mutex<std::collections::HashSet<u64>> {
     SET.get_or_init(|| Mutex::new(std::collections::HashSet::new()))
 }
 
+// The one folder an export command is allowed to write into this session,
+// remembered from the last real save dialog the backend itself ran (either
+// `pick_export_dest`'s own containing folder or `pick_export_folder`'s
+// picked directory) -- an export command never trusts a `dest_path` string
+// from the IPC call on its own, since that call could in principle be made
+// with any argument at all rather than the one a dialog actually returned.
+static LAST_EXPORT_DEST_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
+
+fn remember_export_dest_dir(dir: &Path) {
+    if let Ok(canon) = fs::canonicalize(dir) {
+        *LAST_EXPORT_DEST_DIR.lock().unwrap_or_else(|e| e.into_inner()) = Some(canon);
+    }
+}
+
+// Whether `dest`'s containing folder is one this session is actually allowed
+// to export into: the folder from the last save dialog the backend ran for
+// this purpose, the standing `videoExportDir` preference (itself only ever
+// set from that same dialog, in an earlier session), or the source file's own
+// folder (opening a file for editing and saving back next to it is the same
+// trust level the app already gives every attachment path). Everything is
+// compared canonicalized so a relative segment or a different letter case
+// cannot be used to step outside the folder that was actually picked.
+// Split from `export_dest_dir_is_authorized` below so the actual decision is
+// a plain function of paths and can be unit-tested without a running app.
+fn export_dest_dir_is_authorized_against(dest: &Path, src: &Path, last_picked: Option<&Path>, configured_dir: Option<&str>) -> bool {
+    let Some(dest_dir) = dest.parent() else { return false };
+    let Ok(canon_dest_dir) = fs::canonicalize(dest_dir) else { return false };
+    if let Some(picked) = last_picked {
+        if fs::canonicalize(picked).is_ok_and(|c| c == canon_dest_dir) {
+            return true;
+        }
+    }
+    if let Some(cfg) = configured_dir.filter(|c| !c.is_empty()) {
+        if fs::canonicalize(cfg).is_ok_and(|c| c == canon_dest_dir) {
+            return true;
+        }
+    }
+    if let Some(src_dir) = src.parent() {
+        if fs::canonicalize(src_dir).is_ok_and(|c| c == canon_dest_dir) {
+            return true;
+        }
+    }
+    false
+}
+
+fn export_dest_dir_is_authorized(state: &State<'_, Db>, dest: &Path, src: &Path) -> bool {
+    let last_picked = LAST_EXPORT_DEST_DIR.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    let configured = lock(state).settings.ui_texts.get("videoExportDir").cloned();
+    export_dest_dir_is_authorized_against(dest, src, last_picked.as_deref(), configured.as_deref())
+}
+
 // The single-editor "Cancel" button: no generation of its own to name, so it
 // cancels whichever one is current right now -- unchanged behaviour from
 // before the set, and still correct because the editor only ever has one
@@ -25503,7 +25554,7 @@ fn cancel_all_exports() {
 // own JS calling set_taskbar_progress -- so a job keeps reporting correctly
 // even once the window that started it has closed.
 #[tauri::command]
-async fn export_video(app: AppHandle, req: ExportRequest) -> Result<String, String> {
+async fn export_video(app: AppHandle, state: State<'_, Db>, req: ExportRequest) -> Result<String, String> {
     if !matches!(req.format.as_str(), "mp4" | "webm" | "gif" | "avi" | "mov" | "mkv" | "webpanim" | "apng") {
         return Err("unsupported format".to_string());
     }
@@ -25512,6 +25563,9 @@ async fn export_video(app: AppHandle, req: ExportRequest) -> Result<String, Stri
         return Err(ffmpeg_error_json(FfmpegErrorKey::Missing, None, ""));
     }
     let dst = PathBuf::from(&req.dest_path);
+    if !export_dest_dir_is_authorized(&state, &dst, &src) {
+        return Err("export destination not recognized".to_string());
+    }
     let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
     let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
     // Own registry key per job (not just "export"), so a batch of exports
@@ -25632,6 +25686,7 @@ async fn await_batch_export(handle: ExportJoinHandle, id: String, generation: u6
 #[tauri::command]
 async fn export_recordings_batch(
     app: AppHandle,
+    state: State<'_, Db>,
     items: Vec<BatchExportItem>,
     format: String,
     lossless_quality: bool,
@@ -25665,7 +25720,12 @@ async fn export_recordings_batch(
             let (handle, id, generation, job_app) = in_flight.pop_front().unwrap();
             if await_batch_export(handle, id, generation, job_app).await? { ok += 1 } else { failed += 1 }
         }
-        if !PathBuf::from(&item.src_path).is_file() {
+        let item_src = PathBuf::from(&item.src_path);
+        if !item_src.is_file() {
+            failed += 1;
+            continue;
+        }
+        if !export_dest_dir_is_authorized(&state, &PathBuf::from(&item.dest_path), &item_src) {
             failed += 1;
             continue;
         }
@@ -26340,10 +26400,29 @@ async fn pick_export_dest(app: AppHandle, win: tauri::Window, default_name: Stri
     let result = file_dialog_for(&app, win.label())
         .add_filter(ext.to_uppercase(), &[ext.as_str()])
         .set_file_name(&default_name)
-        .save_file()
-        .map(|p| p.to_string_lossy().to_string());
+        .save_file();
     let _ = win.set_focus();
-    result
+    if let Some(dir) = result.as_ref().and_then(|p| p.parent()) {
+        remember_export_dest_dir(dir);
+    }
+    result.map(|p| p.to_string_lossy().to_string())
+}
+
+// The folder-only counterpart, used by the video editor's "choose folder"
+// export target and the recordings batch-export dialog. A plain wrapper
+// around the same picker `pick_folder` uses, except this one also remembers
+// the folder as an authorized export destination -- `pick_folder` itself
+// stays untouched since it is shared with picks that have nothing to do with
+// exporting (attachments, imports, the recordings folder setting, ...) and
+// must not widen what an export command will accept.
+#[tauri::command]
+async fn pick_export_folder(app: AppHandle, win: tauri::Window) -> Option<String> {
+    let result = file_dialog_for(&app, win.label()).pick_folder();
+    let _ = win.set_focus();
+    if let Some(dir) = &result {
+        remember_export_dest_dir(dir);
+    }
+    result.map(|p| p.to_string_lossy().to_string())
 }
 
 // 280's plain "Save" -- writes straight into recordingDir without a dialog
@@ -30327,6 +30406,7 @@ pub fn run() {
             cancel_export_job,
             save_recording_as,
             pick_export_dest,
+            pick_export_folder,
             save_recording_now,
             copy_recording_to_clipboard,
             clip_export_path,
@@ -34550,6 +34630,32 @@ mod tests {
         assert!(canvas_within_ceiling(8192, 4320, 8192, 4320));
         assert!(!canvas_within_ceiling(8193, 4320, 8192, 4320));
         assert!(!canvas_within_ceiling(7680, 4321, 8192, 4320));
+    }
+
+    #[test]
+    fn export_dest_dir_accepts_the_picked_folder_and_rejects_anywhere_else() {
+        let root = std::env::temp_dir().join(format!("ps-exportdesttest-{}", std::process::id()));
+        let picked = root.join("picked");
+        let other = root.join("elsewhere");
+        let src_dir = root.join("source");
+        std::fs::create_dir_all(&picked).unwrap();
+        std::fs::create_dir_all(&other).unwrap();
+        std::fs::create_dir_all(&src_dir).unwrap();
+        let src = src_dir.join("clip.mp4");
+        std::fs::write(&src, b"x").unwrap();
+
+        // Inside the folder a save dialog actually returned: accepted.
+        assert!(export_dest_dir_is_authorized_against(&picked.join("out.mp4"), &src, Some(&picked), None));
+        // A path outside anything the app ever resolved: rejected.
+        assert!(!export_dest_dir_is_authorized_against(&other.join("out.mp4"), &src, Some(&picked), None));
+        // The standing videoExportDir preference is accepted the same way.
+        assert!(export_dest_dir_is_authorized_against(&other.join("out.mp4"), &src, None, other.to_str()));
+        // Saving back into the source file's own folder is accepted with no pick at all.
+        assert!(export_dest_dir_is_authorized_against(&src_dir.join("out.mp4"), &src, None, None));
+        // Nothing remembered and nothing configured: rejected.
+        assert!(!export_dest_dir_is_authorized_against(&other.join("out.mp4"), &src, None, None));
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
