@@ -22054,20 +22054,35 @@ mod keylog {
         now.saturating_sub(next_poll_due) > FOCUS_POLL_MS
     }
 
-    // Called on the transition from no key pending to one arriving:
-    // the ~50ms poll only runs while something is pending (see
+    // Called on the transition from no key pending to one arriving: the
+    // ~50ms poll only runs while something is pending (see
     // focus_poll_due), so next_poll_due can sit unrefreshed for an
     // arbitrarily long quiet stretch with nothing actually wrong -- reading
     // that stale deadline as an overrun would force-gap the first ordinary
-    // key after every idle gap longer than FOCUS_POLL_MS. `changed` is
-    // whatever focus_identity_changed already decided between the last
-    // known identity and the one read at this transition, so a real focus
-    // change during the idle stretch still gaps the key exactly as a poll
-    // detecting it would; only the false stall reading is suppressed.
-    // Returns the new forced_gap flag for the arriving key and the rearmed
-    // poll deadline.
-    fn idle_to_busy_reset(now: u64, changed: bool) -> (bool, u64) {
-        (changed, now.saturating_add(FOCUS_POLL_MS))
+    // key after every idle gap longer than FOCUS_POLL_MS.
+    //
+    // The rearmed deadline is anchored to the key's OWN hook-time
+    // timestamp (`raw_t_ms`), never to mono_ms() at the moment this thread
+    // actually gets around to receiving it. The channel can hand the key
+    // over well after it was captured if this consumer thread itself was
+    // slow to be scheduled, and a focus round trip that lands entirely
+    // inside that gap -- away from the field this key belongs to and back
+    // to the very same one -- compares as "unchanged" at the endpoints no
+    // matter when it is checked, since nothing else recorded the excursion
+    // in between. Anchoring on raw_t_ms instead of the later receive time
+    // means the ordinary focus_poll_due / poll_overran check that already
+    // runs every loop iteration (unconditionally, whether pending was just
+    // armed or has been busy for a while) still reads a consumption delay
+    // past the stall allowance as an overrun on ITS OWN, with no detected
+    // change required, and force-gaps this key through the same
+    // span-widening path (mark_forced_gaps) a genuinely busy consumer
+    // already gets. last_focus itself is deliberately left untouched here:
+    // it keeps whatever was last confirmed before the idle stretch, so the
+    // eventual poll still compares against a real baseline rather than a
+    // read taken at this transition that could already be on the far side
+    // of a round trip this thread never got to see.
+    fn idle_to_busy_reset(raw_t_ms: u64) -> (u64, u64) {
+        (raw_t_ms, raw_t_ms.saturating_add(FOCUS_POLL_MS))
     }
 
     // Whether a key's own timestamp falls inside a span this
@@ -22224,7 +22239,7 @@ mod keylog {
                 None => rx.recv_timeout(Duration::from_millis(IDLE_PRUNE_MS)),
             };
             match recv_result {
-                Ok(mut raw) => {
+                Ok(raw) => {
                     let paused = clock.lock().unwrap_or_else(|e| e.into_inner()).is_paused_at(raw.t_ms);
                     if paused {
                         // Nothing happened here as far as the recording is
@@ -22245,19 +22260,19 @@ mod keylog {
                             ledger.lock().unwrap_or_else(|e| e.into_inner()).push_arrival(raw.t_ms);
                         }
                         if pending.is_empty() {
-                            // Idle->busy transition -- see idle_to_busy_reset
-                            // for why the poll's own stale deadline must not
-                            // be read as an overrun here.
-                            let now = mono_ms();
-                            let cur = focus_identity(&uia);
-                            let changed = focus_identity_changed(&uia, &last_focus, &cur);
-                            let (forced, due) = idle_to_busy_reset(now, changed);
-                            if forced {
-                                raw.forced_gap = true;
-                                ledger.lock().unwrap_or_else(|e| e.into_inner()).push_arrival(now);
-                            }
-                            last_focus = cur;
-                            last_focus_at = now;
+                            // Idle->busy transition, anchored to this key's
+                            // own hook-time timestamp rather than the
+                            // moment this thread got around to receiving
+                            // it -- see idle_to_busy_reset for why. Neither
+                            // last_focus nor the ledger is touched here:
+                            // the ordinary focus_poll_due / poll_overran
+                            // check just below still runs this same
+                            // iteration and every one after, and it is the
+                            // one that ends up gapping this key if either a
+                            // real change or too long a consumption delay
+                            // shows up.
+                            let (reset_at, due) = idle_to_busy_reset(raw.t_ms);
+                            last_focus_at = reset_at;
                             next_poll_due = due;
                         }
                         if pending.len() >= PENDING_CAP {
@@ -23172,35 +23187,29 @@ mod keylog {
         }
 
         #[test]
-        fn idle_to_busy_reset_does_not_flag_a_stall_with_no_focus_change() {
-            // Confirms the bug this closes: read on its own, the stale
-            // deadline left behind by an idle stretch (poll suspended while
-            // pending stayed empty) still looks exactly like a genuine
-            // overrun to poll_overran.
-            assert!(poll_overran(1200, 1000));
-            let (forced, due) = idle_to_busy_reset(1200, false);
-            assert!(!forced, "an idle gap alone, with no focus change, must not force-gap the key that ends it");
-            assert_eq!(due, 1250);
+        fn idle_to_busy_reset_anchors_the_deadline_to_the_keys_own_hook_timestamp() {
+            let (last_focus_at, next_poll_due) = idle_to_busy_reset(1200);
+            assert_eq!(last_focus_at, 1200);
+            assert_eq!(next_poll_due, 1250);
         }
 
         #[test]
-        fn idle_to_busy_reset_still_flags_a_detected_focus_change() {
-            let (forced, due) = idle_to_busy_reset(1200, true);
-            assert!(forced, "a real focus change during the idle stretch must still gap the key, fail-closed");
-            assert_eq!(due, 1250);
-        }
+        fn first_key_after_an_idle_gap_consumed_promptly_is_kept() {
+            // Requirement (a): the idle gap alone, with the key consumed
+            // right after it was captured (no scheduling delay on top),
+            // must not force-gap it. next_poll_due lands at raw.t_ms + 50,
+            // so a receive that happens at essentially the same instant
+            // never reads as an overrun.
+            let (_, next_poll_due) = idle_to_busy_reset(1200);
+            let now = 1200;
+            assert!(!poll_overran(now, next_poll_due));
 
-        #[test]
-        fn first_key_after_an_idle_gap_with_no_focus_change_is_kept() {
             let mut ledger = Ledger::default();
             ledger.push_check(1600, FieldClass::NonText);
             assert_eq!(verdict(&ledger, 1200, false), Some(Verdict::Allow));
 
             let mut pending: VecDeque<RawKey> = VecDeque::new();
-            let mut raw = make_raw_key(1200);
-            let (forced, _due) = idle_to_busy_reset(1200, false);
-            raw.forced_gap = forced;
-            pending.push_back(raw);
+            pending.push_back(make_raw_key(1200));
 
             let mut rec = Recorder::default();
             let clock = Mutex::new(ActiveClock::new(0));
@@ -23209,20 +23218,26 @@ mod keylog {
             resolve_pending(&mut pending, &mut rec, &clock, &cutoff, &ledger);
 
             assert!(pending.is_empty());
-            assert!(rec.sidecar.gaps.is_empty(), "an idle gap with no focus change must not turn into a recorded gap");
+            assert!(rec.sidecar.gaps.is_empty(), "an idle gap with a prompt receive must not turn into a recorded gap");
         }
 
         #[test]
-        fn first_key_after_an_idle_gap_with_a_detected_focus_change_is_gapped() {
+        fn first_key_after_an_idle_gap_with_a_focus_change_on_the_next_poll_is_gapped() {
+            // Requirement (b): the idle->busy reset only rearms the
+            // deadline and leaves last_focus untouched, so a poll that
+            // later runs and genuinely detects a changed identity still
+            // gaps the key through the ordinary mark_forced_gaps path --
+            // exactly as it does for a key that was already pending.
+            let (last_focus_at, _) = idle_to_busy_reset(1200);
+
             let mut ledger = Ledger::default();
             ledger.push_check(1600, FieldClass::NonText);
 
             let mut pending: VecDeque<RawKey> = VecDeque::new();
-            let mut raw = make_raw_key(1200);
-            let (forced, _due) = idle_to_busy_reset(1200, true);
-            raw.forced_gap = forced;
-            pending.push_back(raw);
-            ledger.push_arrival(1200);
+            pending.push_back(make_raw_key(1200));
+            mark_forced_gaps(&mut pending, last_focus_at, 1300);
+            ledger.push_arrival(last_focus_at);
+            ledger.push_arrival(1300);
 
             let mut rec = Recorder::default();
             let clock = Mutex::new(ActiveClock::new(0));
@@ -23237,16 +23252,53 @@ mod keylog {
 
         #[test]
         fn a_genuine_stall_with_a_key_already_pending_still_forces_the_gap() {
-            // Unlike the idle->busy transition above, a poll that was
-            // already armed because a key was already pending must still
-            // treat its own overrun as a stall -- idle_to_busy_reset only
-            // ever runs on the empty->non-empty edge and must not weaken
-            // this ordinary case.
+            // Requirement (c): a poll that was already armed because a key
+            // was already pending must still treat its own overrun as a
+            // stall -- idle_to_busy_reset only ever runs on the
+            // empty->non-empty edge and must not weaken this ordinary case.
             assert!(poll_overran(2000, 1000));
             let mut pending: VecDeque<RawKey> = VecDeque::new();
             pending.push_back(make_raw_key(1200));
             mark_forced_gaps(&mut pending, 1000, 2000);
             assert!(pending[0].forced_gap);
+        }
+
+        #[test]
+        fn a_delayed_receive_with_no_detected_change_still_forces_the_gap() {
+            // The HIGH this closes: focus moves A -> password/text -> A
+            // and back again entirely inside the gap between this key's
+            // own hook timestamp (1200) and the moment this thread actually
+            // gets around to receiving it (1400, a 200ms scheduling delay
+            // with no UIA event ever arriving) -- the round trip completes
+            // silently, so an endpoint comparison alone would read as
+            // "unchanged" no matter when it runs. Anchoring the rearmed
+            // deadline to raw.t_ms instead of the receive time is what
+            // makes poll_overran alone, with no detected change at all,
+            // still catch this: the effective deadline (1200 + 50 = 1250)
+            // is already more than one full FOCUS_POLL_MS behind by the
+            // time anything gets checked.
+            let (last_focus_at, next_poll_due) = idle_to_busy_reset(1200);
+            let now = 1400;
+            assert!(poll_overran(now, next_poll_due), "a consumption delay this long must read as an overrun on its own");
+
+            let mut pending: VecDeque<RawKey> = VecDeque::new();
+            pending.push_back(make_raw_key(1200));
+            mark_forced_gaps(&mut pending, last_focus_at, now);
+
+            let mut ledger = Ledger::default();
+            ledger.push_check(1600, FieldClass::NonText);
+            ledger.push_arrival(last_focus_at);
+            ledger.push_arrival(now);
+
+            let mut rec = Recorder::default();
+            let clock = Mutex::new(ActiveClock::new(0));
+            let cutoff: Mutex<Option<u64>> = Mutex::new(None);
+            let ledger = Mutex::new(ledger);
+            resolve_pending(&mut pending, &mut rec, &clock, &cutoff, &ledger);
+
+            assert!(pending.is_empty());
+            assert!(rec.sidecar.events.is_empty());
+            assert_eq!(rec.sidecar.gaps, vec![Gap { start_ms: 1200, end_ms: 1200 }]);
         }
 
         #[test]
