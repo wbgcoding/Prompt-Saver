@@ -28248,10 +28248,16 @@ fn export_dest_dir_is_authorized_against(
     src: &Path,
     last_picked: Option<&Path>,
     configured_dir: Option<&str>,
-    configured_recording_dir: &Path,
+    trusted_src_dirs: &[PathBuf],
+    own_temp_dir: Option<&Path>,
 ) -> bool {
     let Some(dest_dir) = dest.parent() else { return false };
     let Ok(canon_dest_dir) = fs::canonicalize(dest_dir) else { return false };
+    // The app's own temp folder, where clip_export_path puts the throwaway
+    // file a "copy to clipboard" export writes before it goes on the clipboard.
+    if own_temp_dir.is_some_and(|t| fs::canonicalize(t).is_ok_and(|c| c == canon_dest_dir)) {
+        return true;
+    }
     if let Some(picked) = last_picked {
         if fs::canonicalize(picked).is_ok_and(|c| c == canon_dest_dir) {
             return true;
@@ -28266,7 +28272,7 @@ fn export_dest_dir_is_authorized_against(
     if let Some(src_dir) = src.parent() {
         if let Ok(canon_src_dir) = fs::canonicalize(src_dir) {
             if canon_src_dir == canon_dest_dir {
-                let src_is_trusted = fs::canonicalize(configured_recording_dir).is_ok_and(|c| c == canon_src_dir)
+                let src_is_trusted = trusted_src_dirs.iter().any(|d| fs::canonicalize(d).is_ok_and(|c| c == canon_src_dir))
                     || canon_export_dir.is_some_and(|c| c == canon_src_dir);
                 if src_is_trusted {
                     return true;
@@ -28277,11 +28283,21 @@ fn export_dest_dir_is_authorized_against(
     false
 }
 
-fn export_dest_dir_is_authorized(state: &State<'_, Db>, dest: &Path, src: &Path) -> bool {
+fn export_dest_dir_is_authorized(app: &AppHandle, state: &State<'_, Db>, dest: &Path, src: &Path) -> bool {
     let last_picked = LAST_EXPORT_DEST_DIR.lock().unwrap_or_else(|e| e.into_inner()).clone();
     let configured = lock(state).settings.ui_texts.get("videoExportDir").cloned();
-    let recording_dir = configured_recording_dir(state);
-    export_dest_dir_is_authorized_against(dest, src, last_picked.as_deref(), configured.as_deref(), &recording_dir)
+    // A fresh capture still sits in <data>/recordings when the editor opens it,
+    // so that folder counts as a recording folder here just like recordingDir.
+    let trusted_src_dirs = recording_source_dirs(app, state);
+    let own_temp_dir = std::env::temp_dir().join(brand::TEMP_DIR);
+    export_dest_dir_is_authorized_against(
+        dest,
+        src,
+        last_picked.as_deref(),
+        configured.as_deref(),
+        &trusted_src_dirs,
+        Some(&own_temp_dir),
+    )
 }
 
 // The single-editor "Cancel" button: no generation of its own to name, so it
@@ -28343,7 +28359,7 @@ async fn export_video(app: AppHandle, state: State<'_, Db>, req: ExportRequest) 
         return Err(ffmpeg_error_json(FfmpegErrorKey::Missing, None, ""));
     }
     let dst = PathBuf::from(&req.dest_path);
-    if !export_dest_dir_is_authorized(&state, &dst, &src) {
+    if !export_dest_dir_is_authorized(&app, &state, &dst, &src) {
         return Err("export destination not recognized".to_string());
     }
     let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
@@ -28505,7 +28521,7 @@ async fn export_recordings_batch(
             failed += 1;
             continue;
         }
-        if !export_dest_dir_is_authorized(&state, &PathBuf::from(&item.dest_path), &item_src) {
+        if !export_dest_dir_is_authorized(&app, &state, &PathBuf::from(&item.dest_path), &item_src) {
             failed += 1;
             continue;
         }
@@ -37704,16 +37720,16 @@ mod tests {
         std::fs::write(&src, b"x").unwrap();
 
         // Inside the folder a save dialog actually returned: accepted.
-        assert!(export_dest_dir_is_authorized_against(&picked.join("out.mp4"), &src, Some(&picked), None, &no_recording_dir));
+        assert!(export_dest_dir_is_authorized_against(&picked.join("out.mp4"), &src, Some(&picked), None, std::slice::from_ref(&no_recording_dir), None));
         // A path outside anything the app ever resolved: rejected.
-        assert!(!export_dest_dir_is_authorized_against(&other.join("out.mp4"), &src, Some(&picked), None, &no_recording_dir));
+        assert!(!export_dest_dir_is_authorized_against(&other.join("out.mp4"), &src, Some(&picked), None, std::slice::from_ref(&no_recording_dir), None));
         // The standing videoExportDir preference is accepted the same way.
-        assert!(export_dest_dir_is_authorized_against(&other.join("out.mp4"), &src, None, other.to_str(), &no_recording_dir));
+        assert!(export_dest_dir_is_authorized_against(&other.join("out.mp4"), &src, None, other.to_str(), std::slice::from_ref(&no_recording_dir), None));
         // Saving back into the source file's own folder, when that folder IS the
         // configured recording folder, is accepted with no pick at all.
-        assert!(export_dest_dir_is_authorized_against(&src_dir.join("out.mp4"), &src, None, None, &src_dir));
+        assert!(export_dest_dir_is_authorized_against(&src_dir.join("out.mp4"), &src, None, None, std::slice::from_ref(&src_dir), None));
         // Nothing remembered and nothing configured: rejected.
-        assert!(!export_dest_dir_is_authorized_against(&other.join("out.mp4"), &src, None, None, &no_recording_dir));
+        assert!(!export_dest_dir_is_authorized_against(&other.join("out.mp4"), &src, None, None, std::slice::from_ref(&no_recording_dir), None));
 
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -37742,7 +37758,8 @@ mod tests {
             &untrusted_src,
             None,
             None,
-            &recording_dir,
+            std::slice::from_ref(&recording_dir),
+            None,
         ));
         // src_path sits inside the actual configured recording folder: the same
         // fallback still works for the ordinary case it exists for.
@@ -37751,8 +37768,24 @@ mod tests {
             &recording_src,
             None,
             None,
-            &recording_dir,
+            std::slice::from_ref(&recording_dir),
+            None,
         ));
+
+        // A fresh capture in the <data>/recordings staging folder may be
+        // exported back next to itself, just like one in recordingDir.
+        let staging_dir = root.join("data-recordings");
+        std::fs::create_dir_all(&staging_dir).unwrap();
+        let staged_src = staging_dir.join("rec-fresh.mp4");
+        std::fs::write(&staged_src, b"x").unwrap();
+        let both = [staging_dir.clone(), recording_dir.clone()];
+        assert!(export_dest_dir_is_authorized_against(&staging_dir.join("rec-fresh-edit.mp4"), &staged_src, None, None, &both, None));
+        // The app's own temp folder (the clipboard export's throwaway file) is
+        // accepted; the untrusted folder still is not, temp dir or no temp dir.
+        let temp_dir = root.join("app-temp");
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        assert!(export_dest_dir_is_authorized_against(&temp_dir.join("clip.mp4"), &untrusted_src, None, None, &both, Some(&temp_dir)));
+        assert!(!export_dest_dir_is_authorized_against(&untrusted_dir.join("out.mp4"), &untrusted_src, None, None, &both, Some(&temp_dir)));
 
         let _ = std::fs::remove_dir_all(&root);
     }
