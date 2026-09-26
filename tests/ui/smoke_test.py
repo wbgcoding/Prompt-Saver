@@ -10102,6 +10102,15 @@ RECBAR_PROBE = """
 (async () => {
   const errs = [];
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  // A small quiet headless frame stops producing rendering frames once
+  // nothing keeps invalidating it, and a ResizeObserver's notifications ride
+  // that same rendering step -- dirtying an unused custom property keeps
+  // frames coming without touching any real geometry (same trick the main
+  // window's own probe wrapper uses for its startup rAF).
+  const heartbeat = setInterval(() => {
+    document.documentElement.style.setProperty('--smoke-tick', String(Date.now()));
+    document.body.getBoundingClientRect();
+  }, 40);
   try {
     await sleep(300);
     const timeEl = document.getElementById('time');
@@ -10113,6 +10122,27 @@ RECBAR_PROBE = """
       for (let i = 0; i < (tries || 40) && !fn(); i++) await sleep(50);
       return fn();
     };
+    // 505: recbar.css now sizes the bar to its own content instead of a fixed
+    // 320x56 window, so stop-btn/cancel-btn must never fall outside the width
+    // fit_rec_bar was actually sent -- checked once both audio icons (always
+    // shown by applyAudio) and the hotkey warning (shown here since the
+    // fixture leaves stop_hotkey_ok/pause_hotkey_ok undefined) have settled,
+    // the widest this harness can reach (the disk warning needs the i18n
+    // module, which never finishes loading here, same limitation the eta
+    // tooltip check above already lives with).
+    const fitCalls = () => (window.__SMOKE_ARGS__ || []).filter((c) => c[0] === 'fit_rec_bar');
+    const hotkeyWarnEl = document.getElementById('hotkey-warn');
+    if (!await until(() => fitCalls().length > 0)) errs.push('fit_rec_bar was never called');
+    else if (!await until(() => !hotkeyWarnEl.classList.contains('hidden'))) errs.push('hotkey warning never showed for the undefined stop/pause hotkey state');
+    else {
+      await sleep(100);
+      const lastFit = fitCalls()[fitCalls().length - 1][1];
+      const barLeft = bar.getBoundingClientRect().left;
+      const stopRight = document.getElementById('stop-btn').getBoundingClientRect().right - barLeft;
+      const cancelRight = document.getElementById('cancel-btn').getBoundingClientRect().right - barLeft;
+      if (stopRight > lastFit.width) errs.push('stop-btn falls outside the fitted width: ' + stopRight + ' > ' + lastFit.width);
+      if (cancelRight > lastFit.width) errs.push('cancel-btn falls outside the fitted width: ' + cancelRight + ' > ' + lastFit.width);
+    }
     // Under the show threshold: the readout should go blank on the next poll.
     window.__REC_STATUS_OVERRIDE__ = { bytes: 50 * 1024 * 1024, show_size: false, size_eta_secs: null };
     if (!await until(() => sizeEl.textContent === '')) errs.push('size stayed visible under the show threshold: ' + sizeEl.textContent);
@@ -10169,6 +10199,8 @@ RECBAR_PROBE = """
     if (!window.__REC_STOPPED__) errs.push('stop button did not call stop_recording');
     if (!window.__REC_BAR_HIDDEN__) errs.push('stop did not hide the bar afterwards');
   } catch (e) { errs.push('probe: ' + e.message); }
+  clearInterval(heartbeat);
+  document.documentElement.style.removeProperty('--smoke-tick');
   const pre = document.createElement('pre');
   pre.id = 'SMOKE';
   pre.textContent = JSON.stringify(errs);

@@ -12658,6 +12658,11 @@ fn rec_bar_heal_tick(app: &AppHandle) {
     }
 }
 
+// Remembers the target the bar is currently anchored to, so fit_rec_bar can
+// re-run the same placement show_rec_bar used after a resize without the
+// frontend having to resend a target it never itself tracked.
+static REC_BAR_TARGET: Mutex<(String, isize)> = Mutex::new((String::new(), 0));
+
 // Async on purpose: a synchronous command runs on the main thread, and building
 // a webview window from there never returns -- the window gets created, but
 // every step after build() (capture exclusion, positioning, show) is skipped,
@@ -12686,6 +12691,7 @@ async fn show_rec_bar(app: AppHandle, target_kind: String, id: i64) -> Result<()
         // Unconditional -- not gated by the privacy screenshot-exclusion setting.
         // The bar must never appear in the recording no matter what.
         set_capture_exclusion(&win, true);
+        *REC_BAR_TARGET.lock().unwrap() = (target_kind.clone(), id as isize);
         position_rec_bar(&win, &target_kind, id as isize);
         let _ = win.show();
         if target_kind == "window" {
@@ -12697,6 +12703,30 @@ async fn show_rec_bar(app: AppHandle, target_kind: String, id: i64) -> Result<()
     {
         let _ = (app, target_kind, id);
         Err("recording is only available on Windows".to_string())
+    }
+}
+
+// The bar's own content decides its size now: a fixed 320x56 window used to
+// clip stop-btn/cancel-btn off the right edge for anyone with an optional
+// icon shown. recbar.js measures its real content box after every layout
+// change and asks for exactly that. Re-running position_rec_bar keeps the bar
+// anchored the same way show_rec_bar first placed it instead of leaving it
+// pinned at its old top-left corner as the width changes.
+#[tauri::command]
+fn fit_rec_bar(app: AppHandle, width: f64, height: f64) {
+    #[cfg(windows)]
+    {
+        if let Some(win) = app.get_webview_window("rec-bar") {
+            let _ = win.set_size(tauri::LogicalSize::new(width, height));
+            let (target_kind, id) = REC_BAR_TARGET.lock().unwrap().clone();
+            if !target_kind.is_empty() {
+                position_rec_bar(&win, &target_kind, id);
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (app, width, height);
     }
 }
 
@@ -33590,6 +33620,7 @@ pub fn run() {
             take_recording_sweep_notice,
             sweep_recordings_now,
             show_rec_bar,
+            fit_rec_bar,
             hide_rec_bar,
             rec_bar_mark_moved,
             set_audio_muted,
