@@ -1411,6 +1411,10 @@ const FLAG_LABELS = {
   // OFF -- a low-level keyboard hook exists nowhere in this app unless the
   // user turns this on for a specific recording.
   keyOverlay: "flagKeyOverlay",
+  // Sub-toggle of keyOverlay: restricts capture to shortcut and navigation
+  // keys only (see mod keylog's resolve_verdict), for a recording with
+  // confidential input. Ships OFF -- the plain default records every key.
+  keyOverlayShortcutsOnly: "flagKeyOverlayShortcutsOnly",
   // The record button's right-click "Record camera" entry and its own window.
   // Ships OFF, like every feature that can turn a camera light on -- see
   // camera.rs for the WebView2 permission handling this switch gates.
@@ -2297,7 +2301,7 @@ const EXPERT_TABS = [
     // The recording hotkeys render their own capture row directly (hotkeyRow())
     // instead of a button that jumps to a settings field -- see actionRow()'s
     // "hotkey" branch.
-    { title: "expGroupRecording", flags: ["screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, { key: "recCropNotice", gate: "screenRecord" }, { key: "recBarSize", gate: "screenRecord" }, { key: "recTargetSwitch", gate: "screenRecord" }, { key: "recAutoCrop", gate: "screenRecord" }, { key: "keyOverlay", gate: "screenRecord" }, "cameraRecord"], values: ["recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "recCanvasMaxPx", "recDiskWarnMb", "recMaxMin", "recMaxMb", "exportParallel", "keyOverlayHoldMs", "cameraFramerate"], dropdowns: ["recMicDevice", "recQuality", "recFormat", "recCanvasMode", "cameraDevice", "cameraResolution"], paths: ["recordingDir"],
+    { title: "expGroupRecording", flags: ["screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, { key: "recCropNotice", gate: "screenRecord" }, { key: "recBarSize", gate: "screenRecord" }, { key: "recTargetSwitch", gate: "screenRecord" }, { key: "recAutoCrop", gate: "screenRecord" }, { key: "keyOverlay", gate: "screenRecord" }, { key: "keyOverlayShortcutsOnly", gate: "keyOverlay" }, "cameraRecord"], values: ["recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "recCanvasMaxPx", "recDiskWarnMb", "recMaxMin", "recMaxMb", "exportParallel", "keyOverlayHoldMs", "cameraFramerate"], dropdowns: ["recMicDevice", "recQuality", "recFormat", "recCanvasMode", "cameraDevice", "cameraResolution"], paths: ["recordingDir"],
       actions: [{ id: "rec-stop-hotkey-row", type: "hotkey", hotkeyKey: "recStopHotkey", label: "recStopHotkeyLabel", gate: "recStopHotkey" }, { id: "rec-pause-hotkey-row", type: "hotkey", hotkeyKey: "recPauseHotkey", label: "recPauseHotkeyLabel", gate: "recPauseHotkey" }] },
     { title: "expGroupVideoEditor", flags: ["videoEditor", { key: "veOvRemember", gate: "videoEditor" }, { key: "videoEditSnap", gate: "videoEditor" }], values: ["videoEditUndoMax", "veExportKbpsHigh", "veExportKbpsSmall", "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "veExtraClipsMax"], dropdowns: ["veDefaultFormat", "veDefaultQuality", "veDefaultScale", "veOvFont", "veDefaultPanel"], colors: ["veOvColor"], paths: ["videoExportDir"] },
     // What the screenshot editor and the video editor share -- created here so
@@ -2557,7 +2561,7 @@ const EXPERT_TIPS = [
   "recQuality", "recBitrateKbps", "recFormat", "recordingDir",
   "recStopHotkey", "recPauseHotkey", "recTrayEntries", "recCropNotice", "recBarSize", "recTargetSwitch",
   "recAutoCrop", "recCanvasMode", "recCanvasMaxPx", "recMaxMin", "recMaxMb", "recDiskWarnMb", "exportParallel",
-  "keyOverlay", "keyOverlayHoldMs",
+  "keyOverlay", "keyOverlayHoldMs", "keyOverlayShortcutsOnly",
   "cameraRecord", "cameraDevice", "cameraResolution", "cameraFramerate",
   "videoEditor", "videoEditUndoMax", "veOvRemember", "videoEditSnap",
   "veDefaultFormat", "veDefaultQuality", "veDefaultScale", "veExportKbpsHigh", "veExportKbpsSmall",

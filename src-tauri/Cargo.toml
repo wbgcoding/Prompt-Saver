@@ -106,7 +106,23 @@ windows = { version = "0.58", features = [
   # (WH_KEYBOARD_LL lives in Win32_UI_WindowsAndMessaging, already above) plus
   # UI Automation's IsPassword property, the primary password-field signal.
   "Win32_UI_Accessibility",
+  # GetAsyncKeyState: confirms the hook's own tracked Ctrl/Alt/Win state
+  # against the live keyboard so a key-up the hook never saw (an elevated
+  # window or the secure desktop swallowing it) cannot leave a modifier
+  # stuck "held" forever.
+  "Win32_UI_Input_KeyboardAndMouse",
+  # Lets keylog implement IUIAutomationFocusChangedEventHandler (the
+  # #[implement] macro) so a focus change invalidates the password check
+  # immediately instead of relying on a per-HWND cache.
+  "implement",
 ] }
+# The #[implement] macro's generated code names the `windows_core` crate
+# directly, so it has to be a real, nameable dependency of this crate under
+# that exact name, pinned to the same 0.58 release as `windows` above so both
+# agree on one ABI. webview2-com below needs a newer windows-core release for
+# its own types; that one is pulled in under a different local name (see
+# `webview2-windows-core`) so this crate name keeps meaning 0.58 everywhere.
+windows-core = "0.58"
 # Screen recording (point 191): Windows Graphics Capture + its own Media
 # Foundation H.264/MP4 encoder, vetted against a real desktop before use.
 # Pulls its own newer `windows` crate release transitively (0.62 alongside the
@@ -124,8 +140,11 @@ webview2-com = "=0.38.2"
 # Pinned to the exact release webview2-com itself resolves (checked against
 # Cargo.lock) -- needed directly, not just transitively, to read the
 # permission request's own PWSTR uri and to cast its args to the v3
-# interface for SetSavesInProfile.
-windows-core = "=0.61.2"
+# interface for SetSavesInProfile. Renamed locally to
+# `webview2_windows_core`: the plain `windows-core` name above is already
+# taken by the 0.58 release the #[implement] macro needs, and the two
+# releases cannot share one crate name in the same build.
+webview2-windows-core = { package = "windows-core", version = "=0.61.2" }
 
 # Small release binary, but tuned for much faster builds:
 # thin LTO + parallel codegen cut compile time a lot for a few KB more size.

@@ -201,10 +201,15 @@ menu.
 An optional keys overlay (off by default, in the expert menu) records which
 keys are pressed anywhere on the screen while a recording runs, so a tutorial
 can show them afterward with the video editor's own "Keys" overlay. Only key
-identifiers and their timestamps are ever recorded, never any text;
-a focused password field is skipped for as long as it stays focused and shows
-as a gap instead. How long a released key stays visible is adjustable in the
-expert menu.
+identifiers and their timestamps are ever recorded, never any text. By
+default every key is shown, including typed text; a focused password field is
+skipped for as long as it stays focused and shows as a gap instead, though
+this is not guaranteed, since it relies on Windows correctly reporting the
+field as a password field. A "Shortcuts only" switch (in the expert menu,
+next to the keys overlay itself) restricts capture to combinations with
+Ctrl, Alt or Win plus Enter, Tab, Esc, arrows and F keys, letters and digits
+never included, for a recording with confidential input. How long a released
+key stays visible is adjustable in the expert menu.
 
 An optional camera recording (off by default, in the expert menu) adds a
 "Record camera" entry to the record button's right-click menu. It opens its
@@ -1058,10 +1063,15 @@ gleichzeitig laufen, ist im Experten-Menü einstellbar. Eine Tastenanzeige
 (Standard aus, im Expertenmenü) zeichnet während einer Aufnahme systemweit
 mit, welche Tasten gedrückt werden, damit eine Anleitung sie hinterher über
 die „Tasten"-Überlagerung des Video-Editors zeigen kann. Aufgezeichnet werden
-nur Tastenkennungen mit Zeitstempeln, nie ein Textinhalt; ein fokussiertes
-Passwortfeld wird für diese Zeit ausgelassen und erscheint als Lücke. Wie
-lange eine losgelassene Taste sichtbar bleibt, ist im Expertenmenü
-einstellbar.
+nur Tastenkennungen mit Zeitstempeln, nie ein Textinhalt. Ab Werk wird jede
+Taste angezeigt, auch getippter Text; ein fokussiertes Passwortfeld wird für
+diese Zeit ausgelassen und erscheint als Lücke, ohne dass das garantiert ist,
+da es davon abhängt, dass Windows das Feld richtig als Passwortfeld meldet.
+Ein Schalter „Nur Tastenkürzel" (im Expertenmenü, direkt neben der
+Tastenanzeige) beschränkt die Aufzeichnung auf Kombinationen mit Strg, Alt
+oder Win sowie Enter, Tab, Esc, Pfeile und F-Tasten, Buchstaben und Ziffern
+nie eingeschlossen, für Aufnahmen mit vertraulichen Eingaben. Wie lange eine
+losgelassene Taste sichtbar bleibt, ist im Expertenmenü einstellbar.
 
 Eine optionale Kameraaufnahme (Standard aus, im Expertenmenü) fügt dem
 Rechtsklickmenü des Aufnahme-Knopfs den Eintrag „Kamera aufnehmen" hinzu. Sie

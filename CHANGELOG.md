@@ -543,13 +543,17 @@ the video editor and the introduction tour ship on).
   anyone locked out. Switchable off in the expert menu, on by default.
 - **Key overlay for recordings** (expert menu, off by default). Records
   which keys are pressed anywhere on the screen while a recording runs, as
-  key identifiers and timestamps only — never any text, and a focused
-  password field is skipped for as long as it stays focused and shows up as
-  a gap instead. The video editor's new "Keys" overlay turns this into a
-  picture: four keyboard-layout presets (keys pressed, half keyboard, full
-  keyboard, game keys) plus a free selection, sharing the same range,
-  duplicate, snap and export as every other overlay. How long a released key
-  stays visible is adjustable in the expert menu.
+  key identifiers and timestamps only, never any text. By default every key
+  is shown, including typed text, and a focused password field is skipped
+  for as long as it stays focused and shows up as a gap instead, though this
+  is not guaranteed since it relies on Windows reporting the field
+  correctly. A "Shortcuts only" switch restricts capture to combinations
+  with Ctrl, Alt or Win plus Enter, Tab, Esc, arrows and F keys, for a
+  recording with confidential input. The video editor's new "Keys" overlay
+  turns this into a picture: four keyboard-layout presets (keys pressed,
+  half keyboard, full keyboard, game keys) plus a free selection, sharing
+  the same range, duplicate, snap and export as every other overlay. How
+  long a released key stays visible is adjustable in the expert menu.
 - **Camera recording** (expert menu, off by default). A "Record camera"
   entry on the record button's right-click menu opens its own small window
   with a live preview and its own Start/Pause/Stop, audio source, resolution
