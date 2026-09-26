@@ -40676,7 +40676,7 @@ mod tests {
         fs::write(trash.join("rec-x.mp4"), b"video").unwrap();
         fs::write(trash.join("rec-x.keys.json"), b"{}").unwrap();
         let dir_s = dir.to_string_lossy().to_string();
-        assert!(restore_discarded_recording(dir_s, "rec-x.mp4".to_string()));
+        assert!(restore_discarded_recording_impl(&dir_s, "rec-x.mp4", &dir));
         assert!(dir.join("rec-x.keys.json").is_file(), "the key-overlay sidecar must travel with its recording");
         assert!(!trash.join("rec-x.keys.json").exists());
         let _ = fs::remove_dir_all(&dir);
@@ -40716,7 +40716,7 @@ mod tests {
         fs::write(trash.join("rec-x.mp4"), b"video").unwrap();
         fs::write(trash.join("rec-x.keys.json"), b"{}").unwrap();
         let dir_s = dir.to_string_lossy().to_string();
-        assert!(delete_discarded_recording_now(dir_s, "rec-x.mp4".to_string()));
+        assert!(delete_discarded_recording_now_impl(&dir_s, "rec-x.mp4", &dir));
         assert!(!trash.join("rec-x.keys.json").exists(), "a purge for good must not leave the key-overlay sidecar behind");
         let _ = fs::remove_dir_all(&dir);
     }
