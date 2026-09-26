@@ -94,7 +94,7 @@ let settings = null;
 // The largest number of extra video sources (overlays and sections combined)
 // one project may add. This is now an expert setting (VE.extraClipsMax, see
 // applySettings); the constant here is only the fallback before settings load.
-const EXTRA_CLIPS_MAX_DEFAULT = 8;
+const EXTRA_CLIPS_MAX_DEFAULT = 10;
 
 const VE = {
   src: "",

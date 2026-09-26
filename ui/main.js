@@ -1764,7 +1764,7 @@ const EXPERT_VALUES = {
   veOvPixelateBlock: { label: "valVeOvPixelateBlock", min: 4, max: 64, step: 2, def: 16, unit: "px", gate: "videoEditor" },
   veOvSpotlightDim: { label: "valVeOvSpotlightDim", min: 10, max: 95, step: 5, def: 60, unit: "%", gate: "videoEditor" },
   veOvImageOpacity: { label: "valVeOvImageOpacity", min: 10, max: 100, step: 5, def: 100, unit: "%", gate: "videoEditor" },
-  veExtraClipsMax: { label: "veExtraClipsMax", min: 1, max: 32, step: 1, def: 8, unit: "", gate: "videoEditor" },
+  veExtraClipsMax: { label: "veExtraClipsMax", min: 1, max: 32, step: 1, def: 10, unit: "", gate: "videoEditor" },
   // Shared by the screenshot editor's and the video editor's own numeric
   // input fields (numberField() in floatShared.js) -- default matches that
   // component's own existing hardcoded step/bigStep, so nothing changes for
