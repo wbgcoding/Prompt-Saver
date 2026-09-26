@@ -12014,9 +12014,10 @@ VIDEO_PROBE = """
       errs.push('"Export to..." did not build the path from the picked folder');
     }
 
-    // ---- 525: the plain "File name" field, separate from the full path
-    // above -- a valid custom name flows straight into the export call, an
-    // invalid one shows an inline hint and disables Export/Copy to clipboard ----
+    // ---- the plain "File name" field, separate from the full path above --
+    // a valid custom name flows straight into the export call, an invalid
+    // one shows an inline hint and disables Export, but leaves Copy to
+    // clipboard alone since that one never reads this field ----
     const nameInput = document.getElementById('ve-export-name');
     const nameHint = document.getElementById('ve-export-name-hint');
     nameInput.value = 'Demo 1';
@@ -12044,8 +12045,13 @@ VIDEO_PROBE = """
     if (!nameInput.classList.contains('invalid')) {
       errs.push('an invalid file name does not mark the field itself invalid');
     }
-    if (!document.getElementById('ve-export-start').disabled || !document.getElementById('ve-export-clip').disabled) {
-      errs.push('an invalid file name does not disable Export/Copy to clipboard');
+    if (!document.getElementById('ve-export-start').disabled) {
+      errs.push('an invalid file name does not disable Export');
+    }
+    // Copy to clipboard writes to its own throwaway temp name and never
+    // reads this field, so an invalid name here must not block it.
+    if (document.getElementById('ve-export-clip').disabled) {
+      errs.push('an invalid file name wrongly disables Copy to clipboard');
     }
     // Leave the field valid again so the probe steps below are not blocked
     // by this one's own leftover invalid state.

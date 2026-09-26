@@ -13,6 +13,7 @@ import { APP_NAME } from "./brand.js";
 import { createColorPop } from "./colorpop.js";
 import { placePopoverAt } from "./popover.js";
 import { snapMove } from "./snap.js";
+import { exportNameIsValid } from "./exportName.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
 // switcher, so it comes from the brand rather than a hardcoded English word.
@@ -3139,17 +3140,6 @@ function sourceStem() {
   return stem.replace(/^.*[\\/]/, "");
 }
 
-// Characters Windows itself refuses in a file name, plus a bare ".."
-// (which needs no separator of its own to still mean "walk up a level").
-// Shared by the live field validation and the export-disable gate below.
-const EXPORT_NAME_BAD_CHARS = /[\\/:*?"<>|]/;
-function exportNameIsValid(name) {
-  const trimmed = (name || "").trim();
-  if (!trimmed || trimmed === "." || trimmed === "..") return false;
-  if (trimmed.includes("..")) return false;
-  return !EXPORT_NAME_BAD_CHARS.test(trimmed);
-}
-
 // The file-name field's own value, or the auto "<source stem>-edit" guess
 // when the user never touched it (or cleared it back to empty).
 function exportNameStem() {
@@ -3235,8 +3225,11 @@ function applyExportGate() {
   const valid = exportNameIsValid($("ve-export-name").value);
   $("ve-export-name").classList.toggle("invalid", !valid);
   $("ve-export-name-hint").classList.toggle("hidden", valid);
-  const disabled = VE.exporting || !VE.ffmpeg || !valid;
-  $("ve-export-start").disabled = disabled;
+  const disabled = VE.exporting || !VE.ffmpeg;
+  // "Copy to clipboard" writes to its own throwaway temp name (clip_export_path)
+  // and never reads the file-name field at all, so a name the user has not
+  // finished typing yet must not block it the way it blocks the real export.
+  $("ve-export-start").disabled = disabled || !valid;
   $("ve-export-clip").disabled = disabled;
   return valid;
 }
