@@ -37412,6 +37412,53 @@ mod tests {
     }
 
     #[test]
+    fn export_video_real_ffmpeg_video_overlay_starts_at_its_own_beginning() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-ovtest-videostart-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 6, "64x48");
+        // A red half then a blue half, one second each: a clip whose own first
+        // frame is unmistakably different from its own later frames, which a
+        // constant-colour fixture (like the sibling test above) cannot tell
+        // apart from "the overlay decoded from the wrong point in its file".
+        use std::os::windows::process::CommandExt;
+        let overlay_src = dir.join("overlay.mp4");
+        let status = std::process::Command::new(&ffmpeg)
+            .args(["-y", "-hide_banner", "-loglevel", "error"])
+            .args(["-f", "lavfi", "-i", "color=c=red:s=8x8:d=1"])
+            .args(["-f", "lavfi", "-i", "color=c=blue:s=8x8:d=1"])
+            .args(["-filter_complex", "[0:v][1:v]concat=n=2:v=1:a=0[v]", "-map", "[v]"])
+            .args(["-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "15"])
+            .arg(&overlay_src)
+            .creation_flags(CREATE_NO_WINDOW)
+            .status()
+            .expect("could not build the red/blue overlay fixture");
+        assert!(status.success());
+        let dest = dir.join("out.mp4");
+        let overlay_ff = ff_path_for_test(&overlay_src);
+        // Mirrors buildVideoChain()'s "video" overlay branch after the setpts
+        // fix: the overlay's own clip starts (its own t=0, the red frame) at
+        // output t=3.000, the same start second the export uses for the
+        // overlay's adelay'd audio.
+        let video_chain = format!(
+            "[0:v]fps=15,trim=start=0.000:end=6.000,setpts=PTS-STARTPTS[v0];\
+             movie='{overlay_ff}'[ob];\
+             [ob]setpts=PTS-STARTPTS+3.000/TB,scale=8:8:force_original_aspect_ratio=decrease,pad=8:8:(ow-iw)/2:(oh-ih)/2:color=black,format=rgba,colorchannelmixer=aa=1.00[os];\
+             [v0][os]overlay=0:0:enable='between(t,3.000,5.000)'[vout]"
+        );
+        run_overlay_export(&ffmpeg, &src, &dest, video_chain);
+        let before = sample_pixel_rgb24_at(&ffmpeg, &dest, 2.5, 0, 0);
+        let just_after_start = sample_pixel_rgb24_at(&ffmpeg, &dest, 3.3, 0, 0);
+        let after_its_own_midpoint = sample_pixel_rgb24_at(&ffmpeg, &dest, 4.3, 0, 0);
+        let is_red = |p: [u8; 3]| p[0] > 180 && p[1] < 40 && p[2] < 40;
+        let is_blue = |p: [u8; 3]| p[0] < 40 && p[1] < 40 && p[2] > 180;
+        assert!(!is_red(before) && !is_blue(before), "no overlay colour before its range, sampled {before:?}");
+        assert!(is_red(just_after_start), "the overlay's own first (red) frame must show right after its start, sampled {just_after_start:?}");
+        assert!(is_blue(after_its_own_midpoint), "the overlay's own second (blue) half must show once its own clip reaches it, sampled {after_its_own_midpoint:?}");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn export_video_real_ffmpeg_cancel_leaves_no_destination_file() {
         let Some(ffmpeg) = test_ffmpeg() else { return };
         let dir = std::env::temp_dir().join(format!("ps-exporttest-cancel-{}", std::process::id()));

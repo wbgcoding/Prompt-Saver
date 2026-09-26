@@ -53,7 +53,19 @@ const outMsBlock = extractBlock("outMs", "function outMs(srcMs) {");
 // outMs() call trips this probe immediately instead of staying green.
 const overlayTimeLines = extractLine(
   "video overlay clip-time lines",
-  "let t = outMs(clamp(VE.playhead, 0, VE.dur)) / 1000;\n    if (op.loop && op.videoDurationMs) t %= op.videoDurationMs / 1000;"
+  "let t = (outMs(clamp(VE.playhead, 0, VE.dur)) - outMs(clamp(op.startMs, 0, VE.dur))) / 1000;\n    if (t < 0) t = 0;\n    if (op.loop && op.videoDurationMs) t %= op.videoDurationMs / 1000;"
+);
+
+// The export's own movie= filter chain must shift the overlay's picture by
+// the same startOutSec used for its audio's adelay, or the fix above would
+// only be a preview-side band-aid while the actual export stayed desynced.
+extractLine(
+  "video overlay export setpts shift",
+  "const startOutSec = (outMs(clamp(op.startMs, 0, VE.dur)) / 1000).toFixed(3);"
+);
+extractLine(
+  "video overlay export movie filter using the setpts shift",
+  "parts.push(`[${src}]setpts=PTS-STARTPTS+${startOutSec}/TB,scale=${op.rect.w}:${op.rect.h}:force_original_aspect_ratio=decrease,pad=${op.rect.w}:${op.rect.h}:(ow-iw)/2:(oh-ih)/2:color=black,format=rgba,colorchannelmixer=aa=${(clamp(op.opacity, 5, 100) / 100).toFixed(2)}[${scaled}]`);"
 );
 
 const sandbox = { VE: null, KEPT_CUTS_BUF: [], KEPT_SEGMENTS_BUF: [] };
@@ -100,16 +112,17 @@ const check = (label, actual, expected) => {
 };
 
 // At the exact moment the overlay window opens (playhead == op.startMs), the
-// export shows the overlay's footage at output time outMs(op.startMs) (see
-// the comment now sitting next to the fix: the movie= source is never
-// delayed to op.startMs, it plays in lockstep with the whole export from
-// t=0). The live preview's clip time at that same instant must equal it.
+// overlay's own clip is now shifted (both in the export's setpts and in this
+// preview formula) to show its own beginning, not whatever the overlay file
+// holds at output time outMs(op.startMs). So the preview clip time here must
+// be 0, matching the export's picture landing in sync with its adelay'd audio.
 const windowStartOutputS = exportOutputSeconds(overlayOp.startMs);
-check("preview clip time at the overlay's own start matches the export's output-time offset", overlayClipTimeAtPlayhead(overlayOp.startMs), windowStartOutputS);
+check("preview clip time at the overlay's own start is the clip's own beginning", overlayClipTimeAtPlayhead(overlayOp.startMs), 0);
 // Sanity check on the fixture: with a 2s cut sitting before the overlay and a
 // 2x speed op, the output time at startMs must actually be less than
-// startMs/1000 -- otherwise this fixture would not be exercising the bug at
-// all (the old, wrong formula and the new one would coincidentally agree).
+// startMs/1000 -- otherwise this fixture would not be exercising the shifted
+// timeline at all (a naive source-timeline reading would coincidentally give
+// the same answer).
 check("fixture actually diverges from a naive source-timeline reading", windowStartOutputS, 4);
 
 // 2 seconds later on the source timeline, with no cut inside this stretch,

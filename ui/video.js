@@ -1302,16 +1302,14 @@ function buildLiveOverlayEl(op, vb, reuse) {
     el.playsInline = true;
     const src = convertFileSrc(op.path);
     if (el.dataset.ovSrc !== src) { el.src = src; el.dataset.ovSrc = src; }
-    // The export's movie= source for this overlay is never delayed or
-    // trimmed to op.startMs -- it decodes in lockstep with the exported
-    // output from t=0, so the frame that lands on screen once the enable
-    // window opens is whatever the overlay file holds at that OUTPUT time,
-    // not at time zero of its own file. Confirmed against ffmpeg directly:
-    // overlaying a clip with enable=between(t,4,7) and no extra offset shows
-    // the overlay's own pts=4.08 at output pts=4.08, not pts=0.08. Matching
-    // that here means going through outMs() the same way videoOverlayEnable()
-    // does, with no further subtraction of op.startMs.
-    let t = outMs(clamp(VE.playhead, 0, VE.dur)) / 1000;
+    // The export shifts this overlay's picture (setpts, see the export
+    // filter builder) so its own first frame lands on the output at
+    // op.startMs, matching the adelay already applied to its audio. The
+    // preview mirrors that: the overlay plays from its own beginning once
+    // the playhead reaches the overlay's start, both mapped through outMs()
+    // so a variable-speed timeline lines up the same way it does in export.
+    let t = (outMs(clamp(VE.playhead, 0, VE.dur)) - outMs(clamp(op.startMs, 0, VE.dur))) / 1000;
+    if (t < 0) t = 0;
     if (op.loop && op.videoDurationMs) t %= op.videoDurationMs / 1000;
     if (Number.isFinite(t) && t >= 0 && Math.abs(el.currentTime - t) > 0.3) {
       try { el.currentTime = t; } catch {}
@@ -2954,8 +2952,15 @@ function buildVideoChain() {
     } else if (op.kind === "video") {
       const src = label(), scaled = label(), out = label();
       const loopArg = videoOverlayLoopArg(op);
+      // movie= decodes from its own t=0 in lockstep with the output timeline,
+      // so without a shift the picture at the overlay's start would show
+      // whatever the clip holds at that OUTPUT time instead of its own
+      // beginning. The setpts shift moves the clip's first frame to land at
+      // the same startOutSec used for its audio's adelay below, so picture
+      // and sound stay in sync.
+      const startOutSec = (outMs(clamp(op.startMs, 0, VE.dur)) / 1000).toFixed(3);
       parts.push(`movie='${ffPath(op.path)}'${loopArg}[${src}]`);
-      parts.push(`[${src}]scale=${op.rect.w}:${op.rect.h}:force_original_aspect_ratio=decrease,pad=${op.rect.w}:${op.rect.h}:(ow-iw)/2:(oh-ih)/2:color=black,format=rgba,colorchannelmixer=aa=${(clamp(op.opacity, 5, 100) / 100).toFixed(2)}[${scaled}]`);
+      parts.push(`[${src}]setpts=PTS-STARTPTS+${startOutSec}/TB,scale=${op.rect.w}:${op.rect.h}:force_original_aspect_ratio=decrease,pad=${op.rect.w}:${op.rect.h}:(ow-iw)/2:(oh-ih)/2:color=black,format=rgba,colorchannelmixer=aa=${(clamp(op.opacity, 5, 100) / 100).toFixed(2)}[${scaled}]`);
       parts.push(`[${cur}][${scaled}]overlay=${op.rect.x}:${op.rect.y}:${enable}[${out}]`);
       cur = out;
     } else if (op.kind === "frame") {

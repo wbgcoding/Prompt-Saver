@@ -1431,6 +1431,9 @@ the video editor and the introduction tour ship on).
   easier to find. No setting was removed or renamed, only regrouped.
 - White text on light colours gets a dark halo so it stays readable; the
   threshold for black text is unchanged.
+- An inserted video overlay now starts at its own beginning and stays in
+  sync with its own sound, instead of showing a later moment of the clip
+  while the sound played from the start.
 
 ## 2.6.3 (2026-07-26)
 
