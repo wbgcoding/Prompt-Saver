@@ -17120,10 +17120,43 @@ function bind() {
   // Keep the chain armed while a variable dialog is open: switching windows to
   // look something up must not abort the chain (it leaves the popup stranded). A
   // latched chain ignores blur entirely (that is the point of the lock).
-  window.addEventListener("blur", () => { if (chainMode && chainSel.length && !varsCleanup && !chainLock) setChainMode(false); });
+  //
+  // Dragging the window by its own drag region hands control to the OS move
+  // loop, which blurs and then refocuses the webview even though the user
+  // never left the app. That blur/focus pair must never be treated as a real
+  // window switch, or an active chain (locked or not) drops on every move.
+  // The flag only guards the blur/focus pair a move actually triggers: a
+  // plain mousedown on the drag region with no drag clears it again on
+  // mouseup, and a short timeout catches a drag that never reaches the
+  // webview's own mouseup at all, so a later real alt-tab is never masked.
+  let windowMoving = false;
+  let windowMovingTimer = null;
+  const armWindowMoving = () => {
+    windowMoving = true;
+    clearTimeout(windowMovingTimer);
+    windowMovingTimer = setTimeout(() => { windowMoving = false; }, 1500);
+  };
+  const disarmWindowMoving = () => { windowMoving = false; clearTimeout(windowMovingTimer); };
+  document.addEventListener("mousedown", (e) => {
+    if (e.target?.closest?.("[data-tauri-drag-region]")) armWindowMoving();
+  }, true);
+  window.addEventListener("mouseup", () => disarmWindowMoving());
+  window.addEventListener("blur", () => {
+    if (windowMoving) {
+      // The move is still going once the blur it causes actually arrives: stop the
+      // fallback timeout so a long drag cannot let the guard expire mid-move and
+      // have the matching focus read as a real return from another app.
+      clearTimeout(windowMovingTimer);
+      return;
+    }
+    if (chainMode && chainSel.length && !varsCleanup && !chainLock) setChainMode(false);
+  });
   // A latched chain survives the blur but starts fresh when we return: the
   // previous chain was already copied, so clear the picks (mode stays on).
-  window.addEventListener("focus", () => { if (chainLock && chainSel.length) { chainSel.length = 0; chainTexts.clear(); refreshChainUi(); } });
+  window.addEventListener("focus", () => {
+    if (windowMoving) { disarmWindowMoving(); return; } // the move ended, chain untouched
+    if (chainLock && chainSel.length) { chainSel.length = 0; chainTexts.clear(); refreshChainUi(); }
+  });
   // ==== 117/118: screenshot editor ====
   // Opens right after a capture, before #snip-modal. Pure frontend: it receives a
   // data URL and hands back an edited one; everything downstream of #snip-modal is

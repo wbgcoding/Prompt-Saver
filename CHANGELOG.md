@@ -865,6 +865,10 @@ the video editor and the introduction tour ship on).
   clickable for a moment after the install had already started.
 - **The reminder about outdated recognition packs came back on every start**
   instead of waiting for its interval.
+- **Moving the window switched an active prompt chain off.** Dragging the
+  window by its own drag region briefly blurs and refocuses it, and that was
+  being treated as a real switch away to another app. A chain now only ends
+  from its own toggle, cancelling, or finishing.
 - **The floating buttons' menus flashed English labels** for a moment in every
   other language, and one of them spelled a word the app is free to rename.
 - **The volume slider on a video could be cut off** at the top edge of the
