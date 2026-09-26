@@ -1121,7 +1121,7 @@
       <div id="impexp-field" class="field">
         <div class="export-row">
           <button id="import-btn" class="ghost-btn" data-i18n="import">Import prompts</button>
-          <button id="import-folder-btn" class="ghost-btn" data-i18n="importFolderBtn" data-i18n-title="tipImportFolder">Import from a folder</button>
+          <button id="import-folder-btn" class="ghost-btn" data-i18n="importFolderBtn" data-i18n-title="tipImportFolder">Import folder</button>
           <select id="export-format" class="batch-view-select" data-i18n-aria="exportFormatLabel">
             <option value="csv" data-i18n="exportCsv">CSV</option>
             <option value="txt" data-i18n="exportTxt">TXT</option>
@@ -1133,12 +1133,6 @@
           <button id="settings-backup-btn" class="ghost-btn" data-i18n="settingsBackupBtn" data-i18n-title="tipSettingsBackup">Backup manager</button>
           <button id="export-all" class="ghost-btn" data-i18n="backupSave">Save backup</button>
           <button id="import-all" class="ghost-btn" data-i18n="backupImport">Import backup</button>
-        </div>
-        <!-- The duplicate finder's only other entry point is the expert menu,
-             which a normal user never opens -- this is the same openDupes()
-             the expert action already uses, not a second implementation. -->
-        <div class="export-row">
-          <button id="settings-dupes-btn" class="ghost-btn" data-i18n="dupTitle">Find duplicates</button>
         </div>
       </div>
       <!-- Two columns like the toggle grid above: check + version left, switch right. -->
@@ -1163,20 +1157,14 @@
       </div>
       </div><!-- /settings-main -->
       <div id="settings-expert" class="hidden">
-        <div class="expert-top">
-          <p class="expert-hint">
-            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-              <path fill="currentColor" d="M12 3 1 21h22L12 3Zm0 5.5 6.6 11H5.4L12 8.5ZM11 11h2v5h-2v-5Zm0 6.5h2v2h-2v-2Z"/>
-            </svg>
-            <span data-i18n="expertHint">Changing these can cause unexpected behaviour.</span>
-          </p>
+        <div class="expert-top-row">
+          <div class="expert-presets" role="group" aria-label="Quick profile" data-i18n-aria="expertPresetsHeading">
+            <span class="expert-presets-label" data-i18n="expertPresetsHeading">Quick profile</span>
+            <button id="expert-preset-quiet" type="button" class="ghost-btn" data-i18n="expertPresetQuiet">Quiet</button>
+            <button id="expert-preset-standard" type="button" class="ghost-btn" data-i18n="expertPresetStandard">Standard</button>
+            <button id="expert-preset-full" type="button" class="ghost-btn" data-i18n="expertPresetFull">All on</button>
+          </div>
           <button id="expert-reset" class="ghost-btn danger-btn" data-i18n="expertReset">Reset expert menu</button>
-        </div>
-        <div class="expert-presets" role="group" aria-label="Quick profile" data-i18n-aria="expertPresetsHeading">
-          <span class="expert-presets-label" data-i18n="expertPresetsHeading">Quick profile</span>
-          <button id="expert-preset-quiet" type="button" class="ghost-btn" data-i18n="expertPresetQuiet">Quiet</button>
-          <button id="expert-preset-standard" type="button" class="ghost-btn" data-i18n="expertPresetStandard">Standard</button>
-          <button id="expert-preset-full" type="button" class="ghost-btn" data-i18n="expertPresetFull">All on</button>
         </div>
         <!-- Search + the "only changed" filter share one row: the filter used to be a
              full-width checkbox line of its own, a whole row of height for one word. -->
@@ -1190,7 +1178,8 @@
             <span data-i18n="expertOnlyChanged">Only changed</span>
           </label>
         </div>
-        <!-- Tab bar stays fixed; only the rows below scroll. Both built by JS. -->
+        <!-- Tab bar stays fixed; only the rows below scroll. Both built by JS, along
+             with the expert-hint notice that renders right after the System tab. -->
         <div id="expert-tabs-bar"></div>
         <div id="expert-flags"></div>
       </div>
@@ -1301,10 +1290,27 @@
         <div id="about-version" class="about-version"></div>
         <div class="about-copy">© 2026 BGCoding</div>
       </div>
+      <div class="about-links">
+        <button id="about-whats-new" class="ghost-btn about-link-btn">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m12 3 2.6 5.6 6.1.8-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6-4.5-4.2 6.1-.8Z"/>
+          </svg>
+          <span data-i18n="whatsNewBtn">What's new</span>
+        </button>
+        <button id="about-licenses" class="ghost-btn about-link-btn">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Zm0 0v5h5M9 13h6M9 17h6"/>
+          </svg>
+          <span data-i18n="aboutLicenses">Third-party licenses</span>
+        </button>
+        <button id="about-repo" class="ghost-btn about-link-btn">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4M14 4h6v6M20 4l-9 9"/>
+          </svg>
+          <span data-i18n="aboutRepo">Project page on GitHub</span>
+        </button>
+      </div>
       <div class="modal-actions">
-        <button id="about-whats-new" class="ghost-btn" data-i18n="whatsNewBtn">What's new</button>
-        <button id="about-licenses" class="ghost-btn" data-i18n="aboutLicenses">Third-party licenses</button>
-        <button id="about-repo" class="ghost-btn" data-i18n="aboutRepo">Project page on GitHub</button>
         <button id="about-ok" class="primary-btn" data-i18n="close">Close</button>
       </div>
     </div>

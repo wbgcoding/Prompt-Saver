@@ -15,11 +15,11 @@ const FLOAT_THEME_MAP = {
 const FLOAT_HEX = /^#[0-9a-fA-F]{6}$/;
 
 // The ink rule (expert menu: "Pick the text colour on coloured areas" /
-// "Black text from this brightness"), kept fresh from two sources: the
-// theme-changed event's payload and one ink_prefs() fetch at module load
-// (covers the window before the first event arrives). Defaults match the
-// backend's own shipped default.
-let INK = { auto: true, threshold: 60 };
+// "Black text from this brightness" / "Dark shadow behind white text" /
+// "Shadow strength"), kept fresh from two sources: the theme-changed event's
+// payload and one ink_prefs() fetch at module load (covers the window before
+// the first event arrives). Defaults match the backend's own shipped default.
+let INK = { auto: true, threshold: 60, halo: true, haloStrength: 85 };
 let lastTheme = null;
 let lastVars = null;
 let applied = false; // true once applyFloatTheme has run at least once
@@ -39,11 +39,17 @@ function readableInk(hex) {
 }
 
 // White ink stays white up to the user's threshold (a deliberate look), but
-// on a colour past the contrast crossover it gets a dark halo so it reads.
-const INK_HALO = "0 0 2px rgba(0, 0, 0, 0.85), 0 1px 3px rgba(0, 0, 0, 0.7)";
+// on a colour past the contrast crossover it gets a dark halo so it reads,
+// unless the halo is switched off (INK.halo) or dialed to a different
+// strength (INK.haloStrength, percent; 85 is the halo's original fixed look).
+const INK_HALO_RATIO = 0.7 / 0.85;
 function inkShadow(hex) {
+  if (!INK.halo) return "none";
   const l = hexLuminance(hex);
-  return l > 0.179 && readableInk(hex) === "#fff" ? INK_HALO : "none";
+  if (!(l > 0.179) || readableInk(hex) !== "#fff") return "none";
+  const a1 = INK.haloStrength / 100;
+  const a2 = Number((a1 * INK_HALO_RATIO).toFixed(2));
+  return `0 0 2px rgba(0, 0, 0, ${Number(a1.toFixed(2))}), 0 1px 3px rgba(0, 0, 0, ${a2})`;
 }
 
 export function applyFloatTheme(theme, vars) {
@@ -72,7 +78,12 @@ export function applyFloatTheme(theme, vars) {
 // need a restart to pick up a changed threshold or a flipped switch.
 function setInk(ink) {
   if (!ink) return;
-  INK = { auto: ink.auto !== false, threshold: Number.isFinite(ink.threshold) ? ink.threshold : 60 };
+  INK = {
+    auto: ink.auto !== false,
+    threshold: Number.isFinite(ink.threshold) ? ink.threshold : 60,
+    halo: ink.halo !== false,
+    haloStrength: Number.isFinite(ink.haloStrength) ? ink.haloStrength : 85,
+  };
   if (applied) applyFloatTheme(lastTheme, lastVars);
 }
 window.__TAURI__.event.listen("theme-changed", (e) => setInk(e.payload?.ink)).catch(() => {});

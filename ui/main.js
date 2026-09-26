@@ -615,10 +615,18 @@ function readableInk(hex) {
 
 // White ink stays white up to the user's threshold (a deliberate look), but
 // on a colour past the contrast crossover it gets a dark halo so it reads.
-const INK_HALO = "0 0 2px rgba(0, 0, 0, 0.85), 0 1px 3px rgba(0, 0, 0, 0.7)";
+// The halo can be switched off (inkHalo) or dialed in strength
+// (inkHaloStrength, percent). At 85 percent, the default, both alphas match
+// the halo's original fixed look; the second value keeps the same ratio
+// between the two shadow layers at any strength.
+const INK_HALO_RATIO = 0.7 / 0.85;
 function inkShadow(hex) {
+  if (!flag("inkHalo")) return "none";
   const l = hexLuminance(hex);
-  return l !== null && l > 0.179 && readableInk(hex) === "#fff" ? INK_HALO : "none";
+  if (l === null || l <= 0.179 || readableInk(hex) !== "#fff") return "none";
+  const a1 = val("inkHaloStrength") / 100;
+  const a2 = Number((a1 * INK_HALO_RATIO).toFixed(2));
+  return `0 0 2px rgba(0, 0, 0, ${Number(a1.toFixed(2))}), 0 1px 3px rgba(0, 0, 0, ${a2})`;
 }
 
 // Optional action: { label, onClick } adds a button and keeps the toast longer.
@@ -1287,6 +1295,7 @@ const FLAG_LABELS = {
   favViewReorder: "flagFavViewReorder",
   tileShadow: "flagTileShadow",
   autoInk: "expAutoInk",
+  inkHalo: "flagInkHalo",
   tilePressScale: "flagTilePressScale",
   tileHoverLift: "flagTileHoverLift",
   copyFlash: "flagCopyFlash",
@@ -1924,6 +1933,8 @@ const EXPERT_VALUES = {
   viewGroupMaxRows: { label: "valViewGroupMaxRows", min: 4, max: 12, step: 1, def: 8, unit: "", gate: "viewGroups" },
   // Relative-luminance cutoff (/100) above which readableInk() picks black text.
   inkThreshold: { label: "valInkThreshold", min: 20, max: 90, step: 5, def: 60, unit: "%", gate: "autoInk" },
+  // How dark the halo behind white text gets; 85 reproduces the shadow's original fixed look.
+  inkHaloStrength: { label: "valInkHaloStrength", min: 10, max: 100, step: 5, def: 85, unit: "%", gate: "inkHalo" },
   // How much of a tab's outer edge counts as "drop here to reorder" rather than
   // "drop here to group" -- a wider tab needs a wider zone to stay easy to aim at.
   viewTabEdgeZone: { label: "valViewTabEdgeZone", min: 15, max: 45, step: 1, def: 33, unit: "%", gate: "multiView" },
@@ -1981,8 +1992,8 @@ const EXPERT_VALUES = {
   errorLogMax: { label: "valErrorLogMax", min: 20, max: 500, step: 10, def: 100, unit: "", gate: "errorLog" },
   // The port shows on the persistent badge while the receiver
   // runs -- a companion program reads it from there, not from this slider.
-  remotePort: { label: "valRemotePort", min: 1024, max: 65535, step: 1, def: 51823, unit: "", gate: "remoteApi" },
-  remoteRateLimit: { label: "valRemoteRateLimit", min: 5, max: 300, step: 5, def: 60, unit: "/min", gate: "remoteApi" },
+  remotePort: { label: "valRemotePort", min: 1024, max: 65535, step: 1, def: 51823, unit: "", gate: "remoteApi", input: true },
+  remoteRateLimit: { label: "valRemoteRateLimit", min: 5, max: 300, step: 5, def: 60, unit: "/min", gate: "remoteApi", topUnlimited: true },
 };
 
 // Preset-or-custom numeric settings (dropdown with a free-entry option).
@@ -2315,7 +2326,7 @@ const EXPERT_TABS = [
     // and pure looks. One 26-entry blob made everything hard to find.
     { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "dragToView", "tileHover", { key: "tileHoverLift", gate: "tileHover" }, "tilePressScale", "tileHotkeyBadge", "chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "chainQuickStart", gate: "chainPrompts" }, { key: "chainStartAlwaysVisible", gate: "chainQuickStart" }, { key: "chainVarCheck", gate: "chainPrompts" }], values: ["hoverLift", "dragThreshold", "viewDropHoverMs", "tileHotkeyBadgeOpacity"] },
     { title: "expGroupTooltips", flags: ["tilePreview", "iconTooltips", "tooltipDelay", "tooltipTimeout", "tileTimeTip"], values: ["tooltipWidth", "tooltipDelayMs", "tooltipTimeoutMs"] },
-    { title: "expGroupTileLook", flags: ["tileShadow", "typeBadges", "captions", "compactTiles", "tileGradient", "gridLines", "uppercaseTiles", "boldTileNames", "monospaceTiles", "italicTiles", "tileTextShadow", "autoInk"], values: ["tileRadius", "tileBorderWidth", "inkThreshold"] },
+    { title: "expGroupTileLook", flags: ["tileShadow", "typeBadges", "captions", "compactTiles", "tileGradient", "gridLines", "uppercaseTiles", "boldTileNames", "monospaceTiles", "italicTiles", "tileTextShadow", "autoInk", "inkHalo"], values: ["tileRadius", "tileBorderWidth", "inkThreshold", "inkHaloStrength"] },
     { title: "expGroupFavorites", flags: ["favorites", { key: "favViewButton", gate: "favorites" }, { key: "favViewReorder", gate: "favViewButton" }], values: ["favStarSize", "favMaxCols"] },
   ] },
   { title: "expTabAppearance", groups: [
@@ -2342,7 +2353,7 @@ const EXPERT_TABS = [
     { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "helpSketches", "firstRunTour"],
       actions: [{ id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
     { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "similarHint", "backupBeforeReset", "backupBeforeDelete", "importExport", "recSweepBroken", "undoToast", "errorLog"], values: ["similarThreshold", "importFolderDepth", "importFolderMax", "disarmMs", "recBrokenGraceMin", "recSweepEveryMin", "recDiscardKeepH", "videoClipTtlMin", "errorLogKeepKb", "undoToastMs", "errorLogMax"], selects: ["trashRetentionDays", "recordingRetentionDays"],
-      actions: [{ id: "dupes-open", label: "dupTitle", gate: "dupFinder" }, { id: "trash-open", label: "trashTitle" }, { id: "rec-sweep-now", label: "recSweepNowAction", gate: "recSweepBroken" }, { id: "settings-export", label: "settingsExportAction" }, { id: "settings-import", label: "settingsImportAction" }, { id: "ocr-index-backfill", label: "ocrIndexBackfillAction", gate: "ocrIndex" }, { id: "float-recall", label: "floatRecallAction", gate: "floating" }, { id: "error-log-open", label: "errorLogAction" }] },
+      actions: [{ id: "trash-open", label: "trashTitle" }, { id: "rec-sweep-now", label: "recSweepNowAction", gate: "recSweepBroken" }, { id: "settings-export", label: "settingsExportAction" }, { id: "settings-import", label: "settingsImportAction" }, { id: "ocr-index-backfill", label: "ocrIndexBackfillAction", gate: "ocrIndex" }, { id: "float-recall", label: "floatRecallAction", gate: "floating" }, { id: "error-log-open", label: "errorLogAction" }] },
     // The only new network surface in the app, off by default.
     // A link can only open or copy an entry; the receiver can do everything
     // the command line can, gated by its own password and network switch.
@@ -2597,7 +2608,7 @@ const EXPERT_TIPS = [
   "tooltipDelay", "tooltipTimeout", "iconTooltips",
   "dragToView", "viewDropHoverMs",
   // Appearance
-  "hideScrollbars", "gridLines", "pausedIcons", "autoInk", "inkThreshold",
+  "hideScrollbars", "gridLines", "pausedIcons", "autoInk", "inkThreshold", "inkHalo", "inkHaloStrength",
   "customThemes", "customThemeMax",
   "dragThreshold", "composerMaxH", "popoverPad", "toastWidth", "toastPos", "modalMaxVh",
   // Library / privacy
@@ -2696,7 +2707,7 @@ async function resetOneExpertValue(kind, key, after) {
 // rotatingPrompts/rotateBadge gate a tile's own rotate-badge element -- without
 // a full rebuild here, an already-open grid keeps showing (or hiding) it until some
 // unrelated re-render happens to catch up.
-const TILE_DOM_FLAGS = new Set(["tilePreview", "captions", "promptNotes", "notesInTooltip", "tileTimeTip", "rotatingPrompts", "rotateBadge", "tileHotkeyBadge", "autoInk"]);
+const TILE_DOM_FLAGS = new Set(["tilePreview", "captions", "promptNotes", "notesInTooltip", "tileTimeTip", "rotatingPrompts", "rotateBadge", "tileHotkeyBadge", "autoInk", "inkHalo"]);
 
 function flagRow(key) {
   const row = document.createElement("label");
@@ -2814,12 +2825,12 @@ function flagRow(key) {
 // Almost every expert value only drives a CSS variable, so rebuilding the whole grid
 // for it threw away and recreated every tile: visible as a flash through the
 // translucent settings overlay. Only these actually change tile DOM.
-const GRID_DOM_VALUES = new Set(["previewLen", "gridMax", "notesTipLen", "inkThreshold"]);
+const GRID_DOM_VALUES = new Set(["previewLen", "gridMax", "notesTipLen", "inkThreshold", "inkHaloStrength"]);
 // Re-fit the tile text to the new box size without touching the DOM.
 const refreshTiles = (key) => {
   // A view tab paints its ink as an inline style, so it needs its own
   // re-render -- no CSS var carries the ink rule.
-  if (key === "inkThreshold") renderViews();
+  if (key === "inkThreshold" || key === "inkHaloStrength") renderViews();
   return GRID_DOM_VALUES.has(key) ? renderGrid(true) : (fitAllTiles(), undefined);
 };
 
@@ -2858,17 +2869,54 @@ function valueRow(key) {
   head.className = "value-head";
   const span = document.createElement("span");
   span.textContent = t(cfg.label);
+  // A number typed directly instead of a slider (e.g. a port): every valid
+  // value in range, nothing else, and no silent fallback to the last good one.
+  if (cfg.input) {
+    const right2 = document.createElement("span");
+    right2.className = "value-head-right";
+    const resetBtn2 = rowResetBtn("values", key);
+    if (resetBtn2) right2.append(resetBtn2);
+    head.append(span, right2);
+    const input = document.createElement("input");
+    input.type = "text";
+    input.inputMode = "numeric";
+    input.className = "modal-input expert-num";
+    input.value = String(val(key));
+    input.setAttribute("aria-invalid", "false");
+    const hint = document.createElement("div");
+    hint.className = "expert-row-hint expert-row-hint-danger hidden";
+    hint.textContent = t(cfg.invalidKey || "valPortInvalid");
+    const commit = () => {
+      const n = Number(input.value);
+      const valid = Number.isInteger(n) && n >= cfg.min && n <= cfg.max;
+      input.classList.toggle("invalid", !valid);
+      input.setAttribute("aria-invalid", String(!valid));
+      hint.classList.toggle("hidden", valid);
+      if (valid) commitValue(key, n);
+    };
+    input.addEventListener("change", commit);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); commit(); }
+    });
+    row.append(head, input, hint);
+    return row;
+  }
   const out = document.createElement("span");
   out.className = "value-out";
   const slider = document.createElement("input");
   slider.type = "range";
   slider.className = "value-range";
+  // topUnlimited adds one extra stop past the real max: a slider parked there
+  // shows the "unlimited" label and stores 0, exactly like a 0-stop's zeroLabel
+  // does at the low end.
+  const unlimitedStop = cfg.topUnlimited ? cfg.max + cfg.step : null;
+  const isUnlimitedStop = () => cfg.topUnlimited && Number(slider.value) === unlimitedStop;
   // A `stops` list drives a stepped slider (e.g. history length up to a million,
   // coarser as it climbs); everything else is a plain min/max/step slider.
   const cur = cfg.stops
     ? () => cfg.stops[Number(slider.value)]
-    : () => Number(slider.value);
-  const show = cfg.stops ? (v) => String(v) : fmt;
+    : () => (isUnlimitedStop() ? 0 : Number(slider.value));
+  const show = cfg.stops ? (v) => String(v) : (v) => (isUnlimitedStop() ? t("valUnlimited") : fmt(v));
   if (cfg.stops) {
     slider.min = 0;
     slider.max = cfg.stops.length - 1;
@@ -2877,9 +2925,10 @@ function valueRow(key) {
     slider.value = idx < 0 ? cfg.stops.length - 1 : idx;
   } else {
     slider.min = cfg.min;
-    slider.max = cfg.max;
+    slider.max = unlimitedStop ?? cfg.max;
     slider.step = cfg.step;
-    slider.value = val(key);
+    const stored = val(key);
+    slider.value = cfg.topUnlimited && stored === 0 ? unlimitedStop : stored;
   }
   out.textContent = show(cur());
   slider.addEventListener("input", () => { out.textContent = show(cur()); previewValue(key, cur()); });
@@ -3730,36 +3779,47 @@ function colorRow(key) {
   const defColor = typeof cfg.def === "function" ? cfg.def() : cfg.def;
   const row = document.createElement("div");
   row.className = "field value-field color-field";
+  row.dataset.settingRow = key; // same jump-to-setting hook as valueRow
   const head = document.createElement("div");
   head.className = "value-head";
   const span = document.createElement("span");
   span.textContent = t(cfg.label);
-  head.appendChild(span);
   const cur = HEX_RE.test(settings.ui_texts?.[key] || "") ? settings.ui_texts[key] : defColor;
+  // .value-head is space-between over exactly two children: label plus this
+  // wrapper, the same reason valueRow's slider reset joins .value-out instead
+  // of becoming a 3rd sibling.
+  const right = document.createElement("span");
+  right.className = "value-head-right";
   const swatch = document.createElement("button");
   swatch.type = "button";
   swatch.className = "color-swatch";
   swatch.style.background = cur;
   swatch.title = cur;
+  const hexOut = document.createElement("span");
+  hexOut.className = "value-out";
+  hexOut.textContent = cur;
+  let reset = null;
   const setColor = async (hex) => {
     swatch.style.background = hex;
     swatch.title = hex;
+    hexOut.textContent = hex;
     settings.ui_texts = { ...(settings.ui_texts || {}), [key]: hex };
     try { await invoke("set_ui_text", { key, value: hex }); } catch (e) { errToast(e); }
+    if (reset) reset.classList.toggle("hidden", hex === defColor);
   };
   swatch.addEventListener("click", () => openColorPop(swatch, cur, setColor));
-  head.appendChild(swatch);
-  if (cur !== defColor) {
-    const reset = document.createElement("button");
-    reset.type = "button";
-    reset.className = "expert-row-reset";
-    const label = t("expertResetOne");
-    reset.title = label;
-    reset.setAttribute("aria-label", label);
-    putIcon(reset, ICON_UNDO);
-    reset.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); setColor(defColor).then(renderExpert); });
-    head.appendChild(reset);
-  }
+  right.append(swatch, hexOut);
+  reset = document.createElement("button");
+  reset.type = "button";
+  reset.className = "expert-row-reset";
+  reset.classList.toggle("hidden", cur === defColor);
+  const label = t("expertResetOne");
+  reset.title = label;
+  reset.setAttribute("aria-label", label);
+  putIcon(reset, ICON_UNDO);
+  reset.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); setColor(defColor); });
+  right.append(reset);
+  head.append(span, right);
   row.appendChild(head);
   return withTip(row, key);
 }
@@ -4157,6 +4217,16 @@ function renderExpert() {
       b.textContent = t(tab.title);
       b.addEventListener("click", () => { expertTab = i; box.scrollTop = 0; renderExpert(); });
       bar.appendChild(b);
+      // The caution notice sits right after the System tab, in the tab bar
+      // itself: a plain line of text, never a tab and never focusable.
+      if (tab.title === "expTabSystem") {
+        const hint = document.createElement("span");
+        hint.className = "expert-hint";
+        hint.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">' +
+          '<path fill="currentColor" d="M12 3 1 21h22L12 3Zm0 5.5 6.6 11H5.4L12 8.5ZM11 11h2v5h-2v-5Zm0 6.5h2v2h-2v-2Z"/></svg>' +
+          '<span>' + t("expertHint") + "</span>";
+        bar.appendChild(hint);
+      }
     });
     tabBar.appendChild(bar);
   }
@@ -10271,8 +10341,6 @@ async function maybeDupImportToast() {
     if (groups.length) toast(t("dupImportToast").replace("{n}", String(groups.length)));
   } catch (_) {}
 }
-EXPERT_ACTIONS["dupes-open"] = openDupes;
-
 // The save-time cousin of maybeDupImportToast above: runs after EVERY save
 // (create or edit, called with no await from saveModal), never holds up
 // anything, and never asks a question -- ignoring the toast loses nothing.
@@ -15945,7 +16013,7 @@ const IMPORT_FOLDER_REASON_KEY = {
 async function runImportFolder() {
   let preview;
   try {
-    preview = await withDialog(() => invoke("preview_import_folder"));
+    preview = await withDialog(() => invoke("preview_import_folder", { title: t("importFolderTitle") }));
   } catch (err) {
     if (String(err) !== "canceled") toast(t("importFolderFailed"));
     return;
@@ -19975,7 +20043,6 @@ function bind() {
   $("reset-settings").addEventListener("click", resetSettings);
   $("delete-data").addEventListener("click", deleteData);
   $("settings-backup-btn").addEventListener("click", openBackups);
-  $("settings-dupes-btn").addEventListener("click", openDupes);
   $("library-dupes").addEventListener("click", openDupes);
   $("backup-close").addEventListener("click", closeBackups);
   $("backup-modal").addEventListener("pointerdown", (e) => {
@@ -20432,6 +20499,9 @@ function bind() {
   // back to whats_new_refresh so its GitHub fetch reproduces the same range.
   // null means "current version only" (the About-triggered view).
   let whatsNewSince = null;
+  // Set only when the About dialog opened this modal, so closing it can
+  // return there instead of just closing everything.
+  let whatsNewOpenedFromAbout = false;
   const whatsNewModal = {
     root: $("whats-new-modal"),
     notes: $("whats-new-notes"),
@@ -20447,7 +20517,11 @@ function bind() {
     renderNotes(whatsNewModal.notes, combined || t("noChangelog"), "");
     whatsNewModal.root.classList.remove("hidden");
   };
-  const closeWhatsNewModal = () => whatsNewModal.root.classList.add("hidden");
+  const closeWhatsNewModal = () => {
+    whatsNewModal.root.classList.add("hidden");
+    if (whatsNewOpenedFromAbout) aboutEl.classList.remove("hidden");
+    whatsNewOpenedFromAbout = false;
+  };
   whatsNewModal.close.addEventListener("click", closeWhatsNewModal);
   whatsNewModal.ok.addEventListener("click", closeWhatsNewModal);
   whatsNewModal.root.addEventListener("pointerdown", (e) => {
@@ -20467,6 +20541,8 @@ function bind() {
   $("about-whats-new").addEventListener("click", async () => {
     try {
       const sections = await invoke("whats_new_current");
+      closeAbout();
+      whatsNewOpenedFromAbout = true;
       openWhatsNewModal(sections, null);
     } catch (err) {
       errToast(err);

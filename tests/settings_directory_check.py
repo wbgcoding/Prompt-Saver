@@ -44,7 +44,6 @@ NOT_A_SETTING = {
     "export-all", "import-all", "about-btn", "update-btn", "update-version",
     "help-open", "expert-open", "reset-settings",
     "delete-data", "hotkey-clear", "hotkey-list-btn", "voice-hotkey-clear",
-    "settings-dupes-btn",
 }
 
 

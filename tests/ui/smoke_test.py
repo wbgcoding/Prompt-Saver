@@ -341,23 +341,54 @@ PROBE = """
           const txt = (el.children.length ? '' : el.textContent || '').trim();
           if (/^about[A-Z][A-Za-z]+$/.test(txt)) out.errors.push('76: About dialog shows a raw i18n key: ' + txt);
         }
-        // 97: the button row is centered, so the FIRST button sits as far from the
-        // modal's left edge as the LAST button sits from its right edge -- checking
-        // .modal-actions itself would be wrong, that flex container always spans the
-        // full inner width regardless of justify-content; only its children move.
+        // 516: the three link buttons form a full-width column, so the Close
+        // button below them is the one centered on its own; the FIRST link
+        // button sits as far from the modal's left edge as the Close button's
+        // right edge sits from the modal's right edge -- checking .modal-actions
+        // itself would be wrong, that flex container always spans the full inner
+        // width regardless of justify-content; only its child moves.
         const aboutBox = aboutModal.querySelector('.modal');
         const firstBtn = document.getElementById('about-whats-new');
-        const lastBtn = document.getElementById('about-ok');
-        if (aboutBox && firstBtn && lastBtn) {
+        const closeBtn = document.getElementById('about-ok');
+        // Skipped once the box actually scrolls: a shown scrollbar eats into
+        // the content width on the right only, which shifts the centered
+        // button without the row itself being off center.
+        if (aboutBox && firstBtn && closeBtn && aboutBox.scrollHeight <= aboutBox.clientHeight + 1) {
           const mb = aboutBox.getBoundingClientRect();
           const fb = firstBtn.getBoundingClientRect();
-          const lb = lastBtn.getBoundingClientRect();
+          const cb = closeBtn.getBoundingClientRect();
           const leftGap = fb.left - mb.left;
-          const rightGap = mb.right - lb.right;
+          const rightGap = mb.right - cb.right;
           if (Math.abs(leftGap - rightGap) > 1) {
-            out.errors.push('97: About dialog buttons are not centered, left gap ' + Math.round(leftGap) + 'px vs right gap ' + Math.round(rightGap) + 'px');
+            out.errors.push('516: About dialog Close button is not centered, left gap ' + Math.round(leftGap) + 'px vs right gap ' + Math.round(rightGap) + 'px');
           }
         }
+        // 516: every link button fits its own text (no horizontal overflow),
+        // the box itself never grows wider than its column (a tall box just
+        // scrolls, same as the version-history and theme-editor dialogs), and
+        // Close stays reachable by scrolling to it -- in the current language
+        // and at the current window size (this probe runs at every SIZES
+        // entry, including the app minimum, and once more at 130% scale
+        // further down, and once in each of pl/ro/de below).
+        const aboutFitsCheck = (label) => {
+          for (const btn of aboutModal.querySelectorAll('.about-link-btn')) {
+            if (btn.scrollWidth > btn.clientWidth + 1) {
+              out.errors.push('516: an About link button overflows (' + label + '): ' + btn.textContent.trim());
+            }
+          }
+          if (aboutBox.scrollWidth > aboutBox.clientWidth + 1) {
+            out.errors.push('516: the About dialog is wider than its own box (' + label + ')');
+          }
+          const closeBtn2 = document.getElementById('about-ok');
+          closeBtn2.scrollIntoView({ block: 'nearest' });
+          const cr = closeBtn2.getBoundingClientRect();
+          const hit = document.elementFromPoint(cr.left + cr.width / 2, cr.top + cr.height / 2);
+          if (!closeBtn2.contains(hit)) {
+            out.errors.push('516: the About dialog Close button is not reachable (' + label + ')');
+          }
+        };
+        aboutFitsCheck('default');
+        window.__ABOUT_FITS_CHECK__ = aboutFitsCheck;
         document.getElementById('about-ok').click();
         await sleep(120);
         if (!aboutModal.classList.contains('hidden')) out.errors.push('76: the About dialog did not close');
@@ -2232,6 +2263,9 @@ PROBE = """
         return null;
       };
       for (let i = 0; i < 3 && document.body.classList.contains('chain-mode'); i++) await click('chain-btn');
+      // 510: the grid's own top position with the chain off, to compare against
+      // once the chain overview strip has come and gone below.
+      const gridTopOff = document.getElementById('grid').getBoundingClientRect().top;
       const p0Tile = findGridTile('p0');
       const startBtn = p0Tile && p0Tile.querySelector('.tile-chain-start');
       if (!startBtn) {
@@ -2257,6 +2291,16 @@ PROBE = """
           const ovTitle = bar.querySelector('.chain-ov-title');
           if (ovTitle && ovTitle.getBoundingClientRect().top - bar.getBoundingClientRect().top > 3) {
             out.errors.push('445: the chain overview keeps extra space above its title');
+          }
+          // 510: total gap from the grid area's own top edge (its padding box,
+          // not the strip's) down to the title, so the padding the strip adds
+          // on top of the grid area's own padding is counted too.
+          if (ovTitle) {
+            const gridWrapTop = document.querySelector('.grid-wrap').getBoundingClientRect().top;
+            const gap510 = ovTitle.getBoundingClientRect().top - gridWrapTop;
+            if (gap510 > 4) {
+              out.errors.push('510: the gap above the chain overview title is ' + Math.round(gap510) + 'px, over the 4px target');
+            }
           }
           const firstTile = document.querySelector('#grid .tile');
           if (firstTile && bar.getBoundingClientRect().bottom > firstTile.getBoundingClientRect().top) {
@@ -2319,6 +2363,13 @@ PROBE = """
       }
       for (let i = 0; i < 3 && document.body.classList.contains('chain-mode'); i++) await click('chain-btn');
       await sleep(150);
+      // 510: with the chain off again, the grid must sit exactly where it did
+      // before the strip ever appeared.
+      const gridTopBack = document.getElementById('grid').getBoundingClientRect().top;
+      if (Math.abs(gridTopBack - gridTopOff) > 1) {
+        out.errors.push('510: the grid top moved from ' + Math.round(gridTopOff) + 'px to ' +
+          Math.round(gridTopBack) + 'px after the chain overview strip was shown and hidden again');
+      }
     }
     // Moving the window (a mousedown on a drag region, which starts the native
     // OS move loop and blurs then refocuses the webview) must never end a running
@@ -3018,6 +3069,265 @@ PROBE = """
       await click('expert-back');
       document.getElementById('settings').classList.add('hidden');
     }
+    // 511: the quick-profiles row is the first child of the expert menu, the
+    // filter row and tab bar follow, and the caution hint now lives inside
+    // the tab bar itself, right after the System tab.
+    {
+      document.getElementById('settings').classList.remove('hidden');
+      await click('expert-open');
+      const expertBox = document.getElementById('settings-expert');
+      const firstChild = expertBox.firstElementChild;
+      if (!firstChild || !firstChild.classList.contains('expert-top-row')) {
+        out.errors.push('511: the expert menu top row (presets plus reset) is not the first child');
+      } else if (!firstChild.querySelector('.expert-presets') || firstChild.querySelector('.expert-presets') !== firstChild.firstElementChild) {
+        out.errors.push('511: the quick-profiles group is not the first thing in the top row');
+      }
+      // Jump every tab once so the hint (built after the System tab) actually exists.
+      for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+        tb.click();
+        await sleep(80);
+      }
+      const hint = document.querySelector('#expert-tabs-bar .expert-hint');
+      if (!hint) {
+        out.errors.push('511: the expert menu caution hint is missing from the tab bar');
+      } else {
+        const tabBtns = [...document.querySelectorAll('#expert-tabs-bar .expert-tab')];
+        const systemIdx = (typeof EXPERT_TABS !== 'undefined') ? EXPERT_TABS.findIndex((tb) => tb.title === 'expTabSystem') : -1;
+        const prevTab = hint.previousElementSibling;
+        if (!prevTab || !prevTab.classList.contains('expert-tab')) {
+          out.errors.push('511: the caution hint does not directly follow a tab button');
+        } else if (systemIdx >= 0 && tabBtns[systemIdx] !== prevTab) {
+          out.errors.push('511: the caution hint does not directly follow the System tab');
+        }
+        if (hint.matches('button, a, input, select, [tabindex]') || hint.hasAttribute('tabindex')) {
+          out.errors.push('511: the caution hint is focusable, it should be plain text');
+        }
+      }
+      const firstTab0 = document.querySelector('#expert-tabs-bar .expert-tab');
+      if (firstTab0) { firstTab0.click(); await sleep(100); }
+      await click('expert-back');
+      document.getElementById('settings').classList.add('hidden');
+    }
+    // 513: the drawing-color row -- a real swatch (not a bare default button),
+    // sized and bordered like the app's other color triggers, with the hex
+    // value shown as text, at about the same row height as a dropdown row.
+    {
+      document.getElementById('settings').classList.remove('hidden');
+      await click('expert-open');
+      const search = document.getElementById('expert-search');
+      search.value = 'Screenshot editor';
+      search.dispatchEvent(new Event('input'));
+      await sleep(250);
+      const colorRow513 = document.querySelector('#expert-flags [data-setting-row="snipDefaultColor"]');
+      const toolRow513 = document.querySelector('#expert-flags [data-setting-row="snipEditDefaultTool"]');
+      if (!colorRow513) {
+        out.errors.push('513: the default drawing color row is missing (search did not surface it)');
+      } else {
+        const swatch = colorRow513.querySelector('.color-swatch');
+        if (!swatch) {
+          out.errors.push('513: the color row has no .color-swatch element');
+        } else {
+          const cs = getComputedStyle(swatch);
+          if (Math.round(parseFloat(cs.width)) !== 28) {
+            out.errors.push('513: the color swatch is ' + cs.width + ' wide, expected 28px');
+          }
+          if (parseFloat(cs.borderTopWidth) <= 0) {
+            out.errors.push('513: the color swatch has no border');
+          }
+          if (!colorRow513.querySelector('.value-out')) {
+            out.errors.push('513: the color row shows no hex value text beside the swatch');
+          }
+        }
+        if (toolRow513) {
+          const h1 = Math.round(colorRow513.getBoundingClientRect().height);
+          const h2 = Math.round(toolRow513.getBoundingClientRect().height);
+          if (Math.abs(h1 - h2) > 4) {
+            out.errors.push('513: the color row is ' + h1 + 'px tall vs a dropdown row at ' + h2 + 'px, over the 4px tolerance');
+          }
+        }
+      }
+      search.value = '';
+      search.dispatchEvent(new Event('input'));
+      await sleep(150);
+      await click('expert-back');
+      document.getElementById('settings').classList.add('hidden');
+    }
+    // 514: the remote-access port is a typed number field, not a slider --
+    // an out-of-range value shows the inline hint and commits nothing, a
+    // valid one commits and clears the hint.
+    {
+      document.getElementById('settings').classList.remove('hidden');
+      await click('expert-open');
+      const search514 = document.getElementById('expert-search');
+      const findFlagRow = (label) => [...document.querySelectorAll('#expert-flags .switch-field')]
+        .find((r) => ((r.querySelector('span') || {}).textContent || '').includes(label));
+      search514.value = 'Remote access (local API)';
+      search514.dispatchEvent(new Event('input'));
+      await sleep(250);
+      const remoteFlagRow = findFlagRow('Remote access (local API)');
+      const remoteSw = remoteFlagRow && remoteFlagRow.querySelector('input.switch');
+      if (!remoteSw) {
+        out.errors.push('514: could not find the remote-access switch to enable it for the port test');
+      } else {
+        if (!remoteSw.checked) { remoteSw.click(); await sleep(250); }
+        search514.value = 'Remote access port';
+        search514.dispatchEvent(new Event('input'));
+        await sleep(250);
+        const portRow = document.querySelector('#expert-flags [data-setting-row="remotePort"]');
+        if (!portRow) {
+          out.errors.push('514: the remote-access port row is missing');
+        } else {
+          if (portRow.querySelector('input[type=range]')) {
+            out.errors.push('514: the port row still shows a slider');
+          }
+          const input514 = portRow.querySelector('.expert-num');
+          const hint514 = portRow.querySelector('.expert-row-hint');
+          if (!input514 || !hint514) {
+            out.errors.push('514: the port row has no text input or hint element');
+          } else {
+            const portCommits = () => (window.__SMOKE_ARGS__ || [])
+              .filter(([cmd, args]) => cmd === 'set_ui_value' && args && args.key === 'remotePort')
+              .map(([, args]) => args.value);
+            const before514 = portCommits().length;
+            input514.value = '80';
+            input514.dispatchEvent(new Event('change'));
+            await sleep(150);
+            if (portCommits().length > before514) {
+              out.errors.push('514: an out-of-range port (80) was committed');
+            }
+            if (hint514.classList.contains('hidden')) {
+              out.errors.push('514: no invalid-port hint shown for an out-of-range value');
+            }
+            input514.value = '51900';
+            input514.dispatchEvent(new Event('change'));
+            await sleep(150);
+            const after514 = portCommits();
+            if (after514[after514.length - 1] !== 51900) {
+              out.errors.push('514: a valid port (51900) was not committed, got ' + after514[after514.length - 1]);
+            }
+            if (!hint514.classList.contains('hidden')) {
+              out.errors.push('514: the invalid-port hint stayed visible after a valid value');
+            }
+          }
+        }
+        // 515: the rate-limit slider has one extra stop past its real max,
+        // showing the unlimited label and storing 0.
+        search514.value = 'Remote access requests per minute';
+        search514.dispatchEvent(new Event('input'));
+        await sleep(250);
+        const rateRow = document.querySelector('#expert-flags [data-setting-row="remoteRateLimit"]');
+        if (!rateRow) {
+          out.errors.push('515: the remote rate-limit row is missing');
+        } else {
+          const rateSlider = rateRow.querySelector('input[type=range]');
+          const rateOut = rateRow.querySelector('.value-out');
+          if (!rateSlider || !rateOut) {
+            out.errors.push('515: the rate-limit row has no slider or value readout');
+          } else {
+            const rateCommits = () => (window.__SMOKE_ARGS__ || [])
+              .filter(([cmd, args]) => cmd === 'set_ui_value' && args && args.key === 'remoteRateLimit')
+              .map(([, args]) => args.value);
+            const belowMax = String(Number(rateSlider.max) - Number(rateSlider.step)) + '/min';
+            rateSlider.value = String(Number(rateSlider.max) - Number(rateSlider.step));
+            rateSlider.dispatchEvent(new Event('input'));
+            const readoutBelowMax = rateOut.textContent;
+            if (readoutBelowMax !== belowMax) {
+              out.errors.push('515: the slider one stop below max reads "' + readoutBelowMax + '" instead of "' + belowMax + '"');
+            }
+            rateSlider.value = rateSlider.max;
+            rateSlider.dispatchEvent(new Event('input'));
+            if (rateOut.textContent === (rateSlider.max + '/min') || rateOut.textContent === readoutBelowMax) {
+              out.errors.push('515: the top slider stop does not show a distinct unlimited label: ' + rateOut.textContent);
+            }
+            rateSlider.dispatchEvent(new Event('change'));
+            await sleep(150);
+            const rc = rateCommits();
+            if (rc[rc.length - 1] !== 0) {
+              out.errors.push('515: the unlimited slider stop did not commit 0, got ' + rc[rc.length - 1]);
+            }
+          }
+        }
+        // Put remoteApi back off so the rest of the run sees the shipped default.
+        search514.value = 'Remote access (local API)';
+        search514.dispatchEvent(new Event('input'));
+        await sleep(200);
+        const remoteFlagRowBack = findFlagRow('Remote access (local API)');
+        const remoteSwBack = remoteFlagRowBack && remoteFlagRowBack.querySelector('input.switch');
+        if (remoteSwBack && remoteSwBack.checked) { remoteSwBack.click(); await sleep(200); }
+      }
+      // 512: the dark halo behind white text is a live setting on the blue
+      // sample tile (p0, always white text under the shipped threshold) -
+      // default on at the current look, switch off clears it, a lower
+      // strength lightens it.
+      const inkShadowOf512 = () => {
+        const t = [...document.querySelectorAll('#grid .tile')].find((e) => (e.dataset.id || '') === 'p0');
+        return t ? t.style.getPropertyValue('--ink-shadow') : null;
+      };
+      const todayHalo512 = '0 0 2px rgba(0, 0, 0, 0.85), 0 1px 3px rgba(0, 0, 0, 0.7)';
+      const startHalo512 = inkShadowOf512();
+      if (startHalo512 === null) {
+        out.errors.push('512: could not find the blue sample tile (p0) to check the ink halo');
+      } else if (startHalo512 !== todayHalo512) {
+        out.errors.push('512: the default ink halo does not match the shipped look, got ' + startHalo512);
+      } else {
+        search514.value = 'Dark shadow behind white text';
+        search514.dispatchEvent(new Event('input'));
+        await sleep(200);
+        const findHaloSw512 = () => {
+          const row = findFlagRow('Dark shadow behind white text');
+          return row && row.querySelector('input.switch');
+        };
+        if (!findHaloSw512()) {
+          out.errors.push('512: could not find the ink halo switch');
+        } else {
+          // inkHalo gates the strength row, so toggling it re-renders the
+          // search results -- re-find the switch after every click instead
+          // of holding onto a row the re-render just replaced.
+          findHaloSw512().click();
+          await sleep(200);
+          if (inkShadowOf512() !== 'none') {
+            out.errors.push('512: switching the ink halo off did not clear the tile shadow, got ' + inkShadowOf512());
+          }
+          const haloSwBack = findHaloSw512();
+          if (!haloSwBack) {
+            out.errors.push('512: the ink halo switch disappeared after switching it off');
+          } else {
+            haloSwBack.click();
+            await sleep(200);
+            if (inkShadowOf512() !== todayHalo512) {
+              out.errors.push('512: switching the ink halo back on did not restore the shipped look, got ' + inkShadowOf512());
+            }
+          }
+          search514.value = 'Shadow strength';
+          search514.dispatchEvent(new Event('input'));
+          await sleep(200);
+          const strengthRow512 = document.querySelector('#expert-flags [data-setting-row="inkHaloStrength"]');
+          const strengthSlider512 = strengthRow512 && strengthRow512.querySelector('input[type=range]');
+          if (!strengthSlider512) {
+            out.errors.push('512: could not find the shadow strength slider');
+          } else {
+            strengthSlider512.value = '40';
+            strengthSlider512.dispatchEvent(new Event('input'));
+            strengthSlider512.dispatchEvent(new Event('change'));
+            await sleep(200);
+            const lowerHalo512 = '0 0 2px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.33)';
+            if (inkShadowOf512() !== lowerHalo512) {
+              out.errors.push('512: a lower shadow strength (40) did not lighten the tile halo, got ' + inkShadowOf512());
+            }
+            // Put the strength back to the shipped default for whatever runs after.
+            strengthSlider512.value = '85';
+            strengthSlider512.dispatchEvent(new Event('input'));
+            strengthSlider512.dispatchEvent(new Event('change'));
+            await sleep(150);
+          }
+        }
+      }
+      search514.value = '';
+      search514.dispatchEvent(new Event('input'));
+      await sleep(150);
+      await click('expert-back');
+      document.getElementById('settings').classList.add('hidden');
+    }
     // F22: a modifier-held drag hands the prompt to the OS; a plain drag has to stay
     // the tile reorder it always was, and the switch has to take the whole thing away.
     const gridTile = (id) => [...document.querySelectorAll('#grid .tile')].find(e => (e.dataset.id || '') === id);
@@ -3705,6 +4015,13 @@ PROBE = """
         if (!modal || modal.classList.contains('hidden')) {
           out.errors.push('the folder import preview did not open');
         } else {
+          // 521: the dialog gets a real title instead of Windows' generic chrome.
+          const folderCalls521 = (window.__SMOKE_ARGS__ || [])
+            .filter(([cmd]) => cmd === 'preview_import_folder');
+          const lastCall521 = folderCalls521[folderCalls521.length - 1];
+          if (!lastCall521 || !lastCall521[1] || !lastCall521[1].title) {
+            out.errors.push('521: preview_import_folder was not called with a title');
+          }
           const rows = [...document.querySelectorAll('#import-folder-list .import-preview-row')];
           if (rows.length !== 3) out.errors.push('the folder import preview lists ' + rows.length + ' rows, expected 3');
           const badRows = rows.filter(r => r.classList.contains('dup'));
@@ -4400,17 +4717,13 @@ PROBE = """
       const cmAttach = document.getElementById('confirm-modal');
       if (!cmAttach.classList.contains('hidden')) { await click('confirm-ok'); await sleep(200); }
     }
-    // Duplicates: its own dialog, reachable only from the expert menu, and the last
-    // window of the main surface that no scan had ever opened. Its group (147) lives
-    // in the "System & data" tab, not whatever tab was last active.
-    document.getElementById('settings').classList.remove('hidden');
-    await click('expert-open');
-    const sysTab = [...document.querySelectorAll('#expert-tabs-bar .expert-tab')].find(b => /system/i.test(b.textContent));
-    if (sysTab) { sysTab.click(); await sleep(200); }
-    const dupBtn = [...document.querySelectorAll('#expert-flags button')]
-      .find(b => /duplicat|duplik|dupli/i.test(b.textContent));
+    // Duplicates: its own dialog, reachable from the library header, and the last
+    // window of the main surface that no scan had ever opened.
+    await click('library-btn');
+    await sleep(150);
+    const dupBtn = document.getElementById('library-dupes');
     if (!dupBtn) {
-      out.errors.push('the expert menu has no way to open the duplicates dialog');
+      out.errors.push('the library header has no way to open the duplicates dialog');
     } else {
       dupBtn.click();
       await sleep(500);
@@ -4469,9 +4782,6 @@ PROBE = """
         await sleep(200);
       }
     }
-    await click('expert-back');
-    document.getElementById('settings').classList.add('hidden');
-    await sleep(150);
     // The save-time similar-prompt hint (its own switch, sharing similarThreshold
     // with the duplicate finder above -- same System & data group). Off first:
     // even with a fixture hit ready, saving must show nothing of the kind. Edits
@@ -7236,6 +7546,12 @@ PROBE = """
     // Clipped away by a dialog that cannot scroll counts as unreachable: elementFromPoint
     // respects the clip, and scrollIntoView has nothing to scroll.
     mustReach('settings at 130% scale', '#settings-main button, #settings-main select');
+    // 516: the redesigned About dialog at 130% scale.
+    document.getElementById('about-btn').click();
+    await sleep(150);
+    if (window.__ABOUT_FITS_CHECK__) window.__ABOUT_FITS_CHECK__('130% scale');
+    document.getElementById('about-ok').click();
+    await sleep(120);
     await click('expert-open');
     layoutScan('expert menu at 130% scale');
     // Indentation is the only thing that says which setting belongs to which
@@ -7300,6 +7616,35 @@ PROBE = """
       await click('library-close');
       layoutScan('settings in ' + lang);
       mustReach('settings in ' + lang, '#settings-main button, #settings-main select');
+      // 521: the shortened German label keeps the folder-import button's own
+      // text on one line -- a flex row with align-items stretch equalizes
+      // every button's box height regardless, so the box height alone (the
+      // first thing tried here) cannot tell a wrapped label from a plain one;
+      // only the text's own line count can.
+      if (lang === 'de') {
+        const folderBtn521 = document.getElementById('import-folder-btn');
+        if (!folderBtn521) {
+          out.errors.push('521: could not find the folder-import button in de');
+        } else {
+          const label521 = [...folderBtn521.childNodes].find((n) => n.nodeType === 3 && n.textContent.trim());
+          if (!label521) {
+            out.errors.push('521: the folder-import button has no text label to measure in de');
+          } else {
+            const range521 = document.createRange();
+            range521.selectNodeContents(label521);
+            const tops521 = new Set([...range521.getClientRects()].map((r) => Math.round(r.top)));
+            if (tops521.size > 1) {
+              out.errors.push('521: the folder-import button label wraps to ' + tops521.size + ' lines in de');
+            }
+          }
+        }
+      }
+      // 516: the redesigned About dialog in the longest-label languages.
+      document.getElementById('about-btn').click();
+      await sleep(150);
+      if (window.__ABOUT_FITS_CHECK__) window.__ABOUT_FITS_CHECK__(lang);
+      document.getElementById('about-ok').click();
+      await sleep(120);
       await click('expert-open');
       layoutScan('expert menu in ' + lang);
       await click('expert-back');
@@ -13152,91 +13497,6 @@ CAP_NEEDS_ADMIN_PROBE = """
 </script>
 """
 
-SETTINGS_DUPES_PROBE = """
-<script>
-(async () => {
-  const errs = [];
-  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-  const beat = setInterval(() => {
-    document.documentElement.style.setProperty('--dup-settings-tick', String(Date.now()));
-    document.body.getBoundingClientRect();
-  }, 40);
-  const visible = (el) => !!el && getComputedStyle(el).display !== 'none';
-  // The row lives on whichever expert tab "expGroupData" lands on -- found
-  // fresh every time, since leaving and re-entering the expert page rebuilds it.
-  const findDupCheckbox = async () => {
-    for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
-      tb.click();
-      await sleep(80);
-      const row = [...document.querySelectorAll('#expert-flags .switch-field')]
-        .find(r => (r.querySelector('span') || {}).textContent === 'Duplicate finder');
-      if (row) return row.querySelector('input.switch');
-    }
-    return null;
-  };
-  try {
-    const cm = document.getElementById('confirm-modal');
-    for (let i = 0; i < 80 && cm.classList.contains('hidden'); i++) await sleep(100);
-    if (!cm.classList.contains('hidden')) { document.getElementById('confirm-cancel').click(); await sleep(300); }
-
-    document.getElementById('gear').click();
-    await sleep(200);
-
-    const dupBtn = document.getElementById('settings-dupes-btn');
-    if (!visible(dupBtn)) {
-      errs.push('379: the settings dialog "Find duplicates" entry is not visible while dupFinder ships on');
-    } else {
-      dupBtn.click();
-      await sleep(150);
-      const modal = document.getElementById('dupes-modal');
-      if (!modal || modal.classList.contains('hidden')) {
-        errs.push('379: clicking the settings dialog entry did not open the duplicate finder');
-      }
-      document.getElementById('dupes-close').click();
-      await sleep(100);
-    }
-
-    document.getElementById('expert-open').click();
-    await sleep(300);
-    let cb = await findDupCheckbox();
-    if (!cb) {
-      errs.push('379: no expert-menu switch found for the duplicate finder flag');
-    } else {
-      if (!cb.checked) errs.push('379: the duplicate finder flag does not ship on');
-      cb.checked = false;
-      cb.dispatchEvent(new Event('change'));
-      await sleep(200);
-      document.getElementById('expert-back').click();
-      await sleep(150);
-      if (visible(document.getElementById('settings-dupes-btn'))) {
-        errs.push('379: the settings dialog entry stayed visible after switching dupFinder off');
-      }
-
-      // Back on, so nothing else in this isolated boot is left changed.
-      document.getElementById('expert-open').click();
-      await sleep(300);
-      cb = await findDupCheckbox();
-      if (cb) {
-        cb.checked = true;
-        cb.dispatchEvent(new Event('change'));
-        await sleep(200);
-      }
-      document.getElementById('expert-back').click();
-      await sleep(150);
-      if (!visible(document.getElementById('settings-dupes-btn'))) {
-        errs.push('379: the settings dialog entry did not come back after switching dupFinder on again');
-      }
-    }
-  } catch (e) { errs.push('379 probe: ' + e.message); }
-  clearInterval(beat);
-  const pre = document.createElement('pre');
-  pre.id = 'SMOKE';
-  pre.textContent = JSON.stringify(errs);
-  document.body.appendChild(pre);
-})();
-</script>
-"""
-
 # 411: the parked marker on a pill/folder whose saved screen is gone. Its own
 # boot (window.__FLOAT_PARKED__ = true), same reasoning as the store-sealing
 # and drag-view fixtures above: is_float_parked is only ever asked once at
@@ -13376,6 +13636,7 @@ window.__WHATS_NEW_FIXTURE__ = {
     if (!aboutBtn) {
       errs.push('404: the About dialog has no whats-new button');
     } else {
+      const aboutModal = document.getElementById('about-modal');
       aboutBtn.click();
       await sleep(150);
       const modal = document.getElementById('whats-new-modal');
@@ -13384,6 +13645,14 @@ window.__WHATS_NEW_FIXTURE__ = {
       if (!modal || modal.classList.contains('hidden')) {
         errs.push('404: the About dialog button did not open the whats-new window');
       } else {
+        if (!aboutModal.classList.contains('hidden')) {
+          errs.push('517: the About dialog stays open behind the whats-new window');
+        }
+        const r = modal.getBoundingClientRect();
+        const topEl = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        if (!modal.contains(topEl)) {
+          errs.push('517: the whats-new window is not the topmost element at its own centre point');
+        }
         if (!text.includes('Current version only')) {
           errs.push('404: the About-triggered window does not show the current version own section');
         }
@@ -13398,6 +13667,12 @@ window.__WHATS_NEW_FIXTURE__ = {
           errs.push('404: the Update-from-GitHub button did not replace the list with the fetched one');
         }
         document.getElementById('whats-new-ok').click();
+        await sleep(150);
+        if (aboutModal.classList.contains('hidden')) {
+          errs.push('517: closing the whats-new window opened from About did not return to About');
+        }
+        document.getElementById('about-close').click();
+        await sleep(150);
       }
     }
   } catch (e) { errs.push('404 probe: ' + e.message); }
@@ -14491,30 +14766,6 @@ def main():
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- OCR/voice elevation: no admin rights vs transient failure")
-        for e in errs:
-            print(f"   FAIL: {e}")
-        failed += len(errs)
-        if not errs:
-            print("   ok")
-
-        # 379: the duplicate finder's settings-dialog entry follows dupFinder
-        # and opens the same modal as the expert action.
-        side = tmp / "ui" / "settings-dupes-entry.html"
-        side.write_text(
-            (REPO / "ui" / "index.html").read_text(encoding="utf-8")
-            .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
-            .replace("</body>", SETTINGS_DUPES_PROBE + "</body>"),
-            encoding="utf-8")
-        proc = subprocess.run(
-            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-             f"--user-data-dir={tmp / 'profile-settings-dupes-entry'}", "--allow-file-access-from-files",
-             "--window-size=1000,780", "--virtual-time-budget=45000",
-             "--dump-dom", side.as_uri()],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=180)
-        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
-        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
-        print("-- duplicate finder entry in the settings dialog")
         for e in errs:
             print(f"   FAIL: {e}")
         failed += len(errs)

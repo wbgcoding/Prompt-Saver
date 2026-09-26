@@ -1613,27 +1613,30 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
 /* Toggled from JS; :has() is avoided everywhere in this file (see main.css:733). */
 .expert-chip.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
 
-/* Expert menu: caution line on the left + reset button on the right. */
-.expert-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-.expert-top #expert-reset { flex: 0 0 auto; }
-.expert-hint {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  flex: 1;
-  min-width: 0;
-  color: var(--danger);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.4;
-  text-wrap: balance;
-}
-.expert-hint svg { flex: 0 0 auto; }
+/* Expert menu top row: quick profiles on the left, the reset button on the right. */
+.expert-top-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.expert-top-row #expert-reset { flex: 0 0 auto; }
 /* Three one-click profiles, ahead of the tabs and not one of their own: a
    profile writes its changed flags and is gone, never a state of its own. */
 .expert-presets { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .expert-presets-label { font-size: 12px; font-weight: 600; color: var(--muted); }
+/* The caution notice, now built by renderExpert() right after the System tab
+   button inside .expert-tabs itself rather than as its own row above
+   everything -- a plain muted line, not a tab, never focusable. margin-left:
+   auto only pulls it to the line's end when it still fits there; once the
+   tabs plus the notice would overflow, flex-wrap just drops it to its own
+   line under the tabs, same as a long tab label already wraps. */
+.expert-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 0 auto;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.expert-hint svg { flex: 0 0 auto; }
 /* A state a group is currently in, sitting above that group's settings. It exists
    only while the state holds, so it never leaves a gap behind when it is gone. */
 .expert-notice {
@@ -1655,7 +1658,7 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
 .noflag-screenshot #snip-btn { display: none; }
 .noflag-colorPicker #picker-btn { display: none; }
 .noflag-screenRecord #record-btn { display: none; }
-.noflag-dupFinder #settings-dupes-btn, .noflag-dupFinder #library-dupes { display: none; }
+.noflag-dupFinder #library-dupes { display: none; }
 /* OCR ships on -- a default-on flag only ever sets noflag-<key>, never flag-<key>,
    so both entry points hide via noflag-ocr. */
 .noflag-ocr #ocr-btn,
@@ -1775,12 +1778,16 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   box-shadow: 0 1px 5px rgba(0, 0, 0, 0.45);
 }
 
-/* Chain overview strip: sits above the grid, same slot pattern as the batch bar. */
+/* Chain overview strip: sits above the grid, same slot pattern as the batch bar.
+   The negative top margin only pulls the strip itself up (it is display:none
+   and contributes no layout at all while the chain is off, so the grid's own
+   top position never moves); it trims the strip's own combined gap down to
+   the grid area's own padding-top plus this element's title padding. */
 .chain-overview {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin: 0 0 8px;
+  margin: -8px 0 8px;
   padding: 2px 2px 10px;
   border-bottom: 1px solid var(--border);
   flex: 0 0 auto;
@@ -2473,6 +2480,22 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .value-head-right { display: flex; align-items: center; gap: 4px; }
 .value-out { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .value-range { width: 100%; accent-color: var(--accent); cursor: pointer; }
+/* Expert-menu color swatch: same rounded-square trigger shape as
+   .snip-edit-color-trigger and the theme editor's own swatches, sized to sit
+   evenly with a dropdown row's control. */
+.color-swatch {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--control-border);
+  border-radius: 8px;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.color-swatch:hover { border-color: var(--accent); }
+/* Padding, not a taller swatch, closes the gap to a dropdown row's own height
+   (its select control carries that height on its own). */
+.color-field .value-head { padding-block: 6px; }
 .expert-reset { margin-top: 8px; align-self: flex-start; }
 
 /* Expert menu tabs (the menu grew large; tabs keep it tidy). */
@@ -2511,7 +2534,8 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .view-btn:focus-visible, .view-add-top:focus-visible, .fav-view-toggle:focus-visible,
 .lib-type:focus-visible, .head-toggle:focus-visible,
 .expert-tab:focus-visible, .tile:focus-visible, .switch:focus-visible,
-.win-btn:focus-visible, .swatch:focus-visible, .toolbar-item:focus-visible {
+.win-btn:focus-visible, .swatch:focus-visible, .toolbar-item:focus-visible,
+.color-swatch:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -2529,20 +2553,27 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 /* Release notes need a little more width than a plain confirm dialog: their tables
    and headings would otherwise wrap after every other word. */
 #update-modal .modal { width: min(580px, 94vw); }
-/* About dialog: logo, name, version, copyright, all centered like a splash.
-   Its own (smaller than modal-narrow's default) width keeps the box from reading as
-   an oversized card for this little content. */
-.modal.about-box { max-width: 340px; }
-.about-body { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
-.about-logo { width: 48px; height: 48px; }
+/* About dialog: logo, name, version, copyright, all centered like a splash,
+   then a full-width column of ghost link buttons above a single primary
+   Close. Wide enough that the longest locale never wraps a button label. */
+.modal.about-box { max-width: min(460px, 92vw); }
+.about-body { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.about-logo { width: 64px; height: 64px; }
 .about-name { font-size: 16px; font-weight: 700; }
 .about-version { color: var(--muted); font-size: 13px; }
 .about-copy { color: var(--muted); font-size: 12px; }
-/* Project-page and Close differ enough in text length that a left-aligned row
-   reads lopsided; center the pair and give both the same floor width so the gap
-   from each button to its nearest modal edge comes out equal. */
-.about-box .modal-actions { justify-content: center; }
-.about-box .modal-actions > button { flex: 0 1 auto; min-width: 100px; }
+.about-links { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.about-link-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  text-align: left;
+}
+.about-link-btn svg { flex: 0 0 auto; }
+.about-box .modal-actions { justify-content: center; margin-top: 8px; }
+.about-box .modal-actions > button { flex: 1 1 auto; }
 /* Third-party license list: wider than a plain confirm dialog since every row
    carries a name, a version and a license id side by side. */
 #licenses-modal .modal { width: min(640px, 94vw); }
@@ -2852,8 +2883,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   display: flex; flex-direction: column; gap: 10px;
   flex: 1 1 auto; min-height: 0;
 }
-#settings-expert > .expert-top,
-#settings-expert > .expert-presets,
+#settings-expert > .expert-top-row,
 #settings-expert > .expert-filter-row,
 #settings-expert > #expert-tabs-bar { flex: 0 0 auto; }
 /* A floor, not 0: on a short window the tab bar + search alone filled the dialog and
@@ -3999,6 +4029,10 @@ body.drag-over::after {
 .export-row { display: flex; flex-wrap: wrap; row-gap: 6px; gap: 8px; }
 .export-row + .export-row { margin-top: 6px; }
 .export-row .ghost-btn { flex: 1 1 88px; }
+/* Its own label never wraps to a second line -- at the narrowest supported
+   width the row above still has room to wrap this button onto its own line
+   instead, unlike letting the text itself break. */
+#import-folder-btn { white-space: nowrap; }
 /* The SAME four columns and gap as .settings-btn-row right below it, so the check
    button comes out exactly as wide as Help and the auto-update switch lines up with
    the last button in that row; the bottom of the dialog reads as one block. */
@@ -5276,6 +5310,9 @@ body.noflag-customThemes .theme-edit-btn { display: none; }
   font-size: 12px;
 }
 .theme-hex.invalid { border-color: var(--danger); }
+/* A typed value outside its allowed range (the port field, so far). */
+.expert-num.invalid { border-color: var(--danger); }
+.expert-row-hint-danger { color: var(--danger); }
 .theme-var-reset { flex: 0 0 auto; padding: 4px; }
 .theme-var-reset svg { width: 13px; height: 13px; }
 .theme-var-reset:disabled { opacity: 0; pointer-events: none; }

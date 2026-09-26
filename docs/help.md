@@ -566,7 +566,9 @@ Tile menu, drag-to-reorder, hover lift, type badges, shadows, gradients, rounded
 corners, bold/uppercase/monospace text: behaviour and pure looks, all adjustable.
 Tile, folder, view-tab and message text on a coloured area picks black or white
 automatically; the expert menu can switch this off (always white) or move the
-brightness cutoff where black text starts.
+brightness cutoff where black text starts. White text on a light colour gets a
+dark shadow behind it so it stays readable; the expert menu can switch that
+shadow off or dial its strength.
 
 ### Media
 
@@ -725,9 +727,8 @@ it has run for the guess to mean something, both switchable off.
 
 Duplicate finder, trash (with its own retention setting), CSV/TXT export, and
 full backup export/import, all reached from the expert menu's data group. The
-duplicate finder also has shortcuts in the settings dialog, next to import
-and export, and in the header of All prompts, so it does not take opening the
-expert menu to find it.
+duplicate finder also has a shortcut in the header of All prompts, so it does
+not take opening the expert menu to find it.
 
 ### Trash & restoring tiles
 
@@ -1332,7 +1333,9 @@ System.
 **Kachel-Verhalten & -Aussehen**: Menü, Umsortieren, Hover-Anhebung, Optik. Die
 Schrift auf Kacheln, Ordnern, Ansichts-Reitern und Meldungen wählt automatisch
 Schwarz oder Weiß; im Expertenmenü lässt sich das abschalten (immer Weiß) oder
-die Helligkeitsschwelle für Schwarz verschieben.
+die Helligkeitsschwelle für Schwarz verschieben. Weiße Schrift auf einer hellen
+Farbe bekommt einen dunklen Schatten, damit sie lesbar bleibt; im Expertenmenü
+lässt sich der Schatten abschalten oder seine Stärke einstellen.
 
 **Tooltips**: Verzögerung, Ausblenden, Breite.
 
@@ -1459,9 +1462,8 @@ das Taskleistensymbol und zeigen ab einer eingestellten Schwelle „noch etwa �
 beides abschaltbar.
 
 **Datenwartung**: Duplikatfinder, Papierkorb, Import/Export. Der Duplikatfinder
-hat zusätzlich Abkürzungen im Einstellungsdialog, direkt neben Import und
-Export, und in der Kopfleiste von „Alle Prompts“, damit man dafür nicht erst
-das Expertenmenü öffnen muss.
+hat zusätzlich eine Abkürzung in der Kopfleiste von „Alle Prompts“, damit man
+dafür nicht erst das Expertenmenü öffnen muss.
 
 **Papierkorb & Kacheln wiederherstellen**: gelöschte Kacheln landen zuerst im
 Papierkorb (Aufbewahrung in Tagen, 0 = für immer). Wiederherstellen legt in die
