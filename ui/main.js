@@ -17121,10 +17121,22 @@ function bind() {
   // loop, which blurs and then refocuses the webview even though the user
   // never left the app. That blur/focus pair must never be treated as a real
   // window switch, or an active chain (locked or not) drops on every move.
+  // The flag only guards the blur/focus pair a move actually triggers: a
+  // plain mousedown on the drag region with no drag clears it again on
+  // mouseup, and a short timeout catches a drag that never reaches the
+  // webview's own mouseup at all, so a later real alt-tab is never masked.
   let windowMoving = false;
+  let windowMovingTimer = null;
+  const armWindowMoving = () => {
+    windowMoving = true;
+    clearTimeout(windowMovingTimer);
+    windowMovingTimer = setTimeout(() => { windowMoving = false; }, 1500);
+  };
+  const disarmWindowMoving = () => { windowMoving = false; clearTimeout(windowMovingTimer); };
   document.addEventListener("mousedown", (e) => {
-    if (e.target?.closest?.("[data-tauri-drag-region]")) windowMoving = true;
+    if (e.target?.closest?.("[data-tauri-drag-region]")) armWindowMoving();
   }, true);
+  window.addEventListener("mouseup", () => disarmWindowMoving());
   window.addEventListener("blur", () => {
     if (windowMoving) return; // the window is being moved, not switched away from
     if (chainMode && chainSel.length && !varsCleanup && !chainLock) setChainMode(false);
@@ -17132,7 +17144,7 @@ function bind() {
   // A latched chain survives the blur but starts fresh when we return: the
   // previous chain was already copied, so clear the picks (mode stays on).
   window.addEventListener("focus", () => {
-    if (windowMoving) { windowMoving = false; return; } // the move ended, chain untouched
+    if (windowMoving) { disarmWindowMoving(); return; } // the move ended, chain untouched
     if (chainLock && chainSel.length) { chainSel.length = 0; chainTexts.clear(); refreshChainUi(); }
   });
   // ==== 117/118: screenshot editor ====
