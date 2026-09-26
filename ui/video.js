@@ -13,6 +13,7 @@ import { APP_NAME } from "./brand.js";
 import { createColorPop } from "./colorpop.js";
 import { placePopoverAt } from "./popover.js";
 import { snapMove } from "./snap.js";
+import { exportNameIsValid } from "./exportName.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
 // switcher, so it comes from the brand rather than a hardcoded English word.
@@ -150,6 +151,7 @@ const VE = {
   lastExport: "",       // path of the file the last export produced
   destOverride: null,   // a full path picked via "Save as…" or typed by hand
   destDir: "",          // remembered folder from "Export to…", persisted across videos
+  exportNameOverride: null, // a plain file name typed into ve-export-name
   // Spatial zoom/pan of the preview picture itself, distinct from `zoom`
   // above (the timeline's pixels-per-second). 1 = fit-to-stage, the only level
   // that existed before; panPx is a plain CSS-pixel offset, independent of
@@ -1275,6 +1277,33 @@ function buildLiveOverlayEl(op, vb, reuse) {
     img.style.opacity = String(clamp(op.opacity, 5, 100) / 100);
     return img;
   }
+  if (op.kind === "video") {
+    // A missing source (the file moved or was deleted) never had a live
+    // preview to begin with, same as the export chain skipping it outright.
+    if (op.missing) return null;
+    const el = reuse instanceof HTMLVideoElement ? reuse : document.createElement("video");
+    el.className = "ve-live ve-live-video";
+    rectStyle(el, op.rect);
+    el.style.opacity = String(clamp(op.opacity, 5, 100) / 100);
+    // Muted in the preview even when the export mixes its audio in (see
+    // buildAudioChain) -- a second, unsynced audio source playing alongside
+    // the main clip would only ever sound wrong here.
+    el.muted = true;
+    el.playsInline = true;
+    const src = convertFileSrc(op.path);
+    if (el.dataset.ovSrc !== src) { el.src = src; el.dataset.ovSrc = src; }
+    // Its own clock starts counting from op.startMs, the same zero point
+    // videoOverlayEnable() uses for the export, and wraps once a looping
+    // overlay's footage runs out.
+    let t = (VE.playhead - op.startMs) / 1000;
+    if (op.loop && op.videoDurationMs) t %= op.videoDurationMs / 1000;
+    if (Number.isFinite(t) && t >= 0 && Math.abs(el.currentTime - t) > 0.3) {
+      try { el.currentTime = t; } catch {}
+    }
+    if (!videoEl.paused && t >= 0) { if (el.paused) el.play().catch(() => {}); }
+    else if (!el.paused) el.pause();
+    return el;
+  }
   if (op.kind === "frame") {
     const el = reuse instanceof HTMLElement && reuse.tagName === "DIV" && reuse.classList.contains("ve-live-frame") ? reuse : document.createElement("div");
     el.className = "ve-live ve-live-frame";
@@ -1347,10 +1376,21 @@ function buildLiveOverlayEl(op, vb, reuse) {
   if (op.kind === "spotlight") {
     const el = reuse instanceof HTMLElement && reuse.classList.contains("ve-live-spotlight") ? reuse : document.createElement("div");
     el.className = "ve-live ve-live-spotlight";
-    rectStyle(el, op.rect);
-    // Same "hole punched in an oversized shadow" trick .ve-rect-spotlight
-    // already uses for its edit outline, just at the overlay's own dim level.
-    el.style.boxShadow = `0 0 0 9999px rgba(0, 0, 0, ${clamp(op.dim, 0, 1).toFixed(2)})`;
+    // Covers the whole painted picture and cuts the clear rect out with
+    // clip-path instead of an oversized box-shadow spread -- some GPUs on
+    // real hardware silently drop a 9999px shadow spread during compositing,
+    // which left the dim invisible while the drag border still rendered fine.
+    // clip-path paints an ordinary shape, so it has no such spread to drop.
+    el.style.left = `${vb.left}px`;
+    el.style.top = `${vb.top}px`;
+    el.style.width = `${vb.width}px`;
+    el.style.height = `${vb.height}px`;
+    el.style.background = `rgba(0, 0, 0, ${clamp(op.dim, 0, 1).toFixed(2)})`;
+    const hx = op.rect.x * vb.scale, hy = op.rect.y * vb.scale;
+    const hw = op.rect.w * vb.scale, hh = op.rect.h * vb.scale;
+    const w = vb.width, h = vb.height;
+    el.style.clipPath = `polygon(evenodd, 0 0, 0 ${h}px, ${w}px ${h}px, ${w}px 0, 0 0, `
+      + `${hx}px ${hy}px, ${hx}px ${hy + hh}px, ${hx + hw}px ${hy + hh}px, ${hx + hw}px ${hy}px, ${hx}px ${hy}px)`;
     return el;
   }
   if (op.kind === "keys") {
@@ -2058,9 +2098,10 @@ document.addEventListener("pointerdown", (e) => {
   closeOvCtxPop();
 });
 
-function menuButton(label, onClick) {
+function menuButton(label, onClick, id) {
   const b = document.createElement("button");
   b.type = "button";
+  if (id) b.id = id;
   b.textContent = label;
   b.addEventListener("click", onClick);
   return b;
@@ -2105,8 +2146,8 @@ async function startAddVideo(x, y) {
   if (!picked) return;
   addVideoPop.innerHTML = "";
   addVideoPop.append(
-    menuButton(t("veAddAsOverlay"), () => { closeAddVideoPop(); createVideoOverlay(picked); }),
-    menuButton(t("veAddAsClip"), () => { showClipPositionMenu(picked, x, y); }),
+    menuButton(t("veAddAsOverlay"), () => { closeAddVideoPop(); createVideoOverlay(picked); }, "ve-add-video-as-overlay"),
+    menuButton(t("veAddAsClip"), () => { showClipPositionMenu(picked, x, y); }, "ve-add-video-as-clip"),
   );
   placePopoverAt(addVideoPop, x, y);
 }
@@ -3089,26 +3130,40 @@ function isLosslessCopy() {
 
 // ---------------------------------------------------------------- export
 
-// Three ways to land on a destination, checked in order -- a full path
-// the user typed or picked via "Save as…" wins outright; otherwise a
-// remembered "Export to…" folder keeps the auto filename but moves it there;
-// otherwise the original stem-based guess next to the source file.
-function destPath() {
-  const format = exportFormat();
+// The source file's own stem, with no folder and no extension -- the base
+// every auto-named export starts from.
+function sourceStem() {
   const cut = VE.src.replace(/[/\\]+$/, "");
   const dot = cut.lastIndexOf(".");
-  const stem = dot > cut.lastIndexOf("\\") && dot > cut.lastIndexOf("/") ? cut.slice(0, dot) : cut;
-  const auto = `${stem}-edit.${formatExt(format)}`;
+  const slash = Math.max(cut.lastIndexOf("\\"), cut.lastIndexOf("/"));
+  const stem = dot > slash ? cut.slice(0, dot) : cut;
+  return stem.replace(/^.*[\\/]/, "");
+}
+
+// The file-name field's own value, or the auto "<source stem>-edit" guess
+// when the user never touched it (or cleared it back to empty).
+function exportNameStem() {
+  const custom = (VE.exportNameOverride || "").trim();
+  return custom || `${sourceStem()}-edit`;
+}
+
+// Three ways to land on a destination, checked in order -- a full path
+// the user typed or picked via "Save as…" wins outright; otherwise a
+// remembered "Export to…" folder keeps the (auto or custom) filename but
+// moves it there; otherwise the original folder next to the source file.
+function destPath() {
   if (VE.destOverride) return VE.destOverride;
+  const format = exportFormat();
+  const name = `${exportNameStem()}.${formatExt(format)}`;
   // A file opened for editing from outside the app suggests ITS OWN folder
   // over the standing videoExportDir preference -- that preference is about
   // where every ordinary recording export lands, not about this one-off copy.
   const dir = VE.originDir || VE.destDir;
-  if (dir) {
-    const base = auto.replace(/^.*[\\/]/, "");
-    return `${dir.replace(/[\\/]+$/, "")}/${base}`;
-  }
-  return auto;
+  if (dir) return `${dir.replace(/[\\/]+$/, "")}/${name}`;
+  const cut = VE.src.replace(/[/\\]+$/, "");
+  const slash = Math.max(cut.lastIndexOf("\\"), cut.lastIndexOf("/"));
+  const srcDir = slash >= 0 ? cut.slice(0, slash) : "";
+  return srcDir ? `${srcDir}/${name}` : name;
 }
 
 // One explanatory note per format that needs one, kept as a lookup instead of
@@ -3162,12 +3217,32 @@ async function refreshExportSizeNote(format) {
   $("ve-export-note").textContent = notes.join(" ");
 }
 
+// The one place that decides whether Export/Copy-to-clipboard may be
+// clicked at all -- an invalid or empty file name joins the existing
+// "still exporting"/"ffmpeg missing" reasons rather than replacing them, so
+// none of those call sites has to know about the other two.
+function applyExportGate() {
+  const valid = exportNameIsValid($("ve-export-name").value);
+  $("ve-export-name").classList.toggle("invalid", !valid);
+  $("ve-export-name-hint").classList.toggle("hidden", valid);
+  const disabled = VE.exporting || !VE.ffmpeg;
+  // "Copy to clipboard" writes to its own throwaway temp name (clip_export_path)
+  // and never reads the file-name field at all, so a name the user has not
+  // finished typing yet must not block it the way it blocks the real export.
+  $("ve-export-start").disabled = disabled || !valid;
+  $("ve-export-clip").disabled = disabled;
+  return valid;
+}
+
 function updateExportNote() {
   const format = exportFormat();
   $("ve-export-note").textContent = buildExportNoteBase(format).join(" ");
+  $("ve-export-ext").textContent = `.${formatExt(format)}`;
   // Never overwrite what the user is actively typing into the field itself.
+  if (document.activeElement !== $("ve-export-name")) $("ve-export-name").value = exportNameStem();
   if (document.activeElement !== $("ve-export-dest")) $("ve-export-dest").value = destPath();
   $("ve-export-dest").title = destPath();
+  applyExportGate();
   // None of the three silent formats read the quality/bitrate setting at all.
   $("ve-export-quality").disabled = SILENT_FORMATS.has(format);
   updateAudioLabels();
@@ -3313,8 +3388,7 @@ async function startExport(toClipboard) {
     }
   } finally {
     VE.exporting = false;
-    $("ve-export-start").disabled = false;
-    $("ve-export-clip").disabled = false;
+    applyExportGate();
     $("ve-export-cancel").classList.add("hidden");
     $("ve-export-eta").textContent = "";
   }
@@ -3360,8 +3434,7 @@ $("ve-ffmpeg-get").addEventListener("click", async (e) => {
     await invoke("download_ffmpeg");
     VE.ffmpeg = true;
     $("ve-ffmpeg-warn").classList.add("hidden");
-    $("ve-export-start").disabled = false;
-    $("ve-export-clip").disabled = false;
+    applyExportGate();
     $("ve-still").disabled = false;
     toast(t("ffmpegDownloadDone"));
     await loadRecording(VE.src);
@@ -3688,6 +3761,18 @@ for (const id of ["ve-export-format", "ve-export-quality"]) {
   });
 }
 
+// A plain file name, checked live as it is typed -- an override here
+// wins over the auto "<source stem>-edit" guess but stays under the full-path
+// field below, same as picking a folder (destPath() reads it through
+// exportNameStem()). Typing a full path directly into that field still takes
+// over completely, same as before.
+$("ve-export-name").addEventListener("input", () => {
+  VE.exportNameOverride = $("ve-export-name").value;
+  VE.destOverride = null;
+  $("ve-export-dest").value = destPath();
+  $("ve-export-dest").title = destPath();
+  applyExportGate();
+});
 // The target field is a real input now -- typing a full path directly
 // is itself a manual override, same as picking one via the dialog below.
 $("ve-export-dest").addEventListener("change", () => {
@@ -3700,6 +3785,11 @@ $("ve-export-choose-file").addEventListener("click", async () => {
   const picked = await invoke("pick_export_dest", { defaultName }).catch(() => null);
   if (!picked) return;
   VE.destOverride = picked;
+  // Keep the plain-name field showing what the dialog actually picked,
+  // rather than freezing on whatever it said the moment before.
+  const pickedBase = picked.replace(/^.*[\\/]/, "");
+  const dot = pickedBase.lastIndexOf(".");
+  VE.exportNameOverride = dot > 0 ? pickedBase.slice(0, dot) : pickedBase;
   updateExportNote();
 });
 $("ve-export-choose-folder").addEventListener("click", async () => {
@@ -3901,10 +3991,12 @@ function resetForNewSource() {
   VE.playhead = 0;
   VE.dirty = false;
   VE.lastExport = "";
-  // A full manual "Save as…" path names THIS source's file, so a newly
-  // loaded video starts fresh with it; the remembered destination FOLDER
-  // (VE.destDir) is a standing preference and survives across videos.
+  // A full manual "Save as…" path (or a typed file name) names THIS source's
+  // file, so a newly loaded video starts fresh with both; the remembered
+  // destination FOLDER (VE.destDir) is a standing preference and survives
+  // across videos.
   VE.destOverride = null;
+  VE.exportNameOverride = null;
   // Mic starts muted on every newly loaded video, same reasoning as the
   // module-level default above.
   VE.audio = { sys: { mute: false, vol: 100 }, mic: { mute: true, vol: 100 } };

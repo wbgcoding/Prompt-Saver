@@ -11072,6 +11072,18 @@ VIDEO_PROBE = """
         errs.push(btnId + ' did not produce a .' + liveClass + ' element in the live overlay preview');
       }
     }
+    // 526: an inserted "video" overlay (a picture-in-picture clip, added
+    // through "Add a video" -> "As an overlay" rather than one of the plain
+    // ADD AN OVERLAY buttons above) used to have no live-preview branch at
+    // all in buildLiveOverlayEl -- it rendered fine in export but never
+    // showed anything in the editor while working on it.
+    document.getElementById('ve-add-video').click();
+    await sleep(30);
+    document.getElementById('ve-add-video-as-overlay').click();
+    await sleep(30);
+    if (!liveLayer.querySelector('.ve-live-video')) {
+      errs.push('a "video" overlay did not produce a .ve-live-video element in the live overlay preview');
+    }
     // Every overlay just defaulted to the clip's [0, ve-duration] range --
     // seeking to the exact start must still keep them all visible (inclusive
     // boundary), proving the gate really reads the range rather than always
@@ -11080,11 +11092,70 @@ VIDEO_PROBE = """
     await sleep(30);
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home' }));
     await sleep(30);
-    if (liveLayer.children.length !== overlayKinds.length) {
+    if (liveLayer.children.length !== overlayKinds.length + 1) {
       errs.push('live overlay preview lost overlays at the exact start of their range (playhead 0)');
     }
     document.getElementById('ve-tab-overlays').click();
     await sleep(30);
+
+    // ---- 524: the spotlight dim must be real painted geometry, not a huge
+    // box-shadow spread some GPUs drop on real hardware. Select the spotlight
+    // row so its edit outline (sized to op.rect, same transform the live
+    // preview uses) gives a ground-truth clear rect. The live layer has
+    // pointer-events: none (it is never interactive), so elementFromPoint
+    // cannot see it -- instead read the actual painted shape back from the
+    // computed clip-path: the dim element must cover far more than the clear
+    // rect, and the punched-out hole in its clip-path must line up with that
+    // same rect. A plain box-shadow spread sets no clip-path and keeps the
+    // element itself sized to op.rect, so this fails on the old code.
+    {
+      const spotlightRowIdx = overlayKinds.findIndex(([id]) => id === 've-ov-add-spotlight');
+      const rowsNow = [...document.querySelectorAll('#ve-ov-list .ve-ov-row')];
+      const spotRow = rowsNow[spotlightRowIdx];
+      if (!spotRow) {
+        errs.push('524: could not find the spotlight overlay row to select it');
+      } else {
+        spotRow.click();
+        await sleep(30);
+        const clearEl = document.querySelector('.ve-rect-spotlight');
+        const liveEl = document.querySelector('.ve-live-spotlight');
+        if (!clearEl || !liveEl) {
+          errs.push('524: spotlight edit outline or live preview element is missing');
+        } else {
+          const clear = clearEl.getBoundingClientRect();
+          const live = liveEl.getBoundingClientRect();
+          const bg = getComputedStyle(liveEl).backgroundColor;
+          const parts = bg.match(/rgba?\\(([^)]+)\\)/);
+          const nums = parts ? parts[1].split(',').map((s) => parseFloat(s.trim())) : [];
+          const alpha = nums.length > 3 ? nums[3] : (bg === 'transparent' ? 0 : 1);
+          if (Math.abs(alpha - 0.6) > 0.05) {
+            errs.push('524: spotlight live dim background alpha is ' + alpha + ', expected about 0.6 (op.dim)');
+          }
+          if (live.width < clear.width + 20 || live.height < clear.height + 20) {
+            errs.push('524: the spotlight dim element is not larger than its own clear rect (no dim area outside it)');
+          }
+          const clipPath = getComputedStyle(liveEl).clipPath;
+          if (!clipPath || clipPath === 'none') {
+            errs.push('524: the spotlight dim has no clip-path, so it cannot punch a clear hole in real geometry');
+          } else {
+            const pts = [...clipPath.matchAll(/([\\d.]+)px\\s+([\\d.]+)px/g)].map((m) => [parseFloat(m[1]), parseFloat(m[2])]);
+            const hole = pts.slice(5, 9);
+            if (hole.length < 4) {
+              errs.push('524: the spotlight clip-path does not carry a separate hole shape: ' + clipPath);
+            } else {
+              const xs = hole.map((p) => p[0]), ys = hole.map((p) => p[1]);
+              const holeLeft = live.left + Math.min(...xs), holeTop = live.top + Math.min(...ys);
+              const holeW = Math.max(...xs) - Math.min(...xs), holeH = Math.max(...ys) - Math.min(...ys);
+              const near = (a, b) => Math.abs(a - b) <= 3;
+              if (!near(holeLeft, clear.left) || !near(holeTop, clear.top) || !near(holeW, clear.width) || !near(holeH, clear.height)) {
+                errs.push('524: the clip-path hole (' + [holeLeft, holeTop, holeW, holeH].map((n) => n.toFixed(1)) +
+                  ') does not line up with the clear rect (' + [clear.left, clear.top, clear.width, clear.height].map((n) => n.toFixed(1)) + ')');
+              }
+            }
+          }
+        }
+      }
+    }
 
     rawKeyCheck('overlays tab');
     sideScan(errs, 'overlays tab');
@@ -12052,6 +12123,51 @@ VIDEO_PROBE = """
     if (!destInput.value.startsWith('C:\\\\Videos\\\\Exports')) {
       errs.push('"Export to..." did not build the path from the picked folder');
     }
+
+    // ---- the plain "File name" field, separate from the full path above --
+    // a valid custom name flows straight into the export call, an invalid
+    // one shows an inline hint and disables Export, but leaves Copy to
+    // clipboard alone since that one never reads this field ----
+    const nameInput = document.getElementById('ve-export-name');
+    const nameHint = document.getElementById('ve-export-name-hint');
+    nameInput.value = 'Demo 1';
+    nameInput.dispatchEvent(new Event('input'));
+    await sleep(30);
+    if (!destInput.value.endsWith('Demo 1.mp4')) {
+      errs.push('typing "Demo 1" into the file-name field did not update the export destination: ' + destInput.value);
+    }
+    if (!nameHint.classList.contains('hidden')) {
+      errs.push('a valid file name still shows the invalid-name hint');
+    }
+    window.__SMOKE_ARGS__ = [];
+    document.getElementById('ve-export-start').click();
+    await sleep(150);
+    const nameExportCall = (window.__SMOKE_ARGS__ || []).find(([cmd]) => cmd === 'export_video');
+    if (!nameExportCall || !String(nameExportCall[1].req.dest_path).endsWith('Demo 1.mp4')) {
+      errs.push('export_video was not called with the typed file name');
+    }
+    nameInput.value = 'a/b';
+    nameInput.dispatchEvent(new Event('input'));
+    await sleep(30);
+    if (nameHint.classList.contains('hidden')) {
+      errs.push('an invalid file name ("a/b") does not show the inline hint');
+    }
+    if (!nameInput.classList.contains('invalid')) {
+      errs.push('an invalid file name does not mark the field itself invalid');
+    }
+    if (!document.getElementById('ve-export-start').disabled) {
+      errs.push('an invalid file name does not disable Export');
+    }
+    // Copy to clipboard writes to its own throwaway temp name and never
+    // reads this field, so an invalid name here must not block it.
+    if (document.getElementById('ve-export-clip').disabled) {
+      errs.push('an invalid file name wrongly disables Copy to clipboard');
+    }
+    // Leave the field valid again so the probe steps below are not blocked
+    // by this one's own leftover invalid state.
+    nameInput.value = 'ps-smoke-recording-edit';
+    nameInput.dispatchEvent(new Event('input'));
+    await sleep(30);
 
     // ---- 503: a destination the backend does not recognize (e.g. a file
     // opened from outside the app) opens the export-folder picker and

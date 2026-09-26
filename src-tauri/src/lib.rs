@@ -27998,11 +27998,20 @@ fn probe_recording_blocking(ffprobe: &Path, src: &Path) -> Result<RecordingProbe
 // captured one (the setting was off, or it predates this feature). Read via
 // a command like every other file access the frontend makes, never a direct
 // filesystem call from the webview.
+// The one place a key-sidecar JSON file is turned into a KeySidecar --
+// shared by the actual read command below and by the copy-safety check that
+// runs before a sidecar follows its recording into an editor working copy,
+// so both ever accept exactly the same shape of file.
+#[cfg(windows)]
+fn parse_key_sidecar(data: &str) -> Option<keylog::KeySidecar> {
+    serde_json::from_str(data).ok()
+}
+
 #[cfg(windows)]
 #[tauri::command]
 fn read_key_sidecar(path: String) -> Option<keylog::KeySidecar> {
     let data = fs::read_to_string(keylog::sidecar_path(Path::new(&path))).ok()?;
-    serde_json::from_str(&data).ok()
+    parse_key_sidecar(&data)
 }
 #[cfg(not(windows))]
 #[tauri::command]
@@ -28483,6 +28492,56 @@ fn export_output_to_remember(result: &Result<String, String>) -> Option<PathBuf>
 // recording back next to itself" case. Everything is compared canonicalized
 // so a relative segment or a different letter case cannot be used to step
 // outside the folder that was actually picked.
+// A name typed into the export panel's "File name" field must stay one
+// path segment -- none of Windows' own reserved filename characters, and no
+// ".." (which needs no separator of its own to still mean "walk up a level"
+// on top of a picked/typed folder). Empty or "."/".." alone are refused the
+// same way. The frontend already blocks all of this live as the field is
+// typed; this is the same rule re-applied to whatever dest_path arrives.
+// Windows reserved device names, matched case-insensitively against the part
+// of the stem before its first dot -- "CON.take2" is just as reserved as
+// "CON" itself. Kept in sync by hand with ui/exportName.js's own copy.
+const EXPORT_RESERVED_STEMS: [&str; 22] = [
+    "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4",
+    "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+];
+
+fn export_file_name_is_valid(name: &str) -> bool {
+    let trimmed = name.trim();
+    if trimmed.is_empty() || trimmed == "." || trimmed == ".." {
+        return false;
+    }
+    // A bare ".." inside a longer name (e.g. "v1..2") cannot climb anywhere --
+    // it only means "walk up a level" without separators of its own around
+    // it, which the exact "." / ".." checks above already cover on their own.
+    if trimmed.chars().any(|c| matches!(c, '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|') || (c as u32) < 0x20) {
+        return false;
+    }
+    // Trailing whitespace is already gone after the trim above; a trailing
+    // dot survives it and Windows silently drops it from the real file name,
+    // so it gets its own check here.
+    if trimmed.ends_with('.') {
+        return false;
+    }
+    let first_segment = trimmed.split('.').next().unwrap_or("").to_ascii_uppercase();
+    !EXPORT_RESERVED_STEMS.contains(&first_segment.as_str())
+}
+
+// Exporting a file over itself would ask ffmpeg to read and overwrite the
+// same file mid-run; refused outright rather than relying on unique_dest_path
+// to save it by silently picking a different name. dest need not exist yet
+// (that is the normal case for a fresh export), so only its parent folder is
+// canonicalized; the file name itself is compared case-insensitively, the way
+// Windows treats two names that differ only in case as the same file.
+fn export_dest_is_same_as_src(dest: &Path, src: &Path) -> bool {
+    let Ok(src_canon) = fs::canonicalize(src) else { return false };
+    let dest_parent = dest.parent().unwrap_or_else(|| Path::new("."));
+    let Ok(dest_parent_canon) = fs::canonicalize(dest_parent) else { return false };
+    let Some(dest_name) = dest.file_name() else { return false };
+    let combined = dest_parent_canon.join(dest_name);
+    combined.to_string_lossy().eq_ignore_ascii_case(&src_canon.to_string_lossy())
+}
+
 // Split from `export_dest_dir_is_authorized` below so the actual decision is
 // a plain function of paths and can be unit-tested without a running app.
 fn export_dest_dir_is_authorized_against(
@@ -28601,6 +28660,18 @@ async fn export_video(app: AppHandle, state: State<'_, Db>, req: ExportRequest) 
         return Err(ffmpeg_error_json(FfmpegErrorKey::Missing, None, ""));
     }
     let dst = PathBuf::from(&req.dest_path);
+    // The export panel's own "File name" field types straight into
+    // req.dest_path's own file name -- checked again here rather than
+    // trusted from the frontend's own matching validation, same reasoning as
+    // export_dest_dir_is_authorized just below: the path ultimately
+    // comes from user input.
+    let file_name_ok = dst.file_name().and_then(|n| n.to_str()).is_some_and(export_file_name_is_valid);
+    if !file_name_ok {
+        return Err("export destination not recognized".to_string());
+    }
+    if export_dest_is_same_as_src(&dst, &src) {
+        return Err("export destination not recognized".to_string());
+    }
     if !export_dest_dir_is_authorized(&app, &state, &dst, &src) {
         return Err("export destination not recognized".to_string());
     }
@@ -29139,6 +29210,47 @@ enum OpenEditResult {
     Video { copied_path: String, origin_dir: String, name: String },
 }
 
+// A video opened this way is a COPY (see open_file_in_editor below), and
+// has_keys_sidecar/read_key_sidecar only ever look for "<video>.keys.json"
+// right beside whatever path the editor was actually handed -- without this,
+// reopening a past recording through "open an existing file" (the composer
+// button's right-click, or a library attachment) silently lost its typed
+// keys even though the original recording's own sidecar was still sitting
+// untouched next to the source file. A source with no sidecar (the setting
+// was off, or the recording predates this feature) leaves the copy without
+// one too, same as it always did.
+// A ceiling on the key-sidecar JSON this app will ever copy along with a
+// working copy. EVENTS_CAP already bounds how large a sidecar this app's own
+// capture can produce, so a file well past that is either corrupted or from
+// somewhere else entirely -- either way not worth reading into memory just to
+// carry it into a throwaway editor folder.
+#[cfg(windows)]
+const KEY_SIDECAR_MAX_COPY_BYTES: u64 = 16 * 1024 * 1024;
+
+// Whether `path` is safe to carry along as a key-overlay sidecar: present,
+// under the size ceiling, and parseable as the same KeySidecar shape
+// read_key_sidecar itself expects. Split out as its own pure function (no
+// destination involved) so a test can prove an oversized or malformed file is
+// rejected without going through open_file_in_editor's whole command.
+#[cfg(windows)]
+fn key_sidecar_is_safe_to_copy(path: &Path) -> bool {
+    let Ok(meta) = fs::metadata(path) else { return false };
+    if !meta.is_file() || meta.len() > KEY_SIDECAR_MAX_COPY_BYTES {
+        return false;
+    }
+    fs::read_to_string(path).ok().and_then(|data| parse_key_sidecar(&data)).is_some()
+}
+
+#[cfg(windows)]
+fn copy_keys_sidecar_alongside(src: &Path, dest: &Path) {
+    let src_sidecar = keylog::sidecar_path(src);
+    if key_sidecar_is_safe_to_copy(&src_sidecar) {
+        let _ = fs::copy(&src_sidecar, keylog::sidecar_path(dest));
+    }
+}
+#[cfg(not(windows))]
+fn copy_keys_sidecar_alongside(_src: &Path, _dest: &Path) {}
+
 // Right-click "Open a file in the editor" (the screenshot/record buttons, and
 // an image/video attachment in the library) all land here. The original file
 // is never touched: an image is read into a data URL straight into the same
@@ -29186,6 +29298,7 @@ async fn open_file_in_editor(app: AppHandle, state: State<'_, Db>, path: String)
             fs::create_dir_all(&work_dir).map_err(|e| e.to_string())?;
             let dest = work_dir.join(format!("{base}.{ext}"));
             fs::copy(&p, &dest).map_err(|e| e.to_string())?;
+            copy_keys_sidecar_alongside(&p, &dest);
             Ok(OpenEditResult::Video { copied_path: dest.to_string_lossy().to_string(), origin_dir, name })
         }
         _ => Err("not-media".to_string()),
@@ -38027,6 +38140,68 @@ mod tests {
     }
 
     #[test]
+    fn export_file_name_is_valid_accepts_a_plain_name() {
+        assert!(export_file_name_is_valid("Demo 1"));
+        assert!(export_file_name_is_valid("clip-edit"));
+        assert!(export_file_name_is_valid("My Video v1.2.3"));
+    }
+
+    // A bare ".." only means "walk up a level" when it stands alone with
+    // separators around it -- inside a longer name it is just two dots and
+    // must stay legal, unlike a full ".." path segment.
+    #[test]
+    fn export_file_name_is_valid_accepts_two_dots_inside_a_longer_name() {
+        assert!(export_file_name_is_valid("v1..2"));
+        assert!(export_file_name_is_valid("a..b"));
+    }
+
+    #[test]
+    fn export_file_name_is_valid_rejects_a_separator_or_a_lone_dot_segment() {
+        assert!(!export_file_name_is_valid("a/b"));
+        assert!(!export_file_name_is_valid("a\\b"));
+        assert!(!export_file_name_is_valid("."));
+        assert!(!export_file_name_is_valid(".."));
+        assert!(!export_file_name_is_valid("..\\evil"));
+        assert!(!export_file_name_is_valid(""));
+        assert!(!export_file_name_is_valid("   "));
+        assert!(!export_file_name_is_valid("a:b"));
+        assert!(!export_file_name_is_valid("a*b"));
+        assert!(!export_file_name_is_valid("a?b"));
+        assert!(!export_file_name_is_valid("a\"b"));
+        assert!(!export_file_name_is_valid("a<b"));
+        assert!(!export_file_name_is_valid("a>b"));
+        assert!(!export_file_name_is_valid("a|b"));
+        assert!(!export_file_name_is_valid("a\u{7}b"));
+    }
+
+    #[test]
+    fn export_file_name_is_valid_rejects_a_trailing_dot_or_a_reserved_device_name() {
+        assert!(!export_file_name_is_valid("clip."));
+        assert!(!export_file_name_is_valid("CON"));
+        assert!(!export_file_name_is_valid("con"));
+        assert!(!export_file_name_is_valid("Con.take2"));
+        assert!(!export_file_name_is_valid("LPT1"));
+        // Only an exact reserved segment is refused, not merely a prefix.
+        assert!(export_file_name_is_valid("Console"));
+    }
+
+    #[test]
+    fn export_dest_is_same_as_src_matches_same_file_and_ignores_case() {
+        let root = std::env::temp_dir().join(format!("ps-exportdest-samesrc-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let src = root.join("clip.mp4");
+        std::fs::write(&src, b"x").unwrap();
+        let same_case = root.join("CLIP.mp4");
+        let other = root.join("clip-edit.mp4");
+
+        assert!(export_dest_is_same_as_src(&src, &src));
+        assert!(export_dest_is_same_as_src(&same_case, &src));
+        assert!(!export_dest_is_same_as_src(&other, &src));
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn export_dest_dir_accepts_the_picked_folder_and_rejects_anywhere_else() {
         let root = std::env::temp_dir().join(format!("ps-exportdesttest-{}", std::process::id()));
         let picked = root.join("picked");
@@ -41096,6 +41271,64 @@ mod tests {
         let video = PathBuf::from("C:/recs/rec-2026-01-01-00-00-00.mp4");
         let foreign_sidecar = PathBuf::from("C:/recs/rec-someone-elses-take.mic.wav");
         assert!(!is_own_mic_sidecar(&video, &foreign_sidecar), "a sidecar for a different recording must not pass");
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn copy_keys_sidecar_alongside_brings_the_sidecar_to_the_open_editor_copy() {
+        let dir = std::env::temp_dir().join(format!("ps-openedit-keys-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = dir.join("rec-x.mp4");
+        let dest = dir.join("rec-x-copy.mp4");
+        fs::write(&src, b"video").unwrap();
+        fs::write(keylog::sidecar_path(&src), br#"{"events":[],"gaps":[]}"#).unwrap();
+        copy_keys_sidecar_alongside(&src, &dest);
+        assert!(keylog::sidecar_path(&dest).is_file(), "open_file_in_editor's copy must bring the key-overlay sidecar with it");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn copy_keys_sidecar_alongside_skips_a_sidecar_that_does_not_parse() {
+        let dir = std::env::temp_dir().join(format!("ps-openedit-keys-bad-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = dir.join("rec-x.mp4");
+        let dest = dir.join("rec-x-copy.mp4");
+        fs::write(&src, b"video").unwrap();
+        fs::write(keylog::sidecar_path(&src), b"not json at all").unwrap();
+        copy_keys_sidecar_alongside(&src, &dest);
+        assert!(!keylog::sidecar_path(&dest).exists(), "a sidecar that is not the expected shape must never be carried along");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn copy_keys_sidecar_alongside_skips_a_sidecar_past_the_size_ceiling() {
+        let dir = std::env::temp_dir().join(format!("ps-openedit-keys-huge-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = dir.join("rec-x.mp4");
+        let dest = dir.join("rec-x-copy.mp4");
+        fs::write(&src, b"video").unwrap();
+        // Well past KEY_SIDECAR_MAX_COPY_BYTES, and never actually parsed --
+        // the size check must turn it away before the file is even read.
+        let oversized = vec![b' '; (KEY_SIDECAR_MAX_COPY_BYTES + 1) as usize];
+        fs::write(keylog::sidecar_path(&src), &oversized).unwrap();
+        copy_keys_sidecar_alongside(&src, &dest);
+        assert!(!keylog::sidecar_path(&dest).exists(), "an oversized sidecar must never be carried along");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn copy_keys_sidecar_alongside_is_a_no_op_when_the_source_never_captured_keys() {
+        let dir = std::env::temp_dir().join(format!("ps-openedit-nokeys-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = dir.join("rec-x.mp4");
+        let dest = dir.join("rec-x-copy.mp4");
+        fs::write(&src, b"video").unwrap();
+        copy_keys_sidecar_alongside(&src, &dest);
+        assert!(!keylog::sidecar_path(&dest).exists(), "no sidecar to begin with must not conjure one for the copy");
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

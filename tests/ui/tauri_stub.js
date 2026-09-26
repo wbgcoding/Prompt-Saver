@@ -478,10 +478,16 @@ const RESULTS = {
   video_folder_file_durations_ms: (a) => (a.names || []).map(() => 5000),
   check_export_disk_space_batch: () => window.__EXPORT_DISK_WARN__ || null,
   export_recordings_batch: (a) => { window.__BATCH_EXPORT_CALLED__ = a; return { ok: (a.items || []).length, failed: 0 }; },
+  // 527: has_keys_sidecar/read_key_sidecar let a probe exercise the "keys"
+  // overlay end to end instead of only ever hitting its veOvKeysNoData
+  // branch -- window.__KEY_SIDECAR__ (default: none) is the fixture read_key_sidecar
+  // hands back, a plain {hold_ms, events} object shaped like keylog::KeySidecar.
   probe_recording: () => ({
     duration_ms: 600000, fps: 30, width: 1920, height: 1080,
     has_audio: true, has_mic_track: true, mic_sidecar: "",
+    has_keys_sidecar: !!window.__KEY_SIDECAR__,
   }),
+  read_key_sidecar: () => window.__KEY_SIDECAR__ || null,
   // 416: the "Add a video" flow's own ffprobe check. window.__EXTRA_VIDEO_FAIL__
   // (default: unset) lets one probe step exercise the rejection path -- the
   // same JSON envelope shape a real ffmpeg-error rejection uses -- without

@@ -589,6 +589,10 @@ the video editor and the introduction tour ship on).
   entirely, exporting into a self-cleaning temporary copy (removed after an
   hour, and again on the next launch, both adjustable) and putting the
   finished file straight on the clipboard.
+- **The video editor's export destination now has its own file name field**,
+  separate from the folder path, with the extension shown beside it. A name
+  with a path separator or a reserved Windows character is rejected on the
+  spot, with Export and Copy-to-clipboard disabled until it is fixed.
 
 ### Improved
 
@@ -1224,6 +1228,18 @@ the video editor and the introduction tour ship on).
   removed.** The window now shows a proper title bar above the search field,
   and each remembered search can be deleted on its own or cleared all at
   once.
+- **A recording's typed keys went missing from the keyboard overlay after
+  reopening it through "Open an existing file"** (the record button's
+  right-click, or a library video attachment). That path works on a
+  throwaway copy, and only the copy of the video itself used to travel
+  there, never its key-overlay data. Reopening a recording this way now
+  brings that data along too.
+- **The video editor's inserted-video overlay (a picture-in-picture clip
+  added through "Add a video") showed nothing at all in the live preview**
+  while you worked on it, although it exported correctly; every other
+  overlay kind had its own live-preview drawing, this one never did. It now
+  plays in the preview too, muted, starting and looping in step with its own
+  time range.
 
 ### Security
 

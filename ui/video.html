@@ -300,6 +300,14 @@
           <p id="ve-export-note" class="modal-hint"></p>
 
           <h3 class="ve-h" data-i18n="veExportTarget">Target file</h3>
+          <label class="field">
+            <span data-i18n="veExportName">File name</span>
+            <div class="ve-export-name-row">
+              <input id="ve-export-name" class="modal-input" type="text" />
+              <span id="ve-export-ext" class="ve-muted"></span>
+            </div>
+          </label>
+          <p id="ve-export-name-hint" class="modal-hint hidden" data-i18n="veExportNameInvalid">Use a name without \ / : * ? " &lt; &gt; |.</p>
           <input id="ve-export-dest" class="modal-input ve-export-dest-input" type="text" data-i18n-title="veExportDestTip" />
           <div class="export-row">
             <button id="ve-export-choose-file" class="ghost-btn" type="button" data-i18n="veExportChooseFile" data-i18n-title="veExportChooseFileTip">Save as…</button>
