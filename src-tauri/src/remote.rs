@@ -60,13 +60,15 @@ fn remote_port(settings: &Settings) -> u16 {
         .map(|v| v.clamp(1024.0, 65535.0) as u16)
         .unwrap_or(DEFAULT_PORT)
 }
+// 0 means no throttle at all (the slider's rightmost stop); every other
+// stored value still clamps into the normal 1..=100000 range.
 fn remote_rate_limit(settings: &Settings) -> u32 {
     settings
         .ui_values
         .get("remoteRateLimit")
         .copied()
         .filter(|v| v.is_finite())
-        .map(|v| v.clamp(1.0, 100_000.0))
+        .map(|v| if v <= 0.0 { 0.0 } else { v.clamp(1.0, 100_000.0) })
         .unwrap_or(DEFAULT_RATE_LIMIT) as u32
 }
 fn split_ranges(s: &str) -> Vec<String> {
@@ -257,8 +259,13 @@ impl RemoteGuard {
     }
 
     // true = still within the per-minute allowance for this peer (and it was
-    // just counted); false = the request is over the limit.
+    // just counted); false = the request is over the limit. A limit of 0
+    // means the setting's unlimited stop: no throttle at all, and the peer's
+    // own window never even needs tracking.
     fn check_rate(&self, ip: IpAddr, limit: u32) -> bool {
+        if limit == 0 {
+            return true;
+        }
         let mut peers = self.peers.lock().unwrap_or_else(|e| e.into_inner());
         let entry = peers.entry(ip).or_default();
         if entry.window_start.elapsed() >= Duration::from_secs(RATE_WINDOW_SECS) {
@@ -266,7 +273,7 @@ impl RemoteGuard {
             entry.count_in_window = 0;
         }
         entry.count_in_window += 1;
-        entry.count_in_window <= limit.max(1)
+        entry.count_in_window <= limit
     }
 
     // Returns true exactly when this failure is the one that just triggered
@@ -985,6 +992,27 @@ mod tests {
             assert!(guard.check_rate(ip, 5));
         }
         assert!(!guard.check_rate(ip, 5));
+    }
+
+    // The slider's rightmost "unlimited" stop is stored as 0, and that must
+    // skip the throttle entirely -- old code always applied a cap here.
+    #[test]
+    fn a_zero_limit_never_throttles() {
+        let guard = RemoteGuard::new();
+        let ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+        for _ in 0..1000 {
+            assert!(guard.check_rate(ip, 0));
+        }
+    }
+
+    #[test]
+    fn a_real_limit_still_blocks_the_request_past_it() {
+        let guard = RemoteGuard::new();
+        let ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+        for _ in 0..60 {
+            assert!(guard.check_rate(ip, 60));
+        }
+        assert!(!guard.check_rate(ip, 60), "the 61st request must be blocked");
     }
 
     #[test]

@@ -2191,7 +2191,7 @@ export const I18N = {
     remoteApiBadgeOff: "Turn off",
     remoteApiReapplyNeeded: "Turn remote access off and on again for this to take effect.",
     tipRemotePort: "The TCP port the local remote-access receiver listens on while it is running.",
-    tipRemoteRateLimit: "How many requests per minute the local remote-access receiver accepts from one address before it slows down.",
+    tipRemoteRateLimit: "How many requests per minute the local remote-access receiver accepts from one address before it slows down. The rightmost position removes the limit; the lockout after wrong passwords stays active.",
   },
   de: {
     settings: "Einstellungen",
@@ -4379,7 +4379,7 @@ export const I18N = {
     remoteApiBadgeOff: "Ausschalten",
     remoteApiReapplyNeeded: "Fernzugriff einmal aus- und wieder einschalten, damit das wirkt.",
     tipRemotePort: "Der TCP-Port, auf dem der lokale Fernzugriff lauscht, waehrend er laeuft.",
-    tipRemoteRateLimit: "Wie viele Anfragen pro Minute der lokale Fernzugriff von einer Adresse annimmt, bevor er sie drosselt.",
+    tipRemoteRateLimit: "Wie viele Anfragen pro Minute der lokale Fernzugriff von einer Adresse annimmt, bevor er sie drosselt. Ganz rechts entfällt die Grenze; die Sperre nach falschen Passwörtern bleibt aktiv.",
   },
   es: {
     flagChainPrompts: "Encadenar prompts",
@@ -6567,7 +6567,7 @@ export const I18N = {
     remoteApiBadgeOff: "Apagar",
     remoteApiReapplyNeeded: "Apaga y vuelve a encender el acceso remoto para que esto tenga efecto.",
     tipRemotePort: "El puerto TCP en el que escucha el acceso remoto local mientras esta activo.",
-    tipRemoteRateLimit: "Cuantas solicitudes por minuto acepta el acceso remoto local desde una direccion antes de frenarla.",
+    tipRemoteRateLimit: "Cuantas solicitudes por minuto acepta el acceso remoto local desde una direccion antes de frenarla. La posicion mas a la derecha elimina el limite; el bloqueo tras contrasenas incorrectas sigue activo.",
   },
   it: {
     flagChainPrompts: "Concatenazione prompt",
@@ -8755,7 +8755,7 @@ export const I18N = {
     remoteApiBadgeOff: "Disattiva",
     remoteApiReapplyNeeded: "Disattiva e riattiva l'accesso remoto perche questo abbia effetto.",
     tipRemotePort: "La porta TCP su cui resta in ascolto l'accesso remoto locale mentre e attivo.",
-    tipRemoteRateLimit: "Quante richieste al minuto accetta l'accesso remoto locale da un indirizzo prima di rallentarlo.",
+    tipRemoteRateLimit: "Quante richieste al minuto accetta l'accesso remoto locale da un indirizzo prima di rallentarlo. La posizione piu a destra rimuove il limite; il blocco dopo password errate resta attivo.",
   },
   pt: {
     flagChainPrompts: "Encadear prompts",
@@ -10943,7 +10943,7 @@ export const I18N = {
     remoteApiBadgeOff: "Desligar",
     remoteApiReapplyNeeded: "Desliga e volta a ligar o acesso remoto para que isto tenha efeito.",
     tipRemotePort: "A porta TCP em que o acesso remoto local escuta enquanto esta em execucao.",
-    tipRemoteRateLimit: "Quantos pedidos por minuto o acesso remoto local aceita de um endereco antes de o abrandar.",
+    tipRemoteRateLimit: "Quantos pedidos por minuto o acesso remoto local aceita de um endereco antes de o abrandar. A posicao mais a direita remove o limite; o bloqueio apos senhas erradas continua ativo.",
   },
   pl: {
     flagChainPrompts: "Łączenie promptów",
@@ -13131,7 +13131,7 @@ export const I18N = {
     remoteApiBadgeOff: "Wylacz",
     remoteApiReapplyNeeded: "Wylacz i ponownie wlacz dostep zdalny, aby to zadzialalo.",
     tipRemotePort: "Port TCP, na ktorym nasluchuje lokalny dostep zdalny, gdy jest uruchomiony.",
-    tipRemoteRateLimit: "Ile zadan na minute z jednego adresu przyjmuje lokalny dostep zdalny, zanim go spowolni.",
+    tipRemoteRateLimit: "Ile zadan na minute z jednego adresu przyjmuje lokalny dostep zdalny, zanim go spowolni. Skrajnie prawa pozycja usuwa limit; blokada po blednych haslach nadal dziala.",
   },
   zh: {
     flagChainPrompts: "提示词链接",
@@ -15319,7 +15319,7 @@ export const I18N = {
     remoteApiBadgeOff: "关闭",
     remoteApiReapplyNeeded: "请将远程访问关闭再重新打开，设置才会生效。",
     tipRemotePort: "本地远程访问接口运行期间监听的 TCP 端口。",
-    tipRemoteRateLimit: "本地远程访问接口在放慢某个地址之前，每分钟接受该地址的请求数量。",
+    tipRemoteRateLimit: "本地远程访问接口在放慢某个地址之前，每分钟接受该地址的请求数量。最右侧的位置会取消限制；错误密码导致的锁定仍然有效。",
   },
   ja: {
     flagChainPrompts: "プロンプト連結",
@@ -17507,7 +17507,7 @@ export const I18N = {
     remoteApiBadgeOff: "オフにする",
     remoteApiReapplyNeeded: "設定を反映するには、リモートアクセスを一度オフにしてから再度オンにしてください。",
     tipRemotePort: "ローカルのリモートアクセスが稼働中に待ち受ける TCP ポート。",
-    tipRemoteRateLimit: "ローカルのリモートアクセスが1つのアドレスからの要求を減速させるまでに、1分間に受け付ける件数。",
+    tipRemoteRateLimit: "ローカルのリモートアクセスが1つのアドレスからの要求を減速させるまでに、1分間に受け付ける件数。一番右の位置で制限が解除されます。誤ったパスワードによるロックはそのまま有効です。",
   },
   nl: {
     flagChainPrompts: "Prompts koppelen",
@@ -19695,7 +19695,7 @@ export const I18N = {
     remoteApiBadgeOff: "Uitschakelen",
     remoteApiReapplyNeeded: "Zet de externe toegang uit en weer aan zodat dit van kracht wordt.",
     tipRemotePort: "De TCP-poort waarop de lokale externe toegang luistert terwijl deze actief is.",
-    tipRemoteRateLimit: "Hoeveel verzoeken per minuut de lokale externe toegang van een adres accepteert voordat die wordt afgeremd.",
+    tipRemoteRateLimit: "Hoeveel verzoeken per minuut de lokale externe toegang van een adres accepteert voordat die wordt afgeremd. De meest rechtse stand verwijdert de limiet; de vergrendeling na verkeerde wachtwoorden blijft actief.",
   },
   tr: {
     flagChainPrompts: "Komut zincirleme",
@@ -21883,7 +21883,7 @@ export const I18N = {
     remoteApiBadgeOff: "Kapat",
     remoteApiReapplyNeeded: "Bunun etkili olmasi icin uzaktan erisimi kapatip tekrar acin.",
     tipRemotePort: "Yerel uzaktan erisimin calisirken dinledigi TCP portu.",
-    tipRemoteRateLimit: "Yerel uzaktan erisimin bir adresi yavaslatmadan once dakikada kabul ettigi istek sayisi.",
+    tipRemoteRateLimit: "Yerel uzaktan erisimin bir adresi yavaslatmadan once dakikada kabul ettigi istek sayisi. En sagdaki konum siniri kaldirir; yanlis parolalardan sonraki kilitlenme etkin kalir.",
   },
   ro: {
     flagChainPrompts: "Înlănțuire prompturi",
@@ -24071,7 +24071,7 @@ export const I18N = {
     remoteApiBadgeOff: "Opreste",
     remoteApiReapplyNeeded: "Opreste si reporneste accesul la distanta pentru ca aceasta sa aiba efect.",
     tipRemotePort: "Portul TCP pe care asculta accesul local la distanta cat timp ruleaza.",
-    tipRemoteRateLimit: "Cate cereri pe minut accepta accesul local la distanta de la o adresa inainte de a o incetini.",
+    tipRemoteRateLimit: "Cate cereri pe minut accepta accesul local la distanta de la o adresa inainte de a o incetini. Pozitia cea mai din dreapta elimina limita; blocarea dupa parole gresite ramane activa.",
   },
 };
 

@@ -1981,7 +1981,7 @@ const EXPERT_VALUES = {
   // The port shows on the persistent badge while the receiver
   // runs -- a companion program reads it from there, not from this slider.
   remotePort: { label: "valRemotePort", min: 1024, max: 65535, step: 1, def: 51823, unit: "", gate: "remoteApi", input: true },
-  remoteRateLimit: { label: "valRemoteRateLimit", min: 5, max: 300, step: 5, def: 60, unit: "/min", gate: "remoteApi" },
+  remoteRateLimit: { label: "valRemoteRateLimit", min: 5, max: 300, step: 5, def: 60, unit: "/min", gate: "remoteApi", topUnlimited: true },
 };
 
 // Preset-or-custom numeric settings (dropdown with a free-entry option).
@@ -2894,12 +2894,17 @@ function valueRow(key) {
   const slider = document.createElement("input");
   slider.type = "range";
   slider.className = "value-range";
+  // topUnlimited adds one extra stop past the real max: a slider parked there
+  // shows the "unlimited" label and stores 0, exactly like a 0-stop's zeroLabel
+  // does at the low end.
+  const unlimitedStop = cfg.topUnlimited ? cfg.max + cfg.step : null;
+  const isUnlimitedStop = () => cfg.topUnlimited && Number(slider.value) === unlimitedStop;
   // A `stops` list drives a stepped slider (e.g. history length up to a million,
   // coarser as it climbs); everything else is a plain min/max/step slider.
   const cur = cfg.stops
     ? () => cfg.stops[Number(slider.value)]
-    : () => Number(slider.value);
-  const show = cfg.stops ? (v) => String(v) : fmt;
+    : () => (isUnlimitedStop() ? 0 : Number(slider.value));
+  const show = cfg.stops ? (v) => String(v) : (v) => (isUnlimitedStop() ? t("valUnlimited") : fmt(v));
   if (cfg.stops) {
     slider.min = 0;
     slider.max = cfg.stops.length - 1;
@@ -2908,9 +2913,10 @@ function valueRow(key) {
     slider.value = idx < 0 ? cfg.stops.length - 1 : idx;
   } else {
     slider.min = cfg.min;
-    slider.max = cfg.max;
+    slider.max = unlimitedStop ?? cfg.max;
     slider.step = cfg.step;
-    slider.value = val(key);
+    const stored = val(key);
+    slider.value = cfg.topUnlimited && stored === 0 ? unlimitedStop : stored;
   }
   out.textContent = show(cur());
   slider.addEventListener("input", () => { out.textContent = show(cur()); previewValue(key, cur()); });

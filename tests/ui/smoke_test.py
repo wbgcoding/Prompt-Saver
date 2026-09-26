@@ -3189,6 +3189,43 @@ PROBE = """
             }
           }
         }
+        // 515: the rate-limit slider has one extra stop past its real max,
+        // showing the unlimited label and storing 0.
+        search514.value = 'Remote access requests per minute';
+        search514.dispatchEvent(new Event('input'));
+        await sleep(250);
+        const rateRow = document.querySelector('#expert-flags [data-setting-row="remoteRateLimit"]');
+        if (!rateRow) {
+          out.errors.push('515: the remote rate-limit row is missing');
+        } else {
+          const rateSlider = rateRow.querySelector('input[type=range]');
+          const rateOut = rateRow.querySelector('.value-out');
+          if (!rateSlider || !rateOut) {
+            out.errors.push('515: the rate-limit row has no slider or value readout');
+          } else {
+            const rateCommits = () => (window.__SMOKE_ARGS__ || [])
+              .filter(([cmd, args]) => cmd === 'set_ui_value' && args && args.key === 'remoteRateLimit')
+              .map(([, args]) => args.value);
+            const belowMax = String(Number(rateSlider.max) - Number(rateSlider.step)) + '/min';
+            rateSlider.value = String(Number(rateSlider.max) - Number(rateSlider.step));
+            rateSlider.dispatchEvent(new Event('input'));
+            const readoutBelowMax = rateOut.textContent;
+            if (readoutBelowMax !== belowMax) {
+              out.errors.push('515: the slider one stop below max reads "' + readoutBelowMax + '" instead of "' + belowMax + '"');
+            }
+            rateSlider.value = rateSlider.max;
+            rateSlider.dispatchEvent(new Event('input'));
+            if (rateOut.textContent === (rateSlider.max + '/min') || rateOut.textContent === readoutBelowMax) {
+              out.errors.push('515: the top slider stop does not show a distinct unlimited label: ' + rateOut.textContent);
+            }
+            rateSlider.dispatchEvent(new Event('change'));
+            await sleep(150);
+            const rc = rateCommits();
+            if (rc[rc.length - 1] !== 0) {
+              out.errors.push('515: the unlimited slider stop did not commit 0, got ' + rc[rc.length - 1]);
+            }
+          }
+        }
         // Put remoteApi back off so the rest of the run sees the shipped default.
         search514.value = 'Remote access (local API)';
         search514.dispatchEvent(new Event('input'));
