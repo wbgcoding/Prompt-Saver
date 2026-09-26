@@ -1301,7 +1301,15 @@ the video editor and the introduction tour ship on).
   Converting, saving and copying a recording now require the same proof for
   their source file, and the screenshot, video-export, recording, sync and
   data folder settings now only accept a folder just returned by the app's
-  own picker dialog (or the built-in default), instead of any string.
+  own picker dialog (or the built-in default), instead of any string. Each
+  picked folder is now also tied to the one setting it was picked for, so it
+  cannot be spent on a different setting's own dialog. Exporting a video
+  opened from outside the app, or a library attachment, now offers the
+  export-folder picker instead of refusing outright, and "Save as" after an
+  export accepts that export's own output alongside an ordinary recording. A
+  sync-folder switch the backend actually refused now says so and keeps
+  showing the folder still in effect, instead of a misleading "old folder
+  kept" message.
 - The crash log's folder-name scrubbing now handles a folder name that
   contains spaces and no longer skips the rest of an older log file over one
   broken byte in a single line. The error log's per-entry origin label is now
