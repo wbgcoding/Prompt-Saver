@@ -302,7 +302,7 @@ stopBtn.addEventListener("click", stopRecording);
 audioSelect.addEventListener("change", refreshPreview);
 resSelect.addEventListener("change", refreshPreview);
 folderBtn.addEventListener("click", async () => {
-  const dir = await invoke("pick_folder").catch(() => null);
+  const dir = await invoke("pick_folder", { purpose: "recording" }).catch(() => null);
   if (dir) {
     await invoke("set_recording_dir", { dir }).catch(() => {});
     folderPathEl.textContent = dir;

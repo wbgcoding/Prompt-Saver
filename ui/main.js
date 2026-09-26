@@ -3156,7 +3156,7 @@ const EXPERT_PATHS = {
     def: () => defaultScreenshotDir,
     get: () => settings.ui_texts?.screenshotDir || defaultScreenshotDir,
     change: async () => {
-      const dir = await invoke("pick_folder").catch(() => null);
+      const dir = await invoke("pick_folder", { purpose: "screenshot" }).catch(() => null);
       if (!dir) return;
       settings.ui_texts = { ...(settings.ui_texts || {}), screenshotDir: dir };
       invoke("set_screenshot_dir", { dir }).catch((e) => errToast(e));
@@ -3179,7 +3179,7 @@ const EXPERT_PATHS = {
     def: () => "",
     get: () => settings.ui_texts?.videoExportDir || "",
     change: async () => {
-      const dir = await invoke("pick_folder").catch(() => null);
+      const dir = await invoke("pick_folder", { purpose: "videoExport" }).catch(() => null);
       if (!dir) return;
       settings.ui_texts = { ...(settings.ui_texts || {}), videoExportDir: dir };
       invoke("set_video_export_dir", { dir }).catch((e) => errToast(e));
@@ -3195,7 +3195,7 @@ const EXPERT_PATHS = {
     label: "valDataDir",
     get: () => currentDataDir,
     change: async () => {
-      const dir = await invoke("pick_folder").catch(() => null);
+      const dir = await invoke("pick_folder", { purpose: "data" }).catch(() => null);
       if (!dir) return;
       if (!(await confirmSyncFolderChoice(dir))) return;
       let oldPath;
@@ -3222,7 +3222,7 @@ const EXPERT_PATHS = {
     def: () => defaultSyncDir,
     get: () => settings.ui_texts?.syncDir || defaultSyncDir,
     change: async () => {
-      const dir = await invoke("pick_folder").catch(() => null);
+      const dir = await invoke("pick_folder", { purpose: "sync" }).catch(() => null);
       if (!dir) return;
       await applySyncDir(dir);
     },
@@ -3238,7 +3238,7 @@ const EXPERT_PATHS = {
     def: () => defaultRecordingDir,
     get: () => settings.ui_texts?.recordingDir || defaultRecordingDir,
     change: async () => {
-      const dir = await invoke("pick_folder").catch(() => null);
+      const dir = await invoke("pick_folder", { purpose: "recording" }).catch(() => null);
       if (!dir) return;
       settings.ui_texts = { ...(settings.ui_texts || {}), recordingDir: dir };
       invoke("set_recording_dir", { dir }).catch((e) => errToast(e));
