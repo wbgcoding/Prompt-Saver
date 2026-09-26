@@ -24684,13 +24684,25 @@ fn crop_recording_blocking(
 // from its own capture timer, so it turns this into a percentage rather than
 // the backend guessing at one.
 #[tauri::command]
-async fn convert_recording(app: AppHandle, src_path: String, format: String, lossless: bool) -> Result<String, String> {
+async fn convert_recording(
+    app: AppHandle,
+    state: State<'_, Db>,
+    src_path: String,
+    format: String,
+    lossless: bool,
+) -> Result<String, String> {
     if !matches!(format.as_str(), "mp4" | "webm" | "gif" | "avi" | "mov" | "mkv" | "webpanim" | "apng") {
         return Err("unsupported format".to_string());
     }
     let src = PathBuf::from(&src_path);
     if !src.is_file() {
         return Err(ffmpeg_error_json(FfmpegErrorKey::Missing, None, ""));
+    }
+    // ffmpeg re-encodes this file in place of the source below -- an IPC
+    // caller that is not really the recording UI must not be able to point
+    // that at an arbitrary file just by naming it in src_path.
+    if !is_own_recording_source(&recording_source_dirs(&app, &state), &src) {
+        return Err("source-not-allowed".to_string());
     }
     let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
     REC_CONVERT_CANCEL.store(false, Ordering::SeqCst);
@@ -26633,10 +26645,16 @@ async fn pick_export_folder(app: AppHandle, win: tauri::Window) -> Option<String
 // (the common case); save_recording_as above keeps the free dialog for
 // everything else.
 #[tauri::command]
-async fn save_recording_now(state: State<'_, Db>, src_path: String) -> Result<String, String> {
+async fn save_recording_now(app: AppHandle, state: State<'_, Db>, src_path: String) -> Result<String, String> {
     let src = PathBuf::from(&src_path);
     if !src.is_file() {
         return Err("recording file not found".to_string());
+    }
+    // place_in_dir below moves the file -- refuse to move anything that is not
+    // proven to be this app's own recording, sitting where its own capture or
+    // an earlier Save/Copy left it.
+    if !is_own_recording_source(&recording_source_dirs(&app, &state), &src) {
+        return Err("source-not-allowed".to_string());
     }
     let custom = lock(&state).settings.ui_texts.get("recordingDir").cloned().unwrap_or_default();
     let dest = place_in_dir(&src, &recording_dir(&custom)).map_err(|e| e.to_string())?;
@@ -26659,10 +26677,15 @@ async fn save_recording_now(state: State<'_, Db>, src_path: String) -> Result<St
 // would fail with "file not found" even though the recording still exists,
 // safely, at `dest`.
 #[tauri::command]
-async fn copy_recording_to_clipboard(state: State<'_, Db>, src_path: String) -> Result<(String, bool), String> {
+async fn copy_recording_to_clipboard(app: AppHandle, state: State<'_, Db>, src_path: String) -> Result<(String, bool), String> {
     let src = PathBuf::from(&src_path);
     if !src.is_file() {
         return Err("recording file not found".to_string());
+    }
+    // Same move as save_recording_now above -- the source must already be
+    // proven to be this app's own recording before place_in_dir relocates it.
+    if !is_own_recording_source(&recording_source_dirs(&app, &state), &src) {
+        return Err("source-not-allowed".to_string());
     }
     let custom = lock(&state).settings.ui_texts.get("recordingDir").cloned().unwrap_or_default();
     let dest = place_in_dir(&src, &recording_dir(&custom)).map_err(|e| e.to_string())?;
@@ -26700,6 +26723,33 @@ async fn copy_file_to_clipboard(path: String) -> bool {
 // whole discard-trash cleanup, keeping everything in "verworfen" forever.
 fn discard_keep_hours(state: &State<'_, Db>) -> f64 {
     lock(state).settings.ui_values.get("recDiscardKeepH").copied().unwrap_or(24.0)
+}
+
+// The two folders a genuine recording can sit in while a recording command is
+// still allowed to act on it by an IPC path: the app's own capture staging
+// folder (<data>/recordings, where a fresh recording always lands first) and
+// the currently configured recordingDir (where Save/Copy leave it before the
+// result window closes). Shared by discard/convert/save/copy below so they
+// all draw the line in exactly the same place.
+fn recording_source_dirs(app: &AppHandle, state: &State<'_, Db>) -> [PathBuf; 2] {
+    let custom = lock(state).settings.ui_texts.get("recordingDir").cloned().unwrap_or_default();
+    [data_dir(app).join("recordings"), recording_dir(&custom)]
+}
+
+// Whether `path` is a recording this app itself produced, sitting in one of
+// `allowed`'s folders, rather than an arbitrary file named in a recording
+// command's IPC argument -- the same "rec-" stem plus allowed-parent-folder
+// proof discard_recording_file_in below already requires, reused here so
+// convert_recording/save_recording_now/copy_recording_to_clipboard cannot be
+// made to move, replace or feed ffmpeg an unrelated file just because a
+// subverted renderer sent that file's path as `src_path`.
+fn is_own_recording_source(allowed: &[PathBuf], path: &Path) -> bool {
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    if !name.starts_with("rec-") || !path.is_file() {
+        return false;
+    }
+    let Some(parent) = path.parent().and_then(|d| d.canonicalize().ok()) else { return false };
+    allowed.iter().any(|d| d.canonicalize().map(|c| c == parent).unwrap_or(false))
 }
 
 // Discard a not-yet-saved recording. Scoped to the app's own recordings
@@ -37916,6 +37966,39 @@ mod tests {
             "",
             "the feature's own built-in default must reset without needing a grant"
         );
+    }
+
+    // ---------- security pass: recording-source ownership (convert/save/copy) ----------
+
+    #[test]
+    fn is_own_recording_source_accepts_a_rec_file_inside_an_allowed_folder() {
+        let dir = std::env::temp_dir().join(format!("ps-recsrc-own-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = dir.join("rec-2026-01-01-00-00-00.mp4");
+        fs::write(&src, b"video").unwrap();
+        assert!(is_own_recording_source(std::slice::from_ref(&dir), &src));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn is_own_recording_source_refuses_a_foreign_file_outside_the_allowed_folders() {
+        let dir = std::env::temp_dir().join(format!("ps-recsrc-in-{}", std::process::id()));
+        let other = std::env::temp_dir().join(format!("ps-recsrc-out-{}", std::process::id()));
+        fs::create_dir_all(&other).unwrap();
+        let src = other.join("rec-elsewhere.mp4");
+        fs::write(&src, b"video").unwrap();
+        assert!(!is_own_recording_source(&[dir], &src), "the folder is not one this app writes recordings into");
+        let _ = fs::remove_dir_all(&other);
+    }
+
+    #[test]
+    fn is_own_recording_source_refuses_a_file_without_the_rec_prefix_even_inside_an_allowed_folder() {
+        let dir = std::env::temp_dir().join(format!("ps-recsrc-noprefix-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = dir.join("not-a-recording.mp4");
+        fs::write(&src, b"video").unwrap();
+        assert!(!is_own_recording_source(std::slice::from_ref(&dir), &src), "a made-up name must not pass as proof");
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

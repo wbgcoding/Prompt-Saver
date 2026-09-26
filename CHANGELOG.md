@@ -1267,6 +1267,10 @@ the video editor and the introduction tour ship on).
   check every destination and folder argument against one the app itself
   resolved (a save dialog it ran, the configured recording folder, or the
   source file's own folder), instead of trusting that argument on its own.
+  Converting, saving and copying a recording now require the same proof for
+  their source file, and the screenshot, video-export, recording, sync and
+  data folder settings now only accept a folder just returned by the app's
+  own picker dialog (or the built-in default), instead of any string.
 - The crash log's folder-name scrubbing now handles a folder name that
   contains spaces and no longer skips the rest of an older log file over one
   broken byte in a single line. The error log's per-entry origin label is now
