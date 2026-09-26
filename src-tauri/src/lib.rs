@@ -28238,6 +28238,32 @@ fn remember_export_dest_dir(dir: &Path) {
     }
 }
 
+// A bounded set of files this session's own export_video calls have actually
+// written -- the backend's own proof that a given path is one of its own
+// outputs, so `save_recording_as` can also accept moving one of THESE without
+// widening the "rec-" recording-folder rule that command otherwise enforces
+// (an export can land anywhere the export-destination gate authorized, not
+// only inside a recording folder, so that rule alone would refuse "Save as"
+// after every export whose target was not itself a recording folder).
+// Bounded so a very long session cannot grow this without limit; the oldest
+// entry is dropped once the cap is hit, same shape as PICKER_GRANTS above.
+const EXPORT_OUTPUT_MAX: usize = 64;
+static EXPORT_OUTPUTS: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
+
+fn remember_export_output(path: &Path) {
+    let Ok(canon) = fs::canonicalize(path) else { return };
+    let mut outputs = EXPORT_OUTPUTS.lock().unwrap_or_else(|e| e.into_inner());
+    if outputs.len() >= EXPORT_OUTPUT_MAX {
+        outputs.remove(0);
+    }
+    outputs.push(canon);
+}
+
+fn is_known_export_output(path: &Path) -> bool {
+    let Ok(canon) = fs::canonicalize(path) else { return false };
+    EXPORT_OUTPUTS.lock().unwrap_or_else(|e| e.into_inner()).iter().any(|p| *p == canon)
+}
+
 // Whether `dest`'s containing folder is one this session is actually allowed
 // to export into: the folder from the last save dialog the backend ran for
 // this purpose, the standing `videoExportDir` preference (itself only ever
@@ -28384,6 +28410,7 @@ async fn export_video(app: AppHandle, state: State<'_, Db>, req: ExportRequest) 
     let progress_app = app.clone();
     let progress_target = target.clone();
     let progress_id = id.clone();
+    let dst_for_output = dst.clone();
     push_bg_op(&app, &id, "export", "running", Some(0), Some(target.clone()));
     let result = tauri::async_runtime::spawn_blocking(move || {
         export_video_blocking(&ffmpeg, &src, &dst, &req, my_gen, move |ms| {
@@ -28395,7 +28422,10 @@ async fn export_video(app: AppHandle, state: State<'_, Db>, req: ExportRequest) 
     .await
     .map_err(|e| e.to_string())?;
     match &result {
-        Ok(_) => push_bg_op(&app, &id, "export", "done", None, None),
+        Ok(_) => {
+            push_bg_op(&app, &id, "export", "done", None, None);
+            remember_export_output(&dst_for_output);
+        }
         Err(e) if e == "cancelled" => push_bg_op(&app, &id, "export", "done", None, None),
         Err(_) => push_bg_op(&app, &id, "export", "error", None, None),
     }
@@ -29245,9 +29275,13 @@ async fn save_recording_as(app: AppHandle, state: State<'_, Db>, win: tauri::Win
         return Err("recording file not found".to_string());
     }
     // move_file below relocates this file wherever the save dialog points --
-    // refuse to move anything that is not proven to be this app's own
-    // recording first.
-    if !is_own_recording_source(&recording_source_dirs(&app, &state), &src) {
+    // refuse to move anything that is not proven to be either this app's own
+    // recording, sitting in a recording folder, or a file this same
+    // session's own export_video call actually wrote (an export can land
+    // outside any recording folder once export_dest_dir_is_authorized has
+    // cleared it, so the recording-folder rule alone would refuse "Save as"
+    // right after a perfectly legitimate export).
+    if !is_own_recording_source(&recording_source_dirs(&app, &state), &src) && !is_known_export_output(&src) {
         return Err("source-not-allowed".to_string());
     }
     let ext = src.extension().and_then(|e| e.to_str()).unwrap_or("mp4").to_string();
@@ -40700,6 +40734,23 @@ mod tests {
         let src = dir.join("not-a-recording.mp4");
         fs::write(&src, b"video").unwrap();
         assert!(!is_own_recording_source(std::slice::from_ref(&dir), &src), "a made-up name must not pass as proof");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // ---------- security pass: bounded export-output set (save_recording_as) ----------
+
+    #[test]
+    fn is_known_export_output_accepts_only_a_path_export_video_actually_wrote() {
+        let dir = std::env::temp_dir().join(format!("ps-exportout-known-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let exported = dir.join("clip-edit.mp4");
+        fs::write(&exported, b"video").unwrap();
+        let untouched = dir.join("clip-not-exported.mp4");
+        fs::write(&untouched, b"video").unwrap();
+        assert!(!is_known_export_output(&exported), "not remembered yet, must not pass");
+        remember_export_output(&exported);
+        assert!(is_known_export_output(&exported), "a file export_video actually produced must be recognized");
+        assert!(!is_known_export_output(&untouched), "a neighbour file never exported must stay refused");
         let _ = fs::remove_dir_all(&dir);
     }
 
