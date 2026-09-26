@@ -304,7 +304,7 @@ resSelect.addEventListener("change", refreshPreview);
 folderBtn.addEventListener("click", async () => {
   const dir = await invoke("pick_folder").catch(() => null);
   if (dir) {
-    await invoke("set_ui_text", { key: "recordingDir", value: dir }).catch(() => {});
+    await invoke("set_recording_dir", { dir }).catch(() => {});
     folderPathEl.textContent = dir;
   }
 });

@@ -16249,6 +16249,76 @@ fn default_sync_dir(app: AppHandle) -> String {
     sync_default_dir(&app).to_string_lossy().to_string()
 }
 
+// How long a folder picked through a native dialog stays usable by the
+// set_*_dir command it was picked for -- long enough to cover the confirm
+// dialog some of those flows show (a data-dir move, a sync-dir switch)
+// before the setter call lands, without leaving the grant valid forever: a
+// subverted renderer replaying an old pick after this window closes gets the
+// same stable error as one that never showed the user a picker at all.
+const PICKER_GRANT_TTL: Duration = Duration::from_secs(10 * 60);
+// Bounded so a compromised renderer spamming the picker cannot grow this
+// forever; the oldest grant is dropped once the cap is hit.
+const PICKER_GRANT_MAX: usize = 16;
+
+// Every folder the user actually picked through pick_folder/pick_export_folder,
+// each spendable exactly once by the matching set_*_dir command -- the only
+// authority those commands accept besides their own built-in default, closing
+// the gap where a subverted renderer could call a setter directly with any
+// path it likes and have the backend write files there on its say alone.
+static PICKER_GRANTS: Mutex<Vec<(PathBuf, SystemTime)>> = Mutex::new(Vec::new());
+
+fn picker_grant_key(path: &Path) -> PathBuf {
+    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
+// A dialog result is proof the user picked this folder just now -- recorded so
+// the setter call that follows can spend it.
+fn grant_picked_dir(path: &Path) {
+    let key = picker_grant_key(path);
+    let mut grants = PICKER_GRANTS.lock().unwrap_or_else(|e| e.into_inner());
+    grants.retain(|(_, at)| at.elapsed().map(|e| e < PICKER_GRANT_TTL).unwrap_or(true));
+    if grants.len() >= PICKER_GRANT_MAX {
+        grants.remove(0);
+    }
+    grants.push((key, SystemTime::now()));
+}
+
+// Spends a grant for `dir` if one exists and has not expired. Consuming it
+// (rather than just checking) means only the legitimate setter call that
+// follows the picker can ever use it -- a captured dir string cannot be
+// replayed for a second write once that call has gone through.
+fn consume_granted_dir(dir: &Path) -> bool {
+    let key = picker_grant_key(dir);
+    let mut grants = PICKER_GRANTS.lock().unwrap_or_else(|e| e.into_inner());
+    grants.retain(|(_, at)| at.elapsed().map(|e| e < PICKER_GRANT_TTL).unwrap_or(true));
+    if let Some(pos) = grants.iter().position(|(p, _)| *p == key) {
+        grants.remove(pos);
+        true
+    } else {
+        false
+    }
+}
+
+// Shared gate for every set_*_dir command below: an empty string or the
+// feature's own built-in default always resets it (nothing to authorize
+// there), and any other path must be one the user just picked through
+// pick_folder/pick_export_folder in this same flow -- never a raw string the
+// renderer made up on its own.
+fn accept_dir_setting(dir: &str, default_dir: &Path) -> Result<String, String> {
+    let trimmed = dir.trim();
+    if trimmed.is_empty() {
+        return Ok(String::new());
+    }
+    let candidate = Path::new(trimmed);
+    if path_matches_configured_dir(candidate, default_dir) {
+        return Ok(String::new());
+    }
+    if consume_granted_dir(candidate) {
+        return Ok(trimmed.to_string());
+    }
+    Err("dir-not-picked".to_string())
+}
+
 // Native folder picker (used by the expert screenshot-dir + data-dir options).
 #[tauri::command]
 async fn pick_folder(app: AppHandle, win: tauri::Window) -> Option<String> {
@@ -16256,6 +16326,9 @@ async fn pick_folder(app: AppHandle, win: tauri::Window) -> Option<String> {
         .pick_folder()
         .map(|p| p.to_string_lossy().to_string());
     let _ = win.set_focus();
+    if let Some(dir) = &result {
+        grant_picked_dir(Path::new(dir));
+    }
     result
 }
 
@@ -16361,6 +16434,9 @@ async fn set_data_dir(app: AppHandle, state: State<'_, Db>, dir: String) -> Resu
     let trimmed = dir.trim();
     if trimmed.is_empty() {
         return Err("empty path".to_string());
+    }
+    if !consume_granted_dir(Path::new(trimmed)) {
+        return Err("dir-not-picked".to_string());
     }
     let new = PathBuf::from(trimmed);
     fs::create_dir_all(&new).map_err(|e| e.to_string())?;
@@ -20189,6 +20265,25 @@ fn virtual_screen_bounds() -> Result<(i32, i32, u32, u32), String> {
 // obviously too-large case before paying for that attempt.
 fn canvas_within_ceiling(w: u32, h: u32, ceiling_w: u32, ceiling_h: u32) -> bool {
     w <= ceiling_w && h <= ceiling_h
+}
+
+// A value from an imported settings file or a stray manual edit can carry
+// anything; fall back to the smallest, most conservative capture ("window")
+// for any string that is not one of the three modes this actually knows.
+fn sanitize_canvas_mode(raw: &str) -> &'static str {
+    match raw {
+        "monitor" => "monitor",
+        "all" => "all",
+        _ => "window",
+    }
+}
+
+// Clamped to the same range the expert menu itself offers (`recCanvasMaxPx`
+// in main.js) so a value written outside the menu, such as an imported
+// settings file, cannot push the recording canvas ceiling past what the UI
+// ever lets a user pick.
+fn clamp_canvas_max_px(raw: f64) -> u32 {
+    raw.clamp(2048.0, 15360.0) as u32
 }
 
 // Pure predicate for the two optional recording safety nets (recMaxMin and
@@ -25158,13 +25253,16 @@ fn resolve_recording_settings(db: &State<Db>) -> (bool, recording::AudioConfig, 
     // offered reactively the first time a recording actually hits the resize
     // problem (see the recording-captured payload's resize_crop_at_ms). No
     // expert-menu row for this setting yet (a future menu writes it directly).
-    let canvas_mode = db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_texts.get("recCanvasMode").cloned().unwrap_or_else(|| "window".to_string());
+    let canvas_mode = {
+        let raw = db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_texts.get("recCanvasMode").cloned().unwrap_or_else(|| "window".to_string());
+        sanitize_canvas_mode(&raw).to_string()
+    };
     // One expert-menu row (`recCanvasMaxPx`) now governs both the width and
     // the height ceiling -- there was never a settings row for the two
     // separate constants this replaces, so no stored value can have relied
     // on them differing.
     let canvas_ceiling = {
-        let max_px = db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("recCanvasMaxPx").copied().unwrap_or(8192.0).max(1.0) as u32;
+        let max_px = clamp_canvas_max_px(db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("recCanvasMaxPx").copied().unwrap_or(8192.0));
         (max_px, max_px)
     };
     // The mid-recording disk-space watch's own threshold -- see
@@ -26065,27 +26163,74 @@ fn set_ui_value(app: AppHandle, state: State<Db>, key: String, value: f64) {
     notify_float_settings(&app);
 }
 
+// Settings that name a folder the backend itself writes into or deletes from.
+// A generic setter (this one) or a settings/backup import must never be able
+// to point one of these at an arbitrary folder -- each is changed only
+// through its own dedicated command (set_screenshot_dir, set_video_export_dir,
+// set_recording_dir, set_sync_dir), so a subverted renderer calling the
+// generic string setter, or a hostile imported settings file, cannot grant
+// itself write or delete authority over a folder of its choosing.
+const PROTECTED_FOLDER_KEYS: [&str; 4] = ["screenshotDir", "videoExportDir", "recordingDir", "syncDir"];
+
+fn is_protected_folder_key(key: &str) -> bool {
+    PROTECTED_FOLDER_KEYS.contains(&key)
+}
+
 // Set an expert string option (e.g. the copy-feedback font key).
 #[tauri::command]
 fn set_ui_text(app: AppHandle, state: State<Db>, key: String, value: String) {
-    let is_sync_dir = key == "syncDir";
+    if is_protected_folder_key(&key) {
+        return;
+    }
     {
         let mut store = lock(&state);
         store.settings.ui_texts.insert(key, value);
         save_settings(&app, &store.settings);
-        // Pointing the sync at a different folder used to change nothing until the
-        // next prompt save happened to flush it: the folder the user just picked
-        // stayed empty and the feature looked broken. Same synchronous, one-off
-        // treatment activation gets: when this returns, the files are there. Files
-        // in the PREVIOUS folder are deliberately left alone; that folder is the
-        // user's own, and this app never deletes outside the folder it syncs to.
-        if is_sync_dir && sync_enabled(&store.settings) {
-            // Unlike the activation above this command has no error channel back to
-            // the window; sync_write_all_impl has already logged whatever failed.
-            let _ = sync_write_all_impl(&app, &store.prompts, &store.settings);
-        }
     }
     notify_float_settings(&app);
+}
+
+// Dedicated setter for the screenshot save folder -- the expert menu's
+// "Change" button calls pick_folder for the dialog, then this with its
+// result. Kept out of the generic set_ui_text path; see PROTECTED_FOLDER_KEYS.
+#[tauri::command]
+fn set_screenshot_dir(app: AppHandle, state: State<Db>, dir: String) -> Result<(), String> {
+    let value = accept_dir_setting(&dir, Path::new(&default_screenshot_dir()))?;
+    let mut store = lock(&state);
+    store.settings.ui_texts.insert("screenshotDir".to_string(), value);
+    save_settings(&app, &store.settings);
+    drop(store);
+    notify_float_settings(&app);
+    Ok(())
+}
+
+// Dedicated setter for the video editor's export folder -- same shape as
+// set_screenshot_dir above, and for the same reason. There is no separate
+// built-in default folder here (empty already means "next to the source
+// file"), so accept_dir_setting's default check is a no-op past the empty
+// case above it.
+#[tauri::command]
+fn set_video_export_dir(app: AppHandle, state: State<Db>, dir: String) -> Result<(), String> {
+    let value = accept_dir_setting(&dir, Path::new(""))?;
+    let mut store = lock(&state);
+    store.settings.ui_texts.insert("videoExportDir".to_string(), value);
+    save_settings(&app, &store.settings);
+    drop(store);
+    notify_float_settings(&app);
+    Ok(())
+}
+
+// Dedicated setter for the screen-recording save folder -- same shape as
+// set_screenshot_dir above, and for the same reason.
+#[tauri::command]
+fn set_recording_dir(app: AppHandle, state: State<Db>, dir: String) -> Result<(), String> {
+    let value = accept_dir_setting(&dir, Path::new(&default_recording_dir()))?;
+    let mut store = lock(&state);
+    store.settings.ui_texts.insert("recordingDir".to_string(), value);
+    save_settings(&app, &store.settings);
+    drop(store);
+    notify_float_settings(&app);
+    Ok(())
 }
 
 // Clear all expert overrides back to the shipped defaults.
@@ -27152,13 +27297,25 @@ fn crop_recording_blocking(
 // from its own capture timer, so it turns this into a percentage rather than
 // the backend guessing at one.
 #[tauri::command]
-async fn convert_recording(app: AppHandle, src_path: String, format: String, lossless: bool) -> Result<String, String> {
+async fn convert_recording(
+    app: AppHandle,
+    state: State<'_, Db>,
+    src_path: String,
+    format: String,
+    lossless: bool,
+) -> Result<String, String> {
     if !matches!(format.as_str(), "mp4" | "webm" | "gif" | "avi" | "mov" | "mkv" | "webpanim" | "apng") {
         return Err("unsupported format".to_string());
     }
     let src = PathBuf::from(&src_path);
     if !src.is_file() {
         return Err(ffmpeg_error_json(FfmpegErrorKey::Missing, None, ""));
+    }
+    // ffmpeg re-encodes this file in place of the source below -- an IPC
+    // caller that is not really the recording UI must not be able to point
+    // that at an arbitrary file just by naming it in src_path.
+    if !is_own_recording_source(&recording_source_dirs(&app, &state), &src) {
+        return Err("source-not-allowed".to_string());
     }
     let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
     REC_CONVERT_CANCEL.store(false, Ordering::SeqCst);
@@ -27727,11 +27884,23 @@ async fn backfill_media_meta(app: AppHandle, state: State<'_, Db>, id: String) -
 // Non-fatal to the caller: the video keeps playing system-audio-only if this
 // fails, and the sidecar is left in place to retry on the next open.
 #[tauri::command]
-async fn mux_mic_track(app: AppHandle, video_path: String, sidecar_path: String) -> Result<(), String> {
+async fn mux_mic_track(app: AppHandle, state: State<'_, Db>, video_path: String, sidecar_path: String) -> Result<(), String> {
     let video = PathBuf::from(&video_path);
     let sidecar = PathBuf::from(&sidecar_path);
     if !video.is_file() || !sidecar.is_file() {
         return Err("recording or mic sidecar not found".to_string());
+    }
+    // mux_mic_track_blocking below replaces `video` in place and deletes
+    // `sidecar` on success -- both need to be proven to belong to this app
+    // before either is touched. The video must be one of our own
+    // recordings, and the sidecar must be exactly THAT video's own mic
+    // capture, never an unrelated second path that just happens to sit in
+    // the same allowed folder.
+    if !is_own_recording_source(&recording_source_dirs(&app, &state), &video) {
+        return Err("source-not-allowed".to_string());
+    }
+    if !is_own_mic_sidecar(&video, &sidecar) {
+        return Err("source-not-allowed".to_string());
     }
     let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
     let audio_kbps = app
@@ -28045,6 +28214,76 @@ fn video_export_cancelled() -> &'static Mutex<std::collections::HashSet<u64>> {
     SET.get_or_init(|| Mutex::new(std::collections::HashSet::new()))
 }
 
+// The one folder an export command is allowed to write into this session,
+// remembered from the last real save dialog the backend itself ran (either
+// `pick_export_dest`'s own containing folder or `pick_export_folder`'s
+// picked directory) -- an export command never trusts a `dest_path` string
+// from the IPC call on its own, since that call could in principle be made
+// with any argument at all rather than the one a dialog actually returned.
+static LAST_EXPORT_DEST_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
+
+fn remember_export_dest_dir(dir: &Path) {
+    if let Ok(canon) = fs::canonicalize(dir) {
+        *LAST_EXPORT_DEST_DIR.lock().unwrap_or_else(|e| e.into_inner()) = Some(canon);
+    }
+}
+
+// Whether `dest`'s containing folder is one this session is actually allowed
+// to export into: the folder from the last save dialog the backend ran for
+// this purpose, the standing `videoExportDir` preference (itself only ever
+// set from that same dialog, in an earlier session), or the source file's own
+// folder -- but ONLY when that source file already lives inside a folder this
+// app controls (its recording folder or the configured export folder).
+// Without that restriction an IPC-supplied src_path naming any existing file
+// at all would authorize that file's own parent as an export destination,
+// handing out write authority over whatever folder happens to contain it;
+// with it, the fallback only ever covers the ordinary "convert/export a
+// recording back next to itself" case. Everything is compared canonicalized
+// so a relative segment or a different letter case cannot be used to step
+// outside the folder that was actually picked.
+// Split from `export_dest_dir_is_authorized` below so the actual decision is
+// a plain function of paths and can be unit-tested without a running app.
+fn export_dest_dir_is_authorized_against(
+    dest: &Path,
+    src: &Path,
+    last_picked: Option<&Path>,
+    configured_dir: Option<&str>,
+    configured_recording_dir: &Path,
+) -> bool {
+    let Some(dest_dir) = dest.parent() else { return false };
+    let Ok(canon_dest_dir) = fs::canonicalize(dest_dir) else { return false };
+    if let Some(picked) = last_picked {
+        if fs::canonicalize(picked).is_ok_and(|c| c == canon_dest_dir) {
+            return true;
+        }
+    }
+    let canon_export_dir = configured_dir.filter(|c| !c.is_empty()).and_then(|c| fs::canonicalize(c).ok());
+    if let Some(cfg) = &canon_export_dir {
+        if *cfg == canon_dest_dir {
+            return true;
+        }
+    }
+    if let Some(src_dir) = src.parent() {
+        if let Ok(canon_src_dir) = fs::canonicalize(src_dir) {
+            if canon_src_dir == canon_dest_dir {
+                let src_is_trusted = fs::canonicalize(configured_recording_dir).is_ok_and(|c| c == canon_src_dir)
+                    || canon_export_dir.is_some_and(|c| c == canon_src_dir);
+                if src_is_trusted {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+fn export_dest_dir_is_authorized(state: &State<'_, Db>, dest: &Path, src: &Path) -> bool {
+    let last_picked = LAST_EXPORT_DEST_DIR.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    let configured = lock(state).settings.ui_texts.get("videoExportDir").cloned();
+    let recording_dir = configured_recording_dir(state);
+    export_dest_dir_is_authorized_against(dest, src, last_picked.as_deref(), configured.as_deref(), &recording_dir)
+}
+
 // The single-editor "Cancel" button: no generation of its own to name, so it
 // cancels whichever one is current right now -- unchanged behaviour from
 // before the set, and still correct because the editor only ever has one
@@ -28095,7 +28334,7 @@ fn cancel_all_exports() {
 // own JS calling set_taskbar_progress -- so a job keeps reporting correctly
 // even once the window that started it has closed.
 #[tauri::command]
-async fn export_video(app: AppHandle, req: ExportRequest) -> Result<String, String> {
+async fn export_video(app: AppHandle, state: State<'_, Db>, req: ExportRequest) -> Result<String, String> {
     if !matches!(req.format.as_str(), "mp4" | "webm" | "gif" | "avi" | "mov" | "mkv" | "webpanim" | "apng") {
         return Err("unsupported format".to_string());
     }
@@ -28104,6 +28343,9 @@ async fn export_video(app: AppHandle, req: ExportRequest) -> Result<String, Stri
         return Err(ffmpeg_error_json(FfmpegErrorKey::Missing, None, ""));
     }
     let dst = PathBuf::from(&req.dest_path);
+    if !export_dest_dir_is_authorized(&state, &dst, &src) {
+        return Err("export destination not recognized".to_string());
+    }
     let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
     let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
     // Own registry key per job (not just "export"), so a batch of exports
@@ -28224,6 +28466,7 @@ async fn await_batch_export(handle: ExportJoinHandle, id: String, generation: u6
 #[tauri::command]
 async fn export_recordings_batch(
     app: AppHandle,
+    state: State<'_, Db>,
     items: Vec<BatchExportItem>,
     format: String,
     lossless_quality: bool,
@@ -28257,7 +28500,12 @@ async fn export_recordings_batch(
             let (handle, id, generation, job_app) = in_flight.pop_front().unwrap();
             if await_batch_export(handle, id, generation, job_app).await? { ok += 1 } else { failed += 1 }
         }
-        if !PathBuf::from(&item.src_path).is_file() {
+        let item_src = PathBuf::from(&item.src_path);
+        if !item_src.is_file() {
+            failed += 1;
+            continue;
+        }
+        if !export_dest_dir_is_authorized(&state, &PathBuf::from(&item.dest_path), &item_src) {
             failed += 1;
             continue;
         }
@@ -28703,6 +28951,33 @@ fn default_recording_dir() -> String {
     recording_dir("").to_string_lossy().to_string()
 }
 
+// The recording folder's own canonical form -- the custom `recordingDir`
+// setting, or the default `Videos\<app>` folder when none is set -- resolved
+// by Rust from its own settings rather than trusted from a caller's raw IPC
+// argument. Every command below that lists, cleans or deletes recordings
+// checks its `dir` parameter against this before touching anything, so a
+// call made with some other folder string can only ever read/delete inside
+// the one folder this app actually keeps recordings in.
+fn configured_recording_dir(state: &State<'_, Db>) -> PathBuf {
+    let custom = lock(state).settings.ui_texts.get("recordingDir").cloned().unwrap_or_default();
+    recording_dir(&custom)
+}
+
+// Whether `candidate` really is `configured`: canonicalized when the folder
+// exists (defeats a short-name, trailing-dot or symlink mismatch), a plain
+// case-insensitive comparison when it does not exist yet -- there is nothing
+// to list, clean or delete from a folder that was never created either way,
+// so a name-only comparison costs nothing extra there.
+fn path_matches_configured_dir(candidate: &Path, configured: &Path) -> bool {
+    match (fs::canonicalize(candidate), fs::canonicalize(configured)) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => {
+            let norm = |p: &Path| p.to_string_lossy().trim_end_matches(['\\', '/']).to_ascii_lowercase();
+            norm(candidate) == norm(configured)
+        }
+    }
+}
+
 // Only the extensions this app itself ever writes into the recording folder --
 // the user could point it at any folder they like (including one already full
 // of unrelated files), so both the size readout and the cleanup below must
@@ -28710,7 +28985,16 @@ fn default_recording_dir() -> String {
 const VIDEO_FOLDER_EXTS: [&str; 8] = ["mp4", "webm", "gif", "avi", "mov", "mkv", "webp", "apng"];
 
 fn is_video_folder_file(path: &std::path::Path) -> bool {
-    path.is_file()
+    // The extension check alone still leaves every OTHER file with a matching
+    // extension in a shared folder (a real video the user already had there,
+    // or one from some other app) open to being counted and swept up by the
+    // automatic cleanup below -- discard_recording_file_in already treats its
+    // "rec-" stem as the actual proof a file is this app's own recording;
+    // stats/cleanup/the discard trash listing now require the same proof,
+    // rather than trusting the extension on its own.
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    name.starts_with("rec-")
+        && path.is_file()
         && path
             .extension()
             .map(|e| VIDEO_FOLDER_EXTS.contains(&e.to_string_lossy().to_lowercase().as_str()))
@@ -28737,12 +29021,23 @@ fn video_folder_stats_in(dir: &std::path::Path) -> (u64, u64) {
 // the "verworfen" discard-trash subfolder too: those files still sit on
 // this same drive, under this same folder, so leaving them out would make the
 // displayed folder size quietly wrong the moment anything gets discarded.
-#[tauri::command]
-fn video_folder_stats(dir: String) -> (u64, u64) {
-    let base = std::path::Path::new(&dir);
+// `configured` is Rust's own resolved recording folder (see
+// `configured_recording_dir`); `dir` is only ever trusted once it is proven
+// to be that same folder, kept apart from the tauri::command wrapper below so
+// it can be unit-tested without a running app.
+fn video_folder_stats_impl(dir: &str, configured: &Path) -> (u64, u64) {
+    let base = std::path::Path::new(dir);
+    if !path_matches_configured_dir(base, configured) {
+        return (0, 0);
+    }
     let (c1, b1) = video_folder_stats_in(base);
     let (c2, b2) = video_folder_stats_in(&base.join("verworfen"));
     (c1 + c2, b1 + b2)
+}
+
+#[tauri::command]
+fn video_folder_stats(state: State<'_, Db>, dir: String) -> (u64, u64) {
+    video_folder_stats_impl(&dir, &configured_recording_dir(&state))
 }
 
 #[derive(Serialize)]
@@ -28770,23 +29065,37 @@ fn video_folder_stale(dir: &str, age_days: u32) -> Vec<(std::path::PathBuf, Vide
     out
 }
 
+fn video_folder_cleanup_preview_impl(dir: &str, age_days: u32, configured: &Path) -> Vec<VideoFolderFile> {
+    if !path_matches_configured_dir(std::path::Path::new(dir), configured) {
+        return Vec::new();
+    }
+    video_folder_stale(dir, age_days).into_iter().map(|(_, f)| f).collect()
+}
+
 #[tauri::command]
-fn video_folder_cleanup_preview(dir: String, age_days: u32) -> Vec<VideoFolderFile> {
-    video_folder_stale(&dir, age_days).into_iter().map(|(_, f)| f).collect()
+fn video_folder_cleanup_preview(state: State<'_, Db>, dir: String, age_days: u32) -> Vec<VideoFolderFile> {
+    video_folder_cleanup_preview_impl(&dir, age_days, &configured_recording_dir(&state))
 }
 
 // Deletes exactly the files video_folder_cleanup_preview just listed -- never
 // re-scans with different criteria, so the confirmed list and the
 // actually-deleted files can never drift apart (e.g. a file aging past the
 // threshold between preview and confirm just stays for next time, not a bug).
-#[tauri::command]
-fn video_folder_cleanup(dir: String, age_days: u32) -> usize {
-    let stale = video_folder_stale(&dir, age_days);
+fn video_folder_cleanup_impl(dir: &str, age_days: u32, configured: &Path) -> usize {
+    if !path_matches_configured_dir(std::path::Path::new(dir), configured) {
+        return 0;
+    }
+    let stale = video_folder_stale(dir, age_days);
     let mut n = 0;
     for (path, _) in stale {
         if fs::remove_file(&path).is_ok() { n += 1; }
     }
     n
+}
+
+#[tauri::command]
+fn video_folder_cleanup(state: State<'_, Db>, dir: String, age_days: u32) -> usize {
+    video_folder_cleanup_impl(&dir, age_days, &configured_recording_dir(&state))
 }
 
 // The batch-export dialog needs each selected recording's real duration
@@ -28904,10 +29213,16 @@ fn place_in_dir(src: &std::path::Path, dir: &std::path::Path) -> std::io::Result
 // frontend updates its own pending-path to the new location afterwards, so
 // a later Attach/Copy on the same result still finds the file.
 #[tauri::command]
-async fn save_recording_as(app: AppHandle, win: tauri::Window, src_path: String) -> Result<Option<String>, String> {
+async fn save_recording_as(app: AppHandle, state: State<'_, Db>, win: tauri::Window, src_path: String) -> Result<Option<String>, String> {
     let src = PathBuf::from(&src_path);
     if !src.is_file() {
         return Err("recording file not found".to_string());
+    }
+    // move_file below relocates this file wherever the save dialog points --
+    // refuse to move anything that is not proven to be this app's own
+    // recording first.
+    if !is_own_recording_source(&recording_source_dirs(&app, &state), &src) {
+        return Err("source-not-allowed".to_string());
     }
     let ext = src.extension().and_then(|e| e.to_str()).unwrap_or("mp4").to_string();
     let name = src.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| format!("Recording.{ext}"));
@@ -28932,20 +29247,46 @@ async fn pick_export_dest(app: AppHandle, win: tauri::Window, default_name: Stri
     let result = file_dialog_for(&app, win.label())
         .add_filter(ext.to_uppercase(), &[ext.as_str()])
         .set_file_name(&default_name)
-        .save_file()
-        .map(|p| p.to_string_lossy().to_string());
+        .save_file();
     let _ = win.set_focus();
-    result
+    if let Some(dir) = result.as_ref().and_then(|p| p.parent()) {
+        remember_export_dest_dir(dir);
+    }
+    result.map(|p| p.to_string_lossy().to_string())
+}
+
+// The folder-only counterpart, used by the video editor's "choose folder"
+// export target and the recordings batch-export dialog. A plain wrapper
+// around the same picker `pick_folder` uses, except this one also remembers
+// the folder as an authorized export destination -- `pick_folder` itself
+// stays untouched since it is shared with picks that have nothing to do with
+// exporting (attachments, imports, the recordings folder setting, ...) and
+// must not widen what an export command will accept.
+#[tauri::command]
+async fn pick_export_folder(app: AppHandle, win: tauri::Window) -> Option<String> {
+    let result = file_dialog_for(&app, win.label()).pick_folder();
+    let _ = win.set_focus();
+    if let Some(dir) = &result {
+        remember_export_dest_dir(dir);
+        grant_picked_dir(dir);
+    }
+    result.map(|p| p.to_string_lossy().to_string())
 }
 
 // 280's plain "Save" -- writes straight into recordingDir without a dialog
 // (the common case); save_recording_as above keeps the free dialog for
 // everything else.
 #[tauri::command]
-async fn save_recording_now(state: State<'_, Db>, src_path: String) -> Result<String, String> {
+async fn save_recording_now(app: AppHandle, state: State<'_, Db>, src_path: String) -> Result<String, String> {
     let src = PathBuf::from(&src_path);
     if !src.is_file() {
         return Err("recording file not found".to_string());
+    }
+    // place_in_dir below moves the file -- refuse to move anything that is not
+    // proven to be this app's own recording, sitting where its own capture or
+    // an earlier Save/Copy left it.
+    if !is_own_recording_source(&recording_source_dirs(&app, &state), &src) {
+        return Err("source-not-allowed".to_string());
     }
     let custom = lock(&state).settings.ui_texts.get("recordingDir").cloned().unwrap_or_default();
     let dest = place_in_dir(&src, &recording_dir(&custom)).map_err(|e| e.to_string())?;
@@ -28968,10 +29309,15 @@ async fn save_recording_now(state: State<'_, Db>, src_path: String) -> Result<St
 // would fail with "file not found" even though the recording still exists,
 // safely, at `dest`.
 #[tauri::command]
-async fn copy_recording_to_clipboard(state: State<'_, Db>, src_path: String) -> Result<(String, bool), String> {
+async fn copy_recording_to_clipboard(app: AppHandle, state: State<'_, Db>, src_path: String) -> Result<(String, bool), String> {
     let src = PathBuf::from(&src_path);
     if !src.is_file() {
         return Err("recording file not found".to_string());
+    }
+    // Same move as save_recording_now above -- the source must already be
+    // proven to be this app's own recording before place_in_dir relocates it.
+    if !is_own_recording_source(&recording_source_dirs(&app, &state), &src) {
+        return Err("source-not-allowed".to_string());
     }
     let custom = lock(&state).settings.ui_texts.get("recordingDir").cloned().unwrap_or_default();
     let dest = place_in_dir(&src, &recording_dir(&custom)).map_err(|e| e.to_string())?;
@@ -29009,6 +29355,42 @@ async fn copy_file_to_clipboard(path: String) -> bool {
 // whole discard-trash cleanup, keeping everything in "verworfen" forever.
 fn discard_keep_hours(state: &State<'_, Db>) -> f64 {
     lock(state).settings.ui_values.get("recDiscardKeepH").copied().unwrap_or(24.0)
+}
+
+// The two folders a genuine recording can sit in while a recording command is
+// still allowed to act on it by an IPC path: the app's own capture staging
+// folder (<data>/recordings, where a fresh recording always lands first) and
+// the currently configured recordingDir (where Save/Copy leave it before the
+// result window closes). Shared by discard/convert/save/copy below so they
+// all draw the line in exactly the same place.
+fn recording_source_dirs(app: &AppHandle, state: &State<'_, Db>) -> [PathBuf; 2] {
+    let custom = lock(state).settings.ui_texts.get("recordingDir").cloned().unwrap_or_default();
+    [data_dir(app).join("recordings"), recording_dir(&custom)]
+}
+
+// Whether `path` is a recording this app itself produced, sitting in one of
+// `allowed`'s folders, rather than an arbitrary file named in a recording
+// command's IPC argument -- the same "rec-" stem plus allowed-parent-folder
+// proof discard_recording_file_in below already requires, reused here so
+// convert_recording/save_recording_now/copy_recording_to_clipboard cannot be
+// made to move, replace or feed ffmpeg an unrelated file just because a
+// subverted renderer sent that file's path as `src_path`.
+fn is_own_recording_source(allowed: &[PathBuf], path: &Path) -> bool {
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    if !name.starts_with("rec-") || !path.is_file() {
+        return false;
+    }
+    let Some(parent) = path.parent().and_then(|d| d.canonicalize().ok()) else { return false };
+    allowed.iter().any(|d| d.canonicalize().map(|c| c == parent).unwrap_or(false))
+}
+
+// Whether `sidecar` is exactly the mic capture belonging to `video` -- the
+// only sidecar mux_mic_track may consume and delete. Checked apart from
+// is_own_recording_source (which only proves `video` itself is ours) so a
+// second, unrelated path cannot ride along just because it happens to sit in
+// an allowed folder too.
+fn is_own_mic_sidecar(video: &Path, sidecar: &Path) -> bool {
+    sidecar == video.with_extension("mic.wav")
 }
 
 // Discard a not-yet-saved recording. Scoped to the app's own recordings
@@ -29101,9 +29483,11 @@ fn is_bare_filename(name: &str) -> bool {
 // The Aufnahmeordner dialog's own listing of what is currently sitting in
 // the trash, waiting out its retention window -- same shape and same
 // extension filter as video_folder_stats/video_folder_cleanup_preview above.
-#[tauri::command]
-fn list_discarded_recordings(dir: String) -> Vec<VideoFolderFile> {
-    let trash = std::path::Path::new(&dir).join("verworfen");
+fn list_discarded_recordings_impl(dir: &str, configured: &Path) -> Vec<VideoFolderFile> {
+    if !path_matches_configured_dir(std::path::Path::new(dir), configured) {
+        return Vec::new();
+    }
+    let trash = std::path::Path::new(dir).join("verworfen");
     let Ok(entries) = fs::read_dir(&trash) else { return Vec::new() };
     let mut out = Vec::new();
     for e in entries.flatten() {
@@ -29117,13 +29501,20 @@ fn list_discarded_recordings(dir: String) -> Vec<VideoFolderFile> {
 }
 
 #[tauri::command]
-fn restore_discarded_recording(dir: String, name: String) -> bool {
-    if !is_bare_filename(&name) {
+fn list_discarded_recordings(state: State<'_, Db>, dir: String) -> Vec<VideoFolderFile> {
+    list_discarded_recordings_impl(&dir, &configured_recording_dir(&state))
+}
+
+fn restore_discarded_recording_impl(dir: &str, name: &str, configured: &Path) -> bool {
+    if !is_bare_filename(name) {
         return false;
     }
-    let trash = std::path::Path::new(&dir).join("verworfen");
-    let src = trash.join(&name);
-    let dst = std::path::Path::new(&dir).join(&name);
+    if !path_matches_configured_dir(std::path::Path::new(dir), configured) {
+        return false;
+    }
+    let trash = std::path::Path::new(dir).join("verworfen");
+    let src = trash.join(name);
+    let dst = std::path::Path::new(dir).join(name);
     // Never overwrites a same-named file that has appeared at the old spot
     // since the discard -- restoring silently on top of someone else's
     // recording would be a worse surprise than the restore just failing.
@@ -29148,12 +29539,19 @@ fn restore_discarded_recording(dir: String, name: String) -> bool {
 }
 
 #[tauri::command]
-fn delete_discarded_recording_now(dir: String, name: String) -> bool {
-    if !is_bare_filename(&name) {
+fn restore_discarded_recording(state: State<'_, Db>, dir: String, name: String) -> bool {
+    restore_discarded_recording_impl(&dir, &name, &configured_recording_dir(&state))
+}
+
+fn delete_discarded_recording_now_impl(dir: &str, name: &str, configured: &Path) -> bool {
+    if !is_bare_filename(name) {
         return false;
     }
-    let trash = std::path::Path::new(&dir).join("verworfen");
-    let path = trash.join(&name);
+    if !path_matches_configured_dir(std::path::Path::new(dir), configured) {
+        return false;
+    }
+    let trash = std::path::Path::new(dir).join("verworfen");
+    let path = trash.join(name);
     if !path.is_file() {
         return false;
     }
@@ -29163,6 +29561,11 @@ fn delete_discarded_recording_now(dir: String, name: String) -> bool {
     let _ = fs::remove_file(path.with_extension("keys.json"));
     let _ = fs::remove_file(camera::sidecar_path(&path));
     fs::remove_file(&path).is_ok()
+}
+
+#[tauri::command]
+fn delete_discarded_recording_now(state: State<'_, Db>, dir: String, name: String) -> bool {
+    delete_discarded_recording_now_impl(&dir, &name, &configured_recording_dir(&state))
 }
 
 // Called by the frontend once the first render + text fit is complete.
@@ -31020,10 +31423,22 @@ fn settings_import_diff(current: &Settings, incoming: &SettingsOnlyExport) -> (u
     (changed, total)
 }
 
+// A settings-only import file is untrusted (it could be a hostile file placed
+// where the user was talked into picking it, not necessarily their own
+// export), so the folder-authority keys never come along for the ride --
+// see PROTECTED_FOLDER_KEYS. Called on every incoming file before it is
+// diffed or applied, so preview and apply always agree on what would change.
+fn strip_protected_folder_keys(incoming: &mut SettingsOnlyExport) {
+    for key in PROTECTED_FOLDER_KEYS {
+        incoming.ui_texts.remove(key);
+    }
+}
+
 #[tauri::command]
 async fn preview_settings_import(state: State<'_, Db>, path: String) -> Result<(usize, usize), String> {
     let raw = read_file_capped(&PathBuf::from(path), MAX_SETTINGS_IMPORT_BYTES)?;
-    let incoming = parse_settings_only(&raw)?;
+    let mut incoming = parse_settings_only(&raw)?;
+    strip_protected_folder_keys(&mut incoming);
     let store = lock(&state);
     Ok(settings_import_diff(&store.settings, &incoming))
 }
@@ -31031,7 +31446,8 @@ async fn preview_settings_import(state: State<'_, Db>, path: String) -> Result<(
 #[tauri::command]
 async fn apply_settings_import(app: AppHandle, state: State<'_, Db>, path: String) -> Result<usize, String> {
     let raw = read_file_capped(&PathBuf::from(path), MAX_SETTINGS_IMPORT_BYTES)?;
-    let incoming = parse_settings_only(&raw)?;
+    let mut incoming = parse_settings_only(&raw)?;
+    strip_protected_folder_keys(&mut incoming);
     let changed = {
         let mut store = lock(&state);
         let (changed, _) = settings_import_diff(&store.settings, &incoming);
@@ -31103,6 +31519,14 @@ fn apply_import(store: &mut Store, backup: Backup, want_data: bool, want_setting
     let backup_pw_dropped = want_settings && backup.settings.ui_texts.contains_key(BACKUP_PW_KEY);
     if want_settings {
         let local_backup_pw = store.settings.ui_texts.get(BACKUP_PW_KEY).cloned();
+        // A full backup can come from another machine, or be a hostile file the
+        // user was talked into restoring, so its own folder-authority settings
+        // (PROTECTED_FOLDER_KEYS) must not land here either -- this machine's
+        // current folders are kept exactly like the backup password above.
+        let local_folders: Vec<(String, String)> = PROTECTED_FOLDER_KEYS
+            .iter()
+            .filter_map(|k| store.settings.ui_texts.get(*k).map(|v| (k.to_string(), v.clone())))
+            .collect();
         store.settings = backup.settings;
         SETTINGS_LOCKED.store(false, Ordering::Relaxed); // a full settings import supersedes any corrupt-row lock
         // migrate() fills defaults and guarantees at least one view: without it a
@@ -31112,6 +31536,12 @@ fn apply_import(store: &mut Store, backup: Backup, want_data: bool, want_setting
         store.settings.ui_texts.remove(BACKUP_PW_KEY);
         if let Some(pw) = local_backup_pw {
             store.settings.ui_texts.insert(BACKUP_PW_KEY.to_string(), pw);
+        }
+        for key in PROTECTED_FOLDER_KEYS {
+            store.settings.ui_texts.remove(key);
+        }
+        for (k, v) in local_folders {
+            store.settings.ui_texts.insert(k, v);
         }
         load_pick_history(&store.settings); // restore brings its own history mirror
     }
@@ -31551,24 +31981,65 @@ fn looks_like_a_path(s: &str) -> bool {
     drive_rooted || unc || unix_like
 }
 
+// Whether `line[at..]` starts a path, and if it is preceded by an ASCII
+// letter or digit (so a bare "D:\" is only ever recognised at a real word
+// boundary, never mid-word).
+fn path_starts_at(line: &str, at: usize) -> bool {
+    if at > 0 {
+        let prev = line[..at].chars().next_back().unwrap_or(' ');
+        if prev.is_ascii_alphanumeric() {
+            return false;
+        }
+    }
+    looks_like_a_path(&line[at..])
+}
+
 // Last, structural line of defence for `append_crash_log`: any drive-rooted,
 // UNC or Unix-style path that slipped past the named placeholders above (a data
 // or sync folder the user pointed the app at that this run never resolved, for
 // one) is cut down to its file name rather than left whole in the log.
+//
+// A path can legitimately contain spaces ("D:\Private Folder\x.mp4"), so this
+// can no longer just split on whitespace -- that used to leave every space-
+// separated component of such a path in the log untouched except the first.
+// Instead it scans the line once: a path inside matching quotes runs to the
+// closing quote (spaces and all); an unquoted path runs to the next quote
+// character or the end of the line, since nothing in a Windows path itself
+// ends it earlier than that.
 fn shorten_stray_paths(line: &str) -> String {
-    line.split(' ')
-        .map(|word| {
-            let trimmed = word.trim_end_matches(|c: char| ".,;:)]}\"'".contains(c));
-            let suffix = &word[trimmed.len()..];
-            if looks_like_a_path(trimmed) {
-                let name = trimmed.rsplit(['\\', '/']).find(|s| !s.is_empty()).unwrap_or(trimmed);
-                format!("{name}{suffix}")
-            } else {
-                word.to_string()
+    let mut out = String::with_capacity(line.len());
+    let mut i = 0;
+    while i < line.len() {
+        let rest = &line[i..];
+        let ch = rest.chars().next().unwrap();
+        if ch == '"' || ch == '\'' {
+            let after_quote = i + ch.len_utf8();
+            if let Some(rel_end) = line[after_quote..].find(ch) {
+                let inner = &line[after_quote..after_quote + rel_end];
+                if looks_like_a_path(inner) {
+                    let name = inner.rsplit(['\\', '/']).find(|s| !s.is_empty()).unwrap_or(inner);
+                    out.push(ch);
+                    out.push_str(name);
+                    out.push(ch);
+                    i = after_quote + rel_end + ch.len_utf8();
+                    continue;
+                }
             }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
+        } else if path_starts_at(line, i) {
+            let end = rest.find(['"', '\'']).map(|e| i + e).unwrap_or(line.len());
+            let raw = &line[i..end];
+            let trimmed = raw.trim_end_matches(|c: char| " .,;:)]}".contains(c));
+            let suffix = &raw[trimmed.len()..];
+            let name = trimmed.rsplit(['\\', '/']).find(|s| !s.is_empty()).unwrap_or(trimmed);
+            out.push_str(name);
+            out.push_str(suffix);
+            i = end;
+            continue;
+        }
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    out
 }
 
 // One line's worth of cleanup for the crash log: named folders first (readable
@@ -31584,12 +32055,49 @@ fn scrub_log_line(line: &str) -> String {
 // in place rather than deleting the line it is on -- the rest of that line is
 // still a real, useful diagnostic. Its own function, taking an explicit path, for
 // the same testability reason as `rotate_log_file` above.
+// Reads the raw bytes and decodes each line separately (lossy) rather than
+// `fs::read_to_string`-ing the whole file: an older build's crash log is
+// exactly the kind of file that can carry one stray non-UTF-8 byte (a raw
+// OS error message, a truncated multi-byte character at a old rotation cut),
+// and reading the whole file as one string would fail closed on that single
+// byte and skip scrubbing every other line in the file along with it. A
+// broken byte here only turns into a replacement character on its own line;
+// every other line is still scrubbed normally.
+// Rewritten atomically (temp file + rename) under the same lock
+// `append_crash_log` uses, so this can never interleave with a concurrent
+// append and leave the file half old, half rewritten.
 fn strip_user_path_lines(path: &Path) {
-    let Ok(text) = fs::read_to_string(path) else { return };
-    let cleaned: String = text.lines().map(|line| format!("{}\n", scrub_log_line(line))).collect();
-    if cleaned != text {
-        let _ = fs::write(path, cleaned);
+    let Ok(bytes) = fs::read(path) else { return };
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut changed = false;
+    for raw_line in bytes.split_inclusive(|&b| b == b'\n') {
+        let (body, had_newline) = match raw_line.strip_suffix(b"\n") {
+            Some(b) => (b, true),
+            None => (raw_line, false),
+        };
+        let text = String::from_utf8_lossy(body);
+        let cleaned = scrub_log_line(&text);
+        if cleaned != text {
+            changed = true;
+        }
+        out.extend_from_slice(cleaned.as_bytes());
+        if had_newline {
+            out.push(b'\n');
+        }
     }
+    if !changed {
+        return;
+    }
+    with_crash_log_lock(path, || {
+        let tmp = path.with_extension("log.tmp");
+        let Ok(mut f) = fs::File::create(&tmp) else { return };
+        use std::io::Write;
+        let wrote = f.write_all(&out).and_then(|_| f.flush()).and_then(|_| f.sync_all());
+        drop(f);
+        if wrote.is_err() || fs::rename(&tmp, path).is_err() {
+            let _ = fs::remove_file(&tmp);
+        }
+    });
 }
 
 // One-time cleanup: an older build's crash log can carry the BUILD MACHINE's own
@@ -31658,6 +32166,37 @@ fn scrub_error_log_text(s: &str) -> String {
     }
 }
 
+// Every value `origin` is actually allowed to carry: every overlay/modal id
+// `currentErrorOrigin()` (main.js) can read off the open dialog, plus the two
+// non-modal screens it falls back to and the two backend-only origins
+// (`remoteApi`, the remote-access receiver; `test`, used only by this file's
+// own tests). `log_error` is a real IPC command, so its `origin` argument is
+// exactly as untrusted as any other string a caller passes it -- an allow-
+// list with a fixed "other" fallback for anything else keeps it from ever
+// becoming a free-text field, the same reasoning `scrub_error_log_text`
+// already applies to `text`/`raw`.
+const ERROR_LOG_ORIGINS: [&str; 38] = [
+    "about-modal", "backup-modal", "batch-export-modal", "clip-modal", "compare-modal",
+    "confirm-modal", "dupes-modal", "error-log-modal", "global-search", "help",
+    "hotkeys-modal", "import-folder-modal", "import-preview-modal", "journal", "library",
+    "licenses-modal", "lightbox", "modal", "ocr-langs-modal", "ocr-modal", "rec-modal",
+    "settings", "shortcuts-modal", "snip-edit", "snip-modal", "tag-modal", "theme-modal",
+    "tour-modal", "trash-modal", "update-modal", "vars-modal", "ve-confirm",
+    "ve-overlay-live", "video-cleanup-modal", "view-modal", "whats-new-modal",
+    "settings-expert", "main",
+];
+
+fn sanitize_error_log_origin(origin: &str) -> &'static str {
+    if let Some(&known) = ERROR_LOG_ORIGINS.iter().find(|&&known| known == origin) {
+        return known;
+    }
+    match origin {
+        "remoteApi" => "remoteApi",
+        "test" => "test",
+        _ => "other",
+    }
+}
+
 // Newest first; anything past `max` is dropped from the old end.
 fn record_error_log(text: &str, origin: &str, raw: Option<&str>, max: usize) {
     let mut log = ERROR_LOG.lock().unwrap_or_else(|e| e.into_inner());
@@ -31667,7 +32206,7 @@ fn record_error_log(text: &str, origin: &str, raw: Option<&str>, max: usize) {
         ErrorLogEntry {
             ts,
             text: scrub_error_log_text(text),
-            origin: origin.to_string(),
+            origin: sanitize_error_log_origin(origin).to_string(),
             raw: raw.map(scrub_error_log_text),
         },
     );
@@ -32786,6 +33325,9 @@ pub fn run() {
             set_ui_flag,
             set_ui_value,
             set_ui_text,
+            set_screenshot_dir,
+            set_video_export_dir,
+            set_recording_dir,
             reset_expert,
             remote::remote_api_take_shown_password,
             remote::remote_api_regenerate_password,
@@ -32928,6 +33470,7 @@ pub fn run() {
             cancel_export_job,
             save_recording_as,
             pick_export_dest,
+            pick_export_folder,
             save_recording_now,
             copy_recording_to_clipboard,
             clip_export_path,
@@ -34503,10 +35046,14 @@ fn sync_status(state: State<Db>) -> SyncStatus {
 // ago, read from the settings here.
 #[tauri::command]
 fn set_sync_dir(app: AppHandle, state: State<Db>, dir: String, delete_old: bool) -> Result<usize, String> {
+    let trimmed = dir.trim();
+    if !trimmed.is_empty() && !consume_granted_dir(Path::new(trimmed)) {
+        return Err("dir-not-picked".to_string());
+    }
     let (old, write_failures) = {
         let mut store = lock(&state);
         let old = sync_dir_path(&app, &store.settings);
-        store.settings.ui_texts.insert("syncDir".into(), dir.trim().to_string());
+        store.settings.ui_texts.insert("syncDir".into(), trimmed.to_string());
         save_settings(&app, &store.settings);
         // Same synchronous, one-off treatment activation gets: when this returns, the
         // files are in the new folder. Deliberately inside the lock, as before.
@@ -37144,6 +37691,91 @@ mod tests {
     }
 
     #[test]
+    fn export_dest_dir_accepts_the_picked_folder_and_rejects_anywhere_else() {
+        let root = std::env::temp_dir().join(format!("ps-exportdesttest-{}", std::process::id()));
+        let picked = root.join("picked");
+        let other = root.join("elsewhere");
+        let src_dir = root.join("source");
+        let no_recording_dir = root.join("unused-recording-dir");
+        std::fs::create_dir_all(&picked).unwrap();
+        std::fs::create_dir_all(&other).unwrap();
+        std::fs::create_dir_all(&src_dir).unwrap();
+        let src = src_dir.join("clip.mp4");
+        std::fs::write(&src, b"x").unwrap();
+
+        // Inside the folder a save dialog actually returned: accepted.
+        assert!(export_dest_dir_is_authorized_against(&picked.join("out.mp4"), &src, Some(&picked), None, &no_recording_dir));
+        // A path outside anything the app ever resolved: rejected.
+        assert!(!export_dest_dir_is_authorized_against(&other.join("out.mp4"), &src, Some(&picked), None, &no_recording_dir));
+        // The standing videoExportDir preference is accepted the same way.
+        assert!(export_dest_dir_is_authorized_against(&other.join("out.mp4"), &src, None, other.to_str(), &no_recording_dir));
+        // Saving back into the source file's own folder, when that folder IS the
+        // configured recording folder, is accepted with no pick at all.
+        assert!(export_dest_dir_is_authorized_against(&src_dir.join("out.mp4"), &src, None, None, &src_dir));
+        // Nothing remembered and nothing configured: rejected.
+        assert!(!export_dest_dir_is_authorized_against(&other.join("out.mp4"), &src, None, None, &no_recording_dir));
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // Finding 2 (security pass 348): a src_path naming any existing file used
+    // to authorize that file's own parent folder as an export destination, with
+    // no restriction on where that folder was. An attacker-controlled src_path
+    // pointing into an arbitrary folder must no longer grant write access to it
+    // just because the destination sits alongside it.
+    #[test]
+    fn export_dest_dir_fallback_requires_src_inside_a_trusted_folder() {
+        let root = std::env::temp_dir().join(format!("ps-exportdest-untrusted-{}", std::process::id()));
+        let untrusted_dir = root.join("attacker-chosen");
+        let recording_dir = root.join("recordings");
+        std::fs::create_dir_all(&untrusted_dir).unwrap();
+        std::fs::create_dir_all(&recording_dir).unwrap();
+        let untrusted_src = untrusted_dir.join("clip.mp4");
+        std::fs::write(&untrusted_src, b"x").unwrap();
+        let recording_src = recording_dir.join("rec-clip.mp4");
+        std::fs::write(&recording_src, b"x").unwrap();
+
+        // src_path sits in a folder this app never resolved as its own: the
+        // "save back next to source" fallback must not authorize it.
+        assert!(!export_dest_dir_is_authorized_against(
+            &untrusted_dir.join("out.mp4"),
+            &untrusted_src,
+            None,
+            None,
+            &recording_dir,
+        ));
+        // src_path sits inside the actual configured recording folder: the same
+        // fallback still works for the ordinary case it exists for.
+        assert!(export_dest_dir_is_authorized_against(
+            &recording_dir.join("out.mp4"),
+            &recording_src,
+            None,
+            None,
+            &recording_dir,
+        ));
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn sanitize_canvas_mode_keeps_the_two_known_alternatives_and_rejects_the_rest() {
+        assert_eq!(sanitize_canvas_mode("monitor"), "monitor");
+        assert_eq!(sanitize_canvas_mode("all"), "all");
+        assert_eq!(sanitize_canvas_mode("window"), "window");
+        assert_eq!(sanitize_canvas_mode(""), "window");
+        assert_eq!(sanitize_canvas_mode("Monitor"), "window");
+        assert_eq!(sanitize_canvas_mode("drop table settings"), "window");
+    }
+
+    #[test]
+    fn clamp_canvas_max_px_stays_inside_the_expert_menus_own_range() {
+        assert_eq!(clamp_canvas_max_px(8192.0), 8192);
+        assert_eq!(clamp_canvas_max_px(0.0), 2048);
+        assert_eq!(clamp_canvas_max_px(-1.0), 2048);
+        assert_eq!(clamp_canvas_max_px(1_000_000_000.0), 15360);
+    }
+
+    #[test]
     fn recording_limit_reached_is_off_by_default() {
         assert!(!recording_limit_reached(u64::MAX, u64::MAX, 0.0, 0.0));
     }
@@ -39635,14 +40267,29 @@ mod tests {
     fn video_folder_stats_counts_only_known_video_extensions() {
         let dir = std::env::temp_dir().join(format!("ps-video-folder-stats-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
-        fs::write(dir.join("a.mp4"), b"1234").unwrap();
-        fs::write(dir.join("b.webm"), b"12").unwrap();
-        fs::write(dir.join("c.gif"), b"123").unwrap();
+        fs::write(dir.join("rec-a.mp4"), b"1234").unwrap();
+        fs::write(dir.join("rec-b.webm"), b"12").unwrap();
+        fs::write(dir.join("rec-c.gif"), b"123").unwrap();
         fs::write(dir.join("notes.txt"), b"ignored, wrong extension").unwrap();
         fs::create_dir_all(dir.join("MP4")).unwrap(); // a directory named like an extension is not a file
-        let (count, bytes) = video_folder_stats(dir.to_string_lossy().to_string());
+        let (count, bytes) = video_folder_stats_impl(&dir.to_string_lossy(), &dir);
         assert_eq!(count, 3, "only the three video files must be counted, not the txt or the subfolder");
         assert_eq!(bytes, 4 + 2 + 3);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // Finding 3 (security pass 348): the extension check alone let this count
+    // and clean up any matching file in a shared folder, not only the app's own
+    // recordings -- the same "rec-" naming proof discard already requires.
+    #[test]
+    fn video_folder_stats_ignores_a_video_file_without_the_rec_prefix() {
+        let dir = std::env::temp_dir().join(format!("ps-video-folder-noprefix-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("rec-mine.mp4"), b"1234").unwrap();
+        fs::write(dir.join("someone-elses-video.mp4"), b"999999").unwrap();
+        let (count, bytes) = video_folder_stats_impl(&dir.to_string_lossy(), &dir);
+        assert_eq!(count, 1, "only the app's own rec-prefixed file must be counted");
+        assert_eq!(bytes, 4);
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -39650,7 +40297,7 @@ mod tests {
     fn video_folder_stats_on_a_missing_folder_is_empty_not_an_error() {
         let dir = std::env::temp_dir().join(format!("ps-video-folder-missing-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir); // guarantee it really does not exist
-        assert_eq!(video_folder_stats(dir.to_string_lossy().to_string()), (0, 0));
+        assert_eq!(video_folder_stats_impl(&dir.to_string_lossy(), &dir), (0, 0));
     }
 
     // ---- Folder import ----
@@ -39810,7 +40457,7 @@ mod tests {
         fs::create_dir_all(&trash).unwrap();
         fs::write(dir.join("rec-a.mp4"), b"1234").unwrap();
         fs::write(trash.join("rec-b.mp4"), b"12").unwrap();
-        let (count, bytes) = video_folder_stats(dir.to_string_lossy().to_string());
+        let (count, bytes) = video_folder_stats_impl(&dir.to_string_lossy(), &dir);
         assert_eq!(count, 2, "a discarded recording still occupies real disk space in this folder");
         assert_eq!(bytes, 4 + 2);
         let _ = fs::remove_dir_all(&dir);
@@ -39924,6 +40571,90 @@ mod tests {
         let _ = fs::remove_dir_all(&other);
     }
 
+    // ---------- security pass: picker-capability grants (set_*_dir gate) ----------
+
+    #[test]
+    fn accept_dir_setting_rejects_a_path_that_was_never_picked() {
+        let dir = std::env::temp_dir().join(format!("ps-grant-unpicked-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let dir_s = dir.to_string_lossy().to_string();
+        let default = std::env::temp_dir().join(format!("ps-grant-unpicked-default-{}", std::process::id()));
+        let err = accept_dir_setting(&dir_s, &default).expect_err("a dir the picker never returned must be refused");
+        assert_eq!(err, "dir-not-picked");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn accept_dir_setting_accepts_a_granted_dir_exactly_once() {
+        let dir = std::env::temp_dir().join(format!("ps-grant-once-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let dir_s = dir.to_string_lossy().to_string();
+        let default = std::env::temp_dir().join(format!("ps-grant-once-default-{}", std::process::id()));
+        grant_picked_dir(&dir);
+        assert_eq!(accept_dir_setting(&dir_s, &default).unwrap(), dir_s, "the just-picked dir must be accepted");
+        let err = accept_dir_setting(&dir_s, &default).expect_err("the same grant must not be usable twice");
+        assert_eq!(err, "dir-not-picked");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn accept_dir_setting_treats_empty_and_the_built_in_default_as_a_reset() {
+        let default = std::env::temp_dir().join(format!("ps-grant-default-{}", std::process::id()));
+        assert_eq!(accept_dir_setting("", &default).unwrap(), "", "empty must reset without needing a grant");
+        assert_eq!(
+            accept_dir_setting(&default.to_string_lossy(), &default).unwrap(),
+            "",
+            "the feature's own built-in default must reset without needing a grant"
+        );
+    }
+
+    // ---------- security pass: recording-source ownership (convert/save/copy) ----------
+
+    #[test]
+    fn is_own_recording_source_accepts_a_rec_file_inside_an_allowed_folder() {
+        let dir = std::env::temp_dir().join(format!("ps-recsrc-own-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = dir.join("rec-2026-01-01-00-00-00.mp4");
+        fs::write(&src, b"video").unwrap();
+        assert!(is_own_recording_source(std::slice::from_ref(&dir), &src));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn is_own_recording_source_refuses_a_foreign_file_outside_the_allowed_folders() {
+        let dir = std::env::temp_dir().join(format!("ps-recsrc-in-{}", std::process::id()));
+        let other = std::env::temp_dir().join(format!("ps-recsrc-out-{}", std::process::id()));
+        fs::create_dir_all(&other).unwrap();
+        let src = other.join("rec-elsewhere.mp4");
+        fs::write(&src, b"video").unwrap();
+        assert!(!is_own_recording_source(&[dir], &src), "the folder is not one this app writes recordings into");
+        let _ = fs::remove_dir_all(&other);
+    }
+
+    #[test]
+    fn is_own_recording_source_refuses_a_file_without_the_rec_prefix_even_inside_an_allowed_folder() {
+        let dir = std::env::temp_dir().join(format!("ps-recsrc-noprefix-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = dir.join("not-a-recording.mp4");
+        fs::write(&src, b"video").unwrap();
+        assert!(!is_own_recording_source(std::slice::from_ref(&dir), &src), "a made-up name must not pass as proof");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn is_own_mic_sidecar_accepts_only_the_matching_videos_own_sidecar() {
+        let video = PathBuf::from("C:/recs/rec-2026-01-01-00-00-00.mp4");
+        let own_sidecar = PathBuf::from("C:/recs/rec-2026-01-01-00-00-00.mic.wav");
+        assert!(is_own_mic_sidecar(&video, &own_sidecar));
+    }
+
+    #[test]
+    fn is_own_mic_sidecar_refuses_an_unrelated_sidecar_in_the_same_folder() {
+        let video = PathBuf::from("C:/recs/rec-2026-01-01-00-00-00.mp4");
+        let foreign_sidecar = PathBuf::from("C:/recs/rec-someone-elses-take.mic.wav");
+        assert!(!is_own_mic_sidecar(&video, &foreign_sidecar), "a sidecar for a different recording must not pass");
+    }
+
     #[test]
     fn restore_discarded_recording_moves_the_file_back_to_its_original_folder() {
         let dir = std::env::temp_dir().join(format!("ps-restore-{}", std::process::id()));
@@ -39931,7 +40662,7 @@ mod tests {
         fs::create_dir_all(&trash).unwrap();
         fs::write(trash.join("rec-x.mp4"), b"video").unwrap();
         let dir_s = dir.to_string_lossy().to_string();
-        assert!(restore_discarded_recording(dir_s.clone(), "rec-x.mp4".to_string()));
+        assert!(restore_discarded_recording_impl(&dir_s, "rec-x.mp4", &dir));
         assert!(dir.join("rec-x.mp4").is_file());
         assert!(!trash.join("rec-x.mp4").exists());
         let _ = fs::remove_dir_all(&dir);
@@ -39959,7 +40690,7 @@ mod tests {
         fs::write(trash.join("rec-x.mp4"), b"discarded copy").unwrap();
         fs::write(dir.join("rec-x.mp4"), b"a newer recording already took this name").unwrap();
         let dir_s = dir.to_string_lossy().to_string();
-        assert!(!restore_discarded_recording(dir_s, "rec-x.mp4".to_string()));
+        assert!(!restore_discarded_recording_impl(&dir_s, "rec-x.mp4", &dir));
         assert_eq!(fs::read(dir.join("rec-x.mp4")).unwrap(), b"a newer recording already took this name");
         assert!(trash.join("rec-x.mp4").is_file(), "the discarded copy must stay put, not vanish on a failed restore");
         let _ = fs::remove_dir_all(&dir);
@@ -39972,7 +40703,7 @@ mod tests {
         fs::create_dir_all(&trash).unwrap();
         fs::write(trash.join("rec-x.mp4"), b"video").unwrap();
         let dir_s = dir.to_string_lossy().to_string();
-        assert!(delete_discarded_recording_now(dir_s, "rec-x.mp4".to_string()));
+        assert!(delete_discarded_recording_now_impl(&dir_s, "rec-x.mp4", &dir));
         assert!(!trash.join("rec-x.mp4").exists());
         let _ = fs::remove_dir_all(&dir);
     }
@@ -40056,8 +40787,8 @@ mod tests {
     fn video_folder_cleanup_preview_and_cleanup_agree_and_only_touch_stale_video_files() {
         let dir = std::env::temp_dir().join(format!("ps-video-folder-cleanup-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
-        let stale = dir.join("old-recording.mp4");
-        let fresh = dir.join("new-recording.mp4");
+        let stale = dir.join("rec-old-recording.mp4");
+        let fresh = dir.join("rec-new-recording.mp4");
         let unrelated = dir.join("readme.txt");
         fs::write(&stale, b"old").unwrap();
         fs::write(&fresh, b"new").unwrap();
@@ -40066,17 +40797,75 @@ mod tests {
         backdate(&unrelated, Duration::from_secs(40 * 24 * 3600));
 
         let dir_s = dir.to_string_lossy().to_string();
-        let preview = video_folder_cleanup_preview(dir_s.clone(), 30);
+        let preview = video_folder_cleanup_preview_impl(&dir_s, 30, &dir);
         assert_eq!(preview.len(), 1, "only the stale video file is older than 30 days");
-        assert_eq!(preview[0].name, "old-recording.mp4");
+        assert_eq!(preview[0].name, "rec-old-recording.mp4");
         assert_eq!(preview[0].size, 3);
 
-        let deleted = video_folder_cleanup(dir_s, 30);
+        let deleted = video_folder_cleanup_impl(&dir_s, 30, &dir);
         assert_eq!(deleted, 1, "cleanup must delete exactly what the preview listed");
         assert!(!stale.exists(), "the stale video must be gone");
         assert!(fresh.exists(), "a fresh video must survive");
         assert!(unrelated.exists(), "a non-video file must never be deleted, however old");
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    // Finding 3 (security pass 348): a stale file with a matching extension but
+    // no "rec-" stem (some other app's video the user's chosen folder already
+    // had in it) must survive the cleanup that only ever meant to sweep this
+    // app's own recordings.
+    #[test]
+    fn video_folder_cleanup_never_touches_a_stale_file_without_the_rec_prefix() {
+        let dir = std::env::temp_dir().join(format!("ps-video-folder-cleanup-noprefix-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let foreign = dir.join("someone-elses-video.mp4");
+        fs::write(&foreign, b"not ours").unwrap();
+        backdate(&foreign, Duration::from_secs(40 * 24 * 3600));
+
+        let dir_s = dir.to_string_lossy().to_string();
+        assert!(video_folder_cleanup_preview_impl(&dir_s, 30, &dir).is_empty(), "a non-rec- file must never be previewed for cleanup");
+        assert_eq!(video_folder_cleanup_impl(&dir_s, 30, &dir), 0, "a non-rec- file must never be deleted by cleanup");
+        assert!(foreign.is_file(), "the foreign video must survive untouched");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn video_folder_cleanup_refuses_a_dir_that_is_not_the_configured_recording_folder() {
+        let configured = std::env::temp_dir().join(format!("ps-video-folder-configured-{}", std::process::id()));
+        let foreign = std::env::temp_dir().join(format!("ps-video-folder-foreign-{}", std::process::id()));
+        fs::create_dir_all(&configured).unwrap();
+        fs::create_dir_all(&foreign).unwrap();
+        let victim = foreign.join("not-a-recording.mp4");
+        fs::write(&victim, b"old").unwrap();
+        backdate(&victim, Duration::from_secs(40 * 24 * 3600));
+        let foreign_s = foreign.to_string_lossy().to_string();
+
+        assert!(video_folder_cleanup_preview_impl(&foreign_s, 30, &configured).is_empty(), "a foreign folder must never be previewed");
+        assert_eq!(video_folder_cleanup_impl(&foreign_s, 30, &configured), 0, "a foreign folder must never be cleaned");
+        assert!(victim.is_file(), "the file in the foreign folder must survive untouched");
+        assert_eq!(video_folder_stats_impl(&foreign_s, &configured), (0, 0), "stats for a foreign folder must read as empty");
+
+        let _ = fs::remove_dir_all(&configured);
+        let _ = fs::remove_dir_all(&foreign);
+    }
+
+    #[test]
+    fn discarded_recording_commands_refuse_a_dir_that_is_not_the_configured_recording_folder() {
+        let configured = std::env::temp_dir().join(format!("ps-discard-configured-{}", std::process::id()));
+        let foreign = std::env::temp_dir().join(format!("ps-discard-foreign-{}", std::process::id()));
+        let foreign_trash = foreign.join("verworfen");
+        fs::create_dir_all(&configured).unwrap();
+        fs::create_dir_all(&foreign_trash).unwrap();
+        fs::write(foreign_trash.join("rec-x.mp4"), b"video").unwrap();
+        let foreign_s = foreign.to_string_lossy().to_string();
+
+        assert!(list_discarded_recordings_impl(&foreign_s, &configured).is_empty(), "a foreign folder's trash must never be listed");
+        assert!(!restore_discarded_recording_impl(&foreign_s, "rec-x.mp4", &configured), "a foreign folder must never be restored from");
+        assert!(!delete_discarded_recording_now_impl(&foreign_s, "rec-x.mp4", &configured), "a foreign folder must never be deleted from");
+        assert!(foreign_trash.join("rec-x.mp4").is_file(), "the file in the foreign folder must survive untouched");
+
+        let _ = fs::remove_dir_all(&configured);
+        let _ = fs::remove_dir_all(&foreign);
     }
 
     // Reusing a zoomed-in filmstrip's cache for a zoomed-out request served
@@ -41378,6 +42167,40 @@ mod tests {
         assert!(redirected.contains(&msg), "a path-free message must reach the log exactly as written: {redirected}");
     }
 
+    // A folder name with a space in it used to survive scrubbing: splitting on
+    // spaces before deciding what looks like a path left every space-separated
+    // piece past the first one (here "Folder\x.mp4") sitting in the log in the
+    // clear. The whole path, spaces and all, must come out as just the file name.
+    #[test]
+    fn shorten_stray_paths_removes_a_folder_name_that_contains_a_space() {
+        let out = shorten_stray_paths(r"path=D:\Private Folder\x.mp4");
+        assert_eq!(out, "path=x.mp4");
+        assert!(!out.contains("Private"), "no fragment of the folder name may remain: {out}");
+        assert!(!out.contains("Folder"), "no fragment of the folder name may remain: {out}");
+    }
+
+    // The same path, quoted, must shorten to just the file name inside the
+    // quotes rather than treating the quote character as part of the path or
+    // leaving the quotes describing something that is no longer there.
+    #[test]
+    fn shorten_stray_paths_removes_a_quoted_path_with_spaces() {
+        let out = shorten_stray_paths(r#"could not open "D:\Private Folder\x.mp4" for writing"#);
+        assert_eq!(out, r#"could not open "x.mp4" for writing"#);
+    }
+
+    #[test]
+    fn append_crash_log_scrubs_a_folder_name_with_a_space_in_it() {
+        const MARKER: &str = "PROBE-crash-log-scrub-space-in-folder";
+        append_crash_log(&format!(r"{MARKER}: path=D:\Private Folder\x.mp4"));
+
+        let redirected = fs::read_to_string(crash_log_path()).unwrap_or_default();
+        assert!(!redirected.contains("Private Folder"), "a spaced folder name must never reach the log: {redirected}");
+        assert!(
+            redirected.contains(&format!("{MARKER}: path=x.mp4")),
+            "the file name itself may stay, only the folder must go: {redirected}"
+        );
+    }
+
     // record_error_log/ERROR_LOG is a shared static -- serialise against other
     // tests touching it, same reasoning as SEAL_TEST_LOCK above.
     static ERROR_LOG_TEST_LOCK: Mutex<()> = Mutex::new(());
@@ -41393,6 +42216,24 @@ mod tests {
         assert_eq!(log.len(), 5, "the buffer must never grow past the configured cap");
         assert_eq!(log.first().unwrap().text, "message 6", "the newest entry must be first");
         assert_eq!(log.last().unwrap().text, "message 2", "the oldest entries beyond the cap must have been dropped");
+    }
+
+    #[test]
+    fn sanitize_error_log_origin_keeps_the_known_set_and_falls_back_to_other() {
+        assert_eq!(sanitize_error_log_origin("settings"), "settings");
+        assert_eq!(sanitize_error_log_origin("main"), "main");
+        assert_eq!(sanitize_error_log_origin("remoteApi"), "remoteApi");
+        assert_eq!(sanitize_error_log_origin("some prompt text smuggled in as an origin"), "other");
+        assert_eq!(sanitize_error_log_origin(""), "other");
+    }
+
+    #[test]
+    fn record_error_log_sanitizes_an_origin_outside_the_known_set() {
+        let _guard = ERROR_LOG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        ERROR_LOG.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        record_error_log("message", "not-a-real-modal-id", None, 5);
+        let log = ERROR_LOG.lock().unwrap_or_else(|e| e.into_inner());
+        assert_eq!(log.first().unwrap().origin, "other", "an origin outside the fixed set must never reach the stored entry as-is");
     }
 
     #[test]
@@ -41566,6 +42407,30 @@ mod tests {
 
         let after = fs::read_to_string(&path).unwrap();
         assert_eq!(before, after, "a clean file must not be rewritten");
+        let _ = fs::remove_file(&path);
+    }
+
+    // A single invalid UTF-8 byte anywhere in the file (a raw OS error message,
+    // a rotation cut mid multi-byte character) used to make `fs::read_to_string`
+    // fail outright, which skipped scrubbing every other line in the file along
+    // with the broken one. Reading raw bytes and decoding line by line must keep
+    // scrubbing every well-formed line regardless of what one broken line holds.
+    #[test]
+    fn strip_user_path_lines_still_scrubs_other_lines_past_one_invalid_utf8_byte() {
+        let path = std::env::temp_dir().join(format!("ps-crashlog-scrub-badutf8-{}", std::process::id()));
+        let mut contents = Vec::new();
+        contents.extend_from_slice(b"[t=1 v1.0] broken byte follows: \xFF end of line\n");
+        contents.extend_from_slice(b"[t=2 v1.0] panicked at C:\\Users\\example\\lib.rs:42");
+        contents.push(b'\n');
+        fs::write(&path, &contents).unwrap();
+
+        strip_user_path_lines(&path);
+
+        let cleaned = fs::read(&path).unwrap();
+        let cleaned_text = String::from_utf8_lossy(&cleaned);
+        assert_eq!(cleaned_text.lines().count(), 2, "both lines must survive, invalid byte and all: {cleaned_text:?}");
+        assert!(!cleaned_text.to_ascii_lowercase().contains(r"\users\"), "the profile path on the OTHER line must still be scrubbed: {cleaned_text:?}");
+        assert!(cleaned_text.contains("lib.rs:42"), "the rest of the second line must survive: {cleaned_text:?}");
         let _ = fs::remove_file(&path);
     }
 
@@ -43159,6 +44024,88 @@ mod tests {
             !store.settings.ui_texts.contains_key(BACKUP_PW_KEY),
             "the foreign backup password must not survive — this machine had none to restore"
         );
+    }
+
+    // Finding 1 (security pass 348): a full backup restore used to overwrite
+    // the folder-authority settings outright, so a hostile backup file could
+    // point videoExportDir/recordingDir/screenshotDir/syncDir at any folder it
+    // liked and have export/cleanup/sync commands trust it from then on. This
+    // machine's own folders must survive a settings-scope import exactly like
+    // the backup password above.
+    #[test]
+    fn import_all_settings_scope_keeps_this_machines_own_folder_settings() {
+        let mut store = Store {
+            prompts: vec![test_prompt("live")],
+            trash: Vec::new(),
+            settings: Settings::default(),
+            prompts_locked: false,
+            written: Default::default(),
+        };
+        store.settings.ui_texts.insert("recordingDir".into(), "D:\\mine\\recordings".into());
+        store.settings.ui_texts.insert("videoExportDir".into(), "D:\\mine\\exports".into());
+        store.settings.ui_texts.insert("screenshotDir".into(), "D:\\mine\\shots".into());
+        store.settings.ui_texts.insert("syncDir".into(), "D:\\mine\\sync".into());
+        let mut backup_settings = Settings::default();
+        backup_settings.ui_texts.insert("recordingDir".into(), "C:\\Windows\\System32".into());
+        backup_settings.ui_texts.insert("videoExportDir".into(), "C:\\Windows\\System32".into());
+        backup_settings.ui_texts.insert("screenshotDir".into(), "C:\\Windows\\System32".into());
+        backup_settings.ui_texts.insert("syncDir".into(), "C:\\Windows\\System32".into());
+        backup_settings.ui_texts.insert("marker".into(), "BACKUP".into());
+        let backup = Backup { prompts: vec![test_prompt("backed-up")], settings: backup_settings };
+
+        apply_import(&mut store, backup, false, true);
+
+        assert_eq!(
+            store.settings.ui_texts.get("marker").map(String::as_str),
+            Some("BACKUP"),
+            "an ordinary setting must still come from the backup"
+        );
+        for (key, own_value) in [
+            ("recordingDir", "D:\\mine\\recordings"),
+            ("videoExportDir", "D:\\mine\\exports"),
+            ("screenshotDir", "D:\\mine\\shots"),
+            ("syncDir", "D:\\mine\\sync"),
+        ] {
+            assert_eq!(
+                store.settings.ui_texts.get(key).map(String::as_str),
+                Some(own_value),
+                "{key} must keep this machine's own folder, never the backup's",
+            );
+        }
+    }
+
+    // Finding 1 (security pass 348): set_ui_text is the generic string setter
+    // every ordinary expert-menu row uses -- a folder-authority key must never
+    // be reachable through it, only through its own dedicated command.
+    #[test]
+    fn is_protected_folder_key_covers_every_folder_setting_and_nothing_else() {
+        assert!(is_protected_folder_key("screenshotDir"));
+        assert!(is_protected_folder_key("videoExportDir"));
+        assert!(is_protected_folder_key("recordingDir"));
+        assert!(is_protected_folder_key("syncDir"));
+        assert!(!is_protected_folder_key("copyFont"), "an ordinary string setting must stay reachable");
+        assert!(!is_protected_folder_key("dataDir"), "dataDir has its own separate command and storage, not a ui_texts key");
+    }
+
+    // Finding 1 (security pass 348): a settings-only import file is untrusted
+    // (it could be a hostile file, not necessarily the user's own export) --
+    // its folder-authority rows must be dropped before the diff/apply ever see
+    // them, so neither preview nor apply can be talked into changing them.
+    #[test]
+    fn strip_protected_folder_keys_removes_every_folder_setting_and_nothing_else() {
+        let mut incoming = SettingsOnlyExport::default();
+        incoming.ui_texts.insert("screenshotDir".into(), "C:\\evil".into());
+        incoming.ui_texts.insert("videoExportDir".into(), "C:\\evil".into());
+        incoming.ui_texts.insert("recordingDir".into(), "C:\\evil".into());
+        incoming.ui_texts.insert("syncDir".into(), "C:\\evil".into());
+        incoming.ui_texts.insert("copyFont".into(), "Consolas".into());
+
+        strip_protected_folder_keys(&mut incoming);
+
+        for key in PROTECTED_FOLDER_KEYS {
+            assert!(!incoming.ui_texts.contains_key(key), "{key} must be stripped from an incoming settings file");
+        }
+        assert_eq!(incoming.ui_texts.get("copyFont").map(String::as_str), Some("Consolas"), "an ordinary setting must survive untouched");
     }
 
     // A full "data" import must actually delete the prompts it replaces ON DISK,

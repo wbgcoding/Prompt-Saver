@@ -1189,6 +1189,13 @@ the video editor and the introduction tour ship on).
 - **A tile's menu and select button still popped up on hover while a chain
   was running**, competing with the order badge in the same corner. They now
   stay hidden on every tile until the chain ends, unless multi-select is on.
+- **The screenshot, recording and video-export folders could be redirected by
+  a settings import or a restored backup**, and the video editor's export
+  destination and recording cleanup could be pointed at a folder never
+  actually chosen through their own dialogs. These folders are now changed
+  only through their dedicated pickers, an import or restore can no longer
+  touch them, and cleanup only ever counts or removes this app's own
+  recordings.
 
 ### Security
 
@@ -1261,6 +1268,24 @@ the video editor and the introduction tour ship on).
   not copy, and stays out of search, Markdown sync, and a plain export by
   default; export can keep it encrypted instead, and a full backup always
   does. Uses the same encryption as encrypted backups, with its own password.
+- The recording canvas size limit and capture mode are now range-checked and
+  restricted to known values in the app itself, not only in the expert menu,
+  so an imported settings file cannot push either past what the menu allows.
+- Video export and the recordings-folder tools (cleanup, discard, restore) now
+  check every destination and folder argument against one the app itself
+  resolved (a save dialog it ran, the configured recording folder, or the
+  source file's own folder), instead of trusting that argument on its own.
+  Converting, saving and copying a recording now require the same proof for
+  their source file, and the screenshot, video-export, recording, sync and
+  data folder settings now only accept a folder just returned by the app's
+  own picker dialog (or the built-in default), instead of any string.
+- The crash log's folder-name scrubbing now handles a folder name that
+  contains spaces and no longer skips the rest of an older log file over one
+  broken byte in a single line. The error log's per-entry origin label is now
+  restricted to a fixed, known set instead of accepting any text.
+- Corrected the help text's count of the app's own network activity: it now
+  also names the update download itself, the GitHub link from the logo or
+  version label, and the Windows language-pack install.
 
 ### Removed
 

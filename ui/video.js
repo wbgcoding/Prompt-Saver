@@ -3665,10 +3665,16 @@ $("ve-export-choose-file").addEventListener("click", async () => {
   updateExportNote();
 });
 $("ve-export-choose-folder").addEventListener("click", async () => {
-  const folder = await invoke("pick_folder").catch(() => null);
+  const folder = await invoke("pick_export_folder").catch(() => null);
   if (!folder) return;
   VE.destDir = folder;
   VE.destOverride = null; // the auto filename moves into the new folder
+  // The backend only accepts this folder from the setter call that follows
+  // its own picker in the same flow, so it is sent here, once, rather than
+  // through persistExportSettings below, which resends the unchanged
+  // VE.destDir on every unrelated format/quality/scale change and would
+  // just be refused on every call after the first.
+  invoke("set_video_export_dir", { dir: folder }).catch(() => {});
   persistExportSettings();
   updateExportNote();
 });
@@ -3703,7 +3709,8 @@ function persistExportSettings() {
   // A custom free-typed size has no discrete preset to remember -- it falls
   // back to "keep original" as the safe default for the next session.
   invoke("set_ui_text", { key: "videoExportScale", value: currentScalePresetKey() || "" }).catch(() => {});
-  invoke("set_ui_text", { key: "videoExportDir", value: VE.destDir }).catch(() => {});
+  // videoExportDir itself is NOT resent here -- see the choose-folder handler
+  // above, which is the only place VE.destDir actually changes.
 }
 
 // ---------------------------------------------------------------- keyboard
