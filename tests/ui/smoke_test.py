@@ -2365,6 +2365,33 @@ PROBE = """
             if (document.body.classList.contains('chain-mode')) {
               out.errors.push('a click on the drag region with no drag left the move guard armed for the next real blur');
             }
+            // A locked chain must survive a drag longer than the fallback timeout:
+            // that timeout only catches a drag whose mouseup never reaches the
+            // webview, it must not let the guard expire while the blur it caused
+            // is still in effect and have the matching focus read as a real return.
+            for (let i = 0; i < 3 && document.body.classList.contains('chain-mode'); i++) await click('chain-btn');
+            await sleep(150);
+            startBtn.click();
+            await sleep(150);
+            if (!await clickTile('p3')) out.errors.push('could not pick p3 into the chain for the locked-chain drag test');
+            await click('chain-btn'); // on -> latched
+            await sleep(50);
+            if (!document.body.classList.contains('chain-mode')) {
+              out.errors.push('the chain-btn click did not latch the chain for the locked-chain drag test');
+            } else {
+              header.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }));
+              window.dispatchEvent(new Event('blur'));
+              await sleep(1650); // past the 1500ms fallback timeout, the drag is still going
+              window.dispatchEvent(new Event('focus'));
+              await sleep(50);
+              if (!document.body.classList.contains('chain-mode')) {
+                out.errors.push('a drag longer than the fallback timeout switched a locked chain off');
+              }
+              const p3TileLocked = findGridTile('p3');
+              if (!p3TileLocked || !p3TileLocked.classList.contains('chain-picked')) {
+                out.errors.push('a drag longer than the fallback timeout let the returning focus clear a locked chain picks');
+              }
+            }
           }
         }
       }

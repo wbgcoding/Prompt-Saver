@@ -17138,7 +17138,13 @@ function bind() {
   }, true);
   window.addEventListener("mouseup", () => disarmWindowMoving());
   window.addEventListener("blur", () => {
-    if (windowMoving) return; // the window is being moved, not switched away from
+    if (windowMoving) {
+      // The move is still going once the blur it causes actually arrives: stop the
+      // fallback timeout so a long drag cannot let the guard expire mid-move and
+      // have the matching focus read as a real return from another app.
+      clearTimeout(windowMovingTimer);
+      return;
+    }
     if (chainMode && chainSel.length && !varsCleanup && !chainLock) setChainMode(false);
   });
   // A latched chain survives the blur but starts fresh when we return: the
