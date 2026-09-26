@@ -589,6 +589,10 @@ the video editor and the introduction tour ship on).
   entirely, exporting into a self-cleaning temporary copy (removed after an
   hour, and again on the next launch, both adjustable) and putting the
   finished file straight on the clipboard.
+- **The video editor's export destination now has its own file name field**,
+  separate from the folder path, with the extension shown beside it. A name
+  with a path separator or a reserved Windows character is rejected on the
+  spot, with Export and Copy-to-clipboard disabled until it is fixed.
 
 ### Improved
 

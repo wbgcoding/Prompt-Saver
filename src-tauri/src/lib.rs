@@ -28386,6 +28386,20 @@ fn export_output_to_remember(result: &Result<String, String>) -> Option<PathBuf>
 // recording back next to itself" case. Everything is compared canonicalized
 // so a relative segment or a different letter case cannot be used to step
 // outside the folder that was actually picked.
+// A name typed into the export panel's "File name" field must stay one
+// path segment -- none of Windows' own reserved filename characters, and no
+// ".." (which needs no separator of its own to still mean "walk up a level"
+// on top of a picked/typed folder). Empty or "."/".." alone are refused the
+// same way. The frontend already blocks all of this live as the field is
+// typed; this is the same rule re-applied to whatever dest_path arrives.
+fn export_file_name_is_valid(name: &str) -> bool {
+    let trimmed = name.trim();
+    if trimmed.is_empty() || trimmed == "." || trimmed == ".." || trimmed.contains("..") {
+        return false;
+    }
+    !trimmed.chars().any(|c| matches!(c, '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|'))
+}
+
 // Split from `export_dest_dir_is_authorized` below so the actual decision is
 // a plain function of paths and can be unit-tested without a running app.
 fn export_dest_dir_is_authorized_against(
@@ -28504,6 +28518,15 @@ async fn export_video(app: AppHandle, state: State<'_, Db>, req: ExportRequest) 
         return Err(ffmpeg_error_json(FfmpegErrorKey::Missing, None, ""));
     }
     let dst = PathBuf::from(&req.dest_path);
+    // The export panel's own "File name" field types straight into
+    // req.dest_path's own file name -- checked again here rather than
+    // trusted from the frontend's own matching validation, same reasoning as
+    // export_dest_dir_is_authorized just below: the path ultimately
+    // comes from user input.
+    let file_name_ok = dst.file_name().and_then(|n| n.to_str()).is_some_and(export_file_name_is_valid);
+    if !file_name_ok {
+        return Err("export destination not recognized".to_string());
+    }
     if !export_dest_dir_is_authorized(&app, &state, &dst, &src) {
         return Err("export destination not recognized".to_string());
     }
@@ -37906,6 +37929,31 @@ mod tests {
         assert!(canvas_within_ceiling(8192, 4320, 8192, 4320));
         assert!(!canvas_within_ceiling(8193, 4320, 8192, 4320));
         assert!(!canvas_within_ceiling(7680, 4321, 8192, 4320));
+    }
+
+    #[test]
+    fn export_file_name_is_valid_accepts_a_plain_name() {
+        assert!(export_file_name_is_valid("Demo 1"));
+        assert!(export_file_name_is_valid("clip-edit"));
+        assert!(export_file_name_is_valid("My Video v1.2.3"));
+    }
+
+    #[test]
+    fn export_file_name_is_valid_rejects_a_separator_or_dot_dot() {
+        assert!(!export_file_name_is_valid("a/b"));
+        assert!(!export_file_name_is_valid("a\\b"));
+        assert!(!export_file_name_is_valid(".."));
+        assert!(!export_file_name_is_valid("..\\evil"));
+        assert!(!export_file_name_is_valid("a..b"));
+        assert!(!export_file_name_is_valid(""));
+        assert!(!export_file_name_is_valid("   "));
+        assert!(!export_file_name_is_valid("a:b"));
+        assert!(!export_file_name_is_valid("a*b"));
+        assert!(!export_file_name_is_valid("a?b"));
+        assert!(!export_file_name_is_valid("a\"b"));
+        assert!(!export_file_name_is_valid("a<b"));
+        assert!(!export_file_name_is_valid("a>b"));
+        assert!(!export_file_name_is_valid("a|b"));
     }
 
     #[test]

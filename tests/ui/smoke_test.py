@@ -11955,6 +11955,45 @@ VIDEO_PROBE = """
       errs.push('"Export to..." did not build the path from the picked folder');
     }
 
+    // ---- 525: the plain "File name" field, separate from the full path
+    // above -- a valid custom name flows straight into the export call, an
+    // invalid one shows an inline hint and disables Export/Copy to clipboard ----
+    const nameInput = document.getElementById('ve-export-name');
+    const nameHint = document.getElementById('ve-export-name-hint');
+    nameInput.value = 'Demo 1';
+    nameInput.dispatchEvent(new Event('input'));
+    await sleep(30);
+    if (!destInput.value.endsWith('Demo 1.mp4')) {
+      errs.push('typing "Demo 1" into the file-name field did not update the export destination: ' + destInput.value);
+    }
+    if (!nameHint.classList.contains('hidden')) {
+      errs.push('a valid file name still shows the invalid-name hint');
+    }
+    window.__SMOKE_ARGS__ = [];
+    document.getElementById('ve-export-start').click();
+    await sleep(150);
+    const nameExportCall = (window.__SMOKE_ARGS__ || []).find(([cmd]) => cmd === 'export_video');
+    if (!nameExportCall || !String(nameExportCall[1].req.dest_path).endsWith('Demo 1.mp4')) {
+      errs.push('export_video was not called with the typed file name');
+    }
+    nameInput.value = 'a/b';
+    nameInput.dispatchEvent(new Event('input'));
+    await sleep(30);
+    if (nameHint.classList.contains('hidden')) {
+      errs.push('an invalid file name ("a/b") does not show the inline hint');
+    }
+    if (!nameInput.classList.contains('invalid')) {
+      errs.push('an invalid file name does not mark the field itself invalid');
+    }
+    if (!document.getElementById('ve-export-start').disabled || !document.getElementById('ve-export-clip').disabled) {
+      errs.push('an invalid file name does not disable Export/Copy to clipboard');
+    }
+    // Leave the field valid again so the probe steps below are not blocked
+    // by this one's own leftover invalid state.
+    nameInput.value = 'ps-smoke-recording-edit';
+    nameInput.dispatchEvent(new Event('input'));
+    await sleep(30);
+
     // ---- 503: a destination the backend does not recognize (e.g. a file
     // opened from outside the app) opens the export-folder picker and
     // retries once instead of failing outright ----

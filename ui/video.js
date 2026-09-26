@@ -150,6 +150,7 @@ const VE = {
   lastExport: "",       // path of the file the last export produced
   destOverride: null,   // a full path picked via "Save as…" or typed by hand
   destDir: "",          // remembered folder from "Export to…", persisted across videos
+  exportNameOverride: null, // a plain file name typed into ve-export-name
   // Spatial zoom/pan of the preview picture itself, distinct from `zoom`
   // above (the timeline's pixels-per-second). 1 = fit-to-stage, the only level
   // that existed before; panPx is a plain CSS-pixel offset, independent of
@@ -3117,26 +3118,51 @@ function isLosslessCopy() {
 
 // ---------------------------------------------------------------- export
 
-// Three ways to land on a destination, checked in order -- a full path
-// the user typed or picked via "Save as…" wins outright; otherwise a
-// remembered "Export to…" folder keeps the auto filename but moves it there;
-// otherwise the original stem-based guess next to the source file.
-function destPath() {
-  const format = exportFormat();
+// The source file's own stem, with no folder and no extension -- the base
+// every auto-named export starts from.
+function sourceStem() {
   const cut = VE.src.replace(/[/\\]+$/, "");
   const dot = cut.lastIndexOf(".");
-  const stem = dot > cut.lastIndexOf("\\") && dot > cut.lastIndexOf("/") ? cut.slice(0, dot) : cut;
-  const auto = `${stem}-edit.${formatExt(format)}`;
+  const slash = Math.max(cut.lastIndexOf("\\"), cut.lastIndexOf("/"));
+  const stem = dot > slash ? cut.slice(0, dot) : cut;
+  return stem.replace(/^.*[\\/]/, "");
+}
+
+// Characters Windows itself refuses in a file name, plus a bare ".."
+// (which needs no separator of its own to still mean "walk up a level").
+// Shared by the live field validation and the export-disable gate below.
+const EXPORT_NAME_BAD_CHARS = /[\\/:*?"<>|]/;
+function exportNameIsValid(name) {
+  const trimmed = (name || "").trim();
+  if (!trimmed || trimmed === "." || trimmed === "..") return false;
+  if (trimmed.includes("..")) return false;
+  return !EXPORT_NAME_BAD_CHARS.test(trimmed);
+}
+
+// The file-name field's own value, or the auto "<source stem>-edit" guess
+// when the user never touched it (or cleared it back to empty).
+function exportNameStem() {
+  const custom = (VE.exportNameOverride || "").trim();
+  return custom || `${sourceStem()}-edit`;
+}
+
+// Three ways to land on a destination, checked in order -- a full path
+// the user typed or picked via "Save as…" wins outright; otherwise a
+// remembered "Export to…" folder keeps the (auto or custom) filename but
+// moves it there; otherwise the original folder next to the source file.
+function destPath() {
   if (VE.destOverride) return VE.destOverride;
+  const format = exportFormat();
+  const name = `${exportNameStem()}.${formatExt(format)}`;
   // A file opened for editing from outside the app suggests ITS OWN folder
   // over the standing videoExportDir preference -- that preference is about
   // where every ordinary recording export lands, not about this one-off copy.
   const dir = VE.originDir || VE.destDir;
-  if (dir) {
-    const base = auto.replace(/^.*[\\/]/, "");
-    return `${dir.replace(/[\\/]+$/, "")}/${base}`;
-  }
-  return auto;
+  if (dir) return `${dir.replace(/[\\/]+$/, "")}/${name}`;
+  const cut = VE.src.replace(/[/\\]+$/, "");
+  const slash = Math.max(cut.lastIndexOf("\\"), cut.lastIndexOf("/"));
+  const srcDir = slash >= 0 ? cut.slice(0, slash) : "";
+  return srcDir ? `${srcDir}/${name}` : name;
 }
 
 // One explanatory note per format that needs one, kept as a lookup instead of
@@ -3190,12 +3216,29 @@ async function refreshExportSizeNote(format) {
   $("ve-export-note").textContent = notes.join(" ");
 }
 
+// The one place that decides whether Export/Copy-to-clipboard may be
+// clicked at all -- an invalid or empty file name joins the existing
+// "still exporting"/"ffmpeg missing" reasons rather than replacing them, so
+// none of those call sites has to know about the other two.
+function applyExportGate() {
+  const valid = exportNameIsValid($("ve-export-name").value);
+  $("ve-export-name").classList.toggle("invalid", !valid);
+  $("ve-export-name-hint").classList.toggle("hidden", valid);
+  const disabled = VE.exporting || !VE.ffmpeg || !valid;
+  $("ve-export-start").disabled = disabled;
+  $("ve-export-clip").disabled = disabled;
+  return valid;
+}
+
 function updateExportNote() {
   const format = exportFormat();
   $("ve-export-note").textContent = buildExportNoteBase(format).join(" ");
+  $("ve-export-ext").textContent = `.${formatExt(format)}`;
   // Never overwrite what the user is actively typing into the field itself.
+  if (document.activeElement !== $("ve-export-name")) $("ve-export-name").value = exportNameStem();
   if (document.activeElement !== $("ve-export-dest")) $("ve-export-dest").value = destPath();
   $("ve-export-dest").title = destPath();
+  applyExportGate();
   // None of the three silent formats read the quality/bitrate setting at all.
   $("ve-export-quality").disabled = SILENT_FORMATS.has(format);
   updateAudioLabels();
@@ -3341,8 +3384,7 @@ async function startExport(toClipboard) {
     }
   } finally {
     VE.exporting = false;
-    $("ve-export-start").disabled = false;
-    $("ve-export-clip").disabled = false;
+    applyExportGate();
     $("ve-export-cancel").classList.add("hidden");
     $("ve-export-eta").textContent = "";
   }
@@ -3388,8 +3430,7 @@ $("ve-ffmpeg-get").addEventListener("click", async (e) => {
     await invoke("download_ffmpeg");
     VE.ffmpeg = true;
     $("ve-ffmpeg-warn").classList.add("hidden");
-    $("ve-export-start").disabled = false;
-    $("ve-export-clip").disabled = false;
+    applyExportGate();
     $("ve-still").disabled = false;
     toast(t("ffmpegDownloadDone"));
     await loadRecording(VE.src);
@@ -3716,6 +3757,18 @@ for (const id of ["ve-export-format", "ve-export-quality"]) {
   });
 }
 
+// A plain file name, checked live as it is typed -- an override here
+// wins over the auto "<source stem>-edit" guess but stays under the full-path
+// field below, same as picking a folder (destPath() reads it through
+// exportNameStem()). Typing a full path directly into that field still takes
+// over completely, same as before.
+$("ve-export-name").addEventListener("input", () => {
+  VE.exportNameOverride = $("ve-export-name").value;
+  VE.destOverride = null;
+  $("ve-export-dest").value = destPath();
+  $("ve-export-dest").title = destPath();
+  applyExportGate();
+});
 // The target field is a real input now -- typing a full path directly
 // is itself a manual override, same as picking one via the dialog below.
 $("ve-export-dest").addEventListener("change", () => {
@@ -3728,6 +3781,11 @@ $("ve-export-choose-file").addEventListener("click", async () => {
   const picked = await invoke("pick_export_dest", { defaultName }).catch(() => null);
   if (!picked) return;
   VE.destOverride = picked;
+  // Keep the plain-name field showing what the dialog actually picked,
+  // rather than freezing on whatever it said the moment before.
+  const pickedBase = picked.replace(/^.*[\\/]/, "");
+  const dot = pickedBase.lastIndexOf(".");
+  VE.exportNameOverride = dot > 0 ? pickedBase.slice(0, dot) : pickedBase;
   updateExportNote();
 });
 $("ve-export-choose-folder").addEventListener("click", async () => {
@@ -3929,10 +3987,12 @@ function resetForNewSource() {
   VE.playhead = 0;
   VE.dirty = false;
   VE.lastExport = "";
-  // A full manual "Save as…" path names THIS source's file, so a newly
-  // loaded video starts fresh with it; the remembered destination FOLDER
-  // (VE.destDir) is a standing preference and survives across videos.
+  // A full manual "Save as…" path (or a typed file name) names THIS source's
+  // file, so a newly loaded video starts fresh with both; the remembered
+  // destination FOLDER (VE.destDir) is a standing preference and survives
+  // across videos.
   VE.destOverride = null;
+  VE.exportNameOverride = null;
   // Mic starts muted on every newly loaded video, same reasoning as the
   // module-level default above.
   VE.audio = { sys: { mute: false, vol: 100 }, mic: { mute: true, vol: 100 } };
