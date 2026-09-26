@@ -29042,6 +29042,25 @@ enum OpenEditResult {
     Video { copied_path: String, origin_dir: String, name: String },
 }
 
+// A video opened this way is a COPY (see open_file_in_editor below), and
+// has_keys_sidecar/read_key_sidecar only ever look for "<video>.keys.json"
+// right beside whatever path the editor was actually handed -- without this,
+// reopening a past recording through "open an existing file" (the composer
+// button's right-click, or a library attachment) silently lost its typed
+// keys even though the original recording's own sidecar was still sitting
+// untouched next to the source file. A source with no sidecar (the setting
+// was off, or the recording predates this feature) leaves the copy without
+// one too, same as it always did.
+#[cfg(windows)]
+fn copy_keys_sidecar_alongside(src: &Path, dest: &Path) {
+    let src_sidecar = keylog::sidecar_path(src);
+    if src_sidecar.is_file() {
+        let _ = fs::copy(&src_sidecar, keylog::sidecar_path(dest));
+    }
+}
+#[cfg(not(windows))]
+fn copy_keys_sidecar_alongside(_src: &Path, _dest: &Path) {}
+
 // Right-click "Open a file in the editor" (the screenshot/record buttons, and
 // an image/video attachment in the library) all land here. The original file
 // is never touched: an image is read into a data URL straight into the same
@@ -29089,6 +29108,7 @@ async fn open_file_in_editor(app: AppHandle, state: State<'_, Db>, path: String)
             fs::create_dir_all(&work_dir).map_err(|e| e.to_string())?;
             let dest = work_dir.join(format!("{base}.{ext}"));
             fs::copy(&p, &dest).map_err(|e| e.to_string())?;
+            copy_keys_sidecar_alongside(&p, &dest);
             Ok(OpenEditResult::Video { copied_path: dest.to_string_lossy().to_string(), origin_dir, name })
         }
         _ => Err("not-media".to_string()),
@@ -40958,6 +40978,33 @@ mod tests {
         let video = PathBuf::from("C:/recs/rec-2026-01-01-00-00-00.mp4");
         let foreign_sidecar = PathBuf::from("C:/recs/rec-someone-elses-take.mic.wav");
         assert!(!is_own_mic_sidecar(&video, &foreign_sidecar), "a sidecar for a different recording must not pass");
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn copy_keys_sidecar_alongside_brings_the_sidecar_to_the_open_editor_copy() {
+        let dir = std::env::temp_dir().join(format!("ps-openedit-keys-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = dir.join("rec-x.mp4");
+        let dest = dir.join("rec-x-copy.mp4");
+        fs::write(&src, b"video").unwrap();
+        fs::write(keylog::sidecar_path(&src), b"{}").unwrap();
+        copy_keys_sidecar_alongside(&src, &dest);
+        assert!(keylog::sidecar_path(&dest).is_file(), "open_file_in_editor's copy must bring the key-overlay sidecar with it");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn copy_keys_sidecar_alongside_is_a_no_op_when_the_source_never_captured_keys() {
+        let dir = std::env::temp_dir().join(format!("ps-openedit-nokeys-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = dir.join("rec-x.mp4");
+        let dest = dir.join("rec-x-copy.mp4");
+        fs::write(&src, b"video").unwrap();
+        copy_keys_sidecar_alongside(&src, &dest);
+        assert!(!keylog::sidecar_path(&dest).exists(), "no sidecar to begin with must not conjure one for the copy");
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

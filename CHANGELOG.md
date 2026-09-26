@@ -1220,6 +1220,12 @@ the video editor and the introduction tour ship on).
   only through their dedicated pickers, an import or restore can no longer
   touch them, and cleanup only ever counts or removes this app's own
   recordings.
+- **A recording's typed keys went missing from the keyboard overlay after
+  reopening it through "Open an existing file"** (the record button's
+  right-click, or a library video attachment) — that path works on a
+  throwaway copy, and only the copy of the video itself used to travel
+  there, never its key-overlay data. Reopening a recording this way now
+  brings that data along too.
 
 ### Security
 
