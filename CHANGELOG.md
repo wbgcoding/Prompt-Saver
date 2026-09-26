@@ -1253,6 +1253,9 @@ the video editor and the introduction tour ship on).
   not copy, and stays out of search, Markdown sync, and a plain export by
   default; export can keep it encrypted instead, and a full backup always
   does. Uses the same encryption as encrypted backups, with its own password.
+- The recording canvas size limit and capture mode are now range-checked and
+  restricted to known values in the app itself, not only in the expert menu,
+  so an imported settings file cannot push either past what the menu allows.
 
 ### Removed
 
