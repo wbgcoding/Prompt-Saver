@@ -21050,9 +21050,10 @@ mod keylog {
     use windows::Win32::UI::Accessibility::{
         CUIAutomation, IUIAutomation, IUIAutomation2, IUIAutomationElement, IUIAutomationFocusChangedEventHandler,
         IUIAutomationFocusChangedEventHandler_Impl, IUIAutomationTextPattern, IUIAutomationValuePattern, UIA_CONTROLTYPE_ID,
-        UIA_ButtonControlTypeId, UIA_CheckBoxControlTypeId, UIA_HyperlinkControlTypeId, UIA_ImageControlTypeId, UIA_ListItemControlTypeId,
-        UIA_MenuItemControlTypeId, UIA_RadioButtonControlTypeId, UIA_ScrollBarControlTypeId, UIA_SliderControlTypeId, UIA_TabItemControlTypeId,
-        UIA_TextPatternId, UIA_ThumbControlTypeId, UIA_ToolBarControlTypeId, UIA_TreeItemControlTypeId, UIA_ValuePatternId,
+        UIA_ButtonControlTypeId, UIA_CheckBoxControlTypeId, UIA_DocumentControlTypeId, UIA_EditControlTypeId, UIA_HyperlinkControlTypeId,
+        UIA_ImageControlTypeId, UIA_ListItemControlTypeId, UIA_MenuItemControlTypeId, UIA_RadioButtonControlTypeId, UIA_ScrollBarControlTypeId,
+        UIA_SliderControlTypeId, UIA_TabItemControlTypeId, UIA_TextPatternId, UIA_ThumbControlTypeId, UIA_ToolBarControlTypeId,
+        UIA_TreeItemControlTypeId, UIA_ValuePatternId,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
         CallNextHookEx, GetForegroundWindow, GetGUIThreadInfo, GetMessageW, GetWindowLongW, GetWindowThreadProcessId,
@@ -21263,33 +21264,38 @@ mod keylog {
 
     // What the focused control was, at the instant a check ran. `Password`
     // is the strictest tier (see `verdict`: gaps absolutely everything,
-    // shortcuts included). `Text` covers any other text-entry control --
-    // an Edit or Document control type, an editable ValuePattern or
-    // TextPattern, or plain doubt (UI Automation unreachable, the call
-    // erroring, an unrecognized or proxy element). `NonText` is the
-    // narrowest tier: reached only by a POSITIVE classification that the
-    // control is neither a password field nor a text-entry one. Product
-    // decision (2026-09-26): `Text` and `NonText` now resolve to the exact
-    // same verdict (see `verdict` below) -- a text field is no longer
-    // restricted to shortcuts by default, only a confirmed password field
-    // still gaps. The distinction stays in the classifier because nothing
+    // shortcuts included). `Text` is reached only by a POSITIVE text-entry
+    // identification -- an Edit or Document control type, an editable
+    // ValuePattern, or any TextPattern at all. `NonText` is reached only by
+    // a POSITIVE classification that the control is structurally incapable
+    // of taking text input (the allow-list in `is_non_text_control_type`)
+    // AND nothing about it also proved editable text. `Unknown` is
+    // everything else: no focused element, a failed control-type or
+    // pattern read, or a control type that is neither positively text nor
+    // on the non-text allow-list (an unrecognized type, a proxy element, a
+    // bare Pane/Window/Custom/Group). Product decision (2026-09-26): `Text`
+    // and `NonText` resolve to the same verdict (see `verdict` below) -- a
+    // text field is no longer restricted to shortcuts by default, only a
+    // confirmed password field or an `Unknown` classification still gaps.
+    // The Text/NonText distinction stays in the classifier because nothing
     // downstream of `is_password_field` needs to change to keep proving
     // "not a password field" the same rigorous way; it simply no longer
-    // changes what gets recorded.
+    // changes what gets recorded once positively identified as text.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum FieldClass {
         Password,
         Text,
         NonText,
+        Unknown,
     }
 
     // The two shapes a resolved key's fate can take. `Gap` is unconditional
     // (injected input, the ledger's own fail_closed flag, a blind window, a
-    // confirmed password field, or a dirty guard window). `Allow` covers
-    // both the Text and NonText tiers -- see FieldClass's own doc for why
-    // they no longer differ here. `resolve_verdict` still applies the
-    // separate, OPT-IN `keyOverlayShortcutsOnly` filter on top of an Allow,
-    // regardless of which tier produced it.
+    // confirmed password field, an `Unknown` classification, or a dirty
+    // guard window). `Allow` covers both the Text and NonText tiers -- see
+    // FieldClass's own doc for why they no longer differ here. `resolve_
+    // verdict` still applies the separate, OPT-IN `keyOverlayShortcutsOnly`
+    // filter on top of an Allow, regardless of which tier produced it.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum Verdict {
         Gap,
@@ -21425,7 +21431,9 @@ mod keylog {
     // not enough information exists YET (the caller must keep the key
     // pending and wait for a later check) -- never treated as a record,
     // only ever eventually resolved to a gap if nothing ever qualifies (see
-    // `verdict_at_stop`).
+    // `verdict_at_stop`). `Unknown` gaps the same as `Password`: a failed
+    // read or an unrecognized control type is doubt, not a positive
+    // text-entry finding, and doubt has never been enough to record.
     fn verdict(ledger: &Ledger, t: u64, injected: bool) -> Option<Verdict> {
         if injected || ledger.fail_closed {
             return Some(Verdict::Gap);
@@ -21434,7 +21442,7 @@ mod keylog {
             return Some(Verdict::Gap);
         }
         let (check_time, class) = ledger.qualifying_check(t)?;
-        if class == FieldClass::Password {
+        if class == FieldClass::Password || class == FieldClass::Unknown {
             return Some(Verdict::Gap);
         }
         if ledger.window_is_dirty(t.saturating_sub(GUARD_MS), check_time) {
@@ -21442,7 +21450,7 @@ mod keylog {
         }
         Some(match class {
             FieldClass::NonText | FieldClass::Text => Verdict::Allow,
-            FieldClass::Password => unreachable!("handled above"),
+            FieldClass::Password | FieldClass::Unknown => unreachable!("handled above"),
         })
     }
 
@@ -21904,52 +21912,63 @@ mod keylog {
             || control_type == UIA_ThumbControlTypeId
     }
 
-    // Takes the focused element ALREADY fetched by the caller (see
-    // classify_identity) rather than fetching its own -- see NEW-4.
-    fn is_confidently_non_text(el: Option<&IUIAutomationElement>) -> bool {
-        let Some(el) = el else { return false };
-        let Ok(control_type) = (unsafe { el.CurrentControlType() }) else { return false };
-        if !is_non_text_control_type(control_type) {
-            return false;
+    // Positive classification of a non-password focused element into Text,
+    // NonText or Unknown. Takes the element ALREADY fetched by the caller
+    // (see classify_identity) rather than fetching its own -- see NEW-4.
+    //
+    // Text requires actual positive evidence: an Edit or Document control
+    // type, an editable ValuePattern, or any TextPattern at all (even a
+    // read-only one -- its mere presence means editable text cannot be
+    // ruled out). NonText requires a control type on the structurally-
+    // incapable-of-text allow-list AND no pattern read proved otherwise.
+    // Anything else -- no element, a failed control-type or pattern read,
+    // or a control type on neither list -- is Unknown. This used to
+    // collapse every one of those doubt cases to Text (a failed read, an
+    // unrecognized control type, a bare Pane/Window/Custom/Group with no
+    // pattern support all looked identical to a normal Edit box), which let
+    // an unclassifiable focused control record in full. Doubt now gaps,
+    // exactly like a confirmed password field, and Text is reached only by
+    // a genuine positive identification.
+    fn classify_control(el: Option<&IUIAutomationElement>) -> FieldClass {
+        let Some(el) = el else { return FieldClass::Unknown };
+        let Ok(control_type) = (unsafe { el.CurrentControlType() }) else {
+            return FieldClass::Unknown;
+        };
+        if control_type == UIA_EditControlTypeId || control_type == UIA_DocumentControlTypeId {
+            return FieldClass::Text;
         }
-        // Even an allow-listed control type is not trusted blindly: one
-        // that additionally exposes an editable ValuePattern, or any
-        // TextPattern at all, still falls through to Text -- this only ever
-        // narrows the allow-list further, never widens it.
         if let Ok(value_pattern) = unsafe { el.GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId) } {
             match unsafe { value_pattern.CurrentIsReadOnly() } {
-                Ok(read_only) if !read_only.as_bool() => return false, // editable ValuePattern -- text
-                Ok(_) => {}                                            // read-only ValuePattern -- keep checking
-                Err(_) => return false,                                // doubt about read-only -- text
+                Ok(read_only) if !read_only.as_bool() => return FieldClass::Text, // editable ValuePattern
+                Ok(_) => {}                                                       // read-only ValuePattern -- keep checking
+                Err(_) => return FieldClass::Unknown,                             // failed read -- doubt, not a positive finding
             }
         }
         if unsafe { el.GetCurrentPatternAs::<IUIAutomationTextPattern>(UIA_TextPatternId) }.is_ok() {
-            return false; // a TextPattern exists at all -- cannot rule out editable text
+            return FieldClass::Text; // a TextPattern exists at all -- cannot rule out editable text
         }
-        true
+        if is_non_text_control_type(control_type) {
+            FieldClass::NonText
+        } else {
+            FieldClass::Unknown
+        }
     }
 
     // The full classification, given an identity ALREADY fetched once by
     // the caller (see focus_identity) -- NEW-4: is_password_field and
-    // is_confidently_non_text used to each call GetFocusedElement
-    // independently, so a focus change landing between the two reads could
-    // hand them two different elements without either read itself failing.
+    // classify_control used to each call GetFocusedElement independently,
+    // so a focus change landing between the two reads could hand them two
+    // different elements without either read itself failing.
     // FieldClass::Password takes priority over everything (the existing,
-    // unchanged `is_password_field` fail-closed rule), then
-    // FieldClass::NonText only on a positive, confident non-text
-    // classification, and FieldClass::Text for anything else at all -- see
-    // `is_confidently_non_text`'s own doc for why doubt lands here rather
-    // than in the narrower NonText tier.
+    // unchanged `is_password_field` fail-closed rule); everything else goes
+    // through `classify_control` -- see its own doc for the Text/NonText/
+    // Unknown split.
     fn classify_identity(identity: &(HWND, Option<IUIAutomationElement>)) -> FieldClass {
         let (hwnd, el) = identity;
         if is_password_field(*hwnd, el.as_ref()) {
             return FieldClass::Password;
         }
-        if is_confidently_non_text(el.as_ref()) {
-            FieldClass::NonText
-        } else {
-            FieldClass::Text
-        }
+        classify_control(el.as_ref())
     }
 
     // NEW-4: a check is stamped as having STARTED at some instant, but
@@ -23081,12 +23100,14 @@ mod keylog {
         }
 
         // --- NEW-3: only a structurally non-text UIA control type may ever
-        // resolve to FieldClass::NonText; everything else, including a bare
-        // Pane/Custom element such as PuTTY or an RDP/VNC session, is Text.
-        // Since 2026-09-26 both tiers reach the same Verdict::Allow (see
-        // FieldClass's own doc), so this distinction no longer changes what
-        // gets recorded by default -- it is kept only because the same UIA
-        // read pipeline still has to prove "not a password field" either way.
+        // resolve to FieldClass::NonText. Since 2026-09-26 both Text and
+        // NonText reach the same Verdict::Allow (see FieldClass's own doc),
+        // so that distinction no longer changes what gets recorded by
+        // default -- it is kept only because the same UIA read pipeline
+        // still has to prove "not a password field" either way. A control
+        // type on neither list -- a bare Pane/Custom element such as PuTTY
+        // or an RDP/VNC session, a failed read, or no element at all -- is
+        // FieldClass::Unknown, which gaps (see classify_control's own doc).
 
         #[test]
         fn every_allow_listed_control_type_is_non_text() {
@@ -23110,26 +23131,29 @@ mod keylog {
         }
 
         #[test]
-        fn a_putty_like_pane_or_custom_control_now_keeps_typed_letters() {
+        fn a_putty_like_pane_or_custom_control_gaps_instead_of_recording() {
             // PuTTY/KiTTY, an RDP/VNC remote session window, or any
             // Qt/Java/game window with no accessibility provider at all
             // surfaces as a bare Pane or Custom element -- neither is
-            // allow-listed, so both fall through to FieldClass::Text.
+            // allow-listed, so a positive NonText classification is out.
             assert!(!is_non_text_control_type(UIA_PaneControlTypeId));
             assert!(!is_non_text_control_type(UIA_CustomControlTypeId));
-            // Which, through the same verdict pipeline every other field
-            // uses, now records a typed letter in full -- an SSH or RDP
-            // password character included. Turning on "Shortcuts only" is
-            // the answer for confidential input in a window UI Automation
-            // cannot see into, not a guess at which such windows exist.
+            // Such an element also never proved a positive Text
+            // identification (no Edit/Document type, no editable
+            // ValuePattern, no TextPattern), so classify_control resolves it
+            // to Unknown, not Text -- see the HIGH finding this closes: an
+            // unclassifiable control used to collapse to Text/Allow, which
+            // let an SSH or RDP password typed into such a window through
+            // in full. Unknown gaps instead, the same as a confirmed
+            // password field.
             let mut ledger = Ledger::default();
-            ledger.push_check(0, FieldClass::Text);
-            ledger.push_check(400, FieldClass::Text);
+            ledger.push_check(0, FieldClass::Unknown);
+            ledger.push_check(400, FieldClass::Unknown);
             let v = verdict(&ledger, 50, false).expect("a qualifying check exists");
-            assert_eq!(v, Verdict::Allow);
+            assert_eq!(v, Verdict::Gap);
             assert!(
-                !resolve_verdict(v, false, KeyId { vk: 0x41, scan: 0x1E, extended: false, ctrl: false, alt: false, win: false }),
-                "a PuTTY-like Pane/Custom window's typed letters are now kept, not gapped"
+                resolve_verdict(v, false, KeyId { vk: 0x41, scan: 0x1E, extended: false, ctrl: false, alt: false, win: false }),
+                "an unclassifiable Pane/Custom window's typed letters must be gapped, never recorded"
             );
         }
 
@@ -23161,8 +23185,12 @@ mod keylog {
         }
 
         #[test]
-        fn is_confidently_non_text_fails_closed_with_no_element_to_query() {
-            assert!(!is_confidently_non_text(None), "no element to positively classify means Text, never NonText");
+        fn classify_control_is_unknown_with_no_element_to_query() {
+            // Before this fix, no element to query fell through to
+            // FieldClass::Text (a positive-sounding tier with no positive
+            // evidence behind it). It must land in Unknown instead, which
+            // gaps just like doubt anywhere else in this module.
+            assert_eq!(classify_control(None), FieldClass::Unknown, "no element to classify is doubt, never a positive Text finding");
         }
 
         #[test]
@@ -23497,20 +23525,20 @@ mod keylog {
         }
 
         #[test]
-        fn an_unresolved_classification_defaults_to_text_and_now_keeps_typing() {
-            // A failed or unknown classification resolves to FieldClass::Text,
-            // the fail-closed default for "is this a password field" -- but
-            // since 2026-09-26 Text no longer restricts to shortcuts, so a
-            // failed classification now keeps typing, same as a confirmed
-            // NonText field. Proven here through the same verdict() pipeline
-            // the production code calls, not just the resolve_verdict helper
+        fn an_unresolved_classification_is_unknown_and_gaps() {
+            // A failed or unknown classification (see classify_control) now
+            // resolves to FieldClass::Unknown, never Text -- Text requires a
+            // positive text-entry finding. Unknown gaps unconditionally,
+            // the same fail-closed answer as a confirmed password field.
+            // Proven here through the same verdict() pipeline the
+            // production code calls, not just the resolve_verdict helper
             // alone.
             let mut ledger = Ledger::default();
-            ledger.push_check(0, FieldClass::Text);
-            ledger.push_check(400, FieldClass::Text);
+            ledger.push_check(0, FieldClass::Unknown);
+            ledger.push_check(400, FieldClass::Unknown);
             let v = verdict(&ledger, 50, false).expect("a qualifying check exists");
-            assert_eq!(v, Verdict::Allow);
-            assert!(!resolve_verdict(v, false, KeyId { vk: 0x41, scan: 0, extended: false, ctrl: false, alt: false, win: false }), "the fail-closed Text default now keeps plain typing, not gaps it");
+            assert_eq!(v, Verdict::Gap);
+            assert!(resolve_verdict(v, false, KeyId { vk: 0x41, scan: 0, extended: false, ctrl: false, alt: false, win: false }), "an unresolved classification must gap, never record as if it were confirmed text");
         }
 
         #[test]
