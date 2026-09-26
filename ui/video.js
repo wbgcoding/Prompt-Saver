@@ -1275,6 +1275,33 @@ function buildLiveOverlayEl(op, vb, reuse) {
     img.style.opacity = String(clamp(op.opacity, 5, 100) / 100);
     return img;
   }
+  if (op.kind === "video") {
+    // A missing source (the file moved or was deleted) never had a live
+    // preview to begin with, same as the export chain skipping it outright.
+    if (op.missing) return null;
+    const el = reuse instanceof HTMLVideoElement ? reuse : document.createElement("video");
+    el.className = "ve-live ve-live-video";
+    rectStyle(el, op.rect);
+    el.style.opacity = String(clamp(op.opacity, 5, 100) / 100);
+    // Muted in the preview even when the export mixes its audio in (see
+    // buildAudioChain) -- a second, unsynced audio source playing alongside
+    // the main clip would only ever sound wrong here.
+    el.muted = true;
+    el.playsInline = true;
+    const src = convertFileSrc(op.path);
+    if (el.dataset.ovSrc !== src) { el.src = src; el.dataset.ovSrc = src; }
+    // Its own clock starts counting from op.startMs, the same zero point
+    // videoOverlayEnable() uses for the export, and wraps once a looping
+    // overlay's footage runs out.
+    let t = (VE.playhead - op.startMs) / 1000;
+    if (op.loop && op.videoDurationMs) t %= op.videoDurationMs / 1000;
+    if (Number.isFinite(t) && t >= 0 && Math.abs(el.currentTime - t) > 0.3) {
+      try { el.currentTime = t; } catch {}
+    }
+    if (!videoEl.paused && t >= 0) { if (el.paused) el.play().catch(() => {}); }
+    else if (!el.paused) el.pause();
+    return el;
+  }
   if (op.kind === "frame") {
     const el = reuse instanceof HTMLElement && reuse.tagName === "DIV" && reuse.classList.contains("ve-live-frame") ? reuse : document.createElement("div");
     el.className = "ve-live ve-live-frame";
@@ -2058,9 +2085,10 @@ document.addEventListener("pointerdown", (e) => {
   closeOvCtxPop();
 });
 
-function menuButton(label, onClick) {
+function menuButton(label, onClick, id) {
   const b = document.createElement("button");
   b.type = "button";
+  if (id) b.id = id;
   b.textContent = label;
   b.addEventListener("click", onClick);
   return b;
@@ -2105,8 +2133,8 @@ async function startAddVideo(x, y) {
   if (!picked) return;
   addVideoPop.innerHTML = "";
   addVideoPop.append(
-    menuButton(t("veAddAsOverlay"), () => { closeAddVideoPop(); createVideoOverlay(picked); }),
-    menuButton(t("veAddAsClip"), () => { showClipPositionMenu(picked, x, y); }),
+    menuButton(t("veAddAsOverlay"), () => { closeAddVideoPop(); createVideoOverlay(picked); }, "ve-add-video-as-overlay"),
+    menuButton(t("veAddAsClip"), () => { showClipPositionMenu(picked, x, y); }, "ve-add-video-as-clip"),
   );
   placePopoverAt(addVideoPop, x, y);
 }

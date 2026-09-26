@@ -10962,6 +10962,18 @@ VIDEO_PROBE = """
         errs.push(btnId + ' did not produce a .' + liveClass + ' element in the live overlay preview');
       }
     }
+    // 526: an inserted "video" overlay (a picture-in-picture clip, added
+    // through "Add a video" -> "As an overlay" rather than one of the plain
+    // ADD AN OVERLAY buttons above) used to have no live-preview branch at
+    // all in buildLiveOverlayEl -- it rendered fine in export but never
+    // showed anything in the editor while working on it.
+    document.getElementById('ve-add-video').click();
+    await sleep(30);
+    document.getElementById('ve-add-video-as-overlay').click();
+    await sleep(30);
+    if (!liveLayer.querySelector('.ve-live-video')) {
+      errs.push('a "video" overlay did not produce a .ve-live-video element in the live overlay preview');
+    }
     // Every overlay just defaulted to the clip's [0, ve-duration] range --
     // seeking to the exact start must still keep them all visible (inclusive
     // boundary), proving the gate really reads the range rather than always
@@ -10970,7 +10982,7 @@ VIDEO_PROBE = """
     await sleep(30);
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home' }));
     await sleep(30);
-    if (liveLayer.children.length !== overlayKinds.length) {
+    if (liveLayer.children.length !== overlayKinds.length + 1) {
       errs.push('live overlay preview lost overlays at the exact start of their range (playhead 0)');
     }
     document.getElementById('ve-tab-overlays').click();

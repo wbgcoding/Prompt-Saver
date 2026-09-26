@@ -1226,6 +1226,12 @@ the video editor and the introduction tour ship on).
   throwaway copy, and only the copy of the video itself used to travel
   there, never its key-overlay data. Reopening a recording this way now
   brings that data along too.
+- **The video editor's inserted-video overlay (a picture-in-picture clip
+  added through "Add a video") showed nothing at all in the live preview**
+  while you worked on it, although it exported correctly — every other
+  overlay kind had its own live-preview drawing, this one never did. It now
+  plays in the preview too, muted, starting and looping in step with its own
+  time range.
 
 ### Security
 
