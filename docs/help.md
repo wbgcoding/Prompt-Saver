@@ -154,10 +154,14 @@ uses: click a window, drag a region, or click empty desktop for the whole
 screen. An optional countdown toast then counts down before capture actually
 starts (3 seconds by default, adjustable in the expert menu, 0 turns it off).
 A small floating control bar then follows the recording: a red dot, elapsed
-time, live file size, Pause/Resume, Stop and a discard (cancel) button. It
-follows a moved recorded window and is itself excluded from the recording no
-matter what, even if the recording happens to include the monitor the bar
-sits on.
+time, live file size, two audio buttons, Pause/Resume, Stop and a discard
+(cancel) button. It follows a moved recorded window and is itself excluded
+from the recording no matter what, even if the recording happens to include
+the monitor the bar sits on. Drag the bar itself (anywhere except its
+buttons) to move it, including onto another monitor; the moment you do, it
+stops following the recorded window and stays exactly where you put it for
+the rest of that recording and every one after, until an expert-menu action
+resets it back to following.
 
 System audio and microphone audio (pick a device in the expert menu) both
 record on by default, each into its own track. The microphone track is
@@ -166,11 +170,23 @@ once you bring it in yourself, from the video editor below. Turn microphone
 capture off in the expert menu if you would rather it never records at all.
 If the microphone is unplugged mid-recording, the picture and system audio
 keep going; the control bar's microphone icon switches to a "lost" state
-instead of stopping anything.
+instead of stopping anything. The bar's two audio buttons mute either source
+instantly while recording, without cutting the track: a muted source keeps
+recording silence instead of dropping out, so it can be brought back later
+in the same recording, and the bar reopens showing whichever state you left
+each one in.
 
 A running recording can also be stopped or paused/resumed from anywhere via
 two optional global hotkeys (set in the expert menu, live only while a
-recording is actually running) and from the tray menu.
+recording is actually running) and from the tray menu; both hotkeys live in
+the expert menu's own recording group and, once set, also show up in "All
+hotkeys" alongside the global and per-tile ones.
+
+The expert menu's recording-folder row shows how many videos are in it and
+how much space they use, with a "Clean up…" button next to it: pick 7, 30 or
+90 days, review the exact list of files that age would remove and how much
+it would free, then confirm. Nothing is ever deleted in the background;
+only this dialog, and only after you confirm it, ever removes a file.
 
 Stopping leads into a dialog offering Save, Save as…, Copy, Edit and Discard.
 Save and Copy use one shared recording folder (changeable here or in the
@@ -248,10 +264,20 @@ choice. The format choice goes beyond MP4, WebM and GIF to AVI, MOV, MKV,
 animated WebP and APNG as well, each with a short note on what it's good for;
 GIF, WebP and APNG carry no sound at all (the source audio stays untouched in
 the original recording) and warn past ten seconds, since all three grow large
-fast. Undo/redo covers every editing step, with an adjustable limit in the
-expert menu. A failed export shows the actual reason in plain language, with
-the raw ffmpeg log reachable underneath in a closed "Technical details" row,
-never the log itself as the message. A second video can be added too: "Add
+fast. The export destination is an editable field, not just a fixed name next
+to the source file: type into it directly, use "Save as…" to pick a full path
+through the usual file dialog, or "Export to…" to keep the file name and only
+choose a different folder; changing the format only rewrites the extension,
+never a folder or name you already typed. The chosen folder is remembered as
+the default for next time. "Export and copy" next to it skips naming anything
+at all: it exports into a copy that cleans itself up on its own (after an hour,
+and again on the next launch, both adjustable in the expert menu) and puts the
+finished file straight on the clipboard for pasting into another app, the way
+the recording dialog's own Copy button does. Undo/redo covers every editing
+step, with an adjustable limit in the expert menu. A failed export shows the
+actual reason in plain language, with the raw ffmpeg log reachable underneath
+in a closed "Technical details" row, never the log itself as the message. A
+second video can be added too: "Add
 a video" offers it either as another overlay (its own rectangle, time range
 and volume, muted by default) or as a whole extra section spliced in at the
 start, the end or the current position; each extra source is checked once
@@ -736,12 +762,18 @@ menu.
 
 ### Import & export
 
-Plain CSV/TXT export for the text alone, or a full backup file with everything:
-tiles, views, layouts, colours, styles, and language. A CSV/TXT import shows a
-preview first: every incoming item's name and whether it would land as a
-duplicate, before anything is written; a full backup restores directly. If
-the file changes after the preview is shown, confirming the import is refused
-rather than importing something different from what was previewed.
+Plain CSV, TXT or JSON export for the text alone, or a full backup file with
+everything: tiles, views, layouts, colours, styles, and language. A single
+"Export" button and a format dropdown replace three separate buttons; JSON is
+the only one of the three that can carry a rotating tile's full list of
+entries, tags, notes, a hotkey, and colour, rather than joining them into one
+field the way CSV and TXT have to. Images never travel in any of the three,
+to keep the file small; use a full backup for those. Importing decides CSV or
+JSON by looking at the file itself, never its extension, and shows a preview
+first: every incoming item's name and whether it would land as a duplicate,
+before anything is written; a full backup restores directly. If the file
+changes after the preview is shown, confirming the import is refused rather
+than importing something different from what was previewed.
 
 "Import from a folder" turns a folder of `.md`/`.txt` files into tiles, one per
 file, without touching the original files at all. The file name becomes the
@@ -1049,12 +1081,22 @@ ziehen oder auf den freien Desktop klicken für den ganzen Bildschirm. Ein
 Countdown zählt danach herunter, bevor die Aufnahme wirklich startet
 (3 Sekunden Standard, im Expertenmenü einstellbar, `0` schaltet ihn ab). Eine
 kleine Bedienleiste begleitet die Aufnahme (roter Punkt, Laufzeit,
-Dateigröße, Pause/Fortsetzen, Stopp, Verwerfen), folgt einem verschobenen
-Aufnahmefenster und ist selbst niemals im Video zu sehen. Systemton (Standard
-an) und Mikrofon (Standard aus, Gerät wählbar im Expertenmenü) werden je als
-eigene Spur aufgenommen; zieht man das Mikrofon während der Aufnahme ab,
-laufen Bild und Systemton weiter, das Mikrofon-Symbol zeigt nur „verloren".
-Stopp führt in denselben Anheften/Speichern/Verwerfen-Dialog wie ein
+Dateigröße, zwei Ton-Knöpfe, Pause/Fortsetzen, Stopp, Verwerfen), folgt einem
+verschobenen Aufnahmefenster und ist selbst niemals im Video zu sehen. Zieht
+man die Leiste selbst (nicht ihre Knöpfe), lässt sie sich frei verschieben,
+auch auf einen anderen Monitor; ab dem ersten Ziehen folgt sie dem
+Aufnahmefenster nicht mehr, sondern bleibt dort stehen, wo man sie
+hingezogen hat, für diese Aufnahme und jede weitere, bis eine Aktion im
+Expertenmenü sie wieder auf „folgt dem Fenster" zurücksetzt. Systemton
+(Standard an) und Mikrofon (Standard aus, Gerät wählbar im Expertenmenü)
+werden je als eigene Spur aufgenommen; zieht man das Mikrofon während der
+Aufnahme ab, laufen Bild und Systemton weiter, das Mikrofon-Symbol zeigt nur
+„verloren". Die beiden Ton-Knöpfe in der Leiste schalten Systemton und
+Mikrofon während der Aufnahme sofort stumm, ohne die Spur zu beenden: eine
+stumme Quelle nimmt weiter Stille auf statt auszusetzen, lässt sich also
+innerhalb derselben Aufnahme wieder zuschalten, und die Leiste zeigt beim
+nächsten Öffnen wieder den zuletzt gewählten Zustand. Stopp führt in denselben
+Anheften/Speichern/Verwerfen-Dialog wie ein
 Screenshot; braucht das gewählte Format oder die Qualitätsstufe eine
 Umwandlung, zeigt der Dialog zuerst „Wird konvertiert…" (anklicken zum
 Abbrechen) statt einer Vorschau; eine fehlgeschlagene oder abgebrochene
@@ -1064,7 +1106,12 @@ automatisch und behält, was bis dahin aufgenommen wurde. Der
 Aufräumen-Dialog im Aufnahmeordner (Experten-Menü) kann mehrere fertige
 Aufnahmen auch in einem Rutsch exportieren: Häkchen setzen, dann Format,
 Qualität und Zielordner für alle zusammen wählen. Wie viele davon
-gleichzeitig laufen, ist im Experten-Menü einstellbar. Eine Tastenanzeige
+gleichzeitig laufen, ist im Experten-Menü einstellbar. Die Aufnahmeordner-Zeile
+im Expertenmenü zeigt außerdem, wie viele Videos darin liegen und wie viel
+Platz sie belegen, mit einem „Aufräumen…"-Knopf daneben: 7, 30 oder 90 Tage
+wählen, die genaue Dateiliste und die frei werdende Größe prüfen, dann
+bestätigen. Gelöscht wird nie im Hintergrund, immer nur hier und nur nach
+Bestätigung. Eine Tastenanzeige
 (Standard aus, im Expertenmenü) zeichnet während einer Aufnahme systemweit
 mit, welche Tasten gedrückt werden, damit eine Anleitung sie hinterher über
 die „Tasten"-Überlagerung des Video-Editors zeigen kann. Aufgezeichnet werden
@@ -1112,7 +1159,16 @@ standardmäßig stumm) oder als ganzen zusätzlichen Abschnitt am Anfang, am
 Ende oder an der aktuellen Stelle; jede zusätzliche Quelle wird beim
 Auswählen einmal geprüft und bleibt sichtbar als fehlend markiert, falls sie
 später verschoben oder gelöscht wird, bis zu einer Höchstzahl je Projekt
-(ab Werk acht, einstellbar im Expertenmenü).
+(ab Werk acht, einstellbar im Expertenmenü). Das Exportziel ist ein
+Eingabefeld, kein fester Name mehr: direkt hineintippen, „Speichern als…" für
+den vollen Pfad über den gewohnten Dateidialog, oder „Exportieren nach…", um
+nur den Ordner zu ändern und den Dateinamen zu behalten; ein Formatwechsel
+ändert nur die Endung, nie Ordner oder Namen, die man selbst eingetippt hat.
+„Exportieren und kopieren" daneben verzichtet ganz auf einen Namen: es
+exportiert in eine Kopie, die sich selbst aufräumt (nach einer Stunde, und
+erneut beim nächsten Start, beides im Expertenmenü einstellbar), und legt die
+fertige Datei direkt in die Zwischenablage zum Einfügen in eine andere App,
+genauso wie der Kopieren-Knopf im Aufnahme-Dialog.
 
 <p>
 <svg viewBox="0 0 560 130" xmlns="http://www.w3.org/2000/svg" role="img"><rect x="60" y="15" width="120" height="30" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="120" y="34" font-size="10" fill="currentColor" text-anchor="middle">Überlagerung</text><rect x="20" y="55" width="520" height="22" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="180" y1="55" x2="180" y2="77" stroke="currentColor" stroke-width="1.5"/><line x1="340" y1="55" x2="340" y2="77" stroke="currentColor" stroke-width="1.5"/><text x="180" y="95" font-size="10" fill="currentColor" text-anchor="middle">Schnittmarke</text><path d="M 20 115 q 15 -15 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0" fill="none" stroke="currentColor" stroke-width="1"/><text x="480" y="95" font-size="10" fill="currentColor" text-anchor="middle">Tonspur</text><text x="290" y="12" font-size="10" fill="currentColor" text-anchor="middle">Zeitleiste</text></svg>
@@ -1428,8 +1484,13 @@ seinen Namen mit einem Knopf zum Öffnen und einem zum Vergleichen. Sie hält
 das Speichern nie auf und fragt nichts, wer sie ignoriert verliert nichts.
 Beide teilen sich eine Schwelle im Expertenmenü.
 
-**Import & Export**: CSV/TXT nur für den reinen Text, volle Sicherung für
-alles. Ein CSV/TXT-Import zeigt vorher eine Vorschau mit Name und
+**Import & Export**: CSV, TXT oder JSON für den reinen Text, volle Sicherung
+für alles. Ein Export-Knopf und eine Formatauswahl ersetzen die drei früheren
+Einzelknöpfe; nur JSON trägt eine rotierende Kachel mit allen Einträgen, Tags,
+Notiz, Tastenkürzel und Farbe vollständig, statt sie wie CSV und TXT in ein
+Feld zu quetschen. Bilder reisen in keinem der drei mit, dafür gibt es die
+volle Sicherung. Beim Import entscheidet der Dateiinhalt zwischen CSV und
+JSON, nie die Dateiendung, und zeigt vorher eine Vorschau mit Name und
 Duplikat-Kennzeichnung; eine volle Sicherung stellt direkt wieder her. Ändert
 sich die Datei nach der Vorschau, wird der Import verweigert statt etwas
 anderes zu importieren als angezeigt.
