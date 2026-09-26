@@ -22054,35 +22054,68 @@ mod keylog {
         now.saturating_sub(next_poll_due) > FOCUS_POLL_MS
     }
 
-    // Called on the transition from no key pending to one arriving: the
-    // ~50ms poll only runs while something is pending (see
-    // focus_poll_due), so next_poll_due can sit unrefreshed for an
-    // arbitrarily long quiet stretch with nothing actually wrong -- reading
-    // that stale deadline as an overrun would force-gap the first ordinary
-    // key after every idle gap longer than FOCUS_POLL_MS.
-    //
-    // The rearmed deadline is anchored to the key's OWN hook-time
-    // timestamp (`raw_t_ms`), never to mono_ms() at the moment this thread
-    // actually gets around to receiving it. The channel can hand the key
-    // over well after it was captured if this consumer thread itself was
-    // slow to be scheduled, and a focus round trip that lands entirely
-    // inside that gap -- away from the field this key belongs to and back
-    // to the very same one -- compares as "unchanged" at the endpoints no
-    // matter when it is checked, since nothing else recorded the excursion
-    // in between. Anchoring on raw_t_ms instead of the later receive time
-    // means the ordinary focus_poll_due / poll_overran check that already
-    // runs every loop iteration (unconditionally, whether pending was just
-    // armed or has been busy for a while) still reads a consumption delay
-    // past the stall allowance as an overrun on ITS OWN, with no detected
-    // change required, and force-gaps this key through the same
-    // span-widening path (mark_forced_gaps) a genuinely busy consumer
-    // already gets. last_focus itself is deliberately left untouched here:
-    // it keeps whatever was last confirmed before the idle stretch, so the
-    // eventual poll still compares against a real baseline rather than a
-    // read taken at this transition that could already be on the far side
-    // of a round trip this thread never got to see.
+    // The safe half of the empty->non-empty transition (see
+    // classify_idle_transition, which is what actually decides whether
+    // this is the branch to take): rearms the poll deadline from the
+    // key's OWN hook-time timestamp (`raw_t_ms`), never from mono_ms() at
+    // the moment this thread gets around to receiving it, so a poll that
+    // runs shortly afterward is judged against when the key was actually
+    // captured rather than against a next_poll_due left stale by however
+    // long pending had been sitting empty for a completely unrelated
+    // reason. last_focus itself is deliberately left untouched: it keeps
+    // whatever was last confirmed, so a poll that later runs still
+    // compares against a real baseline rather than a read taken here that
+    // could already be on the far side of a change this thread never got
+    // to see.
     fn idle_to_busy_reset(raw_t_ms: u64) -> (u64, u64) {
         (raw_t_ms, raw_t_ms.saturating_add(FOCUS_POLL_MS))
+    }
+
+    // What the empty->non-empty transition does with the arriving key.
+    // Rearm is the ordinary case: nothing to hide, the poll baseline
+    // simply moves forward. ForceGap is chosen when this key cannot be
+    // trusted to a fresh baseline at all, and instead has to be judged
+    // against the real span [span_from, span_to] the same way a genuinely
+    // busy consumer's stall already is (see mark_forced_gaps).
+    enum IdleTransition {
+        Rearm { last_focus_at: u64, next_poll_due: u64 },
+        ForceGap { span_from: u64, span_to: u64 },
+    }
+
+    // Decides which half of the empty->non-empty transition applies.
+    //
+    // `recv_entered_at` is the instant this thread most recently called
+    // rx.recv_timeout with pending genuinely empty; `last_observed_at` is
+    // the last instant focus was ACTUALLY looked at (a poll tick that ran
+    // to completion, or that same blocking-recv instant -- see
+    // last_observed_at's own doc). Rearming from the key's own timestamp
+    // (idle_to_busy_reset) is only safe when this thread was truly idle,
+    // waiting in that recv call, WHEN THE KEY ARRIVED -- i.e. raw_t_ms is
+    // no earlier than recv_entered_at. If raw_t_ms already precedes
+    // recv_entered_at, the key was sitting in the channel before this
+    // thread even started waiting for it: something else had this thread
+    // busy, not blocked, and pending being empty during that stretch
+    // means nothing was there to poll for or classify (see focus_poll_due
+    // and settle_check_due, both gated on pending being non-empty), so no
+    // check ran the whole time. A short busy stretch right after a real
+    // observation is not itself dangerous -- there was barely any window
+    // for a focus round trip to hide in -- so that case still rearms
+    // normally; only once the silence since last_observed_at exceeds the
+    // same stall allowance poll_overran already enforces elsewhere does
+    // this key get force-gapped across the real, unshortened span back to
+    // last_observed_at instead of a fresh one starting at raw_t_ms, which
+    // would otherwise erase the only evidence that nothing was watched
+    // since the busy stretch began.
+    fn classify_idle_transition(raw_t_ms: u64, recv_entered_at: u64, last_observed_at: u64, now: u64) -> IdleTransition {
+        let busy_before_recv = raw_t_ms < recv_entered_at;
+        let observation_due = last_observed_at.saturating_add(FOCUS_POLL_MS);
+        let observation_stale = poll_overran(recv_entered_at, observation_due);
+        if busy_before_recv && observation_stale {
+            IdleTransition::ForceGap { span_from: last_observed_at, span_to: now }
+        } else {
+            let (last_focus_at, next_poll_due) = idle_to_busy_reset(raw_t_ms);
+            IdleTransition::Rearm { last_focus_at, next_poll_due }
+        }
     }
 
     // Whether a key's own timestamp falls inside a span this
@@ -22218,6 +22251,14 @@ mod keylog {
         // unconditional check/poll block below for why this has to be an
         // absolute deadline rather than "did the Timeout arm just fire".
         let mut next_poll_due = mono_ms().saturating_add(FOCUS_POLL_MS);
+        // The last instant focus was ACTUALLY looked at -- by a poll tick
+        // that ran to completion, or by this thread entering the blocking
+        // recv below with pending genuinely empty (nothing yet existed to
+        // hide while sitting there). Unlike last_focus_at, this is never
+        // rearmed just because a key arrived; see classify_idle_transition
+        // for why the distinction matters. Starts alongside last_focus for
+        // the same reason both of those do.
+        let mut last_observed_at = mono_ms();
         loop {
             // Block until either the next raw key, or a timeout -- while
             // keys are pending the timeout is also the ~50ms focus poll
@@ -22231,15 +22272,25 @@ mod keylog {
             // bottom of this loop) -- otherwise an idle or paused capture
             // sitting through a lot of automated focus churn would grow the
             // ledger for as long as nothing else woke this thread up.
+            // Captured before the call below, whichever arm runs -- the
+            // None arm is the one that matters for
+            // classify_idle_transition: reaching it means this thread was
+            // actually about to block with nothing pending, not busy doing
+            // something else, so that instant doubles as a real
+            // observation (see last_observed_at's own doc).
+            let recv_entered_at = mono_ms();
             let recv_result = match pending.front() {
                 Some(front) => {
                     let wait = recv_wait_ms(mono_ms(), front.t_ms, next_poll_due);
                     rx.recv_timeout(Duration::from_millis(wait))
                 }
-                None => rx.recv_timeout(Duration::from_millis(IDLE_PRUNE_MS)),
+                None => {
+                    last_observed_at = recv_entered_at;
+                    rx.recv_timeout(Duration::from_millis(IDLE_PRUNE_MS))
+                }
             };
             match recv_result {
-                Ok(raw) => {
+                Ok(mut raw) => {
                     let paused = clock.lock().unwrap_or_else(|e| e.into_inner()).is_paused_at(raw.t_ms);
                     if paused {
                         // Nothing happened here as far as the recording is
@@ -22260,20 +22311,28 @@ mod keylog {
                             ledger.lock().unwrap_or_else(|e| e.into_inner()).push_arrival(raw.t_ms);
                         }
                         if pending.is_empty() {
-                            // Idle->busy transition, anchored to this key's
-                            // own hook-time timestamp rather than the
-                            // moment this thread got around to receiving
-                            // it -- see idle_to_busy_reset for why. Neither
-                            // last_focus nor the ledger is touched here:
-                            // the ordinary focus_poll_due / poll_overran
-                            // check just below still runs this same
-                            // iteration and every one after, and it is the
-                            // one that ends up gapping this key if either a
-                            // real change or too long a consumption delay
-                            // shows up.
-                            let (reset_at, due) = idle_to_busy_reset(raw.t_ms);
-                            last_focus_at = reset_at;
-                            next_poll_due = due;
+                            // Idle->busy transition -- see
+                            // classify_idle_transition for the two
+                            // outcomes: either this key can safely rearm
+                            // the poll baseline from its own hook
+                            // timestamp, or it was already sitting in the
+                            // channel while this thread was busy with
+                            // something other than waiting for it, for too
+                            // long since focus was last actually observed
+                            // to trust an endpoint comparison alone.
+                            let now = mono_ms();
+                            match classify_idle_transition(raw.t_ms, recv_entered_at, last_observed_at, now) {
+                                IdleTransition::Rearm { last_focus_at: at, next_poll_due: due } => {
+                                    last_focus_at = at;
+                                    next_poll_due = due;
+                                }
+                                IdleTransition::ForceGap { span_from, span_to } => {
+                                    raw.forced_gap = true;
+                                    let mut guard = ledger.lock().unwrap_or_else(|e| e.into_inner());
+                                    guard.push_arrival(span_from);
+                                    guard.push_arrival(span_to);
+                                }
+                            }
                         }
                         if pending.len() >= PENDING_CAP {
                             // The queue growing this large means verdicts
@@ -22362,6 +22421,10 @@ mod keylog {
                 last_focus = cur;
                 last_focus_at = now;
                 next_poll_due = now.saturating_add(FOCUS_POLL_MS);
+                // A poll that ran to completion, whatever it found, is
+                // itself a real observation -- see last_observed_at's own
+                // doc and classify_idle_transition.
+                last_observed_at = now;
             }
             resolve_pending(&mut pending, &mut rec, &clock, &cutoff, &ledger);
             // Nothing before the oldest still-pending key's own GUARD_MS
@@ -23299,6 +23362,102 @@ mod keylog {
             assert!(pending.is_empty());
             assert!(rec.sidecar.events.is_empty());
             assert_eq!(rec.sidecar.gaps, vec![Gap { start_ms: 1200, end_ms: 1200 }]);
+        }
+
+        #[test]
+        fn a_key_captured_while_busy_before_recv_with_a_stale_observation_is_gapped() {
+            // The follow-up HIGH this closes: this thread was busy with
+            // something else (not blocked in recv) while pending stayed
+            // empty, so neither the poll nor a settle check ever ran (both
+            // are gated on pending being non-empty) -- focus could go
+            // A -> password/text -> A and back, silently, entirely inside
+            // that stretch. The key is captured near the end of it (1250),
+            // this thread only gets around to calling recv at 1300 and
+            // receives it almost immediately after (1310). Rearming from
+            // the key's own timestamp alone (idle_to_busy_reset) would
+            // erase the fact that nothing was observed since 1000, hiding
+            // the whole stretch. Because raw_t_ms (1250) precedes
+            // recv_entered_at (1300) and the silence since last_observed_at
+            // (1000) already exceeds the ordinary stall allowance,
+            // classify_idle_transition force-gaps across the real span
+            // back to 1000 instead of a fresh one starting at 1250.
+            let outcome = classify_idle_transition(1250, 1300, 1000, 1310);
+            let (span_from, span_to) = match outcome {
+                IdleTransition::ForceGap { span_from, span_to } => (span_from, span_to),
+                IdleTransition::Rearm { .. } => panic!("expected ForceGap for a stale, busy-before-recv key"),
+            };
+            assert_eq!((span_from, span_to), (1000, 1310));
+
+            let mut ledger = Ledger::default();
+            ledger.push_check(1600, FieldClass::NonText);
+            ledger.push_arrival(span_from);
+            ledger.push_arrival(span_to);
+
+            let mut pending: VecDeque<RawKey> = VecDeque::new();
+            let mut raw = make_raw_key(1250);
+            raw.forced_gap = true;
+            pending.push_back(raw);
+
+            let mut rec = Recorder::default();
+            let clock = Mutex::new(ActiveClock::new(0));
+            let cutoff: Mutex<Option<u64>> = Mutex::new(None);
+            let ledger = Mutex::new(ledger);
+            resolve_pending(&mut pending, &mut rec, &clock, &cutoff, &ledger);
+
+            assert!(pending.is_empty());
+            assert!(rec.sidecar.events.is_empty());
+            assert_eq!(rec.sidecar.gaps, vec![Gap { start_ms: 1250, end_ms: 1250 }]);
+        }
+
+        #[test]
+        fn idle_then_prompt_key_still_rearms_and_is_kept() {
+            // The genuine idle case must stay green: this thread was truly
+            // blocked in recv (nothing pending, nothing to hide) when the
+            // key arrived, so raw_t_ms is no earlier than recv_entered_at
+            // and classify_idle_transition takes the ordinary Rearm branch,
+            // exactly like idle_to_busy_reset always did on its own.
+            let recv_entered_at = 1150;
+            let last_observed_at = 1150; // set when this thread entered that same recv call
+            let raw_t_ms = 1200; // arrived while genuinely waiting
+            let now = 1200;
+            let outcome = classify_idle_transition(raw_t_ms, recv_entered_at, last_observed_at, now);
+            let (last_focus_at, next_poll_due) = match outcome {
+                IdleTransition::Rearm { last_focus_at, next_poll_due } => (last_focus_at, next_poll_due),
+                IdleTransition::ForceGap { .. } => panic!("expected Rearm for a genuinely idle receive"),
+            };
+            assert_eq!((last_focus_at, next_poll_due), (1200, 1250));
+
+            let mut ledger = Ledger::default();
+            ledger.push_check(1600, FieldClass::NonText);
+            assert_eq!(verdict(&ledger, 1200, false), Some(Verdict::Allow));
+
+            let mut pending: VecDeque<RawKey> = VecDeque::new();
+            pending.push_back(make_raw_key(1200));
+
+            let mut rec = Recorder::default();
+            let clock = Mutex::new(ActiveClock::new(0));
+            let cutoff: Mutex<Option<u64>> = Mutex::new(None);
+            let ledger = Mutex::new(ledger);
+            resolve_pending(&mut pending, &mut rec, &clock, &cutoff, &ledger);
+
+            assert!(pending.is_empty());
+            assert!(rec.sidecar.gaps.is_empty(), "a genuinely idle receive must not turn into a recorded gap");
+        }
+
+        #[test]
+        fn a_brief_busy_stretch_right_after_an_observation_still_rearms() {
+            // busy_before_recv alone is not enough to force-gap: a short
+            // stretch right after a real observation has barely any window
+            // for a round trip to hide in, so this still takes the
+            // ordinary Rearm branch -- only a silence past the stall
+            // allowance escalates to ForceGap.
+            let outcome = classify_idle_transition(1210, 1230, 1200, 1235);
+            match outcome {
+                IdleTransition::Rearm { last_focus_at, next_poll_due } => {
+                    assert_eq!((last_focus_at, next_poll_due), (1210, 1260));
+                }
+                IdleTransition::ForceGap { .. } => panic!("expected Rearm for a fresh observation"),
+            }
         }
 
         #[test]
