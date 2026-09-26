@@ -16224,6 +16224,76 @@ fn default_sync_dir(app: AppHandle) -> String {
     sync_default_dir(&app).to_string_lossy().to_string()
 }
 
+// How long a folder picked through a native dialog stays usable by the
+// set_*_dir command it was picked for -- long enough to cover the confirm
+// dialog some of those flows show (a data-dir move, a sync-dir switch)
+// before the setter call lands, without leaving the grant valid forever: a
+// subverted renderer replaying an old pick after this window closes gets the
+// same stable error as one that never showed the user a picker at all.
+const PICKER_GRANT_TTL: Duration = Duration::from_secs(10 * 60);
+// Bounded so a compromised renderer spamming the picker cannot grow this
+// forever; the oldest grant is dropped once the cap is hit.
+const PICKER_GRANT_MAX: usize = 16;
+
+// Every folder the user actually picked through pick_folder/pick_export_folder,
+// each spendable exactly once by the matching set_*_dir command -- the only
+// authority those commands accept besides their own built-in default, closing
+// the gap where a subverted renderer could call a setter directly with any
+// path it likes and have the backend write files there on its say alone.
+static PICKER_GRANTS: Mutex<Vec<(PathBuf, SystemTime)>> = Mutex::new(Vec::new());
+
+fn picker_grant_key(path: &Path) -> PathBuf {
+    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
+// A dialog result is proof the user picked this folder just now -- recorded so
+// the setter call that follows can spend it.
+fn grant_picked_dir(path: &Path) {
+    let key = picker_grant_key(path);
+    let mut grants = PICKER_GRANTS.lock().unwrap_or_else(|e| e.into_inner());
+    grants.retain(|(_, at)| at.elapsed().map(|e| e < PICKER_GRANT_TTL).unwrap_or(true));
+    if grants.len() >= PICKER_GRANT_MAX {
+        grants.remove(0);
+    }
+    grants.push((key, SystemTime::now()));
+}
+
+// Spends a grant for `dir` if one exists and has not expired. Consuming it
+// (rather than just checking) means only the legitimate setter call that
+// follows the picker can ever use it -- a captured dir string cannot be
+// replayed for a second write once that call has gone through.
+fn consume_granted_dir(dir: &Path) -> bool {
+    let key = picker_grant_key(dir);
+    let mut grants = PICKER_GRANTS.lock().unwrap_or_else(|e| e.into_inner());
+    grants.retain(|(_, at)| at.elapsed().map(|e| e < PICKER_GRANT_TTL).unwrap_or(true));
+    if let Some(pos) = grants.iter().position(|(p, _)| *p == key) {
+        grants.remove(pos);
+        true
+    } else {
+        false
+    }
+}
+
+// Shared gate for every set_*_dir command below: an empty string or the
+// feature's own built-in default always resets it (nothing to authorize
+// there), and any other path must be one the user just picked through
+// pick_folder/pick_export_folder in this same flow -- never a raw string the
+// renderer made up on its own.
+fn accept_dir_setting(dir: &str, default_dir: &Path) -> Result<String, String> {
+    let trimmed = dir.trim();
+    if trimmed.is_empty() {
+        return Ok(String::new());
+    }
+    let candidate = Path::new(trimmed);
+    if path_matches_configured_dir(candidate, default_dir) {
+        return Ok(String::new());
+    }
+    if consume_granted_dir(candidate) {
+        return Ok(trimmed.to_string());
+    }
+    Err("dir-not-picked".to_string())
+}
+
 // Native folder picker (used by the expert screenshot-dir + data-dir options).
 #[tauri::command]
 async fn pick_folder(app: AppHandle, win: tauri::Window) -> Option<String> {
@@ -16231,6 +16301,9 @@ async fn pick_folder(app: AppHandle, win: tauri::Window) -> Option<String> {
         .pick_folder()
         .map(|p| p.to_string_lossy().to_string());
     let _ = win.set_focus();
+    if let Some(dir) = &result {
+        grant_picked_dir(Path::new(dir));
+    }
     result
 }
 
@@ -16336,6 +16409,9 @@ async fn set_data_dir(app: AppHandle, state: State<'_, Db>, dir: String) -> Resu
     let trimmed = dir.trim();
     if trimmed.is_empty() {
         return Err("empty path".to_string());
+    }
+    if !consume_granted_dir(Path::new(trimmed)) {
+        return Err("dir-not-picked".to_string());
     }
     let new = PathBuf::from(trimmed);
     fs::create_dir_all(&new).map_err(|e| e.to_string())?;
@@ -23505,34 +23581,43 @@ fn set_ui_text(app: AppHandle, state: State<Db>, key: String, value: String) {
 // "Change" button calls pick_folder for the dialog, then this with its
 // result. Kept out of the generic set_ui_text path; see PROTECTED_FOLDER_KEYS.
 #[tauri::command]
-fn set_screenshot_dir(app: AppHandle, state: State<Db>, dir: String) {
+fn set_screenshot_dir(app: AppHandle, state: State<Db>, dir: String) -> Result<(), String> {
+    let value = accept_dir_setting(&dir, Path::new(&default_screenshot_dir()))?;
     let mut store = lock(&state);
-    store.settings.ui_texts.insert("screenshotDir".to_string(), dir);
+    store.settings.ui_texts.insert("screenshotDir".to_string(), value);
     save_settings(&app, &store.settings);
     drop(store);
     notify_float_settings(&app);
+    Ok(())
 }
 
 // Dedicated setter for the video editor's export folder -- same shape as
-// set_screenshot_dir above, and for the same reason.
+// set_screenshot_dir above, and for the same reason. There is no separate
+// built-in default folder here (empty already means "next to the source
+// file"), so accept_dir_setting's default check is a no-op past the empty
+// case above it.
 #[tauri::command]
-fn set_video_export_dir(app: AppHandle, state: State<Db>, dir: String) {
+fn set_video_export_dir(app: AppHandle, state: State<Db>, dir: String) -> Result<(), String> {
+    let value = accept_dir_setting(&dir, Path::new(""))?;
     let mut store = lock(&state);
-    store.settings.ui_texts.insert("videoExportDir".to_string(), dir);
+    store.settings.ui_texts.insert("videoExportDir".to_string(), value);
     save_settings(&app, &store.settings);
     drop(store);
     notify_float_settings(&app);
+    Ok(())
 }
 
 // Dedicated setter for the screen-recording save folder -- same shape as
 // set_screenshot_dir above, and for the same reason.
 #[tauri::command]
-fn set_recording_dir(app: AppHandle, state: State<Db>, dir: String) {
+fn set_recording_dir(app: AppHandle, state: State<Db>, dir: String) -> Result<(), String> {
+    let value = accept_dir_setting(&dir, Path::new(&default_recording_dir()))?;
     let mut store = lock(&state);
-    store.settings.ui_texts.insert("recordingDir".to_string(), dir);
+    store.settings.ui_texts.insert("recordingDir".to_string(), value);
     save_settings(&app, &store.settings);
     drop(store);
     notify_float_settings(&app);
+    Ok(())
 }
 
 // Clear all expert overrides back to the shipped defaults.
@@ -26539,6 +26624,7 @@ async fn pick_export_folder(app: AppHandle, win: tauri::Window) -> Option<String
     let _ = win.set_focus();
     if let Some(dir) = &result {
         remember_export_dest_dir(dir);
+        grant_picked_dir(dir);
     }
     result.map(|p| p.to_string_lossy().to_string())
 }
@@ -32260,10 +32346,14 @@ fn sync_status(state: State<Db>) -> SyncStatus {
 // ago, read from the settings here.
 #[tauri::command]
 fn set_sync_dir(app: AppHandle, state: State<Db>, dir: String, delete_old: bool) -> Result<usize, String> {
+    let trimmed = dir.trim();
+    if !trimmed.is_empty() && !consume_granted_dir(Path::new(trimmed)) {
+        return Err("dir-not-picked".to_string());
+    }
     let (old, write_failures) = {
         let mut store = lock(&state);
         let old = sync_dir_path(&app, &store.settings);
-        store.settings.ui_texts.insert("syncDir".into(), dir.trim().to_string());
+        store.settings.ui_texts.insert("syncDir".into(), trimmed.to_string());
         save_settings(&app, &store.settings);
         // Same synchronous, one-off treatment activation gets: when this returns, the
         // files are in the new folder. Deliberately inside the lock, as before.
@@ -37789,6 +37879,43 @@ mod tests {
         assert!(discard_recording_file_in(&[dir], &src).is_none(), "dir is not in the allowed list");
         assert!(src.is_file());
         let _ = fs::remove_dir_all(&other);
+    }
+
+    // ---------- security pass: picker-capability grants (set_*_dir gate) ----------
+
+    #[test]
+    fn accept_dir_setting_rejects_a_path_that_was_never_picked() {
+        let dir = std::env::temp_dir().join(format!("ps-grant-unpicked-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let dir_s = dir.to_string_lossy().to_string();
+        let default = std::env::temp_dir().join(format!("ps-grant-unpicked-default-{}", std::process::id()));
+        let err = accept_dir_setting(&dir_s, &default).expect_err("a dir the picker never returned must be refused");
+        assert_eq!(err, "dir-not-picked");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn accept_dir_setting_accepts_a_granted_dir_exactly_once() {
+        let dir = std::env::temp_dir().join(format!("ps-grant-once-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let dir_s = dir.to_string_lossy().to_string();
+        let default = std::env::temp_dir().join(format!("ps-grant-once-default-{}", std::process::id()));
+        grant_picked_dir(&dir);
+        assert_eq!(accept_dir_setting(&dir_s, &default).unwrap(), dir_s, "the just-picked dir must be accepted");
+        let err = accept_dir_setting(&dir_s, &default).expect_err("the same grant must not be usable twice");
+        assert_eq!(err, "dir-not-picked");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn accept_dir_setting_treats_empty_and_the_built_in_default_as_a_reset() {
+        let default = std::env::temp_dir().join(format!("ps-grant-default-{}", std::process::id()));
+        assert_eq!(accept_dir_setting("", &default).unwrap(), "", "empty must reset without needing a grant");
+        assert_eq!(
+            accept_dir_setting(&default.to_string_lossy(), &default).unwrap(),
+            "",
+            "the feature's own built-in default must reset without needing a grant"
+        );
     }
 
     #[test]
