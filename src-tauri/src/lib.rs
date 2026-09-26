@@ -21432,14 +21432,21 @@ mod keylog {
             self.arrivals.drain(0..ai);
         }
 
-        // Whether a "password" check, or a focus-change arrival, lies
-        // anywhere in [from, to] -- checked separately from the single
-        // qualifying check above, because a check that itself said "not
-        // password" can still be sitting right next to a focus change (or
-        // another, dirtier check) that happened in between and that the
-        // qualifying check alone, being a single point, cannot see.
+        // Whether a "password" or "unknown" check, or a focus-change
+        // arrival, lies anywhere in [from, to] -- checked separately from
+        // the single qualifying check above, because a check that itself
+        // said "not password" can still be sitting right next to a focus
+        // change (or another, dirtier check) that happened in between and
+        // that the qualifying check alone, being a single point, cannot
+        // see. Unknown counts as dirty here for the same reason Password
+        // does: a check the ledger could not positively clear is doubt
+        // sitting inside the window, not something a later, cleaner-looking
+        // check is allowed to paper over.
         fn window_is_dirty(&self, from: u64, to: u64) -> bool {
-            let bad_check = self.checks.iter().any(|(t, class)| *class == FieldClass::Password && *t >= from && *t <= to);
+            let bad_check = self
+                .checks
+                .iter()
+                .any(|(t, class)| matches!(class, FieldClass::Password | FieldClass::Unknown) && *t >= from && *t <= to);
             let bad_arrival = self.arrivals.iter().any(|t| *t >= from && *t <= to);
             bad_check || bad_arrival
         }
@@ -23052,6 +23059,25 @@ mod keylog {
             for t in pin_chars {
                 assert!(verdict(&ledger, t, false) == Some(Verdict::Gap), "PIN char at {t} must gap");
             }
+        }
+
+        #[test]
+        fn window_is_dirty_treats_an_unknown_check_as_dirty_too() {
+            // An Unknown check sitting inside the window between a key and
+            // its qualifying check must dirty the window exactly like a
+            // Password check does -- before this fix window_is_dirty only
+            // ever looked for Password, so an Unknown check right next to a
+            // later, clean-looking Text check was silently ignored and the
+            // key was allowed through anyway.
+            let mut ledger = Ledger::default();
+            ledger.push_check(0, FieldClass::Text); // stable before any of this
+            ledger.push_check(100, FieldClass::Unknown); // classification failed partway through
+            ledger.push_check(400, FieldClass::Text); // the qualifying check for the key below
+            assert_eq!(
+                verdict(&ledger, 50, false),
+                Some(Verdict::Gap),
+                "an Unknown check inside the window must gap the key, not be ignored by window_is_dirty"
+            );
         }
 
         #[test]
