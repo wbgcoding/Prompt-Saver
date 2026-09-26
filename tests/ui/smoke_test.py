@@ -9462,6 +9462,115 @@ PICK_PROBE = """
 """
 
 
+# 501: a real drag over a highlighted window must still crop to the dragged rect,
+# never fall back to capturing the whole window or the whole stitched canvas.
+# Runs once at 1x and once at a simulated 150 percent display scale (the ratio
+# mapping toImg uses is meant to be scale independent, so both must resolve the
+# same rect). Shares snip.html with PICK_PROBE above: waits for its own #SMOKE
+# element instead of creating a second one, then merges its findings into it.
+REGION_PROBE = """
+<script>
+(() => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const until = async (fn) => { for (let i = 0; i < 80 && !fn(); i++) await sleep(50); return fn(); };
+  // PICK_PROBE runs its own long walk on this same page first and only creates
+  // #SMOKE at its very end; a plain re-assignment of window.__TAURI__.core.invoke
+  // done only after that walk finishes would arrive too late, because snip.js
+  // reads the invoke property exactly once, when its deferred module evaluates
+  // (right after the document finishes parsing) -- long before either probe
+  // script has finished its own async work. The last SYNCHRONOUS assignment
+  // before that point wins, so this installs one stable dispatcher right now,
+  // synchronously, and simply forwards to whatever was there before (PICK_PROBE
+  // own wrapper) until this probe own session is actually ready to run.
+  const priorInvoke = window.__TAURI__.core.invoke;
+  let seen = null; // non-null only while a region session below is live
+  let fullW = 0, fullH = 0;
+  const cv = document.createElement("canvas");
+  cv.width = 8; cv.height = 4;
+  cv.getContext("2d").fillStyle = "#336699";
+  cv.getContext("2d").fillRect(0, 0, 8, 4);
+  const url = cv.toDataURL("image/png");
+  window.__TAURI__.core.invoke = async (cmd, args) => {
+    if (!seen) return priorInvoke(cmd, args);
+    seen.push([cmd, args]);
+    if (cmd === "snip_should_begin") return true;
+    if (cmd === "snip_background") {
+      return { src: url, is_file: false, width: fullW, height: fullH, pick: false, record: false };
+    }
+    // One maximized window covering the whole stitched canvas, topmost --
+    // exactly what a real desktop hands back when a window fills the screen
+    // under the drag.
+    if (cmd === "snip_windows") return [{ id: 42, x: 0, y: 0, width: fullW, height: fullH }];
+    if (cmd === "capture_region" || cmd === "capture_window") return null;
+    return priorInvoke(cmd, args);
+  };
+
+  const bg = () => document.getElementById("snip-bg").getBoundingClientRect();
+  const called = (cmd) => seen.some((c) => c[0] === cmd);
+
+  const runSession = async (w, h, tag) => {
+    fullW = w; fullH = h; seen = [];
+    window.__FIRE__("snip-begin");
+    await until(() => called("snip_background"));
+    await sleep(200); // let snip_windows resolve too
+
+    const r = bg();
+    const sx = r.width / fullW, sy = r.height / fullH;
+    const wantX = 200, wantY = 200, wantW = 800, wantH = 600;
+    const cA = { x: r.left + wantX * sx, y: r.top + wantY * sy };
+    const cMid = { x: r.left + 600 * sx, y: r.top + 500 * sy };
+    const cB = { x: r.left + (wantX + wantW) * sx, y: r.top + (wantY + wantH) * sy };
+    window.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0, clientX: cA.x, clientY: cA.y }));
+    window.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: cMid.x, clientY: cMid.y }));
+    window.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: cB.x, clientY: cB.y }));
+    window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0, clientX: cB.x, clientY: cB.y }));
+    await until(() => called("capture_region") || called("capture_window"));
+    const call = seen.filter((c) => c[0] === "capture_region" || c[0] === "capture_window").pop();
+    if (!call) {
+      errs.push(tag + ": no capture command was invoked after the drag over a window");
+    } else if (call[0] !== "capture_region") {
+      errs.push(tag + ": drag over a maximized window invoked " + call[0] + " instead of capture_region");
+    } else {
+      const a = call[1];
+      const tol = 3;
+      if (Math.abs(a.x - wantX) > tol || Math.abs(a.y - wantY) > tol ||
+          Math.abs(a.width - wantW) > tol || Math.abs(a.height - wantH) > tol) {
+        errs.push(tag + ": capture_region got x=" + a.x + " y=" + a.y + " width=" + a.width + " height=" + a.height +
+          " instead of roughly x=" + wantX + " y=" + wantY + " width=" + wantW + " height=" + wantH);
+      }
+    }
+  };
+
+  const untilLong = async (fn) => { for (let i = 0; i < 500 && !fn(); i++) await sleep(50); return fn(); };
+  (async () => {
+    // Wait for PICK_PROBE own #SMOKE before this dispatcher starts intercepting
+    // (seen stays null, so every call above still forwards to priorInvoke), so
+    // its long walk keeps seeing exactly the responses it expects.
+    await untilLong(() => document.getElementById("SMOKE"));
+    try {
+      await runSession(1280, 800, "1x scale");
+      await runSession(1920, 1200, "150 percent scale");
+    } catch (e) { errs.push("region probe: " + e.message); }
+    seen = null; // stop intercepting, back to pure pass-through
+
+    const prior = document.getElementById("SMOKE");
+    if (prior) {
+      let merged = errs;
+      try { merged = JSON.parse(prior.textContent).concat(errs); } catch (e) { /* keep just this run own errs */ }
+      prior.textContent = JSON.stringify(merged);
+    } else {
+      const pre = document.createElement("pre");
+      pre.id = "SMOKE";
+      pre.textContent = JSON.stringify(errs);
+      document.body.appendChild(pre);
+    }
+  })();
+})();
+</script>
+"""
+
+
 # F25: the folder window is the only place its UI is observable: the closed icon
 # (previews + count + label), the grid the window grows into, and Esc collapsing it.
 FOLDER_PROBE = """
@@ -13545,7 +13654,7 @@ def main():
         # and nowhere else.
         for name, size, probe, budget in (
                 ("floating.html", (240, 60), FLOAT_PROBE, 15000),
-                ("snip.html", (1280, 800), PICK_PROBE, 20000),
+                ("snip.html", (1280, 800), PICK_PROBE + REGION_PROBE, 28000),
                 ("folder.html", (520, 420), FOLDER_PROBE, 15000),
                 ("vars.html", (340, 250), VARS_PROBE, 15000),
                 ("launcher.html", (560, 420), LAUNCHER_PROBE, 15000),
