@@ -3087,6 +3087,50 @@ PROBE = """
       await click('expert-back');
       document.getElementById('settings').classList.add('hidden');
     }
+    // 513: the drawing-color row -- a real swatch (not a bare default button),
+    // sized and bordered like the app's other color triggers, with the hex
+    // value shown as text, at about the same row height as a dropdown row.
+    {
+      document.getElementById('settings').classList.remove('hidden');
+      await click('expert-open');
+      const search = document.getElementById('expert-search');
+      search.value = 'Screenshot editor';
+      search.dispatchEvent(new Event('input'));
+      await sleep(250);
+      const colorRow513 = document.querySelector('#expert-flags [data-setting-row="snipDefaultColor"]');
+      const toolRow513 = document.querySelector('#expert-flags [data-setting-row="snipEditDefaultTool"]');
+      if (!colorRow513) {
+        out.errors.push('513: the default drawing color row is missing (search did not surface it)');
+      } else {
+        const swatch = colorRow513.querySelector('.color-swatch');
+        if (!swatch) {
+          out.errors.push('513: the color row has no .color-swatch element');
+        } else {
+          const cs = getComputedStyle(swatch);
+          if (Math.round(parseFloat(cs.width)) !== 28) {
+            out.errors.push('513: the color swatch is ' + cs.width + ' wide, expected 28px');
+          }
+          if (parseFloat(cs.borderTopWidth) <= 0) {
+            out.errors.push('513: the color swatch has no border');
+          }
+          if (!colorRow513.querySelector('.value-out')) {
+            out.errors.push('513: the color row shows no hex value text beside the swatch');
+          }
+        }
+        if (toolRow513) {
+          const h1 = Math.round(colorRow513.getBoundingClientRect().height);
+          const h2 = Math.round(toolRow513.getBoundingClientRect().height);
+          if (Math.abs(h1 - h2) > 4) {
+            out.errors.push('513: the color row is ' + h1 + 'px tall vs a dropdown row at ' + h2 + 'px, over the 4px tolerance');
+          }
+        }
+      }
+      search.value = '';
+      search.dispatchEvent(new Event('input'));
+      await sleep(150);
+      await click('expert-back');
+      document.getElementById('settings').classList.add('hidden');
+    }
     // F22: a modifier-held drag hands the prompt to the OS; a plain drag has to stay
     // the tile reorder it always was, and the switch has to take the whole thing away.
     const gridTile = (id) => [...document.querySelectorAll('#grid .tile')].find(e => (e.dataset.id || '') === id);

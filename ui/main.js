@@ -3729,36 +3729,47 @@ function colorRow(key) {
   const defColor = typeof cfg.def === "function" ? cfg.def() : cfg.def;
   const row = document.createElement("div");
   row.className = "field value-field color-field";
+  row.dataset.settingRow = key; // same jump-to-setting hook as valueRow
   const head = document.createElement("div");
   head.className = "value-head";
   const span = document.createElement("span");
   span.textContent = t(cfg.label);
-  head.appendChild(span);
   const cur = HEX_RE.test(settings.ui_texts?.[key] || "") ? settings.ui_texts[key] : defColor;
+  // .value-head is space-between over exactly two children: label plus this
+  // wrapper, the same reason valueRow's slider reset joins .value-out instead
+  // of becoming a 3rd sibling.
+  const right = document.createElement("span");
+  right.className = "value-head-right";
   const swatch = document.createElement("button");
   swatch.type = "button";
   swatch.className = "color-swatch";
   swatch.style.background = cur;
   swatch.title = cur;
+  const hexOut = document.createElement("span");
+  hexOut.className = "value-out";
+  hexOut.textContent = cur;
+  let reset = null;
   const setColor = async (hex) => {
     swatch.style.background = hex;
     swatch.title = hex;
+    hexOut.textContent = hex;
     settings.ui_texts = { ...(settings.ui_texts || {}), [key]: hex };
     try { await invoke("set_ui_text", { key, value: hex }); } catch (e) { errToast(e); }
+    if (reset) reset.classList.toggle("hidden", hex === defColor);
   };
   swatch.addEventListener("click", () => openColorPop(swatch, cur, setColor));
-  head.appendChild(swatch);
-  if (cur !== defColor) {
-    const reset = document.createElement("button");
-    reset.type = "button";
-    reset.className = "expert-row-reset";
-    const label = t("expertResetOne");
-    reset.title = label;
-    reset.setAttribute("aria-label", label);
-    putIcon(reset, ICON_UNDO);
-    reset.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); setColor(defColor).then(renderExpert); });
-    head.appendChild(reset);
-  }
+  right.append(swatch, hexOut);
+  reset = document.createElement("button");
+  reset.type = "button";
+  reset.className = "expert-row-reset";
+  reset.classList.toggle("hidden", cur === defColor);
+  const label = t("expertResetOne");
+  reset.title = label;
+  reset.setAttribute("aria-label", label);
+  putIcon(reset, ICON_UNDO);
+  reset.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); setColor(defColor); });
+  right.append(reset);
+  head.append(span, right);
   row.appendChild(head);
   return withTip(row, key);
 }
