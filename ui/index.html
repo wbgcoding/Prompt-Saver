@@ -1163,20 +1163,14 @@
       </div>
       </div><!-- /settings-main -->
       <div id="settings-expert" class="hidden">
-        <div class="expert-top">
-          <p class="expert-hint">
-            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-              <path fill="currentColor" d="M12 3 1 21h22L12 3Zm0 5.5 6.6 11H5.4L12 8.5ZM11 11h2v5h-2v-5Zm0 6.5h2v2h-2v-2Z"/>
-            </svg>
-            <span data-i18n="expertHint">Changing these can cause unexpected behaviour.</span>
-          </p>
+        <div class="expert-top-row">
+          <div class="expert-presets" role="group" aria-label="Quick profile" data-i18n-aria="expertPresetsHeading">
+            <span class="expert-presets-label" data-i18n="expertPresetsHeading">Quick profile</span>
+            <button id="expert-preset-quiet" type="button" class="ghost-btn" data-i18n="expertPresetQuiet">Quiet</button>
+            <button id="expert-preset-standard" type="button" class="ghost-btn" data-i18n="expertPresetStandard">Standard</button>
+            <button id="expert-preset-full" type="button" class="ghost-btn" data-i18n="expertPresetFull">All on</button>
+          </div>
           <button id="expert-reset" class="ghost-btn danger-btn" data-i18n="expertReset">Reset expert menu</button>
-        </div>
-        <div class="expert-presets" role="group" aria-label="Quick profile" data-i18n-aria="expertPresetsHeading">
-          <span class="expert-presets-label" data-i18n="expertPresetsHeading">Quick profile</span>
-          <button id="expert-preset-quiet" type="button" class="ghost-btn" data-i18n="expertPresetQuiet">Quiet</button>
-          <button id="expert-preset-standard" type="button" class="ghost-btn" data-i18n="expertPresetStandard">Standard</button>
-          <button id="expert-preset-full" type="button" class="ghost-btn" data-i18n="expertPresetFull">All on</button>
         </div>
         <!-- Search + the "only changed" filter share one row: the filter used to be a
              full-width checkbox line of its own, a whole row of height for one word. -->
@@ -1190,7 +1184,8 @@
             <span data-i18n="expertOnlyChanged">Only changed</span>
           </label>
         </div>
-        <!-- Tab bar stays fixed; only the rows below scroll. Both built by JS. -->
+        <!-- Tab bar stays fixed; only the rows below scroll. Both built by JS, along
+             with the expert-hint notice that renders right after the System tab. -->
         <div id="expert-tabs-bar"></div>
         <div id="expert-flags"></div>
       </div>

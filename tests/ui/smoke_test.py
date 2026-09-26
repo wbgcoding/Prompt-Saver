@@ -3048,6 +3048,45 @@ PROBE = """
       await click('expert-back');
       document.getElementById('settings').classList.add('hidden');
     }
+    // 511: the quick-profiles row is the first child of the expert menu, the
+    // filter row and tab bar follow, and the caution hint now lives inside
+    // the tab bar itself, right after the System tab.
+    {
+      document.getElementById('settings').classList.remove('hidden');
+      await click('expert-open');
+      const expertBox = document.getElementById('settings-expert');
+      const firstChild = expertBox.firstElementChild;
+      if (!firstChild || !firstChild.classList.contains('expert-top-row')) {
+        out.errors.push('511: the expert menu top row (presets plus reset) is not the first child');
+      } else if (!firstChild.querySelector('.expert-presets') || firstChild.querySelector('.expert-presets') !== firstChild.firstElementChild) {
+        out.errors.push('511: the quick-profiles group is not the first thing in the top row');
+      }
+      // Jump every tab once so the hint (built after the System tab) actually exists.
+      for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+        tb.click();
+        await sleep(80);
+      }
+      const hint = document.querySelector('#expert-tabs-bar .expert-hint');
+      if (!hint) {
+        out.errors.push('511: the expert menu caution hint is missing from the tab bar');
+      } else {
+        const tabBtns = [...document.querySelectorAll('#expert-tabs-bar .expert-tab')];
+        const systemIdx = (typeof EXPERT_TABS !== 'undefined') ? EXPERT_TABS.findIndex((tb) => tb.title === 'expTabSystem') : -1;
+        const prevTab = hint.previousElementSibling;
+        if (!prevTab || !prevTab.classList.contains('expert-tab')) {
+          out.errors.push('511: the caution hint does not directly follow a tab button');
+        } else if (systemIdx >= 0 && tabBtns[systemIdx] !== prevTab) {
+          out.errors.push('511: the caution hint does not directly follow the System tab');
+        }
+        if (hint.matches('button, a, input, select, [tabindex]') || hint.hasAttribute('tabindex')) {
+          out.errors.push('511: the caution hint is focusable, it should be plain text');
+        }
+      }
+      const firstTab0 = document.querySelector('#expert-tabs-bar .expert-tab');
+      if (firstTab0) { firstTab0.click(); await sleep(100); }
+      await click('expert-back');
+      document.getElementById('settings').classList.add('hidden');
+    }
     // F22: a modifier-held drag hands the prompt to the OS; a plain drag has to stay
     // the tile reorder it always was, and the switch has to take the whole thing away.
     const gridTile = (id) => [...document.querySelectorAll('#grid .tile')].find(e => (e.dataset.id || '') === id);

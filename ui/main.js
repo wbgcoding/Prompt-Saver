@@ -4156,6 +4156,16 @@ function renderExpert() {
       b.textContent = t(tab.title);
       b.addEventListener("click", () => { expertTab = i; box.scrollTop = 0; renderExpert(); });
       bar.appendChild(b);
+      // The caution notice sits right after the System tab, in the tab bar
+      // itself: a plain line of text, never a tab and never focusable.
+      if (tab.title === "expTabSystem") {
+        const hint = document.createElement("span");
+        hint.className = "expert-hint";
+        hint.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">' +
+          '<path fill="currentColor" d="M12 3 1 21h22L12 3Zm0 5.5 6.6 11H5.4L12 8.5ZM11 11h2v5h-2v-5Zm0 6.5h2v2h-2v-2Z"/></svg>' +
+          '<span>' + t("expertHint") + "</span>";
+        bar.appendChild(hint);
+      }
     });
     tabBar.appendChild(bar);
   }
