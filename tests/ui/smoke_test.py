@@ -11315,6 +11315,49 @@ VIDEO_PROBE = """
     if (!destInput.value.startsWith('C:\\\\Videos\\\\Exports')) {
       errs.push('"Export to..." did not build the path from the picked folder');
     }
+
+    // ---- 503: a destination the backend does not recognize (e.g. a file
+    // opened from outside the app) opens the export-folder picker and
+    // retries once instead of failing outright ----
+    window.__EXPORT_DEST_REFUSED_ONCE__ = false;
+    window.__SMOKE_CALLS__ = [];
+    destInput.value = 'C:\\\\Outside\\\\REFUSEDEST-clip.mp4';
+    destInput.dispatchEvent(new Event('change'));
+    await sleep(30);
+    window.__PICK_FOLDER__ = 'C:\\\\Retry\\\\Folder';
+    document.getElementById('ve-export-start').click();
+    await sleep(250);
+    if (!window.__SMOKE_CALLS__.includes('pick_export_folder')) {
+      errs.push('503: a refused export destination did not open the export-folder picker');
+    }
+    const retryStatus = document.getElementById('ve-export-status').textContent;
+    if (!retryStatus.includes('C:\\\\Retry\\\\Folder')) {
+      errs.push(`503: the retried export did not land in the picked folder, status reads ${JSON.stringify(retryStatus)}`);
+    }
+    if (document.getElementById('ve-export-saveas').classList.contains('hidden')) {
+      errs.push('503: the retried export did not complete successfully');
+    }
+    window.__PICK_FOLDER__ = null;
+
+    // ---- 503: cancelling that picker is a plain no-op -- no export, no error ----
+    window.__EXPORT_DEST_REFUSED_ONCE__ = false;
+    destInput.value = 'C:\\\\Outside\\\\REFUSEDEST-cancel.mp4';
+    destInput.dispatchEvent(new Event('change'));
+    await sleep(30);
+    window.__PICK_FOLDER__ = null; // cancel
+    window.__SMOKE_CALLS__ = [];
+    document.getElementById('ve-export-start').click();
+    await sleep(250);
+    if (!window.__SMOKE_CALLS__.includes('pick_export_folder')) {
+      errs.push('503: cancelling the retry picker was never even offered');
+    }
+    if (document.getElementById('ve-export-status').textContent.toLowerCase().includes('not recognized')) {
+      errs.push('503: a cancelled retry showed the raw backend refusal instead of staying silent');
+    }
+    destInput.value = 'C:\\\\Custom\\\\my-clip.mp4';
+    destInput.dispatchEvent(new Event('change'));
+    await sleep(30);
+
     const formatSel = document.getElementById('ve-export-format');
     const otherOpt = formatSel && [...formatSel.options].find((o) => o.value !== formatSel.value);
     if (otherOpt) {

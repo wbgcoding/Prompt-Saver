@@ -3187,44 +3187,10 @@ async function startExport(toClipboard) {
   if (total < 1) { toast(t("veNothingToExport")); return; }
   const lossless = isLosslessCopy();
   const format = exportFormat();
-  const dest = toClipboard
+  let dest = toClipboard
     ? await invoke("clip_export_path", { ext: formatExt(format) }).catch((err) => { toast(String(err)); return null; })
     : destPath();
   if (!dest) return;
-  const request = {
-    src_path: VE.src,
-    dest_path: dest,
-    filter_chain: lossless ? null : buildVideoChain(),
-    audio_map: lossless ? null : buildAudioChain(),
-    lossless_copy: lossless,
-    // Distinct from lossless_copy -- this is the "Lossless" QUALITY tier,
-    // which forces a real re-encode (see isLosslessCopy above) that must
-    // itself stay lossless (-crf 0) rather than falling back to an ordinary
-    // bitrate target with nothing to map "lossless" to.
-    lossless_quality: exportQuality() === "lossless",
-    format,
-    video_kbps: lossless ? null : videoKbps(),
-    // Only meaningful on the stream-copy path, where there is no filter graph
-    // that could carry the trim itself.
-    trim_start_ms: lossless ? Math.round(keptSegments()[0].a) : null,
-    trim_end_ms: lossless ? Math.round(keptSegments().slice(-1)[0].b) : null,
-    total_ms: total,
-  };
-  // A stream copy has no bitrate-based estimate to check against (see
-  // estimate_export_bytes) -- skipped the same way its size note above is.
-  if (!lossless) {
-    const diskWarn = await invoke("check_export_disk_space", {
-      destPath: dest, format, videoKbps: request.video_kbps, losslessQuality: request.lossless_quality, durationMs: total,
-    }).catch(() => null);
-    if (diskWarn) {
-      const msg = t("recDiskWarnExportMsg")
-        .replace("{drive}", diskWarn.drive)
-        .replace("{free}", fmtBytes(diskWarn.free_mb * 1024 * 1024))
-        .replace("{needed}", fmtBytes(diskWarn.needed_mb * 1024 * 1024));
-      const proceed = await veConfirm(t("recDiskWarnTitle"), msg, t("recDiskWarnExportAnyway"));
-      if (!proceed) return;
-    }
-  }
   VE.exporting = true;
   $("ve-export-start").disabled = true;
   $("ve-export-clip").disabled = true;
@@ -3234,27 +3200,84 @@ async function startExport(toClipboard) {
   showExportErrorDetails("");
   exportEta.reset();
   setProgress(0);
+  // A source opened from outside the app (or a library attachment) has a
+  // destination the backend never authorized through a picker or a saved
+  // preference -- retried at most once, with a folder the user just chose
+  // through the export-folder dialog, rather than failing outright. A
+  // clipboard export never lands here: its destination is always the app's
+  // own temp folder.
+  let destRetried = false;
   try {
-    await invoke("export_video", { req: request });
-    invoke("record_tool_usage", { tool: "video_export" }).catch(() => {});
-    VE.dirty = false;
-    // A finished export means nothing here is "unfinished" any more -- clear the
-    // remembered row so reopening this recording later never offers to restore
-    // work that already made it out. Continued editing after this point simply
-    // gets a fresh row from the next autosave tick, same as any other edit.
-    if (VE.editStateKeepOn && VE.src) {
-      invoke("discard_edit_state", { kind: "video", target: VE.src }).catch(() => {});
-    }
-    setProgress(100);
-    if (toClipboard) {
-      const clipOk = await invoke("copy_file_to_clipboard", { path: dest }).catch(() => false);
-      $("ve-export-status").textContent = clipOk ? t("veClipExportDone") : t("veExportDone").replace("{path}", dest);
-      toast(clipOk ? t("veClipExportDone") : t("veExportDone").replace("{path}", dest));
-    } else {
-      VE.lastExport = dest;
-      $("ve-export-status").textContent = t("veExportDone").replace("{path}", dest);
-      $("ve-export-saveas").classList.remove("hidden");
-      toast(t("veExportDone").replace("{path}", dest));
+    for (;;) {
+      const request = {
+        src_path: VE.src,
+        dest_path: dest,
+        filter_chain: lossless ? null : buildVideoChain(),
+        audio_map: lossless ? null : buildAudioChain(),
+        lossless_copy: lossless,
+        // Distinct from lossless_copy -- this is the "Lossless" QUALITY tier,
+        // which forces a real re-encode (see isLosslessCopy above) that must
+        // itself stay lossless (-crf 0) rather than falling back to an ordinary
+        // bitrate target with nothing to map "lossless" to.
+        lossless_quality: exportQuality() === "lossless",
+        format,
+        video_kbps: lossless ? null : videoKbps(),
+        // Only meaningful on the stream-copy path, where there is no filter graph
+        // that could carry the trim itself.
+        trim_start_ms: lossless ? Math.round(keptSegments()[0].a) : null,
+        trim_end_ms: lossless ? Math.round(keptSegments().slice(-1)[0].b) : null,
+        total_ms: total,
+      };
+      // A stream copy has no bitrate-based estimate to check against (see
+      // estimate_export_bytes) -- skipped the same way its size note above is.
+      if (!lossless) {
+        const diskWarn = await invoke("check_export_disk_space", {
+          destPath: dest, format, videoKbps: request.video_kbps, losslessQuality: request.lossless_quality, durationMs: total,
+        }).catch(() => null);
+        if (diskWarn) {
+          const msg = t("recDiskWarnExportMsg")
+            .replace("{drive}", diskWarn.drive)
+            .replace("{free}", fmtBytes(diskWarn.free_mb * 1024 * 1024))
+            .replace("{needed}", fmtBytes(diskWarn.needed_mb * 1024 * 1024));
+          const proceed = await veConfirm(t("recDiskWarnTitle"), msg, t("recDiskWarnExportAnyway"));
+          if (!proceed) return;
+        }
+      }
+      try {
+        await invoke("export_video", { req: request });
+        invoke("record_tool_usage", { tool: "video_export" }).catch(() => {});
+        VE.dirty = false;
+        // A finished export means nothing here is "unfinished" any more -- clear the
+        // remembered row so reopening this recording later never offers to restore
+        // work that already made it out. Continued editing after this point simply
+        // gets a fresh row from the next autosave tick, same as any other edit.
+        if (VE.editStateKeepOn && VE.src) {
+          invoke("discard_edit_state", { kind: "video", target: VE.src }).catch(() => {});
+        }
+        setProgress(100);
+        if (toClipboard) {
+          const clipOk = await invoke("copy_file_to_clipboard", { path: dest }).catch(() => false);
+          $("ve-export-status").textContent = clipOk ? t("veClipExportDone") : t("veExportDone").replace("{path}", dest);
+          toast(clipOk ? t("veClipExportDone") : t("veExportDone").replace("{path}", dest));
+        } else {
+          VE.lastExport = dest;
+          $("ve-export-status").textContent = t("veExportDone").replace("{path}", dest);
+          $("ve-export-saveas").classList.remove("hidden");
+          toast(t("veExportDone").replace("{path}", dest));
+        }
+        return;
+      } catch (err) {
+        const raw = String(err);
+        if (!toClipboard && !destRetried && raw.includes("export destination not recognized")) {
+          destRetried = true;
+          const folder = await invoke("pick_export_folder").catch(() => null);
+          if (!folder) return; // cancelled: no export, no error toast
+          const base = dest.replace(/^.*[\\/]/, "");
+          dest = `${folder.replace(/[\\/]+$/, "")}/${base}`;
+          continue;
+        }
+        throw err;
+      }
     }
   } catch (err) {
     noteFfmpeg(err);

@@ -542,11 +542,22 @@ const RESULTS = {
   // raw text as the headline. Rejecting with a plain string (not an Error
   // object) matches what a real Tauri Result<_, String> command actually
   // hands back to JS.
+  // 503: a destination path containing "REFUSEDEST" simulates the backend's
+  // purpose-bound export gate refusing a source it does not recognize (e.g.
+  // opened from outside the app) -- rejected exactly once, since the
+  // frontend's own retry (picking a new folder through pick_export_folder)
+  // must not loop forever. window.__EXPORT_DEST_REFUSED_ONCE__ tracks whether
+  // this probe run has already spent its one refusal.
   export_video: (a) => {
     const destPath = (a && a.req && a.req.dest_path) || "";
     if (destPath.includes("FAILCLASSIFY")) {
       return Promise.reject(JSON.stringify({ key: "ffErrNoSpace", code: null, raw: "out.mp4: No space left on device" }));
     }
+    if (destPath.includes("REFUSEDEST") && !window.__EXPORT_DEST_REFUSED_ONCE__) {
+      window.__EXPORT_DEST_REFUSED_ONCE__ = true;
+      return Promise.reject("export destination not recognized");
+    }
+    window.__EXPORT_VIDEO_LAST_DEST__ = destPath;
     return new Promise((resolve) => setTimeout(() => resolve(null), window.__EXPORT_DELAY_MS__ || 80));
   },
   // 412: mirrors the shape of the real Rust estimate_export_bytes (a plain
