@@ -26171,6 +26171,33 @@ fn default_recording_dir() -> String {
     recording_dir("").to_string_lossy().to_string()
 }
 
+// The recording folder's own canonical form -- the custom `recordingDir`
+// setting, or the default `Videos\<app>` folder when none is set -- resolved
+// by Rust from its own settings rather than trusted from a caller's raw IPC
+// argument. Every command below that lists, cleans or deletes recordings
+// checks its `dir` parameter against this before touching anything, so a
+// call made with some other folder string can only ever read/delete inside
+// the one folder this app actually keeps recordings in.
+fn configured_recording_dir(state: &State<'_, Db>) -> PathBuf {
+    let custom = lock(state).settings.ui_texts.get("recordingDir").cloned().unwrap_or_default();
+    recording_dir(&custom)
+}
+
+// Whether `candidate` really is `configured`: canonicalized when the folder
+// exists (defeats a short-name, trailing-dot or symlink mismatch), a plain
+// case-insensitive comparison when it does not exist yet -- there is nothing
+// to list, clean or delete from a folder that was never created either way,
+// so a name-only comparison costs nothing extra there.
+fn path_matches_configured_dir(candidate: &Path, configured: &Path) -> bool {
+    match (fs::canonicalize(candidate), fs::canonicalize(configured)) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => {
+            let norm = |p: &Path| p.to_string_lossy().trim_end_matches(['\\', '/']).to_ascii_lowercase();
+            norm(candidate) == norm(configured)
+        }
+    }
+}
+
 // Only the extensions this app itself ever writes into the recording folder --
 // the user could point it at any folder they like (including one already full
 // of unrelated files), so both the size readout and the cleanup below must
@@ -26205,12 +26232,23 @@ fn video_folder_stats_in(dir: &std::path::Path) -> (u64, u64) {
 // the "verworfen" discard-trash subfolder too: those files still sit on
 // this same drive, under this same folder, so leaving them out would make the
 // displayed folder size quietly wrong the moment anything gets discarded.
-#[tauri::command]
-fn video_folder_stats(dir: String) -> (u64, u64) {
-    let base = std::path::Path::new(&dir);
+// `configured` is Rust's own resolved recording folder (see
+// `configured_recording_dir`); `dir` is only ever trusted once it is proven
+// to be that same folder, kept apart from the tauri::command wrapper below so
+// it can be unit-tested without a running app.
+fn video_folder_stats_impl(dir: &str, configured: &Path) -> (u64, u64) {
+    let base = std::path::Path::new(dir);
+    if !path_matches_configured_dir(base, configured) {
+        return (0, 0);
+    }
     let (c1, b1) = video_folder_stats_in(base);
     let (c2, b2) = video_folder_stats_in(&base.join("verworfen"));
     (c1 + c2, b1 + b2)
+}
+
+#[tauri::command]
+fn video_folder_stats(state: State<'_, Db>, dir: String) -> (u64, u64) {
+    video_folder_stats_impl(&dir, &configured_recording_dir(&state))
 }
 
 #[derive(Serialize)]
@@ -26238,23 +26276,37 @@ fn video_folder_stale(dir: &str, age_days: u32) -> Vec<(std::path::PathBuf, Vide
     out
 }
 
+fn video_folder_cleanup_preview_impl(dir: &str, age_days: u32, configured: &Path) -> Vec<VideoFolderFile> {
+    if !path_matches_configured_dir(std::path::Path::new(dir), configured) {
+        return Vec::new();
+    }
+    video_folder_stale(dir, age_days).into_iter().map(|(_, f)| f).collect()
+}
+
 #[tauri::command]
-fn video_folder_cleanup_preview(dir: String, age_days: u32) -> Vec<VideoFolderFile> {
-    video_folder_stale(&dir, age_days).into_iter().map(|(_, f)| f).collect()
+fn video_folder_cleanup_preview(state: State<'_, Db>, dir: String, age_days: u32) -> Vec<VideoFolderFile> {
+    video_folder_cleanup_preview_impl(&dir, age_days, &configured_recording_dir(&state))
 }
 
 // Deletes exactly the files video_folder_cleanup_preview just listed -- never
 // re-scans with different criteria, so the confirmed list and the
 // actually-deleted files can never drift apart (e.g. a file aging past the
 // threshold between preview and confirm just stays for next time, not a bug).
-#[tauri::command]
-fn video_folder_cleanup(dir: String, age_days: u32) -> usize {
-    let stale = video_folder_stale(&dir, age_days);
+fn video_folder_cleanup_impl(dir: &str, age_days: u32, configured: &Path) -> usize {
+    if !path_matches_configured_dir(std::path::Path::new(dir), configured) {
+        return 0;
+    }
+    let stale = video_folder_stale(dir, age_days);
     let mut n = 0;
     for (path, _) in stale {
         if fs::remove_file(&path).is_ok() { n += 1; }
     }
     n
+}
+
+#[tauri::command]
+fn video_folder_cleanup(state: State<'_, Db>, dir: String, age_days: u32) -> usize {
+    video_folder_cleanup_impl(&dir, age_days, &configured_recording_dir(&state))
 }
 
 // The batch-export dialog needs each selected recording's real duration
@@ -26588,9 +26640,11 @@ fn is_bare_filename(name: &str) -> bool {
 // The Aufnahmeordner dialog's own listing of what is currently sitting in
 // the trash, waiting out its retention window -- same shape and same
 // extension filter as video_folder_stats/video_folder_cleanup_preview above.
-#[tauri::command]
-fn list_discarded_recordings(dir: String) -> Vec<VideoFolderFile> {
-    let trash = std::path::Path::new(&dir).join("verworfen");
+fn list_discarded_recordings_impl(dir: &str, configured: &Path) -> Vec<VideoFolderFile> {
+    if !path_matches_configured_dir(std::path::Path::new(dir), configured) {
+        return Vec::new();
+    }
+    let trash = std::path::Path::new(dir).join("verworfen");
     let Ok(entries) = fs::read_dir(&trash) else { return Vec::new() };
     let mut out = Vec::new();
     for e in entries.flatten() {
@@ -26604,13 +26658,20 @@ fn list_discarded_recordings(dir: String) -> Vec<VideoFolderFile> {
 }
 
 #[tauri::command]
-fn restore_discarded_recording(dir: String, name: String) -> bool {
-    if !is_bare_filename(&name) {
+fn list_discarded_recordings(state: State<'_, Db>, dir: String) -> Vec<VideoFolderFile> {
+    list_discarded_recordings_impl(&dir, &configured_recording_dir(&state))
+}
+
+fn restore_discarded_recording_impl(dir: &str, name: &str, configured: &Path) -> bool {
+    if !is_bare_filename(name) {
         return false;
     }
-    let trash = std::path::Path::new(&dir).join("verworfen");
-    let src = trash.join(&name);
-    let dst = std::path::Path::new(&dir).join(&name);
+    if !path_matches_configured_dir(std::path::Path::new(dir), configured) {
+        return false;
+    }
+    let trash = std::path::Path::new(dir).join("verworfen");
+    let src = trash.join(name);
+    let dst = std::path::Path::new(dir).join(name);
     // Never overwrites a same-named file that has appeared at the old spot
     // since the discard -- restoring silently on top of someone else's
     // recording would be a worse surprise than the restore just failing.
@@ -26629,18 +26690,30 @@ fn restore_discarded_recording(dir: String, name: String) -> bool {
 }
 
 #[tauri::command]
-fn delete_discarded_recording_now(dir: String, name: String) -> bool {
-    if !is_bare_filename(&name) {
+fn restore_discarded_recording(state: State<'_, Db>, dir: String, name: String) -> bool {
+    restore_discarded_recording_impl(&dir, &name, &configured_recording_dir(&state))
+}
+
+fn delete_discarded_recording_now_impl(dir: &str, name: &str, configured: &Path) -> bool {
+    if !is_bare_filename(name) {
         return false;
     }
-    let trash = std::path::Path::new(&dir).join("verworfen");
-    let path = trash.join(&name);
+    if !path_matches_configured_dir(std::path::Path::new(dir), configured) {
+        return false;
+    }
+    let trash = std::path::Path::new(dir).join("verworfen");
+    let path = trash.join(name);
     if !path.is_file() {
         return false;
     }
     let _ = fs::remove_file(path.with_extension("mic.wav"));
     let _ = fs::remove_file(camera::sidecar_path(&path));
     fs::remove_file(&path).is_ok()
+}
+
+#[tauri::command]
+fn delete_discarded_recording_now(state: State<'_, Db>, dir: String, name: String) -> bool {
+    delete_discarded_recording_now_impl(&dir, &name, &configured_recording_dir(&state))
 }
 
 // Called by the frontend once the first render + text fit is complete.
@@ -37173,7 +37246,7 @@ mod tests {
         fs::write(dir.join("c.gif"), b"123").unwrap();
         fs::write(dir.join("notes.txt"), b"ignored, wrong extension").unwrap();
         fs::create_dir_all(dir.join("MP4")).unwrap(); // a directory named like an extension is not a file
-        let (count, bytes) = video_folder_stats(dir.to_string_lossy().to_string());
+        let (count, bytes) = video_folder_stats_impl(&dir.to_string_lossy(), &dir);
         assert_eq!(count, 3, "only the three video files must be counted, not the txt or the subfolder");
         assert_eq!(bytes, 4 + 2 + 3);
         let _ = fs::remove_dir_all(&dir);
@@ -37183,7 +37256,7 @@ mod tests {
     fn video_folder_stats_on_a_missing_folder_is_empty_not_an_error() {
         let dir = std::env::temp_dir().join(format!("ps-video-folder-missing-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir); // guarantee it really does not exist
-        assert_eq!(video_folder_stats(dir.to_string_lossy().to_string()), (0, 0));
+        assert_eq!(video_folder_stats_impl(&dir.to_string_lossy(), &dir), (0, 0));
     }
 
     // ---- Folder import ----
@@ -37343,7 +37416,7 @@ mod tests {
         fs::create_dir_all(&trash).unwrap();
         fs::write(dir.join("rec-a.mp4"), b"1234").unwrap();
         fs::write(trash.join("rec-b.mp4"), b"12").unwrap();
-        let (count, bytes) = video_folder_stats(dir.to_string_lossy().to_string());
+        let (count, bytes) = video_folder_stats_impl(&dir.to_string_lossy(), &dir);
         assert_eq!(count, 2, "a discarded recording still occupies real disk space in this folder");
         assert_eq!(bytes, 4 + 2);
         let _ = fs::remove_dir_all(&dir);
@@ -37464,7 +37537,7 @@ mod tests {
         fs::create_dir_all(&trash).unwrap();
         fs::write(trash.join("rec-x.mp4"), b"video").unwrap();
         let dir_s = dir.to_string_lossy().to_string();
-        assert!(restore_discarded_recording(dir_s.clone(), "rec-x.mp4".to_string()));
+        assert!(restore_discarded_recording_impl(&dir_s, "rec-x.mp4", &dir));
         assert!(dir.join("rec-x.mp4").is_file());
         assert!(!trash.join("rec-x.mp4").exists());
         let _ = fs::remove_dir_all(&dir);
@@ -37478,7 +37551,7 @@ mod tests {
         fs::write(trash.join("rec-x.mp4"), b"discarded copy").unwrap();
         fs::write(dir.join("rec-x.mp4"), b"a newer recording already took this name").unwrap();
         let dir_s = dir.to_string_lossy().to_string();
-        assert!(!restore_discarded_recording(dir_s, "rec-x.mp4".to_string()));
+        assert!(!restore_discarded_recording_impl(&dir_s, "rec-x.mp4", &dir));
         assert_eq!(fs::read(dir.join("rec-x.mp4")).unwrap(), b"a newer recording already took this name");
         assert!(trash.join("rec-x.mp4").is_file(), "the discarded copy must stay put, not vanish on a failed restore");
         let _ = fs::remove_dir_all(&dir);
@@ -37491,7 +37564,7 @@ mod tests {
         fs::create_dir_all(&trash).unwrap();
         fs::write(trash.join("rec-x.mp4"), b"video").unwrap();
         let dir_s = dir.to_string_lossy().to_string();
-        assert!(delete_discarded_recording_now(dir_s, "rec-x.mp4".to_string()));
+        assert!(delete_discarded_recording_now_impl(&dir_s, "rec-x.mp4", &dir));
         assert!(!trash.join("rec-x.mp4").exists());
         let _ = fs::remove_dir_all(&dir);
     }
@@ -37535,17 +37608,56 @@ mod tests {
         backdate(&unrelated, Duration::from_secs(40 * 24 * 3600));
 
         let dir_s = dir.to_string_lossy().to_string();
-        let preview = video_folder_cleanup_preview(dir_s.clone(), 30);
+        let preview = video_folder_cleanup_preview_impl(&dir_s, 30, &dir);
         assert_eq!(preview.len(), 1, "only the stale video file is older than 30 days");
         assert_eq!(preview[0].name, "old-recording.mp4");
         assert_eq!(preview[0].size, 3);
 
-        let deleted = video_folder_cleanup(dir_s, 30);
+        let deleted = video_folder_cleanup_impl(&dir_s, 30, &dir);
         assert_eq!(deleted, 1, "cleanup must delete exactly what the preview listed");
         assert!(!stale.exists(), "the stale video must be gone");
         assert!(fresh.exists(), "a fresh video must survive");
         assert!(unrelated.exists(), "a non-video file must never be deleted, however old");
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn video_folder_cleanup_refuses_a_dir_that_is_not_the_configured_recording_folder() {
+        let configured = std::env::temp_dir().join(format!("ps-video-folder-configured-{}", std::process::id()));
+        let foreign = std::env::temp_dir().join(format!("ps-video-folder-foreign-{}", std::process::id()));
+        fs::create_dir_all(&configured).unwrap();
+        fs::create_dir_all(&foreign).unwrap();
+        let victim = foreign.join("not-a-recording.mp4");
+        fs::write(&victim, b"old").unwrap();
+        backdate(&victim, Duration::from_secs(40 * 24 * 3600));
+        let foreign_s = foreign.to_string_lossy().to_string();
+
+        assert!(video_folder_cleanup_preview_impl(&foreign_s, 30, &configured).is_empty(), "a foreign folder must never be previewed");
+        assert_eq!(video_folder_cleanup_impl(&foreign_s, 30, &configured), 0, "a foreign folder must never be cleaned");
+        assert!(victim.is_file(), "the file in the foreign folder must survive untouched");
+        assert_eq!(video_folder_stats_impl(&foreign_s, &configured), (0, 0), "stats for a foreign folder must read as empty");
+
+        let _ = fs::remove_dir_all(&configured);
+        let _ = fs::remove_dir_all(&foreign);
+    }
+
+    #[test]
+    fn discarded_recording_commands_refuse_a_dir_that_is_not_the_configured_recording_folder() {
+        let configured = std::env::temp_dir().join(format!("ps-discard-configured-{}", std::process::id()));
+        let foreign = std::env::temp_dir().join(format!("ps-discard-foreign-{}", std::process::id()));
+        let foreign_trash = foreign.join("verworfen");
+        fs::create_dir_all(&configured).unwrap();
+        fs::create_dir_all(&foreign_trash).unwrap();
+        fs::write(foreign_trash.join("rec-x.mp4"), b"video").unwrap();
+        let foreign_s = foreign.to_string_lossy().to_string();
+
+        assert!(list_discarded_recordings_impl(&foreign_s, &configured).is_empty(), "a foreign folder's trash must never be listed");
+        assert!(!restore_discarded_recording_impl(&foreign_s, "rec-x.mp4", &configured), "a foreign folder must never be restored from");
+        assert!(!delete_discarded_recording_now_impl(&foreign_s, "rec-x.mp4", &configured), "a foreign folder must never be deleted from");
+        assert!(foreign_trash.join("rec-x.mp4").is_file(), "the file in the foreign folder must survive untouched");
+
+        let _ = fs::remove_dir_all(&configured);
+        let _ = fs::remove_dir_all(&foreign);
     }
 
     // Reusing a zoomed-in filmstrip's cache for a zoomed-out request served
