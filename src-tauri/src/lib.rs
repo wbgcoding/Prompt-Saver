@@ -17822,6 +17822,15 @@ fn ocr_join_lines(lines: &[String]) -> String {
     out
 }
 
+// Assembles the final OCR text from the recognized lines and trims the
+// result -- an image whose lines are all empty must yield a genuinely empty
+// string, not a run of newlines, so the caller can tell "nothing was
+// recognized" apart from a real (whitespace-only-looking) result.
+fn ocr_assemble_text(lines: &[String], join_lines: bool) -> String {
+    let joined = if join_lines { ocr_join_lines(lines) } else { lines.join("\n") };
+    joined.trim().to_string()
+}
+
 // Strict allowlist check for a capability Name, BEFORE it is ever used to
 // build a PowerShell/process argument. Anchored on the whole string (not
 // a substring scan), so something like
@@ -18717,7 +18726,7 @@ mod ocr {
         }
         // Nothing recognized -> Ok with empty text, never an error (a later pass
         // turns that into a friendly toast, not an error dialog).
-        let text = if join_lines { super::ocr_join_lines(&lines) } else { lines.join("\n") };
+        let text = super::ocr_assemble_text(&lines, join_lines);
         Ok(OcrResult { text, lang: engine_tag(&engine) })
     }
 
@@ -38234,6 +38243,22 @@ mod tests {
     fn ocr_join_lines_empty_input_yields_empty_string() {
         let lines: Vec<String> = vec![];
         assert_eq!(ocr_join_lines(&lines), "");
+    }
+
+    // An image whose lines all come back empty must assemble to a genuinely
+    // empty string (a whitespace-only join, e.g. "\n\n", used to slip through
+    // and open the result dialog with nothing visible in it).
+    #[test]
+    fn ocr_assemble_text_all_empty_lines_yields_empty_string() {
+        let lines = vec!["".to_string(), "".to_string()];
+        assert_eq!(ocr_assemble_text(&lines, false), "");
+        assert_eq!(ocr_assemble_text(&lines, true), "");
+    }
+
+    #[test]
+    fn ocr_assemble_text_trims_surrounding_whitespace_from_real_text() {
+        let lines = vec!["  Hello world  ".to_string()];
+        assert_eq!(ocr_assemble_text(&lines, false), "Hello world");
     }
 
     // A hyphen is not sentence-ending punctuation, so a hyphen-wrapped word is

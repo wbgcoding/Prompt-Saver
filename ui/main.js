@@ -19171,8 +19171,11 @@ function bind() {
   // file) and the ocr-captured event below -- one place decides "empty -> toast
   // only" and "auto-copy -> copy now + footer note instead of a toast".
   function showOcrResult(result) {
-    const text = result?.text || "";
-    if (!text) { toast(t("ocrNoTextFound")); return; }
+    const text = (result?.text || "").trim();
+    if (!text) {
+      toast(t("ocrNoTextFound"), { label: t("ocrLangsManage"), onClick: openOcrLangsModal });
+      return;
+    }
     const autoCopy = flag("ocrAutoCopy");
     if (autoCopy) invoke("copy_text", { text }).catch(() => {});
     $("ocr-result-text").value = text;

@@ -8575,6 +8575,30 @@ PROBE = """
           out.errors.push('OCR result dialog did not close');
         }
       }
+      // 509: an image whose recognized lines are all empty must show a clear
+      // toast instead of opening the result dialog with nothing in it.
+      {
+        const toastEl509 = document.getElementById('toast');
+        window.__FIRE__('ocr-captured', { text: '\\n\\n', lang: 'en' });
+        await sleep(150);
+        if (!ocrModal.classList.contains('hidden')) {
+          out.errors.push('509: an all-blank OCR result opened the result dialog instead of a toast');
+        }
+        if (!toastEl509.classList.contains('show') || toastEl509.classList.contains('hidden')) {
+          out.errors.push('509: no toast appeared for an all-blank OCR result');
+        } else {
+          const manageBtn = toastEl509.querySelector('.toast-btn');
+          if (!manageBtn || !manageBtn.textContent.trim()) {
+            out.errors.push('509: the no-text-found toast is missing its manage-languages button');
+          }
+          const msgEl = toastEl509.querySelector('.toast-msg');
+          if (!msgEl || !msgEl.textContent.trim()) {
+            out.errors.push('509: the no-text-found toast has no message text');
+          }
+        }
+        toastEl509.classList.remove('show'); // don't linger into later blocks
+        await sleep(250);
+      }
       await toggleOcrFlag(false);
       if (!hiddenNow(ocrBtn) || !hiddenNow(snipModalOcrBtn)) {
         out.errors.push('OCR entry points stayed visible after switching the flag off');
