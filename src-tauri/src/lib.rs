@@ -39236,7 +39236,7 @@ mod tests {
         let path = std::env::temp_dir().join(format!("ps-crashlog-scrub-badutf8-{}", std::process::id()));
         let mut contents = Vec::new();
         contents.extend_from_slice(b"[t=1 v1.0] broken byte follows: \xFF end of line\n");
-        contents.extend_from_slice(br"[t=2 v1.0] panicked at C:\Users\example\lib.rs:42");
+        contents.extend_from_slice(b"[t=2 v1.0] panicked at C:\\Users\\example\\lib.rs:42");
         contents.push(b'\n');
         fs::write(&path, &contents).unwrap();
 
