@@ -3131,6 +3131,78 @@ PROBE = """
       await click('expert-back');
       document.getElementById('settings').classList.add('hidden');
     }
+    // 514: the remote-access port is a typed number field, not a slider --
+    // an out-of-range value shows the inline hint and commits nothing, a
+    // valid one commits and clears the hint.
+    {
+      document.getElementById('settings').classList.remove('hidden');
+      await click('expert-open');
+      const search514 = document.getElementById('expert-search');
+      const findFlagRow = (label) => [...document.querySelectorAll('#expert-flags .switch-field')]
+        .find((r) => ((r.querySelector('span') || {}).textContent || '').includes(label));
+      search514.value = 'Remote access (local API)';
+      search514.dispatchEvent(new Event('input'));
+      await sleep(250);
+      const remoteFlagRow = findFlagRow('Remote access (local API)');
+      const remoteSw = remoteFlagRow && remoteFlagRow.querySelector('input.switch');
+      if (!remoteSw) {
+        out.errors.push('514: could not find the remote-access switch to enable it for the port test');
+      } else {
+        if (!remoteSw.checked) { remoteSw.click(); await sleep(250); }
+        search514.value = 'Remote access port';
+        search514.dispatchEvent(new Event('input'));
+        await sleep(250);
+        const portRow = document.querySelector('#expert-flags [data-setting-row="remotePort"]');
+        if (!portRow) {
+          out.errors.push('514: the remote-access port row is missing');
+        } else {
+          if (portRow.querySelector('input[type=range]')) {
+            out.errors.push('514: the port row still shows a slider');
+          }
+          const input514 = portRow.querySelector('.expert-num');
+          const hint514 = portRow.querySelector('.expert-row-hint');
+          if (!input514 || !hint514) {
+            out.errors.push('514: the port row has no text input or hint element');
+          } else {
+            const portCommits = () => (window.__SMOKE_ARGS__ || [])
+              .filter(([cmd, args]) => cmd === 'set_ui_value' && args && args.key === 'remotePort')
+              .map(([, args]) => args.value);
+            const before514 = portCommits().length;
+            input514.value = '80';
+            input514.dispatchEvent(new Event('change'));
+            await sleep(150);
+            if (portCommits().length > before514) {
+              out.errors.push('514: an out-of-range port (80) was committed');
+            }
+            if (hint514.classList.contains('hidden')) {
+              out.errors.push('514: no invalid-port hint shown for an out-of-range value');
+            }
+            input514.value = '51900';
+            input514.dispatchEvent(new Event('change'));
+            await sleep(150);
+            const after514 = portCommits();
+            if (after514[after514.length - 1] !== 51900) {
+              out.errors.push('514: a valid port (51900) was not committed, got ' + after514[after514.length - 1]);
+            }
+            if (!hint514.classList.contains('hidden')) {
+              out.errors.push('514: the invalid-port hint stayed visible after a valid value');
+            }
+          }
+        }
+        // Put remoteApi back off so the rest of the run sees the shipped default.
+        search514.value = 'Remote access (local API)';
+        search514.dispatchEvent(new Event('input'));
+        await sleep(200);
+        const remoteFlagRowBack = findFlagRow('Remote access (local API)');
+        const remoteSwBack = remoteFlagRowBack && remoteFlagRowBack.querySelector('input.switch');
+        if (remoteSwBack && remoteSwBack.checked) { remoteSwBack.click(); await sleep(200); }
+      }
+      search514.value = '';
+      search514.dispatchEvent(new Event('input'));
+      await sleep(150);
+      await click('expert-back');
+      document.getElementById('settings').classList.add('hidden');
+    }
     // F22: a modifier-held drag hands the prompt to the OS; a plain drag has to stay
     // the tile reorder it always was, and the switch has to take the whole thing away.
     const gridTile = (id) => [...document.querySelectorAll('#grid .tile')].find(e => (e.dataset.id || '') === id);

@@ -1980,7 +1980,7 @@ const EXPERT_VALUES = {
   errorLogMax: { label: "valErrorLogMax", min: 20, max: 500, step: 10, def: 100, unit: "", gate: "errorLog" },
   // The port shows on the persistent badge while the receiver
   // runs -- a companion program reads it from there, not from this slider.
-  remotePort: { label: "valRemotePort", min: 1024, max: 65535, step: 1, def: 51823, unit: "", gate: "remoteApi" },
+  remotePort: { label: "valRemotePort", min: 1024, max: 65535, step: 1, def: 51823, unit: "", gate: "remoteApi", input: true },
   remoteRateLimit: { label: "valRemoteRateLimit", min: 5, max: 300, step: 5, def: 60, unit: "/min", gate: "remoteApi" },
 };
 
@@ -2857,6 +2857,38 @@ function valueRow(key) {
   head.className = "value-head";
   const span = document.createElement("span");
   span.textContent = t(cfg.label);
+  // A number typed directly instead of a slider (e.g. a port): every valid
+  // value in range, nothing else, and no silent fallback to the last good one.
+  if (cfg.input) {
+    const right2 = document.createElement("span");
+    right2.className = "value-head-right";
+    const resetBtn2 = rowResetBtn("values", key);
+    if (resetBtn2) right2.append(resetBtn2);
+    head.append(span, right2);
+    const input = document.createElement("input");
+    input.type = "text";
+    input.inputMode = "numeric";
+    input.className = "modal-input expert-num";
+    input.value = String(val(key));
+    input.setAttribute("aria-invalid", "false");
+    const hint = document.createElement("div");
+    hint.className = "expert-row-hint expert-row-hint-danger hidden";
+    hint.textContent = t(cfg.invalidKey || "valPortInvalid");
+    const commit = () => {
+      const n = Number(input.value);
+      const valid = Number.isInteger(n) && n >= cfg.min && n <= cfg.max;
+      input.classList.toggle("invalid", !valid);
+      input.setAttribute("aria-invalid", String(!valid));
+      hint.classList.toggle("hidden", valid);
+      if (valid) commitValue(key, n);
+    };
+    input.addEventListener("change", commit);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); commit(); }
+    });
+    row.append(head, input, hint);
+    return row;
+  }
   const out = document.createElement("span");
   out.className = "value-out";
   const slider = document.createElement("input");

@@ -5287,6 +5287,9 @@ body.noflag-customThemes .theme-edit-btn { display: none; }
   font-size: 12px;
 }
 .theme-hex.invalid { border-color: var(--danger); }
+/* A typed value outside its allowed range (the port field, so far). */
+.expert-num.invalid { border-color: var(--danger); }
+.expert-row-hint-danger { color: var(--danger); }
 .theme-var-reset { flex: 0 0 auto; padding: 4px; }
 .theme-var-reset svg { width: 13px; height: 13px; }
 .theme-var-reset:disabled { opacity: 0; pointer-events: none; }
