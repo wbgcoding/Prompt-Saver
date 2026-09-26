@@ -28261,7 +28261,7 @@ fn remember_export_output(path: &Path) {
 
 fn is_known_export_output(path: &Path) -> bool {
     let Ok(canon) = fs::canonicalize(path) else { return false };
-    EXPORT_OUTPUTS.lock().unwrap_or_else(|e| e.into_inner()).iter().any(|p| *p == canon)
+    EXPORT_OUTPUTS.lock().unwrap_or_else(|e| e.into_inner()).contains(&canon)
 }
 
 // Whether `dest`'s containing folder is one this session is actually allowed
