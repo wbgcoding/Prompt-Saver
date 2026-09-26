@@ -1375,10 +1375,21 @@ function buildLiveOverlayEl(op, vb, reuse) {
   if (op.kind === "spotlight") {
     const el = reuse instanceof HTMLElement && reuse.classList.contains("ve-live-spotlight") ? reuse : document.createElement("div");
     el.className = "ve-live ve-live-spotlight";
-    rectStyle(el, op.rect);
-    // Same "hole punched in an oversized shadow" trick .ve-rect-spotlight
-    // already uses for its edit outline, just at the overlay's own dim level.
-    el.style.boxShadow = `0 0 0 9999px rgba(0, 0, 0, ${clamp(op.dim, 0, 1).toFixed(2)})`;
+    // Covers the whole painted picture and cuts the clear rect out with
+    // clip-path instead of an oversized box-shadow spread -- some GPUs on
+    // real hardware silently drop a 9999px shadow spread during compositing,
+    // which left the dim invisible while the drag border still rendered fine.
+    // clip-path paints an ordinary shape, so it has no such spread to drop.
+    el.style.left = `${vb.left}px`;
+    el.style.top = `${vb.top}px`;
+    el.style.width = `${vb.width}px`;
+    el.style.height = `${vb.height}px`;
+    el.style.background = `rgba(0, 0, 0, ${clamp(op.dim, 0, 1).toFixed(2)})`;
+    const hx = op.rect.x * vb.scale, hy = op.rect.y * vb.scale;
+    const hw = op.rect.w * vb.scale, hh = op.rect.h * vb.scale;
+    const w = vb.width, h = vb.height;
+    el.style.clipPath = `polygon(evenodd, 0 0, 0 ${h}px, ${w}px ${h}px, ${w}px 0, 0 0, `
+      + `${hx}px ${hy}px, ${hx}px ${hy + hh}px, ${hx + hw}px ${hy + hh}px, ${hx + hw}px ${hy}px, ${hx}px ${hy}px)`;
     return el;
   }
   if (op.kind === "keys") {

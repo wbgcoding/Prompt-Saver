@@ -10988,6 +10988,65 @@ VIDEO_PROBE = """
     document.getElementById('ve-tab-overlays').click();
     await sleep(30);
 
+    // ---- 524: the spotlight dim must be real painted geometry, not a huge
+    // box-shadow spread some GPUs drop on real hardware. Select the spotlight
+    // row so its edit outline (sized to op.rect, same transform the live
+    // preview uses) gives a ground-truth clear rect. The live layer has
+    // pointer-events: none (it is never interactive), so elementFromPoint
+    // cannot see it -- instead read the actual painted shape back from the
+    // computed clip-path: the dim element must cover far more than the clear
+    // rect, and the punched-out hole in its clip-path must line up with that
+    // same rect. A plain box-shadow spread sets no clip-path and keeps the
+    // element itself sized to op.rect, so this fails on the old code.
+    {
+      const spotlightRowIdx = overlayKinds.findIndex(([id]) => id === 've-ov-add-spotlight');
+      const rowsNow = [...document.querySelectorAll('#ve-ov-list .ve-ov-row')];
+      const spotRow = rowsNow[spotlightRowIdx];
+      if (!spotRow) {
+        errs.push('524: could not find the spotlight overlay row to select it');
+      } else {
+        spotRow.click();
+        await sleep(30);
+        const clearEl = document.querySelector('.ve-rect-spotlight');
+        const liveEl = document.querySelector('.ve-live-spotlight');
+        if (!clearEl || !liveEl) {
+          errs.push('524: spotlight edit outline or live preview element is missing');
+        } else {
+          const clear = clearEl.getBoundingClientRect();
+          const live = liveEl.getBoundingClientRect();
+          const bg = getComputedStyle(liveEl).backgroundColor;
+          const parts = bg.match(/rgba?\\(([^)]+)\\)/);
+          const nums = parts ? parts[1].split(',').map((s) => parseFloat(s.trim())) : [];
+          const alpha = nums.length > 3 ? nums[3] : (bg === 'transparent' ? 0 : 1);
+          if (Math.abs(alpha - 0.6) > 0.05) {
+            errs.push('524: spotlight live dim background alpha is ' + alpha + ', expected about 0.6 (op.dim)');
+          }
+          if (live.width < clear.width + 20 || live.height < clear.height + 20) {
+            errs.push('524: the spotlight dim element is not larger than its own clear rect (no dim area outside it)');
+          }
+          const clipPath = getComputedStyle(liveEl).clipPath;
+          if (!clipPath || clipPath === 'none') {
+            errs.push('524: the spotlight dim has no clip-path, so it cannot punch a clear hole in real geometry');
+          } else {
+            const pts = [...clipPath.matchAll(/([\\d.]+)px\\s+([\\d.]+)px/g)].map((m) => [parseFloat(m[1]), parseFloat(m[2])]);
+            const hole = pts.slice(5, 9);
+            if (hole.length < 4) {
+              errs.push('524: the spotlight clip-path does not carry a separate hole shape: ' + clipPath);
+            } else {
+              const xs = hole.map((p) => p[0]), ys = hole.map((p) => p[1]);
+              const holeLeft = live.left + Math.min(...xs), holeTop = live.top + Math.min(...ys);
+              const holeW = Math.max(...xs) - Math.min(...xs), holeH = Math.max(...ys) - Math.min(...ys);
+              const near = (a, b) => Math.abs(a - b) <= 3;
+              if (!near(holeLeft, clear.left) || !near(holeTop, clear.top) || !near(holeW, clear.width) || !near(holeH, clear.height)) {
+                errs.push('524: the clip-path hole (' + [holeLeft, holeTop, holeW, holeH].map((n) => n.toFixed(1)) +
+                  ') does not line up with the clear rect (' + [clear.left, clear.top, clear.width, clear.height].map((n) => n.toFixed(1)) + ')');
+              }
+            }
+          }
+        }
+      }
+    }
+
     rawKeyCheck('overlays tab');
     sideScan(errs, 'overlays tab');
 
