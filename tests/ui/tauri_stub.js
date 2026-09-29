@@ -444,7 +444,6 @@ const RESULTS = {
   },
   open_video_editor: () => null,
   // 335: export-destination pickers for the video editor's export row.
-  pick_export_dest: (a) => "C:\\Videos\\" + (a && a.defaultName || "export.mp4"),
   // A probe that needs the picker to answer with a specific folder sets
   // window.__PICK_FOLDER__ first; everything else gets the export folder.
   pick_folder: () => window.__PICK_FOLDER__ || "C:\\Videos\\Exports",

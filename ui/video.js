@@ -3813,18 +3813,6 @@ $("ve-export-dest").addEventListener("change", () => {
   VE.destOverride = value || null;
   updateExportNote();
 });
-$("ve-export-choose-file").addEventListener("click", async () => {
-  const defaultName = destPath().replace(/^.*[\\/]/, "");
-  const picked = await invoke("pick_export_dest", { defaultName }).catch(() => null);
-  if (!picked) return;
-  VE.destOverride = picked;
-  // Keep the plain-name field showing what the dialog actually picked,
-  // rather than freezing on whatever it said the moment before.
-  const pickedBase = picked.replace(/^.*[\\/]/, "");
-  const dot = pickedBase.lastIndexOf(".");
-  VE.exportNameOverride = dot > 0 ? pickedBase.slice(0, dot) : pickedBase;
-  updateExportNote();
-});
 $("ve-export-choose-folder").addEventListener("click", async () => {
   const folder = await invoke("pick_export_folder").catch(() => null);
   if (!folder) return;

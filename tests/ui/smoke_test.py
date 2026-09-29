@@ -12109,11 +12109,6 @@ VIDEO_PROBE = """
     if (destInput.value !== 'C:\\\\Custom\\\\my-clip.mp4') {
       errs.push('typing a destination path directly did not stick as an override');
     }
-    document.getElementById('ve-export-choose-file').click();
-    await sleep(80);
-    if (!destInput.value.startsWith('C:\\\\Videos')) {
-      errs.push('"Save as..." did not adopt the picked file path');
-    }
     const pickedFile = destInput.value;
     document.getElementById('ve-export-choose-folder').click();
     await sleep(80);
@@ -12189,6 +12184,18 @@ VIDEO_PROBE = """
     }
     if (document.getElementById('ve-export-saveas').classList.contains('hidden')) {
       errs.push('503: the retried export did not complete successfully');
+    }
+    // The one control that acts on a finished export reads "Move to..." with a
+    // tooltip, and the old pre-export file picker is gone: the name field plus
+    // "Export to..." cover it.
+    {
+      const moveBtn = document.getElementById('ve-export-saveas');
+      const moveText = moveBtn.textContent.trim();
+      if (moveText !== 'Move to…') errs.push('547: the post-export button reads ' + JSON.stringify(moveText) + ', expected Move to...');
+      if (!moveBtn.title || !moveBtn.title.includes('exported')) errs.push('547: the Move to button has no tooltip: ' + JSON.stringify(moveBtn.title));
+      if (document.getElementById('ve-export-choose-file')) errs.push('547: the pre-export Save as button still exists');
+      const saveAsLike = [...document.querySelectorAll('#ve-panel-export button')].filter((b) => /Save as|Speichern unter/.test(b.textContent));
+      if (saveAsLike.length) errs.push('547: a Save as button is still in the export panel: ' + saveAsLike.map((b) => b.id).join(','));
     }
     window.__PICK_FOLDER__ = null;
 

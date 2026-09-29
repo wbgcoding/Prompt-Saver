@@ -851,6 +851,10 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **The video export panel no longer has two "Save as" buttons.** The button
+  that picked a file before exporting is gone (the name field and "Export to…"
+  cover it), and the one shown after an export now reads "Move to…" with a
+  tooltip saying it moves the finished video to another place.
 - **The 720p, 1080p and larger resolution presets can be chosen again.** A
   recording smaller than the preset (a small region, say) used to fall back to
   "keep original" whatever you clicked. A larger preset now enlarges the video,
