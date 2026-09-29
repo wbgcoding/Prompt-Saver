@@ -43,11 +43,13 @@ let recPath = null;
 let recExt = "webm";
 let paused = false;
 let recStartWall = 0;
-// The screen recording's own pause-aware position at the exact moment this
-// take's recorder.start() actually ran -- read live (camera_screen_elapsed_ms)
-// right before that call, never reconstructed later from wall-clock stamps
-// alone, or a pause in the screen recording between the two starts would
-// silently inflate the overlay's placement by however long it lasted.
+// The screen recording's own pause-aware position at the moment this take's
+// recorder reported that it actually started -- read live
+// (camera_screen_elapsed_ms) from the recorder's start event, never
+// reconstructed later from wall-clock stamps alone, or a pause in the screen
+// recording between the two starts would silently inflate the overlay's
+// placement by however long it lasted. Holds the pending read (a promise),
+// which onstop awaits.
 let recScreenElapsedAtStart = null;
 let recTimer = 0;
 // The two expert-menu settings this window has no control of its own for
@@ -122,17 +124,28 @@ async function refreshPreview() {
   const height = Number(resSelect.value) || 720;
   const width = Math.round((height * 16) / 9);
   const audioDeviceId = audioSelect.value;
-  const constraints = {
+  const constraintsFor = (withDevice) => ({
     video: {
       width: { ideal: width },
       height: { ideal: height },
       frameRate: { ideal: frameRate },
-      ...(videoDeviceId ? { deviceId: { exact: videoDeviceId } } : {}),
+      ...(withDevice && videoDeviceId ? { deviceId: { exact: videoDeviceId } } : {}),
     },
     audio: audioDeviceId ? { deviceId: { exact: audioDeviceId } } : false,
-  };
+  });
   try {
-    const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+    let newStream;
+    try {
+      newStream = await navigator.mediaDevices.getUserMedia(constraintsFor(true));
+    } catch (err) {
+      // A saved camera that has since been unplugged must not switch the
+      // window off for good: one retry with the default camera, and only for
+      // the two errors a missing device produces (a permission denial or any
+      // other failure is not a stale device and is not retried).
+      const missing = err && (err.name === "NotFoundError" || err.name === "OverconstrainedError");
+      if (!videoDeviceId || !missing || gen !== previewGen) throw err;
+      newStream = await navigator.mediaDevices.getUserMedia(constraintsFor(false));
+    }
     if (gen !== previewGen) {
       // A newer refreshPreview() call (or a stop) already won the race --
       // never let a late, now-stale stream take over the camera light.
@@ -185,6 +198,7 @@ async function rollbackFailedStart() {
   const path = recPath;
   if (recorder) {
     recorder.ondataavailable = null;
+    recorder.onstart = null;
     recorder.onstop = null;
   }
   recorder = null;
@@ -222,6 +236,7 @@ async function startRecording() {
     return;
   }
   recPath = begin.path;
+  // Provisional until the recorder's start event stamps the real value.
   recStartWall = Date.now();
   recScreenElapsedAtStart = null;
   pendingAppends = [];
@@ -244,6 +259,15 @@ async function startRecording() {
       });
     pendingAppends.push(append);
   };
+  // Stamped when the recorder really reports it is running, not when Start
+  // was clicked or the backend reserved the take: this is the one moment
+  // that matters for alignment, not begin time (which can sit open for a
+  // while with the camera preview idle) and not finish time (the screen
+  // recording may have moved on, paused again, or stopped by then).
+  recorder.onstart = () => {
+    recStartWall = Date.now();
+    recScreenElapsedAtStart = invoke("camera_screen_elapsed_ms").catch(() => null);
+  };
   recorder.onstop = async () => {
     clearInterval(recTimer);
     recBadge.classList.add("hidden");
@@ -258,8 +282,10 @@ async function startRecording() {
     resSelect.disabled = false;
     const path = recPath;
     const startedAtMs = recStartWall;
-    const screenElapsedMs = recScreenElapsedAtStart;
     recPath = null;
+    // A recorder that never reached its start event has nothing to align.
+    const screenElapsedMs = await (recScreenElapsedAtStart || Promise.resolve(null));
+    recScreenElapsedAtStart = null;
     if (!path) {
       startBtn.disabled = !stream;
       return;
@@ -302,11 +328,6 @@ async function startRecording() {
     }
     refreshPreview();
   };
-  // Read live, right before the recorder actually starts -- this is the one
-  // moment that matters for alignment, not begin time (which can sit open
-  // for a while with the camera preview idle) and not finish time (the
-  // screen recording may have moved on, paused again, or stopped by then).
-  recScreenElapsedAtStart = await invoke("camera_screen_elapsed_ms").catch(() => null);
   try {
     recorder.start(1000);
   } catch {

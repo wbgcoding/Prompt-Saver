@@ -10912,9 +10912,12 @@ CAMERA_PROBE = """
 # of camera.html (camera_rec.html) so the plain no-camera run above stays
 # untouched.
 CAMERA_REC_STUB = """
+<script type="module" src="i18n.js"></script>
+<script type="module" src="floatShared.js"></script>
 <script>
 window.__CAM = { gum: [], calls: [], order: [], gumFail: null, ctorThrow: false, startThrow: false,
-  n: 0, appendFail: function () { return false; }, elapsedDelay: 0, startDelay: 0, device: "" };
+  n: 0, appendFail: function () { return false; }, elapsedDelay: 0, startDelay: 0, device: "dev-1" };
+__CAM.gumFail = (c) => (c.video.deviceId ? new DOMException("gone", "NotFoundError") : null);
 if (!navigator.mediaDevices) { navigator.mediaDevices = {}; }
 navigator.mediaDevices.getUserMedia = (c) => {
   __CAM.gum.push(c);
@@ -10999,9 +11002,30 @@ CAMERA_REC_PROBE = """
   };
   try {
     step = "ready";
-    await sleep(200);
+    // Settings (and with them the saved camera id) load before the first
+    // preview request, the way the permission-ready event orders it for real.
+    await until(() => startBtn.textContent.trim());
     window.__FIRE__("camera-permission-ready", null);
     if (!(await until(() => !startBtn.disabled))) errs.push("Start never became enabled with a resolving stream");
+    // The saved camera is gone: exactly one retry with the default camera.
+    step = "deviceRetry";
+    if (__CAM.gum.length !== 2) errs.push("device retry: getUserMedia calls " + __CAM.gum.length);
+    else {
+      if (!__CAM.gum[0].video.deviceId) errs.push("device retry: first call had no exact device");
+      if (__CAM.gum[1].video.deviceId) errs.push("device retry: second call still had a device");
+    }
+    // A permission denial is not a stale device: no retry, Start stays off.
+    step = "denied";
+    __CAM.gum.length = 0;
+    __CAM.gumFail = () => new DOMException("no", "NotAllowedError");
+    document.getElementById("cam-res-select").dispatchEvent(new Event("change"));
+    await until(() => startBtn.disabled);
+    await sleep(100);
+    if (__CAM.gum.length !== 1) errs.push("denied: getUserMedia calls " + __CAM.gum.length);
+    if (!startBtn.disabled) errs.push("denied: Start stayed enabled");
+    __CAM.gumFail = (c) => (c.video.deviceId ? new DOMException("gone", "NotFoundError") : null);
+    document.getElementById("cam-res-select").dispatchEvent(new Event("change"));
+    if (!(await until(() => !startBtn.disabled))) errs.push("Start never came back after the denial cleared");
     // Constructor throws after the backend already reserved the take.
     for (const mode of ["ctorThrow", "startThrow"]) {
       step = mode;
@@ -11033,10 +11057,7 @@ CAMERA_REC_PROBE = """
     window.__REC.stop();
     await until(() => statusText.textContent.trim() && !startBtn.disabled, 200);
     await sleep(100);
-    // The i18n module loads asynchronously and may not have arrived in this
-    // headless run, in which case t() falls back to the bare key; the wording
-    // itself is covered by the i18n suite.
-    if (statusText.textContent !== "camChunkWriteFailed" && statusText.textContent !== "Part of the recording could not be saved. The raw file was kept.") errs.push("failure message missing, status: " + statusText.textContent);
+    if (statusText.textContent !== "Part of the recording could not be saved. The raw file was kept.") errs.push("failure message missing, status: " + statusText.textContent);
     if (__CAM.order.filter(o => o.indexOf("append-done") === 0).length !== 3) errs.push("not every append was drained: " + __CAM.order.join());
     if (count("camera_finish_recording") !== 0) errs.push("a take with a failed chunk was finished");
     if (count("open_video_editor") !== 0) errs.push("the editor opened for a damaged take");
@@ -11065,6 +11086,13 @@ CAMERA_REC_PROBE = """
     if (__CAM.order.join() !== "append-done-1,append-done-2,finish") errs.push("finish did not wait for the last append: " + __CAM.order.join());
     if (count("open_video_editor") !== 1) errs.push("editor open count " + count("open_video_editor"));
     if (statusText.textContent.trim()) errs.push("status text after a good take: " + statusText.textContent);
+    // The start stamp follows the recorder start event (300 ms after the
+    // click here), and the screen offset comes from a read taken there.
+    const fin = __CAM.calls.find(c => c[0] === "camera_finish_recording");
+    if (fin) {
+      if (fin[1].camStartMs < t0 + 250) errs.push("camera start stamped before the recorder started: " + (fin[1].camStartMs - t0));
+      if (fin[1].screenElapsedMs !== 4242) errs.push("screen offset not carried: " + fin[1].screenElapsedMs);
+    }
   } catch (e) {
     errs.push("probe crashed: " + e);
   }
