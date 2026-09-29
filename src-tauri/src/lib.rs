@@ -15919,7 +15919,15 @@ async fn begin_capture(
     if !pick && snip_delay > 0 {
         tokio::time::sleep(std::time::Duration::from_millis(snip_delay)).await;
     }
-    let (canvas, min_x, min_y) = freeze_desktop()?;
+    let (canvas, min_x, min_y) = match freeze_desktop() {
+        Ok(v) => v,
+        Err(e) => {
+            // The session never got going: hide the parked overlay, clear the
+            // flags and bring back whatever was hidden for it.
+            close_all_snip(&app);
+            return Err(e);
+        }
+    };
     let (total_w, total_h) = canvas.dimensions();
     // Arc'd so the preview encode (worker thread) and the stored capture (full-res
     // crops) share one buffer instead of each paying for their own ~80 MB copy.
