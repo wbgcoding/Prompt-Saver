@@ -8246,6 +8246,8 @@ async fn reset_settings(app: AppHandle, state: State<'_, Db>) -> Result<(), Stri
         store.forget_written_rows();
         save_settings(&app, &store.settings);
     }
+    // Defaults mean the screenshot switch is off: open windows go back to excluded.
+    apply_capture_exclusion_all(&app, true);
     Ok(())
 }
 
@@ -12519,6 +12521,76 @@ fn set_capture_exclusion(win: &tauri::WebviewWindow, excluded: bool) {
 #[cfg(not(windows))]
 fn set_capture_exclusion(_win: &tauri::WebviewWindow, _excluded: bool) {}
 
+// The window's current display affinity as the system reports it (0 = none,
+// 0x11 = excluded from capture), or None when it cannot be read.
+#[cfg(windows)]
+fn display_affinity(win: &tauri::WebviewWindow) -> Option<u32> {
+    #[link(name = "user32")]
+    extern "system" {
+        fn GetWindowDisplayAffinity(hwnd: isize, affinity: *mut u32) -> i32;
+    }
+    let h = win.hwnd().ok()?;
+    let mut aff: u32 = 0;
+    let ok = unsafe { GetWindowDisplayAffinity(h.0 as isize, &mut aff) };
+    if ok != 0 { Some(aff) } else { None }
+}
+
+#[cfg(not(windows))]
+fn display_affinity(_win: &tauri::WebviewWindow) -> Option<u32> {
+    None
+}
+
+// The recording bar and the region outline stay out of every capture whatever
+// the privacy setting says: a recording must never contain its own controls.
+fn always_excluded(label: &str) -> bool {
+    label == "rec-bar" || label == "rec-outline"
+}
+
+// Whether a window has to be capture-excluded, given the state the privacy
+// setting alone asks for. Every loop that applies the affinity to all windows
+// goes through this, so the setting can never clear a permanent exclusion.
+fn wants_capture_exclusion(label: &str, setting_excluded: bool) -> bool {
+    always_excluded(label) || setting_excluded
+}
+
+// Pure: does a readback agree with what was asked for? An unreadable affinity
+// counts as agreeing, since there is nothing to compare.
+fn affinity_matches(want_excluded: bool, readback: Option<u32>) -> bool {
+    match readback {
+        Some(a) => (a != 0) == want_excluded,
+        None => true,
+    }
+}
+
+// Pure: whether the app's own screenshot, colour picker and recording picker
+// hide the app windows before freezing the desktop. With the privacy setting
+// allowing screenshots the app stays visible in its own tools.
+fn capture_hides_app_windows(setting_excluded: bool) -> bool {
+    setting_excluded
+}
+
+// Apply the privacy setting to every open window and read the result back.
+// A window that still reports the wrong state gets the call once more. Returns
+// true when a window that must be capturable still reports exclusion after
+// that (some Windows builds keep it), so the caller can tell the user.
+fn apply_capture_exclusion_all(app: &AppHandle, setting_excluded: bool) -> bool {
+    let mut stuck = false;
+    for (label, win) in app.webview_windows() {
+        let want = wants_capture_exclusion(&label, setting_excluded);
+        set_capture_exclusion(&win, want);
+        if !affinity_matches(want, display_affinity(&win)) {
+            set_capture_exclusion(&win, want);
+            if !affinity_matches(want, display_affinity(&win)) && !want {
+                stuck = true;
+            }
+        }
+    }
+    if stuck {
+        let _ = app.emit_to("main", "capture-restart-notice", ());
+    }
+    stuck
+}
+
 // ---- Recording control bar: a small always-on-top window with its own
 // WDA_EXCLUDEFROMCAPTURE (unconditional -- unlike the privacy setting the pill
 // windows use, the bar must NEVER appear in the recording, full stop), pinned
@@ -12752,12 +12824,21 @@ fn hide_rec_bar(app: AppHandle) {
 // Window recordings, which keep the OS border and never call this at all.
 // Never focused: it has nothing to click or type into, and showing it must
 // not steal keyboard focus away from whatever app is being recorded.
+// Bumped for every outline window that is shown or torn down, so a re-apply
+// queued for an earlier outline can never touch the next recording's one.
+static REC_OUTLINE_GEN: AtomicU64 = AtomicU64::new(0);
+
+fn outline_closure_is_current(gen: u64, current: u64) -> bool {
+    gen == current
+}
+
 #[cfg(windows)]
 fn show_rec_outline(app: &AppHandle, rect: (i32, i32, u32, u32)) {
     let label = "rec-outline";
     if app.get_webview_window(label).is_some() {
         return;
     }
+    let gen = REC_OUTLINE_GEN.fetch_add(1, Ordering::SeqCst) + 1;
     let win = match WebviewWindowBuilder::new(app, label, WebviewUrl::App("recoutline.html".into()))
         .title("")
         .decorations(false)
@@ -12776,19 +12857,86 @@ fn show_rec_outline(app: &AppHandle, rect: (i32, i32, u32, u32)) {
         Err(_) => return,
     };
     let _ = win.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
-    let (x, y, w, h) = rect;
-    set_bounds_phys(&win, Rect { x: x as f64, y: y as f64, w: w as f64, h: h as f64 });
     // Unconditional, like the rec bar: it must never appear in the recording
-    // no matter what the privacy screenshot-exclusion setting says.
+    // no matter what the privacy screenshot-exclusion setting says. Applied
+    // while the window is still hidden, before any placement below.
     set_capture_exclusion(&win, true);
     let _ = win.set_ignore_cursor_events(true); // click-through: never steals input from whatever is under it
+    // The window is built on whichever monitor the system picks and then moved
+    // to the region's own monitor, which can have another scale factor. tao
+    // answers the resulting DPI change by resizing the window to the system's
+    // suggested rect, which rescales its physical size. So the rect is applied
+    // again after every scale or size event, deferred to the main thread (a
+    // re-apply inside the event itself runs before tao's own resize and is
+    // undone by it). The pixel guard keeps that from looping.
+    let want = rect;
+    let app_evt = app.clone();
+    win.on_window_event(move |event| {
+        if matches!(event, WindowEvent::ScaleFactorChanged { .. } | WindowEvent::Resized(_)) {
+            let app2 = app_evt.clone();
+            let _ = app_evt.run_on_main_thread(move || {
+                if !outline_closure_is_current(gen, REC_OUTLINE_GEN.load(Ordering::SeqCst)) {
+                    return;
+                }
+                if let Some(w) = app2.get_webview_window("rec-outline") {
+                    place_rec_outline(&w, want);
+                }
+            });
+        }
+    });
+    place_rec_outline(&win, want);
     let _ = win.show();
+    // Showing can trigger the DPI settle too; one more deferred check covers
+    // a settle that lands after the event handler above was already queued.
+    let app2 = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if !outline_closure_is_current(gen, REC_OUTLINE_GEN.load(Ordering::SeqCst)) {
+            return;
+        }
+        if let Some(w) = app2.get_webview_window("rec-outline") {
+            place_rec_outline(&w, want);
+        }
+    });
+}
+
+// Put the outline window on its requested rect and confirm it stuck: if the
+// window is more than a couple of pixels off afterwards (a DPI boundary crossed
+// by the first move), apply the rect once more, which no longer crosses one.
+#[cfg(windows)]
+fn place_rec_outline(win: &tauri::WebviewWindow, rect: (i32, i32, u32, u32)) {
+    let (x, y, w, h) = rect;
+    let r = Rect { x: x as f64, y: y as f64, w: w as f64, h: h as f64 };
+    for _ in 0..2 {
+        let actual = match (win.outer_position(), win.outer_size()) {
+            (Ok(p), Ok(s)) => Some((p.x, p.y, s.width, s.height)),
+            _ => None,
+        };
+        if let Some(a) = actual {
+            if !outline_rect_needs_reapply(a, rect) {
+                return;
+            }
+        }
+        set_bounds_phys(win, r);
+    }
+}
+
+// Pure: whether a window sitting at `actual` has to be moved or resized to
+// reach `want`. Anything within OUTLINE_TOLERANCE_PX on every edge counts as
+// placed, so a rounding difference never starts a move/resize loop.
+const OUTLINE_TOLERANCE_PX: i64 = 2;
+fn outline_rect_needs_reapply(actual: (i32, i32, u32, u32), want: (i32, i32, u32, u32)) -> bool {
+    let d = |a: i64, b: i64| (a - b).abs() > OUTLINE_TOLERANCE_PX;
+    d(actual.0 as i64, want.0 as i64)
+        || d(actual.1 as i64, want.1 as i64)
+        || d(actual.2 as i64, want.2 as i64)
+        || d(actual.3 as i64, want.3 as i64)
 }
 
 // Torn down (not just hidden) on stop, cancel and auto-stop -- see
 // stop_recording_now and cancel_recording.
 #[cfg(windows)]
 fn hide_rec_outline(app: &AppHandle) {
+    REC_OUTLINE_GEN.fetch_add(1, Ordering::SeqCst);
     if let Some(w) = app.get_webview_window("rec-outline") {
         let _ = w.close();
     }
@@ -14843,6 +14991,17 @@ static PICK_ACTIVE: AtomicBool = AtomicBool::new(false);
 // listeners (start a recording vs. swap its source) never both react to it.
 static REC_SWITCH_PICK: AtomicBool = AtomicBool::new(false);
 
+// Set by begin_capture when it hid the app's own windows for this session, so
+// the end of the session restores exactly what it hid and nothing else: a snip
+// started with screenshots allowed never pops up a hidden or minimised main window.
+static SNIP_HID_APP: AtomicBool = AtomicBool::new(false);
+
+fn restore_app_windows_after_snip(app: &AppHandle) {
+    if SNIP_HID_APP.swap(false, Ordering::SeqCst) {
+        set_app_windows_hidden(app, false);
+    }
+}
+
 // End the current snip session: HIDE (never close) the reusable overlay so its
 // warm WebView2 survives for the next snip, bring the app's own windows back, and
 // drop the temp preview. Closing the overlay is what forced every snip to pay the
@@ -14853,7 +15012,7 @@ fn close_all_snip(app: &AppHandle) {
             let _ = win.hide();
         }
     }
-    set_app_windows_hidden(app, false);
+    restore_app_windows_after_snip(app);
     remove_snip_preview();
     SNIP_ACTIVE.store(false, Ordering::SeqCst);
     PICK_ACTIVE.store(false, Ordering::SeqCst);
@@ -15623,7 +15782,7 @@ fn build_snip_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String> {
     win.on_window_event(move |event| {
         if matches!(event, WindowEvent::Destroyed) && SNIP_ACTIVE.load(Ordering::SeqCst) {
             SNIP_ACTIVE.store(false, Ordering::SeqCst);
-            set_app_windows_hidden(&app_evt, false);
+            restore_app_windows_after_snip(&app_evt);
         }
     });
     Ok(win)
@@ -15722,7 +15881,7 @@ async fn begin_capture(
     PICK_ACTIVE.store(pick, Ordering::SeqCst);
     // Loupe/quality/delay settings are read once here, in both capture modes,
     // while nothing else holds the store.
-    let (cfg, hist_max, snip_q, snip_delay) = app
+    let (cfg, hist_max, snip_q, snip_delay, hide_app) = app
         .try_state::<Db>()
         .map(|s| {
             let guard = s.lock().unwrap_or_else(|e| e.into_inner());
@@ -15731,9 +15890,9 @@ async fn begin_capture(
             let snip_delay = settings.ui_values.get("snipDelayMs").copied().unwrap_or(0.0).clamp(0.0, 5000.0) as u64;
             let cfg = if pick { pick_cfg(settings) } else { PickCfg { zoom: 8, format: "hex".to_string(), cells: 15 } };
             let hist_max = if pick { pick_history_max(settings) } else { PICK_HISTORY_DEFAULT };
-            (cfg, hist_max, snip_q, snip_delay)
+            (cfg, hist_max, snip_q, snip_delay, capture_hides_app_windows(capture_excluded(settings)))
         })
-        .unwrap_or((PickCfg { zoom: 8, format: "hex".to_string(), cells: 15 }, PICK_HISTORY_DEFAULT, 80, 0));
+        .unwrap_or((PickCfg { zoom: 8, format: "hex".to_string(), cells: 15 }, PICK_HISTORY_DEFAULT, 80, 0, true));
     // Wake the overlay's WebView2 NOW (off-screen) so a long-idle, background-throttled
     // webview un-throttles DURING the freeze+encode below. Without this head start the
     // icon path (overlay idle a while) lags behind a retry (whose webview was just
@@ -15746,7 +15905,9 @@ async fn begin_capture(
     // Hide our own windows BEFORE freezing so they're never in the capture and
     // the target underneath (e.g. Task Manager behind the main window) is
     // revealed. A short settle lets the hide reach the screen first.
-    let had_visible = set_app_windows_hidden(&app, true);
+    // With screenshots of the app allowed, nothing is hidden at all.
+    SNIP_HID_APP.store(hide_app, Ordering::SeqCst);
+    let had_visible = hide_app && set_app_windows_hidden(&app, true);
     // Nothing was on screen to hide, so there is nothing the freeze could catch
     // mid-hide either: the settle delay only matters when we just hid something.
     if had_visible {
@@ -15758,7 +15919,15 @@ async fn begin_capture(
     if !pick && snip_delay > 0 {
         tokio::time::sleep(std::time::Duration::from_millis(snip_delay)).await;
     }
-    let (canvas, min_x, min_y) = freeze_desktop()?;
+    let (canvas, min_x, min_y) = match freeze_desktop() {
+        Ok(v) => v,
+        Err(e) => {
+            // The session never got going: hide the parked overlay, clear the
+            // flags and bring back whatever was hidden for it.
+            close_all_snip(&app);
+            return Err(e);
+        }
+    };
     let (total_w, total_h) = canvas.dimensions();
     // Arc'd so the preview encode (worker thread) and the stored capture (full-res
     // crops) share one buffer instead of each paying for their own ~80 MB copy.
@@ -15831,7 +16000,7 @@ async fn begin_capture(
         Err(e) => {
             // Build failed: clear the session so the app's windows come back.
             SNIP_ACTIVE.store(false, Ordering::SeqCst);
-            set_app_windows_hidden(&app, false);
+            restore_app_windows_after_snip(&app);
             return Err(e);
         }
     };
@@ -26279,9 +26448,7 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
     // screenshots", so the exclusion is its OPPOSITE: passing it straight through
     // is what made the switch work backwards.
     if is_capture {
-        for (_label, win) in app.webview_windows() {
-            set_capture_exclusion(&win, !enabled);
-        }
+        apply_capture_exclusion_all(&app, !enabled);
     }
     // The window itself now always runs (started at boot) since 91's
     // auto-advance session needs it independently of this toggle; on/off just
@@ -26458,9 +26625,7 @@ fn reset_expert(app: AppHandle, state: State<Db>) {
     ERROR_LOG_KEEP_BYTES.store(256 * 1024, Ordering::Relaxed);
     // Cleared flags put the screenshot permission back to its default (off), which
     // means the exclusion is on: re-assert it on every window so it is immediate.
-    for (_label, win) in app.webview_windows() {
-        set_capture_exclusion(&win, true);
-    }
+    apply_capture_exclusion_all(&app, true);
     apply_tray_menu(&app); // The tray sections fall back to their defaults too
     notify_float_settings(&app);
 }
@@ -31880,9 +32045,7 @@ async fn apply_settings_import(app: AppHandle, state: State<'_, Db>, path: Strin
         let store = lock(&state);
         (capture_excluded(&store.settings), store.settings.ui_values.get("errorLogKeepKb").copied())
     };
-    for (_label, win) in app.webview_windows() {
-        set_capture_exclusion(&win, excluded);
-    }
+    apply_capture_exclusion_all(&app, excluded);
     apply_tray_menu(&app);
     if let Some(kb) = error_log_kb {
         ERROR_LOG_KEEP_BYTES.store((kb.max(1.0) * 1024.0) as u64, Ordering::Relaxed);
@@ -32037,6 +32200,9 @@ async fn import_all(
     };
     // Re-apply the visible parts of the imported settings without a restart.
     push_theme(&app, &settings);
+    if want_settings {
+        apply_capture_exclusion_all(&app, capture_excluded(&settings));
+    }
     rearm_hotkeys(&app);
     apply_tray_menu(&app); // An import can bring new tray settings with it
     sync_float_windows(&app); // Pills and folders follow the restored settings
@@ -36319,6 +36485,61 @@ mod tests {
     fn outline_rect_for_target_is_none_for_monitor_and_window_targets() {
         assert_eq!(recording::outline_rect_for_target(recording::RecTarget::Monitor(0)), None);
         assert_eq!(recording::outline_rect_for_target(recording::RecTarget::Window(123)), None);
+    }
+
+    #[test]
+    fn outline_reapply_guard_ignores_a_two_pixel_rounding_difference() {
+        let want = (2020, 50, 400, 300);
+        assert!(!outline_rect_needs_reapply(want, want));
+        assert!(!outline_rect_needs_reapply((2022, 48, 402, 298), want));
+        // A window rescaled by a DPI change (400x300 at 100% moved to 150%)
+        // is far outside the guard.
+        assert!(outline_rect_needs_reapply((2020, 50, 600, 450), want));
+        assert!(outline_rect_needs_reapply((2023, 50, 400, 300), want));
+        assert!(outline_rect_needs_reapply((2020, 50, 400, 297), want));
+    }
+
+    #[test]
+    fn recording_windows_stay_excluded_whatever_the_setting_says() {
+        assert!(always_excluded("rec-bar"));
+        assert!(always_excluded("rec-outline"));
+        assert!(!always_excluded("main"));
+        assert!(!always_excluded("float-abc"));
+        // Setting allows screenshots (excluded = false): only the two stay excluded.
+        assert!(wants_capture_exclusion("rec-bar", false));
+        assert!(wants_capture_exclusion("rec-outline", false));
+        assert!(!wants_capture_exclusion("main", false));
+        assert!(!wants_capture_exclusion("snip-0", false));
+        // Setting off (excluded = true): everything is excluded.
+        assert!(wants_capture_exclusion("main", true));
+        assert!(wants_capture_exclusion("rec-bar", true));
+    }
+
+    #[test]
+    fn begin_capture_hides_the_app_only_while_screenshots_are_not_allowed() {
+        assert!(capture_hides_app_windows(true));
+        assert!(!capture_hides_app_windows(false));
+        // The default setting (nothing stored) means excluded, so hidden.
+        assert!(capture_hides_app_windows(capture_excluded(&Settings::default())));
+        let mut allow = Settings::default();
+        allow.ui_flags.insert(ALLOW_SCREENSHOT_KEY.to_string(), true);
+        assert!(!capture_hides_app_windows(capture_excluded(&allow)));
+    }
+
+    #[test]
+    fn a_stale_outline_closure_is_not_current_after_a_newer_outline() {
+        assert!(outline_closure_is_current(3, 3));
+        assert!(!outline_closure_is_current(3, 4));
+    }
+
+    #[test]
+    fn affinity_readback_is_compared_against_the_wanted_state() {
+        assert!(affinity_matches(true, Some(0x11)));
+        assert!(affinity_matches(false, Some(0)));
+        assert!(!affinity_matches(false, Some(0x11)));
+        assert!(!affinity_matches(true, Some(0)));
+        assert!(affinity_matches(true, None));
+        assert!(affinity_matches(false, None));
     }
 
     #[test]
