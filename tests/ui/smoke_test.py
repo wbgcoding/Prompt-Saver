@@ -12500,6 +12500,63 @@ EDIT_STATE_PROBE = """
 """
 
 
+# A 1280x720 source (a small region recording): the fixed-height presets may
+# enlarge. 1080p sets a 1920x1080 scale op and shows the "scaled up" hint, the
+# export filter scales with lanczos; 720p equals the source height, sets no op,
+# selects "keep original" and shows no hint.
+SCALE_UP_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const until = async (fn, tries) => {
+    for (let i = 0; i < (tries || 100) && !fn(); i++) await sleep(50);
+    return fn();
+  };
+  try {
+    const cur = document.getElementById('ve-scale-current');
+    const loaded = await until(() => /1280/.test(cur.textContent) && document.querySelectorAll('#ve-scale-presets button').length > 3, 300);
+    if (!loaded) errs.push('the 1280x720 source never loaded: ' + cur.textContent);
+    else {
+      const btn = (k) => [...document.querySelectorAll('#ve-scale-presets button')].find((b) => b.dataset.key === k);
+      const hint = document.getElementById('ve-scale-uphint');
+      const wField = document.getElementById('ve-scale-w');
+      const hField = document.getElementById('ve-scale-h');
+      if (!hint) errs.push('there is no scale-up hint element');
+      else {
+        if (!hint.classList.contains('hidden')) errs.push('the hint shows before any preset is picked');
+        btn('1080').click();
+        await sleep(60);
+        if (wField.value !== '1920' || hField.value !== '1080') errs.push('1080p on a 720 source did not set 1920x1080, got ' + wField.value + 'x' + hField.value);
+        if (hint.classList.contains('hidden')) errs.push('no scale-up hint while 1080p is selected on a 720 source');
+        if (!btn('1080').classList.contains('sel')) errs.push('the 1080p button is not marked selected');
+        if (!hint.textContent.trim() || /^veScaleUpHint/.test(hint.textContent.trim())) errs.push('the hint carries no text: ' + hint.textContent);
+        document.getElementById('ve-export-start').click();
+        await sleep(300);
+        const call = (window.__SMOKE_ARGS__ || []).filter((c) => c[0] === 'export_video').pop();
+        const chain = call && call[1] && call[1].req ? String(call[1].req.filter_chain) : '';
+        if (!/scale=1920:1080:flags=lanczos/.test(chain)) errs.push('the export filter does not enlarge with lanczos: ' + chain);
+        btn('720').click();
+        await sleep(60);
+        if (!hint.classList.contains('hidden')) errs.push('the hint shows for the preset equal to the source height');
+        if (!btn('').classList.contains('sel')) errs.push('the source-height preset did not select keep original');
+        if (document.querySelectorAll('#ve-ops-list .ve-op-row').length !== 0) errs.push('the source-height preset left a scale op behind');
+        btn('480').click();
+        await sleep(60);
+        if (!hint.classList.contains('hidden')) errs.push('the hint shows for a smaller preset');
+        if (wField.value !== '854' || hField.value !== '480') errs.push('480p on a 720 source did not set 854x480, got ' + wField.value + 'x' + hField.value);
+      }
+    }
+  } catch (e) { errs.push('probe: ' + e.message); }
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
 # A second recording arriving (the "video-editor-load" event of a reused window)
 # while the restore dialog of the first is still open: the first load must
 # settle instead of waiting forever on a dialog nobody can answer any more, and
@@ -14742,6 +14799,31 @@ def main():
             failed += len(errs)
             if not errs:
                 print("   ok")
+
+        # A 1280x720 source: the fixed-height presets may enlarge.
+        side = tmp / "ui" / "video-scale-up.html"
+        side.write_text(
+            (REPO / "ui" / "video.html").read_text(encoding="utf-8")
+            .replace("<script",
+                     '<script>window.__PROBE_W__ = 1280; window.__PROBE_H__ = 720;</script>\n'
+                     '<script src="tauri_stub.js"></script>\n<script', 1)
+            .replace("</body>", SCALE_UP_PROBE + "</body>"),
+            encoding="utf-8")
+        proc = subprocess.run(
+            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+             f"--user-data-dir={tmp / 'profile-video-scale-up'}", "--allow-file-access-from-files",
+             "--window-size=1130,860", "--virtual-time-budget=30000",
+             "--dump-dom", side.as_uri()],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=180)
+        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        print("-- video.html scale presets on a 720p source")
+        for e in errs:
+            print(f"   FAIL: {e}")
+        failed += len(errs)
+        if not errs:
+            print("   ok")
 
         # A second recording arriving while the first one's restore dialog is open.
         side = tmp / "ui" / "video-restore-superseded.html"

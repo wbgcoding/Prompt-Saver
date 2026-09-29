@@ -1838,12 +1838,13 @@ function renderScalePresets() {
 }
 
 // The one place a scale op becomes literal pixels: a fixed-height preset
-// refuses to enlarge past the source (picking 1080p for a 720p clip means
-// "don't shrink it", not "blow it up and waste bits doing so"), while a
-// percent value always applies as typed -- upscaling on purpose stays
-// possible through the percent field and its 50%/25%... well above 100 too.
+// gives its own size whether that is smaller or larger than the source (a
+// region recording is often below 720 px, and refusing to enlarge would turn
+// every preset into "keep original"). Only a preset equal to the source
+// height needs no op at all and stays "keep original". A percent value always
+// applies as typed.
 function scaleForHeightPreset(h) {
-  if (!VE.w || !VE.h || h >= VE.h) return null;
+  if (!VE.w || !VE.h || h === VE.h) return null;
   return { w: even(Math.round((VE.w * h) / VE.h)), h: even(h) };
 }
 function scaleForPercent(pct) {
@@ -1908,6 +1909,8 @@ function updateScaleCurrent() {
   }
 
   const key = currentScalePresetKey();
+  // Only a selected height preset that is taller than the source gets the hint.
+  $("ve-scale-uphint").classList.toggle("hidden", !(scale && key !== null && SCALE_HEIGHT_PRESETS.includes(Number(key)) && scale.h > VE.h));
   for (const btn of $("ve-scale-presets").querySelectorAll("button")) {
     btn.classList.toggle("sel", key !== null && btn.dataset.key === key);
   }
@@ -3012,11 +3015,15 @@ function buildVideoChain() {
     if (fade.outMs > 0) chain(`fade=t=out:st=${Math.max(0, total - fade.outMs / 1000).toFixed(3)}:d=${(fade.outMs / 1000).toFixed(3)}`);
   }
 
-  // The op itself already carries the decision: fixed-height presets refuse
-  // to be set at or above the source size (see scaleForHeightPreset), while
-  // the percent field and free width/height typing are meant to upscale on
-  // request. Nothing left to guard here.
-  if (downscale) chain(`scale=${downscale.w}:${downscale.h}`);
+  // The op itself already carries the decision (a preset, the percent field or
+  // typed width/height, larger or smaller than the source). Enlarging gets the
+  // sharper lanczos scaler instead of ffmpeg's default bicubic one.
+  if (downscale) {
+    const inW = crop ? crop.rect.w : VE.w;
+    const inH = crop ? crop.rect.h : VE.h;
+    const enlarging = downscale.w > inW || downscale.h > inH;
+    chain(`scale=${downscale.w}:${downscale.h}${enlarging ? ":flags=lanczos" : ""}`);
+  }
 
   // GIF, animated WebP and APNG balloon in file size fast at a high resolution
   // -- cap the long side regardless of any explicit scale op above.
@@ -3671,8 +3678,7 @@ for (const id of ["ve-fade-in", "ve-fade-out"]) {
 
 // The Edit tab's width/height/percent fields and the Export tab's read-only
 // summary are two faces of the one same "scale" op -- this is the only
-// place that ever writes it, literally, with no upscale guard: that guard
-// belongs to the fixed-height presets alone (see scaleForHeightPreset).
+// place that ever writes it, literally, with no size guard of any kind.
 function setScaleOp(w, h) {
   if (w == null || h == null) { removeOps((o) => o.tool === "scale"); return; }
   const cw = even(clamp(Math.round(w), 16, 7680));

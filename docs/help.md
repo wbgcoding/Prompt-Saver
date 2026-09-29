@@ -250,8 +250,8 @@ opens the clip in its own window with a live preview and no processing until
 you actually export: trim and cut (frame-exact, keeps the original quality
 when nothing else changes), crop, change speed, fade in/out, resize (typed
 width/height or a percentage, an aspect-ratio lock, and quick presets from
-4K down to 25%; a preset never enlarges past the source, but the percent
-field and free typing can, for upscaling on purpose), and overlay images,
+4K down to 25%; a preset larger than the source enlarges the video and says
+so, one equal to the source height keeps the original), and overlay images,
 freeze-frames, text, pixelation, a spotlight or a keys overlay (four
 keyboard-layout presets plus a free selection of keys, filled from a
 recording's own key data if it captured any) anywhere on the timeline. A

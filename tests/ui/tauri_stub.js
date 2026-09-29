@@ -483,7 +483,7 @@ const RESULTS = {
   // branch -- window.__KEY_SIDECAR__ (default: none) is the fixture read_key_sidecar
   // hands back, a plain {hold_ms, events} object shaped like keylog::KeySidecar.
   probe_recording: () => ({
-    duration_ms: 600000, fps: 30, width: 1920, height: 1080,
+    duration_ms: 600000, fps: 30, width: window.__PROBE_W__ || 1920, height: window.__PROBE_H__ || 1080,
     has_audio: true, has_mic_track: true, mic_sidecar: "",
     has_keys_sidecar: !!window.__KEY_SIDECAR__,
   }),

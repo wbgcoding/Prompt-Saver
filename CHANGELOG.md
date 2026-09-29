@@ -851,6 +851,11 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **The 720p, 1080p and larger resolution presets can be chosen again.** A
+  recording smaller than the preset (a small region, say) used to fall back to
+  "keep original" whatever you clicked. A larger preset now enlarges the video,
+  says so under the buttons and exports with a sharper scaler; a preset equal to
+  the source height keeps the original.
 - **The video editor no longer hangs when a second recording arrives during
   the restore question.** Opening another recording while the question about an
   unfinished edit was still open left the first load waiting forever. The old
