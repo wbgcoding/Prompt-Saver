@@ -137,7 +137,11 @@ document.addEventListener("keydown", (e) => {
 const OPENED_AT = Date.now();
 const BLUR_GRACE_MS = 400;
 window.addEventListener("blur", () => {
-  if (Date.now() - OPENED_AT > BLUR_GRACE_MS) close();
+  const left = BLUR_GRACE_MS - (Date.now() - OPENED_AT);
+  if (left <= 0) close();
+  // A blur inside the hand-off window is deferred, not dropped: close once the
+  // grace ends unless this window has the focus again by then.
+  else setTimeout(() => { if (!document.hasFocus()) close(); }, left);
 });
 document.body.addEventListener("mousedown", (e) => {
   if (!cardEl.contains(e.target)) close();

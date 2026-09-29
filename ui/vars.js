@@ -162,7 +162,11 @@ cancelEl.addEventListener("click", () => answer(null));
 const OPENED_AT = Date.now();
 const BLUR_GRACE_MS = 400;
 window.addEventListener("blur", () => {
-  if (Date.now() - OPENED_AT > BLUR_GRACE_MS) answer(null);
+  const left = BLUR_GRACE_MS - (Date.now() - OPENED_AT);
+  if (left <= 0) answer(null);
+  // A blur inside the hand-off window is deferred, not dropped: close once the
+  // grace ends unless this window has the focus again by then.
+  else setTimeout(() => { if (!document.hasFocus()) answer(null); }, left);
 });
 // A click on the transparent margin around the card is an outside click too.
 document.body.addEventListener("mousedown", (e) => {

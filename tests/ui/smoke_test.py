@@ -14557,6 +14557,95 @@ def unescape(s):
         s = s.replace(a, b)
     return s
 
+# Folder window, drag-out on: a modifier-click that never moves is a plain copy,
+# the same rule the pill states. No OS drag starts, so the click must not vanish.
+FOLDER_DRAGOUT_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const calls = () => (window.__SMOKE_CALLS__ = window.__SMOKE_CALLS__ || []);
+  const until = async (fn) => { for (let i = 0; i < 80 && !fn(); i++) await sleep(100); return fn(); };
+  try {
+    await until(() => document.getElementById('fname').textContent !== '');
+    const invoke = window.__TAURI__.core.invoke;
+    await invoke('set_ui_flag', { key: 'autoPaste', enabled: false });
+    await invoke('set_ui_value', { key: 'copyCooldownMs', value: 0 });
+    await invoke('set_ui_flag', { key: 'dragOut', enabled: true });
+    window.__FIRE__('settings-changed');
+    await sleep(100);
+    document.getElementById('icon').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0 }));
+    const pop = document.getElementById('pop');
+    await until(() => !pop.classList.contains('hidden'));
+    const tile = document.querySelector('#grid .folder-member');
+    if (!tile) {
+      errs.push('the open folder rendered no members');
+    } else {
+      calls().length = 0;
+      tile.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, buttons: 1, ctrlKey: true }));
+      window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0, buttons: 0 }));
+      await until(() => calls().includes('copy_prompt'));
+      if (!calls().includes('copy_prompt')) errs.push('a modifier-click without movement did not copy the member');
+    }
+  } catch (e) { errs.push('probe: ' + e.message); }
+  errs.push(...(window.__SMOKE_ERRORS__ || []));
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
+# Pill window: closing the menu (Escape) while a size button's set_float_scale is
+# still in flight must not leave an uncaught error behind. The probe wraps invoke
+# before the window script captures it, so it can hold that one call back.
+FLOAT_SCALE_RACE_PROBE = """
+<script>
+(() => {
+  const real = window.__TAURI__.core.invoke;
+  window.__SCALE_GATE__ = [];
+  window.__TAURI__.core.invoke = async (cmd, args) => {
+    const out = await real(cmd, args);
+    if (cmd === 'set_float_scale' && window.__HOLD_SCALE__) {
+      await new Promise((resolve) => window.__SCALE_GATE__.push(resolve));
+    }
+    return out;
+  };
+})();
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const calls = () => (window.__SMOKE_CALLS__ = window.__SMOKE_CALLS__ || []);
+  const until = async (fn) => { for (let i = 0; i < 80 && !fn(); i++) await sleep(50); return fn(); };
+  try {
+    await until(() => calls().includes('resize_float_pill'));
+    window.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    const menu = document.getElementById('menu');
+    await until(() => !menu.classList.contains('hidden'));
+    if (menu.classList.contains('hidden')) errs.push('the pill menu did not open');
+    window.__HOLD_SCALE__ = true;
+    document.querySelector('#menu [data-scale="2"]').click();
+    await until(() => window.__SCALE_GATE__.length > 0);
+    if (!window.__SCALE_GATE__.length) errs.push('the size button never called set_float_scale');
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await sleep(100);
+    window.__HOLD_SCALE__ = false;
+    window.__SCALE_GATE__.forEach((resolve) => resolve());
+    await sleep(200);
+  } catch (e) { errs.push('probe: ' + e.message); }
+  errs.push(...(window.__SMOKE_ERRORS__ || []));
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
 
 def main():
     browser = next((p for p in CHROME_CANDIDATES if Path(p).exists()), None)
@@ -15386,6 +15475,50 @@ def main():
         if not errs:
             print("   ok")
 
+        # Folder window with drag-out on: a modifier-click without movement copies.
+        side = tmp / "ui" / "folder-dragout.html"
+        side.write_text(
+            (REPO / "ui" / "folder.html").read_text(encoding="utf-8")
+            .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
+            .replace("</body>", FOLDER_DRAGOUT_PROBE + "</body>"),
+            encoding="utf-8")
+        proc = subprocess.run(
+            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+             f"--user-data-dir={tmp / 'profile-folder-dragout'}", "--allow-file-access-from-files",
+             "--window-size=520,420", "--virtual-time-budget=15000",
+             "--dump-dom", side.as_uri()],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=180)
+        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        print("-- folder window: modifier-click without movement copies")
+        for e in errs:
+            print(f"   FAIL: {e}")
+        failed += len(errs)
+        if not errs:
+            print("   ok")
+        # Pill window: Escape during an in-flight size change throws nothing.
+        side = tmp / "ui" / "floating-scale-race.html"
+        side.write_text(
+            (REPO / "ui" / "floating.html").read_text(encoding="utf-8")
+            .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
+            .replace("</body>", FLOAT_SCALE_RACE_PROBE + "</body>"),
+            encoding="utf-8")
+        proc = subprocess.run(
+            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+             f"--user-data-dir={tmp / 'profile-float-scale-race'}", "--allow-file-access-from-files",
+             "--window-size=240,60", "--virtual-time-budget=15000",
+             "--dump-dom", side.as_uri()],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=180)
+        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        print("-- pill window: closing the menu during a size change")
+        for e in errs:
+            print(f"   FAIL: {e}")
+        failed += len(errs)
+        if not errs:
+            print("   ok")
         print("PASS" if not failed else f"{failed} problem(s)")
         return 1 if failed else 0
     finally:
