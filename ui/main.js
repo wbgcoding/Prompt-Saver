@@ -616,9 +616,8 @@ function readableInk(hex) {
 // White ink stays white up to the user's threshold (a deliberate look), but
 // on a colour past the contrast crossover it gets a dark halo so it reads.
 // The halo can be switched off (inkHalo) or dialed in strength
-// (inkHaloStrength, percent). At 85 percent, the default, both alphas match
-// the halo's original fixed look; the second value keeps the same ratio
-// between the two shadow layers at any strength.
+// (inkHaloStrength, percent). The second alpha keeps the same ratio to the
+// first at any strength (0.7 to 0.85 was the original fixed look).
 const INK_HALO_RATIO = 0.7 / 0.85;
 function inkShadow(hex) {
   if (!flag("inkHalo")) return "none";
@@ -1933,8 +1932,8 @@ const EXPERT_VALUES = {
   viewGroupMaxRows: { label: "valViewGroupMaxRows", min: 4, max: 12, step: 1, def: 8, unit: "", gate: "viewGroups" },
   // Relative-luminance cutoff (/100) above which readableInk() picks black text.
   inkThreshold: { label: "valInkThreshold", min: 20, max: 90, step: 5, def: 60, unit: "%", gate: "autoInk" },
-  // How dark the halo behind white text gets; 85 reproduces the shadow's original fixed look.
-  inkHaloStrength: { label: "valInkHaloStrength", min: 10, max: 100, step: 5, def: 85, unit: "%", gate: "inkHalo" },
+  // How dark the halo behind white text gets, in percent.
+  inkHaloStrength: { label: "valInkHaloStrength", min: 10, max: 100, step: 5, def: 75, unit: "%", gate: "inkHalo" },
   // How much of a tab's outer edge counts as "drop here to reorder" rather than
   // "drop here to group" -- a wider tab needs a wider zone to stay easy to aim at.
   viewTabEdgeZone: { label: "valViewTabEdgeZone", min: 15, max: 45, step: 1, def: 33, unit: "%", gate: "multiView" },

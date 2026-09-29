@@ -3373,7 +3373,7 @@ PROBE = """
         const t = [...document.querySelectorAll('#grid .tile')].find((e) => (e.dataset.id || '') === 'p0');
         return t ? t.style.getPropertyValue('--ink-shadow') : null;
       };
-      const todayHalo512 = '0 0 2px rgba(0, 0, 0, 0.85), 0 1px 3px rgba(0, 0, 0, 0.7)';
+      const todayHalo512 = '0 0 2px rgba(0, 0, 0, 0.75), 0 1px 3px rgba(0, 0, 0, 0.62)';
       const startHalo512 = inkShadowOf512();
       if (startHalo512 === null) {
         out.errors.push('512: could not find the blue sample tile (p0) to check the ink halo');
@@ -3425,7 +3425,7 @@ PROBE = """
               out.errors.push('512: a lower shadow strength (40) did not lighten the tile halo, got ' + inkShadowOf512());
             }
             // Put the strength back to the shipped default for whatever runs after.
-            strengthSlider512.value = '85';
+            strengthSlider512.value = '75';
             strengthSlider512.dispatchEvent(new Event('input'));
             strengthSlider512.dispatchEvent(new Event('change'));
             await sleep(150);
