@@ -1437,6 +1437,8 @@ the video editor and the introduction tour ship on).
   to unexpected behavior."
 - The right-click menu no longer has "Compare with"; comparing two entries
   stays in the library and in the duplicate finder.
+- Rescan in the duplicate finder now shows a small spinning ring for at least a
+  second, so you can see it ran, and a second click while it works is ignored.
 - An inserted video overlay now starts at its own beginning and stays in
   sync with its own sound, instead of showing a later moment of the clip
   while the sound played from the start.

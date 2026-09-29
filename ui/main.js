@@ -10069,16 +10069,42 @@ async function openDupes() {
 // "Compare" button that opens the SAME view the library's/tile's free compare
 // uses (openCompareView below), passing this group along so that view shows
 // the finder's own "keep one side" actions instead of "take left/right".
-async function scanDupes() {
+// The Rescan button shows a ring for at least a second (opts.minBusyMs) so a scan
+// that answers in a few milliseconds still visibly did something. Only one scan
+// runs at a time: a second click on the button is ignored, any other caller that
+// arrives meanwhile (a list change) is replayed once the running scan is done.
+let dupScanBusy = false;
+let dupScanPending = false;
+async function scanDupes(opts = {}) {
+  if (dupScanBusy) {
+    if (!opts.fromButton) dupScanPending = true;
+    return;
+  }
+  dupScanBusy = true;
   const body = $("dupes-body");
-  body.innerHTML = "";
-  const loading = document.createElement("div");
-  loading.className = "hint";
-  loading.textContent = t("dupScanning");
-  body.appendChild(loading);
-  let groups;
+  const btn = $("dupes-rescan");
+  btn.classList.add("is-busy");
+  btn.setAttribute("aria-busy", "true");
+  // Old cards stay until the new list is ready; only an empty dialog shows the
+  // scanning line, so a rescan never flashes it.
+  if (!body.children.length) {
+    const loading = document.createElement("div");
+    loading.className = "hint";
+    loading.textContent = t("dupScanning");
+    body.appendChild(loading);
+  }
+  const started = Date.now();
+  let groups = null;
+  let failure = null;
   try { groups = await invoke("find_duplicates", { threshold: Math.round(val("similarThreshold")) }); }
-  catch (e) { errToast(e); body.innerHTML = ""; return; }
+  catch (e) { failure = e; }
+  const left = (opts.minBusyMs || 0) - (Date.now() - started);
+  if (left > 0) await new Promise((r) => setTimeout(r, left));
+  dupScanBusy = false;
+  btn.classList.remove("is-busy");
+  btn.removeAttribute("aria-busy");
+  if (dupScanPending) { dupScanPending = false; scanDupes(); return; }
+  if (failure) { errToast(failure); body.innerHTML = ""; return; }
   recordToolUsage("duplicate_finder");
   body.innerHTML = "";
   if (!groups.length) {
@@ -19738,7 +19764,7 @@ function bind() {
   // Duplicate finder modal (backups + statistics are now inline expert panels).
   $("dupes-close").addEventListener("click", () => $("dupes-modal").classList.add("hidden"));
   $("dupes-modal").addEventListener("pointerdown", (e) => { if (e.target === $("dupes-modal")) $("dupes-modal").classList.add("hidden"); });
-  $("dupes-rescan").addEventListener("click", () => scanDupes());
+  $("dupes-rescan").addEventListener("click", () => scanDupes({ fromButton: true, minBusyMs: 1000 }));
   // Compare view -- shared by the duplicate finder's own pairs and the
   // library's/tile's free "compare two entries" entry points below.
   $("compare-close").addEventListener("click", closeCompareView);

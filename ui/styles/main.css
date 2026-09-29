@@ -4385,6 +4385,29 @@ body.drag-over::after {
   cursor: pointer;
 }
 .head-toggle:hover { border-color: var(--accent); }
+/* Reusable busy state for a button: the label fades out and a small ring fades
+   in on the same spot, so the button never changes width. Under no-animations
+   and reduced motion the ring simply stays still. */
+.btn-busyable { position: relative; }
+.btn-busyable .btn-label { transition: opacity 200ms; }
+.btn-busyable .btn-spinner {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  box-sizing: border-box;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms;
+}
+.btn-busyable.is-busy .btn-label { opacity: 0; }
+.btn-busyable.is-busy .btn-spinner { opacity: 1; animation: btn-spin 0.8s linear infinite; }
+@keyframes btn-spin { to { transform: rotate(360deg); } }
 .head-toggle.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 /* "Clear history" is a .head-toggle AND .head-clear; the base .head-toggle colour above
    would win at equal specificity, so re-assert the danger colour more specifically. */

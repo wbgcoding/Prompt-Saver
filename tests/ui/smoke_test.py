@@ -5015,6 +5015,30 @@ PROBE = """
       if (libDupesModal.classList.contains('hidden')) {
         out.errors.push('the library header shortcut did not open the duplicate finder');
       }
+      // 552: Rescan shows a busy ring for at least a second even when the scan
+      // answers at once, ignores a second click meanwhile, and never changes width.
+      {
+        const rescan552 = document.getElementById('dupes-rescan');
+        const scanCalls552 = () => (window.__SMOKE_CALLS__ || []).filter((c) => c === 'find_duplicates').length;
+        await sleep(300);
+        const widthBefore552 = rescan552.getBoundingClientRect().width;
+        const callsBefore552 = scanCalls552();
+        rescan552.click();
+        await sleep(50);
+        rescan552.click();
+        await sleep(100);
+        const widthDuring552 = rescan552.getBoundingClientRect().width;
+        await sleep(750);
+        if (!rescan552.classList.contains('is-busy')) out.errors.push('552: the Rescan button is not busy 900 ms after the click');
+        if (rescan552.getAttribute('aria-busy') !== 'true') out.errors.push('552: the busy Rescan button has no aria-busy');
+        if (!rescan552.querySelector('.btn-spinner')) out.errors.push('552: the Rescan button has no spinner element');
+        await sleep(500);
+        if (rescan552.classList.contains('is-busy')) out.errors.push('552: the Rescan button is still busy 1400 ms after the click');
+        if (rescan552.hasAttribute('aria-busy')) out.errors.push('552: aria-busy stayed on after the scan');
+        if (scanCalls552() - callsBefore552 !== 1) out.errors.push('552: a second click during the busy state started another scan (' + (scanCalls552() - callsBefore552) + ' calls)');
+        if (Math.abs(widthBefore552 - widthDuring552) > 1) out.errors.push('552: the Rescan button changed width while busy: ' + widthBefore552 + ' to ' + widthDuring552);
+        if (!document.querySelectorAll('#dupes-body .dup-group').length) out.errors.push('552: no result list after the rescan');
+      }
       await click('dupes-close');
       await sleep(150);
     }
