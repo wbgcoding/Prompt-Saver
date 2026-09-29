@@ -1939,3 +1939,5 @@ floating buttons.
 - Prompt grid with free placement, multiple views, per-prompt colors,
   10 languages, import/export, floating quick-copy buttons, tray mode,
   autostart
+- The outline around a region recording now matches the drawn region on
+  monitors with different scaling.

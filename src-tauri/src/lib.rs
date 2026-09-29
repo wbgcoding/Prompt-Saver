@@ -12776,13 +12776,73 @@ fn show_rec_outline(app: &AppHandle, rect: (i32, i32, u32, u32)) {
         Err(_) => return,
     };
     let _ = win.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
-    let (x, y, w, h) = rect;
-    set_bounds_phys(&win, Rect { x: x as f64, y: y as f64, w: w as f64, h: h as f64 });
     // Unconditional, like the rec bar: it must never appear in the recording
-    // no matter what the privacy screenshot-exclusion setting says.
+    // no matter what the privacy screenshot-exclusion setting says. Applied
+    // while the window is still hidden, before any placement below.
     set_capture_exclusion(&win, true);
     let _ = win.set_ignore_cursor_events(true); // click-through: never steals input from whatever is under it
+    // The window is built on whichever monitor the system picks and then moved
+    // to the region's own monitor, which can have another scale factor. tao
+    // answers the resulting DPI change by resizing the window to the system's
+    // suggested rect, which rescales its physical size. So the rect is applied
+    // again after every scale or size event, deferred to the main thread (a
+    // re-apply inside the event itself runs before tao's own resize and is
+    // undone by it). The pixel guard keeps that from looping.
+    let want = rect;
+    let app_evt = app.clone();
+    win.on_window_event(move |event| {
+        if matches!(event, WindowEvent::ScaleFactorChanged { .. } | WindowEvent::Resized(_)) {
+            let app2 = app_evt.clone();
+            let _ = app_evt.run_on_main_thread(move || {
+                if let Some(w) = app2.get_webview_window("rec-outline") {
+                    place_rec_outline(&w, want);
+                }
+            });
+        }
+    });
+    place_rec_outline(&win, want);
     let _ = win.show();
+    // Showing can trigger the DPI settle too; one more deferred check covers
+    // a settle that lands after the event handler above was already queued.
+    let app2 = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if let Some(w) = app2.get_webview_window("rec-outline") {
+            place_rec_outline(&w, want);
+        }
+    });
+}
+
+// Put the outline window on its requested rect and confirm it stuck: if the
+// window is more than a couple of pixels off afterwards (a DPI boundary crossed
+// by the first move), apply the rect once more, which no longer crosses one.
+#[cfg(windows)]
+fn place_rec_outline(win: &tauri::WebviewWindow, rect: (i32, i32, u32, u32)) {
+    let (x, y, w, h) = rect;
+    let r = Rect { x: x as f64, y: y as f64, w: w as f64, h: h as f64 };
+    for _ in 0..2 {
+        let actual = match (win.outer_position(), win.outer_size()) {
+            (Ok(p), Ok(s)) => Some((p.x, p.y, s.width, s.height)),
+            _ => None,
+        };
+        if let Some(a) = actual {
+            if !outline_rect_needs_reapply(a, rect) {
+                return;
+            }
+        }
+        set_bounds_phys(win, r);
+    }
+}
+
+// Pure: whether a window sitting at `actual` has to be moved or resized to
+// reach `want`. Anything within OUTLINE_TOLERANCE_PX on every edge counts as
+// placed, so a rounding difference never starts a move/resize loop.
+const OUTLINE_TOLERANCE_PX: i64 = 2;
+fn outline_rect_needs_reapply(actual: (i32, i32, u32, u32), want: (i32, i32, u32, u32)) -> bool {
+    let d = |a: i64, b: i64| (a - b).abs() > OUTLINE_TOLERANCE_PX;
+    d(actual.0 as i64, want.0 as i64)
+        || d(actual.1 as i64, want.1 as i64)
+        || d(actual.2 as i64, want.2 as i64)
+        || d(actual.3 as i64, want.3 as i64)
 }
 
 // Torn down (not just hidden) on stop, cancel and auto-stop -- see
@@ -36337,6 +36397,18 @@ mod tests {
     fn outline_rect_for_target_is_none_for_monitor_and_window_targets() {
         assert_eq!(recording::outline_rect_for_target(recording::RecTarget::Monitor(0)), None);
         assert_eq!(recording::outline_rect_for_target(recording::RecTarget::Window(123)), None);
+    }
+
+    #[test]
+    fn outline_reapply_guard_ignores_a_two_pixel_rounding_difference() {
+        let want = (2020, 50, 400, 300);
+        assert!(!outline_rect_needs_reapply(want, want));
+        assert!(!outline_rect_needs_reapply((2022, 48, 402, 298), want));
+        // A window rescaled by a DPI change (400x300 at 100% moved to 150%)
+        // is far outside the guard.
+        assert!(outline_rect_needs_reapply((2020, 50, 600, 450), want));
+        assert!(outline_rect_needs_reapply((2023, 50, 400, 300), want));
+        assert!(outline_rect_needs_reapply((2020, 50, 400, 297), want));
     }
 
     #[test]
