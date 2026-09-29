@@ -5522,11 +5522,12 @@ async function duplicateView(v) {
 // The chain button turns several TEXT buttons into one clipboard copy: click it,
 // then click text buttons in the order you want them; each shows its position (1,
 // 2, 3 …) and the joined text (newline-separated) lands on the clipboard after
-// every pick. It auto-ends after a paste (Ctrl+V while focused, or leaving the
-// window to paste elsewhere) or when the button is clicked again. Only text
+// every pick. It ends after a paste (Ctrl+V inside this window) or when
+// the button is clicked again; switching to another program leaves it
+// untouched. Only text
 // prompts qualify: image/file/video buttons copy media, which can't be joined.
 let chainMode = false;
-let chainLock = false; // "always on": survives window blur until turned off by hand
+let chainLock = false; // "always on": stays after a copy until turned off by hand
 const chainSel = []; // selected prompt ids, in pick order
 const chainTexts = new Map(); // id -> resolved copy text (variables already filled)
 
@@ -5726,9 +5727,9 @@ function setChainMode(on) {
   refreshChainUi();
 }
 
-// Latch chaining "always on": a window switch normally resets the chain, but a
-// locked chain survives until the user turns it off by hand. The button fills with
-// the accent colour to mark the locked (infinite-repeat) state.
+// Latch chaining "always on": an unlocked chain ends after a paste in this
+// window, a locked one stays until the user turns it off by hand. The button
+// fills with the accent colour to mark the locked (infinite-repeat) state.
 function setChainLock() {
   if (!flag("chainPrompts") || !flag("chainLock")) return;
   chainLock = true;
@@ -17255,9 +17256,9 @@ function bind() {
   // Chain mode: combine several text buttons into one clipboard copy. Single
   // click toggles it; a quick double-click latches it "always on".
   $("chain-btn").addEventListener("click", onChainClick);
-  // A paste ends chain mode (unless latched). Ctrl/Cmd+V is only seen while we're
-  // focused; leaving the window to paste elsewhere blurs it: both finalize (the
-  // clipboard already holds the chain). Clicking the chain button is the manual off.
+  // A paste inside this window ends chain mode (unless latched); the clipboard
+  // already holds the chain. A paste in another program is not seen here, so the
+  // chain simply stays until the chain button ends it.
   document.addEventListener("keydown", (e) => {
     if (chainMode && !chainLock && (e.ctrlKey || e.metaKey) && (e.key === "v" || e.key === "V")) setChainMode(false);
   });
@@ -17289,46 +17290,8 @@ function bind() {
     if (!chainSel.length) { setChainMode(false); return; }
     if (flag("chainLock")) setChainLock(); // picked something → keep the chain alive
   });
-  // Keep the chain armed while a variable dialog is open: switching windows to
-  // look something up must not abort the chain (it leaves the popup stranded). A
-  // latched chain ignores blur entirely (that is the point of the lock).
-  //
-  // Dragging the window by its own drag region hands control to the OS move
-  // loop, which blurs and then refocuses the webview even though the user
-  // never left the app. That blur/focus pair must never be treated as a real
-  // window switch, or an active chain (locked or not) drops on every move.
-  // The flag only guards the blur/focus pair a move actually triggers: a
-  // plain mousedown on the drag region with no drag clears it again on
-  // mouseup, and a short timeout catches a drag that never reaches the
-  // webview's own mouseup at all, so a later real alt-tab is never masked.
-  let windowMoving = false;
-  let windowMovingTimer = null;
-  const armWindowMoving = () => {
-    windowMoving = true;
-    clearTimeout(windowMovingTimer);
-    windowMovingTimer = setTimeout(() => { windowMoving = false; }, 1500);
-  };
-  const disarmWindowMoving = () => { windowMoving = false; clearTimeout(windowMovingTimer); };
-  document.addEventListener("mousedown", (e) => {
-    if (e.target?.closest?.("[data-tauri-drag-region]")) armWindowMoving();
-  }, true);
-  window.addEventListener("mouseup", () => disarmWindowMoving());
-  window.addEventListener("blur", () => {
-    if (windowMoving) {
-      // The move is still going once the blur it causes actually arrives: stop the
-      // fallback timeout so a long drag cannot let the guard expire mid-move and
-      // have the matching focus read as a real return from another app.
-      clearTimeout(windowMovingTimer);
-      return;
-    }
-    if (chainMode && chainSel.length && !varsCleanup && !chainLock) setChainMode(false);
-  });
-  // A latched chain survives the blur but starts fresh when we return: the
-  // previous chain was already copied, so clear the picks (mode stays on).
-  window.addEventListener("focus", () => {
-    if (windowMoving) { disarmWindowMoving(); return; } // the move ended, chain untouched
-    if (chainLock && chainSel.length) { chainSel.length = 0; chainTexts.clear(); refreshChainUi(); }
-  });
+  // Switching to another program never touches a chain, locked or not: it ends
+  // only through the chain button or Ctrl+V pressed inside this window.
   // ==== 117/118: screenshot editor ====
   // Opens right after a capture, before #snip-modal. Pure frontend: it receives a
   // data URL and hands back an edited one; everything downstream of #snip-modal is

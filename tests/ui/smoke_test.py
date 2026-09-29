@@ -2481,79 +2481,46 @@ PROBE = """
           Math.round(gridTopBack) + 'px after the chain overview strip was shown and hidden again');
       }
     }
-    // Moving the window (a mousedown on a drag region, which starts the native
-    // OS move loop and blurs then refocuses the webview) must never end a running
-    // chain, locked or not -- only an explicit toggle, Escape or a finished chain may.
-    // A plain click on the drag region with no drag at all (mousedown then mouseup,
-    // no move) must not leave the guard armed: a real alt-tab right after still ends
-    // an unlocked chain.
+    // 554: switching to another program (blur, then focus on return) never ends
+    // or clears a chain, locked or not; that includes the blur/focus pair a
+    // window move causes. Only the chain button, Escape or Ctrl+V in this window end it.
     {
       const findGridTile = (id) => [...document.querySelectorAll('#grid .tile')].find(e => (e.dataset.id || '') === id);
       const p0Tile = findGridTile('p0');
       const startBtn = p0Tile && p0Tile.querySelector('.tile-chain-start');
+      const pickedIds = () => ['p0', 'p3'].filter((id) => findGridTile(id)?.classList.contains('chain-picked'));
+      const awayAndBack = async () => {
+        window.dispatchEvent(new Event('blur'));
+        await sleep(60);
+        window.dispatchEvent(new Event('focus'));
+        await sleep(60);
+      };
       if (!startBtn) {
         out.errors.push('fixture tile p0 has no chain-start button to begin a chain with');
       } else {
         startBtn.click();
         await sleep(150);
         if (!await clickTile('p3')) out.errors.push('could not pick p3 into the chain');
-        if (!document.body.classList.contains('chain-mode')) {
-          out.errors.push('the chain never started, cannot test the window-move path');
+        if (!document.body.classList.contains('chain-mode') || pickedIds().length !== 2) {
+          out.errors.push('554: the chain did not start with two picks, cannot test the app switch');
         } else {
+          await awayAndBack();
+          if (!document.body.classList.contains('chain-mode')) out.errors.push('554: blur then focus ended an unlocked chain');
+          if (pickedIds().length !== 2) out.errors.push('554: blur then focus dropped the picks of an unlocked chain');
           const header = document.querySelector('[data-tauri-drag-region]');
-          if (!header) {
-            out.errors.push('no drag region found on the main window to simulate a move from');
-          } else {
+          if (header) {
             header.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }));
-            window.dispatchEvent(new Event('blur'));
-            await sleep(50);
-            window.dispatchEvent(new Event('focus'));
-            await sleep(50);
-            if (!document.body.classList.contains('chain-mode')) {
-              out.errors.push('moving the window (drag-region mousedown plus the resulting blur) switched an unlocked chain off');
+            await awayAndBack();
+            if (!document.body.classList.contains('chain-mode') || pickedIds().length !== 2) {
+              out.errors.push('554: a window move (drag-region mousedown, blur, focus) hurt the chain');
             }
-            const p3TileNow = findGridTile('p3');
-            if (!p3TileNow || !p3TileNow.classList.contains('chain-picked')) {
-              out.errors.push('moving the window dropped the chain picks');
-            }
-            // A click with no drag (mousedown immediately followed by mouseup, no
-            // move in between) must clear the guard again: a real alt-tab right
-            // after still ends the unlocked chain instead of being masked by it.
-            header.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }));
             window.dispatchEvent(new Event('mouseup'));
-            window.dispatchEvent(new Event('blur'));
-            await sleep(50);
-            if (document.body.classList.contains('chain-mode')) {
-              out.errors.push('a click on the drag region with no drag left the move guard armed for the next real blur');
-            }
-            // A locked chain must survive a drag longer than the fallback timeout:
-            // that timeout only catches a drag whose mouseup never reaches the
-            // webview, it must not let the guard expire while the blur it caused
-            // is still in effect and have the matching focus read as a real return.
-            for (let i = 0; i < 3 && document.body.classList.contains('chain-mode'); i++) await click('chain-btn');
-            await sleep(150);
-            startBtn.click();
-            await sleep(150);
-            if (!await clickTile('p3')) out.errors.push('could not pick p3 into the chain for the locked-chain drag test');
-            await click('chain-btn'); // on -> latched
-            await sleep(50);
-            if (!document.body.classList.contains('chain-mode')) {
-              out.errors.push('the chain-btn click did not latch the chain for the locked-chain drag test');
-            } else {
-              header.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }));
-              window.dispatchEvent(new Event('blur'));
-              await sleep(1650); // past the 1500ms fallback timeout, the drag is still going
-              window.dispatchEvent(new Event('focus'));
-              await sleep(50);
-              if (!document.body.classList.contains('chain-mode')) {
-                out.errors.push('a drag longer than the fallback timeout switched a locked chain off');
-              }
-              const p3TileLocked = findGridTile('p3');
-              if (!p3TileLocked || !p3TileLocked.classList.contains('chain-picked')) {
-                out.errors.push('a drag longer than the fallback timeout let the returning focus clear a locked chain picks');
-              }
-            }
           }
+          await click('chain-btn'); // on -> latched
+          await sleep(60);
+          await awayAndBack();
+          if (!document.body.classList.contains('chain-mode')) out.errors.push('554: blur then focus ended a locked chain');
+          if (pickedIds().length !== 2) out.errors.push('554: blur then focus cleared the picks of a locked chain');
         }
       }
       for (let i = 0; i < 3 && document.body.classList.contains('chain-mode'); i++) await click('chain-btn');

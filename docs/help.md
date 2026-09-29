@@ -449,7 +449,9 @@ fast too often pauses the session with a toast instead of looping.
   copy. Hovering a text tile also shows a small chain icon next to its
   selection checkbox that starts a chain with that tile as the first entry
   directly, switchable off on its own in the expert menu under Tiles &
-  copying, alongside the rest of the chain settings.
+  copying, alongside the rest of the chain settings. A chain stays when you
+  switch to another program; it ends when you click the chain button again or
+  paste with Ctrl+V in the app window.
 - Chain overview: while chaining, a strip above the grid lists the picked
   steps in order, with small marks for the placeholders each step needs and
   the reserved names it fills by itself. A step turns red when nothing
@@ -1281,7 +1283,9 @@ zu häufiges Einfügen pausiert die Sitzung mit einem Hinweis statt zu wiederhol
 
 **Kopieren**: Verketten (mehrere verschiedene Kacheln als ein Text, anders als
 Rotation oben; auch direkt über ein Kettensymbol an der Kachel, einzeln
-abschaltbar unter Kacheln & Kopieren im Experten-Menü). Beim Verketten zeigt
+abschaltbar unter Kacheln & Kopieren im Experten-Menü). Eine Kette bleibt beim Wechsel in ein
+anderes Programm bestehen und endet erst durch erneutes Klicken auf den
+Ketten-Knopf oder Strg+V im App-Fenster. Beim Verketten zeigt
 eine Leiste über dem Raster die gewählten
 Schritte der Reihe nach, mit Marken für die Platzhalter, die jeder Schritt
 braucht und die er selbst füllt; ein Schritt ohne Antwort aus einem früheren
