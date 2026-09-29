@@ -3227,7 +3227,7 @@ async function refreshExportSizeNote(format) {
     format,
     videoKbps: videoKbps(),
     losslessQuality: exportQuality() === "lossless",
-    durationMs: totalOutMs(),
+    durationMs: Math.round(totalOutMs()),
   }).catch(() => null);
   if (myGen !== exportNoteGen) return; // superseded by a later call
   if (exportFormat() !== format || isLosslessCopy()) return; // stale by the time it landed
@@ -3294,7 +3294,8 @@ function setProgress(pct) {
 async function startExport(toClipboard) {
   if (VE.exporting) return;
   if (!VE.ffmpeg) { toast(t("recFfmpegMissingHint")); return; }
-  const total = totalOutMs();
+  // The backend takes whole milliseconds; a tempo such as 1.3x makes the output length fractional.
+  const total = Math.round(totalOutMs());
   if (total < 1) { toast(t("veNothingToExport")); return; }
   const lossless = isLosslessCopy();
   const format = exportFormat();

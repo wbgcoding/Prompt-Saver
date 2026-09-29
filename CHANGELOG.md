@@ -851,6 +851,10 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **The video export no longer fails after a tempo change.** A speed such as
+  1.3x made the output length a fraction of a millisecond, which the export
+  refused with an "invalid type" error. The length is now rounded to whole
+  milliseconds before it is sent.
 - **A start that could not open the database could cost every prompt.** If the
   emergency copy of the prompts was missing at that moment — the state an
   earlier failed save can leave behind — the app came up empty and the next
