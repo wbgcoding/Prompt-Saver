@@ -14483,6 +14483,53 @@ FOLDER_DRAGOUT_PROBE = """
 """
 
 
+# Pill window: closing the menu (Escape) while a size button's set_float_scale is
+# still in flight must not leave an uncaught error behind. The probe wraps invoke
+# before the window script captures it, so it can hold that one call back.
+FLOAT_SCALE_RACE_PROBE = """
+<script>
+(() => {
+  const real = window.__TAURI__.core.invoke;
+  window.__SCALE_GATE__ = [];
+  window.__TAURI__.core.invoke = async (cmd, args) => {
+    const out = await real(cmd, args);
+    if (cmd === 'set_float_scale' && window.__HOLD_SCALE__) {
+      await new Promise((resolve) => window.__SCALE_GATE__.push(resolve));
+    }
+    return out;
+  };
+})();
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const calls = () => (window.__SMOKE_CALLS__ = window.__SMOKE_CALLS__ || []);
+  const until = async (fn) => { for (let i = 0; i < 80 && !fn(); i++) await sleep(50); return fn(); };
+  try {
+    await until(() => calls().includes('resize_float_pill'));
+    window.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    const menu = document.getElementById('menu');
+    await until(() => !menu.classList.contains('hidden'));
+    if (menu.classList.contains('hidden')) errs.push('the pill menu did not open');
+    window.__HOLD_SCALE__ = true;
+    document.querySelector('#menu [data-scale="2"]').click();
+    await until(() => window.__SCALE_GATE__.length > 0);
+    if (!window.__SCALE_GATE__.length) errs.push('the size button never called set_float_scale');
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await sleep(100);
+    window.__HOLD_SCALE__ = false;
+    window.__SCALE_GATE__.forEach((resolve) => resolve());
+    await sleep(200);
+  } catch (e) { errs.push('probe: ' + e.message); }
+  errs.push(...(window.__SMOKE_ERRORS__ || []));
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
 
 def main():
     browser = next((p for p in CHROME_CANDIDATES if Path(p).exists()), None)
@@ -15279,6 +15326,28 @@ def main():
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- folder window: modifier-click without movement copies")
+        for e in errs:
+            print(f"   FAIL: {e}")
+        failed += len(errs)
+        if not errs:
+            print("   ok")
+        # Pill window: Escape during an in-flight size change throws nothing.
+        side = tmp / "ui" / "floating-scale-race.html"
+        side.write_text(
+            (REPO / "ui" / "floating.html").read_text(encoding="utf-8")
+            .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
+            .replace("</body>", FLOAT_SCALE_RACE_PROBE + "</body>"),
+            encoding="utf-8")
+        proc = subprocess.run(
+            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+             f"--user-data-dir={tmp / 'profile-float-scale-race'}", "--allow-file-access-from-files",
+             "--window-size=240,60", "--virtual-time-budget=15000",
+             "--dump-dom", side.as_uri()],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=180)
+        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        print("-- pill window: closing the menu during a size change")
         for e in errs:
             print(f"   FAIL: {e}")
         failed += len(errs)

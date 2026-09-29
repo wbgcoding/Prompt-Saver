@@ -678,6 +678,9 @@ for (const btn of menu.querySelectorAll("[data-scale]")) {
     scale = Number(btn.dataset.scale) || 1;
     markSelectedSize();
     await invoke("set_float_scale", { id: promptId, scale, resize: false }).catch(() => {});
+    // The menu may have been closed (Escape) while the scale was being stored;
+    // closeMenu already restored the window, so there is nothing left to place.
+    if (!menuOpen) return;
     const box = pillBox();
     lockPillBox(box.w, box.h);
     placeMenu(box, menu.offsetWidth, menu.offsetHeight);
