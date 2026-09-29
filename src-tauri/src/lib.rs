@@ -8246,6 +8246,8 @@ async fn reset_settings(app: AppHandle, state: State<'_, Db>) -> Result<(), Stri
         store.forget_written_rows();
         save_settings(&app, &store.settings);
     }
+    // Defaults mean the screenshot switch is off: open windows go back to excluded.
+    apply_capture_exclusion_all(&app, true);
     Ok(())
 }
 
@@ -32191,6 +32193,9 @@ async fn import_all(
     };
     // Re-apply the visible parts of the imported settings without a restart.
     push_theme(&app, &settings);
+    if want_settings {
+        apply_capture_exclusion_all(&app, capture_excluded(&settings));
+    }
     rearm_hotkeys(&app);
     apply_tray_menu(&app); // An import can bring new tray settings with it
     sync_float_windows(&app); // Pills and folders follow the restored settings
