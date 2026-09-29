@@ -10905,6 +10905,128 @@ CAMERA_PROBE = """
 """
 
 
+# The recording paths of the camera window: a resolving fake stream, a fake
+# MediaRecorder and a scripted backend (every camera_* command is answered
+# here and logged in __CAM.calls), so start failures, chunk-write failures and
+# the device retry can be driven deterministically. Runs against its own copy
+# of camera.html (camera_rec.html) so the plain no-camera run above stays
+# untouched.
+CAMERA_REC_STUB = """
+<script>
+window.__CAM = { gum: [], calls: [], order: [], gumFail: null, ctorThrow: false, startThrow: false,
+  n: 0, appendFail: function () { return false; }, elapsedDelay: 0, startDelay: 0, device: "" };
+if (!navigator.mediaDevices) { navigator.mediaDevices = {}; }
+navigator.mediaDevices.getUserMedia = (c) => {
+  __CAM.gum.push(c);
+  const err = __CAM.gumFail && __CAM.gumFail(c);
+  if (err) return Promise.reject(err);
+  return Promise.resolve(new MediaStream());
+};
+navigator.mediaDevices.enumerateDevices = () => Promise.resolve([]);
+class FakeRec {
+  static isTypeSupported() { return true; }
+  constructor() {
+    if (__CAM.ctorThrow) throw new Error("ctor");
+    this.state = "inactive";
+    window.__REC = this;
+  }
+  start() {
+    if (__CAM.startThrow) throw new Error("start");
+    this.state = "recording";
+    setTimeout(() => { __CAM.startedAt = Date.now(); if (this.onstart) this.onstart(); }, __CAM.startDelay);
+  }
+  stop() { this.state = "inactive"; if (this.onstop) this.onstop(); }
+  emit(text) { this.ondataavailable({ data: new Blob([text]) }); }
+}
+window.MediaRecorder = FakeRec;
+const origInvoke = window.__TAURI__.core.invoke;
+window.__TAURI__.core.invoke = async (cmd, args) => {
+  __CAM.calls.push([cmd, args]);
+  if (cmd === "camera_begin_recording") return { path: "C:/r/rec-cam-1.webm" };
+  if (cmd === "camera_append_chunk") {
+    const i = ++__CAM.n;
+    await new Promise((r) => setTimeout(r, i * 20));
+    __CAM.order.push("append-done-" + i);
+    if (__CAM.appendFail(i)) throw new Error("disk full");
+    return null;
+  }
+  if (cmd === "camera_screen_elapsed_ms") {
+    await new Promise((r) => setTimeout(r, __CAM.elapsedDelay));
+    return 4242;
+  }
+  if (cmd === "camera_finish_recording") { __CAM.order.push("finish"); return { path: args.path }; }
+  if (cmd === "camera_mark_finishing" || cmd === "camera_discard_recording" || cmd === "camera_abandon_recording") return null;
+  if (cmd === "open_video_editor") return null;
+  if (cmd === "get_settings") {
+    const s = await origInvoke(cmd, args);
+    return Object.assign({}, s, { ui_texts: Object.assign({}, s.ui_texts || {}, { cameraDevice: __CAM.device }) });
+  }
+  return origInvoke(cmd, args);
+};
+</script>
+"""
+
+CAMERA_REC_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  let step = "boot";
+  const finish = () => {
+    if (document.getElementById("SMOKE")) return;
+    const pre = document.createElement("pre");
+    pre.id = "SMOKE";
+    pre.textContent = JSON.stringify(errs);
+    document.body.appendChild(pre);
+  };
+  setTimeout(() => { errs.push("probe stalled at step " + step); finish(); }, 25000);
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const until = async (fn, tries) => {
+    for (let i = 0; i < (tries || 100) && !fn(); i++) await sleep(50);
+    return fn();
+  };
+  const count = (cmd) => __CAM.calls.filter(c => c[0] === cmd).length;
+  const startBtn = document.getElementById("cam-start-btn");
+  const statusText = document.getElementById("cam-status-text");
+  const recBadge = document.getElementById("cam-rec-badge");
+  const pauseBtn = document.getElementById("cam-pause-btn");
+  const stopBtn = document.getElementById("cam-stop-btn");
+  const idleUi = (label) => {
+    if (startBtn.disabled) errs.push(label + ": Start stayed disabled");
+    if (startBtn.classList.contains("hidden")) errs.push(label + ": Start is hidden");
+    if (!recBadge.classList.contains("hidden")) errs.push(label + ": rec badge still visible");
+    if (!pauseBtn.classList.contains("hidden")) errs.push(label + ": pause still visible");
+    if (!stopBtn.classList.contains("hidden")) errs.push(label + ": stop still visible");
+  };
+  try {
+    step = "ready";
+    await sleep(200);
+    window.__FIRE__("camera-permission-ready", null);
+    if (!(await until(() => !startBtn.disabled))) errs.push("Start never became enabled with a resolving stream");
+    // Constructor throws after the backend already reserved the take.
+    for (const mode of ["ctorThrow", "startThrow"]) {
+      step = mode;
+      __CAM[mode] = true;
+      __CAM.calls.length = 0;
+      startBtn.click();
+      await until(() => count("camera_discard_recording") > 0 && !startBtn.disabled);
+      await sleep(100);
+      if (count("camera_begin_recording") !== 1) errs.push(mode + ": begin count " + count("camera_begin_recording"));
+      if (count("camera_discard_recording") !== 1) errs.push(mode + ": discard count " + count("camera_discard_recording"));
+      const d = __CAM.calls.find(c => c[0] === "camera_discard_recording");
+      if (d && d[1].path !== "C:/r/rec-cam-1.webm") errs.push(mode + ": discarded the wrong path");
+      if (statusText.textContent.trim()) errs.push(mode + ": status text left over: " + statusText.textContent);
+      idleUi(mode);
+      __CAM[mode] = false;
+    }
+  } catch (e) {
+    errs.push("probe crashed: " + e);
+  }
+  finish();
+})();
+</script>
+"""
+
+
 # The video editor: the recording is PULLED at boot (video_editor_source), not
 # pushed, so the probe only has to wait -- tauri_stub.js's own fixture is a
 # 10-minute 1080p30 clip with both a system and a mic track, real enough that a
@@ -14599,7 +14721,10 @@ def main():
                 ("launcher.html", (560, 420), LAUNCHER_PROBE, 15000),
                 ("tray.html", (240, 360), TRAY_PROBE, 15000),
                 ("recbar.html", (320, 56), RECBAR_PROBE, 15000),
-                ("camera.html", (420, 620), CAMERA_STUB + CAMERA_PROBE, 15000)):
+                ("camera.html", (420, 620), CAMERA_STUB + CAMERA_PROBE, 15000),
+                ("camera_rec.html", (420, 620), CAMERA_REC_STUB + CAMERA_REC_PROBE, 30000)):
+            if name == "camera_rec.html":
+                shutil.copyfile(REPO / "ui" / "camera.html", tmp / "ui" / name)
             side = tmp / "ui" / name
             side.write_text(
                 side.read_text(encoding="utf-8")

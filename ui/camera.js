@@ -173,6 +173,33 @@ function bufToBase64(buf) {
 // recording missing its last second or so.
 let pendingAppends = [];
 
+// The one way back from a start that got as far as reserving the take in the
+// backend (file + session) and then failed in the recorder: releases that
+// reservation through the ordinary discard command and puts the window back
+// to its idle state, so the next Start begins from scratch.
+async function rollbackFailedStart() {
+  const path = recPath;
+  if (recorder) {
+    recorder.ondataavailable = null;
+    recorder.onstop = null;
+  }
+  recorder = null;
+  recPath = null;
+  pendingAppends = [];
+  recScreenElapsedAtStart = null;
+  paused = false;
+  clearInterval(recTimer);
+  recBadge.classList.add("hidden");
+  setStatus("idle");
+  startBtn.classList.remove("hidden");
+  pauseBtn.classList.add("hidden");
+  stopBtn.classList.add("hidden");
+  audioSelect.disabled = false;
+  resSelect.disabled = false;
+  if (path) await invoke("camera_discard_recording", { path }).catch(() => {});
+  startBtn.disabled = !stream;
+}
+
 async function startRecording() {
   if (!stream) return;
   // Guards against a second click landing while the first is still awaiting
@@ -194,7 +221,12 @@ async function startRecording() {
   recStartWall = Date.now();
   recScreenElapsedAtStart = null;
   pendingAppends = [];
-  recorder = new MediaRecorder(stream, { mimeType });
+  try {
+    recorder = new MediaRecorder(stream, { mimeType });
+  } catch {
+    await rollbackFailedStart();
+    return;
+  }
   recorder.ondataavailable = (e) => {
     if (!e.data || e.data.size === 0 || !recPath) return;
     const path = recPath;
@@ -258,7 +290,7 @@ async function startRecording() {
   try {
     recorder.start(1000);
   } catch {
-    startBtn.disabled = false;
+    await rollbackFailedStart();
     return;
   }
   paused = false;
