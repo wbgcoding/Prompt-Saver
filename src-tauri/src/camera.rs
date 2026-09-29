@@ -343,12 +343,26 @@ pub fn camera_discard_recording(cam: State<'_, CameraState>, path: String) -> Re
     Ok(())
 }
 
+// Sits next to a take whose recording failed part way but whose partial file
+// is kept for the user. The recordings sweep skips both the marker and the
+// video it names, however old, so "the raw file was kept" stays true.
+pub fn abandoned_marker_path(output_path: &Path) -> PathBuf {
+    output_path.with_extension("abandoned")
+}
+
+pub fn is_kept_abandoned(path: &Path) -> bool {
+    path.extension().is_some_and(|e| e == "abandoned") || abandoned_marker_path(path).is_file()
+}
+
 // Releases the session WITHOUT touching the file: used when the page knows a
 // take is damaged (a chunk write failed) but the partial file may still be the
 // only copy of the recording. No delete, no sidecar.
 #[tauri::command]
 pub fn camera_abandon_recording(cam: State<'_, CameraState>, path: String) -> Result<(), String> {
-    take_matching(&mut cam.0.lock().unwrap_or_else(|e| e.into_inner()), Path::new(&path)).map(|_| ())
+    let session = take_matching(&mut cam.0.lock().unwrap_or_else(|e| e.into_inner()), Path::new(&path))?;
+    // The marker tells the recordings sweep to leave this damaged take alone
+    // (it would otherwise age out as an unreferenced file).
+    fs::write(abandoned_marker_path(&session.output_path), b"").map_err(|e| e.to_string())
 }
 
 fn discard_session(session: &CamSession) {
@@ -741,6 +755,22 @@ mod tests {
         discard_session(&taken);
         assert!(!video.exists());
         assert!(!sidecar_path(&video).exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_abandoned_marker_protects_the_video_and_itself() {
+        let dir = std::env::temp_dir().join(format!("psc-cam-test7-{}", std::process::id()));
+        let _ = fs::create_dir_all(&dir);
+        let video = dir.join("rec-cam-1.webm");
+        let other = dir.join("rec-cam-2.webm");
+        fs::write(&video, b"partial").unwrap();
+        fs::write(&other, b"x").unwrap();
+        assert!(!is_kept_abandoned(&video));
+        fs::write(abandoned_marker_path(&video), b"").unwrap();
+        assert!(is_kept_abandoned(&video));
+        assert!(is_kept_abandoned(&abandoned_marker_path(&video)));
+        assert!(!is_kept_abandoned(&other));
         let _ = fs::remove_dir_all(&dir);
     }
 
