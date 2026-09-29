@@ -676,7 +676,9 @@ window.addEventListener("mouseup", async (e) => {
   const drag = memberDrag;
   memberDrag = null;
   drag.el.classList.remove("dragging");
-  if (drag.out) return; // the OS drag owns this gesture
+  // A real OS drag would already have cleared memberDrag in dragstart, so an
+  // out gesture that reaches here never moved: it is a plain click and copies.
+  if (drag.out) { copyMember(drag.id); return; }
   if (!drag.moved) {
     copyMember(drag.id);
     return;
