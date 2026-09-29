@@ -851,6 +851,11 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **The video editor no longer hangs when a second recording arrives during
+  the restore question.** Opening another recording while the question about an
+  unfinished edit was still open left the first load waiting forever. The old
+  question is now closed and released, and only an explicit "start fresh" answer
+  discards the saved edit.
 - **The video export no longer fails after a tempo change.** A speed such as
   1.3x made the output length a fraction of a millisecond, which the export
   refused with an "invalid type" error. The length is now rounded to whole

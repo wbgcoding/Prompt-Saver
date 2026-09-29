@@ -314,7 +314,12 @@ let confirmState = null;
 // (see closeWindow()'s export-in-progress case) -- the third button is click-only,
 // with no Escape/Enter shortcut of its own, and resolves the promise to "third"
 // rather than a boolean.
+//
+// Only one dialog can be open. A newer one settles a still-pending older one
+// with null (superseded, not an answer) so its await never hangs; every caller
+// treats null as "do nothing" and only an explicit false means "discard".
 function veConfirm(title, message, okLabel, opts = {}) {
+  closeConfirm(null);
   return new Promise((resolve) => {
     const overlay = $("ve-confirm");
     confirmState = { resolve, prev: document.activeElement };
@@ -3875,7 +3880,7 @@ async function closeWindow() {
       cancelLabel: t("bgStayOpen"),
       thirdLabel: t("bgCancelClose"),
     });
-    if (choice === false) return;
+    if (choice === false || choice === null) return;
     if (choice === "third") invoke("cancel_export").catch(() => {});
   } else if (VE.ops.length && VE.dirty) {
     const ok = await veConfirm(t("veCloseTitle"), t("veCloseUnsaved"), t("veDiscard"));
@@ -3995,6 +4000,9 @@ document.addEventListener("keyup", (e) => {
 // ---------------------------------------------------------------- loading
 
 function resetForNewSource() {
+  // A confirm still open from the previous source (the restore question) must
+  // not stay up over the new one, and its waiting caller must be released.
+  closeConfirm(null);
   VE.ops = [];
   VE.redo = [];
   VE.floor = 0;
@@ -4156,7 +4164,9 @@ async function checkEditState(path, myGen) {
     // the editor opens with a stale badge state for a moment rather than
     // waiting on a stat per extra source first.
     refreshExtraSourceAvailability(myGen);
-  } else {
+  } else if (ok === false) {
+    // Only an explicit "start fresh" answer drops the saved state; a dialog that
+    // was superseded by another source (null) leaves it for the next open.
     invoke("discard_edit_state", { kind: "video", target: path }).catch(() => {});
   }
 }
