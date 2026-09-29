@@ -12519,6 +12519,76 @@ fn set_capture_exclusion(win: &tauri::WebviewWindow, excluded: bool) {
 #[cfg(not(windows))]
 fn set_capture_exclusion(_win: &tauri::WebviewWindow, _excluded: bool) {}
 
+// The window's current display affinity as the system reports it (0 = none,
+// 0x11 = excluded from capture), or None when it cannot be read.
+#[cfg(windows)]
+fn display_affinity(win: &tauri::WebviewWindow) -> Option<u32> {
+    #[link(name = "user32")]
+    extern "system" {
+        fn GetWindowDisplayAffinity(hwnd: isize, affinity: *mut u32) -> i32;
+    }
+    let h = win.hwnd().ok()?;
+    let mut aff: u32 = 0;
+    let ok = unsafe { GetWindowDisplayAffinity(h.0 as isize, &mut aff) };
+    if ok != 0 { Some(aff) } else { None }
+}
+
+#[cfg(not(windows))]
+fn display_affinity(_win: &tauri::WebviewWindow) -> Option<u32> {
+    None
+}
+
+// The recording bar and the region outline stay out of every capture whatever
+// the privacy setting says: a recording must never contain its own controls.
+fn always_excluded(label: &str) -> bool {
+    label == "rec-bar" || label == "rec-outline"
+}
+
+// Whether a window has to be capture-excluded, given the state the privacy
+// setting alone asks for. Every loop that applies the affinity to all windows
+// goes through this, so the setting can never clear a permanent exclusion.
+fn wants_capture_exclusion(label: &str, setting_excluded: bool) -> bool {
+    always_excluded(label) || setting_excluded
+}
+
+// Pure: does a readback agree with what was asked for? An unreadable affinity
+// counts as agreeing, since there is nothing to compare.
+fn affinity_matches(want_excluded: bool, readback: Option<u32>) -> bool {
+    match readback {
+        Some(a) => (a != 0) == want_excluded,
+        None => true,
+    }
+}
+
+// Pure: whether the app's own screenshot, colour picker and recording picker
+// hide the app windows before freezing the desktop. With the privacy setting
+// allowing screenshots the app stays visible in its own tools.
+fn capture_hides_app_windows(setting_excluded: bool) -> bool {
+    setting_excluded
+}
+
+// Apply the privacy setting to every open window and read the result back.
+// A window that still reports the wrong state gets the call once more. Returns
+// true when a window that must be capturable still reports exclusion after
+// that (some Windows builds keep it), so the caller can tell the user.
+fn apply_capture_exclusion_all(app: &AppHandle, setting_excluded: bool) -> bool {
+    let mut stuck = false;
+    for (label, win) in app.webview_windows() {
+        let want = wants_capture_exclusion(&label, setting_excluded);
+        set_capture_exclusion(&win, want);
+        if !affinity_matches(want, display_affinity(&win)) {
+            set_capture_exclusion(&win, want);
+            if !affinity_matches(want, display_affinity(&win)) && !want {
+                stuck = true;
+            }
+        }
+    }
+    if stuck {
+        let _ = app.emit_to("main", "capture-restart-notice", ());
+    }
+    stuck
+}
+
 // ---- Recording control bar: a small always-on-top window with its own
 // WDA_EXCLUDEFROMCAPTURE (unconditional -- unlike the privacy setting the pill
 // windows use, the bar must NEVER appear in the recording, full stop), pinned
@@ -14903,6 +14973,17 @@ static PICK_ACTIVE: AtomicBool = AtomicBool::new(false);
 // listeners (start a recording vs. swap its source) never both react to it.
 static REC_SWITCH_PICK: AtomicBool = AtomicBool::new(false);
 
+// Set by begin_capture when it hid the app's own windows for this session, so
+// the end of the session restores exactly what it hid and nothing else: a snip
+// started with screenshots allowed never pops up a hidden or minimised main window.
+static SNIP_HID_APP: AtomicBool = AtomicBool::new(false);
+
+fn restore_app_windows_after_snip(app: &AppHandle) {
+    if SNIP_HID_APP.swap(false, Ordering::SeqCst) {
+        set_app_windows_hidden(app, false);
+    }
+}
+
 // End the current snip session: HIDE (never close) the reusable overlay so its
 // warm WebView2 survives for the next snip, bring the app's own windows back, and
 // drop the temp preview. Closing the overlay is what forced every snip to pay the
@@ -14913,7 +14994,7 @@ fn close_all_snip(app: &AppHandle) {
             let _ = win.hide();
         }
     }
-    set_app_windows_hidden(app, false);
+    restore_app_windows_after_snip(app);
     remove_snip_preview();
     SNIP_ACTIVE.store(false, Ordering::SeqCst);
     PICK_ACTIVE.store(false, Ordering::SeqCst);
@@ -15683,7 +15764,7 @@ fn build_snip_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String> {
     win.on_window_event(move |event| {
         if matches!(event, WindowEvent::Destroyed) && SNIP_ACTIVE.load(Ordering::SeqCst) {
             SNIP_ACTIVE.store(false, Ordering::SeqCst);
-            set_app_windows_hidden(&app_evt, false);
+            restore_app_windows_after_snip(&app_evt);
         }
     });
     Ok(win)
@@ -15782,7 +15863,7 @@ async fn begin_capture(
     PICK_ACTIVE.store(pick, Ordering::SeqCst);
     // Loupe/quality/delay settings are read once here, in both capture modes,
     // while nothing else holds the store.
-    let (cfg, hist_max, snip_q, snip_delay) = app
+    let (cfg, hist_max, snip_q, snip_delay, hide_app) = app
         .try_state::<Db>()
         .map(|s| {
             let guard = s.lock().unwrap_or_else(|e| e.into_inner());
@@ -15791,9 +15872,9 @@ async fn begin_capture(
             let snip_delay = settings.ui_values.get("snipDelayMs").copied().unwrap_or(0.0).clamp(0.0, 5000.0) as u64;
             let cfg = if pick { pick_cfg(settings) } else { PickCfg { zoom: 8, format: "hex".to_string(), cells: 15 } };
             let hist_max = if pick { pick_history_max(settings) } else { PICK_HISTORY_DEFAULT };
-            (cfg, hist_max, snip_q, snip_delay)
+            (cfg, hist_max, snip_q, snip_delay, capture_hides_app_windows(capture_excluded(settings)))
         })
-        .unwrap_or((PickCfg { zoom: 8, format: "hex".to_string(), cells: 15 }, PICK_HISTORY_DEFAULT, 80, 0));
+        .unwrap_or((PickCfg { zoom: 8, format: "hex".to_string(), cells: 15 }, PICK_HISTORY_DEFAULT, 80, 0, true));
     // Wake the overlay's WebView2 NOW (off-screen) so a long-idle, background-throttled
     // webview un-throttles DURING the freeze+encode below. Without this head start the
     // icon path (overlay idle a while) lags behind a retry (whose webview was just
@@ -15806,7 +15887,9 @@ async fn begin_capture(
     // Hide our own windows BEFORE freezing so they're never in the capture and
     // the target underneath (e.g. Task Manager behind the main window) is
     // revealed. A short settle lets the hide reach the screen first.
-    let had_visible = set_app_windows_hidden(&app, true);
+    // With screenshots of the app allowed, nothing is hidden at all.
+    SNIP_HID_APP.store(hide_app, Ordering::SeqCst);
+    let had_visible = hide_app && set_app_windows_hidden(&app, true);
     // Nothing was on screen to hide, so there is nothing the freeze could catch
     // mid-hide either: the settle delay only matters when we just hid something.
     if had_visible {
@@ -15891,7 +15974,7 @@ async fn begin_capture(
         Err(e) => {
             // Build failed: clear the session so the app's windows come back.
             SNIP_ACTIVE.store(false, Ordering::SeqCst);
-            set_app_windows_hidden(&app, false);
+            restore_app_windows_after_snip(&app);
             return Err(e);
         }
     };
@@ -26339,9 +26422,7 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
     // screenshots", so the exclusion is its OPPOSITE: passing it straight through
     // is what made the switch work backwards.
     if is_capture {
-        for (_label, win) in app.webview_windows() {
-            set_capture_exclusion(&win, !enabled);
-        }
+        apply_capture_exclusion_all(&app, !enabled);
     }
     // The window itself now always runs (started at boot) since 91's
     // auto-advance session needs it independently of this toggle; on/off just
@@ -26518,9 +26599,7 @@ fn reset_expert(app: AppHandle, state: State<Db>) {
     ERROR_LOG_KEEP_BYTES.store(256 * 1024, Ordering::Relaxed);
     // Cleared flags put the screenshot permission back to its default (off), which
     // means the exclusion is on: re-assert it on every window so it is immediate.
-    for (_label, win) in app.webview_windows() {
-        set_capture_exclusion(&win, true);
-    }
+    apply_capture_exclusion_all(&app, true);
     apply_tray_menu(&app); // The tray sections fall back to their defaults too
     notify_float_settings(&app);
 }
@@ -31957,9 +32036,7 @@ async fn apply_settings_import(app: AppHandle, state: State<'_, Db>, path: Strin
         let store = lock(&state);
         (capture_excluded(&store.settings), store.settings.ui_values.get("errorLogKeepKb").copied())
     };
-    for (_label, win) in app.webview_windows() {
-        set_capture_exclusion(&win, excluded);
-    }
+    apply_capture_exclusion_all(&app, excluded);
     apply_tray_menu(&app);
     if let Some(kb) = error_log_kb {
         ERROR_LOG_KEEP_BYTES.store((kb.max(1.0) * 1024.0) as u64, Ordering::Relaxed);
@@ -36409,6 +36486,43 @@ mod tests {
         assert!(outline_rect_needs_reapply((2020, 50, 600, 450), want));
         assert!(outline_rect_needs_reapply((2023, 50, 400, 300), want));
         assert!(outline_rect_needs_reapply((2020, 50, 400, 297), want));
+    }
+
+    #[test]
+    fn recording_windows_stay_excluded_whatever_the_setting_says() {
+        assert!(always_excluded("rec-bar"));
+        assert!(always_excluded("rec-outline"));
+        assert!(!always_excluded("main"));
+        assert!(!always_excluded("float-abc"));
+        // Setting allows screenshots (excluded = false): only the two stay excluded.
+        assert!(wants_capture_exclusion("rec-bar", false));
+        assert!(wants_capture_exclusion("rec-outline", false));
+        assert!(!wants_capture_exclusion("main", false));
+        assert!(!wants_capture_exclusion("snip-0", false));
+        // Setting off (excluded = true): everything is excluded.
+        assert!(wants_capture_exclusion("main", true));
+        assert!(wants_capture_exclusion("rec-bar", true));
+    }
+
+    #[test]
+    fn begin_capture_hides_the_app_only_while_screenshots_are_not_allowed() {
+        assert!(capture_hides_app_windows(true));
+        assert!(!capture_hides_app_windows(false));
+        // The default setting (nothing stored) means excluded, so hidden.
+        assert!(capture_hides_app_windows(capture_excluded(&Settings::default())));
+        let mut allow = Settings::default();
+        allow.ui_flags.insert(ALLOW_SCREENSHOT_KEY.to_string(), true);
+        assert!(!capture_hides_app_windows(capture_excluded(&allow)));
+    }
+
+    #[test]
+    fn affinity_readback_is_compared_against_the_wanted_state() {
+        assert!(affinity_matches(true, Some(0x11)));
+        assert!(affinity_matches(false, Some(0)));
+        assert!(!affinity_matches(false, Some(0x11)));
+        assert!(!affinity_matches(true, Some(0)));
+        assert!(affinity_matches(true, None));
+        assert!(affinity_matches(false, None));
     }
 
     #[test]

@@ -968,6 +968,9 @@ $("bg-ops-btn").addEventListener("click", async () => {
 // done, error -- regardless of which window (if any) started the job, so this
 // popover stays live without a separate poll timer.
 listen("bg-ops-changed", refreshBgOps);
+// Some Windows builds keep a window out of screenshots after the switch is turned
+// on; the backend says so once when its readback still shows it.
+listen("capture-restart-notice", () => toast(t("allowScreenshotRestart")));
 refreshBgOps();
 
 listen("bg-quit-requested", async (e) => {

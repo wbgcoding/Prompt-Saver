@@ -621,7 +621,7 @@ export const HELP_CONTENT = {
       title: "Common questions",
       whatItIs: "This section answers the questions that come up most often.",
       howTo: [
-        "\"My screenshot came out empty\": screen-capture exclusion is working as intended; turn it off if unwanted.",
+        "\"My screenshot came out empty\": screen-capture exclusion is working as intended; switch on \"Allow screenshots\" in the expert menu if unwanted.",
         "\"The app will not start\": it needs the Microsoft WebView2 runtime, offered automatically by the installer.",
         "\"I cannot find a setting\": the expert menu's search box scans every tab at once.",
         "\"A hotkey does not do anything\": another app may already hold that combination; the editor explains why.",

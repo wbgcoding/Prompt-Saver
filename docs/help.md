@@ -649,7 +649,10 @@ library/history/pin buttons, multiple views, and view groups.
 ### Privacy
 
 Excludes the window from screen capture (on by default), blurs tiles/media until
-hovered, hides tile names, dims unhovered tiles.
+hovered, hides tile names, dims unhovered tiles. "Allow screenshots of Prompt
+Saver" lets every capture program, the app's own screenshot tool included,
+record its windows; the recording bar and the outline around a recorded region
+never appear in a recording either way.
 
 An optional, off-by-default setting reads text out of an attached picture so
 the library search can find it too, and a hit found only there carries a
@@ -948,8 +951,8 @@ Reopen the current version's list any time from the About dialog.
 ### Common questions
 
 - *My screenshot of this app came out empty*: the screen-capture exclusion
-  privacy setting is working as intended; turn it off in the expert menu if
-  that's not wanted
+  privacy setting is working as intended; switch on "Allow screenshots of
+  Prompt Saver" in the expert menu if that's not wanted
 - *The app won't start*: it needs the Microsoft WebView2 runtime; the installer
   offers it automatically if missing
 - *I can't find a setting*: check the expert menu's search box first; it scans
@@ -1385,8 +1388,10 @@ sobald sie zum ersten Mal angezeigt werden. Das Hauptraster bleibt unverändert.
 
 **Werkzeugleiste**: welche Buttons Kopf- und Composer-Leiste zeigen.
 
-**Datenschutz**: Bildschirmaufnahme-Ausschluss (an), Weichzeichnen, Namen
-verbergen, Abdunkeln. Eine optionale, standardmäßig ausgeschaltete Einstellung
+**Datenschutz**: Bildschirmaufnahme-Ausschluss (an; "Screenshots von Prompt
+Saver erlauben" gilt für jedes Aufnahmeprogramm, auch das eigene, nur die
+Aufnahmeleiste und der Rahmen um den aufgenommenen Bereich bleiben immer
+ausgenommen), Weichzeichnen, Namen verbergen, Abdunkeln. Eine optionale, standardmäßig ausgeschaltete Einstellung
 liest Text aus einem angehängten Bild, damit die Bibliothekssuche ihn auch
 findet, und ein Treffer nur dort trägt die Kennzeichnung "im Bild gefunden". Der
 erkannte Text dient ausschließlich dieser Suche: Er erscheint nirgends in der
@@ -1650,7 +1655,8 @@ Programm, nur ihr Knopf „Von GitHub aktualisieren" braucht Netz. Über den
 Über-Dialog jederzeit für die laufende Version erneut aufrufbar.
 
 **Häufige Fragen**: Bildschirmaufnahme dieser App leer? Der
-Datenschutz-Ausschluss wirkt wie vorgesehen, im Experten-Menü abschaltbar. App
+Datenschutz-Ausschluss wirkt wie vorgesehen, mit "Screenshots von Prompt
+Saver erlauben" im Experten-Menü aufhebbar. App
 startet nicht? Die WebView2-Laufzeit fehlt, der Installer bietet sie an.
 Einstellung nicht gefunden? Die Suche im Experten-Menü durchsucht alle Tabs
 auf einmal. Hotkey tut nichts? Eine andere App hält die Kombination

@@ -851,6 +851,11 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- Allow screenshots of the app now works for every capture program, including
+  the app's own. The recording bar and the outline around a recorded region stay
+  out of recordings whatever this switch says.
+- The outline around a region recording now matches the drawn region on
+  monitors with different scaling.
 - **A start that could not open the database could cost every prompt.** If the
   emergency copy of the prompts was missing at that moment — the state an
   earlier failed save can leave behind — the app came up empty and the next
@@ -1939,5 +1944,3 @@ floating buttons.
 - Prompt grid with free placement, multiple views, per-prompt colors,
   10 languages, import/export, floating quick-copy buttons, tray mode,
   autostart
-- The outline around a region recording now matches the drawn region on
-  monitors with different scaling.
