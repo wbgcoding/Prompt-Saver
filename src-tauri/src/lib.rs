@@ -6707,7 +6707,7 @@ fn sweep_stale_recordings_in(
     let mut bytes = 0u64;
     for e in entries.flatten() {
         let path = e.path();
-        if !path.is_file() || protected.iter().any(|p| p == &path) {
+        if !path.is_file() || protected.iter().any(|p| p == &path) || camera::is_kept_abandoned(&path) {
             continue;
         }
         // A "<name>.mic.wav" sidecar is referenced whenever its own
@@ -34030,6 +34030,7 @@ pub fn run() {
             camera::camera_finish_recording,
             camera::camera_mark_finishing,
             camera::camera_discard_recording,
+            camera::camera_abandon_recording,
             camera::read_camera_sidecar,
             camera::camera_screen_elapsed_ms,
             windows_fonts_dir,
@@ -42201,6 +42202,33 @@ mod tests {
         assert_eq!(count, 0);
         assert_eq!(bytes, 0);
         assert!(active.exists(), "the currently recording session's own file must survive every sweep");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // A camera take abandoned after a failed chunk write keeps its partial
+    // file (and its marker) through every sweep, however old; an ordinary
+    // stale file next to it is still removed.
+    #[test]
+    fn sweep_stale_recordings_in_keeps_an_abandoned_camera_take() {
+        let dir = std::env::temp_dir().join(format!("ps-test-abandoned-sweep-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let kept = dir.join("rec-cam-2026-09-29_100000.webm");
+        let marker = camera::abandoned_marker_path(&kept);
+        let stale = dir.join("rec-cam-2026-09-29_090000.webm");
+        for p in [&kept, &marker, &stale] {
+            fs::write(p, b"partial").unwrap();
+            backdate(p, Duration::from_secs(3 * 24 * 3600));
+        }
+
+        let empty = std::collections::HashSet::new();
+        let (count, _) = sweep_stale_recordings_in(&dir, &empty, &[], true, Duration::from_secs(60), Some(Duration::from_secs(3600)));
+
+        assert_eq!(count, 1);
+        assert!(kept.exists(), "the abandoned take must survive the sweep");
+        assert!(marker.exists(), "its marker must survive too");
+        assert!(!stale.exists(), "an ordinary stale file is still swept");
 
         let _ = fs::remove_dir_all(&dir);
     }

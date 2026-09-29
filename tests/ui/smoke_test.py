@@ -10958,6 +10958,237 @@ CAMERA_PROBE = """
 """
 
 
+# The recording paths of the camera window: a resolving fake stream, a fake
+# MediaRecorder and a scripted backend (every camera_* command is answered
+# here and logged in __CAM.calls), so start failures, chunk-write failures and
+# the device retry can be driven deterministically. Runs against its own copy
+# of camera.html (camera_rec.html) so the plain no-camera run above stays
+# untouched.
+CAMERA_REC_STUB = """
+<script type="module" src="i18n.js"></script>
+<script type="module" src="floatShared.js"></script>
+<script>
+window.__CAM = { gum: [], calls: [], order: [], gumFail: null, ctorThrow: false, startThrow: false,
+  n: 0, appendFail: function () { return false; }, elapsedDelay: 0, startDelay: 0, device: "dev-1" };
+__CAM.gumFail = (c) => (c.video.deviceId ? new DOMException("gone", "NotFoundError") : null);
+if (!navigator.mediaDevices) { navigator.mediaDevices = {}; }
+navigator.mediaDevices.getUserMedia = (c) => {
+  __CAM.gum.push(c);
+  const err = __CAM.gumFail && __CAM.gumFail(c);
+  if (err) return Promise.reject(err);
+  return Promise.resolve(new MediaStream());
+};
+navigator.mediaDevices.enumerateDevices = () => Promise.resolve([]);
+class FakeRec {
+  static isTypeSupported() { return true; }
+  constructor() {
+    if (__CAM.ctorThrow) throw new Error("ctor");
+    this.state = "inactive";
+    window.__REC = this;
+  }
+  start() {
+    if (__CAM.startThrow) throw new Error("start");
+    this.state = "recording";
+    setTimeout(() => { __CAM.startedAt = Date.now(); if (this.onstart) this.onstart(); }, __CAM.startDelay);
+  }
+  stop() { this.state = "inactive"; if (this.onstop) this.onstop(); }
+  emit(text) { this.ondataavailable({ data: new Blob([text]) }); }
+}
+window.MediaRecorder = FakeRec;
+const origInvoke = window.__TAURI__.core.invoke;
+window.__TAURI__.core.invoke = async (cmd, args) => {
+  __CAM.calls.push([cmd, args]);
+  if (cmd === "camera_begin_recording") return { path: "C:/r/rec-cam-1.webm" };
+  if (cmd === "camera_append_chunk") {
+    const i = ++__CAM.n;
+    await new Promise((r) => setTimeout(r, i * 20));
+    __CAM.order.push("append-done-" + i);
+    if (__CAM.appendFail(i)) throw new Error("disk full");
+    return null;
+  }
+  if (cmd === "camera_screen_elapsed_ms") {
+    await new Promise((r) => setTimeout(r, __CAM.elapsedDelay));
+    return 4242;
+  }
+  if (cmd === "camera_finish_recording") { __CAM.order.push("finish"); return { path: args.path }; }
+  if (cmd === "camera_mark_finishing" || cmd === "camera_discard_recording" || cmd === "camera_abandon_recording") return null;
+  if (cmd === "open_video_editor") return null;
+  if (cmd === "get_settings") {
+    const s = await origInvoke(cmd, args);
+    return Object.assign({}, s, { ui_texts: Object.assign({}, s.ui_texts || {}, { cameraDevice: __CAM.device }) });
+  }
+  return origInvoke(cmd, args);
+};
+</script>
+"""
+
+CAMERA_REC_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  let step = "boot";
+  const finish = () => {
+    if (document.getElementById("SMOKE")) return;
+    const pre = document.createElement("pre");
+    pre.id = "SMOKE";
+    pre.textContent = JSON.stringify(errs);
+    document.body.appendChild(pre);
+  };
+  setTimeout(() => { errs.push("probe stalled at step " + step); finish(); }, 25000);
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const until = async (fn, tries) => {
+    for (let i = 0; i < (tries || 100) && !fn(); i++) await sleep(50);
+    return fn();
+  };
+  const count = (cmd) => __CAM.calls.filter(c => c[0] === cmd).length;
+  const startBtn = document.getElementById("cam-start-btn");
+  const statusText = document.getElementById("cam-status-text");
+  const recBadge = document.getElementById("cam-rec-badge");
+  const pauseBtn = document.getElementById("cam-pause-btn");
+  const stopBtn = document.getElementById("cam-stop-btn");
+  const idleUi = (label) => {
+    if (startBtn.disabled) errs.push(label + ": Start stayed disabled");
+    if (startBtn.classList.contains("hidden")) errs.push(label + ": Start is hidden");
+    if (!recBadge.classList.contains("hidden")) errs.push(label + ": rec badge still visible");
+    if (!pauseBtn.classList.contains("hidden")) errs.push(label + ": pause still visible");
+    if (!stopBtn.classList.contains("hidden")) errs.push(label + ": stop still visible");
+  };
+  try {
+    step = "ready";
+    // Settings (and with them the saved camera id) load before the first
+    // preview request, the way the permission-ready event orders it for real.
+    await until(() => startBtn.textContent.trim());
+    window.__FIRE__("camera-permission-ready", null);
+    if (!(await until(() => !startBtn.disabled))) errs.push("Start never became enabled with a resolving stream");
+    // The saved camera is gone: exactly one retry with the default camera.
+    step = "deviceRetry";
+    if (__CAM.gum.length !== 2) errs.push("device retry: getUserMedia calls " + __CAM.gum.length);
+    else {
+      if (!__CAM.gum[0].video.deviceId) errs.push("device retry: first call had no exact device");
+      if (__CAM.gum[1].video.deviceId) errs.push("device retry: second call still had a device");
+    }
+    // A permission denial is not a stale device: no retry, Start stays off.
+    step = "denied";
+    __CAM.gum.length = 0;
+    __CAM.gumFail = () => new DOMException("no", "NotAllowedError");
+    document.getElementById("cam-res-select").dispatchEvent(new Event("change"));
+    await until(() => startBtn.disabled);
+    await sleep(100);
+    if (__CAM.gum.length !== 1) errs.push("denied: getUserMedia calls " + __CAM.gum.length);
+    if (!startBtn.disabled) errs.push("denied: Start stayed enabled");
+    __CAM.gumFail = (c) => (c.video.deviceId ? new DOMException("gone", "NotFoundError") : null);
+    document.getElementById("cam-res-select").dispatchEvent(new Event("change"));
+    if (!(await until(() => !startBtn.disabled))) errs.push("Start never came back after the denial cleared");
+    // Constructor throws after the backend already reserved the take.
+    for (const mode of ["ctorThrow", "startThrow"]) {
+      step = mode;
+      __CAM[mode] = true;
+      __CAM.calls.length = 0;
+      startBtn.click();
+      await until(() => count("camera_discard_recording") > 0 && !startBtn.disabled);
+      await sleep(100);
+      if (count("camera_begin_recording") !== 1) errs.push(mode + ": begin count " + count("camera_begin_recording"));
+      if (count("camera_discard_recording") !== 1) errs.push(mode + ": discard count " + count("camera_discard_recording"));
+      const d = __CAM.calls.find(c => c[0] === "camera_discard_recording");
+      if (d && d[1].path !== "C:/r/rec-cam-1.webm") errs.push(mode + ": discarded the wrong path");
+      if (statusText.textContent.trim()) errs.push(mode + ": status text left over: " + statusText.textContent);
+      idleUi(mode);
+      __CAM[mode] = false;
+    }
+    // A rejected middle append: every append is still drained, the take is
+    // not finished or opened, the session is released once and never deleted.
+    step = "appendFail";
+    __CAM.calls.length = 0;
+    __CAM.order.length = 0;
+    __CAM.n = 0;
+    __CAM.appendFail = (i) => i === 2;
+    startBtn.click();
+    if (!(await until(() => window.__REC && window.__REC.state === "recording"))) errs.push("recorder never started");
+    window.__REC.emit("a");
+    window.__REC.emit("b");
+    window.__REC.emit("c");
+    window.__REC.stop();
+    await until(() => statusText.textContent.trim() && !startBtn.disabled, 200);
+    await sleep(100);
+    if (statusText.textContent !== "Part of the recording could not be saved. The raw file was kept: C:/r/rec-cam-1.webm") errs.push("failure message missing, status: " + statusText.textContent);
+    if (__CAM.order.filter(o => o.indexOf("append-done") === 0).length !== 3) errs.push("not every append was drained: " + __CAM.order.join());
+    if (count("camera_finish_recording") !== 0) errs.push("a take with a failed chunk was finished");
+    if (count("open_video_editor") !== 0) errs.push("the editor opened for a damaged take");
+    if (count("camera_abandon_recording") !== 1) errs.push("abandon count " + count("camera_abandon_recording"));
+    if (count("camera_discard_recording") !== 0) errs.push("the raw file was discarded");
+    idleUi("appendFail");
+    if (document.getElementById("cam-res-select").disabled) errs.push("appendFail: resolution select stayed disabled");
+    // The failure lands while the take is still recording: the session is
+    // released at once, so a later stop never marks it finishing (a window
+    // closed in between could otherwise write a sidecar for a corrupt take).
+    step = "failBeforeStop";
+    __CAM.calls.length = 0;
+    __CAM.order.length = 0;
+    __CAM.n = 0;
+    __CAM.appendFail = (i) => i === 1;
+    startBtn.click();
+    await until(() => window.__REC && window.__REC.state === "recording");
+    window.__REC.emit("a");
+    window.__REC.emit("b");
+    await until(() => count("camera_abandon_recording") > 0);
+    if (count("camera_abandon_recording") !== 1) errs.push("failBeforeStop: abandon not called when the append failed");
+    if (count("camera_mark_finishing") !== 0) errs.push("failBeforeStop: marked finishing too early");
+    await sleep(200);
+    window.__REC.stop();
+    await until(() => !startBtn.disabled, 200);
+    await sleep(100);
+    if (count("camera_mark_finishing") !== 0) errs.push("failBeforeStop: a released take was marked finishing");
+    if (count("camera_abandon_recording") !== 1) errs.push("failBeforeStop: abandon count " + count("camera_abandon_recording"));
+    if (count("camera_finish_recording") !== 0 || count("camera_discard_recording") !== 0) errs.push("failBeforeStop: finished or discarded");
+    if (!statusText.textContent.includes("C:/r/rec-cam-1.webm")) errs.push("failBeforeStop: message lacks the file path");
+    // A clean take waits for its last append before finishing, and the
+    // camera start plus screen offset are stamped at the recorder start event.
+    step = "success";
+    __CAM.calls.length = 0;
+    __CAM.order.length = 0;
+    __CAM.n = 0;
+    __CAM.appendFail = () => false;
+    __CAM.startDelay = 300;
+    __CAM.elapsedDelay = 100;
+    const t0 = Date.now();
+    startBtn.click();
+    await until(() => window.__REC && window.__REC.state === "recording" && __CAM.startedAt > t0 - 1);
+    await sleep(400);
+    window.__REC.emit("a");
+    window.__REC.emit("b");
+    window.__REC.stop();
+    // While the finish is in flight neither Start nor the selects may be live.
+    if (!startBtn.disabled) errs.push("Start enabled while the finish is in flight");
+    if (!document.getElementById("cam-res-select").disabled || !document.getElementById("cam-audio-select").disabled) errs.push("selects enabled while the finish is in flight");
+    await until(() => count("open_video_editor") > 0, 200);
+    await sleep(300);
+    if (startBtn.disabled) errs.push("Start not re-enabled after the finish");
+    if (document.getElementById("cam-res-select").disabled) errs.push("selects not re-enabled after the finish");
+    {
+      const marks = __CAM.calls.filter(c => c[0] === "camera_mark_finishing");
+      if (!marks.length || marks[marks.length - 1][1].screenElapsedMs !== 4242) errs.push("mark finishing lacks the screen offset");
+    }
+    if (count("camera_finish_recording") !== 1) errs.push("finish count " + count("camera_finish_recording"));
+    if (count("camera_abandon_recording") !== 0) errs.push("a good take was abandoned");
+    if (__CAM.order.join() !== "append-done-1,append-done-2,finish") errs.push("finish did not wait for the last append: " + __CAM.order.join());
+    if (count("open_video_editor") !== 1) errs.push("editor open count " + count("open_video_editor"));
+    if (statusText.textContent.trim()) errs.push("status text after a good take: " + statusText.textContent);
+    // The start stamp follows the recorder start event (300 ms after the
+    // click here), and the screen offset comes from a read taken there.
+    const fin = __CAM.calls.find(c => c[0] === "camera_finish_recording");
+    if (fin) {
+      if (fin[1].camStartMs < t0 + 250) errs.push("camera start stamped before the recorder started: " + (fin[1].camStartMs - t0));
+      if (fin[1].screenElapsedMs !== 4242) errs.push("screen offset not carried: " + fin[1].screenElapsedMs);
+    }
+  } catch (e) {
+    errs.push("probe crashed: " + e);
+  }
+  finish();
+})();
+</script>
+"""
+
+
 # The video editor: the recording is PULLED at boot (video_editor_source), not
 # pushed, so the probe only has to wait -- tauri_stub.js's own fixture is a
 # 10-minute 1080p30 clip with both a system and a mic track, real enough that a
@@ -14857,7 +15088,10 @@ def main():
                 ("launcher.html", (560, 420), LAUNCHER_PROBE, 15000),
                 ("tray.html", (240, 360), TRAY_PROBE, 15000),
                 ("recbar.html", (320, 56), RECBAR_PROBE, 15000),
-                ("camera.html", (420, 620), CAMERA_STUB + CAMERA_PROBE, 15000)):
+                ("camera.html", (420, 620), CAMERA_STUB + CAMERA_PROBE, 15000),
+                ("camera_rec.html", (420, 620), CAMERA_REC_STUB + CAMERA_REC_PROBE, 30000)):
+            if name == "camera_rec.html":
+                shutil.copyfile(REPO / "ui" / "camera.html", tmp / "ui" / name)
             side = tmp / "ui" / name
             side.write_text(
                 side.read_text(encoding="utf-8")

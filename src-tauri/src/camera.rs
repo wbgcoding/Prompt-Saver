@@ -194,7 +194,6 @@ pub async fn camera_begin_recording(
     let dir = recording_dir(&custom);
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let (y, mo, d, h, mi, s) = local_time_parts();
-    let path = create_unique(&dir, |n| cam_filename((y, mo, d, h, mi, s), &ext, n)).map_err(|e| e.to_string())?;
     let companion_path = {
         #[cfg(windows)]
         {
@@ -207,12 +206,30 @@ pub async fn camera_begin_recording(
             None
         }
     };
-    *cam.0.lock().unwrap_or_else(|e| e.into_inner()) =
-        Some(CamSession { output_path: path.clone(), companion_path: companion_path.clone(), finishing: None });
+    // The slot is checked and filled under one lock, so a second begin can
+    // never replace a live session (and orphan its file) between the check
+    // and the store.
+    let mut slot = cam.0.lock().unwrap_or_else(|e| e.into_inner());
+    if slot.is_some() {
+        return Err("a camera recording is already active".to_string());
+    }
+    let path = create_unique(&dir, |n| cam_filename((y, mo, d, h, mi, s), &ext, n)).map_err(|e| e.to_string())?;
+    *slot = Some(CamSession { output_path: path.clone(), companion_path: companion_path.clone(), finishing: None });
     Ok(CamBeginResult {
         path: path.to_string_lossy().to_string(),
         companion_path: companion_path.map(|p| p.to_string_lossy().to_string()),
     })
+}
+
+// Removes and returns the active session only when `path` is exactly its
+// output file. A stale or forged path leaves the live session untouched, so a
+// later correct call still finds it.
+fn take_matching(slot: &mut Option<CamSession>, path: &Path) -> Result<CamSession, String> {
+    match slot.as_ref() {
+        None => Err("no active camera recording".to_string()),
+        Some(s) if s.output_path != path => Err("path does not match the active camera recording".to_string()),
+        Some(_) => Ok(slot.take().expect("session checked above")),
+    }
 }
 
 // MediaRecorder hands the page a Blob in timesliced chunks; each one is
@@ -274,10 +291,7 @@ pub fn camera_finish_recording(
     cam_start_ms: u64,
     screen_elapsed_ms: Option<u64>,
 ) -> Result<CamFinishResult, String> {
-    let session = cam.0.lock().unwrap_or_else(|e| e.into_inner()).take().ok_or_else(|| "no active camera recording".to_string())?;
-    if session.output_path != Path::new(&path) {
-        return Err("path does not match the active camera recording".to_string());
-    }
+    let session = take_matching(&mut cam.0.lock().unwrap_or_else(|e| e.into_inner()), Path::new(&path))?;
     finalize_session(&session, cam_start_ms, screen_elapsed_ms);
     let screen_still_active = {
         #[cfg(windows)]
@@ -324,15 +338,31 @@ pub fn camera_mark_finishing(cam: State<'_, CameraState>, path: String, cam_star
 // half-written video nor a sidecar behind for the library to trip over.
 #[tauri::command]
 pub fn camera_discard_recording(cam: State<'_, CameraState>, path: String) -> Result<(), String> {
-    let mut guard = cam.0.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(session) = guard.take() {
-        if session.output_path == Path::new(&path) {
-            discard_session(&session);
-            return Ok(());
-        }
-        *guard = Some(session);
-    }
-    Err("path does not match the active camera recording".to_string())
+    let session = take_matching(&mut cam.0.lock().unwrap_or_else(|e| e.into_inner()), Path::new(&path))?;
+    discard_session(&session);
+    Ok(())
+}
+
+// Sits next to a take whose recording failed part way but whose partial file
+// is kept for the user. The recordings sweep skips both the marker and the
+// video it names, however old, so "the raw file was kept" stays true.
+pub fn abandoned_marker_path(output_path: &Path) -> PathBuf {
+    output_path.with_extension("abandoned")
+}
+
+pub fn is_kept_abandoned(path: &Path) -> bool {
+    path.extension().is_some_and(|e| e == "abandoned") || abandoned_marker_path(path).is_file()
+}
+
+// Releases the session WITHOUT touching the file: used when the page knows a
+// take is damaged (a chunk write failed) but the partial file may still be the
+// only copy of the recording. No delete, no sidecar.
+#[tauri::command]
+pub fn camera_abandon_recording(cam: State<'_, CameraState>, path: String) -> Result<(), String> {
+    let session = take_matching(&mut cam.0.lock().unwrap_or_else(|e| e.into_inner()), Path::new(&path))?;
+    // The marker tells the recordings sweep to leave this damaged take alone
+    // (it would otherwise age out as an unreferenced file).
+    fs::write(abandoned_marker_path(&session.output_path), b"").map_err(|e| e.to_string())
 }
 
 fn discard_session(session: &CamSession) {
@@ -686,5 +716,76 @@ mod tests {
         });
         mark_finishing(&mut session, Path::new("C:/r/rec-cam-OTHER.webm"), 5_000, None);
         assert!(session.unwrap().finishing.is_none());
+    }
+
+    fn session_at(p: &str) -> Option<CamSession> {
+        Some(CamSession { output_path: PathBuf::from(p), companion_path: None, finishing: None })
+    }
+
+    #[test]
+    fn a_mismatched_path_leaves_the_active_session_in_place() {
+        let mut slot = session_at("C:/r/rec-cam-1.webm");
+        assert!(take_matching(&mut slot, Path::new("C:/r/rec-cam-OTHER.webm")).is_err());
+        assert_eq!(slot.as_ref().unwrap().output_path, PathBuf::from("C:/r/rec-cam-1.webm"));
+    }
+
+    #[test]
+    fn the_matching_path_removes_exactly_that_session() {
+        let mut slot = session_at("C:/r/rec-cam-1.webm");
+        let taken = take_matching(&mut slot, Path::new("C:/r/rec-cam-1.webm")).unwrap();
+        assert_eq!(taken.output_path, PathBuf::from("C:/r/rec-cam-1.webm"));
+        assert!(slot.is_none());
+    }
+
+    #[test]
+    fn taking_from_an_empty_slot_reports_no_active_recording() {
+        let mut slot: Option<CamSession> = None;
+        assert_eq!(take_matching(&mut slot, Path::new("C:/r/x.webm")).err().unwrap(), "no active camera recording");
+    }
+
+    #[test]
+    fn discarding_a_session_removes_the_reserved_file_and_its_sidecar() {
+        let dir = std::env::temp_dir().join(format!("psc-cam-test5-{}", std::process::id()));
+        let _ = fs::create_dir_all(&dir);
+        let video = dir.join("rec-cam-1.webm");
+        fs::write(&video, b"x").unwrap();
+        fs::write(sidecar_path(&video), b"{}").unwrap();
+        let mut slot = Some(CamSession { output_path: video.clone(), companion_path: None, finishing: None });
+        let taken = take_matching(&mut slot, &video).unwrap();
+        discard_session(&taken);
+        assert!(!video.exists());
+        assert!(!sidecar_path(&video).exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_abandoned_marker_protects_the_video_and_itself() {
+        let dir = std::env::temp_dir().join(format!("psc-cam-test7-{}", std::process::id()));
+        let _ = fs::create_dir_all(&dir);
+        let video = dir.join("rec-cam-1.webm");
+        let other = dir.join("rec-cam-2.webm");
+        fs::write(&video, b"partial").unwrap();
+        fs::write(&other, b"x").unwrap();
+        assert!(!is_kept_abandoned(&video));
+        fs::write(abandoned_marker_path(&video), b"").unwrap();
+        assert!(is_kept_abandoned(&video));
+        assert!(is_kept_abandoned(&abandoned_marker_path(&video)));
+        assert!(!is_kept_abandoned(&other));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn abandoning_needs_a_matching_path_and_keeps_the_file() {
+        let dir = std::env::temp_dir().join(format!("psc-cam-test6-{}", std::process::id()));
+        let _ = fs::create_dir_all(&dir);
+        let video = dir.join("rec-cam-1.webm");
+        fs::write(&video, b"partial").unwrap();
+        let mut slot = Some(CamSession { output_path: video.clone(), companion_path: None, finishing: None });
+        assert!(take_matching(&mut slot, &dir.join("other.webm")).is_err());
+        assert!(slot.is_some());
+        take_matching(&mut slot, &video).unwrap();
+        assert!(slot.is_none());
+        assert_eq!(fs::read(&video).unwrap(), b"partial");
+        let _ = fs::remove_dir_all(&dir);
     }
 }
