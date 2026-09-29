@@ -1432,6 +1432,9 @@ the video editor and the introduction tour ship on).
 - White text on light colours gets a dark halo so it stays readable; the
   threshold for black text is unchanged. The halo now starts at 75 percent
   strength instead of 85 (the slider is unchanged).
+- The caution line in the expert menu now sits centered and in red at the top
+  of the page, stays visible while searching, and reads "Changes here can lead
+  to unexpected behavior."
 - An inserted video overlay now starts at its own beginning and stays in
   sync with its own sound, instead of showing a later moment of the clip
   while the sound played from the start.

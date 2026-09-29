@@ -3179,40 +3179,54 @@ PROBE = """
       await click('expert-back');
       document.getElementById('settings').classList.add('hidden');
     }
-    // 511: the quick-profiles row is the first child of the expert menu, the
-    // filter row and tab bar follow, and the caution hint now lives inside
-    // the tab bar itself, right after the System tab.
+    // 511/551: the caution hint is the first child of the expert page, red and
+    // centered in every mode; the quick-profiles row follows it.
     {
       document.getElementById('settings').classList.remove('hidden');
       await click('expert-open');
       const expertBox = document.getElementById('settings-expert');
-      const firstChild = expertBox.firstElementChild;
-      if (!firstChild || !firstChild.classList.contains('expert-top-row')) {
-        out.errors.push('511: the expert menu top row (presets plus reset) is not the first child');
-      } else if (!firstChild.querySelector('.expert-presets') || firstChild.querySelector('.expert-presets') !== firstChild.firstElementChild) {
-        out.errors.push('511: the quick-profiles group is not the first thing in the top row');
-      }
-      // Jump every tab once so the hint (built after the System tab) actually exists.
-      for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
-        tb.click();
-        await sleep(80);
-      }
-      const hint = document.querySelector('#expert-tabs-bar .expert-hint');
-      if (!hint) {
-        out.errors.push('511: the expert menu caution hint is missing from the tab bar');
-      } else {
-        const tabBtns = [...document.querySelectorAll('#expert-tabs-bar .expert-tab')];
-        const systemIdx = (typeof EXPERT_TABS !== 'undefined') ? EXPERT_TABS.findIndex((tb) => tb.title === 'expTabSystem') : -1;
-        const prevTab = hint.previousElementSibling;
-        if (!prevTab || !prevTab.classList.contains('expert-tab')) {
-          out.errors.push('511: the caution hint does not directly follow a tab button');
-        } else if (systemIdx >= 0 && tabBtns[systemIdx] !== prevTab) {
-          out.errors.push('511: the caution hint does not directly follow the System tab');
+      const hint = document.getElementById('expert-hint');
+      const expertPage = document.getElementById('settings-expert');
+      const hintOk = (label) => {
+        if (!hint || expertPage.firstElementChild !== hint) {
+          out.errors.push('551: the caution hint is not the first child of the expert page (' + label + ')');
+          return;
+        }
+        const dangerProbe = document.createElement('span');
+        dangerProbe.style.color = 'var(--danger)';
+        document.body.appendChild(dangerProbe);
+        const dangerColor = getComputedStyle(dangerProbe).color;
+        dangerProbe.remove();
+        if (getComputedStyle(hint).color !== dangerColor) {
+          out.errors.push('551: the caution hint is not in the danger colour (' + label + '): ' + getComputedStyle(hint).color + ' vs ' + dangerColor);
+        }
+        const hr = hint.getBoundingClientRect();
+        const pr = expertPage.getBoundingClientRect();
+        const content = [...hint.children].map((c) => c.getBoundingClientRect());
+        const cx = (Math.min(...content.map((r) => r.left)) + Math.max(...content.map((r) => r.right))) / 2;
+        const px = pr.left + pr.width / 2;
+        if (hr.width < 1 || Math.abs(cx - px) > 2) {
+          out.errors.push('551: the caution hint is not centered (' + label + '): content x ' + cx + ' vs page x ' + px);
         }
         if (hint.matches('button, a, input, select, [tabindex]') || hint.hasAttribute('tabindex')) {
-          out.errors.push('511: the caution hint is focusable, it should be plain text');
+          out.errors.push('551: the caution hint is focusable, it should be plain text');
         }
+      };
+      hintOk('browse');
+      const topRow551 = expertBox.querySelector('.expert-top-row');
+      if (!topRow551 || hint.nextElementSibling !== topRow551) {
+        out.errors.push('511: the expert menu top row (presets plus reset) does not follow the hint');
+      } else if (!topRow551.querySelector('.expert-presets') || topRow551.querySelector('.expert-presets') !== topRow551.firstElementChild) {
+        out.errors.push('511: the quick-profiles group is not the first thing in the top row');
       }
+      const expertSearch551 = document.getElementById('expert-search');
+      expertSearch551.value = 'shadow';
+      expertSearch551.dispatchEvent(new Event('input'));
+      await sleep(250);
+      hintOk('while searching');
+      expertSearch551.value = '';
+      expertSearch551.dispatchEvent(new Event('input'));
+      await sleep(250);
       const firstTab0 = document.querySelector('#expert-tabs-bar .expert-tab');
       if (firstTab0) { firstTab0.click(); await sleep(100); }
       await click('expert-back');
