@@ -11018,6 +11018,53 @@ CAMERA_REC_PROBE = """
       idleUi(mode);
       __CAM[mode] = false;
     }
+    // A rejected middle append: every append is still drained, the take is
+    // not finished or opened, the session is released once and never deleted.
+    step = "appendFail";
+    __CAM.calls.length = 0;
+    __CAM.order.length = 0;
+    __CAM.n = 0;
+    __CAM.appendFail = (i) => i === 2;
+    startBtn.click();
+    if (!(await until(() => window.__REC && window.__REC.state === "recording"))) errs.push("recorder never started");
+    window.__REC.emit("a");
+    window.__REC.emit("b");
+    window.__REC.emit("c");
+    window.__REC.stop();
+    await until(() => statusText.textContent.trim() && !startBtn.disabled, 200);
+    await sleep(100);
+    // The i18n module loads asynchronously and may not have arrived in this
+    // headless run, in which case t() falls back to the bare key; the wording
+    // itself is covered by the i18n suite.
+    if (statusText.textContent !== "camChunkWriteFailed" && statusText.textContent !== "Part of the recording could not be saved. The raw file was kept.") errs.push("failure message missing, status: " + statusText.textContent);
+    if (__CAM.order.filter(o => o.indexOf("append-done") === 0).length !== 3) errs.push("not every append was drained: " + __CAM.order.join());
+    if (count("camera_finish_recording") !== 0) errs.push("a take with a failed chunk was finished");
+    if (count("open_video_editor") !== 0) errs.push("the editor opened for a damaged take");
+    if (count("camera_abandon_recording") !== 1) errs.push("abandon count " + count("camera_abandon_recording"));
+    if (count("camera_discard_recording") !== 0) errs.push("the raw file was discarded");
+    idleUi("appendFail");
+    // A clean take waits for its last append before finishing, and the
+    // camera start plus screen offset are stamped at the recorder start event.
+    step = "success";
+    __CAM.calls.length = 0;
+    __CAM.order.length = 0;
+    __CAM.n = 0;
+    __CAM.appendFail = () => false;
+    __CAM.startDelay = 300;
+    __CAM.elapsedDelay = 100;
+    const t0 = Date.now();
+    startBtn.click();
+    await until(() => window.__REC && window.__REC.state === "recording" && __CAM.startedAt > t0 - 1);
+    await sleep(400);
+    window.__REC.emit("a");
+    window.__REC.emit("b");
+    window.__REC.stop();
+    await until(() => count("open_video_editor") > 0, 200);
+    if (count("camera_finish_recording") !== 1) errs.push("finish count " + count("camera_finish_recording"));
+    if (count("camera_abandon_recording") !== 0) errs.push("a good take was abandoned");
+    if (__CAM.order.join() !== "append-done-1,append-done-2,finish") errs.push("finish did not wait for the last append: " + __CAM.order.join());
+    if (count("open_video_editor") !== 1) errs.push("editor open count " + count("open_video_editor"));
+    if (statusText.textContent.trim()) errs.push("status text after a good take: " + statusText.textContent);
   } catch (e) {
     errs.push("probe crashed: " + e);
   }

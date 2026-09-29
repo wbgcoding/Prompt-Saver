@@ -172,6 +172,10 @@ function bufToBase64(buf) {
 // finish's session.take() and is dropped on the floor, silently, with the
 // recording missing its last second or so.
 let pendingAppends = [];
+// True once any append of the current take was rejected (disk full, denied
+// write, IPC failure). The drain in onstop still waits for every in-flight
+// append, then refuses to present a take with a hole in it as a good one.
+let appendFailed = false;
 
 // The one way back from a start that got as far as reserving the take in the
 // backend (file + session) and then failed in the recorder: releases that
@@ -221,6 +225,7 @@ async function startRecording() {
   recStartWall = Date.now();
   recScreenElapsedAtStart = null;
   pendingAppends = [];
+  appendFailed = false;
   try {
     recorder = new MediaRecorder(stream, { mimeType });
   } catch {
@@ -233,7 +238,10 @@ async function startRecording() {
     const append = e.data
       .arrayBuffer()
       .then((buf) => invoke("camera_append_chunk", { path, bytesB64: bufToBase64(buf) }))
-      .catch((err) => console.error("camera chunk lost", err));
+      .catch((err) => {
+        appendFailed = true;
+        console.error("camera chunk lost", err);
+      });
     pendingAppends.push(append);
   };
   recorder.onstop = async () => {
@@ -263,6 +271,16 @@ async function startRecording() {
     await invoke("camera_mark_finishing", { path, camStartMs: startedAtMs, screenElapsedMs }).catch(() => {});
     await Promise.allSettled(pendingAppends);
     pendingAppends = [];
+    if (appendFailed) {
+      // A chunk never reached the disk, so the file is truncated or holes
+      // in it. Release the backend session without deleting anything (the
+      // partial file may be the only copy), skip the editor and say so.
+      appendFailed = false;
+      await invoke("camera_abandon_recording", { path }).catch(() => {});
+      statusText.textContent = t("camChunkWriteFailed");
+      refreshPreview();
+      return;
+    }
     try {
       const finished = await invoke("camera_finish_recording", { path, camStartMs: startedAtMs, screenElapsedMs });
       // A companion screen recording that has ALREADY stopped by now opens
@@ -279,6 +297,8 @@ async function startRecording() {
     } catch {
       // A finish that fails leaves the raw file in place, still playable --
       // the same fallback the screen recorder's own encode-error path uses.
+      // The session slot is released too, or the next Start would be refused.
+      await invoke("camera_abandon_recording", { path }).catch(() => {});
     }
     refreshPreview();
   };
