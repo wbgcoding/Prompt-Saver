@@ -1435,6 +1435,8 @@ the video editor and the introduction tour ship on).
 - The caution line in the expert menu now sits centered and in red at the top
   of the page, stays visible while searching, and reads "Changes here can lead
   to unexpected behavior."
+- The right-click menu no longer has "Compare with"; comparing two entries
+  stays in the library and in the duplicate finder.
 - An inserted video overlay now starts at its own beginning and stays in
   sync with its own sound, instead of showing a later moment of the clip
   while the sound played from the start.

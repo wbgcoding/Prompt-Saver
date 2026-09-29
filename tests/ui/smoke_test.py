@@ -5085,30 +5085,6 @@ PROBE = """
     }
     document.getElementById('library-select-btn').classList.contains('active') && document.getElementById('library-select-btn').click();
     await click('library-close');
-    // The same view, reached from a tile's own context menu instead: picks the
-    // first entry, then the library's normal selection is how the second is chosen.
-    const tile3 = [...document.querySelectorAll('#grid .tile')].find(e => (e.dataset.id || '') === 'p3');
-    if (!tile3) {
-      out.errors.push('no tile found to test "compare with" from its context menu');
-    } else {
-      tile3.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
-      await sleep(200);
-      const cmpWithBtn = document.querySelector('#ctx [data-act="compareWith"]');
-      if (!cmpWithBtn) {
-        out.errors.push('the tile context menu has no "compare with" action');
-      } else {
-        cmpWithBtn.click();
-        await sleep(300);
-        if (document.getElementById('library').classList.contains('hidden')) {
-          out.errors.push('"compare with" did not open the library to pick a second entry');
-        }
-        if (!document.querySelector('#library-list .lib-item[data-id="p3"]')?.classList.contains('lib-selected')) {
-          out.errors.push('"compare with" did not pre-select the entry it was opened from');
-        }
-        document.getElementById('library-select-btn').classList.contains('active') && document.getElementById('library-select-btn').click();
-        await click('library-close');
-      }
-    }
     // The colour picker must fit the window at ANY size: it may neither scroll (the
     // knob would be out of reach) nor spill (the hex field gets cut off).
     if (await openEditor('p1')) {

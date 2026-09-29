@@ -10304,24 +10304,6 @@ async function takeCompareSide(target, source) {
   if (!libraryEl.classList.contains("hidden")) renderLibrary();
   toast(t("compareTaken"));
 }
-// Enters library selection with ONE entry pre-picked -- the user then picks the
-// second the normal way (click a row in select mode), and the batch bar's own
-// "Compare" button (enabled at exactly two selected) opens the view above. This
-// IS "the existing entry search": the library's own search field stays usable
-// the whole time selection mode is on.
-function startCompareWith(id) {
-  document.body.classList.add("library-front");
-  libraryEl.classList.remove("hidden");
-  libQuery = "";
-  $("library-q").value = "";
-  setLibSelectMode(true);
-  libSelected.add(id);
-  libLastId = id;
-  applyLibSelectionDom();
-  updateBatchBar();
-  renderLibrary();
-  toast(t("comparePickSecond"));
-}
 // Import hook: after an import, flag near-duplicates with a toast linking to the tool.
 async function maybeDupImportToast() {
   if (!flag("dupFinder") || !flag("dupImportCheck")) return;
@@ -20208,8 +20190,6 @@ function bind() {
       }
     } else if (act === "duplicate") {
       await duplicatePrompt(id);
-    } else if (act === "compareWith") {
-      startCompareWith(id);
     } else if (act === "hide") {
       // Remove from the active view's grid; stays available in the library.
       const view = activeView();
