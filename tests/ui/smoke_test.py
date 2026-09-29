@@ -2438,10 +2438,18 @@ PROBE = """
             }
             // Drag the red (3rd) row onto the 1st row and drop -- the strip must
             // recompute in place, not leave the red mark stuck at the old position.
-            const dt = new DataTransfer();
-            row2.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: dt }));
-            row0.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }));
-            row0.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+            const pt445 = (type, el, x, y) => el.dispatchEvent(new PointerEvent(type, {
+              bubbles: true, cancelable: true, pointerId: 5, isPrimary: true, button: 0,
+              buttons: type === 'pointerup' ? 0 : 1, clientX: x, clientY: y,
+            }));
+            const rr2 = row2.getBoundingClientRect();
+            const rr0 = row0.getBoundingClientRect();
+            const sx = rr2.left + rr2.width / 2, sy = rr2.top + rr2.height / 2;
+            const ex = rr0.left + rr0.width * 0.25, ey = rr0.top + rr0.height / 2;
+            pt445('pointerdown', row2, sx, sy);
+            pt445('pointermove', row2, sx + 14, sy);
+            pt445('pointermove', row2, ex, ey);
+            pt445('pointerup', row2, ex, ey);
             await sleep(150);
             rows = [...bar.querySelectorAll('.chain-ov-row')];
             if (!rows[0] || !rows[0].classList.contains('chain-ov-missing')) {
@@ -2480,6 +2488,70 @@ PROBE = """
         out.errors.push('510: the grid top moved from ' + Math.round(gridTopOff) + 'px to ' +
           Math.round(gridTopBack) + 'px after the chain overview strip was shown and hidden again');
       }
+    }
+    // 555: the chain overview rows reorder by pointer drag and drop a step on
+    // right-click; the clipboard text follows both.
+    {
+      const findGridTile = (id) => [...document.querySelectorAll('#grid .tile')].find(e => (e.dataset.id || '') === id);
+      const startBtn = findGridTile('p0')?.querySelector('.tile-chain-start');
+      const ovRows = () => [...document.querySelectorAll('#chain-overview .chain-ov-row')];
+      const ovNames = () => ovRows().map((r) => r.querySelector('.chain-ov-name').textContent);
+      const clipParts = () => String(window.__LAST_COPY__ || '').split('\\n\\n');
+      const ptr = (type, el, x, y) => el.dispatchEvent(new PointerEvent(type, {
+        bubbles: true, cancelable: true, pointerId: 7, isPrimary: true, button: 0,
+        buttons: type === 'pointerup' ? 0 : 1, clientX: x, clientY: y,
+      }));
+      if (!startBtn) {
+        out.errors.push('555: fixture tile p0 has no chain-start button');
+      } else {
+        startBtn.click();
+        await sleep(150);
+        if (!await clickTile('p3')) out.errors.push('555: could not pick p3 into the chain');
+        if (!await clickTile('p2')) out.errors.push('555: could not pick p2 into the chain');
+        await sleep(150);
+        const rows0 = ovRows();
+        if (rows0.length !== 3) {
+          out.errors.push('555: expected three chain steps, got ' + rows0.length);
+        } else {
+          const names0 = ovNames();
+          const parts0 = clipParts();
+          if (parts0.length !== 3) out.errors.push('555: the chain clipboard text does not have three parts: ' + parts0.length);
+          if (!rows0[0].title) out.errors.push('555: a chain step has no tooltip');
+          const r3 = rows0[2].getBoundingClientRect();
+          const r1 = rows0[0].getBoundingClientRect();
+          const x3 = r3.left + r3.width / 2, y3 = r3.top + r3.height / 2;
+          ptr('pointerdown', rows0[2], x3, y3);
+          ptr('pointermove', rows0[2], x3 + 3, y3);
+          if (rows0[2].classList.contains('dragging')) out.errors.push('555: a move under the threshold already started the drag');
+          const lx = r1.left + r1.width * 0.25, ly = r1.top + r1.height / 2;
+          ptr('pointermove', rows0[2], x3 + 14, y3);
+          ptr('pointermove', rows0[2], lx, ly);
+          if (!rows0[2].classList.contains('dragging')) out.errors.push('555: the dragged step has no dragging class');
+          if (!rows0[0].classList.contains('drag-over')) out.errors.push('555: the step under the pointer shows no drag-over mark');
+          ptr('pointerup', rows0[2], lx, ly);
+          await sleep(200);
+          const names1 = ovNames();
+          const want1 = [names0[2], names0[0], names0[1]];
+          if (names1.join('|') !== want1.join('|')) out.errors.push('555: dragging step 3 onto the left half of step 1 gave ' + names1.join('|') + ', wanted ' + want1.join('|'));
+          const parts1 = clipParts();
+          const wantParts1 = [parts0[2], parts0[0], parts0[1]];
+          if (parts1.join('|') !== wantParts1.join('|')) out.errors.push('555: the clipboard text did not follow the new order');
+          if (ovRows().some((r) => r.classList.contains('dragging') || r.classList.contains('drag-over'))) out.errors.push('555: drag marks stayed after the drop');
+          // Right-click on step 2 removes it and the clipboard follows.
+          const row2 = ovRows()[1];
+          const cm = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 });
+          row2.dispatchEvent(cm);
+          await sleep(200);
+          if (!cm.defaultPrevented) out.errors.push('555: right-click on a step did not prevent the native menu');
+          if (!document.getElementById('ctx').classList.contains('hidden')) out.errors.push('555: right-click on a step opened the tile menu');
+          const names2 = ovNames();
+          if (names2.join('|') !== [names1[0], names1[2]].join('|')) out.errors.push('555: right-click did not remove exactly step 2: ' + names2.join('|'));
+          if (clipParts().join('|') !== [parts1[0], parts1[2]].join('|')) out.errors.push('555: the clipboard did not lose the removed step');
+          if (!document.body.classList.contains('chain-mode')) out.errors.push('555: removing a step ended the chain');
+        }
+      }
+      for (let i = 0; i < 3 && document.body.classList.contains('chain-mode'); i++) await click('chain-btn');
+      await sleep(150);
     }
     // 554: switching to another program (blur, then focus on return) never ends
     // or clears a chain, locked or not; that includes the blur/focus pair a

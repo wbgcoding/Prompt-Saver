@@ -1441,6 +1441,9 @@ the video editor and the introduction tour ship on).
   second, so you can see it ran, and a second click while it works is ignored.
 - A chain now survives switching to another program: the picks stay, locked or
   not, until you click the chain button again or paste with Ctrl+V in the app.
+- The steps in the chain overview now reorder by dragging (it did not work
+  reliably before) and a right-click removes a step; the clipboard text is
+  rebuilt after either change.
 - An inserted video overlay now starts at its own beginning and stays in
   sync with its own sound, instead of showing a later moment of the clip
   while the sound played from the start.

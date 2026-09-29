@@ -5604,7 +5604,6 @@ function renderChainOverview() {
     const row = document.createElement("div");
     row.className = "chain-ov-row";
     row.classList.toggle("chain-ov-missing", info.missing.length > 0);
-    row.draggable = true;
     const num = document.createElement("span");
     num.className = "chain-ov-num";
     num.textContent = String(i + 1);
@@ -5637,23 +5636,90 @@ function renderChainOverview() {
       miss.textContent = `${t("chainMissing")} ${info.missing.join(", ")}`;
       row.append(miss);
     }
-    row.addEventListener("dragstart", (e) => {
-      e.dataTransfer.setData("text/plain", String(i));
-      e.dataTransfer.effectAllowed = "move";
+    row.title = t("chainStepHint");
+    row.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      e.stopPropagation();
+      startChainStepDrag(e, row, list);
     });
-    row.addEventListener("dragover", (e) => { e.preventDefault(); row.classList.add("drag-over"); });
-    row.addEventListener("dragleave", () => row.classList.remove("drag-over"));
-    row.addEventListener("drop", (e) => {
+    row.addEventListener("contextmenu", (e) => {
       e.preventDefault();
-      row.classList.remove("drag-over");
-      const from = parseInt(e.dataTransfer.getData("text/plain"), 10);
-      if (!Number.isFinite(from) || from === i) return;
-      const [moved] = chainSel.splice(from, 1);
-      chainSel.splice(i, 0, moved);
-      refreshChainUi();
+      e.stopPropagation();
+      removeChainStep(i);
     });
     list.append(row);
   });
+}
+
+// Drops one step from the chain (same removal as un-picking its tile) and puts
+// the shortened chain on the clipboard. An empty chain stays active.
+function removeChainStep(i) {
+  const id = chainSel[i];
+  if (id === undefined) return;
+  chainSel.splice(i, 1);
+  chainTexts.delete(id);
+  refreshChainUi();
+  pushChainClipboard();
+}
+
+// Reorders the chain steps with plain pointer events (the webview's own drop
+// target swallows HTML5 drag and drop). A press that moves past DRAG_THRESHOLD
+// starts the drag; the step under the pointer shows a before/after mark from
+// the pointer's side of its middle, which also works across wrapped lines.
+function startChainStepDrag(down, row, list) {
+  const rows = () => [...list.querySelectorAll(".chain-ov-row")];
+  const from = rows().indexOf(row);
+  if (from < 0) return;
+  let dragging = false;
+  let target = null; // { el, after }
+  const clearMarks = () => {
+    for (const r of rows()) r.classList.remove("drag-over", "drop-before", "drop-after");
+  };
+  const move = (e) => {
+    if (e.pointerId !== down.pointerId) return;
+    if (!dragging) {
+      if (Math.abs(e.clientX - down.clientX) < DRAG_THRESHOLD &&
+          Math.abs(e.clientY - down.clientY) < DRAG_THRESHOLD) return;
+      dragging = true;
+      row.classList.add("dragging");
+      try { row.setPointerCapture(down.pointerId); } catch (_) {}
+    }
+    e.stopPropagation();
+    clearMarks();
+    const el = document.elementFromPoint(e.clientX, e.clientY)?.closest?.(".chain-ov-row");
+    if (el && el !== row && list.contains(el)) {
+      const r = el.getBoundingClientRect();
+      const after = e.clientX > r.left + r.width / 2;
+      el.classList.add("drag-over", after ? "drop-after" : "drop-before");
+      target = { el, after };
+    } else {
+      target = null;
+    }
+  };
+  const end = (e, commit) => {
+    if (e.pointerId !== down.pointerId) return;
+    window.removeEventListener("pointermove", move, true);
+    window.removeEventListener("pointerup", up, true);
+    window.removeEventListener("pointercancel", cancel, true);
+    try { row.releasePointerCapture(down.pointerId); } catch (_) {}
+    row.classList.remove("dragging");
+    clearMarks();
+    if (!dragging) return;
+    e.stopPropagation();
+    if (!commit || !target) return;
+    let to = rows().indexOf(target.el) + (target.after ? 1 : 0);
+    if (to > from) to -= 1;
+    if (to === from) return;
+    const [moved] = chainSel.splice(from, 1);
+    chainSel.splice(to, 0, moved);
+    refreshChainUi();
+    pushChainClipboard();
+  };
+  const up = (e) => end(e, true);
+  const cancel = (e) => end(e, false);
+  window.addEventListener("pointermove", move, true);
+  window.addEventListener("pointerup", up, true);
+  window.addEventListener("pointercancel", cancel, true);
 }
 
 // A rotating/variable prompt's pick goes through an await (peek, var fill)

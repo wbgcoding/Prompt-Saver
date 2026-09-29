@@ -1809,8 +1809,13 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   border-radius: 8px;
   background: var(--surface-2);
   cursor: grab;
+  touch-action: none;
+  user-select: none;
 }
+.chain-ov-row.dragging { opacity: .6; cursor: grabbing; }
 .chain-ov-row.drag-over { border-color: var(--accent); }
+.chain-ov-row.drop-before { box-shadow: -3px 0 0 var(--accent); }
+.chain-ov-row.drop-after { box-shadow: 3px 0 0 var(--accent); }
 .chain-ov-row.chain-ov-missing { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, var(--surface-2)); }
 .chain-ov-num {
   min-width: 18px;

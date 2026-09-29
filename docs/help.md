@@ -456,7 +456,8 @@ fast too often pauses the session with a toast instead of looping.
   steps in order, with small marks for the placeholders each step needs and
   the reserved names it fills by itself. A step turns red when nothing
   earlier in the chain answers a placeholder it needs, though the chain can
-  still be started. Drag a row to reorder the chain right there. Switchable
+  still be started. Drag a row to reorder the chain right there, right-click a row to
+  remove that step; the clipboard follows either change. Switchable
   off on its own in the expert menu.
 - Per-tile hotkeys: copy a specific tile from anywhere, without opening the app
 - Drag-out: hold the modifier key and drag a tile onto another window to paste
@@ -1290,7 +1291,8 @@ eine Leiste über dem Raster die gewählten
 Schritte der Reihe nach, mit Marken für die Platzhalter, die jeder Schritt
 braucht und die er selbst füllt; ein Schritt ohne Antwort aus einem früheren
 Schritt wird rot markiert, lässt sich aber trotzdem starten. Die Zeilen lassen
-sich per Ziehen umsortieren, die Leiste selbst ist einzeln abschaltbar.
+sich per Ziehen umsortieren und per Rechtsklick entfernen (die Zwischenablage
+folgt), die Leiste selbst ist einzeln abschaltbar.
 Hotkeys pro Kachel, Herausziehen (mit oder, per Schalter, ohne
 Modifikatortaste), automatisches Einfügen. Formatiert kopieren (im Rechtsklick
 und im Editor, nur bei Text mit echter Markdown-Syntax): legt zusätzlich zur
