@@ -19,7 +19,7 @@ const FLOAT_HEX = /^#[0-9a-fA-F]{6}$/;
 // "Shadow strength"), kept fresh from two sources: the theme-changed event's
 // payload and one ink_prefs() fetch at module load (covers the window before
 // the first event arrives). Defaults match the backend's own shipped default.
-let INK = { auto: true, threshold: 60, halo: true, haloStrength: 85 };
+let INK = { auto: true, threshold: 60, halo: true, haloStrength: 75 };
 let lastTheme = null;
 let lastVars = null;
 let applied = false; // true once applyFloatTheme has run at least once
@@ -41,7 +41,7 @@ function readableInk(hex) {
 // White ink stays white up to the user's threshold (a deliberate look), but
 // on a colour past the contrast crossover it gets a dark halo so it reads,
 // unless the halo is switched off (INK.halo) or dialed to a different
-// strength (INK.haloStrength, percent; 85 is the halo's original fixed look).
+// strength (INK.haloStrength, percent).
 const INK_HALO_RATIO = 0.7 / 0.85;
 function inkShadow(hex) {
   if (!INK.halo) return "none";
@@ -82,7 +82,7 @@ function setInk(ink) {
     auto: ink.auto !== false,
     threshold: Number.isFinite(ink.threshold) ? ink.threshold : 60,
     halo: ink.halo !== false,
-    haloStrength: Number.isFinite(ink.haloStrength) ? ink.haloStrength : 85,
+    haloStrength: Number.isFinite(ink.haloStrength) ? ink.haloStrength : 75,
   };
   if (applied) applyFloatTheme(lastTheme, lastVars);
 }

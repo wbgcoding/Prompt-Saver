@@ -1448,7 +1448,20 @@ the video editor and the introduction tour ship on).
   menu**, next to the other tile settings, so the chain icon on a tile is
   easier to find. No setting was removed or renamed, only regrouped.
 - White text on light colours gets a dark halo so it stays readable; the
-  threshold for black text is unchanged.
+  threshold for black text is unchanged. The halo now starts at 75 percent
+  strength instead of 85 (the slider is unchanged).
+- The caution line in the expert menu now sits centered and in red at the top
+  of the page, stays visible while searching, and reads "Changes here can lead
+  to unexpected behavior."
+- The right-click menu no longer has "Compare with"; comparing two entries
+  stays in the library and in the duplicate finder.
+- Rescan in the duplicate finder now shows a small spinning ring for at least a
+  second, so you can see it ran, and a second click while it works is ignored.
+- A chain now survives switching to another program: the picks stay, locked or
+  not, until you click the chain button again or paste with Ctrl+V in the app.
+- The steps in the chain overview now reorder by dragging (it did not work
+  reliably before) and a right-click removes a step; the clipboard text is
+  rebuilt after either change.
 - An inserted video overlay now starts at its own beginning and stays in
   sync with its own sound, instead of showing a later moment of the clip
   while the sound played from the start.

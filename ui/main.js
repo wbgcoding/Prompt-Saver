@@ -616,9 +616,8 @@ function readableInk(hex) {
 // White ink stays white up to the user's threshold (a deliberate look), but
 // on a colour past the contrast crossover it gets a dark halo so it reads.
 // The halo can be switched off (inkHalo) or dialed in strength
-// (inkHaloStrength, percent). At 85 percent, the default, both alphas match
-// the halo's original fixed look; the second value keeps the same ratio
-// between the two shadow layers at any strength.
+// (inkHaloStrength, percent). The second alpha keeps the same ratio to the
+// first at any strength (0.7 to 0.85 was the original fixed look).
 const INK_HALO_RATIO = 0.7 / 0.85;
 function inkShadow(hex) {
   if (!flag("inkHalo")) return "none";
@@ -1933,8 +1932,8 @@ const EXPERT_VALUES = {
   viewGroupMaxRows: { label: "valViewGroupMaxRows", min: 4, max: 12, step: 1, def: 8, unit: "", gate: "viewGroups" },
   // Relative-luminance cutoff (/100) above which readableInk() picks black text.
   inkThreshold: { label: "valInkThreshold", min: 20, max: 90, step: 5, def: 60, unit: "%", gate: "autoInk" },
-  // How dark the halo behind white text gets; 85 reproduces the shadow's original fixed look.
-  inkHaloStrength: { label: "valInkHaloStrength", min: 10, max: 100, step: 5, def: 85, unit: "%", gate: "inkHalo" },
+  // How dark the halo behind white text gets, in percent.
+  inkHaloStrength: { label: "valInkHaloStrength", min: 10, max: 100, step: 5, def: 75, unit: "%", gate: "inkHalo" },
   // How much of a tab's outer edge counts as "drop here to reorder" rather than
   // "drop here to group" -- a wider tab needs a wider zone to stay easy to aim at.
   viewTabEdgeZone: { label: "valViewTabEdgeZone", min: 15, max: 45, step: 1, def: 33, unit: "%", gate: "multiView" },
@@ -4217,16 +4216,6 @@ function renderExpert() {
       b.textContent = t(tab.title);
       b.addEventListener("click", () => { expertTab = i; box.scrollTop = 0; renderExpert(); });
       bar.appendChild(b);
-      // The caution notice sits right after the System tab, in the tab bar
-      // itself: a plain line of text, never a tab and never focusable.
-      if (tab.title === "expTabSystem") {
-        const hint = document.createElement("span");
-        hint.className = "expert-hint";
-        hint.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">' +
-          '<path fill="currentColor" d="M12 3 1 21h22L12 3Zm0 5.5 6.6 11H5.4L12 8.5ZM11 11h2v5h-2v-5Zm0 6.5h2v2h-2v-2Z"/></svg>' +
-          '<span>' + t("expertHint") + "</span>";
-        bar.appendChild(hint);
-      }
     });
     tabBar.appendChild(bar);
   }
@@ -5533,11 +5522,12 @@ async function duplicateView(v) {
 // The chain button turns several TEXT buttons into one clipboard copy: click it,
 // then click text buttons in the order you want them; each shows its position (1,
 // 2, 3 …) and the joined text (newline-separated) lands on the clipboard after
-// every pick. It auto-ends after a paste (Ctrl+V while focused, or leaving the
-// window to paste elsewhere) or when the button is clicked again. Only text
+// every pick. It ends after a paste (Ctrl+V inside this window) or when
+// the button is clicked again; switching to another program leaves it
+// untouched. Only text
 // prompts qualify: image/file/video buttons copy media, which can't be joined.
 let chainMode = false;
-let chainLock = false; // "always on": survives window blur until turned off by hand
+let chainLock = false; // "always on": stays after a copy until turned off by hand
 const chainSel = []; // selected prompt ids, in pick order
 const chainTexts = new Map(); // id -> resolved copy text (variables already filled)
 
@@ -5614,7 +5604,6 @@ function renderChainOverview() {
     const row = document.createElement("div");
     row.className = "chain-ov-row";
     row.classList.toggle("chain-ov-missing", info.missing.length > 0);
-    row.draggable = true;
     const num = document.createElement("span");
     num.className = "chain-ov-num";
     num.textContent = String(i + 1);
@@ -5647,23 +5636,90 @@ function renderChainOverview() {
       miss.textContent = `${t("chainMissing")} ${info.missing.join(", ")}`;
       row.append(miss);
     }
-    row.addEventListener("dragstart", (e) => {
-      e.dataTransfer.setData("text/plain", String(i));
-      e.dataTransfer.effectAllowed = "move";
+    row.title = t("chainStepHint");
+    row.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      e.stopPropagation();
+      startChainStepDrag(e, row, list);
     });
-    row.addEventListener("dragover", (e) => { e.preventDefault(); row.classList.add("drag-over"); });
-    row.addEventListener("dragleave", () => row.classList.remove("drag-over"));
-    row.addEventListener("drop", (e) => {
+    row.addEventListener("contextmenu", (e) => {
       e.preventDefault();
-      row.classList.remove("drag-over");
-      const from = parseInt(e.dataTransfer.getData("text/plain"), 10);
-      if (!Number.isFinite(from) || from === i) return;
-      const [moved] = chainSel.splice(from, 1);
-      chainSel.splice(i, 0, moved);
-      refreshChainUi();
+      e.stopPropagation();
+      removeChainStep(i);
     });
     list.append(row);
   });
+}
+
+// Drops one step from the chain (same removal as un-picking its tile) and puts
+// the shortened chain on the clipboard. An empty chain stays active.
+function removeChainStep(i) {
+  const id = chainSel[i];
+  if (id === undefined) return;
+  chainSel.splice(i, 1);
+  chainTexts.delete(id);
+  refreshChainUi();
+  pushChainClipboard();
+}
+
+// Reorders the chain steps with plain pointer events (the webview's own drop
+// target swallows HTML5 drag and drop). A press that moves past DRAG_THRESHOLD
+// starts the drag; the step under the pointer shows a before/after mark from
+// the pointer's side of its middle, which also works across wrapped lines.
+function startChainStepDrag(down, row, list) {
+  const rows = () => [...list.querySelectorAll(".chain-ov-row")];
+  const from = rows().indexOf(row);
+  if (from < 0) return;
+  let dragging = false;
+  let target = null; // { el, after }
+  const clearMarks = () => {
+    for (const r of rows()) r.classList.remove("drag-over", "drop-before", "drop-after");
+  };
+  const move = (e) => {
+    if (e.pointerId !== down.pointerId) return;
+    if (!dragging) {
+      if (Math.abs(e.clientX - down.clientX) < DRAG_THRESHOLD &&
+          Math.abs(e.clientY - down.clientY) < DRAG_THRESHOLD) return;
+      dragging = true;
+      row.classList.add("dragging");
+      try { row.setPointerCapture(down.pointerId); } catch (_) {}
+    }
+    e.stopPropagation();
+    clearMarks();
+    const el = document.elementFromPoint(e.clientX, e.clientY)?.closest?.(".chain-ov-row");
+    if (el && el !== row && list.contains(el)) {
+      const r = el.getBoundingClientRect();
+      const after = e.clientX > r.left + r.width / 2;
+      el.classList.add("drag-over", after ? "drop-after" : "drop-before");
+      target = { el, after };
+    } else {
+      target = null;
+    }
+  };
+  const end = (e, commit) => {
+    if (e.pointerId !== down.pointerId) return;
+    window.removeEventListener("pointermove", move, true);
+    window.removeEventListener("pointerup", up, true);
+    window.removeEventListener("pointercancel", cancel, true);
+    try { row.releasePointerCapture(down.pointerId); } catch (_) {}
+    row.classList.remove("dragging");
+    clearMarks();
+    if (!dragging) return;
+    e.stopPropagation();
+    if (!commit || !target) return;
+    let to = rows().indexOf(target.el) + (target.after ? 1 : 0);
+    if (to > from) to -= 1;
+    if (to === from) return;
+    const [moved] = chainSel.splice(from, 1);
+    chainSel.splice(to, 0, moved);
+    refreshChainUi();
+    pushChainClipboard();
+  };
+  const up = (e) => end(e, true);
+  const cancel = (e) => end(e, false);
+  window.addEventListener("pointermove", move, true);
+  window.addEventListener("pointerup", up, true);
+  window.addEventListener("pointercancel", cancel, true);
 }
 
 // A rotating/variable prompt's pick goes through an await (peek, var fill)
@@ -5737,9 +5793,9 @@ function setChainMode(on) {
   refreshChainUi();
 }
 
-// Latch chaining "always on": a window switch normally resets the chain, but a
-// locked chain survives until the user turns it off by hand. The button fills with
-// the accent colour to mark the locked (infinite-repeat) state.
+// Latch chaining "always on": an unlocked chain ends after a paste in this
+// window, a locked one stays until the user turns it off by hand. The button
+// fills with the accent colour to mark the locked (infinite-repeat) state.
 function setChainLock() {
   if (!flag("chainPrompts") || !flag("chainLock")) return;
   chainLock = true;
@@ -10080,16 +10136,42 @@ async function openDupes() {
 // "Compare" button that opens the SAME view the library's/tile's free compare
 // uses (openCompareView below), passing this group along so that view shows
 // the finder's own "keep one side" actions instead of "take left/right".
-async function scanDupes() {
+// The Rescan button shows a ring for at least a second (opts.minBusyMs) so a scan
+// that answers in a few milliseconds still visibly did something. Only one scan
+// runs at a time: a second click on the button is ignored, any other caller that
+// arrives meanwhile (a list change) is replayed once the running scan is done.
+let dupScanBusy = false;
+let dupScanPending = false;
+async function scanDupes(opts = {}) {
+  if (dupScanBusy) {
+    if (!opts.fromButton) dupScanPending = true;
+    return;
+  }
+  dupScanBusy = true;
   const body = $("dupes-body");
-  body.innerHTML = "";
-  const loading = document.createElement("div");
-  loading.className = "hint";
-  loading.textContent = t("dupScanning");
-  body.appendChild(loading);
-  let groups;
+  const btn = $("dupes-rescan");
+  btn.classList.add("is-busy");
+  btn.setAttribute("aria-busy", "true");
+  // Old cards stay until the new list is ready; only an empty dialog shows the
+  // scanning line, so a rescan never flashes it.
+  if (!body.children.length) {
+    const loading = document.createElement("div");
+    loading.className = "hint";
+    loading.textContent = t("dupScanning");
+    body.appendChild(loading);
+  }
+  const started = Date.now();
+  let groups = null;
+  let failure = null;
   try { groups = await invoke("find_duplicates", { threshold: Math.round(val("similarThreshold")) }); }
-  catch (e) { errToast(e); body.innerHTML = ""; return; }
+  catch (e) { failure = e; }
+  const left = (opts.minBusyMs || 0) - (Date.now() - started);
+  if (left > 0) await new Promise((r) => setTimeout(r, left));
+  dupScanBusy = false;
+  btn.classList.remove("is-busy");
+  btn.removeAttribute("aria-busy");
+  if (dupScanPending) { dupScanPending = false; scanDupes(); return; }
+  if (failure) { errToast(failure); body.innerHTML = ""; return; }
   recordToolUsage("duplicate_finder");
   body.innerHTML = "";
   if (!groups.length) {
@@ -10314,24 +10396,6 @@ async function takeCompareSide(target, source) {
   await renderGrid(true);
   if (!libraryEl.classList.contains("hidden")) renderLibrary();
   toast(t("compareTaken"));
-}
-// Enters library selection with ONE entry pre-picked -- the user then picks the
-// second the normal way (click a row in select mode), and the batch bar's own
-// "Compare" button (enabled at exactly two selected) opens the view above. This
-// IS "the existing entry search": the library's own search field stays usable
-// the whole time selection mode is on.
-function startCompareWith(id) {
-  document.body.classList.add("library-front");
-  libraryEl.classList.remove("hidden");
-  libQuery = "";
-  $("library-q").value = "";
-  setLibSelectMode(true);
-  libSelected.add(id);
-  libLastId = id;
-  applyLibSelectionDom();
-  updateBatchBar();
-  renderLibrary();
-  toast(t("comparePickSecond"));
 }
 // Import hook: after an import, flag near-duplicates with a toast linking to the tool.
 async function maybeDupImportToast() {
@@ -17258,9 +17322,9 @@ function bind() {
   // Chain mode: combine several text buttons into one clipboard copy. Single
   // click toggles it; a quick double-click latches it "always on".
   $("chain-btn").addEventListener("click", onChainClick);
-  // A paste ends chain mode (unless latched). Ctrl/Cmd+V is only seen while we're
-  // focused; leaving the window to paste elsewhere blurs it: both finalize (the
-  // clipboard already holds the chain). Clicking the chain button is the manual off.
+  // A paste inside this window ends chain mode (unless latched); the clipboard
+  // already holds the chain. A paste in another program is not seen here, so the
+  // chain simply stays until the chain button ends it.
   document.addEventListener("keydown", (e) => {
     if (chainMode && !chainLock && (e.ctrlKey || e.metaKey) && (e.key === "v" || e.key === "V")) setChainMode(false);
   });
@@ -17292,46 +17356,8 @@ function bind() {
     if (!chainSel.length) { setChainMode(false); return; }
     if (flag("chainLock")) setChainLock(); // picked something → keep the chain alive
   });
-  // Keep the chain armed while a variable dialog is open: switching windows to
-  // look something up must not abort the chain (it leaves the popup stranded). A
-  // latched chain ignores blur entirely (that is the point of the lock).
-  //
-  // Dragging the window by its own drag region hands control to the OS move
-  // loop, which blurs and then refocuses the webview even though the user
-  // never left the app. That blur/focus pair must never be treated as a real
-  // window switch, or an active chain (locked or not) drops on every move.
-  // The flag only guards the blur/focus pair a move actually triggers: a
-  // plain mousedown on the drag region with no drag clears it again on
-  // mouseup, and a short timeout catches a drag that never reaches the
-  // webview's own mouseup at all, so a later real alt-tab is never masked.
-  let windowMoving = false;
-  let windowMovingTimer = null;
-  const armWindowMoving = () => {
-    windowMoving = true;
-    clearTimeout(windowMovingTimer);
-    windowMovingTimer = setTimeout(() => { windowMoving = false; }, 1500);
-  };
-  const disarmWindowMoving = () => { windowMoving = false; clearTimeout(windowMovingTimer); };
-  document.addEventListener("mousedown", (e) => {
-    if (e.target?.closest?.("[data-tauri-drag-region]")) armWindowMoving();
-  }, true);
-  window.addEventListener("mouseup", () => disarmWindowMoving());
-  window.addEventListener("blur", () => {
-    if (windowMoving) {
-      // The move is still going once the blur it causes actually arrives: stop the
-      // fallback timeout so a long drag cannot let the guard expire mid-move and
-      // have the matching focus read as a real return from another app.
-      clearTimeout(windowMovingTimer);
-      return;
-    }
-    if (chainMode && chainSel.length && !varsCleanup && !chainLock) setChainMode(false);
-  });
-  // A latched chain survives the blur but starts fresh when we return: the
-  // previous chain was already copied, so clear the picks (mode stays on).
-  window.addEventListener("focus", () => {
-    if (windowMoving) { disarmWindowMoving(); return; } // the move ended, chain untouched
-    if (chainLock && chainSel.length) { chainSel.length = 0; chainTexts.clear(); refreshChainUi(); }
-  });
+  // Switching to another program never touches a chain, locked or not: it ends
+  // only through the chain button or Ctrl+V pressed inside this window.
   // ==== 117/118: screenshot editor ====
   // Opens right after a capture, before #snip-modal. Pure frontend: it receives a
   // data URL and hands back an edited one; everything downstream of #snip-modal is
@@ -19767,7 +19793,7 @@ function bind() {
   // Duplicate finder modal (backups + statistics are now inline expert panels).
   $("dupes-close").addEventListener("click", () => $("dupes-modal").classList.add("hidden"));
   $("dupes-modal").addEventListener("pointerdown", (e) => { if (e.target === $("dupes-modal")) $("dupes-modal").classList.add("hidden"); });
-  $("dupes-rescan").addEventListener("click", () => scanDupes());
+  $("dupes-rescan").addEventListener("click", () => scanDupes({ fromButton: true, minBusyMs: 1000 }));
   // Compare view -- shared by the duplicate finder's own pairs and the
   // library's/tile's free "compare two entries" entry points below.
   $("compare-close").addEventListener("click", closeCompareView);
@@ -20219,8 +20245,6 @@ function bind() {
       }
     } else if (act === "duplicate") {
       await duplicatePrompt(id);
-    } else if (act === "compareWith") {
-      startCompareWith(id);
     } else if (act === "hide") {
       // Remove from the active view's grid; stays available in the library.
       const view = activeView();

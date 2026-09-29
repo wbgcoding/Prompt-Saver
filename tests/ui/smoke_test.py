@@ -2438,10 +2438,18 @@ PROBE = """
             }
             // Drag the red (3rd) row onto the 1st row and drop -- the strip must
             // recompute in place, not leave the red mark stuck at the old position.
-            const dt = new DataTransfer();
-            row2.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: dt }));
-            row0.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }));
-            row0.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+            const pt445 = (type, el, x, y) => el.dispatchEvent(new PointerEvent(type, {
+              bubbles: true, cancelable: true, pointerId: 5, isPrimary: true, button: 0,
+              buttons: type === 'pointerup' ? 0 : 1, clientX: x, clientY: y,
+            }));
+            const rr2 = row2.getBoundingClientRect();
+            const rr0 = row0.getBoundingClientRect();
+            const sx = rr2.left + rr2.width / 2, sy = rr2.top + rr2.height / 2;
+            const ex = rr0.left + rr0.width * 0.25, ey = rr0.top + rr0.height / 2;
+            pt445('pointerdown', row2, sx, sy);
+            pt445('pointermove', row2, sx + 14, sy);
+            pt445('pointermove', row2, ex, ey);
+            pt445('pointerup', row2, ex, ey);
             await sleep(150);
             rows = [...bar.querySelectorAll('.chain-ov-row')];
             if (!rows[0] || !rows[0].classList.contains('chain-ov-missing')) {
@@ -2481,79 +2489,110 @@ PROBE = """
           Math.round(gridTopBack) + 'px after the chain overview strip was shown and hidden again');
       }
     }
-    // Moving the window (a mousedown on a drag region, which starts the native
-    // OS move loop and blurs then refocuses the webview) must never end a running
-    // chain, locked or not -- only an explicit toggle, Escape or a finished chain may.
-    // A plain click on the drag region with no drag at all (mousedown then mouseup,
-    // no move) must not leave the guard armed: a real alt-tab right after still ends
-    // an unlocked chain.
+    // 555: the chain overview rows reorder by pointer drag and drop a step on
+    // right-click; the clipboard text follows both.
+    {
+      const findGridTile = (id) => [...document.querySelectorAll('#grid .tile')].find(e => (e.dataset.id || '') === id);
+      const startBtn = findGridTile('p0')?.querySelector('.tile-chain-start');
+      const ovRows = () => [...document.querySelectorAll('#chain-overview .chain-ov-row')];
+      const ovNames = () => ovRows().map((r) => r.querySelector('.chain-ov-name').textContent);
+      const clipParts = () => String(window.__LAST_COPY__ || '').split('\\n\\n');
+      const ptr = (type, el, x, y) => el.dispatchEvent(new PointerEvent(type, {
+        bubbles: true, cancelable: true, pointerId: 7, isPrimary: true, button: 0,
+        buttons: type === 'pointerup' ? 0 : 1, clientX: x, clientY: y,
+      }));
+      if (!startBtn) {
+        out.errors.push('555: fixture tile p0 has no chain-start button');
+      } else {
+        startBtn.click();
+        await sleep(150);
+        if (!await clickTile('p3')) out.errors.push('555: could not pick p3 into the chain');
+        if (!await clickTile('p2')) out.errors.push('555: could not pick p2 into the chain');
+        await sleep(150);
+        const rows0 = ovRows();
+        if (rows0.length !== 3) {
+          out.errors.push('555: expected three chain steps, got ' + rows0.length);
+        } else {
+          const names0 = ovNames();
+          const parts0 = clipParts();
+          if (parts0.length !== 3) out.errors.push('555: the chain clipboard text does not have three parts: ' + parts0.length);
+          if (!rows0[0].title) out.errors.push('555: a chain step has no tooltip');
+          const r3 = rows0[2].getBoundingClientRect();
+          const r1 = rows0[0].getBoundingClientRect();
+          const x3 = r3.left + r3.width / 2, y3 = r3.top + r3.height / 2;
+          ptr('pointerdown', rows0[2], x3, y3);
+          ptr('pointermove', rows0[2], x3 + 3, y3);
+          if (rows0[2].classList.contains('dragging')) out.errors.push('555: a move under the threshold already started the drag');
+          const lx = r1.left + r1.width * 0.25, ly = r1.top + r1.height / 2;
+          ptr('pointermove', rows0[2], x3 + 14, y3);
+          ptr('pointermove', rows0[2], lx, ly);
+          if (!rows0[2].classList.contains('dragging')) out.errors.push('555: the dragged step has no dragging class');
+          if (!rows0[0].classList.contains('drag-over')) out.errors.push('555: the step under the pointer shows no drag-over mark');
+          ptr('pointerup', rows0[2], lx, ly);
+          await sleep(200);
+          const names1 = ovNames();
+          const want1 = [names0[2], names0[0], names0[1]];
+          if (names1.join('|') !== want1.join('|')) out.errors.push('555: dragging step 3 onto the left half of step 1 gave ' + names1.join('|') + ', wanted ' + want1.join('|'));
+          const parts1 = clipParts();
+          const wantParts1 = [parts0[2], parts0[0], parts0[1]];
+          if (parts1.join('|') !== wantParts1.join('|')) out.errors.push('555: the clipboard text did not follow the new order');
+          if (ovRows().some((r) => r.classList.contains('dragging') || r.classList.contains('drag-over'))) out.errors.push('555: drag marks stayed after the drop');
+          // Right-click on step 2 removes it and the clipboard follows.
+          const row2 = ovRows()[1];
+          const cm = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 });
+          row2.dispatchEvent(cm);
+          await sleep(200);
+          if (!cm.defaultPrevented) out.errors.push('555: right-click on a step did not prevent the native menu');
+          if (!document.getElementById('ctx').classList.contains('hidden')) out.errors.push('555: right-click on a step opened the tile menu');
+          const names2 = ovNames();
+          if (names2.join('|') !== [names1[0], names1[2]].join('|')) out.errors.push('555: right-click did not remove exactly step 2: ' + names2.join('|'));
+          if (clipParts().join('|') !== [parts1[0], parts1[2]].join('|')) out.errors.push('555: the clipboard did not lose the removed step');
+          if (!document.body.classList.contains('chain-mode')) out.errors.push('555: removing a step ended the chain');
+        }
+      }
+      for (let i = 0; i < 3 && document.body.classList.contains('chain-mode'); i++) await click('chain-btn');
+      await sleep(150);
+    }
+    // 554: switching to another program (blur, then focus on return) never ends
+    // or clears a chain, locked or not; that includes the blur/focus pair a
+    // window move causes. Only the chain button, Escape or Ctrl+V in this window end it.
     {
       const findGridTile = (id) => [...document.querySelectorAll('#grid .tile')].find(e => (e.dataset.id || '') === id);
       const p0Tile = findGridTile('p0');
       const startBtn = p0Tile && p0Tile.querySelector('.tile-chain-start');
+      const pickedIds = () => ['p0', 'p3'].filter((id) => findGridTile(id)?.classList.contains('chain-picked'));
+      const awayAndBack = async () => {
+        window.dispatchEvent(new Event('blur'));
+        await sleep(60);
+        window.dispatchEvent(new Event('focus'));
+        await sleep(60);
+      };
       if (!startBtn) {
         out.errors.push('fixture tile p0 has no chain-start button to begin a chain with');
       } else {
         startBtn.click();
         await sleep(150);
         if (!await clickTile('p3')) out.errors.push('could not pick p3 into the chain');
-        if (!document.body.classList.contains('chain-mode')) {
-          out.errors.push('the chain never started, cannot test the window-move path');
+        if (!document.body.classList.contains('chain-mode') || pickedIds().length !== 2) {
+          out.errors.push('554: the chain did not start with two picks, cannot test the app switch');
         } else {
+          await awayAndBack();
+          if (!document.body.classList.contains('chain-mode')) out.errors.push('554: blur then focus ended an unlocked chain');
+          if (pickedIds().length !== 2) out.errors.push('554: blur then focus dropped the picks of an unlocked chain');
           const header = document.querySelector('[data-tauri-drag-region]');
-          if (!header) {
-            out.errors.push('no drag region found on the main window to simulate a move from');
-          } else {
+          if (header) {
             header.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }));
-            window.dispatchEvent(new Event('blur'));
-            await sleep(50);
-            window.dispatchEvent(new Event('focus'));
-            await sleep(50);
-            if (!document.body.classList.contains('chain-mode')) {
-              out.errors.push('moving the window (drag-region mousedown plus the resulting blur) switched an unlocked chain off');
+            await awayAndBack();
+            if (!document.body.classList.contains('chain-mode') || pickedIds().length !== 2) {
+              out.errors.push('554: a window move (drag-region mousedown, blur, focus) hurt the chain');
             }
-            const p3TileNow = findGridTile('p3');
-            if (!p3TileNow || !p3TileNow.classList.contains('chain-picked')) {
-              out.errors.push('moving the window dropped the chain picks');
-            }
-            // A click with no drag (mousedown immediately followed by mouseup, no
-            // move in between) must clear the guard again: a real alt-tab right
-            // after still ends the unlocked chain instead of being masked by it.
-            header.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }));
             window.dispatchEvent(new Event('mouseup'));
-            window.dispatchEvent(new Event('blur'));
-            await sleep(50);
-            if (document.body.classList.contains('chain-mode')) {
-              out.errors.push('a click on the drag region with no drag left the move guard armed for the next real blur');
-            }
-            // A locked chain must survive a drag longer than the fallback timeout:
-            // that timeout only catches a drag whose mouseup never reaches the
-            // webview, it must not let the guard expire while the blur it caused
-            // is still in effect and have the matching focus read as a real return.
-            for (let i = 0; i < 3 && document.body.classList.contains('chain-mode'); i++) await click('chain-btn');
-            await sleep(150);
-            startBtn.click();
-            await sleep(150);
-            if (!await clickTile('p3')) out.errors.push('could not pick p3 into the chain for the locked-chain drag test');
-            await click('chain-btn'); // on -> latched
-            await sleep(50);
-            if (!document.body.classList.contains('chain-mode')) {
-              out.errors.push('the chain-btn click did not latch the chain for the locked-chain drag test');
-            } else {
-              header.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }));
-              window.dispatchEvent(new Event('blur'));
-              await sleep(1650); // past the 1500ms fallback timeout, the drag is still going
-              window.dispatchEvent(new Event('focus'));
-              await sleep(50);
-              if (!document.body.classList.contains('chain-mode')) {
-                out.errors.push('a drag longer than the fallback timeout switched a locked chain off');
-              }
-              const p3TileLocked = findGridTile('p3');
-              if (!p3TileLocked || !p3TileLocked.classList.contains('chain-picked')) {
-                out.errors.push('a drag longer than the fallback timeout let the returning focus clear a locked chain picks');
-              }
-            }
           }
+          await click('chain-btn'); // on -> latched
+          await sleep(60);
+          await awayAndBack();
+          if (!document.body.classList.contains('chain-mode')) out.errors.push('554: blur then focus ended a locked chain');
+          if (pickedIds().length !== 2) out.errors.push('554: blur then focus cleared the picks of a locked chain');
         }
       }
       for (let i = 0; i < 3 && document.body.classList.contains('chain-mode'); i++) await click('chain-btn');
@@ -3179,40 +3218,54 @@ PROBE = """
       await click('expert-back');
       document.getElementById('settings').classList.add('hidden');
     }
-    // 511: the quick-profiles row is the first child of the expert menu, the
-    // filter row and tab bar follow, and the caution hint now lives inside
-    // the tab bar itself, right after the System tab.
+    // 511/551: the caution hint is the first child of the expert page, red and
+    // centered in every mode; the quick-profiles row follows it.
     {
       document.getElementById('settings').classList.remove('hidden');
       await click('expert-open');
       const expertBox = document.getElementById('settings-expert');
-      const firstChild = expertBox.firstElementChild;
-      if (!firstChild || !firstChild.classList.contains('expert-top-row')) {
-        out.errors.push('511: the expert menu top row (presets plus reset) is not the first child');
-      } else if (!firstChild.querySelector('.expert-presets') || firstChild.querySelector('.expert-presets') !== firstChild.firstElementChild) {
-        out.errors.push('511: the quick-profiles group is not the first thing in the top row');
-      }
-      // Jump every tab once so the hint (built after the System tab) actually exists.
-      for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
-        tb.click();
-        await sleep(80);
-      }
-      const hint = document.querySelector('#expert-tabs-bar .expert-hint');
-      if (!hint) {
-        out.errors.push('511: the expert menu caution hint is missing from the tab bar');
-      } else {
-        const tabBtns = [...document.querySelectorAll('#expert-tabs-bar .expert-tab')];
-        const systemIdx = (typeof EXPERT_TABS !== 'undefined') ? EXPERT_TABS.findIndex((tb) => tb.title === 'expTabSystem') : -1;
-        const prevTab = hint.previousElementSibling;
-        if (!prevTab || !prevTab.classList.contains('expert-tab')) {
-          out.errors.push('511: the caution hint does not directly follow a tab button');
-        } else if (systemIdx >= 0 && tabBtns[systemIdx] !== prevTab) {
-          out.errors.push('511: the caution hint does not directly follow the System tab');
+      const hint = document.getElementById('expert-hint');
+      const expertPage = document.getElementById('settings-expert');
+      const hintOk = (label) => {
+        if (!hint || expertPage.firstElementChild !== hint) {
+          out.errors.push('551: the caution hint is not the first child of the expert page (' + label + ')');
+          return;
+        }
+        const dangerProbe = document.createElement('span');
+        dangerProbe.style.color = 'var(--danger)';
+        document.body.appendChild(dangerProbe);
+        const dangerColor = getComputedStyle(dangerProbe).color;
+        dangerProbe.remove();
+        if (getComputedStyle(hint).color !== dangerColor) {
+          out.errors.push('551: the caution hint is not in the danger colour (' + label + '): ' + getComputedStyle(hint).color + ' vs ' + dangerColor);
+        }
+        const hr = hint.getBoundingClientRect();
+        const pr = expertPage.getBoundingClientRect();
+        const content = [...hint.children].map((c) => c.getBoundingClientRect());
+        const cx = (Math.min(...content.map((r) => r.left)) + Math.max(...content.map((r) => r.right))) / 2;
+        const px = pr.left + pr.width / 2;
+        if (hr.width < 1 || Math.abs(cx - px) > 2) {
+          out.errors.push('551: the caution hint is not centered (' + label + '): content x ' + cx + ' vs page x ' + px);
         }
         if (hint.matches('button, a, input, select, [tabindex]') || hint.hasAttribute('tabindex')) {
-          out.errors.push('511: the caution hint is focusable, it should be plain text');
+          out.errors.push('551: the caution hint is focusable, it should be plain text');
         }
+      };
+      hintOk('browse');
+      const topRow551 = expertBox.querySelector('.expert-top-row');
+      if (!topRow551 || hint.nextElementSibling !== topRow551) {
+        out.errors.push('511: the expert menu top row (presets plus reset) does not follow the hint');
+      } else if (!topRow551.querySelector('.expert-presets') || topRow551.querySelector('.expert-presets') !== topRow551.firstElementChild) {
+        out.errors.push('511: the quick-profiles group is not the first thing in the top row');
       }
+      const expertSearch551 = document.getElementById('expert-search');
+      expertSearch551.value = 'shadow';
+      expertSearch551.dispatchEvent(new Event('input'));
+      await sleep(250);
+      hintOk('while searching');
+      expertSearch551.value = '';
+      expertSearch551.dispatchEvent(new Event('input'));
+      await sleep(250);
       const firstTab0 = document.querySelector('#expert-tabs-bar .expert-tab');
       if (firstTab0) { firstTab0.click(); await sleep(100); }
       await click('expert-back');
@@ -3373,7 +3426,7 @@ PROBE = """
         const t = [...document.querySelectorAll('#grid .tile')].find((e) => (e.dataset.id || '') === 'p0');
         return t ? t.style.getPropertyValue('--ink-shadow') : null;
       };
-      const todayHalo512 = '0 0 2px rgba(0, 0, 0, 0.85), 0 1px 3px rgba(0, 0, 0, 0.7)';
+      const todayHalo512 = '0 0 2px rgba(0, 0, 0, 0.75), 0 1px 3px rgba(0, 0, 0, 0.62)';
       const startHalo512 = inkShadowOf512();
       if (startHalo512 === null) {
         out.errors.push('512: could not find the blue sample tile (p0) to check the ink halo');
@@ -3425,7 +3478,7 @@ PROBE = """
               out.errors.push('512: a lower shadow strength (40) did not lighten the tile halo, got ' + inkShadowOf512());
             }
             // Put the strength back to the shipped default for whatever runs after.
-            strengthSlider512.value = '85';
+            strengthSlider512.value = '75';
             strengthSlider512.dispatchEvent(new Event('input'));
             strengthSlider512.dispatchEvent(new Event('change'));
             await sleep(150);
@@ -5001,6 +5054,30 @@ PROBE = """
       if (libDupesModal.classList.contains('hidden')) {
         out.errors.push('the library header shortcut did not open the duplicate finder');
       }
+      // 552: Rescan shows a busy ring for at least a second even when the scan
+      // answers at once, ignores a second click meanwhile, and never changes width.
+      {
+        const rescan552 = document.getElementById('dupes-rescan');
+        const scanCalls552 = () => (window.__SMOKE_CALLS__ || []).filter((c) => c === 'find_duplicates').length;
+        await sleep(300);
+        const widthBefore552 = rescan552.getBoundingClientRect().width;
+        const callsBefore552 = scanCalls552();
+        rescan552.click();
+        await sleep(50);
+        rescan552.click();
+        await sleep(100);
+        const widthDuring552 = rescan552.getBoundingClientRect().width;
+        await sleep(750);
+        if (!rescan552.classList.contains('is-busy')) out.errors.push('552: the Rescan button is not busy 900 ms after the click');
+        if (rescan552.getAttribute('aria-busy') !== 'true') out.errors.push('552: the busy Rescan button has no aria-busy');
+        if (!rescan552.querySelector('.btn-spinner')) out.errors.push('552: the Rescan button has no spinner element');
+        await sleep(500);
+        if (rescan552.classList.contains('is-busy')) out.errors.push('552: the Rescan button is still busy 1400 ms after the click');
+        if (rescan552.hasAttribute('aria-busy')) out.errors.push('552: aria-busy stayed on after the scan');
+        if (scanCalls552() - callsBefore552 !== 1) out.errors.push('552: a second click during the busy state started another scan (' + (scanCalls552() - callsBefore552) + ' calls)');
+        if (Math.abs(widthBefore552 - widthDuring552) > 1) out.errors.push('552: the Rescan button changed width while busy: ' + widthBefore552 + ' to ' + widthDuring552);
+        if (!document.querySelectorAll('#dupes-body .dup-group').length) out.errors.push('552: no result list after the rescan');
+      }
       await click('dupes-close');
       await sleep(150);
     }
@@ -5071,30 +5148,6 @@ PROBE = """
     }
     document.getElementById('library-select-btn').classList.contains('active') && document.getElementById('library-select-btn').click();
     await click('library-close');
-    // The same view, reached from a tile's own context menu instead: picks the
-    // first entry, then the library's normal selection is how the second is chosen.
-    const tile3 = [...document.querySelectorAll('#grid .tile')].find(e => (e.dataset.id || '') === 'p3');
-    if (!tile3) {
-      out.errors.push('no tile found to test "compare with" from its context menu');
-    } else {
-      tile3.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
-      await sleep(200);
-      const cmpWithBtn = document.querySelector('#ctx [data-act="compareWith"]');
-      if (!cmpWithBtn) {
-        out.errors.push('the tile context menu has no "compare with" action');
-      } else {
-        cmpWithBtn.click();
-        await sleep(300);
-        if (document.getElementById('library').classList.contains('hidden')) {
-          out.errors.push('"compare with" did not open the library to pick a second entry');
-        }
-        if (!document.querySelector('#library-list .lib-item[data-id="p3"]')?.classList.contains('lib-selected')) {
-          out.errors.push('"compare with" did not pre-select the entry it was opened from');
-        }
-        document.getElementById('library-select-btn').classList.contains('active') && document.getElementById('library-select-btn').click();
-        await click('library-close');
-      }
-    }
     // The colour picker must fit the window at ANY size: it may neither scroll (the
     // knob would be out of reach) nor spill (the hex field gets cut off).
     if (await openEditor('p1')) {

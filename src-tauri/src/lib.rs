@@ -4883,7 +4883,7 @@ fn ink_prefs_of(settings: &Settings) -> InkPrefs {
         auto: settings.ui_flags.get("autoInk") != Some(&false), // on by default
         threshold: settings.ui_values.get("inkThreshold").copied().unwrap_or(60.0).clamp(20.0, 90.0),
         halo: settings.ui_flags.get("inkHalo") != Some(&false), // on by default
-        halo_strength: settings.ui_values.get("inkHaloStrength").copied().unwrap_or(85.0).clamp(10.0, 100.0),
+        halo_strength: settings.ui_values.get("inkHaloStrength").copied().unwrap_or(75.0).clamp(10.0, 100.0),
     }
 }
 
@@ -48378,7 +48378,7 @@ mod tests {
         let s = Settings::default();
         let prefs = ink_prefs_of(&s);
         assert!(prefs.halo, "the ink halo ships on");
-        assert_eq!(prefs.halo_strength, 85.0);
+        assert_eq!(prefs.halo_strength, 75.0);
 
         let mut off = Settings::default();
         off.ui_flags.insert("inkHalo".into(), false);

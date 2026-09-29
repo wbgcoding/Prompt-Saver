@@ -449,12 +449,15 @@ fast too often pauses the session with a toast instead of looping.
   copy. Hovering a text tile also shows a small chain icon next to its
   selection checkbox that starts a chain with that tile as the first entry
   directly, switchable off on its own in the expert menu under Tiles &
-  copying, alongside the rest of the chain settings.
+  copying, alongside the rest of the chain settings. A chain stays when you
+  switch to another program; it ends when you click the chain button again or
+  paste with Ctrl+V in the app window.
 - Chain overview: while chaining, a strip above the grid lists the picked
   steps in order, with small marks for the placeholders each step needs and
   the reserved names it fills by itself. A step turns red when nothing
   earlier in the chain answers a placeholder it needs, though the chain can
-  still be started. Drag a row to reorder the chain right there. Switchable
+  still be started. Drag a row to reorder the chain right there, right-click a row to
+  remove that step; the clipboard follows either change. Switchable
   off on its own in the expert menu.
 - Per-tile hotkeys: copy a specific tile from anywhere, without opening the app
 - Drag-out: hold the modifier key and drag a tile onto another window to paste
@@ -1281,12 +1284,15 @@ zu häufiges Einfügen pausiert die Sitzung mit einem Hinweis statt zu wiederhol
 
 **Kopieren**: Verketten (mehrere verschiedene Kacheln als ein Text, anders als
 Rotation oben; auch direkt über ein Kettensymbol an der Kachel, einzeln
-abschaltbar unter Kacheln & Kopieren im Experten-Menü). Beim Verketten zeigt
+abschaltbar unter Kacheln & Kopieren im Experten-Menü). Eine Kette bleibt beim Wechsel in ein
+anderes Programm bestehen und endet erst durch erneutes Klicken auf den
+Ketten-Knopf oder Strg+V im App-Fenster. Beim Verketten zeigt
 eine Leiste über dem Raster die gewählten
 Schritte der Reihe nach, mit Marken für die Platzhalter, die jeder Schritt
 braucht und die er selbst füllt; ein Schritt ohne Antwort aus einem früheren
 Schritt wird rot markiert, lässt sich aber trotzdem starten. Die Zeilen lassen
-sich per Ziehen umsortieren, die Leiste selbst ist einzeln abschaltbar.
+sich per Ziehen umsortieren und per Rechtsklick entfernen (die Zwischenablage
+folgt), die Leiste selbst ist einzeln abschaltbar.
 Hotkeys pro Kachel, Herausziehen (mit oder, per Schalter, ohne
 Modifikatortaste), automatisches Einfügen. Formatiert kopieren (im Rechtsklick
 und im Editor, nur bei Text mit echter Markdown-Syntax): legt zusätzlich zur

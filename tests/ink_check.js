@@ -64,7 +64,7 @@ async function run() {
   check("pre-fetch default: #4a7dd8 (medium blue) stays white", pillFg(), "#fff");
 
   // ink_prefs() resolves with the shipped default explicitly.
-  resolveInkPrefs({ auto: true, threshold: 60, halo: true, haloStrength: 85 });
+  resolveInkPrefs({ auto: true, threshold: 60, halo: true, haloStrength: 75 });
   await tick();
   applyFloatTheme("dark", { accent: "#4a7dd8" });
   check("threshold 60: #4a7dd8 stays white (red under the old fixed 0.179 split)", pillFg(), "#fff");
@@ -78,13 +78,17 @@ async function run() {
   applyFloatTheme("dark", { accent: "#ffffff" });
   check("threshold 60: #ffffff (black text) gets no halo", pillInkShadow(), "none");
   applyFloatTheme("dark", { accent: "#4fa3e0" });
-  check("threshold 60, halo 85: #4fa3e0 (white text, past the crossover) gets today's halo",
+  check("threshold 60, halo 75: #4fa3e0 (white text, past the crossover) gets the default halo",
+    pillInkShadow(), "0 0 2px rgba(0, 0, 0, 0.75), 0 1px 3px rgba(0, 0, 0, 0.62)");
+  themeHandler({ payload: { ink: { auto: true, threshold: 60, halo: true, haloStrength: 85 } } });
+  applyFloatTheme("dark", { accent: "#4fa3e0" });
+  check("halo strength 85 still gives the old look",
     pillInkShadow(), "0 0 2px rgba(0, 0, 0, 0.85), 0 1px 3px rgba(0, 0, 0, 0.7)");
   applyFloatTheme("dark", { accent: "#202020" });
   check("threshold 60: #202020 (dark enough for white on its own) gets no halo", pillInkShadow(), "none");
 
   // The halo can be switched off entirely, live.
-  themeHandler({ payload: { ink: { auto: true, threshold: 60, halo: false, haloStrength: 85 } } });
+  themeHandler({ payload: { ink: { auto: true, threshold: 60, halo: false, haloStrength: 75 } } });
   applyFloatTheme("dark", { accent: "#4fa3e0" });
   check("halo off: #4fa3e0 gets no halo", pillInkShadow(), "none");
 
@@ -95,7 +99,7 @@ async function run() {
     pillInkShadow(), "0 0 2px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.33)");
 
   // A later theme-changed event can still flip the auto switch off, live.
-  themeHandler({ payload: { ink: { auto: false, threshold: 60, halo: true, haloStrength: 85 } } });
+  themeHandler({ payload: { ink: { auto: false, threshold: 60, halo: true, haloStrength: 75 } } });
   applyFloatTheme("dark", { accent: "#4a7dd8" });
   check("switch off: #4a7dd8 stays white", pillFg(), "#fff");
   applyFloatTheme("dark", { accent: "#ffd54f" });

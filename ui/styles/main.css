@@ -1620,18 +1620,16 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
    profile writes its changed flags and is gone, never a state of its own. */
 .expert-presets { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .expert-presets-label { font-size: 12px; font-weight: 600; color: var(--muted); }
-/* The caution notice, now built by renderExpert() right after the System tab
-   button inside .expert-tabs itself rather than as its own row above
-   everything -- a plain muted line, not a tab, never focusable. margin-left:
-   auto only pulls it to the line's end when it still fits there; once the
-   tabs plus the notice would overflow, flex-wrap just drops it to its own
-   line under the tabs, same as a long tab label already wraps. */
+/* The caution notice: static markup, first line of the expert page, centered
+   and red in every mode (also while searching). A plain line, never focusable. */
 .expert-hint {
   display: flex;
   align-items: center;
+  justify-content: center;
+  text-align: center;
   gap: 6px;
-  margin: 0 0 0 auto;
-  color: var(--muted);
+  margin: 0;
+  color: var(--danger);
   font-size: 12px;
   font-weight: 600;
   line-height: 1.4;
@@ -1811,8 +1809,13 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   border-radius: 8px;
   background: var(--surface-2);
   cursor: grab;
+  touch-action: none;
+  user-select: none;
 }
+.chain-ov-row.dragging { opacity: .6; cursor: grabbing; }
 .chain-ov-row.drag-over { border-color: var(--accent); }
+.chain-ov-row.drop-before { box-shadow: -3px 0 0 var(--accent); }
+.chain-ov-row.drop-after { box-shadow: 3px 0 0 var(--accent); }
 .chain-ov-row.chain-ov-missing { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, var(--surface-2)); }
 .chain-ov-num {
   min-width: 18px;
@@ -2908,6 +2911,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   display: flex; flex-direction: column; gap: 10px;
   flex: 1 1 auto; min-height: 0;
 }
+#settings-expert > .expert-hint,
 #settings-expert > .expert-top-row,
 #settings-expert > .expert-filter-row,
 #settings-expert > #expert-tabs-bar { flex: 0 0 auto; }
@@ -4386,6 +4390,29 @@ body.drag-over::after {
   cursor: pointer;
 }
 .head-toggle:hover { border-color: var(--accent); }
+/* Reusable busy state for a button: the label fades out and a small ring fades
+   in on the same spot, so the button never changes width. Under no-animations
+   and reduced motion the ring simply stays still. */
+.btn-busyable { position: relative; }
+.btn-busyable .btn-label { transition: opacity 200ms; }
+.btn-busyable .btn-spinner {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  box-sizing: border-box;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms;
+}
+.btn-busyable.is-busy .btn-label { opacity: 0; }
+.btn-busyable.is-busy .btn-spinner { opacity: 1; animation: btn-spin 0.8s linear infinite; }
+@keyframes btn-spin { to { transform: rotate(360deg); } }
 .head-toggle.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 /* "Clear history" is a .head-toggle AND .head-clear; the base .head-toggle colour above
    would win at equal specificity, so re-assert the danger colour more specifically. */
