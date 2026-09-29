@@ -851,6 +851,24 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **The video export panel no longer has two "Save as" buttons.** The button
+  that picked a file before exporting is gone (the name field and "Export to…"
+  cover it), and the one shown after an export now reads "Move to…" with a
+  tooltip saying it moves the finished video to another place.
+- **The 720p, 1080p and larger resolution presets can be chosen again.** A
+  recording smaller than the preset (a small region, say) used to fall back to
+  "keep original" whatever you clicked. A larger preset now enlarges the video,
+  says so under the buttons and exports with a sharper scaler; a preset equal to
+  the source height keeps the original.
+- **The video editor no longer hangs when a second recording arrives during
+  the restore question.** Opening another recording while the question about an
+  unfinished edit was still open left the first load waiting forever. The old
+  question is now closed and released, and only an explicit "start fresh" answer
+  discards the saved edit.
+- **The video export no longer fails after a tempo change.** A speed such as
+  1.3x made the output length a fraction of a millisecond, which the export
+  refused with an "invalid type" error. The length is now rounded to whole
+  milliseconds before it is sent.
 - **A start that could not open the database could cost every prompt.** If the
   emergency copy of the prompts was missing at that moment — the state an
   earlier failed save can leave behind — the app came up empty and the next

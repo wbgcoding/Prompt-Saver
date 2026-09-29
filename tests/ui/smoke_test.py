@@ -12109,11 +12109,6 @@ VIDEO_PROBE = """
     if (destInput.value !== 'C:\\\\Custom\\\\my-clip.mp4') {
       errs.push('typing a destination path directly did not stick as an override');
     }
-    document.getElementById('ve-export-choose-file').click();
-    await sleep(80);
-    if (!destInput.value.startsWith('C:\\\\Videos')) {
-      errs.push('"Save as..." did not adopt the picked file path');
-    }
     const pickedFile = destInput.value;
     document.getElementById('ve-export-choose-folder').click();
     await sleep(80);
@@ -12189,6 +12184,18 @@ VIDEO_PROBE = """
     }
     if (document.getElementById('ve-export-saveas').classList.contains('hidden')) {
       errs.push('503: the retried export did not complete successfully');
+    }
+    // The one control that acts on a finished export reads "Move to..." with a
+    // tooltip, and the old pre-export file picker is gone: the name field plus
+    // "Export to..." cover it.
+    {
+      const moveBtn = document.getElementById('ve-export-saveas');
+      const moveText = moveBtn.textContent.trim();
+      if (moveText !== 'Move to…') errs.push('547: the post-export button reads ' + JSON.stringify(moveText) + ', expected Move to...');
+      if (!moveBtn.title || !moveBtn.title.includes('exported')) errs.push('547: the Move to button has no tooltip: ' + JSON.stringify(moveBtn.title));
+      if (document.getElementById('ve-export-choose-file')) errs.push('547: the pre-export Save as button still exists');
+      const saveAsLike = [...document.querySelectorAll('#ve-panel-export button')].filter((b) => /Save as|Speichern unter/.test(b.textContent));
+      if (saveAsLike.length) errs.push('547: a Save as button is still in the export panel: ' + saveAsLike.map((b) => b.id).join(','));
     }
     window.__PICK_FOLDER__ = null;
 
@@ -12491,6 +12498,115 @@ EDIT_STATE_PROBE = """
       }
     }
   } catch (e) { errs.push(which + 'probe: ' + e.message); }
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
+# A 1280x720 source (a small region recording): the fixed-height presets may
+# enlarge. 1080p sets a 1920x1080 scale op and shows the "scaled up" hint, the
+# export filter scales with lanczos; 720p equals the source height, sets no op,
+# selects "keep original" and shows no hint.
+SCALE_UP_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const until = async (fn, tries) => {
+    for (let i = 0; i < (tries || 100) && !fn(); i++) await sleep(50);
+    return fn();
+  };
+  try {
+    const cur = document.getElementById('ve-scale-current');
+    const loaded = await until(() => /1280/.test(cur.textContent) && document.querySelectorAll('#ve-scale-presets button').length > 3, 300);
+    if (!loaded) errs.push('the 1280x720 source never loaded: ' + cur.textContent);
+    else {
+      const btn = (k) => [...document.querySelectorAll('#ve-scale-presets button')].find((b) => b.dataset.key === k);
+      const hint = document.getElementById('ve-scale-uphint');
+      const wField = document.getElementById('ve-scale-w');
+      const hField = document.getElementById('ve-scale-h');
+      if (!hint) errs.push('there is no scale-up hint element');
+      else {
+        if (!hint.classList.contains('hidden')) errs.push('the hint shows before any preset is picked');
+        btn('1080').click();
+        await sleep(60);
+        if (wField.value !== '1920' || hField.value !== '1080') errs.push('1080p on a 720 source did not set 1920x1080, got ' + wField.value + 'x' + hField.value);
+        if (hint.classList.contains('hidden')) errs.push('no scale-up hint while 1080p is selected on a 720 source');
+        if (!btn('1080').classList.contains('sel')) errs.push('the 1080p button is not marked selected');
+        if (!hint.textContent.trim() || /^veScaleUpHint/.test(hint.textContent.trim())) errs.push('the hint carries no text: ' + hint.textContent);
+        document.getElementById('ve-export-start').click();
+        await sleep(300);
+        const call = (window.__SMOKE_ARGS__ || []).filter((c) => c[0] === 'export_video').pop();
+        const chain = call && call[1] && call[1].req ? String(call[1].req.filter_chain) : '';
+        if (!/scale=1920:1080:flags=lanczos/.test(chain)) errs.push('the export filter does not enlarge with lanczos: ' + chain);
+        btn('720').click();
+        await sleep(60);
+        if (!hint.classList.contains('hidden')) errs.push('the hint shows for the preset equal to the source height');
+        if (!btn('').classList.contains('sel')) errs.push('the source-height preset did not select keep original');
+        if (document.querySelectorAll('#ve-ops-list .ve-op-row').length !== 0) errs.push('the source-height preset left a scale op behind');
+        btn('480').click();
+        await sleep(60);
+        if (!hint.classList.contains('hidden')) errs.push('the hint shows for a smaller preset');
+        if (wField.value !== '854' || hField.value !== '480') errs.push('480p on a 720 source did not set 854x480, got ' + wField.value + 'x' + hField.value);
+      }
+    }
+  } catch (e) { errs.push('probe: ' + e.message); }
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
+# A second recording arriving (the "video-editor-load" event of a reused window)
+# while the restore dialog of the first is still open: the first load must
+# settle instead of waiting forever on a dialog nobody can answer any more, and
+# the new source must get its own working dialog. The first load finishing is
+# seen through the render loop the boot code starts only after it: a
+# requestAnimationFrame(tick) call planted before the module runs.
+EDIT_STATE_SUPERSEDE_PROBE = """
+<script>
+window.__TICK_STARTED__ = false;
+const realRaf = window.requestAnimationFrame.bind(window);
+window.requestAnimationFrame = (fn) => {
+  if (fn && fn.name === 'tick') window.__TICK_STARTED__ = true;
+  return realRaf(fn);
+};
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const until = async (fn, tries) => {
+    for (let i = 0; i < (tries || 100) && !fn(); i++) await sleep(50);
+    return fn();
+  };
+  try {
+    const overlay = document.getElementById('ve-confirm');
+    const shown = await until(() => overlay && !overlay.classList.contains('hidden'), 300);
+    if (!shown) errs.push('the first restore dialog never opened');
+    else {
+      window.__FIRE__('video-editor-load', { path: 'C:\\\\Recordings\\\\ps-second-recording.mp4', origin_dir: '' });
+      // Long enough for the second load to get through its probe and reopen
+      // the dialog for its own saved state.
+      await sleep(1500);
+      if (!window.__TICK_STARTED__) errs.push('the first load never settled after a second recording superseded its restore dialog');
+      if (window.__EDIT_STATE_DISCARDED__) errs.push('a superseded dialog must not discard the saved edit state');
+      const reopened = await until(() => !overlay.classList.contains('hidden'), 100);
+      if (!reopened) errs.push('the second recording got no restore dialog of its own');
+      else {
+        document.getElementById('ve-confirm-ok').click();
+        await sleep(200);
+        const rows = document.querySelectorAll('#ve-ops-list .ve-op-row').length;
+        if (rows !== 2) errs.push('answering the second dialog did not restore the saved ops: ' + rows + ' rows');
+        if (!overlay.classList.contains('hidden')) errs.push('the second dialog did not close after the answer');
+      }
+    }
+  } catch (e) { errs.push('probe: ' + e.message); }
   const pre = document.createElement('pre');
   pre.id = 'SMOKE';
   pre.textContent = JSON.stringify(errs);
@@ -14690,6 +14806,56 @@ def main():
             failed += len(errs)
             if not errs:
                 print("   ok")
+
+        # A 1280x720 source: the fixed-height presets may enlarge.
+        side = tmp / "ui" / "video-scale-up.html"
+        side.write_text(
+            (REPO / "ui" / "video.html").read_text(encoding="utf-8")
+            .replace("<script",
+                     '<script>window.__PROBE_W__ = 1280; window.__PROBE_H__ = 720;</script>\n'
+                     '<script src="tauri_stub.js"></script>\n<script', 1)
+            .replace("</body>", SCALE_UP_PROBE + "</body>"),
+            encoding="utf-8")
+        proc = subprocess.run(
+            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+             f"--user-data-dir={tmp / 'profile-video-scale-up'}", "--allow-file-access-from-files",
+             "--window-size=1130,860", "--virtual-time-budget=30000",
+             "--dump-dom", side.as_uri()],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=180)
+        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        print("-- video.html scale presets on a 720p source")
+        for e in errs:
+            print(f"   FAIL: {e}")
+        failed += len(errs)
+        if not errs:
+            print("   ok")
+
+        # A second recording arriving while the first one's restore dialog is open.
+        side = tmp / "ui" / "video-restore-superseded.html"
+        side.write_text(
+            (REPO / "ui" / "video.html").read_text(encoding="utf-8")
+            .replace("<script",
+                     f'<script>window.__EDIT_STATE_FIXTURE__ = {edit_state_fixture};</script>\n'
+                     '<script src="tauri_stub.js"></script>\n<script', 1)
+            .replace("</body>", EDIT_STATE_SUPERSEDE_PROBE + "</body>"),
+            encoding="utf-8")
+        proc = subprocess.run(
+            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+             f"--user-data-dir={tmp / 'profile-video-restore-superseded'}", "--allow-file-access-from-files",
+             "--window-size=1130,860", "--virtual-time-budget=30000",
+             "--dump-dom", side.as_uri()],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=180)
+        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        print("-- video.html restore dialog (superseded by a second recording)")
+        for e in errs:
+            print(f"   FAIL: {e}")
+        failed += len(errs)
+        if not errs:
+            print("   ok")
 
         # 420: dragging a grid tile onto a view tab. Its own boot, same reasoning
         # as the restore-dialog and store-sealing runs below: window.__DRAG_VIEW_TEST__

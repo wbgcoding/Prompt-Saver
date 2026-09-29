@@ -250,8 +250,8 @@ opens the clip in its own window with a live preview and no processing until
 you actually export: trim and cut (frame-exact, keeps the original quality
 when nothing else changes), crop, change speed, fade in/out, resize (typed
 width/height or a percentage, an aspect-ratio lock, and quick presets from
-4K down to 25%; a preset never enlarges past the source, but the percent
-field and free typing can, for upscaling on purpose), and overlay images,
+4K down to 25%; a preset larger than the source enlarges the video and says
+so, one equal to the source height keeps the original), and overlay images,
 freeze-frames, text, pixelation, a spotlight or a keys overlay (four
 keyboard-layout presets plus a free selection of keys, filled from a
 recording's own key data if it captured any) anywhere on the timeline. A
@@ -265,10 +265,10 @@ animated WebP and APNG as well, each with a short note on what it's good for;
 GIF, WebP and APNG carry no sound at all (the source audio stays untouched in
 the original recording) and warn past ten seconds, since all three grow large
 fast. The export destination is an editable field, not just a fixed name next
-to the source file: type into it directly, use "Save as…" to pick a full path
-through the usual file dialog, or "Export to…" to keep the file name and only
-choose a different folder; changing the format only rewrites the extension,
-never a folder or name you already typed. The chosen folder is remembered as
+to the source file: type into it directly, or use "Export to…" to keep the
+file name and only choose a different folder; once an export has finished,
+"Move to…" moves that finished video to another place. Changing the format only
+rewrites the extension, never a folder or name you already typed. The chosen folder is remembered as
 the default for next time. "Export and copy" next to it skips naming anything
 at all: it exports into a copy that cleans itself up on its own (after an hour,
 and again on the next launch, both adjustable in the expert menu) and puts the
@@ -1162,10 +1162,10 @@ Ende oder an der aktuellen Stelle; jede zusätzliche Quelle wird beim
 Auswählen einmal geprüft und bleibt sichtbar als fehlend markiert, falls sie
 später verschoben oder gelöscht wird, bis zu einer Höchstzahl je Projekt
 (ab Werk acht, einstellbar im Expertenmenü). Das Exportziel ist ein
-Eingabefeld, kein fester Name mehr: direkt hineintippen, „Speichern als…" für
-den vollen Pfad über den gewohnten Dateidialog, oder „Exportieren nach…", um
-nur den Ordner zu ändern und den Dateinamen zu behalten; ein Formatwechsel
-ändert nur die Endung, nie Ordner oder Namen, die man selbst eingetippt hat.
+Eingabefeld, kein fester Name mehr: direkt hineintippen, oder „Exportieren nach…", um
+nur den Ordner zu ändern und den Dateinamen zu behalten; nach einem fertigen
+Export verschiebt „Verschieben nach…" das fertige Video an einen anderen Ort.
+Ein Formatwechsel ändert nur die Endung, nie Ordner oder Namen, die man selbst eingetippt hat.
 „Exportieren und kopieren" daneben verzichtet ganz auf einen Namen: es
 exportiert in eine Kopie, die sich selbst aufräumt (nach einer Stunde, und
 erneut beim nächsten Start, beides im Expertenmenü einstellbar), und legt die

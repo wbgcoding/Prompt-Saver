@@ -444,7 +444,6 @@ const RESULTS = {
   },
   open_video_editor: () => null,
   // 335: export-destination pickers for the video editor's export row.
-  pick_export_dest: (a) => "C:\\Videos\\" + (a && a.defaultName || "export.mp4"),
   // A probe that needs the picker to answer with a specific folder sets
   // window.__PICK_FOLDER__ first; everything else gets the export folder.
   pick_folder: () => window.__PICK_FOLDER__ || "C:\\Videos\\Exports",
@@ -483,7 +482,7 @@ const RESULTS = {
   // branch -- window.__KEY_SIDECAR__ (default: none) is the fixture read_key_sidecar
   // hands back, a plain {hold_ms, events} object shaped like keylog::KeySidecar.
   probe_recording: () => ({
-    duration_ms: 600000, fps: 30, width: 1920, height: 1080,
+    duration_ms: 600000, fps: 30, width: window.__PROBE_W__ || 1920, height: window.__PROBE_H__ || 1080,
     has_audio: true, has_mic_track: true, mic_sidecar: "",
     has_keys_sidecar: !!window.__KEY_SIDECAR__,
   }),

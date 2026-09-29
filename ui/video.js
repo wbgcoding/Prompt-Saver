@@ -314,7 +314,12 @@ let confirmState = null;
 // (see closeWindow()'s export-in-progress case) -- the third button is click-only,
 // with no Escape/Enter shortcut of its own, and resolves the promise to "third"
 // rather than a boolean.
+//
+// Only one dialog can be open. A newer one settles a still-pending older one
+// with null (superseded, not an answer) so its await never hangs; every caller
+// treats null as "do nothing" and only an explicit false means "discard".
 function veConfirm(title, message, okLabel, opts = {}) {
+  closeConfirm(null);
   return new Promise((resolve) => {
     const overlay = $("ve-confirm");
     confirmState = { resolve, prev: document.activeElement };
@@ -1833,12 +1838,13 @@ function renderScalePresets() {
 }
 
 // The one place a scale op becomes literal pixels: a fixed-height preset
-// refuses to enlarge past the source (picking 1080p for a 720p clip means
-// "don't shrink it", not "blow it up and waste bits doing so"), while a
-// percent value always applies as typed -- upscaling on purpose stays
-// possible through the percent field and its 50%/25%... well above 100 too.
+// gives its own size whether that is smaller or larger than the source (a
+// region recording is often below 720 px, and refusing to enlarge would turn
+// every preset into "keep original"). Only a preset equal to the source
+// height needs no op at all and stays "keep original". A percent value always
+// applies as typed.
 function scaleForHeightPreset(h) {
-  if (!VE.w || !VE.h || h >= VE.h) return null;
+  if (!VE.w || !VE.h || h === VE.h) return null;
   return { w: even(Math.round((VE.w * h) / VE.h)), h: even(h) };
 }
 function scaleForPercent(pct) {
@@ -1903,6 +1909,8 @@ function updateScaleCurrent() {
   }
 
   const key = currentScalePresetKey();
+  // Only a selected height preset that is taller than the source gets the hint.
+  $("ve-scale-uphint").classList.toggle("hidden", !(scale && key !== null && SCALE_HEIGHT_PRESETS.includes(Number(key)) && scale.h > VE.h));
   for (const btn of $("ve-scale-presets").querySelectorAll("button")) {
     btn.classList.toggle("sel", key !== null && btn.dataset.key === key);
   }
@@ -3007,11 +3015,15 @@ function buildVideoChain() {
     if (fade.outMs > 0) chain(`fade=t=out:st=${Math.max(0, total - fade.outMs / 1000).toFixed(3)}:d=${(fade.outMs / 1000).toFixed(3)}`);
   }
 
-  // The op itself already carries the decision: fixed-height presets refuse
-  // to be set at or above the source size (see scaleForHeightPreset), while
-  // the percent field and free width/height typing are meant to upscale on
-  // request. Nothing left to guard here.
-  if (downscale) chain(`scale=${downscale.w}:${downscale.h}`);
+  // The op itself already carries the decision (a preset, the percent field or
+  // typed width/height, larger or smaller than the source). Enlarging gets the
+  // sharper lanczos scaler instead of ffmpeg's default bicubic one.
+  if (downscale) {
+    const inW = crop ? crop.rect.w : VE.w;
+    const inH = crop ? crop.rect.h : VE.h;
+    const enlarging = downscale.w > inW || downscale.h > inH;
+    chain(`scale=${downscale.w}:${downscale.h}${enlarging ? ":flags=lanczos" : ""}`);
+  }
 
   // GIF, animated WebP and APNG balloon in file size fast at a high resolution
   // -- cap the long side regardless of any explicit scale op above.
@@ -3227,7 +3239,7 @@ async function refreshExportSizeNote(format) {
     format,
     videoKbps: videoKbps(),
     losslessQuality: exportQuality() === "lossless",
-    durationMs: totalOutMs(),
+    durationMs: Math.round(totalOutMs()),
   }).catch(() => null);
   if (myGen !== exportNoteGen) return; // superseded by a later call
   if (exportFormat() !== format || isLosslessCopy()) return; // stale by the time it landed
@@ -3294,7 +3306,8 @@ function setProgress(pct) {
 async function startExport(toClipboard) {
   if (VE.exporting) return;
   if (!VE.ffmpeg) { toast(t("recFfmpegMissingHint")); return; }
-  const total = totalOutMs();
+  // The backend takes whole milliseconds; a tempo such as 1.3x makes the output length fractional.
+  const total = Math.round(totalOutMs());
   if (total < 1) { toast(t("veNothingToExport")); return; }
   const lossless = isLosslessCopy();
   const format = exportFormat();
@@ -3665,8 +3678,7 @@ for (const id of ["ve-fade-in", "ve-fade-out"]) {
 
 // The Edit tab's width/height/percent fields and the Export tab's read-only
 // summary are two faces of the one same "scale" op -- this is the only
-// place that ever writes it, literally, with no upscale guard: that guard
-// belongs to the fixed-height presets alone (see scaleForHeightPreset).
+// place that ever writes it, literally, with no size guard of any kind.
 function setScaleOp(w, h) {
   if (w == null || h == null) { removeOps((o) => o.tool === "scale"); return; }
   const cw = even(clamp(Math.round(w), 16, 7680));
@@ -3801,18 +3813,6 @@ $("ve-export-dest").addEventListener("change", () => {
   VE.destOverride = value || null;
   updateExportNote();
 });
-$("ve-export-choose-file").addEventListener("click", async () => {
-  const defaultName = destPath().replace(/^.*[\\/]/, "");
-  const picked = await invoke("pick_export_dest", { defaultName }).catch(() => null);
-  if (!picked) return;
-  VE.destOverride = picked;
-  // Keep the plain-name field showing what the dialog actually picked,
-  // rather than freezing on whatever it said the moment before.
-  const pickedBase = picked.replace(/^.*[\\/]/, "");
-  const dot = pickedBase.lastIndexOf(".");
-  VE.exportNameOverride = dot > 0 ? pickedBase.slice(0, dot) : pickedBase;
-  updateExportNote();
-});
 $("ve-export-choose-folder").addEventListener("click", async () => {
   const folder = await invoke("pick_export_folder").catch(() => null);
   if (!folder) return;
@@ -3874,7 +3874,7 @@ async function closeWindow() {
       cancelLabel: t("bgStayOpen"),
       thirdLabel: t("bgCancelClose"),
     });
-    if (choice === false) return;
+    if (choice === false || choice === null) return;
     if (choice === "third") invoke("cancel_export").catch(() => {});
   } else if (VE.ops.length && VE.dirty) {
     const ok = await veConfirm(t("veCloseTitle"), t("veCloseUnsaved"), t("veDiscard"));
@@ -3994,6 +3994,9 @@ document.addEventListener("keyup", (e) => {
 // ---------------------------------------------------------------- loading
 
 function resetForNewSource() {
+  // A confirm still open from the previous source (the restore question) must
+  // not stay up over the new one, and its waiting caller must be released.
+  closeConfirm(null);
   VE.ops = [];
   VE.redo = [];
   VE.floor = 0;
@@ -4155,7 +4158,9 @@ async function checkEditState(path, myGen) {
     // the editor opens with a stale badge state for a moment rather than
     // waiting on a stat per extra source first.
     refreshExtraSourceAvailability(myGen);
-  } else {
+  } else if (ok === false) {
+    // Only an explicit "start fresh" answer drops the saved state; a dialog that
+    // was superseded by another source (null) leaves it for the next open.
     invoke("discard_edit_state", { kind: "video", target: path }).catch(() => {});
   }
 }

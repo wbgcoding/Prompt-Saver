@@ -28436,11 +28436,11 @@ fn video_export_cancelled() -> &'static Mutex<std::collections::HashSet<u64>> {
 }
 
 // The one folder an export command is allowed to write into this session,
-// remembered from the last real save dialog the backend itself ran (either
-// `pick_export_dest`'s own containing folder or `pick_export_folder`'s
-// picked directory) -- an export command never trusts a `dest_path` string
-// from the IPC call on its own, since that call could in principle be made
-// with any argument at all rather than the one a dialog actually returned.
+// remembered from the last real folder dialog the backend itself ran
+// (`pick_export_folder`'s picked directory) -- an export command never trusts
+// a `dest_path` string from the IPC call on its own, since that call could in
+// principle be made with any argument at all rather than the one a dialog
+// actually returned.
 static LAST_EXPORT_DEST_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
 
 fn remember_export_dest_dir(dir: &Path) {
@@ -29658,24 +29658,7 @@ async fn save_recording_as(app: AppHandle, state: State<'_, Db>, win: tauri::Win
     }
 }
 
-// A plain save-file dialog for the video editor's export target, picked
-// BEFORE exporting rather than moving the result afterward like
-// save_recording_as above -- no source file to move, just a chosen path.
-#[tauri::command]
-async fn pick_export_dest(app: AppHandle, win: tauri::Window, default_name: String) -> Option<String> {
-    let ext = Path::new(&default_name).extension().and_then(|e| e.to_str()).unwrap_or("mp4").to_string();
-    let result = file_dialog_for(&app, win.label())
-        .add_filter(ext.to_uppercase(), &[ext.as_str()])
-        .set_file_name(&default_name)
-        .save_file();
-    let _ = win.set_focus();
-    if let Some(dir) = result.as_ref().and_then(|p| p.parent()) {
-        remember_export_dest_dir(dir);
-    }
-    result.map(|p| p.to_string_lossy().to_string())
-}
-
-// The folder-only counterpart, used by the video editor's "choose folder"
+// The folder picker used by the video editor's "choose folder"
 // export target and the recordings batch-export dialog. A plain wrapper
 // around the same picker `pick_folder` uses, except this one also remembers
 // the folder as an authorized export destination -- `pick_folder` itself
@@ -33894,7 +33877,6 @@ pub fn run() {
             cancel_export,
             cancel_export_job,
             save_recording_as,
-            pick_export_dest,
             pick_export_folder,
             save_recording_now,
             copy_recording_to_clipboard,
