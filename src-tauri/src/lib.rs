@@ -12824,12 +12824,21 @@ fn hide_rec_bar(app: AppHandle) {
 // Window recordings, which keep the OS border and never call this at all.
 // Never focused: it has nothing to click or type into, and showing it must
 // not steal keyboard focus away from whatever app is being recorded.
+// Bumped for every outline window that is shown or torn down, so a re-apply
+// queued for an earlier outline can never touch the next recording's one.
+static REC_OUTLINE_GEN: AtomicU64 = AtomicU64::new(0);
+
+fn outline_closure_is_current(gen: u64, current: u64) -> bool {
+    gen == current
+}
+
 #[cfg(windows)]
 fn show_rec_outline(app: &AppHandle, rect: (i32, i32, u32, u32)) {
     let label = "rec-outline";
     if app.get_webview_window(label).is_some() {
         return;
     }
+    let gen = REC_OUTLINE_GEN.fetch_add(1, Ordering::SeqCst) + 1;
     let win = match WebviewWindowBuilder::new(app, label, WebviewUrl::App("recoutline.html".into()))
         .title("")
         .decorations(false)
@@ -12866,6 +12875,9 @@ fn show_rec_outline(app: &AppHandle, rect: (i32, i32, u32, u32)) {
         if matches!(event, WindowEvent::ScaleFactorChanged { .. } | WindowEvent::Resized(_)) {
             let app2 = app_evt.clone();
             let _ = app_evt.run_on_main_thread(move || {
+                if !outline_closure_is_current(gen, REC_OUTLINE_GEN.load(Ordering::SeqCst)) {
+                    return;
+                }
                 if let Some(w) = app2.get_webview_window("rec-outline") {
                     place_rec_outline(&w, want);
                 }
@@ -12878,6 +12890,9 @@ fn show_rec_outline(app: &AppHandle, rect: (i32, i32, u32, u32)) {
     // a settle that lands after the event handler above was already queued.
     let app2 = app.clone();
     let _ = app.run_on_main_thread(move || {
+        if !outline_closure_is_current(gen, REC_OUTLINE_GEN.load(Ordering::SeqCst)) {
+            return;
+        }
         if let Some(w) = app2.get_webview_window("rec-outline") {
             place_rec_outline(&w, want);
         }
@@ -12921,6 +12936,7 @@ fn outline_rect_needs_reapply(actual: (i32, i32, u32, u32), want: (i32, i32, u32
 // stop_recording_now and cancel_recording.
 #[cfg(windows)]
 fn hide_rec_outline(app: &AppHandle) {
+    REC_OUTLINE_GEN.fetch_add(1, Ordering::SeqCst);
     if let Some(w) = app.get_webview_window("rec-outline") {
         let _ = w.close();
     }
@@ -36518,6 +36534,12 @@ mod tests {
         let mut allow = Settings::default();
         allow.ui_flags.insert(ALLOW_SCREENSHOT_KEY.to_string(), true);
         assert!(!capture_hides_app_windows(capture_excluded(&allow)));
+    }
+
+    #[test]
+    fn a_stale_outline_closure_is_not_current_after_a_newer_outline() {
+        assert!(outline_closure_is_current(3, 3));
+        assert!(!outline_closure_is_current(3, 4));
     }
 
     #[test]
