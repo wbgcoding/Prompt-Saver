@@ -23,7 +23,7 @@
   cursor: grab;
 }
 .cam-titlebar:active { cursor: grabbing; }
-.cam-titlebar-label { font-size: 12px; opacity: 0.75; flex: 1; }
+.cam-titlebar-label { font-size: 12px; opacity: 0.75; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cam-close { margin-left: auto; }
 
 .cam-status-dot {

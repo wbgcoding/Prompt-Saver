@@ -51,6 +51,9 @@ let recStartWall = 0;
 // placement by however long it lasted. Holds the pending read (a promise),
 // which onstop awaits.
 let recScreenElapsedAtStart = null;
+// The same read once it has resolved (null until then), so onstop can mark
+// the session finishing without waiting on the read.
+let recScreenElapsedValue = null;
 let recTimer = 0;
 // The two expert-menu settings this window has no control of its own for
 // (device, framerate) -- read once at boot, applied to every getUserMedia
@@ -75,6 +78,7 @@ function setStatus(state) {
   statusDot.classList.toggle("on", state !== "idle");
   statusDot.classList.toggle("paused", state === "paused");
   statusText.textContent = state === "idle" ? "" : t("cameraRecording");
+  statusText.title = "";
 }
 
 function bestMimeType() {
@@ -189,6 +193,9 @@ let pendingAppends = [];
 // write, IPC failure). The drain in onstop still waits for every in-flight
 // append, then refuses to present a take with a hole in it as a good one.
 let appendFailed = false;
+// The in-flight release of the session started by the FIRST failed append
+// (see ondataavailable): onstop awaits it, never issues a second one.
+let abandonCall = null;
 
 // The one way back from a start that got as far as reserving the take in the
 // backend (file + session) and then failed in the recorder: releases that
@@ -205,6 +212,7 @@ async function rollbackFailedStart() {
   recPath = null;
   pendingAppends = [];
   recScreenElapsedAtStart = null;
+  recScreenElapsedValue = null;
   paused = false;
   clearInterval(recTimer);
   recBadge.classList.add("hidden");
@@ -241,6 +249,8 @@ async function startRecording() {
   recScreenElapsedAtStart = null;
   pendingAppends = [];
   appendFailed = false;
+  abandonCall = null;
+  recScreenElapsedValue = null;
   try {
     recorder = new MediaRecorder(stream, { mimeType });
   } catch {
@@ -254,8 +264,13 @@ async function startRecording() {
       .arrayBuffer()
       .then((buf) => invoke("camera_append_chunk", { path, bytesB64: bufToBase64(buf) }))
       .catch((err) => {
-        appendFailed = true;
         console.error("camera chunk lost", err);
+        if (appendFailed) return;
+        appendFailed = true;
+        // The take now has a hole in it. Release the session at once, before
+        // anything can finish it or a closing window can write its sidecar;
+        // the partial file itself is kept (see camera_abandon_recording).
+        abandonCall = invoke("camera_abandon_recording", { path }).catch(() => {});
       });
     pendingAppends.push(append);
   };
@@ -266,44 +281,72 @@ async function startRecording() {
   // recording may have moved on, paused again, or stopped by then).
   recorder.onstart = () => {
     recStartWall = Date.now();
-    recScreenElapsedAtStart = invoke("camera_screen_elapsed_ms").catch(() => null);
+    recScreenElapsedAtStart = invoke("camera_screen_elapsed_ms")
+      .catch(() => null)
+      .then((v) => {
+        recScreenElapsedValue = v;
+        return v;
+      });
   };
   recorder.onstop = async () => {
     clearInterval(recTimer);
     recBadge.classList.add("hidden");
     setStatus("idle");
-    // Start stays disabled until the whole finish below has run (the last
-    // refreshPreview() re-enables it): a new take begun while the old one is
-    // still uploading its last chunks would fight it over the one session.
+    // Start and the two selects stay disabled until the whole finish below
+    // has run: a new take (or a preview refresh that would re-enable Start)
+    // while the old one is still uploading its last chunks would fight it
+    // over the one session.
     startBtn.classList.remove("hidden");
     pauseBtn.classList.add("hidden");
     stopBtn.classList.add("hidden");
-    audioSelect.disabled = false;
-    resSelect.disabled = false;
     const path = recPath;
     const startedAtMs = recStartWall;
     recPath = null;
-    // A recorder that never reached its start event has nothing to align.
-    const screenElapsedMs = await (recScreenElapsedAtStart || Promise.resolve(null));
-    recScreenElapsedAtStart = null;
+    const idleControls = () => {
+      audioSelect.disabled = false;
+      resSelect.disabled = false;
+    };
     if (!path) {
+      idleControls();
       startBtn.disabled = !stream;
       return;
     }
-    // Marks the session finishing before the (possibly slow) chunk-upload
-    // wait below -- Alt+F4/taskbar-close/app-quit landing in that window
-    // must finish this take, not delete it as if it were still an active,
-    // abandoned recording (see camera::CamSession::finishing).
-    await invoke("camera_mark_finishing", { path, camStartMs: startedAtMs, screenElapsedMs }).catch(() => {});
+    // Marks the session finishing before any slow wait below -- Alt+F4/
+    // taskbar-close/app-quit landing in that window must finish this take,
+    // not delete it as if it were still an active, abandoned recording (see
+    // camera::CamSession::finishing). A take whose chunk write already
+    // failed is not marked: it was released for good and must never get a
+    // sidecar.
+    let screenElapsedMs = recScreenElapsedValue;
+    const elapsedRead = recScreenElapsedAtStart;
+    recScreenElapsedAtStart = null;
+    if (!appendFailed) {
+      await invoke("camera_mark_finishing", { path, camStartMs: startedAtMs, screenElapsedMs }).catch(() => {});
+    }
+    // The elapsed read normally resolved long ago; a stop right after the
+    // start event can beat it, and the mark is then refreshed with the value.
+    // A recorder that never reached its start event has nothing to align.
+    const lateElapsed = await (elapsedRead || Promise.resolve(null));
+    if (lateElapsed !== screenElapsedMs) {
+      screenElapsedMs = lateElapsed;
+      if (!appendFailed) {
+        await invoke("camera_mark_finishing", { path, camStartMs: startedAtMs, screenElapsedMs }).catch(() => {});
+      }
+    }
     await Promise.allSettled(pendingAppends);
     pendingAppends = [];
     if (appendFailed) {
-      // A chunk never reached the disk, so the file is truncated or holes
-      // in it. Release the backend session without deleting anything (the
-      // partial file may be the only copy), skip the editor and say so.
+      // A chunk never reached the disk, so the file is truncated or has
+      // holes in it. The session was already released (without deleting
+      // anything, the partial file may be the only copy); skip the editor
+      // and say where the file is.
       appendFailed = false;
-      await invoke("camera_abandon_recording", { path }).catch(() => {});
-      statusText.textContent = t("camChunkWriteFailed");
+      await abandonCall;
+      abandonCall = null;
+      const text = t("camChunkWriteFailed").replace("{path}", path);
+      statusText.textContent = text;
+      statusText.title = text;
+      idleControls();
       refreshPreview();
       return;
     }
@@ -323,9 +366,8 @@ async function startRecording() {
     } catch {
       // A finish that fails leaves the raw file in place, still playable --
       // the same fallback the screen recorder's own encode-error path uses.
-      // The session slot is released too, or the next Start would be refused.
-      await invoke("camera_abandon_recording", { path }).catch(() => {});
     }
+    idleControls();
     refreshPreview();
   };
   try {
