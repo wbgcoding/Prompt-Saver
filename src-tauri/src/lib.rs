@@ -33881,6 +33881,7 @@ pub fn run() {
             camera::camera_finish_recording,
             camera::camera_mark_finishing,
             camera::camera_discard_recording,
+            camera::camera_abandon_recording,
             camera::read_camera_sidecar,
             camera::camera_screen_elapsed_ms,
             windows_fonts_dir,

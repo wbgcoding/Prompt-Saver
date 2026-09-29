@@ -208,7 +208,9 @@ async function startRecording() {
     clearInterval(recTimer);
     recBadge.classList.add("hidden");
     setStatus("idle");
-    startBtn.disabled = false;
+    // Start stays disabled until the whole finish below has run (the last
+    // refreshPreview() re-enables it): a new take begun while the old one is
+    // still uploading its last chunks would fight it over the one session.
     startBtn.classList.remove("hidden");
     pauseBtn.classList.add("hidden");
     stopBtn.classList.add("hidden");
@@ -218,7 +220,10 @@ async function startRecording() {
     const startedAtMs = recStartWall;
     const screenElapsedMs = recScreenElapsedAtStart;
     recPath = null;
-    if (!path) return;
+    if (!path) {
+      startBtn.disabled = !stream;
+      return;
+    }
     // Marks the session finishing before the (possibly slow) chunk-upload
     // wait below -- Alt+F4/taskbar-close/app-quit landing in that window
     // must finish this take, not delete it as if it were still an active,
