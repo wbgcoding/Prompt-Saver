@@ -19787,7 +19787,7 @@ mod ocr {
         use base64::Engine;
         let bytes: Vec<u8> = script.encode_utf16().flat_map(|u| u.to_le_bytes()).collect();
         let params = format!(
-            "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand {}",
+            "-NoProfile -NonInteractive -EncodedCommand {}",
             base64::engine::general_purpose::STANDARD.encode(bytes)
         );
         // CreateProcess accepts a command line of at most 32767 characters.
@@ -52264,6 +52264,7 @@ mod tests {
         let script = "$ErrorActionPreference = 'Stop'\r\ntry { Add-WindowsCapability -Online -Name 'Language.OCR~~~de-DE~0.0.1.0' } catch { }\r\n";
         let params = ocr::elevated_params(script).unwrap();
         assert!(params.contains("-EncodedCommand "));
+        assert!(!params.contains("ExecutionPolicy") && !params.contains("WindowStyle"), "no malware-looking switches: {params}");
         assert!(!params.contains("-File"), "no script file is referenced: {params}");
         assert!(!params.contains("-Command "), "no inline command either: {params}");
         let payload = params.rsplit("-EncodedCommand ").next().unwrap();
