@@ -15806,6 +15806,150 @@ def main():
         failed += len(errs)
         if not errs:
             print("   ok")
+        # Video editor expert values that are NOT at their shipped default.
+        # The stub is seeded before video.html loads, so the boot-time settings
+        # read is what gets exercised (the backend never sends a live settings
+        # event to this window). Its own boot, same reasoning as the runs above.
+        video_expert_probe = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const until = async (fn, tries) => {
+    for (let i = 0; i < (tries || 100) && !fn(); i++) await sleep(50);
+    return fn();
+  };
+  const fieldOf = (label) => {
+    const row = [...document.querySelectorAll('#ve-ov-editor label.field')]
+      .find((l) => l.firstElementChild && l.firstElementChild.textContent === label);
+    return row ? row.querySelector('input,select') : null;
+  };
+  const exportCalls = () => (window.__SMOKE_ARGS__ || []).filter((c) => c[0] === 'export_video');
+  const overlayRows = () => document.querySelectorAll('#ve-ov-list .ve-ov-row').length;
+  try {
+    await until(() => document.getElementById('ve-stage-msg').classList.contains('hidden') &&
+      document.querySelectorAll('#ve-filmstrip .ve-thumb').length > 0, 300);
+    await until(() => document.getElementById('ve-scale-w').value === '1280', 100);
+
+    // Panel, export format, quality and scale preset open on the seeded values.
+    if (!document.getElementById('ve-tab-export').classList.contains('active')) {
+      errs.push('537: the seeded default panel (export) was not the open tab');
+    }
+    if (document.getElementById('ve-export-format').value !== 'webm') {
+      errs.push('537: the seeded default format webm was ignored, got ' + document.getElementById('ve-export-format').value);
+    }
+    if (document.getElementById('ve-export-quality').value !== 'small') {
+      errs.push('537: the seeded default quality small was ignored, got ' + document.getElementById('ve-export-quality').value);
+    }
+    const sw = document.getElementById('ve-scale-w').value, sh = document.getElementById('ve-scale-h').value;
+    if (sw !== '1280' || sh !== '720') {
+      errs.push('537: the seeded default scale 720 was ignored, got ' + sw + 'x' + sh);
+    }
+    // The initial fade fields.
+    if (document.getElementById('ve-fade-in').value !== '900' || document.getElementById('ve-fade-out').value !== '900') {
+      errs.push('537: the seeded fade length 900 was ignored, got ' + document.getElementById('ve-fade-in').value + '/' + document.getElementById('ve-fade-out').value);
+    }
+
+    // Export state: bitrate of the small tier scaled to 720p of a 1080p source
+    // (3000 * 720 / 1080), then the high tier (9000 * 720 / 1080), with the fade.
+    document.getElementById('ve-fade-on').click();
+    await sleep(80);
+    document.getElementById('ve-export-start').click();
+    await until(() => exportCalls().length > 0, 100);
+    let last = exportCalls().pop();
+    let req = last && last[1] && last[1].req;
+    if (!req) errs.push('537: no export request was made');
+    else {
+      if (req.format !== 'webm') errs.push('537: the export format was ' + req.format + ', expected the seeded webm');
+      if (req.video_kbps !== 2000) errs.push('537: the small-tier bitrate was ' + req.video_kbps + ', expected the seeded 3000 scaled to 2000');
+      const chain = String(req.filter_chain);
+      if (!/fade=t=in:st=0:d=0[.]900/.test(chain)) errs.push('537: the export fade-in did not use the seeded 900 ms: ' + chain);
+    }
+    await until(() => !document.getElementById('ve-export-start').disabled, 100);
+    const before = exportCalls().length;
+    const q = document.getElementById('ve-export-quality');
+    q.value = 'high';
+    q.dispatchEvent(new Event('change', { bubbles: true }));
+    await sleep(80);
+    document.getElementById('ve-export-start').click();
+    await until(() => exportCalls().length > before, 100);
+    last = exportCalls().pop();
+    req = last && last[1] && last[1].req;
+    if (!req || req.video_kbps !== 6000) {
+      errs.push('537: the high-tier bitrate was ' + (req && req.video_kbps) + ', expected the seeded 9000 scaled to 6000');
+    }
+
+    // A new overlay of each kind starts from the seeded values.
+    document.getElementById('ve-tab-overlays').click();
+    await sleep(60);
+    document.getElementById('ve-ov-add-pixelate').click();
+    await until(() => overlayRows() === 1, 60);
+    const block = fieldOf('Block size (px)');
+    if (!block || block.value !== '24') errs.push('537: a new pixelate overlay did not use the seeded block size 24, got ' + (block && block.value));
+    const rectX = fieldOf('X');
+    const x0 = rectX ? Number(rectX.value) : NaN;
+    // Duplicate through the row context menu: shifted by the seeded offset.
+    document.querySelector('#ve-ov-list .ve-ov-row').dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 200, clientY: 200 }));
+    await sleep(60);
+    const dupBtn = [...document.querySelectorAll('body > .ctx[role=menu] button')].find((b) => !b.classList.contains('danger'));
+    if (!dupBtn) errs.push('537: the overlay context menu had no duplicate button');
+    else {
+      dupBtn.click();
+      await until(() => overlayRows() === 2, 60);
+      const dx = fieldOf('X') ? Number(fieldOf('X').value) - x0 : NaN;
+      if (dx !== 40) errs.push('537: the duplicated overlay moved by ' + dx + ' px, expected the seeded 40');
+    }
+    document.getElementById('ve-ov-add-spotlight').click();
+    await until(() => overlayRows() === 3, 60);
+    const dim = fieldOf('Darkening (%)');
+    if (!dim || dim.value !== '70') errs.push('537: a new spotlight did not use the seeded darkening 70, got ' + (dim && dim.value));
+    document.getElementById('ve-ov-add-text').click();
+    await until(() => overlayRows() === 4, 60);
+    const font = fieldOf('Font');
+    if (!font || font.value !== 'consola') errs.push('537: a new text overlay did not use the seeded font consola, got ' + (font && font.value));
+    const sel = document.querySelector('#ve-ov-editor .swatch.sel');
+    if (!sel || String(sel.title).toLowerCase() !== '#ef4444') errs.push('537: a new text overlay did not use the seeded colour #ef4444, got ' + (sel && sel.title));
+    document.getElementById('ve-ov-add-image').click();
+    await until(() => overlayRows() === 5, 60);
+    const opac = fieldOf('Opacity (%)');
+    if (!opac || opac.value !== '40') errs.push('537: a new image overlay did not use the seeded opacity 40, got ' + (opac && opac.value));
+  } catch (e) { errs.push('537: probe threw: ' + e); }
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+        seed = (
+            '<script>window.__SEED_UI_VALUES__ = {"veExportKbpsHigh": 9000, "veExportKbpsSmall": 3000, '
+            '"veFadeMs": 900, "veOvPixelateBlock": 24, "veOvSpotlightDim": 70, "veOvImageOpacity": 40, '
+            '"veOvDupOffsetPx": 40};'
+            'window.__SEED_UI_TEXTS__ = {"veDefaultFormat": "webm", "veDefaultQuality": "small", '
+            '"veDefaultScale": "720", "veOvColor": "#ef4444", "veOvFont": "consola", '
+            '"veDefaultPanel": "export"};</script>\n')
+        side = tmp / "ui" / "video-expert-seeded.html"
+        side.write_text(
+            (REPO / "ui" / "video.html").read_text(encoding="utf-8")
+            .replace("<script", seed + '<script src="tauri_stub.js"></script>\n<script', 1)
+            .replace("</body>", video_expert_probe + "</body>"),
+            encoding="utf-8")
+        proc = subprocess.run(
+            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+             f"--user-data-dir={tmp / 'profile-video-expert-seeded'}", "--allow-file-access-from-files",
+             "--window-size=1130,860", "--virtual-time-budget=30000",
+             "--dump-dom", side.as_uri()],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=180)
+        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        print("-- video.html seeded non-default expert values")
+        for e in errs:
+            print(f"   FAIL: {e}")
+        failed += len(errs)
+        if not errs:
+            print("   ok")
         print("PASS" if not failed else f"{failed} problem(s)")
         return 1 if failed else 0
     finally:

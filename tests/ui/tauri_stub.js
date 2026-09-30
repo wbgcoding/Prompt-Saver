@@ -236,7 +236,10 @@ const SETTINGS = {
     // real restart into the sample library looks like from the window's side).
     demoMode: !!window.__DEMO_TEST__,
   },
-  ui_values: {}, ui_texts: {}, dup_ignored: [],
+  // A probe that needs non-default expert values seeds them before this file
+  // loads (window.__SEED_UI_VALUES__ / __SEED_UI_TEXTS__); every other run
+  // keeps the empty defaults.
+  ui_values: { ...(window.__SEED_UI_VALUES__ || {}) }, ui_texts: { ...(window.__SEED_UI_TEXTS__ || {}) }, dup_ignored: [],
   // 428: p1 also has a canned entry in last_edited_map below, so it is the one
   // fixture with BOTH a copy and an edit timestamp; p2 (untouched) has neither.
   usage: { p1: 3 }, last_used: { p1: 1700000000 },
