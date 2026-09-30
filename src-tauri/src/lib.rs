@@ -10734,6 +10734,27 @@ fn dup_pair_is_ignored(groups: &[Vec<String>], a: &str, b: &str) -> bool {
     groups.iter().any(|g| g.iter().any(|id| id == a) && g.iter().any(|id| id == b))
 }
 
+// The few fields the duplicate scan reads. Cloning whole prompts under the store
+// lock would copy every stored image (hundreds of kilobytes each) for nothing.
+// A confidential entry is left out here: its stored text is ciphertext.
+struct DupSource {
+    id: String,
+    name: String,
+    text: String,
+    #[allow(dead_code)]
+    variants: Vec<String>,
+    #[allow(dead_code)]
+    tags: Vec<String>,
+}
+
+fn dup_sources(prompts: &[Prompt]) -> Vec<DupSource> {
+    prompts
+        .iter()
+        .filter(|p| !p.secret)
+        .map(|p| DupSource { id: p.id.clone(), name: p.name.clone(), text: p.text.clone(), variants: p.variants.clone(), tags: p.tags.clone() })
+        .collect()
+}
+
 // Find near-duplicate prompts by trigram/Dice similarity. Rayon-parallel over the
 // upper-triangle of pairs; 1000 prompts finish well under a second.
 #[tauri::command]
@@ -10749,7 +10770,7 @@ async fn find_duplicates(state: State<'_, Db>, threshold: f64) -> Result<Vec<Dup
     let (prompts, dup_ignored, views, usage) = {
         let store = lock(&state);
         (
-            store.prompts.clone(),
+            dup_sources(&store.prompts),
             store.settings.dup_ignored.clone(),
             store.settings.views.clone(),
             store.settings.usage.clone(),
@@ -10763,13 +10784,10 @@ async fn find_duplicates(state: State<'_, Db>, threshold: f64) -> Result<Vec<Dup
     // two prompts that happen to share their FIRST entry but differ in the rest are
     // not "near duplicates" of each other, and comparing every entry pair would
     // turn this already-O(n^2) scan into O(n^2 * entries).
-    let items: Vec<(&Prompt, String)> = prompts
+    let items: Vec<(&DupSource, String)> = prompts
         .iter()
-        // A confidential entry's stored text is ciphertext, never a real body to
-        // compare -- same reason the library search skips it, this scan does too
-        // rather than group entries by coincidental ciphertext similarity or show
-        // the ciphertext in a match's preview.
-        .filter(|p| !p.secret)
+        // Confidential entries were already left out of the snapshot (their stored
+        // text is ciphertext, never a real body to compare).
         .map(|p| {
             let base = if !p.text.is_empty() { p.text.as_str() } else { p.name.as_str() };
             (p, normalize_dup(base))
@@ -42777,6 +42795,22 @@ mod tests {
         let at = src.find("async fn video_folder_file_durations_ms(").unwrap();
         assert!(src[at..at + 600].contains("spawn_blocking"), "the durations command must use spawn_blocking");
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn dup_sources_keep_only_what_the_scan_reads_and_skip_confidential_entries() {
+        let mut a = test_prompt("a");
+        a.name = "Alpha".into();
+        a.text = "some body".into();
+        a.image = "data:image/png;base64,BBBB".into();
+        a.tags = vec!["t".into()];
+        a.variants = vec!["v".into()];
+        let mut s = test_prompt("s");
+        s.secret = true;
+        let got = dup_sources(&[a, s]);
+        assert_eq!(got.len(), 1, "the confidential entry is not scanned");
+        assert_eq!((got[0].id.as_str(), got[0].name.as_str(), got[0].text.as_str()), ("a", "Alpha", "some body"));
+        assert_eq!((got[0].variants.len(), got[0].tags.len()), (1, 1));
     }
 
     #[test]

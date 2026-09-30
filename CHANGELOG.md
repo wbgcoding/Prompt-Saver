@@ -877,6 +877,9 @@ the video editor and the introduction tour ship on).
   ties up a background worker one file at a time.
 - **Searching the library with picture text search on draws the list once per
   keystroke pause instead of twice.**
+- **Finding duplicates copies far less data while the library is locked.**
+  Only names, texts, variants and tags are copied for the scan, not the stored
+  pictures.
 
 ### Fixed
 
