@@ -275,6 +275,51 @@ async function cameraOverlayRaceCheck() {
   expect("a camera overlay of the current load is added", sb2.VE.ops.some((o) => o.path === "C:/cam.mp4"));
 }
 
+// An export that finishes after another recording was opened in the editor must
+// not touch that recording's unsaved flag, saved edit state or "Move to" target.
+async function exportLoadRaceCheck() {
+  const els = {};
+  const el = (id) => els[id] || (els[id] = {
+    textContent: "", value: "", disabled: false,
+    classList: { add() {}, remove() {}, toggle() {} }, setAttribute() {},
+  });
+  let release;
+  const held = new Promise((r) => { release = r; });
+  const calls = [];
+  const sb = {
+    VE: { exporting: false, ffmpeg: true, src: "C:/a.mp4", etaShow: false, dirty: false, editStateKeepOn: true, loadGen: 1, lastExport: "" },
+    $: el, t: (k) => k, toast: () => {},
+    invoke: (cmd, args) => { calls.push([cmd, args]); return cmd === "export_video" ? held : Promise.resolve(null); },
+    totalOutMs: () => 5000, isLosslessCopy: () => true, exportFormat: () => "mp4", exportQuality: () => "high",
+    formatExt: () => "mp4", destPath: () => "C:/out/a.mp4", showExportErrorDetails: () => {},
+    exportEta: { reset() {} }, setProgress: () => {},
+    buildVideoChain: () => null, buildAudioChain: () => null, keptSegments: () => [{ a: 0, b: 5000 }],
+    videoKbps: () => 1000, fmtBytes: String, veConfirm: async () => false, noteFfmpeg: () => {},
+    parseFfmpegError: () => ({ message: "x", details: "" }), applyExportGate: () => {},
+  };
+  vm.createContext(sb);
+  vm.runInContext(
+    [
+      extractBlock("clearExportStatus", "function clearExportStatus() {"),
+      extractBlock("startExport", "async function startExport(toClipboard) {"),
+    ].join(String.fromCharCode(10)),
+    sb,
+    { filename: "video.js (extracted)" }
+  );
+  const running = vm.runInContext("startExport(false)", sb);
+  await new Promise((r) => setTimeout(r, 0));
+  // Recording B is opened while A still exports, and gets edited.
+  sb.VE.loadGen = 2;
+  sb.VE.src = "C:/b.mp4";
+  sb.VE.dirty = true;
+  release();
+  await running;
+  expect("a finished export of the previous recording keeps the new one dirty", sb.VE.dirty === true);
+  expect("a finished export of the previous recording leaves the new one's saved edit state", !calls.some(([c, a]) => c === "discard_edit_state" && a.target === "C:/b.mp4"), JSON.stringify(calls));
+  expect("a finished export of the previous recording does not set the Move to target", sb.VE.lastExport === "");
+  expect("the export flag is released", sb.VE.exporting === false);
+}
+
 // An export that stops before writing anything (no folder picked, disk warning
 // declined) must not leave "Exporting" and a 0% bar behind.
 async function exportIdleCheck() {
@@ -315,7 +360,7 @@ async function exportIdleCheck() {
   }
 }
 
-cameraOverlayRaceCheck().then(exportIdleCheck).then(closeChecks).then(() => {
+cameraOverlayRaceCheck().then(exportIdleCheck).then(exportLoadRaceCheck).then(closeChecks).then(() => {
 if (problems.length) {
   console.log(`${problems.length} problem(s):`);
   for (const p of problems) console.log(" - " + p);

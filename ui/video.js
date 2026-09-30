@@ -3402,6 +3402,11 @@ async function startExport(toClipboard) {
     ? await invoke("clip_export_path", { ext: formatExt(format) }).catch((err) => { toast(String(err)); return null; })
     : destPath();
   if (!dest) return;
+  // Another recording can be opened while this export still runs; its result
+  // must never touch that recording's state.
+  const gen = VE.loadGen;
+  const src = VE.src;
+  const stillHere = () => VE.loadGen === gen;
   VE.exporting = true;
   $("ve-export-start").disabled = true;
   $("ve-export-clip").disabled = true;
@@ -3457,23 +3462,25 @@ async function startExport(toClipboard) {
       try {
         await invoke("export_video", { req: request });
         invoke("record_tool_usage", { tool: "video_export" }).catch(() => {});
-        VE.dirty = false;
+        if (stillHere()) VE.dirty = false;
         // A finished export means nothing here is "unfinished" any more -- clear the
         // remembered row so reopening this recording later never offers to restore
         // work that already made it out. Continued editing after this point simply
         // gets a fresh row from the next autosave tick, same as any other edit.
-        if (VE.editStateKeepOn && VE.src) {
-          invoke("discard_edit_state", { kind: "video", target: VE.src }).catch(() => {});
+        if (stillHere() && VE.editStateKeepOn && src) {
+          invoke("discard_edit_state", { kind: "video", target: src }).catch(() => {});
         }
-        setProgress(100);
+        if (stillHere()) setProgress(100);
         if (toClipboard) {
           const clipOk = await invoke("copy_file_to_clipboard", { path: dest }).catch(() => false);
-          $("ve-export-status").textContent = clipOk ? t("veClipExportDone") : t("veExportDone").replace("{path}", dest);
+          if (stillHere()) $("ve-export-status").textContent = clipOk ? t("veClipExportDone") : t("veExportDone").replace("{path}", dest);
           toast(clipOk ? t("veClipExportDone") : t("veExportDone").replace("{path}", dest));
         } else {
-          VE.lastExport = dest;
-          $("ve-export-status").textContent = t("veExportDone").replace("{path}", dest);
-          $("ve-export-saveas").classList.remove("hidden");
+          if (stillHere()) {
+            VE.lastExport = dest;
+            $("ve-export-status").textContent = t("veExportDone").replace("{path}", dest);
+            $("ve-export-saveas").classList.remove("hidden");
+          }
           toast(t("veExportDone").replace("{path}", dest));
         }
         return;
@@ -3498,7 +3505,9 @@ async function startExport(toClipboard) {
     // noteFfmpeg() above. Everything else is a real ffmpeg (or filesystem)
     // failure, translated by the one shared classifier -- never its raw text
     // as the headline, only reachable underneath in "Technical details".
-    if (raw.includes("cancel")) {
+    if (!stillHere()) {
+      // the editor moved on to another recording; nothing of this one to show
+    } else if (raw.includes("cancel")) {
       $("ve-export-status").textContent = t("veExportCancelled");
     } else if (raw.includes("ffmpeg-missing")) {
       $("ve-export-status").textContent = t("recFfmpegMissingHint");
