@@ -36274,26 +36274,27 @@ fn sync_write_all_impl(app: &AppHandle, prompts: &[Prompt], settings: &Settings)
             // prompt id (the poll skips it) nor something the orphan sweep may touch.
             let copy = dir.join(format!("{}.conflict-{}.md", p.id, now_secs()));
             let mut kept_copy = false;
-            if !on_disk.is_empty() && sync_changed_since_seen(&path) {
-                if write_file_atomic(&copy, &on_disk) {
-                    kept_copy = true;
-                    append_crash_log(&format!(
-                        "prompt-sync: {filename} was edited outside the app and in the app at the same time; the outside version was kept as {}",
-                        copy.file_name().unwrap_or_default().to_string_lossy()
-                    ));
-                }
+            if !on_disk.is_empty() && sync_changed_since_seen(&path) && write_file_atomic(&copy, &on_disk) {
+                kept_copy = true;
+                append_crash_log(&format!(
+                    "prompt-sync: {filename} was edited outside the app and in the app at the same time; the outside version was kept as {}",
+                    copy.file_name().unwrap_or_default().to_string_lossy()
+                ));
             }
             // One more look right before the replace: the lock file is only ours, an
             // external editor never honors it, so a save that landed after the first
             // read has to end up in the conflict copy as well, not be overwritten.
             let latest = fs::read_to_string(&path).unwrap_or_default();
-            if latest != on_disk && latest != content && !latest.is_empty() {
-                if write_file_atomic(&copy, &latest) && !kept_copy {
-                    append_crash_log(&format!(
-                        "prompt-sync: {filename} was edited outside the app while it was being written; the outside version was kept as {}",
-                        copy.file_name().unwrap_or_default().to_string_lossy()
-                    ));
-                }
+            if latest != on_disk
+                && latest != content
+                && !latest.is_empty()
+                && write_file_atomic(&copy, &latest)
+                && !kept_copy
+            {
+                append_crash_log(&format!(
+                    "prompt-sync: {filename} was edited outside the app while it was being written; the outside version was kept as {}",
+                    copy.file_name().unwrap_or_default().to_string_lossy()
+                ));
             }
             let ok = write_file_atomic(&path, &content);
             sync_lock_release(&path);
@@ -51848,9 +51849,11 @@ mod tests {
 
     #[test]
     fn deleting_a_view_also_drops_its_grid_folders() {
-        let mut settings = Settings::default();
-        settings.views = vec![test_view("a"), test_view("b")];
-        settings.active_view = "a".to_string();
+        let mut settings = Settings {
+            views: vec![test_view("a"), test_view("b")],
+            active_view: "a".to_string(),
+            ..Settings::default()
+        };
         settings.tile_folders.push(TileFolder {
             id: "f".to_string(),
             name: String::new(),
