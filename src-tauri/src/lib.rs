@@ -35580,6 +35580,49 @@ fn md_escape_line(s: &str) -> String {
     s.replace(['\n', '\r'], " ")
 }
 
+// Notes are typed into a multi-line box, so they are the one header field where a
+// line break is real content. A note with one is written escaped (\n, \r, \\) and
+// flagged with a `notes_enc` line; one without stays exactly as it always was, so
+// older files and single-line notes (which may hold a path with backslashes) read
+// back unchanged.
+fn md_escape_notes(s: &str) -> Option<String> {
+    if !s.contains(['\n', '\r']) {
+        return None;
+    }
+    let mut out = String::with_capacity(s.len() + 8);
+    for c in s.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            _ => out.push(c),
+        }
+    }
+    Some(out)
+}
+
+fn md_unescape_notes(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            out.push(c);
+            continue;
+        }
+        match chars.next() {
+            Some('n') => out.push('\n'),
+            Some('r') => out.push('\r'),
+            Some('\\') => out.push('\\'),
+            Some(other) => {
+                out.push('\\');
+                out.push(other);
+            }
+            None => out.push('\\'),
+        }
+    }
+    out
+}
+
 // What a prompt's synced .md file's placement header lines should say:
 // derived from Settings (view.layouts / tile_folders / float_folders), never
 // stored on Prompt itself. An empty field means "not applicable".
@@ -35648,6 +35691,23 @@ fn sync_placement_for(p: &Prompt, settings: &Settings) -> SyncPlacement {
 }
 
 fn prompt_to_md(p: &Prompt, placement: &SyncPlacement) -> String {
+    prompt_to_md_impl(p, placement, false)
+}
+
+// Whether a file's content is what this machine would write for the prompt, in
+// today's format or in the one before notes and a trailing newline round-tripped
+// (notes flattened to one line, no extra newline after a text that ends with one).
+// Without the second form, every file an older version wrote would read as an edit
+// by someone else right after the update.
+fn sync_md_matches(p: &Prompt, placement: &SyncPlacement, content: &str) -> bool {
+    prompt_to_md_impl(p, placement, false) == content || prompt_to_md_impl(p, placement, true) == content
+}
+
+fn prompt_to_md_impl(p: &Prompt, placement: &SyncPlacement, legacy: bool) -> String {
+    let (notes, notes_enc) = match (legacy, md_escape_notes(&p.notes)) {
+        (false, Some(escaped)) => (escaped, "notes_enc: escaped\n"),
+        _ => (md_escape_line(&p.notes), ""),
+    };
     let tags = p.tags.iter().map(|t| md_escape_line(t)).collect::<Vec<_>>().join(", ");
     // `variants` is informational only (a human glancing at the header sees the
     // entry count at a glance): NEVER read back by apply_md_to_prompt, which always
@@ -35656,11 +35716,12 @@ fn prompt_to_md(p: &Prompt, placement: &SyncPlacement) -> String {
     // and the six placement fields below (2) are additive, which md_is_ours()
     // already tolerates.
     let mut out = format!(
-        "---\nname: {}\ncolor: {}\ntags: {}\nnotes: {}\nvariants: {}\nview: {}\ngrid: {}\ncell: {}\ntile_folder: {}\ntile_folder_color: {}\nfloat_folder: {}\nfile: {}\nicon: {}\npdf_page: {}\n---\n",
+        "---\nname: {}\ncolor: {}\ntags: {}\nnotes: {}\n{}variants: {}\nview: {}\ngrid: {}\ncell: {}\ntile_folder: {}\ntile_folder_color: {}\nfloat_folder: {}\nfile: {}\nicon: {}\npdf_page: {}\n---\n",
         md_escape_line(&p.name),
         md_escape_line(&p.color),
         tags,
-        md_escape_line(&p.notes),
+        notes,
+        notes_enc,
         p.variants.len(),
         md_escape_line(&placement.view),
         placement.grid,
@@ -35674,7 +35735,9 @@ fn prompt_to_md(p: &Prompt, placement: &SyncPlacement) -> String {
     );
     let text = join_variants(&p.text, &p.variants);
     out.push_str(&text);
-    if !text.is_empty() && !text.ends_with('\n') {
+    // The newline closing the body always belongs to the file: a text that ends with
+    // one gets a second, and apply_md_to_prompt takes exactly one off again.
+    if !text.is_empty() && (!legacy || !text.ends_with('\n')) {
         out.push('\n');
     }
     out
@@ -35744,7 +35807,7 @@ fn apply_md_to_prompt(base: &Prompt, content: &str) -> Option<Prompt> {
             .collect();
     }
     if let Some(v) = fields.get("notes") {
-        p.notes.clone_from(v);
+        p.notes = if fields.contains_key("notes_enc") { md_unescape_notes(v) } else { v.clone() };
     }
     // Media by reference. Absent field = an older or hand-written file that does not
     // describe media at all: leave whatever the prompt already has. Present but
@@ -36725,7 +36788,7 @@ fn sync_poll_apply(
                 continue;
             }
             let placement = sync_placement_for(&store.prompts[idx], &store.settings);
-            let unchanged = prompt_to_md(&store.prompts[idx], &placement) == content;
+            let unchanged = sync_md_matches(&store.prompts[idx], &placement, &content);
             if unchanged {
                 continue; // a concurrent edit already made this file's content current
             }
@@ -36873,7 +36936,7 @@ fn sync_poll_once(app: &AppHandle) {
                 continue;
             }
             let placement = sync_placement_for(&snapshot[idx], &settings_snapshot);
-            if prompt_to_md(&snapshot[idx], &placement) == content {
+            if sync_md_matches(&snapshot[idx], &placement, &content) {
                 continue; // matches what we would write ourselves: not a real change
             }
             candidates.push((stem, content, false));
@@ -42157,6 +42220,42 @@ mod tests {
         assert_eq!(sync_decode_text(be).as_deref(), Some(md.as_str()));
         assert!(sync_decode_text(vec![0xFF, 0xFE, 0x41]).is_none(), "an odd UTF-16 length is not text");
         assert!(sync_decode_text(vec![0xC3, 0x28]).is_none());
+    }
+
+    #[test]
+    fn a_round_trip_keeps_multi_line_notes_and_a_trailing_newline() {
+        let mut p = sync_test_prompt();
+        p.notes = "a\nb\\c\r\nd".into();
+        p.text = "abc\n".into();
+        let back = apply_md_to_prompt(&p, &prompt_to_md(&p, &SyncPlacement::default())).unwrap();
+        assert_eq!(back.notes, p.notes);
+        assert_eq!(back.text, p.text);
+        p.text = "one\n\n".into();
+        p.variants = vec!["two".into()];
+        let back = apply_md_to_prompt(&p, &prompt_to_md(&p, &SyncPlacement::default())).unwrap();
+        assert_eq!(back.text, p.text);
+        assert_eq!(back.variants, p.variants);
+        // A note without a line break keeps its exact old form: no churn for files that round-tripped fine.
+        let mut plain = sync_test_prompt();
+        plain.notes = "C:\\new\\file is fine".into();
+        let md = prompt_to_md(&plain, &SyncPlacement::default());
+        assert!(!md.contains("notes_enc"), "{md}");
+        assert_eq!(apply_md_to_prompt(&plain, &md).unwrap().notes, "C:\\new\\file is fine");
+    }
+
+    #[test]
+    fn a_file_in_the_previous_format_does_not_read_as_an_outside_edit() {
+        let mut p = sync_test_prompt();
+        p.notes = "line one\nline two".into();
+        p.text = "ends with a newline\n".into();
+        let placement = SyncPlacement::default();
+        let old_form = prompt_to_md_impl(&p, &placement, true);
+        assert_ne!(old_form, prompt_to_md(&p, &placement));
+        assert!(sync_md_matches(&p, &placement, &old_form));
+        assert!(sync_md_matches(&p, &placement, &prompt_to_md(&p, &placement)));
+        let mut other = p.clone();
+        other.name = "renamed".into();
+        assert!(!sync_md_matches(&other, &placement, &old_form));
     }
 
     #[test]
