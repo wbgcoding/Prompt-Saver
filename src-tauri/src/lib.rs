@@ -36872,6 +36872,15 @@ fn sync_poll_once(app: &AppHandle) {
     if changed {
         save_prompts(app, &store);
     }
+    drop(store);
+    if changed || settings_changed {
+        // Every open window still holds what it fetched last. Tell them, or a stale
+        // grid shows old names and a later drag in it would write its old layout
+        // back over what the other machine just moved.
+        let _ = app.emit_to("main", "store-synced", ());
+        notify_float_settings(app);
+        rebuild_tray(app);
+    }
 }
 
 // ---- Letting go of the old folder when the user picks a new one ----
@@ -42002,6 +42011,23 @@ mod tests {
         assert!(!changed);
         assert!(store.prompts.is_empty(), "a trashed id must not come back as a second, live prompt");
         assert_eq!(store.trash.len(), 1);
+    }
+
+    #[test]
+    fn sync_poll_apply_reports_settings_changed_for_a_placement_only_file() {
+        let p = sync_test_prompt();
+        let mut settings = Settings::default();
+        settings.views.push(test_view("v1"));
+        let key = grid_key(settings.views[0].cols, settings.views[0].rows);
+        settings.views[0].layouts.entry(key.clone()).or_default().insert("p1".into(), [0, 0]);
+        let mut moved = settings.clone();
+        moved.views[0].layouts.get_mut(&key).unwrap().insert("p1".into(), [2, 1]);
+        let content = prompt_to_md(&p, &sync_placement_for(&p, &moved));
+        let mut store = sync_apply_store(vec![p], Vec::new());
+        store.settings = settings;
+        let (_, settings_changed) = sync_apply(&mut store, "p1", content, false);
+        assert!(settings_changed, "the flag the store-synced event keys on must be set for a moved tile");
+        assert_eq!(store.settings.views[0].layouts[&key]["p1"], [2, 1]);
     }
 
     #[test]

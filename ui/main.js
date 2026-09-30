@@ -21026,6 +21026,12 @@ function bind() {
     // fine until it is reopened.
     if (!$("settings-expert").classList.contains("hidden")) renderExpert();
   });
+  // The folder sync imported something behind this window: refetch instead of
+  // showing (and later saving back) a stale grid.
+  listen("store-synced", async () => {
+    await renderGrid();
+    if (!libraryEl.classList.contains("hidden")) renderLibrary();
+  });
   // Pushed by the backend every few seconds instead of this window polling
   // missing_files on its own timer.
   listen("missing-files", (e) => applyMissingFiles(e.payload || []));
