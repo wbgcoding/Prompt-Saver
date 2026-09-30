@@ -118,7 +118,9 @@ original file's own folder.
 ### Screen recording
 
 Records a window, a monitor, or a dragged region as a video, via the record
-button next to the screenshot tool. MP4 (H.264) is always what gets written
+button next to the screenshot tool. A region recording shows a thin frame
+around the recorded area; it never appears in the video, and the expert menu
+can switch it off or change its colour. MP4 (H.264) is always what gets written
 while recording; three quality steps trade file size for detail before you
 start:
 
@@ -304,7 +306,9 @@ shared by both editors. In the video editor, the colour, thickness, opacity
 and font size a new overlay starts with also follow whatever was last used
 for that same kind (image, frame, text, pixelation or spotlight), across
 restarts too; an expert switch turns that off again in favour of the fixed
-starting values.
+starting values. The expert menu also sets the starting text outline width,
+the colour of a pressed key in a new keys overlay and the starting volume of a
+newly inserted video overlay.
 
 Dragging a shape (screenshot editor) or a crop box or overlay (video editor)
 snaps to the canvas or frame edges, its centre in both directions, and the
@@ -448,8 +452,9 @@ fast too often pauses the session with a toast instead of looping.
   what it holds. Click several tiles in a row, they combine into one clipboard
   copy. Hovering a text tile also shows a small chain icon next to its
   selection checkbox that starts a chain with that tile as the first entry
-  directly, switchable off on its own in the expert menu under Tiles &
-  copying, alongside the rest of the chain settings. A chain stays when you
+  directly, switchable off on its own in the expert menu under Chain,
+  alongside the rest of the chain settings, including what goes between two
+  chained tiles (a blank line unless changed). A chain stays when you
   switch to another program; it ends when you click the chain button again or
   paste with Ctrl+V in the app window.
 - Chain overview: while chaining, a strip above the grid lists the picked
@@ -534,8 +539,9 @@ each in its own group with up to five hits and a "show more". Arrow keys
 move the highlight across group boundaries; Enter runs the fitting action for
 whatever is highlighted: copies a prompt or history entry, opens an
 attachment, switches to a view, opens and highlights a setting, or opens the
-matching help topic. The field remembers the last five searches and shows
-them when it is empty. Escape, a click outside the card, or the icon again
+matching help topic. The field remembers your recent searches (five by
+default; the expert menu changes that, and 0 keeps none) and shows them when it
+is empty. Escape, a click outside the card, or the icon again
 all close it. A flag in the expert menu turns it off, with a value setting
 for how many hits each group shows before "show more".
 
@@ -618,7 +624,8 @@ menu caps how many matches it lists at once.
 
 A small always-on-top popup (default hotkey Ctrl+Alt+P) with fuzzy search across
 every tile's name and text; pick one and it copies immediately, no need to bring
-the main window forward.
+the main window forward. The expert menu sets how many results it lists (8 by
+default).
 
 ## Look and feel
 
@@ -1075,6 +1082,8 @@ machbarer Schritt.
 
 **Bildschirmaufnahme**: nimmt ein Fenster, einen Monitor oder einen gezogenen
 Bereich als Video auf, über den Aufnahme-Knopf neben dem Screenshot-Werkzeug.
+Eine Bereichsaufnahme zeigt einen dünnen Rahmen um den Bereich; er erscheint nie
+im Video, und das Experten-Menü schaltet ihn ab oder ändert seine Farbe.
 Aufgenommen wird immer MP4 (H.264); drei Qualitätsstufen wählen davor die
 Bitrate: Klein (4000 kbps), Hoch (12000 kbps, Standard) und Verlustfrei; dabei
 wird mit der aktuellen Bitrate aufgenommen und die Aufnahme danach automatisch
@@ -1202,6 +1211,9 @@ richten sich Farbe, Stärke, Deckkraft und Schriftgröße einer neuen
 Überlagerung außerdem nach dem, was für dieselbe Art (Bild, Rahmen, Text,
 Verpixeln oder Spotlight) zuletzt benutzt wurde, auch über einen Neustart
 hinweg; ein Expertenschalter stellt stattdessen wieder feste Vorgabewerte ein.
+Das Experten-Menü legt außerdem die Anfangsbreite des Textumrisses, die Farbe
+einer gedrückten Taste in einer neuen Tastenüberlagerung und die
+Anfangslautstärke einer neu eingefügten Videoüberlagerung fest.
 
 Beim Ziehen einer Form (Screenshot-Editor) oder eines Zuschnitts bzw. einer
 Überlagerung (Video-Editor) rastet die Bewegung an den Kanten der Leinwand
@@ -1298,9 +1310,10 @@ zu häufiges Einfügen pausiert die Sitzung mit einem Hinweis statt zu wiederhol
 
 **Kopieren**: Verketten (mehrere verschiedene Kacheln als ein Text, anders als
 Rotation oben; auch direkt über ein Kettensymbol an der Kachel, einzeln
-abschaltbar unter Kacheln & Kopieren im Experten-Menü). Eine Kette bleibt beim Wechsel in ein
+abschaltbar unter Kette im Experten-Menü). Eine Kette bleibt beim Wechsel in ein
 anderes Programm bestehen und endet erst durch erneutes Klicken auf den
-Ketten-Knopf oder Strg+V im App-Fenster. Beim Verketten zeigt
+Ketten-Knopf oder Strg+V im App-Fenster. Was zwischen zwei verketteten
+Kacheln steht, legt das Experten-Menü fest (ab Werk eine Leerzeile). Beim Verketten zeigt
 eine Leiste über dem Raster die gewählten
 Schritte der Reihe nach, mit Marken für die Platzhalter, die jeder Schritt
 braucht und die er selbst füllt; ein Schritt ohne Antwort aus einem früheren
@@ -1382,8 +1395,8 @@ Gruppe mit bis zu fünf Treffern und „weitere anzeigen". Pfeiltasten bewegen
 die Markierung über Gruppengrenzen hinweg; Eingabetaste löst die passende
 Aktion aus: kopiert einen Prompt oder Verlaufseintrag, öffnet einen Anhang,
 wechselt die Ansicht, öffnet und markiert eine Einstellung, oder öffnet das
-passende Hilfethema. Das Feld merkt sich die letzten fünf Suchen und zeigt
-sie, wenn es leer ist. Escape, ein Klick daneben oder das Symbol schließen
+passende Hilfethema. Das Feld merkt sich die letzten Suchen (ab Werk fünf,
+im Experten-Menü einstellbar, bei 0 keine) und zeigt sie, wenn es leer ist. Escape, ein Klick daneben oder das Symbol schließen
 die Überlagerung wieder. Ein Schalter im Experten-Menü stellt sie ab, dazu
 ein Wert für die Trefferzahl je Gruppe vor „weitere anzeigen".
 
@@ -1717,7 +1730,7 @@ nach Namen und nach jeder Spalte sortierbar, mit einem Knopf, um genau
 diesen einen Prompt direkt aus der Liste wiederherzustellen statt der
 ganzen Sicherung.
 
-**Eigenständig: Schnellstarter.** Strg+Alt+P, unscharfe Suche, sofortiges Kopieren.
+**Eigenständig: Schnellstarter.** Strg+Alt+P, unscharfe Suche, sofortiges Kopieren. Wie viele Treffer er zeigt, stellt das Experten-Menü ein (ab Werk 8).
 
 **Eigenständig: Mehrfachansichten.** Mehrere Rasterseiten, Ansichtsgruppen als Reiter.
 

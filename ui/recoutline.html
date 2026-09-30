@@ -13,12 +13,14 @@
     /* The whole window IS the outline: its rect is set to exactly the
        recorded region (see show_rec_outline in lib.rs), so the border only
        has to sit flush against its own edges. box-sizing keeps the 2px
-       stroke inside the window bounds instead of growing past them. */
+       stroke inside the window bounds instead of growing past them. The
+       colour comes from --outline-color, set by a script the backend runs in
+       this window before the page (the recOutlineColor setting). */
     #frame {
       position: fixed;
       inset: 0;
       box-sizing: border-box;
-      border: 2px solid #2563eb;
+      border: 2px solid var(--outline-color, #2563eb);
       pointer-events: none;
     }
   </style>

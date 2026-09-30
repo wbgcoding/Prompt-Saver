@@ -168,6 +168,9 @@ const VE = {
   ovTextColorDefault: "#ffffff",
   ovFrameColorDefault: "#ffffff",
   ovDupOffsetPx: 16,
+  ovTextOutlineDefault: 3,
+  ovKeysActiveColorDefault: "#3fa7ff",
+  ovVideoVolumeDefault: 0,
   snapOn: true,
   snapTolPx: 6,
   guide: null,
@@ -1955,7 +1958,7 @@ async function addOverlay(kind) {
   } else if (kind === "frame") {
     op = { ...base, rect: snapRect({ x: 0, y: 0, w: VE.w, h: VE.h }), color: VE.ovFrameColorDefault, thickness: VE.ovLastFrameThickness ?? Math.max(2, even(VE.h * 0.01)), style: "solid", opacity: VE.ovFrameOpacityDefault ?? 100 };
   } else if (kind === "text") {
-    op = { ...base, text: t("veOvTextDefault"), x: even(VE.w * 0.08), y: even(VE.h * 0.08), fontPx: VE.ovLastTextFontPx ?? Math.max(12, Math.round(VE.h / 16)), font: VE.ovFontDefault || FONT_FILES[0][0], color: VE.ovTextColorDefault, back: "plate", outlinePx: 3 };
+    op = { ...base, text: t("veOvTextDefault"), x: even(VE.w * 0.08), y: even(VE.h * 0.08), fontPx: VE.ovLastTextFontPx ?? Math.max(12, Math.round(VE.h / 16)), font: VE.ovFontDefault || FONT_FILES[0][0], color: VE.ovTextColorDefault, back: "plate", outlinePx: VE.ovTextOutlineDefault ?? 3 };
   } else if (kind === "pixelate") {
     op = { ...base, rect: centeredRect(0.35), blockPx: VE.ovPixelateBlockDefault ?? 16 };
   } else if (kind === "spotlight") {
@@ -1963,7 +1966,7 @@ async function addOverlay(kind) {
   } else if (kind === "keys") {
     op = {
       ...base, rect: centeredRect(0.3), preset: "pressed", keys: [],
-      color: VE.ovColorDefault, activeColor: "#3fa7ff", opacity: 100,
+      color: VE.ovColorDefault, activeColor: VE.ovKeysActiveColorDefault ?? "#3fa7ff", opacity: 100,
     };
   }
   if (!op) return;
@@ -2047,9 +2050,9 @@ function createVideoOverlay({ path, probe }) {
   const op = {
     tool: "overlay", id: newId(), kind: "video", ...range,
     path, rect, opacity: VE.ovImageOpacityDefault ?? 100,
-    // "Vorgabe stumm": a freshly added video overlay carries no sound until
-    // the user turns its volume up on purpose.
-    volume: 0, loop: false,
+    // Silent unless the user chose a starting volume (veOvVideoVolume, 0 by
+    // default): a freshly added video overlay carries no sound until asked to.
+    volume: VE.ovVideoVolumeDefault ?? 0, loop: false,
     hasAudio: !!probe.has_audio, videoDurationMs: Number(probe.duration_ms) || 0,
   };
   VE.selOv = op.id;
@@ -4387,6 +4390,11 @@ function applySettings(settings) {
   VE.ovSpotlightDimDefault = Number.isFinite(spotlightDim) && spotlightDim > 0 ? spotlightDim / 100 : 0.6;
   const imageOpacity = Number(values.veOvImageOpacity);
   VE.ovImageOpacityDefault = Number.isFinite(imageOpacity) && imageOpacity > 0 ? Math.round(imageOpacity) : 100;
+  const textOutline = Number(values.veOvTextOutlinePx);
+  VE.ovTextOutlineDefault = Number.isFinite(textOutline) && textOutline >= 1 ? Math.min(12, Math.round(textOutline)) : 3;
+  VE.ovKeysActiveColorDefault = HEX_RE.test(texts.veOvKeysActiveColor || "") ? texts.veOvKeysActiveColor : "#3fa7ff";
+  const videoVolume = Number(values.veOvVideoVolume);
+  VE.ovVideoVolumeDefault = Number.isFinite(videoVolume) && videoVolume > 0 ? Math.min(100, Math.round(videoVolume)) : 0;
   const dupOffset = Number(values.veOvDupOffsetPx);
   VE.ovDupOffsetPx = Number.isFinite(dupOffset) && dupOffset >= 0 ? Math.round(dupOffset) : 16;
   // Shared with the screenshot editor's own snapping (see snap.js); the switch

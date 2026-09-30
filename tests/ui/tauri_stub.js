@@ -277,6 +277,15 @@ const SETTINGS = {
 // a stub that never restored one, because the stale index-based cell was still there.
 for (const f of SETTINGS.tile_folders) for (const m of f.members) delete LAYOUT[m];
 
+// A probe that needs a non-default setting at boot (a window that reads its
+// values once, like the video editor) sets window.__SEED_SETTINGS__ before this
+// file loads; each of its ui_flags / ui_values / ui_texts maps is merged in.
+if (window.__SEED_SETTINGS__) {
+  for (const k of ["ui_flags", "ui_values", "ui_texts"]) {
+    Object.assign(SETTINGS[k], window.__SEED_SETTINGS__[k] || {});
+  }
+}
+
 // 420: the drag-to-view probe needs one view it can fill with a single tile, to
 // prove a genuinely full target refuses the whole drop -- shrinking "work" to
 // its one and only cell is far cheaper than padding it with eleven throwaway

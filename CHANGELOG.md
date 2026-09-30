@@ -21,6 +21,14 @@ the video editor and the introduction tour ship on).
 
 ### Added
 
+- **Eight more expert settings for things that were fixed values.** A switch
+  and a colour for the frame around a region recording (it still never appears
+  in the video), a choice of what goes between two chained prompts (blank line,
+  line break, space or nothing), how many recent searches the search window
+  keeps (0 keeps none), how many results the quick launcher lists, and, for the
+  video editor, the starting outline width of a new text overlay, the colour of
+  a pressed key in a new keys overlay and the starting volume of a newly
+  inserted video overlay. Every default is the old fixed value.
 - **Command line.** `prompt-saver.exe <command> ...` runs the app as a
   command line tool instead of opening its window: list, get, copy, add,
   edit, delete and restore prompts, manage tags and views, search, export,
@@ -1435,6 +1443,15 @@ the video editor and the introduction tour ship on).
 
 ### Changed
 
+- **Several expert-menu rows moved next to the feature they belong to.** The
+  chain settings have their own "Chain" group, the recording cleanup rows sit
+  under "Screen recording", the temporary-export lifetime under "Video editor",
+  the image-text index fill action under "Library", the floating-button recall
+  action under "Floating buttons & folders", and the grid border, the view
+  limit and the grid size limit under "Views and quick grid". Rows that only
+  matter with a switch on now hide with it and step in under it, including the
+  colour pickers and the fixed-value list. The "Tiles & copying" group is now
+  just "Tiles".
 - **The safety backup before Reset settings and before Delete all data is now
   on by default**, and split into two separate switches so either case can be
   turned off on its own.
