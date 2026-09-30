@@ -27,7 +27,7 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::Notify;
+use tokio::sync::oneshot;
 
 // ---------- Settings ----------
 
@@ -429,24 +429,129 @@ impl RemoteGuard {
 
 // ---------- Managed state: the running receiver, if any ----------
 
+// One receiver run: its own shutdown signal and the task that owns the
+// listener. Nothing is shared between runs, so a stop can never leave a
+// pending wake-up behind for the next start.
+#[derive(Default)]
+struct RunSlot {
+    cancel: Option<oneshot::Sender<()>>,
+    join: Option<tauri::async_runtime::JoinHandle<()>>,
+}
+
+// Hands out runs one at a time. A new run cancels the previous one and gets
+// its task handle, so it can wait for the port to be free; the generation
+// only tells a late-finishing run that it is no longer the current one.
+pub(crate) struct RunController {
+    generation: AtomicU64,
+    slot: Mutex<RunSlot>,
+}
+
+struct RunTicket {
+    generation: u64,
+    cancel: oneshot::Receiver<()>,
+    previous: Option<tauri::async_runtime::JoinHandle<()>>,
+}
+
+impl RunController {
+    fn new() -> Self {
+        RunController { generation: AtomicU64::new(0), slot: Mutex::new(RunSlot::default()) }
+    }
+
+    fn current(&self, generation: u64) -> bool {
+        self.generation.load(Ordering::SeqCst) == generation
+    }
+
+    // Signals the running run, if any. Its task handle stays in the slot so
+    // the next start can still wait for that run to let go of its port.
+    fn stop(&self) {
+        let mut slot = self.slot.lock().unwrap_or_else(|e| e.into_inner());
+        self.generation.fetch_add(1, Ordering::SeqCst);
+        if let Some(tx) = slot.cancel.take() {
+            let _ = tx.send(());
+        }
+    }
+
+    // Holds the slot while the caller spawns, so two starts can never
+    // interleave. `spawn` gets the ticket and returns the new run's task.
+    fn start_run(&self, spawn: impl FnOnce(RunTicket) -> tauri::async_runtime::JoinHandle<()>) {
+        let mut slot = self.slot.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(tx) = slot.cancel.take() {
+            let _ = tx.send(());
+        }
+        let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
+        let (tx, rx) = oneshot::channel();
+        slot.cancel = Some(tx);
+        let previous = slot.join.take();
+        slot.join = Some(spawn(RunTicket { generation, cancel: rx, previous }));
+    }
+}
+
+// The body of one run: wait for the previous run to be gone, bind, serve until
+// this run's own signal, release the port. Returns without binding when the
+// run was cancelled while it waited.
+async fn serve_run<F>(
+    ticket: RunTicket,
+    addr: SocketAddr,
+    controller: Arc<RunController>,
+    on_bound: impl FnOnce(u16),
+    on_bind_failed: impl FnOnce(std::io::Error, bool),
+    on_connection: F,
+    on_finished: impl FnOnce(bool),
+) where
+    F: Fn(TcpStream, SocketAddr),
+{
+    let RunTicket { generation, mut cancel, previous } = ticket;
+    if let Some(prev) = previous {
+        tokio::select! {
+            _ = prev => {}
+            _ = &mut cancel => {
+                on_finished(false);
+                return;
+            }
+        }
+    }
+    let listener = match TcpListener::bind(addr).await {
+        Ok(l) => l,
+        Err(e) => {
+            on_bind_failed(e, controller.current(generation));
+            return;
+        }
+    };
+    let bound_port = listener.local_addr().map(|a| a.port()).unwrap_or(addr.port());
+    if !controller.current(generation) {
+        // Stopped between the wait and the bind: never announce, never serve.
+        drop(listener);
+        on_finished(false);
+        return;
+    }
+    on_bound(bound_port);
+    loop {
+        tokio::select! {
+            _ = &mut cancel => break,
+            accepted = listener.accept() => {
+                if let Ok((stream, peer)) = accepted {
+                    on_connection(stream, peer);
+                }
+            }
+        }
+    }
+    drop(listener);
+    on_finished(controller.current(generation));
+}
+
 pub(crate) struct RemoteApiState {
     running: AtomicBool,
     port: AtomicU16,
-    // Bumped by every start()/stop() so an old accept loop that is still
-    // winding down can tell it is no longer the current one and must not
-    // overwrite what a newer start already put in `running`/`port`.
-    generation: AtomicU64,
     guard: Arc<RemoteGuard>,
-    shutdown: Arc<Notify>,
+    runs: Arc<RunController>,
 }
 impl RemoteApiState {
     pub(crate) fn new() -> Self {
         RemoteApiState {
             running: AtomicBool::new(false),
             port: AtomicU16::new(0),
-            generation: AtomicU64::new(0),
             guard: Arc::new(RemoteGuard::new()),
-            shutdown: Arc::new(Notify::new()),
+            runs: Arc::new(RunController::new()),
         }
     }
 }
@@ -498,66 +603,58 @@ pub(crate) fn start(app: AppHandle) {
     if state.running.swap(true, Ordering::SeqCst) {
         return; // already running
     }
-    let my_gen = state.generation.fetch_add(1, Ordering::SeqCst) + 1;
     let port = remote_port(&settings);
-    // Only the bind address is fixed for the lifetime of this run; the peer
-    // allow-list itself is re-read fresh on every connection (see
-    // handle_connection), so narrowing it back to loopback-only takes effect
-    // immediately without a restart. Widening it (turning the network switch
-    // ON) needs a restart, the same way changing the port does -- both
-    // change what the OS socket itself is bound to.
+    // The bind address is fixed for the lifetime of a run; the peer allow-list
+    // itself is re-read fresh on every connection (see handle_connection).
     let bind_ip = if network_filter_enabled(&settings) { Ipv4Addr::UNSPECIFIED } else { Ipv4Addr::LOCALHOST };
     let addr = SocketAddr::from((bind_ip, port));
     let guard = state.guard.clone();
-    let shutdown = state.shutdown.clone();
-    let app2 = app.clone();
-    tauri::async_runtime::spawn(async move {
-        let listener = match TcpListener::bind(addr).await {
-            Ok(l) => l,
-            Err(e) => {
-                let state: State<RemoteApiState> = app2.state();
-                if state.generation.load(Ordering::SeqCst) == my_gen {
+    let runs = state.runs.clone();
+    let runs_for_run = runs.clone();
+    runs.start_run(|ticket| {
+        let (app_bound, app_failed, app_conn, app_done) = (app.clone(), app.clone(), app.clone(), app.clone());
+        tauri::async_runtime::spawn(serve_run(
+            ticket,
+            addr,
+            runs_for_run,
+            move |bound_port| {
+                let state: State<RemoteApiState> = app_bound.state();
+                state.port.store(bound_port, Ordering::SeqCst);
+                let _ = app_bound.emit("remote-api-status", serde_json::json!({"running": true, "port": bound_port}));
+            },
+            move |e, current| {
+                let state: State<RemoteApiState> = app_failed.state();
+                if current {
                     state.running.store(false, Ordering::SeqCst);
                 }
                 record_error_log(&format!("remote access could not bind its port: {e}"), "remoteApi", None, 100);
-                return;
-            }
-        };
-        let bound_port = listener.local_addr().map(|a| a.port()).unwrap_or(port);
-        {
-            let state: State<RemoteApiState> = app2.state();
-            state.port.store(bound_port, Ordering::SeqCst);
-        }
-        let _ = app2.emit("remote-api-status", serde_json::json!({"running": true, "port": bound_port}));
-        loop {
-            tokio::select! {
-                _ = shutdown.notified() => break,
-                accepted = listener.accept() => {
-                    match accepted {
-                        Ok((stream, peer)) => {
-                            let app3 = app2.clone();
-                            let guard2 = guard.clone();
-                            tauri::async_runtime::spawn(async move { handle_connection(stream, peer, app3, guard2).await });
-                        }
-                        Err(_) => continue,
-                    }
+            },
+            move |stream, peer| {
+                let app3 = app_conn.clone();
+                let guard2 = guard.clone();
+                tauri::async_runtime::spawn(async move { handle_connection(stream, peer, app3, guard2).await });
+            },
+            move |current| {
+                // A run that is no longer the current one must not touch the
+                // shared status: its stop() already published "not running",
+                // and a newer run owns `running` and `port` now.
+                if current {
+                    let state: State<RemoteApiState> = app_done.state();
+                    state.running.store(false, Ordering::SeqCst);
+                    state.port.store(0, Ordering::SeqCst);
+                    let _ = app_done.emit("remote-api-status", serde_json::json!({"running": false, "port": 0}));
                 }
-            }
-        }
-        let state: State<RemoteApiState> = app2.state();
-        if state.generation.load(Ordering::SeqCst) == my_gen {
-            state.running.store(false, Ordering::SeqCst);
-            state.port.store(0, Ordering::SeqCst);
-        }
-        let _ = app2.emit("remote-api-status", serde_json::json!({"running": false, "port": 0}));
+            },
+        ))
     });
 }
 
 pub(crate) fn stop(app: &AppHandle) {
     let state: State<RemoteApiState> = app.state();
-    state.generation.fetch_add(1, Ordering::SeqCst);
+    state.runs.stop();
     state.running.store(false, Ordering::SeqCst);
-    state.shutdown.notify_one();
+    state.port.store(0, Ordering::SeqCst);
+    let _ = app.emit("remote-api-status", serde_json::json!({"running": false, "port": 0}));
 }
 
 // ---------- The wire protocol ----------
@@ -1497,5 +1594,93 @@ mod tests {
         assert!(r.is_err());
         assert_eq!(calls, 0);
         assert_eq!(s.ui_texts.get("remoteAllowedRanges").map(String::as_str), Some("192.168.1.0/24"));
+    }
+
+    // ---- one shutdown per run ----
+
+    #[derive(Default)]
+    struct Probe {
+        bound: std::sync::atomic::AtomicUsize,
+        finished_current: std::sync::atomic::AtomicUsize,
+        finished_stale: std::sync::atomic::AtomicUsize,
+    }
+
+    fn launch(controller: &Arc<RunController>, addr: SocketAddr, probe: &Arc<Probe>) {
+        let c = controller.clone();
+        let (p1, p2) = (probe.clone(), probe.clone());
+        controller.start_run(|ticket| {
+            tauri::async_runtime::spawn(serve_run(
+                ticket,
+                addr,
+                c,
+                move |_| {
+                    p1.bound.fetch_add(1, Ordering::SeqCst);
+                },
+                |_, _| {},
+                |_stream, _peer| {},
+                move |current| {
+                    let counter = if current { &p2.finished_current } else { &p2.finished_stale };
+                    counter.fetch_add(1, Ordering::SeqCst);
+                },
+            ))
+        });
+    }
+
+    async fn free_port() -> u16 {
+        let l = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+        l.local_addr().unwrap().port()
+    }
+
+    async fn wait_until(mut cond: impl FnMut() -> bool) -> bool {
+        for _ in 0..200 {
+            if cond() {
+                return true;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+        cond()
+    }
+
+    #[tokio::test]
+    async fn a_stop_while_idle_does_not_kill_the_next_start() {
+        let controller = Arc::new(RunController::new());
+        controller.stop();
+        controller.stop();
+        let probe = Arc::new(Probe::default());
+        let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, free_port().await));
+        launch(&controller, addr, &probe);
+        assert!(wait_until(|| probe.bound.load(Ordering::SeqCst) == 1).await);
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert_eq!(probe.finished_current.load(Ordering::SeqCst) + probe.finished_stale.load(Ordering::SeqCst), 0);
+        assert!(TcpStream::connect(addr).await.is_ok());
+        controller.stop();
+        assert!(wait_until(|| probe.finished_current.load(Ordering::SeqCst) == 0 && probe.finished_stale.load(Ordering::SeqCst) == 1).await);
+    }
+
+    #[tokio::test]
+    async fn rapid_start_stop_start_leaves_one_live_listener_and_a_quiet_old_run() {
+        let controller = Arc::new(RunController::new());
+        let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, free_port().await));
+        let first = Arc::new(Probe::default());
+        let second = Arc::new(Probe::default());
+        launch(&controller, addr, &first);
+        controller.stop();
+        launch(&controller, addr, &second);
+        assert!(wait_until(|| second.bound.load(Ordering::SeqCst) == 1).await);
+        // The old run never took the port after the stop, and never published.
+        assert!(wait_until(|| first.finished_stale.load(Ordering::SeqCst) == 1).await);
+        assert_eq!(first.finished_current.load(Ordering::SeqCst), 0);
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert_eq!(second.finished_current.load(Ordering::SeqCst) + second.finished_stale.load(Ordering::SeqCst), 0);
+        assert!(TcpStream::connect(addr).await.is_ok());
+        // One owner: a second bind on the same port is refused while it runs.
+        assert!(TcpListener::bind(addr).await.is_err());
+        // A restart waits for the running one to release the port, then owns it.
+        let third = Arc::new(Probe::default());
+        launch(&controller, addr, &third);
+        assert!(wait_until(|| third.bound.load(Ordering::SeqCst) == 1).await);
+        assert!(wait_until(|| second.finished_stale.load(Ordering::SeqCst) == 1).await);
+        assert_eq!(second.finished_current.load(Ordering::SeqCst), 0);
+        assert!(TcpStream::connect(addr).await.is_ok());
     }
 }
