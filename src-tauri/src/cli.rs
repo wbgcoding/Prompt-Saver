@@ -1629,6 +1629,19 @@ fn cmd_settings_set(store: &mut Store, key: &str, value: &str) -> Outcome {
         return Outcome::err(1, format!("{key} is managed by the app and cannot be set
 "));
     }
+    // Folder authority, the vault keys, the backup password, the import-denied
+    // switches and every receiver setting have their own dedicated writers and
+    // are refused for an import too; this generic setter is reachable from the
+    // remote receiver, so it must not be a way around them.
+    if crate::is_protected_folder_key(key)
+        || crate::is_vault_key(key)
+        || key == crate::BACKUP_PW_KEY
+        || crate::is_import_denied_flag(key)
+        || crate::is_import_denied_value(key)
+    {
+        return Outcome::err(1, format!("{key} can only be changed in the app itself
+"));
+    }
     let s = &mut store.settings;
     match key {
         "theme" => s.theme = value.to_string(),
@@ -2602,10 +2615,25 @@ mod tests {
             assert_ne!(set.code, 0, "{key} must not be writable");
             assert_eq!(store.settings.ui_texts.get(key).map(String::as_str), Some("sealed"));
         }
-        // The user-facing, non-secret receiver settings stay settable.
-        let ok = run_cmd(&mut store, &dir, &["settings", "set", "remoteAllowedRanges", "10.0.0.0/8", "--yes"]);
-        assert_eq!(ok.code, 0);
-        assert_eq!(store.settings.ui_texts.get("remoteAllowedRanges").map(String::as_str), Some("10.0.0.0/8"));
+    }
+
+    #[test]
+    fn settings_set_refuses_every_key_with_its_own_dedicated_writer() {
+        let mut store = fixture_store();
+        let dir = std::env::temp_dir();
+        for key in [
+            "syncDir", "recordingDir", "screenshotDir", "videoExportDir", "secretVaultSalt", "secretVaultVerify",
+            "backupPw", "remoteNetworkFilter", "remoteApi", "remoteAllowedRanges", "remotePort", "remoteRateLimit",
+            "clipWatcher", "urlSchemeCopyAllowed", "urlScheme", "demoMode", "promptSync",
+        ] {
+            let before = serde_json::to_string(&store.settings).unwrap();
+            for value in ["true", "12", "x"] {
+                let set = run_cmd(&mut store, &dir, &["settings", "set", key, value, "--yes"]);
+                assert_ne!(set.code, 0, "{key} must not be writable here");
+                assert!(!set.mutated_settings, "{key} must not flag a settings write");
+            }
+            assert_eq!(serde_json::to_string(&store.settings).unwrap(), before, "{key} changed the store");
+        }
     }
 
     #[test]
