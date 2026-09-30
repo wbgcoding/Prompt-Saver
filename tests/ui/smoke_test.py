@@ -9315,6 +9315,11 @@ PROBE = """
           }
         }
         window.__OCR_INSTALL_GATE__ = null;
+        // The install above counts as still running across the close, and the
+        // reopened dialog polls its result again: keep that result pending so the
+        // elevated-listing check below is not interrupted by a finished install's
+        // reload.
+        RESULTS.ocr_install_result = () => null;
         document.getElementById('ocr-langs-close-x').click();
         await sleep(100);
       }
