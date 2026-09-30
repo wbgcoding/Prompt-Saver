@@ -36233,10 +36233,14 @@ fn sync_known_note(path: &Path) {
 // Whether the file changed since the app last wrote or read it. `None` (never seen)
 // is deliberately NOT a conflict: on a fresh start every file is unknown, and
 // claiming a conflict there would litter the folder with copies of itself.
+//
+// A stamp the poll noted but has not read yet (handled: false) counts as changed
+// too: the new stamp is already in the map, so comparing stamps alone would call an
+// edit the app never saw "unchanged" and overwrite it without keeping a copy.
 fn sync_changed_since_seen(path: &Path) -> bool {
     let seen = sync_seen_lock();
     match (seen.get(&sync_seen_key(path)), sync_stamp_of(path)) {
-        (Some(prev), Some(now)) => prev.stamp != now,
+        (Some(prev), Some(now)) => prev.stamp != now || !prev.handled,
         _ => false,
     }
 }
@@ -41931,6 +41935,28 @@ mod tests {
         sync_write_dir(&dir, &[a], &Settings::default());
         assert!(!dir.join("b.md").exists(), "a deleted prompt takes its own file along");
         assert!(dir.join("a.md").exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sync_write_keeps_a_conflict_copy_of_an_edit_the_poll_noted_but_not_read() {
+        let dir = sync_tmp_dir("unread-edit");
+        let path = dir.join("p1.md");
+        let mut edited = sync_test_prompt();
+        edited.text = "edited outside the app".into();
+        fs::write(&path, prompt_to_md(&edited, &SyncPlacement::default())).unwrap();
+        // The poll has seen this stamp (Settle) but has not read the file yet.
+        let stamp = sync_stamp_of(&path).unwrap();
+        sync_seen_lock().insert(sync_seen_key(&path), SyncSeen { stamp, handled: false });
+        let mut app_side = sync_test_prompt();
+        app_side.text = "changed inside the app".into();
+        sync_write_dir(&dir, &[app_side], &Settings::default());
+        let copies = fs::read_dir(&dir)
+            .unwrap()
+            .flatten()
+            .filter(|e| e.file_name().to_string_lossy().starts_with("p1.conflict-"))
+            .count();
+        assert_eq!(copies, 1, "the unread outside edit must be kept as a conflict copy");
         let _ = fs::remove_dir_all(&dir);
     }
 
