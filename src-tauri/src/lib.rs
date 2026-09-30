@@ -11790,10 +11790,23 @@ async fn backup_contents(app: AppHandle, name: String) -> Result<BackupContents,
 // "settings"): either way relaunch after, so nothing can half-apply.
 #[tauri::command]
 async fn restore_backup(app: AppHandle, state: State<'_, Db>, name: String, keep: usize, scope: String) -> Result<(), String> {
+    restore_backup_core(app.clone(), state, name, keep, scope)?;
+    app.restart();
+}
+
+// Everything a restore does except the relaunch. The command line and the
+// receiver call this, answer their caller, and only then restart: a restart
+// inside the call drops the connection before any answer is written, and a
+// script would read a restore that worked as a failure.
+fn restore_backup_core(app: AppHandle, state: State<'_, Db>, name: String, keep: usize, scope: String) -> Result<(), String> {
     if !valid_backup_name(&name) {
         return Err("bad-name".into());
     }
     valid_scope(&scope)?;
+    // A store another machine holds locked is not ours to overwrite.
+    if data_dir_write_blocked(&app) {
+        return Err("readonly".into());
+    }
     let Some(backup_db) = backup_db_file(&backups_dir(&app).join(&name)) else {
         return Err("missing".into());
     };
@@ -11835,7 +11848,7 @@ async fn restore_backup(app: AppHandle, state: State<'_, Db>, name: String, keep
         // slipping in before it must not trust a single one of the old hashes.
         store.forget_written_rows();
     }
-    app.restart();
+    Ok(())
 }
 
 #[tauri::command]
@@ -51994,5 +52007,77 @@ mod tests {
         assert!(text.contains("LATE"), "the appended line must survive the scrub: {text:?}");
         assert!(!text.to_ascii_lowercase().contains("\\users\\"), "the path is still scrubbed: {text:?}");
         let _ = fs::remove_file(&path);
+    }
+
+    // A standalone restore in a folder another machine holds locked must be refused
+    // with exit 3 and leave the store alone (the check used to sit behind the
+    // restore arm, which returned before reaching it).
+    fn restore_fixture(name: &str) -> (PathBuf, String) {
+        let dir = ddlock_test_dir(name);
+        {
+            let live = db_conn_at(&dir).expect("live store");
+            live.execute("INSERT INTO meta(key, value) VALUES('marker', 'live')", []).unwrap();
+        }
+        let backup_name = "2024-01-01_00-00-00".to_string();
+        let folder = dir.join("backups").join(&backup_name);
+        fs::create_dir_all(&folder).unwrap();
+        {
+            let snap = db_conn_at(&folder).expect("snapshot store");
+            snap.execute("INSERT INTO meta(key, value) VALUES('marker', 'backup')", []).unwrap();
+        }
+        (dir, backup_name)
+    }
+
+    fn marker_of(dir: &Path) -> String {
+        let conn = Connection::open(dir.join("data.db")).unwrap();
+        conn.query_row("SELECT value FROM meta WHERE key = 'marker'", [], |r| r.get(0)).unwrap()
+    }
+
+    #[test]
+    fn a_standalone_restore_is_refused_while_another_machine_holds_the_folder() {
+        let _g = DdlockGuard::capture();
+        let (dir, name) = restore_fixture("restore-locked");
+        write_data_dir_lock(
+            &data_dir_lock_path(&dir),
+            &DataDirLockInfo { host: "OTHER-PC".to_string(), pid: 999, seen: unix_now() },
+        );
+        let argv: Vec<String> = ["backup", "restore", &name, "--yes"].iter().map(|s| s.to_string()).collect();
+        let code = cli::run_standalone_with(|| dir.clone(), &argv, &dir);
+        assert_eq!(code, 3);
+        assert_eq!(marker_of(&dir), "live", "the locked store must be untouched");
+        assert_eq!(fs::read_dir(dir.join("backups")).unwrap().count(), 1, "no safety snapshot either");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_standalone_restore_of_a_free_folder_swaps_the_database_and_exits_zero() {
+        let _g = DdlockGuard::capture();
+        let (dir, name) = restore_fixture("restore-free");
+        let argv: Vec<String> = ["backup", "restore", &name, "--yes"].iter().map(|s| s.to_string()).collect();
+        let code = cli::run_standalone_with(|| dir.clone(), &argv, &dir);
+        assert_eq!(code, 0);
+        assert_eq!(marker_of(&dir), "backup");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // The answer has to be on the wire before the relaunch: a restart inside the
+    // call drops the connection and the caller reads a restore that worked as a failure.
+    #[test]
+    fn the_answer_is_written_before_the_restart_runs() {
+        let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
+        let order = std::sync::Mutex::new(Vec::<&str>::new());
+        rt.block_on(cli::answer_then_restart(
+            async { order.lock().unwrap().push("answer") },
+            true,
+            || order.lock().unwrap().push("restart"),
+        ));
+        assert_eq!(*order.lock().unwrap(), vec!["answer", "restart"]);
+        order.lock().unwrap().clear();
+        rt.block_on(cli::answer_then_restart(
+            async { order.lock().unwrap().push("answer") },
+            false,
+            || order.lock().unwrap().push("restart"),
+        ));
+        assert_eq!(*order.lock().unwrap(), vec!["answer"], "no restart unless one is due");
     }
 }

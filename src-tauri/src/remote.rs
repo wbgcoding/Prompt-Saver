@@ -1146,10 +1146,11 @@ async fn serve_request<S: AsyncRead + AsyncWrite + Unpin>(
         write_response(&mut stream, 200, &body).await;
         return;
     }
-    let (code, stdout, stderr) = crate::cli::run_in_process(&app, argv, dir).await;
+    let (code, stdout, stderr, restart) = crate::cli::run_in_process_deferred(&app, argv, dir).await;
     log_remote(&settings, "remoteApi", &format!("remote access: {cmd_name} -> exit {code}"));
     let body = serde_json::to_vec(&serde_json::json!({"code": code, "stdout": stdout, "stderr": stderr})).unwrap_or_default();
-    write_response(&mut stream, 200, &body).await;
+    // A restore relaunches the app: the answer goes out first, then the restart.
+    crate::cli::answer_then_restart(write_response(&mut stream, 200, &body), restart, || app.restart()).await;
 }
 
 // ---------- promptsaver:// links ----------
