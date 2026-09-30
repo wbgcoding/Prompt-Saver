@@ -16736,7 +16736,7 @@ def main():
       if (drawn.join() !== '5') errs.push('595: after a second resize the next marker reads ' + JSON.stringify(drawn) + ', expected 5');
     }
 """)
-        failed += ar_probe('ba598', 'screenshot editor: duplicating a spotlight never leaves two spotlights dimming each other', 'index', '1000x780', '', ba_common + r"""
+        failed += ar_probe('ba598', 'screenshot editor: a spotlight offers no Duplicate, so two never dim each other', 'index', '1000x780', '', ba_common + r"""
     if (!(await baOpen(''))) { errs.push('598: the editor did not open'); }
     else {
       await baTool('spotlight'); await baDrag(40, 30, 120, 80);
@@ -16745,27 +16745,15 @@ def main():
       const pop = await baCtx(80, 55);
       if (!pop) { errs.push('598: fixture: no context menu over the spotlight'); }
       else {
-        const dup = [...pop.querySelectorAll('button')].find((b) => !b.classList.contains('danger'));
-        if (dup) { dup.click(); await sleep(80); }
-        img = await baExport();
-        // inside the copy (moved by the duplicate offset) but outside the original rectangle
-        if (!near(img.px(130, 90), BGC, 8)) errs.push('598: a point inside the duplicate is dimmed, a second spotlight layer exists: ' + JSON.stringify(img.px(130, 90)));
-        await baUndo();
-        img = await baExport();
-        // the replaced original is back, and the copy's dimming is gone with it
-        if (near(img.px(5, 5), BGC, 8)) errs.push('598: undo lost the original spotlight, the outside is not dimmed');
-        if (!near(img.px(42, 32), BGC, 8)) errs.push('598: the original spotlight is not clear inside after undo');
-        if (near(img.px(130, 90), BGC, 8)) errs.push('598: the point beside the original is not dimmed after undo');
-        if (document.getElementById('snip-edit-undo').disabled) errs.push('598: the original spotlight has no undo step of its own after undo');
-        await baRedo();
-        img = await baExport();
-        if (!near(img.px(130, 90), BGC, 8)) errs.push('598: redo did not put the duplicate back in place of the original');
-        await baUndo();
-        await baUndo();
-        img = await baExport();
-        if (!near(img.px(5, 5), BGC, 8)) errs.push('598: undoing both steps leaves a spotlight behind');
-        if (!document.getElementById('snip-edit-undo').disabled) errs.push('598: more than two spotlight steps are on the undo stack');
+        const shown = [...pop.querySelectorAll('button')].filter((b) => !b.classList.contains('hidden') && b.offsetParent !== null);
+        if (shown.length !== 1 || !shown[0].classList.contains('danger')) errs.push('598: the spotlight menu offers ' + JSON.stringify(shown.map((b) => b.textContent)) + ', expected only Delete');
       }
+      // a rectangle keeps both entries
+      document.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      await baTool('rect'); await baDrag(20, 100, 60, 115);
+      const pop2 = await baCtx(40, 100);
+      const shown2 = pop2 ? [...pop2.querySelectorAll('button')].filter((b) => b.offsetParent !== null) : [];
+      if (shown2.length !== 2) errs.push('598: fixture: a rectangle menu shows ' + shown2.length + ' entries, expected Duplicate and Delete');
     }
 """)
         failed += ar_probe('ba599', 'screenshot editor: a capture that arrives while Apply saves keeps its own file and state', 'index', '1000x780', ba_seed, ba_common + r"""

@@ -17541,6 +17541,7 @@ function bind() {
   function openSnipCtxPop(op, x, y) {
     snipCtxOp = op;
     snipCtxDupBtn.textContent = t("duplicate");
+    snipCtxDupBtn.classList.toggle("hidden", op.tool === "spotlight");
     snipCtxDelBtn.textContent = t("delete");
     placePopoverAt(snipCtxPop, x, y);
   }
@@ -18452,6 +18453,7 @@ function bind() {
   // always pops the last entry, so anything inserted mid-array would make undo
   // remove the wrong operation.
   function snipEditDuplicateOp(op) {
+    if (op.tool === "spotlight") return; // only one spotlight may exist, there is nothing to copy
     const offset = SNIP_DUP_OFFSET_PX();
     const dup = JSON.parse(JSON.stringify(op));
     if (dup.rect) {
@@ -18461,9 +18463,7 @@ function bind() {
     } else if (dup.point) {
       dup.point = { x: snipEditClamp(dup.point.x + offset, 0, SE.w), y: snipEditClamp(dup.point.y + offset, 0, SE.h) };
     }
-    // Only one spotlight may exist (two would dim each other's clear area), so a
-    // duplicate of it replaces the original rather than stacking a second layer.
-    if (dup.tool === "spotlight") snipEditPushUniqueOp("spotlight", dup); else snipEditPushOp(dup);
+    snipEditPushOp(dup);
   }
   // Removes one specific op wherever it sits in SE.ops. The removal is an undo
   // entry too, so Ctrl+Z brings the op back at its old place.
