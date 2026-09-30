@@ -23669,7 +23669,9 @@ mod keylog {
 
     fn write_sidecar(output_path: &Path, sidecar: &KeySidecar) {
         if let Ok(json) = serde_json::to_string(sidecar) {
-            let _ = fs::write(sidecar_path(output_path), json);
+            // Sealed like the rest of the local store: the events are the keys
+            // typed during the recording. Readers pass old plain files through.
+            let _ = fs::write(sidecar_path(output_path), super::enc_str(&json));
         }
     }
 
@@ -23866,6 +23868,25 @@ mod keylog {
             let mut gap_keys: Vec<&str> = gap.as_object().unwrap().keys().map(|s| s.as_str()).collect();
             gap_keys.sort();
             assert_eq!(gap_keys, vec!["end_ms", "start_ms"]);
+        }
+
+        #[test]
+        fn written_sidecar_is_sealed_on_disk_and_parses_back() {
+            let dir = std::env::temp_dir().join(format!("ps-keys-sealed-{}", std::process::id()));
+            fs::create_dir_all(&dir).unwrap();
+            let video = dir.join("rec-sealed.mp4");
+            let sc = KeySidecar { hold_ms: 777, ..Default::default() };
+            write_sidecar(&video, &sc);
+            let raw = fs::read_to_string(sidecar_path(&video)).unwrap();
+            assert!(!raw.contains("hold_ms") && !raw.starts_with('{'), "the sidecar must not sit on disk as plain JSON");
+            assert_eq!(crate::parse_key_sidecar(&raw), Some(sc));
+            let _ = fs::remove_dir_all(&dir);
+        }
+
+        #[test]
+        fn an_old_plain_sidecar_still_parses() {
+            let parsed = crate::parse_key_sidecar(r#"{"events":[],"gaps":[],"hold_ms":500}"#).unwrap();
+            assert_eq!(parsed.hold_ms, 500);
         }
 
         #[test]
@@ -28983,7 +29004,8 @@ fn probe_recording_blocking(ffprobe: &Path, src: &Path) -> Result<RecordingProbe
 // so both ever accept exactly the same shape of file.
 #[cfg(windows)]
 fn parse_key_sidecar(data: &str) -> Option<keylog::KeySidecar> {
-    serde_json::from_str(data).ok()
+    // dec_str passes an old unsealed file through unchanged.
+    serde_json::from_str(&dec_str(data)).ok()
 }
 
 #[cfg(windows)]
