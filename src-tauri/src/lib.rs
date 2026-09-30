@@ -8228,6 +8228,24 @@ async fn delete_all_data(app: AppHandle, state: State<'_, Db>) -> Result<(), Str
     Ok(())
 }
 
+// The settings a reset leaves behind: every default, plus the values that are
+// keys rather than preferences. The backup password would make every protected
+// backup unreadable if dropped, the receiver's certificate belongs to this
+// machine, and the vault's salt and verifier are what the confidential prompts
+// the reset keeps are sealed with.
+fn settings_after_reset(old: &Settings) -> Settings {
+    let mut fresh = Settings::default();
+    fresh.migrate();
+    if let Some(pw) = old.ui_texts.get(BACKUP_PW_KEY) {
+        fresh.ui_texts.insert(BACKUP_PW_KEY.to_string(), pw.clone());
+    }
+    for (k, v) in remote_tls::tls_values(old) {
+        fresh.ui_texts.insert(k, v);
+    }
+    carry_vault_keys(old, &mut fresh);
+    fresh
+}
+
 // Reset every SETTING to its default (theme, views/layouts, toggles, expert values)
 // while keeping the stored prompts intact. The front-end reloads so each default
 // re-applies cleanly; cleared views make normalizeLayout re-place the kept prompts.
@@ -8250,19 +8268,9 @@ async fn reset_settings(app: AppHandle, state: State<'_, Db>) -> Result<(), Stri
         let prompts = std::mem::take(&mut store.prompts); // keep the prompts
         // The backup password is a key, not a preference: dropping it would make
         // every password-protected backup permanently unreadable.
-        let backup_pw = store.settings.ui_texts.remove(BACKUP_PW_KEY);
-        let tls_values = remote_tls::tls_values(&store.settings);
-        store.settings = Settings::default();
+        store.settings = settings_after_reset(&store.settings);
         SETTINGS_LOCKED.store(false, Ordering::Relaxed); // explicit reset overrides the corrupt-row lock
-        store.settings.migrate();
         load_pick_history(&store.settings); // reset clears the mirror too
-        if let Some(pw) = backup_pw {
-            store.settings.ui_texts.insert(BACKUP_PW_KEY.to_string(), pw);
-        }
-        // The receiver's certificate is a machine value like the backup password.
-        for (k, v) in tls_values {
-            store.settings.ui_texts.insert(k, v);
-        }
         store.prompts = prompts;
         // The prompt rows themselves are untouched here, but the store around them
         // is rebuilt from defaults: start the row bookkeeping from scratch rather
@@ -11311,6 +11319,13 @@ fn valid_scope(scope: &str) -> Result<&str, String> {
     }
 }
 
+// The live settings row, or None when it is absent or cannot be read (a row
+// that cannot be read has no vault keys to carry).
+fn read_settings_row(conn: &Connection) -> Option<Settings> {
+    let raw: String = conn.query_row("SELECT value FROM main.meta WHERE key = 'settings'", [], |r| r.get(0)).ok()?;
+    serde_json::from_str(&dec_str(&raw)).ok()
+}
+
 fn restore_selective(target: &std::path::Path, staged: &std::path::Path, scope: &str) -> Result<(), String> {
     let mut conn = Connection::open(target).map_err(|e| e.to_string())?;
     conn.execute("ATTACH DATABASE ?1 AS backup", [staged.to_string_lossy().to_string()])
@@ -11346,11 +11361,17 @@ fn restore_selective(target: &std::path::Path, staged: &std::path::Path, scope: 
                 )?;
             }
         } else if scope == "settings" {
+            // The prompts stay, so the vault keys they are sealed with stay too.
+            let local = read_settings_row(&tx);
             tx.execute(
                 "INSERT INTO meta(key, value) SELECT key, value FROM backup.meta WHERE key = 'settings'
                  ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 [],
             )?;
+            if let (Some(local), Some(mut restored)) = (local, read_settings_row(&tx)) {
+                carry_vault_keys(&local, &mut restored);
+                db_write_settings(&tx, &restored)?;
+            }
         }
         tx.commit()
     })();
@@ -45810,6 +45831,124 @@ mod tests {
         });
         assert_eq!(r, Err("save-failed".to_string()));
         assert_eq!(serde_json::to_string(&store.prompts).unwrap(), before, "memory matches the disk again");
+    }
+
+    // ---- the confidential vault keys survive every path that keeps the prompts ----
+
+    // A settings block with a vault set up for password "pw", plus one prompt
+    // sealed with its key.
+    fn vault_fixture() -> (Settings, Prompt, [u8; 32]) {
+        let mut settings = Settings::default();
+        let salt = b"0123456789abcdef";
+        let key = secret_derive_key("pw", salt).expect("derive");
+        let verify = secret_encrypt(SECRET_VERIFY_MARKER, &key);
+        assert_eq!(secret_vault_first_setup(&mut settings, salt, verify, |_| true), Ok(true));
+        let mut p = test_prompt("secret");
+        p.secret = true;
+        p.text = secret_encrypt("the hidden text", &key);
+        (settings, p, key)
+    }
+
+    // The same password must still open the prompt with what the settings hold.
+    fn still_opens(settings: &Settings, p: &Prompt) -> bool {
+        let salt = settings.ui_texts.get(SECRET_SALT_KEY).cloned().unwrap_or_default();
+        let verify = settings.ui_texts.get(SECRET_VERIFY_KEY).cloned().unwrap_or_default();
+        match secret_vault_verify("pw", &salt, &verify) {
+            Ok(key) => reveal_secret_text(p, Some(key)).map(|(t, _)| t == "the hidden text").unwrap_or(false),
+            Err(_) => false,
+        }
+    }
+
+    #[test]
+    fn a_reset_keeps_the_vault_so_a_confidential_prompt_still_opens() {
+        let (mut old, p, _) = vault_fixture();
+        old.theme = "ocean".into();
+        old.ui_texts.insert(BACKUP_PW_KEY.into(), "sealed".into());
+        assert!(still_opens(&old, &p));
+        let fresh = settings_after_reset(&old);
+        assert_eq!(fresh.theme, default_theme(), "everything else is reset");
+        assert_eq!(fresh.ui_texts.get(BACKUP_PW_KEY).map(String::as_str), Some("sealed"));
+        assert!(still_opens(&fresh, &p), "the same password must open the prompt after a reset");
+    }
+
+    fn vault_store(settings: Settings, p: Prompt) -> Store {
+        Store { prompts: vec![p], trash: Vec::new(), settings, prompts_locked: false, written: Default::default() }
+    }
+
+    fn foreign_backup(with_salt: bool) -> Backup {
+        let mut settings = Settings::default();
+        settings.ui_texts.insert("marker".into(), "THEIRS".into());
+        if with_salt {
+            settings.ui_texts.insert(SECRET_SALT_KEY.into(), "Zm9yZWlnbi1zYWx0".into());
+            settings.ui_texts.insert(SECRET_VERIFY_KEY.into(), "Zm9yZWlnbi12ZXJpZnk=".into());
+        }
+        Backup { prompts: vec![test_prompt("theirs")], settings }
+    }
+
+    #[test]
+    fn a_settings_only_import_keeps_the_local_vault_whatever_the_file_carries() {
+        for with_salt in [true, false] {
+            let (settings, p, _) = vault_fixture();
+            let mut store = vault_store(settings, p.clone());
+            apply_import(&mut store, foreign_backup(with_salt), false, true);
+            assert_eq!(store.settings.ui_texts.get("marker").map(String::as_str), Some("THEIRS"), "the settings did come in");
+            assert!(still_opens(&store.settings, &p), "file with salt: {with_salt}");
+        }
+    }
+
+    #[test]
+    fn a_settings_file_cannot_replace_the_local_vault() {
+        let (mut live, p, _) = vault_fixture();
+        let mut file = SettingsOnlyExport::default();
+        file.ui_texts.insert(SECRET_SALT_KEY.into(), "Zm9yZWlnbi1zYWx0".into());
+        file.ui_texts.insert(SECRET_VERIFY_KEY.into(), "Zm9yZWlnbi12ZXJpZnk=".into());
+        file.ui_texts.insert("copyFont".into(), "Consolas".into());
+        strip_denied_import_keys(&mut file);
+        merge_settings_only(&mut live, file, |_| true).unwrap();
+        assert_eq!(live.ui_texts.get("copyFont").map(String::as_str), Some("Consolas"));
+        assert!(still_opens(&live, &p));
+    }
+
+    #[test]
+    fn a_full_import_with_data_takes_the_backups_own_vault_keys() {
+        let (settings, p, _) = vault_fixture();
+        let mut store = vault_store(settings, p);
+        let mut backup = foreign_backup(true);
+        backup.prompts = vec![test_prompt("theirs")];
+        apply_import(&mut store, backup, true, true);
+        assert_eq!(store.settings.ui_texts.get(SECRET_SALT_KEY).map(String::as_str), Some("Zm9yZWlnbi1zYWx0"));
+        assert_eq!(store.settings.ui_texts.get(SECRET_VERIFY_KEY).map(String::as_str), Some("Zm9yZWlnbi12ZXJpZnk="));
+    }
+
+    // A settings-only restore of a stored snapshot merges the settings row in the
+    // database itself; the vault keys of the live row must come through it.
+    #[test]
+    fn a_settings_only_restore_keeps_the_local_vault() {
+        let dir = std::env::temp_dir();
+        let target = dir.join(format!("{}-test-restore-vault-target.db", brand::SLUG));
+        let staged = dir.join(format!("{}-test-restore-vault-staged.db", brand::SLUG));
+        let (live, p, _) = vault_fixture();
+        {
+            let conn = full_schema_db(&target, "target");
+            db_write_settings(&conn, &live).unwrap();
+        }
+        {
+            let conn = full_schema_db(&staged, "staged");
+            let mut theirs = Settings::default();
+            theirs.ui_texts.insert("marker".into(), "THEIRS".into());
+            theirs.ui_texts.insert(SECRET_SALT_KEY.into(), "Zm9yZWlnbi1zYWx0".into());
+            theirs.ui_texts.insert(SECRET_VERIFY_KEY.into(), "Zm9yZWlnbi12ZXJpZnk=".into());
+            db_write_settings(&conn, &theirs).unwrap();
+        }
+        restore_selective(&target, &staged, "settings").unwrap();
+        let conn = Connection::open(&target).unwrap();
+        let (_, restored, _, _, _) = db_load(&conn, &mut WrittenRows::new());
+        let restored = restored.expect("settings row");
+        assert_eq!(restored.ui_texts.get("marker").map(String::as_str), Some("THEIRS"), "the backup settings did come in");
+        assert!(still_opens(&restored, &p), "the local vault keys must survive");
+        drop(conn);
+        let _ = std::fs::remove_file(&target);
+        let _ = std::fs::remove_file(&staged);
     }
 
     #[test]

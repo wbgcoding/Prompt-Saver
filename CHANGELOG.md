@@ -851,6 +851,10 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **Confidential entries stay readable after a settings reset or a settings
+  import.** Resetting all settings, importing settings from a file or
+  restoring only the settings of a backup now keep the vault key material of
+  this computer, so the same password still opens the entries that were kept.
 - **Importing a backup file is all or nothing.** The entries and the settings
   are written together, so a failed save can no longer leave one half
   imported while an error is shown. After a failed import the library and the
