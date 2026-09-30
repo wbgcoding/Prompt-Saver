@@ -15301,14 +15301,38 @@ static PICK_ACTIVE: AtomicBool = AtomicBool::new(false);
 // listeners (start a recording vs. swap its source) never both react to it.
 static REC_SWITCH_PICK: AtomicBool = AtomicBool::new(false);
 
-// Set by begin_capture when it hid the app's own windows for this session, so
-// the end of the session restores exactly what it hid and nothing else: a snip
-// started with screenshots allowed never pops up a hidden or minimised main window.
-static SNIP_HID_APP: AtomicBool = AtomicBool::new(false);
+// The labels of the app windows begin_capture actually hid for this session (the
+// ones that were visible beforehand), so the end of the session restores exactly
+// those and nothing else: a snip started with screenshots allowed, or a window that
+// was already hidden (main closed to the tray, a pill hidden on purpose), is never
+// popped up by a snip.
+static SNIP_HID_APP: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
 fn restore_app_windows_after_snip(app: &AppHandle) {
-    if SNIP_HID_APP.swap(false, Ordering::SeqCst) {
-        set_app_windows_hidden(app, false);
+    let hid = std::mem::take(&mut *SNIP_HID_APP.lock().unwrap_or_else(|e| e.into_inner()));
+    if !hid.is_empty() {
+        show_app_windows(app, &hid);
+    }
+}
+
+// The hidden windows a snip session put away, as the restore set: only what was
+// visible before the hide pass.
+fn windows_to_restore(before: &[(String, bool)]) -> Vec<String> {
+    before
+        .iter()
+        .filter(|(_, visible)| *visible)
+        .map(|(label, _)| label.clone())
+        .collect()
+}
+
+// Bring a snip's result to the main window (editor, result dialog, OCR text): the
+// restore pass no longer shows a main window that was hidden before the snip, so
+// the paths that hand something to main show it themselves.
+fn reveal_main_for_snip_result(app: &AppHandle) {
+    if let Some(win) = app.get_webview_window("main") {
+        let _ = win.show();
+        let _ = win.unminimize();
+        let _ = win.set_focus();
     }
 }
 
@@ -15334,38 +15358,42 @@ fn close_all_snip(app: &AppHandle) {
     }
 }
 
-// Hide (or restore) the app's own windows (the main window and floating pills)
-// around a snip, so a screenshot never contains the app itself (this also
-// reveals whatever the main window was covering, e.g. Task Manager).
-// Returns whether any matching window was visible beforehand: begin_capture
-// uses this on the hide path to skip its post-hide settle delay when there was
-// nothing on screen to hide in the first place.
-fn set_app_windows_hidden(app: &AppHandle, hidden: bool) -> bool {
-    let mut was_visible = false;
+// Hide the app's own windows (the main window and floating pills) around a snip,
+// so a screenshot never contains the app itself (this also reveals whatever the
+// main window was covering, e.g. Task Manager). Returns the labels that were
+// visible beforehand and are now hidden: that is the set the end of the session
+// restores, and begin_capture skips its post-hide settle delay when it is empty.
+fn hide_app_windows(app: &AppHandle) -> Vec<String> {
+    let mut before: Vec<(String, bool)> = Vec::new();
     for (label, win) in app.webview_windows() {
-        // A folder window is always-on-top exactly like a pill, and every other
-        // caller that hides float- windows for a screenshot already pairs it with
-        // folder- (2924, 4662, 4700, 8009): missing it here left an open folder
-        // sitting in the snip capture.
-        if label == "main" || label.starts_with("float-") || label.starts_with("folder-") {
-            if hidden {
-                if win.is_visible().unwrap_or(true) {
-                    was_visible = true;
-                }
-                let _ = win.hide();
-            } else {
-                let _ = win.show();
-                // Bring the main window back to the front (and out of any minimized
-                // state) so finishing/cancelling a snip never leaves it hidden behind
-                // other windows: which reads as the app having minimized itself.
-                if label == "main" {
-                    let _ = win.unminimize();
-                    let _ = win.set_focus();
-                }
+        if is_snip_hidden_label(&label) {
+            before.push((label, win.is_visible().unwrap_or(true)));
+            let _ = win.hide();
+        }
+    }
+    windows_to_restore(&before)
+}
+
+// A folder window is always-on-top exactly like a pill, and every other caller that
+// hides float- windows for a screenshot already pairs it with folder-: missing it
+// left an open folder sitting in the snip capture.
+fn is_snip_hidden_label(label: &str) -> bool {
+    label == "main" || label.starts_with("float-") || label.starts_with("folder-")
+}
+
+// Show the windows hide_app_windows put away. The main window also comes out of
+// any minimized state and gets the focus, so finishing or cancelling a snip never
+// leaves it behind other windows, which reads as the app having minimized itself.
+fn show_app_windows(app: &AppHandle, labels: &[String]) {
+    for label in labels {
+        if let Some(win) = app.get_webview_window(label) {
+            let _ = win.show();
+            if label == "main" {
+                let _ = win.unminimize();
+                let _ = win.set_focus();
             }
         }
     }
-    was_visible
 }
 
 // Hide (or re-show) only the snip overlay(s). Used by the window-capture
@@ -16216,8 +16244,9 @@ async fn begin_capture(
     // the target underneath (e.g. Task Manager behind the main window) is
     // revealed. A short settle lets the hide reach the screen first.
     // With screenshots of the app allowed, nothing is hidden at all.
-    SNIP_HID_APP.store(hide_app, Ordering::SeqCst);
-    let had_visible = hide_app && set_app_windows_hidden(&app, true);
+    let hid = if hide_app { hide_app_windows(&app) } else { Vec::new() };
+    let had_visible = !hid.is_empty();
+    *SNIP_HID_APP.lock().unwrap_or_else(|e| e.into_inner()) = hid;
     // Nothing was on screen to hide, so there is nothing the freeze could catch
     // mid-hide either: the settle delay only matters when we just hid something.
     if had_visible {
@@ -17714,6 +17743,7 @@ async fn finalize_capture(app: &AppHandle, crop: image::RgbaImage, app_name: Opt
     .map_err(|e| e.to_string())??;
 
     close_all_snip(app);
+    reveal_main_for_snip_result(app);
     app.state::<SnipState>()
         .0
         .lock()
@@ -17765,6 +17795,7 @@ async fn finalize_ocr_capture(app: &AppHandle, state: &State<'_, SnipState>, cro
             .await
             .map_err(|e| e.to_string())??;
         close_all_snip(app);
+        reveal_main_for_snip_result(app);
         state.0.lock().unwrap_or_else(|e| e.into_inner()).clear();
         let _ = app.emit("ocr-captured", result);
         Ok(())
@@ -37343,6 +37374,21 @@ mod tests {
         let mut allow = Settings::default();
         allow.ui_flags.insert(ALLOW_SCREENSHOT_KEY.to_string(), true);
         assert!(!capture_hides_app_windows(capture_excluded(&allow)));
+    }
+
+    #[test]
+    fn snip_restore_set_skips_windows_that_were_hidden_before() {
+        let before = vec![
+            ("main".to_string(), false),
+            ("float-1".to_string(), true),
+            ("folder-2".to_string(), false),
+            ("float-3".to_string(), true),
+        ];
+        assert_eq!(windows_to_restore(&before), vec!["float-1".to_string(), "float-3".to_string()]);
+        assert!(windows_to_restore(&[("main".to_string(), false)]).is_empty());
+        assert_eq!(windows_to_restore(&[("main".to_string(), true)]), vec!["main".to_string()]);
+        assert!(is_snip_hidden_label("main") && is_snip_hidden_label("float-x") && is_snip_hidden_label("folder-y"));
+        assert!(!is_snip_hidden_label("snip-0") && !is_snip_hidden_label("rec-bar"));
     }
 
     #[test]
