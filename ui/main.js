@@ -10611,9 +10611,9 @@ EXPERT_ACTIONS["settings-export"] = async () => {
 EXPERT_ACTIONS["settings-import"] = async () => {
   const path = await invoke("pick_settings_import_file").catch(() => null);
   if (!path) return;
-  let changed, total;
+  let changed, total, skipped;
   try {
-    [changed, total] = await invoke("preview_settings_import", { path });
+    [changed, total, skipped] = await invoke("preview_settings_import", { path });
   } catch (e) {
     toast(t("settingsImportBadFile"));
     return;
@@ -10624,7 +10624,8 @@ EXPERT_ACTIONS["settings-import"] = async () => {
   }
   const ok = await confirmDialog({
     title: t("settingsImportAction"),
-    message: t("settingsImportPreview").replace("{n}", String(changed)).replace("{total}", String(total)),
+    message: t("settingsImportPreview").replace("{n}", String(changed)).replace("{total}", String(total))
+      + (skipped > 0 ? " " + t("settingsImportSkipped").replace("{s}", String(skipped)) : ""),
     confirmLabel: t("settingsImportAction"),
     cancelLabel: t("cancel"),
     danger: false,

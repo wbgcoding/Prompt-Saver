@@ -1281,6 +1281,13 @@ the video editor and the introduction tour ship on).
 
 ### Security
 
+- **A settings or backup file can no longer switch on remote access or other
+  machine features.** Importing settings from a file, or restoring a backup
+  file, leaves the remote access switches, password, allowed addresses and
+  port, the promptsaver:// links, the autostart entry, the certificate, the
+  backup password and the folder locations exactly as this computer has
+  them. The import preview says how many entries were skipped, and a settings
+  export no longer contains the remote access password hash.
 - **Remote access from other devices now runs over HTTPS with the app's own
   certificate.** With the network switch on, the receiver accepts only
   encrypted connections, so the password is no longer readable on the

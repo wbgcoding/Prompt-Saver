@@ -32011,12 +32011,20 @@ struct SettingsOnlyExport {
     ui_texts: HashMap<String, String>,
 }
 
-// The settings-only export copy: the receiver's certificate values stay on
-// this machine.
+// The settings-only export copy. Everything an import would skip is left out
+// of the file too: the receiver's password hash and certificate, the sealed
+// backup password, network and machine switches. The vault's salt and
+// verifier stay in (not secrets).
 fn settings_only_payload(settings: &Settings) -> SettingsOnlyExport {
-    let mut ui_texts = settings.ui_texts.clone();
-    remote_tls::strip_tls_keys(&mut ui_texts);
-    SettingsOnlyExport { ui_flags: settings.ui_flags.clone(), ui_values: settings.ui_values.clone(), ui_texts }
+    let mut payload = SettingsOnlyExport {
+        ui_flags: settings.ui_flags.clone(),
+        ui_values: settings.ui_values.clone(),
+        ui_texts: settings.ui_texts.clone(),
+    };
+    payload.ui_flags.retain(|k, _| !is_import_denied_flag(k));
+    payload.ui_values.retain(|k, _| !is_import_denied_value(k));
+    payload.ui_texts.retain(|k, _| !is_machine_text_key(k));
+    payload
 }
 
 #[tauri::command]
@@ -32080,64 +32088,169 @@ fn settings_import_diff(current: &Settings, incoming: &SettingsOnlyExport) -> (u
     (changed, total)
 }
 
-// A settings-only import file is untrusted (it could be a hostile file placed
-// where the user was talked into picking it, not necessarily their own
-// export), so the folder-authority keys never come along for the ride --
-// see PROTECTED_FOLDER_KEYS. Called on every incoming file before it is
-// diffed or applied, so preview and apply always agree on what would change.
-fn strip_protected_folder_keys(incoming: &mut SettingsOnlyExport) {
-    for key in PROTECTED_FOLDER_KEYS {
-        incoming.ui_texts.remove(key);
+// Settings no imported file may set, whether a settings-only file or a whole
+// backup: network exposure, credentials and the machine's own integrations. A
+// file is untrusted (it can be a hostile one the user was talked into picking),
+// and each of these has its own dedicated command with its own validation, so
+// the value this machine already has is the one that stays. The receiver's
+// password hash and certificate values come in through the same helper the
+// generic setters use; every other `remote*` row is covered by the prefix, so
+// a receiver setting added later is denied without touching this list.
+const IMPORT_DENIED_FLAGS: [&str; 8] = [
+    "remoteApi",
+    "remoteNetworkFilter",
+    "urlScheme",
+    "urlSchemeOpenAllowed",
+    "urlSchemeCopyAllowed",
+    "demoMode",
+    "allowMultipleInstances",
+    "promptSync",
+];
+
+fn is_import_denied_flag(key: &str) -> bool {
+    key.starts_with("remote") || IMPORT_DENIED_FLAGS.contains(&key)
+}
+
+fn is_import_denied_value(key: &str) -> bool {
+    key.starts_with("remote")
+}
+
+// Text rows that belong to this machine: the receiver's password hash,
+// allowed ranges and certificate, the sealed backup password and the folder
+// authority keys (see PROTECTED_FOLDER_KEYS).
+fn is_machine_text_key(key: &str) -> bool {
+    remote::is_remote_secret_key(key) || key.starts_with("remote") || is_protected_folder_key(key) || key == BACKUP_PW_KEY
+}
+
+// The confidential-prompt vault's salt and verifier. Not secrets, but the
+// prompts on this machine are sealed with a key derived from THIS salt, so a
+// foreign one would make every confidential prompt unreadable.
+fn is_vault_key(key: &str) -> bool {
+    key == SECRET_SALT_KEY || key == SECRET_VERIFY_KEY
+}
+
+// Copies the vault salt and verifier of `from` into `to`, overwriting what `to`
+// has, and removes them from `to` when `from` has none. Used wherever settings
+// are replaced while the current prompts stay.
+fn carry_vault_keys(from: &Settings, to: &mut Settings) {
+    for key in [SECRET_SALT_KEY, SECRET_VERIFY_KEY] {
+        match from.ui_texts.get(key) {
+            Some(v) => {
+                to.ui_texts.insert(key.to_string(), v.clone());
+            }
+            None => {
+                to.ui_texts.remove(key);
+            }
+        }
     }
-    // The receiver's certificate belongs to this machine: a file can neither
-    // plant a key nor wipe the one in use.
-    remote_tls::strip_tls_keys(&mut incoming.ui_texts);
+}
+
+// After a whole Settings block was replaced by an imported one: every denied
+// row goes back to what `local` had (or stays absent), plus the autostart
+// registration flag. Hotkeys, themes and layouts do come along.
+fn keep_machine_settings(local: &Settings, incoming: &mut Settings) {
+    incoming.ui_flags.retain(|k, _| !is_import_denied_flag(k));
+    incoming.ui_values.retain(|k, _| !is_import_denied_value(k));
+    incoming.ui_texts.retain(|k, _| !is_machine_text_key(k));
+    for (k, v) in &local.ui_flags {
+        if is_import_denied_flag(k) {
+            incoming.ui_flags.insert(k.clone(), *v);
+        }
+    }
+    for (k, v) in &local.ui_values {
+        if is_import_denied_value(k) {
+            incoming.ui_values.insert(k.clone(), *v);
+        }
+    }
+    for (k, v) in &local.ui_texts {
+        if is_machine_text_key(k) {
+            incoming.ui_texts.insert(k.clone(), v.clone());
+        }
+    }
+    incoming.autostart = local.autostart;
+}
+
+// Drops every denied row from an incoming settings file and returns how many
+// the user would have expected to be applied. Called on every incoming file
+// before it is diffed or applied, so preview and apply always agree on what
+// would change. The vault rows are dropped too but not counted: they are never
+// something the user chose.
+fn strip_denied_import_keys(incoming: &mut SettingsOnlyExport) -> usize {
+    let count = |i: &SettingsOnlyExport| i.ui_flags.len() + i.ui_values.len() + i.ui_texts.len();
+    incoming.ui_texts.retain(|k, _| !is_vault_key(k));
+    let before = count(incoming);
+    incoming.ui_flags.retain(|k, _| !is_import_denied_flag(k));
+    incoming.ui_values.retain(|k, _| !is_import_denied_value(k));
+    incoming.ui_texts.retain(|k, _| !is_machine_text_key(k));
+    before - count(incoming)
 }
 
 #[tauri::command]
-async fn preview_settings_import(state: State<'_, Db>, path: String) -> Result<(usize, usize), String> {
+async fn preview_settings_import(state: State<'_, Db>, path: String) -> Result<(usize, usize, usize), String> {
     let raw = read_file_capped(&PathBuf::from(path), MAX_SETTINGS_IMPORT_BYTES)?;
     let mut incoming = parse_settings_only(&raw)?;
-    strip_protected_folder_keys(&mut incoming);
+    let skipped = strip_denied_import_keys(&mut incoming);
     let store = lock(&state);
-    Ok(settings_import_diff(&store.settings, &incoming))
+    let (changed, total) = settings_import_diff(&store.settings, &incoming);
+    Ok((changed, total, skipped))
+}
+
+// Merges the file's rows into `settings` and persists through `persist`. A
+// failed save puts the previous settings back and reports save-failed, so a
+// settings block that is not on disk is never left active.
+fn merge_settings_only(
+    settings: &mut Settings,
+    incoming: SettingsOnlyExport,
+    persist: impl FnOnce(&Settings) -> bool,
+) -> Result<usize, String> {
+    let (changed, _) = settings_import_diff(settings, &incoming);
+    let original = settings.clone();
+    // Merge, not replace: a row this file never mentions (e.g. a newer
+    // setting an older export predates) is left exactly as it is.
+    for (k, v) in incoming.ui_flags {
+        settings.ui_flags.insert(k, v);
+    }
+    for (k, v) in incoming.ui_values {
+        settings.ui_values.insert(k, v);
+    }
+    for (k, v) in incoming.ui_texts {
+        settings.ui_texts.insert(k, v);
+    }
+    // The prompts stay, so their vault keys stay.
+    carry_vault_keys(&original, settings);
+    if !persist(settings) {
+        *settings = original;
+        return Err("save-failed".to_string());
+    }
+    Ok(changed)
+}
+
+// What every import re-applies without a restart, for the settings that just
+// landed: theme, screenshot exclusion, global hotkeys, tray, the pill windows
+// and the error log's size cap.
+fn refresh_after_import(app: &AppHandle, settings: &Settings) {
+    push_theme(app, settings);
+    apply_capture_exclusion_all(app, capture_excluded(settings));
+    rearm_hotkeys(app);
+    apply_tray_menu(app);
+    sync_float_windows(app);
+    if let Some(kb) = settings.ui_values.get("errorLogKeepKb").copied() {
+        ERROR_LOG_KEEP_BYTES.store((kb.max(1.0) * 1024.0) as u64, Ordering::Relaxed);
+    }
+    notify_float_settings(app);
 }
 
 #[tauri::command]
 async fn apply_settings_import(app: AppHandle, state: State<'_, Db>, path: String) -> Result<usize, String> {
     let raw = read_file_capped(&PathBuf::from(path), MAX_SETTINGS_IMPORT_BYTES)?;
     let mut incoming = parse_settings_only(&raw)?;
-    strip_protected_folder_keys(&mut incoming);
-    let changed = {
+    strip_denied_import_keys(&mut incoming);
+    let (changed, settings) = {
         let mut store = lock(&state);
-        let (changed, _) = settings_import_diff(&store.settings, &incoming);
-        // Merge, not replace: a row this file never mentions (e.g. a newer
-        // setting an older export predates) is left exactly as it is.
-        for (k, v) in incoming.ui_flags {
-            store.settings.ui_flags.insert(k, v);
-        }
-        for (k, v) in incoming.ui_values {
-            store.settings.ui_values.insert(k, v);
-        }
-        for (k, v) in incoming.ui_texts {
-            store.settings.ui_texts.insert(k, v);
-        }
-        save_settings(&app, &store.settings);
-        changed
+        let changed = merge_settings_only(&mut store.settings, incoming, |s| save_settings(&app, s))?;
+        (changed, store.settings.clone())
     };
-    // Same broad refresh reset_expert already uses for "many settings just
-    // changed at once": the tray, every window's screenshot exclusion, and the
-    // crash-log cap static all need to reflect whatever just landed.
-    let (excluded, error_log_kb) = {
-        let store = lock(&state);
-        (capture_excluded(&store.settings), store.settings.ui_values.get("errorLogKeepKb").copied())
-    };
-    apply_capture_exclusion_all(&app, excluded);
-    apply_tray_menu(&app);
-    if let Some(kb) = error_log_kb {
-        ERROR_LOG_KEEP_BYTES.store((kb.max(1.0) * 1024.0) as u64, Ordering::Relaxed);
-    }
-    notify_float_settings(&app);
+    refresh_after_import(&app, &settings);
     Ok(changed)
 }
 
@@ -32176,37 +32289,21 @@ fn apply_import(store: &mut Store, backup: Backup, want_data: bool, want_setting
     // identical reason). Only meaningful once settings are actually touched.
     let backup_pw_dropped = want_settings && backup.settings.ui_texts.contains_key(BACKUP_PW_KEY);
     if want_settings {
-        let local_backup_pw = store.settings.ui_texts.get(BACKUP_PW_KEY).cloned();
         // A full backup can come from another machine, or be a hostile file the
-        // user was talked into restoring, so its own folder-authority settings
-        // (PROTECTED_FOLDER_KEYS) must not land here either -- this machine's
-        // current folders are kept exactly like the backup password above.
-        let local_folders: Vec<(String, String)> = PROTECTED_FOLDER_KEYS
-            .iter()
-            .filter_map(|k| store.settings.ui_texts.get(*k).map(|v| (k.to_string(), v.clone())))
-            .collect();
-        let local_tls = remote_tls::tls_values(&store.settings);
-        store.settings = backup.settings;
+        // user was talked into restoring: network exposure, credentials, folder
+        // authority and OS registrations (see IMPORT_DENIED_FLAGS) stay as this
+        // machine has them.
+        let local = std::mem::replace(&mut store.settings, backup.settings);
         SETTINGS_LOCKED.store(false, Ordering::Relaxed); // a full settings import supersedes any corrupt-row lock
         // migrate() fills defaults and guarantees at least one view: without it a
         // hand-edited backup with "views": [] makes active_view_mut index [0] panic
         // on the next mutation (and poisons the Db mutex).
         store.settings.migrate();
-        store.settings.ui_texts.remove(BACKUP_PW_KEY);
-        if let Some(pw) = local_backup_pw {
-            store.settings.ui_texts.insert(BACKUP_PW_KEY.to_string(), pw);
-        }
-        for key in PROTECTED_FOLDER_KEYS {
-            store.settings.ui_texts.remove(key);
-        }
-        for (k, v) in local_folders {
-            store.settings.ui_texts.insert(k, v);
-        }
-        // Same for the receiver's certificate: this machine's own stays, the
-        // file's never lands.
-        remote_tls::strip_tls_keys(&mut store.settings.ui_texts);
-        for (k, v) in local_tls {
-            store.settings.ui_texts.insert(k, v);
+        keep_machine_settings(&local, &mut store.settings);
+        // The backup's own vault keys belong to its own prompts: they travel
+        // with them. With the current prompts staying, the local ones stay too.
+        if !want_data {
+            carry_vault_keys(&local, &mut store.settings);
         }
         load_pick_history(&store.settings); // restore brings its own history mirror
     }
@@ -45344,7 +45441,7 @@ mod tests {
     // its folder-authority rows must be dropped before the diff/apply ever see
     // them, so neither preview nor apply can be talked into changing them.
     #[test]
-    fn strip_protected_folder_keys_removes_every_folder_setting_and_nothing_else() {
+    fn strip_denied_import_keys_removes_every_folder_setting_and_nothing_else() {
         let mut incoming = SettingsOnlyExport::default();
         incoming.ui_texts.insert("screenshotDir".into(), "C:\\evil".into());
         incoming.ui_texts.insert("videoExportDir".into(), "C:\\evil".into());
@@ -45352,7 +45449,7 @@ mod tests {
         incoming.ui_texts.insert("syncDir".into(), "C:\\evil".into());
         incoming.ui_texts.insert("copyFont".into(), "Consolas".into());
 
-        strip_protected_folder_keys(&mut incoming);
+        strip_denied_import_keys(&mut incoming);
 
         for key in PROTECTED_FOLDER_KEYS {
             assert!(!incoming.ui_texts.contains_key(key), "{key} must be stripped from an incoming settings file");
@@ -45375,7 +45472,7 @@ mod tests {
         assert!(!serde_json::to_string(&payload).unwrap().contains("remoteTls"));
         let mut incoming = payload;
         incoming.ui_texts.insert(remote_tls::REMOTE_TLS_KEY.into(), "planted".into());
-        strip_protected_folder_keys(&mut incoming);
+        strip_denied_import_keys(&mut incoming);
         assert!(!incoming.ui_texts.contains_key(remote_tls::REMOTE_TLS_KEY));
     }
 
@@ -45390,6 +45487,85 @@ mod tests {
         apply_import(&mut store, backup, false, true);
         assert_eq!(store.settings.ui_texts.get(remote_tls::REMOTE_TLS_CA).map(String::as_str), Some("mine"));
         assert!(!store.settings.ui_texts.contains_key(remote_tls::REMOTE_TLS_KEY));
+    }
+
+    // A hostile file plants every key that could open a listener, register
+    // with the OS or swap a secret. A full import keeps this machine's own
+    // value for each of them (or the absence of one).
+    fn hostile_settings() -> Settings {
+        let mut s = Settings::default();
+        s.autostart = true;
+        for k in ["remoteApi", "remoteNetworkFilter", "urlScheme", "urlSchemeOpenAllowed", "urlSchemeCopyAllowed", "demoMode", "allowMultipleInstances", "promptSync"] {
+            s.ui_flags.insert(k.into(), true);
+        }
+        s.ui_flags.insert("copyFlash".into(), false);
+        s.ui_values.insert("remotePort".into(), 4444.0);
+        s.ui_values.insert("remoteRateLimit".into(), 0.0);
+        s.ui_values.insert("tileGap".into(), 7.0);
+        for k in ["remotePasswordHash", "remoteAllowedRanges", BACKUP_PW_KEY, "screenshotDir"] {
+            s.ui_texts.insert(k.into(), "planted".into());
+        }
+        for k in remote_tls::REMOTE_TLS_KEYS {
+            s.ui_texts.insert(k.to_string(), "planted".into());
+        }
+        s.ui_texts.insert("copyFont".into(), "Consolas".into());
+        s
+    }
+
+    #[test]
+    fn a_full_import_cannot_plant_network_or_machine_settings() {
+        let mut store = Store { prompts: vec![], trash: Vec::new(), settings: Settings::default(), prompts_locked: false, written: Default::default() };
+        store.settings.ui_flags.insert("remoteApi".into(), false);
+        store.settings.ui_texts.insert("remotePasswordHash".into(), "mine".into());
+        let backup = Backup { prompts: vec![], settings: hostile_settings() };
+        apply_import(&mut store, backup, false, true);
+        let s = &store.settings;
+        for k in ["remoteNetworkFilter", "urlScheme", "urlSchemeOpenAllowed", "urlSchemeCopyAllowed", "demoMode", "allowMultipleInstances", "promptSync"] {
+            assert!(!s.ui_flags.contains_key(k), "{k} must not be imported");
+        }
+        assert_eq!(s.ui_flags.get("remoteApi"), Some(&false), "this machine's own value stays");
+        assert_eq!(s.ui_texts.get("remotePasswordHash").map(String::as_str), Some("mine"));
+        assert!(!s.ui_texts.contains_key("remoteAllowedRanges"));
+        assert!(!s.ui_values.contains_key("remotePort") && !s.ui_values.contains_key("remoteRateLimit"));
+        assert!(!s.autostart, "a file cannot switch the autostart registration on");
+        assert_eq!(s.ui_values.get("tileGap"), Some(&7.0), "ordinary settings still arrive");
+        assert_eq!(s.ui_texts.get("copyFont").map(String::as_str), Some("Consolas"));
+        assert_eq!(s.ui_flags.get("copyFlash"), Some(&false));
+    }
+
+    #[test]
+    fn a_settings_file_previews_every_denied_key_as_skipped_and_changes_none() {
+        let hostile = hostile_settings();
+        let mut incoming = SettingsOnlyExport { ui_flags: hostile.ui_flags.clone(), ui_values: hostile.ui_values.clone(), ui_texts: hostile.ui_texts.clone() };
+        incoming.ui_texts.insert(SECRET_SALT_KEY.into(), "foreign".into());
+        incoming.ui_texts.insert(SECRET_VERIFY_KEY.into(), "foreign".into());
+        let skipped = strip_denied_import_keys(&mut incoming);
+        // 8 flags, 2 values, 4 texts + 3 certificate values + 2 vault keys
+        assert_eq!(skipped, 8 + 2 + 4 + 3, "the vault rows are dropped silently");
+        assert_eq!(incoming.ui_flags.keys().collect::<Vec<_>>(), vec!["copyFlash"]);
+        assert_eq!(incoming.ui_values.keys().collect::<Vec<_>>(), vec!["tileGap"]);
+        assert_eq!(incoming.ui_texts.keys().collect::<Vec<_>>(), vec!["copyFont"]);
+        let mut live = Settings::default();
+        live.ui_flags.insert("remoteApi".into(), false);
+        let mut again = SettingsOnlyExport { ui_flags: hostile.ui_flags, ui_values: hostile.ui_values, ui_texts: hostile.ui_texts };
+        strip_denied_import_keys(&mut again);
+        let _ = merge_settings_only(&mut live, again, |_| true).unwrap();
+        let after: serde_json::Value = serde_json::from_str(&serde_json::to_string(&live).unwrap()).unwrap();
+        assert_eq!(after["ui_flags"]["remoteApi"], serde_json::json!(false));
+        assert!(after["ui_flags"].get("remoteNetworkFilter").is_none());
+        assert!(after["ui_texts"].get("remotePasswordHash").is_none());
+    }
+
+    #[test]
+    fn a_settings_export_carries_no_password_hash_or_sealed_backup_password() {
+        let mut s = Settings::default();
+        s.ui_texts.insert("remotePasswordHash".into(), "hash".into());
+        s.ui_texts.insert(BACKUP_PW_KEY.into(), "sealed".into());
+        s.ui_texts.insert("copyFont".into(), "Consolas".into());
+        let payload = settings_only_payload(&s);
+        assert!(!payload.ui_texts.contains_key("remotePasswordHash"));
+        assert!(!payload.ui_texts.contains_key(BACKUP_PW_KEY));
+        assert!(payload.ui_texts.contains_key("copyFont"));
     }
 
     #[test]

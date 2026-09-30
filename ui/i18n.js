@@ -1986,6 +1986,7 @@ export const I18N = {
     settingsImportPreview: "{n} of {total} settings would change.",
     settingsImportNone: "This file changes nothing, every setting already has that value.",
     settingsImportBadFile: "This file does not hold settings of this app.",
+    settingsImportSkipped: "{s} entries for security and this computer were skipped and stay as they are.",
     settingsExportDone: "Settings written to {path}.",
     // --- screenshot and video editor drawing defaults, export folder ---
     valSnipLinePx: "Line width",
@@ -4193,6 +4194,7 @@ export const I18N = {
     settingsImportPreview: "{n} von {total} Einstellungen würden sich ändern.",
     settingsImportNone: "Diese Datei ändert nichts, jede Einstellung hat diesen Wert bereits.",
     settingsImportBadFile: "Diese Datei enthält keine Einstellungen dieses Programms.",
+    settingsImportSkipped: "{s} Einträge zu Sicherheit und diesem Computer wurden übersprungen und bleiben unverändert.",
     settingsExportDone: "Einstellungen nach {path} geschrieben.",
     // --- screenshot and video editor drawing defaults, export folder ---
     valSnipLinePx: "Linien-Strichstärke",
@@ -6393,6 +6395,7 @@ export const I18N = {
     settingsImportPreview: "{n} de {total} ajustes cambiarían.",
     settingsImportNone: "Este archivo no cambia nada; todos los ajustes ya tienen ese valor.",
     settingsImportBadFile: "Este archivo no contiene ajustes de esta aplicación.",
+    settingsImportSkipped: "Se omitieron {s} entradas de seguridad y de este equipo; se quedan como están.",
     settingsExportDone: "Ajustes guardados en {path}.",
     // --- screenshot and video editor drawing defaults, export folder ---
     valSnipLinePx: "Grosor de línea",
@@ -8600,6 +8603,7 @@ export const I18N = {
     settingsImportPreview: "{n} su {total} impostazioni verrebbero modificate.",
     settingsImportNone: "Questo file non modifica nulla, ogni impostazione ha già quel valore.",
     settingsImportBadFile: "Questo file non contiene impostazioni di questa app.",
+    settingsImportSkipped: "{s} voci relative alla sicurezza e a questo computer sono state saltate e restano invariate.",
     settingsExportDone: "Impostazioni salvate in {path}.",
     // --- screenshot and video editor drawing defaults, export folder ---
     valSnipLinePx: "Spessore linea",
@@ -10807,6 +10811,7 @@ export const I18N = {
     settingsImportPreview: "{n} de {total} configurações mudariam.",
     settingsImportNone: "Este ficheiro não altera nada; todas as configurações já têm esse valor.",
     settingsImportBadFile: "Este ficheiro não contém configurações desta aplicação.",
+    settingsImportSkipped: "{s} entradas de segurança e deste computador foram ignoradas e ficam como estão.",
     settingsExportDone: "Configurações guardadas em {path}.",
     // --- screenshot and video editor drawing defaults, export folder ---
     valSnipLinePx: "Espessura da linha",
@@ -13014,6 +13019,7 @@ export const I18N = {
     settingsImportPreview: "Zmieniłoby się {n} z {total} ustawień.",
     settingsImportNone: "Ten plik niczego nie zmienia, każde ustawienie ma już taką wartość.",
     settingsImportBadFile: "Ten plik nie zawiera ustawień tej aplikacji.",
+    settingsImportSkipped: "Pominięto {s} wpisów dotyczących bezpieczeństwa i tego komputera, zostają bez zmian.",
     settingsExportDone: "Ustawienia zapisano w {path}.",
     // --- screenshot and video editor drawing defaults, export folder ---
     valSnipLinePx: "Grubość linii",
@@ -15221,6 +15227,7 @@ export const I18N = {
     settingsImportPreview: "将更改 {total} 项设置中的 {n} 项。",
     settingsImportNone: "此文件未作任何更改，每项设置已具备该数值。",
     settingsImportBadFile: "此文件不包含此应用的设置。",
+    settingsImportSkipped: "已跳过 {s} 项与安全和本机有关的条目，它们保持不变。",
     settingsExportDone: "设置已保存至 {path}。",
     // --- screenshot and video editor drawing defaults, export folder ---
     valSnipLinePx: "线条宽度",
@@ -17428,6 +17435,7 @@ export const I18N = {
     settingsImportPreview: "{total} 件中 {n} 件の設定が変更されます。",
     settingsImportNone: "このファイルによる変更はありません。すべての設定がすでにその値になっています。",
     settingsImportBadFile: "このファイルにはこのアプリの設定が含まれていません。",
+    settingsImportSkipped: "セキュリティとこのコンピューターに関する {s} 件は読み込まれず、そのまま保たれます。",
     settingsExportDone: "設定を {path} に保存しました。",
     // --- screenshot and video editor drawing defaults, export folder ---
     valSnipLinePx: "線の太さ",
@@ -19635,6 +19643,7 @@ export const I18N = {
     settingsImportPreview: "{n} van {total} instellingen zouden veranderen.",
     settingsImportNone: "Dit bestand verandert niets, elke instelling heeft die waarde al.",
     settingsImportBadFile: "Dit bestand bevat geen instellingen van deze app.",
+    settingsImportSkipped: "{s} items over beveiliging en deze computer zijn overgeslagen en blijven ongewijzigd.",
     settingsExportDone: "Instellingen opgeslagen in {path}.",
     // --- screenshot and video editor drawing defaults, export folder ---
     valSnipLinePx: "Lijndikte",
@@ -21842,6 +21851,7 @@ export const I18N = {
     settingsImportPreview: "{total} ayardan {n} tanesi değişecek.",
     settingsImportNone: "Bu dosya hiçbir şeyi değiştirmez, tüm ayarlar zaten bu değere sahip.",
     settingsImportBadFile: "Bu dosya bu uygulamanın ayarlarını içermiyor.",
+    settingsImportSkipped: "Güvenlik ve bu bilgisayarla ilgili {s} öğe atlandı ve olduğu gibi kalır.",
     settingsExportDone: "Ayarlar {path} konumuna kaydedildi.",
     // --- screenshot and video editor drawing defaults, export folder ---
     valSnipLinePx: "Çizgi kalınlığı",
@@ -24049,6 +24059,7 @@ export const I18N = {
     settingsImportPreview: "{n} din {total} setări s-ar modifica.",
     settingsImportNone: "Acest fișier nu schimbă nimic, fiecare setare are deja acea valoare.",
     settingsImportBadFile: "Acest fișier nu conține setările acestei aplicații.",
+    settingsImportSkipped: "{s} intrări despre securitate și acest calculator au fost omise și rămân neschimbate.",
     settingsExportDone: "Setările au fost salvate în {path}.",
     // --- screenshot and video editor drawing defaults, export folder ---
     valSnipLinePx: "Grosime linie",
