@@ -4462,7 +4462,10 @@ function showExpertPage(on) {
   // wider 3-across settings width.
   settingsEl.classList.toggle("expert-active", on);
   $("settings-title").textContent = on ? t("expertMenu") : t("settings");
-  if (on) renderExpert();
+  if (on) {
+    syncStatusAsked = false; // the sync readout is live: ask again on every open
+    renderExpert();
+  }
 }
 
 // ---- View helpers ----

@@ -16270,6 +16270,27 @@ def main():
       }
     }
 """)
+        failed += ar_probe('g6', 'expert menu: the sync readout is asked again each time the menu opens', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { promptSync: true } };</script>\n', r"""
+    await bootReady();
+    document.getElementById('gear').click(); await sleep(200);
+    window.__SMOKE_ARGS__.length = 0;
+    document.getElementById('expert-open').click(); await sleep(400);
+    for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+      tb.click(); await sleep(80);
+      if (document.querySelector('.path-sync-stats')) break;
+    }
+    if (!document.querySelector('.path-sync-stats')) errs.push('564-6: the sync readout row was not found');
+    const asked = () => callsFor('sync_status').length;
+    const first = asked();
+    if (first < 1) errs.push('564-6: opening the menu did not ask for the sync status');
+    document.getElementById('expert-back').click(); await sleep(200);
+    document.getElementById('expert-open').click(); await sleep(400);
+    for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+      tb.click(); await sleep(80);
+      if (document.querySelector('.path-sync-stats')) break;
+    }
+    if (asked() <= first) errs.push('564-6: reopening the menu reused the first answer of the session (' + asked() + ' request(s))');
+""")
         # ---- main window findings: generated block end ----
         print("PASS" if not failed else f"{failed} problem(s)")
         return 1 if failed else 0
