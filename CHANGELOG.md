@@ -859,6 +859,28 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **Restoring or importing entries takes the matching vault key along.**
+  Confidential entries of a backup open with the backup's own vault password,
+  and a backup without a vault keeps yours. If confidential entries in the
+  trash can no longer be opened because of that, the import says so.
+- **An old snapshot no longer brings back old remote access settings.**
+  Restoring a local snapshot keeps this computer's remote access switches,
+  password, allowed addresses, update choices and clipboard watcher.
+- **A leftover emergency copy can no longer overwrite what you just saved.**
+  Once a save reaches the database, the old fallback file of an earlier failed
+  save is removed.
+- **Confidential entries stay readable after a settings reset or a settings
+  import.** Resetting all settings, importing settings from a file or
+  restoring only the settings of a backup now keep the vault key material of
+  this computer, so the same password still opens the entries that were kept.
+- **Importing a backup file is all or nothing.** The entries and the settings
+  are written together, so a failed save can no longer leave one half
+  imported while an error is shown. After a failed import the library and the
+  settings are exactly as they were.
+- **Importing settings from a file is saved before it applies.** If the save
+  fails the import is undone and reported, and after a successful import the
+  theme, tray, screenshot protection, pill windows and hotkeys follow the new
+  settings at once.
 - **Every dropdown now opens the same rounded, themed list.** The library sort,
   the export and save-as format pickers, the statistics export, the screenshot
   editor's text options, the video editor's export and overlay dropdowns and the
@@ -1289,6 +1311,13 @@ the video editor and the introduction tour ship on).
 
 ### Security
 
+- **A settings or backup file can no longer switch on remote access or other
+  machine features.** Importing settings from a file, or restoring a backup
+  file, leaves the remote access switches, password, allowed addresses and
+  port, the promptsaver:// links, the autostart entry, the certificate, the
+  backup password and the folder locations exactly as this computer has
+  them. The import preview says how many entries were skipped, and a settings
+  export no longer contains the remote access password hash.
 - **Remote access from other devices now runs over HTTPS with the app's own
   certificate.** With the network switch on, the receiver accepts only
   encrypted connections, so the password is no longer readable on the

@@ -10647,9 +10647,9 @@ EXPERT_ACTIONS["settings-export"] = async () => {
 EXPERT_ACTIONS["settings-import"] = async () => {
   const path = await invoke("pick_settings_import_file").catch(() => null);
   if (!path) return;
-  let changed, total;
+  let changed, total, skipped;
   try {
-    [changed, total] = await invoke("preview_settings_import", { path });
+    [changed, total, skipped] = await invoke("preview_settings_import", { path });
   } catch (e) {
     toast(t("settingsImportBadFile"));
     return;
@@ -10660,7 +10660,8 @@ EXPERT_ACTIONS["settings-import"] = async () => {
   }
   const ok = await confirmDialog({
     title: t("settingsImportAction"),
-    message: t("settingsImportPreview").replace("{n}", String(changed)).replace("{total}", String(total)),
+    message: t("settingsImportPreview").replace("{n}", String(changed)).replace("{total}", String(total))
+      + (skipped > 0 ? " " + t("settingsImportSkipped").replace("{s}", String(skipped)) : ""),
     confirmLabel: t("settingsImportAction"),
     cancelLabel: t("cancel"),
     danger: false,
@@ -16284,6 +16285,8 @@ async function runImportAll() {
       // The file's own backup password is a foreign-machine DPAPI blob and was
       // discarded: say so, or a following export silently ships unprotected.
       if (res.backup_pw_dropped) msg += "\n" + t("importBackupPwKept");
+      // Confidential entries left in the trash were sealed with the vault key this import replaced.
+      if (res.vault_mismatch) msg += "\n" + t("importVaultMismatch");
       await infoDialog(t("backupImport"), msg);
       return;
     } catch (err) {
