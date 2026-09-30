@@ -16752,7 +16752,19 @@ def main():
         if (!near(img.px(130, 90), BGC, 8)) errs.push('598: a point inside the duplicate is dimmed, a second spotlight layer exists: ' + JSON.stringify(img.px(130, 90)));
         await baUndo();
         img = await baExport();
-        if (!document.getElementById('snip-edit-undo').disabled) errs.push('598: more than one spotlight step is on the undo stack');
+        // the replaced original is back, and the copy's dimming is gone with it
+        if (near(img.px(5, 5), BGC, 8)) errs.push('598: undo lost the original spotlight, the outside is not dimmed');
+        if (!near(img.px(42, 32), BGC, 8)) errs.push('598: the original spotlight is not clear inside after undo');
+        if (near(img.px(130, 90), BGC, 8)) errs.push('598: the point beside the original is not dimmed after undo');
+        if (document.getElementById('snip-edit-undo').disabled) errs.push('598: the original spotlight has no undo step of its own after undo');
+        await baRedo();
+        img = await baExport();
+        if (!near(img.px(130, 90), BGC, 8)) errs.push('598: redo did not put the duplicate back in place of the original');
+        await baUndo();
+        await baUndo();
+        img = await baExport();
+        if (!near(img.px(5, 5), BGC, 8)) errs.push('598: undoing both steps leaves a spotlight behind');
+        if (!document.getElementById('snip-edit-undo').disabled) errs.push('598: more than two spotlight steps are on the undo stack');
       }
     }
 """)

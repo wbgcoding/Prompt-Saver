@@ -17969,6 +17969,17 @@ function bind() {
     if (JSON.stringify(before) === JSON.stringify(after)) return;
     snipEditPushOp({ tool: "edit", kind: "geom", op, before, after }, SE.lastNudged);
   }
+  // Puts an op back next to the neighbours it had when it left SE.ops. Positions are
+  // never stored as raw indexes: a crop commit or discard in between filters an op
+  // out and would shift every index behind it.
+  function snipEditReinsert(op, prev, next) {
+    let i = next ? SE.ops.indexOf(next) : -1;
+    if (i < 0) {
+      const p = prev ? SE.ops.indexOf(prev) : -1;
+      i = p >= 0 ? p + 1 : (prev || next) ? SE.ops.length : 0;
+    }
+    SE.ops.splice(i, 0, op);
+  }
   function snipEditUndoEdit(e) {
     if (e.kind === "geom") snipEditApplyGeom(e.op, e.before);
     else if (e.kind === "remove") { SE.ops.splice(e.index, 0, e.op); SE.floor = e.floorBefore; }
@@ -17985,6 +17996,12 @@ function bind() {
   // stacking two dimming layers.
   function snipEditPushUniqueOp(tool, op) {
     const before = SE.ops.length;
+    const at = SE.ops.findIndex((o) => o.tool === tool);
+    // A replaced spotlight is an annotation the user made: Ctrl+Z on its replacement
+    // must bring it back, so the new op remembers it and where it sat.
+    if (tool === "spotlight" && at >= 0) {
+      op.replaced = { op: SE.ops[at], prev: SE.ops[at - 1] || null, next: SE.ops[at + 1] || null, floorShift: at < SE.floor ? 1 : 0 };
+    }
     SE.ops = SE.ops.filter((o) => o.tool !== tool);
     // floor is a count-based boundary into SE.ops; removing an entry shifts every
     // later index down by one, so shrink the floor by the same amount to keep
@@ -18100,6 +18117,10 @@ function bind() {
       SE.floor = op.prevFloor; // the undo limit as it was before the resize
     } else if (op.tool === "edit") {
       snipEditUndoEdit(op);
+    } else if (op.tool === "spotlight" && op.replaced) {
+      const r = op.replaced;
+      snipEditReinsert(r.op, r.prev, r.next);
+      SE.floor += r.floorShift;
     }
     snipEditDeselectShape();
     SE.lastNudged = null;
@@ -18119,6 +18140,10 @@ function bind() {
       if (SE.ops.length - SE.floor > SNIP_EDIT_UNDO_MAX()) SE.floor = SE.ops.length - SNIP_EDIT_UNDO_MAX();
     } else if (op.tool === "edit") {
       snipEditRedoEdit(op);
+    } else if (op.tool === "spotlight" && op.replaced) {
+      const i = SE.ops.indexOf(op.replaced.op);
+      if (i >= 0) SE.ops.splice(i, 1);
+      SE.floor = Math.max(0, SE.floor - op.replaced.floorShift);
     }
     snipEditDeselectShape();
     SE.lastNudged = null;
