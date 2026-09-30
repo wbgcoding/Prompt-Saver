@@ -35806,7 +35806,7 @@ fn apply_md_placement(settings: &mut Settings, prompt_id: &str, fields: &HashMap
             } else {
                 sync_find_or_create_view(settings, view_name, cols, rows)
             };
-            if sync_join_tile_folder(settings, prompt_id, name, color, &view_id, cell.unwrap_or([0, 0])) {
+            if sync_join_tile_folder(settings, prompt_id, name, color, &view_id, cell) {
                 folders_touched = true;
                 return (true, folders_touched);
             }
@@ -35964,7 +35964,7 @@ fn sync_leave_float_folder(settings: &mut Settings, prompt_id: &str) -> bool {
 // carries the same name/color/place, so any one of them can recreate it. Mirrors
 // save_tile_folder: pulled out of every OTHER folder first, and a folder member is
 // not a tile of its own, so its own layout entry is dropped the moment it joins.
-fn sync_join_tile_folder(settings: &mut Settings, prompt_id: &str, name: &str, color: &str, view_id: &str, cell: [u32; 2]) -> bool {
+fn sync_join_tile_folder(settings: &mut Settings, prompt_id: &str, name: &str, color: &str, view_id: &str, cell: Option<[u32; 2]>) -> bool {
     let Ok(name) = folder_name_of(name) else { return false };
     if name.is_empty() {
         return false;
@@ -35973,10 +35973,35 @@ fn sync_join_tile_folder(settings: &mut Settings, prompt_id: &str, name: &str, c
     // Match on (name, view_id): a bare name match merges same-named folders
     // from DIFFERENT views into whichever one the scan happens to find first.
     let exists = settings.tile_folders.iter().any(|f| f.name == name && f.view_id == view_id);
-    let cell = if exists { cell } else { sync_resolve_cell(settings, view_id, prompt_id, cell).unwrap_or(cell) };
+    let incoming = cell;
+    let wanted = cell.unwrap_or([0, 0]);
+    let cell = if exists { wanted } else { sync_resolve_cell(settings, view_id, prompt_id, wanted).unwrap_or(wanted) };
     sync_leave_tile_folder(settings, prompt_id);
+    // An existing folder is not moved or recoloured by a plain join, so two machines
+    // that disagree about its cell or colour would rewrite every member file forever.
+    // Adopt what the file says when this machine can: the cell only if it is free in
+    // that view (the folder's own cell excluded), the colour only if it is a valid one.
+    let mut adopt_cell = None;
+    if let (true, Some(want)) = (exists, incoming) {
+        let idx = settings.tile_folders.iter().position(|f| f.name == name && f.view_id == view_id);
+        if let Some(i) = idx.filter(|&i| settings.tile_folders[i].cell != want) {
+            let own = std::mem::replace(&mut settings.tile_folders[i].cell, [u32::MAX, u32::MAX]);
+            if sync_resolve_cell(settings, view_id, prompt_id, want) == Some(want) {
+                adopt_cell = Some(want);
+            }
+            settings.tile_folders[i].cell = own;
+        }
+    }
     match settings.tile_folders.iter_mut().find(|f| f.name == name && f.view_id == view_id) {
-        Some(folder) => folder.members.push(prompt_id.to_string()),
+        Some(folder) => {
+            folder.members.push(prompt_id.to_string());
+            if let Some(c) = adopt_cell {
+                folder.cell = c;
+            }
+            if !color.is_empty() {
+                folder.color.clone_from(&color);
+            }
+        }
         None => settings.tile_folders.push(TileFolder {
             id: gen_id(),
             name,
@@ -36682,9 +36707,15 @@ fn sync_poll_apply(
                 continue; // a concurrent edit already made this file's content current
             }
             if let Some(updated) = apply_md_to_prompt(&store.prompts[idx], &content) {
-                on_replace(&store.settings, &store.prompts[idx], &updated);
-                store.prompts[idx] = updated;
-                changed = true;
+                // A file that only moved or recoloured a tile leaves the prompt itself
+                // as it was: replacing it would count as a change, save the prompts and
+                // write every file again for nothing.
+                let blank = SyncPlacement::default();
+                if prompt_to_md(&store.prompts[idx], &blank) != prompt_to_md(&updated, &blank) {
+                    on_replace(&store.settings, &store.prompts[idx], &updated);
+                    store.prompts[idx] = updated;
+                    changed = true;
+                }
             }
             if let Some(f) = fields.as_ref() {
                 let (placed, folders_touched_here) = apply_md_placement(&mut store.settings, &stem, f);
@@ -41515,7 +41546,7 @@ mod tests {
         settings.tile_folders[0].name = "Work".to_string();
 
         // Same name, DIFFERENT view -> must NOT merge into v1's folder.
-        let ok = sync_join_tile_folder(&mut settings, "b", "Work", "", "v2", [0, 0]);
+        let ok = sync_join_tile_folder(&mut settings, "b", "Work", "", "v2", Some([0, 0]));
         assert!(ok);
         assert_eq!(settings.tile_folders.len(), 2, "same name in a different view must not merge");
         let v1_folder = settings.tile_folders.iter().find(|f| f.view_id == "v1").unwrap();
@@ -41524,7 +41555,7 @@ mod tests {
         assert_eq!(v2_folder.members, vec!["b".to_string()]);
 
         // Same name, SAME view -> must merge.
-        let ok2 = sync_join_tile_folder(&mut settings, "c", "Work", "", "v1", [0, 0]);
+        let ok2 = sync_join_tile_folder(&mut settings, "c", "Work", "", "v1", Some([0, 0]));
         assert!(ok2);
         let v1_folder2 = settings.tile_folders.iter().find(|f| f.view_id == "v1").unwrap();
         assert!(v1_folder2.members.contains(&"c".to_string()));
@@ -42025,9 +42056,57 @@ mod tests {
         let content = prompt_to_md(&p, &sync_placement_for(&p, &moved));
         let mut store = sync_apply_store(vec![p], Vec::new());
         store.settings = settings;
-        let (_, settings_changed) = sync_apply(&mut store, "p1", content, false);
+        let (changed, settings_changed) = sync_apply(&mut store, "p1", content, false);
+        assert!(!changed, "a file that only moved the tile must not count as a changed prompt");
         assert!(settings_changed, "the flag the store-synced event keys on must be set for a moved tile");
         assert_eq!(store.settings.views[0].layouts[&key]["p1"], [2, 1]);
+    }
+
+    #[test]
+    fn sync_join_adopts_the_cell_and_colour_of_an_existing_grid_folder() {
+        let p = sync_test_prompt();
+        let mut settings = Settings::default();
+        settings.views.push(test_view("v1"));
+        settings.tile_folders.push({
+            let mut f = test_tile_folder("f1", "v1", [0, 0], &["p1"]);
+            f.name = "F".to_string();
+            f
+        });
+        let grid = grid_key(settings.views[0].cols, settings.views[0].rows);
+        let incoming_placement = SyncPlacement {
+            view: "V1".into(),
+            grid,
+            cell: "3,1".into(),
+            tile_folder: "F".into(),
+            tile_folder_color: "#ef4444".into(),
+            float_folder: String::new(),
+        };
+        let incoming = prompt_to_md(&p, &incoming_placement);
+        let (_, fields_body) = parse_frontmatter(&incoming).unwrap();
+        let _ = fields_body;
+        let fields = parse_frontmatter(&incoming).unwrap().0;
+        apply_md_placement(&mut settings, "p1", &fields);
+        assert_eq!(settings.tile_folders.len(), 1);
+        assert_eq!(settings.tile_folders[0].cell, [3, 1]);
+        assert_eq!(settings.tile_folders[0].color, "#ef4444");
+        assert_eq!(
+            prompt_to_md(&p, &sync_placement_for(&p, &settings)),
+            incoming,
+            "after adopting, this machine writes exactly what it read, so the two stop rewriting each other"
+        );
+    }
+
+    #[test]
+    fn sync_join_keeps_a_folders_cell_when_the_file_carries_none() {
+        let mut settings = Settings::default();
+        settings.views.push(test_view("v1"));
+        settings.tile_folders.push({
+            let mut f = test_tile_folder("f1", "v1", [2, 2], &["a"]);
+            f.name = "F".to_string();
+            f
+        });
+        assert!(sync_join_tile_folder(&mut settings, "b", "F", "", "v1", None));
+        assert_eq!(settings.tile_folders[0].cell, [2, 2]);
     }
 
     #[test]
