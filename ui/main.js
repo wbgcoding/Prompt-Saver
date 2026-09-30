@@ -11049,9 +11049,12 @@ function pollLangInstall(kind, name) {
     let res;
     try { res = await invoke(LANG_CMDS[kind].installResult, { name }); } catch (_) { res = undefined; }
     // The dialog was closed (and maybe reopened, with a fresh poller) while that
-    // answer was on its way: this chain is stale and must not re-arm itself.
-    if (st.installChain[name] !== chain) return;
+    // answer was on its way: this chain is stale and must not re-arm itself. A
+    // terminal answer is still handled, though: the backend already deleted the
+    // result and dropped its nonce, so no later poll will ever see it again.
+    const stale = st.installChain[name] !== chain;
     if (res == null) {
+      if (stale) return;
       if (attempts >= MAX_LANG_INSTALL_POLLS) {
         delete st.installTimers[name];
         st.installing.delete(name);
@@ -11062,7 +11065,10 @@ function pollLangInstall(kind, name) {
       st.installTimers[name] = setTimeout(tick, 3000); // still running (or a transient probe failure)
       return;
     }
+    // A poller started by a reopen in the meantime has nothing left to wait for.
+    clearTimeout(st.installTimers[name]);
     delete st.installTimers[name];
+    delete st.installChain[name];
     st.installing.delete(name);
     if (res.ok) {
       // Clear both caches so the new pack is selectable immediately, no restart.
