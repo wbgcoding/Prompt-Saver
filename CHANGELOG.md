@@ -859,6 +859,20 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **Markdown folder sync no longer loses or damages data.** A file with the id
+  of a confidential entry can no longer overwrite it, a file whose prompt sits
+  in the trash no longer comes back as a second prompt, and the cleanup of
+  leftover files only removes files the app has known before, so a folder that
+  already holds another machine's files, or a file you made or renamed by hand,
+  is left alone. An edit the sync has noticed but not read yet is kept as a
+  conflict copy instead of being overwritten. Notes with several lines and a
+  text that ends with a new line now come back unchanged, and files saved with a
+  byte order mark or as UTF-16 are read.
+- **Markdown folder sync follows changes properly.** Open windows and the tray
+  refresh when the sync imports something, a grid folder takes over the cell
+  and colour from the other machine instead of both machines rewriting its files
+  forever, choosing the same folder under another spelling no longer deletes it,
+  and a paused sync resumes as soon as you switch to a working folder.
 - **Restoring or importing entries takes the matching vault key along.**
   Confidential entries of a backup open with the backup's own vault password,
   and a backup without a vault keeps yours. If confidential entries in the
