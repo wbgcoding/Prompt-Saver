@@ -10,6 +10,7 @@
 // this file waits for the camera-permission-ready event before ever calling
 // it, closing the race where the page could ask before the handler exists.
 import { fmtTimeMMSS } from "./floatShared.js";
+import { attachSelectPicker } from "./selectpop.js";
 
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
@@ -26,6 +27,10 @@ const audioSelect = document.getElementById("cam-audio-select");
 const audioLabel = document.getElementById("cam-audio-label");
 const resSelect = document.getElementById("cam-res-select");
 const resLabel = document.getElementById("cam-res-label");
+// Themed list popup instead of the native OS dropdown. A locked select (a
+// take in flight, see the disabled toggles below) never opens it.
+attachSelectPicker(audioSelect);
+attachSelectPicker(resSelect);
 const folderLabel = document.getElementById("cam-folder-label");
 const folderPathEl = document.getElementById("cam-folder-path");
 const folderBtn = document.getElementById("cam-folder-btn");

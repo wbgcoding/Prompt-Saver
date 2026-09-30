@@ -3964,7 +3964,7 @@ select,
 select:focus { border-color: var(--accent); outline: none; }
 option, optgroup { background-color: var(--surface); color: var(--fg); }
 option:checked { background-color: var(--accent); color: var(--accent-fg); }
-.expert-select { border-radius: 10px; }
+.expert-select { border-radius: 8px; }
 /* Label to the LEFT of every expert dropdown (was stacked above). */
 /* Label left, control right. Both sides stretch to the row's height, so the label
    text is vertically CENTRED against the control it belongs to, while the control
@@ -4422,8 +4422,8 @@ body.drag-over::after {
 /* Library sort dropdown. */
 .head-sort { display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .lib-sort {
-  padding: 5px 8px;
-  border: 1px solid var(--border);
+  padding: 5px 30px 5px 8px;
+  border: 1px solid var(--control-border);
   border-radius: 8px;
   background-color: var(--surface-2);
   color: var(--fg);
@@ -4441,7 +4441,7 @@ body.drag-over::after {
 .batch-view-select {
   padding: 8px 30px 8px 14px;
   border: 1px solid var(--control-border);
-  border-radius: var(--radius);
+  border-radius: 8px;
   background-color: transparent;
   color: var(--fg);
   font: inherit;
@@ -4915,6 +4915,14 @@ body.drag-over::after {
   color: var(--accent-fg);
   font-weight: 600;
 }
+/* Keyboard highlight in a select popup: the hover tint plus a ring, so it stays
+   visible on the selected (accent) row too. */
+.num-pop button.kb {
+  background: var(--surface-2);
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+.num-pop button.sel.kb { background: var(--accent); }
 
 /* ---- Toast ---- */
 /* Toast: a compact themed card (icon badge + message), the same visual language as

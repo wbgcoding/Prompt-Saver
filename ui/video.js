@@ -11,6 +11,7 @@ import { withShortcut as withShortcutRaw, rowsForScope as rowsForScopeRaw } from
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
 import { createColorPop } from "./colorpop.js";
+import { attachSelectPicker } from "./selectpop.js";
 import { placePopoverAt } from "./popover.js";
 import { snapMove } from "./snap.js";
 import { exportNameIsValid } from "./exportName.js";
@@ -2305,6 +2306,7 @@ function selectInput(options, value, onChange) {
   }
   select.value = value;
   select.addEventListener("change", () => onChange(select.value));
+  attachSelectPicker(select);
   return select;
 }
 
@@ -3783,6 +3785,7 @@ audioControl("sys", "ve-mute-sys", "ve-vol-sys");
 audioControl("mic", "ve-mute-mic", "ve-vol-mic");
 
 for (const id of ["ve-export-format", "ve-export-quality"]) {
+  attachSelectPicker($(id));
   $(id).addEventListener("change", () => {
     // A full manual destination names its own extension -- picking a
     // different container format makes that extension wrong, so the format
