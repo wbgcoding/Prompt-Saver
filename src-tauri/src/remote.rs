@@ -150,28 +150,156 @@ pub(crate) fn remote_api_take_shown_password() -> Option<String> {
     LAST_SHOWN_PASSWORD.lock().unwrap_or_else(|e| e.into_inner()).take()
 }
 
-#[tauri::command]
-pub(crate) fn remote_api_regenerate_password(app: AppHandle, state: State<Db>) -> Result<String, String> {
-    let password = generate_password();
-    let hash = hash_password(&password);
-    {
-        let mut store = lock(&state);
-        if !remote_api_enabled(&store.settings) {
-            return Err("remote access is off".to_string());
+// ---------- Durable remote-access changes ----------
+//
+// Every change to the receiver's own settings goes through one of these
+// cores, which take the save as a closure so the failure paths can be proven
+// without an AppHandle. The rule is asymmetric on purpose: anything that
+// opens the receiver up (switching it on, a new password, wider ranges) is
+// rolled back and refused when the write does not land, so a restart can never
+// bring back something the user was not told about. Anything that closes it
+// (switching it off) still takes effect at once and only reports that the
+// choice was not saved.
+
+pub(crate) const ERR_SAVE_FAILED: &str = "save-failed";
+pub(crate) const ERR_OFF_NOT_SAVED: &str = "remote-off-not-saved";
+
+fn restore_text(settings: &mut Settings, key: &str, old: Option<String>) {
+    match old {
+        Some(v) => {
+            settings.ui_texts.insert(key.to_string(), v);
         }
-        store.settings.ui_texts.insert("remotePasswordHash".to_string(), hash);
-        save_settings(&app, &store.settings);
+        None => {
+            settings.ui_texts.remove(key);
+        }
+    }
+}
+
+fn restore_flag(settings: &mut Settings, key: &str, old: Option<bool>) {
+    match old {
+        Some(v) => {
+            settings.ui_flags.insert(key.to_string(), v);
+        }
+        None => {
+            settings.ui_flags.remove(key);
+        }
+    }
+}
+
+// What the caller must do to the running receiver once a switch was applied.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub(crate) enum SwitchAction {
+    None,
+    Start,
+    Stop,
+}
+
+pub(crate) struct SwitchResult {
+    pub action: SwitchAction,
+    // The first password ever minted, shown once by the caller; only ever set
+    // after the write that stores its hash has landed.
+    pub password: Option<String>,
+    pub error: Option<String>,
+}
+
+// The `remoteApi` switch. On: flag plus (the very first time) a password hash
+// are saved together; a failed write restores both and starts nothing. Off:
+// the flag goes off in memory and the receiver is told to stop whatever the
+// write does; a failed write is reported as ERR_OFF_NOT_SAVED.
+pub(crate) fn apply_remote_switch(settings: &mut Settings, enabled: bool, mut save: impl FnMut(&Settings) -> bool) -> SwitchResult {
+    if !enabled {
+        settings.ui_flags.insert("remoteApi".to_string(), false);
+        let saved = save(settings);
+        return SwitchResult {
+            action: SwitchAction::Stop,
+            password: None,
+            error: if saved { None } else { Some(ERR_OFF_NOT_SAVED.to_string()) },
+        };
+    }
+    let old_flag = settings.ui_flags.get("remoteApi").copied();
+    let old_hash = settings.ui_texts.get("remotePasswordHash").cloned();
+    settings.ui_flags.insert("remoteApi".to_string(), true);
+    let mut minted = None;
+    if password_hash_hex(settings).is_none() {
+        let password = generate_password();
+        settings.ui_texts.insert("remotePasswordHash".to_string(), hash_password(&password));
+        minted = Some(password);
+    }
+    if !save(settings) {
+        restore_flag(settings, "remoteApi", old_flag);
+        restore_text(settings, "remotePasswordHash", old_hash);
+        return SwitchResult { action: SwitchAction::None, password: None, error: Some(ERR_SAVE_FAILED.to_string()) };
+    }
+    SwitchResult { action: SwitchAction::Start, password: minted, error: None }
+}
+
+// A new password replaces the stored hash. When the write fails the old hash
+// is put back and the caller must stop the receiver: the user was never shown
+// the new password, and the disk still holds the old one.
+pub(crate) fn regenerate_password_core(settings: &mut Settings, mut save: impl FnMut(&Settings) -> bool) -> Result<String, String> {
+    if !remote_api_enabled(settings) {
+        return Err("remote access is off".to_string());
+    }
+    let password = generate_password();
+    let old_hash = settings.ui_texts.get("remotePasswordHash").cloned();
+    settings.ui_texts.insert("remotePasswordHash".to_string(), hash_password(&password));
+    if !save(settings) {
+        restore_text(settings, "remotePasswordHash", old_hash);
+        return Err(ERR_SAVE_FAILED.to_string());
     }
     Ok(password)
 }
 
+pub(crate) fn set_allowed_ranges_core(settings: &mut Settings, ranges: String, mut save: impl FnMut(&Settings) -> bool) -> Result<(), String> {
+    validate_range_syntax(&ranges)?;
+    let old = settings.ui_texts.get("remoteAllowedRanges").cloned();
+    settings.ui_texts.insert("remoteAllowedRanges".to_string(), ranges);
+    if !save(settings) {
+        restore_text(settings, "remoteAllowedRanges", old);
+        return Err(ERR_SAVE_FAILED.to_string());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) fn remote_api_regenerate_password(app: AppHandle, state: State<Db>) -> Result<String, String> {
+    let result = {
+        let mut store = lock(&state);
+        regenerate_password_core(&mut store.settings, |s| save_settings(&app, s))
+    };
+    if matches!(&result, Err(e) if e == ERR_SAVE_FAILED) {
+        stop(&app);
+    }
+    result
+}
+
 #[tauri::command]
 pub(crate) fn set_remote_allowed_ranges(app: AppHandle, state: State<Db>, ranges: String) -> Result<(), String> {
-    validate_range_syntax(&ranges)?;
     let mut store = lock(&state);
-    store.settings.ui_texts.insert("remoteAllowedRanges".to_string(), ranges);
-    save_settings(&app, &store.settings);
-    Ok(())
+    set_allowed_ranges_core(&mut store.settings, ranges, |s| save_settings(&app, s))
+}
+
+// The `remoteApi` branch of set_ui_flag: applies the switch, then does the one
+// matching runtime transition. Returns the caller's error, if any.
+pub(crate) fn set_remote_api_flag(app: &AppHandle, state: &State<Db>, enabled: bool) -> Result<(), String> {
+    let result = {
+        let mut store = lock(state);
+        apply_remote_switch(&mut store.settings, enabled, |s| save_settings(app, s))
+    };
+    match result.action {
+        SwitchAction::Start => {
+            if let Some(password) = result.password {
+                stash_shown_password(password);
+            }
+            start(app.clone());
+        }
+        SwitchAction::Stop => stop(app),
+        SwitchAction::None => {}
+    }
+    match result.error {
+        Some(e) => Err(e),
+        None => Ok(()),
+    }
 }
 
 // ---------- IPv4 CIDR matching ----------
@@ -332,14 +460,20 @@ pub(crate) fn remote_api_status(app: AppHandle) -> serde_json::Value {
     })
 }
 
+// The banner's off switch: the receiver stops whether or not "off" could be
+// written; a failed write comes back as an error so the user knows a restart
+// may bring it back.
 #[tauri::command]
-pub(crate) fn remote_api_stop_now(app: AppHandle, state: State<Db>) {
-    {
+pub(crate) fn remote_api_stop_now(app: AppHandle, state: State<Db>) -> Result<(), String> {
+    let result = {
         let mut store = lock(&state);
-        store.settings.ui_flags.insert("remoteApi".to_string(), false);
-        save_settings(&app, &store.settings);
-    }
+        apply_remote_switch(&mut store.settings, false, |s| save_settings(&app, s))
+    };
     stop(&app);
+    match result.error {
+        Some(e) => Err(e),
+        None => Ok(()),
+    }
 }
 
 // Starts the receiver if the setting is on and a password already exists;
@@ -1238,5 +1372,130 @@ mod tests {
     fn wire_body_requires_argv() {
         let bad = br#"{}"#;
         assert!(serde_json::from_slice::<RemoteRequest>(bad).is_err());
+    }
+
+    // ---- durable-or-reversible remote settings ----
+
+    fn settings_with(on: bool, hash: Option<&str>) -> Settings {
+        let mut s = Settings::default();
+        if on {
+            s.ui_flags.insert("remoteApi".into(), true);
+        }
+        if let Some(h) = hash {
+            s.ui_texts.insert("remotePasswordHash".into(), h.into());
+        }
+        s
+    }
+
+    #[test]
+    fn enabling_with_a_failed_write_restores_flag_and_first_password() {
+        let mut s = settings_with(false, None);
+        let mut calls = 0;
+        let r = apply_remote_switch(&mut s, true, |_| {
+            calls += 1;
+            false
+        });
+        assert_eq!(calls, 1);
+        assert_eq!(r.action, SwitchAction::None);
+        assert!(r.password.is_none());
+        assert_eq!(r.error.as_deref(), Some(ERR_SAVE_FAILED));
+        assert!(!remote_api_enabled(&s));
+        assert!(s.ui_texts.get("remotePasswordHash").is_none());
+    }
+
+    #[test]
+    fn enabling_with_a_failed_write_keeps_an_existing_hash() {
+        let mut s = settings_with(false, Some("aa"));
+        let r = apply_remote_switch(&mut s, true, |_| false);
+        assert_eq!(r.action, SwitchAction::None);
+        assert_eq!(s.ui_texts.get("remotePasswordHash").map(String::as_str), Some("aa"));
+        assert!(!remote_api_enabled(&s));
+    }
+
+    #[test]
+    fn enabling_with_a_good_write_starts_once_and_shows_the_new_password() {
+        let mut s = settings_with(false, None);
+        let mut calls = 0;
+        let r = apply_remote_switch(&mut s, true, |_| {
+            calls += 1;
+            true
+        });
+        assert_eq!(calls, 1);
+        assert_eq!(r.action, SwitchAction::Start);
+        assert!(r.error.is_none());
+        let pw = r.password.expect("first password");
+        assert!(verify_password(&pw, &password_hash_hex(&s).unwrap()));
+        // A second enable keeps the stored password and mints nothing.
+        let r2 = apply_remote_switch(&mut s, true, |_| true);
+        assert!(r2.password.is_none());
+        assert!(verify_password(&pw, &password_hash_hex(&s).unwrap()));
+    }
+
+    #[test]
+    fn disabling_stops_even_when_the_write_fails_and_says_so() {
+        let mut s = settings_with(true, Some("aa"));
+        let r = apply_remote_switch(&mut s, false, |_| false);
+        assert_eq!(r.action, SwitchAction::Stop);
+        assert_eq!(r.error.as_deref(), Some(ERR_OFF_NOT_SAVED));
+        assert!(!remote_api_enabled(&s));
+        let mut s2 = settings_with(true, Some("aa"));
+        let ok = apply_remote_switch(&mut s2, false, |_| true);
+        assert_eq!(ok.action, SwitchAction::Stop);
+        assert!(ok.error.is_none());
+    }
+
+    #[test]
+    fn regenerating_with_a_failed_write_restores_the_old_hash() {
+        let mut s = settings_with(true, Some("old-hash"));
+        let r = regenerate_password_core(&mut s, |_| false);
+        assert_eq!(r.err().as_deref(), Some(ERR_SAVE_FAILED));
+        assert_eq!(s.ui_texts.get("remotePasswordHash").map(String::as_str), Some("old-hash"));
+    }
+
+    #[test]
+    fn regenerating_with_a_good_write_replaces_the_hash_and_returns_the_password() {
+        let mut s = settings_with(true, Some("old-hash"));
+        let pw = regenerate_password_core(&mut s, |_| true).unwrap();
+        assert!(verify_password(&pw, &password_hash_hex(&s).unwrap()));
+    }
+
+    #[test]
+    fn regenerating_while_off_is_refused_without_saving() {
+        let mut s = settings_with(false, Some("old-hash"));
+        let mut calls = 0;
+        let r = regenerate_password_core(&mut s, |_| {
+            calls += 1;
+            true
+        });
+        assert!(r.is_err());
+        assert_eq!(calls, 0);
+    }
+
+    #[test]
+    fn a_failed_range_write_restores_the_old_ranges() {
+        let mut s = settings_with(true, Some("aa"));
+        s.ui_texts.insert("remoteAllowedRanges".into(), "10.0.0.0/8".into());
+        let r = set_allowed_ranges_core(&mut s, "0.0.0.0/0".into(), |_| false);
+        assert_eq!(r.err().as_deref(), Some(ERR_SAVE_FAILED));
+        assert_eq!(s.ui_texts.get("remoteAllowedRanges").map(String::as_str), Some("10.0.0.0/8"));
+        // Never set before: the failed write leaves it unset, not empty.
+        let mut fresh = settings_with(true, Some("aa"));
+        let _ = set_allowed_ranges_core(&mut fresh, "10.0.0.0/8".into(), |_| false);
+        assert!(fresh.ui_texts.get("remoteAllowedRanges").is_none());
+    }
+
+    #[test]
+    fn a_good_range_write_lands_and_a_bad_range_never_reaches_the_save() {
+        let mut s = settings_with(true, Some("aa"));
+        assert!(set_allowed_ranges_core(&mut s, "192.168.1.0/24".into(), |_| true).is_ok());
+        assert_eq!(s.ui_texts.get("remoteAllowedRanges").map(String::as_str), Some("192.168.1.0/24"));
+        let mut calls = 0;
+        let r = set_allowed_ranges_core(&mut s, "nonsense".into(), |_| {
+            calls += 1;
+            true
+        });
+        assert!(r.is_err());
+        assert_eq!(calls, 0);
+        assert_eq!(s.ui_texts.get("remoteAllowedRanges").map(String::as_str), Some("192.168.1.0/24"));
     }
 }

@@ -26375,7 +26375,13 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
     let is_tray = key == "trayRecent" || key == "trayFavs" || key == TRAY_CUSTOM_MENU_KEY;
     let is_folders = key == "pillFolders";
     let is_sync_enable = key == "promptSync" && enabled; // Prompt-folders-as-Markdown
-    let is_remote_toggle = key == "remoteApi";
+    // The receiver's own switch is durable-or-reversible (see remote.rs), so it
+    // never takes the generic save-and-ignore path below.
+    if key == "remoteApi" {
+        let result = remote::set_remote_api_flag(&app, &state, enabled);
+        notify_float_settings(&app);
+        return result;
+    }
     let is_url_scheme_toggle = key == "urlScheme";
     // Turning either gate off must not leave a session silently running.
     let end_auto_session = !enabled && (key == "rotatingPrompts" || key == "rotateAuto");
@@ -26474,29 +26480,6 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
     if is_folders {
         let handle = app.clone();
         tauri::async_runtime::spawn(async move { sync_float_windows(&handle) });
-    }
-    // Turning the receiver on mints a password the very first time (never
-    // overwrites one already set, e.g. by a later regenerate) and starts it;
-    // start() itself is the one place that refuses to bind without a
-    // password, so nothing here has to re-check that. Turning it off stops it.
-    if is_remote_toggle {
-        if enabled {
-            let needs_password = {
-                let store = lock(&state);
-                store.settings.ui_texts.get("remotePasswordHash").map(String::is_empty).unwrap_or(true)
-            };
-            if needs_password {
-                let password = remote::generate_password();
-                let hash = remote::hash_password(&password);
-                let mut store = lock(&state);
-                store.settings.ui_texts.insert("remotePasswordHash".to_string(), hash);
-                save_settings(&app, &store.settings);
-                remote::stash_shown_password(password);
-            }
-            remote::start(app.clone());
-        } else {
-            remote::stop(&app);
-        }
     }
     // Best-effort: a registry write can fail (locked-down profile, odd ACLs)
     // without the switch itself failing, the same tolerance apply_autostart's
