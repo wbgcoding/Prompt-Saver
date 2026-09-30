@@ -95,7 +95,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "A short confirmation bubble or flash confirms the copy. Chaining, clicking several tiles in a row, combines them into one clipboard entry instead of overwriting each other; hovering a text tile also shows a small chain icon next to its selection checkbox that starts a chain with that tile first. A chain stays when you switch to another program; it ends when you click the chain button again or paste with Ctrl+V in the app window. While chaining, drag a step in the strip above the grid to reorder it, or right-click it to remove it. Chaining is not the same as rotation: chaining combines several different tiles, rotation changes what a single tile holds from copy to copy (see Rotating tiles).",
-      settings: ["Chaining, and the chain icon shown on a tile: Expert menu → Features → Tiles & copying", "Per-tile hotkeys, auto-paste, drag-out, close-on-copy: Expert menu → Features → Copying", "Which key drags a tile out, and whether that key drags out or moves it: Expert menu → Features → Copying"],
+      settings: ["Chaining, and the chain icon shown on a tile: Expert menu → Features → Chain", "Per-tile hotkeys, auto-paste, drag-out, close-on-copy: Expert menu → Features → Copying", "Which key drags a tile out, and whether that key drags out or moves it: Expert menu → Features → Copying"],
       sketches: ["flowToTarget", "chainSteps"],
     },
     {
@@ -158,7 +158,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens: "These are interaction and looks only; none of them change what a tile copies.",
       settings: [
-        "Tile menu, drag-to-reorder, hover lift: Expert menu → Buttons → Tiles & copying",
+        "Tile menu, drag-to-reorder, hover lift: Expert menu → Buttons → Tiles",
         "Type badges, shadows, gradients, rounded corners, bold, uppercase, or monospace text: Expert menu → Buttons → Tile appearance",
       ],
     },
@@ -348,7 +348,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "A tile keeps its cell until moved; the grid never rearranges itself. Shrinking the grid does not delete tiles that fall outside the new size; they stay assigned and reappear once it grows back. The 20x20 default is only a starting point; the expert menu's limit setting raises it up to 200x200.",
-      settings: ["Quick grid-size control, grid border: Expert menu → System & data → Toolbar", "Maximum grid size: Expert menu → Appearance → Limits & values"],
+      settings: ["Quick grid-size control, grid border, maximum grid size: Expert menu → Features → Views and quick grid"],
     },
     {
       section: "copying",
@@ -368,7 +368,7 @@ export const HELP_CONTENT = {
       settings: [
         "Global hotkey, all hotkeys: Settings",
         "Per-tile hotkeys, paste-after-copy: Expert menu → Features → Copying",
-        "Hotkey badge, badge opacity: Expert menu → Buttons → Tiles & copying",
+        "Hotkey badge, badge opacity: Expert menu → Buttons → Tiles",
       ],
     },
     {
@@ -477,7 +477,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "MP4 (H.264) is always what gets written while recording; three quality steps (Small/High/Lossless) trade file size for detail, and a format setting can turn the result into WebM, AVI, MOV, MKV, animated WebP or APNG afterward (the last three carry no audio and are capped at 30 seconds). Anything other than plain MP4, or the Lossless step, needs ffmpeg (a separate download, offered inline when missing); a failed or cancelled conversion always falls back to the untouched original recording. System audio and microphone audio both record on by default, each into its own track: the microphone track is captured but not mixed in audibly until you bring it in yourself from the video editor; unplugging the microphone mid-recording keeps picture and system audio going and just marks that track as lost. The control bar's two audio buttons can mute either source instantly while recording without dropping its track: a muted source keeps recording silence and can be unmuted again in the same recording. Save and Copy share one recording folder; Edit opens the clip in the video editor without deciding its fate, so closing the dialog afterward without saving or copying still discards the file. Dragging the bar itself (not its buttons) moves it anywhere, including onto another monitor, and stops it following the recorded window for the rest of that one recording; the next recording starts following again, and the bar is otherwise never part of the recording. If the recorded window closes on its own, the recording stops automatically and keeps what was captured so far. A recording that never reached its own stop path (a crash, a forced shutdown) is removed automatically once it clears a grace period, so a just-stopped recording that is still finalising is never touched. The recording folder's row in the expert menu shows how many videos are in it and how much space they use, with a \"Clean up…\" button that lists files older than 7, 30 or 90 days and the space they would free before deleting anything; nothing is removed without that confirmation. An optional keys overlay records which keys are pressed while a recording runs, as key identifiers and timestamps only, never any text; it shows every key by default, including typed text, and skips a password field when Windows reports it as such, though this is not guaranteed. A \"Shortcuts only\" switch restricts capture to combinations with Ctrl, Alt or Win plus Enter, Tab, Esc, Backspace, Delete, Insert, arrows, Home, End, Page Up, Page Down and F keys, for a recording with confidential input.",
-      settings: ["Screen recording, cursor, countdown, audio sources and device, bitrate, quality, format, recording folder and cleanup, stop/pause hotkeys, tray entries, auto-remove broken recordings, keys overlay: Expert menu → Features → Create prompts"],
+      settings: ["Screen recording, cursor, countdown, audio sources and device, bitrate, quality, format, recording folder and cleanup, stop/pause hotkeys, tray entries, auto-remove broken recordings, keys overlay: Expert menu → Capture → Screen recording"],
     },
     {
       section: "basics",
@@ -712,7 +712,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Eine kurze Bestätigungsblase oder ein Aufblinken bestätigt den Kopiervorgang. Verketten, mehrere Kacheln hintereinander anklicken, fasst sie zu einem Eintrag in der Zwischenablage zusammen, statt sie zu überschreiben; beim Überfahren einer Text-Kachel erscheint zusätzlich ein kleines Ketten-Symbol neben ihrer Auswahlbox, das direkt eine Kette mit dieser Kachel beginnt. Eine Kette bleibt beim Wechsel in ein anderes Programm bestehen und endet erst durch erneutes Klicken auf den Ketten-Knopf oder Strg+V im App-Fenster. Beim Verketten lässt sich ein Schritt in der Leiste über dem Raster ziehen, um ihn umzusortieren, oder per Rechtsklick entfernen. Verketten ist nicht dasselbe wie Rotation: Verketten fasst mehrere verschiedene Kacheln zusammen, Rotation ändert, was eine einzelne Kachel von Kopie zu Kopie enthält (siehe Wechselnde Kacheln).",
-      settings: ["Verketten und das Ketten-Symbol an der Kachel: Experten-Menü → Funktionen → Kacheln & Kopieren", "Eigene Hotkeys pro Kachel, Auto-Paste, Drag-out, Schließen-nach-Kopieren: Experten-Menü → Funktionen → Kopieren", "Welche Taste eine Kachel herauszieht und ob diese Taste herauszieht oder sie verschiebt: Experten-Menü → Funktionen → Kopieren"],
+      settings: ["Verketten und das Ketten-Symbol an der Kachel: Experten-Menü → Funktionen → Kette", "Eigene Hotkeys pro Kachel, Auto-Paste, Drag-out, Schließen-nach-Kopieren: Experten-Menü → Funktionen → Kopieren", "Welche Taste eine Kachel herauszieht und ob diese Taste herauszieht oder sie verschiebt: Experten-Menü → Funktionen → Kopieren"],
       sketches: ["flowToTarget", "chainSteps"],
     },
     {
@@ -776,7 +776,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens: "Das sind nur Interaktion und Optik; nichts davon ändert, was eine Kachel kopiert.",
       settings: [
-        "Kachel-Menü, Drag-to-Reorder, Hover-Lift: Experten-Menü → Buttons → Kacheln & Kopieren",
+        "Kachel-Menü, Drag-to-Reorder, Hover-Lift: Experten-Menü → Buttons → Kacheln",
         "Typ-Badges, Schatten, Farbverläufe, abgerundete Ecken, fetter, großgeschriebener oder dicktengleicher Text: Experten-Menü → Buttons → Kachel-Aussehen",
       ],
     },
@@ -966,7 +966,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Eine Kachel behält ihre Zelle, bis sie bewegt wird; das Raster ordnet sich nie selbst neu. Das Verkleinern löscht keine außerhalb liegenden Kacheln; sie bleiben zugewiesen und erscheinen beim Vergrößern wieder. Die Standardgröße von 20x20 ist nur ein Startwert; die Limit-Einstellung im Experten-Menü hebt sie auf bis zu 200x200 an.",
-      settings: ["Schnelle Rastergrößen-Steuerung, Rasterrahmen: Experten-Menü → System & Daten → Werkzeugleiste", "Maximale Rastergröße: Experten-Menü → Aussehen → Grenzwerte & Werte"],
+      settings: ["Schnelle Rastergrößen-Steuerung, Rasterrahmen, maximale Rastergröße: Experten-Menü → Funktionen → Ansichten und Schnellraster"],
     },
     {
       section: "copying",
@@ -986,7 +986,7 @@ export const HELP_CONTENT = {
       settings: [
         "Globaler Hotkey, alle Hotkeys: Einstellungen",
         "Eigene Hotkeys pro Kachel, Einfügen nach Kopieren: Experten-Menü → Funktionen → Kopieren",
-        "Hotkey-Abzeichen, Deckkraft des Abzeichens: Experten-Menü → Buttons → Kacheln & Kopieren",
+        "Hotkey-Abzeichen, Deckkraft des Abzeichens: Experten-Menü → Buttons → Kacheln",
       ],
     },
     {
@@ -1095,7 +1095,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Aufgenommen wird immer MP4 (H.264); drei Qualitätsstufen (Klein/Hoch/Verlustfrei) tauschen Dateigröße gegen Bildschärfe, ein Format-Feld kann das Ergebnis danach in WebM, AVI, MOV, MKV, animiertes WebP oder APNG umwandeln (die letzten drei ohne Ton und auf 30 Sekunden begrenzt). Alles außer reinem MP4 sowie die Stufe Verlustfrei braucht ffmpeg (ein separater Download, direkt angeboten, wenn es fehlt); eine fehlgeschlagene oder abgebrochene Umwandlung fällt immer auf die unangetastete Originalaufnahme zurück. Systemton und Mikrofon werden beide standardmäßig aufgenommen, je als eigene Spur: die Mikrofonspur wird zwar aufgezeichnet, aber erst hörbar, wenn man sie später selbst im Video-Editor dazumischt; zieht man das Mikrofon während der Aufnahme ab, laufen Bild und Systemton weiter, nur diese Spur gilt als verloren. Die beiden Ton-Knöpfe in der Bedienleiste schalten Systemton oder Mikrofon sofort stumm, ohne die Spur zu beenden: eine stumme Quelle nimmt weiter Stille auf und lässt sich in derselben Aufnahme wieder zuschalten. Speichern und Kopieren teilen sich einen Aufnahme-Ordner; Bearbeiten öffnet den Clip im Video-Editor, ohne über sein Schicksal zu entscheiden; schließt man den Dialog danach, ohne gespeichert oder kopiert zu haben, wird die Datei trotzdem verworfen. Zieht man die Bedienleiste selbst (nicht ihre Knöpfe), folgt sie für den Rest dieser einen Aufnahme nicht mehr dem Aufnahmefenster, sondern bleibt frei beweglich stehen, auch auf einem anderen Monitor; die nächste Aufnahme folgt wieder von vorn, und die Leiste ist ansonsten nie Teil der Aufnahme. Schließt sich das aufgenommene Fenster von selbst, stoppt die Aufnahme automatisch und behält, was bis dahin aufgenommen wurde. Eine Aufnahme, die nie ordnungsgemäß gestoppt wurde (Absturz, erzwungenes Beenden), wird automatisch entfernt, sobald sie eine Schonfrist überschreitet; eine gerade gestoppte Aufnahme, die noch abgeschlossen wird, bleibt dabei unangetastet. Die Aufnahme-Ordner-Zeile im Experten-Menü zeigt Anzahl und Größe der enthaltenen Videos, mit einem „Aufräumen…“-Knopf, der Dateien älter als 7, 30 oder 90 Tage samt der frei werdenden Größe zur Bestätigung auflistet, bevor irgendetwas gelöscht wird. Eine optionale Tastenanzeige zeichnet auf, welche Tasten während einer Aufnahme gedrückt werden, nur als Tastenkennungen mit Zeitstempeln, nie als Textinhalt; sie zeigt ab Werk jede Taste, auch getippten Text, und lässt ein Passwortfeld aus, wenn Windows es als solches meldet, ohne dass das garantiert ist. Ein Schalter „Nur Tastenkürzel“ beschränkt die Aufzeichnung auf Kombinationen mit Strg, Alt oder Win sowie Enter, Tab, Esc, Rücktaste, Entf, Einfg, Pfeile, Pos1, Ende, Bild auf, Bild ab und F-Tasten, für Aufnahmen mit vertraulichen Eingaben.",
-      settings: ["Bildschirmaufnahme, Mauszeiger, Countdown, Tonquellen und -gerät, Bitrate, Qualität, Format, Aufnahme-Ordner, Stopp-/Pause-Hotkeys, Tray-Einträge, defekte Aufnahmen automatisch entfernen, Tastenanzeige: Experten-Menü → Funktionen → Prompts erstellen"],
+      settings: ["Bildschirmaufnahme, Mauszeiger, Countdown, Tonquellen und -gerät, Bitrate, Qualität, Format, Aufnahme-Ordner, Stopp-/Pause-Hotkeys, Tray-Einträge, defekte Aufnahmen automatisch entfernen, Tastenanzeige: Experten-Menü → Aufnehmen → Bildschirmaufnahme"],
     },
     {
       section: "basics",

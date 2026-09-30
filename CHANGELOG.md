@@ -1420,6 +1420,15 @@ the video editor and the introduction tour ship on).
 
 ### Changed
 
+- **Several expert-menu rows moved next to the feature they belong to.** The
+  chain settings have their own "Chain" group, the recording cleanup rows sit
+  under "Screen recording", the temporary-export lifetime under "Video editor",
+  the image-text index fill action under "Library", the floating-button recall
+  action under "Floating buttons & folders", and the grid border, the view
+  limit and the grid size limit under "Views and quick grid". Rows that only
+  matter with a switch on now hide with it and step in under it, including the
+  colour pickers and the fixed-value list. The "Tiles & copying" group is now
+  just "Tiles".
 - **The safety backup before Reset settings and before Delete all data is now
   on by default**, and split into two separate switches so either case can be
   turned off on its own.

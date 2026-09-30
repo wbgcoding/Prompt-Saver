@@ -131,6 +131,9 @@ DEPENDENCIES = {
     "checkUpdateOnStart": "showUpdates",
     # Tiles + copying
     "chainLock": "chainPrompts",
+    "chainQuickStart": "chainPrompts",
+    "chainStartAlwaysVisible": "chainQuickStart",
+    "chainVarCheck": "chainPrompts",
     "autoPasteEnter": "autoPaste",
     "autoPasteDelayMs": "autoPaste",
     "dblClickMs": "autoPaste",
@@ -179,6 +182,17 @@ DEPENDENCIES = {
     "viewGroups": "multiView",
     "viewBorder": "multiView",
     "viewGroupMaxRows": "viewGroups",
+    "maxViews": "multiView",
+    "gridViewBorder": "multiView",
+    # Recording upkeep lives with the recording switch, the video editor's temp
+    # files with the editor, the error log's size with the log.
+    "recSweepBroken": "screenRecord",
+    "recBrokenGraceMin": "recSweepBroken",
+    "recSweepEveryMin": "recSweepBroken",
+    "recDiscardKeepH": "screenRecord",
+    "recordingRetentionDays": "screenRecord",
+    "videoClipTtlMin": "videoEditor",
+    "errorLogKeepKb": "errorLog",
     "dupImportCheck": "dupFinder",
     "similarThreshold": "similarHint",
     "editorDraftSecs": "editorDraft",

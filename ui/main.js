@@ -1623,7 +1623,7 @@ const EXPERT_VALUES = {
   // Max length for prompt names + captions (raise it for long labels).
   nameMaxLen: { label: "valNameMaxLen", min: 20, max: 1000, step: 10, def: 80, unit: "" },
   // Limit overrides (defaults match the classic 20; backend ceiling is 200).
-  maxViews: { label: "valMaxViews", min: 1, max: 200, step: 1, def: 20, unit: "" },
+  maxViews: { label: "valMaxViews", min: 1, max: 200, step: 1, def: 20, unit: "", gate: "multiView" },
   gridMax: { label: "valGridMax", min: 1, max: 200, step: 1, def: 20, unit: "" },
   // Copy-history length (0 = keep none).
   historyMax: { label: "valHistoryMax", def: 100, unit: "", stops: HISTORY_STOPS, gate: "copyHistory" },
@@ -1761,15 +1761,14 @@ const EXPERT_VALUES = {
   recBrokenGraceMin: { label: "valRecBrokenGraceMin", min: 1, max: 60, step: 1, def: 5, unit: "min", gate: "recSweepBroken" },
   recSweepEveryMin: { label: "valRecSweepEveryMin", min: 5, max: 1440, step: 5, def: 60, unit: "min", gate: "recSweepBroken" },
   // How long a discarded recording sits in its "verworfen" trash before the
-  // background sweep removes it for good -- already enforced, this row
-  // just makes the value visible and changeable for the first time. Not
-  // gated on recSweepBroken: the backend runs this sweep unconditionally,
-  // gating the row the same way would hide a control that still works.
-  recDiscardKeepH: { label: "valRecDiscardKeepH", min: 0, max: 720, step: 1, def: 24, unit: "h", zeroLabel: "retentionForever" },
+  // background sweep removes it for good. Shown under the recording switch
+  // only; it is not tied to recSweepBroken because the backend runs this
+  // sweep whether or not the broken-recording sweep is on.
+  recDiscardKeepH: { label: "valRecDiscardKeepH", min: 0, max: 720, step: 1, def: 24, unit: "h", zeroLabel: "retentionForever", gate: "screenRecord" },
   // How long a video editor "Copy to clipboard" export's throwaway temp
   // file survives before the background sweep deletes it (also cleared at
   // the next app start regardless).
-  videoClipTtlMin: { label: "valVideoClipTtl", min: 5, max: 240, step: 5, def: 60, unit: "min" },
+  videoClipTtlMin: { label: "valVideoClipTtl", min: 5, max: 240, step: 5, def: 60, unit: "min", gate: "videoEditor" },
   // How often the background thread checks installed language packs for an
   // update, how long the "update available" toast stays before it counts as a
   // silent no-op, and how long a click on its Cancel button postpones the next
@@ -1827,7 +1826,7 @@ const EXPERT_VALUES = {
   // How long a confirm button (delete etc.) stays armed before it auto-resets.
   disarmMs: { label: "valDisarmMs", min: 1000, max: 10000, step: 500, def: 3000, unit: "ms" },
   // Matches append_crash_log's own pre-existing hardcoded rotation cap (256 KB).
-  errorLogKeepKb: { label: "valErrorLogKeepKb", min: 64, max: 4096, step: 64, def: 256, unit: "KB" },
+  errorLogKeepKb: { label: "valErrorLogKeepKb", min: 64, max: 4096, step: 64, def: 256, unit: "KB", gate: "errorLog" },
   // Automatic backups: how many rotating snapshots to keep.
   backupKeep: { label: "valBackupKeep", min: 1, max: 50, step: 1, def: 10, unit: "", gate: "autoBackup" },
   // How long the auto-backup job waits after launch before its first check --
@@ -1936,7 +1935,7 @@ const EXPERT_SELECTS = {
   // Off by default (0), same "0 = forever" convention, so nothing changes for
   // anyone who never opens this row -- a referenced recording never qualifies
   // regardless of this value.
-  recordingRetentionDays: { label: "valRecordingRetentionDays", options: [0, 7, 30, 90, 365], def: 0, unit: "d", zeroLabel: "retentionForever" },
+  recordingRetentionDays: { label: "valRecordingRetentionDays", options: [0, 7, 30, 90, 365], def: 0, unit: "d", zeroLabel: "retentionForever", gate: "screenRecord" },
   // How often the background thread checks for a new release.
   updateCheckH: { label: "valUpdateCheckH", options: [6, 12, 24, 48, 168], def: 24, unit: "h", gate: "showUpdates" },
 };
@@ -2202,7 +2201,7 @@ const EXPERT_TABS = [
   { title: "expTabFeatures", groups: [
     // Everything that puts new content into the app.
     { title: "expGroupInput", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, { key: "attachTextPreview", gate: "fileAttach" }, "pasteMedia", "dragDrop"], values: ["attachPreviewKb"] },
-    { title: "expGroupViews", flags: ["multiView", { key: "viewGroups", gate: "multiView" }, { key: "multiViewPrompt", gate: "multiView" }, "quickGrid", { key: "quickGridHoverOnly", gate: "quickGrid" }], values: ["viewBorder", "viewGroupMaxRows", "viewTabEdgeZone"] },
+    { title: "expGroupViews", flags: ["multiView", { key: "viewGroups", gate: "multiView" }, { key: "multiViewPrompt", gate: "multiView" }, { key: "gridViewBorder", gate: "multiView" }, "quickGrid", { key: "quickGridHoverOnly", gate: "quickGrid" }], values: ["viewBorder", "viewGroupMaxRows", "viewTabEdgeZone", "maxViews", "gridMax"] },
     // Placeholders, from the grammar to where the app asks for them. varFixed
     // (a hand-maintained name/value list, empty by default, only ever
     // SUGGESTED in the fill-in dialog) stays in this same group rather than
@@ -2214,8 +2213,11 @@ const EXPERT_TABS = [
     { title: "expGroupEditor", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }, { key: "copyFormatted", gate: "mdPreview" }, "lengthCounter", "promptHistory", { key: "historyDiff", gate: "promptHistory" }, "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace", "confirmDiscard", "editorDraft"], values: ["hlFontPx", "historyPerPrompt", "notesTipLen", "mdMaxChars", "hlMaxChars", "diffWordCap", "historyPreviewLen", "editorDraftSecs"], dropdowns: ["counterUnits"] },
     // Everything that happens between a click and the clipboard.
     { title: "expGroupCopy", flags: ["promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, { key: "autoPasteEnter", gate: "autoPaste" }, "hideWindowOnCopy", "copyBubble", "copyFlash", "copySound"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs", "bubbleMs", "copySoundVolume"], dropdowns: ["dragOutModifier", "copySize", "copyFont"] },
+    // Copying several different prompts as one text.
+    { title: "expGroupChain", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "chainQuickStart", gate: "chainPrompts" }, { key: "chainStartAlwaysVisible", gate: "chainQuickStart" }, { key: "chainVarCheck", gate: "chainPrompts" }] },
     // Floating buttons and the two kinds of folder they can form.
-    { title: "expGroupFolders", flags: ["floating", { key: "floatPark", gate: "floating" }, { key: "pillFolders", gate: "floating" }, "tileFolders"], values: ["floatOpacity", "pillFontSize", "pillTextMinW", "pillBorderW", "pillRingFrac", "pillMenuGap", "floatParkCleanupH", "pillMergeRadius", "pillMergeGrow", "pillFolderTileSize", "pillFolderTileGap", "pillFolderPad", "pillFolderPopGap", "folderGridCols", "tileFolderZone", "tileFolderHoverMs", "tileFolderCols"] },
+    { title: "expGroupFolders", flags: ["floating", { key: "floatPark", gate: "floating" }, { key: "pillFolders", gate: "floating" }, "tileFolders"], values: ["floatOpacity", "pillFontSize", "pillTextMinW", "pillBorderW", "pillRingFrac", "pillMenuGap", "floatParkCleanupH", "pillMergeRadius", "pillMergeGrow", "pillFolderTileSize", "pillFolderTileGap", "pillFolderPad", "pillFolderPopGap", "folderGridCols", "tileFolderZone", "tileFolderHoverMs", "tileFolderCols"],
+      actions: [{ id: "float-recall", label: "floatRecallAction", gate: "floating" }] },
     // The quick-copy sections of the tray menu, each with its own entry count.
     { title: "expGroupTray", flags: ["trayCustomMenu", "trayRecent", "trayFavs", "traySearch"], values: ["trayRecentN", "trayFavN", "trayLabelMax", "trayMenuMax"] },
     // The watcher that collects what you copy elsewhere.
@@ -2241,9 +2243,9 @@ const EXPERT_TABS = [
     // The recording hotkeys render their own capture row directly (hotkeyRow())
     // instead of a button that jumps to a settings field -- see actionRow()'s
     // "hotkey" branch.
-    { title: "expGroupRecording", flags: ["screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, { key: "recCropNotice", gate: "screenRecord" }, { key: "recBarSize", gate: "screenRecord" }, { key: "recTargetSwitch", gate: "screenRecord" }, { key: "recAutoCrop", gate: "screenRecord" }, { key: "keyOverlay", gate: "screenRecord" }, { key: "keyOverlayShortcutsOnly", gate: "keyOverlay" }, "cameraRecord"], values: ["recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "recCanvasMaxPx", "recDiskWarnMb", "recMaxMin", "recMaxMb", "exportParallel", "keyOverlayHoldMs", "cameraFramerate"], dropdowns: ["recMicDevice", "recQuality", "recFormat", "recCanvasMode", "cameraDevice", "cameraResolution"], paths: ["recordingDir"],
-      actions: [{ id: "rec-stop-hotkey-row", type: "hotkey", hotkeyKey: "recStopHotkey", label: "recStopHotkeyLabel", gate: "recStopHotkey" }, { id: "rec-pause-hotkey-row", type: "hotkey", hotkeyKey: "recPauseHotkey", label: "recPauseHotkeyLabel", gate: "recPauseHotkey" }] },
-    { title: "expGroupVideoEditor", flags: ["videoEditor", { key: "veOvRemember", gate: "videoEditor" }, { key: "videoEditSnap", gate: "videoEditor" }], values: ["videoEditUndoMax", "veExportKbpsHigh", "veExportKbpsSmall", "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "veExtraClipsMax"], dropdowns: ["veDefaultFormat", "veDefaultQuality", "veDefaultScale", "veOvFont", "veDefaultPanel"], colors: ["veOvColor"], paths: ["videoExportDir"] },
+    { title: "expGroupRecording", flags: ["screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, { key: "recCropNotice", gate: "screenRecord" }, { key: "recBarSize", gate: "screenRecord" }, { key: "recTargetSwitch", gate: "screenRecord" }, { key: "recAutoCrop", gate: "screenRecord" }, { key: "keyOverlay", gate: "screenRecord" }, { key: "keyOverlayShortcutsOnly", gate: "keyOverlay" }, { key: "recSweepBroken", gate: "screenRecord" }, "cameraRecord"], values: ["recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "recCanvasMaxPx", "recDiskWarnMb", "recMaxMin", "recMaxMb", "exportParallel", "keyOverlayHoldMs", "recBrokenGraceMin", "recSweepEveryMin", "recDiscardKeepH", "cameraFramerate"], selects: ["recordingRetentionDays"], dropdowns: ["recMicDevice", "recQuality", "recFormat", "recCanvasMode", "cameraDevice", "cameraResolution"], paths: ["recordingDir"],
+      actions: [{ id: "rec-sweep-now", label: "recSweepNowAction", gate: "recSweepBroken" }, { id: "rec-stop-hotkey-row", type: "hotkey", hotkeyKey: "recStopHotkey", label: "recStopHotkeyLabel", gate: "recStopHotkey" }, { id: "rec-pause-hotkey-row", type: "hotkey", hotkeyKey: "recPauseHotkey", label: "recPauseHotkeyLabel", gate: "recPauseHotkey" }] },
+    { title: "expGroupVideoEditor", flags: ["videoEditor", { key: "veOvRemember", gate: "videoEditor" }, { key: "videoEditSnap", gate: "videoEditor" }], values: ["videoEditUndoMax", "veExportKbpsHigh", "veExportKbpsSmall", "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "veExtraClipsMax", "videoClipTtlMin"], dropdowns: ["veDefaultFormat", "veDefaultQuality", "veDefaultScale", "veOvFont", "veDefaultPanel"], colors: ["veOvColor"], paths: ["videoExportDir"] },
     // What the screenshot editor and the video editor share -- created here so
     // no setting key is ever declared in two groups (expert_menu_check.py).
     { title: "expGroupEditors", flags: ["numFieldWheel", "editStateKeep"], values: ["numFieldStep", "numFieldBigStep", "zoomStepPct", "zoomMaxPct", "editStateSaveSecs", "editStateKeepDays", "veOvDupOffsetPx", "editSnapTolerancePx", "editorOpenMaxMb"] },
@@ -2251,7 +2253,7 @@ const EXPERT_TABS = [
   { title: "expTabTiles", groups: [
     // Split by what a setting actually does: acting on a tile, the hover tooltip,
     // and pure looks. One 26-entry blob made everything hard to find.
-    { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "dragToView", "tileHover", { key: "tileHoverLift", gate: "tileHover" }, "tilePressScale", "tileHotkeyBadge", "chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "chainQuickStart", gate: "chainPrompts" }, { key: "chainStartAlwaysVisible", gate: "chainQuickStart" }, { key: "chainVarCheck", gate: "chainPrompts" }], values: ["hoverLift", "dragThreshold", "viewDropHoverMs", "tileHotkeyBadgeOpacity"] },
+    { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "dragToView", "tileHover", { key: "tileHoverLift", gate: "tileHover" }, "tilePressScale", "tileHotkeyBadge"], values: ["hoverLift", "dragThreshold", "viewDropHoverMs", "tileHotkeyBadgeOpacity"] },
     { title: "expGroupTooltips", flags: ["tilePreview", "iconTooltips", "tooltipDelay", "tooltipTimeout", "tileTimeTip"], values: ["tooltipWidth", "tooltipDelayMs", "tooltipTimeoutMs"] },
     { title: "expGroupTileLook", flags: ["tileShadow", "typeBadges", "captions", "compactTiles", "tileGradient", "gridLines", "uppercaseTiles", "boldTileNames", "monospaceTiles", "italicTiles", "tileTextShadow", "autoInk", "inkHalo"], values: ["tileRadius", "tileBorderWidth", "inkThreshold", "inkHaloStrength"] },
     { title: "expGroupFavorites", flags: ["favorites", { key: "favViewButton", gate: "favorites" }, { key: "favViewReorder", gate: "favViewButton" }], values: ["favStarSize", "favMaxCols"] },
@@ -2260,10 +2262,11 @@ const EXPERT_TABS = [
     { title: "expGroupScales", values: ["uiScale", "modalScale", "composerScale", "iconScale", "primaryScale"] },
     { title: "expGroupAppearanceDetails", flags: ["animations", "accentHeader", "hideScrollbars", { key: "accentScrollbar", gate: "!hideScrollbars" }, "smoothScroll", "frostedModals"], values: ["animSpeed", "gridGap", "gridPad", "headerPadY", "modalRadius", "overlayDim", "scrollbarWidth", "frostedBlur", "composerMaxH", "popoverPad", "toastWidth", "toastMs", "modalMaxVh"], dropdowns: ["toastPos"] },
     { title: "expGroupColors", flags: ["customThemes"], values: ["customThemeMax"], palette: true },
-    { title: "expGroupLimits", values: ["maxViews", "gridMax", "previewLen", "nameMaxLen"] },
+    { title: "expGroupLimits", values: ["previewLen", "nameMaxLen"] },
   ] },
   { title: "expTabLibrary", groups: [
-    { title: "expGroupLibrary", flags: ["librarySearch", "globalSearch", "searchSuggest", "savedSearches", "fuzzySearch", "smartSort", "batchOps", "libraryTypeFilter", "colorFilter", "searchAutofocus", "imagePreview", "libraryVideoPreview", "closeAfterCopy", "libraryCloseToggle", "ocrIndex", "archiveTag", "libraryTiles"], values: ["searchRecentMax", "savedSearchMax", "libraryCols", "libraryWidth", "libPreviewLines", "searchDebounceMs", "globalSearchLimit", "ocrIndexMaxChars", "libraryTileSize"], dropdowns: ["fuzzyMaxTypos"] },
+    { title: "expGroupLibrary", flags: ["librarySearch", "globalSearch", "searchSuggest", "savedSearches", "fuzzySearch", "smartSort", "batchOps", "libraryTypeFilter", "colorFilter", "searchAutofocus", "imagePreview", "libraryVideoPreview", "closeAfterCopy", "libraryCloseToggle", "ocrIndex", "archiveTag", "libraryTiles"], values: ["searchRecentMax", "savedSearchMax", "libraryCols", "libraryWidth", "libPreviewLines", "searchDebounceMs", "globalSearchLimit", "ocrIndexMaxChars", "libraryTileSize"], dropdowns: ["fuzzyMaxTypos"],
+      actions: [{ id: "ocr-index-backfill", label: "ocrIndexBackfillAction", gate: "ocrIndex" }] },
     { title: "expGroupTags", flags: ["tags"], values: ["tagChipPx", "tagPopCols"], dropdowns: ["tagFilterMode", "tagSort"] },
     // Everything that records or shows copy history lives with the history view.
     { title: "expGroupJournal", flags: ["copyHistory", "historyTimestamps", "historyGrouped", "dedupCopyLog", "journalSearch", "journalTypeFilter", "journalColorFilter", { key: "journalTagFilter", gate: "tags" }, "journalRecent", "journalMostUsed", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "journalClear", "confirmClearHistory"], values: ["historyMax", "journalLimit", "journalWidth"], selects: ["historyDays"] },
@@ -2273,14 +2276,14 @@ const EXPERT_TABS = [
   ] },
   { title: "expTabSystem", groups: [
     // Toolbar button visibility (mirrors the header right-click tool list).
-    { title: "expGroupToolbar", flags: ["gridViewBorder", "pinButton", "barToggles", { key: "barToggleBoth", gate: "barToggles" }, "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons", "headerSeparators", "toolbarHoverDim"] },
+    { title: "expGroupToolbar", flags: ["pinButton", "barToggles", { key: "barToggleBoth", gate: "barToggles" }, "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons", "headerSeparators", "toolbarHoverDim"] },
     { title: "expGroupPrivacy", notices: ["storeUnsealed", "settingsLocked", "settingsWriteFailed"], flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "tilesHoverDim", "secretPrompts"], values: ["tileBlur", "mediaBlur", "tilesHoverOpacity", "secretTimeoutMin"] },
     { title: "expGroupSystem", notices: ["dataDirReadOnly"], flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }, { key: "whatsNew", gate: "showUpdates" }, "keyboardNav", "allowMultipleInstances", "dataDirLock", "demoMode", "taskbarProgress", "etaShow"], values: ["kbFocusFadeMs", "etaMinPct", "etaMinSecs", "bgDoneKeepMin"], selects: ["updateCheckH"], paths: ["dataDir"],
       actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }] },
     { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "helpSketches", "firstRunTour"],
       actions: [{ id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
-    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "similarHint", "backupBeforeReset", "backupBeforeDelete", "importExport", "recSweepBroken", "undoToast", "errorLog"], values: ["similarThreshold", "importFolderDepth", "importFolderMax", "disarmMs", "recBrokenGraceMin", "recSweepEveryMin", "recDiscardKeepH", "videoClipTtlMin", "errorLogKeepKb", "undoToastMs", "errorLogMax"], selects: ["trashRetentionDays", "recordingRetentionDays"],
-      actions: [{ id: "trash-open", label: "trashTitle" }, { id: "rec-sweep-now", label: "recSweepNowAction", gate: "recSweepBroken" }, { id: "settings-export", label: "settingsExportAction" }, { id: "settings-import", label: "settingsImportAction" }, { id: "ocr-index-backfill", label: "ocrIndexBackfillAction", gate: "ocrIndex" }, { id: "float-recall", label: "floatRecallAction", gate: "floating" }, { id: "error-log-open", label: "errorLogAction" }] },
+    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "similarHint", "backupBeforeReset", "backupBeforeDelete", "importExport", "undoToast", "errorLog"], values: ["similarThreshold", "importFolderDepth", "importFolderMax", "disarmMs", "errorLogKeepKb", "undoToastMs", "errorLogMax"], selects: ["trashRetentionDays"],
+      actions: [{ id: "trash-open", label: "trashTitle" }, { id: "settings-export", label: "settingsExportAction" }, { id: "settings-import", label: "settingsImportAction" }, { id: "error-log-open", label: "errorLogAction", gate: "errorLog" }] },
     // The only new network surface in the app, off by default.
     // A link can only open or copy an entry; the receiver can do everything
     // the command line can, gated by its own password and network switch.
@@ -2639,6 +2642,7 @@ const TILE_DOM_FLAGS = new Set(["tilePreview", "captions", "promptNotes", "notes
 function flagRow(key) {
   const row = document.createElement("label");
   row.className = "field switch-field";
+  row.dataset.settingRow = key; // same jump-to-setting hook as valueRow
   withTip(row, key);
   const span = document.createElement("span");
   span.textContent = t(flagLabelKey(key));
@@ -4084,7 +4088,9 @@ function emitExpertRows(list, parent, actionById, depth) {
   const build = (n) => {
     const row = n.kind === "actions"
       ? actionRow(actionById.get(n.k))
-      : { flags: flagRow, values: valueRow, selects: selectRow, dropdowns: dropdownRow, paths: pathRow }[n.kind](n.k);
+      : n.kind === "varFixedList"
+        ? varFixedListRow()
+        : { flags: flagRow, values: valueRow, selects: selectRow, dropdowns: dropdownRow, paths: pathRow, colors: colorRow }[n.kind](n.k);
     // Indent by depth: a setting unlocked by a setting that is itself unlocked sits
     // one step further in, so the chain of dependencies reads off the left edge.
     if (depth > 0) {
@@ -4253,14 +4259,16 @@ function renderExpert() {
         const ownerOf = (kind, k) => {
           const g = kind === "flags" ? FLAG_GATES[k]
             : kind === "actions" ? actionById.get(k)?.gate
+            : kind === "colors" ? EXPERT_COLORS[k]?.gate
+            : kind === "varFixedList" ? "varFixed"
             : EXPERT_DEFS[kind]?.[k]?.gate;
           return g && g[0] !== "!" && g !== k && shownFlags.has(g) ? g : null;
         };
         const byFlag = new Map();
         const roots = [];
-        const lists = { flags, values, selects, dropdowns, paths, actions: actions.map((a) => a.id) };
+        const lists = { flags, values, selects, dropdowns, paths, actions: actions.map((a) => a.id), colors, varFixedList: varFixedList ? ["varFixedList"] : [] };
         // Flags first, so a parent always exists before anything hangs off it.
-        for (const kind of ["flags", "values", "selects", "dropdowns", "paths", "actions"]) {
+        for (const kind of ["flags", "values", "selects", "dropdowns", "paths", "actions", "colors", "varFixedList"]) {
           for (const k of lists[kind]) {
             const n = { kind, k, kids: [] };
             if (kind === "flags") byFlag.set(k, n);
@@ -4271,8 +4279,12 @@ function renderExpert() {
         emitExpertRows(roots, sec, actionById, 0);
       }
       if (palette) sec.appendChild(paletteRow());
-      if (varFixedList) sec.appendChild(varFixedListRow());
-      for (const key of colors) sec.appendChild(colorRow(key));
+      // Browsing mode already placed the list and the colours under their
+      // switch; only the flat search list appends them here.
+      if (searching) {
+        if (varFixedList) sec.appendChild(varFixedListRow());
+        for (const key of colors) sec.appendChild(colorRow(key));
+      }
       box.appendChild(sec);
     }
   }
