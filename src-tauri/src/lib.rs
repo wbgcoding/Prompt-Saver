@@ -36581,6 +36581,90 @@ fn sync_blank_prompt(id: String) -> Prompt {
     }
 }
 
+// The apply half of sync_poll_once, free of any window or file access so a test can
+// drive it: takes the candidates the scan collected (stem, file content, is_new)
+// and folds them into the store. `on_replace` sees a prompt right before a file
+// replaces it (the caller keeps a restore point). Returns (prompts_changed,
+// settings_changed); the caller persists whichever is set.
+fn sync_poll_apply(
+    store: &mut Store,
+    candidates: Vec<(String, String, bool)>,
+    on_replace: &mut dyn FnMut(&Settings, &Prompt, &Prompt),
+) -> (bool, bool) {
+    let mut changed = false;
+    let mut settings_changed = false;
+    let mut placements_touched = false;
+    for (stem, content, is_new) in candidates {
+        // Fields lives alongside content/name/etc: parse_frontmatter is cheap
+        // (string splitting) and apply_md_to_prompt already re-parses it itself, so
+        // a second pass here isn't worth threading through that function's own
+        // signature just to share one HashMap.
+        let fields = parse_frontmatter(&content).filter(|(f, _)| md_is_ours(f)).map(|(f, _)| f);
+        if is_new {
+            if store.prompts.iter().any(|p| p.id == stem) {
+                continue; // added by something else in the meantime
+            }
+            let Some(np) = apply_md_to_prompt(&sync_blank_prompt(stem), &content) else { continue };
+            let id = np.id.clone();
+            store.prompts.push(np);
+            let (placed, folders_touched_here) = fields
+                .as_ref()
+                .map(|f| apply_md_placement(&mut store.settings, &id, f))
+                .unwrap_or((false, false));
+            if folders_touched_here {
+                placements_touched = true;
+                settings_changed = true;
+            }
+            if placed {
+                settings_changed = true;
+            } else {
+                let folder_cells = active_view_folder_cells(&store.settings);
+                let view = store.settings.active_view_mut();
+                if let Some(cell) = first_free_cell_excluding(view, &folder_cells) {
+                    let key = grid_key(view.cols, view.rows);
+                    view.layouts.entry(key).or_default().insert(id, cell);
+                    settings_changed = true;
+                }
+            }
+            changed = true;
+        } else if let Some(idx) = store.prompts.iter().position(|p| p.id == stem) {
+            if store.prompts[idx].secret {
+                // A confidential entry never has a file of its own: its text here is
+                // ciphertext, and a stray plaintext file with the same id (written by a
+                // machine that does not know it is confidential) must not replace it.
+                continue;
+            }
+            let placement = sync_placement_for(&store.prompts[idx], &store.settings);
+            let unchanged = prompt_to_md(&store.prompts[idx], &placement) == content;
+            if unchanged {
+                continue; // a concurrent edit already made this file's content current
+            }
+            if let Some(updated) = apply_md_to_prompt(&store.prompts[idx], &content) {
+                on_replace(&store.settings, &store.prompts[idx], &updated);
+                store.prompts[idx] = updated;
+                changed = true;
+            }
+            if let Some(f) = fields.as_ref() {
+                let (placed, folders_touched_here) = apply_md_placement(&mut store.settings, &stem, f);
+                if placed {
+                    settings_changed = true;
+                }
+                if folders_touched_here {
+                    placements_touched = true;
+                    settings_changed = true;
+                }
+            }
+        } // else: deleted while we were reading files; nothing left to update
+    }
+    if placements_touched {
+        let prompt_ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
+        let view_ids: Vec<String> = store.settings.views.iter().map(|v| v.id.clone()).collect();
+        sync_normalize_tile_folders(&mut store.settings.tile_folders, &prompt_ids, &view_ids);
+        sync_normalize_float_folders(&mut store.settings.float_folders, &prompt_ids);
+    }
+    (changed, settings_changed)
+}
+
 // The inbound half: files -> DB. Runs on a timer (see start_sync_poll) rather than
 // a filesystem watcher, see the module note above for why.
 //
@@ -36685,6 +36769,10 @@ fn sync_poll_once(app: &AppHandle) {
             continue;
         };
         if let Some(idx) = snapshot.iter().position(|p| p.id == stem) {
+            if snapshot[idx].secret {
+                append_crash_log(&format!("prompt-sync: {name} belongs to a confidential prompt, skipped"));
+                continue;
+            }
             let placement = sync_placement_for(&snapshot[idx], &settings_snapshot);
             if prompt_to_md(&snapshot[idx], &placement) == content {
                 continue; // matches what we would write ourselves: not a real change
@@ -36708,88 +36796,26 @@ fn sync_poll_once(app: &AppHandle) {
     if store.prompts_locked || !sync_enabled(&store.settings) {
         return;
     }
-    let mut changed = false;
-    let mut settings_changed = false;
-    let mut placements_touched = false;
-    for (stem, content, is_new) in candidates {
-        // Fields lives alongside content/name/etc: parse_frontmatter is cheap
-        // (string splitting) and apply_md_to_prompt already re-parses it itself, so
-        // a second pass here isn't worth threading through that function's own
-        // signature just to share one HashMap.
-        let fields = parse_frontmatter(&content).filter(|(f, _)| md_is_ours(f)).map(|(f, _)| f);
-        if is_new {
-            if store.prompts.iter().any(|p| p.id == stem) {
-                continue; // added by something else in the meantime
-            }
-            let Some(np) = apply_md_to_prompt(&sync_blank_prompt(stem), &content) else { continue };
-            let id = np.id.clone();
-            store.prompts.push(np);
-            let (placed, folders_touched_here) = fields
-                .as_ref()
-                .map(|f| apply_md_placement(&mut store.settings, &id, f))
-                .unwrap_or((false, false));
-            if folders_touched_here {
-                placements_touched = true;
-                settings_changed = true;
-            }
-            if placed {
-                settings_changed = true;
-            } else {
-                let folder_cells = active_view_folder_cells(&store.settings);
-                let view = store.settings.active_view_mut();
-                if let Some(cell) = first_free_cell_excluding(view, &folder_cells) {
-                    let key = grid_key(view.cols, view.rows);
-                    view.layouts.entry(key).or_default().insert(id, cell);
-                    settings_changed = true;
+    let (changed, settings_changed) = sync_poll_apply(&mut store, candidates, &mut |settings, old, updated| {
+        // The file wins this round, so whatever the prompt said before is about to
+        // be gone. If both sides changed since the last sync this is the losing
+        // side of a conflict, so keep it as a restore point instead of dropping it,
+        // the same way an edit in the app keeps one.
+        if !history_enabled(settings)
+            || (old.name == updated.name && old.text == updated.text && old.variants == updated.variants)
+        {
+            return;
+        }
+        let cap = history_cap(settings);
+        match db_conn(app) {
+            Some(c) => {
+                if let Err(e) = db_add_version(&c, &old.id, now_secs(), &old.name, &old.text, &old.variants, cap) {
+                    append_crash_log(&format!("prompt-sync: no restore point kept for {}: {e}", old.id));
                 }
             }
-            changed = true;
-        } else if let Some(idx) = store.prompts.iter().position(|p| p.id == stem) {
-            let placement = sync_placement_for(&store.prompts[idx], &store.settings);
-            let unchanged = prompt_to_md(&store.prompts[idx], &placement) == content;
-            if unchanged {
-                continue; // a concurrent edit already made this file's content current
-            }
-            if let Some(updated) = apply_md_to_prompt(&store.prompts[idx], &content) {
-                // The file wins this round, so whatever the prompt said before is
-                // about to be gone. If both sides changed since the last sync this is
-                // the losing side of a conflict, so keep it as a restore point instead
-                // of dropping it, the same way an edit in the app keeps one.
-                let old = &store.prompts[idx];
-                if history_enabled(&store.settings)
-                    && (old.name != updated.name || old.text != updated.text || old.variants != updated.variants)
-                {
-                    let cap = history_cap(&store.settings);
-                    match db_conn(app) {
-                        Some(c) => {
-                            if let Err(e) = db_add_version(&c, &stem, now_secs(), &old.name, &old.text, &old.variants, cap) {
-                                append_crash_log(&format!("prompt-sync: no restore point kept for {stem}: {e}"));
-                            }
-                        }
-                        None => append_crash_log(&format!("prompt-sync: no restore point kept for {stem}: no DB connection")),
-                    }
-                }
-                store.prompts[idx] = updated;
-                changed = true;
-            }
-            if let Some(f) = fields.as_ref() {
-                let (placed, folders_touched_here) = apply_md_placement(&mut store.settings, &stem, f);
-                if placed {
-                    settings_changed = true;
-                }
-                if folders_touched_here {
-                    placements_touched = true;
-                    settings_changed = true;
-                }
-            }
-        } // else: deleted while we were reading files; nothing left to update
-    }
-    if placements_touched {
-        let prompt_ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
-        let view_ids: Vec<String> = store.settings.views.iter().map(|v| v.id.clone()).collect();
-        sync_normalize_tile_folders(&mut store.settings.tile_folders, &prompt_ids, &view_ids);
-        sync_normalize_float_folders(&mut store.settings.float_folders, &prompt_ids);
-    }
+            None => append_crash_log(&format!("prompt-sync: no restore point kept for {}: no DB connection", old.id)),
+        }
+    });
     // Prompts and Settings are separate tables/files (save_prompts never touches
     // settings): a placement-only change with no content change would otherwise be
     // applied in memory, echoed straight back out to the sync folder by
@@ -41801,6 +41827,29 @@ mod tests {
         assert!(dir.join("p1 - Copy.md").exists(), "a name this app could never have written is never swept");
         assert!(!dir.join("gone.md").exists(), "a real orphan of ours is still cleaned up");
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    fn sync_apply_store(prompts: Vec<Prompt>, trash: Vec<Prompt>) -> Store {
+        Store { prompts, trash, settings: Settings::default(), prompts_locked: false, written: Default::default() }
+    }
+
+    fn sync_apply(store: &mut Store, stem: &str, content: String, is_new: bool) -> (bool, bool) {
+        sync_poll_apply(store, vec![(stem.to_string(), content, is_new)], &mut |_, _, _| {})
+    }
+
+    #[test]
+    fn sync_poll_never_writes_a_files_plaintext_into_a_confidential_prompt() {
+        let mut secret = sync_test_prompt();
+        secret.secret = true;
+        secret.text = "CIPHERTEXT".into();
+        let mut plain = sync_test_prompt();
+        plain.text = "plaintext from another machine".into();
+        let content = prompt_to_md(&plain, &SyncPlacement::default());
+        let mut store = sync_apply_store(vec![secret], Vec::new());
+        let (changed, _) = sync_apply(&mut store, "p1", content, false);
+        assert!(!changed);
+        assert_eq!(store.prompts[0].text, "CIPHERTEXT");
+        assert!(store.prompts[0].secret);
     }
 
     #[test]
