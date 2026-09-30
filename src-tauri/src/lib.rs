@@ -27063,10 +27063,16 @@ fn set_ui_value(app: AppHandle, state: State<Db>, key: String, value: f64) {
     let is_tray = key == "trayRecentN" || key == "trayFavN" || key == "trayLabelMax";
     let is_folder_grid = key == "folderGridCols";
     let is_error_log_cap = key == "errorLogKeepKb";
-    {
+    let restart_port_from = {
         let mut store = lock(&state);
+        let old = store.settings.ui_values.get(&key).copied();
+        let restart = remote::needs_receiver_restart(&key, old, value, &store.settings);
         store.settings.ui_values.insert(key, value);
         save_settings(&app, &store.settings);
+        restart.then_some(old)
+    };
+    if let Some(old) = restart_port_from {
+        remote::apply_port_change(&app, &state, old);
     }
     if is_tray {
         rebuild_tray(&app); // dragging a slider must not rebuild on every step

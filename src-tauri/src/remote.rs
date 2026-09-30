@@ -414,9 +414,32 @@ pub(crate) fn set_network_flag(app: &AppHandle, state: &State<Db>, enabled: bool
     }
 }
 
+// The port is fixed for the life of one run, so a new value only takes effect
+// through a restart: needed when the receiver is on and the value really moved.
+pub(crate) fn needs_receiver_restart(key: &str, old: Option<f64>, new: f64, settings: &Settings) -> bool {
+    key == "remotePort" && old != Some(new) && remote_api_enabled(settings)
+}
+
+// The `remotePort` branch of set_ui_value, run after the new value was saved.
+// A port the receiver cannot bind goes back to the old value and the old run.
+pub(crate) fn apply_port_change(app: &AppHandle, state: &State<Db>, old: Option<f64>) {
+    if let Err(e) = restart_receiver(app) {
+        crate::append_crash_log(&format!("remote access: the new port could not be used: {e}"));
+        {
+            let mut store = lock(state);
+            match old {
+                Some(v) => store.settings.ui_values.insert("remotePort".to_string(), v),
+                None => store.settings.ui_values.remove("remotePort"),
+            };
+            let _ = save_settings(app, &store.settings);
+        }
+        let _ = start(app.clone());
+    }
+}
+
 // Stops the running receiver and starts it again from the stored settings. The
 // new run waits for the old one to let go of its port.
-fn restart_receiver(app: &AppHandle) -> Result<(), String> {
+pub(crate) fn restart_receiver(app: &AppHandle) -> Result<(), String> {
     stop(app);
     start(app.clone())
 }
@@ -1491,6 +1514,18 @@ pub(crate) fn url_scheme_restore(_prior: Option<String>) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_port_change_restarts_the_receiver_only_while_it_runs() {
+        let mut on = Settings::default();
+        on.ui_flags.insert("remoteApi".into(), true);
+        let off = Settings::default();
+        assert!(needs_receiver_restart("remotePort", Some(51823.0), 51900.0, &on));
+        assert!(needs_receiver_restart("remotePort", None, 51900.0, &on));
+        assert!(!needs_receiver_restart("remotePort", Some(51900.0), 51900.0, &on), "same value");
+        assert!(!needs_receiver_restart("remotePort", Some(51823.0), 51900.0, &off), "receiver off");
+        assert!(!needs_receiver_restart("remoteRateLimit", Some(1.0), 2.0, &on), "other key");
+    }
+
     #[test]
     fn a_reset_that_turns_the_receiver_and_the_scheme_off_owes_both_side_effects() {
         let mut old = Settings::default();
