@@ -2329,19 +2329,30 @@ const FLAG_GATES = Object.fromEntries(
 const EXPERT_PRESET_QUIET = ["copyBubble", "copyFlash", "copySound", "undoToast", "whatsNew", "similarHint", "dupImportCheck", "taskbarProgress"];
 // Left out of "All on" because they send something outward or cost time/money
 // rather than simply turning a feature on: image-text search reads a picture the
-// user may not expect read, and online dictation sends audio to Microsoft.
-const EXPERT_PRESET_FULL_EXCLUDE = ["ocrIndex", "voiceOnlineOk"];
+// user may not expect read, and online dictation sends audio to Microsoft. The
+// last four each have their own confirmation step on the switch itself (a
+// password dialog for the receiver, a plaintext-on-disk warning for sync), which
+// a bulk write through set_ui_flag would skip.
+// Demo mode is a session with its own enable and disable commands and a restart,
+// so no bulk action (profile, category reset, reset all) may ever write it.
+const EXPERT_BULK_NEVER = ["demoMode"];
+const EXPERT_PRESET_FULL_EXCLUDE = [
+  "ocrIndex", "voiceOnlineOk", ...EXPERT_BULK_NEVER,
+  "remoteApi", "remoteNetworkFilter", "urlScheme", "promptSync",
+];
 const ALL_EXPERT_FLAG_KEYS = [...ALL_FLAG_KEYS, ...OPT_FLAG_KEYS];
 
 // key -> target value for one profile. "standard" reaches every current and
 // future flag by construction (each one's own shipped default), so the tests
 // only need to watch the two curated lists above for a stale or missing key.
 function expertPresetTarget(name) {
-  if (name === "quiet") return Object.fromEntries(EXPERT_PRESET_QUIET.map((k) => [k, false]));
-  if (name === "full") {
-    return Object.fromEntries(ALL_EXPERT_FLAG_KEYS.filter((k) => !EXPERT_PRESET_FULL_EXCLUDE.includes(k)).map((k) => [k, true]));
-  }
-  return Object.fromEntries(ALL_EXPERT_FLAG_KEYS.map((k) => [k, shipsOn(k)]));
+  let target;
+  if (name === "quiet") target = Object.fromEntries(EXPERT_PRESET_QUIET.map((k) => [k, false]));
+  else if (name === "full") {
+    target = Object.fromEntries(ALL_EXPERT_FLAG_KEYS.filter((k) => !EXPERT_PRESET_FULL_EXCLUDE.includes(k)).map((k) => [k, true]));
+  } else target = Object.fromEntries(ALL_EXPERT_FLAG_KEYS.map((k) => [k, shipsOn(k)]));
+  for (const k of EXPERT_BULK_NEVER) delete target[k];
+  return target;
 }
 const EXPERT_PRESET_TITLES = { quiet: "expertPresetQuiet", standard: "expertPresetStandard", full: "expertPresetFull" };
 
@@ -2630,6 +2641,7 @@ function syncRowReset(kind, key) {
   if (btn) btn.classList.toggle("hidden", !isRowChanged(kind, key));
 }
 async function resetOneExpertValue(kind, key, after) {
+  if (kind === "flags" && EXPERT_BULK_NEVER.includes(key)) return;
   if (kind === "flags") {
     const enabled = shipsOn(key);
     settings.ui_flags = { ...(settings.ui_flags || {}), [key]: enabled };
@@ -3644,7 +3656,8 @@ const syncOnlyChangedChip = () =>
 // have no single "default value" to diff against, so they are excluded up in
 // renderExpert() instead of handled here.
 function isRowChanged(kind, key) {
-  if (kind === "flags") return flagState(key) !== shipsOn(key);
+  // A bulk reset never touches these, so they are never offered one.
+  if (kind === "flags") return !EXPERT_BULK_NEVER.includes(key) && flagState(key) !== shipsOn(key);
   if (kind === "values" || kind === "selects") {
     const cfg = EXPERT_VALUES[key] || EXPERT_SELECTS[key];
     return val(key) !== cfg.def;
@@ -4379,7 +4392,7 @@ async function resetExpertGroup(group, changed, count) {
     confirmLabel: t("expertReset"),
   });
   if (!ok) return;
-  for (const key of changed.flags) {
+  for (const key of changed.flags.filter((k) => !EXPERT_BULK_NEVER.includes(k))) {
     const enabled = shipsOn(key);
     settings.ui_flags = { ...(settings.ui_flags || {}), [key]: enabled };
     try { await invoke("set_ui_flag", { key, enabled }); } catch (err) { errToast(err); }
@@ -4408,11 +4421,16 @@ async function resetExpertGroup(group, changed, count) {
 }
 
 async function onResetExpert() {
-  settings.ui_flags = {};
+  // The backend wipes every stored flag, demo mode included. A running demo
+  // session must stay one (leaving it is the switch's own confirmed restart), so
+  // its marker is written back straight after.
+  const keep = EXPERT_BULK_NEVER.filter((k) => flag(k));
+  settings.ui_flags = Object.fromEntries(keep.map((k) => [k, true]));
   settings.ui_values = {};
   settings.ui_texts = {};
   try {
     await invoke("reset_expert");
+    for (const key of keep) await invoke("set_ui_flag", { key, enabled: true });
   } catch (err) {
     errToast(err);
   }
