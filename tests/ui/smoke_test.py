@@ -16756,6 +16756,35 @@ def main():
       }
     }
 """)
+        failed += ar_probe('ba599', 'screenshot editor: a capture that arrives while Apply saves keeps its own file and state', 'index', '1000x780', ba_seed, ba_common + r"""
+    if (!(await baOpen('C:/shots/first.png'))) { errs.push('599: the editor did not open'); }
+    else {
+      let release = null;
+      RESULTS.save_screenshot_now = () => new Promise((res) => { release = () => res('C:/shots/e1.png'); });
+      RESULTS.delete_screenshot_file = () => true;
+      await baTool('pen'); await baDrag(20, 20, 90, 70);
+      window.__SMOKE_ARGS__.length = 0;
+      document.getElementById('snip-edit-apply').click(); await sleep(150);
+      // a hotkey capture lands while the re-encode is still running
+      window.__FIRE__('snip-captured', { data_url: captureFixture(), path: 'C:/shots/new.png', name: 'new.png' });
+      await sleep(400);
+      if (!release) { errs.push('599: fixture: the save never started'); }
+      else {
+        release(); await sleep(300);
+        const dels = callsFor('delete_screenshot_file').map((a) => a.path);
+        if (dels.includes('C:/shots/new.png')) errs.push('599: the new capture file was deleted: ' + dels.join());
+        if (!dels.includes('C:/shots/first.png')) errs.push('599: the replaced unedited file was not removed: ' + dels.join());
+        if (!document.getElementById('snip-modal').classList.contains('hidden')) errs.push('599: the stale apply opened the result dialog over the new capture');
+        // applying the new capture must delete its own file, never the first edit's file
+        RESULTS.save_screenshot_now = () => 'C:/shots/e2.png';
+        await baTool('pen'); await baDrag(20, 20, 90, 70);
+        window.__SMOKE_ARGS__.length = 0;
+        document.getElementById('snip-edit-apply').click(); await sleep(400);
+        const dels2 = callsFor('delete_screenshot_file').map((a) => a.path);
+        if (dels2.join() !== 'C:/shots/new.png') errs.push('599: applying the new capture deleted ' + JSON.stringify(dels2) + ', expected only its own file');
+      }
+    }
+""")
         # ---- main window findings: generated block end ----
         print("PASS" if not failed else f"{failed} problem(s)")
         return 1 if failed else 0

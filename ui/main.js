@@ -19383,6 +19383,9 @@ function bind() {
   const snipModal = $("snip-modal");
   let pendingSnip = null;
   let pendingSnipPath = ""; // disk path if this shot was auto-saved to the folder
+  // Bumped by every new capture: an async save that finishes after a newer shot
+  // arrived must not touch that shot's state or files.
+  let snipCaptureGen = 0;
   let pendingSnipName = ""; // backend-suggested "Screenshot <app?> <timestamp>"
   // Set only for a file opened for editing from outside the app -- the folder
   // this "Save as..." should default into, since the original itself is never
@@ -19398,6 +19401,7 @@ function bind() {
   listen("snip-captured", (e) => {
     pendingSnip = e.payload?.data_url || "";
     if (!pendingSnip) return;
+    snipCaptureGen++;
     recordToolUsage("screenshot");
     pendingSnipPath = e.payload?.path || "";
     pendingSnipName = e.payload?.name || "";
@@ -19422,13 +19426,18 @@ function bind() {
           // Save the edited copy first and only then remove the unedited file, so a
           // failed save (unwritable folder, full disk, too large) never leaves the
           // user with neither of the two on disk.
+          const oldPath = pendingSnipPath;
+          const gen = snipCaptureGen;
           const saved = (await invoke("save_screenshot_now", { dataUrl: editedDataUrl }).catch(() => "")) || "";
           if (saved) {
             // The same timestamp name overwrites the old file in place: then the old
             // path IS the new one and must stay.
-            if (pendingSnipPath && pendingSnipPath !== saved) await invoke("delete_screenshot_file", { path: pendingSnipPath }).catch(() => {});
+            if (oldPath && oldPath !== saved) await invoke("delete_screenshot_file", { path: oldPath }).catch(() => {});
+            // A newer capture arrived while saving: it owns the state and the dialog now.
+            if (gen !== snipCaptureGen) return;
             pendingSnipPath = saved;
           } else {
+            if (gen !== snipCaptureGen) return;
             // The unedited file stays where it is; the dialog's shot is simply not saved.
             pendingSnipPath = "";
             saveFailed = true;
@@ -19482,7 +19491,10 @@ function bind() {
     if (optBox) optBox.checked = on;
     if (on) {
       if (!pendingSnipPath && pendingSnip) {
-        pendingSnipPath = (await invoke("save_screenshot_now", { dataUrl: pendingSnip }).catch(() => "")) || "";
+        const gen = snipCaptureGen;
+        const savedNow = (await invoke("save_screenshot_now", { dataUrl: pendingSnip }).catch(() => "")) || "";
+        if (gen !== snipCaptureGen) return; // a newer capture owns the state now
+        pendingSnipPath = savedNow;
         if (!pendingSnipPath) {
           // Nothing reached the disk: say so and put the switch back off, setting included.
           toast(t("snipSaveFailed"));
