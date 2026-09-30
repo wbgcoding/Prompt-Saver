@@ -45556,6 +45556,49 @@ mod tests {
         assert!(after["ui_texts"].get("remotePasswordHash").is_none());
     }
 
+    fn theme_file(theme_gap: f64) -> SettingsOnlyExport {
+        let mut f = SettingsOnlyExport::default();
+        f.ui_values.insert("tileGap".into(), theme_gap);
+        f.ui_flags.insert("trayRecent".into(), true);
+        f.ui_texts.insert("copyFont".into(), "Consolas".into());
+        f
+    }
+
+    #[test]
+    fn a_settings_import_that_cannot_be_saved_changes_nothing() {
+        let mut live = Settings::default();
+        live.ui_values.insert("tileGap".into(), 3.0);
+        let before = serde_json::to_string(&live).unwrap();
+        let mut saw = 0;
+        let r = merge_settings_only(&mut live, theme_file(9.0), |_| {
+            saw += 1;
+            false
+        });
+        assert_eq!(r, Err("save-failed".to_string()));
+        assert_eq!(saw, 1, "exactly one write was attempted");
+        assert_eq!(serde_json::to_string(&live).unwrap(), before, "memory must equal what disk still holds");
+    }
+
+    #[test]
+    fn a_saved_settings_import_is_what_was_written_and_survives_a_reload() {
+        let mut live = Settings::default();
+        live.ui_values.insert("tileGap".into(), 3.0);
+        live.ui_texts.insert("untouched".into(), "keep".into());
+        let mut written = None;
+        let changed = merge_settings_only(&mut live, theme_file(9.0), |s| {
+            written = Some(serde_json::to_string(s).unwrap());
+            true
+        })
+        .unwrap();
+        assert_eq!(changed, 3);
+        assert_eq!(written.as_deref(), Some(serde_json::to_string(&live).unwrap().as_str()), "what was saved is what is live");
+        let reloaded: Settings = serde_json::from_str(&written.unwrap()).unwrap();
+        assert_eq!(reloaded.ui_values.get("tileGap"), Some(&9.0));
+        assert_eq!(reloaded.ui_flags.get("trayRecent"), Some(&true));
+        assert_eq!(reloaded.ui_texts.get("untouched").map(String::as_str), Some("keep"), "a row the file never mentions stays");
+        assert!(capture_excluded(&reloaded) == capture_excluded(&live), "the capture state follows the same settings");
+    }
+
     #[test]
     fn a_settings_export_carries_no_password_hash_or_sealed_backup_password() {
         let mut s = Settings::default();

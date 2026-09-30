@@ -851,6 +851,10 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **Importing settings from a file is saved before it applies.** If the save
+  fails the import is undone and reported, and after a successful import the
+  theme, tray, screenshot protection, pill windows and hotkeys follow the new
+  settings at once.
 - **Every dropdown now opens the same rounded, themed list.** The library sort,
   the export and save-as format pickers, the statistics export, the screenshot
   editor's text options, the video editor's export and overlay dropdowns and the
