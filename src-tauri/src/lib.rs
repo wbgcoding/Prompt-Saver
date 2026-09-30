@@ -28919,6 +28919,10 @@ struct ExportRequest {
 // each generation is cancelled (or not) independently, and a finished job
 // removes its own entry so the set never grows unbounded.
 static VIDEO_EXPORT_GEN: AtomicU64 = AtomicU64::new(0);
+// The generation of the export the video editor itself has in flight (0 =
+// none). The editor's Cancel must hit exactly this one, not whichever
+// generation a batch export reserved last.
+static EDITOR_EXPORT_GEN: AtomicU64 = AtomicU64::new(0);
 
 fn video_export_cancelled() -> &'static Mutex<std::collections::HashSet<u64>> {
     use std::sync::OnceLock;
@@ -29099,14 +29103,20 @@ fn export_dest_dir_is_authorized(app: &AppHandle, state: &State<'_, Db>, dest: &
     )
 }
 
-// The single-editor "Cancel" button: no generation of its own to name, so it
-// cancels whichever one is current right now -- unchanged behaviour from
-// before the set, and still correct because the editor only ever has one
-// export of its own in flight.
+// The single-editor "Cancel" button: cancels the export the editor itself
+// started (it only ever has one in flight), never a batch job that reserved a
+// later generation in the meantime. Nothing in flight means nothing to cancel,
+// so no stale entry is left behind either.
+fn cancel_editor_export_in(editor_gen: &AtomicU64) {
+    let gen = editor_gen.load(Ordering::SeqCst);
+    if gen != 0 {
+        video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).insert(gen);
+    }
+}
+
 #[tauri::command]
 fn cancel_export() {
-    let gen = VIDEO_EXPORT_GEN.load(Ordering::SeqCst);
-    video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).insert(gen);
+    cancel_editor_export_in(&EDITOR_EXPORT_GEN);
 }
 
 // The batch-export list's per-row cancel button: targets one specific
@@ -29175,6 +29185,7 @@ async fn export_video(app: AppHandle, state: State<'_, Db>, req: ExportRequest) 
     }
     let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
     let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+    EDITOR_EXPORT_GEN.store(my_gen, Ordering::SeqCst);
     // Own registry key per job (not just "export"), so a batch of exports
     // running together each show as their own row instead of overwriting one
     // shared entry -- "export" itself stays the kind the frontend groups
@@ -29193,8 +29204,9 @@ async fn export_video(app: AppHandle, state: State<'_, Db>, req: ExportRequest) 
             push_bg_op(&progress_app, &progress_id, "export", "running", Some(pct), Some(progress_target.clone()));
         })
     })
-    .await
-    .map_err(|e| e.to_string())?;
+    .await;
+    let _ = EDITOR_EXPORT_GEN.compare_exchange(my_gen, 0, Ordering::SeqCst, Ordering::SeqCst);
+    let result = result.map_err(|e| e.to_string())?;
     match &result {
         Ok(_) => {
             push_bg_op(&app, &id, "export", "done", None, None);
@@ -38525,6 +38537,25 @@ mod tests {
         assert!(gen_a != gen_b);
         let is_cancelled_b = || video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).contains(&gen_b);
         assert!(!is_cancelled_b(), "an older generation's cancellation must not affect a newer one");
+        video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).remove(&gen_a);
+    }
+
+    // The editor's Cancel must hit the editor's own export even when a batch
+    // export has reserved later generations since.
+    #[test]
+    fn editor_cancel_targets_the_editor_generation_not_a_later_batch_one() {
+        let editor_gen = AtomicU64::new(0);
+        cancel_editor_export_in(&editor_gen);
+        let gen_a = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+        editor_gen.store(gen_a, Ordering::SeqCst);
+        let gen_b = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+        assert!(!video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).contains(&gen_a));
+        cancel_editor_export_in(&editor_gen);
+        let set = video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner());
+        assert!(set.contains(&gen_a), "the editor's own export must be cancelled");
+        assert!(!set.contains(&gen_b), "a batch job must not be cancelled by the editor");
+        assert!(!set.contains(&0), "no export in flight leaves nothing behind");
+        drop(set);
         video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).remove(&gen_a);
     }
 
