@@ -15506,7 +15506,18 @@ struct SnipModeState(Mutex<SnipMode>);
 // it. None = still encoding, Some(None) = encode failed, Some(Some) = ready.
 #[derive(Clone)]
 // Frozen-desktop preview. None = still encoding, Some(None) = failed, Some(Some) = ready.
-struct SnipPreview(Arc<Mutex<Option<Option<SnipBg>>>>);
+// Each ready entry carries the session generation its encode belonged to.
+struct SnipPreview(Arc<Mutex<Option<(u64, Option<SnipBg>)>>>);
+
+// Store a finished preview encode, unless a newer session has started since: a slow
+// encode of a cancelled snip must never become the next snip's background.
+fn preview_slot_store<T>(slot: &mut Option<(u64, T)>, gen_now: u64, gen_of_encode: u64, value: T) -> bool {
+    if gen_of_encode != gen_now {
+        return false;
+    }
+    *slot = Some((gen_of_encode, value));
+    true
+}
 
 // True while a snip session is on screen (between open_snip and capture/cancel).
 // The overlay window itself is kept alive and reused, so this flag: not the
@@ -16454,7 +16465,7 @@ async fn begin_capture(
         SNIP_ACTIVE.store(true, Ordering::SeqCst);
     }
     PICK_ACTIVE.store(pick, Ordering::SeqCst);
-    SNIP_GEN.fetch_add(1, Ordering::SeqCst);
+    let gen = SNIP_GEN.fetch_add(1, Ordering::SeqCst) + 1;
     // Loupe/quality/delay settings are read once here, in both capture modes,
     // while nothing else holds the store.
     let (cfg, hist_max, snip_q, snip_delay, hide_app) = app
@@ -16520,6 +16531,10 @@ async fn begin_capture(
     let slot = preview.0.clone();
     *slot.lock().unwrap_or_else(|e| e.into_inner()) = None;
     tauri::async_runtime::spawn_blocking(move || {
+        // A newer session already owns the slot (and the preview file): nothing to do.
+        if SNIP_GEN.load(Ordering::SeqCst) != gen {
+            return;
+        }
         // Encode the capture at NATIVE resolution: pixel-sharp overlay, no downscale.
         let bg = encode_snip_jpeg(enc_img.as_raw(), total_w, total_h, if pick { PICK_Q } else { snip_q }).map(|j| {
             let (src, is_file) = match write_snip_preview(&j) {
@@ -16547,7 +16562,8 @@ async fn begin_capture(
                 origin_y: min_y,
             }
         });
-        *slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(bg);
+        let gen_now = SNIP_GEN.load(Ordering::SeqCst);
+        preview_slot_store(&mut slot.lock().unwrap_or_else(|e| e.into_inner()), gen_now, gen, bg);
     });
 
     // Reuse the overlay if it already exists. A long-idle HIDDEN WebView2 is heavily
@@ -16845,8 +16861,11 @@ async fn snip_background(preview: State<'_, SnipPreview>, index: usize) -> Resul
     let _ = index;
     for _ in 0..2000 {
         let ready = preview.0.lock().unwrap_or_else(|e| e.into_inner()).clone();
-        if let Some(bg) = ready {
-            return Ok(bg);
+        // An entry of an older session counts as "still encoding".
+        if let Some((g, bg)) = ready {
+            if g == SNIP_GEN.load(Ordering::SeqCst) {
+                return Ok(bg);
+            }
         }
         tokio::time::sleep(std::time::Duration::from_millis(5)).await;
     }
@@ -37136,6 +37155,17 @@ fn start_sync_poll(app: AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ---- a stale preview encode never lands in the slot ----
+
+    #[test]
+    fn a_stale_preview_encode_leaves_the_slot_alone() {
+        let mut slot: Option<(u64, i32)> = None;
+        assert!(!preview_slot_store(&mut slot, 2, 1, 7));
+        assert!(slot.is_none());
+        assert!(preview_slot_store(&mut slot, 2, 2, 9));
+        assert_eq!(slot, Some((2, 9)));
+    }
 
     // ---- a capture of a cancelled session finishes without side effects ----
 
