@@ -851,6 +851,16 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **Restoring or importing entries takes the matching vault key along.**
+  Confidential entries of a backup open with the backup's own vault password,
+  and a backup without a vault keeps yours. If confidential entries in the
+  trash can no longer be opened because of that, the import says so.
+- **An old snapshot no longer brings back old remote access settings.**
+  Restoring a local snapshot keeps this computer's remote access switches,
+  password, allowed addresses, update choices and clipboard watcher.
+- **A leftover emergency copy can no longer overwrite what you just saved.**
+  Once a save reaches the database, the old fallback file of an earlier failed
+  save is removed.
 - **Confidential entries stay readable after a settings reset or a settings
   import.** Resetting all settings, importing settings from a file or
   restoring only the settings of a backup now keep the vault key material of

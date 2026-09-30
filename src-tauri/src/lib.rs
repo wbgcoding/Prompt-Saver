@@ -3024,6 +3024,17 @@ fn read_text_capped(path: &std::path::Path, max: u64) -> Option<String> {
 
 // Atomic write: temp file then rename, so a crash never truncates data. Returns
 // whether the data actually reached disk, so callers can log a persist failure.
+// The JSON pair is only the fallback for a failed database write. Once the
+// database has accepted the same rows, a file left over from an earlier failed
+// write is stale and would be read back as the truth on the next launch (see
+// load_store), overwriting what was just saved.
+fn drop_stale_fallback(dir: &Path, file: &str) {
+    let path = dir.join(file);
+    if path.exists() {
+        let _ = fs::remove_file(path);
+    }
+}
+
 fn write_sealed_json<T: Serialize>(path: &PathBuf, data: &T) -> bool {
     if let Ok(json) = serde_json::to_string(data).map(|j| enc_str(&j)) {
         let tmp = path.with_extension("tmp");
@@ -4194,6 +4205,7 @@ fn save_prompts(app: &AppHandle, store: &Store) -> bool {
             db_write_prompts(&mut conn, &prompts, &mut written).is_ok()
         };
         if ok {
+            drop_stale_fallback(&dir, "prompts.json");
             spawn_sync_write_all(app, store); // Prompt-folders-as-Markdown: no-op unless the feature is on
             return true;
         }
@@ -4253,6 +4265,7 @@ fn save_prompts_and_trash(app: &AppHandle, store: &Store) -> bool {
             db_write_prompts_and_trash(&mut conn, &prompts, &trash, &mut written).is_ok()
         };
         if ok {
+            drop_stale_fallback(&dir, "prompts.json");
             spawn_sync_write_all(app, store); // Prompt-folders-as-Markdown mirrors prompts, same as save_prompts
             return true;
         }
@@ -4289,6 +4302,7 @@ fn write_settings_now(app: &AppHandle, settings: &Settings) -> bool {
     }
     if let Some(conn) = db_conn(app) {
         if db_write_settings(&conn, settings).is_ok() {
+            drop_stale_fallback(&data_dir(app), "settings.json");
             // Only announced on the actual true -> false transition (swap, not a
             // plain store) -- every ordinary successful write also passes through
             // here and must not spam the window with a recovery event it never
@@ -11321,9 +11335,28 @@ fn valid_scope(scope: &str) -> Result<&str, String> {
 
 // The live settings row, or None when it is absent or cannot be read (a row
 // that cannot be read has no vault keys to carry).
-fn read_settings_row(conn: &Connection) -> Option<Settings> {
-    let raw: String = conn.query_row("SELECT value FROM main.meta WHERE key = 'settings'", [], |r| r.get(0)).ok()?;
+fn read_settings_row(conn: &Connection, schema: &str) -> Option<Settings> {
+    let schema = if schema == "backup" { "backup" } else { "main" };
+    let raw: String = conn.query_row(&format!("SELECT value FROM {schema}.meta WHERE key = 'settings'"), [], |r| r.get(0)).ok()?;
     serde_json::from_str(&dec_str(&raw)).ok()
+}
+
+// Before a whole snapshot replaces the database: the settings row inside the
+// staged copy gets this machine's own network, credential and registration
+// values back, so an old snapshot cannot bring back an old receiver password or
+// switch. The vault keys stay with the snapshot's prompts.
+fn keep_machine_in_staged(target: &std::path::Path, staged: &std::path::Path) -> Result<(), String> {
+    let local = match Connection::open(target) {
+        Ok(conn) => read_settings_row(&conn, "main"),
+        Err(_) => None,
+    };
+    let Some(local) = local else { return Ok(()) };
+    let conn = Connection::open(staged).map_err(|e| e.to_string())?;
+    if let Some(mut restored) = read_settings_row(&conn, "main") {
+        keep_machine_settings(&local, &mut restored);
+        db_write_settings(&conn, &restored).map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 fn restore_selective(target: &std::path::Path, staged: &std::path::Path, scope: &str) -> Result<(), String> {
@@ -11360,15 +11393,26 @@ fn restore_selective(target: &std::path::Path, staged: &std::path::Path, scope: 
                     [],
                 )?;
             }
+            // The vault keys follow the prompts: confidential prompts are sealed
+            // with the key derived from the salt of the settings they came with.
+            if let (Some(mut local), Some(theirs)) = (read_settings_row(&tx, "main"), read_settings_row(&tx, "backup")) {
+                if has_vault_keys(&theirs) {
+                    carry_vault_keys(&theirs, &mut local);
+                    db_write_settings(&tx, &local)?;
+                }
+            }
         } else if scope == "settings" {
-            // The prompts stay, so the vault keys they are sealed with stay too.
-            let local = read_settings_row(&tx);
+            // The prompts stay, so the vault keys they are sealed with stay too,
+            // and so do this machine's network, credential and registration values.
+            let local = read_settings_row(&tx, "main");
             tx.execute(
                 "INSERT INTO meta(key, value) SELECT key, value FROM backup.meta WHERE key = 'settings'
                  ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 [],
             )?;
-            if let (Some(local), Some(mut restored)) = (local, read_settings_row(&tx)) {
+            if let (Some(local), Some(mut restored)) = (local, read_settings_row(&tx, "main")) {
+                keep_machine_settings(&local, &mut restored);
+                clear_vault_keys(&mut restored);
                 carry_vault_keys(&local, &mut restored);
                 db_write_settings(&tx, &restored)?;
             }
@@ -11484,6 +11528,10 @@ async fn restore_backup(app: AppHandle, state: State<'_, Db>, name: String, keep
             // Writing straight onto data.db truncates it first, so a disk that fills
             // up (or any I/O error) halfway through would leave the user with
             // neither the old database nor the restored one: swap via rename instead.
+            if let Err(e) = keep_machine_in_staged(&target, &staged) {
+                let _ = fs::remove_file(&staged);
+                return Err(e);
+            }
             if let Err(e) = fs::rename(&staged, &target) {
                 let _ = fs::remove_file(&staged);
                 return Err(e.to_string());
@@ -32022,6 +32070,9 @@ struct ImportSummary {
     // The file carried its own (foreign-machine, undecryptable-here) backup
     // password, which was discarded in favour of this machine's own.
     backup_pw_dropped: bool,
+    // Confidential entries in the trash were sealed with a vault key that the
+    // imported prompt set replaced.
+    vault_mismatch: bool,
 }
 
 #[tauri::command]
@@ -32135,7 +32186,8 @@ fn settings_import_diff(current: &Settings, incoming: &SettingsOnlyExport) -> (u
 // password hash and certificate values come in through the same helper the
 // generic setters use; every other `remote*` row is covered by the prefix, so
 // a receiver setting added later is denied without touching this list.
-const IMPORT_DENIED_FLAGS: [&str; 8] = [
+const IMPORT_DENIED_FLAGS: [&str; 9] = [
+    "clipWatcher",
     "remoteApi",
     "remoteNetworkFilter",
     "urlScheme",
@@ -32169,19 +32221,26 @@ fn is_vault_key(key: &str) -> bool {
 }
 
 // Copies the vault salt and verifier of `from` into `to`, overwriting what `to`
-// has, and removes them from `to` when `from` has none. Used wherever settings
-// are replaced while the current prompts stay.
+// has. A `from` without them leaves `to` untouched.
 fn carry_vault_keys(from: &Settings, to: &mut Settings) {
     for key in [SECRET_SALT_KEY, SECRET_VERIFY_KEY] {
-        match from.ui_texts.get(key) {
-            Some(v) => {
-                to.ui_texts.insert(key.to_string(), v.clone());
-            }
-            None => {
-                to.ui_texts.remove(key);
-            }
+        if let Some(v) = from.ui_texts.get(key) {
+            to.ui_texts.insert(key.to_string(), v.clone());
         }
     }
+}
+
+fn clear_vault_keys(settings: &mut Settings) {
+    settings.ui_texts.remove(SECRET_SALT_KEY);
+    settings.ui_texts.remove(SECRET_VERIFY_KEY);
+}
+
+fn has_vault_keys(settings: &Settings) -> bool {
+    settings.ui_texts.contains_key(SECRET_SALT_KEY) || settings.ui_texts.contains_key(SECRET_VERIFY_KEY)
+}
+
+fn vault_keys_differ(a: &Settings, b: &Settings) -> bool {
+    [SECRET_SALT_KEY, SECRET_VERIFY_KEY].iter().any(|k| a.ui_texts.get(*k) != b.ui_texts.get(*k))
 }
 
 // After a whole Settings block was replaced by an imported one: every denied
@@ -32206,7 +32265,11 @@ fn keep_machine_settings(local: &Settings, incoming: &mut Settings) {
             incoming.ui_texts.insert(k.clone(), v.clone());
         }
     }
+    // Machine-level behaviour that is not an expert row: the registry autostart
+    // entry and the update choices made on this computer.
     incoming.autostart = local.autostart;
+    incoming.auto_update = local.auto_update;
+    incoming.skipped_versions = local.skipped_versions.clone();
 }
 
 // Drops every denied row from an incoming settings file and returns how many
@@ -32327,6 +32390,10 @@ fn apply_import(store: &mut Store, backup: Backup, want_data: bool, want_setting
     // import instead (reset_settings already does the identical rescue for the
     // identical reason). Only meaningful once settings are actually touched.
     let backup_pw_dropped = want_settings && backup.settings.ui_texts.contains_key(BACKUP_PW_KEY);
+    // Vault keys follow the prompt set: confidential prompts are sealed with a
+    // key derived from the salt that was in the settings they were saved with.
+    let mut backup_vault = Settings::default();
+    carry_vault_keys(&backup.settings, &mut backup_vault);
     if want_settings {
         // A full backup can come from another machine, or be a hostile file the
         // user was talked into restoring: network exposure, credentials, folder
@@ -32339,11 +32406,18 @@ fn apply_import(store: &mut Store, backup: Backup, want_data: bool, want_setting
         store.settings.migrate();
         keep_machine_settings(&local, &mut store.settings);
         // The backup's own vault keys belong to its own prompts: they travel
-        // with them. With the current prompts staying, the local ones stay too.
+        // with them, and a backup without any keeps the local ones. With the
+        // current prompts staying, the local ones stay whatever the file says.
         if !want_data {
+            clear_vault_keys(&mut store.settings);
+        }
+        if !want_data || !has_vault_keys(&backup_vault) {
             carry_vault_keys(&local, &mut store.settings);
         }
         load_pick_history(&store.settings); // restore brings its own history mirror
+    }
+    if want_data && !want_settings {
+        carry_vault_keys(&backup_vault, &mut store.settings);
     }
     // A colliding or unusable accelerator must not fail the restore: drop
     // it and let the summary say so. Runs regardless of scope: an imported
@@ -32370,12 +32444,15 @@ fn run_import(
     want_data: bool,
     want_settings: bool,
     persist: impl FnOnce(&Store, bool, bool) -> bool,
-) -> Result<(usize, usize, bool), String> {
+) -> Result<(usize, usize, bool, bool), String> {
     let original_prompts = store.prompts.clone();
     let original_settings = store.settings.clone();
     let original_prompts_locked = store.prompts_locked;
     let original_settings_locked = SETTINGS_LOCKED.load(Ordering::Relaxed);
     let (count, dropped, backup_pw_dropped) = apply_import(store, backup, want_data, want_settings);
+    // The trash is not part of an import: confidential entries in it stay sealed
+    // with the key that was in use, which a replaced vault no longer matches.
+    let vault_mismatch = want_data && store.trash.iter().any(|p| p.secret) && vault_keys_differ(&original_settings, &store.settings);
     if want_settings {
         SETTINGS_LOCKED.store(false, Ordering::Relaxed); // a full settings import supersedes any corrupt-row lock
     }
@@ -32392,7 +32469,7 @@ fn run_import(
         store.forget_written_rows();
         return Err("save-failed".into());
     }
-    Ok((count, dropped, backup_pw_dropped))
+    Ok((count, dropped, backup_pw_dropped, vault_mismatch))
 }
 
 // Writes the halves an import touched in one database transaction. No JSON
@@ -32426,7 +32503,11 @@ fn save_import(app: &AppHandle, store: &Store, write_prompts: bool, write_settin
         append_crash_log("persist failed: the import could not be written to the database");
         return false;
     }
+    if write_prompts {
+        drop_stale_fallback(&dir, "prompts.json");
+    }
     if write_settings {
+        drop_stale_fallback(&dir, "settings.json");
         SETTINGS_DELAY.discard();
         if SETTINGS_WRITE_FAILED.swap(false, Ordering::Relaxed) {
             let _ = app.emit("settings-write-recovered", ());
@@ -32473,12 +32554,12 @@ async fn import_all(
     let want_data = scope != "settings";
     let want_settings = scope != "data";
 
-    let (settings, count, dropped_hotkeys, backup_pw_dropped) = {
+    let (settings, count, dropped_hotkeys, backup_pw_dropped, vault_mismatch) = {
         let mut store = lock(&state);
-        let (count, dropped, backup_pw_dropped) = run_import(&mut store, backup, want_data, want_settings, |st, prompts, settings| {
+        let (count, dropped, backup_pw_dropped, vault_mismatch) = run_import(&mut store, backup, want_data, want_settings, |st, prompts, settings| {
             save_import(&app, st, prompts, settings)
         })?;
-        (store.settings.clone(), count, dropped, backup_pw_dropped)
+        (store.settings.clone(), count, dropped, backup_pw_dropped, vault_mismatch)
     };
     // Re-apply the imported state without a restart, the same way a settings-only
     // import does.
@@ -32491,6 +32572,7 @@ async fn import_all(
         count,
         dropped_hotkeys,
         backup_pw_dropped,
+        vault_mismatch,
     })
 }
 
@@ -45725,7 +45807,7 @@ mod tests {
         (prompts.iter().map(|p| p.id.clone()).collect(), marker)
     }
 
-    fn import_with(conn: &mut Connection, store: &mut Store, want_data: bool, want_settings: bool) -> Result<(usize, usize, bool), String> {
+    fn import_with(conn: &mut Connection, store: &mut Store, want_data: bool, want_settings: bool) -> Result<(usize, usize, bool, bool), String> {
         run_import(store, import_test_backup(), want_data, want_settings, |st, prompts, settings| {
             db_write_import(conn, st, &st.prompts, prompts, settings).is_ok()
         })
@@ -45779,7 +45861,7 @@ mod tests {
         let _serial = SETTINGS_LOCK_TEST.lock().unwrap_or_else(|e| e.into_inner());
         let mut conn = import_test_db();
         let mut store = import_test_store(&mut conn);
-        let (count, _, _) = import_with(&mut conn, &mut store, true, true).unwrap();
+        let (count, _, _, _) = import_with(&mut conn, &mut store, true, true).unwrap();
         assert_eq!(count, 1);
         assert_eq!(store.prompts.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(), vec!["new1"]);
         let (ids, marker) = disk_state(&conn);
@@ -45948,6 +46030,167 @@ mod tests {
         drop(conn);
         let _ = std::fs::remove_file(&target);
         let _ = std::fs::remove_file(&staged);
+    }
+
+    // ---- review follow-ups: vault follows the prompts, stale fallbacks, snapshot restores ----
+
+    #[test]
+    fn a_data_import_takes_the_backups_vault_keys_or_keeps_local_ones_when_it_has_none() {
+        let (settings, p, _) = vault_fixture();
+        let mut store = vault_store(settings.clone(), p.clone());
+        apply_import(&mut store, foreign_backup(true), true, false);
+        assert_eq!(store.settings.ui_texts.get(SECRET_SALT_KEY).map(String::as_str), Some("Zm9yZWlnbi1zYWx0"), "keys follow the prompts");
+        assert_eq!(store.settings.ui_texts.get("marker"), None, "data scope still leaves the other settings alone");
+
+        let mut store = vault_store(settings.clone(), p.clone());
+        apply_import(&mut store, foreign_backup(false), true, false);
+        assert!(still_opens(&store.settings, &p), "a backup without keys keeps the local ones");
+        let mut store = vault_store(settings, p.clone());
+        apply_import(&mut store, foreign_backup(false), true, true);
+        assert!(still_opens(&store.settings, &p), "full import of a backup without keys keeps the local ones");
+        assert_eq!(store.settings.ui_texts.get("marker").map(String::as_str), Some("THEIRS"));
+    }
+
+    #[test]
+    fn carrying_vault_keys_from_a_source_without_them_changes_nothing() {
+        let (with, _, _) = vault_fixture();
+        let mut to = with.clone();
+        carry_vault_keys(&Settings::default(), &mut to);
+        assert_eq!(to.ui_texts.get(SECRET_SALT_KEY), with.ui_texts.get(SECRET_SALT_KEY));
+        assert!(has_vault_keys(&to));
+    }
+
+    #[test]
+    fn an_import_warns_when_trashed_confidential_prompts_lose_their_key() {
+        let _serial = SETTINGS_LOCK_TEST.lock().unwrap_or_else(|e| e.into_inner());
+        let (settings, p, _) = vault_fixture();
+        for (trash_secret, expect) in [(true, true), (false, false)] {
+            let mut store = vault_store(settings.clone(), p.clone());
+            let mut t = test_prompt("trashed");
+            t.secret = trash_secret;
+            store.trash.push(t);
+            let r = run_import(&mut store, foreign_backup(true), true, true, |_, _, _| true).unwrap();
+            assert_eq!(r.3, expect, "trash holds a confidential prompt: {trash_secret}");
+        }
+        let mut store = vault_store(settings, p);
+        let mut t = test_prompt("trashed");
+        t.secret = true;
+        store.trash.push(t);
+        let r = run_import(&mut store, foreign_backup(false), true, true, |_, _, _| true).unwrap();
+        assert!(!r.3, "keys unchanged, nothing to warn about");
+    }
+
+    #[test]
+    fn a_data_restore_moves_the_vault_keys_along_with_the_prompts() {
+        let dir = std::env::temp_dir();
+        let target = dir.join(format!("{}-test-restore-vaultdata-target.db", brand::SLUG));
+        let staged = dir.join(format!("{}-test-restore-vaultdata-staged.db", brand::SLUG));
+        let (live, _, _) = vault_fixture();
+        {
+            let conn = full_schema_db(&target, "target");
+            db_write_settings(&conn, &live).unwrap();
+        }
+        {
+            let conn = full_schema_db(&staged, "staged");
+            let mut theirs = Settings::default();
+            theirs.ui_texts.insert("marker".into(), "THEIRS".into());
+            theirs.ui_texts.insert(SECRET_SALT_KEY.into(), "Zm9yZWlnbi1zYWx0".into());
+            theirs.ui_texts.insert(SECRET_VERIFY_KEY.into(), "Zm9yZWlnbi12ZXJpZnk=".into());
+            db_write_settings(&conn, &theirs).unwrap();
+        }
+        restore_selective(&target, &staged, "data").unwrap();
+        let conn = Connection::open(&target).unwrap();
+        let after = read_settings_row(&conn, "main").expect("settings row");
+        assert_eq!(after.ui_texts.get(SECRET_SALT_KEY).map(String::as_str), Some("Zm9yZWlnbi1zYWx0"));
+        assert_eq!(after.ui_texts.get("marker"), None, "the other settings stay local");
+        drop(conn);
+        let _ = std::fs::remove_file(&target);
+        let _ = std::fs::remove_file(&staged);
+    }
+
+    // An old snapshot must not bring back an old receiver password, switch or
+    // allowed ranges, whichever scope restores its settings.
+    fn old_snapshot_settings() -> Settings {
+        let mut old = Settings { auto_update: false, ..Settings::default() };
+        old.ui_flags.insert("remoteApi".into(), true);
+        old.ui_flags.insert("clipWatcher".into(), true);
+        old.ui_texts.insert("remotePasswordHash".into(), "old-hash".into());
+        old.ui_texts.insert("remoteAllowedRanges".into(), "10.0.0.0/8".into());
+        old.ui_texts.insert("marker".into(), "SNAPSHOT".into());
+        old.skipped_versions = vec!["9.9.9".into()];
+        old
+    }
+
+    fn local_machine_settings() -> Settings {
+        let mut live = Settings { auto_update: true, ..Settings::default() };
+        live.ui_flags.insert("remoteApi".into(), false);
+        live.ui_texts.insert("remotePasswordHash".into(), "new-hash".into());
+        live
+    }
+
+    fn assert_machine_values_are_local(s: &Settings) {
+        assert_eq!(s.ui_flags.get("remoteApi"), Some(&false));
+        assert_eq!(s.ui_texts.get("remotePasswordHash").map(String::as_str), Some("new-hash"));
+        assert!(!s.ui_texts.contains_key("remoteAllowedRanges"));
+        assert!(!s.ui_flags.contains_key("clipWatcher"));
+        assert!(s.auto_update, "the update choice stays");
+        assert!(s.skipped_versions.is_empty());
+        assert_eq!(s.ui_texts.get("marker").map(String::as_str), Some("SNAPSHOT"), "ordinary settings do come back");
+    }
+
+    #[test]
+    fn a_snapshot_restore_keeps_this_machines_network_and_credential_values() {
+        let dir = std::env::temp_dir();
+        for scope in ["settings", "all"] {
+            let target = dir.join(format!("{}-test-restore-machine-{scope}-target.db", brand::SLUG));
+            let staged = dir.join(format!("{}-test-restore-machine-{scope}-staged.db", brand::SLUG));
+            {
+                let conn = full_schema_db(&target, "target");
+                db_write_settings(&conn, &local_machine_settings()).unwrap();
+            }
+            {
+                let conn = full_schema_db(&staged, "staged");
+                db_write_settings(&conn, &old_snapshot_settings()).unwrap();
+            }
+            if scope == "settings" {
+                restore_selective(&target, &staged, scope).unwrap();
+            } else {
+                keep_machine_in_staged(&target, &staged).unwrap();
+                std::fs::rename(&staged, &target).unwrap();
+            }
+            let conn = Connection::open(&target).unwrap();
+            assert_machine_values_are_local(&read_settings_row(&conn, "main").expect("settings row"));
+            drop(conn);
+            let _ = std::fs::remove_file(&target);
+            let _ = std::fs::remove_file(&staged);
+        }
+    }
+
+    #[test]
+    fn a_full_import_keeps_the_update_choices_and_the_clipboard_watcher_of_this_machine() {
+        let mut store = Store { prompts: vec![], trash: Vec::new(), settings: local_machine_settings(), prompts_locked: false, written: Default::default() };
+        apply_import(&mut store, Backup { prompts: vec![], settings: old_snapshot_settings() }, false, true);
+        assert_machine_values_are_local(&store.settings);
+    }
+
+    #[test]
+    fn a_successful_write_removes_the_stale_fallback_file_and_a_reload_matches() {
+        let dir = std::env::temp_dir().join(format!("{}-test-stale-fallback", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let stale = vec![test_prompt("stale")];
+        assert!(write_sealed_json(&dir.join("prompts.json"), &stale));
+        assert!(write_sealed_json(&dir.join("settings.json"), &Settings::default()));
+        let mut conn = import_test_db();
+        let fresh = vec![test_prompt("fresh")];
+        db_write_prompts(&mut conn, &fresh, &mut WrittenRows::new()).unwrap();
+        drop_stale_fallback(&dir, "prompts.json");
+        drop_stale_fallback(&dir, "settings.json");
+        drop_stale_fallback(&dir, "never-there.json"); // absent file: no effect, no panic
+        assert!(!dir.join("prompts.json").exists() && !dir.join("settings.json").exists());
+        let (loaded, _, _, _, _) = db_load(&conn, &mut WrittenRows::new());
+        assert_eq!(loaded.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(), vec!["fresh"]);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

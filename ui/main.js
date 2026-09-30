@@ -16249,6 +16249,8 @@ async function runImportAll() {
       // The file's own backup password is a foreign-machine DPAPI blob and was
       // discarded: say so, or a following export silently ships unprotected.
       if (res.backup_pw_dropped) msg += "\n" + t("importBackupPwKept");
+      // Confidential entries left in the trash were sealed with the vault key this import replaced.
+      if (res.vault_mismatch) msg += "\n" + t("importVaultMismatch");
       await infoDialog(t("backupImport"), msg);
       return;
     } catch (err) {
