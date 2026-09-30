@@ -6337,7 +6337,6 @@ function buildTile(p) {
   const selBtn = document.createElement("button");
   selBtn.type = "button";
   selBtn.className = "tile-select";
-  selBtn.title = t("selectPrompt");
   selBtn.setAttribute("aria-label", t("selectPrompt"));
   selBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
   selBtn.addEventListener("click", (e) => { e.stopPropagation(); toggleGridSelect(p.id); });
@@ -6351,7 +6350,6 @@ function buildTile(p) {
     const chainBtn = document.createElement("button");
     chainBtn.type = "button";
     chainBtn.className = "tile-chain-start";
-    chainBtn.title = t("startChainHere");
     chainBtn.setAttribute("aria-label", t("startChainHere"));
     chainBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">'
       + '<path transform="rotate(-45 12 12)" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" d="M9 17H7A5 5 0 0 1 7 7h2M15 7h2a5 5 0 0 1 0 10h-2M8 12h1.6M14.4 12H16"/></svg>';
@@ -6504,7 +6502,7 @@ function buildTile(p) {
     const menuBtn = document.createElement("button");
     menuBtn.className = "tile-menu";
     menuBtn.innerHTML = DOTS;
-    menuBtn.title = t("actions");
+    menuBtn.setAttribute("aria-label", t("actions"));
     menuBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
     menuBtn.addEventListener("click", (e) => {
       e.stopPropagation();

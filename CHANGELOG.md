@@ -1498,6 +1498,9 @@ the video editor and the introduction tour ship on).
 
 ### Changed
 
+- **The small buttons on a tile no longer show a tooltip.** Select, start a
+  chain and the actions menu stay quiet on hover; screen readers still get
+  their names.
 - **Several expert-menu rows moved next to the feature they belong to.** The
   chain settings have their own "Chain" group, the recording cleanup rows sit
   under "Screen recording", the temporary-export lifetime under "Video editor",
