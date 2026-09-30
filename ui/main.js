@@ -6979,6 +6979,16 @@ function moveTileDom(id, col, row) {
 // Place a tile at [col,row]; swaps with the occupant. Renders from local
 // state immediately, persistence runs in the background.
 async function placeTile(id, col, row) {
+  // A grid folder is not part of the layout: a tile dropped on its cell takes the
+  // cell and the folder moves to the cell the tile leaves. A tile that has no cell
+  // yet leaves nothing to swap with, so that drop is refused.
+  const onFolder = gridEl.querySelector(`.cell[data-col="${col}"][data-row="${row}"] > .folder-tile`);
+  const folderThere = onFolder ? folderById(onFolder.dataset.folderId) : null;
+  if (folderThere) {
+    const from = layoutOf(activeView())[id];
+    if (!from) return;
+    if (!(await saveFolder(folderThere, { cell: [from[0], from[1]] }))) return;
+  }
   const view = activeView();
   // Off by default: placing a prompt here drops it from every other view it
   // sits in first, keeping the historical "one placement" guarantee. On, a prompt

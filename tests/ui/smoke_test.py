@@ -15950,6 +15950,98 @@ def main():
         failed += len(errs)
         if not errs:
             print("   ok")
+        # ---- main window findings: generated block begin ----
+        ar_scaffold = r"""
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const until = async (fn, tries) => { for (let i = 0; i < (tries || 100) && !fn(); i++) await sleep(50); return fn(); };
+  try {
+%s
+%s
+  } catch (e) { errs.push('probe threw: ' + e.message); }
+  errs.push(...(window.__SMOKE_ERRORS__ || []));
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+        def ar_probe(tag, label, page, size, pre, body):
+            side = tmp / "ui" / f"ar-{tag}.html"
+            side.write_text(
+                (REPO / "ui" / f"{page}.html").read_text(encoding="utf-8")
+                .replace("<script", pre + '<script src="tauri_stub.js"></script>\n<script', 1)
+                .replace("</body>", ar_scaffold % (ar_common, body) + "</body>"),
+                encoding="utf-8")
+            w, h = size.split("x")
+            proc = subprocess.run(
+                [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+                 f"--user-data-dir={tmp / ('profile-ar-' + tag)}", "--allow-file-access-from-files",
+                 f"--window-size={w},{h}", "--virtual-time-budget=45000",
+                 "--dump-dom", side.as_uri()],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=180)
+            m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+            errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+            print(f"-- {label}")
+            for e in errs:
+                print(f"   FAIL: {e}")
+            if not errs:
+                print("   ok")
+            return len(errs)
+
+        ar_common = r"""
+    const visible = (el) => !!el && !el.classList.contains('hidden');
+    const callsFor = (cmd) => (window.__SMOKE_ARGS__ || []).filter(([c]) => c === cmd).map(([, a]) => a);
+    const tileEl = (id) => document.querySelector('#grid .tile[data-id="' + id + '"]');
+    const centre = (el) => { const r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
+    const ptr = (type, x, y, el, extra) => (el || window).dispatchEvent(new PointerEvent(type, Object.assign({
+      bubbles: true, cancelable: true, button: 0, isPrimary: true, pointerId: 6, clientX: x, clientY: y,
+    }, extra || {})));
+    const dragTo = async (tile, tx, ty) => {
+      const [sx, sy] = centre(tile);
+      ptr('pointerdown', sx, sy, tile);
+      ptr('pointermove', sx + 8, sy - 8, tile);
+      await sleep(60);
+      ptr('pointermove', tx, ty, window);
+      await sleep(60);
+    };
+    const endDrag = async (x, y) => { ptr('pointerup', x, y, window); await sleep(300); };
+    const bootReady = async () => {
+      await until(() => document.querySelectorAll('#grid .tile').length > 0, 200);
+      const cm = document.getElementById('confirm-modal');
+      for (let i = 0; i < 60 && !visible(cm); i++) await sleep(50);
+      if (visible(cm)) { document.getElementById('confirm-cancel').click(); await sleep(300); }
+    };
+    const cellEl = (c, r) => document.querySelector('#grid .cell[data-col="' + c + '"][data-row="' + r + '"]');
+"""
+
+        failed += ar_probe('f1', 'grid folder: a tile dropped on its cell sends the folder to the vacated cell', 'index', '1000x780', '', r"""
+    await bootReady();
+    const folderCell = () => { const c = document.querySelector('#grid .cell .folder-tile'); return c ? [Number(c.parentElement.dataset.col), Number(c.parentElement.dataset.row)] : null; };
+    const tabFor = (id) => document.querySelector('.view-btn[data-view-id="' + id + '"]');
+    const before = folderCell();
+    if (!before || before[0] !== 0 || before[1] !== 1) errs.push('563-1: fixture folder not at [0,1], got ' + JSON.stringify(before));
+    // p9 sits at [1,2]; the first free cell after the move would be [2,1], not the vacated one
+    const srcCell = tileEl('p9').parentElement;
+    const old = [Number(srcCell.dataset.col), Number(srcCell.dataset.row)];
+    await dragTo(tileEl('p9'), ...centre(cellEl(0, 1)));
+    await endDrag(...centre(cellEl(0, 1)));
+    const p9At = tileEl('p9').parentElement;
+    if (p9At.dataset.col !== '0' || p9At.dataset.row !== '1') errs.push('563-1: the drop did not land p9 on [0,1]');
+    // a full render from the stored layout, as any later refresh does
+    tabFor('work').click(); await sleep(250);
+    tabFor('home').click(); await sleep(300);
+    const after = folderCell();
+    if (!after || after[0] !== old[0] || after[1] !== old[1]) {
+      errs.push('563-1: dropping a tile on the folder cell should put the folder on the vacated cell ' + JSON.stringify(old) + ', got ' + JSON.stringify(after));
+    }
+""")
+        # ---- main window findings: generated block end ----
         print("PASS" if not failed else f"{failed} problem(s)")
         return 1 if failed else 0
     finally:

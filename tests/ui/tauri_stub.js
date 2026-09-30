@@ -1111,6 +1111,13 @@ const RESULTS = {
     if (a.copyImage !== undefined) p.copy_image = a.copyImage;
     return p;
   },
+  // Persists the active view's arrangement so a later get_state shows it, like the
+  // backend does; without this every re-fetch snapped a moved tile back.
+  set_layout: (a) => {
+    const view = SETTINGS.views.find((v) => v.id === SETTINGS.active_view);
+    if (view && a && a.layout) view.layouts[view.cols + "x" + view.rows] = JSON.parse(JSON.stringify(a.layout));
+    return null;
+  },
   set_active_view: (a) => {
     if (SETTINGS.views.some((v) => v.id === (a && a.id))) SETTINGS.active_view = a.id;
     return clone();
