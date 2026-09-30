@@ -194,6 +194,9 @@ function bufToBase64(buf) {
 // finish's session.take() and is dropped on the floor, silently, with the
 // recording missing its last second or so.
 let pendingAppends = [];
+// Each chunk's append starts only after the previous one finished: the backend
+// command is async, so two calls in flight at once could write out of order.
+let appendChain = Promise.resolve();
 // True once any append of the current take was rejected (disk full, denied
 // write, IPC failure). The drain in onstop still waits for every in-flight
 // append, then refuses to present a take with a hole in it as a good one.
@@ -216,6 +219,7 @@ async function rollbackFailedStart() {
   recorder = null;
   recPath = null;
   pendingAppends = [];
+  appendChain = Promise.resolve();
   recScreenElapsedAtStart = null;
   recScreenElapsedValue = null;
   paused = false;
@@ -253,6 +257,7 @@ async function startRecording() {
   recStartWall = Date.now();
   recScreenElapsedAtStart = null;
   pendingAppends = [];
+  appendChain = Promise.resolve();
   appendFailed = false;
   abandonCall = null;
   recScreenElapsedValue = null;
@@ -265,8 +270,8 @@ async function startRecording() {
   recorder.ondataavailable = (e) => {
     if (!e.data || e.data.size === 0 || !recPath) return;
     const path = recPath;
-    const append = e.data
-      .arrayBuffer()
+    const append = appendChain
+      .then(() => e.data.arrayBuffer())
       .then((buf) => invoke("camera_append_chunk", { path, bytesB64: bufToBase64(buf) }))
       .catch((err) => {
         console.error("camera chunk lost", err);
@@ -278,6 +283,7 @@ async function startRecording() {
         abandonCall = invoke("camera_abandon_recording", { path }).catch(() => {});
       });
     pendingAppends.push(append);
+    appendChain = append;
   };
   // Stamped when the recorder really reports it is running, not when Start
   // was clicked or the backend reserved the take: this is the one moment

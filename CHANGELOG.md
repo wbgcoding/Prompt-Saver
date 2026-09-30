@@ -860,6 +860,9 @@ the video editor and the introduction tour ship on).
   windows.** Copying the file, reading its properties and recognizing text in
   a new picture now happen before the library is locked, so copying and
   searching keep working while a big save runs.
+- **Camera recording no longer stalls the window every second.** Saving each
+  recorded chunk moved off the main thread, and the chunks are still written
+  strictly in order.
 
 ### Fixed
 
