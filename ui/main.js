@@ -18034,10 +18034,11 @@ function bind() {
     const keptOps = SE.ops
       .filter((o) => o.tool === "crop")
       .map((o) => ({ ...o, rect: { x: o.rect.x * sx, y: o.rect.y * sy, w: o.rect.w * sx, h: o.rect.h * sy } }));
+    const prevFloor = SE.floor;
     SE.floor = Math.max(0, SE.floor - (prevOps.length - keptOps.length));
     const op = {
       tool: "scale", w: targetW, h: targetH, img: baked, rawCanvas: rawBaked, keptOps,
-      prevW, prevH, prevImg, prevRawCanvas, prevOps,
+      prevW, prevH, prevImg, prevRawCanvas, prevOps, prevFloor,
     };
     SE.img = baked;
     SE.rawCanvas = rawBaked;
@@ -18073,7 +18074,10 @@ function bind() {
     if (SE.ops.length <= SE.floor) return;
     const op = SE.ops.pop();
     SE.redo.push(op);
-    if (op.tool === "scale") snipEditRestoreScaleState(op.prevW, op.prevH, op.prevImg, op.prevRawCanvas, op.prevOps);
+    if (op.tool === "scale") {
+      snipEditRestoreScaleState(op.prevW, op.prevH, op.prevImg, op.prevRawCanvas, op.prevOps);
+      SE.floor = op.prevFloor; // the undo limit as it was before the resize
+    }
     snipEditDeselectShape();
     SE.lastNudged = null;
     snipEditUpdateNudgeHint();
@@ -18084,7 +18088,12 @@ function bind() {
     if (!SE.redo.length) return;
     const op = SE.redo.pop();
     SE.ops.push(op);
-    if (op.tool === "scale") snipEditRestoreScaleState(op.w, op.h, op.img, op.rawCanvas, [...op.keptOps, op]);
+    if (op.tool === "scale") {
+      snipEditRestoreScaleState(op.w, op.h, op.img, op.rawCanvas, [...op.keptOps, op]);
+      // The floor the resize itself produced, worked out the same way it was then.
+      SE.floor = Math.max(0, op.prevFloor - (op.prevOps.length - op.keptOps.length));
+      if (SE.ops.length - SE.floor > SNIP_EDIT_UNDO_MAX()) SE.floor = SE.ops.length - SNIP_EDIT_UNDO_MAX();
+    }
     snipEditDeselectShape();
     SE.lastNudged = null;
     snipEditUpdateNudgeHint();
