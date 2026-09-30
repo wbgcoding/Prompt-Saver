@@ -38,6 +38,12 @@ rfd = "0.15"
 sys-locale = "0.3"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "bmp", "ico", "tiff", "tga", "gif"] }
 ureq = { version = "2", default-features = false, features = ["tls"] }
+# HTTPS for the remote-access receiver when the network switch is on: rustls with
+# the ring provider only (ureq already brings rustls and ring, so no second
+# crypto backend), plus a certificate generator for the receiver's own identity.
+# Both pinned exactly.
+tokio-rustls = { version = "=0.26.6", default-features = false, features = ["ring", "tls12", "logging"] }
+rcgen = { version = "=0.14.10", default-features = false, features = ["crypto", "ring", "pem"] }
 # Verify the SHA-256 of a downloaded update against the hash published in the release.
 sha2 = "0.10"
 # Encrypted single-file backups: AES-256-GCM + Argon2id password KDF (pure Rust, no
