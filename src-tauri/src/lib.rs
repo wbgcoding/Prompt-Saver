@@ -27146,18 +27146,22 @@ fn set_recording_dir(app: AppHandle, state: State<Db>, dir: String) -> Result<()
     Ok(())
 }
 
+// Clears the expert flags, values and texts. The texts that are keys rather than
+// preferences stay: the backup password, the receiver's certificate values and
+// the vault's salt and verifier (the confidential prompts are sealed with it).
+fn reset_expert_settings(settings: &mut Settings) {
+    settings.ui_flags.clear();
+    settings.ui_values.clear();
+    let kept = settings_after_reset(settings).ui_texts;
+    settings.ui_texts = kept;
+}
+
 // Clear all expert overrides back to the shipped defaults.
 #[tauri::command]
 fn reset_expert(app: AppHandle, state: State<Db>) {
     {
         let mut store = lock(&state);
-        store.settings.ui_flags.clear();
-        store.settings.ui_values.clear();
-        let tls_values = remote_tls::tls_values(&store.settings);
-        store.settings.ui_texts.clear();
-        for (k, v) in tls_values {
-            store.settings.ui_texts.insert(k, v);
-        }
+        reset_expert_settings(&mut store.settings);
         save_settings(&app, &store.settings);
     }
     ERROR_LOG_KEEP_BYTES.store(256 * 1024, Ordering::Relaxed);
@@ -44205,6 +44209,24 @@ mod tests {
         assert_eq!(s.views[0].rows, default_rows());
         assert_eq!(s.theme, default_theme(), "theme back to default");
         assert!(s.ui_flags.is_empty() && s.ui_values.is_empty(), "expert tweaks cleared");
+    }
+
+    #[test]
+    fn reset_expert_keeps_the_keys_and_drops_the_preferences() {
+        let mut s = Settings::default();
+        s.ui_texts.insert(SECRET_SALT_KEY.to_string(), "salt".into());
+        s.ui_texts.insert(SECRET_VERIFY_KEY.to_string(), "verify".into());
+        s.ui_texts.insert(BACKUP_PW_KEY.to_string(), "sealed".into());
+        s.ui_texts.insert("remoteTlsKey".to_string(), "tls".into());
+        s.ui_texts.insert("copyFont".to_string(), "mono".into());
+        s.ui_flags.insert("clipWatcher".to_string(), true);
+        s.ui_values.insert("trayRecentN".to_string(), 9.0);
+        reset_expert_settings(&mut s);
+        for (k, v) in [(SECRET_SALT_KEY, "salt"), (SECRET_VERIFY_KEY, "verify"), (BACKUP_PW_KEY, "sealed"), ("remoteTlsKey", "tls")] {
+            assert_eq!(s.ui_texts.get(k).map(String::as_str), Some(v), "{k} must survive");
+        }
+        assert!(!s.ui_texts.contains_key("copyFont"));
+        assert!(s.ui_flags.is_empty() && s.ui_values.is_empty());
     }
 
     #[test]
