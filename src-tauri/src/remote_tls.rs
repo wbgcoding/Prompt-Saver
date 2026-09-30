@@ -311,7 +311,7 @@ mod tests {
     fn a_failed_write_keeps_the_old_identity_and_starts_nothing() {
         let mut s = Settings::default();
         assert_eq!(ensure_tls_identity(&mut s, &names(), |_| false).err().as_deref(), Some(ERR_SAVE_FAILED));
-        assert!(s.ui_texts.get(REMOTE_TLS_KEY).is_none());
+        assert!(!s.ui_texts.contains_key(REMOTE_TLS_KEY));
         let (id, _) = ensure_tls_identity(&mut s, &names(), |_| true).unwrap();
         let before = s.ui_texts.get(REMOTE_TLS_CA).cloned();
         assert!(renew_tls_identity(&mut s, &names(), |_| false).is_err());
@@ -352,8 +352,8 @@ mod tests {
         let mut s = Settings::default();
         ensure_tls_identity(&mut s, &names(), |_| true).unwrap();
         strip_private_key(&mut s);
-        assert!(s.ui_texts.get(REMOTE_TLS_KEY).is_none());
-        assert!(s.ui_texts.get(REMOTE_TLS_CA).is_some());
+        assert!(!s.ui_texts.contains_key(REMOTE_TLS_KEY));
+        assert!(s.ui_texts.contains_key(REMOTE_TLS_CA));
         strip_tls_keys(&mut s.ui_texts);
         assert!(REMOTE_TLS_KEYS.iter().all(|k| !s.ui_texts.contains_key(*k)));
     }

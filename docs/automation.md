@@ -60,6 +60,37 @@ before running anything -- wrong password, rate limit, disallowed address --
 gets a non-200 HTTP status and a `{"error": "..."}` body instead; see
 "Errors" below.
 
+**From another device (network switch on).** With the network switch on, the
+receiver speaks HTTPS only, for this computer and every other device alike. A
+plain `http://` request is dropped during the handshake, before a single
+request byte, and so before the password, is read. The receiver uses its own
+certificate: on the computer, open **Certificate...** in the remote access
+group of the expert menu and save the certificate, then copy that file to the
+other device. Windows 10 and 11 ship `curl.exe`:
+
+```
+curl.exe --ssl-no-revoke --cacert <saved certificate> -H "X-Promptsaver-Password: <password>" -H "Content-Type: application/json" --data-binary "@request.json" https://<computer name>:<port>/api
+```
+
+where `request.json` holds `{"argv": ["list", "--json"]}`. The certificate
+names this computer by its host name (and `<host name>.local`); on a network
+without name resolution, keep the name and give its address with `--resolve`:
+
+```
+curl.exe --ssl-no-revoke --cacert <saved certificate> --resolve <computer name>:<port>:<ip address> -H "X-Promptsaver-Password: <password>" --data-binary "@request.json" https://<computer name>:<port>/api
+```
+
+`--ssl-no-revoke` is needed because the Windows `curl.exe` (Schannel) asks the
+certificate's issuer whether it was revoked, and a certificate made by the
+app has no revocation list to ask; without the option curl stops with
+"the revocation status is unknown". The certificate itself is still fully
+checked against the saved file (a wrong file ends in "untrusted root"), and
+there is no setting that switches that check off; a script should never do so
+either. Renewing the certificate in
+the same dialog replaces it at once: every device that trusted the old one has
+to be given the new file. Without the network switch the receiver stays plain
+HTTP on `127.0.0.1`, where the traffic never leaves the machine.
+
 ## Discovering the command set
 
 `prompt-saver describe` prints the same table below as JSON -- the
@@ -192,10 +223,10 @@ promptsaver://copy/p_ab12cd
 - Both the receiver and the link scheme are **off by default**. Turning the
   receiver on requires a password to already be on record; the app
   generates and shows one, once, the first time the receiver is switched on.
-- The receiver binds `127.0.0.1` only unless a separate network switch is
-  also turned on, and even then only the address ranges the person has
-  explicitly listed are accepted -- everything else is refused before a
-  single byte of the request is read.
+- The receiver binds `127.0.0.1` (plain HTTP) only unless a separate network
+  switch is also turned on. Then it binds every interface, speaks HTTPS only,
+  and accepts only the address ranges the person has explicitly listed --
+  everything else is refused before a single byte of the request is read.
 - The password is never logged, never placed in a URL, and compared in
   constant time; ten wrong attempts from one address lock that address out
   for ten minutes.

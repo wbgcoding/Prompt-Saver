@@ -922,6 +922,15 @@ its own errors. A locked entry stays locked here too, the same as everywhere
 else in the app. While the receiver is running, a banner stays on screen
 with its port number and its own off button.
 
+With the network switch on, the connection is encrypted (HTTPS) with a
+certificate the app makes for itself, and a plain `http://` request gets no
+answer at all. The **Certificate...** button next to the address ranges shows
+the certificate's fingerprint, saves the certificate so another device can
+trust it (for example `curl.exe --ssl-no-revoke --cacert <file>
+https://<computer name>:<port>/api`), and creates a new one; a new certificate replaces the old
+one at once, so every device has to be set up again. Without the network
+switch the receiver only listens on this computer and stays plain HTTP.
+
 For a script or another program driving either of these two, `prompt-saver
 describe` prints the full command list as JSON, and
 [docs/automation.md](automation.md) has the complete reference: every
@@ -1631,7 +1640,16 @@ zehn Minuten. Jede Anfrage braucht das Passwort, ist in ihrer Größe begrenzt,
 zählt gegen ein Limit pro Minute und wird protokolliert, ohne das Passwort
 oder den vollen Inhalt. Eine gesperrte Kachel bleibt auch hier gesperrt. Eine
 Anzeige bleibt sichtbar, solange die Schnittstelle läuft, mit Portnummer und
-eigenem Ausschalter.
+eigenem Ausschalter. Ist der Netzwerk-Schalter an, ist die Verbindung
+verschlüsselt (HTTPS), mit einem Zertifikat, das die App selbst erzeugt; eine
+unverschlüsselte `http://`-Anfrage bekommt gar keine Antwort. Der Knopf
+**Zertifikat...** neben den Adressbereichen zeigt den Fingerabdruck des
+Zertifikats, speichert es, damit ein anderes Gerät ihm vertrauen kann (zum
+Beispiel `curl.exe --ssl-no-revoke --cacert <Datei>
+https://<Computername>:<Port>/api`) und
+erzeugt ein neues; ein neues Zertifikat ersetzt das alte sofort, jedes Gerät
+muss also neu eingerichtet werden. Ohne den Netzwerk-Schalter lauscht die
+Schnittstelle nur auf diesem Rechner und bleibt einfaches HTTP.
 
 Für ein Skript oder ein anderes Programm, das eines der beiden steuert, gibt
 `prompt-saver describe` die vollständige Befehlsliste als JSON aus, und

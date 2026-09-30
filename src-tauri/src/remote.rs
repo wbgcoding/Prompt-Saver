@@ -1683,7 +1683,7 @@ mod tests {
         assert!(r.password.is_none());
         assert_eq!(r.error.as_deref(), Some(ERR_SAVE_FAILED));
         assert!(!remote_api_enabled(&s));
-        assert!(s.ui_texts.get("remotePasswordHash").is_none());
+        assert!(!s.ui_texts.contains_key("remotePasswordHash"));
     }
 
     #[test]
@@ -1764,7 +1764,7 @@ mod tests {
         // Never set before: the failed write leaves it unset, not empty.
         let mut fresh = settings_with(true, Some("aa"));
         let _ = set_allowed_ranges_core(&mut fresh, "10.0.0.0/8".into(), |_| false);
-        assert!(fresh.ui_texts.get("remoteAllowedRanges").is_none());
+        assert!(!fresh.ui_texts.contains_key("remoteAllowedRanges"));
     }
 
     #[test]
@@ -2089,6 +2089,6 @@ mod tests {
         let mut s = settings_with(false, None);
         let restart = apply_network_switch(&mut s, true, &names_for_test(), |_| true).unwrap();
         assert!(!restart);
-        assert!(s.ui_texts.get(crate::remote_tls::REMOTE_TLS_KEY).is_none());
+        assert!(!s.ui_texts.contains_key(crate::remote_tls::REMOTE_TLS_KEY));
     }
 }

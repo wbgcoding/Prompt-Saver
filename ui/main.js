@@ -748,6 +748,9 @@ const ERROR_MSG_KEYS = {
   "demo-mode-multiple-instances": "demoModeMultipleInstances",
   "dir-not-picked": "syncDirNotApplied",
   "recording-busy": "recBusy",
+  "save-failed": "persistFailed",
+  "remote-off-not-saved": "remoteOffNotSaved",
+  "the certificate key could not be protected": "remoteTlsKeyNotProtected",
 };
 function errToast(err) {
   const s = String(err);
@@ -2360,7 +2363,7 @@ const EXPERT_TABS = [
     // A link can only open or copy an entry; the receiver can do everything
     // the command line can, gated by its own password and network switch.
     { title: "expGroupRemote", flags: ["remoteApi", { key: "remoteNetworkFilter", gate: "remoteApi" }, "urlScheme"], values: ["remotePort", "remoteRateLimit"],
-      actions: [{ id: "remote-password-open", label: "remotePasswordAction", gate: "remoteApi" }, { id: "remote-ranges-open", label: "remoteRangesAction", gate: "remoteNetworkFilter" }] },
+      actions: [{ id: "remote-password-open", label: "remotePasswordAction", gate: "remoteApi" }, { id: "remote-ranges-open", label: "remoteRangesAction", gate: "remoteNetworkFilter" }, { id: "remote-tls-open", label: "remoteTlsAction", tip: "remoteTlsActionTip", gate: "remoteNetworkFilter" }] },
   ] },
 ];
 
@@ -2779,9 +2782,15 @@ function flagRow(key) {
       if (msg.startsWith("sync-backup-failed")) toast(t("syncBackupFailed"));
       else if (msg.startsWith("sync-write-failed")) toast(t("syncWriteFailed"));
       else if (msg === "demo-mode-active") toast(t("demoModeMultipleInstances"));
+      else if (msg === "save-failed") toast(t("persistFailed"));
+      else if (msg === "remote-off-not-saved") toast(t("remoteOffNotSaved"));
+      else if (msg === "the certificate key could not be protected") toast(t("remoteTlsKeyNotProtected"));
       else toast(msg);
-      settings.ui_flags = { ...(settings.ui_flags || {}), [key]: !enabled };
-      input.checked = !enabled;
+      // Switching the receiver off always takes effect, even when the write did
+      // not land, so that one error keeps the switch off instead of reverting it.
+      const stayed = msg === "remote-off-not-saved";
+      settings.ui_flags = { ...(settings.ui_flags || {}), [key]: stayed ? enabled : !enabled };
+      input.checked = stayed ? enabled : !enabled;
     }
     // Turning the receiver on may have just minted its very first password
     // (see set_ui_flag's own remoteApi branch) -- shown here, once, in a
@@ -2798,9 +2807,6 @@ function flagRow(key) {
         });
       }
     }
-    // The bind address itself only changes on the next start() -- said here
-    // instead of pretending the wider reach applies immediately.
-    if (key === "remoteNetworkFilter" && enabled && optFlag("remoteApi")) toast(t("remoteApiReapplyNeeded"));
     // Read once at process start (before the builder exists): flipping it live
     // cannot change which guard is already running.
     if (key === "allowMultipleInstances") toast(t("toastRestartNeeded"));
@@ -4096,6 +4102,7 @@ function actionRow(a) {
   btn.className = "ghost-btn expert-action";
   btn.dataset.action = a.id;
   btn.textContent = t(a.label);
+  if (a.tip) btn.title = t(a.tip);
   // Passing the button itself lets a long-running action (ffmpeg-download) show
   // progress in its own label and repurpose a second click as cancel: every
   // existing handler ignores the extra argument.
@@ -5844,6 +5851,7 @@ const CLEAR_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="
 const TAKEOVER_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5.5" rx="7.5" ry="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M4.5 5.5v13c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3v-13M4.5 12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3"/></svg>';
 const LOCK_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M8 10V7a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15.5" r="1.6" fill="currentColor"/></svg>';
 // Reveal toggle for password fields (backup settings + the restore prompt).
+const COPY_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>';
 const EYE_SVG ='<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.6" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
 function wireClear(el) {
   if (!el || el.dataset.clearWired || el.readOnly) return;
@@ -10602,10 +10610,43 @@ async function openRemoteRangesDialog() {
     await invoke("set_remote_allowed_ranges", { ranges: value });
     settings.ui_texts = { ...(settings.ui_texts || {}), remoteAllowedRanges: value };
   } catch (e) {
-    toast(t("remoteRangesInvalid").replace("{value}", String(e)));
+    toast(String(e) === "save-failed" ? t("persistFailed") : t("remoteRangesInvalid").replace("{value}", String(e)));
   }
 }
 EXPERT_ACTIONS["remote-ranges-open"] = openRemoteRangesDialog;
+
+// The certificate other devices check: its fingerprint (with a copy button), a
+// save-for-other-devices button and a renewal. Renewing invalidates the old
+// certificate at once, so it asks first; the loop shows the new fingerprint.
+async function openRemoteTlsDialog() {
+  for (;;) {
+    let fingerprint = null;
+    try { fingerprint = await invoke("remote_tls_fingerprint"); } catch (e) { fingerprint = null; }
+    const answer = await confirmDialog({
+      title: t("remoteTlsFingerprint"),
+      message: t("remoteTlsActionTip"),
+      input: { type: "text", value: fingerprint || "\u2013", copy: true },
+      confirmLabel: t("remoteTlsSave"),
+      altLabel: t("remoteTlsRenew"),
+      cancelLabel: t("close"),
+      danger: false,
+    });
+    if (answer === null || answer === false) return;
+    if (answer === "alt") {
+      const sure = await confirmDialog({ title: t("remoteTlsRenew"), message: t("remoteTlsRenewConfirm"), confirmLabel: t("remoteTlsRenew") });
+      if (!sure) continue;
+      try { await invoke("remote_tls_renew"); } catch (e) { errToast(e); }
+      continue;
+    }
+    try {
+      await invoke("remote_tls_save_cert");
+    } catch (e) {
+      if (String(e) !== "canceled") errToast(e);
+    }
+    return;
+  }
+}
+EXPERT_ACTIONS["remote-tls-open"] = openRemoteTlsDialog;
 
 // Runs the same sweep on demand -- unlike the silent background sweep,
 // an explicit click always gets an answer, even "nothing to clean up".
@@ -12561,8 +12602,10 @@ function confirmDialog({ title, message, confirmLabel, cancelLabel, altLabel, ic
     field.type = input.type || "password";
     field.value = input.value || "";
     field.placeholder = input.placeholder || "";
-    eye.innerHTML = EYE_SVG;
-    eye.classList.toggle("hidden", field.type !== "password");
+    eye.innerHTML = input.copy ? COPY_SVG : EYE_SVG;
+    eye.title = input.copy ? t("copy") : "";
+    eye.setAttribute("aria-label", input.copy ? t("copy") : t("showPassword"));
+    eye.classList.toggle("hidden", field.type !== "password" && !input.copy);
     // Native browser completion from the given list (e.g. existing tag names) --
     // only wired when the caller actually passes one, so every other prompt keeps
     // its plain input.
@@ -12618,7 +12661,17 @@ function confirmDialog({ title, message, confirmLabel, cancelLabel, altLabel, ic
     const onAlt = () => done("alt");
     const onBg = (e) => { if (e.target === root) finish(false); };
     const onKey = (e) => { if (e.key === "Enter" && !ok.disabled) { e.preventDefault(); finish(true); } };
-    const onEye = () => { field.type = field.type === "password" ? "text" : "password"; };
+    const onEye = () => {
+      if (input && input.copy) {
+        field.select();
+        const value = field.value;
+        Promise.resolve(navigator.clipboard?.writeText(value)).then(() => toast(t("copied"))).catch(() => {
+          try { document.execCommand("copy"); toast(t("copied")); } catch (e) { /* nothing more to try */ }
+        });
+        return;
+      }
+      field.type = field.type === "password" ? "text" : "password";
+    };
     ok.addEventListener("click", onOk);
     cancel.addEventListener("click", onCancel);
     alt.addEventListener("click", onAlt);

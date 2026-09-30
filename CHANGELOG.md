@@ -1274,6 +1274,21 @@ the video editor and the introduction tour ship on).
 
 ### Security
 
+- **Remote access from other devices now runs over HTTPS with the app's own
+  certificate.** With the network switch on, the receiver accepts only
+  encrypted connections, so the password is no longer readable on the
+  network. The new **Certificate...** button shows the certificate's
+  fingerprint, saves it for other devices and creates a new one. Turning the
+  network switch on or off now takes effect at once, without switching remote
+  access off and on again.
+- **Remote access settings are saved before they take effect.** Switching it
+  on, a new password or wider address ranges are undone when the write fails,
+  and switching it off always stops the receiver. A restart can no longer
+  bring back a receiver you turned off, or one that wants a password you were
+  never shown.
+- **Stopping and restarting the receiver is reliable.** Each run has its own
+  shutdown, so a stop can no longer end the next start, and a restart waits
+  for the old listener to release the port.
 - **The WebView2 runtime download is now checked for Microsoft's signature**
   before it is run. It is the one file the app may have to fetch before its
   own window exists, and until now only the connection vouched for it.
