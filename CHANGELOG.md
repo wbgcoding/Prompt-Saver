@@ -1466,6 +1466,10 @@ the video editor and the introduction tour ship on).
   trash) the moment "Index text inside attached pictures for search" goes off, not only hidden.
 - **Switching off the clipboard collector asks what to do with what it
   gathered.** Keep it or delete it; closing the question keeps it.
+- **Saved editor work for pictures and videos is stored encrypted.** The
+  remembered edits (including text overlays) and the file path they belong to
+  are sealed for your Windows account; work saved by an earlier version still
+  loads and is replaced in the new form on the next save.
 
 ### Removed
 

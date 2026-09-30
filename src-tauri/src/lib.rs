@@ -14612,31 +14612,65 @@ async fn stat_file(path: String) -> Result<(i64, i64), String> {
     Ok((meta.len() as i64, mtime))
 }
 
+// Rows are keyed by a hash of the file path and carry the path and the ops
+// sealed, so the table no longer lists recording paths or text overlay
+// contents in clear. A row an earlier version wrote (plain "kind:path" id,
+// plain columns) is still found through its legacy id and read as is.
+fn edit_state_id(kind: &str, target: &str) -> String {
+    use sha2::{Digest, Sha256};
+    format!("{kind}:{:x}", Sha256::digest(target.as_bytes()))
+}
+
+fn edit_state_legacy_id(kind: &str, target: &str) -> String {
+    format!("{kind}:{target}")
+}
+
+fn edit_state_write(conn: &Connection, kind: &str, target: &str, size: i64, mtime: i64, ops: &str, updated_at: i64) -> Result<(), String> {
+    conn.execute(
+        "INSERT INTO edit_state(id, kind, target, size, mtime, ops, updated_at) VALUES(?1,?2,?3,?4,?5,?6,?7)
+         ON CONFLICT(id) DO UPDATE SET target=excluded.target, size=excluded.size, mtime=excluded.mtime, ops=excluded.ops, updated_at=excluded.updated_at",
+        params![edit_state_id(kind, target), kind, enc_str(target), size, mtime, enc_str(ops), updated_at],
+    )
+    .map_err(|e| e.to_string())?;
+    // The state now lives under the hashed id; drop an old plain-path row for it.
+    let _ = conn.execute("DELETE FROM edit_state WHERE id = ?1", params![edit_state_legacy_id(kind, target)]);
+    Ok(())
+}
+
+// (row id, ops as stored, decrypted) for the exact (size, mtime) triple, hashed id first.
+fn edit_state_read(conn: &Connection, kind: &str, target: &str, size: i64, mtime: i64) -> Option<(String, String)> {
+    for id in [edit_state_id(kind, target), edit_state_legacy_id(kind, target)] {
+        let ops = conn
+            .query_row(
+                "SELECT ops FROM edit_state WHERE id = ?1 AND size = ?2 AND mtime = ?3",
+                params![id, size, mtime],
+                |r| r.get::<_, String>(0),
+            )
+            .ok();
+        if let Some(ops) = ops {
+            return Some((id, dec_str(&ops)));
+        }
+    }
+    None
+}
+
+fn edit_state_discard(conn: &Connection, kind: &str, target: &str) -> Result<(), String> {
+    for id in [edit_state_id(kind, target), edit_state_legacy_id(kind, target)] {
+        conn.execute("DELETE FROM edit_state WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 async fn save_edit_state(app: AppHandle, kind: String, target: String, size: i64, mtime: i64, ops: String) -> Result<(), String> {
     let conn = db_conn(&app).ok_or_else(|| "db unavailable".to_string())?;
-    let id = format!("{kind}:{target}");
     let updated_at = (now_ms() / 1000) as i64;
-    conn.execute(
-        "INSERT INTO edit_state(id, kind, target, size, mtime, ops, updated_at) VALUES(?1,?2,?3,?4,?5,?6,?7)
-         ON CONFLICT(id) DO UPDATE SET size=excluded.size, mtime=excluded.mtime, ops=excluded.ops, updated_at=excluded.updated_at",
-        params![id, kind, target, size, mtime, ops, updated_at],
-    )
-    .map_err(|e| e.to_string())?;
-    Ok(())
+    edit_state_write(&conn, &kind, &target, size, mtime, &ops, updated_at)
 }
 #[tauri::command]
 async fn load_edit_state(app: AppHandle, kind: String, target: String, size: i64, mtime: i64) -> Result<Option<String>, String> {
     let conn = db_conn(&app).ok_or_else(|| "db unavailable".to_string())?;
-    let id = format!("{kind}:{target}");
-    let ops = conn
-        .query_row(
-            "SELECT ops FROM edit_state WHERE id = ?1 AND size = ?2 AND mtime = ?3",
-            params![id, size, mtime],
-            |r| r.get::<_, String>(0),
-        )
-        .ok();
-    let Some(ops) = ops else { return Ok(None) };
+    let Some((id, ops)) = edit_state_read(&conn, &kind, &target, size, mtime) else { return Ok(None) };
     // Malformed JSON, or a "v" this build does not recognise, must never reach the
     // editor -- it would try to replay operations it cannot make sense of. Decided
     // here rather than in JS, so there is exactly one place "usable" is defined;
@@ -14662,9 +14696,7 @@ fn edit_state_ops_version(ops: &str) -> Option<i64> {
 #[tauri::command]
 async fn discard_edit_state(app: AppHandle, kind: String, target: String) -> Result<(), String> {
     let conn = db_conn(&app).ok_or_else(|| "db unavailable".to_string())?;
-    let id = format!("{kind}:{target}");
-    conn.execute("DELETE FROM edit_state WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
-    Ok(())
+    edit_state_discard(&conn, &kind, &target)
 }
 
 // ---- Editor draft autosave ----
@@ -14771,6 +14803,7 @@ fn sweep_edit_state_conn(conn: &Connection, exists: impl Fn(&str) -> bool, keep_
     drop(stmt);
     let mut removed = 0usize;
     for (id, target, updated_at) in rows {
+        let target = dec_str(&target);
         let gone = !exists(&target);
         let expired = keep_days > 0.0 && updated_at < cutoff;
         if (gone || expired) && conn.execute("DELETE FROM edit_state WHERE id = ?1", params![id]).is_ok() {
@@ -44385,6 +44418,45 @@ mod tests {
         )
         .unwrap();
         conn
+    }
+
+    #[test]
+    fn edit_state_is_sealed_and_keyed_without_the_path_and_reads_back() {
+        let conn = edit_state_test_conn();
+        let path = "c:/clips/secret-meeting.mp4";
+        edit_state_write(&conn, "video", path, 10, 20, "{\"v\":1,\"ops\":[\"hello overlay text\"]}", (now_ms() / 1000) as i64).unwrap();
+        let (id, target, ops): (String, String, String) = conn
+            .query_row("SELECT id, target, ops FROM edit_state", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .unwrap();
+        for stored in [&id, &target, &ops] {
+            assert!(!stored.contains("secret-meeting") && !stored.contains("hello overlay"), "no plain path or overlay text at rest: {stored}");
+        }
+        let (_, back) = edit_state_read(&conn, "video", path, 10, 20).unwrap();
+        assert!(back.contains("hello overlay text"));
+        assert!(edit_state_read(&conn, "video", path, 10, 21).is_none(), "a changed mtime still misses");
+        // The sweep reads the sealed path and drops the row once the file is gone.
+        assert_eq!(sweep_edit_state_conn(&conn, |p| p == path, 30.0), 0);
+        assert_eq!(sweep_edit_state_conn(&conn, |_| false, 30.0), 1);
+    }
+
+    #[test]
+    fn edit_state_reads_an_old_plain_row_and_replaces_it_on_save() {
+        let conn = edit_state_test_conn();
+        let path = "c:/clips/old.mp4";
+        let now = (now_ms() / 1000) as i64;
+        conn.execute(
+            "INSERT INTO edit_state VALUES('video:c:/clips/old.mp4', 'video', 'c:/clips/old.mp4', 1, 2, '{\"v\":1}', ?1)",
+            params![now],
+        )
+        .unwrap();
+        assert_eq!(edit_state_read(&conn, "video", path, 1, 2).unwrap().1, "{\"v\":1}");
+        assert_eq!(sweep_edit_state_conn(&conn, |_| true, 30.0), 0, "a plain legacy target still resolves in the sweep");
+        edit_state_write(&conn, "video", path, 1, 2, "{\"v\":1,\"x\":1}", now).unwrap();
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM edit_state", [], |r| r.get(0)).unwrap();
+        assert_eq!(count, 1, "the legacy row is replaced, not duplicated");
+        edit_state_discard(&conn, "video", path).unwrap();
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM edit_state", [], |r| r.get(0)).unwrap();
+        assert_eq!(count, 0);
     }
 
     #[test]
