@@ -16816,6 +16816,28 @@ def main():
       }
     }
 """)
+        failed += ar_probe('ba601', 'screenshot editor: a run of arrow-key nudges is one undo step and redo keeps it', 'index', '1000x780', '', ba_common + r"""
+    if (!(await baOpen(''))) { errs.push('601: the editor did not open'); }
+    else {
+      const hasInk = (img, x, y) => { for (let d = -3; d <= 3; d++) { if (!near(img.px(x + d, y), BGC, 30)) return true; } return false; };
+      await baTool('rect'); await baDrag(20, 75, 120, 105);
+      let img = await baExport();
+      if (!hasInk(img, 20, 90)) errs.push('601: fixture: the rectangle is not drawn');
+      baKey('ArrowRight', { shiftKey: true }); baKey('ArrowRight', { shiftKey: true }); await sleep(60);
+      img = await baExport();
+      if (hasInk(img, 20, 90)) errs.push('601: fixture: the nudges did not move the rectangle');
+      await baUndo();
+      img = await baExport();
+      if (!hasInk(img, 20, 90)) errs.push('601: undo did not take the nudges back');
+      if (!hasInk(img, 60, 75)) errs.push('601: undo removed the rectangle, the nudges were more than one step');
+      await baRedo();
+      img = await baExport();
+      if (hasInk(img, 20, 90)) errs.push('601: redo dropped the nudges');
+      await baUndo(); await baUndo();
+      img = await baExport();
+      if (hasInk(img, 60, 75)) errs.push('601: the second undo did not remove the rectangle');
+    }
+""")
         # ---- main window findings: generated block end ----
         print("PASS" if not failed else f"{failed} problem(s)")
         return 1 if failed else 0

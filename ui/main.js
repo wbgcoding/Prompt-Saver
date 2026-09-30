@@ -18161,6 +18161,7 @@ function bind() {
     snipEditNudgeHintEl.classList.toggle("hidden", !SE.lastNudged);
   }
   function snipEditNudge(op, key, amount, resize) {
+    const before = snipEditGeom(op);
     const dx = key === "ArrowLeft" ? -amount : key === "ArrowRight" ? amount : 0;
     const dy = key === "ArrowUp" ? -amount : key === "ArrowDown" ? amount : 0;
     if (resize) {
@@ -18175,7 +18176,18 @@ function bind() {
       if (op.point) { op.point.x += dx; op.point.y += dy; }
       if (op.rect) { op.rect.x += dx; op.rect.y += dy; }
     }
-    snipEditRedrawBase();
+    // One undo step per run of nudges: a run on the same op and tool folds into the
+    // entry just below the top; a different op or tool, or any other action in
+    // between, starts a new one.
+    const last = SE.ops[SE.ops.length - 1];
+    if (last && last.tool === "edit" && last.kind === "geom" && last.nudgeOf === op && last.nudgeTool === SE.tool) {
+      last.after = snipEditGeom(op);
+      snipEditRedrawBase();
+    } else {
+      const after = snipEditGeom(op);
+      if (JSON.stringify(before) === JSON.stringify(after)) { snipEditRedrawBase(); }
+      else snipEditPushOp({ tool: "edit", kind: "geom", op, before, after, nudgeOf: op, nudgeTool: SE.tool }, op);
+    }
     // The move/resize above only touched the op's own coordinates -- the
     // selection handles are a separate live-layer drawing keyed to the same
     // op, and would otherwise keep showing the pre-nudge position/size.
