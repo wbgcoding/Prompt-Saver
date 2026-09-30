@@ -16715,6 +16715,27 @@ def main():
       }
     }
 """)
+        failed += ar_probe('ba595', 'screenshot editor: step numbers go on counting after a resize', 'index', '1000x780', '', ba_common + r"""
+    if (!(await baOpen(''))) { errs.push('595: the editor did not open'); }
+    else {
+      await baTool('step');
+      await baClick(30, 100); await baClick(60, 100); await baClick(90, 100);
+      await baScale50();
+      const drawn = [];
+      const orig = CanvasRenderingContext2D.prototype.fillText;
+      CanvasRenderingContext2D.prototype.fillText = function (text) { drawn.push(String(text)); return orig.apply(this, arguments); };
+      await baClick(40, 50);
+      CanvasRenderingContext2D.prototype.fillText = orig;
+      if (drawn.join() !== '4') errs.push('595: the marker placed after the resize reads ' + JSON.stringify(drawn) + ', expected 4');
+      // a second resize keeps the count as well
+      await baScale50();
+      drawn.length = 0;
+      CanvasRenderingContext2D.prototype.fillText = function (text) { drawn.push(String(text)); return orig.apply(this, arguments); };
+      await baClick(20, 25);
+      CanvasRenderingContext2D.prototype.fillText = orig;
+      if (drawn.join() !== '5') errs.push('595: after a second resize the next marker reads ' + JSON.stringify(drawn) + ', expected 5');
+    }
+""")
         # ---- main window findings: generated block end ----
         print("PASS" if not failed else f"{failed} problem(s)")
         return 1 if failed else 0

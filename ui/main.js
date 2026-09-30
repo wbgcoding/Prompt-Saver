@@ -17913,7 +17913,10 @@ function bind() {
     // the same pixels the capture started with.
     if (SE.showRaw) { ctx.drawImage(SE.rawCanvas, 0, 0, SE.w, SE.h); return; }
     ctx.drawImage(SE.img, 0, 0, SE.w, SE.h);
-    let stepN = 0;
+    // A resize bakes the markers placed so far into SE.img; the scale op remembers
+    // how many, so the next marker carries on from there instead of restarting at 1.
+    const baked = SE.ops.find((o) => o.tool === "scale");
+    let stepN = baked ? baked.stepBase : 0;
     for (const op of SE.ops) {
       if (op.tool === "crop") continue; // drawn as an overlay pass below
       if (op.tool === "scale") continue; // already baked into SE.img, see snipEditApplyScale
@@ -18051,8 +18054,10 @@ function bind() {
       .map((o) => ({ ...o, rect: { x: o.rect.x * sx, y: o.rect.y * sy, w: o.rect.w * sx, h: o.rect.h * sy } }));
     const prevFloor = SE.floor;
     SE.floor = Math.max(0, SE.floor - (prevOps.length - keptOps.length));
+    const prevScale = prevOps.find((o) => o.tool === "scale");
+    const stepBase = (prevScale ? prevScale.stepBase : 0) + prevOps.filter((o) => o.tool === "step").length;
     const op = {
-      tool: "scale", w: targetW, h: targetH, img: baked, rawCanvas: rawBaked, keptOps,
+      tool: "scale", w: targetW, h: targetH, img: baked, rawCanvas: rawBaked, keptOps, stepBase,
       prevW, prevH, prevImg, prevRawCanvas, prevOps, prevFloor,
     };
     SE.img = baked;
