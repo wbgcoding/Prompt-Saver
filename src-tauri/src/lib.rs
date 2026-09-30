@@ -2683,6 +2683,19 @@ fn removed_ui_value_keys() -> &'static [&'static str] {
         "errorLogMax",
         "numFieldBigStep",
         "clipSecretMinLen",
+        "pillRingFrac",
+        "pillMenuGap",
+        "pillFolderPad",
+        "pillFolderTileGap",
+        "pillFolderPopGap",
+        "pillMergeGrow",
+        "headerPadY",
+        "popoverPad",
+        "viewTabEdgeZone",
+        "tileFolderZone",
+        "kbFocusFadeMs",
+        "etaMinPct",
+        "etaMinSecs",
     ]
 }
 

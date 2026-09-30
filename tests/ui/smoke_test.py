@@ -66,6 +66,10 @@ PROBE = """
   try {
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   const click = async (id) => { const e = document.getElementById(id); if (e) { e.click(); await sleep(200); } };
+  // The header padding stays at the former default of the removed setting (measured
+  // before the setting went: 10px).
+  { const hp = parseFloat(getComputedStyle(document.querySelector('.header')).paddingTop);
+    if (Math.abs(hp - 10) > 0.5) out.errors.push('the header padding is ' + hp + 'px, expected 10px'); }
   // A name or body that looks like markup must render as literal text everywhere
   // it shows up (grid tile, library row), never as a real element.
   const XSS_NAME = 'Injected <img src=x onerror=alert(1)> name';
@@ -5377,7 +5381,7 @@ PROBE = """
             tabPtr('pointermove', gx.left + gx.width / 2 + 8, gx.top + gx.height / 2);
             await sleep(80);
             // The outer-left edge of the target loose tab, well inside the
-            // viewTabEdgeZone -- must read as "reorder", not "group".
+            // the view tab edge zone -- must read as "reorder", not "group".
             tabPtr('pointermove', r.left + 3, r.top + r.height / 2);
             await sleep(80);
             const edgeMark = document.querySelector('.tab-drop-edge');
@@ -9902,6 +9906,15 @@ FLOAT_PROBE = """
     await until(() => calls().includes('resize_float_pill'));
     if (!calls().includes('resize_float_pill')) errs.push('the pill never applied its settings');
     sideScan(errs, 'pill');
+    // A headless window reports no inner size, so give the ring a known one.
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 240 });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 160 });
+    // and a quiet headless frame fires no animation frame, so run the handler on a timer.
+    window.requestAnimationFrame = (fn) => setTimeout(fn, 0);
+    window.dispatchEvent(new Event('resize'));
+    await sleep(200);
+    { const rz = parseFloat(getComputedStyle(document.getElementById('resize')).getPropertyValue('--rz'));
+      if (Math.abs(rz - 29) > 0.5) errs.push('the pill resize ring is ' + rz + 'px, expected 29px'); }
     // The OS move loop startDragging() hands the window to CONSUMES the button
     // release, so a dragged pill never sees `mouseup`. The merge test therefore has
     // to run off the first later event that reports no button held.
@@ -10455,6 +10468,14 @@ FOLDER_PROBE = """
     const tiles = [...document.querySelectorAll('#grid .folder-member')];
     if (tiles.length !== 5) errs.push('the open folder shows ' + tiles.length + ' members instead of 5');
     sideScan(errs, 'folder, open');
+    { const ex = (window.__SMOKE_ARGS__ || []).filter((c) => c[0] === 'expand_float_folder').pop();
+      const gs = getComputedStyle(document.getElementById('grid'));
+      // Measured before the tile and popover spacing became fixed values: at this
+      // folder scale the popover gap was 15.25px, the grid padding 25px, the tile gap 20px.
+      if (!ex) errs.push('the open folder never asked for its popover gap');
+      else if (Math.abs(ex[1].gap - 15.25) > 0.5) errs.push('the folder popover gap is ' + ex[1].gap + 'px, expected 15.25px');
+      if (Math.abs(parseFloat(gs.paddingTop) - 25) > 0.5) errs.push('the folder grid padding is ' + gs.paddingTop + ', expected 25px');
+      if (Math.abs(parseFloat(gs.rowGap) - 20) > 0.5) errs.push('the folder tile gap is ' + gs.rowGap + ', expected 20px'); }
     if (!tiles.length) {
       errs.push('the open folder rendered no members at all');
     } else {
@@ -12616,7 +12637,7 @@ VIDEO_PROBE = """
     formatSel.dispatchEvent(new Event('change'));
     await sleep(30);
 
-    // ---- 387: the remaining-time estimate stays hidden below etaMinPct (10%
+    // ---- 387: the remaining-time estimate stays hidden below the minimum percent (10%
     // by default), regardless of how fast progress is moving ----
     const exportEtaEl = document.getElementById('ve-export-eta');
     const exportStartBtn = document.getElementById('ve-export-start');
@@ -12630,14 +12651,14 @@ VIDEO_PROBE = """
     window.__FIRE__('recording-convert-progress', { ms: 30000 }); // 5%, fast rate but still under 10%
     await sleep(10);
     if (exportEtaEl.textContent.trim() !== '') {
-      errs.push(`387: remaining-time text showed before etaMinPct, got ${JSON.stringify(exportEtaEl.textContent)}`);
+      errs.push(`387: remaining-time text showed before the minimum percent, got ${JSON.stringify(exportEtaEl.textContent)}`);
     }
     await sleep(120); // let this export resolve so a second one can start clean
 
-    // ---- 387: past etaMinPct, a slow enough rate shows an "about ..." text ----
+    // ---- 387: past the minimum percent, a slow enough rate shows an "about ..." text ----
     // startExport() itself feeds an initial 0% sample the instant it starts, so
     // the very first real tick below is measured against that -- a real 3s gap
-    // keeps that first rate low enough for the average to clear etaMinSecs.
+    // keeps that first rate low enough for the average to clear the minimum seconds.
     // export_video needs to still be pending 3s in, hence the longer delay.
     window.__EXPORT_DELAY_MS__ = 3500;
     exportStartBtn.click();
@@ -12645,7 +12666,7 @@ VIDEO_PROBE = """
     window.__FIRE__('recording-convert-progress', { ms: 60000 }); // 10% after ~3s -> roughly 3.3%/s
     await sleep(10);
     if (!/about/i.test(exportEtaEl.textContent)) {
-      errs.push(`387: remaining-time text did not appear past etaMinPct with a slow rate, got ${JSON.stringify(exportEtaEl.textContent)}`);
+      errs.push(`387: remaining-time text did not appear past the minimum percent with a slow rate, got ${JSON.stringify(exportEtaEl.textContent)}`);
     }
     await sleep(700);
     window.__EXPORT_DELAY_MS__ = undefined;

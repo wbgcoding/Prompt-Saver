@@ -41,6 +41,9 @@ const ZOOM_MAX_PX_PER_S = 600;    // ~1.7ms per pixel: far past frame accuracy
 const MAX_TRACK_PX = 12000;       // canvas/DOM ceiling for the timeline strip
 const THUMB_PX = 96;              // target width of one filmstrip thumbnail
 const WAVE_BUCKET_MAX = 2000;
+// Remaining time stays hidden below this percent and for this many seconds.
+const ETA_MIN_PCT = 10;
+const ETA_MIN_SECS = 20;
 // Arrow-key overlay nudge step while Shift is held.
 const NUM_FIELD_BIG_STEP = 10;
 const UNDO_MAX_DEFAULT = 40;      // expert value videoEditUndoMax
@@ -146,8 +149,6 @@ const VE = {
   peaks: { 0: null, 1: null },
   exporting: false,
   etaShow: true,        // "Show remaining time" -- settings-driven, see applySettings
-  etaMinPct: 10,
-  etaMinSecs: 20,
   extraClipsMax: EXTRA_CLIPS_MAX_DEFAULT, // settings-driven, see applySettings
   dirty: false,         // ops changed since the last successful export
   lastExport: "",       // path of the file the last export produced
@@ -3378,7 +3379,7 @@ function setProgress(pct) {
   $("ve-export-progress").value = clamped;
   $("ve-export-pct").textContent = `${Math.round(clamped)}%`;
   exportEta.feed(clamped);
-  const estimate = exportEta.estimate(VE.etaMinPct, VE.etaMinSecs);
+  const estimate = exportEta.estimate(ETA_MIN_PCT, ETA_MIN_SECS);
   const etaSpan = $("ve-export-eta");
   etaSpan.textContent = VE.etaShow ? formatEta(estimate, t) : "";
   $("ve-export-progress").setAttribute("aria-valuetext", a11yProgressText(t, clamped, estimate));
@@ -3543,7 +3544,7 @@ $("ve-ffmpeg-get").addEventListener("click", async (e) => {
   const unlisten = await listen("ffmpeg-download-progress", (ev) => {
     const pct = ffmpegDownloadPct(ev.payload);
     dlEta.feed(pct);
-    const estimate = dlEta.estimate(VE.etaMinPct, VE.etaMinSecs);
+    const estimate = dlEta.estimate(ETA_MIN_PCT, ETA_MIN_SECS);
     const eta = VE.etaShow ? formatEta(estimate, t) : "";
     btn.textContent = t("ffmpegDownloading").replace("{pct}", String(pct)) + (eta ? ` (${eta})` : "");
     btn.setAttribute("aria-valuenow", String(pct));
@@ -4417,10 +4418,6 @@ function applySettings(settings) {
   VE.etaShow = settings?.ui_flags?.etaShow !== false;
   VE.editStateKeepOn = settings?.ui_flags?.editStateKeep !== false;
   armEditStateAutosave();
-  const etaMinPct = Number(values.etaMinPct);
-  VE.etaMinPct = Number.isFinite(etaMinPct) ? etaMinPct : 10;
-  const etaMinSecs = Number(values.etaMinSecs);
-  VE.etaMinSecs = Number.isFinite(etaMinSecs) ? etaMinSecs : 20;
   const numFieldStep = Number(values.numFieldStep);
   VE.numFieldStep = Number.isFinite(numFieldStep) && numFieldStep > 0 ? numFieldStep : 1;
   const extraClipsMax = Number(values.veExtraClipsMax);
