@@ -9155,12 +9155,15 @@ fn remap_colors(app: AppHandle, state: State<Db>, pairs: Vec<(String, String)>) 
             prompts_changed = true;
         }
     }
-    if prompts_changed && !save_prompts(&app, &store) {
-        for (id, c) in original_prompt_colors {
-            if let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) {
-                p.color = c;
+    let restore_prompt_colors = |store: &mut Store| {
+        for (id, c) in &original_prompt_colors {
+            if let Some(p) = store.prompts.iter_mut().find(|p| p.id == *id) {
+                p.color = c.clone();
             }
         }
+    };
+    if prompts_changed && !save_prompts(&app, &store) {
+        restore_prompt_colors(&mut store);
         return Err("save-failed".into());
     }
     let original_view_colors: Vec<(String, String)> = store
@@ -9205,6 +9208,11 @@ fn remap_colors(app: AppHandle, state: State<Db>, pairs: Vec<(String, String)>) 
             if let Some(g) = store.settings.view_groups.iter_mut().find(|g| g.id == id) {
                 g.color = c;
             }
+        }
+        // The prompts reached disk already: put their colours back there too.
+        if prompts_changed {
+            restore_prompt_colors(&mut store);
+            let _ = save_prompts(&app, &store);
         }
         return Err("save-failed".into());
     }
