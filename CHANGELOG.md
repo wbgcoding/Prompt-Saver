@@ -863,6 +863,9 @@ the video editor and the introduction tour ship on).
 - **Camera recording no longer stalls the window every second.** Saving each
   recorded chunk moved off the main thread, and the chunks are still written
   strictly in order.
+- **The Markdown folder check no longer copies the whole library every few
+  seconds.** The poll first looks at file sizes and dates only and copies the
+  prompts and settings just when a file actually changed.
 
 ### Fixed
 

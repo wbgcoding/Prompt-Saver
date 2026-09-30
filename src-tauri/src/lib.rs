@@ -36784,36 +36784,21 @@ fn sync_blank_prompt(id: String) -> Prompt {
 // written back). Only the cheap "does this file differ from the snapshot" check
 // and the file-level lock happen unlocked; apply_md_to_prompt runs once the
 // store lock is back, against each prompt's CURRENT state.
-fn sync_poll_once(app: &AppHandle) {
-    let Some(state) = app.try_state::<Db>() else { return };
-    let (dir, snapshot, settings_snapshot) = {
-        let store = lock(&state);
-        if store.prompts_locked || !sync_enabled(&store.settings) {
-            return;
-        }
-        (sync_dir_path(app, &store.settings), store.prompts.clone(), store.settings.clone())
-    };
-    let entries = match fs::read_dir(&dir) {
-        Ok(e) => e,
-        Err(e) => {
-            // An unreachable folder (a network share that is not mounted, a removed
-            // drive) must not turn into a failure every few seconds for the rest of
-            // the session. After enough failed rounds the poll pauses and says so.
-            let max = SYNC_FAIL_MAX;
-            let just_paused = {
-                let mut h = sync_health_lock();
-                sync_health_note_fail(&mut h, max, &e.to_string())
-            };
-            if just_paused {
-                append_crash_log(&format!(
-                    "prompt-sync: paused after {max} rounds that could not read {}: {e}",
-                    dir.display()
-                ));
-            }
-            return;
-        }
-    };
-    let mut candidates: Vec<(String, String, bool)> = Vec::new(); // (stem, content, is_new)
+// A file the stat scan wants read this round.
+struct SyncToRead {
+    path: PathBuf,
+    key: String,
+    stem: String,
+    name: String,
+    stamp: SyncStamp,
+}
+
+// Stat-only pass over the folder: decides which files changed and have settled,
+// without reading a file or touching the store. A folder nothing changed in
+// costs one stat per file, and the caller copies no prompts or settings.
+fn sync_scan_folder(dir: &Path) -> std::io::Result<(Vec<SyncToRead>, usize)> {
+    let entries = fs::read_dir(dir)?;
+    let mut to_read = Vec::new();
     let mut present: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut files = 0usize;
     for entry in entries.flatten() {
@@ -36838,12 +36823,65 @@ fn sync_poll_once(app: &AppHandle) {
         // Metadata only, for every file in the folder: a folder whose files have not
         // changed since the last round costs one stat each and not a single read.
         let decision = sync_scan_decision(sync_seen_lock().get(&key).copied(), stamp);
-        if decision != SyncScan::Read {
-            if decision == SyncScan::Settle {
-                sync_seen_lock().insert(key, SyncSeen { stamp, handled: false });
-            }
-            continue;
+        if decision == SyncScan::Read {
+            to_read.push(SyncToRead { path, key, stem, name, stamp });
+        } else if decision == SyncScan::Settle {
+            sync_seen_lock().insert(key, SyncSeen { stamp, handled: false });
         }
+    }
+    // Files that are gone leave no entry behind: this map would otherwise grow for
+    // the life of the process in a folder with a lot of coming and going.
+    sync_seen_lock().retain(|key, _| present.contains(key));
+    Ok((to_read, files))
+}
+
+fn sync_poll_once(app: &AppHandle) {
+    let Some(state) = app.try_state::<Db>() else { return };
+    let dir = {
+        let store = lock(&state);
+        if store.prompts_locked || !sync_enabled(&store.settings) {
+            return;
+        }
+        sync_dir_path(app, &store.settings)
+    };
+    let (to_read, files) = match sync_scan_folder(&dir) {
+        Ok(r) => r,
+        Err(e) => {
+            // An unreachable folder (a network share that is not mounted, a removed
+            // drive) must not turn into a failure every few seconds for the rest of
+            // the session. After enough failed rounds the poll pauses and says so.
+            let max = SYNC_FAIL_MAX;
+            let just_paused = {
+                let mut h = sync_health_lock();
+                sync_health_note_fail(&mut h, max, &e.to_string())
+            };
+            if just_paused {
+                append_crash_log(&format!(
+                    "prompt-sync: paused after {max} rounds that could not read {}: {e}",
+                    dir.display()
+                ));
+            }
+            return;
+        }
+    };
+    {
+        let mut h = sync_health_lock();
+        sync_health_note_ok(&mut h, files, now_secs());
+    }
+    if to_read.is_empty() {
+        return; // nothing changed: no prompt or settings copy is made
+    }
+    // Only now, with at least one file to read, is the library copied for the
+    // comparison against what each file would be written as.
+    let (snapshot, settings_snapshot) = {
+        let store = lock(&state);
+        if store.prompts_locked || !sync_enabled(&store.settings) {
+            return;
+        }
+        (store.prompts.clone(), store.settings.clone())
+    };
+    let mut candidates: Vec<(String, String, bool)> = Vec::new(); // (stem, content, is_new)
+    for SyncToRead { path, key, stem, name, stamp } in to_read {
         // Acquire the file lock BEFORE reading, not after - the
         // lock is meant to protect the read from a concurrent writer, which it did
         // not while the read happened first and the lock was only taken afterward
@@ -36880,13 +36918,6 @@ fn sync_poll_once(app: &AppHandle) {
             candidates.push((stem, content, true));
         }
     }
-    {
-        let mut h = sync_health_lock();
-        sync_health_note_ok(&mut h, files, now_secs());
-    }
-    // Files that are gone leave no entry behind: this map would otherwise grow for
-    // the life of the process in a folder with a lot of coming and going.
-    sync_seen_lock().retain(|key, _| present.contains(key));
     if candidates.is_empty() {
         return;
     }
@@ -42561,6 +42592,31 @@ mod tests {
         for call in ["store_attached_file(&app", "probe_media_meta(", "ocr_index_text(img"] {
             assert!(upd[..staged_end].contains(call), "update_prompt must stage {call} before its locked section");
         }
+    }
+
+    // The stat scan alone decides whether anything needs reading; with nothing to
+    // read the poll returns before it copies the library.
+    #[test]
+    fn sync_scan_folder_asks_for_a_read_only_once_a_changed_file_has_settled() {
+        let dir = std::env::temp_dir().join(format!("ps-scan-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("abc123.md");
+        fs::write(&file, "hello").unwrap();
+        fs::write(dir.join("AGENTS.md"), "readme").unwrap();
+        fs::write(dir.join("notes.txt"), "not markdown").unwrap();
+        // First sight: the stamp is only remembered, nothing is read yet.
+        let (to_read, files) = sync_scan_folder(&dir).unwrap();
+        assert!(to_read.is_empty() && files == 1, "a file seen for the first time is not read yet");
+        // Next round, stamp unchanged: now it settles into a read.
+        let (to_read, _) = sync_scan_folder(&dir).unwrap();
+        assert_eq!(to_read.len(), 1);
+        assert_eq!(to_read[0].stem, "abc123");
+        // Once handled, an unchanged folder asks for nothing.
+        sync_seen_lock().insert(to_read[0].key.clone(), SyncSeen { stamp: to_read[0].stamp, handled: true });
+        let (to_read, _) = sync_scan_folder(&dir).unwrap();
+        assert!(to_read.is_empty(), "an unchanged, handled folder needs no read and therefore no snapshot");
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
