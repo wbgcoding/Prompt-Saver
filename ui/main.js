@@ -17915,6 +17915,7 @@ function bind() {
     for (const op of SE.ops) {
       if (op.tool === "crop") continue; // drawn as an overlay pass below
       if (op.tool === "scale") continue; // already baked into SE.img, see snipEditApplyScale
+      if (op.tool === "edit") continue; // an undo record for a moved/deleted shape, nothing to draw
       if (op.tool === "step") stepN++;
       snipEditDrawOp(ctx, op, stepN);
     }
@@ -17927,7 +17928,9 @@ function bind() {
     $("snip-edit-undo").disabled = SE.ops.length <= SE.floor;
     $("snip-edit-redo").disabled = !SE.redo.length;
   }
-  function snipEditPushOp(op) {
+  // `nudge` is what the arrow keys act on afterwards: the op itself by default, or
+  // whatever the caller names (an undo entry is not something to nudge).
+  function snipEditPushOp(op, nudge) {
     SE.ops.push(op);
     // SE.ops IS the render list -- never drop a rendered op. Once the undo
     // window is exceeded, advance the floor instead of shifting the oldest op out;
@@ -17935,10 +17938,43 @@ function bind() {
     // permanent, undo just can no longer walk back past it.
     if (SE.ops.length - SE.floor > SNIP_EDIT_UNDO_MAX()) SE.floor = SE.ops.length - SNIP_EDIT_UNDO_MAX();
     SE.redo.length = 0;
-    SE.lastNudged = op;
+    SE.lastNudged = nudge === undefined ? op : nudge;
     snipEditUpdateNudgeHint();
     snipEditRedrawBase();
     snipEditUpdateUndoRedoButtons();
+  }
+  // Moving, resizing, re-pointing or deleting a finished shape or text changes an
+  // op that already sits in SE.ops, so it gets an undo entry of its own: a
+  // {tool: "edit"} record that is never drawn, only applied backwards by undo and
+  // forwards again by redo (see snipEditUndoEdit / snipEditRedoEdit).
+  function snipEditGeom(op) {
+    const g = {};
+    if (op.points) g.points = op.points.map((p) => ({ ...p }));
+    if (op.rect) g.rect = { ...op.rect };
+    if (op.point) g.point = { ...op.point };
+    return g;
+  }
+  function snipEditApplyGeom(op, g) {
+    if (g.points) op.points = g.points.map((p) => ({ ...p }));
+    if (g.rect) op.rect = { ...g.rect };
+    if (g.point) op.point = { ...g.point };
+  }
+  function snipEditCommitGeomEdit(op, before) {
+    const after = snipEditGeom(op);
+    if (JSON.stringify(before) === JSON.stringify(after)) return;
+    snipEditPushOp({ tool: "edit", kind: "geom", op, before, after }, SE.lastNudged);
+  }
+  function snipEditUndoEdit(e) {
+    if (e.kind === "geom") snipEditApplyGeom(e.op, e.before);
+    else if (e.kind === "remove") { SE.ops.splice(e.index, 0, e.op); SE.floor = e.floorBefore; }
+  }
+  function snipEditRedoEdit(e) {
+    if (e.kind === "geom") snipEditApplyGeom(e.op, e.after);
+    else if (e.kind === "remove") {
+      const i = SE.ops.indexOf(e.op);
+      if (i >= 0) SE.ops.splice(i, 1);
+      SE.floor = e.floorAfter;
+    }
   }
   // Spotlight/crop: exactly one may exist -- a new one replaces the old rather than
   // stacking two dimming layers.
@@ -18051,6 +18087,8 @@ function bind() {
     if (op.tool === "scale") {
       snipEditRestoreScaleState(op.prevW, op.prevH, op.prevImg, op.prevRawCanvas, op.prevOps);
       SE.floor = op.prevFloor; // the undo limit as it was before the resize
+    } else if (op.tool === "edit") {
+      snipEditUndoEdit(op);
     }
     snipEditDeselectShape();
     SE.lastNudged = null;
@@ -18067,6 +18105,8 @@ function bind() {
       // The floor the resize itself produced, worked out the same way it was then.
       SE.floor = Math.max(0, op.prevFloor - (op.prevOps.length - op.keptOps.length));
       if (SE.ops.length - SE.floor > SNIP_EDIT_UNDO_MAX()) SE.floor = SE.ops.length - SNIP_EDIT_UNDO_MAX();
+    } else if (op.tool === "edit") {
+      snipEditRedoEdit(op);
     }
     snipEditDeselectShape();
     SE.lastNudged = null;
@@ -18376,17 +18416,18 @@ function bind() {
     }
     snipEditPushOp(dup);
   }
-  // Removes one specific op wherever it sits in SE.ops, same floor bookkeeping
-  // as snipEditCropDiscard/snipEditPushUniqueOp.
+  // Removes one specific op wherever it sits in SE.ops. The removal is an undo
+  // entry too, so Ctrl+Z brings the op back at its old place.
   function snipEditRemoveOp(op) {
-    const before = SE.ops.length;
-    SE.ops = SE.ops.filter((o) => o !== op);
-    if (SE.ops.length === before) return;
-    SE.floor = Math.max(0, SE.floor - (before - SE.ops.length));
+    const index = SE.ops.indexOf(op);
+    if (index < 0) return;
+    const floorBefore = SE.floor;
+    SE.ops.splice(index, 1);
+    if (index < SE.floor) SE.floor -= 1;
     if (SE.selOp === op) snipEditDeselectShape();
-    if (SE.lastNudged === op) { SE.lastNudged = null; snipEditUpdateNudgeHint(); }
-    snipEditUpdateUndoRedoButtons();
-    snipEditRedrawBase();
+    const entry = { tool: "edit", kind: "remove", op, index, floorBefore, floorAfter: 0 };
+    snipEditPushOp(entry, null);
+    entry.floorAfter = SE.floor;
   }
 
   // ---- text: a real <input> positioned over the canvas, in stage-local (i.e.
@@ -18929,13 +18970,15 @@ function bind() {
         break;
       }
       case "crop-new": case "crop-move": case "crop-resize": snipEditCropPointerUp(); break;
-      case "text-move": if (d.newPoint) { d.op.point = d.newPoint; snipEditRedrawBase(); } break;
-      case "shape-move":
-        if (d.newPoints) d.op.points = d.newPoints; else if (d.newRect) d.op.rect = d.newRect;
+      case "text-move": case "shape-move": case "shape-resize": case "shape-endpoint": {
+        const before = snipEditGeom(d.op);
+        if (d.newPoint) d.op.point = d.newPoint;
+        else if (d.newPoints) d.op.points = d.newPoints;
+        else if (d.newRect) d.op.rect = d.newRect;
         snipEditRedrawBase();
+        snipEditCommitGeomEdit(d.op, before);
         break;
-      case "shape-resize": if (d.newRect) d.op.rect = d.newRect; snipEditRedrawBase(); break;
-      case "shape-endpoint": if (d.newPoints) d.op.points = d.newPoints; snipEditRedrawBase(); break;
+      }
     }
     // snipEditClearLive() above wiped the selection handles a plain click
     // (kind "shape-move" with no actual movement) just painted on mousedown --

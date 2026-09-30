@@ -16504,11 +16504,15 @@ def main():
     }));
     const baDrag = async (x1, y1, x2, y2) => {
       const live = document.getElementById('snip-edit-live');
-      const a = baPt(x1, y1), b = baPt(x2, y2);
+      // every position is worked out again after the previous event: a selection can
+      // re-render the context bar and shift the canvas
+      let a = baPt(x1, y1);
       baPtr('pointerdown', a[0], a[1], live);
-      baPtr('pointermove', (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, live);
-      baPtr('pointermove', b[0], b[1], live);
-      baPtr('pointerup', b[0], b[1], window);
+      a = baPt((x1 + x2) / 2, (y1 + y2) / 2);
+      baPtr('pointermove', a[0], a[1], live);
+      a = baPt(x2, y2);
+      baPtr('pointermove', a[0], a[1], live);
+      baPtr('pointerup', a[0], a[1], window);
       await sleep(40);
     };
     const baClick = async (x, y) => {
@@ -16599,6 +16603,55 @@ def main():
     if (!/could not be saved/i.test(document.getElementById('toast').textContent)) errs.push('597: no error toast, toast is ' + JSON.stringify(document.getElementById('toast').textContent));
     const last = callsFor('set_ui_flag').filter((a) => a && a.key === 'screenshotSave').pop();
     if (!last || last.enabled !== false) errs.push('597: the stored setting was left on, last write ' + JSON.stringify(last));
+""")
+        failed += ar_probe('ba594', 'screenshot editor: moving, resizing or deleting a finished shape is one undo step of its own', 'index', '1000x780', '', ba_common + r"""
+    if (!(await baOpen(''))) { errs.push('594: the editor did not open'); }
+    else {
+      // rows of the arrow (y 30) and of the rectangle border (y 75), sampled in a small band
+      const hasInk = (img, x, y) => { for (let d = -3; d <= 3; d++) { if (!near(img.px(x, y + d), BGC, 30)) return true; } return false; };
+      await baTool('arrow'); await baDrag(20, 30, 120, 30);
+      await baTool('rect'); await baDrag(20, 75, 120, 105);
+      await baTool('arrow');
+      let img = await baExport();
+      if (!img || !hasInk(img, 60, 30) || !hasInk(img, 60, 75)) errs.push('594: fixture: arrow and rectangle are not both drawn');
+      // drag the arrow down by 20
+      await baDrag(60, 30, 60, 50);
+      img = await baExport();
+      if (!hasInk(img, 60, 50) || hasInk(img, 60, 22)) errs.push('594: fixture: the drag did not move the arrow');
+      await baUndo();
+      img = await baExport();
+      if (!hasInk(img, 60, 30)) errs.push('594: undo did not bring the moved arrow back to its place');
+      if (hasInk(img, 60, 50)) errs.push('594: the arrow is still at the moved place after undo');
+      if (!hasInk(img, 60, 75)) errs.push('594: undo removed the rectangle instead of the move');
+      await baRedo();
+      img = await baExport();
+      if (!hasInk(img, 60, 50) || hasInk(img, 60, 22)) errs.push('594: redo did not move the arrow again');
+      if (!hasInk(img, 60, 75)) errs.push('594: redo lost the rectangle');
+      // resize the rectangle by its corner handle, then undo
+      await baTool('rect');
+      await baClick(70, 75);
+      await baDrag(120, 105, 160, 112);
+      img = await baExport();
+      if (!hasInk(img, 140, 112)) errs.push('594: fixture: the rectangle was not resized');
+      await baUndo();
+      img = await baExport();
+      if (hasInk(img, 140, 112)) errs.push('594: undo left the rectangle at its enlarged size');
+      if (!hasInk(img, 60, 50)) errs.push('594: undoing the resize also undid the earlier arrow move');
+      // delete the rectangle through the right-click menu, then undo
+      const pop = await baCtx(60, 75);
+      if (!pop) { errs.push('594: fixture: no context menu over the rectangle'); }
+      else {
+        pop.querySelector('button.danger').click(); await sleep(80);
+        img = await baExport();
+        if (hasInk(img, 60, 75)) errs.push('594: fixture: Delete did not remove the rectangle');
+        await baUndo();
+        img = await baExport();
+        if (!hasInk(img, 60, 75)) errs.push('594: undo did not bring the deleted rectangle back');
+        await baRedo();
+        img = await baExport();
+        if (hasInk(img, 60, 75)) errs.push('594: redo did not delete the rectangle again');
+      }
+    }
 """)
         # ---- main window findings: generated block end ----
         print("PASS" if not failed else f"{failed} problem(s)")
