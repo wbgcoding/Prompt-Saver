@@ -1324,6 +1324,10 @@ the video editor and the introduction tour ship on).
   clipboard inbox clear offers no undo, undoing a resize no longer unlocks
   steps behind the undo limit, a shift-drag of a top crop corner keeps the
   bottom edge still, and a screenshot whose delete failed is not saved twice.
+- **A failed still-frame extraction no longer leaves its picture in the temp
+  folder, and abandoned ones are swept.** A frame cut from a video that
+  failed half way is removed at once; leftovers from a crash are cleaned up
+  with the other temporary files.
 
 ### Security
 

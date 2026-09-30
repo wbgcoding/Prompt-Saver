@@ -15782,11 +15782,16 @@ fn sweep_stale_temp_files() {
     // copy. The editor itself never deletes this once the window is closed,
     // so without this sweep the folder would only ever grow.
     let openedit_prefix = format!("{}-openedit-", brand::TEMP_PREFIX);
+    // Still frames cut out of a video land in the same folder; a crash or kill
+    // mid-extraction leaves the frame behind.
+    let still_prefix = format!("{}-still-", brand::TEMP_PREFIX);
     if let Ok(entries) = fs::read_dir(&ocr_dir) {
         for e in entries.flatten() {
             let name = e.file_name().to_string_lossy().to_string();
             if name.starts_with(&openedit_prefix) && is_stale(&e) {
                 let _ = fs::remove_dir_all(e.path());
+            } else if name.starts_with(&still_prefix) && e.path().is_file() && is_stale(&e) {
+                let _ = fs::remove_file(e.path());
             }
         }
     }
@@ -29444,12 +29449,25 @@ fn extract_still_frame_blocking(ffmpeg: &Path, src: &Path, at_ms: u64, format: &
     cmd.stdin(std::process::Stdio::null());
     cmd.stdout(std::process::Stdio::null());
     cmd.stderr(std::process::Stdio::null());
-    let status = status_in_job(&mut cmd).map_err(|e| format!("could not start ffmpeg: {e}"))?;
-    if !status.success() || !tmp.is_file() {
-        return Err("still-frame extraction failed".to_string());
-    }
-    let bytes = fs::read(&tmp).map_err(|e| e.to_string());
-    let _ = fs::remove_file(&tmp);
+    let status = match status_in_job(&mut cmd) {
+        Ok(s) => s,
+        Err(e) => {
+            let _ = take_still_output(&tmp, false);
+            return Err(format!("could not start ffmpeg: {e}"));
+        }
+    };
+    take_still_output(&tmp, status.success())
+}
+
+// Reads the extracted frame and removes it; on a failed run the file is removed
+// too, since ffmpeg can leave a partial one behind.
+fn take_still_output(tmp: &Path, succeeded: bool) -> Result<Vec<u8>, String> {
+    let bytes = if succeeded && tmp.is_file() {
+        fs::read(tmp).map_err(|e| e.to_string())
+    } else {
+        Err("still-frame extraction failed".to_string())
+    };
+    let _ = fs::remove_file(tmp);
     bytes
 }
 
@@ -42469,6 +42487,37 @@ mod tests {
     // NOT a fresh one -- "Allow multiple instances" lets a second launch run this
     // same sweep while a concurrently open instance still has its own snip preview
     // in active use, so only files older than STALE_TEMP_FILE_AGE are fair game.
+    #[test]
+    fn take_still_output_removes_a_partial_frame_after_a_failed_run() {
+        let dir = std::env::temp_dir().join(format!("ps-still-fail-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let partial = dir.join(format!("{}-still-1-2.png", brand::TEMP_PREFIX));
+        fs::write(&partial, b"half a frame").unwrap();
+        assert!(take_still_output(&partial, false).is_err());
+        assert!(!partial.exists(), "a failed extraction must not leave its partial frame");
+        let good = dir.join(format!("{}-still-1-3.png", brand::TEMP_PREFIX));
+        fs::write(&good, b"frame").unwrap();
+        assert_eq!(take_still_output(&good, true).unwrap(), b"frame");
+        assert!(!good.exists(), "a read frame is removed as before");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sweep_stale_temp_files_also_reclaims_an_abandoned_still_frame() {
+        let sub = std::env::temp_dir().join(brand::TEMP_DIR);
+        fs::create_dir_all(&sub).unwrap();
+        let pid = std::process::id();
+        let old = sub.join(format!("{}-still-{}-sweeptest-old.png", brand::TEMP_PREFIX, pid));
+        let fresh = sub.join(format!("{}-still-{}-sweeptest-fresh.png", brand::TEMP_PREFIX, pid));
+        fs::write(&old, b"x").unwrap();
+        fs::write(&fresh, b"x").unwrap();
+        backdate(&old, STALE_TEMP_FILE_AGE + Duration::from_secs(60));
+        sweep_stale_temp_files();
+        assert!(!old.exists(), "a stale still frame must be swept");
+        assert!(fresh.exists(), "a young still frame may belong to a running extraction");
+        let _ = fs::remove_file(&fresh);
+    }
+
     #[test]
     fn remove_own_temp_leftovers_takes_only_this_pids_files() {
         let root = std::env::temp_dir().join(format!("ps-ownexit-{}", std::process::id()));
