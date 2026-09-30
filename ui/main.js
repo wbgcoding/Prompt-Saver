@@ -18210,6 +18210,9 @@ function bind() {
     if (shift && orig.w && orig.h) {
       const ratio = orig.w / orig.h;
       if (handle === "n" || handle === "s") nr.w = nr.h * ratio; else nr.h = nr.w / ratio;
+      // The edge opposite a top handle is the anchor: re-derive the top from it, or
+      // the new height would push that fixed edge around.
+      if (handle.includes("n")) nr.y = y <= y2 ? y2 - nr.h : y2;
     }
     return nr;
   }
