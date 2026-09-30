@@ -9831,6 +9831,26 @@ PROBE = """
           out.errors.push('OcrIndex: the library row has no "found in image" badge');
         }
       }
+      {
+        // One query change with the switch on must redraw the list once, not
+        // once for the text match and again when the picture lookup answers.
+        const libList = document.getElementById('library-list');
+        const innerDesc = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+        let redraws = 0;
+        Object.defineProperty(libList, 'innerHTML', {
+          configurable: true,
+          get() { return innerDesc.get.call(this); },
+          set(v) { if (v === '') redraws++; innerDesc.set.call(this, v); },
+        });
+        const oq3 = document.getElementById('library-q');
+        oq3.value = 'lighthouse ';
+        oq3.dispatchEvent(new Event('input', { bubbles: true }));
+        await sleep(400);
+        delete libList.innerHTML;
+        if (redraws !== 1) {
+          out.errors.push('OcrIndex: one search change redrew the library ' + redraws + ' times, expected 1');
+        }
+      }
       await click('library-close');
     }
   } catch (e) { out.errors.push('probe: ' + e.message); }

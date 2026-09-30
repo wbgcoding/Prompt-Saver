@@ -875,6 +875,8 @@ the video editor and the introduction tour ship on).
 - **The batch export dialog reads the lengths of the selected recordings in
   parallel.** Choosing many recordings opens the dialog faster and no longer
   ties up a background worker one file at a time.
+- **Searching the library with picture text search on draws the list once per
+  keystroke pause instead of twice.**
 
 ### Fixed
 

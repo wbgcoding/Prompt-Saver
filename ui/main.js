@@ -19777,8 +19777,14 @@ function bind() {
   const refreshImageHitsDebounced = debounced(() => refreshImageHits(libQuery.trim().toLowerCase()), () => val("searchDebounceMs"));
   $("library-q").addEventListener("input", (e) => {
     libQuery = e.target.value;
-    renderLibraryDebounced();
-    refreshImageHitsDebounced();
+    // With picture text search on and a query typed, the lookup renders once its
+    // answer is in; rendering first as well would draw the whole library twice.
+    if (optFlag("ocrIndex") && libQuery.trim()) {
+      refreshImageHitsDebounced();
+    } else {
+      renderLibraryDebounced();
+      refreshImageHitsDebounced();
+    }
   });
   wireSearchSuggest($("library-q"), "recentSearchLib");
   $("library-search-save").addEventListener("click", () => saveSavedSearch());
