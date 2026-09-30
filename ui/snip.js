@@ -711,7 +711,10 @@ window.addEventListener("mouseup", async (e) => {
       busy = true;
       try {
         await invoke("capture_window", { id: win.id });
-      } catch { busy = false; showError(); }
+      } catch (err) {
+        busy = false;
+        if (String(err) !== "cancelled") showError();
+      }
     } else {
       hint.classList.remove("hidden");
       fullDim();
@@ -734,7 +737,7 @@ window.addEventListener("mouseup", async (e) => {
     // OCR language installed at all. The overlay itself has no reach into the
     // main window's #ocr-langs-modal, so this stays a specific, honest message
     // rather than a generic retry hint; the overlay stays open either way.
-    showError(String(err) === "ocr-no-language" ? T.ocrNoLang : undefined);
+    if (String(err) !== "cancelled") showError(String(err) === "ocr-no-language" ? T.ocrNoLang : undefined);
   }
 });
 
@@ -744,7 +747,9 @@ window.addEventListener("mouseup", async (e) => {
 const NUDGE = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
 const ZOOM_KEYS = { "+": 1, "=": 1, "-": -1, _: -1 };
 window.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") { saveZoom(); invoke("snip_cancel").catch(() => {}); return; }
+  // A capture already in flight finishes or fails on its own: cancelling under it
+  // would hide the overlay while the shot is still copied and saved.
+  if (e.key === "Escape") { if (busy) return; saveZoom(); invoke("snip_cancel").catch(() => {}); return; }
   if (!pickMode || pickBusy) return;
   const d = NUDGE[e.key];
   const zk = ZOOM_KEYS[e.key];

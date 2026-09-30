@@ -15513,6 +15513,21 @@ struct SnipPreview(Arc<Mutex<Option<Option<SnipBg>>>>);
 // window's existence: is what tells open_snip a snip is already in progress.
 static SNIP_ACTIVE: AtomicBool = AtomicBool::new(false);
 
+// Bumped by begin_capture every time a session starts. A capture that is already
+// running when the session is cancelled (and maybe a new one started) compares the
+// number it saw at its start, so it can tell that its session is gone and must not
+// copy, save, announce or close anything.
+static SNIP_GEN: AtomicU64 = AtomicU64::new(0);
+
+// True while the session a capture started in is still the running one.
+fn finalize_allowed(gen_at_start: u64, gen_now: u64, active: bool) -> bool {
+    active && gen_at_start == gen_now
+}
+
+fn snip_session_current(gen_at_start: u64) -> bool {
+    finalize_allowed(gen_at_start, SNIP_GEN.load(Ordering::SeqCst), SNIP_ACTIVE.load(Ordering::SeqCst))
+}
+
 // The running session is a colour pick (loupe overlay) rather than a region
 // snip. Both share the freeze + overlay pipeline; only the overlay's mode differs.
 static PICK_ACTIVE: AtomicBool = AtomicBool::new(false);
@@ -16439,6 +16454,7 @@ async fn begin_capture(
         SNIP_ACTIVE.store(true, Ordering::SeqCst);
     }
     PICK_ACTIVE.store(pick, Ordering::SeqCst);
+    SNIP_GEN.fetch_add(1, Ordering::SeqCst);
     // Loupe/quality/delay settings are read once here, in both capture modes,
     // while nothing else holds the store.
     let (cfg, hist_max, snip_q, snip_delay, hide_app) = app
@@ -17941,10 +17957,13 @@ fn clean_app_name(raw: &str) -> String {
 // sibling finalize_ocr_capture -- this used to run inline on the async worker thread,
 // blocking whichever other command happened to land on it for however long the encode
 // and disk write take.
-async fn finalize_capture(app: &AppHandle, crop: image::RgbaImage, app_name: Option<String>) -> Result<(), String> {
+async fn finalize_capture(app: &AppHandle, gen: u64, crop: image::RgbaImage, app_name: Option<String>) -> Result<(), String> {
     let (cw, ch) = crop.dimensions();
     if cw == 0 || ch == 0 {
         return Err("empty region".to_string());
+    }
+    if !snip_session_current(gen) {
+        return Err("cancelled".to_string());
     }
 
     // "Screenshot" + a precise timestamp (+ the source app for a window shot): the
@@ -17984,6 +18003,10 @@ async fn finalize_capture(app: &AppHandle, crop: image::RgbaImage, app_name: Opt
             .then(|| encode_screenshot(crop.as_raw(), cw, ch, &format, save_q))
             .flatten();
         let data_url = format!("data:{};base64,{}", screenshot_format_mime(data_format), base64_encode(&data_bytes));
+        // The encode can take a while: a cancel that came in meanwhile wins.
+        if !snip_session_current(gen) {
+            return Err("cancelled".to_string());
+        }
         let _ = arboard::Clipboard::new().and_then(|mut c| {
             c.set_image(arboard::ImageData {
                 width: cw as usize,
@@ -18001,6 +18024,9 @@ async fn finalize_capture(app: &AppHandle, crop: image::RgbaImage, app_name: Opt
     })
     .await
     .map_err(|e| e.to_string())??;
+    if !snip_session_current(gen) {
+        return Err("cancelled".to_string());
+    }
 
     close_all_snip(app);
     reveal_main_for_snip_result(app);
@@ -18043,10 +18069,13 @@ fn ocr_settings_from(app: &AppHandle) -> (u32, bool, String, bool) {
 // finalize_capture, that failure runs BEFORE close_all_snip, so the overlay stays
 // open and the caller's showError() can offer a retry with the freeze still in
 // place, instead of silently ending the session on a failed recognition.
-async fn finalize_ocr_capture(app: &AppHandle, state: &State<'_, SnipState>, crop: image::RgbaImage) -> Result<(), String> {
+async fn finalize_ocr_capture(app: &AppHandle, state: &State<'_, SnipState>, gen: u64, crop: image::RgbaImage) -> Result<(), String> {
     let (cw, ch) = crop.dimensions();
     if cw == 0 || ch == 0 {
         return Err("empty region".to_string());
+    }
+    if !snip_session_current(gen) {
+        return Err("cancelled".to_string());
     }
     let (upscale, join, lang, auto_pick) = ocr_settings_from(app);
     #[cfg(windows)]
@@ -18054,6 +18083,9 @@ async fn finalize_ocr_capture(app: &AppHandle, state: &State<'_, SnipState>, cro
         let result = tauri::async_runtime::spawn_blocking(move || ocr::recognize_crop(crop, upscale, join, &lang, auto_pick))
             .await
             .map_err(|e| e.to_string())??;
+        if !snip_session_current(gen) {
+            return Err("cancelled".to_string());
+        }
         close_all_snip(app);
         reveal_main_for_snip_result(app);
         state.0.lock().unwrap_or_else(|e| e.into_inner()).clear();
@@ -18062,7 +18094,7 @@ async fn finalize_ocr_capture(app: &AppHandle, state: &State<'_, SnipState>, cro
     }
     #[cfg(not(windows))]
     {
-        let _ = (crop, upscale, join, lang, auto_pick);
+        let _ = (crop, upscale, join, lang, auto_pick, gen, state, app);
         Err("ocr is only available on Windows".to_string())
     }
 }
@@ -18150,12 +18182,13 @@ async fn capture_region(
     width: u32,
     height: u32,
 ) -> Result<(), String> {
+    let gen = SNIP_GEN.load(Ordering::SeqCst);
     let crop = crop_frozen(&state, index, x, y, width, height).ok_or("empty region")?;
     let ocr_armed = *snip_mode.0.lock().unwrap_or_else(|e| e.into_inner()) == SnipMode::Ocr;
     if ocr_armed {
-        return finalize_ocr_capture(&app, &state, crop).await;
+        return finalize_ocr_capture(&app, &state, gen, crop).await;
     }
-    finalize_capture(&app, crop, None).await
+    finalize_capture(&app, gen, crop, None).await
 }
 
 // Top-level windows stacked ABOVE the target that overlap its rect (global
@@ -18264,6 +18297,7 @@ async fn capture_window(
     // OCR mode (set_snip_mode) before calling finalize_capture() unconditionally --
     // otherwise clicking a WINDOW while OCR mode is armed silently produces a
     // normal screenshot instead of running OCR.
+    let gen = SNIP_GEN.load(Ordering::SeqCst);
     let ocr_armed = *snip_mode.0.lock().unwrap_or_else(|e| e.into_inner()) == SnipMode::Ocr;
     // Source app name for the button label (best-effort; empty for unknown windows).
     let app_name = xcap::Window::all()
@@ -18293,7 +18327,7 @@ async fn capture_window(
             .filter(|im| !capture_looks_bad(im))
     };
     if let Some(im) = direct {
-        return if ocr_armed { finalize_ocr_capture(&app, &state, im).await } else { finalize_capture(&app, im, app_name.clone()).await };
+        return if ocr_armed { finalize_ocr_capture(&app, &state, gen, im).await } else { finalize_capture(&app, gen, im, app_name.clone()).await };
     }
 
     // Target's global physical rect + frozen-image origin.
@@ -18319,7 +18353,7 @@ async fn capture_window(
             if let Some((ox, oy)) = origin {
                 if let Some(im) = crop_frozen(&state, 0, wx - ox, wy - oy, ww as u32, wh as u32) {
                     if !capture_is_blank(&im) {
-                        return if ocr_armed { finalize_ocr_capture(&app, &state, im).await } else { finalize_capture(&app, im, app_name.clone()).await };
+                        return if ocr_armed { finalize_ocr_capture(&app, &state, gen, im).await } else { finalize_capture(&app, gen, im, app_name.clone()).await };
                     }
                 }
             }
@@ -18341,13 +18375,20 @@ async fn capture_window(
         }
         match grab {
             Some(im) if !capture_is_blank(&im) => {
-                let res = if ocr_armed { finalize_ocr_capture(&app, &state, im).await } else { finalize_capture(&app, im, app_name.clone()).await };
+                let res = if ocr_armed { finalize_ocr_capture(&app, &state, gen, im).await } else { finalize_capture(&app, gen, im, app_name.clone()).await };
                 // The overlay was hidden for the grab; a failed OCR or save reports its
                 // error inside that overlay, so it has to come back with the error.
-                show_overlay_again_on_error(res, || set_snip_overlay_hidden(&app, false))
+                // A cancelled session must not get its overlay back (a new one may own it now).
+                show_overlay_again_on_error(res, || {
+                    if snip_session_current(gen) {
+                        set_snip_overlay_hidden(&app, false);
+                    }
+                })
             }
             _ => {
-                set_snip_overlay_hidden(&app, false);
+                if snip_session_current(gen) {
+                    set_snip_overlay_hidden(&app, false);
+                }
                 Err("blocked".to_string())
             }
         }
@@ -18359,7 +18400,7 @@ async fn capture_window(
             .filter(|im| !capture_is_blank(im));
         match img {
             Some(im) => {
-                if ocr_armed { finalize_ocr_capture(&app, &state, im).await } else { finalize_capture(&app, im, app_name.clone()).await }
+                if ocr_armed { finalize_ocr_capture(&app, &state, gen, im).await } else { finalize_capture(&app, gen, im, app_name.clone()).await }
             }
             None => Err("blocked".to_string()),
         }
@@ -37095,6 +37136,15 @@ fn start_sync_poll(app: AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ---- a capture of a cancelled session finishes without side effects ----
+
+    #[test]
+    fn finalize_is_refused_for_a_session_that_ended_or_was_replaced() {
+        assert!(finalize_allowed(2, 2, true));
+        assert!(!finalize_allowed(1, 2, true));
+        assert!(!finalize_allowed(1, 1, false));
+    }
 
     // ---- the overlay hit-tests a window by its frame, not its client area ----
 
