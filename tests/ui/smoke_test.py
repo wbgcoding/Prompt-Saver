@@ -16357,6 +16357,21 @@ def main():
       if (document.getElementById('modal-confirm').disabled) errs.push('564-m1: Save stayed disabled after the refused save');
     }
 """)
+        failed += ar_probe('v2', 'dictation: a final text that lands late replaces the live partial instead of doubling it', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { voiceInterim: true } };</script>\n', r"""
+    await bootReady();
+    const btn = document.getElementById('voice-btn');
+    const input = document.getElementById('input');
+    input.value = '';
+    btn.click(); await sleep(100);
+    window.__FIRE__('voice-partial', { id: 1, token: 1, text: 'hello' });
+    await sleep(50);
+    if (input.value.trim() !== 'hello') errs.push('564-v2: fixture: the partial did not land, got ' + JSON.stringify(input.value));
+    window.__FIRE__('voice-stopped', { id: 1, token: 1, reason: 'manual' });
+    await sleep(50);
+    window.__FIRE__('voice-text', { id: 1, token: 1, text: 'hello world' });
+    await sleep(100);
+    if (input.value.trim() !== 'hello world') errs.push('564-v2: the late final text should replace the partial, field holds ' + JSON.stringify(input.value));
+""")
         # ---- main window findings: generated block end ----
         print("PASS" if not failed else f"{failed} problem(s)")
         return 1 if failed else 0

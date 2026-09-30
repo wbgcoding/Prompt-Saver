@@ -11138,7 +11138,7 @@ let voiceArmCancelled = false; // stopVoice() was called before voice_start's in
 // already fired -- delivered instead of dropped, but only within the grace
 // window and only to ITS OWN target, never adopted by whatever session (if any)
 // has started in the meantime. Not an expert setting -- internal timing.
-let voicePrev = null; // {token, el, caret, lang, hotkey, endedAt} | null
+let voicePrev = null; // {token, el, caret, lang, hotkey, endedAt, interim} | null
 const VOICE_LATE_GRACE_MS = 3000;
 
 // The two-letter code voice.js's command tables are keyed by, derived from
@@ -11179,6 +11179,11 @@ function endVoiceUi() {
       token: voiceToken,
       el: voiceTargetEl,
       caret: voiceTargetEl.selectionEnd ?? null,
+      // The live partial still sitting in the field: the final text of this very
+      // session replaces it instead of landing next to it.
+      interim: voiceInterim
+        ? { start: voiceInterim.start, len: voiceInterim.len, text: voiceTargetEl.value.substr(voiceInterim.start, voiceInterim.len) }
+        : null,
       lang: voiceResolvedLang,
       hotkey: voiceTargetEl === voiceHotkeyBuffer,
       endedAt: Date.now(),
@@ -11275,6 +11280,14 @@ function deliverLateVoiceText(payload) {
   if (prev.hotkey) { deliverVoiceHotkeyText(processed); return; }
   const el = prev.el;
   if (!el || el.classList.contains("hidden")) return;
+  const part = prev.interim;
+  if (part && el.value.substr(part.start, part.len) === part.text) {
+    // Still exactly the partial the session left behind: swap it for the final text.
+    el.value = el.value.slice(0, part.start) + processed + el.value.slice(part.start + part.len);
+    el.selectionStart = el.selectionEnd = part.start + processed.length;
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    return;
+  }
   const atEnd = txt("voiceInsert") === "end";
   const at = atEnd ? el.value.length : (prev.caret ?? el.value.length);
   insertLateVoiceText(el, processed, at);
