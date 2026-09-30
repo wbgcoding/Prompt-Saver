@@ -12673,6 +12673,28 @@ async fn delete_copy_entry(app: AppHandle, rowid: i64) -> bool {
         .unwrap_or(false)
 }
 
+// The boxes float_recall spreads out, in physical pixels: every pill (in a stable
+// id order) and then every folder, each sized by its own scale and the screen's
+// scale factor. Returns the pill ids in the same order as their boxes.
+fn recall_wishes(settings: &Settings, prompts: &[Prompt], work: Rect, dpi: f64) -> (Vec<String>, Vec<Rect>) {
+    let mut wishes: Vec<Rect> = Vec::new();
+    let mut pill_ids: Vec<String> = settings.floating.keys().cloned().collect();
+    pill_ids.sort(); // stable fan-out order across runs
+    for id in &pill_ids {
+        let scale = float_scale_of(settings, id);
+        let (w, h) = match prompts.iter().find(|p| &p.id == id) {
+            Some(p) => pill_dims(is_image_prompt(p), scale),
+            None => pill_dims(false, scale),
+        };
+        wishes.push(Rect { x: work.x, y: work.y, w: w * dpi, h: h * dpi });
+    }
+    for folder in &settings.float_folders {
+        let side = folder_box(folder.scale) * dpi;
+        wishes.push(Rect { x: work.x, y: work.y, w: side, h: side });
+    }
+    (pill_ids, wishes)
+}
+
 // Expert action "Bring every floating window back to the main screen": the
 // emergency exit once a run of monitor changes has left positions and screen
 // identities not worth untangling by hand. Every pill and folder, parked or
@@ -12688,21 +12710,14 @@ async fn float_recall(app: AppHandle, state: State<'_, Db>) -> Result<(), String
             .cloned()
             .unwrap_or((String::new(), 0, 0, 1920, 1080));
         let work = Rect { x: mx as f64, y: my as f64, w: mw as f64, h: mh as f64 };
-
-        let mut wishes: Vec<Rect> = Vec::new();
-        let mut pill_ids: Vec<String> = store.settings.floating.keys().cloned().collect();
-        pill_ids.sort(); // stable fan-out order across runs
-        for id in &pill_ids {
-            let scale = float_scale_of(&store.settings, id);
-            let (w, h) = match store.prompts.iter().find(|p| &p.id == id) {
-                Some(p) => pill_dims(is_image_prompt(p), scale),
-                None => pill_dims(false, scale),
-            };
-            wishes.push(Rect { x: work.x, y: work.y, w, h });
-        }
-        for folder in &store.settings.float_folders {
-            wishes.push(Rect { x: work.x, y: work.y, w: folder_box(folder.scale), h: folder_box(folder.scale) });
-        }
+        // The work area is in physical pixels, the box sizes in logical ones: scale
+        // them by the main screen's own factor, as the folder dissolve does.
+        let dpi = app
+            .get_webview_window("main")
+            .and_then(|w| w.available_monitors().ok())
+            .and_then(|m| m.first().map(|m| m.scale_factor()))
+            .unwrap_or(1.0);
+        let (pill_ids, wishes) = recall_wishes(&store.settings, &store.prompts, work, dpi);
         let spots = spread_free_positions(&wishes, &[], work);
 
         for (id, (x, y)) in pill_ids.iter().zip(spots.iter()) {
@@ -52079,5 +52094,46 @@ mod tests {
             || order.lock().unwrap().push("restart"),
         ));
         assert_eq!(*order.lock().unwrap(), vec!["answer"], "no restart unless one is due");
+    }
+
+    fn recall_rects(dpi_for_wishes: f64, dpi_on_screen: f64) -> Vec<Rect> {
+        let mut settings = Settings::default();
+        for id in ["a", "b", "c"] {
+            settings.floating.insert(id.to_string(), Pos::default());
+        }
+        settings.float_folders.push(FloatFolder {
+            id: "f".to_string(),
+            name: String::new(),
+            pos: Pos::default(),
+            scale: 1.0,
+            members: vec!["a".to_string(), "b".to_string()],
+        });
+        let work = Rect { x: 0.0, y: 0.0, w: 1920.0, h: 1080.0 };
+        let (_ids, wishes) = recall_wishes(&settings, &[], work, dpi_for_wishes);
+        let spots = spread_free_positions(&wishes, &[], work);
+        // What the windows really occupy: the logical box times the screen's factor.
+        let (_ids, real) = recall_wishes(&settings, &[], work, dpi_on_screen);
+        spots
+            .iter()
+            .zip(real.iter())
+            .map(|((x, y), r)| Rect { x: *x, y: *y, w: r.w, h: r.h })
+            .collect()
+    }
+
+    fn any_overlap(rects: &[Rect]) -> bool {
+        for (i, a) in rects.iter().enumerate() {
+            for b in &rects[i + 1..] {
+                if a.x < b.x + b.w - 0.5 && b.x < a.x + a.w - 0.5 && a.y < b.y + b.h - 0.5 && b.y < a.y + a.h - 0.5 {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    #[test]
+    fn recalled_windows_do_not_overlap_on_a_scaled_screen() {
+        assert!(!any_overlap(&recall_rects(1.5, 1.5)), "boxes sized for the screen spread without overlap");
+        assert!(any_overlap(&recall_rects(1.0, 1.5)), "boxes sized without the factor overlap once drawn at it");
     }
 }
