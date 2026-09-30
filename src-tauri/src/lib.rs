@@ -31079,10 +31079,12 @@ const VARIANT_SEP: &str = "\n<!-- next -->\n";
 const VARIANT_SEP_ESCAPED: &str = "\n<!-- \\next -->\n";
 
 fn join_variants(text: &str, variants: &[String]) -> String {
-    if variants.is_empty() {
-        return text.to_string();
-    }
+    // Escaped even with no further entries: a single text that contains the marker
+    // verbatim must not come back split in two.
     let escape = |s: &str| s.replace(VARIANT_SEP, VARIANT_SEP_ESCAPED);
+    if variants.is_empty() {
+        return escape(text);
+    }
     std::iter::once(escape(text))
         .chain(variants.iter().map(|s| escape(s)))
         .collect::<Vec<_>>()
@@ -31272,7 +31274,7 @@ fn to_txt(prompts: &[Prompt]) -> String {
         // Entries 2..n ride along inside the body itself, joined by the same
         // marker as CSV/Markdown-sync: never the bare "---" the blocks below are
         // themselves separated by.
-        let mut block = format!("### {}\n{}", p.name, join_variants(&p.text, &p.variants));
+        let mut block = format!("### {}\n{}", p.name, txt_escape_body(&join_variants(&p.text, &p.variants)));
         if !p.color.is_empty() {
             let _ = write!(block, "\n@color {}", p.color);
         }
@@ -31636,6 +31638,55 @@ fn parse_settings_lines(lines: &str, data: &mut ImportData) {
     }
 }
 
+// The metadata keys a TXT block may end with (see to_txt).
+const TXT_META_KEYS: [&str; 12] = [
+    "rotatemode", "imagedata", "flags", "capsize", "caption", "icon", "pdfpage", "file", "style", "tags", "notes", "color",
+];
+
+// True for a body line that would read as metadata or as the block rule once
+// written out: "@..." or a bare "---", behind any number of escaping backslashes.
+fn txt_line_needs_escape(line: &str) -> bool {
+    let bare = line.trim_start_matches('\\');
+    bare.starts_with('@') || bare == "---"
+}
+
+// A body line that could be mistaken for metadata or for the block separator gets
+// one extra leading backslash; every other line, including one that merely starts
+// with a backslash, is written as it is.
+fn txt_escape_body(body: &str) -> String {
+    body.split('\n')
+        .map(|l| if txt_line_needs_escape(l) { format!("\\{l}") } else { l.to_string() })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn txt_unescape_body(body: &str) -> String {
+    body.split('\n')
+        .map(|l| match l.strip_prefix('\\') {
+            Some(rest) if txt_line_needs_escape(l) => rest,
+            _ => l,
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+// Splits a block body into its text and the trailing run of "@key value" lines
+// (known keys only, each at most once, the run ends at the first other line).
+fn split_txt_meta(body: &str) -> (String, HashMap<&'static str, String>) {
+    let mut lines: Vec<&str> = body.split('\n').collect();
+    let mut meta: HashMap<&'static str, String> = HashMap::new();
+    while let Some(last) = lines.last() {
+        let Some((key, value)) = last.strip_prefix('@').and_then(|r| r.split_once(' ')) else { break };
+        let Some(known) = TXT_META_KEYS.iter().find(|k| **k == key) else { break };
+        if meta.contains_key(known) {
+            break;
+        }
+        meta.insert(known, value.to_string());
+        lines.pop();
+    }
+    (lines.join("\n"), meta)
+}
+
 fn parse_txt(content: &str) -> ImportData {
     let mut data = ImportData::default();
     for block in content.replace("\r\n", "\n").split("\n\n---\n\n") {
@@ -31658,66 +31709,40 @@ fn parse_txt(content: &str) -> ImportData {
             Some((t, _)) => t,
             None => body,
         };
-        // Strip trailing metadata lines in reverse write order:
-        // @rotatemode, @imagedata, @flags, @icon, @file, @style, @color.
-        let (body, rotate_mode) = match body.rsplit_once("\n@rotatemode ") {
-            Some((t, v)) => (t.to_string(), v.trim().to_string()),
-            None => (body.to_string(), String::new()),
-        };
-        let (body, image) = match body.rsplit_once("\n@imagedata ") {
-            Some((t, v)) => (t.to_string(), v.trim().to_string()),
-            None => (body.to_string(), String::new()),
-        };
-        let (body, show_image, copy_image) = match body.rsplit_once("\n@flags ") {
-            Some((t, v)) => {
+        // The metadata is the trailing run of "@key value" lines, whatever their
+        // order; everything above that run is the body, whose own lines were
+        // escaped on export when they could be mistaken for one.
+        let (body, mut meta) = split_txt_meta(body);
+        let body = txt_unescape_body(&body);
+        let rotate_mode = meta.remove("rotatemode").map(|v| v.trim().to_string()).unwrap_or_default();
+        let image = meta.remove("imagedata").map(|v| v.trim().to_string()).unwrap_or_default();
+        let (show_image, copy_image) = match meta.remove("flags") {
+            Some(v) => {
                 let mut parts = v.split_whitespace();
                 let show = parts.next() == Some("1");
                 let copy = parts.next() == Some("1");
-                (t.to_string(), show, copy)
+                (show, copy)
             }
-            None => (body, false, false),
+            None => (false, false),
         };
-        let (body, caption_size) = match body.rsplit_once("\n@capsize ") {
-            Some((t, v)) => (t.to_string(), v.trim().parse().unwrap_or(0)),
-            None => (body, 0),
-        };
-        let (body, caption) = match body.rsplit_once("\n@caption ") {
-            Some((t, v)) => (t.to_string(), v.trim().to_string()),
-            None => (body, String::new()),
-        };
-        let (body, icon_path) = match body.rsplit_once("\n@icon ") {
-            Some((t, v)) => (t.to_string(), v.trim().to_string()),
-            None => (body, String::new()),
-        };
-        let (body, pdf_page) = match body.rsplit_once("\n@pdfpage ") {
-            Some((t, v)) => (t.to_string(), v.trim().parse().unwrap_or(0)),
-            None => (body, 0),
-        };
-        let (body, file_path) = match body.rsplit_once("\n@file ") {
-            Some((t, f)) => (t.to_string(), f.trim().to_string()),
-            None => (body, String::new()),
-        };
-        let (body, font, font_size) = match body.rsplit_once("\n@style ") {
-            Some((t, s)) => {
-                let mut parts = s.split_whitespace();
+        let caption_size = meta.remove("capsize").and_then(|v| v.trim().parse().ok()).unwrap_or(0);
+        let caption = meta.remove("caption").map(|v| v.trim().to_string()).unwrap_or_default();
+        let icon_path = meta.remove("icon").map(|v| v.trim().to_string()).unwrap_or_default();
+        let pdf_page = meta.remove("pdfpage").and_then(|v| v.trim().parse().ok()).unwrap_or(0);
+        let file_path = meta.remove("file").map(|v| v.trim().to_string()).unwrap_or_default();
+        let (font, font_size) = match meta.remove("style") {
+            Some(v) => {
+                let mut parts = v.split_whitespace();
                 let font = parts.next().filter(|f| *f != "-").unwrap_or("").to_string();
                 let size = parts.next().and_then(|v| v.parse().ok()).unwrap_or(0);
-                (t.to_string(), font, size)
+                (font, size)
             }
-            None => (body, String::new(), 0),
+            None => (String::new(), 0),
         };
-        let (body, tags) = match body.rsplit_once("\n@tags ") {
-            Some((t, v)) => (t.to_string(), split_tag_list(v)),
-            None => (body, Vec::new()),
-        };
-        let (body, notes) = match body.rsplit_once("\n@notes ") {
-            Some((t, v)) => (t.to_string(), notes_unescape(v.trim())),
-            None => (body, String::new()),
-        };
-        let (text, color) = match body.rsplit_once("\n@color ") {
-            Some((t, c)) => (t.to_string(), c.trim().to_string()),
-            None => (body, String::new()),
-        };
+        let tags = meta.remove("tags").map(|v| split_tag_list(&v)).unwrap_or_default();
+        let notes = meta.remove("notes").map(|v| notes_unescape(v.trim())).unwrap_or_default();
+        let color = meta.remove("color").map(|v| v.trim().to_string()).unwrap_or_default();
+        let text = body;
         // Entries 2..n still ride along inside `text` at this point: split
         // them back out now that every trailing @key line is gone.
         let (text, variants) = split_variants(&text);
@@ -51859,5 +51884,74 @@ mod tests {
         export_journal_remove(&journal, &alive);
         assert!(!journal.exists(), "an empty journal is removed");
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    fn txt_round_trip(text: &str) -> ImportedPrompt {
+        let mut p = test_prompt("p");
+        p.text = text.to_string();
+        let mut data = parse_txt(&to_txt(&[p]));
+        assert_eq!(data.prompts.len(), 1, "one block in, one block out: {text:?}");
+        data.prompts.remove(0)
+    }
+
+    #[test]
+    fn a_body_line_that_looks_like_metadata_survives_the_txt_round_trip() {
+        for text in [
+            "a\n@file x.js\nb",
+            "@tags x",
+            "tail\n@color red",
+            "x\n@notes hi\n@style a 1",
+            r"\@file keeps its backslash",
+            "a\n\\\\@file two",
+            r"path \\server\share
+\begin{x}",
+        ] {
+            let got = txt_round_trip(text);
+            assert_eq!(got.text, text);
+            assert_eq!(got.file_path, "");
+            assert!(got.tags.is_empty());
+            assert_eq!(got.color, "");
+        }
+    }
+
+    #[test]
+    fn a_markdown_rule_inside_a_prompt_survives_the_txt_round_trip() {
+        let got = txt_round_trip("x\n\n---\n\ny");
+        assert_eq!(got.text, "x\n\n---\n\ny");
+        let mut p = test_prompt("q");
+        p.text = "x\n\n---\n\ny".to_string();
+        let data = parse_txt(&to_txt(&[p, test_prompt("r")]));
+        assert_eq!(data.prompts.len(), 2);
+    }
+
+    #[test]
+    fn a_single_text_holding_the_variant_marker_is_not_split_on_import() {
+        let got = txt_round_trip("one\n<!-- next -->\ntwo");
+        assert_eq!(got.text, "one\n<!-- next -->\ntwo");
+        assert!(got.variants.is_empty());
+        let joined = join_variants("one\n<!-- next -->\ntwo", &[]);
+        assert_eq!(split_variants(&joined), ("one\n<!-- next -->\ntwo".to_string(), Vec::new()));
+    }
+
+    #[test]
+    fn real_metadata_still_round_trips_beside_an_escaped_body() {
+        let mut p = test_prompt("p");
+        p.text = "line\n@file inside".to_string();
+        p.file_path = r"C:\docs\a.txt".to_string();
+        p.tags = vec!["t1".to_string(), "t2".to_string()];
+        p.color = "#112233".to_string();
+        let got = parse_txt(&to_txt(&[p])).prompts.remove(0);
+        assert_eq!(got.text, "line\n@file inside");
+        assert_eq!(got.file_path, r"C:\docs\a.txt");
+        assert_eq!(got.tags, vec!["t1".to_string(), "t2".to_string()]);
+        assert_eq!(got.color, "#112233");
+    }
+
+    #[test]
+    fn an_older_txt_export_with_trailing_metadata_still_imports() {
+        let got = parse_txt("### Old\nbody line\n@color #abcdef\n@file D:\\x.txt").prompts.remove(0);
+        assert_eq!(got.text, "body line");
+        assert_eq!(got.color, "#abcdef");
+        assert_eq!(got.file_path, r"D:\x.txt");
     }
 }
