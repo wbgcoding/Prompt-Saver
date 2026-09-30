@@ -7346,6 +7346,7 @@ window.addEventListener("pointerup", async (e) => {
   if (!d.moved) {
     // A plain click copies, exactly like the tile it stands for.
     if (!p) return;
+    if (chainMode) { await toggleChainPick(p); return; } // pick (asks vars), don't copy
     if (dialogTokens(p, await peekRotatedText(p)).length) { await copyTextWithVars(p, d.el); return; }
     if (copyOnCooldown(d.id)) return;
     if (await copyResolved(p)) {

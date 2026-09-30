@@ -16085,6 +16085,23 @@ def main():
     if (!bar.classList.contains('hidden')) errs.push('563-4: the batch bar stayed visible after switching to the favorites grid');
     if (document.body.classList.contains('grid-selecting')) errs.push('563-4: the grid stayed in selection mode after switching to the favorites grid');
 """)
+        failed += ar_probe('f11', 'folder popover member: a click in chain mode picks the prompt for the chain', 'index', '1000x780', '', r"""
+    await bootReady();
+    const click = async (el) => { const [x, y] = centre(el); ptr('pointerdown', x, y, el); ptr('pointerup', x, y, window); await sleep(300); };
+    document.getElementById('chain-btn').click();
+    await sleep(200);
+    await click(tileEl('p0'));
+    const copies = () => callsFor('copy_text').map((a) => a && a.text);
+    if (!copies().some((x) => /number 1[.]/.test(x || ''))) errs.push('563-11: fixture: the chain pick of p0 did not copy its text, got ' + JSON.stringify(copies()));
+    await click(document.querySelector('#grid .folder-tile'));
+    const member = document.querySelector('.folder-member-tile[data-id="p4"]');
+    if (!member) { errs.push('563-11: the folder popover did not open'); }
+    else {
+      await click(member);
+      const last = copies().pop() || '';
+      if (!(/number 1[.]/.test(last) && /number 5[.]/.test(last))) errs.push('563-11: a member click in chain mode replaced the chain text instead of adding a step, clipboard now: ' + JSON.stringify(last));
+    }
+""")
         # ---- main window findings: generated block end ----
         print("PASS" if not failed else f"{failed} problem(s)")
         return 1 if failed else 0
