@@ -11568,6 +11568,11 @@ fn stage_and_validate_backup(backup_db: &std::path::Path, dir: &std::path::Path)
         let _ = fs::remove_file(&staged);
         return Err(e);
     }
+    // fs::copy keeps the source's modified time, which would make a fresh copy look
+    // old to the stale-file sweep of another instance: stamp it with now.
+    if let Ok(f) = fs::OpenOptions::new().write(true).open(&staged) {
+        let _ = f.set_modified(SystemTime::now());
+    }
     // A readable SQLite file is not necessarily one of THIS app's backups -- any
     // valid-but-unrelated .db (empty, wrong schema, a stray file the user picked)
     // would pass a bare "can I query it" check and, for scope "all", be renamed
@@ -28338,32 +28343,83 @@ fn output_in_job(cmd: &mut std::process::Command) -> std::io::Result<std::proces
 static EXPORT_JOURNAL: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
 static EXPORT_JOURNAL_LOCK: Mutex<()> = Mutex::new(());
 
+// One line per staged file: `host<TAB>pid<TAB>path`. The data folder may be shared
+// between machines, so a line is only ever acted on by the host that wrote it.
 fn journal_lines(journal: &Path) -> Vec<String> {
     fs::read_to_string(journal)
         .map(|t| t.lines().filter(|l| !l.is_empty()).map(String::from).collect())
         .unwrap_or_default()
 }
 
+fn journal_line(host: &str, pid: u32, staged: &Path) -> String {
+    format!("{}\t{}\t{}", host.replace(['\t', '\r', '\n'], " "), pid, staged.to_string_lossy())
+}
+
+fn parse_journal_line(line: &str) -> Option<(&str, u32, &str)> {
+    let mut it = line.splitn(3, '\t');
+    let host = it.next()?;
+    let pid = it.next()?.parse().ok()?;
+    let path = it.next()?;
+    Some((host, pid, path))
+}
+
+// Atomic replace: a reader never sees a half-written list.
 fn journal_write(journal: &Path, lines: &[String]) {
     if lines.is_empty() {
         let _ = fs::remove_file(journal);
     } else {
-        let _ = fs::write(journal, lines.join("\n") + "\n");
+        let tmp = journal.with_extension(format!("tmp{}", std::process::id()));
+        if fs::write(&tmp, lines.join("\n") + "\n").is_ok() && fs::rename(&tmp, journal).is_err() {
+            let _ = fs::remove_file(&tmp);
+        }
     }
 }
 
-fn export_journal_add(journal: &Path, staged: &Path) {
+// Read-modify-write across processes: the in-process mutex covers threads, a
+// create-new lock file covers a second local instance. A lock older than ten
+// seconds belongs to a dead run and is taken over; if it cannot be had within
+// a second the change runs unlocked rather than blocking an export.
+fn with_journal_lock<R>(journal: &Path, f: impl FnOnce() -> R) -> R {
     let _guard = EXPORT_JOURNAL_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let mut lines = journal_lines(journal);
-    lines.push(staged.to_string_lossy().into_owned());
-    journal_write(journal, &lines);
+    let lock = journal.with_extension("lock");
+    let mut held = false;
+    for _ in 0..20 {
+        if fs::OpenOptions::new().write(true).create_new(true).open(&lock).is_ok() {
+            held = true;
+            break;
+        }
+        let stale = fs::metadata(&lock)
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.elapsed().ok())
+            .is_some_and(|age| age > Duration::from_secs(10));
+        if stale {
+            let _ = fs::remove_file(&lock);
+        } else {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+    let out = f();
+    if held {
+        let _ = fs::remove_file(&lock);
+    }
+    out
+}
+
+fn export_journal_add(journal: &Path, staged: &Path) {
+    with_journal_lock(journal, || {
+        let mut lines = journal_lines(journal);
+        lines.push(journal_line(&local_host_name(), std::process::id(), staged));
+        journal_write(journal, &lines);
+    });
 }
 
 fn export_journal_remove(journal: &Path, staged: &Path) {
-    let _guard = EXPORT_JOURNAL_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let key = staged.to_string_lossy();
-    let lines: Vec<String> = journal_lines(journal).into_iter().filter(|l| *l != key).collect();
-    journal_write(journal, &lines);
+    with_journal_lock(journal, || {
+        let mine = journal_line(&local_host_name(), std::process::id(), staged);
+        let lines: Vec<String> = journal_lines(journal).into_iter().filter(|l| *l != mine).collect();
+        journal_write(journal, &lines);
+    });
 }
 
 // The process id in a `.export-<pid>-<stamp>.<ext>` staged name, and only for a
@@ -28379,22 +28435,32 @@ fn staged_export_pid(path: &Path) -> Option<u32> {
     pid.parse().ok()
 }
 
-// Removes the staged files of runs whose process is gone and forgets them. A file
-// whose process is still alive (another instance) stays listed.
-fn sweep_stale_exports(journal: &Path, is_alive: impl Fn(u32) -> bool) {
-    let _guard = EXPORT_JOURNAL_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let mut keep: Vec<String> = Vec::new();
-    for line in journal_lines(journal) {
-        let path = PathBuf::from(&line);
-        match staged_export_pid(&path) {
-            Some(pid) if pid == std::process::id() || is_alive(pid) => keep.push(line),
-            Some(_) => {
-                let _ = fs::remove_file(&path);
+// Removes the staged files of runs on THIS host whose process is gone and forgets
+// them. Lines of other hosts are kept verbatim (a pid means nothing there); a
+// file whose process is still alive stays listed. Callers skip this entirely in
+// a read-only instance.
+fn sweep_stale_exports(journal: &Path, host: &str, is_alive: impl Fn(u32) -> bool) {
+    with_journal_lock(journal, || {
+        let mut keep: Vec<String> = Vec::new();
+        for line in journal_lines(journal) {
+            let Some((line_host, pid, raw)) = parse_journal_line(&line) else {
+                continue; // not a line this version wrote: forgotten, never deleted
+            };
+            if line_host != host {
+                keep.push(line);
+                continue;
             }
-            None => {} // not one of ours: dropped from the list, never deleted
+            let path = PathBuf::from(raw);
+            match staged_export_pid(&path) {
+                Some(name_pid) if name_pid == pid && (pid == std::process::id() || is_alive(pid)) => keep.push(line),
+                Some(name_pid) if name_pid == pid => {
+                    let _ = fs::remove_file(&path);
+                }
+                _ => {} // not one of ours: dropped from the list, never deleted
+            }
         }
-    }
-    journal_write(journal, &keep);
+        journal_write(journal, &keep);
+    });
 }
 
 // Generous on purpose: this is a last-resort safety net against a hung
@@ -34749,11 +34815,14 @@ pub fn run() {
             reconcile_windows_state(autostart, start_min, url_scheme_on, demo);
             // A quit or crash mid-pack leaves raw copies and folders without a snapshot.
             cleanup_incomplete_backups(&backups_dir(&handle), Duration::from_secs(60));
-            remove_stale_staged_restores(&data_dir(&handle), Duration::from_secs(60));
-            // Staged exports a killed run left in the user's folders.
-            let journal = data_dir(&handle).join("export-staging.txt");
-            sweep_stale_exports(&journal, pid_is_alive);
-            let _ = EXPORT_JOURNAL.set(journal);
+            // A read-only instance never writes into the folder another machine owns.
+            if !DATA_DIR_READONLY.load(Ordering::Relaxed) {
+                remove_stale_staged_restores(&data_dir(&handle), Duration::from_secs(60));
+                // Staged exports a killed run left in the user's folders.
+                let journal = data_dir(&handle).join("export-staging.txt");
+                sweep_stale_exports(&journal, &local_host_name(), pid_is_alive);
+                let _ = EXPORT_JOURNAL.set(journal);
+            }
 
             // One place decides which pills and which folders belong on screen.
             sync_float_windows(&handle);
@@ -51891,28 +51960,53 @@ mod tests {
     }
 
     #[test]
-    fn the_export_journal_sweeps_only_dead_staged_exports() {
+    fn the_export_journal_sweeps_only_dead_staged_exports_of_this_host() {
         let root = std::env::temp_dir().join(format!("{}-test-export-journal", brand::SLUG));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         let dead = root.join(".export-4000000001-123.mp4");
         let alive = root.join(".export-4000000002-456.mp4");
         let foreign = root.join("precious.docx");
-        for f in [&dead, &alive, &foreign] {
+        let other_host = root.join(".export-4000000003-789.mp4");
+        for f in [&dead, &alive, &foreign, &other_host] {
             std::fs::write(f, b"x").unwrap();
         }
         let journal = root.join("export-staging.txt");
-        for f in [&dead, &alive, &foreign] {
-            export_journal_add(&journal, f);
-        }
-        sweep_stale_exports(&journal, |pid| pid == 4000000002);
+        let host = local_host_name();
+        let mut lines: Vec<String> = [(&dead, 4000000001u32), (&alive, 4000000002), (&foreign, 1)]
+            .iter()
+            .map(|(f, pid)| journal_line(&host, *pid, f))
+            .collect();
+        let other_line = journal_line("OTHER-PC", 4000000003, &other_host);
+        lines.push(other_line.clone());
+        journal_write(&journal, &lines);
+        sweep_stale_exports(&journal, &host, |pid| pid == 4000000002);
         assert!(!dead.exists(), "a staged file of a dead process is removed");
         assert!(alive.exists(), "a live process keeps its file");
         assert!(foreign.exists(), "a journal line that is not a staged export name is never deleted");
+        assert!(other_host.exists(), "another host's staged file is never deleted");
         let left = journal_lines(&journal);
-        assert_eq!(left, vec![alive.to_string_lossy().into_owned()]);
-        export_journal_remove(&journal, &alive);
-        assert!(!journal.exists(), "an empty journal is removed");
+        assert_eq!(left, vec![journal_line(&host, 4000000002, &alive), other_line]);
+        let mine = root.join(format!(".export-{}-1.mp4", std::process::id()));
+        export_journal_add(&journal, &mine);
+        assert_eq!(journal_lines(&journal).len(), 3);
+        export_journal_remove(&journal, &mine);
+        assert_eq!(journal_lines(&journal).len(), 2, "only this process's own line is removed");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_staged_restore_copy_is_stamped_with_now() {
+        let root = std::env::temp_dir().join(format!("{}-test-stage-mtime", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let src = root.join("old.db");
+        drop(full_schema_db(&src, "x"));
+        let old = SystemTime::now() - Duration::from_secs(86400);
+        std::fs::OpenOptions::new().write(true).open(&src).unwrap().set_modified(old).unwrap();
+        let staged = stage_and_validate_backup(&src, &root).unwrap();
+        let age = std::fs::metadata(&staged).unwrap().modified().unwrap().elapsed().unwrap_or_default();
+        assert!(age < Duration::from_secs(60), "a fresh staged copy must not look stale");
         let _ = std::fs::remove_dir_all(&root);
     }
 
