@@ -49,6 +49,34 @@ fn remote_api_enabled(settings: &Settings) -> bool {
 fn network_filter_enabled(settings: &Settings) -> bool {
     settings.ui_flags.get("remoteNetworkFilter") == Some(&true)
 }
+// What a reset that turned the stored flags off still owes the outside world:
+// the receiver keeps its socket until stopped and the address scheme stays in
+// the registry until removed.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct ResetSideEffects {
+    pub stop_receiver: bool,
+    pub unregister_scheme: bool,
+}
+
+pub(crate) fn reset_side_effects(old: &Settings, new: &Settings) -> ResetSideEffects {
+    ResetSideEffects {
+        stop_receiver: remote_api_enabled(old) && !remote_api_enabled(new),
+        unregister_scheme: url_scheme_enabled(old) && !url_scheme_enabled(new),
+    }
+}
+
+// Carries out the effects after the reset was saved.
+pub(crate) fn run_reset_side_effects(app: &AppHandle, effects: &ResetSideEffects) {
+    if effects.stop_receiver {
+        stop(app);
+    }
+    if effects.unregister_scheme {
+        if let Err(e) = apply_url_scheme_registration(false) {
+            crate::append_crash_log(&format!("reset: the address scheme could not be removed: {e}"));
+        }
+    }
+}
+
 pub(crate) fn url_scheme_enabled(settings: &Settings) -> bool {
     settings.ui_flags.get("urlScheme") == Some(&true)
 }
@@ -1463,6 +1491,18 @@ pub(crate) fn url_scheme_restore(_prior: Option<String>) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_reset_that_turns_the_receiver_and_the_scheme_off_owes_both_side_effects() {
+        let mut old = Settings::default();
+        old.ui_flags.insert("remoteApi".into(), true);
+        old.ui_flags.insert("urlScheme".into(), true);
+        let new = Settings::default();
+        assert_eq!(reset_side_effects(&old, &new), ResetSideEffects { stop_receiver: true, unregister_scheme: true });
+        assert_eq!(reset_side_effects(&new, &new), ResetSideEffects { stop_receiver: false, unregister_scheme: false });
+        // A flag that stays on after the reset is not turned off by it.
+        assert_eq!(reset_side_effects(&old, &old), ResetSideEffects { stop_receiver: false, unregister_scheme: false });
+    }
+
     use super::*;
     use std::net::Ipv4Addr;
 

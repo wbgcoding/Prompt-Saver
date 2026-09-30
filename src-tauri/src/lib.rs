@@ -8377,8 +8377,9 @@ async fn reset_settings(app: AppHandle, state: State<'_, Db>) -> Result<(), Stri
         }
     }
     let _ = apply_autostart(false, false);
-    {
+    let effects = {
         let mut store = lock(&state);
+        let old = store.settings.clone();
         let prompts = std::mem::take(&mut store.prompts); // keep the prompts
         // The backup password is a key, not a preference: dropping it would make
         // every password-protected backup permanently unreadable.
@@ -8391,7 +8392,9 @@ async fn reset_settings(app: AppHandle, state: State<'_, Db>) -> Result<(), Stri
         // than reasoning about what survived a factory reset.
         store.forget_written_rows();
         save_settings(&app, &store.settings);
-    }
+        remote::reset_side_effects(&old, &store.settings)
+    };
+    remote::run_reset_side_effects(&app, &effects);
     // Defaults mean the screenshot switch is off: open windows go back to excluded.
     apply_capture_exclusion_all(&app, true);
     Ok(())
@@ -27167,11 +27170,14 @@ fn reset_expert_settings(settings: &mut Settings) {
 // Clear all expert overrides back to the shipped defaults.
 #[tauri::command]
 fn reset_expert(app: AppHandle, state: State<Db>) {
-    {
+    let effects = {
         let mut store = lock(&state);
+        let old = store.settings.clone();
         reset_expert_settings(&mut store.settings);
         save_settings(&app, &store.settings);
-    }
+        remote::reset_side_effects(&old, &store.settings)
+    };
+    remote::run_reset_side_effects(&app, &effects);
     ERROR_LOG_KEEP_BYTES.store(256 * 1024, Ordering::Relaxed);
     // Cleared flags put the screenshot permission back to its default (off), which
     // means the exclusion is on: re-assert it on every window so it is immediate.
