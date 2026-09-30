@@ -28435,6 +28435,22 @@ fn staged_export_pid(path: &Path) -> Option<u32> {
     pid.parse().ok()
 }
 
+// Only a local absolute path may be deleted from a journal line: a UNC or other
+// network path (or a relative one) would make every start talk to a host the
+// journal's writer picked.
+fn is_local_absolute_path(raw: &str) -> bool {
+    if raw.starts_with("\\\\") || raw.starts_with("//") {
+        return false;
+    }
+    let b = raw.as_bytes();
+    if b.len() < 3 || !b[0].is_ascii_alphabetic() || b[1] != b':' || (b[2] != b'\\' && b[2] != b'/') {
+        return false;
+    }
+    let root: Vec<u16> = format!("{}:\\", b[0] as char).encode_utf16().chain(std::iter::once(0)).collect();
+    const DRIVE_REMOTE: u32 = 4;
+    unsafe { windows::Win32::Storage::FileSystem::GetDriveTypeW(windows::core::PCWSTR(root.as_ptr())) != DRIVE_REMOTE }
+}
+
 // Removes the staged files of runs on THIS host whose process is gone and forgets
 // them. Lines of other hosts are kept verbatim (a pid means nothing there); a
 // file whose process is still alive stays listed. Callers skip this entirely in
@@ -28449,6 +28465,9 @@ fn sweep_stale_exports(journal: &Path, host: &str, is_alive: impl Fn(u32) -> boo
             if line_host != host {
                 keep.push(line);
                 continue;
+            }
+            if !is_local_absolute_path(raw) {
+                continue; // network or relative: forgotten, never deleted
             }
             let path = PathBuf::from(raw);
             match staged_export_pid(&path) {
@@ -51993,6 +52012,18 @@ mod tests {
         export_journal_remove(&journal, &mine);
         assert_eq!(journal_lines(&journal).len(), 2, "only this process's own line is removed");
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_journal_path_must_be_local_and_absolute() {
+        assert!(is_local_absolute_path(r"C:\x\.export-1-1.mp4"));
+        assert!(is_local_absolute_path(r"C:/x/.export-1-1.mp4"));
+        assert!(!is_local_absolute_path(r"\\host\share\.export-1-1.mp4"));
+        assert!(!is_local_absolute_path(r"//host/share/.export-1-1.mp4"));
+        assert!(!is_local_absolute_path(r"\\?\UNC\host\share\.export-1-1.mp4"));
+        assert!(!is_local_absolute_path(r".export-1-1.mp4"));
+        assert!(!is_local_absolute_path(r"sub\.export-1-1.mp4"));
+        assert!(!is_local_absolute_path(r"C:.export-1-1.mp4"));
     }
 
     #[test]
