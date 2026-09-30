@@ -32,7 +32,9 @@ let lastUsed = {};
 let active = -1; // keyboard-highlighted row index into the CURRENT rendered list
 let closed = false;
 
-const MAX_RESULTS = 8;
+// Rows listed at once: the launcherMaxResults expert value, read in boot().
+const MAX_RESULTS_DEFAULT = 8;
+let maxResults = MAX_RESULTS_DEFAULT;
 const PREVIEW_LEN = 70;
 
 function close() {
@@ -64,7 +66,7 @@ function score(p, q) {
 function defaultList() {
   return [...prompts]
     .sort((a, b) => (usage[b.id] || 0) - (usage[a.id] || 0) || (lastUsed[b.id] || 0) - (lastUsed[a.id] || 0))
-    .slice(0, MAX_RESULTS);
+    .slice(0, maxResults);
 }
 
 function matchList(q) {
@@ -72,7 +74,7 @@ function matchList(q) {
     .map((p) => [p, score(p, q)])
     .filter(([, s]) => s >= 0)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, MAX_RESULTS)
+    .slice(0, maxResults)
     .map(([p]) => p);
 }
 
@@ -151,6 +153,9 @@ async function boot() {
   // A lean command instead of get_state: this window has to be ready the instant
   // its hotkey fires, and it needs four small fields, not a whole prompt each.
   const state = await invoke("launcher_items").catch(() => ({ prompts: [], language: "", usage: {}, last_used: {} }));
+  const cfg = await invoke("get_settings").catch(() => null);
+  const wanted = Number(cfg?.ui_values?.launcherMaxResults);
+  maxResults = Number.isFinite(wanted) ? Math.min(20, Math.max(3, Math.round(wanted))) : MAX_RESULTS_DEFAULT;
   applyFloatTheme(await invoke("current_theme").catch(() => null), await invoke("theme_vars").catch(() => ({})));
   listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars));
 

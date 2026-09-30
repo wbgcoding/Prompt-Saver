@@ -12832,14 +12832,51 @@ fn outline_closure_is_current(gen: u64, current: u64) -> bool {
     gen == current
 }
 
+// The outline's shipped frame colour, the one recoutline.html falls back to.
+const REC_OUTLINE_DEFAULT_COLOR: &str = "#2563eb";
+
+// The `recOutline` switch ships on: only an explicit false hides the frame.
+fn rec_outline_wanted(settings: &Settings) -> bool {
+    settings.ui_flags.get("recOutline").copied().unwrap_or(true)
+}
+
+// The stored colour, or the default when it is missing or not a plain
+// `#rrggbb`. The value ends up inside a script string handed to the outline
+// window, so nothing but six hex digits may ever pass.
+fn rec_outline_color(settings: &Settings) -> String {
+    match settings.ui_texts.get("recOutlineColor") {
+        Some(c) if c.len() == 7 && c.starts_with('#') && c[1..].bytes().all(|b| b.is_ascii_hexdigit()) => c.to_ascii_lowercase(),
+        _ => REC_OUTLINE_DEFAULT_COLOR.to_string(),
+    }
+}
+
+// What a recording start asks the outline for: the region and the colour, or
+// nothing when the target has no outline (monitor and window recordings) or
+// the user switched it off.
+fn rec_outline_request(settings: &Settings, rect: Option<(i32, i32, u32, u32)>) -> Option<((i32, i32, u32, u32), String)> {
+    if !rec_outline_wanted(settings) {
+        return None;
+    }
+    rect.map(|r| (r, rec_outline_color(settings)))
+}
+
+// Runs in the outline window before its page, so the frame has its colour from
+// the first paint. The page reads it from the `--outline-color` variable.
+fn rec_outline_init_script(color: &str) -> String {
+    format!(
+        "(function(){{var c='{color}';var a=function(){{document.documentElement.style.setProperty('--outline-color',c);}};if(document.readyState==='loading'){{document.addEventListener('DOMContentLoaded',a);}}else{{a();}}}})();"
+    )
+}
+
 #[cfg(windows)]
-fn show_rec_outline(app: &AppHandle, rect: (i32, i32, u32, u32)) {
+fn show_rec_outline(app: &AppHandle, rect: (i32, i32, u32, u32), color: &str) {
     let label = "rec-outline";
     if app.get_webview_window(label).is_some() {
         return;
     }
     let gen = REC_OUTLINE_GEN.fetch_add(1, Ordering::SeqCst) + 1;
     let win = match WebviewWindowBuilder::new(app, label, WebviewUrl::App("recoutline.html".into()))
+        .initialization_script(rec_outline_init_script(color))
         .title("")
         .decorations(false)
         .transparent(true)
@@ -25692,8 +25729,12 @@ async fn start_recording(
     keylog::maybe_start(key_overlay_on, key_overlay_hold_ms, keylog::mono_ms(), key_overlay_shortcuts_only);
     // Region only -- Monitor/Window recordings keep the OS capture border
     // and never get an outline window at all (see outline_rect_for_target).
-    if let Some(rect) = recording::outline_rect_for_target(target) {
-        show_rec_outline(&app, rect);
+    let outline = {
+        let g = db.lock().unwrap_or_else(|e| e.into_inner());
+        rec_outline_request(&g.settings, recording::outline_rect_for_target(target))
+    };
+    if let Some((rect, color)) = outline {
+        show_rec_outline(&app, rect, &color);
     }
     *rstate.0.lock().unwrap_or_else(|e| e.into_inner()) = Some(session);
     // A fresh recording never inherits an earlier chain's already-closed
@@ -36569,6 +36610,34 @@ mod tests {
         assert!(outline_rect_needs_reapply((2020, 50, 600, 450), want));
         assert!(outline_rect_needs_reapply((2023, 50, 400, 300), want));
         assert!(outline_rect_needs_reapply((2020, 50, 400, 297), want));
+    }
+
+    #[test]
+    fn rec_outline_switch_and_colour_come_from_the_settings() {
+        let rect = Some((10, 20, 300, 200));
+        let mut s = Settings::default();
+        // Nothing stored: the frame shows, in the shipped colour.
+        assert_eq!(rec_outline_request(&s, rect), Some(((10, 20, 300, 200), "#2563eb".to_string())));
+        // A target without an outline never asks for one.
+        assert_eq!(rec_outline_request(&s, None), None);
+        s.ui_texts.insert("recOutlineColor".to_string(), "#FF8800".to_string());
+        assert_eq!(rec_outline_request(&s, rect).map(|r| r.1), Some("#ff8800".to_string()));
+        // Switched off: no outline for any target.
+        s.ui_flags.insert("recOutline".to_string(), false);
+        assert_eq!(rec_outline_request(&s, rect), None);
+        s.ui_flags.insert("recOutline".to_string(), true);
+        assert!(rec_outline_request(&s, rect).is_some());
+    }
+
+    #[test]
+    fn rec_outline_colour_only_lets_six_hex_digits_through() {
+        for bad in ["", "red", "#fff", "#12345g", "#1234567", "2563eb", "#fff';alert(1)//", "#2563eb\n"] {
+            let mut s = Settings::default();
+            s.ui_texts.insert("recOutlineColor".to_string(), bad.to_string());
+            assert_eq!(rec_outline_color(&s), REC_OUTLINE_DEFAULT_COLOR, "{bad:?}");
+        }
+        let script = rec_outline_init_script("#2563eb");
+        assert!(script.contains("'#2563eb'") && script.contains("--outline-color"));
     }
 
     #[test]

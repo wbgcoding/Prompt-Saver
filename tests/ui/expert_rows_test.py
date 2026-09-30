@@ -56,15 +56,24 @@ EXPECTED = [
     ("action", "error-log-open", "expTabSystem", "expGroupData", 1),
     ("color", "snipDefaultColor", "expTabCapture", "expGroupSnipEditor", 1),
     ("color", "veOvColor", "expTabCapture", "expGroupVideoEditor", 1),
+    ("flag", "recOutline", "expTabCapture", "expGroupRecording", 1),
+    ("color", "recOutlineColor", "expTabCapture", "expGroupRecording", 2),
+    ("dropdown", "chainSeparator", "expTabFeatures", "expGroupChain", 1),
+    ("value", "gsRecentMax", "expTabLibrary", "expGroupLibrary", 1),
+    ("value", "launcherMaxResults", "expTabLibrary", "expGroupLibrary", 0),
+    ("value", "veOvTextOutlinePx", "expTabCapture", "expGroupVideoEditor", 1),
+    ("color", "veOvKeysActiveColor", "expTabCapture", "expGroupVideoEditor", 1),
+    ("value", "veOvVideoVolume", "expTabCapture", "expGroupVideoEditor", 1),
 ]
 
 # Rows that stay on screen with every gate off (they have no parent switch that
 # is in the GATES list below).
-STAYS = ["flag:chainPrompts", "value:gridMax"]
+STAYS = ["flag:chainPrompts", "value:gridMax", "value:launcherMaxResults"]
 
 # The parent switches the rows above hang off.
 GATES = ["chainQuickStart", "multiView", "screenRecord", "recSweepBroken", "videoEditor",
-         "ocrIndex", "floating", "promptVars", "dynVars", "varFixed", "errorLog", "screenshot", "snipEditor"]
+         "ocrIndex", "floating", "promptVars", "dynVars", "varFixed", "errorLog", "screenshot", "snipEditor",
+         "globalSearch", "recOutline"]
 
 FIND = """
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -164,12 +173,224 @@ PROBE_OFF = """
 """
 
 
-def run(browser, tmp, name, probe, seed, size=(1280, 900), budget=60000):
+# ---- consumers: a non-default value reaches the code that uses it ----------------
+# Probe JS avoids apostrophes and backslashes (the strings are plain Python).
+
+FINISH = """
+  const finish = (errs) => {
+    errs.push(...(window.__SMOKE_ERRORS__ || []));
+    const pre = document.createElement('pre');
+    pre.id = 'SMOKE';
+    pre.textContent = JSON.stringify(errs);
+    document.body.appendChild(pre);
+  };
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const until = async (fn, tries) => {
+    for (let i = 0; i < (tries || 80) && !fn(); i++) await sleep(50);
+    return fn();
+  };
+"""
+
+# chainSeparator: two static prompts chained, the copied text carries the chosen separator.
+CHAIN_PROBE = """
+<script>
+(async () => {""" + FINISH + """
+  const errs = [];
+  try {
+    await until(() => document.querySelectorAll('#grid .tile').length > 6);
+    await sleep(400);
+    const tile = (id) => [...document.querySelectorAll('#grid .tile')].find((e) => (e.dataset.id || '') === id);
+    const pick = async (id) => {
+      const el = tile(id);
+      for (const type of ['pointerdown', 'pointerup', 'click']) {
+        el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, button: 0, isPrimary: true, pointerId: 1 }));
+      }
+      await sleep(400);
+    };
+    const start = tile('p0') && tile('p0').querySelector('.tile-chain-start');
+    if (!start) { errs.push('p0 has no chain-start button; tiles with one: ' + [...document.querySelectorAll('#grid .tile')].filter((x) => x.querySelector('.tile-chain-start')).map((x) => x.dataset.id).join(',') + ' of ' + [...document.querySelectorAll('#grid .tile')].map((x) => x.dataset.id).join(',')); }
+    else {
+      start.click();
+      await sleep(300);
+      await pick('p2');
+      const want = 'Example prompt body number 1.' + __SEP__ + 'Example prompt body number 3.';
+      if (window.__LAST_COPY__ !== want) errs.push('chain text is ' + JSON.stringify(window.__LAST_COPY__) + ', expected ' + JSON.stringify(want));
+    }
+  } catch (e) { errs.push('probe threw: ' + (e && e.stack || e)); }
+  finish(errs);
+})();
+</script>
+"""
+
+# gsRecentMax: the recent-search list keeps as many terms as the setting says.
+GS_PROBE = """
+<script>
+(async () => {""" + FINISH + """
+  const errs = [];
+  try {
+    await until(() => document.querySelectorAll('#grid .tile').length > 6);
+    await sleep(400);
+    const open = () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }));
+    const run = async (term) => {
+      open();
+      await sleep(150);
+      const inp = document.getElementById('gs-input');
+      inp.value = term;
+      inp.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(200);
+      inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      await sleep(150);
+    };
+    for (let i = 1; i <= __TERMS__; i++) await run('Prompt ' + i);
+    open();
+    await sleep(200);
+    const names = [...document.querySelectorAll('#gs-results .gs-recent-row .gs-row-name')].map((r) => r.textContent);
+    if (names.length !== __WANT__) errs.push('recent list holds ' + names.length + ' terms (' + names.join(',') + '), expected __WANT__');
+    if (__WANT__ > 0 && names[0] !== 'Prompt __TERMS__') errs.push('newest recent term is ' + names[0] + ', expected Prompt __TERMS__');
+  } catch (e) { errs.push('probe threw: ' + (e && e.stack || e)); }
+  finish(errs);
+})();
+</script>
+"""
+
+# launcherMaxResults: the launcher lists as many rows as the setting says.
+LAUNCHER_PROBE = """
+<script>
+(async () => {""" + FINISH + """
+  const errs = [];
+  try {
+    await until(() => document.querySelectorAll('#results .launcher-row').length > 0);
+    await sleep(300);
+    const n = document.querySelectorAll('#results .launcher-row').length;
+    if (n !== __WANT__) errs.push('launcher lists ' + n + ' rows, expected __WANT__');
+    const search = document.getElementById('search');
+    search.value = 'Prompt';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    await sleep(100);
+    const m = document.querySelectorAll('#results .launcher-row').length;
+    if (m !== __WANT__) errs.push('launcher lists ' + m + ' matches, expected __WANT__');
+  } catch (e) { errs.push('probe threw: ' + (e && e.stack || e)); }
+  finish(errs);
+})();
+</script>
+"""
+
+# veOvTextOutlinePx / veOvKeysActiveColor / veOvVideoVolume: a new overlay starts from them.
+# The editor autosaves its operations every few seconds; that record is what is read.
+VIDEO_PROBE = """
+<script>
+(async () => {""" + FINISH + """
+  const errs = [];
+  try {
+    await until(() => document.getElementById('ve-stage-msg').classList.contains('hidden') &&
+      document.querySelectorAll('#ve-filmstrip .ve-thumb').length > 0, 300);
+    await sleep(300);
+    document.getElementById('ve-tab-overlays').click();
+    await sleep(100);
+    document.getElementById('ve-ov-add-text').click();
+    await sleep(150);
+    document.getElementById('ve-ov-add-keys').click();
+    await sleep(150);
+    document.getElementById('ve-add-video').click();
+    await sleep(100);
+    document.getElementById('ve-add-video-as-overlay').click();
+    await sleep(6500);
+    const saved = window.__EDIT_STATE_SAVED__;
+    if (!saved) { errs.push('the editor never saved its operations'); }
+    else {
+      const ops = JSON.parse(saved.ops).ops.filter((o) => o.tool === 'overlay');
+      const of = (kind) => ops.find((o) => o.kind === kind);
+      const text = of('text'), keys = of('keys'), video = of('video');
+      if (!text || !keys || !video) errs.push('missing overlay kinds: ' + ops.map((o) => o.kind).join(','));
+      else {
+        if (text.outlinePx !== __OUTLINE__) errs.push('text outlinePx is ' + text.outlinePx + ', expected __OUTLINE__');
+        if (keys.activeColor !== '__ACTIVE__') errs.push('keys activeColor is ' + keys.activeColor + ', expected __ACTIVE__');
+        if (video.volume !== __VOLUME__) errs.push('video volume is ' + video.volume + ', expected __VOLUME__');
+      }
+    }
+  } catch (e) { errs.push('probe threw: ' + (e && e.stack || e)); }
+  finish(errs);
+})();
+</script>
+"""
+
+# recOutlineColor: the script the backend runs in the outline window (taken from the
+# Rust source, so the two cannot drift apart) recolours the frame of recoutline.html.
+OUTLINE_PROBE = """
+<script>
+(async () => {""" + FINISH + """
+  const errs = [];
+  try {
+    await sleep(200);
+    const frame = document.getElementById('frame');
+    const got = getComputedStyle(frame).borderTopColor;
+    if (got !== '__WANT__') errs.push('frame border is ' + got + ', expected __WANT__');
+    const w = getComputedStyle(frame).borderTopWidth;
+    if (w !== '2px') errs.push('frame border width is ' + w + ', expected 2px');
+  } catch (e) { errs.push('probe threw: ' + (e && e.stack || e)); }
+  finish(errs);
+})();
+</script>
+"""
+
+
+def outline_init_script(color):
+    """The Rust rec_outline_init_script template with the colour filled in."""
+    src = (REPO / "src-tauri" / "src" / "lib.rs").read_text(encoding="utf-8")
+    m = re.search(r"fn rec_outline_init_script\(color: &str\) -> String \{\s*format!\(\s*\"(.*?)\"\s*\)\s*\}", src, re.S)
+    if not m:
+        raise RuntimeError("rec_outline_init_script not found in lib.rs")
+    return m.group(1).replace("{{", "{").replace("}}", "}").replace("{color}", color)
+
+
+def hex_to_rgb(h):
+    return "rgb(%d, %d, %d)" % (int(h[1:3], 16), int(h[3:5], 16), int(h[5:7], 16))
+
+
+def consumer_problems(browser, tmp):
+    out = []
+
+    def check(label, name, probe, seed, **kw):
+        for e in run(browser, tmp, name, probe, seed, **kw):
+            out.append(f"[{label}] {e}")
+
+    nl = "String.fromCharCode(10)"
+    for texts, sep in (({}, nl + " + " + nl), ({"chainSeparator": "break"}, nl), ({"chainSeparator": "space"}, "' '"),
+                       ({"chainSeparator": "none"}, "''")):
+        label = "chainSeparator " + (texts.get("chainSeparator") or "default")
+        check(label, "index.html", CHAIN_PROBE.replace("__SEP__", sep),
+              {"ui_flags": {"chainQuickStart": True}, "ui_texts": texts})
+    for values, terms, want in (({}, 6, 5), ({"gsRecentMax": 2}, 3, 2), ({"gsRecentMax": 0}, 3, 0)):
+        label = "gsRecentMax " + str(values.get("gsRecentMax", "default"))
+        check(label, "index.html", GS_PROBE.replace("__TERMS__", str(terms)).replace("__WANT__", str(want)),
+              {"ui_flags": {"globalSearch": True}, "ui_values": values})
+    for values, want in (({}, 8), ({"launcherMaxResults": 3}, 3), ({"launcherMaxResults": 11}, 11)):
+        label = "launcherMaxResults " + str(values.get("launcherMaxResults", "default"))
+        check(label, "launcher.html", LAUNCHER_PROBE.replace("__WANT__", str(want)), {"ui_values": values},
+              size=(560, 420), budget=15000)
+    seeded = {"ui_values": {"veOvTextOutlinePx": 7, "veOvVideoVolume": 40, "editStateSaveSecs": 5},
+              "ui_texts": {"veOvKeysActiveColor": "#ff00aa"}}
+    plain = {"ui_values": {"editStateSaveSecs": 5}}
+    for label, seed, o, a, v in (("video overlays seeded", seeded, 7, "#ff00aa", 40),
+                                 ("video overlays default", plain, 3, "#3fa7ff", 0)):
+        probe = VIDEO_PROBE.replace("__OUTLINE__", str(o)).replace("__ACTIVE__", a).replace("__VOLUME__", str(v))
+        check(label, "video.html", probe, seed, size=(1130, 860), budget=40000)
+    for color in ("#ff8800", "#2563eb"):
+        head = "<script>" + outline_init_script(color) + "</script>"
+        check("outline colour " + color, "recoutline.html", OUTLINE_PROBE.replace("__WANT__", hex_to_rgb(color)),
+              {}, size=(300, 200), budget=5000, head=head)
+    check("outline colour default", "recoutline.html", OUTLINE_PROBE.replace("__WANT__", hex_to_rgb("#2563eb")),
+          {}, size=(300, 200), budget=5000)
+    return out
+
+
+def run(browser, tmp, name, probe, seed, size=(1280, 900), budget=60000, head=""):
     side = tmp / "ui" / name
     pre = "<script>window.__SEED_SETTINGS__ = " + json.dumps(seed) + ";</script>\n"
     side.write_text(
         (REPO / "ui" / name).read_text(encoding="utf-8")
         .replace("<script", pre + '<script src="tauri_stub.js"></script>\n<script', 1)
+        .replace("</head>", head + "</head>", 1)
         .replace("</body>", probe + "</body>"),
         encoding="utf-8")
     proc = subprocess.run(
@@ -227,6 +448,7 @@ def main():
             probe = probe.replace("__EXPECTED__", expected).replace("__STAYS__", json.dumps(STAYS))
             errs = run(browser, tmp, "index.html", probe, seed)
             problems += [f"[{label}] {e}" for e in errs]
+        problems += consumer_problems(browser, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     for p in problems:

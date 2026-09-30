@@ -193,6 +193,16 @@ DEPENDENCIES = {
     "recordingRetentionDays": "screenRecord",
     "videoClipTtlMin": "videoEditor",
     "errorLogKeepKb": "errorLog",
+    # Starting values and choices added with their feature's own switch
+    "recOutline": "screenRecord",
+    "recOutlineColor": "recOutline",
+    "chainSeparator": "chainPrompts",
+    "gsRecentMax": "globalSearch",
+    "veOvTextOutlinePx": "videoEditor",
+    "veOvVideoVolume": "videoEditor",
+    "veOvKeysActiveColor": "videoEditor",
+    "veOvColor": "videoEditor",
+    "snipDefaultColor": "snipEditor",
     "dupImportCheck": "dupFinder",
     "similarThreshold": "similarHint",
     "editorDraftSecs": "editorDraft",
@@ -287,6 +297,8 @@ selects = set(top_keys(selects_src))
 dropdowns_src = block("const EXPERT_DROPDOWNS", "{", "}")
 dropdowns = set(top_keys(dropdowns_src))
 paths_src = block("const EXPERT_PATHS", "{", "}")
+colors_src = block("const EXPERT_COLORS", "{", "}")
+colors = set(top_keys(colors_src))
 
 problems = []
 
@@ -298,6 +310,7 @@ declared.update(gates_of(values_src))
 declared.update(gates_of(selects_src))
 declared.update(gates_of(paths_src))
 declared.update(gates_of(dropdowns_src))
+declared.update(gates_of(colors_src))
 for m in re.finditer(r'(\w+):\s*enumDropdown\((.*?)\),\n', dropdowns_src, re.S):
     args = re.findall(r'"([^"]*)"', m.group(2).rsplit("]", 1)[-1])
     if len(args) >= 2 and args[-1]:
@@ -310,7 +323,7 @@ for m in re.finditer(r'\{\s*title:\s*"(expGroup\w+)"', tabs):
     text = balanced(tabs, m.start(), "{", "}")
     title = m.group(1)
     kinds, flag_gates = {}, {}
-    for kind in ("flags", "values", "selects", "dropdowns", "paths"):
+    for kind in ("flags", "values", "selects", "dropdowns", "paths", "colors"):
         km = re.search(kind + r':\s*\[', text)
         if not km:
             continue
@@ -342,7 +355,7 @@ for title, kinds, _, _ in groups:
             group_of.setdefault(key, title)
 
 for kind, known in (("flags", all_flags), ("values", values),
-                    ("selects", selects), ("dropdowns", dropdowns)):
+                    ("selects", selects), ("dropdowns", dropdowns), ("colors", colors)):
     seen = set()
     for key in used.get(kind, []):
         if key not in known:
@@ -401,7 +414,6 @@ if not tips:
     problems.append("EXPERT_TIPS: list not found")
 else:
     tip_keys = re.findall(r'"([A-Za-z0-9_]+)"', tips.group(1))
-    colors_src = block("const EXPERT_COLORS", "{", "}")
     known_settings = all_flags | values | selects | dropdowns | set(top_keys(paths_src)) | set(top_keys(colors_src))
     for key in tip_keys:
         want = "tip" + key[0].upper() + key[1:]

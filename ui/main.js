@@ -1399,6 +1399,9 @@ const FLAG_LABELS = {
   // or a closed window never loses unsaved work; offers to restore the draft
   // once, at the next start. Ships ON.
   editorDraft: "flagEditorDraft",
+  // The thin frame around a region recording. It is never part of the video
+  // (its window is excluded from capture). Ships ON.
+  recOutline: "flagRecOutline",
 };
 const ALL_FLAG_KEYS = Object.keys(FLAG_LABELS);
 
@@ -1652,6 +1655,10 @@ const EXPERT_VALUES = {
   // Hits shown per source group before "show more" -- the overlay has six
   // sources at once, so a low cap keeps the first screen scannable.
   globalSearchLimit: { label: "valGlobalSearchLimit", min: 3, max: 20, step: 1, def: 5, unit: "", gate: "globalSearch" },
+  // How many recent searches the search window remembers; 0 keeps none.
+  gsRecentMax: { label: "valGsRecentMax", min: 0, max: 20, step: 1, def: 5, unit: "", gate: "globalSearch" },
+  // The quick launcher always opens from the app hotkey, so this has no gate.
+  launcherMaxResults: { label: "valLauncherMaxResults", min: 3, max: 20, step: 1, def: 8, unit: "" },
   // Caps the recognized text kept per picture, so a screenshot of a wall of
   // text cannot inflate the database.
   ocrIndexMaxChars: { label: "valOcrIndexMaxChars", min: 500, max: 100000, step: 500, def: 20000, unit: "", gate: "ocrIndex" },
@@ -1702,6 +1709,10 @@ const EXPERT_VALUES = {
   veOvSpotlightDim: { label: "valVeOvSpotlightDim", min: 10, max: 95, step: 5, def: 60, unit: "%", gate: "videoEditor" },
   veOvImageOpacity: { label: "valVeOvImageOpacity", min: 10, max: 100, step: 5, def: 100, unit: "%", gate: "videoEditor" },
   veExtraClipsMax: { label: "veExtraClipsMax", min: 1, max: 32, step: 1, def: 10, unit: "", gate: "videoEditor" },
+  // Starting values of a NEW overlay (one already placed keeps its own). The
+  // outline starts at 1: the overlay editor and the export treat 0 as "use 3".
+  veOvTextOutlinePx: { label: "valVeOvTextOutlinePx", min: 1, max: 12, step: 1, def: 3, unit: "px", gate: "videoEditor" },
+  veOvVideoVolume: { label: "valVeOvVideoVolume", min: 0, max: 100, step: 5, def: 0, unit: "%", gate: "videoEditor" },
   // Shared by the screenshot editor's and the video editor's own numeric
   // input fields (numberField() in floatShared.js) -- default matches that
   // component's own existing hardcoded step/bigStep, so nothing changes for
@@ -1978,6 +1989,8 @@ const EXPERT_DROPDOWNS = {
   tagFilterMode: enumDropdown("tagFilterMode", "valTagFilterMode",
     [["and", "optTagAnd"], ["or", "optTagOr"]], "and", "tags"),
   // How the self-filling date/time placeholders are written.
+  chainSeparator: enumDropdown("chainSeparator", "valChainSeparator",
+    [["blank", "optChainSepBlank"], ["break", "optChainSepBreak"], ["space", "optChainSepSpace"], ["none", "optChainSepNone"]], "blank", "chainPrompts"),
   dateStyle: enumDropdown("dateStyle", "valDateStyle", STYLE_OPTS, "short", "dynVars"),
   timeStyle: enumDropdown("timeStyle", "valTimeStyle", STYLE_OPTS, "short", "dynVars"),
   // Which key turns a press into a drag-out instead of the plain drag.
@@ -2214,7 +2227,7 @@ const EXPERT_TABS = [
     // Everything that happens between a click and the clipboard.
     { title: "expGroupCopy", flags: ["promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, { key: "autoPasteEnter", gate: "autoPaste" }, "hideWindowOnCopy", "copyBubble", "copyFlash", "copySound"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs", "bubbleMs", "copySoundVolume"], dropdowns: ["dragOutModifier", "copySize", "copyFont"] },
     // Copying several different prompts as one text.
-    { title: "expGroupChain", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "chainQuickStart", gate: "chainPrompts" }, { key: "chainStartAlwaysVisible", gate: "chainQuickStart" }, { key: "chainVarCheck", gate: "chainPrompts" }] },
+    { title: "expGroupChain", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "chainQuickStart", gate: "chainPrompts" }, { key: "chainStartAlwaysVisible", gate: "chainQuickStart" }, { key: "chainVarCheck", gate: "chainPrompts" }], dropdowns: ["chainSeparator"] },
     // Floating buttons and the two kinds of folder they can form.
     { title: "expGroupFolders", flags: ["floating", { key: "floatPark", gate: "floating" }, { key: "pillFolders", gate: "floating" }, "tileFolders"], values: ["floatOpacity", "pillFontSize", "pillTextMinW", "pillBorderW", "pillRingFrac", "pillMenuGap", "floatParkCleanupH", "pillMergeRadius", "pillMergeGrow", "pillFolderTileSize", "pillFolderTileGap", "pillFolderPad", "pillFolderPopGap", "folderGridCols", "tileFolderZone", "tileFolderHoverMs", "tileFolderCols"],
       actions: [{ id: "float-recall", label: "floatRecallAction", gate: "floating" }] },
@@ -2243,9 +2256,9 @@ const EXPERT_TABS = [
     // The recording hotkeys render their own capture row directly (hotkeyRow())
     // instead of a button that jumps to a settings field -- see actionRow()'s
     // "hotkey" branch.
-    { title: "expGroupRecording", flags: ["screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, { key: "recCropNotice", gate: "screenRecord" }, { key: "recBarSize", gate: "screenRecord" }, { key: "recTargetSwitch", gate: "screenRecord" }, { key: "recAutoCrop", gate: "screenRecord" }, { key: "keyOverlay", gate: "screenRecord" }, { key: "keyOverlayShortcutsOnly", gate: "keyOverlay" }, { key: "recSweepBroken", gate: "screenRecord" }, "cameraRecord"], values: ["recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "recCanvasMaxPx", "recDiskWarnMb", "recMaxMin", "recMaxMb", "exportParallel", "keyOverlayHoldMs", "recBrokenGraceMin", "recSweepEveryMin", "recDiscardKeepH", "cameraFramerate"], selects: ["recordingRetentionDays"], dropdowns: ["recMicDevice", "recQuality", "recFormat", "recCanvasMode", "cameraDevice", "cameraResolution"], paths: ["recordingDir"],
+    { title: "expGroupRecording", flags: ["screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, { key: "recCropNotice", gate: "screenRecord" }, { key: "recBarSize", gate: "screenRecord" }, { key: "recTargetSwitch", gate: "screenRecord" }, { key: "recAutoCrop", gate: "screenRecord" }, { key: "keyOverlay", gate: "screenRecord" }, { key: "keyOverlayShortcutsOnly", gate: "keyOverlay" }, { key: "recSweepBroken", gate: "screenRecord" }, { key: "recOutline", gate: "screenRecord" }, "cameraRecord"], values: ["recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "recCanvasMaxPx", "recDiskWarnMb", "recMaxMin", "recMaxMb", "exportParallel", "keyOverlayHoldMs", "recBrokenGraceMin", "recSweepEveryMin", "recDiscardKeepH", "cameraFramerate"], selects: ["recordingRetentionDays"], dropdowns: ["recMicDevice", "recQuality", "recFormat", "recCanvasMode", "cameraDevice", "cameraResolution"], colors: ["recOutlineColor"], paths: ["recordingDir"],
       actions: [{ id: "rec-sweep-now", label: "recSweepNowAction", gate: "recSweepBroken" }, { id: "rec-stop-hotkey-row", type: "hotkey", hotkeyKey: "recStopHotkey", label: "recStopHotkeyLabel", gate: "recStopHotkey" }, { id: "rec-pause-hotkey-row", type: "hotkey", hotkeyKey: "recPauseHotkey", label: "recPauseHotkeyLabel", gate: "recPauseHotkey" }] },
-    { title: "expGroupVideoEditor", flags: ["videoEditor", { key: "veOvRemember", gate: "videoEditor" }, { key: "videoEditSnap", gate: "videoEditor" }], values: ["videoEditUndoMax", "veExportKbpsHigh", "veExportKbpsSmall", "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "veExtraClipsMax", "videoClipTtlMin"], dropdowns: ["veDefaultFormat", "veDefaultQuality", "veDefaultScale", "veOvFont", "veDefaultPanel"], colors: ["veOvColor"], paths: ["videoExportDir"] },
+    { title: "expGroupVideoEditor", flags: ["videoEditor", { key: "veOvRemember", gate: "videoEditor" }, { key: "videoEditSnap", gate: "videoEditor" }], values: ["videoEditUndoMax", "veExportKbpsHigh", "veExportKbpsSmall", "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "veExtraClipsMax", "videoClipTtlMin", "veOvTextOutlinePx", "veOvVideoVolume"], dropdowns: ["veDefaultFormat", "veDefaultQuality", "veDefaultScale", "veOvFont", "veDefaultPanel"], colors: ["veOvColor", "veOvKeysActiveColor"], paths: ["videoExportDir"] },
     // What the screenshot editor and the video editor share -- created here so
     // no setting key is ever declared in two groups (expert_menu_check.py).
     { title: "expGroupEditors", flags: ["numFieldWheel", "editStateKeep"], values: ["numFieldStep", "numFieldBigStep", "zoomStepPct", "zoomMaxPct", "editStateSaveSecs", "editStateKeepDays", "veOvDupOffsetPx", "editSnapTolerancePx", "editorOpenMaxMb"] },
@@ -2265,7 +2278,7 @@ const EXPERT_TABS = [
     { title: "expGroupLimits", values: ["previewLen", "nameMaxLen"] },
   ] },
   { title: "expTabLibrary", groups: [
-    { title: "expGroupLibrary", flags: ["librarySearch", "globalSearch", "searchSuggest", "savedSearches", "fuzzySearch", "smartSort", "batchOps", "libraryTypeFilter", "colorFilter", "searchAutofocus", "imagePreview", "libraryVideoPreview", "closeAfterCopy", "libraryCloseToggle", "ocrIndex", "archiveTag", "libraryTiles"], values: ["searchRecentMax", "savedSearchMax", "libraryCols", "libraryWidth", "libPreviewLines", "searchDebounceMs", "globalSearchLimit", "ocrIndexMaxChars", "libraryTileSize"], dropdowns: ["fuzzyMaxTypos"],
+    { title: "expGroupLibrary", flags: ["librarySearch", "globalSearch", "searchSuggest", "savedSearches", "fuzzySearch", "smartSort", "batchOps", "libraryTypeFilter", "colorFilter", "searchAutofocus", "imagePreview", "libraryVideoPreview", "closeAfterCopy", "libraryCloseToggle", "ocrIndex", "archiveTag", "libraryTiles"], values: ["searchRecentMax", "savedSearchMax", "libraryCols", "libraryWidth", "libPreviewLines", "searchDebounceMs", "globalSearchLimit", "gsRecentMax", "launcherMaxResults", "ocrIndexMaxChars", "libraryTileSize"], dropdowns: ["fuzzyMaxTypos"],
       actions: [{ id: "ocr-index-backfill", label: "ocrIndexBackfillAction", gate: "ocrIndex" }] },
     { title: "expGroupTags", flags: ["tags"], values: ["tagChipPx", "tagPopCols"], dropdowns: ["tagFilterMode", "tagSort"] },
     // Everything that records or shows copy history lives with the history view.
@@ -2563,6 +2576,8 @@ const EXPERT_TIPS = [
   "viewBorder", "statsTopN", "viewGroups", "viewGroupMaxRows", "multiViewPrompt", "viewTabEdgeZone",
   "barToggles", "barToggleBoth", "quickGrid", "quickGridHoverOnly", "multiView", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "libraryCols", "copySize", "copyFont", "showLibrary", "showJournal", "composerScale", "primaryScale",
   "remoteApi", "remoteNetworkFilter", "urlScheme", "remotePort", "remoteRateLimit",
+  "recOutline", "recOutlineColor", "chainSeparator", "gsRecentMax", "launcherMaxResults",
+  "veOvTextOutlinePx", "veOvKeysActiveColor", "veOvVideoVolume",
 ];
 const EXPERT_TIP_SET = new Set(EXPERT_TIPS);
 // Attach the tooltip for `key` to a rendered expert row, if one is defined.
@@ -3248,6 +3263,9 @@ const EXPERT_COLORS = {
   // per-overlay "Colour" field caption in the overlay editor itself (video.js),
   // a wholly unrelated existing string this must not collide with or overwrite.
   veOvColor: { label: "veOvDefaultColor", def: "#ffffff", gate: "videoEditor" },
+  veOvKeysActiveColor: { label: "valVeOvKeysActiveColor", def: "#3fa7ff", gate: "videoEditor" },
+  // Read by the backend when a region recording starts (see show_rec_outline).
+  recOutlineColor: { label: "valRecOutlineColor", def: "#2563eb", gate: "recOutline" },
   // `def` is a FUNCTION here, not a fixed hex, because the screenshot editor's
   // own current fallback (COLORS[1]) already tracks the user's custom palette
   // -- freezing this row at a fixed hex would silently stop following a
@@ -5473,11 +5491,17 @@ const chainTexts = new Map(); // id -> resolved copy text (variables already fil
 
 const isTextPrompt = (p) => !!p && !p.copy_image && !p.file_path;
 
-// Chained prompts are joined with a blank line (two newlines) between them.
-const CHAIN_SEP = "\n\n";
+// What goes between two chained prompts: the chainSeparator expert choice
+// (a blank line unless changed).
+const CHAIN_SEPARATORS = { blank: "\n\n", break: "\n", space: " ", none: "" };
+
+function chainSeparator() {
+  const key = settings.ui_texts?.chainSeparator;
+  return Object.prototype.hasOwnProperty.call(CHAIN_SEPARATORS, key) ? CHAIN_SEPARATORS[key] : CHAIN_SEPARATORS.blank;
+}
 
 function chainText() {
-  return chainSel.map((id) => chainTexts.get(id) ?? "").join(CHAIN_SEP);
+  return chainSel.map((id) => chainTexts.get(id) ?? "").join(chainSeparator());
 }
 
 // `commitId` is the prompt just newly picked into the chain (if it rotates):
@@ -15814,7 +15838,7 @@ function gsRecentRow(term) {
 function gsRecentList() {
   let list;
   try { list = JSON.parse(settings.ui_texts?.globalSearchRecent || "[]"); } catch { list = []; }
-  return Array.isArray(list) ? list : [];
+  return Array.isArray(list) ? list.slice(0, val("gsRecentMax")) : [];
 }
 
 function gsSaveRecent(list) {
@@ -15842,13 +15866,13 @@ function gsClearRecent() {
 }
 
 // Remembers a query for the "recent searches" list shown at rest -- capped at
-// five, newest first, deduped case-insensitively.
+// gsRecentMax (5 unless changed), newest first, deduped case-insensitively.
 function gsRemember(term) {
   term = term.trim();
   if (term.length < 2) return;
   let list = gsRecentList().filter((x) => x.toLowerCase() !== term.toLowerCase());
   list.unshift(term);
-  gsSaveRecent(list.slice(0, 5));
+  gsSaveRecent(list.slice(0, val("gsRecentMax")));
 }
 
 function gsSetActive(i) {

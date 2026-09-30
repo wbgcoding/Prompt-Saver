@@ -21,6 +21,14 @@ the video editor and the introduction tour ship on).
 
 ### Added
 
+- **Eight more expert settings for things that were fixed values.** A switch
+  and a colour for the frame around a region recording (it still never appears
+  in the video), a choice of what goes between two chained prompts (blank line,
+  line break, space or nothing), how many recent searches the search window
+  keeps (0 keeps none), how many results the quick launcher lists, and, for the
+  video editor, the starting outline width of a new text overlay, the colour of
+  a pressed key in a new keys overlay and the starting volume of a newly
+  inserted video overlay. Every default is the old fixed value.
 - **Command line.** `prompt-saver.exe <command> ...` runs the app as a
   command line tool instead of opening its window: list, get, copy, add,
   edit, delete and restore prompts, manage tags and views, search, export,
