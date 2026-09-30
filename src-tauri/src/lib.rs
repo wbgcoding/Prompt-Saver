@@ -28970,6 +28970,19 @@ fn is_known_export_output(path: &Path) -> bool {
     EXPORT_OUTPUTS.lock().unwrap_or_else(|e| e.into_inner()).contains(&canon)
 }
 
+// Moves a file and, when it was one of this session's own export outputs,
+// carries that proof over to its new place (and drops the old entry), so the
+// same export can be moved again from where it landed.
+fn move_tracked_export_output(src: &Path, dst: &Path) -> std::io::Result<()> {
+    let old = if is_known_export_output(src) { fs::canonicalize(src).ok() } else { None };
+    move_file(src, dst)?;
+    if let Some(old) = old {
+        EXPORT_OUTPUTS.lock().unwrap_or_else(|e| e.into_inner()).retain(|p| p != &old);
+        remember_export_output(dst);
+    }
+    Ok(())
+}
+
 // What export_video should add to EXPORT_OUTPUTS once ffmpeg finishes: the
 // path export_video_blocking's own Ok result names, never the caller's
 // originally requested dest_path. When that name was already taken,
@@ -30153,7 +30166,7 @@ async fn save_recording_as(app: AppHandle, state: State<'_, Db>, win: tauri::Win
     let _ = win.set_focus();
     match result {
         Some(p) => {
-            move_file(&src, &p).map_err(|e| e.to_string())?;
+            move_tracked_export_output(&src, &p).map_err(|e| e.to_string())?;
             move_mic_sidecar_alongside(&src, &p);
             Ok(Some(p.to_string_lossy().to_string()))
         }
@@ -42370,6 +42383,26 @@ mod tests {
         remember_export_output(&exported);
         assert!(is_known_export_output(&exported), "a file export_video actually produced must be recognized");
         assert!(!is_known_export_output(&untouched), "a neighbour file never exported must stay refused");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_moved_export_output_stays_known_at_its_new_place() {
+        let dir = std::env::temp_dir().join(format!("ps-exportout-move-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let x = dir.join("clip-edit.mp4");
+        let y = dir.join("moved.mp4");
+        let z = dir.join("moved-again.mp4");
+        let other = dir.join("other.mp4");
+        fs::write(&x, b"video").unwrap();
+        fs::write(&other, b"video").unwrap();
+        remember_export_output(&x);
+        move_tracked_export_output(&x, &y).unwrap();
+        assert!(is_known_export_output(&y), "the moved file must still count as an export output");
+        move_tracked_export_output(&y, &z).unwrap();
+        assert!(is_known_export_output(&z), "a second move must keep the proof too");
+        move_tracked_export_output(&other, &dir.join("other-moved.mp4")).unwrap();
+        assert!(!is_known_export_output(&dir.join("other-moved.mp4")), "a file that was never an export stays unknown");
         let _ = fs::remove_dir_all(&dir);
     }
 

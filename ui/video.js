@@ -3951,7 +3951,7 @@ $("ve-export-clip").addEventListener("click", () => startExport(true));
 $("ve-export-cancel").addEventListener("click", () => invoke("cancel_export").catch(() => {}));
 $("ve-export-saveas").addEventListener("click", async () => {
   if (!VE.lastExport) return;
-  const moved = await invoke("save_recording_as", { srcPath: VE.lastExport }).catch((err) => { toast(String(err)); return null; });
+  const moved = await invoke("save_recording_as", { srcPath: VE.lastExport }).catch((err) => { toast(String(err).includes("source-not-allowed") ? t("veMoveNotAllowed") : String(err)); return null; });
   if (moved) {
     VE.lastExport = moved;
     $("ve-export-status").textContent = t("veExportDone").replace("{path}", moved);
