@@ -26,6 +26,7 @@ pub mod brand;
 mod camera;
 mod cli;
 mod remote;
+mod remote_tls;
 
 use image::imageops::FilterType;
 use rusqlite::{params, Connection, Transaction};
@@ -7929,7 +7930,7 @@ async fn batch_prompts(
     }
     // Return only the (small) settings: the caller mutates its local prompt list
     // in place, so we never re-serialise every prompt's base64 image over IPC.
-    let settings = store.settings.clone();
+    let settings = webview_settings(&store.settings);
     drop(store); // never re-arm shortcuts while the store mutex is held
     if action == "delete" {
         rearm_hotkeys(&app); // The deleted prompts give their accelerators back
@@ -7967,7 +7968,7 @@ async fn restore_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Res
         let Some(pos) = pos else {
             return Err("not-found".into());
         };
-        let original_settings = store.settings.clone();
+        let original_settings = webview_settings(&store.settings);
         let mut p = store.trash.remove(pos);
         let original_trashed_at = p.trashed_at;
         p.trashed_at = 0;
@@ -7993,7 +7994,7 @@ async fn restore_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Res
         }
         save_settings(&app, &store.settings);
         let secret_key = secret_session_key(secret_timeout_min(&store.settings));
-        (AppState { prompts: slim_prompts(&store.prompts, secret_key), settings: store.settings.clone() }, true)
+        (AppState { prompts: slim_prompts(&store.prompts, secret_key), settings: webview_settings(&store.settings) }, true)
     };
     if restored {
         rearm_hotkeys(&app); // The restored prompt's own hotkey, if any, is free again to re-claim
@@ -8232,12 +8233,17 @@ async fn reset_settings(app: AppHandle, state: State<'_, Db>) -> Result<(), Stri
         // The backup password is a key, not a preference: dropping it would make
         // every password-protected backup permanently unreadable.
         let backup_pw = store.settings.ui_texts.remove(BACKUP_PW_KEY);
+        let tls_values = remote_tls::tls_values(&store.settings);
         store.settings = Settings::default();
         SETTINGS_LOCKED.store(false, Ordering::Relaxed); // explicit reset overrides the corrupt-row lock
         store.settings.migrate();
         load_pick_history(&store.settings); // reset clears the mirror too
         if let Some(pw) = backup_pw {
             store.settings.ui_texts.insert(BACKUP_PW_KEY.to_string(), pw);
+        }
+        // The receiver's certificate is a machine value like the backup password.
+        for (k, v) in tls_values {
+            store.settings.ui_texts.insert(k, v);
         }
         store.prompts = prompts;
         // The prompt rows themselves are untouched here, but the store around them
@@ -8549,13 +8555,13 @@ fn set_view_grid(app: AppHandle, state: State<Db>, id: String, cols: u32, rows: 
         .flat_map(|f| f.members.iter().cloned())
         .collect();
     let Some(view) = store.settings.views.iter_mut().find(|v| v.id == id) else {
-        return store.settings.clone();
+        return webview_settings(&store.settings);
     };
     view.cols = cols;
     view.rows = rows;
     rebuild_view_layout(view, &folder_cells, &folder_members);
     save_settings(&app, &store.settings);
-    store.settings.clone()
+    webview_settings(&store.settings)
 }
 
 // ---------- Tag commands ----------
@@ -8820,7 +8826,7 @@ async fn rename_tag(
         }
         return Err("save-failed".into());
     }
-    Ok(store.settings.clone())
+    Ok(webview_settings(&store.settings))
 }
 
 // Remove a tag from every prompt plus its color entry. Idempotent.
@@ -8850,7 +8856,7 @@ async fn delete_tag(app: AppHandle, state: State<'_, Db>, name: String) -> Resul
         }
         return Err("save-failed".into());
     }
-    Ok(store.settings.clone())
+    Ok(webview_settings(&store.settings))
 }
 
 #[derive(Deserialize)]
@@ -8884,7 +8890,7 @@ fn set_tag_colors(app: AppHandle, state: State<Db>, entries: Vec<TagColor>) -> R
     let mut store = lock(&state);
     apply_tag_colors(&mut store.settings, entries)?;
     save_settings(&app, &store.settings);
-    Ok(store.settings.clone())
+    Ok(webview_settings(&store.settings))
 }
 
 #[tauri::command]
@@ -8898,7 +8904,7 @@ fn set_tag_color(app: AppHandle, state: State<Db>, name: String, color: String) 
         store.settings.tag_colors.insert(key, color);
     }
     save_settings(&app, &store.settings);
-    Ok(store.settings.clone())
+    Ok(webview_settings(&store.settings))
 }
 
 // ---------- View commands ----------
@@ -8926,7 +8932,7 @@ fn add_view(app: AppHandle, state: State<Db>, name: String, color: String) -> Re
     store.settings.active_view.clone_from(&view.id);
     store.settings.views.push(view);
     save_settings(&app, &store.settings);
-    Ok(store.settings.clone())
+    Ok(webview_settings(&store.settings))
 }
 
 #[tauri::command]
@@ -8939,7 +8945,7 @@ fn rename_view(app: AppHandle, state: State<Db>, id: String, name: String) -> Se
         }
     }
     save_settings(&app, &store.settings);
-    store.settings.clone()
+    webview_settings(&store.settings)
 }
 
 // Set a view's tab color (hex); empty string clears it back to default.
@@ -8950,7 +8956,7 @@ fn set_view_color(app: AppHandle, state: State<Db>, id: String, color: String) -
         view.color = color.trim().to_string();
     }
     save_settings(&app, &store.settings);
-    store.settings.clone()
+    webview_settings(&store.settings)
 }
 
 // The tab bar's order, and a group's own member order, are both nothing
@@ -8980,7 +8986,7 @@ fn reorder_views(app: AppHandle, state: State<Db>, order: Vec<String>) -> Settin
     let mut store = lock(&state);
     store.settings.views = reorder_views_by_id(std::mem::take(&mut store.settings.views), &order);
     save_settings(&app, &store.settings);
-    store.settings.clone()
+    webview_settings(&store.settings)
 }
 
 // Recolor saved data when the global palette changes: every prompt/view whose
@@ -9078,7 +9084,7 @@ fn delete_view(app: AppHandle, state: State<Db>, id: String) -> Result<Settings,
     let views = store.settings.views.clone();
     normalize_view_groups(&mut store.settings.view_groups, &views);
     save_settings(&app, &store.settings);
-    Ok(store.settings.clone())
+    Ok(webview_settings(&store.settings))
 }
 
 #[tauri::command]
@@ -9088,7 +9094,7 @@ fn set_active_view(app: AppHandle, state: State<Db>, id: String) -> Settings {
         store.settings.active_view = id;
     }
     save_settings(&app, &store.settings);
-    store.settings.clone()
+    webview_settings(&store.settings)
 }
 
 // ---------- View group commands ----------
@@ -9170,7 +9176,7 @@ fn save_view_group(
     let views = store.settings.views.clone();
     normalize_view_groups(&mut store.settings.view_groups, &views);
     save_settings(&app, &store.settings);
-    Ok(store.settings.clone())
+    Ok(webview_settings(&store.settings))
 }
 
 // Move one view into `group_id`, or out of every group when it is empty. Both
@@ -9198,7 +9204,7 @@ fn set_view_group_member(
     let views = store.settings.views.clone();
     normalize_view_groups(&mut store.settings.view_groups, &views);
     save_settings(&app, &store.settings);
-    Ok(store.settings.clone())
+    Ok(webview_settings(&store.settings))
 }
 
 // ---------- Tile folder commands ----------
@@ -9321,7 +9327,7 @@ fn save_tile_folder(
     let view_ids: Vec<String> = store.settings.views.iter().map(|v| v.id.clone()).collect();
     normalize_tile_folders(&mut store.settings.tile_folders, &ids, &view_ids);
     save_settings(&app, &store.settings);
-    Ok(store.settings.clone())
+    Ok(webview_settings(&store.settings))
 }
 
 // Take one prompt out of its folder and put it on `cell` of the folder's view. The
@@ -9361,7 +9367,7 @@ fn take_out_of_tile_folder(
     let view_ids: Vec<String> = store.settings.views.iter().map(|v| v.id.clone()).collect();
     normalize_tile_folders(&mut store.settings.tile_folders, &ids, &view_ids);
     save_settings(&app, &store.settings);
-    Ok(store.settings.clone())
+    Ok(webview_settings(&store.settings))
 }
 
 // Dissolve a grid folder: its prompts become tiles again, nothing is deleted. Each
@@ -9394,7 +9400,7 @@ fn delete_tile_folder(app: AppHandle, state: State<Db>, id: String) -> Settings 
         }
     }
     save_settings(&app, &store.settings);
-    store.settings.clone()
+    webview_settings(&store.settings)
 }
 
 // Dissolve a group: its views go back to the tab bar, nothing is deleted.
@@ -9403,14 +9409,24 @@ fn delete_view_group(app: AppHandle, state: State<Db>, id: String) -> Settings {
     let mut store = lock(&state);
     store.settings.view_groups.retain(|g| g.id != id);
     save_settings(&app, &store.settings);
-    store.settings.clone()
+    webview_settings(&store.settings)
 }
 
 // ---------- Settings commands ----------
 
+// The copy of the settings a window may hold: the receiver's private key stays
+// in the backend.
+fn webview_settings(settings: &Settings) -> Settings {
+    let mut copy = settings.clone();
+    remote_tls::strip_private_key(&mut copy);
+    // The password hash is checked inside the backend only; its dialog has its own command.
+    copy.ui_texts.remove(remote::REMOTE_PASSWORD_KEY);
+    copy
+}
+
 #[tauri::command]
 fn get_settings(state: State<Db>) -> Settings {
-    lock(&state).settings.clone()
+    webview_settings(&lock(&state).settings)
 }
 
 // What the window needs from a prompt to draw it: every field of `Prompt` except
@@ -9560,7 +9576,7 @@ async fn get_state(state: State<'_, Db>) -> Result<AppState, String> {
     let secret_key = secret_session_key(secret_timeout_min(&store.settings));
     Ok(AppState {
         prompts: slim_prompts(&store.prompts, secret_key),
-        settings: store.settings.clone(),
+        settings: webview_settings(&store.settings),
     })
 }
 
@@ -11511,7 +11527,7 @@ fn save_custom_theme(
             }
         }
         save_settings(&app, &store.settings);
-        store.settings.clone()
+        webview_settings(&store.settings)
     };
     push_theme(&app, &settings);
     Ok(settings)
@@ -11527,7 +11543,7 @@ fn delete_custom_theme(app: AppHandle, state: State<Db>, id: String) -> Result<S
             store.settings.theme = default_theme();
         }
         save_settings(&app, &store.settings);
-        store.settings.clone()
+        webview_settings(&store.settings)
     };
     push_theme(&app, &settings);
     Ok(settings)
@@ -26375,7 +26391,20 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
     let is_tray = key == "trayRecent" || key == "trayFavs" || key == TRAY_CUSTOM_MENU_KEY;
     let is_folders = key == "pillFolders";
     let is_sync_enable = key == "promptSync" && enabled; // Prompt-folders-as-Markdown
-    let is_remote_toggle = key == "remoteApi";
+    // The receiver's own switch is durable-or-reversible (see remote.rs), so it
+    // never takes the generic save-and-ignore path below.
+    if key == "remoteApi" {
+        let result = remote::set_remote_api_flag(&app, &state, enabled);
+        notify_float_settings(&app);
+        return result;
+    }
+    // Widening or narrowing the receiver's reach restarts it with the matching
+    // protocol and is saved first, like its own switch.
+    if key == "remoteNetworkFilter" {
+        let result = remote::set_network_flag(&app, &state, enabled);
+        notify_float_settings(&app);
+        return result;
+    }
     let is_url_scheme_toggle = key == "urlScheme";
     // Turning either gate off must not leave a session silently running.
     let end_auto_session = !enabled && (key == "rotatingPrompts" || key == "rotateAuto");
@@ -26475,29 +26504,6 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
         let handle = app.clone();
         tauri::async_runtime::spawn(async move { sync_float_windows(&handle) });
     }
-    // Turning the receiver on mints a password the very first time (never
-    // overwrites one already set, e.g. by a later regenerate) and starts it;
-    // start() itself is the one place that refuses to bind without a
-    // password, so nothing here has to re-check that. Turning it off stops it.
-    if is_remote_toggle {
-        if enabled {
-            let needs_password = {
-                let store = lock(&state);
-                store.settings.ui_texts.get("remotePasswordHash").map(String::is_empty).unwrap_or(true)
-            };
-            if needs_password {
-                let password = remote::generate_password();
-                let hash = remote::hash_password(&password);
-                let mut store = lock(&state);
-                store.settings.ui_texts.insert("remotePasswordHash".to_string(), hash);
-                save_settings(&app, &store.settings);
-                remote::stash_shown_password(password);
-            }
-            remote::start(app.clone());
-        } else {
-            remote::stop(&app);
-        }
-    }
     // Best-effort: a registry write can fail (locked-down profile, odd ACLs)
     // without the switch itself failing, the same tolerance apply_autostart's
     // own caller does not need because that path already returns Result -- this
@@ -26558,7 +26564,7 @@ fn is_protected_folder_key(key: &str) -> bool {
 // Set an expert string option (e.g. the copy-feedback font key).
 #[tauri::command]
 fn set_ui_text(app: AppHandle, state: State<Db>, key: String, value: String) {
-    if is_protected_folder_key(&key) {
+    if is_protected_folder_key(&key) || remote::is_remote_secret_key(&key) {
         return;
     }
     {
@@ -26619,7 +26625,11 @@ fn reset_expert(app: AppHandle, state: State<Db>) {
         let mut store = lock(&state);
         store.settings.ui_flags.clear();
         store.settings.ui_values.clear();
+        let tls_values = remote_tls::tls_values(&store.settings);
         store.settings.ui_texts.clear();
+        for (k, v) in tls_values {
+            store.settings.ui_texts.insert(k, v);
+        }
         save_settings(&app, &store.settings);
     }
     ERROR_LOG_KEEP_BYTES.store(256 * 1024, Ordering::Relaxed);
@@ -31844,7 +31854,7 @@ async fn secret_vault_unlock(app: AppHandle, state: State<'_, Db>, password: Str
     let secret_key = secret_session_key(secret_timeout_min(&store.settings));
     Ok(AppState {
         prompts: slim_prompts(&store.prompts, secret_key),
-        settings: store.settings.clone(),
+        settings: webview_settings(&store.settings),
     })
 }
 
@@ -31856,7 +31866,7 @@ async fn secret_vault_lock(state: State<'_, Db>) -> Result<AppState, String> {
     let store = lock(&state);
     Ok(AppState {
         prompts: slim_prompts(&store.prompts, None),
-        settings: store.settings.clone(),
+        settings: webview_settings(&store.settings),
     })
 }
 
@@ -31876,7 +31886,7 @@ async fn set_prompt_secret(app: AppHandle, state: State<'_, Db>, id: String, sec
     let secret_key = secret_session_key(timeout);
     Ok(AppState {
         prompts: slim_prompts(&store.prompts, secret_key),
-        settings: store.settings.clone(),
+        settings: webview_settings(&store.settings),
     })
 }
 
@@ -31939,9 +31949,11 @@ async fn export_all(app: AppHandle, state: State<'_, Db>) -> Result<usize, Strin
         // The export itself takes the live block, so it is right either way: but
         // an export is also the moment the store on disk should agree with it.
         flush_settings(&app, &store.settings);
+        let mut backup_settings = store.settings.clone();
+        remote_tls::strip_tls_keys(&mut backup_settings.ui_texts);
         let backup = Backup {
             prompts: store.prompts.clone(),
-            settings: store.settings.clone(),
+            settings: backup_settings,
         };
         let json = serde_json::to_string_pretty(&backup).map_err(|e| e.to_string())?;
         (json, store.prompts.len(), stored_backup_password(&store))
@@ -31999,16 +32011,17 @@ struct SettingsOnlyExport {
     ui_texts: HashMap<String, String>,
 }
 
+// The settings-only export copy: the receiver's certificate values stay on
+// this machine.
+fn settings_only_payload(settings: &Settings) -> SettingsOnlyExport {
+    let mut ui_texts = settings.ui_texts.clone();
+    remote_tls::strip_tls_keys(&mut ui_texts);
+    SettingsOnlyExport { ui_flags: settings.ui_flags.clone(), ui_values: settings.ui_values.clone(), ui_texts }
+}
+
 #[tauri::command]
 async fn export_settings_only(app: AppHandle, state: State<'_, Db>) -> Result<String, String> {
-    let payload = {
-        let store = lock(&state);
-        SettingsOnlyExport {
-            ui_flags: store.settings.ui_flags.clone(),
-            ui_values: store.settings.ui_values.clone(),
-            ui_texts: store.settings.ui_texts.clone(),
-        }
-    };
+    let payload = settings_only_payload(&lock(&state).settings);
     let json = serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())?;
     let file = file_dialog(&app)
         .set_file_name(format!("{}-settings.json", brand::SLUG))
@@ -32076,6 +32089,9 @@ fn strip_protected_folder_keys(incoming: &mut SettingsOnlyExport) {
     for key in PROTECTED_FOLDER_KEYS {
         incoming.ui_texts.remove(key);
     }
+    // The receiver's certificate belongs to this machine: a file can neither
+    // plant a key nor wipe the one in use.
+    remote_tls::strip_tls_keys(&mut incoming.ui_texts);
 }
 
 #[tauri::command]
@@ -32169,6 +32185,7 @@ fn apply_import(store: &mut Store, backup: Backup, want_data: bool, want_setting
             .iter()
             .filter_map(|k| store.settings.ui_texts.get(*k).map(|v| (k.to_string(), v.clone())))
             .collect();
+        let local_tls = remote_tls::tls_values(&store.settings);
         store.settings = backup.settings;
         SETTINGS_LOCKED.store(false, Ordering::Relaxed); // a full settings import supersedes any corrupt-row lock
         // migrate() fills defaults and guarantees at least one view: without it a
@@ -32183,6 +32200,12 @@ fn apply_import(store: &mut Store, backup: Backup, want_data: bool, want_setting
             store.settings.ui_texts.remove(key);
         }
         for (k, v) in local_folders {
+            store.settings.ui_texts.insert(k, v);
+        }
+        // Same for the receiver's certificate: this machine's own stays, the
+        // file's never lands.
+        remote_tls::strip_tls_keys(&mut store.settings.ui_texts);
+        for (k, v) in local_tls {
             store.settings.ui_texts.insert(k, v);
         }
         load_pick_history(&store.settings); // restore brings its own history mirror
@@ -32267,7 +32290,7 @@ async fn import_all(
             store.prompts_locked = original_locked;
             return Err("save-failed".into());
         }
-        (store.settings.clone(), count, dropped, backup_pw_dropped)
+        (webview_settings(&store.settings), count, dropped, backup_pw_dropped)
     };
     // Re-apply the visible parts of the imported settings without a restart.
     push_theme(&app, &settings);
@@ -33426,7 +33449,7 @@ pub fn run() {
             app.manage(remote::PendingLaunchUrl(Default::default()));
             // Same "never starts without a password" rule start() enforces on
             // every caller; harmless to call unconditionally at every boot.
-            remote::start(handle.clone());
+            let _ = remote::start(handle.clone());
             // A promptsaver:// link that started this very process (the app was
             // not already running yet) waits in PendingLaunchUrl until the main
             // window's script asks for it -- see run_pending_launch_url.
@@ -33979,6 +34002,9 @@ pub fn run() {
             remote::remote_api_status,
             remote::remote_api_stop_now,
             remote::set_remote_allowed_ranges,
+            remote::remote_tls_fingerprint,
+            remote::remote_tls_save_cert,
+            remote::remote_tls_renew,
             remote::run_pending_launch_url,
             skip_version,
             whats_new_check,
@@ -45332,6 +45358,53 @@ mod tests {
             assert!(!incoming.ui_texts.contains_key(key), "{key} must be stripped from an incoming settings file");
         }
         assert_eq!(incoming.ui_texts.get("copyFont").map(String::as_str), Some("Consolas"), "an ordinary setting must survive untouched");
+    }
+
+    #[test]
+    fn settings_only_payload_omits_the_receiver_certificate_values() {
+        let mut s = Settings::default();
+        for k in remote_tls::REMOTE_TLS_KEYS {
+            s.ui_texts.insert(k.to_string(), "value".into());
+        }
+        s.ui_texts.insert("copyFont".into(), "Consolas".into());
+        let payload = settings_only_payload(&s);
+        for k in remote_tls::REMOTE_TLS_KEYS {
+            assert!(!payload.ui_texts.contains_key(k));
+        }
+        assert_eq!(payload.ui_texts.get("copyFont").map(String::as_str), Some("Consolas"));
+        assert!(!serde_json::to_string(&payload).unwrap().contains("remoteTls"));
+        let mut incoming = payload;
+        incoming.ui_texts.insert(remote_tls::REMOTE_TLS_KEY.into(), "planted".into());
+        strip_protected_folder_keys(&mut incoming);
+        assert!(!incoming.ui_texts.contains_key(remote_tls::REMOTE_TLS_KEY));
+    }
+
+    #[test]
+    fn a_full_import_keeps_this_machines_receiver_certificate() {
+        let mut store = Store { prompts: vec![], trash: Vec::new(), settings: Settings::default(), prompts_locked: false, written: Default::default() };
+        store.settings.ui_texts.insert(remote_tls::REMOTE_TLS_CA.into(), "mine".into());
+        let mut foreign = Settings::default();
+        foreign.ui_texts.insert(remote_tls::REMOTE_TLS_CA.into(), "theirs".into());
+        foreign.ui_texts.insert(remote_tls::REMOTE_TLS_KEY.into(), "theirs-key".into());
+        let backup = Backup { prompts: vec![], settings: foreign };
+        apply_import(&mut store, backup, false, true);
+        assert_eq!(store.settings.ui_texts.get(remote_tls::REMOTE_TLS_CA).map(String::as_str), Some("mine"));
+        assert!(!store.settings.ui_texts.contains_key(remote_tls::REMOTE_TLS_KEY));
+    }
+
+    #[test]
+    fn a_window_copy_of_the_settings_has_no_private_key() {
+        let mut s = Settings::default();
+        s.ui_texts.insert(remote_tls::REMOTE_TLS_KEY.into(), "sealed".into());
+        s.ui_texts.insert(remote_tls::REMOTE_TLS_CA.into(), "ca".into());
+        s.ui_texts.insert(remote::REMOTE_PASSWORD_KEY.into(), "hash".into());
+        s.ui_texts.insert("remoteAllowedRanges".into(), "10.0.0.0/8".into());
+        let copy = webview_settings(&s);
+        assert!(!copy.ui_texts.contains_key(remote::REMOTE_PASSWORD_KEY));
+        assert!(copy.ui_texts.contains_key("remoteAllowedRanges"));
+        assert!(!copy.ui_texts.contains_key(remote_tls::REMOTE_TLS_KEY));
+        assert_eq!(copy.ui_texts.get(remote_tls::REMOTE_TLS_CA).map(String::as_str), Some("ca"));
+        assert!(s.ui_texts.contains_key(remote_tls::REMOTE_TLS_KEY));
     }
 
     // A full "data" import must actually delete the prompts it replaces ON DISK,
