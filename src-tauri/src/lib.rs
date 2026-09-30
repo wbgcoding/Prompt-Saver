@@ -37016,6 +37016,18 @@ fn sync_status(state: State<Db>) -> SyncStatus {
     SyncStatus { enabled, last_ok: h.last_ok, files: h.files, paused: h.paused, reason: h.reason }
 }
 
+// Whether two paths name the same folder, or one lies inside the other. Compared by
+// identity (the resolved path), never by spelling: another letter case, a mapped
+// drive against its share path or a junction all reach the same files, and deleting
+// "the old folder" after writing into it would wipe what was just written.
+fn sync_same_dir(a: &Path, b: &Path) -> bool {
+    let (ca, cb) = match (fs::canonicalize(a), fs::canonicalize(b)) {
+        (Ok(x), Ok(y)) => (x, y),
+        _ => (a.to_path_buf(), b.to_path_buf()),
+    };
+    ca == cb || ca.starts_with(&cb) || cb.starts_with(&ca)
+}
+
 // Point the sync at another folder. `delete_old` is an explicit decision the WINDOW
 // made after asking the user. A backend that deleted a folder on its own initiative
 // is exactly the kind of surprise this app does not do. The folder that may be
@@ -37054,7 +37066,7 @@ fn set_sync_dir(app: AppHandle, state: State<Db>, dir: String, delete_old: bool)
         let store = lock(&state);
         sync_dir_path(&app, &store.settings)
     };
-    if old == new {
+    if sync_same_dir(&old, &new) {
         return Ok(0); // nothing moved, so there is no old folder to let go of
     }
     sync_delete_dir(&old, &data_dir(&app))
@@ -41958,6 +41970,21 @@ mod tests {
             .count();
         assert_eq!(copies, 1, "the unread outside edit must be kept as a conflict copy");
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sync_same_dir_compares_by_identity_not_spelling() {
+        let dir = sync_tmp_dir("same-dir");
+        let name = dir.file_name().unwrap().to_string_lossy().to_uppercase();
+        let shouting = dir.with_file_name(name);
+        assert_ne!(dir, shouting, "a plain path compare (the old check) calls them different");
+        assert!(sync_same_dir(&dir, &shouting), "the same folder in another letter case is the same folder");
+        assert!(sync_same_dir(&dir, &dir.join(".")));
+        let other = sync_tmp_dir("same-dir-other");
+        assert!(!sync_same_dir(&dir, &other));
+        assert!(sync_same_dir(&dir, &dir.join("inner")), "a folder inside the other counts too");
+        let _ = fs::remove_dir_all(&dir);
+        let _ = fs::remove_dir_all(&other);
     }
 
     #[test]
