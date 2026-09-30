@@ -16372,6 +16372,37 @@ def main():
     await sleep(100);
     if (input.value.trim() !== 'hello world') errs.push('564-v2: the late final text should replace the partial, field holds ' + JSON.stringify(input.value));
 """)
+        failed += ar_probe('c3', 'clipboard inbox: a failed clear offers no undo (storage panel and inbox dialog)', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { clipWatcher: true } };</script>\n', r"""
+    await bootReady();
+    RESULTS.clip_inbox_clear = () => { throw 'delete-incomplete'; };
+    const undoBtn = () => document.querySelector('#toast .toast-btn');
+    // 1) the retention row of the backups dialog
+    document.getElementById('gear').click(); await sleep(200);
+    document.getElementById('settings-backup-btn').click(); await sleep(400);
+    const row = document.querySelector('#retention-panel [data-setting-row="retention-clipInbox"]');
+    const clean = row && row.querySelectorAll('.import-preview-actions button')[1];
+    if (!clean) { errs.push('564-c3: the clipboard inbox cleanup button was not found'); }
+    else {
+      window.__SMOKE_ARGS__.length = 0;
+      clean.click(); await sleep(400);
+      if (!callsFor('clip_inbox_clear').length) errs.push('564-c3: fixture: the clear was never attempted');
+      if (undoBtn()) errs.push('564-c3: the storage panel offered Undo after the clear failed');
+      const msg = document.getElementById('toast').textContent;
+      if (/cleared/i.test(msg)) errs.push('564-c3: the storage panel reported a clear that failed: ' + msg);
+    }
+    // 2) the inbox dialog itself
+    document.getElementById('backup-modal').classList.add('hidden');
+    document.getElementById('toast').classList.remove('show');
+    const cb = document.getElementById('clip-btn');
+    if (cb.classList.contains('hidden')) { errs.push('564-c3: the inbox button is not shown in the fixture'); }
+    else {
+      cb.click(); await sleep(300);
+      window.__SMOKE_ARGS__.length = 0;
+      document.getElementById('clip-clear').click(); await sleep(400);
+      if (!callsFor('clip_inbox_clear').length) errs.push('564-c3: fixture: the inbox dialog clear was never attempted');
+      if (undoBtn()) errs.push('564-c3: the inbox dialog offered Undo after the clear failed');
+    }
+""")
         # ---- main window findings: generated block end ----
         print("PASS" if not failed else f"{failed} problem(s)")
         return 1 if failed else 0

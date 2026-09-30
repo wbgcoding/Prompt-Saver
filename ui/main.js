@@ -11600,7 +11600,7 @@ const RETENTION_CLEANUP = {
   clipInbox: async () => {
     const items = await invoke("clip_inbox_list").catch(() => []);
     if (!items.length) { toast(t("recSweepNothing")); return; }
-    await invoke("clip_inbox_clear").catch((e) => { errToast(e); return; });
+    try { await invoke("clip_inbox_clear"); } catch (e) { errToast(e); return; }
     undoToast(t("clipInboxClearedToast"), () => restoreClipInbox(items));
   },
   recordings: () => { closeBackups(); openVideoCleanup(EXPERT_PATHS.recordingDir.get()); },
@@ -19941,7 +19941,8 @@ function bind() {
   $("clip-modal").addEventListener("pointerdown", (e) => { if (e.target === $("clip-modal")) $("clip-modal").classList.add("hidden"); });
   $("clip-clear").addEventListener("click", async () => {
     const items = await invoke("clip_inbox_list").catch(() => []);
-    await invoke("clip_inbox_clear").catch((e) => errToast(e));
+    // A clear that failed left every row in place: no "cleared" toast, no undo.
+    try { await invoke("clip_inbox_clear"); } catch (e) { errToast(e); return; }
     refreshClipInbox();
     undoToast(t("clipInboxClearedToast"), () => restoreClipInbox(items));
   });
