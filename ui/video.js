@@ -687,15 +687,24 @@ function planEntryOutMs(entry) {
 // Source milliseconds -> milliseconds in the exported clip. Overlay time ranges
 // are picked on the source timeline (that is what the user sees) but ffmpeg's
 // `enable` expressions run on the output timeline, so every range goes through
-// this on the way into the filter graph.
-function outMs(srcMs) {
+// this on the way into the filter graph. The walk follows timelinePlan(), so
+// the length of every inserted section clip that sits before the point is
+// counted (overlays are applied after the clips are concatenated in). A point
+// exactly on the start of a kept stretch lands after the clips in front of it
+// when it opens a range, and before them when it closes one (atEnd).
+function outMs(srcMs, atEnd) {
+  const rate = speedRate();
   let acc = 0;
-  for (const seg of keptSegments()) {
-    if (srcMs <= seg.a) break;
-    acc += Math.min(srcMs, seg.b) - seg.a;
-    if (srcMs < seg.b) break;
+  let pending = 0;
+  for (const entry of timelinePlan()) {
+    if (entry.type === "clip") { pending += planEntryOutMs(entry); continue; }
+    if (srcMs < entry.a || (atEnd && srcMs === entry.a)) break;
+    acc += pending;
+    pending = 0;
+    acc += (Math.min(srcMs, entry.b) - entry.a) / rate;
+    if (srcMs < entry.b) break;
   }
-  return acc / speedRate();
+  return acc;
 }
 
 // Includes every inserted section clip's own length -- the one change that
@@ -2663,7 +2672,7 @@ const hexToFf = (hex, opacity) => `0x${String(hex).replace("#", "")}@${(clamp(op
 // timeline, which is what `enable=between(t,…)` reads.
 function enableExpr(op) {
   const a = outMs(clamp(op.startMs, 0, VE.dur)) / 1000;
-  const b = outMs(clamp(op.endMs, 0, VE.dur)) / 1000;
+  const b = outMs(clamp(op.endMs, 0, VE.dur), true) / 1000;
   if (b <= a) return null;
   return `enable='between(t,${a.toFixed(3)},${b.toFixed(3)})'`;
 }
@@ -2678,7 +2687,7 @@ function enableExpr(op) {
 // or a cut inside the range must not stretch or shrink the footage's own length.
 function videoOverlayWindowOutMs(op) {
   const aOut = outMs(clamp(op.startMs, 0, VE.dur));
-  const bOut = outMs(clamp(op.endMs, 0, VE.dur));
+  const bOut = outMs(clamp(op.endMs, 0, VE.dur), true);
   const endOut = op.loop || !op.videoDurationMs ? bOut : Math.min(bOut, aOut + op.videoDurationMs);
   return { aOut, endOut };
 }
@@ -2833,7 +2842,7 @@ function keysEnable(op, spans) {
   const clipped = spans
     .map(([s, e]) => [Math.max(s, op.startMs), Math.min(e, op.endMs)])
     .filter(([s, e]) => e > s)
-    .map(([s, e]) => [outMs(s) / 1000, outMs(e) / 1000]);
+    .map(([s, e]) => [outMs(s) / 1000, outMs(e, true) / 1000]);
   if (!clipped.length) return null;
   return `enable='${clipped.map(([a, b]) => `between(t,${a.toFixed(3)},${b.toFixed(3)})`).join("+")}'`;
 }

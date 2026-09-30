@@ -45,7 +45,9 @@ const opOfLine = extractLine("opOf", "const opOf = (tool) => VE.ops.filter((o) =
 const opsOfLine = extractLine("opsOf", "const opsOf = (tool) => VE.ops.filter((o) => o.tool === tool);");
 const keptSegmentsBlock = extractBlock("keptSegments", "function keptSegments() {");
 const speedRateBlock = extractBlock("speedRate", "const speedRate = () => {") + ";";
-const outMsBlock = extractBlock("outMs", "function outMs(srcMs) {");
+const timelinePlanBlock = extractBlock("timelinePlan", "function timelinePlan() {");
+const planEntryOutMsBlock = extractBlock("planEntryOutMs", "function planEntryOutMs(entry) {");
+const outMsBlock = extractBlock("outMs", "function outMs(srcMs, atEnd) {");
 
 // The two lines inside buildLiveOverlayEl's video branch that turn the
 // current playhead into the overlay's own clip time. Pinning the exact text
@@ -71,7 +73,7 @@ extractLine(
 const sandbox = { VE: null, KEPT_CUTS_BUF: [], KEPT_SEGMENTS_BUF: [] };
 vm.createContext(sandbox);
 vm.runInContext(
-  [clampLine, opOfLine, opsOfLine, keptSegmentsBlock, speedRateBlock, outMsBlock].join("\n"),
+  [clampLine, opOfLine, opsOfLine, keptSegmentsBlock, speedRateBlock, timelinePlanBlock, planEntryOutMsBlock, outMsBlock].join("\n"),
   sandbox,
   { filename: "video.js (extracted)" }
 );

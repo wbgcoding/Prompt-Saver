@@ -45,7 +45,7 @@ function makeSandbox(extra) {
       extractBlock("speedRate", "const speedRate = () => {") + ";",
       extractBlock("timelinePlan", "function timelinePlan() {"),
       extractBlock("planEntryOutMs", "function planEntryOutMs(entry) {"),
-      extractBlock("outMs", "function outMs(srcMs) {"),
+      extractBlock("outMs", "function outMs(srcMs, atEnd) {"),
       extractLine("totalOutMs", "const totalOutMs = () => timelinePlan().reduce((sum, e) => sum + planEntryOutMs(e), 0);"),
       extractLine("secs", "const secs = (ms) => (ms / 1000).toFixed(3);"),
       extractBlock("ffPath", "function ffPath(path) {"),
@@ -210,6 +210,32 @@ expect("double frame preview puts its outline inside the border", src.includes("
   sb.VE.ops = [Object.assign({}, clip, { hasAudio: false })];
   g = vm.runInContext("buildAudioChain()", sb);
   expect("a clip without audio stays a silent gap", g && !g.includes("amovie=") && g.includes("anullsrc="), g);
+}
+
+// Overlays are applied after the inserted clips are concatenated in, so their
+// time range has to move later by every clip that sits in front of them.
+{
+  const sb = makeSandbox({ exportFormat: () => "mp4", exportQuality: () => "high" });
+  const text = { tool: "overlay", kind: "text", startMs: 10000, endMs: 12000 };
+  const clip = (over) => Object.assign({ tool: "clip", position: "start", missing: false, hasAudio: false, path: "C:/x/clip.mp4", durationMs: 5000 }, over);
+  sb.VE = baseState([clip(), text]);
+  let e = vm.runInContext("enableExpr", sb)(text);
+  expect("overlay window moves behind a start clip", e === "enable='between(t,15.000,17.000)'", e);
+  sb.VE = baseState([clip({ position: "end" }), text]);
+  e = vm.runInContext("enableExpr", sb)(text);
+  expect("an end clip does not move an overlay", e === "enable='between(t,10.000,12.000)'", e);
+  sb.VE = baseState([clip({ position: "cut", atMs: 4000 }), text]);
+  e = vm.runInContext("enableExpr", sb)(text);
+  expect("a clip cut in before the overlay moves it", e === "enable='between(t,15.000,17.000)'", e);
+  sb.VE = baseState([clip({ position: "cut", atMs: 11000 }), text]);
+  e = vm.runInContext("enableExpr", sb)(text);
+  expect("a clip inside the overlay range stretches it", e === "enable='between(t,10.000,17.000)'", e);
+  sb.VE = baseState([clip({ position: "cut", atMs: 12000 }), text]);
+  e = vm.runInContext("enableExpr", sb)(text);
+  expect("a clip right at the overlay end is not covered by it", e === "enable='between(t,10.000,12.000)'", e);
+  sb.VE = baseState([clip(), { tool: "speed", rate: 2 }, text]);
+  e = vm.runInContext("enableExpr", sb)(text);
+  expect("clip length and speed combine", e === "enable='between(t,7.500,8.500)'", e);
 }
 
 // With every recorded track muted (or turned down), the inserted clip's sound
