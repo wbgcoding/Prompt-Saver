@@ -53,6 +53,11 @@ function makeSandbox(extra) {
       extractBlock("videoOverlayEnable", "function videoOverlayEnable(op) {"),
       extractBlock("videoOverlayLoopArg", "function videoOverlayLoopArg(op) {"),
       extractBlock("isLosslessCopy", "function isLosslessCopy() {"),
+      extractBlock("silentGapLabel", "function silentGapLabel(entry, label, parts) {"),
+      extractBlock("silentSpanLabel", "function silentSpanLabel(ms, label, parts) {"),
+      extractBlock("clipAudioLabel", "function clipAudioLabel(entry, label, parts) {"),
+      extractBlock("atempoChain", "function atempoChain(rate) {"),
+      extractBlock("buildAudioChain", "function buildAudioChain() {"),
     ].join("\n"),
     sandbox,
     { filename: "video.js (extracted)" }
@@ -79,6 +84,27 @@ function baseState(ops) {
   expect("isLosslessCopy stays true when the only clip is missing", vm.runInContext("isLosslessCopy()", sb) === true);
   sb.VE = baseState([]);
   expect("isLosslessCopy stays true for an untouched recording", vm.runInContext("isLosslessCopy()", sb) === true);
+}
+
+// An inserted clip that carries sound must be decoded into the audio graph,
+// into exactly one track, not replaced by silence.
+{
+  const sb = makeSandbox({ exportFormat: () => "mp4", exportQuality: () => "high", formatHasAudio: () => true });
+  const clip = { tool: "clip", position: "end", missing: false, hasAudio: true, path: "C:/x/clip.mp4", durationMs: 3000 };
+  const state = (hasSys, hasMic) => Object.assign(baseState([clip]), { hasSys, hasMic });
+  const count = (s, needle) => s.split(needle).length - 1;
+  sb.VE = state(true, true);
+  let g = vm.runInContext("buildAudioChain()", sb);
+  expect("clip audio is decoded with amovie", g && /amovie='C[^']*clip\.mp4'/.test(g), g);
+  expect("clip audio is used in exactly one track", g && count(g, "amovie=") === 1, g);
+  expect("the other track keeps a silent gap", g && count(g, "anullsrc=") === 1, g);
+  sb.VE = state(false, false);
+  g = vm.runInContext("buildAudioChain()", sb);
+  expect("a recording without audio still gets the clip sound", g && /amovie='C[^']*clip\.mp4'/.test(g), g);
+  sb.VE = state(true, false);
+  sb.VE.ops = [Object.assign({}, clip, { hasAudio: false })];
+  g = vm.runInContext("buildAudioChain()", sb);
+  expect("a clip without audio stays a silent gap", g && !g.includes("amovie=") && g.includes("anullsrc="), g);
 }
 
 if (problems.length) {

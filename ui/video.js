@@ -3053,13 +3053,26 @@ function buildVideoChain() {
 // by exactly that clip's length and drift out of sync with everything after
 // it.
 function silentGapLabel(entry, label, parts) {
+  return silentSpanLabel(entry.op.durationMs, label, parts);
+}
+
+function silentSpanLabel(ms, label, parts) {
   const out = label();
-  parts.push(`anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:${secs(entry.op.durationMs)},asetpts=PTS-STARTPTS[${out}]`);
+  parts.push(`anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:${secs(ms)},asetpts=PTS-STARTPTS[${out}]`);
+  return out;
+}
+
+// An inserted clip's own sound, cut or padded to exactly its video length so
+// everything after it stays in sync.
+function clipAudioLabel(entry, label, parts) {
+  const out = label();
+  parts.push(`amovie='${ffPath(entry.op.path)}',aresample=48000,aformat=channel_layouts=stereo,apad,atrim=0:${secs(entry.op.durationMs)},asetpts=PTS-STARTPTS[${out}]`);
   return out;
 }
 
 // Audio half of the same graph: per track trim/cut/concat (with a silent gap
-// standing in for every inserted clip, see silentGapLabel), volume, speed and
+// standing in for every inserted clip, see silentGapLabel, except that one
+// track, the clip host, plays the clips' own sound), volume, speed and
 // fades, plus one delayed branch per audible video overlay, mixed down to one
 // stream on [aout].
 function buildAudioChain() {
@@ -3070,7 +3083,20 @@ function buildAudioChain() {
   if (VE.hasSys) tracks.push({ index: 0, spec: "0:a:0", state: VE.audio.sys });
   if (VE.hasMic) tracks.push({ index: 1, spec: "0:a:1", state: VE.audio.mic });
   const videoOverlaysWithAudio = opsOf("overlay").filter((o) => o.kind === "video" && !o.missing && o.hasAudio && o.volume > 0);
-  if (!tracks.length && !videoOverlaysWithAudio.length) return null;
+  const clipsWithAudio = plan.filter((e) => e.type === "clip" && e.op.hasAudio);
+  if (!tracks.length && !videoOverlaysWithAudio.length && !clipsWithAudio.length) return null;
+  // Clip sound goes into ONE track, or it would be mixed in twice. The first
+  // track that is not muted hosts it; with no recorded audio at all a
+  // dedicated track (silent where the main video plays) carries it.
+  let clipHost = null;
+  if (clipsWithAudio.length) {
+    if (!tracks.length) {
+      clipHost = { index: -1, spec: null, state: { mute: false, vol: 100 } };
+      tracks.push(clipHost);
+    } else {
+      clipHost = tracks.find((tr) => !tr.state.mute) || tracks[0];
+    }
+  }
 
   const speed = opOf("speed");
   const fade = opOf("fade");
@@ -3086,11 +3112,13 @@ function buildAudioChain() {
   const outs = [];
 
   for (const track of tracks) {
-    const mainSplits = mains.length > 1 ? mains.map(() => label()) : null;
+    const silentTrack = track.spec === null;
+    const mainSplits = mains.length > 1 && !silentTrack ? mains.map(() => label()) : null;
     if (mainSplits) parts.push(`[${track.spec}]asplit=${mains.length}${mainSplits.map((l) => `[${l}]`).join("")}`);
     let mi = 0;
     const segLabels = plan.map((entry) => {
-      if (entry.type !== "main") return silentGapLabel(entry, label, parts);
+      if (entry.type !== "main") return track === clipHost && entry.op.hasAudio ? clipAudioLabel(entry, label, parts) : silentGapLabel(entry, label, parts);
+      if (silentTrack) return silentSpanLabel(entry.b - entry.a, label, parts);
       const out = label();
       const src = mains.length > 1 ? mainSplits[mi++] : track.spec;
       parts.push(`[${src}]atrim=start=${secs(entry.a)}:end=${secs(entry.b)},asetpts=PTS-STARTPTS[${out}]`);
