@@ -2039,7 +2039,10 @@ async function pickExtraVideo() {
 // started, read live by the Rust side rather than reconstructed here from
 // two wall-clock stamps (a paused span between the two starts would
 // otherwise inflate the offset by however long it lasted).
-async function addAlignedCameraOverlay(path) {
+//
+// `gen` is the load generation the call belongs to: a second recording opened
+// while one of the two awaits below is pending must not receive this overlay.
+async function addAlignedCameraOverlay(path, gen) {
   if (!path) return;
   if (VE.ops.some((o) => o.tool === "overlay" && o.kind === "video" && o.path === path)) return;
   let probe;
@@ -2050,6 +2053,7 @@ async function addAlignedCameraOverlay(path) {
     // video" picker reaches it by hand if this automatic probe fails.
     return;
   }
+  if (VE.loadGen !== gen) return;
   let startMs = 0;
   try {
     const sidecar = await invoke("read_camera_sidecar", { path });
@@ -2058,6 +2062,7 @@ async function addAlignedCameraOverlay(path) {
     // No sidecar -- 0 (both at the same point) is still a sane fallback,
     // never a missing overlay.
   }
+  if (VE.loadGen !== gen) return;
   const durationMs = Number(probe.duration_ms) || 0;
   const w = even(VE.w * 0.3), h = even(VE.h * 0.3);
   const margin = even(Math.min(VE.w, VE.h) * 0.03);
@@ -4313,8 +4318,9 @@ async function loadRecording(path, originDir, overlayPath) {
   loadStrip();
   scheduleWaves();
   await checkEditState(path, myGen);
-  if (VE.loadGen === myGen) await addAlignedCameraOverlay(overlayPath);
-  armEditStateAutosave();
+  if (VE.loadGen !== myGen) return;
+  await addAlignedCameraOverlay(overlayPath, myGen);
+  if (VE.loadGen === myGen) armEditStateAutosave();
 }
 
 function applyProbe(probe) {

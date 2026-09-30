@@ -71,6 +71,7 @@ function makeSandbox(extra) {
       extractLine("rectsEqual", "const rectsEqual = (a, b) => !!a && !!b && a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;"),
       extractBlock("endRectDrag", "function endRectDrag() {"),
       extractBlock("closeWindow", "async function closeWindow() {"),
+      extractBlock("addAlignedCameraOverlay", "async function addAlignedCameraOverlay(path, gen) {"),
     ].join("\n"),
     sandbox,
     { filename: "video.js (extracted)" }
@@ -223,7 +224,36 @@ async function closeChecks() {
   }
 }
 
-closeChecks().then(() => {
+// A recording opened while the camera overlay of the previous one is still being
+// probed must not end up with that overlay.
+async function cameraOverlayRaceCheck() {
+  let release;
+  const held = new Promise((r) => { release = r; });
+  const sb = makeSandbox({
+    invoke: (cmd) => (cmd === "probe_extra_video_source" ? held : Promise.resolve(null)),
+    even: (n) => Math.round(n / 2) * 2, snapRect: (r) => r, newId: () => "cam1",
+    afterOpsChanged: () => {},
+  });
+  sb.VE = baseState([]);
+  Object.assign(sb.VE, { floor: 0, undoMax: 50, redo: [], loadGen: 1, w: 1920, h: 1080, selOv: null });
+  const pending = vm.runInContext("addAlignedCameraOverlay", sb)("C:/cam.mp4", 1);
+  sb.VE.loadGen = 2; // a second load started and reset the editor
+  release({ duration_ms: 5000, has_audio: false });
+  await pending;
+  expect("a camera overlay from a superseded load is dropped", !sb.VE.ops.some((o) => o.path === "C:/cam.mp4"), JSON.stringify(sb.VE.ops));
+  // Same load still current: the overlay arrives.
+  const sb2 = makeSandbox({
+    invoke: (cmd) => Promise.resolve(cmd === "probe_extra_video_source" ? { duration_ms: 5000, has_audio: false } : null),
+    even: (n) => Math.round(n / 2) * 2, snapRect: (r) => r, newId: () => "cam1",
+    afterOpsChanged: () => {},
+  });
+  sb2.VE = baseState([]);
+  Object.assign(sb2.VE, { floor: 0, undoMax: 50, redo: [], loadGen: 1, w: 1920, h: 1080, selOv: null });
+  await vm.runInContext("addAlignedCameraOverlay", sb2)("C:/cam.mp4", 1);
+  expect("a camera overlay of the current load is added", sb2.VE.ops.some((o) => o.path === "C:/cam.mp4"));
+}
+
+cameraOverlayRaceCheck().then(closeChecks).then(() => {
 if (problems.length) {
   console.log(`${problems.length} problem(s):`);
   for (const p of problems) console.log(" - " + p);
