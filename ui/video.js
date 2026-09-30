@@ -3130,15 +3130,16 @@ function buildAudioChain() {
   const clipsWithAudio = plan.filter((e) => e.type === "clip" && e.op.hasAudio);
   if (!tracks.length && !videoOverlaysWithAudio.length && !clipsWithAudio.length) return null;
   // Clip sound goes into ONE track, or it would be mixed in twice. The first
-  // track that is not muted hosts it; with no recorded audio at all a
-  // dedicated track (silent where the main video plays) carries it.
+  // track that is not muted hosts it; with none (no recorded audio, or all
+  // of it muted) a dedicated track (silent where the main video plays) carries it.
   let clipHost = null;
   if (clipsWithAudio.length) {
-    if (!tracks.length) {
+    clipHost = tracks.find((tr) => !tr.state.mute);
+    if (!clipHost) {
+      // No unmuted recorded track (or none at all): a muted host would zero
+      // the clip's sound too, so it gets a track of its own.
       clipHost = { index: -1, spec: null, state: { mute: false, vol: 100 } };
       tracks.push(clipHost);
-    } else {
-      clipHost = tracks.find((tr) => !tr.state.mute) || tracks[0];
     }
   }
 

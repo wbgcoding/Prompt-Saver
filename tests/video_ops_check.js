@@ -212,6 +212,24 @@ expect("double frame preview puts its outline inside the border", src.includes("
   expect("a clip without audio stays a silent gap", g && !g.includes("amovie=") && g.includes("anullsrc="), g);
 }
 
+// With every recorded track muted (or turned down), the inserted clip's sound
+// still plays at full level: it gets its own host instead of a muted track.
+{
+  const sb = makeSandbox({ exportFormat: () => "mp4", exportQuality: () => "high", formatHasAudio: () => true });
+  const clip = { tool: "clip", position: "end", missing: false, hasAudio: true, path: "C:/x/clip.mp4", durationMs: 3000 };
+  sb.VE = Object.assign(baseState([clip]), { hasSys: true, hasMic: false });
+  sb.VE.audio.sys.mute = true;
+  let g = vm.runInContext("buildAudioChain()", sb);
+  expect("clip sound survives a muted recording track", g && g.includes("volume=1.00") && /amovie=/.test(g), g);
+  expect("the muted track stays muted", g && g.includes("volume=0.00"), g);
+  sb.VE.audio.sys = { mute: true, vol: 20 };
+  g = vm.runInContext("buildAudioChain()", sb);
+  expect("clip sound ignores the muted track's slider", g && !g.includes("volume=0.20"), g);
+  sb.VE.audio.sys = { mute: false, vol: 20 };
+  g = vm.runInContext("buildAudioChain()", sb);
+  expect("an unmuted track still hosts the clip with its own volume", g && g.includes("volume=0.20") && !g.includes("volume=1.00"), g);
+}
+
 // Closing while an export runs: with the edit state not kept, the confirm must
 // also warn about unexported edits.
 async function closeChecks() {
