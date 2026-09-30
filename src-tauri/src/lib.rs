@@ -31710,6 +31710,91 @@ fn secret_vault_status(state: State<Db>) -> SecretVaultStatus {
     }
 }
 
+// Verifies a password against the stored salt and verifier and returns the key.
+fn secret_vault_verify(password: &str, salt_b64: &str, verify_b64: &str) -> Result<[u8; 32], String> {
+    let salt = base64_decode(salt_b64);
+    if salt.is_empty() {
+        return Err("corrupt-vault".to_string());
+    }
+    let key = secret_derive_key(password, &salt)?;
+    secret_decrypt(verify_b64, &key).map_err(|_| "wrong-password".to_string())?;
+    Ok(key)
+}
+
+// First-time vault setup: stores the salt and verifier and reports whether they
+// reached disk. Ok(false) means metadata already exists and nothing was touched
+// (never replace an existing salt: it would orphan every ciphertext). On a failed
+// save both slots return to what they held, so no unlocked state can ever rest on
+// a salt that is not durable.
+fn secret_vault_first_setup(
+    settings: &mut Settings,
+    salt: &[u8],
+    verify: String,
+    mut save: impl FnMut(&Settings) -> bool,
+) -> Result<bool, String> {
+    if settings.ui_texts.get(SECRET_SALT_KEY).map(|s| !s.is_empty()).unwrap_or(false) {
+        return Ok(false);
+    }
+    let old_salt = settings.ui_texts.get(SECRET_SALT_KEY).cloned();
+    let old_verify = settings.ui_texts.get(SECRET_VERIFY_KEY).cloned();
+    settings.ui_texts.insert(SECRET_SALT_KEY.to_string(), base64_encode(salt));
+    settings.ui_texts.insert(SECRET_VERIFY_KEY.to_string(), verify);
+    if !save(settings) {
+        for (k, old) in [(SECRET_SALT_KEY, old_salt), (SECRET_VERIFY_KEY, old_verify)] {
+            match old {
+                Some(v) => { settings.ui_texts.insert(k.to_string(), v); }
+                None => { settings.ui_texts.remove(k); }
+            }
+        }
+        return Err("save-failed".to_string());
+    }
+    Ok(true)
+}
+
+// Converts a copy of one prompt to the requested confidential state, every field
+// authenticated or encrypted before anything is returned. None = already in that
+// state. The live prompt is never touched here.
+fn secret_convert_prompt(p: &Prompt, secret: bool, key: &[u8; 32]) -> Result<Option<Prompt>, String> {
+    if secret == p.secret {
+        return Ok(None);
+    }
+    let mut out = p.clone();
+    if secret {
+        out.text = secret_encrypt(&p.text, key);
+        out.variants = p.variants.iter().map(|v| secret_encrypt(v, key)).collect();
+        out.secret = true;
+    } else {
+        let (text, variants) = reveal_secret_text(p, Some(*key))?;
+        out.text = text;
+        out.variants = variants;
+        out.secret = false;
+    }
+    Ok(Some(out))
+}
+
+// Swaps the converted prompt in, persists, and puts the original back when the
+// save fails, so a failed conversion can never ride along on a later save.
+fn apply_prompt_secret(
+    store: &mut Store,
+    id: &str,
+    secret: bool,
+    key: &[u8; 32],
+    save: impl FnOnce(&Store) -> bool,
+) -> Result<(), String> {
+    let Some(idx) = store.prompts.iter().position(|p| p.id == id) else {
+        return Err("not-found".to_string());
+    };
+    let converted = secret_convert_prompt(&store.prompts[idx], secret, key)?;
+    let original = converted.map(|new| std::mem::replace(&mut store.prompts[idx], new));
+    if !save(store) {
+        if let Some(orig) = original {
+            store.prompts[idx] = orig;
+        }
+        return Err("save-failed".to_string());
+    }
+    Ok(())
+}
+
 // First call ever (no salt stored yet) sets the password up as the vault's
 // password. Every later call verifies against the stored salt/marker instead:
 // there is no way to change it short of turning secretPrompts off, which is a
@@ -31720,32 +31805,36 @@ async fn secret_vault_unlock(app: AppHandle, state: State<'_, Db>, password: Str
     if password.is_empty() || password.len() > SECRET_PW_MAX {
         return Err("invalid-password".to_string());
     }
-    let (salt_b64, verify_b64) = {
+    let read_meta = || {
         let store = lock(&state);
         (
             store.settings.ui_texts.get(SECRET_SALT_KEY).cloned().unwrap_or_default(),
             store.settings.ui_texts.get(SECRET_VERIFY_KEY).cloned().unwrap_or_default(),
         )
     };
-    let key = if salt_b64.is_empty() {
+    let (mut salt_b64, mut verify_b64) = read_meta();
+    let mut fresh_key: Option<[u8; 32]> = None;
+    if salt_b64.is_empty() {
         use rand::RngCore;
         let mut salt = [0u8; 16];
         rand::rngs::OsRng.fill_bytes(&mut salt);
         let key = secret_derive_key(&password, &salt)?;
         let verify = secret_encrypt(SECRET_VERIFY_MARKER, &key);
-        let mut store = lock(&state);
-        store.settings.ui_texts.insert(SECRET_SALT_KEY.to_string(), base64_encode(&salt));
-        store.settings.ui_texts.insert(SECRET_VERIFY_KEY.to_string(), verify);
-        save_settings(&app, &store.settings);
-        key
-    } else {
-        let salt = base64_decode(&salt_b64);
-        if salt.is_empty() {
-            return Err("corrupt-vault".to_string());
+        let created = {
+            let mut store = lock(&state);
+            secret_vault_first_setup(&mut store.settings, &salt, verify, |s| save_settings(&app, s))?
+        };
+        if created {
+            fresh_key = Some(key);
+        } else {
+            // Another call set the vault up first: verify against what it stored
+            // instead of replacing its salt.
+            (salt_b64, verify_b64) = read_meta();
         }
-        let key = secret_derive_key(&password, &salt)?;
-        secret_decrypt(&verify_b64, &key).map_err(|_| "wrong-password".to_string())?;
-        key
+    }
+    let key = match fresh_key {
+        Some(k) => k,
+        None => secret_vault_verify(&password, &salt_b64, &verify_b64)?,
     };
     *SECRET_SESSION.lock().unwrap_or_else(|e| e.into_inner()) = Some(SecretSession {
         key,
@@ -31783,25 +31872,7 @@ async fn set_prompt_secret(app: AppHandle, state: State<'_, Db>, id: String, sec
         return Err("locked".to_string());
     };
     let mut store = lock(&state);
-    let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) else {
-        return Err("not-found".to_string());
-    };
-    if secret && !p.secret {
-        p.text = secret_encrypt(&p.text, &key);
-        p.variants = p.variants.iter().map(|v| secret_encrypt(v, &key)).collect();
-        p.secret = true;
-    } else if !secret && p.secret {
-        p.text = secret_decrypt(&p.text, &key)?;
-        let mut plain = Vec::with_capacity(p.variants.len());
-        for v in &p.variants {
-            plain.push(secret_decrypt(v, &key)?);
-        }
-        p.variants = plain;
-        p.secret = false;
-    }
-    if !save_prompts(&app, &store) {
-        return Err("save-failed".to_string());
-    }
+    apply_prompt_secret(&mut store, &id, secret, &key, |st| save_prompts(&app, st))?;
     let secret_key = secret_session_key(timeout);
     Ok(AppState {
         prompts: slim_prompts(&store.prompts, secret_key),
@@ -42565,6 +42636,134 @@ mod tests {
         let (text, variants) = reveal_secret_text(&p, Some(key)).expect("decrypt");
         assert_eq!(text, "main entry");
         assert_eq!(variants, vec!["entry two".to_string(), "entry three".to_string()]);
+    }
+
+    #[test]
+    fn vault_first_setup_failed_save_leaves_no_salt_or_verifier() {
+        let mut settings = Settings::default();
+        let key = secret_derive_key("pw", b"0123456789abcdef").expect("derive");
+        let verify = secret_encrypt(SECRET_VERIFY_MARKER, &key);
+        let r = secret_vault_first_setup(&mut settings, b"0123456789abcdef", verify, |_| false);
+        assert_eq!(r, Err("save-failed".to_string()));
+        assert!(!settings.ui_texts.contains_key(SECRET_SALT_KEY), "no salt may survive");
+        assert!(!settings.ui_texts.contains_key(SECRET_VERIFY_KEY), "no verifier may survive");
+    }
+
+    #[test]
+    fn vault_first_setup_failed_save_restores_old_empty_values() {
+        let mut settings = Settings::default();
+        settings.ui_texts.insert(SECRET_SALT_KEY.into(), String::new());
+        settings.ui_texts.insert(SECRET_VERIFY_KEY.into(), "old".into());
+        let r = secret_vault_first_setup(&mut settings, b"0123456789abcdef", "new".into(), |_| false);
+        assert!(r.is_err());
+        assert_eq!(settings.ui_texts.get(SECRET_SALT_KEY).map(String::as_str), Some(""));
+        assert_eq!(settings.ui_texts.get(SECRET_VERIFY_KEY).map(String::as_str), Some("old"));
+    }
+
+    #[test]
+    fn vault_first_setup_success_persists_and_rederives_the_same_key() {
+        let mut settings = Settings::default();
+        let salt = b"0123456789abcdef";
+        let key = secret_derive_key("pw", salt).expect("derive");
+        let verify = secret_encrypt(SECRET_VERIFY_MARKER, &key);
+        let mut saved_salt = None;
+        let r = secret_vault_first_setup(&mut settings, salt, verify, |s| {
+            saved_salt = s.ui_texts.get(SECRET_SALT_KEY).cloned();
+            true
+        });
+        assert_eq!(r, Ok(true));
+        assert!(saved_salt.is_some(), "the salt was in the settings when they were saved");
+        let salt_b64 = settings.ui_texts.get(SECRET_SALT_KEY).cloned().unwrap();
+        let verify_b64 = settings.ui_texts.get(SECRET_VERIFY_KEY).cloned().unwrap();
+        assert_eq!(secret_vault_verify("pw", &salt_b64, &verify_b64), Ok(key));
+        assert_eq!(secret_vault_verify("other", &salt_b64, &verify_b64), Err("wrong-password".to_string()));
+    }
+
+    #[test]
+    fn vault_first_setup_never_replaces_an_existing_salt() {
+        let mut settings = Settings::default();
+        settings.ui_texts.insert(SECRET_SALT_KEY.into(), "existing".into());
+        settings.ui_texts.insert(SECRET_VERIFY_KEY.into(), "existing-verify".into());
+        let mut saves = 0;
+        let r = secret_vault_first_setup(&mut settings, b"0123456789abcdef", "new".into(), |_| {
+            saves += 1;
+            true
+        });
+        assert_eq!(r, Ok(false));
+        assert_eq!(saves, 0);
+        assert_eq!(settings.ui_texts.get(SECRET_SALT_KEY).map(String::as_str), Some("existing"));
+        assert_eq!(settings.ui_texts.get(SECRET_VERIFY_KEY).map(String::as_str), Some("existing-verify"));
+    }
+
+    fn secret_test_store(prompts: Vec<Prompt>) -> Store {
+        Store {
+            prompts,
+            trash: Vec::new(),
+            settings: Settings::default(),
+            prompts_locked: false,
+            written: Default::default(),
+        }
+    }
+
+    fn prompts_json(store: &Store) -> String {
+        serde_json::to_string(&store.prompts).unwrap()
+    }
+
+    #[test]
+    fn set_secret_decrypt_with_a_corrupt_middle_variant_changes_nothing() {
+        let key = secret_derive_key("pw", b"0123456789abcdef").expect("derive");
+        let mut p = test_prompt("a");
+        p.secret = true;
+        p.text = secret_encrypt("main", &key);
+        p.variants = vec![secret_encrypt("one", &key), "not-a-ciphertext".into(), secret_encrypt("three", &key)];
+        let mut store = secret_test_store(vec![p]);
+        let before = prompts_json(&store);
+        let mut saved = false;
+        let r = apply_prompt_secret(&mut store, "a", false, &key, |_| { saved = true; true });
+        assert!(r.is_err());
+        assert!(!saved, "nothing may be persisted after a failed conversion");
+        assert_eq!(prompts_json(&store), before, "prompt must stay byte for byte unchanged");
+        assert!(store.prompts[0].secret);
+    }
+
+    #[test]
+    fn set_secret_save_failure_restores_the_prompt_in_both_directions() {
+        let key = secret_derive_key("pw", b"0123456789abcdef").expect("derive");
+        let mut plain = test_prompt("a");
+        plain.text = "plain main".into();
+        plain.variants = vec!["v1".into(), "v2".into()];
+        let mut store = secret_test_store(vec![plain]);
+        let before = prompts_json(&store);
+        let r = apply_prompt_secret(&mut store, "a", true, &key, |_| false);
+        assert_eq!(r, Err("save-failed".to_string()));
+        assert_eq!(prompts_json(&store), before);
+
+        let mut sealed = test_prompt("b");
+        sealed.secret = true;
+        sealed.text = secret_encrypt("main", &key);
+        sealed.variants = vec![secret_encrypt("v1", &key)];
+        let mut store = secret_test_store(vec![sealed]);
+        let before = prompts_json(&store);
+        let r = apply_prompt_secret(&mut store, "b", false, &key, |_| false);
+        assert_eq!(r, Err("save-failed".to_string()));
+        assert_eq!(prompts_json(&store), before);
+    }
+
+    #[test]
+    fn set_secret_success_changes_text_variants_and_flag_together() {
+        let key = secret_derive_key("pw", b"0123456789abcdef").expect("derive");
+        let mut plain = test_prompt("a");
+        plain.text = "plain main".into();
+        plain.variants = vec!["v1".into(), "v2".into()];
+        let mut store = secret_test_store(vec![plain]);
+        apply_prompt_secret(&mut store, "a", true, &key, |_| true).expect("encrypt");
+        assert!(store.prompts[0].secret);
+        assert_ne!(store.prompts[0].text, "plain main");
+        assert_eq!(secret_decrypt(&store.prompts[0].variants[1], &key).unwrap(), "v2");
+        apply_prompt_secret(&mut store, "a", false, &key, |_| true).expect("decrypt");
+        assert!(!store.prompts[0].secret);
+        assert_eq!(store.prompts[0].text, "plain main");
+        assert_eq!(store.prompts[0].variants, vec!["v1".to_string(), "v2".to_string()]);
     }
 
     #[test]
