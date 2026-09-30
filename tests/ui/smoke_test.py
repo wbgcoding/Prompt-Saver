@@ -16324,6 +16324,20 @@ def main():
       }
     }
 """)
+        failed += ar_probe('g35', 'hotkey field: a refused capture leaves the global hotkeys off while the field has focus', 'index', '1000x780', '', r"""
+    await bootReady();
+    document.getElementById('gear').click(); await sleep(250);
+    const input = document.getElementById('opt-hotkey');
+    input.focus(); await sleep(150);
+    const capture = () => callsFor('set_hotkey_capture');
+    if (!capture().some((a) => a && a.active === true)) errs.push('564-35: fixture: focusing the field did not switch capture on');
+    window.__SMOKE_ARGS__.length = 0;
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', ctrlKey: true, altKey: true, bubbles: true, cancelable: true }));
+    await sleep(400);
+    if (!callsFor('set_hotkey').length) errs.push('564-35: fixture: the keydown did not reach set_hotkey');
+    if (document.activeElement !== input) errs.push('564-35: fixture: the field lost the focus');
+    if (!capture().some((a) => a && a.active === true)) errs.push('564-35: after a refused combination the hotkeys were not taken off again while the field still has focus');
+""")
         # ---- main window findings: generated block end ----
         print("PASS" if not failed else f"{failed} problem(s)")
         return 1 if failed else 0

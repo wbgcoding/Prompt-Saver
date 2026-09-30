@@ -9028,12 +9028,14 @@ function bindHotkeyField(input, { id = null, errEl = null, showAllEl = null, cur
       const stored = await onCommit(accel);
       if (stored === null) return; // aborted silently, see onCommit's doc above
       input.value = prettyAccel(stored);
-      reassertHotkeyCapture(); // the field still has the focus
     } catch (err) {
       input.value = prettyAccel(current());
       showErr(hotkeyMessage(String(err)));
     } finally {
       busy = false;
+      // A store re-arms every binding, even when it then fails on another one; the
+      // field still has the focus, so the hotkeys have to come off again either way.
+      reassertHotkeyCapture();
     }
   });
 }
