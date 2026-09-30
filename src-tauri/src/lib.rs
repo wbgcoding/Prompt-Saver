@@ -29177,15 +29177,25 @@ fn parse_key_sidecar(data: &str) -> Option<keylog::KeySidecar> {
     serde_json::from_str(&dec_str(data)).ok()
 }
 
+// Reads through the same size cap the copy check uses, so an oversized or
+// replaced file is refused instead of being read into memory whole.
+#[cfg(windows)]
+fn read_key_sidecar_at(sidecar: &Path) -> Option<keylog::KeySidecar> {
+    let bytes = read_file_capped(sidecar, KEY_SIDECAR_MAX_COPY_BYTES).ok()?;
+    parse_key_sidecar(std::str::from_utf8(&bytes).ok()?)
+}
+
 #[cfg(windows)]
 #[tauri::command]
-fn read_key_sidecar(path: String) -> Option<keylog::KeySidecar> {
-    let data = fs::read_to_string(keylog::sidecar_path(Path::new(&path))).ok()?;
-    parse_key_sidecar(&data)
+async fn read_key_sidecar(path: String) -> Option<keylog::KeySidecar> {
+    tauri::async_runtime::spawn_blocking(move || read_key_sidecar_at(&keylog::sidecar_path(Path::new(&path))))
+        .await
+        .ok()
+        .flatten()
 }
 #[cfg(not(windows))]
 #[tauri::command]
-fn read_key_sidecar(path: String) -> Option<()> {
+async fn read_key_sidecar(path: String) -> Option<()> {
     let _ = path;
     None
 }
@@ -42734,6 +42744,20 @@ mod tests {
         assert_eq!(rows[0].trashed_at, 1234);
         assert!(rows[0].has_image);
         assert_eq!(rows[1].text, "", "a confidential entry shows no stored text");
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn read_key_sidecar_at_refuses_a_file_past_the_size_cap() {
+        let dir = std::env::temp_dir().join(format!("ps-keyread-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let small = dir.join("small.keys.json");
+        fs::write(&small, br#"{"events":[],"gaps":[],"hold_ms":450}"#).unwrap();
+        assert_eq!(read_key_sidecar_at(&small).map(|s| s.hold_ms), Some(450));
+        let big = dir.join("big.keys.json");
+        fs::write(&big, vec![b' '; (KEY_SIDECAR_MAX_COPY_BYTES + 1) as usize]).unwrap();
+        assert!(read_key_sidecar_at(&big).is_none(), "an oversized sidecar is never read whole");
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
