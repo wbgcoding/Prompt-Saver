@@ -8874,6 +8874,29 @@ async fn rename_tag(
     let new = valid_tag_name(&new)?;
     let (old_key, new_key) = (tag_key(&old), tag_key(&new));
     let mut store = lock(&state);
+    rename_tag_in_store(
+        &mut store,
+        &old_key,
+        &new,
+        &new_key,
+        &mut |st| save_prompts(&app, st),
+        &mut |settings| save_settings(&app, settings),
+    )?;
+    Ok(webview_settings(&store.settings))
+}
+
+// The two-step write behind rename_tag with the saves injected, so the rollback is
+// testable. The prompts are saved first; when the settings save then fails, the
+// prompts are put back AND written again, because the rename is already on disk
+// and the caller is told the whole call failed.
+fn rename_tag_in_store(
+    store: &mut Store,
+    old_key: &str,
+    new: &str,
+    new_key: &str,
+    save_prompts_fn: &mut dyn FnMut(&Store) -> bool,
+    save_settings_fn: &mut dyn FnMut(&Settings) -> bool,
+) -> Result<(), String> {
     // Snapshot everything this command can touch before mutating, so a failed
     // save can put it back exactly instead of reporting success for a rename that
     // never reached disk.
@@ -8883,30 +8906,37 @@ async fn rename_tag(
         .filter(|p| p.tags.iter().any(|t| tag_key(t) == old_key))
         .map(|p| (p.id.clone(), p.tags.clone()))
         .collect();
-    let prompts_changed = rename_tag_in(&mut store.prompts, &old_key, &new);
-    if prompts_changed && !save_prompts(&app, &store) {
+    let prompts_changed = rename_tag_in(&mut store.prompts, old_key, new);
+    let restore_prompts = |store: &mut Store, original_tags: Vec<(String, Vec<String>)>| {
         for (id, tags) in original_tags {
             if let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) {
                 p.tags = tags;
             }
         }
+    };
+    if prompts_changed && !save_prompts_fn(store) {
+        restore_prompts(store, original_tags);
         return Err("save-failed".into());
     }
-    let original_old_color = store.settings.tag_colors.get(&old_key).cloned();
-    let original_new_color = store.settings.tag_colors.get(&new_key).cloned();
-    transfer_tag_color(&mut store.settings.tag_colors, &old_key, &new_key);
-    if !save_settings(&app, &store.settings) {
+    let original_old_color = store.settings.tag_colors.get(old_key).cloned();
+    let original_new_color = store.settings.tag_colors.get(new_key).cloned();
+    transfer_tag_color(&mut store.settings.tag_colors, old_key, new_key);
+    if !save_settings_fn(&store.settings) {
         match original_old_color {
-            Some(c) => { store.settings.tag_colors.insert(old_key, c); }
-            None => { store.settings.tag_colors.remove(&old_key); }
+            Some(c) => { store.settings.tag_colors.insert(old_key.to_string(), c); }
+            None => { store.settings.tag_colors.remove(old_key); }
         }
         match original_new_color {
-            Some(c) => { store.settings.tag_colors.insert(new_key, c); }
-            None => { store.settings.tag_colors.remove(&new_key); }
+            Some(c) => { store.settings.tag_colors.insert(new_key.to_string(), c); }
+            None => { store.settings.tag_colors.remove(new_key); }
+        }
+        if prompts_changed {
+            restore_prompts(store, original_tags);
+            let _ = save_prompts_fn(store);
         }
         return Err("save-failed".into());
     }
-    Ok(webview_settings(&store.settings))
+    Ok(())
 }
 
 // Remove a tag from every prompt plus its color entry. Idempotent.
@@ -8933,6 +8963,15 @@ async fn delete_tag(app: AppHandle, state: State<'_, Db>, name: String) -> Resul
     if !save_settings(&app, &store.settings) {
         if let Some(c) = original_color {
             store.settings.tag_colors.insert(key, c);
+        }
+        // The prompts without the tag are already on disk: put them back there too.
+        if prompts_changed {
+            for (id, tags) in original_tags {
+                if let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) {
+                    p.tags = tags;
+                }
+            }
+            let _ = save_prompts(&app, &store);
         }
         return Err("save-failed".into());
     }
@@ -51456,5 +51495,30 @@ mod tests {
         assert!(settings.tile_folders.is_empty(), "the orphan folder must not linger");
         assert_eq!(settings.active_view, "b");
         assert!(remove_view_from_settings(&mut settings, "b", &prompt_ids).is_err());
+    }
+
+    #[test]
+    fn a_failed_settings_save_rolls_the_tag_rename_back_on_disk_too() {
+        let mut p = test_prompt("p1");
+        p.tags = vec!["Old".to_string()];
+        let mut store = secret_test_store(vec![p]);
+        store.settings.tag_colors.insert("old".to_string(), "#111111".to_string());
+        let mut disk: Vec<Vec<String>> = Vec::new();
+        let result = rename_tag_in_store(
+            &mut store,
+            "old",
+            "New",
+            "new",
+            &mut |st| {
+                disk.push(st.prompts[0].tags.clone());
+                true
+            },
+            &mut |_| false,
+        );
+        assert!(result.is_err());
+        assert_eq!(store.prompts[0].tags, vec!["Old".to_string()]);
+        assert_eq!(store.settings.tag_colors.get("old").map(String::as_str), Some("#111111"));
+        assert_eq!(disk.last().unwrap(), &vec!["Old".to_string()], "the last write to disk is the original");
+        assert_eq!(disk.len(), 2);
     }
 }
