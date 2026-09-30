@@ -28459,22 +28459,35 @@ fn run_ffmpeg_to_staged(
     });
 
     // stdout carries `-progress pipe:1`'s machine-readable "key=value" lines,
-    // one flush per line -- unlike the carriage-return-redrawn stats ffmpeg
-    // would otherwise print to stderr -- polled between reads so a cancel
-    // takes effect within one progress tick instead of waiting for the whole
-    // conversion to finish. `out_time_ms` is ffmpeg's own field name for a
-    // value that is actually in MICROSECONDS, hence the /1000 below. The same
-    // loop also enforces FFMPEG_MAX_RUN_SECS: a last-resort kill for a run
-    // that is still producing progress lines but never finishing, not a
-    // quality target -- a process that is fully stuck and prints nothing at
-    // all is caught by the exit-status path below instead, once it does
-    // eventually end.
+    // one flush per line, unlike the carriage-return-redrawn stats ffmpeg would
+    // otherwise print to stderr. `out_time_ms` is ffmpeg's own field name for a
+    // value that is actually in MICROSECONDS, hence the /1000 below. A thread
+    // reads the lines and hands the parsed values over a channel, so this loop
+    // wakes every 200 ms whether or not ffmpeg printed anything: a cancel or the
+    // FFMPEG_MAX_RUN_SECS limit (a last-resort kill, not a quality target) takes
+    // effect even while ffmpeg is silent (probing a huge input, a stalled source)
+    // instead of only at its next progress line.
     let start = std::time::Instant::now();
     let mut timed_out = false;
     if let Some(stdout) = child.stdout.take() {
-        use std::io::BufRead;
-        let reader = std::io::BufReader::new(stdout);
-        for line in reader.lines() {
+        let (tx, rx) = std::sync::mpsc::channel::<u32>();
+        std::thread::spawn(move || {
+            use std::io::BufRead;
+            for line in std::io::BufReader::new(stdout).lines() {
+                let Ok(line) = line else { break };
+                if let Some(us) = line.strip_prefix("out_time_ms=").and_then(|v| v.trim().parse::<i64>().ok()) {
+                    if tx.send((us / 1000).max(0) as u32).is_err() {
+                        break;
+                    }
+                }
+            }
+        });
+        loop {
+            match rx.recv_timeout(std::time::Duration::from_millis(200)) {
+                Ok(ms) => on_progress(ms),
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+            }
             if is_cancelled() {
                 let _ = child.kill();
                 break;
@@ -28483,10 +28496,6 @@ fn run_ffmpeg_to_staged(
                 timed_out = true;
                 let _ = child.kill();
                 break;
-            }
-            let Ok(line) = line else { break };
-            if let Some(us) = line.strip_prefix("out_time_ms=").and_then(|v| v.trim().parse::<i64>().ok()) {
-                on_progress((us / 1000).max(0) as u32);
             }
         }
     }
@@ -52135,5 +52144,53 @@ mod tests {
         let c = crop_rgba(&img, 90, 90, 50, 50).unwrap();
         assert_eq!(c.dimensions(), (10, 10), "past the far edge is still clamped");
         assert!(crop_rgba(&img, -60, 0, 50, 10).is_none(), "a rect wholly outside is nothing");
+    }
+
+    // A stand-in for ffmpeg that prints nothing and just sleeps, like a real one
+    // stuck reading a stalled source.
+    fn silent_stub(dir: &Path) -> PathBuf {
+        let src = dir.join("stub.rs");
+        fs::write(&src, "fn main() { std::thread::sleep(std::time::Duration::from_secs(30)); }").unwrap();
+        let exe = dir.join("stub.exe");
+        let status = std::process::Command::new("rustc")
+            .arg(&src)
+            .arg("-o")
+            .arg(&exe)
+            .arg("-Copt-level=0")
+            .status()
+            .expect("rustc is on the path while tests run");
+        assert!(status.success());
+        exe
+    }
+
+    #[test]
+    fn a_cancel_stops_an_ffmpeg_that_prints_nothing() {
+        let dir = std::env::temp_dir().join(format!("{}-test-silent-ffmpeg", brand::SLUG));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let stub = silent_stub(&dir);
+        let cancel = std::sync::Arc::new(AtomicBool::new(false));
+        let flipper = {
+            let cancel = cancel.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(200));
+                cancel.store(true, Ordering::SeqCst);
+            })
+        };
+        let started = std::time::Instant::now();
+        let result = run_ffmpeg_to_staged(
+            &stub,
+            &dir.join("in.mp4"),
+            &dir.join("out.mp4"),
+            &[],
+            &[],
+            || cancel.load(Ordering::SeqCst),
+            |_| {},
+        );
+        let took = started.elapsed();
+        flipper.join().unwrap();
+        assert_eq!(result.unwrap_err(), "cancelled");
+        assert!(took < Duration::from_secs(2), "the cancel must not wait for ffmpeg's next line: {took:?}");
+        let _ = fs::remove_dir_all(&dir);
     }
 }
