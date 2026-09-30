@@ -35546,6 +35546,28 @@ fn sync_eligible(p: &Prompt) -> bool {
 // skipped instead of being pulled into memory every cycle.
 const MAX_SYNC_MD_BYTES: u64 = 8 * 1024 * 1024;
 
+// Text as an editor may have saved it: plain UTF-8, UTF-8 with a byte order mark, or
+// UTF-16 (Windows PowerShell's default for `>`). Anything else is not text.
+fn sync_decode_text(bytes: Vec<u8>) -> Option<String> {
+    if let Some(rest) = bytes.strip_prefix(&[0xFF, 0xFE]).or_else(|| bytes.strip_prefix(&[0xFE, 0xFF])) {
+        if rest.len() % 2 != 0 {
+            return None;
+        }
+        let little = bytes[0] == 0xFF;
+        let units: Vec<u16> = rest
+            .chunks_exact(2)
+            .map(|c| if little { u16::from_le_bytes([c[0], c[1]]) } else { u16::from_be_bytes([c[0], c[1]]) })
+            .collect();
+        return String::from_utf16(&units).ok();
+    }
+    let text = String::from_utf8(bytes).ok()?;
+    Some(text.strip_prefix('\u{feff}').map(str::to_string).unwrap_or(text))
+}
+
+fn sync_read_text(path: &Path, max: u64) -> Option<String> {
+    sync_decode_text(read_file_capped(path, max).ok()?)
+}
+
 fn sync_safe_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 64
@@ -35661,6 +35683,7 @@ fn prompt_to_md(p: &Prompt, placement: &SyncPlacement) -> String {
 // `None` means "not a file this feature wrote" (no opening `---` header): the
 // caller leaves such files alone rather than guessing at a malformed one.
 fn parse_frontmatter(content: &str) -> Option<(HashMap<String, String>, String)> {
+    let content = content.strip_prefix('\u{feff}').unwrap_or(content);
     let mut lines = content.split('\n');
     if lines.next()?.trim_end_matches('\r') != "---" {
         return None;
@@ -36826,7 +36849,7 @@ fn sync_poll_once(app: &AppHandle) {
         if !sync_lock_acquire(&path) {
             continue; // someone else is mid-write; retry next cycle
         }
-        let content = read_text_capped(&path, MAX_SYNC_MD_BYTES);
+        let content = sync_read_text(&path, MAX_SYNC_MD_BYTES);
         sync_lock_release(&path);
         // Whatever the read said, this stamp has now been dealt with: a file that
         // is too big or unreadable must not be retried (and re-logged) every round.
@@ -42107,6 +42130,33 @@ mod tests {
         });
         assert!(sync_join_tile_folder(&mut settings, "b", "F", "", "v1", None));
         assert_eq!(settings.tile_folders[0].cell, [2, 2]);
+    }
+
+    #[test]
+    fn a_byte_order_mark_does_not_hide_an_edited_file() {
+        let base = sync_test_prompt();
+        let mut edited = sync_test_prompt();
+        edited.text = "edited in an editor that adds a BOM".into();
+        let content = format!("\u{feff}{}", prompt_to_md(&edited, &SyncPlacement::default()));
+        let got = apply_md_to_prompt(&base, &content).expect("a BOM must not make the header unreadable");
+        assert_eq!(got.text, edited.text);
+    }
+
+    #[test]
+    fn sync_decode_text_reads_utf8_bom_and_utf16_files() {
+        let md = prompt_to_md(&sync_test_prompt(), &SyncPlacement::default());
+        assert_eq!(sync_decode_text(md.clone().into_bytes()).as_deref(), Some(md.as_str()));
+        let mut bom8 = vec![0xEF, 0xBB, 0xBF];
+        bom8.extend_from_slice(md.as_bytes());
+        assert_eq!(sync_decode_text(bom8).as_deref(), Some(md.as_str()));
+        let mut le = vec![0xFF, 0xFE];
+        le.extend(md.encode_utf16().flat_map(|u| u.to_le_bytes()));
+        assert_eq!(sync_decode_text(le).as_deref(), Some(md.as_str()));
+        let mut be = vec![0xFE, 0xFF];
+        be.extend(md.encode_utf16().flat_map(|u| u.to_be_bytes()));
+        assert_eq!(sync_decode_text(be).as_deref(), Some(md.as_str()));
+        assert!(sync_decode_text(vec![0xFF, 0xFE, 0x41]).is_none(), "an odd UTF-16 length is not text");
+        assert!(sync_decode_text(vec![0xC3, 0x28]).is_none());
     }
 
     #[test]
