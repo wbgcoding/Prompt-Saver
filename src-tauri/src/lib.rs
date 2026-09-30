@@ -15532,10 +15532,10 @@ struct SnipModeState(Mutex<SnipMode>);
 // Overlay preview prepared in the background the instant the desktop is frozen,
 // so the (heavy) JPEG encode overlaps WebView creation instead of running after
 // it. None = still encoding, Some(None) = encode failed, Some(Some) = ready.
-#[derive(Clone)]
-// Frozen-desktop preview. None = still encoding, Some(None) = failed, Some(Some) = ready.
 // Each ready entry carries the session generation its encode belonged to.
-struct SnipPreview(Arc<Mutex<Option<(u64, Option<SnipBg>)>>>);
+type SnipPreviewSlot = Option<(u64, Option<SnipBg>)>;
+#[derive(Clone)]
+struct SnipPreview(Arc<Mutex<SnipPreviewSlot>>);
 
 // Store a finished preview encode, unless a newer session has started since: a slow
 // encode of a cancelled snip must never become the next snip's background.
