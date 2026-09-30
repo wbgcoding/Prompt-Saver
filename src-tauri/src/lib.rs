@@ -9108,6 +9108,19 @@ fn reorder_views(app: AppHandle, state: State<Db>, order: Vec<String>) -> Settin
     webview_settings(&store.settings)
 }
 
+// Moves every tag colour equal to an old palette hex to its new one. Returns
+// whether anything changed.
+fn remap_tag_colors(colors: &mut HashMap<String, String>, map: &HashMap<String, String>) -> bool {
+    let mut changed = false;
+    for c in colors.values_mut() {
+        if let Some(nc) = map.get(c.as_str()) {
+            *c = nc.clone();
+            changed = true;
+        }
+    }
+    changed
+}
+
 // Recolor saved data when the global palette changes: every prompt/view whose
 // color equals an old palette hex is moved to the new one (pairs = [[old,new],...]).
 #[tauri::command]
@@ -9171,7 +9184,12 @@ fn remap_colors(app: AppHandle, state: State<Db>, pairs: Vec<(String, String)>) 
             views_changed = true;
         }
     }
+    // Tag colours are picked from the same palette swatches, so a tag set to an old
+    // palette hue would otherwise keep the old hex and read as a custom colour.
+    let original_tag_colors = store.settings.tag_colors.clone();
+    views_changed |= remap_tag_colors(&mut store.settings.tag_colors, &map);
     if views_changed && !save_settings(&app, &store.settings) {
+        store.settings.tag_colors = original_tag_colors;
         for (id, c) in original_view_colors {
             if let Some(v) = store.settings.views.iter_mut().find(|v| v.id == id) {
                 v.color = c;
@@ -51520,5 +51538,17 @@ mod tests {
         assert_eq!(store.settings.tag_colors.get("old").map(String::as_str), Some("#111111"));
         assert_eq!(disk.last().unwrap(), &vec!["Old".to_string()], "the last write to disk is the original");
         assert_eq!(disk.len(), 2);
+    }
+
+    #[test]
+    fn a_palette_edit_remaps_tag_colors_too() {
+        let mut colors: HashMap<String, String> = HashMap::new();
+        colors.insert("a".to_string(), "#old".to_string());
+        colors.insert("b".to_string(), "#keep".to_string());
+        let map: HashMap<String, String> = [("#old".to_string(), "#new".to_string())].into_iter().collect();
+        assert!(remap_tag_colors(&mut colors, &map));
+        assert_eq!(colors["a"], "#new");
+        assert_eq!(colors["b"], "#keep");
+        assert!(!remap_tag_colors(&mut colors, &map), "a second pass changes nothing");
     }
 }
