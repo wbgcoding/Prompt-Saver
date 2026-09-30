@@ -16232,6 +16232,44 @@ def main():
       if (out !== 'Unlimited') errs.push('564-3: the stored 0 shows as ' + JSON.stringify(out) + ', expected Unlimited');
     }
 """)
+        failed += ar_probe('g4', 'expert menu: video folder numbers follow the folder, a late answer for an old folder is ignored', 'index', '1000x780', '', r"""
+    await bootReady();
+    const gates = [];
+    RESULTS.video_folder_stats = (a) => new Promise((res) => gates.push({ dir: a.dir, res }));
+    document.getElementById('gear').click(); await sleep(200);
+    document.getElementById('expert-open').click(); await sleep(300);
+    const statsEl = () => document.querySelector('.path-video-stats');
+    for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+      tb.click(); await sleep(80);
+      if (statsEl()) break;
+    }
+    if (!statsEl()) { errs.push('564-4: the video folder row was not found'); }
+    else {
+      const line = () => statsEl().querySelector('span').textContent;
+      const change = async (dir) => {
+        window.__PICK_FOLDER__ = dir;
+        statsEl().parentElement.querySelector('.path-btns button').click();
+        await sleep(300);
+      };
+      if (gates.length < 1) errs.push('564-4: opening the row did not ask for the folder stats');
+      gates[0].res([2, 2048]);
+      await sleep(200);
+      if (!/\b2\b/.test(line())) errs.push('564-4: fixture: first folder numbers missing: ' + line());
+      await change('C:\Videos\B');
+      if (/\b2\b/.test(line())) errs.push('564-4: the old folder numbers stayed on screen after picking another folder: ' + line());
+      if (!statsEl().querySelector('button').disabled) errs.push('564-4: the cleanup button stayed enabled for a folder that is not measured yet');
+      await change('C:\Videos\C');
+      const byDir = (d) => gates.find((g) => g.dir === d);
+      if (!byDir('C:\Videos\B') || !byDir('C:\Videos\C')) errs.push('564-4: fixture: both folder reads were not started');
+      else {
+        byDir('C:\Videos\C').res([7, 7168]);
+        await sleep(200);
+        byDir('C:\Videos\B').res([5, 5120]);
+        await sleep(200);
+        if (!/\b7\b/.test(line())) errs.push('564-4: a late answer for an older folder replaced the current numbers: ' + line());
+      }
+    }
+""")
         # ---- main window findings: generated block end ----
         print("PASS" if not failed else f"{failed} problem(s)")
         return 1 if failed else 0

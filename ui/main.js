@@ -3302,11 +3302,14 @@ const EXPERT_COLORS = {
 // shows a loading placeholder until refreshVideoFolderInfo() resolves.
 let videoFolderInfo = null;
 let videoFolderInfoDir = null;
+let videoFolderGen = 0;
 function refreshVideoFolderInfo(dir) {
   videoFolderInfoDir = dir;
+  videoFolderInfo = null; // the numbers on screen belong to the folder just left
+  const gen = ++videoFolderGen;
   invoke("video_folder_stats", { dir })
-    .then(([count, bytes]) => { videoFolderInfo = { count, bytes }; renderExpert(); })
-    .catch(() => { videoFolderInfo = { count: 0, bytes: 0 }; renderExpert(); });
+    .then(([count, bytes]) => { if (gen === videoFolderGen) { videoFolderInfo = { count, bytes }; renderExpert(); } })
+    .catch(() => { if (gen === videoFolderGen) { videoFolderInfo = { count: 0, bytes: 0 }; renderExpert(); } });
 }
 
 // Switching the Markdown-sync folder. The files in the old folder stay where they
