@@ -16338,6 +16338,25 @@ def main():
     if (document.activeElement !== input) errs.push('564-35: fixture: the field lost the focus');
     if (!capture().some((a) => a && a.active === true)) errs.push('564-35: after a refused combination the hotkeys were not taken off again while the field still has focus');
 """)
+        failed += ar_probe('m1', 'create dialog: saving with an empty text keeps the dialog and what was typed', 'index', '1000x780', '', r"""
+    await bootReady();
+    const empty = [...document.querySelectorAll('#grid .cell')].find((c) => !c.firstElementChild);
+    if (!empty) { errs.push('564-m1: no empty cell in the fixture'); }
+    else {
+      empty.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); await sleep(250);
+      const modal = document.getElementById('modal');
+      if (modal.classList.contains('hidden')) errs.push('564-m1: fixture: the create dialog did not open');
+      document.getElementById('modal-name').value = 'Keep this name';
+      document.getElementById('modal-text').value = '';
+      window.__SMOKE_ARGS__.length = 0;
+      document.getElementById('modal-confirm').click(); await sleep(300);
+      if (modal.classList.contains('hidden')) errs.push('564-m1: saving with an empty text closed the dialog and dropped the typed name');
+      else if (document.getElementById('modal-name').value !== 'Keep this name') errs.push('564-m1: the typed name was lost');
+      if (callsFor('add_prompt').length) errs.push('564-m1: an empty prompt was saved');
+      if (!modal.classList.contains('hidden') && document.activeElement !== document.getElementById('modal-text')) errs.push('564-m1: the text field was not focused for the missing text');
+      if (document.getElementById('modal-confirm').disabled) errs.push('564-m1: Save stayed disabled after the refused save');
+    }
+""")
         # ---- main window findings: generated block end ----
         print("PASS" if not failed else f"{failed} problem(s)")
         return 1 if failed else 0

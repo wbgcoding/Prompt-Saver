@@ -12841,7 +12841,9 @@ async function confirmModal() {
   try {
     if (modalState.mode === "create") {
       const text = (rotating || hasVariants) ? (rotateFilled[0] || "") : modal.text.value.trim();
-      if (!text) { closeModal(); return; }
+      // Nothing to save yet: keep the dialog (and everything else typed into it)
+      // and point at the missing text, like a missing name does.
+      if (!text) { if (!rotating) modal.text.focus(); return; }
       saved = await invoke("add_prompt", { name, text, color, image, showImage, copyImage, filePath, pdfPage, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste, variants, rotateMode, rotateAuto });
       inputEl.value = "";
       autoGrow(inputEl);
