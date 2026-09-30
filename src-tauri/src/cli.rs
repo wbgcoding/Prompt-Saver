@@ -256,11 +256,14 @@ async fn handle_connection(mut pipe: tokio::net::windows::named_pipe::NamedPipeS
         respond_to_show_ping(&mut pipe, &app, false).await;
         return;
     }
-    let (code, stdout, stderr) = run_in_process(&app, req.argv, PathBuf::from(req.cwd)).await;
+    let (code, stdout, stderr, restart) = run_in_process_deferred(&app, req.argv, PathBuf::from(req.cwd)).await;
     let resp = PipeResponse { code, stdout, stderr };
-    if let Ok(bytes) = serde_json::to_vec(&resp) {
-        let _ = write_frame(&mut pipe, &bytes).await;
-    }
+    let answer = async {
+        if let Ok(bytes) = serde_json::to_vec(&resp) {
+            let _ = write_frame(&mut pipe, &bytes).await;
+        }
+    };
+    answer_then_restart(answer, restart, || app.restart()).await;
 }
 
 // A second GUI launch's way of proving this instance is not just accepting
@@ -605,26 +608,29 @@ fn resolve_path_arg(cwd: &Path, raw: &str) -> PathBuf {
 }
 
 // A tiny cursor over the remaining args, shared by every subcommand's parser.
-struct Args<'a> {
-    items: &'a [String],
+// It owns its items: taking a flag out replaces the list instead of leaking a
+// copy, which mattered once the app parsed a command for every pipe and receiver
+// request and never exited between them.
+struct Args {
+    items: Vec<String>,
     pos: usize,
 }
 
-impl<'a> Args<'a> {
-    fn new(items: &'a [String]) -> Self {
-        Args { items, pos: 0 }
+impl Args {
+    fn new(items: &[String]) -> Self {
+        Args { items: items.to_vec(), pos: 0 }
     }
-    fn peek(&self) -> Option<&'a str> {
+    fn peek(&self) -> Option<&str> {
         self.items.get(self.pos).map(String::as_str)
     }
-    fn next(&mut self) -> Option<&'a str> {
-        let v = self.peek();
+    fn next(&mut self) -> Option<String> {
+        let v = self.items.get(self.pos).cloned();
         if v.is_some() {
             self.pos += 1;
         }
         v
     }
-    fn next_positional(&mut self) -> Option<&'a str> {
+    fn next_positional(&mut self) -> Option<String> {
         let v = self.next()?;
         if v.starts_with("--") {
             self.pos -= 1;
@@ -637,6 +643,7 @@ impl<'a> Args<'a> {
 fn parse(argv: &[String]) -> Result<Parsed, String> {
     let mut a = Args::new(argv);
     let head = a.next().ok_or_else(|| usage_err("missing command"))?;
+    let head = head.as_str();
     if head == "--help" || head == "-h" {
         return Ok(Parsed::Help(top_level_help()));
     }
@@ -687,7 +694,7 @@ fn take_flag_value(a: &mut Args, name: &str) -> Result<Option<String>, String> {
             // this call never sees them.
             let mut kept: Vec<String> = a.items[a.pos..i].to_vec();
             kept.extend_from_slice(&a.items[i + 2..]);
-            a.items = Box::leak(kept.into_boxed_slice());
+            a.items = kept;
             a.pos = 0;
             return Ok(Some(val));
         }
@@ -702,7 +709,7 @@ fn take_flag(a: &mut Args, name: &str) -> bool {
         if a.items[i] == name {
             let mut kept: Vec<String> = a.items[a.pos..i].to_vec();
             kept.extend_from_slice(&a.items[i + 1..]);
-            a.items = Box::leak(kept.into_boxed_slice());
+            a.items = kept;
             a.pos = 0;
             return true;
         }
@@ -808,6 +815,7 @@ fn parse_tag(a: &mut Args) -> Result<Parsed, String> {
         return Ok(Parsed::Help(command_help("tag", None)));
     }
     let sub = a.next().ok_or_else(|| usage_err("tag needs list|add|remove"))?;
+    let sub = sub.as_str();
     if wants_help(a) {
         return Ok(Parsed::Help(command_help("tag", Some(sub))));
     }
@@ -843,6 +851,7 @@ fn parse_view(a: &mut Args) -> Result<Parsed, String> {
         return Ok(Parsed::Help(command_help("view", None)));
     }
     let sub = a.next().ok_or_else(|| usage_err("view needs list|add|remove"))?;
+    let sub = sub.as_str();
     if wants_help(a) {
         return Ok(Parsed::Help(command_help("view", Some(sub))));
     }
@@ -907,6 +916,7 @@ fn parse_backup(a: &mut Args) -> Result<Parsed, String> {
         return Ok(Parsed::Help(command_help("backup", None)));
     }
     let sub = a.next().ok_or_else(|| usage_err("backup needs create|list|restore"))?;
+    let sub = sub.as_str();
     if wants_help(a) {
         return Ok(Parsed::Help(command_help("backup", Some(sub))));
     }
@@ -953,6 +963,7 @@ fn parse_settings(a: &mut Args) -> Result<Parsed, String> {
         return Ok(Parsed::Help(command_help("settings", None)));
     }
     let sub = a.next().ok_or_else(|| usage_err("settings needs get|set"))?;
+    let sub = sub.as_str();
     if wants_help(a) {
         return Ok(Parsed::Help(command_help("settings", Some(sub))));
     }
@@ -1549,6 +1560,10 @@ fn restore_backup_standalone(dir: &Path, name: &str, keep: usize, scope: &str, s
     let target = dir.join("data.db");
     let staged = stage_and_validate_backup(&backup_db, dir)?;
     if scope == "all" {
+        if let Err(e) = crate::keep_machine_in_staged(&target, &staged) {
+            let _ = std::fs::remove_file(&staged);
+            return Err(e);
+        }
         if let Err(e) = std::fs::rename(&staged, &target) {
             let _ = std::fs::remove_file(&staged);
             return Err(e.to_string());
@@ -1657,6 +1672,12 @@ fn load_store_headless(dir: &Path) -> Store {
 }
 
 pub(crate) fn run_standalone(argv: &[String], cwd: &Path) -> i32 {
+    run_standalone_with(data_dir_headless, argv, cwd)
+}
+
+// run_standalone with the folder supplied by the caller (asked only once the
+// command needs a store), so a test can point it at a folder of its own.
+pub(crate) fn run_standalone_with(resolve_dir: impl FnOnce() -> PathBuf, argv: &[String], cwd: &Path) -> i32 {
     let parsed = match parse(argv) {
         Ok(p) => p,
         Err(e) => {
@@ -1679,9 +1700,17 @@ pub(crate) fn run_standalone(argv: &[String], cwd: &Path) -> i32 {
         println!("{}", describe_json());
         return 0;
     }
-    let dir = data_dir_headless();
+    let dir = resolve_dir();
     let store = load_store_headless(&dir);
     acquire_data_dir_lock(&dir, data_dir_lock_enabled(&store.settings));
+
+    // Before the restore arm: a restore replaces the whole database, so a store
+    // another machine holds locked must be refused for it like for every other
+    // change (it used to return before this check was ever reached).
+    if is_mutating(&cmd) && crate::DATA_DIR_READONLY.load(Ordering::Relaxed) {
+        eprintln!("the data folder is locked by another machine right now\n");
+        return 3;
+    }
 
     if let Cmd::BackupRestore { name, keep, scope, confirmed } = &cmd {
         if !confirmed {
@@ -1701,10 +1730,6 @@ pub(crate) fn run_standalone(argv: &[String], cwd: &Path) -> i32 {
         };
     }
 
-    if is_mutating(&cmd) && crate::DATA_DIR_READONLY.load(Ordering::Relaxed) {
-        eprintln!("the data folder is locked by another machine right now\n");
-        return 3;
-    }
     if is_mutating(&cmd) && store.prompts_locked {
         eprintln!("the store has rows that failed to decrypt; writes are refused until that is resolved\n");
         return 3;
@@ -1753,6 +1778,33 @@ fn print_version() {
 // ---------- Already-running caller ----------
 
 pub(crate) async fn run_in_process(app: &AppHandle, argv: Vec<String>, cwd: PathBuf) -> (i32, String, String) {
+    let (code, stdout, stderr, restart) = run_in_process_deferred(app, argv, cwd).await;
+    if restart {
+        app.restart();
+    }
+    (code, stdout, stderr)
+}
+
+// Same as run_in_process, but a restore does not relaunch the app itself: the
+// last element says a relaunch is due, and the caller does it once its answer is
+// written. A relaunch inside the call drops the connection before any answer goes
+// out, which a script reads as a failed restore.
+pub(crate) async fn run_in_process_deferred(app: &AppHandle, argv: Vec<String>, cwd: PathBuf) -> (i32, String, String, bool) {
+    let mut restart = false;
+    let (code, stdout, stderr) = run_in_process_inner(app, argv, cwd, &mut restart).await;
+    (code, stdout, stderr, restart)
+}
+
+// Runs `after` once `answer` has finished: the answer must be on the wire before
+// the relaunch tears the connection down.
+pub(crate) async fn answer_then_restart(answer: impl std::future::Future<Output = ()>, restart_due: bool, restart: impl FnOnce()) {
+    answer.await;
+    if restart_due {
+        restart();
+    }
+}
+
+async fn run_in_process_inner(app: &AppHandle, argv: Vec<String>, cwd: PathBuf, restart: &mut bool) -> (i32, String, String) {
     let parsed = match parse(&argv) {
         Ok(p) => p,
         Err(e) => return (1, String::new(), format!("{e}\n")),
@@ -1768,17 +1820,21 @@ pub(crate) async fn run_in_process(app: &AppHandle, argv: Vec<String>, cwd: Path
         return (0, format!("{}\n", describe_json()), String::new());
     }
 
-    // Backup restore reuses the real, already-tested command end to end (safety
-    // snapshot, staged swap, app restart) instead of a second reimplementation
-    // that would have to fake what only a running app can really do.
+    // Backup restore reuses the real, already-tested restore end to end (safety
+    // snapshot, staged swap) instead of a second reimplementation that would have
+    // to fake what only a running app can really do; the relaunch is left to the
+    // caller (see run_in_process_deferred).
     if let Cmd::BackupRestore { name, keep, scope, confirmed } = &cmd {
         if !confirmed {
             return (4, String::new(), format!("refused: {}. Pass --yes to actually do it.\n", dry_run_description(&cmd)));
         }
         let state: tauri::State<Db> = app.state();
         let keep = keep.unwrap_or_else(|| default_keep(&lock(&state).settings));
-        return match crate::restore_backup(app.clone(), state, name.clone(), keep, scope.clone()).await {
-            Ok(()) => (0, format!("restored backup {name}\n"), String::new()),
+        return match crate::restore_backup_core(app.clone(), state, name.clone(), keep, scope.clone()) {
+            Ok(()) => {
+                *restart = true;
+                (0, format!("restored backup {name}\n"), String::new())
+            }
             Err(e) => {
                 let code = if e == "missing" { 2 } else { 3 };
                 (code, String::new(), format!("{e}\n"))
@@ -2667,13 +2723,9 @@ mod tests {
     // folder from APPDATA/portable detection. Those touch process-global state
     // (env vars, the exe's own folder) that a parallel test run must not poke,
     // so the directory is passed in here rather than faked through them.
-    // db_conn_at() only ever runs the schema batch once per PROCESS (a real
-    // standalone launch never touches more than one directory, so that cache is
-    // exactly right there) -- but this test binary calls it against a fresh
-    // TempDir per test, and whichever directory the cache warmed up on leaves
-    // every other one without its tables. Creating them here, once per
-    // directory before its first real use, sidesteps the cache instead of
-    // reaching into it.
+    // db_conn_at() runs the schema batch once per data folder, so a fresh TempDir
+    // per test would get its tables anyway; creating them here first keeps the
+    // tests that open the file directly independent of that.
     fn ensure_test_schema(dir: &Path) {
         let conn = rusqlite::Connection::open(dir.join("data.db")).expect("open db for test schema");
         assert!(crate::db_conn_init_schema(&conn), "schema init failed for test directory");
@@ -2945,5 +2997,22 @@ mod tests {
         let body: serde_json::Value = serde_json::from_str(out.stdout.trim()).expect("backup create --json must print JSON");
         assert!(body["name"].as_str().is_some_and(|n| !n.is_empty()), "backup create --json must print {{\"name\": \"...\"}} as documented");
         assert_eq!(body.as_object().unwrap().len(), 1, "backup create --json's object has exactly one field, name");
+    }
+
+    // Taking a flag out of the argument list must not leak a copy of the rest: the
+    // running app parses a command for every pipe and receiver request. No red
+    // exists for this as a behaviour (a counting allocator is flaky under parallel
+    // tests), so the test pins the shape: Args owns a Vec and the leak is gone.
+    #[test]
+    fn taking_a_flag_does_not_leak_the_remaining_arguments() {
+        let source = include_str!("cli.rs");
+        let needle = ["Box", "::", "leak"].concat();
+        assert!(!source.contains(&needle), "cli.rs must not leak argument lists");
+        let a = Args::new(&args(&["list", "--json", "--tag", "x"]));
+        let _owned: &Vec<String> = &a.items;
+        let mut a = Args::new(&args(&["--json", "--tag", "x", "rest"]));
+        assert!(take_flag(&mut a, "--json"));
+        assert_eq!(take_flag_value(&mut a, "--tag").unwrap().as_deref(), Some("x"));
+        assert_eq!(a.items, vec!["rest".to_string()]);
     }
 }

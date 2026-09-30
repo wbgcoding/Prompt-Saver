@@ -3510,11 +3510,9 @@ fn dec_str(stored: &str) -> String {
     stored.to_string()
 }
 
-// Schema + migration probe for a data.db connection, run at most ONCE per process
-// (see db_conn below). Returns false on any failure; db_conn then fails closed for
-// every call for the rest of the process, same as it already did per-call before:
-// a schema/migration failure here means the DB file itself is unusable, which no
-// retry on a later call would fix differently.
+// Schema + migration probe for a data.db connection, run once per data folder and
+// process (see db_conn_at below). Returns false on any failure; db_conn_at then
+// fails closed for that call and tries again on the next one.
 fn db_conn_init_schema(conn: &Connection) -> bool {
     if conn
         .execute_batch(
@@ -3590,9 +3588,24 @@ fn db_conn_at(dir: &Path) -> Option<Connection> {
     // process: every call used to pay for a 10-statement execute_batch plus a
     // pragma_table_info probe just to open a connection for one write.
     conn.execute_batch("PRAGMA busy_timeout=3000;").ok()?;
-    static SCHEMA_READY: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    if !*SCHEMA_READY.get_or_init(|| db_conn_init_schema(&conn)) {
-        return None;
+    // Keyed by folder, and only a SUCCESS is remembered: a store adopted from another
+    // folder mid-session still gets its schema run, and one transient failure at the
+    // first open (WAL switch, busy) does not disable the database for the process.
+    static SCHEMA_READY: Mutex<Option<std::collections::HashSet<PathBuf>>> = Mutex::new(None);
+    let already = SCHEMA_READY
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+        .is_some_and(|set| set.contains(dir));
+    if !already {
+        if !db_conn_init_schema(&conn) {
+            return None;
+        }
+        SCHEMA_READY
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get_or_insert_with(std::collections::HashSet::new)
+            .insert(dir.to_path_buf());
     }
     Some(conn)
 }
@@ -4111,6 +4124,27 @@ fn db_get_version(conn: &Connection, id: i64) -> Option<(String, String, String,
         )),
     )
     .ok()
+}
+// Removes version history whose prompt is in neither the library nor the trash.
+// Works on the plaintext id column alone, so it is safe even when the rows
+// themselves could not be decrypted. Returns the number of rows removed.
+// The orphan sweep deletes rows: never in a read-only instance (the store belongs
+// to another machine) and never while a JSON fallback still holds prompts.
+fn version_sweep_allowed(dir: &Path, read_only: bool) -> bool {
+    !read_only && !dir.join("prompts.json").exists()
+}
+
+fn db_sweep_orphan_versions(conn: &Connection) -> usize {
+    match conn.execute(
+        "DELETE FROM prompt_versions WHERE prompt_id NOT IN (SELECT id FROM prompts UNION SELECT id FROM trash)",
+        [],
+    ) {
+        Ok(n) => n,
+        Err(e) => {
+            append_crash_log(&format!("could not sweep orphaned version history: {e}"));
+            0
+        }
+    }
 }
 fn db_delete_versions(conn: &Connection, prompt_id: &str) {
     // Called from a PERMANENT purge -- the prompt is meant to be entirely gone,
@@ -4734,6 +4768,12 @@ fn load_store(app: &AppHandle) -> Store {
         // write the flag itself via the tour's own Finish/Skip.
         if tour_should_be_marked_seen(!store.prompts.is_empty(), store.settings.examples_seeded) {
             store.settings.ui_flags.entry("tourSeen".to_string()).or_insert(true);
+        }
+        // A purge whose version-history DELETE failed is never retried by the purge
+        // itself, so the text would stay in prompt_versions for good. Only when no
+        // JSON fallback is waiting: then the tables really are the whole library.
+        if version_sweep_allowed(&dir, DATA_DIR_READONLY.load(Ordering::Relaxed)) {
+            db_sweep_orphan_versions(&conn);
         }
         store.normalize_folders(); // Drop members whose prompt is gone
         sweep_trash(app, &mut store); // drop anything past the retention window
@@ -8200,23 +8240,29 @@ fn sweep_trash(app: &AppHandle, store: &mut Store) {
 // this exact sweep right now.
 #[tauri::command]
 fn sweep_trash_now(app: AppHandle, state: State<'_, Db>) -> (u32, u64) {
-    let mut store = lock(&state);
-    let Some(max_age) = trash_retention_secs(&store.settings) else {
-        return (0, 0);
+    // The orphan sweep locks the store itself, so it runs only after this guard is
+    // gone (same shape as empty_trash): holding both froze the whole app.
+    let (count, bytes, orphan_scan) = {
+        let mut store = lock(&state);
+        let Some(max_age) = trash_retention_secs(&store.settings) else {
+            return (0, 0);
+        };
+        let stale = stale_trash_ids(&store.trash, max_age, now_secs());
+        if stale.is_empty() {
+            return (0, 0);
+        }
+        let stale_paths: Vec<String> = store
+            .trash
+            .iter()
+            .filter(|p| stale.contains(&p.id))
+            .map(|p| p.file_path.clone())
+            .collect();
+        let (_, bytes) = attachments_bytes(&stale_paths);
+        let count = stale.len() as u32;
+        let orphan_scan = purge_ids(&app, &mut store, &stale);
+        (count, bytes, orphan_scan)
     };
-    let stale = stale_trash_ids(&store.trash, max_age, now_secs());
-    if stale.is_empty() {
-        return (0, 0);
-    }
-    let stale_paths: Vec<String> = store
-        .trash
-        .iter()
-        .filter(|p| stale.contains(&p.id))
-        .map(|p| p.file_path.clone())
-        .collect();
-    let (_, bytes) = attachments_bytes(&stale_paths);
-    let count = stale.len() as u32;
-    if let Some(referenced) = purge_ids(&app, &mut store, &stale) {
+    if let Some(referenced) = orphan_scan {
         sweep_orphan_files(&app, &referenced);
     }
     (count, bytes)
@@ -8880,6 +8926,29 @@ async fn rename_tag(
     let new = valid_tag_name(&new)?;
     let (old_key, new_key) = (tag_key(&old), tag_key(&new));
     let mut store = lock(&state);
+    rename_tag_in_store(
+        &mut store,
+        &old_key,
+        &new,
+        &new_key,
+        &mut |st| save_prompts(&app, st),
+        &mut |settings| save_settings(&app, settings),
+    )?;
+    Ok(webview_settings(&store.settings))
+}
+
+// The two-step write behind rename_tag with the saves injected, so the rollback is
+// testable. The prompts are saved first; when the settings save then fails, the
+// prompts are put back AND written again, because the rename is already on disk
+// and the caller is told the whole call failed.
+fn rename_tag_in_store(
+    store: &mut Store,
+    old_key: &str,
+    new: &str,
+    new_key: &str,
+    save_prompts_fn: &mut dyn FnMut(&Store) -> bool,
+    save_settings_fn: &mut dyn FnMut(&Settings) -> bool,
+) -> Result<(), String> {
     // Snapshot everything this command can touch before mutating, so a failed
     // save can put it back exactly instead of reporting success for a rename that
     // never reached disk.
@@ -8889,30 +8958,37 @@ async fn rename_tag(
         .filter(|p| p.tags.iter().any(|t| tag_key(t) == old_key))
         .map(|p| (p.id.clone(), p.tags.clone()))
         .collect();
-    let prompts_changed = rename_tag_in(&mut store.prompts, &old_key, &new);
-    if prompts_changed && !save_prompts(&app, &store) {
+    let prompts_changed = rename_tag_in(&mut store.prompts, old_key, new);
+    let restore_prompts = |store: &mut Store, original_tags: Vec<(String, Vec<String>)>| {
         for (id, tags) in original_tags {
             if let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) {
                 p.tags = tags;
             }
         }
+    };
+    if prompts_changed && !save_prompts_fn(store) {
+        restore_prompts(store, original_tags);
         return Err("save-failed".into());
     }
-    let original_old_color = store.settings.tag_colors.get(&old_key).cloned();
-    let original_new_color = store.settings.tag_colors.get(&new_key).cloned();
-    transfer_tag_color(&mut store.settings.tag_colors, &old_key, &new_key);
-    if !save_settings(&app, &store.settings) {
+    let original_old_color = store.settings.tag_colors.get(old_key).cloned();
+    let original_new_color = store.settings.tag_colors.get(new_key).cloned();
+    transfer_tag_color(&mut store.settings.tag_colors, old_key, new_key);
+    if !save_settings_fn(&store.settings) {
         match original_old_color {
-            Some(c) => { store.settings.tag_colors.insert(old_key, c); }
-            None => { store.settings.tag_colors.remove(&old_key); }
+            Some(c) => { store.settings.tag_colors.insert(old_key.to_string(), c); }
+            None => { store.settings.tag_colors.remove(old_key); }
         }
         match original_new_color {
-            Some(c) => { store.settings.tag_colors.insert(new_key, c); }
-            None => { store.settings.tag_colors.remove(&new_key); }
+            Some(c) => { store.settings.tag_colors.insert(new_key.to_string(), c); }
+            None => { store.settings.tag_colors.remove(new_key); }
+        }
+        if prompts_changed {
+            restore_prompts(store, original_tags);
+            let _ = save_prompts_fn(store);
         }
         return Err("save-failed".into());
     }
-    Ok(webview_settings(&store.settings))
+    Ok(())
 }
 
 // Remove a tag from every prompt plus its color entry. Idempotent.
@@ -8939,6 +9015,15 @@ async fn delete_tag(app: AppHandle, state: State<'_, Db>, name: String) -> Resul
     if !save_settings(&app, &store.settings) {
         if let Some(c) = original_color {
             store.settings.tag_colors.insert(key, c);
+        }
+        // The prompts without the tag are already on disk: put them back there too.
+        if prompts_changed {
+            for (id, tags) in original_tags {
+                if let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) {
+                    p.tags = tags;
+                }
+            }
+            let _ = save_prompts(&app, &store);
         }
         return Err("save-failed".into());
     }
@@ -9075,6 +9160,19 @@ fn reorder_views(app: AppHandle, state: State<Db>, order: Vec<String>) -> Settin
     webview_settings(&store.settings)
 }
 
+// Moves every tag colour equal to an old palette hex to its new one. Returns
+// whether anything changed.
+fn remap_tag_colors(colors: &mut HashMap<String, String>, map: &HashMap<String, String>) -> bool {
+    let mut changed = false;
+    for c in colors.values_mut() {
+        if let Some(nc) = map.get(c.as_str()) {
+            *c = nc.clone();
+            changed = true;
+        }
+    }
+    changed
+}
+
 // Recolor saved data when the global palette changes: every prompt/view whose
 // color equals an old palette hex is moved to the new one (pairs = [[old,new],...]).
 #[tauri::command]
@@ -9103,12 +9201,15 @@ fn remap_colors(app: AppHandle, state: State<Db>, pairs: Vec<(String, String)>) 
             prompts_changed = true;
         }
     }
-    if prompts_changed && !save_prompts(&app, &store) {
-        for (id, c) in original_prompt_colors {
-            if let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) {
-                p.color = c;
+    let restore_prompt_colors = |store: &mut Store| {
+        for (id, c) in &original_prompt_colors {
+            if let Some(p) = store.prompts.iter_mut().find(|p| p.id == *id) {
+                p.color = c.clone();
             }
         }
+    };
+    if prompts_changed && !save_prompts(&app, &store) {
+        restore_prompt_colors(&mut store);
         return Err("save-failed".into());
     }
     let original_view_colors: Vec<(String, String)> = store
@@ -9138,7 +9239,12 @@ fn remap_colors(app: AppHandle, state: State<Db>, pairs: Vec<(String, String)>) 
             views_changed = true;
         }
     }
+    // Tag colours are picked from the same palette swatches, so a tag set to an old
+    // palette hue would otherwise keep the old hex and read as a custom colour.
+    let original_tag_colors = store.settings.tag_colors.clone();
+    views_changed |= remap_tag_colors(&mut store.settings.tag_colors, &map);
     if views_changed && !save_settings(&app, &store.settings) {
+        store.settings.tag_colors = original_tag_colors;
         for (id, c) in original_view_colors {
             if let Some(v) = store.settings.views.iter_mut().find(|v| v.id == id) {
                 v.color = c;
@@ -9149,26 +9255,43 @@ fn remap_colors(app: AppHandle, state: State<Db>, pairs: Vec<(String, String)>) 
                 g.color = c;
             }
         }
+        // The prompts reached disk already: put their colours back there too.
+        if prompts_changed {
+            restore_prompt_colors(&mut store);
+            let _ = save_prompts(&app, &store);
+        }
         return Err("save-failed".into());
     }
+    Ok(())
+}
+
+// The settings half of deleting a view, apart from the lock and the save so it is
+// testable. A grid folder of the deleted view goes with it, and it must go now:
+// left behind until the next start it would still claim its members in
+// normalize_tile_folders' one-folder-per-prompt rule and starve a new folder.
+fn remove_view_from_settings(settings: &mut Settings, id: &str, prompt_ids: &[String]) -> Result<(), String> {
+    if settings.views.len() <= 1 {
+        return Err("cannot delete the last view".to_string());
+    }
+    settings.views.retain(|v| v.id != id);
+    if settings.active_view == id {
+        let first_id = settings.views[0].id.clone();
+        settings.active_view.clone_from(&first_id);
+    }
+    // The deleted view must not linger in a group, and a group that just lost its
+    // last member dissolves instead of becoming an empty folder tab.
+    let views = settings.views.clone();
+    normalize_view_groups(&mut settings.view_groups, &views);
+    let view_ids: Vec<String> = views.iter().map(|v| v.id.clone()).collect();
+    normalize_tile_folders(&mut settings.tile_folders, prompt_ids, &view_ids);
     Ok(())
 }
 
 #[tauri::command]
 fn delete_view(app: AppHandle, state: State<Db>, id: String) -> Result<Settings, String> {
     let mut store = lock(&state);
-    if store.settings.views.len() <= 1 {
-        return Err("cannot delete the last view".to_string());
-    }
-    store.settings.views.retain(|v| v.id != id);
-    if store.settings.active_view == id {
-        let first_id = store.settings.views[0].id.clone();
-        store.settings.active_view.clone_from(&first_id);
-    }
-    // The deleted view must not linger in a group, and a group that just lost its
-    // last member dissolves instead of becoming an empty folder tab.
-    let views = store.settings.views.clone();
-    normalize_view_groups(&mut store.settings.view_groups, &views);
+    let prompt_ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
+    remove_view_from_settings(&mut store.settings, &id, &prompt_ids)?;
     save_settings(&app, &store.settings);
     Ok(webview_settings(&store.settings))
 }
@@ -9416,6 +9539,42 @@ fn save_tile_folder(
     Ok(webview_settings(&store.settings))
 }
 
+// The layout step of taking a prompt out of a grid folder onto `cell`. Whoever
+// already sits on that cell moves to the first free cell (folder cells count as
+// taken); with no free cell left the drop is refused and nothing changes. A cell
+// outside the grid places nothing, so the prompt stays library-only.
+fn place_taken_out_member(
+    view: &mut View,
+    folder_cells: &[[u32; 2]],
+    id: &str,
+    cell: [u32; 2],
+) -> Result<(), ()> {
+    if cell[0] >= view.cols || cell[1] >= view.rows {
+        return Ok(());
+    }
+    let key = grid_key(view.cols, view.rows);
+    let occupants: Vec<String> = view
+        .layouts
+        .get(&key)
+        .map(|l| l.iter().filter(|(_, c)| **c == cell).map(|(k, _)| k.clone()).collect())
+        .unwrap_or_default();
+    let mut moved: Vec<(String, [u32; 2])> = Vec::new();
+    let mut scratch = view.clone();
+    for occupant in occupants {
+        let Some(free) = first_free_cell_excluding(&scratch, folder_cells) else {
+            return Err(());
+        };
+        scratch.layouts.entry(key.clone()).or_default().insert(occupant.clone(), free);
+        moved.push((occupant, free));
+    }
+    let layout = view.layouts.entry(key).or_default();
+    for (occupant, free) in moved {
+        layout.insert(occupant, free);
+    }
+    layout.insert(id.to_string(), cell);
+    Ok(())
+}
+
 // Take one prompt out of its folder and put it on `cell` of the folder's view. The
 // second-to-last member leaving dissolves the folder (normalize), which is what makes
 // "drag the last one out" work without a case of its own.
@@ -9436,18 +9595,24 @@ fn take_out_of_tile_folder(
         Some(f) => f.view_id.clone(),
         None => return Err("not in a folder".to_string()),
     };
+    // Every folder cell of that view lives outside view.layouts; a displaced
+    // occupant must not be handed one of them.
+    let folder_cells: Vec<[u32; 2]> = store
+        .settings
+        .tile_folders
+        .iter()
+        .filter(|f| f.view_id == view_id)
+        .map(|f| f.cell)
+        .collect();
+    // Decide the placement first: a drop that cannot be honoured leaves the
+    // member in its folder instead of half-moving it.
+    if let Some(view) = store.settings.views.iter_mut().find(|v| v.id == view_id) {
+        if place_taken_out_member(view, &folder_cells, &id, cell).is_err() {
+            return Err("no free cell".to_string());
+        }
+    }
     for folder in store.settings.tile_folders.iter_mut() {
         folder.members.retain(|m| m != &id);
-    }
-    if let Some(view) = store.settings.views.iter_mut().find(|v| v.id == view_id) {
-        let key = grid_key(view.cols, view.rows);
-        let free = cell[0] < view.cols && cell[1] < view.rows;
-        let layout = view.layouts.entry(key).or_default();
-        if free {
-            // Whoever sits there moves on: the grid never stacks two prompts.
-            layout.retain(|_, c| *c != cell);
-            layout.insert(id, cell);
-        }
     }
     let ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
     let view_ids: Vec<String> = store.settings.views.iter().map(|v| v.id.clone()).collect();
@@ -11418,11 +11583,35 @@ async fn delete_backup(app: AppHandle, name: String) -> Result<(), String> {
     fs::remove_dir_all(backups_dir(&app).join(&name)).map_err(|e| e.to_string())
 }
 
+const STAGED_RESTORE_PREFIX: &str = "data.db.restoring";
+
+// Start-up sweep of staged backup copies a quit or crash left beside the live store
+// (the copy, its -wal/-shm and the older fixed name). Anything younger than
+// `min_age` is left alone.
+fn remove_stale_staged_restores(dir: &std::path::Path, min_age: Duration) {
+    for entry in fs::read_dir(dir).into_iter().flatten().flatten() {
+        if !entry.file_name().to_string_lossy().starts_with(STAGED_RESTORE_PREFIX) {
+            continue;
+        }
+        let old_enough = entry
+            .metadata()
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.elapsed().ok())
+            .is_some_and(|age| age >= min_age);
+        if old_enough && entry.path().is_file() {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
+}
+
 // Unpack (gunzip if needed) a backup file BESIDE the live store, then prove it is
 // an openable SQLite file. Shared by every restore scope: a snapshot that fails
 // either step must never touch the live database.
 fn stage_and_validate_backup(backup_db: &std::path::Path, dir: &std::path::Path) -> Result<PathBuf, String> {
-    let staged = dir.join("data.db.restoring");
+    // A name of its own per call: two "view contents" clicks, or a view still
+    // unpacking while a restore runs, must never share (and overwrite) one file.
+    let staged = dir.join(format!("{STAGED_RESTORE_PREFIX}-{}", gen_id()));
     let _ = fs::remove_file(&staged);
     let unpack = if backup_db.extension().is_some_and(|e| e == "gz") {
         gunzip_to(backup_db, &staged)
@@ -11432,6 +11621,11 @@ fn stage_and_validate_backup(backup_db: &std::path::Path, dir: &std::path::Path)
     if let Err(e) = unpack {
         let _ = fs::remove_file(&staged);
         return Err(e);
+    }
+    // fs::copy keeps the source's modified time, which would make a fresh copy look
+    // old to the stale-file sweep of another instance: stamp it with now.
+    if let Ok(f) = fs::OpenOptions::new().write(true).open(&staged) {
+        let _ = f.set_modified(SystemTime::now());
     }
     // A readable SQLite file is not necessarily one of THIS app's backups -- any
     // valid-but-unrelated .db (empty, wrong schema, a stray file the user picked)
@@ -11661,10 +11855,23 @@ async fn backup_contents(app: AppHandle, name: String) -> Result<BackupContents,
 // "settings"): either way relaunch after, so nothing can half-apply.
 #[tauri::command]
 async fn restore_backup(app: AppHandle, state: State<'_, Db>, name: String, keep: usize, scope: String) -> Result<(), String> {
+    restore_backup_core(app.clone(), state, name, keep, scope)?;
+    app.restart();
+}
+
+// Everything a restore does except the relaunch. The command line and the
+// receiver call this, answer their caller, and only then restart: a restart
+// inside the call drops the connection before any answer is written, and a
+// script would read a restore that worked as a failure.
+fn restore_backup_core(app: AppHandle, state: State<'_, Db>, name: String, keep: usize, scope: String) -> Result<(), String> {
     if !valid_backup_name(&name) {
         return Err("bad-name".into());
     }
     valid_scope(&scope)?;
+    // A store another machine holds locked is not ours to overwrite.
+    if data_dir_write_blocked(&app) {
+        return Err("readonly".into());
+    }
     let Some(backup_db) = backup_db_file(&backups_dir(&app).join(&name)) else {
         return Err("missing".into());
     };
@@ -11706,7 +11913,7 @@ async fn restore_backup(app: AppHandle, state: State<'_, Db>, name: String, keep
         // slipping in before it must not trust a single one of the old hashes.
         store.forget_written_rows();
     }
-    app.restart();
+    Ok(())
 }
 
 #[tauri::command]
@@ -12531,6 +12738,28 @@ async fn delete_copy_entry(app: AppHandle, rowid: i64) -> bool {
         .unwrap_or(false)
 }
 
+// The boxes float_recall spreads out, in physical pixels: every pill (in a stable
+// id order) and then every folder, each sized by its own scale and the screen's
+// scale factor. Returns the pill ids in the same order as their boxes.
+fn recall_wishes(settings: &Settings, prompts: &[Prompt], work: Rect, dpi: f64) -> (Vec<String>, Vec<Rect>) {
+    let mut wishes: Vec<Rect> = Vec::new();
+    let mut pill_ids: Vec<String> = settings.floating.keys().cloned().collect();
+    pill_ids.sort(); // stable fan-out order across runs
+    for id in &pill_ids {
+        let scale = float_scale_of(settings, id);
+        let (w, h) = match prompts.iter().find(|p| &p.id == id) {
+            Some(p) => pill_dims(is_image_prompt(p), scale),
+            None => pill_dims(false, scale),
+        };
+        wishes.push(Rect { x: work.x, y: work.y, w: w * dpi, h: h * dpi });
+    }
+    for folder in &settings.float_folders {
+        let side = folder_box(folder.scale) * dpi;
+        wishes.push(Rect { x: work.x, y: work.y, w: side, h: side });
+    }
+    (pill_ids, wishes)
+}
+
 // Expert action "Bring every floating window back to the main screen": the
 // emergency exit once a run of monitor changes has left positions and screen
 // identities not worth untangling by hand. Every pill and folder, parked or
@@ -12546,21 +12775,14 @@ async fn float_recall(app: AppHandle, state: State<'_, Db>) -> Result<(), String
             .cloned()
             .unwrap_or((String::new(), 0, 0, 1920, 1080));
         let work = Rect { x: mx as f64, y: my as f64, w: mw as f64, h: mh as f64 };
-
-        let mut wishes: Vec<Rect> = Vec::new();
-        let mut pill_ids: Vec<String> = store.settings.floating.keys().cloned().collect();
-        pill_ids.sort(); // stable fan-out order across runs
-        for id in &pill_ids {
-            let scale = float_scale_of(&store.settings, id);
-            let (w, h) = match store.prompts.iter().find(|p| &p.id == id) {
-                Some(p) => pill_dims(is_image_prompt(p), scale),
-                None => pill_dims(false, scale),
-            };
-            wishes.push(Rect { x: work.x, y: work.y, w, h });
-        }
-        for folder in &store.settings.float_folders {
-            wishes.push(Rect { x: work.x, y: work.y, w: folder_box(folder.scale), h: folder_box(folder.scale) });
-        }
+        // The work area is in physical pixels, the box sizes in logical ones: scale
+        // them by the main screen's own factor, as the folder dissolve does.
+        let dpi = app
+            .get_webview_window("main")
+            .and_then(|w| w.available_monitors().ok())
+            .and_then(|m| m.first().map(|m| m.scale_factor()))
+            .unwrap_or(1.0);
+        let (pill_ids, wishes) = recall_wishes(&store.settings, &store.prompts, work, dpi);
         let spots = spread_free_positions(&wishes, &[], work);
 
         for (id, (x, y)) in pill_ids.iter().zip(spots.iter()) {
@@ -17810,14 +18032,16 @@ async fn finalize_ocr_capture(app: &AppHandle, state: &State<'_, SnipState>, cro
 // Crop an image at a physical-pixel rect (clamped to its bounds).
 fn crop_rgba(img: &image::RgbaImage, x: i32, y: i32, width: u32, height: u32) -> Option<image::RgbaImage> {
     let (iw, ih) = img.dimensions();
-    let cx = x.max(0) as u32;
-    let cy = y.max(0) as u32;
-    let cw = width.min(iw.saturating_sub(cx));
-    let ch = height.min(ih.saturating_sub(cy));
-    if cw == 0 || ch == 0 {
+    // Both edges are clamped on their own: a rect that starts left of or above the
+    // image loses that part, it does not reach further right or down instead.
+    let x0 = (x as i64).max(0);
+    let y0 = (y as i64).max(0);
+    let x1 = (x as i64 + width as i64).min(iw as i64);
+    let y1 = (y as i64 + height as i64).min(ih as i64);
+    if x1 <= x0 || y1 <= y0 {
         return None;
     }
-    Some(image::imageops::crop_imm(img, cx, cy, cw, ch).to_image())
+    Some(image::imageops::crop_imm(img, x0 as u32, y0 as u32, (x1 - x0) as u32, (y1 - y0) as u32).to_image())
 }
 
 // Crop the frozen monitor capture at a physical-pixel rect.
@@ -18079,7 +18303,10 @@ async fn capture_window(
         }
         match grab {
             Some(im) if !capture_is_blank(&im) => {
-                if ocr_armed { finalize_ocr_capture(&app, &state, im).await } else { finalize_capture(&app, im, app_name.clone()).await }
+                let res = if ocr_armed { finalize_ocr_capture(&app, &state, im).await } else { finalize_capture(&app, im, app_name.clone()).await };
+                // The overlay was hidden for the grab; a failed OCR or save reports its
+                // error inside that overlay, so it has to come back with the error.
+                show_overlay_again_on_error(res, || set_snip_overlay_hidden(&app, false))
             }
             _ => {
                 set_snip_overlay_hidden(&app, false);
@@ -18099,6 +18326,14 @@ async fn capture_window(
             None => Err("blocked".to_string()),
         }
     }
+}
+
+// Passes `res` through, calling `show` first when it is an error.
+fn show_overlay_again_on_error<T>(res: Result<T, String>, show: impl FnOnce()) -> Result<T, String> {
+    if res.is_err() {
+        show();
+    }
+    res
 }
 
 // Open the project's GitHub page in the default browser (app logo → repo,
@@ -19590,48 +19825,6 @@ mod ocr {
         format!("'{}'", s.replace('\'', "''"))
     }
 
-    // Windows PowerShell 5.1 (not pwsh core) needs a byte-order mark to reliably
-    // read a UTF-8 script file back as UTF-8 -- without it, non-ASCII bytes in a
-    // path can be misread under the system ANSI code page, hence writing every
-    // generated .ps1 script with a BOM rather than plain ASCII/UTF-8.
-    //
-    // This script is about to run elevated, so how it gets to disk matters: a
-    // predictable path in a shared temp folder is otherwise a same-user process's
-    // opening to plant its own script before ours lands, or to overwrite ours
-    // between this write and the runas prompt being answered. `create_new`
-    // refuses to touch a file that is already there (retried a few times after
-    // clearing it, rather than silently opening whatever an attacker left), and
-    // the returned handle keeps write access denied to everyone else for as
-    // long as the caller holds it -- see run_elevated_script.
-    fn write_ps1_with_bom(path: &Path, content: &str) -> std::io::Result<std::fs::File> {
-        use std::io::Write;
-        use std::os::windows::fs::OpenOptionsExt;
-        const FILE_SHARE_READ: u32 = 0x0000_0001;
-        let mut bytes = vec![0xEFu8, 0xBB, 0xBF];
-        bytes.extend_from_slice(content.as_bytes());
-        let mut last_err = None;
-        for _ in 0..3 {
-            match fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .share_mode(FILE_SHARE_READ)
-                .open(path)
-            {
-                Ok(mut f) => {
-                    f.write_all(&bytes)?;
-                    f.flush()?;
-                    return Ok(f);
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                    let _ = fs::remove_file(path);
-                    last_err = Some(e);
-                }
-                Err(e) => return Err(e),
-            }
-        }
-        Err(last_err.unwrap_or_else(|| std::io::Error::new(std::io::ErrorKind::AlreadyExists, "temp script path is contested")))
-    }
-
     // Every elevated round trip gets its own unguessable file names. The temp
     // folder is writable by anything running as this user, so a name derived only
     // from the language tag or the process id could be created in advance: a
@@ -19669,63 +19862,61 @@ mod ocr {
     fn install_result_path(kind: CapKind, nonce: &str) -> PathBuf {
         std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-{}-install-{}.json", brand::TEMP_PREFIX, kind.slug(), nonce))
     }
-    fn install_script_path(kind: CapKind, nonce: &str) -> PathBuf {
-        std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-{}-install-{}.ps1", brand::TEMP_PREFIX, kind.slug(), nonce))
-    }
 
     // Launches an elevated PowerShell that runs Add-WindowsCapability and writes
     // its own success/failure (including whatever error message Windows gave)
     // to a result file, then returns immediately -- this call never waits for
-    // that process. The elevation script is written out to a temp .ps1 file
-    // rather than passed inline via `-Command "..."`: `name` and the result
-    // path are already safe to embed (name is regex+whitelist-validated by the
-    // caller; the path is entirely ours), but a script FILE sidesteps the
-    // nested-quoting hazard of building a `try{...}catch{...}` PowerShell
-    // one-liner inside a Win32 argument string, which is judged the safer
-    // "equivalent" the spec allows.
+    // that process. The script goes over as an encoded command (see
+    // elevated_params), so there is no quoting of it to get wrong: `name` is
+    // regex+whitelist-validated by the caller and the result path is entirely ours.
     pub(super) fn install_language(kind: CapKind, name: &str) -> Result<(), String> {
         let tag = ocr_tag_from_capability_name(kind.prefix(), name).unwrap_or_default();
         let nonce = start_request(kind, &tag);
         let result_path = install_result_path(kind, &nonce);
-        let script_path = install_script_path(kind, &nonce);
         let _ = fs::remove_file(&result_path); // a stale result must never look fresh
 
-        // finally: the script deletes itself once it is done, elevated or not;
-        // otherwise every install attempt (success, failure, or a declined UAC
-        // prompt) left its .ps1 behind in the temp folder forever.
+        // The script travels on the command line, never as a file: there is no
+        // path a same-user process could swap between the prompt and the read.
         let script = format!(
-            "$ErrorActionPreference = 'Stop'\r\ntry {{\r\n  Add-WindowsCapability -Online -Name {name} {logargs}\r\n  @{{ ok = $true }} | ConvertTo-Json | Out-File -Encoding utf8 {result}\r\n}} catch {{\r\n  @{{ ok = $false; error = $_.Exception.Message }} | ConvertTo-Json | Out-File -Encoding utf8 {result}\r\n}} finally {{\r\n  Remove-Item -LiteralPath {script} -Force -ErrorAction SilentlyContinue\r\n}}\r\n",
+            "$ErrorActionPreference = 'Stop'\r\ntry {{\r\n  Add-WindowsCapability -Online -Name {name} {logargs}\r\n  @{{ ok = $true }} | ConvertTo-Json | Out-File -Encoding utf8 {result}\r\n}} catch {{\r\n  @{{ ok = $false; error = $_.Exception.Message }} | ConvertTo-Json | Out-File -Encoding utf8 {result}\r\n}}\r\n",
             name = ps_single_quote(name),
             logargs = dism_log_args(kind),
             result = ps_single_quote(&result_path.to_string_lossy()),
-            script = ps_single_quote(&script_path.to_string_lossy()),
         );
         // A launch that never happened has nothing to poll for: drop the nonce
         // again so a later result file under that name cannot be believed.
-        run_elevated_script(&script_path, &script).inspect_err(|_| finish_request(kind, &tag))
+        run_elevated_script(&script).inspect_err(|_| finish_request(kind, &tag))
     }
 
-    // Writes a generated .ps1 and starts it through the UAC prompt, returning as
-    // soon as the elevated process has been launched (or the launch was refused).
-    // Used by both elevated paths -- installing a language pack and, on machines
-    // that demand rights even for the read-only listing, the listing itself.
-    fn run_elevated_script(script_path: &Path, script: &str) -> Result<(), String> {
-        if let Some(dir) = script_path.parent() {
-            fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-        }
-        // Kept open (write access denied to everyone else) across the whole
-        // ShellExecuteW call below -- including the time the UAC prompt sits on
-        // screen waiting for the user -- so nothing can swap this script's
-        // content out from under it before the elevated PowerShell reads it.
-        let lock = write_ps1_with_bom(script_path, script).map_err(|e| e.to_string())?;
-
-        // Standard Win32 argv quoting (double quotes for a path that may
-        // contain spaces) -- this is CreateProcess's own command-line
-        // convention, not PowerShell's, since it is powershell.exe's argv.
+    // The argument string that hands `script` to an elevated PowerShell on its own
+    // command line. The script is never written to a file: a file in the shared
+    // temp folder can be replaced by any process of this user between the UAC
+    // prompt and PowerShell opening it, which would run that replacement with the
+    // rights the user just granted. PowerShell takes the script as base64 of its
+    // UTF-16LE bytes, so no quoting of the script text is involved either.
+    pub(super) fn elevated_params(script: &str) -> Result<String, String> {
+        use base64::Engine;
+        let bytes: Vec<u8> = script.encode_utf16().flat_map(|u| u.to_le_bytes()).collect();
         let params = format!(
-            "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File \"{}\"",
-            script_path.display()
+            "-NoProfile -NonInteractive -EncodedCommand {}",
+            base64::engine::general_purpose::STANDARD.encode(bytes)
         );
+        // CreateProcess accepts a command line of at most 32767 characters.
+        if params.len() > 30_000 {
+            return Err("the elevated script is too long for a command line".to_string());
+        }
+        Ok(params)
+    }
+
+    // Starts `script` through the UAC prompt, returning as soon as the elevated
+    // process has been launched (or the launch was refused). Used by both
+    // elevated paths -- installing a language pack and, on machines that demand
+    // rights even for the read-only listing, the listing itself. Any new
+    // elevated call site goes through here, never a bespoke ShellExecuteW.
+    fn run_elevated_script(script: &str) -> Result<(), String> {
+        // The elevated script writes its result into this folder.
+        fs::create_dir_all(std::env::temp_dir().join(brand::TEMP_DIR)).map_err(|e| e.to_string())?;
+        let params = elevated_params(script)?;
         let code = unsafe {
             ShellExecuteW(
                 HWND::default(),
@@ -19736,13 +19927,8 @@ mod ocr {
                 SW_HIDE,
             )
         };
-        drop(lock);
         let code = code.0 as isize;
         if code <= 32 {
-            // The script's own `finally` only runs once PowerShell actually starts:
-            // a launch failure (including a declined UAC prompt) never gets that far,
-            // so the .ps1 would otherwise sit in the temp folder forever.
-            let _ = fs::remove_file(script_path);
             // SE_ERR_ACCESSDENIED (5) is what ShellExecuteW returns when the user
             // declines the UAC prompt; ERROR_CANCELLED (1223) shows up on some
             // Windows versions for the same outcome. Neither is a real failure on
@@ -19879,9 +20065,6 @@ mod ocr {
     fn caps_tmp_path(kind: CapKind, nonce: &str) -> PathBuf {
         std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-{}-caps-{}.json.tmp", brand::TEMP_PREFIX, kind.slug(), nonce))
     }
-    fn caps_script_path(kind: CapKind, nonce: &str) -> PathBuf {
-        std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-{}-caps-{}.ps1", brand::TEMP_PREFIX, kind.slug(), nonce))
-    }
 
     // The same query fetch_capabilities runs, but through an elevated PowerShell
     // that writes its JSON to a temp file. Needed on machines where Windows
@@ -19897,18 +20080,16 @@ mod ocr {
         let nonce = start_request(kind, CAPS_TAG);
         let result_path = caps_result_path(kind, &nonce);
         let tmp_path = caps_tmp_path(kind, &nonce);
-        let script_path = caps_script_path(kind, &nonce);
         let _ = fs::remove_file(&result_path); // a stale list must never look fresh
         let _ = fs::remove_file(&tmp_path);
         let script = format!(
-            "$ErrorActionPreference = 'Stop'\r\ntry {{\r\n  try {{\r\n    Get-WindowsCapability -Online -Name \"{filter}\" {logargs} | Select-Object Name, State, Version, DownloadSize, InstallSize | ConvertTo-Json | Out-File -Encoding utf8 {tmp}\r\n  }} catch {{\r\n    @{{ error = $_.Exception.Message }} | ConvertTo-Json | Out-File -Encoding utf8 {tmp}\r\n  }}\r\n  Move-Item -LiteralPath {tmp} -Destination {result} -Force\r\n}} finally {{\r\n  Remove-Item -LiteralPath {script} -Force -ErrorAction SilentlyContinue\r\n}}\r\n",
+            "$ErrorActionPreference = 'Stop'\r\ntry {{\r\n  Get-WindowsCapability -Online -Name \"{filter}\" {logargs} | Select-Object Name, State, Version, DownloadSize, InstallSize | ConvertTo-Json | Out-File -Encoding utf8 {tmp}\r\n}} catch {{\r\n  @{{ error = $_.Exception.Message }} | ConvertTo-Json | Out-File -Encoding utf8 {tmp}\r\n}}\r\nMove-Item -LiteralPath {tmp} -Destination {result} -Force\r\n",
             filter = kind.filter(),
             logargs = dism_log_args(kind),
             tmp = ps_single_quote(&tmp_path.to_string_lossy()),
             result = ps_single_quote(&result_path.to_string_lossy()),
-            script = ps_single_quote(&script_path.to_string_lossy()),
         );
-        run_elevated_script(&script_path, &script).inspect_err(|_| finish_request(kind, CAPS_TAG))
+        run_elevated_script(&script).inspect_err(|_| finish_request(kind, CAPS_TAG))
     }
 
     // Reads what the elevated listing wrote. Ok(None) = still running, or never
@@ -27658,8 +27839,18 @@ fn request_app_quit(app: &AppHandle) {
 // cancelable job (backup/import have no cancel of their own -- see
 // cancel_all_bg_ops) and closes the main window again, this time for real.
 #[tauri::command]
-fn confirm_quit_with_running_ops(app: AppHandle) {
+async fn confirm_quit_with_running_ops(app: AppHandle) {
     cancel_all_bg_ops();
+    // The workers only see the cancel flag on their next progress line; give them a
+    // moment to stop ffmpeg and remove their staged file before the process ends
+    // (the job object kills whatever is still running after that). Async, so the
+    // wait never blocks the window's own thread.
+    for _ in 0..10 {
+        if bg_ops_running_count() == 0 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
     QUIT_CONFIRMED.store(true, Ordering::SeqCst);
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.close();
@@ -28183,6 +28374,233 @@ fn ffmpeg_error_json(key: FfmpegErrorKey, code: Option<i32>, raw_text: &str) -> 
     serde_json::to_string(&payload).unwrap_or_else(|_| key.as_str().to_string())
 }
 
+// A Windows job object that kills everything assigned to it when its last handle
+// closes, which includes this process ending for any reason. Without it a quit
+// (or a crash) while an export runs leaves ffmpeg alive and still writing its
+// staged file into the user's folder.
+struct KillOnCloseJob(windows::Win32::Foundation::HANDLE);
+
+// A job handle is a plain kernel object handle, usable from any thread.
+unsafe impl Send for KillOnCloseJob {}
+unsafe impl Sync for KillOnCloseJob {}
+
+impl KillOnCloseJob {
+    fn new() -> Option<Self> {
+        use windows::Win32::System::JobObjects::{
+            CreateJobObjectW, JobObjectExtendedLimitInformation, SetInformationJobObject,
+            JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+        };
+        unsafe {
+            let handle = CreateJobObjectW(None, None).ok()?;
+            let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+            info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+            let set = SetInformationJobObject(
+                handle,
+                JobObjectExtendedLimitInformation,
+                &info as *const _ as *const std::ffi::c_void,
+                std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+            );
+            if set.is_err() {
+                let _ = windows::Win32::Foundation::CloseHandle(handle);
+                return None;
+            }
+            Some(KillOnCloseJob(handle))
+        }
+    }
+
+    fn assign(&self, child: &std::process::Child) -> bool {
+        use std::os::windows::io::AsRawHandle;
+        use windows::Win32::System::JobObjects::AssignProcessToJobObject;
+        let process = windows::Win32::Foundation::HANDLE(child.as_raw_handle());
+        unsafe { AssignProcessToJobObject(self.0, process).is_ok() }
+    }
+}
+
+impl Drop for KillOnCloseJob {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = windows::Win32::Foundation::CloseHandle(self.0);
+        }
+    }
+}
+
+// The app's own job, created on first use and never closed before the process
+// ends. None when the OS refused: children then simply run unsupervised, as
+// before.
+fn app_job() -> Option<&'static KillOnCloseJob> {
+    static JOB: std::sync::OnceLock<Option<KillOnCloseJob>> = std::sync::OnceLock::new();
+    JOB.get_or_init(KillOnCloseJob::new).as_ref()
+}
+
+// Spawns `cmd` and puts the child into `job`. A failed assignment is not an error:
+// the child still runs, it just is not covered.
+fn spawn_in_job(cmd: &mut std::process::Command, job: Option<&KillOnCloseJob>) -> std::io::Result<std::process::Child> {
+    let child = cmd.spawn()?;
+    if let Some(job) = job {
+        if !job.assign(&child) {
+            append_crash_log("could not put a helper process into the app job object");
+        }
+    }
+    Ok(child)
+}
+
+// `Command::status()` for a helper that should die with the app.
+fn status_in_job(cmd: &mut std::process::Command) -> std::io::Result<std::process::ExitStatus> {
+    spawn_in_job(cmd, app_job())?.wait()
+}
+
+// `Command::output()` for a helper that should die with the app.
+fn output_in_job(cmd: &mut std::process::Command) -> std::io::Result<std::process::Output> {
+    cmd.stdout(std::process::Stdio::piped());
+    cmd.stderr(std::process::Stdio::piped());
+    spawn_in_job(cmd, app_job())?.wait_with_output()
+}
+
+// Where run_ffmpeg_to_staged notes the staged files it has in flight, one path
+// per line, so a start after a killed run can remove what the dead process left
+// in the user's folders. Set once at start-up; without it nothing is recorded.
+static EXPORT_JOURNAL: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+static EXPORT_JOURNAL_LOCK: Mutex<()> = Mutex::new(());
+
+// One line per staged file: `host<TAB>pid<TAB>path`. The data folder may be shared
+// between machines, so a line is only ever acted on by the host that wrote it.
+fn journal_lines(journal: &Path) -> Vec<String> {
+    fs::read_to_string(journal)
+        .map(|t| t.lines().filter(|l| !l.is_empty()).map(String::from).collect())
+        .unwrap_or_default()
+}
+
+fn journal_line(host: &str, pid: u32, staged: &Path) -> String {
+    format!("{}\t{}\t{}", host.replace(['\t', '\r', '\n'], " "), pid, staged.to_string_lossy())
+}
+
+fn parse_journal_line(line: &str) -> Option<(&str, u32, &str)> {
+    let mut it = line.splitn(3, '\t');
+    let host = it.next()?;
+    let pid = it.next()?.parse().ok()?;
+    let path = it.next()?;
+    Some((host, pid, path))
+}
+
+// Atomic replace: a reader never sees a half-written list.
+fn journal_write(journal: &Path, lines: &[String]) {
+    if lines.is_empty() {
+        let _ = fs::remove_file(journal);
+    } else {
+        let tmp = journal.with_extension(format!("tmp{}", std::process::id()));
+        if fs::write(&tmp, lines.join("\n") + "\n").is_ok() && fs::rename(&tmp, journal).is_err() {
+            let _ = fs::remove_file(&tmp);
+        }
+    }
+}
+
+// Read-modify-write across processes: the in-process mutex covers threads, a
+// create-new lock file covers a second local instance. A lock older than ten
+// seconds belongs to a dead run and is taken over; if it cannot be had within
+// a second the change runs unlocked rather than blocking an export.
+fn with_journal_lock<R>(journal: &Path, f: impl FnOnce() -> R) -> R {
+    let _guard = EXPORT_JOURNAL_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let lock = journal.with_extension("lock");
+    let mut held = false;
+    for _ in 0..20 {
+        if fs::OpenOptions::new().write(true).create_new(true).open(&lock).is_ok() {
+            held = true;
+            break;
+        }
+        let stale = fs::metadata(&lock)
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.elapsed().ok())
+            .is_some_and(|age| age > Duration::from_secs(10));
+        if stale {
+            let _ = fs::remove_file(&lock);
+        } else {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+    let out = f();
+    if held {
+        let _ = fs::remove_file(&lock);
+    }
+    out
+}
+
+fn export_journal_add(journal: &Path, staged: &Path) {
+    with_journal_lock(journal, || {
+        let mut lines = journal_lines(journal);
+        lines.push(journal_line(&local_host_name(), std::process::id(), staged));
+        journal_write(journal, &lines);
+    });
+}
+
+fn export_journal_remove(journal: &Path, staged: &Path) {
+    with_journal_lock(journal, || {
+        let mine = journal_line(&local_host_name(), std::process::id(), staged);
+        let lines: Vec<String> = journal_lines(journal).into_iter().filter(|l| *l != mine).collect();
+        journal_write(journal, &lines);
+    });
+}
+
+// The process id in a `.export-<pid>-<stamp>.<ext>` staged name, and only for a
+// name of exactly that shape: the journal is never trusted to name other files.
+fn staged_export_pid(path: &Path) -> Option<u32> {
+    let name = path.file_name()?.to_str()?;
+    let rest = name.strip_prefix(".export-")?;
+    let (pid, tail) = rest.split_once('-')?;
+    let (stamp, ext) = tail.split_once('.')?;
+    if stamp.is_empty() || !stamp.bytes().all(|b| b.is_ascii_digit()) || ext.is_empty() {
+        return None;
+    }
+    pid.parse().ok()
+}
+
+// Only a local absolute path may be deleted from a journal line: a UNC or other
+// network path (or a relative one) would make every start talk to a host the
+// journal's writer picked.
+fn is_local_absolute_path(raw: &str) -> bool {
+    if raw.starts_with("\\\\") || raw.starts_with("//") {
+        return false;
+    }
+    let b = raw.as_bytes();
+    if b.len() < 3 || !b[0].is_ascii_alphabetic() || b[1] != b':' || (b[2] != b'\\' && b[2] != b'/') {
+        return false;
+    }
+    let root: Vec<u16> = format!("{}:\\", b[0] as char).encode_utf16().chain(std::iter::once(0)).collect();
+    const DRIVE_REMOTE: u32 = 4;
+    unsafe { windows::Win32::Storage::FileSystem::GetDriveTypeW(windows::core::PCWSTR(root.as_ptr())) != DRIVE_REMOTE }
+}
+
+// Removes the staged files of runs on THIS host whose process is gone and forgets
+// them. Lines of other hosts are kept verbatim (a pid means nothing there); a
+// file whose process is still alive stays listed. Callers skip this entirely in
+// a read-only instance.
+fn sweep_stale_exports(journal: &Path, host: &str, is_alive: impl Fn(u32) -> bool) {
+    with_journal_lock(journal, || {
+        let mut keep: Vec<String> = Vec::new();
+        for line in journal_lines(journal) {
+            let Some((line_host, pid, raw)) = parse_journal_line(&line) else {
+                continue; // not a line this version wrote: forgotten, never deleted
+            };
+            if line_host != host {
+                keep.push(line);
+                continue;
+            }
+            if !is_local_absolute_path(raw) {
+                continue; // network or relative: forgotten, never deleted
+            }
+            let path = PathBuf::from(raw);
+            match staged_export_pid(&path) {
+                Some(name_pid) if name_pid == pid && (pid == std::process::id() || is_alive(pid)) => keep.push(line),
+                Some(name_pid) if name_pid == pid => {
+                    let _ = fs::remove_file(&path);
+                }
+                _ => {} // not one of ours: dropped from the list, never deleted
+            }
+        }
+        journal_write(journal, &keep);
+    });
+}
+
 // Generous on purpose: this is a last-resort safety net against a hung
 // ffmpeg process, not a quality-of-service limit, so it must never fire on a
 // large export that is genuinely just slow.
@@ -28219,9 +28637,19 @@ fn run_ffmpeg_to_staged(
     cmd.stdin(std::process::Stdio::null());
     cmd.stdout(std::process::Stdio::piped());
     cmd.stderr(std::process::Stdio::piped());
-    let mut child = match cmd.spawn() {
+    let journal = EXPORT_JOURNAL.get();
+    if let Some(journal) = journal {
+        export_journal_add(journal, &staged);
+    }
+    let forget_staged = || {
+        if let Some(journal) = journal {
+            export_journal_remove(journal, &staged);
+        }
+    };
+    let mut child = match spawn_in_job(&mut cmd, app_job()) {
         Ok(c) => c,
         Err(e) => {
+            forget_staged();
             let text = e.to_string();
             return Err(ffmpeg_error_json(classify_ffmpeg_error(&text), None, &text));
         }
@@ -28241,22 +28669,35 @@ fn run_ffmpeg_to_staged(
     });
 
     // stdout carries `-progress pipe:1`'s machine-readable "key=value" lines,
-    // one flush per line -- unlike the carriage-return-redrawn stats ffmpeg
-    // would otherwise print to stderr -- polled between reads so a cancel
-    // takes effect within one progress tick instead of waiting for the whole
-    // conversion to finish. `out_time_ms` is ffmpeg's own field name for a
-    // value that is actually in MICROSECONDS, hence the /1000 below. The same
-    // loop also enforces FFMPEG_MAX_RUN_SECS: a last-resort kill for a run
-    // that is still producing progress lines but never finishing, not a
-    // quality target -- a process that is fully stuck and prints nothing at
-    // all is caught by the exit-status path below instead, once it does
-    // eventually end.
+    // one flush per line, unlike the carriage-return-redrawn stats ffmpeg would
+    // otherwise print to stderr. `out_time_ms` is ffmpeg's own field name for a
+    // value that is actually in MICROSECONDS, hence the /1000 below. A thread
+    // reads the lines and hands the parsed values over a channel, so this loop
+    // wakes every 200 ms whether or not ffmpeg printed anything: a cancel or the
+    // FFMPEG_MAX_RUN_SECS limit (a last-resort kill, not a quality target) takes
+    // effect even while ffmpeg is silent (probing a huge input, a stalled source)
+    // instead of only at its next progress line.
     let start = std::time::Instant::now();
     let mut timed_out = false;
     if let Some(stdout) = child.stdout.take() {
-        use std::io::BufRead;
-        let reader = std::io::BufReader::new(stdout);
-        for line in reader.lines() {
+        let (tx, rx) = std::sync::mpsc::channel::<u32>();
+        std::thread::spawn(move || {
+            use std::io::BufRead;
+            for line in std::io::BufReader::new(stdout).lines() {
+                let Ok(line) = line else { break };
+                if let Some(us) = line.strip_prefix("out_time_ms=").and_then(|v| v.trim().parse::<i64>().ok()) {
+                    if tx.send((us / 1000).max(0) as u32).is_err() {
+                        break;
+                    }
+                }
+            }
+        });
+        loop {
+            match rx.recv_timeout(std::time::Duration::from_millis(200)) {
+                Ok(ms) => on_progress(ms),
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+            }
             if is_cancelled() {
                 let _ = child.kill();
                 break;
@@ -28266,21 +28707,21 @@ fn run_ffmpeg_to_staged(
                 let _ = child.kill();
                 break;
             }
-            let Ok(line) = line else { break };
-            if let Some(us) = line.strip_prefix("out_time_ms=").and_then(|v| v.trim().parse::<i64>().ok()) {
-                on_progress((us / 1000).max(0) as u32);
-            }
         }
     }
 
     let status = match child.wait() {
         Ok(s) => s,
         Err(e) => {
+            forget_staged();
             let text = e.to_string();
             return Err(ffmpeg_error_json(classify_ffmpeg_error(&text), None, &text));
         }
     };
     let stderr_text = stderr_thread.and_then(|t| t.join().ok()).unwrap_or_default();
+    // ffmpeg is gone now: from here on the staged file is either handed back or
+    // removed by this function itself.
+    forget_staged();
 
     if is_cancelled() {
         let _ = fs::remove_file(&staged);
@@ -28474,7 +28915,7 @@ fn probe_recording_blocking(ffprobe: &Path, src: &Path) -> Result<RecordingProbe
     cmd.args(["-v", "quiet", "-print_format", "json", "-show_format", "-show_streams"]).arg(src);
     cmd.creation_flags(CREATE_NO_WINDOW);
     cmd.stdin(std::process::Stdio::null());
-    let output = cmd.output().map_err(|e| format!("could not start ffprobe: {e}"))?;
+    let output = output_in_job(&mut cmd).map_err(|e| format!("could not start ffprobe: {e}"))?;
     if !output.status.success() {
         return Err("ffprobe failed to read the recording".to_string());
     }
@@ -28688,7 +29129,7 @@ fn mux_mic_track_blocking(ffmpeg: &Path, video: &Path, sidecar: &Path, audio_kbp
     cmd.stdin(std::process::Stdio::null());
     cmd.stdout(std::process::Stdio::null());
     cmd.stderr(std::process::Stdio::piped());
-    let output = cmd.output().map_err(|e| format!("could not start ffmpeg: {e}"))?;
+    let output = output_in_job(&mut cmd).map_err(|e| format!("could not start ffmpeg: {e}"))?;
     if !output.status.success() || !staged.is_file() {
         let _ = fs::remove_file(&staged);
         let tail: String =
@@ -28773,7 +29214,7 @@ fn generate_filmstrip_blocking(ffmpeg: &Path, ffprobe: &Path, src: &Path, count:
             cmd.stdin(std::process::Stdio::null());
             cmd.stdout(std::process::Stdio::null());
             cmd.stderr(std::process::Stdio::null());
-            let status = cmd.status().map_err(|e| format!("could not start ffmpeg: {e}"))?;
+            let status = status_in_job(&mut cmd).map_err(|e| format!("could not start ffmpeg: {e}"))?;
             if !status.success() || !p.is_file() {
                 return Err("thumbnail extraction failed".to_string());
             }
@@ -28810,7 +29251,7 @@ fn generate_waveform_peaks_blocking(ffmpeg: &Path, src: &Path, track: u32, bucke
     cmd.stdin(std::process::Stdio::null());
     cmd.stdout(std::process::Stdio::piped());
     cmd.stderr(std::process::Stdio::null());
-    let output = cmd.output().map_err(|e| format!("could not start ffmpeg: {e}"))?;
+    let output = output_in_job(&mut cmd).map_err(|e| format!("could not start ffmpeg: {e}"))?;
     if !output.status.success() {
         return Err(format!("no audio on track {track}"));
     }
@@ -28892,7 +29333,7 @@ fn extract_still_frame_blocking(ffmpeg: &Path, src: &Path, at_ms: u64, format: &
     cmd.stdin(std::process::Stdio::null());
     cmd.stdout(std::process::Stdio::null());
     cmd.stderr(std::process::Stdio::null());
-    let status = cmd.status().map_err(|e| format!("could not start ffmpeg: {e}"))?;
+    let status = status_in_job(&mut cmd).map_err(|e| format!("could not start ffmpeg: {e}"))?;
     if !status.success() || !tmp.is_file() {
         return Err("still-frame extraction failed".to_string());
     }
@@ -30869,10 +31310,12 @@ const VARIANT_SEP: &str = "\n<!-- next -->\n";
 const VARIANT_SEP_ESCAPED: &str = "\n<!-- \\next -->\n";
 
 fn join_variants(text: &str, variants: &[String]) -> String {
-    if variants.is_empty() {
-        return text.to_string();
-    }
+    // Escaped even with no further entries: a single text that contains the marker
+    // verbatim must not come back split in two.
     let escape = |s: &str| s.replace(VARIANT_SEP, VARIANT_SEP_ESCAPED);
+    if variants.is_empty() {
+        return escape(text);
+    }
     std::iter::once(escape(text))
         .chain(variants.iter().map(|s| escape(s)))
         .collect::<Vec<_>>()
@@ -31062,7 +31505,7 @@ fn to_txt(prompts: &[Prompt]) -> String {
         // Entries 2..n ride along inside the body itself, joined by the same
         // marker as CSV/Markdown-sync: never the bare "---" the blocks below are
         // themselves separated by.
-        let mut block = format!("### {}\n{}", p.name, join_variants(&p.text, &p.variants));
+        let mut block = format!("### {}\n{}", p.name, txt_escape_body(&join_variants(&p.text, &p.variants)));
         if !p.color.is_empty() {
             let _ = write!(block, "\n@color {}", p.color);
         }
@@ -31426,6 +31869,55 @@ fn parse_settings_lines(lines: &str, data: &mut ImportData) {
     }
 }
 
+// The metadata keys a TXT block may end with (see to_txt).
+const TXT_META_KEYS: [&str; 12] = [
+    "rotatemode", "imagedata", "flags", "capsize", "caption", "icon", "pdfpage", "file", "style", "tags", "notes", "color",
+];
+
+// True for a body line that would read as metadata or as the block rule once
+// written out: "@..." or a bare "---", behind any number of escaping backslashes.
+fn txt_line_needs_escape(line: &str) -> bool {
+    let bare = line.trim_start_matches('\\');
+    bare.starts_with('@') || bare == "---"
+}
+
+// A body line that could be mistaken for metadata or for the block separator gets
+// one extra leading backslash; every other line, including one that merely starts
+// with a backslash, is written as it is.
+fn txt_escape_body(body: &str) -> String {
+    body.split('\n')
+        .map(|l| if txt_line_needs_escape(l) { format!("\\{l}") } else { l.to_string() })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn txt_unescape_body(body: &str) -> String {
+    body.split('\n')
+        .map(|l| match l.strip_prefix('\\') {
+            Some(rest) if txt_line_needs_escape(l) => rest,
+            _ => l,
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+// Splits a block body into its text and the trailing run of "@key value" lines
+// (known keys only, each at most once, the run ends at the first other line).
+fn split_txt_meta(body: &str) -> (String, HashMap<&'static str, String>) {
+    let mut lines: Vec<&str> = body.split('\n').collect();
+    let mut meta: HashMap<&'static str, String> = HashMap::new();
+    while let Some(last) = lines.last() {
+        let Some((key, value)) = last.strip_prefix('@').and_then(|r| r.split_once(' ')) else { break };
+        let Some(known) = TXT_META_KEYS.iter().find(|k| **k == key) else { break };
+        if meta.contains_key(known) {
+            break;
+        }
+        meta.insert(known, value.to_string());
+        lines.pop();
+    }
+    (lines.join("\n"), meta)
+}
+
 fn parse_txt(content: &str) -> ImportData {
     let mut data = ImportData::default();
     for block in content.replace("\r\n", "\n").split("\n\n---\n\n") {
@@ -31448,66 +31940,40 @@ fn parse_txt(content: &str) -> ImportData {
             Some((t, _)) => t,
             None => body,
         };
-        // Strip trailing metadata lines in reverse write order:
-        // @rotatemode, @imagedata, @flags, @icon, @file, @style, @color.
-        let (body, rotate_mode) = match body.rsplit_once("\n@rotatemode ") {
-            Some((t, v)) => (t.to_string(), v.trim().to_string()),
-            None => (body.to_string(), String::new()),
-        };
-        let (body, image) = match body.rsplit_once("\n@imagedata ") {
-            Some((t, v)) => (t.to_string(), v.trim().to_string()),
-            None => (body.to_string(), String::new()),
-        };
-        let (body, show_image, copy_image) = match body.rsplit_once("\n@flags ") {
-            Some((t, v)) => {
+        // The metadata is the trailing run of "@key value" lines, whatever their
+        // order; everything above that run is the body, whose own lines were
+        // escaped on export when they could be mistaken for one.
+        let (body, mut meta) = split_txt_meta(body);
+        let body = txt_unescape_body(&body);
+        let rotate_mode = meta.remove("rotatemode").map(|v| v.trim().to_string()).unwrap_or_default();
+        let image = meta.remove("imagedata").map(|v| v.trim().to_string()).unwrap_or_default();
+        let (show_image, copy_image) = match meta.remove("flags") {
+            Some(v) => {
                 let mut parts = v.split_whitespace();
                 let show = parts.next() == Some("1");
                 let copy = parts.next() == Some("1");
-                (t.to_string(), show, copy)
+                (show, copy)
             }
-            None => (body, false, false),
+            None => (false, false),
         };
-        let (body, caption_size) = match body.rsplit_once("\n@capsize ") {
-            Some((t, v)) => (t.to_string(), v.trim().parse().unwrap_or(0)),
-            None => (body, 0),
-        };
-        let (body, caption) = match body.rsplit_once("\n@caption ") {
-            Some((t, v)) => (t.to_string(), v.trim().to_string()),
-            None => (body, String::new()),
-        };
-        let (body, icon_path) = match body.rsplit_once("\n@icon ") {
-            Some((t, v)) => (t.to_string(), v.trim().to_string()),
-            None => (body, String::new()),
-        };
-        let (body, pdf_page) = match body.rsplit_once("\n@pdfpage ") {
-            Some((t, v)) => (t.to_string(), v.trim().parse().unwrap_or(0)),
-            None => (body, 0),
-        };
-        let (body, file_path) = match body.rsplit_once("\n@file ") {
-            Some((t, f)) => (t.to_string(), f.trim().to_string()),
-            None => (body, String::new()),
-        };
-        let (body, font, font_size) = match body.rsplit_once("\n@style ") {
-            Some((t, s)) => {
-                let mut parts = s.split_whitespace();
+        let caption_size = meta.remove("capsize").and_then(|v| v.trim().parse().ok()).unwrap_or(0);
+        let caption = meta.remove("caption").map(|v| v.trim().to_string()).unwrap_or_default();
+        let icon_path = meta.remove("icon").map(|v| v.trim().to_string()).unwrap_or_default();
+        let pdf_page = meta.remove("pdfpage").and_then(|v| v.trim().parse().ok()).unwrap_or(0);
+        let file_path = meta.remove("file").map(|v| v.trim().to_string()).unwrap_or_default();
+        let (font, font_size) = match meta.remove("style") {
+            Some(v) => {
+                let mut parts = v.split_whitespace();
                 let font = parts.next().filter(|f| *f != "-").unwrap_or("").to_string();
                 let size = parts.next().and_then(|v| v.parse().ok()).unwrap_or(0);
-                (t.to_string(), font, size)
+                (font, size)
             }
-            None => (body, String::new(), 0),
+            None => (String::new(), 0),
         };
-        let (body, tags) = match body.rsplit_once("\n@tags ") {
-            Some((t, v)) => (t.to_string(), split_tag_list(v)),
-            None => (body, Vec::new()),
-        };
-        let (body, notes) = match body.rsplit_once("\n@notes ") {
-            Some((t, v)) => (t.to_string(), notes_unescape(v.trim())),
-            None => (body, String::new()),
-        };
-        let (text, color) = match body.rsplit_once("\n@color ") {
-            Some((t, c)) => (t.to_string(), c.trim().to_string()),
-            None => (body, String::new()),
-        };
+        let tags = meta.remove("tags").map(|v| split_tag_list(&v)).unwrap_or_default();
+        let notes = meta.remove("notes").map(|v| notes_unescape(v.trim())).unwrap_or_default();
+        let color = meta.remove("color").map(|v| v.trim().to_string()).unwrap_or_default();
+        let text = body;
         // Entries 2..n still ride along inside `text` at this point: split
         // them back out now that every trailing @key line is gone.
         let (text, variants) = split_variants(&text);
@@ -33496,28 +33962,30 @@ fn scrub_log_line(line: &str) -> String {
 // `append_crash_log` uses, so this can never interleave with a concurrent
 // append and leave the file half old, half rewritten.
 fn strip_user_path_lines(path: &Path) {
-    let Ok(bytes) = fs::read(path) else { return };
-    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
-    let mut changed = false;
-    for raw_line in bytes.split_inclusive(|&b| b == b'\n') {
-        let (body, had_newline) = match raw_line.strip_suffix(b"\n") {
-            Some(b) => (b, true),
-            None => (raw_line, false),
-        };
-        let text = String::from_utf8_lossy(body);
-        let cleaned = scrub_log_line(&text);
-        if cleaned != text {
-            changed = true;
-        }
-        out.extend_from_slice(cleaned.as_bytes());
-        if had_newline {
-            out.push(b'\n');
-        }
-    }
-    if !changed {
-        return;
-    }
+    // Read, transform and swap all under the one lock: an append landing between a
+    // read outside it and the rename would be overwritten by the older copy.
     with_crash_log_lock(path, || {
+        let Ok(bytes) = fs::read(path) else { return };
+        let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+        let mut changed = false;
+        for raw_line in bytes.split_inclusive(|&b| b == b'\n') {
+            let (body, had_newline) = match raw_line.strip_suffix(b"\n") {
+                Some(b) => (b, true),
+                None => (raw_line, false),
+            };
+            let text = String::from_utf8_lossy(body);
+            let cleaned = scrub_log_line(&text);
+            if cleaned != text {
+                changed = true;
+            }
+            out.extend_from_slice(cleaned.as_bytes());
+            if had_newline {
+                out.push(b'\n');
+            }
+        }
+        if !changed {
+            return;
+        }
         let tmp = path.with_extension("log.tmp");
         let Ok(mut f) = fs::File::create(&tmp) else { return };
         use std::io::Write;
@@ -34498,6 +34966,14 @@ pub fn run() {
             reconcile_windows_state(autostart, start_min, url_scheme_on, demo);
             // A quit or crash mid-pack leaves raw copies and folders without a snapshot.
             cleanup_incomplete_backups(&backups_dir(&handle), Duration::from_secs(60));
+            // A read-only instance never writes into the folder another machine owns.
+            if !DATA_DIR_READONLY.load(Ordering::Relaxed) {
+                remove_stale_staged_restores(&data_dir(&handle), Duration::from_secs(60));
+                // Staged exports a killed run left in the user's folders.
+                let journal = data_dir(&handle).join("export-staging.txt");
+                sweep_stale_exports(&journal, &local_host_name(), pid_is_alive);
+                let _ = EXPORT_JOURNAL.set(journal);
+            }
 
             // One place decides which pills and which folders belong on screen.
             sync_float_windows(&handle);
@@ -35916,14 +36392,29 @@ fn sync_write_all_impl(app: &AppHandle, prompts: &[Prompt], settings: &Settings)
             // it instead of disappearing. A conflict is rare, a silent loss is not
             // acceptable. The copy's name carries a dot, so it is neither a valid
             // prompt id (the poll skips it) nor something the orphan sweep may touch.
-            if !on_disk.is_empty() && sync_changed_since_seen(&path) {
-                let copy = dir.join(format!("{}.conflict-{}.md", p.id, now_secs()));
-                if write_file_atomic(&copy, &on_disk) {
-                    append_crash_log(&format!(
-                        "prompt-sync: {filename} was edited outside the app and in the app at the same time; the outside version was kept as {}",
-                        copy.file_name().unwrap_or_default().to_string_lossy()
-                    ));
-                }
+            let copy = dir.join(format!("{}.conflict-{}.md", p.id, now_secs()));
+            let mut kept_copy = false;
+            if !on_disk.is_empty() && sync_changed_since_seen(&path) && write_file_atomic(&copy, &on_disk) {
+                kept_copy = true;
+                append_crash_log(&format!(
+                    "prompt-sync: {filename} was edited outside the app and in the app at the same time; the outside version was kept as {}",
+                    copy.file_name().unwrap_or_default().to_string_lossy()
+                ));
+            }
+            // One more look right before the replace: the lock file is only ours, an
+            // external editor never honors it, so a save that landed after the first
+            // read has to end up in the conflict copy as well, not be overwritten.
+            let latest = fs::read_to_string(&path).unwrap_or_default();
+            if latest != on_disk
+                && latest != content
+                && !latest.is_empty()
+                && write_file_atomic(&copy, &latest)
+                && !kept_copy
+            {
+                append_crash_log(&format!(
+                    "prompt-sync: {filename} was edited outside the app while it was being written; the outside version was kept as {}",
+                    copy.file_name().unwrap_or_default().to_string_lossy()
+                ));
             }
             let ok = write_file_atomic(&path, &content);
             sync_lock_release(&path);
@@ -51397,6 +51888,654 @@ mod tests {
         let shown = whats_new_check_impl(&all, "1.0.0", "2.0.0");
         assert_eq!(shown.iter().map(|s| s.version.as_str()).collect::<Vec<_>>(), vec!["1.1.0", "2.0.0"]);
     }
+
+    // A store adopted from another folder mid-session must still get its schema:
+    // the one-time init used to be remembered per process, not per folder.
+    #[test]
+    fn schema_init_runs_for_every_data_folder() {
+        let base = std::env::temp_dir().join(format!("{}-test-schema-per-dir", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&base);
+        let dir_a = base.join("a");
+        let dir_b = base.join("b");
+        std::fs::create_dir_all(&dir_a).unwrap();
+        std::fs::create_dir_all(&dir_b).unwrap();
+        assert!(db_conn_at(&dir_a).is_some());
+        {
+            let old = Connection::open(dir_b.join("data.db")).unwrap();
+            old.execute_batch(
+                "CREATE TABLE prompt_versions(id INTEGER PRIMARY KEY AUTOINCREMENT, prompt_id TEXT NOT NULL, ts INTEGER NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL);",
+            )
+            .unwrap();
+        }
+        let conn = db_conn_at(&dir_b).expect("the second folder opens");
+        conn.execute(
+            "INSERT INTO prompt_versions(prompt_id, ts, name, text, variants) VALUES('p', 1, 'n', 't', 'v')",
+            [],
+        )
+        .expect("the variants column exists after the open");
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    // A purged prompt whose version-history DELETE failed must not keep its text
+    // forever: the startup sweep drops history of ids that are in neither table.
+    #[test]
+    fn a_read_only_instance_never_sweeps_version_history() {
+        let root = std::env::temp_dir().join(format!("{}-test-sweep-gate", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        assert!(version_sweep_allowed(&root, false));
+        assert!(!version_sweep_allowed(&root, true));
+        std::fs::write(root.join("prompts.json"), b"[]").unwrap();
+        assert!(!version_sweep_allowed(&root, false));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn startup_sweep_drops_version_history_of_vanished_prompts() {
+        let conn = Connection::open_in_memory().unwrap();
+        assert!(db_conn_init_schema(&conn));
+        conn.execute_batch(
+            "INSERT INTO prompts(id, ord, data) VALUES('live', 0, 'x');
+             INSERT INTO trash(id, ord, data) VALUES('binned', 0, 'x');
+             INSERT INTO prompt_versions(prompt_id, ts, name, text) VALUES('gone', 1, 'n', 'secret');
+             INSERT INTO prompt_versions(prompt_id, ts, name, text) VALUES('gone', 2, 'n', 'secret2');
+             INSERT INTO prompt_versions(prompt_id, ts, name, text) VALUES('live', 1, 'n', 't');
+             INSERT INTO prompt_versions(prompt_id, ts, name, text) VALUES('binned', 1, 'n', 't');",
+        )
+        .unwrap();
+        assert_eq!(db_sweep_orphan_versions(&conn), 2);
+        let count = |id: &str| -> i64 {
+            conn.query_row("SELECT COUNT(*) FROM prompt_versions WHERE prompt_id = ?1", [id], |r| r.get(0)).unwrap()
+        };
+        assert_eq!(count("gone"), 0);
+        assert_eq!(count("live"), 1);
+        assert_eq!(count("binned"), 1);
+    }
+
+    // sweep_orphan_files locks the store itself, so a caller that still holds a
+    // store guard deadlocks the whole app. Every call site must sit outside a live
+    // `lock(&state)` guard of its own function.
+    #[test]
+    fn sweep_orphan_files_is_never_called_under_the_store_guard() {
+        let src = include_str!("lib.rs");
+        let code: String = src
+            .lines()
+            .map(|l| match l.find("//") {
+                Some(i) => &l[..i],
+                None => l,
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        let starts: Vec<usize> = code.match_indices("\nfn ").map(|(i, _)| i).collect();
+        let mut checked = 0;
+        for (n, &start) in starts.iter().enumerate() {
+            let end = starts.get(n + 1).copied().unwrap_or(code.len());
+            let body = &code[start..end];
+            if body.starts_with("\nfn sweep_orphan_files(") || !body.contains("sweep_orphan_files(") {
+                continue;
+            }
+            let name = body[4..].split('(').next().unwrap_or("?").to_string();
+            // (guard name, brace depth it was declared at)
+            let mut guards: Vec<(String, i32)> = Vec::new();
+            let mut depth = 0i32;
+            for line in body.lines() {
+                let t = line.trim();
+                if let Some(rest) = t.strip_prefix("let ") {
+                    if rest.contains("= lock(&state)") {
+                        let nm = rest.trim_start_matches("mut ").split([' ', ':']).next().unwrap_or("").to_string();
+                        guards.push((nm, depth));
+                    }
+                }
+                if let Some(arg) = t.strip_prefix("drop(") {
+                    let nm = arg.trim_end_matches(';').trim_end_matches(')').to_string();
+                    guards.retain(|(g, _)| *g != nm);
+                }
+                if t.contains("sweep_orphan_files(") {
+                    checked += 1;
+                    assert!(guards.is_empty(), "{name} calls sweep_orphan_files while holding the store lock");
+                }
+                for ch in line.chars() {
+                    match ch {
+                        '{' => depth += 1,
+                        '}' => {
+                            depth -= 1;
+                            guards.retain(|(_, d)| *d <= depth);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+        assert!(checked >= 4, "the scan found only {checked} call sites");
+    }
+
+    #[test]
+    fn taking_a_prompt_out_moves_the_occupant_instead_of_dropping_it() {
+        let mut view = test_view("v");
+        view.cols = 2;
+        view.rows = 1;
+        let key = grid_key(2, 1);
+        view.layouts.entry(key.clone()).or_default().insert("occ".to_string(), [0, 0]);
+        place_taken_out_member(&mut view, &[], "new", [0, 0]).unwrap();
+        let layout = &view.layouts[&key];
+        assert_eq!(layout.get("new"), Some(&[0, 0]));
+        assert_eq!(layout.get("occ"), Some(&[1, 0]), "the occupant keeps a cell");
+    }
+
+    #[test]
+    fn taking_a_prompt_out_is_refused_when_nowhere_is_free() {
+        let mut view = test_view("v");
+        view.cols = 2;
+        view.rows = 1;
+        let key = grid_key(2, 1);
+        view.layouts.entry(key.clone()).or_default().insert("occ".to_string(), [0, 0]);
+        // the second cell belongs to another folder
+        assert!(place_taken_out_member(&mut view, &[[1, 0]], "new", [0, 0]).is_err());
+        let layout = &view.layouts[&key];
+        assert_eq!(layout.get("occ"), Some(&[0, 0]));
+        assert!(layout.get("new").is_none());
+    }
+
+    #[test]
+    fn deleting_a_view_also_drops_its_grid_folders() {
+        let mut settings = Settings {
+            views: vec![test_view("a"), test_view("b")],
+            active_view: "a".to_string(),
+            ..Settings::default()
+        };
+        settings.tile_folders.push(TileFolder {
+            id: "f".to_string(),
+            name: String::new(),
+            color: String::new(),
+            view_id: "a".to_string(),
+            cell: [0, 0],
+            members: vec!["x".to_string(), "y".to_string()],
+        });
+        let prompt_ids = vec!["x".to_string(), "y".to_string()];
+        remove_view_from_settings(&mut settings, "a", &prompt_ids).unwrap();
+        assert!(settings.tile_folders.is_empty(), "the orphan folder must not linger");
+        assert_eq!(settings.active_view, "b");
+        assert!(remove_view_from_settings(&mut settings, "b", &prompt_ids).is_err());
+    }
+
+    #[test]
+    fn a_failed_settings_save_rolls_the_tag_rename_back_on_disk_too() {
+        let mut p = test_prompt("p1");
+        p.tags = vec!["Old".to_string()];
+        let mut store = secret_test_store(vec![p]);
+        store.settings.tag_colors.insert("old".to_string(), "#111111".to_string());
+        let mut disk: Vec<Vec<String>> = Vec::new();
+        let result = rename_tag_in_store(
+            &mut store,
+            "old",
+            "New",
+            "new",
+            &mut |st| {
+                disk.push(st.prompts[0].tags.clone());
+                true
+            },
+            &mut |_| false,
+        );
+        assert!(result.is_err());
+        assert_eq!(store.prompts[0].tags, vec!["Old".to_string()]);
+        assert_eq!(store.settings.tag_colors.get("old").map(String::as_str), Some("#111111"));
+        assert_eq!(disk.last().unwrap(), &vec!["Old".to_string()], "the last write to disk is the original");
+        assert_eq!(disk.len(), 2);
+    }
+
+    #[test]
+    fn a_palette_edit_remaps_tag_colors_too() {
+        let mut colors: HashMap<String, String> = HashMap::new();
+        colors.insert("a".to_string(), "#old".to_string());
+        colors.insert("b".to_string(), "#keep".to_string());
+        let map: HashMap<String, String> = [("#old".to_string(), "#new".to_string())].into_iter().collect();
+        assert!(remap_tag_colors(&mut colors, &map));
+        assert_eq!(colors["a"], "#new");
+        assert_eq!(colors["b"], "#keep");
+        assert!(!remap_tag_colors(&mut colors, &map), "a second pass changes nothing");
+    }
+
+    #[test]
+    fn two_staged_backups_never_share_one_file() {
+        let root = std::env::temp_dir().join(format!("{}-test-stage-unique", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let (x, y) = (root.join("x.db"), root.join("y.db"));
+        full_schema_db(&x, "x")
+            .execute("INSERT INTO meta(key, value) VALUES('who', 'X')", [])
+            .unwrap();
+        full_schema_db(&y, "y")
+            .execute("INSERT INTO meta(key, value) VALUES('who', 'Y')", [])
+            .unwrap();
+        let p1 = stage_and_validate_backup(&x, &root).unwrap();
+        let p2 = stage_and_validate_backup(&y, &root).unwrap();
+        assert_ne!(p1, p2);
+        let who: String = Connection::open(&p1)
+            .unwrap()
+            .query_row("SELECT value FROM meta WHERE key = 'who'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(who, "X", "the first staged copy is still the first backup");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn stale_staged_restores_are_swept_but_other_files_stay() {
+        let root = std::env::temp_dir().join(format!("{}-test-stage-sweep", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        for name in ["data.db.restoring", "data.db.restoring-abc", "data.db", "data.db.locked.bak"] {
+            std::fs::write(root.join(name), b"x").unwrap();
+        }
+        remove_stale_staged_restores(&root, Duration::from_secs(3600));
+        assert!(root.join("data.db.restoring").exists(), "a young file is left alone");
+        remove_stale_staged_restores(&root, Duration::ZERO);
+        assert!(!root.join("data.db.restoring").exists());
+        assert!(!root.join("data.db.restoring-abc").exists());
+        assert!(root.join("data.db").exists());
+        assert!(root.join("data.db.locked.bak").exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    fn long_child() -> std::process::Command {
+        use std::os::windows::process::CommandExt;
+        let mut cmd = std::process::Command::new("cmd");
+        cmd.args(["/c", "ping", "-n", "30", "127.0.0.1"]);
+        cmd.stdout(std::process::Stdio::null());
+        cmd.creation_flags(CREATE_NO_WINDOW);
+        cmd
+    }
+
+    fn exits_within(child: &mut std::process::Child, ms: u64) -> bool {
+        let deadline = std::time::Instant::now() + Duration::from_millis(ms);
+        while std::time::Instant::now() < deadline {
+            if child.try_wait().unwrap().is_some() {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        false
+    }
+
+    #[test]
+    fn a_child_in_the_job_dies_when_the_job_handle_closes() {
+        let job = KillOnCloseJob::new().expect("a job object");
+        let mut child = spawn_in_job(&mut long_child(), Some(&job)).unwrap();
+        assert!(child.try_wait().unwrap().is_none(), "the child is running");
+        drop(job);
+        let died = exits_within(&mut child, 1000);
+        let _ = child.kill();
+        assert!(died, "closing the job must end the child");
+    }
+
+    #[test]
+    fn a_child_outside_any_job_survives_the_same_drop() {
+        let job = KillOnCloseJob::new().expect("a job object");
+        let mut child = spawn_in_job(&mut long_child(), None).unwrap();
+        drop(job);
+        let died = exits_within(&mut child, 600);
+        let _ = child.kill();
+        let _ = child.wait();
+        assert!(!died, "without the job nothing ends the child");
+    }
+
+    #[test]
+    fn the_export_journal_sweeps_only_dead_staged_exports_of_this_host() {
+        let root = std::env::temp_dir().join(format!("{}-test-export-journal", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let dead = root.join(".export-4000000001-123.mp4");
+        let alive = root.join(".export-4000000002-456.mp4");
+        let foreign = root.join("precious.docx");
+        let other_host = root.join(".export-4000000003-789.mp4");
+        for f in [&dead, &alive, &foreign, &other_host] {
+            std::fs::write(f, b"x").unwrap();
+        }
+        let journal = root.join("export-staging.txt");
+        let host = local_host_name();
+        let mut lines: Vec<String> = [(&dead, 4000000001u32), (&alive, 4000000002), (&foreign, 1)]
+            .iter()
+            .map(|(f, pid)| journal_line(&host, *pid, f))
+            .collect();
+        let other_line = journal_line("OTHER-PC", 4000000003, &other_host);
+        lines.push(other_line.clone());
+        journal_write(&journal, &lines);
+        sweep_stale_exports(&journal, &host, |pid| pid == 4000000002);
+        assert!(!dead.exists(), "a staged file of a dead process is removed");
+        assert!(alive.exists(), "a live process keeps its file");
+        assert!(foreign.exists(), "a journal line that is not a staged export name is never deleted");
+        assert!(other_host.exists(), "another host's staged file is never deleted");
+        let left = journal_lines(&journal);
+        assert_eq!(left, vec![journal_line(&host, 4000000002, &alive), other_line]);
+        let mine = root.join(format!(".export-{}-1.mp4", std::process::id()));
+        export_journal_add(&journal, &mine);
+        assert_eq!(journal_lines(&journal).len(), 3);
+        export_journal_remove(&journal, &mine);
+        assert_eq!(journal_lines(&journal).len(), 2, "only this process's own line is removed");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_journal_path_must_be_local_and_absolute() {
+        assert!(is_local_absolute_path(r"C:\x\.export-1-1.mp4"));
+        assert!(is_local_absolute_path(r"C:/x/.export-1-1.mp4"));
+        assert!(!is_local_absolute_path(r"\\host\share\.export-1-1.mp4"));
+        assert!(!is_local_absolute_path(r"//host/share/.export-1-1.mp4"));
+        assert!(!is_local_absolute_path(r"\\?\UNC\host\share\.export-1-1.mp4"));
+        assert!(!is_local_absolute_path(r".export-1-1.mp4"));
+        assert!(!is_local_absolute_path(r"sub\.export-1-1.mp4"));
+        assert!(!is_local_absolute_path(r"C:.export-1-1.mp4"));
+    }
+
+    #[test]
+    fn a_staged_restore_copy_is_stamped_with_now() {
+        let root = std::env::temp_dir().join(format!("{}-test-stage-mtime", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let src = root.join("old.db");
+        drop(full_schema_db(&src, "x"));
+        let old = SystemTime::now() - Duration::from_secs(86400);
+        std::fs::OpenOptions::new().write(true).open(&src).unwrap().set_modified(old).unwrap();
+        let staged = stage_and_validate_backup(&src, &root).unwrap();
+        let age = std::fs::metadata(&staged).unwrap().modified().unwrap().elapsed().unwrap_or_default();
+        assert!(age < Duration::from_secs(60), "a fresh staged copy must not look stale");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    fn txt_round_trip(text: &str) -> ImportedPrompt {
+        let mut p = test_prompt("p");
+        p.text = text.to_string();
+        let mut data = parse_txt(&to_txt(&[p]));
+        assert_eq!(data.prompts.len(), 1, "one block in, one block out: {text:?}");
+        data.prompts.remove(0)
+    }
+
+    #[test]
+    fn a_body_line_that_looks_like_metadata_survives_the_txt_round_trip() {
+        for text in [
+            "a\n@file x.js\nb",
+            "@tags x",
+            "tail\n@color red",
+            "x\n@notes hi\n@style a 1",
+            r"\@file keeps its backslash",
+            "a\n\\\\@file two",
+            r"path \\server\share
+\begin{x}",
+        ] {
+            let got = txt_round_trip(text);
+            assert_eq!(got.text, text);
+            assert_eq!(got.file_path, "");
+            assert!(got.tags.is_empty());
+            assert_eq!(got.color, "");
+        }
+    }
+
+    #[test]
+    fn a_markdown_rule_inside_a_prompt_survives_the_txt_round_trip() {
+        let got = txt_round_trip("x\n\n---\n\ny");
+        assert_eq!(got.text, "x\n\n---\n\ny");
+        let mut p = test_prompt("q");
+        p.text = "x\n\n---\n\ny".to_string();
+        let data = parse_txt(&to_txt(&[p, test_prompt("r")]));
+        assert_eq!(data.prompts.len(), 2);
+    }
+
+    #[test]
+    fn a_single_text_holding_the_variant_marker_is_not_split_on_import() {
+        let got = txt_round_trip("one\n<!-- next -->\ntwo");
+        assert_eq!(got.text, "one\n<!-- next -->\ntwo");
+        assert!(got.variants.is_empty());
+        let joined = join_variants("one\n<!-- next -->\ntwo", &[]);
+        assert_eq!(split_variants(&joined), ("one\n<!-- next -->\ntwo".to_string(), Vec::new()));
+    }
+
+    #[test]
+    fn real_metadata_still_round_trips_beside_an_escaped_body() {
+        let mut p = test_prompt("p");
+        p.text = "line\n@file inside".to_string();
+        p.file_path = r"C:\docs\a.txt".to_string();
+        p.tags = vec!["t1".to_string(), "t2".to_string()];
+        p.color = "#112233".to_string();
+        let got = parse_txt(&to_txt(&[p])).prompts.remove(0);
+        assert_eq!(got.text, "line\n@file inside");
+        assert_eq!(got.file_path, r"C:\docs\a.txt");
+        assert_eq!(got.tags, vec!["t1".to_string(), "t2".to_string()]);
+        assert_eq!(got.color, "#112233");
+    }
+
+    #[test]
+    fn an_older_txt_export_with_trailing_metadata_still_imports() {
+        let got = parse_txt("### Old\nbody line\n@color #abcdef\n@file D:\\x.txt").prompts.remove(0);
+        assert_eq!(got.text, "body line");
+        assert_eq!(got.color, "#abcdef");
+        assert_eq!(got.file_path, r"D:\x.txt");
+    }
+
+    // An append that lands between the scrub's read and its rename used to be
+    // overwritten by the rewritten copy: the read has to happen under the same lock.
+    #[test]
+    fn strip_user_path_lines_keeps_a_line_appended_while_it_waits_for_the_lock() {
+        let path = std::env::temp_dir().join(format!("ps-crashlog-scrub-race-{}", std::process::id()));
+        fs::write(&path, "[t=1 v1.0] panicked at C:\\Users\\example\\lib.rs:42\n").unwrap();
+        let held = CrashLogLock::acquire(&path);
+        let worker = {
+            let path = path.clone();
+            std::thread::spawn(move || strip_user_path_lines(&path))
+        };
+        std::thread::sleep(Duration::from_millis(100));
+        {
+            use std::io::Write;
+            let mut f = fs::OpenOptions::new().append(true).open(&path).unwrap();
+            f.write_all(b"[t=2 v1.0] LATE\n").unwrap();
+        }
+        drop(held);
+        worker.join().unwrap();
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(text.contains("LATE"), "the appended line must survive the scrub: {text:?}");
+        assert!(!text.to_ascii_lowercase().contains("\\users\\"), "the path is still scrubbed: {text:?}");
+        let _ = fs::remove_file(&path);
+    }
+
+    // A standalone restore in a folder another machine holds locked must be refused
+    // with exit 3 and leave the store alone (the check used to sit behind the
+    // restore arm, which returned before reaching it).
+    fn restore_fixture(name: &str) -> (PathBuf, String) {
+        let dir = ddlock_test_dir(name);
+        {
+            let live = db_conn_at(&dir).expect("live store");
+            live.execute("INSERT INTO meta(key, value) VALUES('marker', 'live')", []).unwrap();
+        }
+        let backup_name = "2024-01-01_00-00-00".to_string();
+        let folder = dir.join("backups").join(&backup_name);
+        fs::create_dir_all(&folder).unwrap();
+        {
+            let snap = db_conn_at(&folder).expect("snapshot store");
+            snap.execute("INSERT INTO meta(key, value) VALUES('marker', 'backup')", []).unwrap();
+        }
+        (dir, backup_name)
+    }
+
+    fn marker_of(dir: &Path) -> String {
+        let conn = Connection::open(dir.join("data.db")).unwrap();
+        conn.query_row("SELECT value FROM meta WHERE key = 'marker'", [], |r| r.get(0)).unwrap()
+    }
+
+    #[test]
+    fn a_standalone_restore_is_refused_while_another_machine_holds_the_folder() {
+        let _g = DdlockGuard::capture();
+        let (dir, name) = restore_fixture("restore-locked");
+        write_data_dir_lock(
+            &data_dir_lock_path(&dir),
+            &DataDirLockInfo { host: "OTHER-PC".to_string(), pid: 999, seen: unix_now() },
+        );
+        let argv: Vec<String> = ["backup", "restore", &name, "--yes"].iter().map(|s| s.to_string()).collect();
+        let code = cli::run_standalone_with(|| dir.clone(), &argv, &dir);
+        assert_eq!(code, 3);
+        assert_eq!(marker_of(&dir), "live", "the locked store must be untouched");
+        assert_eq!(fs::read_dir(dir.join("backups")).unwrap().count(), 1, "no safety snapshot either");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_standalone_restore_of_a_free_folder_swaps_the_database_and_exits_zero() {
+        let _g = DdlockGuard::capture();
+        let (dir, name) = restore_fixture("restore-free");
+        let argv: Vec<String> = ["backup", "restore", &name, "--yes"].iter().map(|s| s.to_string()).collect();
+        let code = cli::run_standalone_with(|| dir.clone(), &argv, &dir);
+        assert_eq!(code, 0);
+        assert_eq!(marker_of(&dir), "backup");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // The answer has to be on the wire before the relaunch: a restart inside the
+    // call drops the connection and the caller reads a restore that worked as a failure.
+    #[test]
+    fn the_answer_is_written_before_the_restart_runs() {
+        let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
+        let order = std::sync::Mutex::new(Vec::<&str>::new());
+        rt.block_on(cli::answer_then_restart(
+            async { order.lock().unwrap().push("answer") },
+            true,
+            || order.lock().unwrap().push("restart"),
+        ));
+        assert_eq!(*order.lock().unwrap(), vec!["answer", "restart"]);
+        order.lock().unwrap().clear();
+        rt.block_on(cli::answer_then_restart(
+            async { order.lock().unwrap().push("answer") },
+            false,
+            || order.lock().unwrap().push("restart"),
+        ));
+        assert_eq!(*order.lock().unwrap(), vec!["answer"], "no restart unless one is due");
+    }
+
+    fn recall_rects(dpi_for_wishes: f64, dpi_on_screen: f64) -> Vec<Rect> {
+        let mut settings = Settings::default();
+        for id in ["a", "b", "c"] {
+            settings.floating.insert(id.to_string(), Pos::default());
+        }
+        settings.float_folders.push(FloatFolder {
+            id: "f".to_string(),
+            name: String::new(),
+            pos: Pos::default(),
+            scale: 1.0,
+            members: vec!["a".to_string(), "b".to_string()],
+        });
+        let work = Rect { x: 0.0, y: 0.0, w: 1920.0, h: 1080.0 };
+        let (_ids, wishes) = recall_wishes(&settings, &[], work, dpi_for_wishes);
+        let spots = spread_free_positions(&wishes, &[], work);
+        // What the windows really occupy: the logical box times the screen's factor.
+        let (_ids, real) = recall_wishes(&settings, &[], work, dpi_on_screen);
+        spots
+            .iter()
+            .zip(real.iter())
+            .map(|((x, y), r)| Rect { x: *x, y: *y, w: r.w, h: r.h })
+            .collect()
+    }
+
+    fn any_overlap(rects: &[Rect]) -> bool {
+        for (i, a) in rects.iter().enumerate() {
+            for b in &rects[i + 1..] {
+                if a.x < b.x + b.w - 0.5 && b.x < a.x + a.w - 0.5 && a.y < b.y + b.h - 0.5 && b.y < a.y + a.h - 0.5 {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    #[test]
+    fn recalled_windows_do_not_overlap_on_a_scaled_screen() {
+        assert!(!any_overlap(&recall_rects(1.5, 1.5)), "boxes sized for the screen spread without overlap");
+        assert!(any_overlap(&recall_rects(1.0, 1.5)), "boxes sized without the factor overlap once drawn at it");
+    }
+
+    // The elevated script must reach PowerShell on its own command line, never as a
+    // file a same-user process could swap after the consent prompt.
+    #[test]
+    fn the_elevated_script_travels_as_an_encoded_command_and_decodes_exactly() {
+        use base64::Engine;
+        let script = "$ErrorActionPreference = 'Stop'\r\ntry { Add-WindowsCapability -Online -Name 'Language.OCR~~~de-DE~0.0.1.0' } catch { }\r\n";
+        let params = ocr::elevated_params(script).unwrap();
+        assert!(params.contains("-EncodedCommand "));
+        assert!(!params.contains("ExecutionPolicy") && !params.contains("WindowStyle"), "no malware-looking switches: {params}");
+        assert!(!params.contains("-File"), "no script file is referenced: {params}");
+        assert!(!params.contains("-Command "), "no inline command either: {params}");
+        let payload = params.rsplit("-EncodedCommand ").next().unwrap();
+        let raw = base64::engine::general_purpose::STANDARD.decode(payload).unwrap();
+        let units: Vec<u16> = raw.chunks(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+        assert_eq!(String::from_utf16(&units).unwrap(), script);
+        assert!(ocr::elevated_params(&"x".repeat(40_000)).is_err(), "an oversized script is refused, not truncated");
+    }
+
+    #[test]
+    fn a_failed_window_capture_brings_the_overlay_back() {
+        let shown = std::cell::Cell::new(0);
+        let failed: Result<(), String> = Err("ocr-language-missing".to_string());
+        let out = show_overlay_again_on_error(failed, || shown.set(shown.get() + 1));
+        assert_eq!(out, Err("ocr-language-missing".to_string()), "the error is passed on unchanged");
+        assert_eq!(shown.get(), 1);
+        let fine: Result<u8, String> = Ok(7);
+        assert_eq!(show_overlay_again_on_error(fine, || shown.set(shown.get() + 1)), Ok(7));
+        assert_eq!(shown.get(), 1, "a finished capture leaves the overlay alone");
+    }
+
+    #[test]
+    fn crop_rgba_keeps_the_requested_right_and_bottom_edge_when_it_starts_off_the_image() {
+        let img = image::RgbaImage::new(100, 100);
+        let c = crop_rgba(&img, -10, 0, 50, 10).unwrap();
+        assert_eq!(c.dimensions(), (40, 10), "the 10 px left of the image are cut off, not added on the right");
+        let c = crop_rgba(&img, 0, -5, 20, 30).unwrap();
+        assert_eq!(c.dimensions(), (20, 25));
+        let c = crop_rgba(&img, 90, 90, 50, 50).unwrap();
+        assert_eq!(c.dimensions(), (10, 10), "past the far edge is still clamped");
+        assert!(crop_rgba(&img, -60, 0, 50, 10).is_none(), "a rect wholly outside is nothing");
+    }
+
+    // A stand-in for ffmpeg that prints nothing and just sleeps, like a real one
+    // stuck reading a stalled source.
+    fn silent_stub(dir: &Path) -> PathBuf {
+        let src = dir.join("stub.rs");
+        fs::write(&src, "fn main() { std::thread::sleep(std::time::Duration::from_secs(30)); }").unwrap();
+        let exe = dir.join("stub.exe");
+        let status = std::process::Command::new("rustc")
+            .arg(&src)
+            .arg("-o")
+            .arg(&exe)
+            .arg("-Copt-level=0")
+            .status()
+            .expect("rustc is on the path while tests run");
+        assert!(status.success());
+        exe
+    }
+
+    #[test]
+    fn a_cancel_stops_an_ffmpeg_that_prints_nothing() {
+        let dir = std::env::temp_dir().join(format!("{}-test-silent-ffmpeg", brand::SLUG));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let stub = silent_stub(&dir);
+        let cancel = std::sync::Arc::new(AtomicBool::new(false));
+        let flipper = {
+            let cancel = cancel.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(200));
+                cancel.store(true, Ordering::SeqCst);
+            })
+        };
+        let started = std::time::Instant::now();
+        let result = run_ffmpeg_to_staged(
+            &stub,
+            &dir.join("in.mp4"),
+            &dir.join("out.mp4"),
+            &[],
+            &[],
+            || cancel.load(Ordering::SeqCst),
+            |_| {},
+        );
+        let took = started.elapsed();
+        flipper.join().unwrap();
+        assert_eq!(result.unwrap_err(), "cancelled");
+        assert!(took < Duration::from_secs(2), "the cancel must not wait for ffmpeg's next line: {took:?}");
+        let _ = fs::remove_dir_all(&dir);
+    }
 }
-
-
