@@ -36212,6 +36212,24 @@ fn sync_seen_record_own_write(path: &Path) {
     sync_seen_lock().insert(sync_seen_key(path), SyncSeen { stamp, handled: true });
 }
 
+// The files this process knows belong to a prompt of this library: written for one,
+// or read back as one. Only these may ever be swept as orphans. A file whose id the
+// app has never known (another machine's folder the user just pointed us at, a file
+// made or renamed by hand, one that arrived a moment ago) is not ours to delete, even
+// when it carries our header: the poll has to import it first.
+static SYNC_KNOWN: std::sync::OnceLock<Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
+
+fn sync_known_lock() -> std::sync::MutexGuard<'static, std::collections::HashSet<String>> {
+    SYNC_KNOWN
+        .get_or_init(|| Mutex::new(std::collections::HashSet::new()))
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+}
+
+fn sync_known_note(path: &Path) {
+    sync_known_lock().insert(sync_seen_key(path));
+}
+
 // Whether the file changed since the app last wrote or read it. `None` (never seen)
 // is deliberately NOT a conflict: on a fresh start every file is unknown, and
 // claiming a conflict there would litter the folder with copies of itself.
@@ -36370,6 +36388,14 @@ fn sync_write_all_impl(app: &AppHandle, prompts: &[Prompt], settings: &Settings)
     let prompts = strip_data_dir_prefix(&sync_source_dir, data_dir_is_demo(app, &sync_source_dir), prompts);
     let prompts = prompts.as_ref();
     let dir = sync_dir_path(app, settings);
+    sync_write_dir(&dir, prompts, settings)
+}
+
+// The file half of sync_write_all_impl: one call writes every eligible prompt into
+// `dir`, then sweeps what this process knows to be orphaned. Free of any window or
+// state access so a test can run it against a temp folder.
+fn sync_write_dir(dir: &Path, prompts: &[Prompt], settings: &Settings) -> usize {
+    let dir = dir.to_path_buf();
     if let Err(e) = fs::create_dir_all(&dir) {
         append_crash_log(&format!("prompt-sync: the sync folder could not be created: {e}"));
         return prompts.iter().filter(|p| sync_eligible(p)).count().max(1);
@@ -36425,6 +36451,7 @@ fn sync_write_all_impl(app: &AppHandle, prompts: &[Prompt], settings: &Settings)
                 append_crash_log(&format!("prompt-sync: writing {filename} failed"));
             }
         }
+        sync_known_note(&path);
         wanted.insert(filename);
     }
     sync_sweep_orphans(&dir, &wanted);
@@ -36536,11 +36563,16 @@ fn sync_sweep_orphans(dir: &Path, wanted: &std::collections::HashSet<String>) {
             continue;
         }
         let path = e.path();
+        // Never a file the app has not known before (see SYNC_KNOWN).
+        if !sync_known_lock().contains(&sync_seen_key(&path)) {
+            continue;
+        }
         let ours = read_text_capped(&path, MAX_SYNC_MD_BYTES)
             .and_then(|c| parse_frontmatter(&c))
             .is_some_and(|(fields, _)| md_is_ours(&fields));
         if ours {
             let _ = fs::remove_file(&path);
+            sync_known_lock().remove(&sync_seen_key(&path));
         }
     }
 }
@@ -36731,6 +36763,9 @@ fn sync_poll_once(app: &AppHandle) {
         }
         files += 1;
         let key = sync_seen_key(&path);
+        if snapshot.iter().any(|p| p.id == stem) {
+            sync_known_note(&path);
+        }
         present.insert(key.clone());
         let Some(stamp) = sync_stamp_of(&path) else { continue };
         // Metadata only, for every file in the folder: a folder whose files have not
@@ -37042,6 +37077,21 @@ fn start_sync_poll(app: AppHandle) {
         return; // already running - set_ui_flag calls this again on every activation
     }
     tauri::async_runtime::spawn(async move {
+        // Learn which files on disk belong to prompts we already have before the
+        // first save can sweep anything: a prompt deleted in the first seconds of a
+        // session must still take its file along.
+        if let Some(state) = app.try_state::<Db>() {
+            let (dir, ids) = {
+                let s = lock(&state);
+                (sync_dir_path(&app, &s.settings), s.prompts.iter().map(|p| p.id.clone()).collect::<Vec<_>>())
+            };
+            for id in ids.iter().filter(|id| sync_safe_id(id)) {
+                let path = dir.join(format!("{id}.md"));
+                if path.is_file() {
+                    sync_known_note(&path);
+                }
+            }
+        }
         loop {
             let Some(state) = app.try_state::<Db>() else {
                 sync_poll_release();
@@ -41092,6 +41142,9 @@ mod tests {
         fs::write(&kept, prompt_to_md(&sync_test_prompt(), &SyncPlacement::default())).unwrap();
         fs::write(dir.join("AGENTS.md"), sync_agents_md()).unwrap();
 
+        sync_known_note(&mine);
+        sync_known_note(&theirs);
+        sync_known_note(&obsidian);
         let mut wanted = std::collections::HashSet::new();
         wanted.insert("p_live.md".to_string());
         sync_sweep_orphans(&dir, &wanted);
@@ -41822,6 +41875,8 @@ mod tests {
         write_ours(&dir, "p1 - Copy.md", "the user's own copy");
         write_ours(&dir, "gone.md", "belongs to a prompt that no longer exists");
         let wanted: std::collections::HashSet<String> = ["p1.md".to_string()].into_iter().collect();
+        sync_known_note(&dir.join("p1 - Copy.md"));
+        sync_known_note(&dir.join("gone.md"));
         sync_sweep_orphans(&dir, &wanted);
         assert!(dir.join("p1.md").exists(), "a live prompt's file stays");
         assert!(dir.join("p1 - Copy.md").exists(), "a name this app could never have written is never swept");
@@ -41850,6 +41905,33 @@ mod tests {
         assert!(!changed);
         assert_eq!(store.prompts[0].text, "CIPHERTEXT");
         assert!(store.prompts[0].secret);
+    }
+
+    #[test]
+    fn sync_write_leaves_a_file_the_app_has_never_known() {
+        let dir = sync_tmp_dir("foreign-file");
+        write_ours(&dir, "foreign.md", "another machine's prompt, not imported yet");
+        let mut keep = sync_test_prompt();
+        keep.id = "mine".into();
+        sync_write_dir(&dir, &[keep], &Settings::default());
+        assert!(dir.join("foreign.md").exists(), "a file the app never knew must survive the sweep");
+        assert!(dir.join("mine.md").exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sync_write_still_sweeps_the_file_of_a_prompt_that_was_deleted() {
+        let dir = sync_tmp_dir("deleted-file");
+        let mut a = sync_test_prompt();
+        a.id = "a".into();
+        let mut b = sync_test_prompt();
+        b.id = "b".into();
+        sync_write_dir(&dir, &[a.clone(), b], &Settings::default());
+        assert!(dir.join("b.md").exists());
+        sync_write_dir(&dir, &[a], &Settings::default());
+        assert!(!dir.join("b.md").exists(), "a deleted prompt takes its own file along");
+        assert!(dir.join("a.md").exists());
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
