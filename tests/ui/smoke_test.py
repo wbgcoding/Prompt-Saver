@@ -16653,6 +16653,31 @@ def main():
       }
     }
 """)
+        failed += ar_probe('ba592a', 'screenshot editor: undoing a committed crop clears the crop box, export is the full image', 'index', '1000x780', '', ba_common + r"""
+    if (!(await baOpen(''))) { errs.push('592: the editor did not open'); }
+    else {
+      await baTool('crop'); await baDrag(60, 30, 140, 90);
+      baKey('Enter'); await sleep(80);
+      let img = await baExport();
+      if (!img || img.w !== 80 || img.h !== 60) errs.push('592: fixture: the crop did not export 80x60, got ' + (img ? img.w + 'x' + img.h : 'nothing'));
+      await baUndo();
+      img = await baExport();
+      if (!img || img.w !== BAW || img.h !== BAH) errs.push('592: after undo the export is ' + (img ? img.w + 'x' + img.h : 'nothing') + ', expected the full ' + BAW + 'x' + BAH);
+      if (!document.getElementById('snip-edit-undo').disabled) errs.push('592: exporting pushed the undone crop back onto the undo stack');
+      await baRedo();
+      img = await baExport();
+      if (!img || img.w !== 80 || img.h !== 60) errs.push('592: redo did not bring the crop back, export is ' + (img ? img.w + 'x' + img.h : 'nothing'));
+    }
+""")
+        failed += ar_probe('ba592b', 'screenshot editor: a resize keeps the crop box and the exported crop in step', 'index', '1000x780', '', ba_common + r"""
+    if (!(await baOpen(''))) { errs.push('592: the editor did not open'); }
+    else {
+      await baTool('crop'); await baDrag(100, 60, 180, 110);
+      await baScale50();
+      const img = await baExport();
+      if (!img || img.w !== 40 || img.h !== 25) errs.push('592: after a 50 percent resize the crop should export 40x25, got ' + (img ? img.w + 'x' + img.h : 'nothing'));
+    }
+""")
         # ---- main window findings: generated block end ----
         print("PASS" if not failed else f"{failed} problem(s)")
         return 1 if failed else 0

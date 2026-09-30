@@ -18060,6 +18060,7 @@ function bind() {
     snipEditLiveCv.width = targetW;
     snipEditLiveCv.height = targetH;
     snipEditPushOp(op);
+    snipEditSyncCropFromOps(); // the crop op was rescaled above, the editable box must follow
     snipEditFit();
     return true;
   }
@@ -18094,6 +18095,7 @@ function bind() {
     SE.lastNudged = null;
     snipEditUpdateNudgeHint();
     snipEditRedrawBase();
+    snipEditSyncCropFromOps();
     snipEditUpdateUndoRedoButtons();
   }
   function snipEditRedo() {
@@ -18112,6 +18114,7 @@ function bind() {
     SE.lastNudged = null;
     snipEditUpdateNudgeHint();
     snipEditRedrawBase();
+    snipEditSyncCropFromOps();
     snipEditUpdateUndoRedoButtons();
   }
   // Shown only while something is nudgeable -- the arrow keys have no other
@@ -18200,6 +18203,15 @@ function bind() {
     }
     snipEditLiveCtx.restore();
     snipEditDrawGuides();
+  }
+  // While the crop tool is active SE.cropRect is the editable copy of the crop op;
+  // whatever changes SE.ops behind its back (undo, redo, a resize) must pull it
+  // back in line, or the next export commits the stale rectangle again.
+  function snipEditSyncCropFromOps() {
+    if (SE.tool !== "crop") return;
+    const existing = SE.ops.find((o) => o.tool === "crop");
+    SE.cropRect = existing ? { ...existing.rect } : null;
+    snipEditDrawCropOverlayLive();
   }
   function snipEditCropPointerDown(pt) {
     const r = SE.cropRect;
@@ -18699,11 +18711,7 @@ function bind() {
     // A grab cursor as soon as the Hand tool is picked, not only once a
     // drag actually starts -- the same affordance Space-hold already gets.
     snipEditWrap.classList.toggle("panning", tool === "hand");
-    if (tool === "crop") {
-      const existing = SE.ops.find((o) => o.tool === "crop");
-      SE.cropRect = existing ? { ...existing.rect } : null;
-      snipEditDrawCropOverlayLive();
-    }
+    snipEditSyncCropFromOps();
     snipEditRenderToolButtons();
     snipEditRenderContext();
     snipEditRedrawBase(); // toggles the crop-dim pass on/off for the new tool
