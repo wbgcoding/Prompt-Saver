@@ -10876,7 +10876,7 @@ fn list_backups_impl_at(dir: &std::path::Path) -> Vec<BackupInfo> {
         .into_iter()
         .flatten()
         .flatten()
-        .filter(|e| e.path().is_dir())
+        .filter(|e| e.path().is_dir() && backup_db_file(&e.path()).is_some())
         .map(|e| {
             let name = e.file_name().to_string_lossy().to_string();
             let size = backup_db_file(&e.path())
@@ -10981,11 +10981,13 @@ fn backups_to_drop(names: &[String], keep: usize, gfs: Option<&GfsConfig>) -> Ve
 // snapshots the same way, working from an already-resolved folder instead of
 // an AppHandle.
 fn rotate_backups_at(dir: &std::path::Path, keep: usize, gfs: Option<GfsConfig>) {
+    // Only folders holding a snapshot count: one still being packed (or left
+    // half-made by a quit) must neither use up a slot nor push a good one out.
     let mut names: Vec<String> = fs::read_dir(dir)
         .into_iter()
         .flatten()
         .flatten()
-        .filter(|e| e.path().is_dir())
+        .filter(|e| e.path().is_dir() && backup_db_file(&e.path()).is_some())
         .map(|e| e.file_name().to_string_lossy().to_string())
         .collect();
     names.sort(); // oldest first (names are timestamps → chronological)
@@ -11050,6 +11052,39 @@ fn auto_backup_tick(app: &AppHandle) {
                 append_crash_log(&format!("automatic backup failed: {e}"));
                 let _ = app.emit_to("main", "backup-failed", e);
             }
+        }
+    }
+}
+
+// Start-up sweep of what a quit or crash mid-pack leaves behind: the raw copy and
+// the half-written archive, and folders that never got a snapshot. Anything newer
+// than `min_age` may belong to a backup running right now and is left alone, and
+// a folder that holds a snapshot is never removed (only its stray temp files).
+fn cleanup_incomplete_backups(root: &std::path::Path, min_age: Duration) {
+    let old_enough = |p: &std::path::Path| {
+        fs::metadata(p)
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.elapsed().ok())
+            .is_some_and(|age| age >= min_age)
+    };
+    for entry in fs::read_dir(root).into_iter().flatten().flatten() {
+        let folder = entry.path();
+        if !folder.is_dir() || !valid_backup_name(&entry.file_name().to_string_lossy()) {
+            continue;
+        }
+        if backup_db_file(&folder).is_some() {
+            for stray in ["data.db.tmp", "data.db.gz.part"] {
+                let f = folder.join(stray);
+                if f.exists() && old_enough(&f) {
+                    let _ = fs::remove_file(&f);
+                }
+            }
+            continue;
+        }
+        let newest_inside_is_old = fs::read_dir(&folder).into_iter().flatten().flatten().all(|e| old_enough(&e.path()));
+        if old_enough(&folder) && newest_inside_is_old {
+            let _ = fs::remove_dir_all(&folder);
         }
     }
 }
@@ -11288,7 +11323,7 @@ fn newest_backup_age(app: &AppHandle) -> Option<u64> {
         .into_iter()
         .flatten()
         .flatten()
-        .filter(|e| e.path().is_dir())
+        .filter(|e| e.path().is_dir() && backup_db_file(&e.path()).is_some())
         .filter_map(|e| stamp_secs(&e.file_name().to_string_lossy()))
         .max()?;
     Some((now - newest).max(0) as u64)
@@ -30541,27 +30576,35 @@ fn registry_owner(command: Option<&str>, this_exe: &str, exists: impl Fn(&str) -
     }
 }
 
-// What start-up does to bring an entry in line with the stored setting: Some(true)
-// writes it, Some(false) removes it, None leaves it.
-fn reconcile_action(setting_on: bool, owner: RegistryOwner) -> Option<bool> {
-    match (setting_on, owner) {
-        (true, RegistryOwner::OtherExe) => None,
-        (true, _) => Some(true),
-        (false, RegistryOwner::ThisExe) => Some(false),
-        (false, _) => None,
+// Start-up only ever writes or refreshes an entry whose setting is on, and only
+// when it is missing or points at this exe or one that no longer exists. It never
+// removes anything: a restart into default settings (demo mode, a missing or
+// unreadable settings row) must not delete the user's real registrations, and
+// removal belongs to the switches. Demo mode skips the whole pass.
+fn boot_reconcile_writes(setting_on: bool, demo: bool, owner: RegistryOwner) -> bool {
+    setting_on && !demo && owner != RegistryOwner::OtherExe
+}
+
+// Turning a switch off must not remove an entry another copy (portable versus
+// installed) registered; the setting still turns off.
+fn skip_registry_removal(enabled: bool, owner: RegistryOwner) -> bool {
+    !enabled && owner == RegistryOwner::OtherExe
+}
+
+fn current_registry_owner(command: Option<&str>) -> RegistryOwner {
+    match std::env::current_exe() {
+        Ok(exe) => registry_owner(command, &exe.display().to_string(), |p| std::path::Path::new(p).exists()),
+        Err(_) => RegistryOwner::Missing,
     }
 }
 
-// Start-up: make autostart and the address scheme match the stored settings,
-// touching only entries that are this program's own.
-fn reconcile_windows_state(autostart_on: bool, start_min: bool, url_scheme_on: bool) {
-    let Ok(exe) = std::env::current_exe() else { return };
-    let exe = exe.display().to_string();
-    let exists = |p: &str| std::path::Path::new(p).exists();
+// Start-up: refresh autostart and the address scheme registrations that the
+// stored settings ask for.
+fn reconcile_windows_state(autostart_on: bool, start_min: bool, url_scheme_on: bool, demo: bool) {
     match autostart_command() {
         Ok(cmd) => {
-            if let Some(on) = reconcile_action(autostart_on, registry_owner(cmd.as_deref(), &exe, exists)) {
-                if let Err(e) = apply_autostart(on, start_min) {
+            if boot_reconcile_writes(autostart_on, demo, current_registry_owner(cmd.as_deref())) {
+                if let Err(e) = apply_autostart(true, start_min) {
                     append_crash_log(&format!("autostart reconcile failed: {e}"));
                 }
             }
@@ -30570,8 +30613,8 @@ fn reconcile_windows_state(autostart_on: bool, start_min: bool, url_scheme_on: b
     }
     match remote::url_scheme_command() {
         Ok(cmd) => {
-            if let Some(on) = reconcile_action(url_scheme_on, registry_owner(cmd.as_deref(), &exe, exists)) {
-                if let Err(e) = remote::apply_url_scheme_registration(on) {
+            if boot_reconcile_writes(url_scheme_on, demo, current_registry_owner(cmd.as_deref())) {
+                if let Err(e) = remote::apply_url_scheme_registration(true) {
                     append_crash_log(&format!("address scheme reconcile failed: {e}"));
                 }
             }
@@ -30588,6 +30631,7 @@ fn set_autostart(app: AppHandle, state: State<Db>, enabled: bool) -> Result<bool
     let prior = store.settings.autostart;
     let minimized = store.settings.start_minimized;
     let prior_os = autostart_command()?;
+    let skip = skip_registry_removal(enabled, current_registry_owner(prior_os.as_deref()));
     two_state_change(
         &mut *store,
         prior_os,
@@ -30599,7 +30643,7 @@ fn set_autostart(app: AppHandle, state: State<Db>, enabled: bool) -> Result<bool
             st.settings.autostart = prior;
             !persist || save_settings(&app, &st.settings)
         },
-        || apply_autostart(enabled, minimized),
+        || if skip { Ok(()) } else { apply_autostart(enabled, minimized) },
         autostart_restore,
     )?;
     Ok(enabled)
@@ -30636,6 +30680,7 @@ fn set_url_scheme_flag(app: &AppHandle, state: &State<Db>, enabled: bool) -> Res
     let mut store = lock(state);
     let prior = store.settings.ui_flags.get("urlScheme").copied();
     let prior_os = remote::url_scheme_command()?;
+    let skip = skip_registry_removal(enabled, current_registry_owner(prior_os.as_deref()));
     two_state_change(
         &mut *store,
         prior_os,
@@ -30650,7 +30695,7 @@ fn set_url_scheme_flag(app: &AppHandle, state: &State<Db>, enabled: bool) -> Res
             };
             !persist || save_settings(app, &st.settings)
         },
-        || remote::apply_url_scheme_registration(enabled),
+        || if skip { Ok(()) } else { remote::apply_url_scheme_registration(enabled) },
         remote::url_scheme_restore,
     )
 }
@@ -34322,10 +34367,13 @@ pub fn run() {
             tray.build(app)?;
             apply_tray_menu(&handle); // Adds the quick-copy sections if they are on
 
-            // Bring autostart and the address scheme in line with the stored
-            // settings (also follows the exe when it moved). Another copy's entry
-            // is never touched.
-            reconcile_windows_state(autostart, start_min, url_scheme_on);
+            // Refresh autostart and the address scheme registrations (also follows
+            // the exe when it moved). Nothing is removed here and another copy's
+            // entry is never touched.
+            let demo = data_dir_is_demo(&handle, &data_dir(&handle));
+            reconcile_windows_state(autostart, start_min, url_scheme_on, demo);
+            // A quit or crash mid-pack leaves raw copies and folders without a snapshot.
+            cleanup_incomplete_backups(&backups_dir(&handle), Duration::from_secs(60));
 
             // One place decides which pills and which folders belong on screen.
             sync_float_windows(&handle);
@@ -44552,16 +44600,69 @@ mod tests {
     }
 
     #[test]
-    fn reconcile_only_touches_entries_that_are_ours() {
+    fn boot_reconcile_only_writes_and_never_removes() {
         use RegistryOwner::*;
-        assert_eq!(reconcile_action(true, Missing), Some(true));
-        assert_eq!(reconcile_action(true, ThisExe), Some(true));
-        assert_eq!(reconcile_action(true, Gone), Some(true));
-        assert_eq!(reconcile_action(true, OtherExe), None);
-        assert_eq!(reconcile_action(false, ThisExe), Some(false));
-        assert_eq!(reconcile_action(false, OtherExe), None);
-        assert_eq!(reconcile_action(false, Gone), None);
-        assert_eq!(reconcile_action(false, Missing), None);
+        for owner in [Missing, ThisExe, Gone] {
+            assert!(boot_reconcile_writes(true, false, owner));
+            assert!(!boot_reconcile_writes(false, false, owner), "a setting that reads as off must not delete an entry at boot");
+            assert!(!boot_reconcile_writes(true, true, owner), "demo mode skips the pass");
+        }
+        assert!(!boot_reconcile_writes(true, false, OtherExe), "another copy's entry is left alone");
+    }
+
+    #[test]
+    fn switching_off_leaves_another_copys_entry_alone() {
+        use RegistryOwner::*;
+        assert!(skip_registry_removal(false, OtherExe));
+        assert!(!skip_registry_removal(false, ThisExe));
+        assert!(!skip_registry_removal(false, Gone));
+        assert!(!skip_registry_removal(false, Missing));
+        assert!(!skip_registry_removal(true, OtherExe), "switching on is never skipped");
+    }
+
+    fn fake_snapshot(root: &std::path::Path, name: &str) {
+        let f = root.join(name);
+        std::fs::create_dir_all(&f).unwrap();
+        std::fs::write(f.join(BACKUP_DB_GZ), b"x").unwrap();
+    }
+
+    #[test]
+    fn rotation_ignores_an_incomplete_folder_and_keeps_good_snapshots() {
+        let dir = stream_test_dir("rotate-incomplete");
+        fake_snapshot(&dir, "2026-01-01_10-00-00");
+        fake_snapshot(&dir, "2026-01-02_10-00-00");
+        // Newer than both, but still being packed: only the raw copy exists.
+        let pending = dir.join("2026-01-03_10-00-00");
+        std::fs::create_dir_all(&pending).unwrap();
+        std::fs::write(pending.join("data.db.tmp"), b"raw").unwrap();
+        rotate_backups_at(&dir, 2, None);
+        assert!(dir.join("2026-01-01_10-00-00").exists(), "a good snapshot must not be dropped for an incomplete folder");
+        assert!(dir.join("2026-01-02_10-00-00").exists());
+        assert!(pending.exists(), "the folder being packed is not rotation's to delete");
+        assert_eq!(list_backups_impl_at(&dir).len(), 2, "the list shows complete snapshots only");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn startup_cleanup_removes_leftovers_and_keeps_complete_snapshots() {
+        let dir = stream_test_dir("cleanup");
+        fake_snapshot(&dir, "2026-01-01_10-00-00");
+        let good = dir.join("2026-01-01_10-00-00");
+        std::fs::write(good.join("data.db.tmp"), b"raw").unwrap();
+        std::fs::write(good.join("data.db.gz.part"), b"half").unwrap();
+        let broken = dir.join("2026-01-02_10-00-00");
+        std::fs::create_dir_all(&broken).unwrap();
+        std::fs::write(broken.join("data.db.tmp"), b"raw").unwrap();
+        // Too fresh to be sure it is abandoned: untouched.
+        cleanup_incomplete_backups(&dir, Duration::from_secs(3600));
+        assert!(broken.exists());
+        assert!(good.join("data.db.tmp").exists());
+        cleanup_incomplete_backups(&dir, Duration::ZERO);
+        assert!(!broken.exists(), "a folder without a snapshot is removed");
+        assert!(!good.join("data.db.tmp").exists());
+        assert!(!good.join("data.db.gz.part").exists());
+        assert!(good.join(BACKUP_DB_GZ).exists(), "a complete snapshot is never touched");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     // allowMultipleInstances lets two full processes share one data directory.
