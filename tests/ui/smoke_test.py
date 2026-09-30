@@ -16797,6 +16797,37 @@ def main():
       }
     }
 """)
+        failed += ar_probe('ba600', 'screenshot editor: undoing a delete puts the shape back in its place even after a crop changed the list', 'index', '1000x780', '', ba_common + r"""
+    if (!(await baOpen(''))) { errs.push('600: the editor did not open'); }
+    else {
+      const baText = async (x, y, word) => {
+        await baClick(x, y);
+        const ti = document.getElementById('snip-edit-text-input');
+        ti.value = word;
+        ti.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+        await sleep(60);
+      };
+      await baTool('crop'); await baDrag(10, 10, 190, 110);
+      baKey('Enter'); await sleep(80);
+      await baTool('text');
+      await baText(30, 90, 'AAA'); await baText(120, 90, 'BBB');
+      const pop = await baCtx(32, 94);
+      const del = pop && pop.querySelector('button.danger');
+      if (!del) { errs.push('600: fixture: no delete entry over the first text'); }
+      else {
+        del.click(); await sleep(80);
+        // discarding the crop drops it from the list, every index behind it moves
+        await baTool('crop');
+        baKey('Escape'); await sleep(80);
+        const drawn = [];
+        const orig = CanvasRenderingContext2D.prototype.fillText;
+        CanvasRenderingContext2D.prototype.fillText = function (text) { drawn.push(String(text)); return orig.apply(this, arguments); };
+        await baUndo();
+        CanvasRenderingContext2D.prototype.fillText = orig;
+        if (drawn.join() !== 'AAA,BBB') errs.push('600: the texts are drawn in the order ' + JSON.stringify(drawn) + ', the restored one must come first');
+      }
+    }
+""")
         # ---- main window findings: generated block end ----
         print("PASS" if not failed else f"{failed} problem(s)")
         return 1 if failed else 0

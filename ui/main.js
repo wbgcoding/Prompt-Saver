@@ -17982,14 +17982,14 @@ function bind() {
   }
   function snipEditUndoEdit(e) {
     if (e.kind === "geom") snipEditApplyGeom(e.op, e.before);
-    else if (e.kind === "remove") { SE.ops.splice(e.index, 0, e.op); SE.floor = e.floorBefore; }
+    else if (e.kind === "remove") { snipEditReinsert(e.op, e.prev, e.next); SE.floor += e.floorShift; }
   }
   function snipEditRedoEdit(e) {
     if (e.kind === "geom") snipEditApplyGeom(e.op, e.after);
     else if (e.kind === "remove") {
       const i = SE.ops.indexOf(e.op);
       if (i >= 0) SE.ops.splice(i, 1);
-      SE.floor = e.floorAfter;
+      SE.floor = Math.max(0, SE.floor - e.floorShift);
     }
   }
   // Spotlight/crop: exactly one may exist -- a new one replaces the old rather than
@@ -18470,13 +18470,14 @@ function bind() {
   function snipEditRemoveOp(op) {
     const index = SE.ops.indexOf(op);
     if (index < 0) return;
-    const floorBefore = SE.floor;
     SE.ops.splice(index, 1);
-    if (index < SE.floor) SE.floor -= 1;
+    // The floor is a count: an op below it leaving shifts it down by one. Only that
+    // delta is stored, so a crop commit or discard in between cannot be undone by
+    // restoring an absolute value.
+    const floorShift = index < SE.floor ? 1 : 0;
+    SE.floor -= floorShift;
     if (SE.selOp === op) snipEditDeselectShape();
-    const entry = { tool: "edit", kind: "remove", op, index, floorBefore, floorAfter: 0 };
-    snipEditPushOp(entry, null);
-    entry.floorAfter = SE.floor;
+    snipEditPushOp({ tool: "edit", kind: "remove", op, prev: SE.ops[index - 1] || null, next: SE.ops[index] || null, floorShift }, null);
   }
 
   // ---- text: a real <input> positioned over the canvas, in stage-local (i.e.
