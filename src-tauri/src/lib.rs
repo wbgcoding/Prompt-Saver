@@ -3462,11 +3462,9 @@ fn dec_str(stored: &str) -> String {
     stored.to_string()
 }
 
-// Schema + migration probe for a data.db connection, run at most ONCE per process
-// (see db_conn below). Returns false on any failure; db_conn then fails closed for
-// every call for the rest of the process, same as it already did per-call before:
-// a schema/migration failure here means the DB file itself is unusable, which no
-// retry on a later call would fix differently.
+// Schema + migration probe for a data.db connection, run once per data folder and
+// process (see db_conn_at below). Returns false on any failure; db_conn_at then
+// fails closed for that call and tries again on the next one.
 fn db_conn_init_schema(conn: &Connection) -> bool {
     if conn
         .execute_batch(
@@ -3542,9 +3540,24 @@ fn db_conn_at(dir: &Path) -> Option<Connection> {
     // process: every call used to pay for a 10-statement execute_batch plus a
     // pragma_table_info probe just to open a connection for one write.
     conn.execute_batch("PRAGMA busy_timeout=3000;").ok()?;
-    static SCHEMA_READY: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    if !*SCHEMA_READY.get_or_init(|| db_conn_init_schema(&conn)) {
-        return None;
+    // Keyed by folder, and only a SUCCESS is remembered: a store adopted from another
+    // folder mid-session still gets its schema run, and one transient failure at the
+    // first open (WAL switch, busy) does not disable the database for the process.
+    static SCHEMA_READY: Mutex<Option<std::collections::HashSet<PathBuf>>> = Mutex::new(None);
+    let already = SCHEMA_READY
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+        .is_some_and(|set| set.contains(dir));
+    if !already {
+        if !db_conn_init_schema(&conn) {
+            return None;
+        }
+        SCHEMA_READY
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get_or_insert_with(std::collections::HashSet::new)
+            .insert(dir.to_path_buf());
     }
     Some(conn)
 }
@@ -4063,6 +4076,21 @@ fn db_get_version(conn: &Connection, id: i64) -> Option<(String, String, String,
         )),
     )
     .ok()
+}
+// Removes version history whose prompt is in neither the library nor the trash.
+// Works on the plaintext id column alone, so it is safe even when the rows
+// themselves could not be decrypted. Returns the number of rows removed.
+fn db_sweep_orphan_versions(conn: &Connection) -> usize {
+    match conn.execute(
+        "DELETE FROM prompt_versions WHERE prompt_id NOT IN (SELECT id FROM prompts UNION SELECT id FROM trash)",
+        [],
+    ) {
+        Ok(n) => n,
+        Err(e) => {
+            append_crash_log(&format!("could not sweep orphaned version history: {e}"));
+            0
+        }
+    }
 }
 fn db_delete_versions(conn: &Connection, prompt_id: &str) {
     // Called from a PERMANENT purge -- the prompt is meant to be entirely gone,
@@ -4685,6 +4713,12 @@ fn load_store(app: &AppHandle) -> Store {
         // write the flag itself via the tour's own Finish/Skip.
         if tour_should_be_marked_seen(!store.prompts.is_empty(), store.settings.examples_seeded) {
             store.settings.ui_flags.entry("tourSeen".to_string()).or_insert(true);
+        }
+        // A purge whose version-history DELETE failed is never retried by the purge
+        // itself, so the text would stay in prompt_versions for good. Only when no
+        // JSON fallback is waiting: then the tables really are the whole library.
+        if !dir.join("prompts.json").exists() {
+            db_sweep_orphan_versions(&conn);
         }
         store.normalize_folders(); // Drop members whose prompt is gone
         sweep_trash(app, &mut store); // drop anything past the retention window
@@ -51207,6 +51241,56 @@ mod tests {
         let shown = whats_new_check_impl(&all, "1.0.0", "2.0.0");
         assert_eq!(shown.iter().map(|s| s.version.as_str()).collect::<Vec<_>>(), vec!["1.1.0", "2.0.0"]);
     }
+
+    // A store adopted from another folder mid-session must still get its schema:
+    // the one-time init used to be remembered per process, not per folder.
+    #[test]
+    fn schema_init_runs_for_every_data_folder() {
+        let base = std::env::temp_dir().join(format!("{}-test-schema-per-dir", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&base);
+        let dir_a = base.join("a");
+        let dir_b = base.join("b");
+        std::fs::create_dir_all(&dir_a).unwrap();
+        std::fs::create_dir_all(&dir_b).unwrap();
+        assert!(db_conn_at(&dir_a).is_some());
+        {
+            let old = Connection::open(dir_b.join("data.db")).unwrap();
+            old.execute_batch(
+                "CREATE TABLE prompt_versions(id INTEGER PRIMARY KEY AUTOINCREMENT, prompt_id TEXT NOT NULL, ts INTEGER NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL);",
+            )
+            .unwrap();
+        }
+        let conn = db_conn_at(&dir_b).expect("the second folder opens");
+        conn.execute(
+            "INSERT INTO prompt_versions(prompt_id, ts, name, text, variants) VALUES('p', 1, 'n', 't', 'v')",
+            [],
+        )
+        .expect("the variants column exists after the open");
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    // A purged prompt whose version-history DELETE failed must not keep its text
+    // forever: the startup sweep drops history of ids that are in neither table.
+    #[test]
+    fn startup_sweep_drops_version_history_of_vanished_prompts() {
+        let conn = Connection::open_in_memory().unwrap();
+        assert!(db_conn_init_schema(&conn));
+        conn.execute_batch(
+            "INSERT INTO prompts(id, ord, data) VALUES('live', 0, 'x');
+             INSERT INTO trash(id, ord, data) VALUES('binned', 0, 'x');
+             INSERT INTO prompt_versions(prompt_id, ts, name, text) VALUES('gone', 1, 'n', 'secret');
+             INSERT INTO prompt_versions(prompt_id, ts, name, text) VALUES('gone', 2, 'n', 'secret2');
+             INSERT INTO prompt_versions(prompt_id, ts, name, text) VALUES('live', 1, 'n', 't');
+             INSERT INTO prompt_versions(prompt_id, ts, name, text) VALUES('binned', 1, 'n', 't');",
+        )
+        .unwrap();
+        assert_eq!(db_sweep_orphan_versions(&conn), 2);
+        let count = |id: &str| -> i64 {
+            conn.query_row("SELECT COUNT(*) FROM prompt_versions WHERE prompt_id = ?1", [id], |r| r.get(0)).unwrap()
+        };
+        assert_eq!(count("gone"), 0);
+        assert_eq!(count("live"), 1);
+        assert_eq!(count("binned"), 1);
+    }
 }
-
-
