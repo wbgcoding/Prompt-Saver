@@ -187,9 +187,17 @@ async function beginSession() {
       .then((w) => { if (tok === sessionSeq) windows = w || []; })
       .catch(() => { if (tok === sessionSeq) windows = []; });
   }
-  // Localized hint/error text: load once, then reuse for every later session.
+  // Localized hint/error text: load once, then reuse for every later session;
+  // a language switch in the settings reloads it (see the language-changed listener).
   if (i18nLoaded) return;
   i18nLoaded = true;
+  loadTexts();
+}
+
+// Resolve the UI language from the settings and swap the overlay's texts to it.
+// The overlay window is only ever hidden, never closed, so this has to run again
+// when the language changes or the old texts would stay until the next restart.
+function loadTexts() {
   Promise.all([invoke("get_settings"), import("./i18n.js"), import("./floatShared.js")])
     .then(([s, { I18N, LANGS }, { resolveLang }]) => {
       const lang = resolveLang(s.language, LANGS);
@@ -204,6 +212,7 @@ async function beginSession() {
     })
     .catch(() => {});
 }
+listen("language-changed", () => { if (i18nLoaded) loadTexts(); });
 
 // Begin now only if a snip is already in flight (cold-build path); otherwise stay
 // idle: the window may be a startup pre-warm. Reused snips arrive via "snip-begin".
