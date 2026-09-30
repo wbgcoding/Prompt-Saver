@@ -377,6 +377,18 @@ function stampBuildFiles(root, b) {
     `$1${b.autostartKey}$2`,
     "installer.nsi autostart key"
   );
+  nsi = sub(
+    nsi,
+    /^(!define TEMPFOLDER ")[^"${}]+(")$/m,
+    `$1${b.tempDir}$2`,
+    "installer.nsi temp folder"
+  );
+  nsi = sub(
+    nsi,
+    /^(!define TEMPPREFIX ")[^"${}]+(")$/m,
+    `$1${b.tempPrefix}$2`,
+    "installer.nsi temp prefix"
+  );
   write(nsiPath, nsi);
 }
 

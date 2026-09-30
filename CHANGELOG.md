@@ -1449,6 +1449,18 @@ the video editor and the introduction tour ship on).
   switch, the URL scheme and the Markdown sync are skipped by "All on", and
   demo mode is never written by a profile or a reset, so a running demo session
   also survives "Reset expert menu".
+- **Editor drafts are stored encrypted, and a confidential prompt is never
+  drafted.** The automatic draft of the open editor is sealed for your Windows
+  account like the prompts themselves, so a revealed confidential prompt no
+  longer lands in the data file or in a backup as plain text. Drafts saved by
+  an earlier version still load, and a prompt turned confidential loses its
+  draft.
+- **The key overlay record next to a screen recording is stored encrypted.**
+  The keys typed during a recording are sealed for your Windows account; older
+  recordings with a plain record still open.
+- **Uninstalling with "delete my data" also removes the temporary working
+  files.** Picture crops, filmstrips and working copies in the temp folder go
+  with it, and closing the app now removes its own working copies at once.
 
 ### Removed
 

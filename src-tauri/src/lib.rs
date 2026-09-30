@@ -15759,6 +15759,31 @@ fn sweep_stale_temp_files() {
     }
 }
 
+// Orderly exit: drop this process's own scratch files right away instead of
+// leaving them for the age-based sweep. Only names carrying this pid are touched
+// (working copies opened for editing, still frames), so a second running
+// instance keeps its own files.
+fn remove_own_temp_leftovers_in(temp_root: &Path, pid: u32) {
+    let dir = temp_root.join(brand::TEMP_DIR);
+    let openedit_prefix = format!("{}-openedit-", brand::TEMP_PREFIX);
+    let openedit_suffix = format!("-{pid}");
+    let still_prefix = format!("{}-still-{pid}-", brand::TEMP_PREFIX);
+    let Ok(entries) = fs::read_dir(&dir) else { return };
+    for e in entries.flatten() {
+        let name = e.file_name().to_string_lossy().to_string();
+        if name.starts_with(&openedit_prefix) && name.ends_with(&openedit_suffix) && e.path().is_dir() {
+            let _ = fs::remove_dir_all(e.path());
+        } else if name.starts_with(&still_prefix) && e.path().is_file() {
+            let _ = fs::remove_file(e.path());
+        }
+    }
+}
+
+fn remove_own_temp_leftovers() {
+    remove_snip_preview();
+    remove_own_temp_leftovers_in(&std::env::temp_dir(), std::process::id());
+}
+
 // The "Copy to clipboard" export's own throwaway files, in the same
 // TEMP_DIR subfolder the OCR/voice leftovers above use. Kept separate from
 // sweep_stale_temp_files because its max age is user-configurable
@@ -35446,6 +35471,7 @@ pub fn run() {
                 // The timer thread is normally parked for hours; tell it to leave
                 // rather than tearing the process down around a sleeping thread.
                 scheduler::shutdown(Duration::from_millis(SCHEDULER_STOP_WAIT_MS));
+                remove_own_temp_leftovers();
             }
         });
 }
@@ -42380,6 +42406,25 @@ mod tests {
     // NOT a fresh one -- "Allow multiple instances" lets a second launch run this
     // same sweep while a concurrently open instance still has its own snip preview
     // in active use, so only files older than STALE_TEMP_FILE_AGE are fair game.
+    #[test]
+    fn remove_own_temp_leftovers_takes_only_this_pids_files() {
+        let root = std::env::temp_dir().join(format!("ps-ownexit-{}", std::process::id()));
+        let dir = root.join(brand::TEMP_DIR);
+        let mine_copy = dir.join(format!("{}-openedit-20260101-1000-4242", brand::TEMP_PREFIX));
+        let other_copy = dir.join(format!("{}-openedit-20260101-1000-4243", brand::TEMP_PREFIX));
+        fs::create_dir_all(&mine_copy).unwrap();
+        fs::create_dir_all(&other_copy).unwrap();
+        fs::write(mine_copy.join("a.png"), b"x").unwrap();
+        let mine_still = dir.join(format!("{}-still-4242-9.png", brand::TEMP_PREFIX));
+        let other_still = dir.join(format!("{}-still-4243-9.png", brand::TEMP_PREFIX));
+        fs::write(&mine_still, b"x").unwrap();
+        fs::write(&other_still, b"x").unwrap();
+        remove_own_temp_leftovers_in(&root, 4242);
+        assert!(!mine_copy.exists() && !mine_still.exists(), "this process's own scratch files go on exit");
+        assert!(other_copy.exists() && other_still.exists(), "another instance's files stay");
+        let _ = fs::remove_dir_all(&root);
+    }
+
     #[test]
     fn sweep_stale_temp_files_removes_only_its_own_stale_leftovers() {
         let dir = std::env::temp_dir();
