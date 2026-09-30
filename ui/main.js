@@ -10780,8 +10780,11 @@ const LANG_CMDS = {
 // Per-kind dialog state, kept independent so switching which dialog is open
 // never loses the other's in-flight scan or install polls.
 const LANG_DIALOG = {
-  ocr: { cache: [], checked: 0, installTimers: {}, installPending: {}, installErrors: {}, elevTimer: null, elevRunning: false, elevLeft: 60 },
-  speech: { cache: [], checked: 0, installTimers: {}, installPending: {}, installErrors: {}, elevTimer: null, elevRunning: false, elevLeft: 60 },
+  // installing: the names whose elevated install was launched and has not reported
+  // back yet. It outlives the dialog (only the pollers stop on close), so a reopened
+  // dialog still knows the row is busy. installChain marks the one live poller per name.
+  ocr: { cache: [], checked: 0, installTimers: {}, installPending: {}, installErrors: {}, installing: new Set(), installChain: {}, elevTimer: null, elevRunning: false, elevLeft: 60 },
+  speech: { cache: [], checked: 0, installTimers: {}, installPending: {}, installErrors: {}, installing: new Set(), installChain: {}, elevTimer: null, elevRunning: false, elevLeft: 60 },
 };
 let langDialogKind = "ocr"; // which kind #ocr-langs-modal currently displays
 function openLangsModal(kind) {
@@ -10795,6 +10798,9 @@ function openLangsModal(kind) {
   // silently doing nothing until the user re-elevates from scratch.
   if (st.elevRunning) { renderLangsLoading(kind); pollElevatedCaps(kind); }
   else loadLangCaps(kind, false);
+  // Installs started before the dialog was closed keep running as OS processes:
+  // pick their result polling back up.
+  for (const name of st.installing) pollLangInstall(kind, name);
 }
 function closeLangsModal() {
   $("ocr-langs-modal").classList.add("hidden");
@@ -10804,6 +10810,7 @@ function closeLangsModal() {
   // nobody is looking. elevRunning itself is left set so reopening resumes.
   for (const id of Object.values(st.installTimers)) clearTimeout(id);
   st.installTimers = {};
+  st.installChain = {};
   if (st.elevTimer) { clearTimeout(st.elevTimer); st.elevTimer = null; }
 }
 async function loadLangCaps(kind, force) {
@@ -10985,7 +10992,7 @@ function langRow(kind, cap) {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "ghost-btn";
-  const busy = !!st.installTimers[cap.name] || !!st.installPending[cap.name];
+  const busy = st.installing.has(cap.name) || !!st.installTimers[cap.name] || !!st.installPending[cap.name];
   btn.disabled = busy;
   // The size sits INSIDE the button label on purpose -- nobody should start a
   // download blind.
@@ -11054,6 +11061,9 @@ const MAX_LANG_INSTALL_POLLS = 200;
 function pollLangInstall(kind, name) {
   const st = LANG_DIALOG[kind];
   if (st.installTimers[name]) return;
+  st.installing.add(name);
+  const chain = {};
+  st.installChain[name] = chain;
   let attempts = 0;
   // setTimeout re-armed after each result, not setInterval -- the callback
   // awaits an invoke, and a reply slower than the 3s tick would otherwise overlap
@@ -11062,9 +11072,13 @@ function pollLangInstall(kind, name) {
     attempts++;
     let res;
     try { res = await invoke(LANG_CMDS[kind].installResult, { name }); } catch (_) { res = undefined; }
+    // The dialog was closed (and maybe reopened, with a fresh poller) while that
+    // answer was on its way: this chain is stale and must not re-arm itself.
+    if (st.installChain[name] !== chain) return;
     if (res == null) {
       if (attempts >= MAX_LANG_INSTALL_POLLS) {
         delete st.installTimers[name];
+        st.installing.delete(name);
         st.installErrors[name] = t("ocrInstallResultTimeout");
         renderLangsBody(kind);
         return;
@@ -11073,6 +11087,7 @@ function pollLangInstall(kind, name) {
       return;
     }
     delete st.installTimers[name];
+    st.installing.delete(name);
     if (res.ok) {
       // Clear both caches so the new pack is selectable immediately, no restart.
       invoke(LANG_CMDS[kind].languages).then((langs) => {

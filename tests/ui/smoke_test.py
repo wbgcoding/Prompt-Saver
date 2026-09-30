@@ -16291,6 +16291,39 @@ def main():
     }
     if (asked() <= first) errs.push('564-6: reopening the menu reused the first answer of the session (' + asked() + ' request(s))');
 """)
+        failed += ar_probe('g33', 'language dialog: a running install stays busy after the dialog is closed and reopened', 'index', '1000x780', '', r"""
+    await bootReady();
+    window.__OCR_CAPS_TEST__ = [
+      { name: 'Language.OCR~~~ja-JP~0.0.1.0', tag: 'ja-JP', label: 'Japanese', state: 'NotPresent', version: '0.0.1.0', download_size: 1000000, install_size: null },
+    ];
+    RESULTS.ocr_install_result = () => null;
+    document.getElementById('gear').click(); await sleep(200);
+    document.getElementById('expert-open').click(); await sleep(300);
+    let opener = null;
+    for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+      tb.click(); await sleep(80);
+      opener = [...document.querySelectorAll('#expert-flags .expert-action')].find((r) => /languages/i.test(r.textContent) && r.closest('.expert-group') && /text recognition|ocr|image/i.test(r.closest('.expert-group').textContent));
+      if (opener) break;
+    }
+    if (!opener) { errs.push('564-33: the language dialog opener was not found'); }
+    else {
+      const modal = document.getElementById('ocr-langs-modal');
+      const btn = () => document.querySelector('#ocr-langs-body .ocr-lang-row .ghost-btn');
+      opener.click(); await sleep(300);
+      if (!btn()) { errs.push('564-33: no download button in the dialog'); }
+      else {
+        btn().click(); await sleep(200);
+        document.getElementById('confirm-ok').click(); await sleep(400);
+        if (!btn().disabled) errs.push('564-33: fixture: the row is not busy while the install runs');
+        document.getElementById('ocr-langs-close-x').click(); await sleep(200);
+        opener.click(); await sleep(400);
+        if (!btn()) errs.push('564-33: no download button after reopening');
+        else if (!btn().disabled) errs.push('564-33: after reopening the dialog the Download button is enabled while the install still runs');
+        const started = callsFor('ocr_install_language').length;
+        if (started !== 1) errs.push('564-33: expected one install start, got ' + started);
+      }
+    }
+""")
         # ---- main window findings: generated block end ----
         print("PASS" if not failed else f"{failed} problem(s)")
         return 1 if failed else 0
