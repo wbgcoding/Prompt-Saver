@@ -100,6 +100,10 @@ function baseState(ops) {
   expect("isLosslessCopy stays true for an untouched recording", vm.runInContext("isLosslessCopy()", sb) === true);
 }
 
+// The preview's second box of a double frame sits inside the border, at inset
+// 2t..3t like the export's second drawbox.
+expect("double frame preview puts its outline inside the border", src.includes("el.style.outlineOffset = `${-3 * px}px`;"));
+
 // A video overlay's footage runs at native speed on the output clock: its
 // enable window must end at start + footage length in OUTPUT seconds, whatever
 // speed op sits on the main timeline.

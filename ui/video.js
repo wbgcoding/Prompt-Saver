@@ -1353,11 +1353,11 @@ function buildLiveOverlayEl(op, vb, reuse) {
     el.style.outline = "";
     el.style.boxShadow = "";
     if (op.style === "double") {
-      // Approximates the second, inset drawbox with an outline outside the
-      // border instead of a truly separate inner box -- close enough for a
-      // preview whose job is "roughly where and how thick", not pixel parity.
+      // Approximates the second, inset drawbox with an outline instead of a
+      // truly separate inner box. A negative offset moves it inside the
+      // border: -3t with width t covers inset 2t..3t, where the export draws it.
       el.style.outline = `${px}px solid ${op.color}`;
-      el.style.outlineOffset = `${op.thickness * vb.scale}px`;
+      el.style.outlineOffset = `${-3 * px}px`;
     } else if (op.style === "soft") {
       el.style.boxShadow = `0 0 ${px * 2}px ${px}px ${op.color}`;
     }
