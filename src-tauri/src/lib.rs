@@ -18193,7 +18193,10 @@ async fn capture_window(
         }
         match grab {
             Some(im) if !capture_is_blank(&im) => {
-                if ocr_armed { finalize_ocr_capture(&app, &state, im).await } else { finalize_capture(&app, im, app_name.clone()).await }
+                let res = if ocr_armed { finalize_ocr_capture(&app, &state, im).await } else { finalize_capture(&app, im, app_name.clone()).await };
+                // The overlay was hidden for the grab; a failed OCR or save reports its
+                // error inside that overlay, so it has to come back with the error.
+                show_overlay_again_on_error(res, || set_snip_overlay_hidden(&app, false))
             }
             _ => {
                 set_snip_overlay_hidden(&app, false);
@@ -18213,6 +18216,14 @@ async fn capture_window(
             None => Err("blocked".to_string()),
         }
     }
+}
+
+// Passes `res` through, calling `show` first when it is an error.
+fn show_overlay_again_on_error<T>(res: Result<T, String>, show: impl FnOnce()) -> Result<T, String> {
+    if res.is_err() {
+        show();
+    }
+    res
 }
 
 // Open the project's GitHub page in the default browser (app logo → repo,
@@ -52098,5 +52109,17 @@ mod tests {
         let units: Vec<u16> = raw.chunks(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
         assert_eq!(String::from_utf16(&units).unwrap(), script);
         assert!(ocr::elevated_params(&"x".repeat(40_000)).is_err(), "an oversized script is refused, not truncated");
+    }
+
+    #[test]
+    fn a_failed_window_capture_brings_the_overlay_back() {
+        let shown = std::cell::Cell::new(0);
+        let failed: Result<(), String> = Err("ocr-language-missing".to_string());
+        let out = show_overlay_again_on_error(failed, || shown.set(shown.get() + 1));
+        assert_eq!(out, Err("ocr-language-missing".to_string()), "the error is passed on unchanged");
+        assert_eq!(shown.get(), 1);
+        let fine: Result<u8, String> = Ok(7);
+        assert_eq!(show_overlay_again_on_error(fine, || shown.set(shown.get() + 1)), Ok(7));
+        assert_eq!(shown.get(), 1, "a finished capture leaves the overlay alone");
     }
 }
