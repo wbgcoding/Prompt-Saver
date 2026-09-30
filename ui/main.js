@@ -4485,6 +4485,7 @@ function refreshFavViewUi() {
 }
 
 function setFavView(on) {
+  if (gridSelected.size) clearGridSelection(); // a selection belongs to what's on screen
   favView = on && favViewEnabled();
   renderGrid(true);
 }

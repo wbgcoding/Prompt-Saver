@@ -16072,6 +16072,19 @@ def main():
       if (!p9 || p9.dataset.col !== '2' || p9.dataset.row !== '2') errs.push('563-2: the original view lost the moved tile position');
     }
 """)
+        failed += ar_probe('f4', 'favorites grid: switching to it clears the grid selection', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { favView: true, favViewButton: true } };</script>\n', r"""
+    await bootReady();
+    const bar = document.getElementById('grid-batch-bar');
+    tileEl('p1').querySelector('.tile-select').click();
+    await sleep(150);
+    if (bar.classList.contains('hidden')) errs.push('563-4: selecting a tile did not show the batch bar (fixture)');
+    const fav = document.getElementById('fav-view-btn');
+    if (fav.classList.contains('hidden')) errs.push('563-4: the favorites toggle is not shown (fixture)');
+    fav.click();
+    await sleep(250);
+    if (!bar.classList.contains('hidden')) errs.push('563-4: the batch bar stayed visible after switching to the favorites grid');
+    if (document.body.classList.contains('grid-selecting')) errs.push('563-4: the grid stayed in selection mode after switching to the favorites grid');
+""")
         # ---- main window findings: generated block end ----
         print("PASS" if not failed else f"{failed} problem(s)")
         return 1 if failed else 0
