@@ -11523,11 +11523,35 @@ async fn delete_backup(app: AppHandle, name: String) -> Result<(), String> {
     fs::remove_dir_all(backups_dir(&app).join(&name)).map_err(|e| e.to_string())
 }
 
+const STAGED_RESTORE_PREFIX: &str = "data.db.restoring";
+
+// Start-up sweep of staged backup copies a quit or crash left beside the live store
+// (the copy, its -wal/-shm and the older fixed name). Anything younger than
+// `min_age` is left alone.
+fn remove_stale_staged_restores(dir: &std::path::Path, min_age: Duration) {
+    for entry in fs::read_dir(dir).into_iter().flatten().flatten() {
+        if !entry.file_name().to_string_lossy().starts_with(STAGED_RESTORE_PREFIX) {
+            continue;
+        }
+        let old_enough = entry
+            .metadata()
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.elapsed().ok())
+            .is_some_and(|age| age >= min_age);
+        if old_enough && entry.path().is_file() {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
+}
+
 // Unpack (gunzip if needed) a backup file BESIDE the live store, then prove it is
 // an openable SQLite file. Shared by every restore scope: a snapshot that fails
 // either step must never touch the live database.
 fn stage_and_validate_backup(backup_db: &std::path::Path, dir: &std::path::Path) -> Result<PathBuf, String> {
-    let staged = dir.join("data.db.restoring");
+    // A name of its own per call: two "view contents" clicks, or a view still
+    // unpacking while a restore runs, must never share (and overwrite) one file.
+    let staged = dir.join(format!("{STAGED_RESTORE_PREFIX}-{}", gen_id()));
     let _ = fs::remove_file(&staged);
     let unpack = if backup_db.extension().is_some_and(|e| e == "gz") {
         gunzip_to(backup_db, &staged)
@@ -34525,6 +34549,7 @@ pub fn run() {
             reconcile_windows_state(autostart, start_min, url_scheme_on, demo);
             // A quit or crash mid-pack leaves raw copies and folders without a snapshot.
             cleanup_incomplete_backups(&backups_dir(&handle), Duration::from_secs(60));
+            remove_stale_staged_restores(&data_dir(&handle), Duration::from_secs(60));
 
             // One place decides which pills and which folders belong on screen.
             sync_float_windows(&handle);
@@ -51550,5 +51575,46 @@ mod tests {
         assert_eq!(colors["a"], "#new");
         assert_eq!(colors["b"], "#keep");
         assert!(!remap_tag_colors(&mut colors, &map), "a second pass changes nothing");
+    }
+
+    #[test]
+    fn two_staged_backups_never_share_one_file() {
+        let root = std::env::temp_dir().join(format!("{}-test-stage-unique", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let (x, y) = (root.join("x.db"), root.join("y.db"));
+        full_schema_db(&x, "x")
+            .execute("INSERT INTO meta(key, value) VALUES('who', 'X')", [])
+            .unwrap();
+        full_schema_db(&y, "y")
+            .execute("INSERT INTO meta(key, value) VALUES('who', 'Y')", [])
+            .unwrap();
+        let p1 = stage_and_validate_backup(&x, &root).unwrap();
+        let p2 = stage_and_validate_backup(&y, &root).unwrap();
+        assert_ne!(p1, p2);
+        let who: String = Connection::open(&p1)
+            .unwrap()
+            .query_row("SELECT value FROM meta WHERE key = 'who'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(who, "X", "the first staged copy is still the first backup");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn stale_staged_restores_are_swept_but_other_files_stay() {
+        let root = std::env::temp_dir().join(format!("{}-test-stage-sweep", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        for name in ["data.db.restoring", "data.db.restoring-abc", "data.db", "data.db.locked.bak"] {
+            std::fs::write(root.join(name), b"x").unwrap();
+        }
+        remove_stale_staged_restores(&root, Duration::from_secs(3600));
+        assert!(root.join("data.db.restoring").exists(), "a young file is left alone");
+        remove_stale_staged_restores(&root, Duration::ZERO);
+        assert!(!root.join("data.db.restoring").exists());
+        assert!(!root.join("data.db.restoring-abc").exists());
+        assert!(root.join("data.db").exists());
+        assert!(root.join("data.db.locked.bak").exists());
+        let _ = std::fs::remove_dir_all(&root);
     }
 }
