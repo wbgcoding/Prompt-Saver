@@ -3363,6 +3363,13 @@ function updateExportNote() {
 
 const exportEta = makeEtaEstimator();
 
+// Back to the idle look after an export that never started writing: no stale
+// "Exporting" line, no 0% bar.
+function clearExportStatus() {
+  $("ve-export-status").textContent = "";
+  $("ve-export-progress-row").classList.add("hidden");
+}
+
 function setProgress(pct) {
   const clamped = clamp(pct, 0, 100);
   const row = $("ve-export-progress-row");
@@ -3441,7 +3448,7 @@ async function startExport(toClipboard) {
             .replace("{free}", fmtBytes(diskWarn.free_mb * 1024 * 1024))
             .replace("{needed}", fmtBytes(diskWarn.needed_mb * 1024 * 1024));
           const proceed = await veConfirm(t("recDiskWarnTitle"), msg, t("recDiskWarnExportAnyway"));
-          if (!proceed) return;
+          if (!proceed) { clearExportStatus(); return; }
         }
       }
       try {
@@ -3472,7 +3479,7 @@ async function startExport(toClipboard) {
         if (!toClipboard && !destRetried && raw.includes("export destination not recognized")) {
           destRetried = true;
           const folder = await invoke("pick_export_folder").catch(() => null);
-          if (!folder) return; // cancelled: no export, no error toast
+          if (!folder) { clearExportStatus(); return; } // cancelled: no export, no error toast
           const base = dest.replace(/^.*[\\/]/, "");
           dest = `${folder.replace(/[\\/]+$/, "")}/${base}`;
           continue;

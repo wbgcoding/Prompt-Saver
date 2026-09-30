@@ -253,7 +253,47 @@ async function cameraOverlayRaceCheck() {
   expect("a camera overlay of the current load is added", sb2.VE.ops.some((o) => o.path === "C:/cam.mp4"));
 }
 
-cameraOverlayRaceCheck().then(closeChecks).then(() => {
+// An export that stops before writing anything (no folder picked, disk warning
+// declined) must not leave "Exporting" and a 0% bar behind.
+async function exportIdleCheck() {
+  const els = {};
+  const el = (id) => els[id] || (els[id] = {
+    textContent: "", value: "", disabled: false, _hidden: false,
+    classList: { add(c) { if (c === "hidden") els[id]._hidden = true; }, remove(c) { if (c === "hidden") els[id]._hidden = false; }, toggle() {} },
+    setAttribute() {},
+  });
+  const scenarios = [
+    ["no folder picked", (cmd) => (cmd === "export_video" ? Promise.reject("export destination not recognized") : Promise.resolve(null)), true],
+    ["disk warning declined", (cmd) => (cmd === "check_export_disk_space" ? Promise.resolve({ drive: "C:", free_mb: 1, needed_mb: 99 }) : Promise.resolve(null)), false],
+  ];
+  for (const [name, invokeStub, lossless] of scenarios) {
+    for (const k of Object.keys(els)) delete els[k];
+    const sb = {
+      VE: { exporting: false, ffmpeg: true, src: "C:/a.mp4", etaMinPct: 0, etaMinSecs: 0, etaShow: false },
+      $: el, t: (k) => k, toast: () => {}, invoke: invokeStub,
+      totalOutMs: () => 5000, isLosslessCopy: () => lossless, exportFormat: () => "mp4", exportQuality: () => "high",
+      formatExt: () => "mp4", destPath: () => "C:/out/a.mp4", showExportErrorDetails: () => {},
+      exportEta: { reset() {} }, setProgress: () => el("ve-export-progress-row").classList.remove("hidden"),
+      buildVideoChain: () => null, buildAudioChain: () => null, keptSegments: () => [{ a: 0, b: 5000 }],
+      videoKbps: () => 1000, fmtBytes: String, veConfirm: async () => false, noteFfmpeg: () => {},
+      parseFfmpegError: () => ({ message: "x", details: "" }), applyExportGate: () => {},
+    };
+    vm.createContext(sb);
+    vm.runInContext(
+      [
+        extractBlock("clearExportStatus", "function clearExportStatus() {"),
+        extractBlock("startExport", "async function startExport(toClipboard) {"),
+      ].join(String.fromCharCode(10)),
+      sb,
+      { filename: "video.js (extracted)" }
+    );
+    await vm.runInContext("startExport(false)", sb);
+    expect(`export that stops early (${name}) clears the status line`, els["ve-export-status"].textContent === "", els["ve-export-status"].textContent);
+    expect(`export that stops early (${name}) hides the progress row`, els["ve-export-progress-row"]._hidden === true);
+  }
+}
+
+cameraOverlayRaceCheck().then(exportIdleCheck).then(closeChecks).then(() => {
 if (problems.length) {
   console.log(`${problems.length} problem(s):`);
   for (const p of problems) console.log(" - " + p);
