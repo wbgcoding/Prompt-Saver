@@ -16,7 +16,7 @@
 // set (see `start`), and a link's first "open" and first "copy" each ask for
 // a one-time, native confirmation before ever acting.
 
-use crate::{data_dir, error_log_enabled, error_log_max, lock, record_error_log, save_settings, show_main, Db, Settings};
+use crate::{data_dir, ERROR_LOG_MAX, error_log_enabled, lock, record_error_log, save_settings, show_main, Db, Settings};
 use rand::RngCore;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -84,7 +84,7 @@ fn password_hash_hex(settings: &Settings) -> Option<String> {
 
 fn log_remote(settings: &Settings, origin: &str, text: &str) {
     if error_log_enabled(settings) {
-        record_error_log(text, origin, None, error_log_max(settings));
+        record_error_log(text, origin, None, ERROR_LOG_MAX);
     }
 }
 

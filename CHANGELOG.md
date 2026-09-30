@@ -1491,6 +1491,11 @@ the video editor and the introduction tour ship on).
   switches, values and text fields to another machine without prompts or
   hotkeys coming along. Importing shows a preview of what will change first.
 
+- **Rarely used fine-tuning values are gone from the expert menu.** Internal
+  timers and retry counts, size limits and pixel values nobody could judge
+  without reading the code are no longer settings; the app keeps using their
+  previous defaults.
+
 ### Changed
 
 - **Several expert-menu rows moved next to the feature they belong to.** The

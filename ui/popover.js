@@ -13,11 +13,7 @@
 // slider pinned by CSS relative to its own button, flipped with one class
 // toggle -- it never needs horizontal clamping or scrolling, so folding it onto
 // this pixel-computed helper would be a rewrite for its own sake, not a fix.
-let POP_PAD = 6; // expert-tunable, see setPopoverPad()
-
-export function setPopoverPad(px) {
-  POP_PAD = px;
-}
+const POP_PAD = 6; // minimum gap between a popover and the window edge (px)
 
 export function placePopover(el, rect, gap = 4) {
   el.classList.remove("hidden"); // a hidden element has no box to measure

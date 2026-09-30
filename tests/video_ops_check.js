@@ -273,7 +273,7 @@ async function exportIdleCheck() {
   for (const [name, invokeStub, lossless] of scenarios) {
     for (const k of Object.keys(els)) delete els[k];
     const sb = {
-      VE: { exporting: false, ffmpeg: true, src: "C:/a.mp4", etaMinPct: 0, etaMinSecs: 0, etaShow: false },
+      VE: { exporting: false, ffmpeg: true, src: "C:/a.mp4", etaShow: false },
       $: el, t: (k) => k, toast: () => {}, invoke: invokeStub,
       totalOutMs: () => 5000, isLosslessCopy: () => lossless, exportFormat: () => "mp4", exportQuality: () => "high",
       formatExt: () => "mp4", destPath: () => "C:/out/a.mp4", showExportErrorDetails: () => {},

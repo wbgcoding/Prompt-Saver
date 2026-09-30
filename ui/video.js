@@ -41,6 +41,11 @@ const ZOOM_MAX_PX_PER_S = 600;    // ~1.7ms per pixel: far past frame accuracy
 const MAX_TRACK_PX = 12000;       // canvas/DOM ceiling for the timeline strip
 const THUMB_PX = 96;              // target width of one filmstrip thumbnail
 const WAVE_BUCKET_MAX = 2000;
+// Remaining time stays hidden below this percent and for this many seconds.
+const ETA_MIN_PCT = 10;
+const ETA_MIN_SECS = 20;
+// Arrow-key overlay nudge step while Shift is held.
+const NUM_FIELD_BIG_STEP = 10;
 const UNDO_MAX_DEFAULT = 40;      // expert value videoEditUndoMax
 const MIN_CLIP_MS = 100;          // shortest trim/cut range that still means something
 const RECT_MIN_PX = 16;           // smallest draggable rectangle, in source pixels
@@ -113,7 +118,6 @@ const VE = {
   floor: 0,             // undo may not walk back past this index
   undoMax: UNDO_MAX_DEFAULT,
   numFieldStep: 1,      // arrow-key overlay nudge, settings-driven, see applySettings
-  numFieldBigStep: 10,  // the same with Shift held
   sel: null,            // { a, b } selection on the source timeline, in ms
   selOv: null,          // id of the overlay currently being edited
   ovFields: {},         // key -> { input, getValue } for the open overlay editor,
@@ -145,8 +149,6 @@ const VE = {
   peaks: { 0: null, 1: null },
   exporting: false,
   etaShow: true,        // "Show remaining time" -- settings-driven, see applySettings
-  etaMinPct: 10,
-  etaMinSecs: 20,
   extraClipsMax: EXTRA_CLIPS_MAX_DEFAULT, // settings-driven, see applySettings
   dirty: false,         // ops changed since the last successful export
   lastExport: "",       // path of the file the last export produced
@@ -1140,7 +1142,7 @@ function nudgeSelectedOverlay(op, e) {
   // step would silently double every other press instead of moving by the
   // requested amount, so the step itself is rounded up to the nearest even
   // number first for those. Text has no such rect and no such constraint.
-  const rawAmount = e.shiftKey ? VE.numFieldBigStep : VE.numFieldStep;
+  const rawAmount = e.shiftKey ? NUM_FIELD_BIG_STEP : VE.numFieldStep;
   const amount = rect ? Math.max(2, even(rawAmount)) : rawAmount;
   let patch;
   if (e.ctrlKey || e.metaKey) {
@@ -3377,7 +3379,7 @@ function setProgress(pct) {
   $("ve-export-progress").value = clamped;
   $("ve-export-pct").textContent = `${Math.round(clamped)}%`;
   exportEta.feed(clamped);
-  const estimate = exportEta.estimate(VE.etaMinPct, VE.etaMinSecs);
+  const estimate = exportEta.estimate(ETA_MIN_PCT, ETA_MIN_SECS);
   const etaSpan = $("ve-export-eta");
   etaSpan.textContent = VE.etaShow ? formatEta(estimate, t) : "";
   $("ve-export-progress").setAttribute("aria-valuetext", a11yProgressText(t, clamped, estimate));
@@ -3542,7 +3544,7 @@ $("ve-ffmpeg-get").addEventListener("click", async (e) => {
   const unlisten = await listen("ffmpeg-download-progress", (ev) => {
     const pct = ffmpegDownloadPct(ev.payload);
     dlEta.feed(pct);
-    const estimate = dlEta.estimate(VE.etaMinPct, VE.etaMinSecs);
+    const estimate = dlEta.estimate(ETA_MIN_PCT, ETA_MIN_SECS);
     const eta = VE.etaShow ? formatEta(estimate, t) : "";
     btn.textContent = t("ffmpegDownloading").replace("{pct}", String(pct)) + (eta ? ` (${eta})` : "");
     btn.setAttribute("aria-valuenow", String(pct));
@@ -4154,11 +4156,13 @@ function resetForNewSource() {
 // would first give it one, and the Rust side already accepts kind="snip" for
 // exactly that day.
 let editStateTimer = null;
+// Seconds between two autosaves of the unfinished edit state.
+const EDIT_STATE_SAVE_SECS = 30;
 
 function armEditStateAutosave() {
   if (editStateTimer) { clearInterval(editStateTimer); editStateTimer = null; }
   if (!VE.editStateKeepOn) return;
-  editStateTimer = setInterval(saveEditStateNow, Math.max(5, VE.editStateSaveSecs) * 1000);
+  editStateTimer = setInterval(saveEditStateNow, EDIT_STATE_SAVE_SECS * 1000);
 }
 
 async function saveEditStateNow() {
@@ -4413,17 +4417,9 @@ function applySettings(settings) {
   const values = settings?.ui_values || {};
   VE.etaShow = settings?.ui_flags?.etaShow !== false;
   VE.editStateKeepOn = settings?.ui_flags?.editStateKeep !== false;
-  const editStateSaveSecs = Number(values.editStateSaveSecs);
-  VE.editStateSaveSecs = Number.isFinite(editStateSaveSecs) && editStateSaveSecs > 0 ? editStateSaveSecs : 30;
   armEditStateAutosave();
-  const etaMinPct = Number(values.etaMinPct);
-  VE.etaMinPct = Number.isFinite(etaMinPct) ? etaMinPct : 10;
-  const etaMinSecs = Number(values.etaMinSecs);
-  VE.etaMinSecs = Number.isFinite(etaMinSecs) ? etaMinSecs : 20;
   const numFieldStep = Number(values.numFieldStep);
   VE.numFieldStep = Number.isFinite(numFieldStep) && numFieldStep > 0 ? numFieldStep : 1;
-  const numFieldBigStep = Number(values.numFieldBigStep);
-  VE.numFieldBigStep = Number.isFinite(numFieldBigStep) && numFieldBigStep > 0 ? numFieldBigStep : 10;
   const extraClipsMax = Number(values.veExtraClipsMax);
   VE.extraClipsMax = Number.isFinite(extraClipsMax) ? Math.min(32, Math.max(1, Math.round(extraClipsMax))) : EXTRA_CLIPS_MAX_DEFAULT;
   const texts = settings?.ui_texts || {};
