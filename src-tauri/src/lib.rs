@@ -7930,7 +7930,7 @@ async fn batch_prompts(
     }
     // Return only the (small) settings: the caller mutates its local prompt list
     // in place, so we never re-serialise every prompt's base64 image over IPC.
-    let settings = store.settings.clone();
+    let settings = webview_settings(&store.settings);
     drop(store); // never re-arm shortcuts while the store mutex is held
     if action == "delete" {
         rearm_hotkeys(&app); // The deleted prompts give their accelerators back
@@ -9419,6 +9419,8 @@ fn delete_view_group(app: AppHandle, state: State<Db>, id: String) -> Settings {
 fn webview_settings(settings: &Settings) -> Settings {
     let mut copy = settings.clone();
     remote_tls::strip_private_key(&mut copy);
+    // The password hash is checked inside the backend only; its dialog has its own command.
+    copy.ui_texts.remove(remote::REMOTE_PASSWORD_KEY);
     copy
 }
 
@@ -26562,7 +26564,7 @@ fn is_protected_folder_key(key: &str) -> bool {
 // Set an expert string option (e.g. the copy-feedback font key).
 #[tauri::command]
 fn set_ui_text(app: AppHandle, state: State<Db>, key: String, value: String) {
-    if is_protected_folder_key(&key) || remote_tls::REMOTE_TLS_KEYS.contains(&key.as_str()) {
+    if is_protected_folder_key(&key) || remote::is_remote_secret_key(&key) {
         return;
     }
     {
@@ -33376,7 +33378,7 @@ pub fn run() {
             app.manage(remote::PendingLaunchUrl(Default::default()));
             // Same "never starts without a password" rule start() enforces on
             // every caller; harmless to call unconditionally at every boot.
-            remote::start(handle.clone());
+            let _ = remote::start(handle.clone());
             // A promptsaver:// link that started this very process (the app was
             // not already running yet) waits in PendingLaunchUrl until the main
             // window's script asks for it -- see run_pending_launch_url.
@@ -45196,7 +45198,11 @@ mod tests {
         let mut s = Settings::default();
         s.ui_texts.insert(remote_tls::REMOTE_TLS_KEY.into(), "sealed".into());
         s.ui_texts.insert(remote_tls::REMOTE_TLS_CA.into(), "ca".into());
+        s.ui_texts.insert(remote::REMOTE_PASSWORD_KEY.into(), "hash".into());
+        s.ui_texts.insert("remoteAllowedRanges".into(), "10.0.0.0/8".into());
         let copy = webview_settings(&s);
+        assert!(!copy.ui_texts.contains_key(remote::REMOTE_PASSWORD_KEY));
+        assert!(copy.ui_texts.contains_key("remoteAllowedRanges"));
         assert!(!copy.ui_texts.contains_key(remote_tls::REMOTE_TLS_KEY));
         assert_eq!(copy.ui_texts.get(remote_tls::REMOTE_TLS_CA).map(String::as_str), Some("ca"));
         assert!(s.ui_texts.contains_key(remote_tls::REMOTE_TLS_KEY));

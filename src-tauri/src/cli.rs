@@ -1576,7 +1576,7 @@ fn map_restore_err_code(e: &str) -> i32 {
 fn cmd_settings_get(store: &Store, key: &str, json: bool) -> Outcome {
     // The receiver's certificate values belong to this machine and never
     // travel over the command line, least of all the remote one.
-    if crate::remote_tls::REMOTE_TLS_KEYS.contains(&key) {
+    if crate::remote::is_remote_secret_key(key) {
         return Outcome::err(2, format!("no setting named \"{key}\"
 "));
     }
@@ -1610,7 +1610,7 @@ fn cmd_settings_get(store: &Store, key: &str, json: bool) -> Outcome {
 }
 
 fn cmd_settings_set(store: &mut Store, key: &str, value: &str) -> Outcome {
-    if crate::remote_tls::REMOTE_TLS_KEYS.contains(&key) {
+    if crate::remote::is_remote_secret_key(key) {
         return Outcome::err(1, format!("{key} is managed by the app and cannot be set
 "));
     }
@@ -2534,10 +2534,10 @@ mod tests {
     }
 
     #[test]
-    fn the_receiver_certificate_values_can_neither_be_read_nor_written_here() {
+    fn the_receiver_secrets_can_neither_be_read_nor_written_here() {
         let mut store = fixture_store();
         let dir = std::env::temp_dir();
-        for key in crate::remote_tls::REMOTE_TLS_KEYS {
+        for key in ["remoteTlsKey", "remoteTlsCert", "remoteTlsCa", "remotePasswordHash"] {
             store.settings.ui_texts.insert(key.to_string(), "sealed".to_string());
             let got = run_cmd(&mut store, &dir, &["settings", "get", key]);
             assert_eq!(got.code, 2, "{key} must not be readable");
@@ -2546,6 +2546,10 @@ mod tests {
             assert_ne!(set.code, 0, "{key} must not be writable");
             assert_eq!(store.settings.ui_texts.get(key).map(String::as_str), Some("sealed"));
         }
+        // The user-facing, non-secret receiver settings stay settable.
+        let ok = run_cmd(&mut store, &dir, &["settings", "set", "remoteAllowedRanges", "10.0.0.0/8", "--yes"]);
+        assert_eq!(ok.code, 0);
+        assert_eq!(store.settings.ui_texts.get("remoteAllowedRanges").map(String::as_str), Some("10.0.0.0/8"));
     }
 
     #[test]

@@ -163,6 +163,14 @@ pub(crate) fn remote_api_take_shown_password() -> Option<String> {
 // choice was not saved.
 
 pub(crate) const ERR_SAVE_FAILED: &str = "save-failed";
+pub(crate) const ERR_NETWORK_OFF_NOT_SAVED: &str = "remote-network-off-not-saved";
+pub(crate) const REMOTE_PASSWORD_KEY: &str = "remotePasswordHash";
+
+// Stored values no setter, reader or export may touch: the password hash and
+// the receiver's certificate values. Each has its own command.
+pub(crate) fn is_remote_secret_key(key: &str) -> bool {
+    key == REMOTE_PASSWORD_KEY || crate::remote_tls::REMOTE_TLS_KEYS.contains(&key)
+}
 pub(crate) const ERR_OFF_NOT_SAVED: &str = "remote-off-not-saved";
 
 fn restore_text(settings: &mut Settings, key: &str, old: Option<String>) {
@@ -289,10 +297,20 @@ pub(crate) fn set_remote_api_flag(app: &AppHandle, state: &State<Db>, enabled: b
     };
     match result.action {
         SwitchAction::Start => {
+            if let Err(e) = start(app.clone()) {
+                // The receiver did not come up: the switch must not stay on, and
+                // a password nobody was shown must not stay on record.
+                let mut store = lock(state);
+                store.settings.ui_flags.insert("remoteApi".to_string(), false);
+                if result.password.is_some() {
+                    store.settings.ui_texts.remove(REMOTE_PASSWORD_KEY);
+                }
+                let _ = save_settings(app, &store.settings);
+                return Err(e);
+            }
             if let Some(password) = result.password {
                 stash_shown_password(password);
             }
-            start(app.clone());
         }
         SwitchAction::Stop => stop(app),
         SwitchAction::None => {}
@@ -303,50 +321,76 @@ pub(crate) fn set_remote_api_flag(app: &AppHandle, state: &State<Db>, enabled: b
     }
 }
 
-// The `remoteNetworkFilter` switch while the receiver may be running. Both
-// directions are saved first and rolled back (nothing changes, nothing is
-// restarted) when the write fails or the certificate cannot be prepared. The
-// answer says whether the running receiver has to be restarted to pick up the
-// new bind address and protocol.
+// The outcome of the `remoteNetworkFilter` switch: whether the running
+// receiver has to be restarted, and the error to report, if any.
+pub(crate) struct NetworkResult {
+    pub restart: bool,
+    pub error: Option<String>,
+}
+
+// The `remoteNetworkFilter` switch while the receiver may be running. Widening
+// it is asymmetric on purpose, like the receiver's own switch: the identity is
+// made first, then the flag is set and saved once, and any failure leaves both
+// memory and disk as they were and restarts nothing. Narrowing it back to
+// loopback takes effect whatever the write does (the receiver is restarted bound
+// to loopback) and a failed write is reported as not saved.
 pub(crate) fn apply_network_switch(
     settings: &mut Settings,
     enabled: bool,
     names: &[String],
     mut save: impl FnMut(&Settings) -> bool,
-) -> Result<bool, String> {
-    let old = settings.ui_flags.get("remoteNetworkFilter").copied();
-    settings.ui_flags.insert("remoteNetworkFilter".to_string(), enabled);
-    if enabled && remote_api_enabled(settings) {
+) -> NetworkResult {
+    let running = remote_api_enabled(settings);
+    if !enabled {
+        settings.ui_flags.insert("remoteNetworkFilter".to_string(), false);
+        let saved = save(settings);
+        return NetworkResult { restart: running, error: if saved { None } else { Some(ERR_NETWORK_OFF_NOT_SAVED.to_string()) } };
+    }
+    if running {
         if let Err(e) = crate::remote_tls::ensure_tls_identity(settings, names, &mut save) {
-            restore_flag(settings, "remoteNetworkFilter", old);
-            return Err(e);
+            return NetworkResult { restart: false, error: Some(e) };
         }
     }
+    let old = settings.ui_flags.get("remoteNetworkFilter").copied();
+    settings.ui_flags.insert("remoteNetworkFilter".to_string(), true);
     if !save(settings) {
         restore_flag(settings, "remoteNetworkFilter", old);
-        return Err(ERR_SAVE_FAILED.to_string());
+        return NetworkResult { restart: false, error: Some(ERR_SAVE_FAILED.to_string()) };
     }
-    Ok(remote_api_enabled(settings))
+    NetworkResult { restart: running, error: None }
 }
 
 // The `remoteNetworkFilter` branch of set_ui_flag.
 pub(crate) fn set_network_flag(app: &AppHandle, state: &State<Db>, enabled: bool) -> Result<(), String> {
     let names = crate::remote_tls::host_names();
-    let restart = {
+    let old = { lock(state).settings.ui_flags.get("remoteNetworkFilter").copied() };
+    let result = {
         let mut store = lock(state);
-        apply_network_switch(&mut store.settings, enabled, &names, |s| save_settings(app, s))?
+        apply_network_switch(&mut store.settings, enabled, &names, |s| save_settings(app, s))
     };
-    if restart {
-        restart_receiver(app);
+    if result.restart {
+        if let Err(e) = restart_receiver(app) {
+            // The new mode could not start: go back to the old one.
+            {
+                let mut store = lock(state);
+                restore_flag(&mut store.settings, "remoteNetworkFilter", old);
+                let _ = save_settings(app, &store.settings);
+            }
+            let _ = start(app.clone());
+            return Err(e);
+        }
     }
-    Ok(())
+    match result.error {
+        Some(e) => Err(e),
+        None => Ok(()),
+    }
 }
 
 // Stops the running receiver and starts it again from the stored settings. The
 // new run waits for the old one to let go of its port.
-fn restart_receiver(app: &AppHandle) {
+fn restart_receiver(app: &AppHandle) -> Result<(), String> {
     stop(app);
-    start(app.clone());
+    start(app.clone())
 }
 
 #[tauri::command]
@@ -390,7 +434,7 @@ pub(crate) fn remote_tls_renew(app: AppHandle, state: State<Db>) -> Result<Strin
         (crate::remote_tls::fingerprint(&id.ca_pem), remote_api_enabled(&store.settings) && network_filter_enabled(&store.settings))
     };
     if restart {
-        restart_receiver(&app);
+        restart_receiver(&app)?;
     }
     fingerprint.ok_or_else(|| "no-certificate".to_string())
 }
@@ -594,10 +638,13 @@ async fn serve_run<F>(
     F: Fn(TcpStream, SocketAddr),
 {
     let RunTicket { generation, mut cancel, previous } = ticket;
-    if let Some(prev) = previous {
+    if let Some(mut prev) = previous {
         tokio::select! {
-            _ = prev => {}
+            _ = &mut prev => {}
             _ = &mut cancel => {
+                // Cancelled while waiting: still wait for the older run, so a
+                // chain of starts and stops never lets two tasks near the port.
+                let _ = prev.await;
                 on_finished(false);
                 return;
             }
@@ -679,18 +726,18 @@ pub(crate) fn remote_api_stop_now(app: AppHandle, state: State<Db>) -> Result<()
 // enforced, so every caller (boot, the expert-menu switch, a future one)
 // gets it for free just by calling start() instead of binding a socket
 // itself.
-pub(crate) fn start(app: AppHandle) {
+pub(crate) fn start(app: AppHandle) -> Result<(), String> {
     let settings = {
         let db: State<Db> = app.state();
         let guard = lock(&db);
         guard.settings.clone()
     };
     if !remote_api_enabled(&settings) {
-        return;
+        return Ok(());
     }
     let Some(_hash) = password_hash_hex(&settings) else {
         log_remote(&settings, "remoteApi", "remote access could not start: no password is set");
-        return;
+        return Ok(());
     };
     let (bind_ip, tls) = bind_plan(&settings);
     // With the network switch on the receiver speaks only TLS. The identity is
@@ -701,7 +748,7 @@ pub(crate) fn start(app: AppHandle) {
             Err(e) => {
                 log_remote(&settings, "remoteApi", &format!("remote access could not start: {e}"));
                 record_error_log(&format!("remote access could not start: {e}"), "remoteApi", None, 100);
-                return;
+                return Err(e);
             }
         }
     } else {
@@ -709,7 +756,7 @@ pub(crate) fn start(app: AppHandle) {
     };
     let state: State<RemoteApiState> = app.state();
     if state.running.swap(true, Ordering::SeqCst) {
-        return; // already running
+        return Ok(()); // already running
     }
     let port = remote_port(&settings);
     // The bind address is fixed for the lifetime of a run; the peer allow-list
@@ -719,6 +766,8 @@ pub(crate) fn start(app: AppHandle) {
     let runs = state.runs.clone();
     let runs_for_run = runs.clone();
     runs.start_run(|ticket| {
+        let generation = ticket.generation;
+        let runs_conn = runs_for_run.clone();
         let (app_bound, app_failed, app_conn, app_done) = (app.clone(), app.clone(), app.clone(), app.clone());
         tauri::async_runtime::spawn(serve_run(
             ticket,
@@ -740,7 +789,8 @@ pub(crate) fn start(app: AppHandle) {
                 let app3 = app_conn.clone();
                 let guard2 = guard.clone();
                 let acceptor2 = acceptor.clone();
-                tauri::async_runtime::spawn(async move { handle_connection(stream, peer, app3, guard2, acceptor2).await });
+                let runs2 = runs_conn.clone();
+                tauri::async_runtime::spawn(async move { handle_connection(stream, peer, app3, guard2, acceptor2, runs2, generation).await });
             },
             move |current| {
                 // A run that is no longer the current one must not touch the
@@ -755,6 +805,7 @@ pub(crate) fn start(app: AppHandle) {
             },
         ))
     });
+    Ok(())
 }
 
 // The stored identity (made and saved first when it is missing or unreadable)
@@ -883,6 +934,7 @@ fn status_text(status: u16) -> &'static str {
         413 => "Payload Too Large",
         429 => "Too Many Requests",
         431 => "Request Header Fields Too Large",
+        503 => "Service Unavailable",
         _ => "Error",
     }
 }
@@ -992,7 +1044,15 @@ fn bind_plan(settings: &Settings) -> (Ipv4Addr, bool) {
     }
 }
 
-async fn handle_connection(mut stream: TcpStream, peer: SocketAddr, app: AppHandle, guard: Arc<RemoteGuard>, acceptor: Option<TlsAcceptor>) {
+async fn handle_connection(
+    mut stream: TcpStream,
+    peer: SocketAddr,
+    app: AppHandle,
+    guard: Arc<RemoteGuard>,
+    acceptor: Option<TlsAcceptor>,
+    runs: Arc<RunController>,
+    generation: u64,
+) {
     let ip = peer.ip();
     let settings = {
         let state: State<Db> = app.state();
@@ -1019,14 +1079,22 @@ async fn handle_connection(mut stream: TcpStream, peer: SocketAddr, app: AppHand
     }
     match acceptor {
         Some(acceptor) => match tls_accept(&acceptor, stream).await {
-            Ok(tls_stream) => serve_request(tls_stream, ip, settings, app, guard).await,
+            Ok(tls_stream) => serve_request(tls_stream, ip, settings, app, guard, runs, generation).await,
             Err(()) => log_remote(&settings, "remoteApi", "remote access: a connection failed the secure handshake"),
         },
-        None => serve_request(stream, ip, settings, app, guard).await,
+        None => serve_request(stream, ip, settings, app, guard, runs, generation).await,
     }
 }
 
-async fn serve_request<S: AsyncRead + AsyncWrite + Unpin>(mut stream: S, ip: IpAddr, settings: Settings, app: AppHandle, guard: Arc<RemoteGuard>) {
+async fn serve_request<S: AsyncRead + AsyncWrite + Unpin>(
+    mut stream: S,
+    ip: IpAddr,
+    settings: Settings,
+    app: AppHandle,
+    guard: Arc<RemoteGuard>,
+    runs: Arc<RunController>,
+    generation: u64,
+) {
     let req = match read_request(&mut stream).await {
         Ok(r) => r,
         Err(status) => {
@@ -1064,6 +1132,13 @@ async fn serve_request<S: AsyncRead + AsyncWrite + Unpin>(mut stream: S, ip: IpA
         }
     };
     let cmd_name = argv[0].clone();
+    // A connection accepted before a stop, a restart or a renewed certificate
+    // belongs to a run that no longer exists: it must not execute anything.
+    if !runs.current(generation) {
+        log_remote(&settings, "remoteApi", "remote access: a request from a stopped receiver was not run");
+        write_response(&mut stream, 503, &json_err("receiver restarted")).await;
+        return;
+    }
     let dir = data_dir(&app);
     if let Err(msg) = crate::cli::confine_path_arg(&argv, &dir) {
         log_remote(&settings, "remoteApi", &format!("remote access: {cmd_name} -> refused (path escapes the data folder)"));
@@ -2068,27 +2143,87 @@ mod tests {
     #[test]
     fn turning_the_network_switch_on_makes_the_identity_then_saves_and_asks_for_a_restart() {
         let mut s = settings_with(true, Some("aa"));
-        let restart = apply_network_switch(&mut s, true, &names_for_test(), |_| true).unwrap();
-        assert!(restart);
+        let r = apply_network_switch(&mut s, true, &names_for_test(), |_| true);
+        assert!(r.error.is_none());
+        assert!(r.restart);
         assert!(network_filter_enabled(&s));
         assert!(s.ui_texts.get(crate::remote_tls::REMOTE_TLS_KEY).unwrap().starts_with(crate::ENC_PREFIX));
     }
 
     #[test]
-    fn a_failed_write_rolls_the_network_switch_back_in_both_directions() {
+    fn a_failed_final_write_leaves_the_flag_off_in_memory_and_on_disk() {
         let mut s = settings_with(true, Some("aa"));
-        assert_eq!(apply_network_switch(&mut s, true, &names_for_test(), |_| false).err().as_deref(), Some(ERR_SAVE_FAILED));
+        // Every write the switch makes: what the disk would hold after each.
+        let mut disk_flag_after_each_write = Vec::new();
+        let r = apply_network_switch(&mut s, true, &names_for_test(), |st| {
+            disk_flag_after_each_write.push(network_filter_enabled(st));
+            // The identity write lands, the flag write fails.
+            !network_filter_enabled(st)
+        });
+        assert_eq!(r.error.as_deref(), Some(ERR_SAVE_FAILED));
+        assert!(!r.restart);
         assert!(!network_filter_enabled(&s));
+        // The only write that succeeded never carried the flag.
+        assert_eq!(disk_flag_after_each_write.first(), Some(&false));
+    }
+
+    #[test]
+    fn a_failing_identity_leaves_the_flag_alone() {
+        let mut s = settings_with(true, Some("aa"));
+        let r = apply_network_switch(&mut s, true, &names_for_test(), |_| false);
+        assert_eq!(r.error.as_deref(), Some(ERR_SAVE_FAILED));
+        assert!(!network_filter_enabled(&s));
+        assert!(!s.ui_texts.contains_key(crate::remote_tls::REMOTE_TLS_KEY));
+    }
+
+    #[test]
+    fn narrowing_the_network_switch_always_applies_and_says_when_it_was_not_saved() {
+        let mut s = settings_with(true, Some("aa"));
         s.ui_flags.insert("remoteNetworkFilter".into(), true);
-        assert_eq!(apply_network_switch(&mut s, false, &names_for_test(), |_| false).err().as_deref(), Some(ERR_SAVE_FAILED));
-        assert!(network_filter_enabled(&s));
+        let r = apply_network_switch(&mut s, false, &names_for_test(), |_| false);
+        assert!(r.restart, "the receiver must be restarted bound to loopback");
+        assert_eq!(r.error.as_deref(), Some(ERR_NETWORK_OFF_NOT_SAVED));
+        assert!(!network_filter_enabled(&s));
+        let mut s2 = settings_with(true, Some("aa"));
+        s2.ui_flags.insert("remoteNetworkFilter".into(), true);
+        let ok = apply_network_switch(&mut s2, false, &names_for_test(), |_| true);
+        assert!(ok.restart && ok.error.is_none());
     }
 
     #[test]
     fn the_network_switch_with_the_receiver_off_needs_no_identity_and_no_restart() {
         let mut s = settings_with(false, None);
-        let restart = apply_network_switch(&mut s, true, &names_for_test(), |_| true).unwrap();
-        assert!(!restart);
+        let r = apply_network_switch(&mut s, true, &names_for_test(), |_| true);
+        assert!(!r.restart && r.error.is_none());
         assert!(!s.ui_texts.contains_key(crate::remote_tls::REMOTE_TLS_KEY));
+    }
+
+    #[test]
+    fn secret_keys_are_the_password_hash_and_the_certificate_values() {
+        assert!(is_remote_secret_key("remotePasswordHash"));
+        for k in crate::remote_tls::REMOTE_TLS_KEYS {
+            assert!(is_remote_secret_key(k));
+        }
+        assert!(!is_remote_secret_key("remoteAllowedRanges"));
+        assert!(!is_remote_secret_key("remotePort"));
+    }
+
+    #[tokio::test]
+    async fn a_chain_of_starts_and_stops_never_binds_twice() {
+        let controller = Arc::new(RunController::new());
+        let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, free_port().await));
+        let probes: Vec<Arc<Probe>> = (0..4).map(|_| Arc::new(Probe::default())).collect();
+        launch(&controller, addr, &probes[0]);
+        controller.stop();
+        launch(&controller, addr, &probes[1]);
+        controller.stop();
+        launch(&controller, addr, &probes[2]);
+        controller.stop();
+        launch(&controller, addr, &probes[3]);
+        assert!(wait_until(|| probes[3].bound.load(Ordering::SeqCst) == 1).await);
+        let bound_total: usize = probes.iter().map(|p| p.bound.load(Ordering::SeqCst)).sum();
+        assert_eq!(bound_total, 1, "only the last run may ever have owned the port");
+        assert!(TcpStream::connect(addr).await.is_ok());
+        assert!(!controller.current(1) && controller.current(controller.generation.load(Ordering::SeqCst)));
     }
 }

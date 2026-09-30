@@ -72,7 +72,35 @@ fn names_for(dns_host: Option<&str>, computer_name: Option<&str>) -> Vec<String>
 // also with .local): the names another device is likely to type.
 pub(crate) fn host_names() -> Vec<String> {
     let computer = std::env::var("COMPUTERNAME").ok();
-    names_for(dns_host_name().as_deref(), computer.as_deref())
+    let host = dns_host_name();
+    let mut names = names_for(host.as_deref(), computer.as_deref());
+    // The machine's own addresses too, so https://192.168.x.y works. They are
+    // read when the certificate is made, so a renewal picks up new ones.
+    for ip in local_ipv4_names(host.as_deref().or(computer.as_deref())) {
+        if !names.contains(&ip) {
+            names.push(ip);
+        }
+    }
+    names
+}
+
+// Non-loopback, non-link-local IPv4 addresses this machine's own name resolves to.
+fn local_ipv4_names(host: Option<&str>) -> Vec<String> {
+    use std::net::ToSocketAddrs;
+    let Some(host) = host else { return Vec::new() };
+    let Ok(addrs) = (host, 0u16).to_socket_addrs() else { return Vec::new() };
+    let mut out = Vec::new();
+    for a in addrs {
+        if let IpAddr::V4(v4) = a.ip() {
+            if !v4.is_loopback() && !v4.is_unspecified() && !v4.is_link_local() && !v4.is_multicast() {
+                let text = v4.to_string();
+                if !out.contains(&text) {
+                    out.push(text);
+                }
+            }
+        }
+    }
+    out
 }
 
 #[cfg(windows)]
@@ -133,13 +161,15 @@ fn generate(names: &[String]) -> Result<TlsIdentity, String> {
     server_params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
     server_params.not_before = not_before;
     server_params.not_after = not_after;
+    // A name that cannot be a certificate name (non-ASCII, say) is skipped
+    // instead of failing the whole identity.
     server_params.subject_alt_names = names
         .iter()
-        .map(|n| match IpAddr::from_str(n) {
-            Ok(ip) => Ok(SanType::IpAddress(ip)),
-            Err(_) => n.clone().try_into().map(SanType::DnsName).map_err(|e: rcgen::Error| e.to_string()),
+        .filter_map(|n| match IpAddr::from_str(n) {
+            Ok(ip) => Some(SanType::IpAddress(ip)),
+            Err(_) => n.clone().try_into().map(SanType::DnsName).ok(),
         })
-        .collect::<Result<Vec<_>, String>>()?;
+        .collect();
     let issuer = Issuer::from_params(&ca_params, &ca_key);
     let server_cert = server_params.signed_by(&server_key, &issuer).map_err(|e| e.to_string())?;
     // ca_key goes out of scope here and is never written anywhere.
@@ -278,6 +308,30 @@ mod tests {
         assert_eq!(n, vec!["localhost", "127.0.0.1", "box", "box.local"]);
         let n = names();
         assert!(n.contains(&"test-pc.local".to_string()) && n.contains(&"testpc".to_string()));
+    }
+
+    fn contains_bytes(hay: &[u8], needle: &[u8]) -> bool {
+        hay.windows(needle.len()).any(|w| w == needle)
+    }
+
+    #[test]
+    fn an_unusable_name_is_skipped_and_addresses_become_ip_names() {
+        let names = vec!["localhost".to_string(), "127.0.0.1".to_string(), "bücher-pc".to_string(), "192.168.7.42".to_string()];
+        let id = generate(&names).expect("a non-ASCII name must not fail the identity");
+        assert!(build_server_config(&id).is_ok());
+        let der = CertificateDer::from_pem_slice(id.cert_pem.as_bytes()).unwrap();
+        assert!(contains_bytes(der.as_ref(), &[192, 168, 7, 42]), "the address must be a name of the certificate");
+        assert!(contains_bytes(der.as_ref(), b"localhost"));
+        assert!(!contains_bytes(der.as_ref(), b"cher-pc"));
+    }
+
+    #[test]
+    fn local_addresses_never_include_loopback_or_link_local() {
+        for ip in local_ipv4_names(Some("localhost")) {
+            let v4: std::net::Ipv4Addr = ip.parse().unwrap();
+            assert!(!v4.is_loopback() && !v4.is_link_local());
+        }
+        assert!(local_ipv4_names(None).is_empty());
     }
 
     #[test]
