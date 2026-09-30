@@ -2636,14 +2636,20 @@ function enableExpr(op) {
 // own duration keeps `movie=` from being asked for frames past the end of
 // its file, which is how a not-looping overlay near the end of a longer
 // range used to break the whole export instead of just stopping early.
-function videoOverlayEffectiveEndMs(op) {
-  if (op.loop || !op.videoDurationMs) return op.endMs;
-  return Math.min(op.endMs, op.startMs + op.videoDurationMs);
+// The overlay's footage plays at native speed on the OUTPUT clock, so the cap
+// is added to the start AFTER both ends went through outMs(): a speed change
+// or a cut inside the range must not stretch or shrink the footage's own length.
+function videoOverlayWindowOutMs(op) {
+  const aOut = outMs(clamp(op.startMs, 0, VE.dur));
+  const bOut = outMs(clamp(op.endMs, 0, VE.dur));
+  const endOut = op.loop || !op.videoDurationMs ? bOut : Math.min(bOut, aOut + op.videoDurationMs);
+  return { aOut, endOut };
 }
 
 function videoOverlayEnable(op) {
-  const a = outMs(clamp(op.startMs, 0, VE.dur)) / 1000;
-  const b = outMs(clamp(videoOverlayEffectiveEndMs(op), 0, VE.dur)) / 1000;
+  const { aOut, endOut } = videoOverlayWindowOutMs(op);
+  const a = aOut / 1000;
+  const b = endOut / 1000;
   if (b <= a) return null;
   return `enable='between(t,${a.toFixed(3)},${b.toFixed(3)})'`;
 }
@@ -2651,10 +2657,11 @@ function videoOverlayEnable(op) {
 // A finite repeat count rather than an unbounded loop: deterministic ffmpeg
 // behaviour, and it needs no guess at a buffer size large enough to hold the
 // whole thing. Native speed only -- a video overlay's own clock is never
-// adjusted to match a "speed" op on the main timeline (see the report).
+// adjusted to match a "speed" op on the main timeline.
 function videoOverlayLoopArg(op) {
   if (!op.loop || !op.videoDurationMs) return "";
-  const neededMs = videoOverlayEffectiveEndMs(op) - op.startMs;
+  const { aOut, endOut } = videoOverlayWindowOutMs(op);
+  const neededMs = endOut - aOut;
   const count = Math.max(0, Math.ceil(neededMs / op.videoDurationMs) - 1);
   return count > 0 ? `:loop=${count}` : "";
 }
@@ -3158,9 +3165,8 @@ function buildAudioChain() {
   // clip, and doubling an overlay's sound into them as well would mix it in
   // twice.
   for (const op of videoOverlaysWithAudio) {
-    const capEnd = videoOverlayEffectiveEndMs(op);
-    const startOutMs = outMs(clamp(op.startMs, 0, VE.dur));
-    const durSec = (capEnd - op.startMs) / 1000;
+    const { aOut: startOutMs, endOut } = videoOverlayWindowOutMs(op);
+    const durSec = (endOut - startOutMs) / 1000;
     if (durSec <= 0) continue;
     const loopArg = videoOverlayLoopArg(op);
     const src = label(), out = label();

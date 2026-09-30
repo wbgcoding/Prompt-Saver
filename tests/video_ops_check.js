@@ -49,7 +49,7 @@ function makeSandbox(extra) {
       extractLine("totalOutMs", "const totalOutMs = () => timelinePlan().reduce((sum, e) => sum + planEntryOutMs(e), 0);"),
       extractLine("secs", "const secs = (ms) => (ms / 1000).toFixed(3);"),
       extractBlock("ffPath", "function ffPath(path) {"),
-      extractBlock("videoOverlayEffectiveEndMs", "function videoOverlayEffectiveEndMs(op) {"),
+      extractBlock("videoOverlayWindowOutMs", "function videoOverlayWindowOutMs(op) {"),
       extractBlock("videoOverlayEnable", "function videoOverlayEnable(op) {"),
       extractBlock("videoOverlayLoopArg", "function videoOverlayLoopArg(op) {"),
       extractBlock("isLosslessCopy", "function isLosslessCopy() {"),
@@ -84,6 +84,26 @@ function baseState(ops) {
   expect("isLosslessCopy stays true when the only clip is missing", vm.runInContext("isLosslessCopy()", sb) === true);
   sb.VE = baseState([]);
   expect("isLosslessCopy stays true for an untouched recording", vm.runInContext("isLosslessCopy()", sb) === true);
+}
+
+// A video overlay's footage runs at native speed on the output clock: its
+// enable window must end at start + footage length in OUTPUT seconds, whatever
+// speed op sits on the main timeline.
+{
+  const sb = makeSandbox({});
+  const overlay = { tool: "overlay", kind: "video", startMs: 0, endMs: 20000, loop: false, videoDurationMs: 8000 };
+  const endOf = (ops) => {
+    sb.VE = baseState(ops);
+    const m = /between\(t,([\d.]+),([\d.]+)\)/.exec(vm.runInContext("videoOverlayEnable", sb)(overlay) || "");
+    return m ? Number(m[2]) : null;
+  };
+  expect("overlay window ends at its footage length at 2x speed", endOf([{ tool: "speed", rate: 2 }, overlay]) === 8, String(endOf([{ tool: "speed", rate: 2 }, overlay])));
+  expect("overlay window ends at its footage length at 0.5x speed", endOf([{ tool: "speed", rate: 0.5 }, overlay]) === 8, String(endOf([{ tool: "speed", rate: 0.5 }, overlay])));
+  expect("overlay window at native speed is unchanged", endOf([overlay]) === 8);
+  sb.VE = baseState([{ tool: "speed", rate: 2 }]);
+  const looping = Object.assign({}, overlay, { loop: true, videoDurationMs: 3000 });
+  // 20 s source at 2x = 10 s of output, repeated 3 s footage: 4 plays = loop count 3.
+  expect("loop count follows the output window", vm.runInContext("videoOverlayLoopArg", sb)(looping) === ":loop=3", vm.runInContext("videoOverlayLoopArg", sb)(looping));
 }
 
 // An inserted clip that carries sound must be decoded into the audio graph,
