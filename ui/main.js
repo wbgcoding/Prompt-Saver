@@ -750,6 +750,7 @@ const ERROR_MSG_KEYS = {
   "recording-busy": "recBusy",
   "save-failed": "persistFailed",
   "remote-off-not-saved": "remoteOffNotSaved",
+  "remote-network-off-not-saved": "remoteNetworkOffNotSaved",
   "the certificate key could not be protected": "remoteTlsKeyNotProtected",
 };
 function errToast(err) {
@@ -2784,11 +2785,12 @@ function flagRow(key) {
       else if (msg === "demo-mode-active") toast(t("demoModeMultipleInstances"));
       else if (msg === "save-failed") toast(t("persistFailed"));
       else if (msg === "remote-off-not-saved") toast(t("remoteOffNotSaved"));
+      else if (msg === "remote-network-off-not-saved") toast(t("remoteNetworkOffNotSaved"));
       else if (msg === "the certificate key could not be protected") toast(t("remoteTlsKeyNotProtected"));
       else toast(msg);
       // Switching the receiver off always takes effect, even when the write did
       // not land, so that one error keeps the switch off instead of reverting it.
-      const stayed = msg === "remote-off-not-saved";
+      const stayed = msg === "remote-off-not-saved" || msg === "remote-network-off-not-saved";
       settings.ui_flags = { ...(settings.ui_flags || {}), [key]: stayed ? enabled : !enabled };
       input.checked = stayed ? enabled : !enabled;
     }

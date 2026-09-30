@@ -928,7 +928,9 @@ answer at all. The **Certificate...** button next to the address ranges shows
 the certificate's fingerprint, saves the certificate so another device can
 trust it (for example `curl.exe --ssl-no-revoke --cacert <file>
 https://<computer name>:<port>/api`), and creates a new one; a new certificate replaces the old
-one at once, so every device has to be set up again. Without the network
+one at once, so every device has to be set up again. The certificate also
+names this computer's addresses as they were when it was made: after the
+network address changes, New certificate refreshes it. Without the network
 switch the receiver only listens on this computer and stays plain HTTP.
 
 For a script or another program driving either of these two, `prompt-saver
@@ -1648,7 +1650,9 @@ Zertifikats, speichert es, damit ein anderes Gerät ihm vertrauen kann (zum
 Beispiel `curl.exe --ssl-no-revoke --cacert <Datei>
 https://<Computername>:<Port>/api`) und
 erzeugt ein neues; ein neues Zertifikat ersetzt das alte sofort, jedes Gerät
-muss also neu eingerichtet werden. Ohne den Netzwerk-Schalter lauscht die
+muss also neu eingerichtet werden. Das Zertifikat nennt außerdem die
+Adressen dieses Rechners, wie sie bei seiner Erzeugung waren: ändert sich die
+Netzwerkadresse, frischt "Neues Zertifikat" es auf. Ohne den Netzwerk-Schalter lauscht die
 Schnittstelle nur auf diesem Rechner und bleibt einfaches HTTP.
 
 Für ein Skript oder ein anderes Programm, das eines der beiden steuert, gibt
