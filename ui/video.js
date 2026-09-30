@@ -687,15 +687,24 @@ function planEntryOutMs(entry) {
 // Source milliseconds -> milliseconds in the exported clip. Overlay time ranges
 // are picked on the source timeline (that is what the user sees) but ffmpeg's
 // `enable` expressions run on the output timeline, so every range goes through
-// this on the way into the filter graph.
-function outMs(srcMs) {
+// this on the way into the filter graph. The walk follows timelinePlan(), so
+// the length of every inserted section clip that sits before the point is
+// counted (overlays are applied after the clips are concatenated in). A point
+// exactly on the start of a kept stretch lands after the clips in front of it
+// when it opens a range, and before them when it closes one (atEnd).
+function outMs(srcMs, atEnd) {
+  const rate = speedRate();
   let acc = 0;
-  for (const seg of keptSegments()) {
-    if (srcMs <= seg.a) break;
-    acc += Math.min(srcMs, seg.b) - seg.a;
-    if (srcMs < seg.b) break;
+  let pending = 0;
+  for (const entry of timelinePlan()) {
+    if (entry.type === "clip") { pending += planEntryOutMs(entry); continue; }
+    if (srcMs < entry.a || (atEnd && srcMs === entry.a)) break;
+    acc += pending;
+    pending = 0;
+    acc += (Math.min(srcMs, entry.b) - entry.a) / rate;
+    if (srcMs < entry.b) break;
   }
-  return acc / speedRate();
+  return acc;
 }
 
 // Includes every inserted section clip's own length -- the one change that
@@ -2663,7 +2672,7 @@ const hexToFf = (hex, opacity) => `0x${String(hex).replace("#", "")}@${(clamp(op
 // timeline, which is what `enable=between(t,…)` reads.
 function enableExpr(op) {
   const a = outMs(clamp(op.startMs, 0, VE.dur)) / 1000;
-  const b = outMs(clamp(op.endMs, 0, VE.dur)) / 1000;
+  const b = outMs(clamp(op.endMs, 0, VE.dur), true) / 1000;
   if (b <= a) return null;
   return `enable='between(t,${a.toFixed(3)},${b.toFixed(3)})'`;
 }
@@ -2678,7 +2687,7 @@ function enableExpr(op) {
 // or a cut inside the range must not stretch or shrink the footage's own length.
 function videoOverlayWindowOutMs(op) {
   const aOut = outMs(clamp(op.startMs, 0, VE.dur));
-  const bOut = outMs(clamp(op.endMs, 0, VE.dur));
+  const bOut = outMs(clamp(op.endMs, 0, VE.dur), true);
   const endOut = op.loop || !op.videoDurationMs ? bOut : Math.min(bOut, aOut + op.videoDurationMs);
   return { aOut, endOut };
 }
@@ -2833,7 +2842,7 @@ function keysEnable(op, spans) {
   const clipped = spans
     .map(([s, e]) => [Math.max(s, op.startMs), Math.min(e, op.endMs)])
     .filter(([s, e]) => e > s)
-    .map(([s, e]) => [outMs(s) / 1000, outMs(e) / 1000]);
+    .map(([s, e]) => [outMs(s) / 1000, outMs(e, true) / 1000]);
   if (!clipped.length) return null;
   return `enable='${clipped.map(([a, b]) => `between(t,${a.toFixed(3)},${b.toFixed(3)})`).join("+")}'`;
 }
@@ -3130,15 +3139,16 @@ function buildAudioChain() {
   const clipsWithAudio = plan.filter((e) => e.type === "clip" && e.op.hasAudio);
   if (!tracks.length && !videoOverlaysWithAudio.length && !clipsWithAudio.length) return null;
   // Clip sound goes into ONE track, or it would be mixed in twice. The first
-  // track that is not muted hosts it; with no recorded audio at all a
-  // dedicated track (silent where the main video plays) carries it.
+  // track that is not muted hosts it; with none (no recorded audio, or all
+  // of it muted) a dedicated track (silent where the main video plays) carries it.
   let clipHost = null;
   if (clipsWithAudio.length) {
-    if (!tracks.length) {
+    clipHost = tracks.find((tr) => !tr.state.mute);
+    if (!clipHost) {
+      // No unmuted recorded track (or none at all): a muted host would zero
+      // the clip's sound too, so it gets a track of its own.
       clipHost = { index: -1, spec: null, state: { mute: false, vol: 100 } };
       tracks.push(clipHost);
-    } else {
-      clipHost = tracks.find((tr) => !tr.state.mute) || tracks[0];
     }
   }
 
@@ -3401,6 +3411,11 @@ async function startExport(toClipboard) {
     ? await invoke("clip_export_path", { ext: formatExt(format) }).catch((err) => { toast(String(err)); return null; })
     : destPath();
   if (!dest) return;
+  // Another recording can be opened while this export still runs; its result
+  // must never touch that recording's state.
+  const gen = VE.loadGen;
+  const src = VE.src;
+  const stillHere = () => VE.loadGen === gen;
   VE.exporting = true;
   $("ve-export-start").disabled = true;
   $("ve-export-clip").disabled = true;
@@ -3456,23 +3471,25 @@ async function startExport(toClipboard) {
       try {
         await invoke("export_video", { req: request });
         invoke("record_tool_usage", { tool: "video_export" }).catch(() => {});
-        VE.dirty = false;
+        if (stillHere()) VE.dirty = false;
         // A finished export means nothing here is "unfinished" any more -- clear the
         // remembered row so reopening this recording later never offers to restore
         // work that already made it out. Continued editing after this point simply
         // gets a fresh row from the next autosave tick, same as any other edit.
-        if (VE.editStateKeepOn && VE.src) {
-          invoke("discard_edit_state", { kind: "video", target: VE.src }).catch(() => {});
+        if (stillHere() && VE.editStateKeepOn && src) {
+          invoke("discard_edit_state", { kind: "video", target: src }).catch(() => {});
         }
-        setProgress(100);
+        if (stillHere()) setProgress(100);
         if (toClipboard) {
           const clipOk = await invoke("copy_file_to_clipboard", { path: dest }).catch(() => false);
-          $("ve-export-status").textContent = clipOk ? t("veClipExportDone") : t("veExportDone").replace("{path}", dest);
+          if (stillHere()) $("ve-export-status").textContent = clipOk ? t("veClipExportDone") : t("veExportDone").replace("{path}", dest);
           toast(clipOk ? t("veClipExportDone") : t("veExportDone").replace("{path}", dest));
         } else {
-          VE.lastExport = dest;
-          $("ve-export-status").textContent = t("veExportDone").replace("{path}", dest);
-          $("ve-export-saveas").classList.remove("hidden");
+          if (stillHere()) {
+            VE.lastExport = dest;
+            $("ve-export-status").textContent = t("veExportDone").replace("{path}", dest);
+            $("ve-export-saveas").classList.remove("hidden");
+          }
           toast(t("veExportDone").replace("{path}", dest));
         }
         return;
@@ -3497,7 +3514,9 @@ async function startExport(toClipboard) {
     // noteFfmpeg() above. Everything else is a real ffmpeg (or filesystem)
     // failure, translated by the one shared classifier -- never its raw text
     // as the headline, only reachable underneath in "Technical details".
-    if (raw.includes("cancel")) {
+    if (!stillHere()) {
+      // the editor moved on to another recording; nothing of this one to show
+    } else if (raw.includes("cancel")) {
       $("ve-export-status").textContent = t("veExportCancelled");
     } else if (raw.includes("ffmpeg-missing")) {
       $("ve-export-status").textContent = t("recFfmpegMissingHint");
@@ -3932,7 +3951,7 @@ $("ve-export-clip").addEventListener("click", () => startExport(true));
 $("ve-export-cancel").addEventListener("click", () => invoke("cancel_export").catch(() => {}));
 $("ve-export-saveas").addEventListener("click", async () => {
   if (!VE.lastExport) return;
-  const moved = await invoke("save_recording_as", { srcPath: VE.lastExport }).catch((err) => { toast(String(err)); return null; });
+  const moved = await invoke("save_recording_as", { srcPath: VE.lastExport }).catch((err) => { toast(String(err).includes("source-not-allowed") ? t("veMoveNotAllowed") : String(err)); return null; });
   if (moved) {
     VE.lastExport = moved;
     $("ve-export-status").textContent = t("veExportDone").replace("{path}", moved);

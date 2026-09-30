@@ -28919,6 +28919,10 @@ struct ExportRequest {
 // each generation is cancelled (or not) independently, and a finished job
 // removes its own entry so the set never grows unbounded.
 static VIDEO_EXPORT_GEN: AtomicU64 = AtomicU64::new(0);
+// The generation of the export the video editor itself has in flight (0 =
+// none). The editor's Cancel must hit exactly this one, not whichever
+// generation a batch export reserved last.
+static EDITOR_EXPORT_GEN: AtomicU64 = AtomicU64::new(0);
 
 fn video_export_cancelled() -> &'static Mutex<std::collections::HashSet<u64>> {
     use std::sync::OnceLock;
@@ -28964,6 +28968,19 @@ fn remember_export_output(path: &Path) {
 fn is_known_export_output(path: &Path) -> bool {
     let Ok(canon) = fs::canonicalize(path) else { return false };
     EXPORT_OUTPUTS.lock().unwrap_or_else(|e| e.into_inner()).contains(&canon)
+}
+
+// Moves a file and, when it was one of this session's own export outputs,
+// carries that proof over to its new place (and drops the old entry), so the
+// same export can be moved again from where it landed.
+fn move_tracked_export_output(src: &Path, dst: &Path) -> std::io::Result<()> {
+    let old = if is_known_export_output(src) { fs::canonicalize(src).ok() } else { None };
+    move_file(src, dst)?;
+    if let Some(old) = old {
+        EXPORT_OUTPUTS.lock().unwrap_or_else(|e| e.into_inner()).retain(|p| p != &old);
+        remember_export_output(dst);
+    }
+    Ok(())
 }
 
 // What export_video should add to EXPORT_OUTPUTS once ffmpeg finishes: the
@@ -29099,14 +29116,20 @@ fn export_dest_dir_is_authorized(app: &AppHandle, state: &State<'_, Db>, dest: &
     )
 }
 
-// The single-editor "Cancel" button: no generation of its own to name, so it
-// cancels whichever one is current right now -- unchanged behaviour from
-// before the set, and still correct because the editor only ever has one
-// export of its own in flight.
+// The single-editor "Cancel" button: cancels the export the editor itself
+// started (it only ever has one in flight), never a batch job that reserved a
+// later generation in the meantime. Nothing in flight means nothing to cancel,
+// so no stale entry is left behind either.
+fn cancel_editor_export_in(editor_gen: &AtomicU64) {
+    let gen = editor_gen.load(Ordering::SeqCst);
+    if gen != 0 {
+        video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).insert(gen);
+    }
+}
+
 #[tauri::command]
 fn cancel_export() {
-    let gen = VIDEO_EXPORT_GEN.load(Ordering::SeqCst);
-    video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).insert(gen);
+    cancel_editor_export_in(&EDITOR_EXPORT_GEN);
 }
 
 // The batch-export list's per-row cancel button: targets one specific
@@ -29175,6 +29198,7 @@ async fn export_video(app: AppHandle, state: State<'_, Db>, req: ExportRequest) 
     }
     let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
     let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+    EDITOR_EXPORT_GEN.store(my_gen, Ordering::SeqCst);
     // Own registry key per job (not just "export"), so a batch of exports
     // running together each show as their own row instead of overwriting one
     // shared entry -- "export" itself stays the kind the frontend groups
@@ -29193,8 +29217,9 @@ async fn export_video(app: AppHandle, state: State<'_, Db>, req: ExportRequest) 
             push_bg_op(&progress_app, &progress_id, "export", "running", Some(pct), Some(progress_target.clone()));
         })
     })
-    .await
-    .map_err(|e| e.to_string())?;
+    .await;
+    let _ = EDITOR_EXPORT_GEN.compare_exchange(my_gen, 0, Ordering::SeqCst, Ordering::SeqCst);
+    let result = result.map_err(|e| e.to_string())?;
     match &result {
         Ok(_) => {
             push_bg_op(&app, &id, "export", "done", None, None);
@@ -30141,7 +30166,7 @@ async fn save_recording_as(app: AppHandle, state: State<'_, Db>, win: tauri::Win
     let _ = win.set_focus();
     match result {
         Some(p) => {
-            move_file(&src, &p).map_err(|e| e.to_string())?;
+            move_tracked_export_output(&src, &p).map_err(|e| e.to_string())?;
             move_mic_sidecar_alongside(&src, &p);
             Ok(Some(p.to_string_lossy().to_string()))
         }
@@ -38528,6 +38553,25 @@ mod tests {
         video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).remove(&gen_a);
     }
 
+    // The editor's Cancel must hit the editor's own export even when a batch
+    // export has reserved later generations since.
+    #[test]
+    fn editor_cancel_targets_the_editor_generation_not_a_later_batch_one() {
+        let editor_gen = AtomicU64::new(0);
+        cancel_editor_export_in(&editor_gen);
+        let gen_a = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+        editor_gen.store(gen_a, Ordering::SeqCst);
+        let gen_b = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+        assert!(!video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).contains(&gen_a));
+        cancel_editor_export_in(&editor_gen);
+        let set = video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner());
+        assert!(set.contains(&gen_a), "the editor's own export must be cancelled");
+        assert!(!set.contains(&gen_b), "a batch job must not be cancelled by the editor");
+        assert!(!set.contains(&0), "no export in flight leaves nothing behind");
+        drop(set);
+        video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).remove(&gen_a);
+    }
+
     // cancel_all_bg_ops used to call plain cancel_export(), which only ever
     // cancels the single latest generation -- correct for the single-editor
     // button, wrong for a batch with several generations running at once
@@ -42339,6 +42383,26 @@ mod tests {
         remember_export_output(&exported);
         assert!(is_known_export_output(&exported), "a file export_video actually produced must be recognized");
         assert!(!is_known_export_output(&untouched), "a neighbour file never exported must stay refused");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_moved_export_output_stays_known_at_its_new_place() {
+        let dir = std::env::temp_dir().join(format!("ps-exportout-move-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let x = dir.join("clip-edit.mp4");
+        let y = dir.join("moved.mp4");
+        let z = dir.join("moved-again.mp4");
+        let other = dir.join("other.mp4");
+        fs::write(&x, b"video").unwrap();
+        fs::write(&other, b"video").unwrap();
+        remember_export_output(&x);
+        move_tracked_export_output(&x, &y).unwrap();
+        assert!(is_known_export_output(&y), "the moved file must still count as an export output");
+        move_tracked_export_output(&y, &z).unwrap();
+        assert!(is_known_export_output(&z), "a second move must keep the proof too");
+        move_tracked_export_output(&other, &dir.join("other-moved.mp4")).unwrap();
+        assert!(!is_known_export_output(&dir.join("other-moved.mp4")), "a file that was never an export stays unknown");
         let _ = fs::remove_dir_all(&dir);
     }
 

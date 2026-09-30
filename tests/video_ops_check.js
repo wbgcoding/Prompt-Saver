@@ -45,7 +45,7 @@ function makeSandbox(extra) {
       extractBlock("speedRate", "const speedRate = () => {") + ";",
       extractBlock("timelinePlan", "function timelinePlan() {"),
       extractBlock("planEntryOutMs", "function planEntryOutMs(entry) {"),
-      extractBlock("outMs", "function outMs(srcMs) {"),
+      extractBlock("outMs", "function outMs(srcMs, atEnd) {"),
       extractLine("totalOutMs", "const totalOutMs = () => timelinePlan().reduce((sum, e) => sum + planEntryOutMs(e), 0);"),
       extractLine("secs", "const secs = (ms) => (ms / 1000).toFixed(3);"),
       extractBlock("ffPath", "function ffPath(path) {"),
@@ -212,6 +212,50 @@ expect("double frame preview puts its outline inside the border", src.includes("
   expect("a clip without audio stays a silent gap", g && !g.includes("amovie=") && g.includes("anullsrc="), g);
 }
 
+// Overlays are applied after the inserted clips are concatenated in, so their
+// time range has to move later by every clip that sits in front of them.
+{
+  const sb = makeSandbox({ exportFormat: () => "mp4", exportQuality: () => "high" });
+  const text = { tool: "overlay", kind: "text", startMs: 10000, endMs: 12000 };
+  const clip = (over) => Object.assign({ tool: "clip", position: "start", missing: false, hasAudio: false, path: "C:/x/clip.mp4", durationMs: 5000 }, over);
+  sb.VE = baseState([clip(), text]);
+  let e = vm.runInContext("enableExpr", sb)(text);
+  expect("overlay window moves behind a start clip", e === "enable='between(t,15.000,17.000)'", e);
+  sb.VE = baseState([clip({ position: "end" }), text]);
+  e = vm.runInContext("enableExpr", sb)(text);
+  expect("an end clip does not move an overlay", e === "enable='between(t,10.000,12.000)'", e);
+  sb.VE = baseState([clip({ position: "cut", atMs: 4000 }), text]);
+  e = vm.runInContext("enableExpr", sb)(text);
+  expect("a clip cut in before the overlay moves it", e === "enable='between(t,15.000,17.000)'", e);
+  sb.VE = baseState([clip({ position: "cut", atMs: 11000 }), text]);
+  e = vm.runInContext("enableExpr", sb)(text);
+  expect("a clip inside the overlay range stretches it", e === "enable='between(t,10.000,17.000)'", e);
+  sb.VE = baseState([clip({ position: "cut", atMs: 12000 }), text]);
+  e = vm.runInContext("enableExpr", sb)(text);
+  expect("a clip right at the overlay end is not covered by it", e === "enable='between(t,10.000,12.000)'", e);
+  sb.VE = baseState([clip(), { tool: "speed", rate: 2 }, text]);
+  e = vm.runInContext("enableExpr", sb)(text);
+  expect("clip length and speed combine", e === "enable='between(t,7.500,8.500)'", e);
+}
+
+// With every recorded track muted (or turned down), the inserted clip's sound
+// still plays at full level: it gets its own host instead of a muted track.
+{
+  const sb = makeSandbox({ exportFormat: () => "mp4", exportQuality: () => "high", formatHasAudio: () => true });
+  const clip = { tool: "clip", position: "end", missing: false, hasAudio: true, path: "C:/x/clip.mp4", durationMs: 3000 };
+  sb.VE = Object.assign(baseState([clip]), { hasSys: true, hasMic: false });
+  sb.VE.audio.sys.mute = true;
+  let g = vm.runInContext("buildAudioChain()", sb);
+  expect("clip sound survives a muted recording track", g && g.includes("volume=1.00") && /amovie=/.test(g), g);
+  expect("the muted track stays muted", g && g.includes("volume=0.00"), g);
+  sb.VE.audio.sys = { mute: true, vol: 20 };
+  g = vm.runInContext("buildAudioChain()", sb);
+  expect("clip sound ignores the muted track's slider", g && !g.includes("volume=0.20"), g);
+  sb.VE.audio.sys = { mute: false, vol: 20 };
+  g = vm.runInContext("buildAudioChain()", sb);
+  expect("an unmuted track still hosts the clip with its own volume", g && g.includes("volume=0.20") && !g.includes("volume=1.00"), g);
+}
+
 // Closing while an export runs: with the edit state not kept, the confirm must
 // also warn about unexported edits.
 async function closeChecks() {
@@ -257,6 +301,51 @@ async function cameraOverlayRaceCheck() {
   expect("a camera overlay of the current load is added", sb2.VE.ops.some((o) => o.path === "C:/cam.mp4"));
 }
 
+// An export that finishes after another recording was opened in the editor must
+// not touch that recording's unsaved flag, saved edit state or "Move to" target.
+async function exportLoadRaceCheck() {
+  const els = {};
+  const el = (id) => els[id] || (els[id] = {
+    textContent: "", value: "", disabled: false,
+    classList: { add() {}, remove() {}, toggle() {} }, setAttribute() {},
+  });
+  let release;
+  const held = new Promise((r) => { release = r; });
+  const calls = [];
+  const sb = {
+    VE: { exporting: false, ffmpeg: true, src: "C:/a.mp4", etaShow: false, dirty: false, editStateKeepOn: true, loadGen: 1, lastExport: "" },
+    $: el, t: (k) => k, toast: () => {},
+    invoke: (cmd, args) => { calls.push([cmd, args]); return cmd === "export_video" ? held : Promise.resolve(null); },
+    totalOutMs: () => 5000, isLosslessCopy: () => true, exportFormat: () => "mp4", exportQuality: () => "high",
+    formatExt: () => "mp4", destPath: () => "C:/out/a.mp4", showExportErrorDetails: () => {},
+    exportEta: { reset() {} }, setProgress: () => {},
+    buildVideoChain: () => null, buildAudioChain: () => null, keptSegments: () => [{ a: 0, b: 5000 }],
+    videoKbps: () => 1000, fmtBytes: String, veConfirm: async () => false, noteFfmpeg: () => {},
+    parseFfmpegError: () => ({ message: "x", details: "" }), applyExportGate: () => {},
+  };
+  vm.createContext(sb);
+  vm.runInContext(
+    [
+      extractBlock("clearExportStatus", "function clearExportStatus() {"),
+      extractBlock("startExport", "async function startExport(toClipboard) {"),
+    ].join(String.fromCharCode(10)),
+    sb,
+    { filename: "video.js (extracted)" }
+  );
+  const running = vm.runInContext("startExport(false)", sb);
+  await new Promise((r) => setTimeout(r, 0));
+  // Recording B is opened while A still exports, and gets edited.
+  sb.VE.loadGen = 2;
+  sb.VE.src = "C:/b.mp4";
+  sb.VE.dirty = true;
+  release();
+  await running;
+  expect("a finished export of the previous recording keeps the new one dirty", sb.VE.dirty === true);
+  expect("a finished export of the previous recording leaves the new one's saved edit state", !calls.some(([c, a]) => c === "discard_edit_state" && a.target === "C:/b.mp4"), JSON.stringify(calls));
+  expect("a finished export of the previous recording does not set the Move to target", sb.VE.lastExport === "");
+  expect("the export flag is released", sb.VE.exporting === false);
+}
+
 // An export that stops before writing anything (no folder picked, disk warning
 // declined) must not leave "Exporting" and a 0% bar behind.
 async function exportIdleCheck() {
@@ -297,7 +386,7 @@ async function exportIdleCheck() {
   }
 }
 
-cameraOverlayRaceCheck().then(exportIdleCheck).then(closeChecks).then(() => {
+cameraOverlayRaceCheck().then(exportIdleCheck).then(exportLoadRaceCheck).then(closeChecks).then(() => {
 if (problems.length) {
   console.log(`${problems.length} problem(s):`);
   for (const p of problems) console.log(" - " + p);
