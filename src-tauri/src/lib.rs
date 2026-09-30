@@ -4080,6 +4080,12 @@ fn db_get_version(conn: &Connection, id: i64) -> Option<(String, String, String,
 // Removes version history whose prompt is in neither the library nor the trash.
 // Works on the plaintext id column alone, so it is safe even when the rows
 // themselves could not be decrypted. Returns the number of rows removed.
+// The orphan sweep deletes rows: never in a read-only instance (the store belongs
+// to another machine) and never while a JSON fallback still holds prompts.
+fn version_sweep_allowed(dir: &Path, read_only: bool) -> bool {
+    !read_only && !dir.join("prompts.json").exists()
+}
+
 fn db_sweep_orphan_versions(conn: &Connection) -> usize {
     match conn.execute(
         "DELETE FROM prompt_versions WHERE prompt_id NOT IN (SELECT id FROM prompts UNION SELECT id FROM trash)",
@@ -4717,7 +4723,7 @@ fn load_store(app: &AppHandle) -> Store {
         // A purge whose version-history DELETE failed is never retried by the purge
         // itself, so the text would stay in prompt_versions for good. Only when no
         // JSON fallback is waiting: then the tables really are the whole library.
-        if !dir.join("prompts.json").exists() {
+        if version_sweep_allowed(&dir, DATA_DIR_READONLY.load(Ordering::Relaxed)) {
             db_sweep_orphan_versions(&conn);
         }
         store.normalize_folders(); // Drop members whose prompt is gone
@@ -51626,6 +51632,18 @@ mod tests {
 
     // A purged prompt whose version-history DELETE failed must not keep its text
     // forever: the startup sweep drops history of ids that are in neither table.
+    #[test]
+    fn a_read_only_instance_never_sweeps_version_history() {
+        let root = std::env::temp_dir().join(format!("{}-test-sweep-gate", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        assert!(version_sweep_allowed(&root, false));
+        assert!(!version_sweep_allowed(&root, true));
+        std::fs::write(root.join("prompts.json"), b"[]").unwrap();
+        assert!(!version_sweep_allowed(&root, false));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
     #[test]
     fn startup_sweep_drops_version_history_of_vanished_prompts() {
         let conn = Connection::open_in_memory().unwrap();
