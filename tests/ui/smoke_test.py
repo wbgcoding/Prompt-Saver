@@ -16216,6 +16216,22 @@ def main():
     const back = seq.find(([c, a]) => c === 'set_ui_flag' && a.key === 'demoMode');
     if (!back || back[1].enabled !== true) errs.push('564-2: reset all left a running demo session without its marker');
 """)
+        failed += ar_probe('g3', 'expert menu: a stored remote rate limit of 0 (unlimited) shows as unlimited, not 5/min', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { remoteApi: true }, ui_values: { remoteRateLimit: 0 } };</script>\n', r"""
+    await bootReady();
+    document.getElementById('gear').click(); await sleep(200);
+    document.getElementById('expert-open').click(); await sleep(300);
+    let row = null;
+    for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+      tb.click(); await sleep(80);
+      row = document.querySelector('#expert-flags [data-setting-row="remoteRateLimit"]');
+      if (row) break;
+    }
+    if (!row) { errs.push('564-3: the remote rate limit row was not found'); }
+    else {
+      const out = row.querySelector('.value-out').textContent;
+      if (out !== 'Unlimited') errs.push('564-3: the stored 0 shows as ' + JSON.stringify(out) + ', expected Unlimited');
+    }
+""")
         # ---- main window findings: generated block end ----
         print("PASS" if not failed else f"{failed} problem(s)")
         return 1 if failed else 0

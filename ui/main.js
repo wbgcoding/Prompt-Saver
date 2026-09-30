@@ -2395,6 +2395,8 @@ const val = (key) => {
   const cfg = EXPERT_VALUES[key] || EXPERT_SELECTS[key]; // selects live in ui_values too
   const raw = settings.ui_values?.[key];
   const v = Number.isFinite(raw) ? raw : cfg.def;
+  // 0 is this setting's "unlimited" stop, below its slider minimum on purpose.
+  if (cfg.topUnlimited && v === 0) return 0;
   // Clamp to the setting's own range so no stored/imported value can push a
   // slider-bounded setting out of bounds (grid geometry etc. stays always valid).
   if (cfg.stops) {
