@@ -16441,6 +16441,24 @@ def main():
       if (undo.disabled) errs.push('564-s1: Undo stayed disabled after redoing the resize');
     }
 """)
+        failed += ar_probe('d1', 'screenshot dialog: a failed delete keeps the saved path, switching back on saves no second copy', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { snipEditor: false, screenshotSave: true } };</script>\n', r"""
+    await bootReady();
+    RESULTS.delete_screenshot_file = () => false;
+    RESULTS.save_screenshot_now = () => 'C:/shots/second.png';
+    const cv = document.createElement('canvas'); cv.width = 40; cv.height = 30;
+    window.__FIRE__('snip-captured', { data_url: cv.toDataURL('image/png'), path: 'C:/shots/first.png', name: 'first.png' });
+    await sleep(300);
+    const modal = document.getElementById('snip-modal');
+    const box = document.getElementById('snip-save-folder');
+    if (modal.classList.contains('hidden')) errs.push('564-d1: fixture: the result dialog did not open');
+    if (!box.checked) errs.push('564-d1: fixture: the folder switch is not on');
+    window.__SMOKE_ARGS__.length = 0;
+    box.checked = false; box.dispatchEvent(new Event('change', { bubbles: true })); await sleep(200);
+    if (!callsFor('delete_screenshot_file').length) errs.push('564-d1: fixture: switching off did not try to delete the file');
+    box.checked = true; box.dispatchEvent(new Event('change', { bubbles: true })); await sleep(200);
+    const saves = callsFor('save_screenshot_now').length;
+    if (saves) errs.push('564-d1: switching back on saved a second copy (' + saves + ' save call) although the first file was never deleted');
+""")
         # ---- main window findings: generated block end ----
         print("PASS" if not failed else f"{failed} problem(s)")
         return 1 if failed else 0

@@ -19434,8 +19434,11 @@ function bind() {
         pendingSnipPath = (await invoke("save_screenshot_now", { dataUrl: pendingSnip }).catch(() => "")) || "";
       }
     } else if (pendingSnipPath) {
-      invoke("delete_screenshot_file", { path: pendingSnipPath }).catch(() => {});
-      pendingSnipPath = "";
+      // The command answers false (it does not reject) when the file could not be
+      // removed: then the path is still the saved copy, and turning the switch back
+      // on must not write a second one next to it.
+      const removed = await invoke("delete_screenshot_file", { path: pendingSnipPath }).catch(() => false);
+      if (removed) pendingSnipPath = "";
     }
   });
   $("snip-modal-saveas").addEventListener("click", async () => {
