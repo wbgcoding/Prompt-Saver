@@ -1005,7 +1005,7 @@ const RESULTS = {
   log_error: (a) => {
     if (SETTINGS.ui_flags.errorLog === false) return null;
     ERROR_LOG.unshift({ ts: Math.floor(Date.now() / 1000), text: (a && a.text) || "", origin: (a && a.origin) || "", raw: (a && a.raw) || null });
-    const max = SETTINGS.ui_values.errorLogMax || 100;
+    const max = 100;
     ERROR_LOG.length = Math.min(ERROR_LOG.length, max);
     return null;
   },

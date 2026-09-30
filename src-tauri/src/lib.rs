@@ -2658,9 +2658,44 @@ const HOME_NAMES: [&str; 18] = [
     "Domů", "Головна", "Hem", "Acasă",
 ];
 
+// Expert-menu values that no longer exist. A loaded store drops them once, so a
+// key that is added back later never inherits a stale stored value.
+fn removed_ui_value_keys() -> &'static [&'static str] {
+    &[
+        "voiceLangCacheH",
+        "voiceLangCheckH",
+        "voiceLangNoticeMs",
+        "voiceLangSnoozeH",
+        "ocrLangCacheH",
+        "ocrLangCheckH",
+        "ocrLangNoticeMs",
+        "ocrLangSnoozeH",
+        "rotateAutoSettleMs",
+        "rotateAutoInputMs",
+        "rotateAutoRearmMax",
+        "recBrokenGraceMin",
+        "recSweepEveryMin",
+        "syncFailMax",
+        "editStateSaveSecs",
+        "mdMaxChars",
+        "hlMaxChars",
+        "diffWordCap",
+        "errorLogMax",
+        "numFieldBigStep",
+        "clipSecretMinLen",
+    ]
+}
+
 impl Settings {
+    fn has_removed_ui_values(&self) -> bool {
+        removed_ui_value_keys().iter().any(|k| self.ui_values.contains_key(*k))
+    }
+
     // Ensure at least one view exists; migrate legacy single-grid data.
     fn migrate(&mut self) {
+        for k in removed_ui_value_keys() {
+            self.ui_values.remove(*k);
+        }
         // The privacy switch used to be "hide from screen capture" (on unless stored
         // false); it is now "allow screenshots" (off unless stored true). Anyone who
         // had deliberately turned the hiding OFF keeps their screenshots.
@@ -4618,6 +4653,7 @@ fn load_store(app: &AppHandle) -> Store {
         // setting change happens to persist it.
         let theme_ai_before =
             settings.theme == "ai" || settings.custom_themes.iter().any(|c| c.base == "ai");
+        let pruned_removed_values = settings.has_removed_ui_values();
         settings.migrate();
         load_pick_history(&settings); // restore the colour-pick history mirror
         // One-time: move any legacy in-blob copy history into the copy_log table.
@@ -4692,7 +4728,7 @@ fn load_store(app: &AppHandle) -> Store {
             // One-time: re-encrypt legacy plaintext rows / drop the migrated log from the blob.
             save_prompts(app, &store);
             save_settings(app, &store.settings);
-        } else if theme_ai_before {
+        } else if theme_ai_before || pruned_removed_values {
             save_settings(app, &store.settings);
         }
         return store;
@@ -6780,13 +6816,17 @@ fn take_recording_sweep_notice() -> Option<(u32, u64)> {
     PENDING_SWEEP_NOTICE.lock().unwrap_or_else(|e| e.into_inner()).take()
 }
 
+// How long a recording may sit unfinished before the sweep treats it as broken
+// (minutes), and how often the periodic sweep runs (minutes).
+const REC_BROKEN_GRACE_MIN: f64 = 5.0;
+const REC_SWEEP_EVERY_MIN: f64 = 60.0;
+
 fn recording_sweep_grace(app: &AppHandle) -> (bool, Duration) {
     app.try_state::<Db>()
         .map(|s| {
             let store = s.lock().unwrap_or_else(|e| e.into_inner());
             let on = store.settings.ui_flags.get("recSweepBroken") != Some(&false);
-            let min = store.settings.ui_values.get("recBrokenGraceMin").copied().unwrap_or(5.0).max(0.0);
-            (on, Duration::from_secs((min * 60.0) as u64))
+            (on, Duration::from_secs((REC_BROKEN_GRACE_MIN * 60.0) as u64))
         })
         .unwrap_or((true, Duration::from_secs(5 * 60)))
 }
@@ -6807,16 +6847,9 @@ fn recording_retention_age(app: &AppHandle) -> Option<Duration> {
     }
 }
 
-// Driven by recSweepEveryMin (default 60, 5-1440) -- clamped the same way
-// lang_check_interval clamps its own expert value, and re-read every round so
-// a changed interval takes effect without a restart.
-fn recording_sweep_interval(app: &AppHandle) -> Duration {
-    let mins = app
-        .try_state::<Db>()
-        .map(|s| s.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("recSweepEveryMin").copied().unwrap_or(60.0))
-        .unwrap_or(60.0)
-        .clamp(5.0, 1440.0);
-    Duration::from_secs((mins * 60.0) as u64)
+// Runs every REC_SWEEP_EVERY_MIN minutes.
+fn recording_sweep_interval() -> Duration {
+    Duration::from_secs((REC_SWEEP_EVERY_MIN * 60.0) as u64)
 }
 
 // Shared by the periodic job and "once a recording ends": both run after
@@ -13468,14 +13501,24 @@ struct AutoCfg {
     timeout_min: u32,
 }
 
+// Fixed timings of the automatic cycling: how long the clipboard must be quiet
+// before a paste counts, the window for typed input, and how often a session
+// may re-arm itself.
+#[cfg(windows)]
+const ROTATE_AUTO_SETTLE_MS: u32 = 350;
+#[cfg(windows)]
+const ROTATE_AUTO_INPUT_MS: u32 = 3000;
+#[cfg(windows)]
+const ROTATE_AUTO_REARM_MAX: u32 = 12;
+
 #[cfg(windows)]
 fn auto_cfg(settings: &Settings) -> AutoCfg {
     let v = |key: &str, def: f64| settings.ui_values.get(key).copied().unwrap_or(def).max(0.0);
     AutoCfg {
-        settle_ms: v("rotateAutoSettleMs", 350.0) as u32,
+        settle_ms: ROTATE_AUTO_SETTLE_MS,
         cooldown_ms: v("rotateAutoCooldownMs", 250.0) as u32,
-        input_ms: v("rotateAutoInputMs", 3000.0) as u32,
-        rearm_max: v("rotateAutoRearmMax", 12.0) as u32,
+        input_ms: ROTATE_AUTO_INPUT_MS,
+        rearm_max: ROTATE_AUTO_REARM_MAX,
         timeout_min: v("rotateAutoTimeoutMin", 60.0) as u32,
     }
 }
@@ -13518,6 +13561,9 @@ fn dword_format_excludes(available: bool, value: Option<u32>) -> bool {
 fn is_own_ui_word(candidate: &str) -> bool {
     candidate.trim().eq_ignore_ascii_case(brand::DISPLAY_NAME)
 }
+
+// Shortest copied text the clipboard collector may take for a password.
+const CLIP_SECRET_MIN_LEN: usize = 8;
 
 // A best-effort guess that freshly copied text is a password rather than a prompt, a
 // sentence or an address: exactly one line, `min_len` to 64 characters, no
@@ -13744,7 +13790,7 @@ mod clipwatch {
             Some(a) => a,
             None => return,
         };
-        let (min, cap, enabled, skip_secrets, secret_min_len) = {
+        let (min, cap, enabled, skip_secrets) = {
             let state = app.state::<Db>();
             let store = lock(&state);
             let enabled = store.settings.ui_flags.get("clipWatcher") == Some(&true);
@@ -13754,8 +13800,7 @@ mod clipwatch {
             // formats below, so the heuristic further down carries the real weight --
             // this stays on unless a user deliberately turns it off.
             let skip_secrets = store.settings.ui_flags.get("clipSkipSecrets") != Some(&false);
-            let secret_min_len = store.settings.ui_values.get("clipSecretMinLen").copied().unwrap_or(8.0).clamp(4.0, 32.0) as usize;
-            (min, cap, enabled, skip_secrets, secret_min_len)
+            (min, cap, enabled, skip_secrets)
         };
         if !enabled {
             return;
@@ -13792,7 +13837,7 @@ mod clipwatch {
         if trimmed.chars().count() < min {
             return;
         }
-        if skip_secrets && super::looks_like_password(trimmed, secret_min_len) {
+        if skip_secrets && super::looks_like_password(trimmed, super::CLIP_SECRET_MIN_LEN) {
             return;
         }
         let h = text_hash(trimmed);
@@ -18696,16 +18741,12 @@ async fn ocr_index_backfill(app: AppHandle, state: State<'_, Db>) -> Result<usiz
 // ERROR_ELEVATION_REQUIRED even for this read-only query -- see the HResult
 // check in ocr::fetch_capabilities, which surfaces that case as its own
 // "ocr-caps-need-elevation" error instead of a raw failure.
-// `force` bypasses the in-memory cache (ocrLangCacheH hours, default 24); the
+// `force` bypasses the in-memory cache (OCR_LANG_CACHE_H hours); the
 // cache is what ocr_install_language's whitelist check is validated against,
 // so a name can never be installed without having actually been enumerated.
 #[tauri::command]
-async fn ocr_capabilities(state: State<'_, Db>, force: bool) -> Result<Vec<OcrCap>, String> {
-    let cache_hours = {
-        let store = lock(&state);
-        store.settings.ui_values.get("ocrLangCacheH").copied().unwrap_or(24.0)
-    }
-    .clamp(1.0, 168.0);
+async fn ocr_capabilities(force: bool) -> Result<Vec<OcrCap>, String> {
+    let cache_hours = OCR_LANG_CACHE_H;
     #[cfg(windows)]
     {
         tauri::async_runtime::spawn_blocking(move || ocr::capabilities(ocr::CapKind::Ocr, force, cache_hours))
@@ -18818,13 +18859,13 @@ fn ocr_install_result(name: String) -> Option<OcrInstallResult> {
 }
 
 // "Abbrechen" on the background update notice -- defers the NEXT
-// automatic notice by ocrLangSnoozeH hours, so the user is not re-nagged on
-// every restart. Does not touch the check cadence itself (ocrLangCheckH); a
+// automatic notice by OCR_LANG_SNOOZE_H hours, so the user is not re-nagged on
+// every restart. Does not touch the check cadence itself; a
 // manual "Jetzt prüfen" (ocr_capabilities(force: true)) is unaffected by this.
 #[tauri::command]
 fn ocr_lang_snooze(app: AppHandle, state: State<Db>) {
     #[cfg(windows)]
-    lang_snooze(&app, &state, ocr::CapKind::Ocr, "ocrLangSnoozeH");
+    lang_snooze(&app, &state, ocr::CapKind::Ocr);
     #[cfg(not(windows))]
     let _ = (app, state);
 }
@@ -18835,12 +18876,8 @@ fn ocr_lang_snooze(app: AppHandle, state: State<Db>) {
 // counterpart here on purpose: that is OCR-specific post-processing of a
 // recognition result, not something dictated text needs.
 #[tauri::command]
-async fn speech_capabilities(state: State<'_, Db>, force: bool) -> Result<Vec<OcrCap>, String> {
-    let cache_hours = {
-        let store = lock(&state);
-        store.settings.ui_values.get("voiceLangCacheH").copied().unwrap_or(24.0)
-    }
-    .clamp(1.0, 168.0);
+async fn speech_capabilities(force: bool) -> Result<Vec<OcrCap>, String> {
+    let cache_hours = VOICE_LANG_CACHE_H;
     #[cfg(windows)]
     {
         tauri::async_runtime::spawn_blocking(move || ocr::capabilities(ocr::CapKind::Speech, force, cache_hours))
@@ -18918,23 +18955,62 @@ fn speech_install_result(name: String) -> Option<OcrInstallResult> {
 #[tauri::command]
 fn voice_lang_snooze(app: AppHandle, state: State<Db>) {
     #[cfg(windows)]
-    lang_snooze(&app, &state, ocr::CapKind::Speech, "voiceLangSnoozeH");
+    lang_snooze(&app, &state, ocr::CapKind::Speech);
     #[cfg(not(windows))]
     let _ = (app, state);
 }
 
 // Shared by ocr_lang_snooze/voice_lang_snooze: defer the NEXT automatic notice
-// by `snooze_setting_key` hours (24-720, default 168), so the user is not
+// by the kind's snooze hours (lang_snooze_hours), so the user is not
 // re-nagged on every restart. Does not touch the check cadence itself; a
 // manual "Jetzt prüfen" (force: true) is unaffected by this.
 #[cfg(windows)]
-fn lang_snooze(app: &AppHandle, state: &State<Db>, kind: ocr::CapKind, snooze_setting_key: &str) {
+fn lang_snooze(app: &AppHandle, state: &State<Db>, kind: ocr::CapKind) {
     let mut store = lock(state);
-    let hours = store.settings.ui_values.get(snooze_setting_key).copied().unwrap_or(168.0).clamp(24.0, 720.0);
+    let hours = lang_snooze_hours(kind);
     let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     let next = now + (hours * 3600.0) as u64;
     store.settings.ui_texts.insert(lang_next_check_key(kind), next.to_string());
     save_settings(app, &store.settings);
+}
+
+// Language-pack timings, one set per kind (both kinds use the same values):
+// how long a checked capability list is trusted (hours), how often the
+// background watcher looks for updates (hours), and how long "Cancel" on the
+// update notice defers the next notice (hours).
+const OCR_LANG_CACHE_H: f64 = 24.0;
+const VOICE_LANG_CACHE_H: f64 = 24.0;
+#[cfg(windows)]
+const OCR_LANG_CHECK_H: f64 = 168.0;
+#[cfg(windows)]
+const VOICE_LANG_CHECK_H: f64 = 168.0;
+#[cfg(windows)]
+const OCR_LANG_SNOOZE_H: f64 = 168.0;
+#[cfg(windows)]
+const VOICE_LANG_SNOOZE_H: f64 = 168.0;
+
+#[cfg(windows)]
+fn lang_cache_hours(kind: ocr::CapKind) -> f64 {
+    match kind {
+        ocr::CapKind::Ocr => OCR_LANG_CACHE_H,
+        ocr::CapKind::Speech => VOICE_LANG_CACHE_H,
+    }
+}
+
+#[cfg(windows)]
+fn lang_check_hours(kind: ocr::CapKind) -> f64 {
+    match kind {
+        ocr::CapKind::Ocr => OCR_LANG_CHECK_H,
+        ocr::CapKind::Speech => VOICE_LANG_CHECK_H,
+    }
+}
+
+#[cfg(windows)]
+fn lang_snooze_hours(kind: ocr::CapKind) -> f64 {
+    match kind {
+        ocr::CapKind::Ocr => OCR_LANG_SNOOZE_H,
+        ocr::CapKind::Speech => VOICE_LANG_SNOOZE_H,
+    }
 }
 
 // Well after launch -- the first round must never compete with window build.
@@ -18942,14 +19018,8 @@ fn lang_snooze(app: &AppHandle, state: &State<Db>, kind: ocr::CapKind, snooze_se
 const OCR_LANG_FIRST_DELAY_SECS: u64 = 30;
 
 #[cfg(windows)]
-fn lang_check_interval(app: &AppHandle, kind: ocr::CapKind) -> Duration {
-    let key = format!("{}LangCheckH", kind.slug());
-    let hours = app
-        .try_state::<Db>()
-        .map(|s| s.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get(&key).copied().unwrap_or(168.0))
-        .unwrap_or(168.0)
-        .clamp(24.0, 720.0);
-    Duration::from_secs((hours * 3600.0) as u64)
+fn lang_check_interval(kind: ocr::CapKind) -> Duration {
+    Duration::from_secs((lang_check_hours(kind) * 3600.0) as u64)
 }
 
 // Background watcher for "an installed language pack is now updatable" -- one
@@ -18964,9 +19034,9 @@ fn lang_check_interval(app: &AppHandle, kind: ocr::CapKind) -> Duration {
 fn start_lang_update_watcher(app: AppHandle, kind: ocr::CapKind) {
     let job_name = format!("{}-lang-check", kind.slug());
     let name_for_job = job_name.clone();
-    scheduler::register_periodic(&job_name, Duration::from_secs(OCR_LANG_FIRST_DELAY_SECS), lang_check_interval(&app, kind), move || {
+    scheduler::register_periodic(&job_name, Duration::from_secs(OCR_LANG_FIRST_DELAY_SECS), lang_check_interval(kind), move || {
         lang_update_tick(&app, kind);
-        scheduler::retime(&name_for_job, lang_check_interval(&app, kind));
+        scheduler::retime(&name_for_job, lang_check_interval(kind));
     });
 }
 
@@ -18974,14 +19044,12 @@ fn start_lang_update_watcher(app: AppHandle, kind: ocr::CapKind) {
 // whether anything happens, so a restart neither skips nor duplicates a check.
 #[cfg(windows)]
 fn lang_update_tick(app: &AppHandle, kind: ocr::CapKind) {
-    let cache_key = format!("{}LangCacheH", kind.slug());
     let auto_update_key = format!("{}LangAutoUpdate", kind.slug());
-    let check_key = format!("{}LangCheckH", kind.slug());
     let snapshot = app.try_state::<Db>().map(|s| {
         let store = s.lock().unwrap_or_else(|e| e.into_inner());
         (
             store.settings.ui_flags.get(&auto_update_key).copied().unwrap_or(true),
-            store.settings.ui_values.get(&cache_key).copied().unwrap_or(24.0).clamp(1.0, 168.0),
+            lang_cache_hours(kind),
             store
                 .settings
                 .ui_texts
@@ -19034,8 +19102,7 @@ fn lang_update_tick(app: &AppHandle, kind: ocr::CapKind) {
         // Persist the next-due time so a user who dismisses the notice any way
         // other than "Abbrechen" (lang_snooze) is not re-nagged on every app
         // start -- the in-process wait cadence alone resets on every launch.
-        let check_hours = store.settings.ui_values.get(&check_key).copied().unwrap_or(168.0).clamp(24.0, 720.0);
-        let next = now + (check_hours * 3600.0) as u64;
+        let next = now + (lang_check_hours(kind) * 3600.0) as u64;
         store.settings.ui_texts.insert(lang_next_check_key(kind), next.to_string());
         save_settings(app, &store.settings);
     }
@@ -19307,7 +19374,7 @@ mod ocr {
         }
         // Temp-file name segment AND the ui_flags/ui_values/ui_texts setting-key
         // prefix -- "voice", not "speech", to match the expert-menu keys (126's
-        // table: voiceLangCacheH, voiceLangAutoUpdate, ...).
+        // table: voiceLangAutoUpdate, ...).
         pub(super) fn slug(self) -> &'static str {
             match self {
                 CapKind::Ocr => "ocr",
@@ -33423,23 +33490,12 @@ struct ErrorLogEntry {
     raw: Option<String>,
 }
 
-const ERROR_LOG_MAX_DEFAULT: usize = 100;
-const ERROR_LOG_MAX_MIN: usize = 20;
-const ERROR_LOG_MAX_CAP: usize = 500;
+// How many recent error messages the in-app list keeps.
+const ERROR_LOG_MAX: usize = 100;
 static ERROR_LOG: Mutex<Vec<ErrorLogEntry>> = Mutex::new(Vec::new());
 
 fn error_log_enabled(settings: &Settings) -> bool {
     settings.ui_flags.get("errorLog") != Some(&false) // on by default
-}
-
-fn error_log_max(settings: &Settings) -> usize {
-    settings
-        .ui_values
-        .get("errorLogMax")
-        .copied()
-        .filter(|v| v.is_finite())
-        .unwrap_or(ERROR_LOG_MAX_DEFAULT as f64)
-        .clamp(ERROR_LOG_MAX_MIN as f64, ERROR_LOG_MAX_CAP as f64) as usize
 }
 
 // Same privacy bar as the crash log (`scrub_log_line`): a path collapses to its
@@ -33516,7 +33572,7 @@ fn log_error(state: State<'_, Db>, text: String, origin: String, raw: Option<Str
     if !error_log_enabled(&settings) {
         return;
     }
-    record_error_log(&text, &origin, raw.as_deref(), error_log_max(&settings));
+    record_error_log(&text, &origin, raw.as_deref(), ERROR_LOG_MAX);
 }
 
 #[tauri::command]
@@ -34029,10 +34085,9 @@ pub fn run() {
             {
                 let referenced = orphan_referenced_set(&store);
                 let broken_on = store.settings.ui_flags.get("recSweepBroken") != Some(&false);
-                let grace_min = store.settings.ui_values.get("recBrokenGraceMin").copied().unwrap_or(5.0).max(0.0);
                 let retention_days = store.settings.ui_values.get("recordingRetentionDays").copied().unwrap_or(0.0);
                 let retention_age = (retention_days > 0.0).then(|| Duration::from_secs(retention_days as u64 * 86_400));
-                let (count, bytes) = sweep_stale_recordings(&handle, &referenced, broken_on, Duration::from_secs((grace_min * 60.0) as u64), retention_age);
+                let (count, bytes) = sweep_stale_recordings(&handle, &referenced, broken_on, Duration::from_secs((REC_BROKEN_GRACE_MIN * 60.0) as u64), retention_age);
                 if count > 0 {
                     append_crash_log(&format!("startup recording sweep: removed {count} file(s), {bytes} bytes"));
                     *PENDING_SWEEP_NOTICE.lock().unwrap_or_else(|e| e.into_inner()) = Some((count, bytes));
@@ -34181,12 +34236,12 @@ pub fn run() {
             // however long the app happened to stay open next -- the same flaw as any
             // other startup-only sweep. First delay = one full interval since the
             // startup sweep above just ran; each round re-times itself off the
-            // current recSweepEveryMin, so a changed interval needs no restart.
+            // fixed REC_SWEEP_EVERY_MIN interval.
             {
                 let h = handle.clone();
-                scheduler::register_periodic("recording-sweep", recording_sweep_interval(&handle), recording_sweep_interval(&handle), move || {
+                scheduler::register_periodic("recording-sweep", recording_sweep_interval(), recording_sweep_interval(), move || {
                     sweep_recordings_and_notify(&h);
-                    scheduler::retime("recording-sweep", recording_sweep_interval(&h));
+                    scheduler::retime("recording-sweep", recording_sweep_interval());
                 });
             }
 
@@ -34857,10 +34912,6 @@ const SYNC_LOCK_STALE_SECS: u64 = 15;
 // SYNC_PAUSED_FACTOR times the interval.
 const SYNC_FAIL_MAX: u32 = 5;
 const SYNC_PAUSED_FACTOR: u64 = 10;
-
-fn sync_fail_max(settings: &Settings) -> u32 {
-    settings.ui_values.get("syncFailMax").copied().unwrap_or(SYNC_FAIL_MAX as f64).clamp(1.0, 50.0) as u32
-}
 
 fn sync_enabled(settings: &Settings) -> bool {
     settings.ui_flags.get("promptSync").copied().unwrap_or(false)
@@ -36002,7 +36053,7 @@ fn sync_poll_once(app: &AppHandle) {
             // An unreachable folder (a network share that is not mounted, a removed
             // drive) must not turn into a failure every few seconds for the rest of
             // the session. After enough failed rounds the poll pauses and says so.
-            let max = sync_fail_max(&settings_snapshot);
+            let max = SYNC_FAIL_MAX;
             let just_paused = {
                 let mut h = sync_health_lock();
                 sync_health_note_fail(&mut h, max, &e.to_string())
@@ -41106,7 +41157,6 @@ mod tests {
                 .expect("default is a number")
         };
         assert_eq!(js_def("syncPollSecs"), SYNC_POLL_SECS as f64);
-        assert_eq!(js_def("syncFailMax"), SYNC_FAIL_MAX as f64);
     }
 
     #[test]
@@ -41294,13 +41344,8 @@ mod tests {
     }
 
     #[test]
-    fn sync_fail_max_clamps_the_stored_expert_value() {
-        let mut s = Settings::default();
-        assert_eq!(sync_fail_max(&s), SYNC_FAIL_MAX);
-        s.ui_values.insert("syncFailMax".into(), 0.0);
-        assert_eq!(sync_fail_max(&s), 1);
-        s.ui_values.insert("syncFailMax".into(), 9999.0);
-        assert_eq!(sync_fail_max(&s), 50);
+    fn sync_fail_max_is_the_fixed_five_rounds() {
+        assert_eq!(SYNC_FAIL_MAX, 5);
     }
 
     // ---- What a hand-written file may put into the library ----
@@ -48158,6 +48203,28 @@ mod tests {
     // Settings JSON from an older version: unknown/removed fields (copy_history,
     // a future field) are ignored and every missing field defaults: never a total
     // parse failure that would wipe the user's settings.
+    #[test]
+    fn load_prune_drops_a_removed_value_and_keeps_a_live_one() {
+        let mut s = Settings::default();
+        s.ui_values.insert("syncFailMax".into(), 9.0);
+        s.ui_values.insert("errorLogKeepKb".into(), 512.0);
+        assert!(s.has_removed_ui_values());
+        s.migrate();
+        assert!(!s.ui_values.contains_key("syncFailMax"));
+        assert_eq!(s.ui_values.get("errorLogKeepKb"), Some(&512.0));
+        assert!(!s.has_removed_ui_values());
+    }
+
+    #[test]
+    fn removed_fine_tuning_values_keep_their_former_defaults() {
+        assert_eq!(ERROR_LOG_MAX, 100);
+        assert_eq!(OCR_LANG_CACHE_H, 24.0);
+        assert_eq!(VOICE_LANG_CACHE_H, 24.0);
+        assert_eq!(REC_BROKEN_GRACE_MIN, 5.0);
+        assert_eq!(REC_SWEEP_EVERY_MIN, 60.0);
+        assert_eq!(CLIP_SECRET_MIN_LEN, 8);
+    }
+
     #[test]
     fn old_settings_json_migrates() {
         let json = r#"{

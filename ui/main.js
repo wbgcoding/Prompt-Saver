@@ -639,12 +639,17 @@ function inkShadow(hex) {
 // separate from `action` rather than folding it in, so every existing single-action
 // caller (undo, update-available, …) is untouched.
 // `duration` overrides the computed auto-hide delay (ms) for this one call --
-// the background OCR-language-update notice uses its own ocrLangNoticeMs expert
-// setting instead of the generic TOAST_MS/action-bonus math below. Every existing
+// the background language-update notices use their own fixed duration
+// (OCR_LANG_NOTICE_MS) instead of the generic TOAST_MS/action-bonus math below. Every existing
 // caller omits it and keeps the old behaviour.
 // Named (not the pill/folder windows' shared COPIED_MS=900 -- this toast
 // chip flash has always run shorter; unifying the value would be a behaviour change).
 const CHIP_COPIED_MS = 400;
+// How long the background language-pack update notices stay up (ms).
+const OCR_LANG_NOTICE_MS = 8000;
+const VOICE_LANG_NOTICE_MS = 8000;
+// Arrow-key nudge step in the screenshot editor while Shift is held.
+const NUM_FIELD_BIG_STEP = 10;
 function toast(msg, action = null, tint = "", chips = null, duration = null) {
   toastEl.textContent = "";
   const hasChips = !!(chips && chips.length);
@@ -1722,7 +1727,6 @@ const EXPERT_VALUES = {
   // component's own existing hardcoded step/bigStep, so nothing changes for
   // anyone who never opens this new group.
   numFieldStep: { label: "valNumFieldStep", min: 1, max: 50, step: 1, def: 1, unit: "" },
-  numFieldBigStep: { label: "valNumFieldBigStep", min: 1, max: 100, step: 1, def: 10, unit: "" },
   // How far a duplicated overlay/shape is shifted from its source, in both editors,
   // so the copy is visible right away instead of sitting exactly on top of it.
   veOvDupOffsetPx: { label: "valVeOvDupOffsetPx", min: 0, max: 100, step: 1, def: 16, unit: "px" },
@@ -1738,7 +1742,6 @@ const EXPERT_VALUES = {
   // A file past this size is rejected before it loads when opening one for
   // editing -- open_file_in_editor reads the very same key.
   editorOpenMaxMb: { label: "valEditorOpenMaxMb", min: 64, max: 8192, step: 64, def: 2048, unit: "MB" },
-  editStateSaveSecs: { label: "valEditStateSaveSecs", min: 5, max: 300, step: 5, def: 30, unit: "s", gate: "editStateKeep" },
   // 0 means forever, same convention as trashRetentionDays.
   editStateKeepDays: { label: "valEditStateKeepDays", min: 0, max: 365, step: 1, def: 30, unit: "", gate: "editStateKeep" },
   // A crop smaller than this (either side) is upscaled 2x before recognition --
@@ -1773,8 +1776,6 @@ const EXPERT_VALUES = {
   // How young a moov-less (broken) recording has to be to still get a pass
   // (the post-capture menu's stop might just still be finalising) and how often
   // the background sweep for it (and for merely-undecided recordings) runs.
-  recBrokenGraceMin: { label: "valRecBrokenGraceMin", min: 1, max: 60, step: 1, def: 5, unit: "min", gate: "recSweepBroken" },
-  recSweepEveryMin: { label: "valRecSweepEveryMin", min: 5, max: 1440, step: 5, def: 60, unit: "min", gate: "recSweepBroken" },
   // How long a discarded recording sits in its "verworfen" trash before the
   // background sweep removes it for good. Shown under the recording switch
   // only; it is not tied to recSweepBroken because the backend runs this
@@ -1788,20 +1789,12 @@ const EXPERT_VALUES = {
   // update, how long the "update available" toast stays before it counts as a
   // silent no-op, and how long a click on its Cancel button postpones the next
   // check. All three only matter while ocrLangAutoUpdate itself is on.
-  ocrLangCheckH: { label: "valOcrLangCheckH", min: 24, max: 720, step: 24, def: 168, unit: "h", gate: "ocrLangAutoUpdate" },
-  ocrLangNoticeMs: { label: "valOcrLangNoticeMs", min: 2000, max: 20000, step: 500, def: 8000, unit: "ms", gate: "ocrLangAutoUpdate" },
-  ocrLangSnoozeH: { label: "valOcrLangSnoozeH", min: 24, max: 720, step: 24, def: 168, unit: "h", gate: "ocrLangAutoUpdate" },
   voiceAutoStopSec: { label: "valVoiceAutoStopSec", min: 1, max: 60, step: 1, def: 10, unit: "s", gate: "voiceAutoStop" },
   voiceMaxMin: { label: "valVoiceMaxMin", min: 1, max: 60, step: 1, def: 10, unit: "min", gate: "voice" },
-  voiceLangCacheH: { label: "valVoiceLangCacheH", min: 1, max: 168, step: 1, def: 24, unit: "h", gate: "voice" },
-  voiceLangCheckH: { label: "valVoiceLangCheckH", min: 24, max: 720, step: 24, def: 168, unit: "h", gate: "voiceLangAutoUpdate" },
-  voiceLangNoticeMs: { label: "valVoiceLangNoticeMs", min: 2000, max: 20000, step: 500, def: 8000, unit: "ms", gate: "voiceLangAutoUpdate" },
-  voiceLangSnoozeH: { label: "valVoiceLangSnoozeH", min: 24, max: 720, step: 24, def: 168, unit: "h", gate: "voiceLangAutoUpdate" },
   // How long ocr_capabilities()'s own result is cached backend-side, so opening
   // the management dialog (or a manual "Check now") does not always wait on
   // PowerShell. Gated on "ocr" alone, not ocrLangAutoUpdate -- manual "Check now"
   // uses this cache too, even with automatic updates switched off.
-  ocrLangCacheH: { label: "valOcrLangCacheH", min: 1, max: 168, step: 1, def: 24, unit: "h", gate: "ocr" },
   // Scrollbar thickness across every dialog (thumb keeps its 3px inset border).
   scrollbarWidth: { label: "valScrollbarWidth", min: 8, max: 20, step: 1, def: 12, unit: "px", gate: "!hideScrollbars" },
   // Frosted-glass dialog background blur (paired with the frostedModals toggle).
@@ -1859,7 +1852,6 @@ const EXPERT_VALUES = {
   // Clipboard watcher: min length + inbox cap.
   clipMinChars: { label: "valClipMin", min: 1, max: 100, step: 1, def: 3, unit: "", gate: "clipWatcher" },
   clipInboxMax: { label: "valClipMax", min: 10, max: 200, step: 10, def: 50, unit: "", gate: "clipWatcher" },
-  clipSecretMinLen: { label: "valClipSecretMinLen", min: 4, max: 32, step: 1, def: 8, unit: "", gate: "clipSkipSecrets" },
   // Confidential-entry vault: how long an unlocked session stays unlocked. 0 = until quit.
   secretTimeoutMin: { label: "valSecretTimeoutMin", min: 0, max: 240, step: 5, def: 0, unit: "min", gate: "secretPrompts" },
   // Keyboard grid focus fades this long after the window loses focus.
@@ -1892,14 +1884,10 @@ const EXPERT_VALUES = {
   // How often the Markdown-sync folder is re-scanned for outside edits.
   syncPollSecs: { label: "valSyncPollSecs", min: 2, max: 30, step: 1, def: 5, unit: "s", gate: "promptSync" },
   // Failed rounds in a row (an unreachable folder) before the sync pauses itself.
-  syncFailMax: { label: "valSyncFailMax", min: 1, max: 50, step: 1, def: 5, unit: "", gate: "promptSync" },
   // Code text size inside the Markdown preview.
   hlFontPx: { label: "valHlFontPx", min: 10, max: 18, step: 1, def: 13, unit: "px", gate: "codeHighlight" },
   // Markdown preview + syntax-highlight size caps, past which they fall back to plain text.
-  mdMaxChars: { label: "valMdMaxChars", min: 10000, max: 500000, step: 10000, def: 100000, unit: "", gate: "mdPreview" },
-  hlMaxChars: { label: "valHlMaxChars", min: 2000, max: 100000, step: 1000, def: 20000, unit: "", gate: "codeHighlight" },
   // Word-diff cap in version history (500: minimum where a diff is still worth it).
-  diffWordCap: { label: "valDiffWordCap", min: 500, max: 20000, step: 500, def: 4000, unit: "", gate: "historyDiff" },
   // Version-history preview line length.
   historyPreviewLen: { label: "valHistoryPreviewLen", min: 20, max: 300, step: 10, def: 80, unit: "", gate: "promptHistory" },
   // How much of a private note the tile tooltip shows (0 = the whole note).
@@ -1918,10 +1906,7 @@ const EXPERT_VALUES = {
   rotateTipLen: { label: "valRotateTipLen", min: 0, max: 300, step: 10, def: 60, unit: "", gate: "rotatingPrompts" },
   // Auto-advance session tuning: mirrors the backend's auto_cfg() defaults.
   rotateAutoTimeoutMin: { label: "valRotateAutoTimeoutMin", min: 0, max: 480, step: 5, def: 60, unit: "min", zeroLabel: "valUnlimited", gate: "rotateAuto" },
-  rotateAutoSettleMs: { label: "valRotateAutoSettleMs", min: 100, max: 2000, step: 50, def: 350, unit: "ms", gate: "rotateAuto" },
   rotateAutoCooldownMs: { label: "valRotateAutoCooldownMs", min: 0, max: 2000, step: 50, def: 250, unit: "ms", gate: "rotateAuto" },
-  rotateAutoInputMs: { label: "valRotateAutoInputMs", min: 500, max: 10000, step: 250, def: 3000, unit: "ms", gate: "rotateAuto" },
-  rotateAutoRearmMax: { label: "valRotateAutoRearmMax", min: 0, max: 50, step: 1, def: 12, unit: "", gate: "rotateAuto" },
   // A remaining-time estimate only shows once a progress bar has moved this
   // far, and only if what's left is still worth naming a number for.
   etaMinPct: { label: "valEtaMinPct", min: 0, max: 50, step: 1, def: 10, unit: "%", gate: "etaShow" },
@@ -1930,7 +1915,6 @@ const EXPERT_VALUES = {
   // How long the Undo button on a destructive-action toast stays clickable.
   undoToastMs: { label: "valUndoToastMs", min: 2000, max: 20000, step: 500, def: 8000, unit: "ms", gate: "undoToast" },
   // How many recent error messages the ring buffer keeps.
-  errorLogMax: { label: "valErrorLogMax", min: 20, max: 500, step: 10, def: 100, unit: "", gate: "errorLog" },
   // The port shows on the persistent badge while the receiver
   // runs -- a companion program reads it from there, not from this slider.
   remotePort: { label: "valRemotePort", min: 1024, max: 65535, step: 1, def: 51823, unit: "", gate: "remoteApi", input: true },
@@ -2227,7 +2211,7 @@ const EXPERT_TABS = [
     { title: "expGroupVars", flags: ["promptVars", { key: "varDefaults", gate: "promptVars" }, { key: "dynVars", gate: "promptVars" }, { key: "choiceVars", gate: "promptVars" }, { key: "choiceRemember", gate: "choiceVars" }, { key: "varPopupWindow", gate: "promptVars" }, { key: "varFixed", gate: "promptVars" }], dropdowns: ["dateStyle", "timeStyle"], varFixedList: true },
     // The editor: what it shows beside the text box. Preview and highlighter belong together; the
     // highlighter only ever paints inside the preview.
-    { title: "expGroupEditor", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }, { key: "copyFormatted", gate: "mdPreview" }, "lengthCounter", "promptHistory", { key: "historyDiff", gate: "promptHistory" }, "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace", "confirmDiscard", "editorDraft"], values: ["hlFontPx", "historyPerPrompt", "notesTipLen", "mdMaxChars", "hlMaxChars", "diffWordCap", "historyPreviewLen", "editorDraftSecs"], dropdowns: ["counterUnits"] },
+    { title: "expGroupEditor", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }, { key: "copyFormatted", gate: "mdPreview" }, "lengthCounter", "promptHistory", { key: "historyDiff", gate: "promptHistory" }, "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace", "confirmDiscard", "editorDraft"], values: ["hlFontPx", "historyPerPrompt", "notesTipLen", "historyPreviewLen", "editorDraftSecs"], dropdowns: ["counterUnits"] },
     // Everything that happens between a click and the clipboard.
     { title: "expGroupCopy", flags: ["promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, { key: "autoPasteEnter", gate: "autoPaste" }, "hideWindowOnCopy", "copyBubble", "copyFlash", "copySound"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs", "bubbleMs", "copySoundVolume"], dropdowns: ["dragOutModifier", "copySize", "copyFont"] },
     // Copying several different prompts as one text.
@@ -2238,14 +2222,14 @@ const EXPERT_TABS = [
     // The quick-copy sections of the tray menu, each with its own entry count.
     { title: "expGroupTray", flags: ["trayCustomMenu", "trayRecent", "trayFavs", "traySearch"], values: ["trayRecentN", "trayFavN", "trayLabelMax", "trayMenuMax"] },
     // The watcher that collects what you copy elsewhere.
-    { title: "expGroupClipboard", flags: ["clipWatcher", { key: "clipSkipSecrets", gate: "clipWatcher" }], values: ["clipMinChars", "clipInboxMax", "clipSecretMinLen"] },
+    { title: "expGroupClipboard", flags: ["clipWatcher", { key: "clipSkipSecrets", gate: "clipWatcher" }], values: ["clipMinChars", "clipInboxMax"] },
     // Prompt folders as Markdown (beta): mirrors text-only prompts as .md files.
-    { title: "expGroupSync", flags: ["promptSync"], values: ["syncPollSecs", "syncFailMax"], paths: ["syncDir"] },
+    { title: "expGroupSync", flags: ["promptSync"], values: ["syncPollSecs"], paths: ["syncDir"] },
     // Auto-advancing through a rotation -- not a capture tool, stays in tab 1.
-    { title: "expGroupRotation", flags: ["rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }, { key: "rotateAuto", gate: "rotatingPrompts" }], values: ["rotateMaxEntries", "rotateTipLen", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax"], dropdowns: ["rotateDefaultMode"] },
+    { title: "expGroupRotation", flags: ["rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }, { key: "rotateAuto", gate: "rotatingPrompts" }], values: ["rotateMaxEntries", "rotateTipLen", "rotateAutoTimeoutMin", "rotateAutoCooldownMs"], dropdowns: ["rotateDefaultMode"] },
     // Voice dictation -- not a capture tool either (it puts text into the composer,
     // the same way typing does), stays in tab 1.
-    { title: "expGroupVoice", flags: ["voice", { key: "voiceInterim", gate: "voice" }, { key: "voicePunct", gate: "voice" }, { key: "voiceAutoCaps", gate: "voicePunct" }, { key: "voiceAutoStop", gate: "voice" }, { key: "voiceOnlineOk", gate: "voice" }, { key: "voiceAutoPickLang", gate: "voice" }, { key: "voiceLangAutoUpdate", gate: "voice" }, { key: "voiceHotkey", gate: "voice" }], values: ["voiceAutoStopSec", "voiceMaxMin", "voiceLangCacheH", "voiceLangCheckH", "voiceLangNoticeMs", "voiceLangSnoozeH"], dropdowns: ["voiceLang", "voiceInsert", "voiceHotkeyTarget"],
+    { title: "expGroupVoice", flags: ["voice", { key: "voiceInterim", gate: "voice" }, { key: "voicePunct", gate: "voice" }, { key: "voiceAutoCaps", gate: "voicePunct" }, { key: "voiceAutoStop", gate: "voice" }, { key: "voiceOnlineOk", gate: "voice" }, { key: "voiceAutoPickLang", gate: "voice" }, { key: "voiceLangAutoUpdate", gate: "voice" }, { key: "voiceHotkey", gate: "voice" }], values: ["voiceAutoStopSec", "voiceMaxMin"], dropdowns: ["voiceLang", "voiceInsert", "voiceHotkeyTarget"],
       actions: [{ id: "voice-langs-open", label: "voiceLangsManage", gate: "voice" }, { id: "voice-hotkey-set", label: "voiceHotkeySet", gate: "voiceHotkey" }] },
   ] },
   { title: "expTabCapture", groups: [
@@ -2254,18 +2238,18 @@ const EXPERT_TABS = [
     { title: "expGroupScreenshot", flags: ["screenshot"], values: ["snipPreviewVh", "snipQuality", "snipSaveQuality", "snipDelayMs"], dropdowns: ["screenshotFormat"], paths: ["screenshotDir"] },
     { title: "expGroupSnipEditor", flags: [{ key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }], values: ["snipPenPx", "snipMarkerPx", "snipLinePx", "snipArrowPx", "snipRectPx", "snipEllipsePx", "snipStepPx", "snipArrowHeadScale", "snipTextPx", "snipTextOutlinePx", "snipPixelBlock", "snipSpotlightDim", "snipEditUndoMax"], dropdowns: ["snipEditDefaultTool", "snipScaleFilter", "snipTextBack"], colors: ["snipDefaultColor"] },
     // Opens #ocr-langs-modal -- same gate as the rest of the feature.
-    { title: "expGroupOcr", flags: ["ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }, { key: "ocrAutoPickLang", gate: "ocr" }, { key: "ocrLangAutoUpdate", gate: "ocr" }], values: ["ocrUpscaleUnderPx", "ocrLangCacheH", "ocrLangCheckH", "ocrLangNoticeMs", "ocrLangSnoozeH"], dropdowns: ["ocrLang"],
+    { title: "expGroupOcr", flags: ["ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }, { key: "ocrAutoPickLang", gate: "ocr" }, { key: "ocrLangAutoUpdate", gate: "ocr" }], values: ["ocrUpscaleUnderPx"], dropdowns: ["ocrLang"],
       actions: [{ id: "ocr-langs-open", label: "ocrLangsManage", gate: "ocr" }] },
     { title: "expGroupPicker", flags: ["colorPicker"], values: ["loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx"], dropdowns: ["pickerFormat"] },
     // The recording hotkeys render their own capture row directly (hotkeyRow())
     // instead of a button that jumps to a settings field -- see actionRow()'s
     // "hotkey" branch.
-    { title: "expGroupRecording", flags: ["screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, { key: "recCropNotice", gate: "screenRecord" }, { key: "recBarSize", gate: "screenRecord" }, { key: "recTargetSwitch", gate: "screenRecord" }, { key: "recAutoCrop", gate: "screenRecord" }, { key: "keyOverlay", gate: "screenRecord" }, { key: "keyOverlayShortcutsOnly", gate: "keyOverlay" }, { key: "recSweepBroken", gate: "screenRecord" }, { key: "recOutline", gate: "screenRecord" }, "cameraRecord"], values: ["recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "recCanvasMaxPx", "recDiskWarnMb", "recMaxMin", "recMaxMb", "exportParallel", "keyOverlayHoldMs", "recBrokenGraceMin", "recSweepEveryMin", "recDiscardKeepH", "cameraFramerate"], selects: ["recordingRetentionDays"], dropdowns: ["recMicDevice", "recQuality", "recFormat", "recCanvasMode", "cameraDevice", "cameraResolution"], colors: ["recOutlineColor"], paths: ["recordingDir"],
+    { title: "expGroupRecording", flags: ["screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, { key: "recCropNotice", gate: "screenRecord" }, { key: "recBarSize", gate: "screenRecord" }, { key: "recTargetSwitch", gate: "screenRecord" }, { key: "recAutoCrop", gate: "screenRecord" }, { key: "keyOverlay", gate: "screenRecord" }, { key: "keyOverlayShortcutsOnly", gate: "keyOverlay" }, { key: "recSweepBroken", gate: "screenRecord" }, { key: "recOutline", gate: "screenRecord" }, "cameraRecord"], values: ["recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "recCanvasMaxPx", "recDiskWarnMb", "recMaxMin", "recMaxMb", "exportParallel", "keyOverlayHoldMs", "recDiscardKeepH", "cameraFramerate"], selects: ["recordingRetentionDays"], dropdowns: ["recMicDevice", "recQuality", "recFormat", "recCanvasMode", "cameraDevice", "cameraResolution"], colors: ["recOutlineColor"], paths: ["recordingDir"],
       actions: [{ id: "rec-sweep-now", label: "recSweepNowAction", gate: "recSweepBroken" }, { id: "rec-stop-hotkey-row", type: "hotkey", hotkeyKey: "recStopHotkey", label: "recStopHotkeyLabel", gate: "recStopHotkey" }, { id: "rec-pause-hotkey-row", type: "hotkey", hotkeyKey: "recPauseHotkey", label: "recPauseHotkeyLabel", gate: "recPauseHotkey" }] },
     { title: "expGroupVideoEditor", flags: ["videoEditor", { key: "veOvRemember", gate: "videoEditor" }, { key: "videoEditSnap", gate: "videoEditor" }], values: ["videoEditUndoMax", "veExportKbpsHigh", "veExportKbpsSmall", "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "veExtraClipsMax", "videoClipTtlMin", "veOvTextOutlinePx", "veOvVideoVolume"], dropdowns: ["veDefaultFormat", "veDefaultQuality", "veDefaultScale", "veOvFont", "veDefaultPanel"], colors: ["veOvColor", "veOvKeysActiveColor"], paths: ["videoExportDir"] },
     // What the screenshot editor and the video editor share -- created here so
     // no setting key is ever declared in two groups (expert_menu_check.py).
-    { title: "expGroupEditors", flags: ["numFieldWheel", "editStateKeep"], values: ["numFieldStep", "numFieldBigStep", "zoomStepPct", "zoomMaxPct", "editStateSaveSecs", "editStateKeepDays", "veOvDupOffsetPx", "editSnapTolerancePx", "editorOpenMaxMb"] },
+    { title: "expGroupEditors", flags: ["numFieldWheel", "editStateKeep"], values: ["numFieldStep", "zoomStepPct", "zoomMaxPct", "editStateKeepDays", "veOvDupOffsetPx", "editSnapTolerancePx", "editorOpenMaxMb"] },
   ] },
   { title: "expTabTiles", groups: [
     // Split by what a setting actually does: acting on a tile, the hover tooltip,
@@ -2299,7 +2283,7 @@ const EXPERT_TABS = [
       actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }] },
     { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "helpSketches", "firstRunTour"],
       actions: [{ id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
-    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "similarHint", "backupBeforeReset", "backupBeforeDelete", "importExport", "undoToast", "errorLog"], values: ["similarThreshold", "importFolderDepth", "importFolderMax", "disarmMs", "errorLogKeepKb", "undoToastMs", "errorLogMax"], selects: ["trashRetentionDays"],
+    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "similarHint", "backupBeforeReset", "backupBeforeDelete", "importExport", "undoToast", "errorLog"], values: ["similarThreshold", "importFolderDepth", "importFolderMax", "disarmMs", "errorLogKeepKb", "undoToastMs"], selects: ["trashRetentionDays"],
       actions: [{ id: "trash-open", label: "trashTitle" }, { id: "settings-export", label: "settingsExportAction" }, { id: "settings-import", label: "settingsImportAction" }, { id: "error-log-open", label: "errorLogAction", gate: "errorLog" }] },
     // The only new network surface in the app, off by default.
     // A link can only open or copy an entry; the receiver can do everything
@@ -2500,9 +2484,6 @@ function applyValues() {
   root.setProperty("--journal-width", `${val("journalWidth")}px`);
   // Caps/lengths that were fixed constants, now expert-tunable.
   ROTATE_SHORT_MAX = Math.round(val("rotateTipLen"));
-  MD_MAX_CHARS = Math.round(val("mdMaxChars"));
-  HL_MAX_CHARS = Math.round(val("hlMaxChars"));
-  DIFF_WORD_CAP = Math.round(val("diffWordCap"));
   HISTORY_PREVIEW_LEN = Math.round(val("historyPreviewLen"));
   DRAG_THRESHOLD = val("dragThreshold");
   INPUT_MAX = Math.round(val("composerMaxH"));
@@ -2526,9 +2507,9 @@ function applyValues() {
 const EXPERT_TIPS = [
   // General / creating
   "storeFiles", "attachTextPreview", "attachPreviewKb", "varDefaults", "dynVars", "choiceVars", "choiceRemember", "varPopupWindow", "varFixed",
-  "lengthCounter", "promptHistory", "historyDiff", "diffWordCap", "historyPreviewLen", "editorMonospace",
+  "lengthCounter", "promptHistory", "historyDiff", "historyPreviewLen", "editorMonospace",
   "promptNotes", "notesInTooltip", "notesTipLen",
-  "mdPreview", "mdMaxChars", "codeHighlight", "codeAutoDetect", "hlFontPx", "hlMaxChars", "copyFormatted",
+  "mdPreview", "codeHighlight", "codeAutoDetect", "hlFontPx", "copyFormatted",
   "colorPicker", "pickerFormat", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx",
   "screenRecord", "recCursor", "recCountdownS", "recFps", "recAudioSystem", "recAudioMic", "recAudioKbps", "recMicDevice",
   "recQuality", "recBitrateKbps", "recFormat", "recordingDir",
@@ -2541,16 +2522,16 @@ const EXPERT_TIPS = [
   "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "veOvColor", "veOvFont",
   "veDefaultPanel", "videoExportDir", "veExtraClipsMax",
   "numFieldWheel", "zoomStepPct", "zoomMaxPct", "errorLogKeepKb", "veOvDupOffsetPx", "editSnapTolerancePx",
-  "editStateKeep", "editStateSaveSecs", "editStateKeepDays", "editorOpenMaxMb", "editorDraft", "editorDraftSecs",
+  "editStateKeep", "editStateKeepDays", "editorOpenMaxMb", "editorDraft", "editorDraftSecs",
   "snipQuality", "snipSaveQuality", "snipDelayMs",
   "snipPenPx", "snipMarkerPx", "snipLinePx", "snipArrowPx", "snipRectPx", "snipEllipsePx", "snipStepPx",
   "snipArrowHeadScale", "snipDefaultColor", "snipTextPx", "snipTextOutlinePx", "snipPixelBlock", "snipSpotlightDim",
   "snipEditUndoMax", "snipEditSnap", "snipTextBack", "snipEditDefaultTool", "snipScaleFilter",
   "ocr", "ocrUpscaleUnderPx", "ocrLang",
-  "ocrAutoPickLang", "ocrLangAutoUpdate", "ocrLangCheckH", "ocrLangNoticeMs", "ocrLangSnoozeH", "ocrLangCacheH",
+  "ocrAutoPickLang", "ocrLangAutoUpdate",
   "voice", "voiceInterim", "voicePunct", "voiceAutoCaps", "voiceAutoStop", "voiceAutoStopSec", "voiceMaxMin",
-  "voiceLangCacheH", "voiceLang", "voiceInsert", "voiceOnlineOk", "voiceAutoPickLang", "voiceLangAutoUpdate",
-  "voiceLangCheckH", "voiceLangNoticeMs", "voiceLangSnoozeH", "voiceHotkey", "voiceHotkeyTarget",
+  "voiceLang", "voiceInsert", "voiceOnlineOk", "voiceAutoPickLang", "voiceLangAutoUpdate",
+  "voiceHotkey", "voiceHotkeyTarget",
   "trayCustomMenu", "trayRecent", "trayFavs", "trayRecentN", "trayFavN", "trayLabelMax", "traySearch", "trayMenuMax",
   "checkUpdateOnStart", "showUpdates", "updateCheckH", "whatsNew", "importExport", "toolbarHoverDim", "keyboardNav", "allowMultipleInstances",
   "taskbarProgress", "etaShow", "dataDir", "dataDirLock", "demoMode",
@@ -2560,7 +2541,7 @@ const EXPERT_TIPS = [
   "folderGridCols",
   "tileFolders", "tileFolderZone", "tileFolderHoverMs", "tileFolderCols",
   "rotatingPrompts", "rotateDefaultMode", "rotateMaxEntries", "rotateBadge", "rotateTipLen",
-  "rotateAuto", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax",
+  "rotateAuto", "rotateAutoTimeoutMin", "rotateAutoCooldownMs",
   "helpTips", "helpHighlight", "helpSketches", "firstRunTour",
   // Tiles / copying
   "tilePreview", "tileMenu", "typeBadges", "tileHotkeyBadge", "copyBubble", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "chainQuickStart", "chainStartAlwaysVisible", "chainVarCheck", "autoPasteEnter", "hideWindowOnCopy",
@@ -2580,15 +2561,15 @@ const EXPERT_TIPS = [
   "dedupCopyLog", "cleanupFiles", "blurTilesUntilHover",
   // Tools / data
   "dupFinder", "clipWatcher", "backupGfs", "backupBeforeReset", "backupBeforeDelete", "disarmMs",
-  "recSweepBroken", "recBrokenGraceMin", "recSweepEveryMin", "recDiscardKeepH", "videoClipTtlMin",
-  "usageStats", "promptSync", "syncDir", "syncPollSecs", "syncFailMax", "clipSkipSecrets",
+  "recSweepBroken", "recDiscardKeepH", "videoClipTtlMin",
+  "usageStats", "promptSync", "syncDir", "syncPollSecs", "clipSkipSecrets",
   "secretPrompts", "secretTimeoutMin",
   "undoToast", "undoToastMs",
-  "errorLog", "errorLogMax",
+  "errorLog",
   "archiveTag",
   // Values that need a unit/behaviour explanation
   "copyCooldownMs", "dblClickMs", "autoPasteDelayMs", "kbFocusFadeMs", "snipPreviewVh",
-  "historyPerPrompt", "similarThreshold", "similarHint", "clipMinChars", "clipInboxMax", "clipSecretMinLen", "historyMax",
+  "historyPerPrompt", "similarThreshold", "similarHint", "clipMinChars", "clipInboxMax", "historyMax",
   "journalLimit", "previewLen", "nameMaxLen", "searchRecentMax", "savedSearchMax", "maxViews", "gridMax",
   "viewBorder", "statsTopN", "viewGroups", "viewGroupMaxRows", "multiViewPrompt", "viewTabEdgeZone",
   "barToggles", "barToggleBoth", "quickGrid", "quickGridHoverOnly", "multiView", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "libraryCols", "copySize", "copyFont", "showLibrary", "showJournal", "composerScale", "primaryScale",
@@ -9260,10 +9241,10 @@ function debounced(fn, ms = SEARCH_DEBOUNCE_MS) {
 // transform below only ever slices that escaped string, so nothing a user types can
 // come out as markup. A link keeps its label as plain styled text and never becomes
 // an <a>, which is why no href/src exists for a click to follow.
-let MD_MAX_CHARS = 100000; // past this the preview is cut, so split-mode typing stays smooth, expert-tunable
+const MD_MAX_CHARS = 100000; // past this the preview is cut, so split-mode typing stays smooth
 // A single huge fence is rendered plain: an unterminated block comment makes the
 // lazy scan quadratic, and nobody reads 20k characters of colour anyway.
-let HL_MAX_CHARS = 20000; // expert-tunable
+const HL_MAX_CHARS = 20000; // past this length code is not highlighted
 const MD_ESC_RE = /[&<>"']/g;
 const MD_ESC_MAP = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
 const mdEsc = (s) => String(s).replace(MD_ESC_RE, (c) => MD_ESC_MAP[c]);
@@ -9588,7 +9569,7 @@ function syncMdUi(textVisible, rotating = false) {
 // dependency, the whole thing is a couple dozen lines. O(n*m) on word count, so
 // a pathologically huge pasted text falls back to plain text (DIFF_WORD_CAP)
 // rather than freezing the editor while it opens the history panel.
-let DIFF_WORD_CAP = 4000; // expert-tunable
+const DIFF_WORD_CAP = 4000;
 function diffWords(oldText, newText) {
   const tokenize = (s) => (s || "").split(/(\s+)/).filter((t) => t !== "");
   const a = tokenize(oldText);
@@ -19055,7 +19036,7 @@ function bind() {
     if (e.key.toLowerCase() === "v" && !e.repeat) { snipOriginalToggle.press(); return; }
     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key) && SE.lastNudged) {
       e.preventDefault();
-      const amount = e.shiftKey ? val("numFieldBigStep") : val("numFieldStep");
+      const amount = e.shiftKey ? NUM_FIELD_BIG_STEP : val("numFieldStep");
       snipEditNudge(SE.lastNudged, e.key, amount, e.ctrlKey || e.metaKey);
       return;
     }
@@ -19548,7 +19529,7 @@ function bind() {
   // updating (a version change, or Windows silently dropped one after a feature
   // update). Purely a notice -- the backend never auto-installs on its own, so a
   // toast the user ignores until it auto-hides is a complete no-op, not a missed
-  // action. Cancel snoozes the next automatic check by ocrLangSnoozeH.
+  // action. Cancel snoozes the next automatic check.
   listen("ocr-lang-update-due", (e) => {
     const due = e.payload || [];
     if (!due.length) return;
@@ -19559,7 +19540,7 @@ function bind() {
       msg,
       { label: t("cancel"), onClick: () => invoke("ocr_lang_snooze").catch(() => {}) },
       "", null,
-      Math.round(val("ocrLangNoticeMs")),
+      OCR_LANG_NOTICE_MS,
     );
   });
   // Same background-watcher notice, for voice language packs.
@@ -19573,7 +19554,7 @@ function bind() {
       msg,
       { label: t("cancel"), onClick: () => invoke("voice_lang_snooze").catch(() => {}) },
       "", null,
-      Math.round(val("voiceLangNoticeMs")),
+      VOICE_LANG_NOTICE_MS,
     );
   });
   // Voice dictation: the two buttons (composer, edit dialog) share one wiring

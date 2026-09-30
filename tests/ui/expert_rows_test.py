@@ -41,8 +41,6 @@ EXPECTED = [
     ("value", "maxViews", "expTabFeatures", "expGroupViews", 1),
     ("value", "gridMax", "expTabFeatures", "expGroupViews", 0),
     ("flag", "recSweepBroken", "expTabCapture", "expGroupRecording", 1),
-    ("value", "recBrokenGraceMin", "expTabCapture", "expGroupRecording", 2),
-    ("value", "recSweepEveryMin", "expTabCapture", "expGroupRecording", 2),
     ("value", "recDiscardKeepH", "expTabCapture", "expGroupRecording", 1),
     ("select", "recordingRetentionDays", "expTabCapture", "expGroupRecording", 1),
     ("action", "rec-sweep-now", "expTabCapture", "expGroupRecording", 2),
@@ -275,6 +273,15 @@ LAUNCHER_PROBE = """
 </script>
 """
 
+# The editor autosaves every 30 s; the probe only waits a few seconds, so the page
+# gets a timer that runs ten times faster for exactly that one interval length.
+FAST_AUTOSAVE = """<script>
+(function () {
+  const real = window.setInterval.bind(window);
+  window.setInterval = (fn, ms, ...rest) => real(fn, ms === 30000 ? 3000 : ms, ...rest);
+})();
+</script>"""
+
 # veOvTextOutlinePx / veOvKeysActiveColor / veOvVideoVolume: a new overlay starts from them.
 # The editor autosaves its operations every few seconds; that record is what is read.
 VIDEO_PROBE = """
@@ -368,13 +375,13 @@ def consumer_problems(browser, tmp):
         label = "launcherMaxResults " + str(values.get("launcherMaxResults", "default"))
         check(label, "launcher.html", LAUNCHER_PROBE.replace("__WANT__", str(want)), {"ui_values": values},
               size=(560, 420), budget=15000)
-    seeded = {"ui_values": {"veOvTextOutlinePx": 7, "veOvVideoVolume": 40, "editStateSaveSecs": 5},
+    seeded = {"ui_values": {"veOvTextOutlinePx": 7, "veOvVideoVolume": 40},
               "ui_texts": {"veOvKeysActiveColor": "#ff00aa"}}
-    plain = {"ui_values": {"editStateSaveSecs": 5}}
+    plain = {"ui_values": {}}
     for label, seed, o, a, v in (("video overlays seeded", seeded, 7, "#ff00aa", 40),
                                  ("video overlays default", plain, 3, "#3fa7ff", 0)):
         probe = VIDEO_PROBE.replace("__OUTLINE__", str(o)).replace("__ACTIVE__", a).replace("__VOLUME__", str(v))
-        check(label, "video.html", probe, seed, size=(1130, 860), budget=40000)
+        check(label, "video.html", probe, seed, size=(1130, 860), budget=40000, head=FAST_AUTOSAVE)
     for color in ("#ff8800", "#2563eb"):
         head = "<script>" + outline_init_script(color) + "</script>"
         check("outline colour " + color, "recoutline.html", OUTLINE_PROBE.replace("__WANT__", hex_to_rgb(color)),

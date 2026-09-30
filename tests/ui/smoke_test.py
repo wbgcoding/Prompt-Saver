@@ -7572,7 +7572,7 @@ PROBE = """
       document.getElementById('settings').classList.add('hidden');
     }
     // 431: the password-skip switch only matters once the clipboard inbox itself is
-    // on, defaults to on, and its length slider only matters while it is.
+    // on and defaults to on; its former length slider is a fixed value now.
     {
       const valueRow431 = (label) => [...document.querySelectorAll('#expert-flags .value-field')]
         .find(r => ((r.querySelector('.value-head span') || {}).textContent || '').includes(label));
@@ -7591,21 +7591,8 @@ PROBE = """
           if (!skipRow.querySelector('input.switch').checked) {
             out.errors.push('431: the password-skip switch is not on by default');
           }
-          if (!valueRow431('Password guess minimum length')) {
-            out.errors.push('431: the minimum-length slider is missing although password-skip is on');
-          }
-          skipRow.querySelector('input.switch').click();
-          await sleep(200);
           if (valueRow431('Password guess minimum length')) {
-            out.errors.push('431: the minimum-length slider survived turning password-skip off');
-          }
-          // Re-fetch: password-skip gates the slider's visibility, so its own switch
-          // rebuilt the tab and the earlier `skipRow` element is now detached.
-          const skipRowBack = await expertRow('Skip likely passwords');
-          if (skipRowBack) skipRowBack.querySelector('input.switch').click();
-          await sleep(200);
-          if (!valueRow431('Password guess minimum length')) {
-            out.errors.push('431: the minimum-length slider did not come back with password-skip');
+            out.errors.push('431: the minimum-length slider is still in the expert menu');
           }
         }
         // Restore the shipped default (off) so later checks see it unchanged.

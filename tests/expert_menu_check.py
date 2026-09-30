@@ -60,7 +60,6 @@ DEPENDENCIES = {
     "counterUnits": "lengthCounter",
     "historyPerPrompt": "promptHistory",
     "historyDiff": "promptHistory",
-    "diffWordCap": "historyDiff",
     "historyPreviewLen": "promptHistory",
     "notesInTooltip": "promptNotes",
     "notesTipLen": "notesInTooltip",
@@ -90,15 +89,10 @@ DEPENDENCIES = {
     "ocrJoinLines": "ocr",
     "ocrUpscaleUnderPx": "ocr",
     "ocrLang": "ocr",
-    # 122: OCR language packs -- ocrAutoPickLang/ocrLangCacheH gate on "ocr" alone
-    # (they matter regardless of the auto-update setting); the other three are
-    # nested under ocrLangAutoUpdate itself, since they tune ITS behaviour.
+    # 122: OCR language packs -- ocrAutoPickLang gates on "ocr" alone (it matters
+    # regardless of the auto-update setting).
     "ocrAutoPickLang": "ocr",
     "ocrLangAutoUpdate": "ocr",
-    "ocrLangCacheH": "ocr",
-    "ocrLangCheckH": "ocrLangAutoUpdate",
-    "ocrLangNoticeMs": "ocrLangAutoUpdate",
-    "ocrLangSnoozeH": "ocrLangAutoUpdate",
     # 32: rotating prompts
     "rotateDefaultMode": "rotatingPrompts",
     "rotateMaxEntries": "rotatingPrompts",
@@ -107,16 +101,11 @@ DEPENDENCIES = {
     # 90-94: auto-advance
     "rotateAuto": "rotatingPrompts",
     "rotateAutoTimeoutMin": "rotateAuto",
-    "rotateAutoSettleMs": "rotateAuto",
     "rotateAutoCooldownMs": "rotateAuto",
-    "rotateAutoInputMs": "rotateAuto",
-    "rotateAutoRearmMax": "rotateAuto",
     # Markdown preview
     "codeHighlight": "mdPreview",
     "codeAutoDetect": "mdPreview",
     "hlFontPx": "codeHighlight",
-    "mdMaxChars": "mdPreview",
-    "hlMaxChars": "codeHighlight",
     # Workspace
     "floatOpacity": "floating",
     "pillFolders": "floating",
@@ -187,8 +176,6 @@ DEPENDENCIES = {
     # Recording upkeep lives with the recording switch, the video editor's temp
     # files with the editor, the error log's size with the log.
     "recSweepBroken": "screenRecord",
-    "recBrokenGraceMin": "recSweepBroken",
-    "recSweepEveryMin": "recSweepBroken",
     "recDiscardKeepH": "screenRecord",
     "recordingRetentionDays": "screenRecord",
     "videoClipTtlMin": "videoEditor",
