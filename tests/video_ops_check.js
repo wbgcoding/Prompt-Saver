@@ -58,6 +58,15 @@ function makeSandbox(extra) {
       extractBlock("clipAudioLabel", "function clipAudioLabel(entry, label, parts) {"),
       extractBlock("atempoChain", "function atempoChain(rate) {"),
       extractBlock("buildAudioChain", "function buildAudioChain() {"),
+      extractBlock("pushOp", "function pushOp(op, opts) {"),
+      extractBlock("pushReplacing", "function pushReplacing(match, op, opts) {"),
+      extractBlock("capPrevChain", "function capPrevChain(op, max) {"),
+      extractLine("overlayStack", "const overlayStack = () => opsOf(\"overlay\").sort((a, b) => (a.z || 0) - (b.z || 0));"),
+      extractBlock("enableExpr", "function enableExpr(op) {"),
+      extractLine("hexToFf", "const hexToFf = (hex, opacity) => `0x${String(hex).replace(\"#\", \"\")}@${(clamp(opacity ?? 100, 0, 100) / 100).toFixed(2)}`;"),
+      extractBlock("scaleTarget", "function scaleTarget() {"),
+      extractBlock("clipVideoLabel", "function clipVideoLabel(op, label, parts, fps) {"),
+      extractBlock("buildVideoChain", "function buildVideoChain() {"),
     ].join("\n"),
     sandbox,
     { filename: "video.js (extracted)" }
@@ -104,6 +113,26 @@ function baseState(ops) {
   const looping = Object.assign({}, overlay, { loop: true, videoDurationMs: 3000 });
   // 20 s source at 2x = 10 s of output, repeated 3 s footage: 4 plays = loop count 3.
   expect("loop count follows the output window", vm.runInContext("videoOverlayLoopArg", sb)(looping) === ":loop=3", vm.runInContext("videoOverlayLoopArg", sb)(looping));
+}
+
+// Overlays stack by a number given at creation, not by position in the op list:
+// editing the lower one re-pushes it at the end of the list, and the export must
+// still draw it below the one added later.
+{
+  const sb = makeSandbox({
+    exportFormat: () => "mp4", exportQuality: () => "high", formatHasAudio: () => true,
+    SILENT_FORMATS: new Set(["gif"]), MAX_SILENT_DIM: 1280, afterOpsChanged: () => {},
+  });
+  sb.VE = baseState([]);
+  Object.assign(sb.VE, { floor: 0, undoMax: 50, redo: [], w: 1920, h: 1080, fps: 30 });
+  const frame = (id, color) => ({ tool: "overlay", id, kind: "frame", startMs: 0, endMs: 10000, rect: { x: 10, y: 10, w: 100, h: 100 }, color, opacity: 100, thickness: 4, style: "solid" });
+  vm.runInContext("pushOp", sb)(frame("A", "#ff0000"));
+  vm.runInContext("pushOp", sb)(frame("B", "#00ff00"));
+  const a = sb.VE.ops.find((o) => o.id === "A");
+  vm.runInContext("pushReplacing", sb)((o) => o.id === "A", Object.assign({}, a, { opacity: 50 }));
+  expect("the edited overlay moved to the end of the op list", sb.VE.ops[sb.VE.ops.length - 1].id === "A");
+  const g = vm.runInContext("buildVideoChain()", sb) || "";
+  expect("the edited lower overlay is still drawn first", g.indexOf("0xff0000") !== -1 && g.indexOf("0xff0000") < g.indexOf("0x00ff00"), g);
 }
 
 // An inserted clip that carries sound must be decoded into the audio graph,

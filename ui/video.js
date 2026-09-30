@@ -389,6 +389,10 @@ $("ve-confirm-third").addEventListener("click", () => closeConfirm("third"));
 // locked): they can never be undone back to, so keeping them around forever
 // would grow VE.ops -- and the rendered #ve-ops-list -- without bound.
 function pushOp(op, opts) {
+  // Every overlay gets a stacking number once, at creation. Edits re-push the
+  // overlay at the end of VE.ops (see pushReplacing) but keep this number, so
+  // export and preview stack overlays by it instead of by array position.
+  if (op.tool === "overlay" && op.z === undefined) op.z = 1 + Math.max(0, ...VE.ops.map((o) => o.z || 0));
   VE.ops.push(op);
   if (VE.ops.length - VE.floor > VE.undoMax) VE.floor = VE.ops.length - VE.undoMax;
   if (VE.floor > 0) { VE.ops = VE.ops.slice(VE.floor); VE.floor = 0; }
@@ -413,6 +417,7 @@ function pushReplacing(match, op, opts) {
   // every later index down, so it has to shrink by the same amount or it would
   // re-lock operations that were still undoable.
   VE.floor = Math.max(0, VE.floor - (before - VE.ops.length));
+  if (prev && op.tool === "overlay" && op.z === undefined && prev.z !== undefined) op = { ...op, z: prev.z };
   const next = prev ? { ...op, _prev: prev } : op;
   pushOp(next._prev ? capPrevChain(next, VE.undoMax) : next, opts);
 }
@@ -427,6 +432,10 @@ function capPrevChain(op, max) {
   delete node._prev;
   return op;
 }
+
+// Overlays bottom to top. Legacy ops without a number sort first, in list order
+// (the sort is stable).
+const overlayStack = () => opsOf("overlay").sort((a, b) => (a.z || 0) - (b.z || 0));
 
 function removeOps(match) {
   const before = VE.ops.length;
@@ -1228,7 +1237,8 @@ function renderOverlayLive(vb) {
   if (!VE.dur) { layer.innerHTML = ""; VE.liveEls.clear(); return; }
   const box = vb || videoBox();
   const now = VE.playhead;
-  for (const op of opsOf("overlay")) {
+  const stack = overlayStack();
+  for (const op of stack) {
     const prev = VE.liveEls.get(op.id);
     if (now < op.startMs || now > op.endMs) {
       if (prev) {
@@ -1247,6 +1257,11 @@ function renderOverlayLive(vb) {
     }
     el.hidden = false;
   }
+  // The layer order has to follow the export's stacking. Nodes are only moved
+  // when they are out of order, since re-inserting a playing <video> restarts it.
+  const wanted = stack.map((op) => VE.liveEls.get(op.id)).filter((el) => el && el.parentNode === layer);
+  const inLayer = [...layer.children].filter((el) => wanted.includes(el));
+  if (wanted.some((el, i) => el !== inLayer[i])) for (const el of wanted) layer.appendChild(el);
   // Overlays that were removed entirely (not just out of range) must not
   // keep their node alive in the map or the layer.
   const liveIds = new Set(opsOf("overlay").map((o) => o.id));
@@ -2190,6 +2205,7 @@ function duplicateOverlay(op) {
   // it, and a single undo afterward steps that chain back instead of
   // removing the duplicate outright.
   delete dup._prev;
+  delete dup.z;
   if (dup.rect) dup.rect = snapRect({ ...dup.rect, x: dup.rect.x + offset, y: dup.rect.y + offset });
   if (dup.kind === "text") { dup.x = clamp(dup.x + offset, 0, VE.w); dup.y = clamp(dup.y + offset, 0, VE.h); }
   VE.selOv = dup.id;
@@ -2903,7 +2919,7 @@ function buildVideoChain() {
   const speed = opOf("speed");
   const fade = opOf("fade");
   const downscale = scaleTarget();
-  const overlays = opsOf("overlay");
+  const overlays = overlayStack();
   const gif = exportFormat() === "gif";
   const silentFormat = SILENT_FORMATS.has(exportFormat());
   const trimmed = mains.length !== 1 || hasClips || mains[0].a > 0 || mains[0].b < VE.dur;
