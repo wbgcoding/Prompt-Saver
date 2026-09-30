@@ -608,26 +608,29 @@ fn resolve_path_arg(cwd: &Path, raw: &str) -> PathBuf {
 }
 
 // A tiny cursor over the remaining args, shared by every subcommand's parser.
-struct Args<'a> {
-    items: &'a [String],
+// It owns its items: taking a flag out replaces the list instead of leaking a
+// copy, which mattered once the app parsed a command for every pipe and receiver
+// request and never exited between them.
+struct Args {
+    items: Vec<String>,
     pos: usize,
 }
 
-impl<'a> Args<'a> {
-    fn new(items: &'a [String]) -> Self {
-        Args { items, pos: 0 }
+impl Args {
+    fn new(items: &[String]) -> Self {
+        Args { items: items.to_vec(), pos: 0 }
     }
-    fn peek(&self) -> Option<&'a str> {
+    fn peek(&self) -> Option<&str> {
         self.items.get(self.pos).map(String::as_str)
     }
-    fn next(&mut self) -> Option<&'a str> {
-        let v = self.peek();
+    fn next(&mut self) -> Option<String> {
+        let v = self.items.get(self.pos).cloned();
         if v.is_some() {
             self.pos += 1;
         }
         v
     }
-    fn next_positional(&mut self) -> Option<&'a str> {
+    fn next_positional(&mut self) -> Option<String> {
         let v = self.next()?;
         if v.starts_with("--") {
             self.pos -= 1;
@@ -640,6 +643,7 @@ impl<'a> Args<'a> {
 fn parse(argv: &[String]) -> Result<Parsed, String> {
     let mut a = Args::new(argv);
     let head = a.next().ok_or_else(|| usage_err("missing command"))?;
+    let head = head.as_str();
     if head == "--help" || head == "-h" {
         return Ok(Parsed::Help(top_level_help()));
     }
@@ -690,7 +694,7 @@ fn take_flag_value(a: &mut Args, name: &str) -> Result<Option<String>, String> {
             // this call never sees them.
             let mut kept: Vec<String> = a.items[a.pos..i].to_vec();
             kept.extend_from_slice(&a.items[i + 2..]);
-            a.items = Box::leak(kept.into_boxed_slice());
+            a.items = kept;
             a.pos = 0;
             return Ok(Some(val));
         }
@@ -705,7 +709,7 @@ fn take_flag(a: &mut Args, name: &str) -> bool {
         if a.items[i] == name {
             let mut kept: Vec<String> = a.items[a.pos..i].to_vec();
             kept.extend_from_slice(&a.items[i + 1..]);
-            a.items = Box::leak(kept.into_boxed_slice());
+            a.items = kept;
             a.pos = 0;
             return true;
         }
@@ -811,6 +815,7 @@ fn parse_tag(a: &mut Args) -> Result<Parsed, String> {
         return Ok(Parsed::Help(command_help("tag", None)));
     }
     let sub = a.next().ok_or_else(|| usage_err("tag needs list|add|remove"))?;
+    let sub = sub.as_str();
     if wants_help(a) {
         return Ok(Parsed::Help(command_help("tag", Some(sub))));
     }
@@ -846,6 +851,7 @@ fn parse_view(a: &mut Args) -> Result<Parsed, String> {
         return Ok(Parsed::Help(command_help("view", None)));
     }
     let sub = a.next().ok_or_else(|| usage_err("view needs list|add|remove"))?;
+    let sub = sub.as_str();
     if wants_help(a) {
         return Ok(Parsed::Help(command_help("view", Some(sub))));
     }
@@ -910,6 +916,7 @@ fn parse_backup(a: &mut Args) -> Result<Parsed, String> {
         return Ok(Parsed::Help(command_help("backup", None)));
     }
     let sub = a.next().ok_or_else(|| usage_err("backup needs create|list|restore"))?;
+    let sub = sub.as_str();
     if wants_help(a) {
         return Ok(Parsed::Help(command_help("backup", Some(sub))));
     }
@@ -956,6 +963,7 @@ fn parse_settings(a: &mut Args) -> Result<Parsed, String> {
         return Ok(Parsed::Help(command_help("settings", None)));
     }
     let sub = a.next().ok_or_else(|| usage_err("settings needs get|set"))?;
+    let sub = sub.as_str();
     if wants_help(a) {
         return Ok(Parsed::Help(command_help("settings", Some(sub))));
     }
@@ -2989,5 +2997,22 @@ mod tests {
         let body: serde_json::Value = serde_json::from_str(out.stdout.trim()).expect("backup create --json must print JSON");
         assert!(body["name"].as_str().is_some_and(|n| !n.is_empty()), "backup create --json must print {{\"name\": \"...\"}} as documented");
         assert_eq!(body.as_object().unwrap().len(), 1, "backup create --json's object has exactly one field, name");
+    }
+
+    // Taking a flag out of the argument list must not leak a copy of the rest: the
+    // running app parses a command for every pipe and receiver request. No red
+    // exists for this as a behaviour (a counting allocator is flaky under parallel
+    // tests), so the test pins the shape: Args owns a Vec and the leak is gone.
+    #[test]
+    fn taking_a_flag_does_not_leak_the_remaining_arguments() {
+        let source = include_str!("cli.rs");
+        let needle = ["Box", "::", "leak"].concat();
+        assert!(!source.contains(&needle), "cli.rs must not leak argument lists");
+        let a = Args::new(&args(&["list", "--json", "--tag", "x"]));
+        let _owned: &Vec<String> = &a.items;
+        let mut a = Args::new(&args(&["--json", "--tag", "x", "rest"]));
+        assert!(take_flag(&mut a, "--json"));
+        assert_eq!(take_flag_value(&mut a, "--tag").unwrap().as_deref(), Some("x"));
+        assert_eq!(a.items, vec!["rest".to_string()]);
     }
 }
