@@ -389,6 +389,10 @@ $("ve-confirm-third").addEventListener("click", () => closeConfirm("third"));
 // locked): they can never be undone back to, so keeping them around forever
 // would grow VE.ops -- and the rendered #ve-ops-list -- without bound.
 function pushOp(op, opts) {
+  // Every overlay gets a stacking number once, at creation. Edits re-push the
+  // overlay at the end of VE.ops (see pushReplacing) but keep this number, so
+  // export and preview stack overlays by it instead of by array position.
+  if (op.tool === "overlay" && op.z === undefined) op.z = 1 + Math.max(0, ...VE.ops.map((o) => o.z || 0));
   VE.ops.push(op);
   if (VE.ops.length - VE.floor > VE.undoMax) VE.floor = VE.ops.length - VE.undoMax;
   if (VE.floor > 0) { VE.ops = VE.ops.slice(VE.floor); VE.floor = 0; }
@@ -413,6 +417,7 @@ function pushReplacing(match, op, opts) {
   // every later index down, so it has to shrink by the same amount or it would
   // re-lock operations that were still undoable.
   VE.floor = Math.max(0, VE.floor - (before - VE.ops.length));
+  if (prev && op.tool === "overlay" && op.z === undefined && prev.z !== undefined) op = { ...op, z: prev.z };
   const next = prev ? { ...op, _prev: prev } : op;
   pushOp(next._prev ? capPrevChain(next, VE.undoMax) : next, opts);
 }
@@ -427,6 +432,10 @@ function capPrevChain(op, max) {
   delete node._prev;
   return op;
 }
+
+// Overlays bottom to top. Legacy ops without a number sort first, in list order
+// (the sort is stable).
+const overlayStack = () => opsOf("overlay").sort((a, b) => (a.z || 0) - (b.z || 0));
 
 function removeOps(match) {
   const before = VE.ops.length;
@@ -1228,7 +1237,8 @@ function renderOverlayLive(vb) {
   if (!VE.dur) { layer.innerHTML = ""; VE.liveEls.clear(); return; }
   const box = vb || videoBox();
   const now = VE.playhead;
-  for (const op of opsOf("overlay")) {
+  const stack = overlayStack();
+  for (const op of stack) {
     const prev = VE.liveEls.get(op.id);
     if (now < op.startMs || now > op.endMs) {
       if (prev) {
@@ -1247,6 +1257,11 @@ function renderOverlayLive(vb) {
     }
     el.hidden = false;
   }
+  // The layer order has to follow the export's stacking. Nodes are only moved
+  // when they are out of order, since re-inserting a playing <video> restarts it.
+  const wanted = stack.map((op) => VE.liveEls.get(op.id)).filter((el) => el && el.parentNode === layer);
+  const inLayer = [...layer.children].filter((el) => wanted.includes(el));
+  if (wanted.some((el, i) => el !== inLayer[i])) for (const el of wanted) layer.appendChild(el);
   // Overlays that were removed entirely (not just out of range) must not
   // keep their node alive in the map or the layer.
   const liveIds = new Set(opsOf("overlay").map((o) => o.id));
@@ -1338,11 +1353,11 @@ function buildLiveOverlayEl(op, vb, reuse) {
     el.style.outline = "";
     el.style.boxShadow = "";
     if (op.style === "double") {
-      // Approximates the second, inset drawbox with an outline outside the
-      // border instead of a truly separate inner box -- close enough for a
-      // preview whose job is "roughly where and how thick", not pixel parity.
+      // Approximates the second, inset drawbox with an outline instead of a
+      // truly separate inner box. A negative offset moves it inside the
+      // border: -3t with width t covers inset 2t..3t, where the export draws it.
       el.style.outline = `${px}px solid ${op.color}`;
-      el.style.outlineOffset = `${op.thickness * vb.scale}px`;
+      el.style.outlineOffset = `${-3 * px}px`;
     } else if (op.style === "soft") {
       el.style.boxShadow = `0 0 ${px * 2}px ${px}px ${op.color}`;
     }
@@ -1530,7 +1545,21 @@ function endRectDrag() {
   renderSnapGuides();
   if (!drag || drag.kind !== "rect") return;
   const op = drag.op;
+  // A point op (text) has no rect: the move already changed x/y in place for
+  // the live preview, so put the old spot back before the op is re-pushed, or
+  // the undo step would restore nothing.
+  if (!drag.live) {
+    const p = drag.livePoint;
+    op.x = drag.orig.x;
+    op.y = drag.orig.y;
+    if (p.x === op.x && p.y === op.y) { renderRects(); return; }
+    pushReplacing((o) => o.id === op.id, { ...op, x: p.x, y: p.y }, { keepEditor: true });
+    return;
+  }
   const raw = drag.live && drag.live.w >= RECT_MIN_PX && drag.live.h >= RECT_MIN_PX ? drag.live : drag.orig;
+  // The move also changed op.rect in place; restore it so the undo step keeps
+  // the rect the op had before the drag.
+  op.rect = { ...drag.orig };
   if (op.tool === "crop") {
     const rect = snapRect(raw);
     // A click-release with no actual movement (or one that snaps right
@@ -2010,7 +2039,10 @@ async function pickExtraVideo() {
 // started, read live by the Rust side rather than reconstructed here from
 // two wall-clock stamps (a paused span between the two starts would
 // otherwise inflate the offset by however long it lasted).
-async function addAlignedCameraOverlay(path) {
+//
+// `gen` is the load generation the call belongs to: a second recording opened
+// while one of the two awaits below is pending must not receive this overlay.
+async function addAlignedCameraOverlay(path, gen) {
   if (!path) return;
   if (VE.ops.some((o) => o.tool === "overlay" && o.kind === "video" && o.path === path)) return;
   let probe;
@@ -2021,6 +2053,7 @@ async function addAlignedCameraOverlay(path) {
     // video" picker reaches it by hand if this automatic probe fails.
     return;
   }
+  if (VE.loadGen !== gen) return;
   let startMs = 0;
   try {
     const sidecar = await invoke("read_camera_sidecar", { path });
@@ -2029,6 +2062,7 @@ async function addAlignedCameraOverlay(path) {
     // No sidecar -- 0 (both at the same point) is still a sane fallback,
     // never a missing overlay.
   }
+  if (VE.loadGen !== gen) return;
   const durationMs = Number(probe.duration_ms) || 0;
   const w = even(VE.w * 0.3), h = even(VE.h * 0.3);
   const margin = even(Math.min(VE.w, VE.h) * 0.03);
@@ -2190,6 +2224,7 @@ function duplicateOverlay(op) {
   // it, and a single undo afterward steps that chain back instead of
   // removing the duplicate outright.
   delete dup._prev;
+  delete dup.z;
   if (dup.rect) dup.rect = snapRect({ ...dup.rect, x: dup.rect.x + offset, y: dup.rect.y + offset });
   if (dup.kind === "text") { dup.x = clamp(dup.x + offset, 0, VE.w); dup.y = clamp(dup.y + offset, 0, VE.h); }
   VE.selOv = dup.id;
@@ -2636,14 +2671,20 @@ function enableExpr(op) {
 // own duration keeps `movie=` from being asked for frames past the end of
 // its file, which is how a not-looping overlay near the end of a longer
 // range used to break the whole export instead of just stopping early.
-function videoOverlayEffectiveEndMs(op) {
-  if (op.loop || !op.videoDurationMs) return op.endMs;
-  return Math.min(op.endMs, op.startMs + op.videoDurationMs);
+// The overlay's footage plays at native speed on the OUTPUT clock, so the cap
+// is added to the start AFTER both ends went through outMs(): a speed change
+// or a cut inside the range must not stretch or shrink the footage's own length.
+function videoOverlayWindowOutMs(op) {
+  const aOut = outMs(clamp(op.startMs, 0, VE.dur));
+  const bOut = outMs(clamp(op.endMs, 0, VE.dur));
+  const endOut = op.loop || !op.videoDurationMs ? bOut : Math.min(bOut, aOut + op.videoDurationMs);
+  return { aOut, endOut };
 }
 
 function videoOverlayEnable(op) {
-  const a = outMs(clamp(op.startMs, 0, VE.dur)) / 1000;
-  const b = outMs(clamp(videoOverlayEffectiveEndMs(op), 0, VE.dur)) / 1000;
+  const { aOut, endOut } = videoOverlayWindowOutMs(op);
+  const a = aOut / 1000;
+  const b = endOut / 1000;
   if (b <= a) return null;
   return `enable='between(t,${a.toFixed(3)},${b.toFixed(3)})'`;
 }
@@ -2651,10 +2692,11 @@ function videoOverlayEnable(op) {
 // A finite repeat count rather than an unbounded loop: deterministic ffmpeg
 // behaviour, and it needs no guess at a buffer size large enough to hold the
 // whole thing. Native speed only -- a video overlay's own clock is never
-// adjusted to match a "speed" op on the main timeline (see the report).
+// adjusted to match a "speed" op on the main timeline.
 function videoOverlayLoopArg(op) {
   if (!op.loop || !op.videoDurationMs) return "";
-  const neededMs = videoOverlayEffectiveEndMs(op) - op.startMs;
+  const { aOut, endOut } = videoOverlayWindowOutMs(op);
+  const neededMs = endOut - aOut;
   const count = Math.max(0, Math.ceil(neededMs / op.videoDurationMs) - 1);
   return count > 0 ? `:loop=${count}` : "";
 }
@@ -2896,7 +2938,7 @@ function buildVideoChain() {
   const speed = opOf("speed");
   const fade = opOf("fade");
   const downscale = scaleTarget();
-  const overlays = opsOf("overlay");
+  const overlays = overlayStack();
   const gif = exportFormat() === "gif";
   const silentFormat = SILENT_FORMATS.has(exportFormat());
   const trimmed = mains.length !== 1 || hasClips || mains[0].a > 0 || mains[0].b < VE.dur;
@@ -3053,13 +3095,26 @@ function buildVideoChain() {
 // by exactly that clip's length and drift out of sync with everything after
 // it.
 function silentGapLabel(entry, label, parts) {
+  return silentSpanLabel(entry.op.durationMs, label, parts);
+}
+
+function silentSpanLabel(ms, label, parts) {
   const out = label();
-  parts.push(`anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:${secs(entry.op.durationMs)},asetpts=PTS-STARTPTS[${out}]`);
+  parts.push(`anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:${secs(ms)},asetpts=PTS-STARTPTS[${out}]`);
+  return out;
+}
+
+// An inserted clip's own sound, cut or padded to exactly its video length so
+// everything after it stays in sync.
+function clipAudioLabel(entry, label, parts) {
+  const out = label();
+  parts.push(`amovie='${ffPath(entry.op.path)}',aresample=48000,aformat=channel_layouts=stereo,apad,atrim=0:${secs(entry.op.durationMs)},asetpts=PTS-STARTPTS[${out}]`);
   return out;
 }
 
 // Audio half of the same graph: per track trim/cut/concat (with a silent gap
-// standing in for every inserted clip, see silentGapLabel), volume, speed and
+// standing in for every inserted clip, see silentGapLabel, except that one
+// track, the clip host, plays the clips' own sound), volume, speed and
 // fades, plus one delayed branch per audible video overlay, mixed down to one
 // stream on [aout].
 function buildAudioChain() {
@@ -3070,7 +3125,20 @@ function buildAudioChain() {
   if (VE.hasSys) tracks.push({ index: 0, spec: "0:a:0", state: VE.audio.sys });
   if (VE.hasMic) tracks.push({ index: 1, spec: "0:a:1", state: VE.audio.mic });
   const videoOverlaysWithAudio = opsOf("overlay").filter((o) => o.kind === "video" && !o.missing && o.hasAudio && o.volume > 0);
-  if (!tracks.length && !videoOverlaysWithAudio.length) return null;
+  const clipsWithAudio = plan.filter((e) => e.type === "clip" && e.op.hasAudio);
+  if (!tracks.length && !videoOverlaysWithAudio.length && !clipsWithAudio.length) return null;
+  // Clip sound goes into ONE track, or it would be mixed in twice. The first
+  // track that is not muted hosts it; with no recorded audio at all a
+  // dedicated track (silent where the main video plays) carries it.
+  let clipHost = null;
+  if (clipsWithAudio.length) {
+    if (!tracks.length) {
+      clipHost = { index: -1, spec: null, state: { mute: false, vol: 100 } };
+      tracks.push(clipHost);
+    } else {
+      clipHost = tracks.find((tr) => !tr.state.mute) || tracks[0];
+    }
+  }
 
   const speed = opOf("speed");
   const fade = opOf("fade");
@@ -3086,11 +3154,13 @@ function buildAudioChain() {
   const outs = [];
 
   for (const track of tracks) {
-    const mainSplits = mains.length > 1 ? mains.map(() => label()) : null;
+    const silentTrack = track.spec === null;
+    const mainSplits = mains.length > 1 && !silentTrack ? mains.map(() => label()) : null;
     if (mainSplits) parts.push(`[${track.spec}]asplit=${mains.length}${mainSplits.map((l) => `[${l}]`).join("")}`);
     let mi = 0;
     const segLabels = plan.map((entry) => {
-      if (entry.type !== "main") return silentGapLabel(entry, label, parts);
+      if (entry.type !== "main") return track === clipHost && entry.op.hasAudio ? clipAudioLabel(entry, label, parts) : silentGapLabel(entry, label, parts);
+      if (silentTrack) return silentSpanLabel(entry.b - entry.a, label, parts);
       const out = label();
       const src = mains.length > 1 ? mainSplits[mi++] : track.spec;
       parts.push(`[${src}]atrim=start=${secs(entry.a)}:end=${secs(entry.b)},asetpts=PTS-STARTPTS[${out}]`);
@@ -3130,9 +3200,8 @@ function buildAudioChain() {
   // clip, and doubling an overlay's sound into them as well would mix it in
   // twice.
   for (const op of videoOverlaysWithAudio) {
-    const capEnd = videoOverlayEffectiveEndMs(op);
-    const startOutMs = outMs(clamp(op.startMs, 0, VE.dur));
-    const durSec = (capEnd - op.startMs) / 1000;
+    const { aOut: startOutMs, endOut } = videoOverlayWindowOutMs(op);
+    const durSec = (endOut - startOutMs) / 1000;
     if (durSec <= 0) continue;
     const loopArg = videoOverlayLoopArg(op);
     const src = label(), out = label();
@@ -3162,6 +3231,9 @@ function isLosslessCopy() {
   if (VE.probe && VE.probe.stream_copy_safe === false) return false;
   if (opsOf("cut").length) return false;
   if (opOf("crop") || opOf("speed") || opOf("fade") || opOf("scale") || opsOf("overlay").length) return false;
+  // An inserted section only exists as a movie= source in the filter graph,
+  // which a plain copy of the main file would leave out.
+  if (opsOf("clip").some((c) => !c.missing)) return false;
   const { sys, mic } = VE.audio;
   return !sys.mute && sys.vol === 100 && !mic.mute && mic.vol === 100;
 }
@@ -3291,6 +3363,13 @@ function updateExportNote() {
 
 const exportEta = makeEtaEstimator();
 
+// Back to the idle look after an export that never started writing: no stale
+// "Exporting" line, no 0% bar.
+function clearExportStatus() {
+  $("ve-export-status").textContent = "";
+  $("ve-export-progress-row").classList.add("hidden");
+}
+
 function setProgress(pct) {
   const clamped = clamp(pct, 0, 100);
   const row = $("ve-export-progress-row");
@@ -3369,7 +3448,7 @@ async function startExport(toClipboard) {
             .replace("{free}", fmtBytes(diskWarn.free_mb * 1024 * 1024))
             .replace("{needed}", fmtBytes(diskWarn.needed_mb * 1024 * 1024));
           const proceed = await veConfirm(t("recDiskWarnTitle"), msg, t("recDiskWarnExportAnyway"));
-          if (!proceed) return;
+          if (!proceed) { clearExportStatus(); return; }
         }
       }
       try {
@@ -3400,7 +3479,7 @@ async function startExport(toClipboard) {
         if (!toClipboard && !destRetried && raw.includes("export destination not recognized")) {
           destRetried = true;
           const folder = await invoke("pick_export_folder").catch(() => null);
-          if (!folder) return; // cancelled: no export, no error toast
+          if (!folder) { clearExportStatus(); return; } // cancelled: no export, no error toast
           const base = dest.replace(/^.*[\\/]/, "");
           dest = `${folder.replace(/[\\/]+$/, "")}/${base}`;
           continue;
@@ -3876,7 +3955,10 @@ async function closeWindow() {
     // Rust-driven now, so it survives this window closing), cancel it and
     // close, or stay put. "Keep running" is the safe default (Enter key);
     // cancelling is the click-only, visually flagged destructive option.
-    const choice = await veConfirm(t("veCloseTitle"), t("veCloseExporting"), t("bgKeepRunning"), {
+    // With the edit state not kept, edits made after the export started would
+    // be lost on close, so say so too.
+    const unsaved = VE.dirty && !VE.editStateKeepOn ? ` ${t("veCloseUnsaved")}` : "";
+    const choice = await veConfirm(t("veCloseTitle"), t("veCloseExporting") + unsaved, t("bgKeepRunning"), {
       cancelLabel: t("bgStayOpen"),
       thirdLabel: t("bgCancelClose"),
     });
@@ -4243,8 +4325,9 @@ async function loadRecording(path, originDir, overlayPath) {
   loadStrip();
   scheduleWaves();
   await checkEditState(path, myGen);
-  if (VE.loadGen === myGen) await addAlignedCameraOverlay(overlayPath);
-  armEditStateAutosave();
+  if (VE.loadGen !== myGen) return;
+  await addAlignedCameraOverlay(overlayPath, myGen);
+  if (VE.loadGen === myGen) armEditStateAutosave();
 }
 
 function applyProbe(probe) {
