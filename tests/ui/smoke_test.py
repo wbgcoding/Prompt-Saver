@@ -16697,6 +16697,24 @@ def main():
       if (!img || img.w !== BAW || !hasInk(img, 100, 30)) errs.push('596: undoing the resize did not bring the arrow back at full size');
     }
 """)
+        failed += ar_probe('ba593', 'screenshot editor: a resize with a crop set does not bake the crop dimming into the image', 'index', '1000x780', '', ba_common + r"""
+    if (!(await baOpen(''))) { errs.push('593: the editor did not open'); }
+    else {
+      await baTool('crop'); await baDrag(60, 30, 140, 90);
+      baKey('Enter'); await sleep(80);
+      await baTool('arrow');
+      await baScale50();
+      await baTool('crop');
+      baKey('Escape'); await sleep(80);
+      const img = await baExport();
+      if (!img || img.w !== 100 || img.h !== 60) errs.push('593: fixture: expected the full 100x60 image, got ' + (img ? img.w + 'x' + img.h : 'nothing'));
+      else {
+        for (const [x, y] of [[0, 0], [99, 59], [5, 50]]) {
+          if (!near(img.px(x, y), BGC, 6)) errs.push('593: pixel ' + x + ',' + y + ' is ' + JSON.stringify(img.px(x, y)) + ', the capture is ' + JSON.stringify(BGC) + ' (the crop dimming was baked in)');
+        }
+      }
+    }
+""")
         # ---- main window findings: generated block end ----
         print("PASS" if not failed else f"{failed} problem(s)")
         return 1 if failed else 0

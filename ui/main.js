@@ -17902,7 +17902,9 @@ function bind() {
   // Full recomposite: base image, then every finished operation in sequence. Only
   // called on discrete events (undo/redo/crop-change/zoom-change/finalize) -- never
   // per mousemove, so a 4K capture never redraws its whole bitmap on a drag.
-  function snipEditRedrawBase() {
+  // `bare` leaves the crop dimming out, for the one caller that bakes this canvas
+  // into the image itself (a resize).
+  function snipEditRedrawBase(bare) {
     const ctx = snipEditBaseCtx;
     ctx.clearRect(0, 0, SE.w, SE.h);
     // Showing the original means the untouched capture, not just "before the
@@ -17920,7 +17922,7 @@ function bind() {
       snipEditDrawOp(ctx, op, stepN);
     }
     const crop = SE.ops.find((o) => o.tool === "crop");
-    if (crop && SE.tool !== "crop") snipEditDrawCropDim(ctx, crop.rect); // crop tool shows its own live overlay instead
+    if (crop && SE.tool !== "crop" && !bare) snipEditDrawCropDim(ctx, crop.rect); // crop tool shows its own live overlay instead
   }
   function snipEditClearLive() { snipEditLiveCtx.clearRect(0, 0, SE.w, SE.h); }
 
@@ -18037,7 +18039,7 @@ function bind() {
     snipOriginalToggle.reset();
     const prevW = SE.w, prevH = SE.h, prevImg = SE.img, prevRawCanvas = SE.rawCanvas, prevOps = SE.ops.slice();
     const sx = targetW / SE.w, sy = targetH / SE.h;
-    snipEditRedrawBase(); // make sure snipEditBaseCv reflects every op (but crop) before it gets baked in
+    snipEditRedrawBase(true); // make sure snipEditBaseCv reflects every op (but crop) before it gets baked in
     const baked = snipEditScaleCanvas(snipEditBaseCv, targetW, targetH);
     const rawBaked = snipEditScaleCanvas(SE.rawCanvas, targetW, targetH);
     // Crop is never rasterized (it only ever dims an overlay preview, see
