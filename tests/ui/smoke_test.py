@@ -16472,6 +16472,134 @@ def main():
     const saves = callsFor('save_screenshot_now').length;
     if (saves) errs.push('564-d1: switching back on saved a second copy (' + saves + ' save call) although the first file was never deleted');
 """)
+        ba_common = r"""
+    const BAW = 200, BAH = 120, BGC = [136, 170, 204];
+    const loadImg = (u) => new Promise((res) => { const i = new Image(); i.onload = () => res(i); i.src = u; });
+    const pixelsOf = async (u) => {
+      const i = await loadImg(u);
+      const c = document.createElement('canvas'); c.width = i.width; c.height = i.height;
+      const g = c.getContext('2d'); g.drawImage(i, 0, 0);
+      return { w: i.width, h: i.height, px: (x, y) => Array.from(g.getImageData(x, y, 1, 1).data) };
+    };
+    const near = (p, c, tol) => [0, 1, 2].every((i) => Math.abs(p[i] - c[i]) <= (tol || 8));
+    const captureFixture = () => {
+      const cv = document.createElement('canvas'); cv.width = BAW; cv.height = BAH;
+      const g = cv.getContext('2d'); g.fillStyle = '#88aacc'; g.fillRect(0, 0, BAW, BAH);
+      return cv.toDataURL('image/png');
+    };
+    const baOpen = async (path) => {
+      await bootReady();
+      window.__FIRE__('snip-captured', { data_url: captureFixture(), path: path || '', name: 'ba.png' });
+      await sleep(400);
+      return !document.getElementById('snip-edit').classList.contains('hidden');
+    };
+    const baTool = async (n) => { document.querySelector('#snip-edit-tools button[data-tool="' + n + '"]').click(); await sleep(60); };
+    const baPt = (x, y) => {
+      const c = document.getElementById('snip-edit-base'), r = c.getBoundingClientRect();
+      const z = r.width / c.width;
+      return [r.left + x * z, r.top + y * z];
+    };
+    const baPtr = (type, x, y, target) => (target || window).dispatchEvent(new PointerEvent(type, {
+      bubbles: true, cancelable: true, button: 0, pointerId: 1, isPrimary: true, clientX: x, clientY: y, altKey: true,
+    }));
+    const baDrag = async (x1, y1, x2, y2) => {
+      const live = document.getElementById('snip-edit-live');
+      const a = baPt(x1, y1), b = baPt(x2, y2);
+      baPtr('pointerdown', a[0], a[1], live);
+      baPtr('pointermove', (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, live);
+      baPtr('pointermove', b[0], b[1], live);
+      baPtr('pointerup', b[0], b[1], window);
+      await sleep(40);
+    };
+    const baClick = async (x, y) => {
+      const live = document.getElementById('snip-edit-live');
+      const a = baPt(x, y);
+      baPtr('pointerdown', a[0], a[1], live);
+      baPtr('pointerup', a[0], a[1], window);
+      await sleep(40);
+    };
+    const baKey = (key, extra) => document.dispatchEvent(new KeyboardEvent('keydown', Object.assign({ key, bubbles: true, cancelable: true }, extra || {})));
+    const baExport = async () => {
+      window.__SMOKE_ARGS__.length = 0;
+      document.getElementById('snip-edit-copy').click();
+      await sleep(200);
+      const c = callsFor('copy_image_data');
+      return c.length ? pixelsOf(c[c.length - 1].dataUrl) : null;
+    };
+    const baScale50 = async () => {
+      document.getElementById('snip-edit-scale').click(); await sleep(150);
+      const pop = document.querySelector('.snip-scale-pop');
+      [...pop.querySelectorAll('.snip-scale-presets button')].find((b) => b.textContent === '50%').click();
+      await sleep(50);
+      pop.querySelector('.primary-btn').click(); await sleep(250);
+    };
+    const baUndo = async () => { document.getElementById('snip-edit-undo').click(); await sleep(60); };
+    const baRedo = async () => { document.getElementById('snip-edit-redo').click(); await sleep(60); };
+    const baCtxPop = () => [...document.body.children].find((e) => e.classList.contains('ctx') && !e.id && !e.classList.contains('hidden'));
+    const baCtx = async (x, y) => {
+      const a = baPt(x, y);
+      document.getElementById('snip-edit-live').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: a[0], clientY: a[1] }));
+      await sleep(60);
+      return baCtxPop();
+    };
+"""
+        ba_seed = '<script>window.__SEED_SETTINGS__ = { ui_flags: { screenshotSave: true } };</script>\n'
+        failed += ar_probe('ba597a', 'screenshot editor: a failed save keeps the unedited file and says so', 'index', '1000x780', ba_seed, ba_common + r"""
+    if (!(await baOpen('C:/shots/first.png'))) { errs.push('597: the editor did not open'); }
+    else {
+      RESULTS.save_screenshot_now = () => null;
+      RESULTS.delete_screenshot_file = () => true;
+      await baTool('pen'); await baDrag(20, 20, 90, 70);
+      window.__SMOKE_ARGS__.length = 0;
+      document.getElementById('toast').textContent = '';
+      document.getElementById('snip-edit-apply').click(); await sleep(500);
+      if (!callsFor('save_screenshot_now').length) errs.push('597: fixture: Apply did not try to save the edited shot');
+      if (callsFor('delete_screenshot_file').length) errs.push('597: the unedited file was deleted although the edited shot was not saved');
+      if (!/could not be saved/i.test(document.getElementById('toast').textContent)) errs.push('597: no error toast after the failed save, toast is ' + JSON.stringify(document.getElementById('toast').textContent));
+      if (document.getElementById('snip-save-folder').checked) errs.push('597: the folder switch stays checked after the failed save');
+      if (document.getElementById('snip-modal').classList.contains('hidden')) errs.push('597: fixture: the result dialog did not open');
+    }
+""")
+        failed += ar_probe('ba597b', 'screenshot editor: a good save removes the old file only after the new one exists, never the new one itself', 'index', '1000x780', ba_seed, ba_common + r"""
+    if (!(await baOpen('C:/shots/first.png'))) { errs.push('597: the editor did not open'); }
+    else {
+      RESULTS.save_screenshot_now = () => 'C:/shots/second.png';
+      RESULTS.delete_screenshot_file = () => true;
+      await baTool('pen'); await baDrag(20, 20, 90, 70);
+      window.__SMOKE_ARGS__.length = 0;
+      document.getElementById('snip-edit-apply').click(); await sleep(500);
+      const order = (window.__SMOKE_ARGS__ || []).map(([c]) => c).filter((c) => c === 'save_screenshot_now' || c === 'delete_screenshot_file');
+      if (order.join() !== 'save_screenshot_now,delete_screenshot_file') errs.push('597: expected save then delete, got ' + order.join());
+      const del = callsFor('delete_screenshot_file')[0];
+      if (!del || del.path !== 'C:/shots/first.png') errs.push('597: the wrong file was deleted: ' + JSON.stringify(del));
+      if (!document.getElementById('snip-save-folder').checked) errs.push('597: the folder switch is off after a good save');
+      // the same name comes back (same second): the old path is the new file, it must stay
+      document.getElementById('snip-modal-close').click(); await sleep(200);
+      window.__FIRE__('snip-captured', { data_url: captureFixture(), path: 'C:/shots/same.png', name: 'same.png' });
+      await sleep(400);
+      RESULTS.save_screenshot_now = () => 'C:/shots/same.png';
+      await baTool('pen'); await baDrag(20, 20, 90, 70);
+      window.__SMOKE_ARGS__.length = 0;
+      document.getElementById('snip-edit-apply').click(); await sleep(500);
+      if (callsFor('delete_screenshot_file').length) errs.push('597: the freshly saved file was deleted because it reused the old name');
+    }
+""")
+        failed += ar_probe('ba597c', 'screenshot dialog: switching the folder save on with a failing save says so and puts the switch back off', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { snipEditor: false, screenshotSave: false } };</script>\n', ba_common + r"""
+    await bootReady();
+    RESULTS.save_screenshot_now = () => null;
+    window.__FIRE__('snip-captured', { data_url: captureFixture(), path: '', name: 'x.png' });
+    await sleep(300);
+    const box = document.getElementById('snip-save-folder');
+    if (document.getElementById('snip-modal').classList.contains('hidden')) errs.push('597: fixture: the result dialog did not open');
+    window.__SMOKE_ARGS__.length = 0;
+    document.getElementById('toast').textContent = '';
+    box.checked = true; box.dispatchEvent(new Event('change', { bubbles: true })); await sleep(300);
+    if (!callsFor('save_screenshot_now').length) errs.push('597: fixture: switching on did not try to save');
+    if (box.checked) errs.push('597: the switch stays on although nothing was saved');
+    if (!/could not be saved/i.test(document.getElementById('toast').textContent)) errs.push('597: no error toast, toast is ' + JSON.stringify(document.getElementById('toast').textContent));
+    const last = callsFor('set_ui_flag').filter((a) => a && a.key === 'screenshotSave').pop();
+    if (!last || last.enabled !== false) errs.push('597: the stored setting was left on, last write ' + JSON.stringify(last));
+""")
         # ---- main window findings: generated block end ----
         print("PASS" if not failed else f"{failed} problem(s)")
         return 1 if failed else 0

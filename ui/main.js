@@ -19354,12 +19354,26 @@ function bind() {
         // finalize_capture already put the UNEDITED image on the clipboard (and,
         // optionally, on disk) -- redo both side effects on the edited result.
         invoke("copy_image_data", { dataUrl: editedDataUrl }).catch((err) => errToast(err));
+        let saveFailed = false;
         if (settings.ui_flags?.screenshotSave === true) {
-          if (pendingSnipPath) await invoke("delete_screenshot_file", { path: pendingSnipPath }).catch(() => {});
-          pendingSnipPath = (await invoke("save_screenshot_now", { dataUrl: editedDataUrl }).catch(() => "")) || "";
+          // Save the edited copy first and only then remove the unedited file, so a
+          // failed save (unwritable folder, full disk, too large) never leaves the
+          // user with neither of the two on disk.
+          const saved = (await invoke("save_screenshot_now", { dataUrl: editedDataUrl }).catch(() => "")) || "";
+          if (saved) {
+            // The same timestamp name overwrites the old file in place: then the old
+            // path IS the new one and must stay.
+            if (pendingSnipPath && pendingSnipPath !== saved) await invoke("delete_screenshot_file", { path: pendingSnipPath }).catch(() => {});
+            pendingSnipPath = saved;
+          } else {
+            // The unedited file stays where it is; the dialog's shot is simply not saved.
+            pendingSnipPath = "";
+            saveFailed = true;
+            toast(t("snipSaveFailed"));
+          }
         }
         $("snip-preview").src = pendingSnip;
-        $("snip-save-folder").checked = settings.ui_flags?.screenshotSave === true;
+        $("snip-save-folder").checked = settings.ui_flags?.screenshotSave === true && !saveFailed;
         $("snip-modal-saveas-format").value = txt("screenshotFormat") || "png";
         $("snip-modal-retry").classList.remove("hidden");
         snipModal.classList.remove("hidden");
@@ -19406,6 +19420,14 @@ function bind() {
     if (on) {
       if (!pendingSnipPath && pendingSnip) {
         pendingSnipPath = (await invoke("save_screenshot_now", { dataUrl: pendingSnip }).catch(() => "")) || "";
+        if (!pendingSnipPath) {
+          // Nothing reached the disk: say so and put the switch back off, setting included.
+          toast(t("snipSaveFailed"));
+          ev.target.checked = false;
+          settings.ui_flags = { ...(settings.ui_flags || {}), screenshotSave: false };
+          invoke("set_ui_flag", { key: "screenshotSave", enabled: false }).catch((err) => errToast(err));
+          if (optBox) optBox.checked = false;
+        }
       }
     } else if (pendingSnipPath) {
       // The command answers false (it does not reject) when the file could not be
