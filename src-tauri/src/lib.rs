@@ -6021,6 +6021,34 @@ fn decode_image<R: std::io::BufRead + std::io::Seek>(reader: image::ImageReader<
     reader.decode().ok()
 }
 
+// Decode for text recognition: the picture as a viewer shows it, upright. Phone
+// photos are stored sideways with an EXIF orientation flag that the decoder only
+// reports, it does not apply it.
+fn decode_image_oriented<R: std::io::BufRead + std::io::Seek>(reader: image::ImageReader<R>) -> Option<image::DynamicImage> {
+    decode_image_with_orientation(reader).map(|(img, _)| img)
+}
+
+// The upright image plus the transform that was applied (NoTransforms when the file
+// carries none), so a caller can tell whether the original pixels differ.
+fn decode_image_with_orientation<R: std::io::BufRead + std::io::Seek>(
+    reader: image::ImageReader<R>,
+) -> Option<(image::DynamicImage, image::metadata::Orientation)> {
+    let mut reader = reader.with_guessed_format().ok()?;
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(MAX_DECODE_DIM);
+    limits.max_image_height = Some(MAX_DECODE_DIM);
+    reader.limits(limits);
+    let mut decoder = reader.into_decoder().ok()?;
+    let orientation = image::ImageDecoder::orientation(&mut decoder).unwrap_or(image::metadata::Orientation::NoTransforms);
+    let mut img = image::DynamicImage::from_decoder(decoder).ok()?;
+    img.apply_orientation(orientation);
+    Some((img, orientation))
+}
+
+fn decode_image_mem_oriented(bytes: &[u8]) -> Option<image::DynamicImage> {
+    decode_image_oriented(image::ImageReader::new(std::io::Cursor::new(bytes)))
+}
+
 fn decode_image_mem(bytes: &[u8]) -> Option<image::DynamicImage> {
     decode_image(image::ImageReader::new(std::io::Cursor::new(bytes)))
 }
@@ -18973,7 +19001,7 @@ async fn ocr_image_data(data_url: String, upscale_under_px: u32, join_lines: boo
         ));
     }
     let bytes = data_url_bytes(&data_url);
-    let img = decode_image_mem(&bytes).ok_or("could not decode image")?.to_rgba8();
+    let img = decode_image_mem_oriented(&bytes).ok_or("could not decode image")?.to_rgba8();
     let upscale_under_px = upscale_under_px.clamp(100, 800);
     #[cfg(windows)]
     {
@@ -19016,7 +19044,7 @@ fn ocr_index_text(data_url: &str, max_chars: usize) -> String {
         return String::new();
     }
     let bytes = data_url_bytes(data_url);
-    let Some(img) = decode_image_mem(&bytes) else { return String::new() };
+    let Some(img) = decode_image_mem_oriented(&bytes) else { return String::new() };
     #[cfg(windows)]
     let text = ocr::recognize_crop(img.to_rgba8(), 480, true, "auto", true).map(|r| r.text).unwrap_or_default();
     #[cfg(not(windows))]
@@ -19659,10 +19687,15 @@ mod ocr {
     // modified. Returns `path` unchanged, with no extra disk write at all, when
     // no resize is needed.
     fn resize_for_ocr(path: &Path, max_dim: u32, upscale_below_px: u32) -> Result<(PathBuf, TempFileGuard), String> {
-        let img = image::open(path).map_err(|e| e.to_string())?;
+        // The file is decoded upright (phone photos carry an EXIF rotation that
+        // BitmapDecoder would ignore) and handed on as a temp copy whenever its
+        // pixels differ from the file's own.
+        let reader = image::ImageReader::open(path).map_err(|e| e.to_string())?;
+        let (img, orientation) = super::decode_image_with_orientation(reader).ok_or_else(|| "could not decode image".to_string())?;
         let (w, h) = img.dimensions();
         let resized = super::ocr_resize_target(w, h, max_dim, upscale_below_px)
-            .map(|(nw, nh)| img.resize(nw, nh, FilterType::Lanczos3));
+            .map(|(nw, nh)| img.resize(nw, nh, FilterType::Lanczos3))
+            .or_else(|| (orientation != image::metadata::Orientation::NoTransforms).then_some(img));
         match resized {
             None => Ok((path.to_path_buf(), TempFileGuard(None))),
             Some(im) => {
@@ -37169,6 +37202,35 @@ fn start_sync_poll(app: AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ---- text recognition sees a photo upright ----
+
+    // A 2x1 JPEG carrying an EXIF Orientation tag of 6 (rotate 90 degrees clockwise).
+    fn jpeg_with_orientation(orientation: u8) -> Vec<u8> {
+        let mut plain = Vec::new();
+        image::DynamicImage::new_rgb8(2, 1)
+            .write_to(&mut std::io::Cursor::new(&mut plain), image::ImageFormat::Jpeg)
+            .unwrap();
+        let mut exif: Vec<u8> = b"Exif  MM *   ".to_vec();
+        exif.extend_from_slice(&[0, 1, 0x01, 0x12, 0, 3, 0, 0, 0, 1, 0, orientation, 0, 0, 0, 0, 0, 0]);
+        let mut out = vec![0xFF, 0xD8, 0xFF, 0xE1];
+        out.extend_from_slice(&((exif.len() + 2) as u16).to_be_bytes());
+        out.extend_from_slice(&exif);
+        out.extend_from_slice(&plain[2..]);
+        out
+    }
+
+    #[test]
+    fn decode_image_oriented_applies_the_exif_rotation() {
+        let bytes = jpeg_with_orientation(6);
+        let raw = decode_image_mem(&bytes).expect("decodes");
+        assert_eq!((raw.width(), raw.height()), (2, 1));
+        let up = decode_image_oriented(image::ImageReader::new(std::io::Cursor::new(&bytes))).expect("decodes");
+        assert_eq!((up.width(), up.height()), (1, 2));
+        let flat = jpeg_with_orientation(1);
+        let same = decode_image_oriented(image::ImageReader::new(std::io::Cursor::new(&flat))).expect("decodes");
+        assert_eq!((same.width(), same.height()), (2, 1));
+    }
 
     // ---- two shots with the same stem never overwrite each other ----
 
