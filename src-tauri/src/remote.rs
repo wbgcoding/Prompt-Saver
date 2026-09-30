@@ -25,9 +25,10 @@ use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager, State};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::oneshot;
+use tokio_rustls::TlsAcceptor;
 
 // ---------- Settings ----------
 
@@ -300,6 +301,98 @@ pub(crate) fn set_remote_api_flag(app: &AppHandle, state: &State<Db>, enabled: b
         Some(e) => Err(e),
         None => Ok(()),
     }
+}
+
+// The `remoteNetworkFilter` switch while the receiver may be running. Both
+// directions are saved first and rolled back (nothing changes, nothing is
+// restarted) when the write fails or the certificate cannot be prepared. The
+// answer says whether the running receiver has to be restarted to pick up the
+// new bind address and protocol.
+pub(crate) fn apply_network_switch(
+    settings: &mut Settings,
+    enabled: bool,
+    names: &[String],
+    mut save: impl FnMut(&Settings) -> bool,
+) -> Result<bool, String> {
+    let old = settings.ui_flags.get("remoteNetworkFilter").copied();
+    settings.ui_flags.insert("remoteNetworkFilter".to_string(), enabled);
+    if enabled && remote_api_enabled(settings) {
+        if let Err(e) = crate::remote_tls::ensure_tls_identity(settings, names, &mut save) {
+            restore_flag(settings, "remoteNetworkFilter", old);
+            return Err(e);
+        }
+    }
+    if !save(settings) {
+        restore_flag(settings, "remoteNetworkFilter", old);
+        return Err(ERR_SAVE_FAILED.to_string());
+    }
+    Ok(remote_api_enabled(settings))
+}
+
+// The `remoteNetworkFilter` branch of set_ui_flag.
+pub(crate) fn set_network_flag(app: &AppHandle, state: &State<Db>, enabled: bool) -> Result<(), String> {
+    let names = crate::remote_tls::host_names();
+    let restart = {
+        let mut store = lock(state);
+        apply_network_switch(&mut store.settings, enabled, &names, |s| save_settings(app, s))?
+    };
+    if restart {
+        restart_receiver(app);
+    }
+    Ok(())
+}
+
+// Stops the running receiver and starts it again from the stored settings. The
+// new run waits for the old one to let go of its port.
+fn restart_receiver(app: &AppHandle) {
+    stop(app);
+    start(app.clone());
+}
+
+#[tauri::command]
+pub(crate) fn remote_tls_fingerprint(state: State<Db>) -> Option<String> {
+    let store = lock(&state);
+    crate::remote_tls::stored_ca(&store.settings).and_then(|pem| crate::remote_tls::fingerprint(&pem))
+}
+
+// Writes the CA certificate (never the key) for the user to put on another
+// device. Makes the identity first when none exists yet.
+#[tauri::command]
+pub(crate) async fn remote_tls_save_cert(app: AppHandle, state: State<'_, Db>) -> Result<String, String> {
+    let names = crate::remote_tls::host_names();
+    let ca = {
+        let mut store = lock(&state);
+        let (id, _) = crate::remote_tls::ensure_tls_identity(&mut store.settings, &names, |s| save_settings(&app, s))?;
+        id.ca_pem
+    };
+    let file = crate::file_dialog(&app)
+        .set_file_name(format!("{}-remote.pem", crate::brand::SLUG))
+        .add_filter("PEM", &["pem"])
+        .save_file();
+    match file {
+        Some(path) => {
+            std::fs::write(&path, ca).map_err(|e| e.to_string())?;
+            Ok(path.display().to_string())
+        }
+        None => Err("canceled".to_string()),
+    }
+}
+
+// A fresh CA and server certificate. The receiver restarts at once when it is
+// serving TLS, so the old certificate stops being offered; an unsaved renewal
+// changes nothing.
+#[tauri::command]
+pub(crate) fn remote_tls_renew(app: AppHandle, state: State<Db>) -> Result<String, String> {
+    let names = crate::remote_tls::host_names();
+    let (fingerprint, restart) = {
+        let mut store = lock(&state);
+        let id = crate::remote_tls::renew_tls_identity(&mut store.settings, &names, |s| save_settings(&app, s))?;
+        (crate::remote_tls::fingerprint(&id.ca_pem), remote_api_enabled(&store.settings) && network_filter_enabled(&store.settings))
+    };
+    if restart {
+        restart_receiver(&app);
+    }
+    fingerprint.ok_or_else(|| "no-certificate".to_string())
 }
 
 // ---------- IPv4 CIDR matching ----------
@@ -599,6 +692,21 @@ pub(crate) fn start(app: AppHandle) {
         log_remote(&settings, "remoteApi", "remote access could not start: no password is set");
         return;
     };
+    let (bind_ip, tls) = bind_plan(&settings);
+    // With the network switch on the receiver speaks only TLS. The identity is
+    // made (and stored) before anything is bound; when that fails nothing starts.
+    let acceptor = if tls {
+        match prepare_acceptor(&app) {
+            Ok(a) => Some(a),
+            Err(e) => {
+                log_remote(&settings, "remoteApi", &format!("remote access could not start: {e}"));
+                record_error_log(&format!("remote access could not start: {e}"), "remoteApi", None, 100);
+                return;
+            }
+        }
+    } else {
+        None
+    };
     let state: State<RemoteApiState> = app.state();
     if state.running.swap(true, Ordering::SeqCst) {
         return; // already running
@@ -606,7 +714,6 @@ pub(crate) fn start(app: AppHandle) {
     let port = remote_port(&settings);
     // The bind address is fixed for the lifetime of a run; the peer allow-list
     // itself is re-read fresh on every connection (see handle_connection).
-    let bind_ip = if network_filter_enabled(&settings) { Ipv4Addr::UNSPECIFIED } else { Ipv4Addr::LOCALHOST };
     let addr = SocketAddr::from((bind_ip, port));
     let guard = state.guard.clone();
     let runs = state.runs.clone();
@@ -632,7 +739,8 @@ pub(crate) fn start(app: AppHandle) {
             move |stream, peer| {
                 let app3 = app_conn.clone();
                 let guard2 = guard.clone();
-                tauri::async_runtime::spawn(async move { handle_connection(stream, peer, app3, guard2).await });
+                let acceptor2 = acceptor.clone();
+                tauri::async_runtime::spawn(async move { handle_connection(stream, peer, app3, guard2, acceptor2).await });
             },
             move |current| {
                 // A run that is no longer the current one must not touch the
@@ -647,6 +755,21 @@ pub(crate) fn start(app: AppHandle) {
             },
         ))
     });
+}
+
+// The stored identity (made and saved first when it is missing or unreadable)
+// turned into a handshake acceptor.
+fn prepare_acceptor(app: &AppHandle) -> Result<TlsAcceptor, String> {
+    let names = crate::remote_tls::host_names();
+    let (id, source) = {
+        let db: State<Db> = app.state();
+        let mut store = lock(&db);
+        crate::remote_tls::ensure_tls_identity(&mut store.settings, &names, |s| save_settings(app, s))?
+    };
+    if source == crate::remote_tls::IdentitySource::KeyUnreadable {
+        record_error_log("the receiver certificate key could not be read here, a new certificate was made", "remoteApi", None, 100);
+    }
+    Ok(TlsAcceptor::from(crate::remote_tls::build_server_config(&id)?))
 }
 
 pub(crate) fn stop(app: &AppHandle) {
@@ -676,7 +799,7 @@ struct HttpRequest {
 // connection, Content-Length only (no chunked transfer, no keep-alive). That
 // is everything a local companion client needs, and it is a much smaller
 // surface to get right than a real HTTP server would be.
-async fn read_request(stream: &mut TcpStream) -> Result<HttpRequest, u16> {
+async fn read_request<S: AsyncRead + Unpin>(stream: &mut S) -> Result<HttpRequest, u16> {
     let deadline = tokio::time::sleep(READ_TIMEOUT);
     tokio::pin!(deadline);
     let mut head = Vec::new();
@@ -704,8 +827,8 @@ fn find_subslice(hay: &[u8], needle: &[u8]) -> Option<usize> {
     hay.windows(needle.len()).position(|w| w == needle)
 }
 
-async fn finish_request(
-    stream: &mut TcpStream,
+async fn finish_request<S: AsyncRead + Unpin>(
+    stream: &mut S,
     head: Vec<u8>,
     mut body: Vec<u8>,
     deadline: &mut (impl std::future::Future<Output = ()> + Unpin),
@@ -767,7 +890,7 @@ fn status_text(status: u16) -> &'static str {
 // No Access-Control-* header is ever sent -- a browser page that ignores the
 // Origin/Referer refusal below and tries anyway still cannot read the
 // response, because nothing here ever opts it in.
-async fn write_response(stream: &mut TcpStream, status: u16, body: &[u8]) {
+async fn write_response<S: AsyncWrite + Unpin>(stream: &mut S, status: u16, body: &[u8]) {
     let head = format!(
         "HTTP/1.1 {status} {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
         status_text(status),
@@ -810,13 +933,73 @@ fn reject_request_shape(req: &HttpRequest) -> Option<ShapeRejection> {
     None
 }
 
-async fn handle_connection(mut stream: TcpStream, peer: SocketAddr, app: AppHandle, guard: Arc<RemoteGuard>) {
+// The request-shape and password checks that need no app state: a verdict as
+// the HTTP status to answer with. A missing stored hash is a 401 too, like a
+// wrong password.
+fn authorize(req: &HttpRequest, stored_hash: Option<&str>) -> Result<(), u16> {
+    if let Some(rejection) = reject_request_shape(req) {
+        return Err(match rejection {
+            ShapeRejection::Method => 405,
+            ShapeRejection::Path => 404,
+            ShapeRejection::CrossSite => 403,
+        });
+    }
+    let Some(stored) = stored_hash else {
+        return Err(401);
+    };
+    let supplied = req.headers.get("x-promptsaver-password").map(String::as_str).unwrap_or("");
+    if supplied.is_empty() || !verify_password(supplied, stored) {
+        return Err(401);
+    }
+    Ok(())
+}
+
+// A refused peer is answered in plain HTTP. In TLS mode that would be garbage
+// to a TLS client (and a plaintext answer is exactly what TLS mode never
+// sends), so the connection is just closed.
+async fn refuse_before_request<S: AsyncWrite + Unpin>(stream: &mut S, tls: bool, status: u16, message: &str) {
+    if !tls {
+        write_response(stream, status, &json_err(message)).await;
+    }
+}
+
+const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
+
+// The TLS handshake, bounded. A plaintext client, a client that does not trust
+// us, or one that stalls all end up as Err before a single request byte is read.
+async fn tls_accept_within(
+    acceptor: &TlsAcceptor,
+    stream: TcpStream,
+    limit: Duration,
+) -> Result<tokio_rustls::server::TlsStream<TcpStream>, ()> {
+    match tokio::time::timeout(limit, acceptor.accept(stream)).await {
+        Ok(Ok(tls)) => Ok(tls),
+        _ => Err(()),
+    }
+}
+
+async fn tls_accept(acceptor: &TlsAcceptor, stream: TcpStream) -> Result<tokio_rustls::server::TlsStream<TcpStream>, ()> {
+    tls_accept_within(acceptor, stream, HANDSHAKE_TIMEOUT).await
+}
+
+// Switch off: loopback, plain HTTP (traffic never leaves the machine). Switch
+// on: every interface, TLS only, for local and remote clients alike.
+fn bind_plan(settings: &Settings) -> (Ipv4Addr, bool) {
+    if network_filter_enabled(settings) {
+        (Ipv4Addr::UNSPECIFIED, true)
+    } else {
+        (Ipv4Addr::LOCALHOST, false)
+    }
+}
+
+async fn handle_connection(mut stream: TcpStream, peer: SocketAddr, app: AppHandle, guard: Arc<RemoteGuard>, acceptor: Option<TlsAcceptor>) {
     let ip = peer.ip();
     let settings = {
         let state: State<Db> = app.state();
         let guard = lock(&state);
         guard.settings.clone()
     };
+    let tls = acceptor.is_some();
     // Checked before a single byte of the actual request is read -- an
     // address outside the loopback default (or outside the configured
     // ranges, with the network switch on) never gets that far.
@@ -826,14 +1009,24 @@ async fn handle_connection(mut stream: TcpStream, peer: SocketAddr, app: AppHand
     }
     if guard.locked(ip) {
         log_remote(&settings, "remoteApi", "remote access: refused a locked-out address");
-        write_response(&mut stream, 403, &json_err("locked out")).await;
+        refuse_before_request(&mut stream, tls, 403, "locked out").await;
         return;
     }
     if !guard.check_rate(ip, remote_rate_limit(&settings)) {
         log_remote(&settings, "remoteApi", "remote access: rate limit exceeded");
-        write_response(&mut stream, 429, &json_err("rate limit exceeded")).await;
+        refuse_before_request(&mut stream, tls, 429, "rate limit exceeded").await;
         return;
     }
+    match acceptor {
+        Some(acceptor) => match tls_accept(&acceptor, stream).await {
+            Ok(tls_stream) => serve_request(tls_stream, ip, settings, app, guard).await,
+            Err(()) => log_remote(&settings, "remoteApi", "remote access: a connection failed the secure handshake"),
+        },
+        None => serve_request(stream, ip, settings, app, guard).await,
+    }
+}
+
+async fn serve_request<S: AsyncRead + AsyncWrite + Unpin>(mut stream: S, ip: IpAddr, settings: Settings, app: AppHandle, guard: Arc<RemoteGuard>) {
     let req = match read_request(&mut stream).await {
         Ok(r) => r,
         Err(status) => {
@@ -842,30 +1035,23 @@ async fn handle_connection(mut stream: TcpStream, peer: SocketAddr, app: AppHand
             return;
         }
     };
-    if let Some(rejection) = reject_request_shape(&req) {
-        let (status, log_msg, body_msg) = match rejection {
-            ShapeRejection::Method => (405, "remote access: method not allowed", "method not allowed"),
-            ShapeRejection::Path => (404, "remote access: unknown path", "not found"),
-            ShapeRejection::CrossSite => (403, "remote access: refused a browser-originated request", "cross-site requests are refused"),
+    let stored_hash = password_hash_hex(&settings);
+    if let Err(status) = authorize(&req, stored_hash.as_deref()) {
+        let (log_msg, body_msg): (&str, &str) = match status {
+            405 => ("remote access: method not allowed", "method not allowed"),
+            404 => ("remote access: unknown path", "not found"),
+            403 => ("remote access: refused a browser-originated request", "cross-site requests are refused"),
+            _ if stored_hash.is_none() => ("remote access: no password is configured", "unauthorized"),
+            _ => {
+                let just_locked = guard.record_auth_failure(ip);
+                (
+                    if just_locked { "remote access: wrong password, address now locked out" } else { "remote access: wrong password" },
+                    "unauthorized",
+                )
+            }
         };
         log_remote(&settings, "remoteApi", log_msg);
         write_response(&mut stream, status, &json_err(body_msg)).await;
-        return;
-    }
-    let Some(stored_hash) = password_hash_hex(&settings) else {
-        log_remote(&settings, "remoteApi", "remote access: no password is configured");
-        write_response(&mut stream, 401, &json_err("unauthorized")).await;
-        return;
-    };
-    let supplied = req.headers.get("x-promptsaver-password").cloned().unwrap_or_default();
-    if supplied.is_empty() || !verify_password(&supplied, &stored_hash) {
-        let just_locked = guard.record_auth_failure(ip);
-        log_remote(
-            &settings,
-            "remoteApi",
-            if just_locked { "remote access: wrong password, address now locked out" } else { "remote access: wrong password" },
-        );
-        write_response(&mut stream, 401, &json_err("unauthorized")).await;
         return;
     }
     guard.record_auth_success(ip);
@@ -1682,5 +1868,227 @@ mod tests {
         assert!(wait_until(|| second.finished_stale.load(Ordering::SeqCst) == 1).await);
         assert_eq!(second.finished_current.load(Ordering::SeqCst), 0);
         assert!(TcpStream::connect(addr).await.is_ok());
+    }
+
+    // ---- HTTPS transport ----
+
+    use std::sync::atomic::AtomicUsize;
+    use tokio_rustls::rustls::pki_types::{pem::PemObject, CertificateDer, ServerName};
+    use tokio_rustls::rustls::{ClientConfig, RootCertStore};
+
+    fn test_identity(settings: &mut Settings) -> crate::remote_tls::TlsIdentity {
+        let names = vec!["localhost".to_string(), "127.0.0.1".to_string()];
+        crate::remote_tls::ensure_tls_identity(settings, &names, |_| true).unwrap().0
+    }
+
+    fn acceptor_for(id: &crate::remote_tls::TlsIdentity) -> TlsAcceptor {
+        TlsAcceptor::from(crate::remote_tls::build_server_config(id).unwrap())
+    }
+
+    fn connector_trusting(ca_pem: &str) -> tokio_rustls::TlsConnector {
+        let mut roots = RootCertStore::empty();
+        for c in CertificateDer::pem_slice_iter(ca_pem.as_bytes()) {
+            roots.add(c.unwrap()).unwrap();
+        }
+        let provider = Arc::new(tokio_rustls::rustls::crypto::ring::default_provider());
+        let cfg = ClientConfig::builder_with_provider(provider)
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_root_certificates(roots)
+            .with_no_client_auth();
+        tokio_rustls::TlsConnector::from(Arc::new(cfg))
+    }
+
+    // A responder built from the same pieces the receiver uses: handshake,
+    // read_request, authorize, write_response. `calls` counts requests that
+    // were parsed, i.e. got past the handshake.
+    async fn spawn_responder(acceptor: Option<TlsAcceptor>, stored: Option<String>, calls: Arc<AtomicUsize>) -> SocketAddr {
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            loop {
+                let Ok((stream, _)) = listener.accept().await else { continue };
+                let acceptor = acceptor.clone();
+                let stored = stored.clone();
+                let calls = calls.clone();
+                tokio::spawn(async move {
+                    async fn respond<S: AsyncRead + AsyncWrite + Unpin>(mut s: S, stored: Option<String>, calls: Arc<AtomicUsize>) {
+                        let Ok(req) = read_request(&mut s).await else { return };
+                        calls.fetch_add(1, Ordering::SeqCst);
+                        match authorize(&req, stored.as_deref()) {
+                            Ok(()) => write_response(&mut s, 200, b"{}").await,
+                            Err(status) => write_response(&mut s, status, b"{}").await,
+                        }
+                    }
+                    match acceptor {
+                        Some(a) => {
+                            if let Ok(tls) = tls_accept(&a, stream).await {
+                                respond(tls, stored, calls).await;
+                            }
+                        }
+                        None => respond(stream, stored, calls).await,
+                    }
+                });
+            }
+        });
+        addr
+    }
+
+    fn post_with(password: &str) -> Vec<u8> {
+        format!("POST /api HTTP/1.1\r\nHost: x\r\nX-Promptsaver-Password: {password}\r\nContent-Length: 2\r\n\r\n{{}}").into_bytes()
+    }
+
+    async fn https_status(connector: &tokio_rustls::TlsConnector, addr: SocketAddr, password: &str) -> Result<u16, String> {
+        let tcp = TcpStream::connect(addr).await.map_err(|e| e.to_string())?;
+        let mut tls = connector.connect(ServerName::try_from("localhost").unwrap(), tcp).await.map_err(|e| e.to_string())?;
+        tls.write_all(&post_with(password)).await.map_err(|e| e.to_string())?;
+        let mut out = Vec::new();
+        let _ = tls.read_to_end(&mut out).await;
+        let text = String::from_utf8_lossy(&out).to_string();
+        text.strip_prefix("HTTP/1.1 ").and_then(|r| r.get(..3)).and_then(|c| c.parse().ok()).ok_or_else(|| format!("no status in {text:?}"))
+    }
+
+    #[test]
+    fn bind_plan_is_loopback_plain_or_everywhere_with_tls() {
+        let mut s = Settings::default();
+        assert_eq!(bind_plan(&s), (Ipv4Addr::LOCALHOST, false));
+        s.ui_flags.insert("remoteNetworkFilter".into(), true);
+        assert_eq!(bind_plan(&s), (Ipv4Addr::UNSPECIFIED, true));
+    }
+
+    #[test]
+    fn authorize_checks_shape_then_password() {
+        let hash = hash_password("secret");
+        let req = |method: &str, path: &str, pw: Option<&str>, origin: bool| {
+            let mut headers = HashMap::new();
+            if let Some(p) = pw {
+                headers.insert("x-promptsaver-password".to_string(), p.to_string());
+            }
+            if origin {
+                headers.insert("origin".to_string(), "http://evil".to_string());
+            }
+            HttpRequest { method: method.into(), path: path.into(), headers, body: vec![] }
+        };
+        assert_eq!(authorize(&req("POST", "/api", Some("secret"), false), Some(&hash)), Ok(()));
+        assert_eq!(authorize(&req("POST", "/api", Some("wrong"), false), Some(&hash)), Err(401));
+        assert_eq!(authorize(&req("POST", "/api", None, false), Some(&hash)), Err(401));
+        assert_eq!(authorize(&req("POST", "/api", Some("secret"), false), None), Err(401));
+        assert_eq!(authorize(&req("GET", "/api", Some("secret"), false), Some(&hash)), Err(405));
+        assert_eq!(authorize(&req("POST", "/x", Some("secret"), false), Some(&hash)), Err(404));
+        assert_eq!(authorize(&req("POST", "/api", Some("secret"), true), Some(&hash)), Err(403));
+    }
+
+    #[tokio::test]
+    async fn plaintext_to_a_tls_listener_gets_no_http_answer_and_reaches_no_request_code() {
+        let mut settings = Settings::default();
+        let id = test_identity(&mut settings);
+        let calls = Arc::new(AtomicUsize::new(0));
+        let addr = spawn_responder(Some(acceptor_for(&id)), Some(hash_password("pw")), calls.clone()).await;
+        let mut plain = TcpStream::connect(addr).await.unwrap();
+        plain.write_all(&post_with("pw")).await.unwrap();
+        let mut out = Vec::new();
+        let _ = tokio::time::timeout(Duration::from_secs(5), plain.read_to_end(&mut out)).await;
+        assert!(!out.starts_with(b"HTTP/"), "a plaintext client must never get an HTTP answer");
+        assert!(!String::from_utf8_lossy(&out).contains("200"));
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn a_client_trusting_the_saved_ca_gets_200_with_the_password_and_401_without() {
+        let mut settings = Settings::default();
+        let id = test_identity(&mut settings);
+        let calls = Arc::new(AtomicUsize::new(0));
+        let addr = spawn_responder(Some(acceptor_for(&id)), Some(hash_password("pw")), calls.clone()).await;
+        let connector = connector_trusting(&id.ca_pem);
+        assert_eq!(https_status(&connector, addr, "pw").await, Ok(200));
+        assert_eq!(https_status(&connector, addr, "wrong").await, Ok(401));
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn a_client_trusting_a_different_or_the_old_ca_fails_the_handshake() {
+        let mut settings = Settings::default();
+        let old = test_identity(&mut settings);
+        let names = vec!["localhost".to_string(), "127.0.0.1".to_string()];
+        let new = crate::remote_tls::renew_tls_identity(&mut settings, &names, |_| true).unwrap();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let addr = spawn_responder(Some(acceptor_for(&new)), Some(hash_password("pw")), calls.clone()).await;
+        // The device that trusted the certificate from before the renewal.
+        assert!(https_status(&connector_trusting(&old.ca_pem), addr, "pw").await.is_err());
+        let mut other = Settings::default();
+        let stranger = test_identity(&mut other);
+        assert!(https_status(&connector_trusting(&stranger.ca_pem), addr, "pw").await.is_err());
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        assert_eq!(https_status(&connector_trusting(&new.ca_pem), addr, "pw").await, Ok(200));
+    }
+
+    #[tokio::test]
+    async fn a_stalled_handshake_is_dropped_within_the_limit() {
+        let mut settings = Settings::default();
+        let id = test_identity(&mut settings);
+        let acceptor = acceptor_for(&id);
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let _idle = TcpStream::connect(addr).await.unwrap();
+        let (server_side, _) = listener.accept().await.unwrap();
+        let started = Instant::now();
+        assert!(tls_accept_within(&acceptor, server_side, Duration::from_millis(200)).await.is_err());
+        assert!(started.elapsed() < Duration::from_secs(3));
+    }
+
+    #[tokio::test]
+    async fn a_refused_peer_in_tls_mode_gets_zero_bytes_and_in_plain_mode_a_status() {
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        for (tls, expect_bytes) in [(true, false), (false, true)] {
+            let client = tokio::spawn(async move {
+                let mut c = TcpStream::connect(addr).await.unwrap();
+                let mut out = Vec::new();
+                let _ = tokio::time::timeout(Duration::from_secs(5), c.read_to_end(&mut out)).await;
+                out
+            });
+            let (mut server_side, _) = listener.accept().await.unwrap();
+            refuse_before_request(&mut server_side, tls, 403, "locked out").await;
+            drop(server_side);
+            let out = client.await.unwrap();
+            assert_eq!(!out.is_empty(), expect_bytes, "tls={tls}");
+            if expect_bytes {
+                assert!(out.starts_with(b"HTTP/1.1 403"));
+            }
+        }
+    }
+
+    // ---- the network switch ----
+
+    fn names_for_test() -> Vec<String> {
+        vec!["localhost".to_string(), "127.0.0.1".to_string()]
+    }
+
+    #[test]
+    fn turning_the_network_switch_on_makes_the_identity_then_saves_and_asks_for_a_restart() {
+        let mut s = settings_with(true, Some("aa"));
+        let restart = apply_network_switch(&mut s, true, &names_for_test(), |_| true).unwrap();
+        assert!(restart);
+        assert!(network_filter_enabled(&s));
+        assert!(s.ui_texts.get(crate::remote_tls::REMOTE_TLS_KEY).unwrap().starts_with(crate::ENC_PREFIX));
+    }
+
+    #[test]
+    fn a_failed_write_rolls_the_network_switch_back_in_both_directions() {
+        let mut s = settings_with(true, Some("aa"));
+        assert_eq!(apply_network_switch(&mut s, true, &names_for_test(), |_| false).err().as_deref(), Some(ERR_SAVE_FAILED));
+        assert!(!network_filter_enabled(&s));
+        s.ui_flags.insert("remoteNetworkFilter".into(), true);
+        assert_eq!(apply_network_switch(&mut s, false, &names_for_test(), |_| false).err().as_deref(), Some(ERR_SAVE_FAILED));
+        assert!(network_filter_enabled(&s));
+    }
+
+    #[test]
+    fn the_network_switch_with_the_receiver_off_needs_no_identity_and_no_restart() {
+        let mut s = settings_with(false, None);
+        let restart = apply_network_switch(&mut s, true, &names_for_test(), |_| true).unwrap();
+        assert!(!restart);
+        assert!(s.ui_texts.get(crate::remote_tls::REMOTE_TLS_KEY).is_none());
     }
 }

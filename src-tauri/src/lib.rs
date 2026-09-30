@@ -26396,6 +26396,13 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
         notify_float_settings(&app);
         return result;
     }
+    // Widening or narrowing the receiver's reach restarts it with the matching
+    // protocol and is saved first, like its own switch.
+    if key == "remoteNetworkFilter" {
+        let result = remote::set_network_flag(&app, &state, enabled);
+        notify_float_settings(&app);
+        return result;
+    }
     let is_url_scheme_toggle = key == "urlScheme";
     // Turning either gate off must not leave a session silently running.
     let end_auto_session = !enabled && (key == "rotatingPrompts" || key == "rotateAuto");
@@ -33922,6 +33929,9 @@ pub fn run() {
             remote::remote_api_status,
             remote::remote_api_stop_now,
             remote::set_remote_allowed_ranges,
+            remote::remote_tls_fingerprint,
+            remote::remote_tls_save_cert,
+            remote::remote_tls_renew,
             remote::run_pending_launch_url,
             skip_version,
             whats_new_check,
