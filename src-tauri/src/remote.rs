@@ -513,6 +513,20 @@ fn prune_peers(peers: &mut HashMap<IpAddr, PeerState>, now: Instant) {
     peers.retain(|_, p| {
         p.locked_until.is_some_and(|until| now < until) || now.saturating_duration_since(p.window_start) < window
     });
+    if peers.len() <= MAX_TRACKED_PEERS {
+        return;
+    }
+    // Still over the bound: every survivor is inside its window. Evict the oldest
+    // windows first, and peers currently locked out only when nothing else is left.
+    let mut order: Vec<(bool, Instant, IpAddr)> = peers
+        .iter()
+        .map(|(ip, p)| (p.locked_until.is_some_and(|until| now < until), p.window_start, *ip))
+        .collect();
+    order.sort();
+    let excess = peers.len() - MAX_TRACKED_PEERS;
+    for (_, _, ip) in order.into_iter().take(excess) {
+        peers.remove(&ip);
+    }
 }
 
 pub(crate) struct RemoteGuard {
@@ -2321,12 +2335,24 @@ mod tests {
     }
 
     #[test]
-    fn busy_peers_inside_their_window_survive_the_prune() {
+    fn busy_peers_inside_their_window_are_capped_oldest_first() {
+        let base = Instant::now();
         let mut peers: HashMap<IpAddr, PeerState> = HashMap::new();
         for i in 0..2000u32 {
-            peers.insert(IpAddr::V4(Ipv4Addr::from(0x0A00_0000 + i)), PeerState::default());
+            peers.insert(
+                IpAddr::V4(Ipv4Addr::from(0x0A00_0000 + i)),
+                PeerState { window_start: base + Duration::from_millis(u64::from(i)), ..PeerState::default() },
+            );
         }
-        prune_peers(&mut peers, Instant::now());
-        assert_eq!(peers.len(), 2000, "every window is still open, so nothing may be dropped");
+        let locked_ip = IpAddr::V4(Ipv4Addr::new(192, 168, 9, 9));
+        peers.insert(
+            locked_ip,
+            PeerState { window_start: base, locked_until: Some(base + Duration::from_secs(600)), ..PeerState::default() },
+        );
+        prune_peers(&mut peers, base + Duration::from_secs(1));
+        assert_eq!(peers.len(), MAX_TRACKED_PEERS);
+        assert!(peers.contains_key(&locked_ip), "a locked-out peer outlives older unlocked ones");
+        assert!(!peers.contains_key(&IpAddr::V4(Ipv4Addr::from(0x0A00_0000))), "the oldest window goes first");
+        assert!(peers.contains_key(&IpAddr::V4(Ipv4Addr::from(0x0A00_0000 + 1999))), "the newest window stays");
     }
 }
