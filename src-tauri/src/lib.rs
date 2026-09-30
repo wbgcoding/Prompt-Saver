@@ -16977,13 +16977,27 @@ fn screenshot_dir(custom: &str) -> PathBuf {
 // Save already-encoded screenshot bytes into the given folder as "<stem>.<ext>".
 // "" on failure. Never re-encodes -- the caller decides the format up front.
 fn save_screenshot(bytes: &[u8], dir: &std::path::Path, stem: &str, ext: &str) -> String {
+    use std::io::Write;
     let _ = fs::create_dir_all(dir);
-    let path = dir.join(format!("{}.{}", stem, ext));
-    if fs::write(&path, bytes).is_ok() {
-        path.to_string_lossy().to_string()
-    } else {
-        String::new()
+    // Never replace a file that is already there (two shots in the same second
+    // share a stem): take the next free " (2)", " (3)" name instead.
+    for n in 1..1000u32 {
+        let name = if n == 1 { format!("{}.{}", stem, ext) } else { format!("{} ({}).{}", stem, n, ext) };
+        let path = dir.join(name);
+        match fs::OpenOptions::new().write(true).create_new(true).open(&path) {
+            Ok(mut f) => {
+                return if f.write_all(bytes).is_ok() {
+                    path.to_string_lossy().to_string()
+                } else {
+                    let _ = fs::remove_file(&path);
+                    String::new()
+                };
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(_) => return String::new(),
+        }
     }
+    String::new()
 }
 
 // Decode a "data:...;base64,..." URL to its raw image bytes (format-agnostic).
@@ -37155,6 +37169,21 @@ fn start_sync_poll(app: AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ---- two shots with the same stem never overwrite each other ----
+
+    #[test]
+    fn save_screenshot_keeps_both_files_for_the_same_stem() {
+        let dir = std::env::temp_dir().join(format!("{}-shot-{}", brand::TEMP_PREFIX, std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let first = save_screenshot(b"one", &dir, "Screenshot-2026-01-01_00-00-00", "png");
+        let second = save_screenshot(b"two", &dir, "Screenshot-2026-01-01_00-00-00", "png");
+        assert!(!first.is_empty() && !second.is_empty());
+        assert_ne!(first, second);
+        assert_eq!(fs::read(&first).unwrap(), b"one");
+        assert_eq!(fs::read(&second).unwrap(), b"two");
+        let _ = fs::remove_dir_all(&dir);
+    }
 
     // ---- a stale preview encode never lands in the slot ----
 
