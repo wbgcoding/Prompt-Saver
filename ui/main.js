@@ -7348,6 +7348,7 @@ window.addEventListener("pointerup", async (e) => {
     if (!p) return;
     if (chainMode) { await toggleChainPick(p); return; } // pick (asks vars), don't copy
     if (dialogTokens(p, await peekRotatedText(p)).length) { await copyTextWithVars(p, d.el); return; }
+    if (autoPasteDouble(d.id)) { await autoPasteNow(d.el); return; } // 2nd fast click pastes
     if (copyOnCooldown(d.id)) return;
     if (await copyResolved(p)) {
       showCopied(d.el);

@@ -16102,6 +16102,22 @@ def main():
       if (!(/number 1[.]/.test(last) && /number 5[.]/.test(last))) errs.push('563-11: a member click in chain mode replaced the chain text instead of adding a step, clipboard now: ' + JSON.stringify(last));
     }
 """)
+        failed += ar_probe('f10', 'folder popover member: a fast second click pastes like the grid tile', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { autoPaste: true } };</script>\n', r"""
+    await bootReady();
+    const click = async (el) => { const [x, y] = centre(el); ptr('pointerdown', x, y, el); ptr('pointerup', x, y, window); await sleep(60); };
+    await click(document.querySelector('#grid .folder-tile'));
+    await sleep(200);
+    const member = document.querySelector('.folder-member-tile[data-id="p4"]');
+    if (!member) { errs.push('563-10: the folder popover did not open'); }
+    else {
+      window.__SMOKE_ARGS__.length = 0;
+      await click(member);
+      await click(member);
+      await sleep(300);
+      if (!callsFor('copy_prompt').length) errs.push('563-10: the first member click did not copy');
+      if (!callsFor('paste_into_previous').length) errs.push('563-10: a fast second member click did not paste into the previous window');
+    }
+""")
         # ---- main window findings: generated block end ----
         print("PASS" if not failed else f"{failed} problem(s)")
         return 1 if failed else 0
