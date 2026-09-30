@@ -6887,10 +6887,16 @@ window.addEventListener("pointerup", async (e) => {
   await placeTile(id, destCol, destRow);
   if (prevCell && (prevCell[0] !== destCol || prevCell[1] !== destRow)) {
     const [fromCol, fromRow] = prevCell;
+    // The undo belongs to the view the tile was moved in: placeTile reads the view
+    // on screen, so after a tab switch it would pull the tile out of its own view.
+    const movedIn = activeView().id;
     toast(t("tileMoved"), {
       label: t("undo"),
       icon: ICON_UNDO,
-      onClick: () => placeTile(id, fromCol, fromRow),
+      onClick: () => {
+        if (favView || activeView().id !== movedIn) return;
+        placeTile(id, fromCol, fromRow);
+      },
     });
   }
 });

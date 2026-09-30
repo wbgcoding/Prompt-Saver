@@ -16041,6 +16041,37 @@ def main():
       errs.push('563-1: dropping a tile on the folder cell should put the folder on the vacated cell ' + JSON.stringify(old) + ', got ' + JSON.stringify(after));
     }
 """)
+        failed += ar_probe('f2', 'grid undo toast: a tab switch before Undo leaves both views alone', 'index', '1000x780', '', r"""
+    await bootReady();
+    const tabFor = (id) => document.querySelector('.view-btn[data-view-id="' + id + '"]');
+    const before = JSON.stringify(layoutRead());
+    function layoutRead() {
+      const o = {};
+      document.querySelectorAll('#grid .cell .tile:not(.folder-tile)').forEach((t) => { o[t.dataset.id] = t.parentElement.dataset.col + ',' + t.parentElement.dataset.row; });
+      return o;
+    }
+    // p9 (cell 1,2) moves to the empty cell 2,2 and the undo toast appears
+    await dragTo(tileEl('p9'), ...centre(cellEl(2, 2)));
+    await endDrag(...centre(cellEl(2, 2)));
+    const movedTo = tileEl('p9') && tileEl('p9').parentElement;
+    if (!movedTo || movedTo.dataset.col !== '2' || movedTo.dataset.row !== '2') errs.push('563-2: the move to 2,2 did not happen');
+    const btn = document.querySelector('#toast .toast-btn');
+    if (!btn) { errs.push('563-2: no undo toast after the move'); }
+    else {
+      tabFor('work').click(); await sleep(300);
+      const work = JSON.stringify(layoutRead());
+      window.__SMOKE_ARGS__.length = 0;
+      btn.click(); await sleep(300);
+      const removes = callsFor('batch_prompts').filter((a) => a && a.action === 'removeView');
+      const layouts = callsFor('set_layout');
+      if (removes.length) errs.push('563-2: Undo after a tab switch removed the prompt from another view: ' + JSON.stringify(removes));
+      if (layouts.length) errs.push('563-2: Undo after a tab switch rewrote the layout of the view on screen');
+      if (JSON.stringify(layoutRead()) !== work) errs.push('563-2: the view on screen changed by Undo');
+      tabFor('home').click(); await sleep(300);
+      const p9 = tileEl('p9') && tileEl('p9').parentElement;
+      if (!p9 || p9.dataset.col !== '2' || p9.dataset.row !== '2') errs.push('563-2: the original view lost the moved tile position');
+    }
+""")
         # ---- main window findings: generated block end ----
         print("PASS" if not failed else f"{failed} problem(s)")
         return 1 if failed else 0
