@@ -1,4 +1,5 @@
 // Pure helpers of the screenshot overlay (ui/snip.js), run on the real extracted source:
+//   snipErrorText: the overlay text for a failed capture, one mapping for both callers.
 //   pickWindow: which window a pointer hits (the list carries each window's visible
 //   frame, so a click on a title bar selects that window, not the one behind it).
 // Run:  node tests/ui/snip_pick_check.js      Exit: 0 = clean, 1 = problems.
@@ -31,6 +32,12 @@ try {
   check("title bar point picks the top window", hit && hit.id, 1);
   check("a point outside the top window picks the one behind", (pick([A, B], { x: 150, y: 150 }) || {}).id, 2);
   check("a point over nothing picks nothing", pick([A, B], { x: 500, y: 500 }), null);
+  vm.runInContext(extract("snipErrorText"), ctx);
+  const text = (err) => vm.runInContext("snipErrorText", ctx)(err, { ocrNoLang: "NO-LANG" });
+  check("no ocr language maps to its own text", text("ocr-no-language"), "NO-LANG");
+  check("an Error object with that message maps too", text(new Error("ocr-no-language")), "NO-LANG");
+  check("any other error uses the default text", text("blocked"), undefined);
+  check("a cancelled session shows nothing", text("cancelled"), null);
 } catch (e) {
   problems.push(String(e && e.message || e));
 }

@@ -593,6 +593,15 @@ async function pickHere() {
   }
 }
 
+// Text for a failed capture: a specific message for the one cause worth naming (no
+// OCR language installed), undefined for the generic failure text, null when the
+// session was cancelled underneath the capture (nothing to report).
+function snipErrorText(err, T) {
+  const msg = String((err && err.message) || err);
+  if (msg === "cancelled") return null;
+  return msg === "ocr-no-language" ? T.ocrNoLang : undefined;
+}
+
 // Topmost window of the z-ordered list that contains an image-space point, or null.
 // The list carries each window's visible frame (title bar and borders included).
 function pickWindow(list, p) {
@@ -713,7 +722,8 @@ window.addEventListener("mouseup", async (e) => {
         await invoke("capture_window", { id: win.id });
       } catch (err) {
         busy = false;
-        if (String(err) !== "cancelled") showError();
+        const msg = snipErrorText(err, T);
+        if (msg !== null) showError(msg);
       }
     } else {
       hint.classList.remove("hidden");
@@ -737,7 +747,8 @@ window.addEventListener("mouseup", async (e) => {
     // OCR language installed at all. The overlay itself has no reach into the
     // main window's #ocr-langs-modal, so this stays a specific, honest message
     // rather than a generic retry hint; the overlay stays open either way.
-    if (String(err) !== "cancelled") showError(String(err) === "ocr-no-language" ? T.ocrNoLang : undefined);
+    const msg = snipErrorText(err, T);
+    if (msg !== null) showError(msg);
   }
 });
 
