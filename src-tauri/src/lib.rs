@@ -19682,48 +19682,6 @@ mod ocr {
         format!("'{}'", s.replace('\'', "''"))
     }
 
-    // Windows PowerShell 5.1 (not pwsh core) needs a byte-order mark to reliably
-    // read a UTF-8 script file back as UTF-8 -- without it, non-ASCII bytes in a
-    // path can be misread under the system ANSI code page, hence writing every
-    // generated .ps1 script with a BOM rather than plain ASCII/UTF-8.
-    //
-    // This script is about to run elevated, so how it gets to disk matters: a
-    // predictable path in a shared temp folder is otherwise a same-user process's
-    // opening to plant its own script before ours lands, or to overwrite ours
-    // between this write and the runas prompt being answered. `create_new`
-    // refuses to touch a file that is already there (retried a few times after
-    // clearing it, rather than silently opening whatever an attacker left), and
-    // the returned handle keeps write access denied to everyone else for as
-    // long as the caller holds it -- see run_elevated_script.
-    fn write_ps1_with_bom(path: &Path, content: &str) -> std::io::Result<std::fs::File> {
-        use std::io::Write;
-        use std::os::windows::fs::OpenOptionsExt;
-        const FILE_SHARE_READ: u32 = 0x0000_0001;
-        let mut bytes = vec![0xEFu8, 0xBB, 0xBF];
-        bytes.extend_from_slice(content.as_bytes());
-        let mut last_err = None;
-        for _ in 0..3 {
-            match fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .share_mode(FILE_SHARE_READ)
-                .open(path)
-            {
-                Ok(mut f) => {
-                    f.write_all(&bytes)?;
-                    f.flush()?;
-                    return Ok(f);
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                    let _ = fs::remove_file(path);
-                    last_err = Some(e);
-                }
-                Err(e) => return Err(e),
-            }
-        }
-        Err(last_err.unwrap_or_else(|| std::io::Error::new(std::io::ErrorKind::AlreadyExists, "temp script path is contested")))
-    }
-
     // Every elevated round trip gets its own unguessable file names. The temp
     // folder is writable by anything running as this user, so a name derived only
     // from the language tag or the process id could be created in advance: a
@@ -19761,63 +19719,61 @@ mod ocr {
     fn install_result_path(kind: CapKind, nonce: &str) -> PathBuf {
         std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-{}-install-{}.json", brand::TEMP_PREFIX, kind.slug(), nonce))
     }
-    fn install_script_path(kind: CapKind, nonce: &str) -> PathBuf {
-        std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-{}-install-{}.ps1", brand::TEMP_PREFIX, kind.slug(), nonce))
-    }
 
     // Launches an elevated PowerShell that runs Add-WindowsCapability and writes
     // its own success/failure (including whatever error message Windows gave)
     // to a result file, then returns immediately -- this call never waits for
-    // that process. The elevation script is written out to a temp .ps1 file
-    // rather than passed inline via `-Command "..."`: `name` and the result
-    // path are already safe to embed (name is regex+whitelist-validated by the
-    // caller; the path is entirely ours), but a script FILE sidesteps the
-    // nested-quoting hazard of building a `try{...}catch{...}` PowerShell
-    // one-liner inside a Win32 argument string, which is judged the safer
-    // "equivalent" the spec allows.
+    // that process. The script goes over as an encoded command (see
+    // elevated_params), so there is no quoting of it to get wrong: `name` is
+    // regex+whitelist-validated by the caller and the result path is entirely ours.
     pub(super) fn install_language(kind: CapKind, name: &str) -> Result<(), String> {
         let tag = ocr_tag_from_capability_name(kind.prefix(), name).unwrap_or_default();
         let nonce = start_request(kind, &tag);
         let result_path = install_result_path(kind, &nonce);
-        let script_path = install_script_path(kind, &nonce);
         let _ = fs::remove_file(&result_path); // a stale result must never look fresh
 
-        // finally: the script deletes itself once it is done, elevated or not;
-        // otherwise every install attempt (success, failure, or a declined UAC
-        // prompt) left its .ps1 behind in the temp folder forever.
+        // The script travels on the command line, never as a file: there is no
+        // path a same-user process could swap between the prompt and the read.
         let script = format!(
-            "$ErrorActionPreference = 'Stop'\r\ntry {{\r\n  Add-WindowsCapability -Online -Name {name} {logargs}\r\n  @{{ ok = $true }} | ConvertTo-Json | Out-File -Encoding utf8 {result}\r\n}} catch {{\r\n  @{{ ok = $false; error = $_.Exception.Message }} | ConvertTo-Json | Out-File -Encoding utf8 {result}\r\n}} finally {{\r\n  Remove-Item -LiteralPath {script} -Force -ErrorAction SilentlyContinue\r\n}}\r\n",
+            "$ErrorActionPreference = 'Stop'\r\ntry {{\r\n  Add-WindowsCapability -Online -Name {name} {logargs}\r\n  @{{ ok = $true }} | ConvertTo-Json | Out-File -Encoding utf8 {result}\r\n}} catch {{\r\n  @{{ ok = $false; error = $_.Exception.Message }} | ConvertTo-Json | Out-File -Encoding utf8 {result}\r\n}}\r\n",
             name = ps_single_quote(name),
             logargs = dism_log_args(kind),
             result = ps_single_quote(&result_path.to_string_lossy()),
-            script = ps_single_quote(&script_path.to_string_lossy()),
         );
         // A launch that never happened has nothing to poll for: drop the nonce
         // again so a later result file under that name cannot be believed.
-        run_elevated_script(&script_path, &script).inspect_err(|_| finish_request(kind, &tag))
+        run_elevated_script(&script).inspect_err(|_| finish_request(kind, &tag))
     }
 
-    // Writes a generated .ps1 and starts it through the UAC prompt, returning as
-    // soon as the elevated process has been launched (or the launch was refused).
-    // Used by both elevated paths -- installing a language pack and, on machines
-    // that demand rights even for the read-only listing, the listing itself.
-    fn run_elevated_script(script_path: &Path, script: &str) -> Result<(), String> {
-        if let Some(dir) = script_path.parent() {
-            fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-        }
-        // Kept open (write access denied to everyone else) across the whole
-        // ShellExecuteW call below -- including the time the UAC prompt sits on
-        // screen waiting for the user -- so nothing can swap this script's
-        // content out from under it before the elevated PowerShell reads it.
-        let lock = write_ps1_with_bom(script_path, script).map_err(|e| e.to_string())?;
-
-        // Standard Win32 argv quoting (double quotes for a path that may
-        // contain spaces) -- this is CreateProcess's own command-line
-        // convention, not PowerShell's, since it is powershell.exe's argv.
+    // The argument string that hands `script` to an elevated PowerShell on its own
+    // command line. The script is never written to a file: a file in the shared
+    // temp folder can be replaced by any process of this user between the UAC
+    // prompt and PowerShell opening it, which would run that replacement with the
+    // rights the user just granted. PowerShell takes the script as base64 of its
+    // UTF-16LE bytes, so no quoting of the script text is involved either.
+    pub(super) fn elevated_params(script: &str) -> Result<String, String> {
+        use base64::Engine;
+        let bytes: Vec<u8> = script.encode_utf16().flat_map(|u| u.to_le_bytes()).collect();
         let params = format!(
-            "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File \"{}\"",
-            script_path.display()
+            "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand {}",
+            base64::engine::general_purpose::STANDARD.encode(bytes)
         );
+        // CreateProcess accepts a command line of at most 32767 characters.
+        if params.len() > 30_000 {
+            return Err("the elevated script is too long for a command line".to_string());
+        }
+        Ok(params)
+    }
+
+    // Starts `script` through the UAC prompt, returning as soon as the elevated
+    // process has been launched (or the launch was refused). Used by both
+    // elevated paths -- installing a language pack and, on machines that demand
+    // rights even for the read-only listing, the listing itself. Any new
+    // elevated call site goes through here, never a bespoke ShellExecuteW.
+    fn run_elevated_script(script: &str) -> Result<(), String> {
+        // The elevated script writes its result into this folder.
+        fs::create_dir_all(std::env::temp_dir().join(brand::TEMP_DIR)).map_err(|e| e.to_string())?;
+        let params = elevated_params(script)?;
         let code = unsafe {
             ShellExecuteW(
                 HWND::default(),
@@ -19828,13 +19784,8 @@ mod ocr {
                 SW_HIDE,
             )
         };
-        drop(lock);
         let code = code.0 as isize;
         if code <= 32 {
-            // The script's own `finally` only runs once PowerShell actually starts:
-            // a launch failure (including a declined UAC prompt) never gets that far,
-            // so the .ps1 would otherwise sit in the temp folder forever.
-            let _ = fs::remove_file(script_path);
             // SE_ERR_ACCESSDENIED (5) is what ShellExecuteW returns when the user
             // declines the UAC prompt; ERROR_CANCELLED (1223) shows up on some
             // Windows versions for the same outcome. Neither is a real failure on
@@ -19971,9 +19922,6 @@ mod ocr {
     fn caps_tmp_path(kind: CapKind, nonce: &str) -> PathBuf {
         std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-{}-caps-{}.json.tmp", brand::TEMP_PREFIX, kind.slug(), nonce))
     }
-    fn caps_script_path(kind: CapKind, nonce: &str) -> PathBuf {
-        std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-{}-caps-{}.ps1", brand::TEMP_PREFIX, kind.slug(), nonce))
-    }
 
     // The same query fetch_capabilities runs, but through an elevated PowerShell
     // that writes its JSON to a temp file. Needed on machines where Windows
@@ -19989,18 +19937,16 @@ mod ocr {
         let nonce = start_request(kind, CAPS_TAG);
         let result_path = caps_result_path(kind, &nonce);
         let tmp_path = caps_tmp_path(kind, &nonce);
-        let script_path = caps_script_path(kind, &nonce);
         let _ = fs::remove_file(&result_path); // a stale list must never look fresh
         let _ = fs::remove_file(&tmp_path);
         let script = format!(
-            "$ErrorActionPreference = 'Stop'\r\ntry {{\r\n  try {{\r\n    Get-WindowsCapability -Online -Name \"{filter}\" {logargs} | Select-Object Name, State, Version, DownloadSize, InstallSize | ConvertTo-Json | Out-File -Encoding utf8 {tmp}\r\n  }} catch {{\r\n    @{{ error = $_.Exception.Message }} | ConvertTo-Json | Out-File -Encoding utf8 {tmp}\r\n  }}\r\n  Move-Item -LiteralPath {tmp} -Destination {result} -Force\r\n}} finally {{\r\n  Remove-Item -LiteralPath {script} -Force -ErrorAction SilentlyContinue\r\n}}\r\n",
+            "$ErrorActionPreference = 'Stop'\r\ntry {{\r\n  Get-WindowsCapability -Online -Name \"{filter}\" {logargs} | Select-Object Name, State, Version, DownloadSize, InstallSize | ConvertTo-Json | Out-File -Encoding utf8 {tmp}\r\n}} catch {{\r\n  @{{ error = $_.Exception.Message }} | ConvertTo-Json | Out-File -Encoding utf8 {tmp}\r\n}}\r\nMove-Item -LiteralPath {tmp} -Destination {result} -Force\r\n",
             filter = kind.filter(),
             logargs = dism_log_args(kind),
             tmp = ps_single_quote(&tmp_path.to_string_lossy()),
             result = ps_single_quote(&result_path.to_string_lossy()),
-            script = ps_single_quote(&script_path.to_string_lossy()),
         );
-        run_elevated_script(&script_path, &script).inspect_err(|_| finish_request(kind, CAPS_TAG))
+        run_elevated_script(&script).inspect_err(|_| finish_request(kind, CAPS_TAG))
     }
 
     // Reads what the elevated listing wrote. Ok(None) = still running, or never
@@ -52135,5 +52081,22 @@ mod tests {
     fn recalled_windows_do_not_overlap_on_a_scaled_screen() {
         assert!(!any_overlap(&recall_rects(1.5, 1.5)), "boxes sized for the screen spread without overlap");
         assert!(any_overlap(&recall_rects(1.0, 1.5)), "boxes sized without the factor overlap once drawn at it");
+    }
+
+    // The elevated script must reach PowerShell on its own command line, never as a
+    // file a same-user process could swap after the consent prompt.
+    #[test]
+    fn the_elevated_script_travels_as_an_encoded_command_and_decodes_exactly() {
+        use base64::Engine;
+        let script = "$ErrorActionPreference = 'Stop'\r\ntry { Add-WindowsCapability -Online -Name 'Language.OCR~~~de-DE~0.0.1.0' } catch { }\r\n";
+        let params = ocr::elevated_params(script).unwrap();
+        assert!(params.contains("-EncodedCommand "));
+        assert!(!params.contains("-File"), "no script file is referenced: {params}");
+        assert!(!params.contains("-Command "), "no inline command either: {params}");
+        let payload = params.rsplit("-EncodedCommand ").next().unwrap();
+        let raw = base64::engine::general_purpose::STANDARD.decode(payload).unwrap();
+        let units: Vec<u16> = raw.chunks(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+        assert_eq!(String::from_utf16(&units).unwrap(), script);
+        assert!(ocr::elevated_params(&"x".repeat(40_000)).is_err(), "an oversized script is refused, not truncated");
     }
 }
