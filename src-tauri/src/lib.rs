@@ -3701,6 +3701,24 @@ fn db_write_prompts_and_trash(
     Ok(())
 }
 
+// An import that replaces both halves: the prompt rows and the settings row
+// land in one transaction, so either both are on disk or neither is. Two
+// separate commits could leave one half imported while the command reported a
+// failure.
+fn db_write_prompts_and_settings(
+    conn: &mut Connection,
+    prompts: &[Prompt],
+    settings: &Settings,
+    written: &mut WrittenRows,
+) -> rusqlite::Result<()> {
+    let tx = conn.transaction()?;
+    let fresh = write_rows(&tx, "prompts", prompts, written)?;
+    db_write_settings(&tx, settings)?;
+    tx.commit()?;
+    adopt_written_rows(written, "prompts", fresh);
+    Ok(())
+}
+
 // `written` collects what the table was found to hold (see WrittenRows) so the
 // first save of the session already only writes what actually changed. Recorded
 // straight from the rows as they were read: never from a later, migrated or
@@ -32294,7 +32312,6 @@ fn apply_import(store: &mut Store, backup: Backup, want_data: bool, want_setting
         // authority and OS registrations (see IMPORT_DENIED_FLAGS) stay as this
         // machine has them.
         let local = std::mem::replace(&mut store.settings, backup.settings);
-        SETTINGS_LOCKED.store(false, Ordering::Relaxed); // a full settings import supersedes any corrupt-row lock
         // migrate() fills defaults and guarantees at least one view: without it a
         // hand-edited backup with "views": [] makes active_view_mut index [0] panic
         // on the next mutation (and poisons the Db mutex).
@@ -32319,6 +32336,85 @@ fn apply_import(store: &mut Store, backup: Backup, want_data: bool, want_setting
         store.normalize_folders();
     }
     (store.prompts.len(), dropped, backup_pw_dropped)
+}
+
+// Applies an import to the in-memory store and persists it through `persist`,
+// which gets the store and whether the prompt rows and the settings row have
+// to be written. A failed write puts the ENTIRE previous state back (prompts,
+// settings and both lock flags), so memory never holds an import the disk does
+// not, and the caller reports a failure only for an import that is not active.
+fn run_import(
+    store: &mut Store,
+    backup: Backup,
+    want_data: bool,
+    want_settings: bool,
+    persist: impl FnOnce(&Store, bool, bool) -> bool,
+) -> Result<(usize, usize, bool), String> {
+    let original_prompts = store.prompts.clone();
+    let original_settings = store.settings.clone();
+    let original_prompts_locked = store.prompts_locked;
+    let original_settings_locked = SETTINGS_LOCKED.load(Ordering::Relaxed);
+    let (count, dropped, backup_pw_dropped) = apply_import(store, backup, want_data, want_settings);
+    if want_settings {
+        SETTINGS_LOCKED.store(false, Ordering::Relaxed); // a full settings import supersedes any corrupt-row lock
+    }
+    // Colliding accelerators are dropped from the prompts whatever the scope, so
+    // a settings-only import that dropped one has changed prompt rows too.
+    let write_prompts = want_data || dropped > 0;
+    if !persist(store, write_prompts, want_settings) {
+        store.prompts = original_prompts;
+        store.settings = original_settings;
+        store.prompts_locked = original_prompts_locked;
+        SETTINGS_LOCKED.store(original_settings_locked, Ordering::Relaxed);
+        // Put back a set the disk was never told about, so nothing may be
+        // skipped as "already written" on the next save either.
+        store.forget_written_rows();
+        return Err("save-failed".into());
+    }
+    Ok((count, dropped, backup_pw_dropped))
+}
+
+// Writes the halves an import touched in one database transaction. No JSON
+// fallback: that file pair cannot be replaced atomically, so an import that
+// cannot reach the database fails and changes nothing.
+fn db_write_import(conn: &mut Connection, store: &Store, prompts: &[Prompt], write_prompts: bool, write_settings: bool) -> rusqlite::Result<()> {
+    let mut written = store.written.borrow_mut();
+    match (write_prompts, write_settings) {
+        (true, true) => db_write_prompts_and_settings(conn, prompts, &store.settings, &mut written),
+        (true, false) => db_write_prompts(conn, prompts, &mut written),
+        (false, true) => db_write_settings(conn, &store.settings),
+        (false, false) => Ok(()),
+    }
+}
+
+fn save_import(app: &AppHandle, store: &Store, write_prompts: bool, write_settings: bool) -> bool {
+    if data_dir_write_blocked(app) || (store.prompts_locked && write_prompts) {
+        return false;
+    }
+    if write_settings && SETTINGS_LOCKED.load(Ordering::Relaxed) {
+        return false;
+    }
+    let _writing = write_settings.then(settings_write_lock);
+    let dir = data_dir(app);
+    let prompts = strip_data_dir_prefix(&dir, data_dir_is_demo(app, &dir), &store.prompts);
+    let Some(mut conn) = db_conn(app) else {
+        append_crash_log("persist failed: the import could not open the database");
+        return false;
+    };
+    if db_write_import(&mut conn, store, &prompts, write_prompts, write_settings).is_err() {
+        append_crash_log("persist failed: the import could not be written to the database");
+        return false;
+    }
+    if write_settings {
+        SETTINGS_DELAY.discard();
+        if SETTINGS_WRITE_FAILED.swap(false, Ordering::Relaxed) {
+            let _ = app.emit("settings-write-recovered", ());
+        }
+    }
+    if write_prompts {
+        spawn_sync_write_all(app, store); // Prompt-folders-as-Markdown, only once the rows are committed
+    }
+    true
 }
 
 // The file is picked separately so a wrong password can be retried on the SAME
@@ -32358,45 +32454,14 @@ async fn import_all(
 
     let (settings, count, dropped_hotkeys, backup_pw_dropped) = {
         let mut store = lock(&state);
-        // This wholesale-replaces prompts AND settings: a failed write must put
-        // the ENTIRE previous store back, not just leave the imported data sitting
-        // unsaved in memory while the UI reports the import as done.
-        let original_prompts = store.prompts.clone();
-        let original_settings = store.settings.clone();
-        let original_locked = store.prompts_locked;
-        let (count, dropped, backup_pw_dropped) = apply_import(&mut store, backup, want_data, want_settings);
-        // Rolled back independently, not as one combined check: if save_prompts
-        // already landed the new prompts on disk, undoing them in memory here only
-        // means the next unrelated save silently overwrites that disk state back to
-        // the pre-import prompts, discarding a write that actually succeeded. A scope
-        // that never touched a side never writes it, so it trivially "succeeds" and
-        // that side's rollback branch below never fires -- same contract as
-        // restore_selective: only roll back what was actually written.
-        let prompts_ok = !want_data || save_prompts(&app, &store);
-        let settings_ok = !want_settings || save_settings(&app, &store.settings);
-        if !prompts_ok || !settings_ok {
-            if !prompts_ok {
-                store.prompts = original_prompts;
-                // Put back a set the disk was never told about, so nothing may be
-                // skipped as "already written" on the next save either.
-                store.forget_written_rows();
-            }
-            if !settings_ok {
-                store.settings = original_settings;
-            }
-            store.prompts_locked = original_locked;
-            return Err("save-failed".into());
-        }
-        (webview_settings(&store.settings), count, dropped, backup_pw_dropped)
+        let (count, dropped, backup_pw_dropped) = run_import(&mut store, backup, want_data, want_settings, |st, prompts, settings| {
+            save_import(&app, st, prompts, settings)
+        })?;
+        (store.settings.clone(), count, dropped, backup_pw_dropped)
     };
-    // Re-apply the visible parts of the imported settings without a restart.
-    push_theme(&app, &settings);
-    if want_settings {
-        apply_capture_exclusion_all(&app, capture_excluded(&settings));
-    }
-    rearm_hotkeys(&app);
-    apply_tray_menu(&app); // An import can bring new tray settings with it
-    sync_float_windows(&app); // Pills and folders follow the restored settings
+    // Re-apply the imported state without a restart, the same way a settings-only
+    // import does.
+    refresh_after_import(&app, &settings);
     Ok(ImportSummary {
         name: path
             .file_name()
@@ -43912,6 +43977,7 @@ mod tests {
     // AppHandle, which no unit test in this file constructs).
     #[test]
     fn settings_locked_command_reports_the_flag() {
+        let _serial = SETTINGS_LOCK_TEST.lock().unwrap_or_else(|e| e.into_inner());
         let before = SETTINGS_LOCKED.load(Ordering::Relaxed);
         SETTINGS_LOCKED.store(true, Ordering::Relaxed);
         assert!(settings_locked());
@@ -45597,6 +45663,153 @@ mod tests {
         assert_eq!(reloaded.ui_flags.get("trayRecent"), Some(&true));
         assert_eq!(reloaded.ui_texts.get("untouched").map(String::as_str), Some("keep"), "a row the file never mentions stays");
         assert!(capture_excluded(&reloaded) == capture_excluded(&live), "the capture state follows the same settings");
+    }
+
+    // ---- a full import commits both halves together or neither ----
+
+    // Serializes the tests that set or read the corrupt-row lock flag.
+    static SETTINGS_LOCK_TEST: Mutex<()> = Mutex::new(());
+
+    fn import_test_db() -> Connection {
+        let conn = row_test_db();
+        conn.execute_batch("CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);").unwrap();
+        conn
+    }
+
+    // A store whose disk holds exactly its prompts "old1", "old2" and a settings
+    // row marked "OLD".
+    fn import_test_store(conn: &mut Connection) -> Store {
+        let mut settings = Settings::default();
+        settings.ui_texts.insert("marker".into(), "OLD".into());
+        let store = Store {
+            prompts: vec![test_prompt("old1"), test_prompt("old2")],
+            trash: Vec::new(),
+            settings,
+            prompts_locked: false,
+            written: Default::default(),
+        };
+        db_write_prompts(conn, &store.prompts, &mut store.written.borrow_mut()).unwrap();
+        db_write_settings(conn, &store.settings).unwrap();
+        store
+    }
+
+    fn import_test_backup() -> Backup {
+        let mut settings = Settings::default();
+        settings.ui_texts.insert("marker".into(), "NEW".into());
+        Backup { prompts: vec![test_prompt("new1")], settings }
+    }
+
+    fn disk_state(conn: &Connection) -> (Vec<String>, String) {
+        let (prompts, settings, _, _, _) = db_load(conn, &mut WrittenRows::new());
+        let marker = settings.and_then(|s| s.ui_texts.get("marker").cloned()).unwrap_or_default();
+        (prompts.iter().map(|p| p.id.clone()).collect(), marker)
+    }
+
+    fn import_with(conn: &mut Connection, store: &mut Store, want_data: bool, want_settings: bool) -> Result<(usize, usize, bool), String> {
+        run_import(store, import_test_backup(), want_data, want_settings, |st, prompts, settings| {
+            db_write_import(conn, st, &st.prompts, prompts, settings).is_ok()
+        })
+    }
+
+    #[test]
+    fn a_full_import_that_fails_on_the_settings_write_leaves_everything_as_it_was() {
+        let _serial = SETTINGS_LOCK_TEST.lock().unwrap_or_else(|e| e.into_inner());
+        let mut conn = import_test_db();
+        let mut store = import_test_store(&mut conn);
+        let before_prompts = serde_json::to_string(&store.prompts).unwrap();
+        let before_settings = serde_json::to_string(&store.settings).unwrap();
+        conn.execute_batch("CREATE TRIGGER fail_settings BEFORE INSERT ON meta BEGIN SELECT RAISE(ABORT, 'injected'); END;").unwrap();
+        SETTINGS_LOCKED.store(true, Ordering::Relaxed);
+        store.prompts_locked = true;
+
+        let r = import_with(&mut conn, &mut store, true, true);
+
+        assert_eq!(r, Err("save-failed".to_string()));
+        assert_eq!(serde_json::to_string(&store.prompts).unwrap(), before_prompts, "memory keeps the old prompts");
+        assert_eq!(serde_json::to_string(&store.settings).unwrap(), before_settings, "memory keeps the old settings");
+        assert!(store.prompts_locked, "the decrypt lock is put back");
+        assert!(SETTINGS_LOCKED.load(Ordering::Relaxed), "the corrupt-row lock is put back");
+        SETTINGS_LOCKED.store(false, Ordering::Relaxed);
+        let (ids, marker) = disk_state(&conn);
+        assert_eq!(ids, vec!["old1".to_string(), "old2".to_string()], "the prompt half must not have committed");
+        assert_eq!(marker, "OLD");
+    }
+
+    #[test]
+    fn a_full_import_that_fails_on_the_prompt_write_leaves_everything_as_it_was() {
+        let _serial = SETTINGS_LOCK_TEST.lock().unwrap_or_else(|e| e.into_inner());
+        let mut conn = import_test_db();
+        let mut store = import_test_store(&mut conn);
+        let before_prompts = serde_json::to_string(&store.prompts).unwrap();
+        let before_settings = serde_json::to_string(&store.settings).unwrap();
+        conn.execute_batch("CREATE TRIGGER fail_prompts BEFORE INSERT ON prompts BEGIN SELECT RAISE(ABORT, 'injected'); END;").unwrap();
+
+        let r = import_with(&mut conn, &mut store, true, true);
+
+        assert_eq!(r, Err("save-failed".to_string()));
+        assert_eq!(serde_json::to_string(&store.prompts).unwrap(), before_prompts);
+        assert_eq!(serde_json::to_string(&store.settings).unwrap(), before_settings);
+        let (ids, marker) = disk_state(&conn);
+        assert_eq!(ids, vec!["old1".to_string(), "old2".to_string()]);
+        assert_eq!(marker, "OLD", "the settings half must not have committed");
+    }
+
+    #[test]
+    fn a_full_import_commits_both_halves_and_a_reopened_store_agrees() {
+        let _serial = SETTINGS_LOCK_TEST.lock().unwrap_or_else(|e| e.into_inner());
+        let mut conn = import_test_db();
+        let mut store = import_test_store(&mut conn);
+        let (count, _, _) = import_with(&mut conn, &mut store, true, true).unwrap();
+        assert_eq!(count, 1);
+        assert_eq!(store.prompts.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(), vec!["new1"]);
+        let (ids, marker) = disk_state(&conn);
+        assert_eq!(ids, vec!["new1".to_string()], "the replaced prompts are gone from disk too");
+        assert_eq!(marker, "NEW");
+    }
+
+    #[test]
+    fn a_data_only_import_never_writes_the_settings_row_and_a_settings_only_one_never_the_prompts() {
+        let _serial = SETTINGS_LOCK_TEST.lock().unwrap_or_else(|e| e.into_inner());
+        let mut conn = import_test_db();
+        let mut store = import_test_store(&mut conn);
+        // A failing settings write cannot matter to a data-only import.
+        conn.execute_batch("CREATE TRIGGER fail_settings BEFORE INSERT ON meta BEGIN SELECT RAISE(ABORT, 'injected'); END;").unwrap();
+        import_with(&mut conn, &mut store, true, false).unwrap();
+        let (ids, marker) = disk_state(&conn);
+        assert_eq!(ids, vec!["new1".to_string()]);
+        assert_eq!(marker, "OLD");
+        conn.execute_batch("DROP TRIGGER fail_settings;").unwrap();
+
+        let mut store = import_test_store_again(&mut conn);
+        conn.execute_batch("CREATE TRIGGER fail_prompts BEFORE INSERT ON prompts BEGIN SELECT RAISE(ABORT, 'injected'); END;").unwrap();
+        import_with(&mut conn, &mut store, false, true).unwrap();
+        let (ids, marker) = disk_state(&conn);
+        assert_eq!(ids, vec!["old1".to_string(), "old2".to_string()], "a settings-only import leaves the prompt rows alone");
+        assert_eq!(marker, "NEW");
+    }
+
+    // Puts the disk back to old1, old2 plus a settings row marked OLD.
+    fn import_test_store_again(conn: &mut Connection) -> Store {
+        conn.execute_batch("DELETE FROM prompts; DELETE FROM meta;").unwrap();
+        import_test_store(conn)
+    }
+
+    #[test]
+    fn a_failed_settings_only_import_puts_back_a_hotkey_it_had_dropped() {
+        let _serial = SETTINGS_LOCK_TEST.lock().unwrap_or_else(|e| e.into_inner());
+        let mut conn = import_test_db();
+        let mut store = import_test_store(&mut conn);
+        store.prompts[0].hotkey = "CommandOrControl+Alt+K".into();
+        store.prompts[1].hotkey = "CommandOrControl+Alt+J".into();
+        let mut backup = import_test_backup();
+        backup.settings.hotkey = "CommandOrControl+Alt+K".into(); // collides with old1
+        let before = serde_json::to_string(&store.prompts).unwrap();
+        let r = run_import(&mut store, backup, false, true, |_, prompts, _| {
+            assert!(prompts, "a dropped accelerator changes prompt rows, so they are written too");
+            false
+        });
+        assert_eq!(r, Err("save-failed".to_string()));
+        assert_eq!(serde_json::to_string(&store.prompts).unwrap(), before, "memory matches the disk again");
     }
 
     #[test]

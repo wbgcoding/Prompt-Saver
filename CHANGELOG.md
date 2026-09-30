@@ -851,6 +851,10 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **Importing a backup file is all or nothing.** The entries and the settings
+  are written together, so a failed save can no longer leave one half
+  imported while an error is shown. After a failed import the library and the
+  settings are exactly as they were.
 - **Importing settings from a file is saved before it applies.** If the save
   fails the import is undone and reported, and after a successful import the
   theme, tray, screenshot protection, pill windows and hotkeys follow the new
