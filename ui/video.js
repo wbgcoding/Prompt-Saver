@@ -3943,7 +3943,10 @@ async function closeWindow() {
     // Rust-driven now, so it survives this window closing), cancel it and
     // close, or stay put. "Keep running" is the safe default (Enter key);
     // cancelling is the click-only, visually flagged destructive option.
-    const choice = await veConfirm(t("veCloseTitle"), t("veCloseExporting"), t("bgKeepRunning"), {
+    // With the edit state not kept, edits made after the export started would
+    // be lost on close, so say so too.
+    const unsaved = VE.dirty && !VE.editStateKeepOn ? ` ${t("veCloseUnsaved")}` : "";
+    const choice = await veConfirm(t("veCloseTitle"), t("veCloseExporting") + unsaved, t("bgKeepRunning"), {
       cancelLabel: t("bgStayOpen"),
       thirdLabel: t("bgCancelClose"),
     });

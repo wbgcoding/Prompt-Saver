@@ -70,6 +70,7 @@ function makeSandbox(extra) {
       extractBlock("undo", "function undo() {"),
       extractLine("rectsEqual", "const rectsEqual = (a, b) => !!a && !!b && a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;"),
       extractBlock("endRectDrag", "function endRectDrag() {"),
+      extractBlock("closeWindow", "async function closeWindow() {"),
     ].join("\n"),
     sandbox,
     { filename: "video.js (extracted)" }
@@ -206,6 +207,23 @@ function baseState(ops) {
   expect("a clip without audio stays a silent gap", g && !g.includes("amovie=") && g.includes("anullsrc="), g);
 }
 
+// Closing while an export runs: with the edit state not kept, the confirm must
+// also warn about unexported edits.
+async function closeChecks() {
+  for (const [keep, dirty, warns] of [[false, true, true], [true, true, false], [false, false, false]]) {
+    const texts = [];
+    const sb = makeSandbox({
+      t: (k) => k, veConfirm: async (title, text) => { texts.push(text); return false; },
+      invoke: () => Promise.resolve(), saveEditStateNow: async () => {}, appWin: { close: () => Promise.resolve() },
+    });
+    sb.VE = baseState([{ tool: "cut", startMs: 0, endMs: 1000 }]);
+    Object.assign(sb.VE, { exporting: true, dirty, editStateKeepOn: keep });
+    await vm.runInContext("closeWindow()", sb);
+    expect(`export close confirm (keep=${keep}, dirty=${dirty}) ${warns ? "warns" : "does not warn"} about unexported edits`, texts.length === 1 && texts[0].includes("veCloseUnsaved") === warns, texts.join("|"));
+  }
+}
+
+closeChecks().then(() => {
 if (problems.length) {
   console.log(`${problems.length} problem(s):`);
   for (const p of problems) console.log(" - " + p);
@@ -213,3 +231,4 @@ if (problems.length) {
 } else {
   console.log("PASS");
 }
+});
