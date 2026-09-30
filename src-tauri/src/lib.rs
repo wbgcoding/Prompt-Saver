@@ -27722,8 +27722,18 @@ fn request_app_quit(app: &AppHandle) {
 // cancelable job (backup/import have no cancel of their own -- see
 // cancel_all_bg_ops) and closes the main window again, this time for real.
 #[tauri::command]
-fn confirm_quit_with_running_ops(app: AppHandle) {
+async fn confirm_quit_with_running_ops(app: AppHandle) {
     cancel_all_bg_ops();
+    // The workers only see the cancel flag on their next progress line; give them a
+    // moment to stop ffmpeg and remove their staged file before the process ends
+    // (the job object kills whatever is still running after that). Async, so the
+    // wait never blocks the window's own thread.
+    for _ in 0..10 {
+        if bg_ops_running_count() == 0 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
     QUIT_CONFIRMED.store(true, Ordering::SeqCst);
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.close();
@@ -28247,6 +28257,153 @@ fn ffmpeg_error_json(key: FfmpegErrorKey, code: Option<i32>, raw_text: &str) -> 
     serde_json::to_string(&payload).unwrap_or_else(|_| key.as_str().to_string())
 }
 
+// A Windows job object that kills everything assigned to it when its last handle
+// closes, which includes this process ending for any reason. Without it a quit
+// (or a crash) while an export runs leaves ffmpeg alive and still writing its
+// staged file into the user's folder.
+struct KillOnCloseJob(windows::Win32::Foundation::HANDLE);
+
+// A job handle is a plain kernel object handle, usable from any thread.
+unsafe impl Send for KillOnCloseJob {}
+unsafe impl Sync for KillOnCloseJob {}
+
+impl KillOnCloseJob {
+    fn new() -> Option<Self> {
+        use windows::Win32::System::JobObjects::{
+            CreateJobObjectW, JobObjectExtendedLimitInformation, SetInformationJobObject,
+            JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+        };
+        unsafe {
+            let handle = CreateJobObjectW(None, None).ok()?;
+            let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+            info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+            let set = SetInformationJobObject(
+                handle,
+                JobObjectExtendedLimitInformation,
+                &info as *const _ as *const std::ffi::c_void,
+                std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+            );
+            if set.is_err() {
+                let _ = windows::Win32::Foundation::CloseHandle(handle);
+                return None;
+            }
+            Some(KillOnCloseJob(handle))
+        }
+    }
+
+    fn assign(&self, child: &std::process::Child) -> bool {
+        use std::os::windows::io::AsRawHandle;
+        use windows::Win32::System::JobObjects::AssignProcessToJobObject;
+        let process = windows::Win32::Foundation::HANDLE(child.as_raw_handle());
+        unsafe { AssignProcessToJobObject(self.0, process).is_ok() }
+    }
+}
+
+impl Drop for KillOnCloseJob {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = windows::Win32::Foundation::CloseHandle(self.0);
+        }
+    }
+}
+
+// The app's own job, created on first use and never closed before the process
+// ends. None when the OS refused: children then simply run unsupervised, as
+// before.
+fn app_job() -> Option<&'static KillOnCloseJob> {
+    static JOB: std::sync::OnceLock<Option<KillOnCloseJob>> = std::sync::OnceLock::new();
+    JOB.get_or_init(KillOnCloseJob::new).as_ref()
+}
+
+// Spawns `cmd` and puts the child into `job`. A failed assignment is not an error:
+// the child still runs, it just is not covered.
+fn spawn_in_job(cmd: &mut std::process::Command, job: Option<&KillOnCloseJob>) -> std::io::Result<std::process::Child> {
+    let child = cmd.spawn()?;
+    if let Some(job) = job {
+        if !job.assign(&child) {
+            append_crash_log("could not put a helper process into the app job object");
+        }
+    }
+    Ok(child)
+}
+
+// `Command::status()` for a helper that should die with the app.
+fn status_in_job(cmd: &mut std::process::Command) -> std::io::Result<std::process::ExitStatus> {
+    spawn_in_job(cmd, app_job())?.wait()
+}
+
+// `Command::output()` for a helper that should die with the app.
+fn output_in_job(cmd: &mut std::process::Command) -> std::io::Result<std::process::Output> {
+    cmd.stdout(std::process::Stdio::piped());
+    cmd.stderr(std::process::Stdio::piped());
+    spawn_in_job(cmd, app_job())?.wait_with_output()
+}
+
+// Where run_ffmpeg_to_staged notes the staged files it has in flight, one path
+// per line, so a start after a killed run can remove what the dead process left
+// in the user's folders. Set once at start-up; without it nothing is recorded.
+static EXPORT_JOURNAL: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+static EXPORT_JOURNAL_LOCK: Mutex<()> = Mutex::new(());
+
+fn journal_lines(journal: &Path) -> Vec<String> {
+    fs::read_to_string(journal)
+        .map(|t| t.lines().filter(|l| !l.is_empty()).map(String::from).collect())
+        .unwrap_or_default()
+}
+
+fn journal_write(journal: &Path, lines: &[String]) {
+    if lines.is_empty() {
+        let _ = fs::remove_file(journal);
+    } else {
+        let _ = fs::write(journal, lines.join("\n") + "\n");
+    }
+}
+
+fn export_journal_add(journal: &Path, staged: &Path) {
+    let _guard = EXPORT_JOURNAL_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let mut lines = journal_lines(journal);
+    lines.push(staged.to_string_lossy().into_owned());
+    journal_write(journal, &lines);
+}
+
+fn export_journal_remove(journal: &Path, staged: &Path) {
+    let _guard = EXPORT_JOURNAL_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let key = staged.to_string_lossy();
+    let lines: Vec<String> = journal_lines(journal).into_iter().filter(|l| *l != key).collect();
+    journal_write(journal, &lines);
+}
+
+// The process id in a `.export-<pid>-<stamp>.<ext>` staged name, and only for a
+// name of exactly that shape: the journal is never trusted to name other files.
+fn staged_export_pid(path: &Path) -> Option<u32> {
+    let name = path.file_name()?.to_str()?;
+    let rest = name.strip_prefix(".export-")?;
+    let (pid, tail) = rest.split_once('-')?;
+    let (stamp, ext) = tail.split_once('.')?;
+    if stamp.is_empty() || !stamp.bytes().all(|b| b.is_ascii_digit()) || ext.is_empty() {
+        return None;
+    }
+    pid.parse().ok()
+}
+
+// Removes the staged files of runs whose process is gone and forgets them. A file
+// whose process is still alive (another instance) stays listed.
+fn sweep_stale_exports(journal: &Path, is_alive: impl Fn(u32) -> bool) {
+    let _guard = EXPORT_JOURNAL_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let mut keep: Vec<String> = Vec::new();
+    for line in journal_lines(journal) {
+        let path = PathBuf::from(&line);
+        match staged_export_pid(&path) {
+            Some(pid) if pid == std::process::id() || is_alive(pid) => keep.push(line),
+            Some(_) => {
+                let _ = fs::remove_file(&path);
+            }
+            None => {} // not one of ours: dropped from the list, never deleted
+        }
+    }
+    journal_write(journal, &keep);
+}
+
 // Generous on purpose: this is a last-resort safety net against a hung
 // ffmpeg process, not a quality-of-service limit, so it must never fire on a
 // large export that is genuinely just slow.
@@ -28283,9 +28440,19 @@ fn run_ffmpeg_to_staged(
     cmd.stdin(std::process::Stdio::null());
     cmd.stdout(std::process::Stdio::piped());
     cmd.stderr(std::process::Stdio::piped());
-    let mut child = match cmd.spawn() {
+    let journal = EXPORT_JOURNAL.get();
+    if let Some(journal) = journal {
+        export_journal_add(journal, &staged);
+    }
+    let forget_staged = || {
+        if let Some(journal) = journal {
+            export_journal_remove(journal, &staged);
+        }
+    };
+    let mut child = match spawn_in_job(&mut cmd, app_job()) {
         Ok(c) => c,
         Err(e) => {
+            forget_staged();
             let text = e.to_string();
             return Err(ffmpeg_error_json(classify_ffmpeg_error(&text), None, &text));
         }
@@ -28340,11 +28507,15 @@ fn run_ffmpeg_to_staged(
     let status = match child.wait() {
         Ok(s) => s,
         Err(e) => {
+            forget_staged();
             let text = e.to_string();
             return Err(ffmpeg_error_json(classify_ffmpeg_error(&text), None, &text));
         }
     };
     let stderr_text = stderr_thread.and_then(|t| t.join().ok()).unwrap_or_default();
+    // ffmpeg is gone now: from here on the staged file is either handed back or
+    // removed by this function itself.
+    forget_staged();
 
     if is_cancelled() {
         let _ = fs::remove_file(&staged);
@@ -28538,7 +28709,7 @@ fn probe_recording_blocking(ffprobe: &Path, src: &Path) -> Result<RecordingProbe
     cmd.args(["-v", "quiet", "-print_format", "json", "-show_format", "-show_streams"]).arg(src);
     cmd.creation_flags(CREATE_NO_WINDOW);
     cmd.stdin(std::process::Stdio::null());
-    let output = cmd.output().map_err(|e| format!("could not start ffprobe: {e}"))?;
+    let output = output_in_job(&mut cmd).map_err(|e| format!("could not start ffprobe: {e}"))?;
     if !output.status.success() {
         return Err("ffprobe failed to read the recording".to_string());
     }
@@ -28752,7 +28923,7 @@ fn mux_mic_track_blocking(ffmpeg: &Path, video: &Path, sidecar: &Path, audio_kbp
     cmd.stdin(std::process::Stdio::null());
     cmd.stdout(std::process::Stdio::null());
     cmd.stderr(std::process::Stdio::piped());
-    let output = cmd.output().map_err(|e| format!("could not start ffmpeg: {e}"))?;
+    let output = output_in_job(&mut cmd).map_err(|e| format!("could not start ffmpeg: {e}"))?;
     if !output.status.success() || !staged.is_file() {
         let _ = fs::remove_file(&staged);
         let tail: String =
@@ -28837,7 +29008,7 @@ fn generate_filmstrip_blocking(ffmpeg: &Path, ffprobe: &Path, src: &Path, count:
             cmd.stdin(std::process::Stdio::null());
             cmd.stdout(std::process::Stdio::null());
             cmd.stderr(std::process::Stdio::null());
-            let status = cmd.status().map_err(|e| format!("could not start ffmpeg: {e}"))?;
+            let status = status_in_job(&mut cmd).map_err(|e| format!("could not start ffmpeg: {e}"))?;
             if !status.success() || !p.is_file() {
                 return Err("thumbnail extraction failed".to_string());
             }
@@ -28874,7 +29045,7 @@ fn generate_waveform_peaks_blocking(ffmpeg: &Path, src: &Path, track: u32, bucke
     cmd.stdin(std::process::Stdio::null());
     cmd.stdout(std::process::Stdio::piped());
     cmd.stderr(std::process::Stdio::null());
-    let output = cmd.output().map_err(|e| format!("could not start ffmpeg: {e}"))?;
+    let output = output_in_job(&mut cmd).map_err(|e| format!("could not start ffmpeg: {e}"))?;
     if !output.status.success() {
         return Err(format!("no audio on track {track}"));
     }
@@ -28956,7 +29127,7 @@ fn extract_still_frame_blocking(ffmpeg: &Path, src: &Path, at_ms: u64, format: &
     cmd.stdin(std::process::Stdio::null());
     cmd.stdout(std::process::Stdio::null());
     cmd.stderr(std::process::Stdio::null());
-    let status = cmd.status().map_err(|e| format!("could not start ffmpeg: {e}"))?;
+    let status = status_in_job(&mut cmd).map_err(|e| format!("could not start ffmpeg: {e}"))?;
     if !status.success() || !tmp.is_file() {
         return Err("still-frame extraction failed".to_string());
     }
@@ -34550,6 +34721,10 @@ pub fn run() {
             // A quit or crash mid-pack leaves raw copies and folders without a snapshot.
             cleanup_incomplete_backups(&backups_dir(&handle), Duration::from_secs(60));
             remove_stale_staged_restores(&data_dir(&handle), Duration::from_secs(60));
+            // Staged exports a killed run left in the user's folders.
+            let journal = data_dir(&handle).join("export-staging.txt");
+            sweep_stale_exports(&journal, pid_is_alive);
+            let _ = EXPORT_JOURNAL.set(journal);
 
             // One place decides which pills and which folders belong on screen.
             sync_float_windows(&handle);
@@ -51615,6 +51790,74 @@ mod tests {
         assert!(!root.join("data.db.restoring-abc").exists());
         assert!(root.join("data.db").exists());
         assert!(root.join("data.db.locked.bak").exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    fn long_child() -> std::process::Command {
+        use std::os::windows::process::CommandExt;
+        let mut cmd = std::process::Command::new("cmd");
+        cmd.args(["/c", "ping", "-n", "30", "127.0.0.1"]);
+        cmd.stdout(std::process::Stdio::null());
+        cmd.creation_flags(CREATE_NO_WINDOW);
+        cmd
+    }
+
+    fn exits_within(child: &mut std::process::Child, ms: u64) -> bool {
+        let deadline = std::time::Instant::now() + Duration::from_millis(ms);
+        while std::time::Instant::now() < deadline {
+            if child.try_wait().unwrap().is_some() {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        false
+    }
+
+    #[test]
+    fn a_child_in_the_job_dies_when_the_job_handle_closes() {
+        let job = KillOnCloseJob::new().expect("a job object");
+        let mut child = spawn_in_job(&mut long_child(), Some(&job)).unwrap();
+        assert!(child.try_wait().unwrap().is_none(), "the child is running");
+        drop(job);
+        let died = exits_within(&mut child, 1000);
+        let _ = child.kill();
+        assert!(died, "closing the job must end the child");
+    }
+
+    #[test]
+    fn a_child_outside_any_job_survives_the_same_drop() {
+        let job = KillOnCloseJob::new().expect("a job object");
+        let mut child = spawn_in_job(&mut long_child(), None).unwrap();
+        drop(job);
+        let died = exits_within(&mut child, 600);
+        let _ = child.kill();
+        let _ = child.wait();
+        assert!(!died, "without the job nothing ends the child");
+    }
+
+    #[test]
+    fn the_export_journal_sweeps_only_dead_staged_exports() {
+        let root = std::env::temp_dir().join(format!("{}-test-export-journal", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let dead = root.join(".export-4000000001-123.mp4");
+        let alive = root.join(".export-4000000002-456.mp4");
+        let foreign = root.join("precious.docx");
+        for f in [&dead, &alive, &foreign] {
+            std::fs::write(f, b"x").unwrap();
+        }
+        let journal = root.join("export-staging.txt");
+        for f in [&dead, &alive, &foreign] {
+            export_journal_add(&journal, f);
+        }
+        sweep_stale_exports(&journal, |pid| pid == 4000000002);
+        assert!(!dead.exists(), "a staged file of a dead process is removed");
+        assert!(alive.exists(), "a live process keeps its file");
+        assert!(foreign.exists(), "a journal line that is not a staged export name is never deleted");
+        let left = journal_lines(&journal);
+        assert_eq!(left, vec![alive.to_string_lossy().into_owned()]);
+        export_journal_remove(&journal, &alive);
+        assert!(!journal.exists(), "an empty journal is removed");
         let _ = std::fs::remove_dir_all(&root);
     }
 }
