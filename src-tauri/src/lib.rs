@@ -7096,10 +7096,36 @@ async fn add_prompt(
     rotate_mode: Option<String>,
     rotate_auto: Option<bool>,
 ) -> Result<Prompt, String> {
-    // One lock for the whole op so the storeFiles flag can't change mid-insert.
+    // The slow steps (copying a large attachment, ffprobe, OCR) run before the
+    // store lock is taken, so every other window keeps working meanwhile. The
+    // lock is taken again only to validate and insert.
+    let (store_files, ocr_index_on, max_chars) = {
+        let store = lock(&state);
+        (
+            store_files_enabled(&store),
+            store.settings.ui_flags.get("ocrIndex").copied().unwrap_or(false),
+            ocr_index_max_chars(&store.settings),
+        )
+    };
+    let mut fp = file_path.unwrap_or_default();
+    let mut ip = icon_path.unwrap_or_default();
+    if store_files {
+        fp = store_attached_file(&app, &fp);
+        ip = store_attached_file(&app, &ip);
+    }
+    // Measured once, right here, never again on a render.
+    let media_source = if !fp.is_empty() { Some(fp.as_str()) } else if !ip.is_empty() { Some(ip.as_str()) } else { None };
+    let (media_duration_ms, media_width, media_height, media_size_bytes) = match media_source {
+        Some(p) => probe_media_meta(ffprobe_search_path(&app).as_deref(), Path::new(p)),
+        None => (0, 0, 0, 0),
+    };
+    let image_value = image.unwrap_or_default();
+    // Read once and indexed once, right here, on purpose: a search index that
+    // costs an OCR pass on every render would be exactly the defect this is
+    // meant not to be.
+    let image_text = resolved_image_text(&image_value, ocr_index_on, |img| ocr_index_text(img, max_chars));
     let prompt = {
         let mut store = lock(&state);
-        let store_files = store_files_enabled(&store);
         let tags = sanitize_tags(tags.unwrap_or_default(), &canonical_tags(&store.prompts))?;
         let notes = sanitize_notes(&notes.unwrap_or_default())?;
         let variants = sanitize_variants(variants.unwrap_or_default());
@@ -7114,25 +7140,6 @@ async fn add_prompt(
         } else {
             sanitize_hotkey_mode(&hotkey_paste.unwrap_or_default())
         };
-        let mut fp = file_path.unwrap_or_default();
-        let mut ip = icon_path.unwrap_or_default();
-        if store_files {
-            fp = store_attached_file(&app, &fp);
-            ip = store_attached_file(&app, &ip);
-        }
-        // Measured once, right here, never again on a render.
-        let media_source = if !fp.is_empty() { Some(fp.as_str()) } else if !ip.is_empty() { Some(ip.as_str()) } else { None };
-        let (media_duration_ms, media_width, media_height, media_size_bytes) = match media_source {
-            Some(p) => probe_media_meta(ffprobe_search_path(&app).as_deref(), Path::new(p)),
-            None => (0, 0, 0, 0),
-        };
-        let image_value = image.unwrap_or_default();
-        // Read once and indexed once, right here, on purpose: a search index that
-        // costs an OCR pass on every render would be exactly the defect this is
-        // meant not to be.
-        let ocr_index_on = store.settings.ui_flags.get("ocrIndex").copied().unwrap_or(false);
-        let max_chars = ocr_index_max_chars(&store.settings);
-        let image_text = resolved_image_text(&image_value, ocr_index_on, |img| ocr_index_text(img, max_chars));
         let prompt = Prompt {
             id: gen_id(),
             trashed_at: 0,
@@ -7411,9 +7418,44 @@ async fn update_prompt(
 ) -> Result<Option<Prompt>, String> {
     let variants = sanitize_variants(variants);
     let rotate_mode = sanitize_rotate_mode(rotate_mode, &variants);
+    // Copying an attachment, probing it and OCR-ing a new picture all happen
+    // before the store lock is taken, against a short snapshot of what the
+    // prompt holds now. The locked section below uses those results only when
+    // the prompt still holds exactly that (a concurrent edit falls back to doing
+    // the work inline, as before).
+    let (store_files, staged_ocr_on, staged_ocr_max, staged_cur) = {
+        let store = lock(&state);
+        let cur = store.prompts.iter().find(|p| p.id == id).map(|p| (p.image.clone(), p.file_path.clone(), p.icon_path.clone()));
+        (
+            store_files_enabled(&store),
+            store.settings.ui_flags.get("ocrIndex").copied().unwrap_or(false),
+            ocr_index_max_chars(&store.settings),
+            cur,
+        )
+    };
+    let file_path = file_path.map(|p| if store_files { store_attached_file(&app, &p) } else { p });
+    let icon_path = icon_path.map(|p| if store_files { store_attached_file(&app, &p) } else { p });
+    let ffprobe = ffprobe_search_path(&app);
+    let staged_image_text = staged_cur.as_ref().and_then(|(cur_img, _, _)| {
+        image.as_deref().is_some_and(|v| v != cur_img).then(|| {
+            resolved_image_text(&merge_image(cur_img, image.clone()), staged_ocr_on, |img| ocr_index_text(img, staged_ocr_max))
+        })
+    });
+    let staged_media = staged_cur.as_ref().and_then(|(_, cur_fp, cur_ip)| {
+        let changed = file_path.as_deref().is_some_and(|v| v != cur_fp) || icon_path.as_deref().is_some_and(|v| v != cur_ip);
+        if !changed {
+            return None;
+        }
+        let fp_now = file_path.clone().unwrap_or_else(|| cur_fp.clone());
+        let ip_now = icon_path.clone().unwrap_or_else(|| cur_ip.clone());
+        let source = if !fp_now.is_empty() { Some(fp_now) } else if !ip_now.is_empty() { Some(ip_now) } else { None };
+        Some(match source {
+            Some(mp) => probe_media_meta(ffprobe.as_deref(), Path::new(&mp)),
+            None => (0, 0, 0, 0),
+        })
+    });
     let updated = {
         let mut store = lock(&state);
-        let store_files = store_files_enabled(&store);
         let tags = match tags {
             Some(list) => Some(sanitize_tags(list, &canonical_tags(&store.prompts))?),
             None => None,
@@ -7431,12 +7473,9 @@ async fn update_prompt(
             }
             None => None,
         };
-        let file_path = file_path.map(|p| if store_files { store_attached_file(&app, &p) } else { p });
-        let icon_path = icon_path.map(|p| if store_files { store_attached_file(&app, &p) } else { p });
         // Read before the mutable prompt borrow below (a MutexGuard can't be
         // split into disjoint field borrows) -- only actually run if the
         // attachment turns out to have changed.
-        let ffprobe = ffprobe_search_path(&app);
         let ocr_index_on = store.settings.ui_flags.get("ocrIndex").copied().unwrap_or(false);
         let ocr_max_chars = ocr_index_max_chars(&store.settings);
         // Read history settings before the mutable prompt borrow (a MutexGuard
@@ -7455,6 +7494,9 @@ async fn update_prompt(
                 // had taken (they would silently revert on the next restart). Also
                 // doubles as the version-history snapshot source below.
                 let original = p.clone();
+                // The staged results above are valid only for the state they were
+                // computed against.
+                let staged_valid = staged_cur.as_ref().is_some_and(|(i, f, c)| *i == p.image && *f == p.file_path && *c == p.icon_path);
                 // A confidential entry's text/variants must never land in storage
                 // as whatever the editor sent -- that is the plain text while
                 // unlocked, so it is re-encrypted here before it touches p; while
@@ -7482,7 +7524,10 @@ async fn update_prompt(
                 let image_changed = image.as_deref().is_some_and(|v| v != p.image);
                 p.image = merge_image(&p.image, image);
                 if image_changed {
-                    p.image_text = resolved_image_text(&p.image, ocr_index_on, |img| ocr_index_text(img, ocr_max_chars));
+                    p.image_text = match &staged_image_text {
+                        Some(t) if staged_valid && staged_ocr_on == ocr_index_on && staged_ocr_max == ocr_max_chars => t.clone(),
+                        _ => resolved_image_text(&p.image, ocr_index_on, |img| ocr_index_text(img, ocr_max_chars)),
+                    };
                 }
                 if let Some(si) = show_image { p.show_image = si; }
                 if let Some(ci) = copy_image { p.copy_image = ci; }
@@ -7495,10 +7540,15 @@ async fn update_prompt(
                 if let Some(pp) = pdf_page { p.pdf_page = pp; }
                 if let Some(ip) = icon_path { p.icon_path = ip; }
                 if attachment_changed {
-                    let media_source = if !p.file_path.is_empty() { Some(p.file_path.as_str()) } else if !p.icon_path.is_empty() { Some(p.icon_path.as_str()) } else { None };
-                    let (d, w, h, sz) = match media_source {
-                        Some(mp) => probe_media_meta(ffprobe.as_deref(), Path::new(mp)),
-                        None => (0, 0, 0, 0),
+                    let (d, w, h, sz) = match staged_media {
+                        Some(m) if staged_valid => m,
+                        _ => {
+                            let media_source = if !p.file_path.is_empty() { Some(p.file_path.as_str()) } else if !p.icon_path.is_empty() { Some(p.icon_path.as_str()) } else { None };
+                            match media_source {
+                                Some(mp) => probe_media_meta(ffprobe.as_deref(), Path::new(mp)),
+                                None => (0, 0, 0, 0),
+                            }
+                        }
                     };
                     p.media_duration_ms = d;
                     p.media_width = w;
@@ -42487,6 +42537,32 @@ mod tests {
     // NOT a fresh one -- "Allow multiple instances" lets a second launch run this
     // same sweep while a concurrently open instance still has its own snip preview
     // in active use, so only files older than STALE_TEMP_FILE_AGE are fair game.
+    // Structural check (no timing-based red exists for "the lock is not held
+    // during the copy"): in add_prompt the copy, the probe and the OCR pass all
+    // sit before the lock that inserts, and update_prompt stages the same three
+    // before its locked section.
+    #[test]
+    fn add_and_update_prompt_do_the_slow_work_before_the_insert_lock() {
+        let src = include_str!("lib.rs");
+        let body = |from: &str, to: &str| {
+            let a = src.find(from).expect("start marker");
+            let b = a + src[a..].find(to).expect("end marker");
+            &src[a..b]
+        };
+        let add = body("async fn add_prompt(", "// One example prompt as the frontend supplies it");
+        let insert_lock = add.rfind("let mut store = lock(&state);").expect("insert lock");
+        for call in ["store_attached_file(&app", "probe_media_meta(", "ocr_index_text(img"] {
+            let at = add.find(call).unwrap_or_else(|| panic!("{call} missing"));
+            assert!(at < insert_lock, "add_prompt must run {call} before taking the insert lock");
+            assert!(!add[insert_lock..].contains(call), "add_prompt must not run {call} under the insert lock");
+        }
+        let upd = body("async fn update_prompt(", "// List a prompt's version snapshots");
+        let staged_end = upd.find("let updated = {").expect("locked section");
+        for call in ["store_attached_file(&app", "probe_media_meta(", "ocr_index_text(img"] {
+            assert!(upd[..staged_end].contains(call), "update_prompt must stage {call} before its locked section");
+        }
+    }
+
     #[test]
     fn take_still_output_removes_a_partial_frame_after_a_failed_run() {
         let dir = std::env::temp_dir().join(format!("ps-still-fail-{}", std::process::id()));

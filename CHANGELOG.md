@@ -856,6 +856,10 @@ the video editor and the introduction tour ship on).
 - The dark shadow behind white text on a coloured tile, folder or floating
   button can now be switched off or dialed to a different strength in the
   expert menu, next to the black/white text switch.
+- **Saving a prompt with a large attachment no longer freezes the other
+  windows.** Copying the file, reading its properties and recognizing text in
+  a new picture now happen before the library is locked, so copying and
+  searching keep working while a big save runs.
 
 ### Fixed
 
