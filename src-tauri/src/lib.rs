@@ -36399,6 +36399,18 @@ fn sync_health_note_ok(h: &mut SyncHealth, files: usize, now: u64) {
     h.last_ok = now;
 }
 
+// Switching to a folder that was written fine ends whatever the old one caused: the
+// pause and its reason describe a folder the app no longer uses.
+fn sync_health_after_dir_change(h: &mut SyncHealth) {
+    h.fails = 0;
+    h.paused = false;
+    h.reason.clear();
+}
+
+// Wakes the poll loop out of its (possibly stretched) sleep, so a new folder is read
+// at once instead of after up to ten intervals.
+static SYNC_WAKE: tokio::sync::Notify = tokio::sync::Notify::const_new();
+
 // A paused poll still comes back, just far less often.
 fn sync_wait_secs(paused: bool, poll: u64) -> u64 {
     if paused {
@@ -37171,7 +37183,7 @@ fn set_sync_dir(app: AppHandle, state: State<Db>, dir: String, delete_old: bool)
     if !trimmed.is_empty() && !consume_granted_dir(Path::new(trimmed), "sync") {
         return Err("dir-not-picked".to_string());
     }
-    let (old, write_failures) = {
+    let (old, new_dir, write_failures) = {
         let mut store = lock(&state);
         let old = sync_dir_path(&app, &store.settings);
         store.settings.ui_texts.insert("syncDir".into(), trimmed.to_string());
@@ -37183,8 +37195,12 @@ fn set_sync_dir(app: AppHandle, state: State<Db>, dir: String, delete_old: bool)
         } else {
             0
         };
-        (old, failures)
+        (old, sync_dir_path(&app, &store.settings), failures)
     };
+    if write_failures == 0 && !sync_same_dir(&old, &new_dir) {
+        sync_health_after_dir_change(&mut sync_health_lock());
+        SYNC_WAKE.notify_one();
+    }
     notify_float_settings(&app);
     if !delete_old {
         return Ok(0);
@@ -37194,10 +37210,7 @@ fn set_sync_dir(app: AppHandle, state: State<Db>, dir: String, delete_old: bool)
     if write_failures > 0 {
         return Err(format!("the new folder could not be written ({write_failures} files), so nothing was deleted"));
     }
-    let new = {
-        let store = lock(&state);
-        sync_dir_path(&app, &store.settings)
-    };
+    let new = new_dir;
     if sync_same_dir(&old, &new) {
         return Ok(0); // nothing moved, so there is no old folder to let go of
     }
@@ -37263,7 +37276,10 @@ fn start_sync_poll(app: AppHandle) {
             // slows down: never a second timer, and never a thread that has to be
             // stopped and started again when the interval changes.
             let paused = sync_health_lock().paused;
-            tokio::time::sleep(std::time::Duration::from_secs(sync_wait_secs(paused, secs))).await;
+            tokio::select! {
+                _ = tokio::time::sleep(std::time::Duration::from_secs(sync_wait_secs(paused, secs))) => {}
+                _ = SYNC_WAKE.notified() => {}
+            }
             sync_poll_once(&app);
         }
     });
@@ -42256,6 +42272,19 @@ mod tests {
         let mut other = p.clone();
         other.name = "renamed".into();
         assert!(!sync_md_matches(&other, &placement, &old_form));
+    }
+
+    #[test]
+    fn a_new_sync_folder_clears_a_paused_health() {
+        let mut h = SyncHealth::default();
+        for _ in 0..SYNC_FAIL_MAX {
+            sync_health_note_fail(&mut h, SYNC_FAIL_MAX, "the drive is gone");
+        }
+        assert!(h.paused);
+        sync_health_after_dir_change(&mut h);
+        assert!(!h.paused);
+        assert_eq!(h.fails, 0);
+        assert!(h.reason.is_empty());
     }
 
     #[test]
