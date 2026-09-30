@@ -593,15 +593,19 @@ async function pickHere() {
   }
 }
 
-// Topmost window under a CSS point; returns its id, CSS rect and image rect.
-function windowAt(cssX, cssY) {
-  const p = toImg(cssX, cssY);
-  for (const w of windows) {
-    if (p.x >= w.x && p.x < w.x + w.width && p.y >= w.y && p.y < w.y + w.height) {
-      return { id: w.id, css: toCss(w.x, w.y, w.width, w.height), img: w };
-    }
+// Topmost window of the z-ordered list that contains an image-space point, or null.
+// The list carries each window's visible frame (title bar and borders included).
+function pickWindow(list, p) {
+  for (const w of list) {
+    if (p.x >= w.x && p.x < w.x + w.width && p.y >= w.y && p.y < w.y + w.height) return w;
   }
   return null;
+}
+
+// Topmost window under a CSS point; returns its id, CSS rect and image rect.
+function windowAt(cssX, cssY) {
+  const w = pickWindow(windows, toImg(cssX, cssY));
+  return w ? { id: w.id, css: toCss(w.x, w.y, w.width, w.height), img: w } : null;
 }
 
 // Process at most once per frame: mousemove fires far faster than the screen

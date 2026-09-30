@@ -16633,6 +16633,42 @@ fn snip_should_begin() -> bool {
     SNIP_ACTIVE.load(Ordering::SeqCst)
 }
 
+// Rect (x, y, width, height) the overlay hit-tests and highlights for a window:
+// its visible frame when known, else the client rect xcap reports.
+fn snip_window_rect(frame: Option<(i32, i32, i32, i32)>, client: (i32, i32, i32, i32)) -> (i32, i32, i32, i32) {
+    frame.unwrap_or(client)
+}
+
+// The window's visible frame in global physical pixels (DWM extended frame
+// bounds: no invisible resize border, but title bar and borders included).
+#[cfg(windows)]
+fn window_frame_rect(id: u32) -> Option<(i32, i32, i32, i32)> {
+    #[repr(C)]
+    #[derive(Default)]
+    struct Rect {
+        left: i32,
+        top: i32,
+        right: i32,
+        bottom: i32,
+    }
+    #[link(name = "dwmapi")]
+    extern "system" {
+        fn DwmGetWindowAttribute(hwnd: isize, attr: u32, out: *mut Rect, size: u32) -> i32;
+    }
+    const DWMWA_EXTENDED_FRAME_BOUNDS: u32 = 9;
+    let mut r = Rect::default();
+    let hr = unsafe { DwmGetWindowAttribute(id as isize, DWMWA_EXTENDED_FRAME_BOUNDS, &mut r, std::mem::size_of::<Rect>() as u32) };
+    if hr != 0 || r.right <= r.left || r.bottom <= r.top {
+        return None;
+    }
+    Some((r.left, r.top, r.right - r.left, r.bottom - r.top))
+}
+
+#[cfg(not(windows))]
+fn window_frame_rect(_id: u32) -> Option<(i32, i32, i32, i32)> {
+    None
+}
+
 // Visible top-level windows overlapping the virtual desktop, topmost first, in
 // stitched-image physical pixels: for hover highlight + single-window capture.
 #[tauri::command]
@@ -16652,7 +16688,9 @@ fn snip_windows(state: State<SnipState>, index: usize) -> Vec<SnipWindow> {
             if w.is_minimized() || w.title().is_empty() {
                 continue;
             }
-            let (gx, gy, ww, wh) = (w.x(), w.y(), w.width() as i32, w.height() as i32);
+            // The hit-test rect is the window's visible frame (title bar and borders
+            // included); xcap's own x/y/width/height is only the client area.
+            let (gx, gy, ww, wh) = snip_window_rect(window_frame_rect(w.id()), (w.x(), w.y(), w.width() as i32, w.height() as i32));
             if ww <= 0 || wh <= 0 {
                 continue;
             }
@@ -37057,6 +37095,15 @@ fn start_sync_poll(app: AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ---- the overlay hit-tests a window by its frame, not its client area ----
+
+    #[test]
+    fn snip_window_rect_prefers_the_frame() {
+        let client = (0, 30, 100, 70);
+        assert_eq!(snip_window_rect(Some((0, 0, 100, 100)), client), (0, 0, 100, 100));
+        assert_eq!(snip_window_rect(None, client), client);
+    }
 
     // ---- the install result file is read with its byte-order mark ----
 
