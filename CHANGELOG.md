@@ -1461,6 +1461,9 @@ the video editor and the introduction tour ship on).
 - **Uninstalling with "delete my data" also removes the temporary working
   files.** Picture crops, filmstrips and working copies in the temp folder go
   with it, and closing the app now removes its own working copies at once.
+- **Switching off the picture text index erases it.** The text read out of
+  attached pictures for searching is removed from every prompt (and the
+  trash) the moment "Search text inside pictures" goes off, not only hidden.
 
 ### Removed
 

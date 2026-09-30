@@ -18996,6 +18996,18 @@ fn cancel_ocr_index_backfill() {
     OCR_INDEX_CANCEL.store(true, Ordering::SeqCst);
 }
 
+// Switching the picture-text index off must not leave the recognized text
+// behind: it is searchable content read out of the user's pictures. Returns
+// whether anything was cleared, so the caller saves only when needed.
+fn clear_image_text(prompts: &mut [Prompt]) -> bool {
+    let mut changed = false;
+    for p in prompts.iter_mut().filter(|p| !p.image_text.is_empty()) {
+        p.image_text.clear();
+        changed = true;
+    }
+    changed
+}
+
 // The expert-menu "read existing pictures" action: every prompt that carries
 // a picture but no index text yet, read once, one at a time -- a single
 // sequential pass, never a flood of parallel OCR calls. Progress and
@@ -27025,10 +27037,20 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
     // lock rather than with the lock held, the way spawn_sync_write_all already
     // does: otherwise every copy, every save and every other window waits for
     // the whole thing to finish.
+    let clear_ocr_index = key == "ocrIndex" && !enabled;
     let snapshot = {
         let mut store = lock(&state);
         store.settings.ui_flags.insert(key, enabled);
         save_settings(&app, &store.settings);
+        if clear_ocr_index {
+            // A running "read existing pictures" pass would write the text straight back.
+            cancel_ocr_index_backfill();
+            let live = clear_image_text(&mut store.prompts);
+            let trashed = clear_image_text(&mut store.trash);
+            if live || trashed {
+                save_prompts_and_trash(&app, &store);
+            }
+        }
         is_sync_enable.then(|| (store.prompts.clone(), store.settings.clone()))
     };
     if let Some((prompts, settings)) = snapshot {
@@ -40986,6 +41008,14 @@ mod tests {
         let mut p = test_prompt(id);
         p.image_text = image_text.into();
         p
+    }
+
+    #[test]
+    fn clear_image_text_empties_every_index_and_reports_whether_it_changed() {
+        let mut prompts = vec![image_text_prompt("a", "invoice total"), image_text_prompt("b", ""), image_text_prompt("c", "receipt")];
+        assert!(clear_image_text(&mut prompts));
+        assert!(prompts.iter().all(|p| p.image_text.is_empty()));
+        assert!(!clear_image_text(&mut prompts), "nothing left to clear the second time");
     }
 
     #[test]
