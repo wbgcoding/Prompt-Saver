@@ -9410,6 +9410,42 @@ fn save_tile_folder(
     Ok(webview_settings(&store.settings))
 }
 
+// The layout step of taking a prompt out of a grid folder onto `cell`. Whoever
+// already sits on that cell moves to the first free cell (folder cells count as
+// taken); with no free cell left the drop is refused and nothing changes. A cell
+// outside the grid places nothing, so the prompt stays library-only.
+fn place_taken_out_member(
+    view: &mut View,
+    folder_cells: &[[u32; 2]],
+    id: &str,
+    cell: [u32; 2],
+) -> Result<(), ()> {
+    if cell[0] >= view.cols || cell[1] >= view.rows {
+        return Ok(());
+    }
+    let key = grid_key(view.cols, view.rows);
+    let occupants: Vec<String> = view
+        .layouts
+        .get(&key)
+        .map(|l| l.iter().filter(|(_, c)| **c == cell).map(|(k, _)| k.clone()).collect())
+        .unwrap_or_default();
+    let mut moved: Vec<(String, [u32; 2])> = Vec::new();
+    let mut scratch = view.clone();
+    for occupant in occupants {
+        let Some(free) = first_free_cell_excluding(&scratch, folder_cells) else {
+            return Err(());
+        };
+        scratch.layouts.entry(key.clone()).or_default().insert(occupant.clone(), free);
+        moved.push((occupant, free));
+    }
+    let layout = view.layouts.entry(key).or_default();
+    for (occupant, free) in moved {
+        layout.insert(occupant, free);
+    }
+    layout.insert(id.to_string(), cell);
+    Ok(())
+}
+
 // Take one prompt out of its folder and put it on `cell` of the folder's view. The
 // second-to-last member leaving dissolves the folder (normalize), which is what makes
 // "drag the last one out" work without a case of its own.
@@ -9430,18 +9466,24 @@ fn take_out_of_tile_folder(
         Some(f) => f.view_id.clone(),
         None => return Err("not in a folder".to_string()),
     };
+    // Every folder cell of that view lives outside view.layouts; a displaced
+    // occupant must not be handed one of them.
+    let folder_cells: Vec<[u32; 2]> = store
+        .settings
+        .tile_folders
+        .iter()
+        .filter(|f| f.view_id == view_id)
+        .map(|f| f.cell)
+        .collect();
+    // Decide the placement first: a drop that cannot be honoured leaves the
+    // member in its folder instead of half-moving it.
+    if let Some(view) = store.settings.views.iter_mut().find(|v| v.id == view_id) {
+        if place_taken_out_member(view, &folder_cells, &id, cell).is_err() {
+            return Err("no free cell".to_string());
+        }
+    }
     for folder in store.settings.tile_folders.iter_mut() {
         folder.members.retain(|m| m != &id);
-    }
-    if let Some(view) = store.settings.views.iter_mut().find(|v| v.id == view_id) {
-        let key = grid_key(view.cols, view.rows);
-        let free = cell[0] < view.cols && cell[1] < view.rows;
-        let layout = view.layouts.entry(key).or_default();
-        if free {
-            // Whoever sits there moves on: the grid never stacks two prompts.
-            layout.retain(|_, c| *c != cell);
-            layout.insert(id, cell);
-        }
     }
     let ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
     let view_ids: Vec<String> = store.settings.views.iter().map(|v| v.id.clone()).collect();
@@ -51355,5 +51397,32 @@ mod tests {
             }
         }
         assert!(checked >= 4, "the scan found only {checked} call sites");
+    }
+
+    #[test]
+    fn taking_a_prompt_out_moves_the_occupant_instead_of_dropping_it() {
+        let mut view = test_view("v");
+        view.cols = 2;
+        view.rows = 1;
+        let key = grid_key(2, 1);
+        view.layouts.entry(key.clone()).or_default().insert("occ".to_string(), [0, 0]);
+        place_taken_out_member(&mut view, &[], "new", [0, 0]).unwrap();
+        let layout = &view.layouts[&key];
+        assert_eq!(layout.get("new"), Some(&[0, 0]));
+        assert_eq!(layout.get("occ"), Some(&[1, 0]), "the occupant keeps a cell");
+    }
+
+    #[test]
+    fn taking_a_prompt_out_is_refused_when_nowhere_is_free() {
+        let mut view = test_view("v");
+        view.cols = 2;
+        view.rows = 1;
+        let key = grid_key(2, 1);
+        view.layouts.entry(key.clone()).or_default().insert("occ".to_string(), [0, 0]);
+        // the second cell belongs to another folder
+        assert!(place_taken_out_member(&mut view, &[[1, 0]], "new", [0, 0]).is_err());
+        let layout = &view.layouts[&key];
+        assert_eq!(layout.get("occ"), Some(&[0, 0]));
+        assert!(layout.get("new").is_none());
     }
 }
