@@ -8072,6 +8072,41 @@ fn list_trash(state: State<Db>) -> Vec<Prompt> {
     lock(&state).trash.clone()
 }
 
+// Moves a trashed prompt back onto the active view and persists it. On a failed
+// write the store is put back exactly as it was: the rollback copy is the FULL
+// settings (never the window copy, which lacks the receiver's password hash and
+// TLS key), so a failed restore cannot strip them from the live store.
+fn restore_trashed_core(store: &mut Store, id: &str, save: impl FnOnce(&Store) -> bool) -> Result<(), String> {
+    let Some(pos) = store.trash.iter().position(|p| p.id == id) else {
+        return Err("not-found".into());
+    };
+    let original_settings = store.settings.clone();
+    let mut p = store.trash.remove(pos);
+    let original_trashed_at = p.trashed_at;
+    p.trashed_at = 0;
+    let folder_cells = active_view_folder_cells(&store.settings);
+    let view = store.settings.active_view_mut();
+    if let Some(cell) = first_free_cell_excluding(view, &folder_cells) {
+        let key = grid_key(view.cols, view.rows);
+        view.layouts.entry(key).or_default().insert(p.id.clone(), cell);
+    }
+    view.members.push(p.id.clone());
+    store.prompts.push(p);
+    // Same atomic prompts+trash write as delete_prompt - on failure, undo the
+    // in-memory move (including the layout cell claimed above) instead of
+    // reporting success for a restore that never reached disk.
+    if !save(store) {
+        if let Some(mut p) = store.prompts.pop() {
+            p.trashed_at = original_trashed_at;
+            let at = pos.min(store.trash.len());
+            store.trash.insert(at, p);
+        }
+        store.settings = original_settings;
+        return Err("save-failed".into());
+    }
+    Ok(())
+}
+
 // Places the restored prompt in the ACTIVE view via the same first_free_cell scan
 // add_prompt already uses for a brand-new prompt: if the view is full, the prompt
 // still comes back (reachable through the library) just without a grid cell of its
@@ -8082,34 +8117,7 @@ fn list_trash(state: State<Db>) -> Vec<Prompt> {
 async fn restore_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Result<AppState, String> {
     let (app_state, restored) = {
         let mut store = lock(&state);
-        let pos = store.trash.iter().position(|p| p.id == id);
-        let Some(pos) = pos else {
-            return Err("not-found".into());
-        };
-        let original_settings = webview_settings(&store.settings);
-        let mut p = store.trash.remove(pos);
-        let original_trashed_at = p.trashed_at;
-        p.trashed_at = 0;
-        let folder_cells = active_view_folder_cells(&store.settings);
-        let view = store.settings.active_view_mut();
-        if let Some(cell) = first_free_cell_excluding(view, &folder_cells) {
-            let key = grid_key(view.cols, view.rows);
-            view.layouts.entry(key).or_default().insert(p.id.clone(), cell);
-        }
-        view.members.push(p.id.clone());
-        store.prompts.push(p);
-        // Same atomic prompts+trash write as delete_prompt - on failure, undo the
-        // in-memory move (including the layout cell claimed above) instead of
-        // reporting success for a restore that never reached disk.
-        if !save_prompts_and_trash(&app, &store) {
-            if let Some(mut p) = store.prompts.pop() {
-                p.trashed_at = original_trashed_at;
-                let at = pos.min(store.trash.len());
-                store.trash.insert(at, p);
-            }
-            store.settings = original_settings;
-            return Err("save-failed".into());
-        }
+        restore_trashed_core(&mut store, &id, |st| save_prompts_and_trash(&app, st))?;
         save_settings(&app, &store.settings);
         let secret_key = secret_session_key(secret_timeout_min(&store.settings));
         (AppState { prompts: slim_prompts(&store.prompts, secret_key), settings: webview_settings(&store.settings) }, true)
@@ -44215,6 +44223,26 @@ mod tests {
         assert_eq!(s.views[0].rows, default_rows());
         assert_eq!(s.theme, default_theme(), "theme back to default");
         assert!(s.ui_flags.is_empty() && s.ui_values.is_empty(), "expert tweaks cleared");
+    }
+
+    #[test]
+    fn a_failed_trash_restore_keeps_the_receiver_secrets_in_the_live_settings() {
+        let mut settings = Settings::default();
+        settings.migrate();
+        let mut store = Store { prompts: Vec::new(), trash: Vec::new(), settings, prompts_locked: false, written: Default::default() };
+        let mut p = test_prompt("trashed");
+        p.id = "t1".into();
+        p.trashed_at = 5;
+        store.trash.push(p);
+        store.settings.ui_texts.insert("remotePasswordHash".into(), "hash".into());
+        store.settings.ui_texts.insert("remoteTlsKey".into(), "sealed".into());
+        let r = restore_trashed_core(&mut store, "t1", |_| false);
+        assert_eq!(r, Err("save-failed".to_string()));
+        assert_eq!(store.settings.ui_texts.get("remotePasswordHash").map(String::as_str), Some("hash"));
+        assert_eq!(store.settings.ui_texts.get("remoteTlsKey").map(String::as_str), Some("sealed"));
+        assert_eq!(store.trash.len(), 1);
+        assert_eq!(store.trash[0].trashed_at, 5);
+        assert!(store.prompts.is_empty());
     }
 
     #[test]
