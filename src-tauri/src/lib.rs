@@ -19102,6 +19102,17 @@ fn cancel_ocr_index_backfill() {
     OCR_INDEX_CANCEL.store(true, Ordering::SeqCst);
 }
 
+// Writes recognized text onto a prompt only while it still shows the picture the text
+// came from and has no text yet: the user may have replaced or removed the picture
+// (or the text may have been refreshed) while the recognition ran.
+fn apply_backfill_text(p: &mut Prompt, recognized_from: &str, text: String) -> bool {
+    if p.image != recognized_from || !p.image_text.is_empty() {
+        return false;
+    }
+    p.image_text = text;
+    true
+}
+
 // The expert-menu "read existing pictures" action: every prompt that carries
 // a picture but no index text yet, read once, one at a time -- a single
 // sequential pass, never a flood of parallel OCR calls. Progress and
@@ -19135,15 +19146,15 @@ async fn ocr_index_backfill(app: AppHandle, state: State<'_, Db>) -> Result<usiz
         };
         if let Some(image) = image {
             if !image.is_empty() {
-                let text = tauri::async_runtime::spawn_blocking(move || ocr_index_text(&image, max_chars))
+                let (text, image) = tauri::async_runtime::spawn_blocking(move || (ocr_index_text(&image, max_chars), image))
                     .await
                     .map_err(|e| e.to_string())?;
                 if !text.is_empty() {
                     let mut store = lock(&state);
-                    if let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) {
-                        p.image_text = text;
+                    let applied = store.prompts.iter_mut().find(|p| p.id == id).is_some_and(|p| apply_backfill_text(p, &image, text));
+                    if applied {
+                        save_prompts(&app, &store);
                     }
-                    save_prompts(&app, &store);
                 }
             }
         }
@@ -37202,6 +37213,25 @@ fn start_sync_poll(app: AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ---- the backfill never writes text for a picture that is gone ----
+
+    #[test]
+    fn backfill_text_is_dropped_when_the_picture_changed_meanwhile() {
+        let mut p = test_prompt("a");
+        p.image = "data:image/png;base64,NEW".to_string();
+        p.image_text = String::new();
+        assert!(!apply_backfill_text(&mut p, "data:image/png;base64,OLD", "old words".to_string()));
+        assert!(p.image_text.is_empty());
+        p.image = String::new();
+        assert!(!apply_backfill_text(&mut p, "data:image/png;base64,OLD", "old words".to_string()));
+        assert!(p.image_text.is_empty());
+        p.image = "data:image/png;base64,SAME".to_string();
+        assert!(apply_backfill_text(&mut p, "data:image/png;base64,SAME", "words".to_string()));
+        assert_eq!(p.image_text, "words");
+        assert!(!apply_backfill_text(&mut p, "data:image/png;base64,SAME", "other".to_string()));
+        assert_eq!(p.image_text, "words");
+    }
 
     // ---- text recognition sees a photo upright ----
 
