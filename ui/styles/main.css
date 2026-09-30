@@ -1176,6 +1176,11 @@ body.noflag-chainQuickStart .tile-chain-start { display: none; }
 /* Same rule as the real grid tile: an image replaces the name, not overlays it. */
 .folder-member-tile.has-image .tile-name { display: none; }
 .folder-member-tile .tile-type { width: 14px; height: 14px; }
+/* Same missing-file banner as the grid tile; the box has a fixed size, so it is
+   its own size container for the banner's text scaling. */
+.folder-member-tile { container-type: size; }
+.folder-member-tile.file-missing { border-color: var(--danger); }
+.folder-member-tile.file-missing .tile-error { display: flex; }
 
 /* Off-screen measurement ruler used by the auto-fit (fixed position keeps
    the subpixel context identical for every measurement). */

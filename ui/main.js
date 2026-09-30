@@ -2329,19 +2329,30 @@ const FLAG_GATES = Object.fromEntries(
 const EXPERT_PRESET_QUIET = ["copyBubble", "copyFlash", "copySound", "undoToast", "whatsNew", "similarHint", "dupImportCheck", "taskbarProgress"];
 // Left out of "All on" because they send something outward or cost time/money
 // rather than simply turning a feature on: image-text search reads a picture the
-// user may not expect read, and online dictation sends audio to Microsoft.
-const EXPERT_PRESET_FULL_EXCLUDE = ["ocrIndex", "voiceOnlineOk"];
+// user may not expect read, and online dictation sends audio to Microsoft. The
+// last four each have their own confirmation step on the switch itself (a
+// password dialog for the receiver, a plaintext-on-disk warning for sync), which
+// a bulk write through set_ui_flag would skip.
+// Demo mode is a session with its own enable and disable commands and a restart,
+// so no bulk action (profile, category reset, reset all) may ever write it.
+const EXPERT_BULK_NEVER = ["demoMode"];
+const EXPERT_PRESET_FULL_EXCLUDE = [
+  "ocrIndex", "voiceOnlineOk", ...EXPERT_BULK_NEVER,
+  "remoteApi", "remoteNetworkFilter", "urlScheme", "promptSync",
+];
 const ALL_EXPERT_FLAG_KEYS = [...ALL_FLAG_KEYS, ...OPT_FLAG_KEYS];
 
 // key -> target value for one profile. "standard" reaches every current and
 // future flag by construction (each one's own shipped default), so the tests
 // only need to watch the two curated lists above for a stale or missing key.
 function expertPresetTarget(name) {
-  if (name === "quiet") return Object.fromEntries(EXPERT_PRESET_QUIET.map((k) => [k, false]));
-  if (name === "full") {
-    return Object.fromEntries(ALL_EXPERT_FLAG_KEYS.filter((k) => !EXPERT_PRESET_FULL_EXCLUDE.includes(k)).map((k) => [k, true]));
-  }
-  return Object.fromEntries(ALL_EXPERT_FLAG_KEYS.map((k) => [k, shipsOn(k)]));
+  let target;
+  if (name === "quiet") target = Object.fromEntries(EXPERT_PRESET_QUIET.map((k) => [k, false]));
+  else if (name === "full") {
+    target = Object.fromEntries(ALL_EXPERT_FLAG_KEYS.filter((k) => !EXPERT_PRESET_FULL_EXCLUDE.includes(k)).map((k) => [k, true]));
+  } else target = Object.fromEntries(ALL_EXPERT_FLAG_KEYS.map((k) => [k, shipsOn(k)]));
+  for (const k of EXPERT_BULK_NEVER) delete target[k];
+  return target;
 }
 const EXPERT_PRESET_TITLES = { quiet: "expertPresetQuiet", standard: "expertPresetStandard", full: "expertPresetFull" };
 
@@ -2384,6 +2395,8 @@ const val = (key) => {
   const cfg = EXPERT_VALUES[key] || EXPERT_SELECTS[key]; // selects live in ui_values too
   const raw = settings.ui_values?.[key];
   const v = Number.isFinite(raw) ? raw : cfg.def;
+  // 0 is this setting's "unlimited" stop, below its slider minimum on purpose.
+  if (cfg.topUnlimited && v === 0) return 0;
   // Clamp to the setting's own range so no stored/imported value can push a
   // slider-bounded setting out of bounds (grid geometry etc. stays always valid).
   if (cfg.stops) {
@@ -2630,6 +2643,7 @@ function syncRowReset(kind, key) {
   if (btn) btn.classList.toggle("hidden", !isRowChanged(kind, key));
 }
 async function resetOneExpertValue(kind, key, after) {
+  if (kind === "flags" && EXPERT_BULK_NEVER.includes(key)) return;
   if (kind === "flags") {
     const enabled = shipsOn(key);
     settings.ui_flags = { ...(settings.ui_flags || {}), [key]: enabled };
@@ -3288,11 +3302,14 @@ const EXPERT_COLORS = {
 // shows a loading placeholder until refreshVideoFolderInfo() resolves.
 let videoFolderInfo = null;
 let videoFolderInfoDir = null;
+let videoFolderGen = 0;
 function refreshVideoFolderInfo(dir) {
   videoFolderInfoDir = dir;
+  videoFolderInfo = null; // the numbers on screen belong to the folder just left
+  const gen = ++videoFolderGen;
   invoke("video_folder_stats", { dir })
-    .then(([count, bytes]) => { videoFolderInfo = { count, bytes }; renderExpert(); })
-    .catch(() => { videoFolderInfo = { count: 0, bytes: 0 }; renderExpert(); });
+    .then(([count, bytes]) => { if (gen === videoFolderGen) { videoFolderInfo = { count, bytes }; renderExpert(); } })
+    .catch(() => { if (gen === videoFolderGen) { videoFolderInfo = { count: 0, bytes: 0 }; renderExpert(); } });
 }
 
 // Switching the Markdown-sync folder. The files in the old folder stay where they
@@ -3644,7 +3661,8 @@ const syncOnlyChangedChip = () =>
 // have no single "default value" to diff against, so they are excluded up in
 // renderExpert() instead of handled here.
 function isRowChanged(kind, key) {
-  if (kind === "flags") return flagState(key) !== shipsOn(key);
+  // A bulk reset never touches these, so they are never offered one.
+  if (kind === "flags") return !EXPERT_BULK_NEVER.includes(key) && flagState(key) !== shipsOn(key);
   if (kind === "values" || kind === "selects") {
     const cfg = EXPERT_VALUES[key] || EXPERT_SELECTS[key];
     return val(key) !== cfg.def;
@@ -4379,7 +4397,7 @@ async function resetExpertGroup(group, changed, count) {
     confirmLabel: t("expertReset"),
   });
   if (!ok) return;
-  for (const key of changed.flags) {
+  for (const key of changed.flags.filter((k) => !EXPERT_BULK_NEVER.includes(k))) {
     const enabled = shipsOn(key);
     settings.ui_flags = { ...(settings.ui_flags || {}), [key]: enabled };
     try { await invoke("set_ui_flag", { key, enabled }); } catch (err) { errToast(err); }
@@ -4408,11 +4426,16 @@ async function resetExpertGroup(group, changed, count) {
 }
 
 async function onResetExpert() {
-  settings.ui_flags = {};
+  // The backend wipes every stored flag, demo mode included. A running demo
+  // session must stay one (leaving it is the switch's own confirmed restart), so
+  // its marker is written back straight after.
+  const keep = EXPERT_BULK_NEVER.filter((k) => flag(k));
+  settings.ui_flags = Object.fromEntries(keep.map((k) => [k, true]));
   settings.ui_values = {};
   settings.ui_texts = {};
   try {
     await invoke("reset_expert");
+    for (const key of keep) await invoke("set_ui_flag", { key, enabled: true });
   } catch (err) {
     errToast(err);
   }
@@ -4439,7 +4462,10 @@ function showExpertPage(on) {
   // wider 3-across settings width.
   settingsEl.classList.toggle("expert-active", on);
   $("settings-title").textContent = on ? t("expertMenu") : t("settings");
-  if (on) renderExpert();
+  if (on) {
+    syncStatusAsked = false; // the sync readout is live: ask again on every open
+    renderExpert();
+  }
 }
 
 // ---- View helpers ----
@@ -4485,6 +4511,7 @@ function refreshFavViewUi() {
 }
 
 function setFavView(on) {
+  if (gridSelected.size) clearGridSelection(); // a selection belongs to what's on screen
   favView = on && favViewEnabled();
   renderGrid(true);
 }
@@ -6623,7 +6650,7 @@ let missingFiles = new Set();
 
 function applyMissingFiles(ids) {
   missingFiles = new Set(ids);
-  document.querySelectorAll(".tile").forEach((tile) => {
+  document.querySelectorAll(".tile, .folder-member-tile").forEach((tile) => {
     tile.classList.toggle("file-missing", missingFiles.has(tile.dataset.id));
   });
 }
@@ -6887,10 +6914,16 @@ window.addEventListener("pointerup", async (e) => {
   await placeTile(id, destCol, destRow);
   if (prevCell && (prevCell[0] !== destCol || prevCell[1] !== destRow)) {
     const [fromCol, fromRow] = prevCell;
+    // The undo belongs to the view the tile was moved in: placeTile reads the view
+    // on screen, so after a tab switch it would pull the tile out of its own view.
+    const movedIn = activeView().id;
     toast(t("tileMoved"), {
       label: t("undo"),
       icon: ICON_UNDO,
-      onClick: () => placeTile(id, fromCol, fromRow),
+      onClick: () => {
+        if (favView || activeView().id !== movedIn) return;
+        placeTile(id, fromCol, fromRow);
+      },
     });
   }
 });
@@ -6979,6 +7012,16 @@ function moveTileDom(id, col, row) {
 // Place a tile at [col,row]; swaps with the occupant. Renders from local
 // state immediately, persistence runs in the background.
 async function placeTile(id, col, row) {
+  // A grid folder is not part of the layout: a tile dropped on its cell takes the
+  // cell and the folder moves to the cell the tile leaves. A tile that has no cell
+  // yet leaves nothing to swap with, so that drop is refused.
+  const onFolder = gridEl.querySelector(`.cell[data-col="${col}"][data-row="${row}"] > .folder-tile`);
+  const folderThere = onFolder ? folderById(onFolder.dataset.folderId) : null;
+  if (folderThere) {
+    const from = layoutOf(activeView())[id];
+    if (!from) return;
+    if (!(await saveFolder(folderThere, { cell: [from[0], from[1]] }))) return;
+  }
   const view = activeView();
   // Off by default: placing a prompt here drops it from every other view it
   // sits in first, keeping the historical "one placement" guarantee. On, a prompt
@@ -7252,10 +7295,21 @@ function openTileFolderPop(f, anchor) {
     } else if (p.color) {
       btn.style.background = p.color;
       btn.style.borderColor = p.color;
+      btn.style.color = readableInk(p.color);
+      btn.style.setProperty("--ink-shadow", inkShadow(p.color));
     }
     const label = document.createElement("span");
     label.className = "tile-name";
     label.textContent = p.name;
+    // Same per-prompt font overrides as the grid tile (0 = follow settings,
+    // 1 = auto-fit, else a fixed size that fitTileText leaves alone).
+    if (p.font) label.style.fontFamily = FONTS[p.font] || "";
+    if (p.font_size === 1) {
+      btn.dataset.fitMode = "auto";
+    } else if (p.font_size > 1) {
+      label.style.fontSize = `${p.font_size}px`;
+      btn.dataset.fitMode = "fixed";
+    }
     btn.appendChild(label);
     const typeIcon = p.file_path
       ? (kind === "video" ? ICON_VIDEO : kind ? ICON_IMAGE : PDF_EXT.test(p.file_path) ? ICON_PDF : ICON_FILE)
@@ -7265,6 +7319,14 @@ function openTileFolderPop(f, anchor) {
       badge.className = "tile-type";
       badge.innerHTML = typeIcon;
       btn.appendChild(badge);
+    }
+    // Same missing-file banner as the grid tile, so a folder never hides a broken prompt.
+    if (p.file_path || p.icon_path) {
+      const err = document.createElement("span");
+      err.className = "tile-error";
+      err.textContent = t("fileMissing");
+      btn.appendChild(err);
+      if (missingFiles.has(p.id)) btn.classList.add("file-missing");
     }
     btn.addEventListener("contextmenu", (ev) => {
       ev.preventDefault();
@@ -7329,7 +7391,9 @@ window.addEventListener("pointerup", async (e) => {
   if (!d.moved) {
     // A plain click copies, exactly like the tile it stands for.
     if (!p) return;
+    if (chainMode) { await toggleChainPick(p); return; } // pick (asks vars), don't copy
     if (dialogTokens(p, await peekRotatedText(p)).length) { await copyTextWithVars(p, d.el); return; }
+    if (autoPasteDouble(d.id)) { await autoPasteNow(d.el); return; } // 2nd fast click pastes
     if (copyOnCooldown(d.id)) return;
     if (await copyResolved(p)) {
       showCopied(d.el);
@@ -8964,12 +9028,14 @@ function bindHotkeyField(input, { id = null, errEl = null, showAllEl = null, cur
       const stored = await onCommit(accel);
       if (stored === null) return; // aborted silently, see onCommit's doc above
       input.value = prettyAccel(stored);
-      reassertHotkeyCapture(); // the field still has the focus
     } catch (err) {
       input.value = prettyAccel(current());
       showErr(hotkeyMessage(String(err)));
     } finally {
       busy = false;
+      // A store re-arms every binding, even when it then fails on another one; the
+      // field still has the focus, so the hotkeys have to come off again either way.
+      reassertHotkeyCapture();
     }
   });
 }
@@ -10716,8 +10782,11 @@ const LANG_CMDS = {
 // Per-kind dialog state, kept independent so switching which dialog is open
 // never loses the other's in-flight scan or install polls.
 const LANG_DIALOG = {
-  ocr: { cache: [], checked: 0, installTimers: {}, installPending: {}, installErrors: {}, elevTimer: null, elevRunning: false, elevLeft: 60 },
-  speech: { cache: [], checked: 0, installTimers: {}, installPending: {}, installErrors: {}, elevTimer: null, elevRunning: false, elevLeft: 60 },
+  // installing: the names whose elevated install was launched and has not reported
+  // back yet. It outlives the dialog (only the pollers stop on close), so a reopened
+  // dialog still knows the row is busy. installChain marks the one live poller per name.
+  ocr: { cache: [], checked: 0, installTimers: {}, installPending: {}, installErrors: {}, installing: new Set(), installChain: {}, elevTimer: null, elevRunning: false, elevLeft: 60 },
+  speech: { cache: [], checked: 0, installTimers: {}, installPending: {}, installErrors: {}, installing: new Set(), installChain: {}, elevTimer: null, elevRunning: false, elevLeft: 60 },
 };
 let langDialogKind = "ocr"; // which kind #ocr-langs-modal currently displays
 function openLangsModal(kind) {
@@ -10731,6 +10800,9 @@ function openLangsModal(kind) {
   // silently doing nothing until the user re-elevates from scratch.
   if (st.elevRunning) { renderLangsLoading(kind); pollElevatedCaps(kind); }
   else loadLangCaps(kind, false);
+  // Installs started before the dialog was closed keep running as OS processes:
+  // pick their result polling back up.
+  for (const name of st.installing) pollLangInstall(kind, name);
 }
 function closeLangsModal() {
   $("ocr-langs-modal").classList.add("hidden");
@@ -10740,6 +10812,7 @@ function closeLangsModal() {
   // nobody is looking. elevRunning itself is left set so reopening resumes.
   for (const id of Object.values(st.installTimers)) clearTimeout(id);
   st.installTimers = {};
+  st.installChain = {};
   if (st.elevTimer) { clearTimeout(st.elevTimer); st.elevTimer = null; }
 }
 async function loadLangCaps(kind, force) {
@@ -10921,7 +10994,7 @@ function langRow(kind, cap) {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "ghost-btn";
-  const busy = !!st.installTimers[cap.name] || !!st.installPending[cap.name];
+  const busy = st.installing.has(cap.name) || !!st.installTimers[cap.name] || !!st.installPending[cap.name];
   btn.disabled = busy;
   // The size sits INSIDE the button label on purpose -- nobody should start a
   // download blind.
@@ -10990,6 +11063,9 @@ const MAX_LANG_INSTALL_POLLS = 200;
 function pollLangInstall(kind, name) {
   const st = LANG_DIALOG[kind];
   if (st.installTimers[name]) return;
+  st.installing.add(name);
+  const chain = {};
+  st.installChain[name] = chain;
   let attempts = 0;
   // setTimeout re-armed after each result, not setInterval -- the callback
   // awaits an invoke, and a reply slower than the 3s tick would otherwise overlap
@@ -10998,9 +11074,13 @@ function pollLangInstall(kind, name) {
     attempts++;
     let res;
     try { res = await invoke(LANG_CMDS[kind].installResult, { name }); } catch (_) { res = undefined; }
+    // The dialog was closed (and maybe reopened, with a fresh poller) while that
+    // answer was on its way: this chain is stale and must not re-arm itself.
+    if (st.installChain[name] !== chain) return;
     if (res == null) {
       if (attempts >= MAX_LANG_INSTALL_POLLS) {
         delete st.installTimers[name];
+        st.installing.delete(name);
         st.installErrors[name] = t("ocrInstallResultTimeout");
         renderLangsBody(kind);
         return;
@@ -11009,6 +11089,7 @@ function pollLangInstall(kind, name) {
       return;
     }
     delete st.installTimers[name];
+    st.installing.delete(name);
     if (res.ok) {
       // Clear both caches so the new pack is selectable immediately, no restart.
       invoke(LANG_CMDS[kind].languages).then((langs) => {
@@ -11057,7 +11138,7 @@ let voiceArmCancelled = false; // stopVoice() was called before voice_start's in
 // already fired -- delivered instead of dropped, but only within the grace
 // window and only to ITS OWN target, never adopted by whatever session (if any)
 // has started in the meantime. Not an expert setting -- internal timing.
-let voicePrev = null; // {token, el, caret, lang, hotkey, endedAt} | null
+let voicePrev = null; // {token, el, caret, lang, hotkey, endedAt, interim} | null
 const VOICE_LATE_GRACE_MS = 3000;
 
 // The two-letter code voice.js's command tables are keyed by, derived from
@@ -11098,6 +11179,11 @@ function endVoiceUi() {
       token: voiceToken,
       el: voiceTargetEl,
       caret: voiceTargetEl.selectionEnd ?? null,
+      // The live partial still sitting in the field: the final text of this very
+      // session replaces it instead of landing next to it.
+      interim: voiceInterim
+        ? { start: voiceInterim.start, len: voiceInterim.len, text: voiceTargetEl.value.substr(voiceInterim.start, voiceInterim.len) }
+        : null,
       lang: voiceResolvedLang,
       hotkey: voiceTargetEl === voiceHotkeyBuffer,
       endedAt: Date.now(),
@@ -11194,6 +11280,14 @@ function deliverLateVoiceText(payload) {
   if (prev.hotkey) { deliverVoiceHotkeyText(processed); return; }
   const el = prev.el;
   if (!el || el.classList.contains("hidden")) return;
+  const part = prev.interim;
+  if (part && el.value.substr(part.start, part.len) === part.text) {
+    // Still exactly the partial the session left behind: swap it for the final text.
+    el.value = el.value.slice(0, part.start) + processed + el.value.slice(part.start + part.len);
+    el.selectionStart = el.selectionEnd = part.start + processed.length;
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    return;
+  }
   const atEnd = txt("voiceInsert") === "end";
   const at = atEnd ? el.value.length : (prev.caret ?? el.value.length);
   insertLateVoiceText(el, processed, at);
@@ -11506,7 +11600,7 @@ const RETENTION_CLEANUP = {
   clipInbox: async () => {
     const items = await invoke("clip_inbox_list").catch(() => []);
     if (!items.length) { toast(t("recSweepNothing")); return; }
-    await invoke("clip_inbox_clear").catch((e) => { errToast(e); return; });
+    try { await invoke("clip_inbox_clear"); } catch (e) { errToast(e); return; }
     undoToast(t("clipInboxClearedToast"), () => restoreClipInbox(items));
   },
   recordings: () => { closeBackups(); openVideoCleanup(EXPERT_PATHS.recordingDir.get()); },
@@ -12760,7 +12854,9 @@ async function confirmModal() {
   try {
     if (modalState.mode === "create") {
       const text = (rotating || hasVariants) ? (rotateFilled[0] || "") : modal.text.value.trim();
-      if (!text) { closeModal(); return; }
+      // Nothing to save yet: keep the dialog (and everything else typed into it)
+      // and point at the missing text, like a missing name does.
+      if (!text) { if (!rotating) modal.text.focus(); return; }
       saved = await invoke("add_prompt", { name, text, color, image, showImage, copyImage, filePath, pdfPage, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste, variants, rotateMode, rotateAuto });
       inputEl.value = "";
       autoGrow(inputEl);
@@ -17938,10 +18034,11 @@ function bind() {
     const keptOps = SE.ops
       .filter((o) => o.tool === "crop")
       .map((o) => ({ ...o, rect: { x: o.rect.x * sx, y: o.rect.y * sy, w: o.rect.w * sx, h: o.rect.h * sy } }));
+    const prevFloor = SE.floor;
     SE.floor = Math.max(0, SE.floor - (prevOps.length - keptOps.length));
     const op = {
       tool: "scale", w: targetW, h: targetH, img: baked, rawCanvas: rawBaked, keptOps,
-      prevW, prevH, prevImg, prevRawCanvas, prevOps,
+      prevW, prevH, prevImg, prevRawCanvas, prevOps, prevFloor,
     };
     SE.img = baked;
     SE.rawCanvas = rawBaked;
@@ -17977,7 +18074,10 @@ function bind() {
     if (SE.ops.length <= SE.floor) return;
     const op = SE.ops.pop();
     SE.redo.push(op);
-    if (op.tool === "scale") snipEditRestoreScaleState(op.prevW, op.prevH, op.prevImg, op.prevRawCanvas, op.prevOps);
+    if (op.tool === "scale") {
+      snipEditRestoreScaleState(op.prevW, op.prevH, op.prevImg, op.prevRawCanvas, op.prevOps);
+      SE.floor = op.prevFloor; // the undo limit as it was before the resize
+    }
     snipEditDeselectShape();
     SE.lastNudged = null;
     snipEditUpdateNudgeHint();
@@ -17988,7 +18088,12 @@ function bind() {
     if (!SE.redo.length) return;
     const op = SE.redo.pop();
     SE.ops.push(op);
-    if (op.tool === "scale") snipEditRestoreScaleState(op.w, op.h, op.img, op.rawCanvas, [...op.keptOps, op]);
+    if (op.tool === "scale") {
+      snipEditRestoreScaleState(op.w, op.h, op.img, op.rawCanvas, [...op.keptOps, op]);
+      // The floor the resize itself produced, worked out the same way it was then.
+      SE.floor = Math.max(0, op.prevFloor - (op.prevOps.length - op.keptOps.length));
+      if (SE.ops.length - SE.floor > SNIP_EDIT_UNDO_MAX()) SE.floor = SE.ops.length - SNIP_EDIT_UNDO_MAX();
+    }
     snipEditDeselectShape();
     SE.lastNudged = null;
     snipEditUpdateNudgeHint();
@@ -18105,6 +18210,9 @@ function bind() {
     if (shift && orig.w && orig.h) {
       const ratio = orig.w / orig.h;
       if (handle === "n" || handle === "s") nr.w = nr.h * ratio; else nr.h = nr.w / ratio;
+      // The edge opposite a top handle is the anchor: re-derive the top from it, or
+      // the new height would push that fixed edge around.
+      if (handle.includes("n")) nr.y = y <= y2 ? y2 - nr.h : y2;
     }
     return nr;
   }
@@ -19326,8 +19434,11 @@ function bind() {
         pendingSnipPath = (await invoke("save_screenshot_now", { dataUrl: pendingSnip }).catch(() => "")) || "";
       }
     } else if (pendingSnipPath) {
-      invoke("delete_screenshot_file", { path: pendingSnipPath }).catch(() => {});
-      pendingSnipPath = "";
+      // The command answers false (it does not reject) when the file could not be
+      // removed: then the path is still the saved copy, and turning the switch back
+      // on must not write a second one next to it.
+      const removed = await invoke("delete_screenshot_file", { path: pendingSnipPath }).catch(() => false);
+      if (removed) pendingSnipPath = "";
     }
   });
   $("snip-modal-saveas").addEventListener("click", async () => {
@@ -19845,7 +19956,8 @@ function bind() {
   $("clip-modal").addEventListener("pointerdown", (e) => { if (e.target === $("clip-modal")) $("clip-modal").classList.add("hidden"); });
   $("clip-clear").addEventListener("click", async () => {
     const items = await invoke("clip_inbox_list").catch(() => []);
-    await invoke("clip_inbox_clear").catch((e) => errToast(e));
+    // A clear that failed left every row in place: no "cleared" toast, no undo.
+    try { await invoke("clip_inbox_clear"); } catch (e) { errToast(e); return; }
     refreshClipInbox();
     undoToast(t("clipInboxClearedToast"), () => restoreClipInbox(items));
   });

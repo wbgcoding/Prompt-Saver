@@ -1309,6 +1309,22 @@ the video editor and the introduction tour ship on).
   instead of keeping its own proportions the way the export does. It is now
   letterboxed in the preview too, with the same black bars export adds.
 
+- **Main window, settings and screenshot editor fixes.** Dropping a tile on a
+  folder now sends the folder to the cell the tile left, and the undo offer
+  stays with the view it was made in. Switching to the favourites grid clears
+  the grid selection. A folder's members behave like the tiles they stand for:
+  a fast second click pastes, a click in chain mode adds the prompt to the
+  chain, a missing file is flagged, and the prompt's own font, size and text
+  colour are used. The remote access rate limit keeps showing Unlimited after a
+  redraw, the video folder numbers and the sync readout follow the current
+  folder and open, and a running language install stays busy when its dialog is
+  reopened. A refused hotkey no longer leaves the field capturing the wrong
+  combination, saving a new prompt without text keeps the dialog and what was
+  typed, a dictation result arriving late replaces its live partial, a failed
+  clipboard inbox clear offers no undo, undoing a resize no longer unlocks
+  steps behind the undo limit, a shift-drag of a top crop corner keeps the
+  bottom edge still, and a screenshot whose delete failed is not saved twice.
+
 ### Security
 
 - **A settings or backup file can no longer switch on remote access or other
@@ -1428,6 +1444,11 @@ the video editor and the introduction tour ship on).
 - Corrected the help text's count of the app's own network activity: it now
   also names the update download itself, the GitHub link from the logo or
   version label, and the Windows language-pack install.
+- **"All on", the profiles and the resets in the expert menu no longer flip the
+  switches that have their own confirmation.** Remote access, its network
+  switch, the URL scheme and the Markdown sync are skipped by "All on", and
+  demo mode is never written by a profile or a reset, so a running demo session
+  also survives "Reset expert menu".
 
 ### Removed
 

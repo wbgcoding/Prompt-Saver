@@ -9315,6 +9315,11 @@ PROBE = """
           }
         }
         window.__OCR_INSTALL_GATE__ = null;
+        // The install above counts as still running across the close, and the
+        // reopened dialog polls its result again: keep that result pending so the
+        // elevated-listing check below is not interrupted by a finished install's
+        // reload.
+        RESULTS.ocr_install_result = () => null;
         document.getElementById('ocr-langs-close-x').click();
         await sleep(100);
       }
@@ -15950,6 +15955,516 @@ def main():
         failed += len(errs)
         if not errs:
             print("   ok")
+        # ---- main window findings: generated block begin ----
+        ar_scaffold = r"""
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const until = async (fn, tries) => { for (let i = 0; i < (tries || 100) && !fn(); i++) await sleep(50); return fn(); };
+  try {
+%s
+%s
+  } catch (e) { errs.push('probe threw: ' + e.message); }
+  errs.push(...(window.__SMOKE_ERRORS__ || []));
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+        def ar_probe(tag, label, page, size, pre, body):
+            side = tmp / "ui" / f"ar-{tag}.html"
+            side.write_text(
+                (REPO / "ui" / f"{page}.html").read_text(encoding="utf-8")
+                .replace("<script", pre + '<script src="tauri_stub.js"></script>\n<script', 1)
+                .replace("</body>", ar_scaffold % (ar_common, body) + "</body>"),
+                encoding="utf-8")
+            w, h = size.split("x")
+            proc = subprocess.run(
+                [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+                 f"--user-data-dir={tmp / ('profile-ar-' + tag)}", "--allow-file-access-from-files",
+                 f"--window-size={w},{h}", "--virtual-time-budget=45000",
+                 "--dump-dom", side.as_uri()],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=180)
+            m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+            errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+            print(f"-- {label}")
+            for e in errs:
+                print(f"   FAIL: {e}")
+            if not errs:
+                print("   ok")
+            return len(errs)
+
+        ar_common = r"""
+    const visible = (el) => !!el && !el.classList.contains('hidden');
+    const callsFor = (cmd) => (window.__SMOKE_ARGS__ || []).filter(([c]) => c === cmd).map(([, a]) => a);
+    const tileEl = (id) => document.querySelector('#grid .tile[data-id="' + id + '"]');
+    const centre = (el) => { const r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
+    const ptr = (type, x, y, el, extra) => (el || window).dispatchEvent(new PointerEvent(type, Object.assign({
+      bubbles: true, cancelable: true, button: 0, isPrimary: true, pointerId: 6, clientX: x, clientY: y,
+    }, extra || {})));
+    const dragTo = async (tile, tx, ty) => {
+      const [sx, sy] = centre(tile);
+      ptr('pointerdown', sx, sy, tile);
+      ptr('pointermove', sx + 8, sy - 8, tile);
+      await sleep(60);
+      ptr('pointermove', tx, ty, window);
+      await sleep(60);
+    };
+    const endDrag = async (x, y) => { ptr('pointerup', x, y, window); await sleep(300); };
+    const bootReady = async () => {
+      await until(() => document.querySelectorAll('#grid .tile').length > 0, 200);
+      const cm = document.getElementById('confirm-modal');
+      for (let i = 0; i < 60 && !visible(cm); i++) await sleep(50);
+      if (visible(cm)) { document.getElementById('confirm-cancel').click(); await sleep(300); }
+    };
+    const cellEl = (c, r) => document.querySelector('#grid .cell[data-col="' + c + '"][data-row="' + r + '"]');
+"""
+
+        failed += ar_probe('f1', 'grid folder: a tile dropped on its cell sends the folder to the vacated cell', 'index', '1000x780', '', r"""
+    await bootReady();
+    const folderCell = () => { const c = document.querySelector('#grid .cell .folder-tile'); return c ? [Number(c.parentElement.dataset.col), Number(c.parentElement.dataset.row)] : null; };
+    const tabFor = (id) => document.querySelector('.view-btn[data-view-id="' + id + '"]');
+    const before = folderCell();
+    if (!before || before[0] !== 0 || before[1] !== 1) errs.push('563-1: fixture folder not at [0,1], got ' + JSON.stringify(before));
+    // p9 sits at [1,2]; the first free cell after the move would be [2,1], not the vacated one
+    const srcCell = tileEl('p9').parentElement;
+    const old = [Number(srcCell.dataset.col), Number(srcCell.dataset.row)];
+    await dragTo(tileEl('p9'), ...centre(cellEl(0, 1)));
+    await endDrag(...centre(cellEl(0, 1)));
+    const p9At = tileEl('p9').parentElement;
+    if (p9At.dataset.col !== '0' || p9At.dataset.row !== '1') errs.push('563-1: the drop did not land p9 on [0,1]');
+    // a full render from the stored layout, as any later refresh does
+    tabFor('work').click(); await sleep(250);
+    tabFor('home').click(); await sleep(300);
+    const after = folderCell();
+    if (!after || after[0] !== old[0] || after[1] !== old[1]) {
+      errs.push('563-1: dropping a tile on the folder cell should put the folder on the vacated cell ' + JSON.stringify(old) + ', got ' + JSON.stringify(after));
+    }
+""")
+        failed += ar_probe('f2', 'grid undo toast: a tab switch before Undo leaves both views alone', 'index', '1000x780', '', r"""
+    await bootReady();
+    const tabFor = (id) => document.querySelector('.view-btn[data-view-id="' + id + '"]');
+    const before = JSON.stringify(layoutRead());
+    function layoutRead() {
+      const o = {};
+      document.querySelectorAll('#grid .cell .tile:not(.folder-tile)').forEach((t) => { o[t.dataset.id] = t.parentElement.dataset.col + ',' + t.parentElement.dataset.row; });
+      return o;
+    }
+    // p9 (cell 1,2) moves to the empty cell 2,2 and the undo toast appears
+    await dragTo(tileEl('p9'), ...centre(cellEl(2, 2)));
+    await endDrag(...centre(cellEl(2, 2)));
+    const movedTo = tileEl('p9') && tileEl('p9').parentElement;
+    if (!movedTo || movedTo.dataset.col !== '2' || movedTo.dataset.row !== '2') errs.push('563-2: the move to 2,2 did not happen');
+    const btn = document.querySelector('#toast .toast-btn');
+    if (!btn) { errs.push('563-2: no undo toast after the move'); }
+    else {
+      tabFor('work').click(); await sleep(300);
+      const work = JSON.stringify(layoutRead());
+      window.__SMOKE_ARGS__.length = 0;
+      btn.click(); await sleep(300);
+      const removes = callsFor('batch_prompts').filter((a) => a && a.action === 'removeView');
+      const layouts = callsFor('set_layout');
+      if (removes.length) errs.push('563-2: Undo after a tab switch removed the prompt from another view: ' + JSON.stringify(removes));
+      if (layouts.length) errs.push('563-2: Undo after a tab switch rewrote the layout of the view on screen');
+      if (JSON.stringify(layoutRead()) !== work) errs.push('563-2: the view on screen changed by Undo');
+      tabFor('home').click(); await sleep(300);
+      const p9 = tileEl('p9') && tileEl('p9').parentElement;
+      if (!p9 || p9.dataset.col !== '2' || p9.dataset.row !== '2') errs.push('563-2: the original view lost the moved tile position');
+    }
+""")
+        failed += ar_probe('f4', 'favorites grid: switching to it clears the grid selection', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { favView: true, favViewButton: true } };</script>\n', r"""
+    await bootReady();
+    const bar = document.getElementById('grid-batch-bar');
+    tileEl('p1').querySelector('.tile-select').click();
+    await sleep(150);
+    if (bar.classList.contains('hidden')) errs.push('563-4: selecting a tile did not show the batch bar (fixture)');
+    const fav = document.getElementById('fav-view-btn');
+    if (fav.classList.contains('hidden')) errs.push('563-4: the favorites toggle is not shown (fixture)');
+    fav.click();
+    await sleep(250);
+    if (!bar.classList.contains('hidden')) errs.push('563-4: the batch bar stayed visible after switching to the favorites grid');
+    if (document.body.classList.contains('grid-selecting')) errs.push('563-4: the grid stayed in selection mode after switching to the favorites grid');
+""")
+        failed += ar_probe('f11', 'folder popover member: a click in chain mode picks the prompt for the chain', 'index', '1000x780', '', r"""
+    await bootReady();
+    const click = async (el) => { const [x, y] = centre(el); ptr('pointerdown', x, y, el); ptr('pointerup', x, y, window); await sleep(300); };
+    document.getElementById('chain-btn').click();
+    await sleep(200);
+    await click(tileEl('p0'));
+    const copies = () => callsFor('copy_text').map((a) => a && a.text);
+    if (!copies().some((x) => /number 1[.]/.test(x || ''))) errs.push('563-11: fixture: the chain pick of p0 did not copy its text, got ' + JSON.stringify(copies()));
+    await click(document.querySelector('#grid .folder-tile'));
+    const member = document.querySelector('.folder-member-tile[data-id="p4"]');
+    if (!member) { errs.push('563-11: the folder popover did not open'); }
+    else {
+      await click(member);
+      const last = copies().pop() || '';
+      if (!(/number 1[.]/.test(last) && /number 5[.]/.test(last))) errs.push('563-11: a member click in chain mode replaced the chain text instead of adding a step, clipboard now: ' + JSON.stringify(last));
+    }
+""")
+        failed += ar_probe('f10', 'folder popover member: a fast second click pastes like the grid tile', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { autoPaste: true } };</script>\n', r"""
+    await bootReady();
+    const click = async (el) => { const [x, y] = centre(el); ptr('pointerdown', x, y, el); ptr('pointerup', x, y, window); await sleep(60); };
+    await click(document.querySelector('#grid .folder-tile'));
+    await sleep(200);
+    const member = document.querySelector('.folder-member-tile[data-id="p4"]');
+    if (!member) { errs.push('563-10: the folder popover did not open'); }
+    else {
+      window.__SMOKE_ARGS__.length = 0;
+      await click(member);
+      await click(member);
+      await sleep(300);
+      if (!callsFor('copy_prompt').length) errs.push('563-10: the first member click did not copy');
+      if (!callsFor('paste_into_previous').length) errs.push('563-10: a fast second member click did not paste into the previous window');
+    }
+""")
+        failed += ar_probe('f13', 'folder popover member: missing file banner like the grid tile', 'index', '1000x780', '', r"""
+    await bootReady();
+    const click = async (el) => { const [x, y] = centre(el); ptr('pointerdown', x, y, el); ptr('pointerup', x, y, window); await sleep(200); };
+    window.__FIRE__('missing-files', ['p11']);
+    await sleep(100);
+    await click(document.querySelector('#grid .folder-tile'));
+    const member = () => document.querySelector('.folder-member-tile[data-id="p11"]');
+    if (!member()) { errs.push('563-13: the folder popover did not open'); }
+    else {
+      if (!member().classList.contains('file-missing')) errs.push('563-13: a member whose file is missing has no file-missing class');
+      const banner = member().querySelector('.tile-error');
+      if (!banner) errs.push('563-13: a member with an attached file has no missing-file banner element');
+      else if (getComputedStyle(banner).display === 'none') errs.push('563-13: the missing-file banner of a member is not shown');
+      window.__FIRE__('missing-files', []);
+      await sleep(100);
+      if (member().classList.contains('file-missing')) errs.push('563-13: the open popover kept file-missing after the file came back');
+      window.__FIRE__('missing-files', ['p11']);
+      await sleep(100);
+      if (!member().classList.contains('file-missing')) errs.push('563-13: the open popover did not pick up a file going missing');
+    }
+""")
+        failed += ar_probe('f14', 'folder popover member: per-prompt font, size and ink like the grid tile', 'index', '1000x780', '', r"""
+    await bootReady();
+    const click = async (el) => { const [x, y] = centre(el); ptr('pointerdown', x, y, el); ptr('pointerup', x, y, window); await sleep(200); };
+    PROMPTS[4].font_size = 20;
+    PROMPTS[4].font = 'mono';
+    PROMPTS[6].font_size = 1;
+    PROMPTS[8].color = '#fde047';
+    const tabFor = (id) => document.querySelector('.view-btn[data-view-id="' + id + '"]');
+    tabFor('work').click(); await sleep(250);
+    tabFor('home').click(); await sleep(300);
+    await click(document.querySelector('#grid .folder-tile'));
+    const m = (id) => document.querySelector('.folder-member-tile[data-id="' + id + '"]');
+    if (!m('p4')) { errs.push('563-14: the folder popover did not open'); }
+    else {
+      const l4 = m('p4').querySelector('.tile-name');
+      if (l4.style.fontSize !== '20px') errs.push('563-14: a fixed-size prompt label has font size ' + JSON.stringify(l4.style.fontSize) + ', expected 20px');
+      if (m('p4').dataset.fitMode !== 'fixed') errs.push('563-14: fitMode of a fixed-size member is ' + m('p4').dataset.fitMode);
+      if (!l4.style.fontFamily) errs.push('563-14: the per-prompt font family is not applied to the member label');
+      if (m('p6').dataset.fitMode !== 'auto') errs.push('563-14: fitMode of an auto-size member is ' + m('p6').dataset.fitMode);
+      const ink = m('p8').style.color;
+      if (ink !== 'rgb(0, 0, 0)' && ink !== '#000' && ink !== 'black') errs.push('563-14: a light tinted member has ink ' + JSON.stringify(ink) + ', expected a dark one');
+    }
+""")
+        failed += ar_probe('g2', 'expert menu bulk actions never flip demo mode, remote access, network, sync or the URL scheme', 'index', '1000x780', '<script>window.__DEMO_TEST__ = true;</script>\n', r"""
+    await bootReady();
+    const flagCalls = () => callsFor('set_ui_flag');
+    const DANGEROUS = ['demoMode', 'remoteApi', 'remoteNetworkFilter', 'urlScheme', 'promptSync'];
+    document.getElementById('gear').click();
+    await sleep(200);
+    document.getElementById('expert-open').click();
+    await sleep(300);
+    const cm = document.getElementById('confirm-modal');
+    const preset = async (id) => {
+      window.__SMOKE_ARGS__.length = 0;
+      document.getElementById(id).click();
+      await sleep(250);
+      if (!visible(cm)) { return false; }
+      document.getElementById('confirm-ok').click();
+      await sleep(400);
+      return true;
+    };
+    // per-category reset: the System category holds the demo switch
+    const tabs = [...document.querySelectorAll('#expert-tabs-bar .expert-tab')];
+    let reset = null;
+    for (const tb of tabs) {
+      tb.click(); await sleep(80);
+      const grp = [...document.querySelectorAll('#expert-flags .expert-group')].find((g) => [...g.querySelectorAll('.switch-field span')].some((s) => s.textContent === 'Demo mode'));
+      if (grp) { reset = grp.querySelector('.expert-group-reset'); break; }
+    }
+    window.__SMOKE_ARGS__.length = 0;
+    if (reset) {
+      reset.click(); await sleep(250);
+      if (visible(cm)) { document.getElementById('confirm-ok').click(); await sleep(400); }
+    }
+    if (flagCalls().some((a) => a.key === 'demoMode')) errs.push('564-2: the category reset wrote demoMode');
+    // per-row reset icon of the demo switch must not exist
+    const rowBtn = [...document.querySelectorAll('#expert-flags .switch-field')].find((r) => (r.querySelector('span') || {}).textContent === 'Demo mode');
+    const rowReset = rowBtn && rowBtn.querySelector('.expert-row-reset');
+    if (rowReset && !rowReset.classList.contains('hidden')) errs.push('564-2: the demo switch offers a per-row reset');
+    if (!(await preset('expert-preset-full'))) errs.push('564-2: All on showed no confirmation in the fixture');
+    const afterFull = flagCalls().filter((a) => DANGEROUS.includes(a.key));
+    if (afterFull.length) errs.push('564-2: All on wrote ' + JSON.stringify(afterFull));
+    const multi = flagCalls().filter((a) => a.key === 'allowMultipleInstances');
+    await preset('expert-preset-standard');
+    const afterStd = flagCalls().filter((a) => DANGEROUS.includes(a.key) && a.enabled !== false);
+    if (flagCalls().some((a) => a.key === 'demoMode')) errs.push('564-2: the Standard profile wrote demoMode during a demo session');
+    if (afterStd.length) errs.push('564-2: the Standard profile switched something on: ' + JSON.stringify(afterStd));
+    // reset all: the backend wipes the flag, so the marker is written back
+    window.__SMOKE_ARGS__.length = 0;
+    const rb = document.getElementById('expert-reset');
+    rb.click(); await sleep(150);
+    rb.click(); await sleep(500);
+    const seq = (window.__SMOKE_ARGS__ || []).filter(([c, a]) => c === 'reset_expert' || (c === 'set_ui_flag' && a.key === 'demoMode'));
+    if (!seq.length || seq[0][0] !== 'reset_expert') errs.push('564-2: reset all did not run reset_expert');
+    const back = seq.find(([c, a]) => c === 'set_ui_flag' && a.key === 'demoMode');
+    if (!back || back[1].enabled !== true) errs.push('564-2: reset all left a running demo session without its marker');
+""")
+        failed += ar_probe('g3', 'expert menu: a stored remote rate limit of 0 (unlimited) shows as unlimited, not 5/min', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { remoteApi: true }, ui_values: { remoteRateLimit: 0 } };</script>\n', r"""
+    await bootReady();
+    document.getElementById('gear').click(); await sleep(200);
+    document.getElementById('expert-open').click(); await sleep(300);
+    let row = null;
+    for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+      tb.click(); await sleep(80);
+      row = document.querySelector('#expert-flags [data-setting-row="remoteRateLimit"]');
+      if (row) break;
+    }
+    if (!row) { errs.push('564-3: the remote rate limit row was not found'); }
+    else {
+      const out = row.querySelector('.value-out').textContent;
+      if (out !== 'Unlimited') errs.push('564-3: the stored 0 shows as ' + JSON.stringify(out) + ', expected Unlimited');
+    }
+""")
+        failed += ar_probe('g4', 'expert menu: video folder numbers follow the folder, a late answer for an old folder is ignored', 'index', '1000x780', '', r"""
+    await bootReady();
+    const gates = [];
+    RESULTS.video_folder_stats = (a) => new Promise((res) => gates.push({ dir: a.dir, res }));
+    document.getElementById('gear').click(); await sleep(200);
+    document.getElementById('expert-open').click(); await sleep(300);
+    const statsEl = () => document.querySelector('.path-video-stats');
+    for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+      tb.click(); await sleep(80);
+      if (statsEl()) break;
+    }
+    if (!statsEl()) { errs.push('564-4: the video folder row was not found'); }
+    else {
+      const line = () => statsEl().querySelector('span').textContent;
+      const change = async (dir) => {
+        window.__PICK_FOLDER__ = dir;
+        statsEl().parentElement.querySelector('.path-btns button').click();
+        await sleep(300);
+      };
+      if (gates.length < 1) errs.push('564-4: opening the row did not ask for the folder stats');
+      gates[0].res([2, 2048]);
+      await sleep(200);
+      if (!/\b2\b/.test(line())) errs.push('564-4: fixture: first folder numbers missing: ' + line());
+      await change('C:\Videos\B');
+      if (/\b2\b/.test(line())) errs.push('564-4: the old folder numbers stayed on screen after picking another folder: ' + line());
+      if (!statsEl().querySelector('button').disabled) errs.push('564-4: the cleanup button stayed enabled for a folder that is not measured yet');
+      await change('C:\Videos\C');
+      const byDir = (d) => gates.find((g) => g.dir === d);
+      if (!byDir('C:\Videos\B') || !byDir('C:\Videos\C')) errs.push('564-4: fixture: both folder reads were not started');
+      else {
+        byDir('C:\Videos\C').res([7, 7168]);
+        await sleep(200);
+        byDir('C:\Videos\B').res([5, 5120]);
+        await sleep(200);
+        if (!/\b7\b/.test(line())) errs.push('564-4: a late answer for an older folder replaced the current numbers: ' + line());
+      }
+    }
+""")
+        failed += ar_probe('g6', 'expert menu: the sync readout is asked again each time the menu opens', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { promptSync: true } };</script>\n', r"""
+    await bootReady();
+    document.getElementById('gear').click(); await sleep(200);
+    window.__SMOKE_ARGS__.length = 0;
+    document.getElementById('expert-open').click(); await sleep(400);
+    for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+      tb.click(); await sleep(80);
+      if (document.querySelector('.path-sync-stats')) break;
+    }
+    if (!document.querySelector('.path-sync-stats')) errs.push('564-6: the sync readout row was not found');
+    const asked = () => callsFor('sync_status').length;
+    const first = asked();
+    if (first < 1) errs.push('564-6: opening the menu did not ask for the sync status');
+    document.getElementById('expert-back').click(); await sleep(200);
+    document.getElementById('expert-open').click(); await sleep(400);
+    for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+      tb.click(); await sleep(80);
+      if (document.querySelector('.path-sync-stats')) break;
+    }
+    if (asked() <= first) errs.push('564-6: reopening the menu reused the first answer of the session (' + asked() + ' request(s))');
+""")
+        failed += ar_probe('g33', 'language dialog: a running install stays busy after the dialog is closed and reopened', 'index', '1000x780', '', r"""
+    await bootReady();
+    window.__OCR_CAPS_TEST__ = [
+      { name: 'Language.OCR~~~ja-JP~0.0.1.0', tag: 'ja-JP', label: 'Japanese', state: 'NotPresent', version: '0.0.1.0', download_size: 1000000, install_size: null },
+    ];
+    RESULTS.ocr_install_result = () => null;
+    document.getElementById('gear').click(); await sleep(200);
+    document.getElementById('expert-open').click(); await sleep(300);
+    let opener = null;
+    for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+      tb.click(); await sleep(80);
+      opener = [...document.querySelectorAll('#expert-flags .expert-action')].find((r) => /languages/i.test(r.textContent) && r.closest('.expert-group') && /text recognition|ocr|image/i.test(r.closest('.expert-group').textContent));
+      if (opener) break;
+    }
+    if (!opener) { errs.push('564-33: the language dialog opener was not found'); }
+    else {
+      const modal = document.getElementById('ocr-langs-modal');
+      const btn = () => document.querySelector('#ocr-langs-body .ocr-lang-row .ghost-btn');
+      opener.click(); await sleep(300);
+      if (!btn()) { errs.push('564-33: no download button in the dialog'); }
+      else {
+        btn().click(); await sleep(200);
+        document.getElementById('confirm-ok').click(); await sleep(400);
+        if (!btn().disabled) errs.push('564-33: fixture: the row is not busy while the install runs');
+        document.getElementById('ocr-langs-close-x').click(); await sleep(200);
+        opener.click(); await sleep(400);
+        if (!btn()) errs.push('564-33: no download button after reopening');
+        else if (!btn().disabled) errs.push('564-33: after reopening the dialog the Download button is enabled while the install still runs');
+        const started = callsFor('ocr_install_language').length;
+        if (started !== 1) errs.push('564-33: expected one install start, got ' + started);
+      }
+    }
+""")
+        failed += ar_probe('g35', 'hotkey field: a refused capture leaves the global hotkeys off while the field has focus', 'index', '1000x780', '', r"""
+    await bootReady();
+    document.getElementById('gear').click(); await sleep(250);
+    const input = document.getElementById('opt-hotkey');
+    input.focus(); await sleep(150);
+    const capture = () => callsFor('set_hotkey_capture');
+    if (!capture().some((a) => a && a.active === true)) errs.push('564-35: fixture: focusing the field did not switch capture on');
+    window.__SMOKE_ARGS__.length = 0;
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', ctrlKey: true, altKey: true, bubbles: true, cancelable: true }));
+    await sleep(400);
+    if (!callsFor('set_hotkey').length) errs.push('564-35: fixture: the keydown did not reach set_hotkey');
+    if (document.activeElement !== input) errs.push('564-35: fixture: the field lost the focus');
+    if (!capture().some((a) => a && a.active === true)) errs.push('564-35: after a refused combination the hotkeys were not taken off again while the field still has focus');
+""")
+        failed += ar_probe('m1', 'create dialog: saving with an empty text keeps the dialog and what was typed', 'index', '1000x780', '', r"""
+    await bootReady();
+    const empty = [...document.querySelectorAll('#grid .cell')].find((c) => !c.firstElementChild);
+    if (!empty) { errs.push('564-m1: no empty cell in the fixture'); }
+    else {
+      empty.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); await sleep(250);
+      const modal = document.getElementById('modal');
+      if (modal.classList.contains('hidden')) errs.push('564-m1: fixture: the create dialog did not open');
+      document.getElementById('modal-name').value = 'Keep this name';
+      document.getElementById('modal-text').value = '';
+      window.__SMOKE_ARGS__.length = 0;
+      document.getElementById('modal-confirm').click(); await sleep(300);
+      if (modal.classList.contains('hidden')) errs.push('564-m1: saving with an empty text closed the dialog and dropped the typed name');
+      else if (document.getElementById('modal-name').value !== 'Keep this name') errs.push('564-m1: the typed name was lost');
+      if (callsFor('add_prompt').length) errs.push('564-m1: an empty prompt was saved');
+      if (!modal.classList.contains('hidden') && document.activeElement !== document.getElementById('modal-text')) errs.push('564-m1: the text field was not focused for the missing text');
+      if (document.getElementById('modal-confirm').disabled) errs.push('564-m1: Save stayed disabled after the refused save');
+    }
+""")
+        failed += ar_probe('v2', 'dictation: a final text that lands late replaces the live partial instead of doubling it', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { voiceInterim: true } };</script>\n', r"""
+    await bootReady();
+    const btn = document.getElementById('voice-btn');
+    const input = document.getElementById('input');
+    input.value = '';
+    btn.click(); await sleep(100);
+    window.__FIRE__('voice-partial', { id: 1, token: 1, text: 'hello' });
+    await sleep(50);
+    if (input.value.trim() !== 'hello') errs.push('564-v2: fixture: the partial did not land, got ' + JSON.stringify(input.value));
+    window.__FIRE__('voice-stopped', { id: 1, token: 1, reason: 'manual' });
+    await sleep(50);
+    window.__FIRE__('voice-text', { id: 1, token: 1, text: 'hello world' });
+    await sleep(100);
+    if (input.value.trim() !== 'hello world') errs.push('564-v2: the late final text should replace the partial, field holds ' + JSON.stringify(input.value));
+""")
+        failed += ar_probe('c3', 'clipboard inbox: a failed clear offers no undo (storage panel and inbox dialog)', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { clipWatcher: true } };</script>\n', r"""
+    await bootReady();
+    RESULTS.clip_inbox_clear = () => { throw 'delete-incomplete'; };
+    const undoBtn = () => document.querySelector('#toast .toast-btn');
+    // 1) the retention row of the backups dialog
+    document.getElementById('gear').click(); await sleep(200);
+    document.getElementById('settings-backup-btn').click(); await sleep(400);
+    const row = document.querySelector('#retention-panel [data-setting-row="retention-clipInbox"]');
+    const clean = row && row.querySelectorAll('.import-preview-actions button')[1];
+    if (!clean) { errs.push('564-c3: the clipboard inbox cleanup button was not found'); }
+    else {
+      window.__SMOKE_ARGS__.length = 0;
+      clean.click(); await sleep(400);
+      if (!callsFor('clip_inbox_clear').length) errs.push('564-c3: fixture: the clear was never attempted');
+      if (undoBtn()) errs.push('564-c3: the storage panel offered Undo after the clear failed');
+      const msg = document.getElementById('toast').textContent;
+      if (/cleared/i.test(msg)) errs.push('564-c3: the storage panel reported a clear that failed: ' + msg);
+    }
+    // 2) the inbox dialog itself
+    document.getElementById('backup-modal').classList.add('hidden');
+    document.getElementById('toast').classList.remove('show');
+    const cb = document.getElementById('clip-btn');
+    if (cb.classList.contains('hidden')) { errs.push('564-c3: the inbox button is not shown in the fixture'); }
+    else {
+      cb.click(); await sleep(300);
+      window.__SMOKE_ARGS__.length = 0;
+      document.getElementById('clip-clear').click(); await sleep(400);
+      if (!callsFor('clip_inbox_clear').length) errs.push('564-c3: fixture: the inbox dialog clear was never attempted');
+      if (undoBtn()) errs.push('564-c3: the inbox dialog offered Undo after the clear failed');
+    }
+""")
+        failed += ar_probe('s1', 'screenshot editor: undoing a resize does not unlock operations behind the undo limit', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_values: { snipEditUndoMax: 10 } };</script>\n', r"""
+    await bootReady();
+    const cv = document.createElement('canvas'); cv.width = 200; cv.height = 120;
+    const g = cv.getContext('2d'); g.fillStyle = '#88aacc'; g.fillRect(0, 0, 200, 120);
+    window.__FIRE__('snip-captured', { data_url: cv.toDataURL('image/png'), path: '', name: 'undo.png' });
+    await sleep(400);
+    const edit = document.getElementById('snip-edit');
+    if (edit.classList.contains('hidden')) { errs.push('564-s1: the editor did not open'); }
+    else {
+      document.querySelector('#snip-edit-tools button[data-tool="pen"]').click(); await sleep(50);
+      const live = document.getElementById('snip-edit-live');
+      const undo = document.getElementById('snip-edit-undo');
+      const r = live.getBoundingClientRect();
+      for (let i = 0; i < 12; i++) {
+        const x = r.left + 10 + i * 3, y = r.top + 10 + i * 4;
+        live.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 1, clientX: x, clientY: y }));
+        live.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 1, clientX: x + 6, clientY: y + 6 }));
+        window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1, clientX: x + 6, clientY: y + 6 }));
+        await sleep(20);
+      }
+      let plain = 0;
+      // a plain count of how far undo walks with no resize, for comparison
+      document.getElementById('snip-edit-scale').click(); await sleep(150);
+      const pop = document.querySelector('.snip-scale-pop');
+      const half = [...pop.querySelectorAll('.snip-scale-presets button')].find((b) => b.textContent === '50%');
+      half.click(); await sleep(50);
+      pop.querySelector('.primary-btn').click(); await sleep(250);
+      let steps = 0;
+      while (!undo.disabled && steps < 40) { undo.click(); steps++; await sleep(15); }
+      // 12 strokes, limit 10: the scale itself plus the 10 newest strokes can be undone
+      if (steps !== 11) errs.push('564-s1: undo walked ' + steps + ' steps after a resize, expected 11 (the resize and ten strokes)');
+      const redo = document.getElementById('snip-edit-redo');
+      let redos = 0;
+      while (!redo.disabled && redos < 40) { redo.click(); redos++; await sleep(15); }
+      if (redos !== 11) errs.push('564-s1: redo walked ' + redos + ' steps, expected 11');
+      if (undo.disabled) errs.push('564-s1: Undo stayed disabled after redoing the resize');
+    }
+""")
+        failed += ar_probe('d1', 'screenshot dialog: a failed delete keeps the saved path, switching back on saves no second copy', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { snipEditor: false, screenshotSave: true } };</script>\n', r"""
+    await bootReady();
+    RESULTS.delete_screenshot_file = () => false;
+    RESULTS.save_screenshot_now = () => 'C:/shots/second.png';
+    const cv = document.createElement('canvas'); cv.width = 40; cv.height = 30;
+    window.__FIRE__('snip-captured', { data_url: cv.toDataURL('image/png'), path: 'C:/shots/first.png', name: 'first.png' });
+    await sleep(300);
+    const modal = document.getElementById('snip-modal');
+    const box = document.getElementById('snip-save-folder');
+    if (modal.classList.contains('hidden')) errs.push('564-d1: fixture: the result dialog did not open');
+    if (!box.checked) errs.push('564-d1: fixture: the folder switch is not on');
+    window.__SMOKE_ARGS__.length = 0;
+    box.checked = false; box.dispatchEvent(new Event('change', { bubbles: true })); await sleep(200);
+    if (!callsFor('delete_screenshot_file').length) errs.push('564-d1: fixture: switching off did not try to delete the file');
+    box.checked = true; box.dispatchEvent(new Event('change', { bubbles: true })); await sleep(200);
+    const saves = callsFor('save_screenshot_now').length;
+    if (saves) errs.push('564-d1: switching back on saved a second copy (' + saves + ' save call) although the first file was never deleted');
+""")
+        # ---- main window findings: generated block end ----
         print("PASS" if not failed else f"{failed} problem(s)")
         return 1 if failed else 0
     finally:

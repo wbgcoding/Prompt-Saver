@@ -568,6 +568,25 @@ if quiet_m and full_exclude_m:
         if needed not in target_fn:
             problems.append(f"presets: expertPresetTarget() no longer uses {needed}")
 
+# ---- bulk writers never flip the switches that carry their own consent step ----
+# "All on" and the resets write through the bare set_ui_flag path, which skips the
+# password dialog (receiver), the plaintext warning (sync) and the confirmed restart
+# (demo mode). Those keys stay out of every bulk write.
+never_m = re.search(r'const EXPERT_BULK_NEVER\s*=\s*\[([^\]]*)\]', SRC)
+if not never_m or "demoMode" not in re.findall(r'"([^"]+)"', never_m.group(1)):
+    problems.append("bulk: EXPERT_BULK_NEVER must list demoMode")
+if full_exclude_m:
+    excluded = set(re.findall(r'"([^"]+)"', full_exclude_m.group(1)))
+    for key in ("remoteApi", "remoteNetworkFilter", "urlScheme", "promptSync"):
+        if key not in excluded:
+            problems.append(f"bulk: EXPERT_PRESET_FULL_EXCLUDE does not keep '{key}' out of All on")
+    if "...EXPERT_BULK_NEVER" not in full_exclude_m.group(1) and "demoMode" not in excluded:
+        problems.append("bulk: EXPERT_PRESET_FULL_EXCLUDE does not keep demoMode out of All on")
+for fn in ("function expertPresetTarget", "function isRowChanged", "async function resetExpertGroup",
+           "async function resetOneExpertValue", "async function onResetExpert"):
+    if "EXPERT_BULK_NEVER" not in block(fn, "{", "}"):
+        problems.append(f"bulk: {fn}() does not honour EXPERT_BULK_NEVER")
+
 for p in problems:
     print("FAIL", p)
 print("PASS" if not problems else f"{len(problems)} problem(s)")
