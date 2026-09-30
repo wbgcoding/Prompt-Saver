@@ -3162,6 +3162,9 @@ function isLosslessCopy() {
   if (VE.probe && VE.probe.stream_copy_safe === false) return false;
   if (opsOf("cut").length) return false;
   if (opOf("crop") || opOf("speed") || opOf("fade") || opOf("scale") || opsOf("overlay").length) return false;
+  // An inserted section only exists as a movie= source in the filter graph,
+  // which a plain copy of the main file would leave out.
+  if (opsOf("clip").some((c) => !c.missing)) return false;
   const { sys, mic } = VE.audio;
   return !sys.mute && sys.vol === 100 && !mic.mute && mic.vol === 100;
 }
