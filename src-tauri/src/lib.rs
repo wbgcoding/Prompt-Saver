@@ -8188,23 +8188,29 @@ fn sweep_trash(app: &AppHandle, store: &mut Store) {
 // this exact sweep right now.
 #[tauri::command]
 fn sweep_trash_now(app: AppHandle, state: State<'_, Db>) -> (u32, u64) {
-    let mut store = lock(&state);
-    let Some(max_age) = trash_retention_secs(&store.settings) else {
-        return (0, 0);
+    // The orphan sweep locks the store itself, so it runs only after this guard is
+    // gone (same shape as empty_trash): holding both froze the whole app.
+    let (count, bytes, orphan_scan) = {
+        let mut store = lock(&state);
+        let Some(max_age) = trash_retention_secs(&store.settings) else {
+            return (0, 0);
+        };
+        let stale = stale_trash_ids(&store.trash, max_age, now_secs());
+        if stale.is_empty() {
+            return (0, 0);
+        }
+        let stale_paths: Vec<String> = store
+            .trash
+            .iter()
+            .filter(|p| stale.contains(&p.id))
+            .map(|p| p.file_path.clone())
+            .collect();
+        let (_, bytes) = attachments_bytes(&stale_paths);
+        let count = stale.len() as u32;
+        let orphan_scan = purge_ids(&app, &mut store, &stale);
+        (count, bytes, orphan_scan)
     };
-    let stale = stale_trash_ids(&store.trash, max_age, now_secs());
-    if stale.is_empty() {
-        return (0, 0);
-    }
-    let stale_paths: Vec<String> = store
-        .trash
-        .iter()
-        .filter(|p| stale.contains(&p.id))
-        .map(|p| p.file_path.clone())
-        .collect();
-    let (_, bytes) = attachments_bytes(&stale_paths);
-    let count = stale.len() as u32;
-    if let Some(referenced) = purge_ids(&app, &mut store, &stale) {
+    if let Some(referenced) = orphan_scan {
         sweep_orphan_files(&app, &referenced);
     }
     (count, bytes)
@@ -51292,5 +51298,62 @@ mod tests {
         assert_eq!(count("gone"), 0);
         assert_eq!(count("live"), 1);
         assert_eq!(count("binned"), 1);
+    }
+
+    // sweep_orphan_files locks the store itself, so a caller that still holds a
+    // store guard deadlocks the whole app. Every call site must sit outside a live
+    // `lock(&state)` guard of its own function.
+    #[test]
+    fn sweep_orphan_files_is_never_called_under_the_store_guard() {
+        let src = include_str!("lib.rs");
+        let code: String = src
+            .lines()
+            .map(|l| match l.find("//") {
+                Some(i) => &l[..i],
+                None => l,
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        let starts: Vec<usize> = code.match_indices("\nfn ").map(|(i, _)| i).collect();
+        let mut checked = 0;
+        for (n, &start) in starts.iter().enumerate() {
+            let end = starts.get(n + 1).copied().unwrap_or(code.len());
+            let body = &code[start..end];
+            if body.starts_with("\nfn sweep_orphan_files(") || !body.contains("sweep_orphan_files(") {
+                continue;
+            }
+            let name = body[4..].split('(').next().unwrap_or("?").to_string();
+            // (guard name, brace depth it was declared at)
+            let mut guards: Vec<(String, i32)> = Vec::new();
+            let mut depth = 0i32;
+            for line in body.lines() {
+                let t = line.trim();
+                if let Some(rest) = t.strip_prefix("let ") {
+                    if rest.contains("= lock(&state)") {
+                        let nm = rest.trim_start_matches("mut ").split([' ', ':']).next().unwrap_or("").to_string();
+                        guards.push((nm, depth));
+                    }
+                }
+                if let Some(arg) = t.strip_prefix("drop(") {
+                    let nm = arg.trim_end_matches(';').trim_end_matches(')').to_string();
+                    guards.retain(|(g, _)| *g != nm);
+                }
+                if t.contains("sweep_orphan_files(") {
+                    checked += 1;
+                    assert!(guards.is_empty(), "{name} calls sweep_orphan_files while holding the store lock");
+                }
+                for ch in line.chars() {
+                    match ch {
+                        '{' => depth += 1,
+                        '}' => {
+                            depth -= 1;
+                            guards.retain(|(_, d)| *d <= depth);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+        assert!(checked >= 4, "the scan found only {checked} call sites");
     }
 }
