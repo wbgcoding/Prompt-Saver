@@ -45580,8 +45580,7 @@ mod tests {
     // with the OS or swap a secret. A full import keeps this machine's own
     // value for each of them (or the absence of one).
     fn hostile_settings() -> Settings {
-        let mut s = Settings::default();
-        s.autostart = true;
+        let mut s = Settings { autostart: true, ..Settings::default() };
         for k in ["remoteApi", "remoteNetworkFilter", "urlScheme", "urlSchemeOpenAllowed", "urlSchemeCopyAllowed", "demoMode", "allowMultipleInstances", "promptSync"] {
             s.ui_flags.insert(k.into(), true);
         }
