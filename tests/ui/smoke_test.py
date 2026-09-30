@@ -16139,6 +16139,29 @@ def main():
       if (!member().classList.contains('file-missing')) errs.push('563-13: the open popover did not pick up a file going missing');
     }
 """)
+        failed += ar_probe('f14', 'folder popover member: per-prompt font, size and ink like the grid tile', 'index', '1000x780', '', r"""
+    await bootReady();
+    const click = async (el) => { const [x, y] = centre(el); ptr('pointerdown', x, y, el); ptr('pointerup', x, y, window); await sleep(200); };
+    PROMPTS[4].font_size = 20;
+    PROMPTS[4].font = 'mono';
+    PROMPTS[6].font_size = 1;
+    PROMPTS[8].color = '#fde047';
+    const tabFor = (id) => document.querySelector('.view-btn[data-view-id="' + id + '"]');
+    tabFor('work').click(); await sleep(250);
+    tabFor('home').click(); await sleep(300);
+    await click(document.querySelector('#grid .folder-tile'));
+    const m = (id) => document.querySelector('.folder-member-tile[data-id="' + id + '"]');
+    if (!m('p4')) { errs.push('563-14: the folder popover did not open'); }
+    else {
+      const l4 = m('p4').querySelector('.tile-name');
+      if (l4.style.fontSize !== '20px') errs.push('563-14: a fixed-size prompt label has font size ' + JSON.stringify(l4.style.fontSize) + ', expected 20px');
+      if (m('p4').dataset.fitMode !== 'fixed') errs.push('563-14: fitMode of a fixed-size member is ' + m('p4').dataset.fitMode);
+      if (!l4.style.fontFamily) errs.push('563-14: the per-prompt font family is not applied to the member label');
+      if (m('p6').dataset.fitMode !== 'auto') errs.push('563-14: fitMode of an auto-size member is ' + m('p6').dataset.fitMode);
+      const ink = m('p8').style.color;
+      if (ink !== 'rgb(0, 0, 0)' && ink !== '#000' && ink !== 'black') errs.push('563-14: a light tinted member has ink ' + JSON.stringify(ink) + ', expected a dark one');
+    }
+""")
         # ---- main window findings: generated block end ----
         print("PASS" if not failed else f"{failed} problem(s)")
         return 1 if failed else 0

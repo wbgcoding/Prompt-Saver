@@ -7269,10 +7269,21 @@ function openTileFolderPop(f, anchor) {
     } else if (p.color) {
       btn.style.background = p.color;
       btn.style.borderColor = p.color;
+      btn.style.color = readableInk(p.color);
+      btn.style.setProperty("--ink-shadow", inkShadow(p.color));
     }
     const label = document.createElement("span");
     label.className = "tile-name";
     label.textContent = p.name;
+    // Same per-prompt font overrides as the grid tile (0 = follow settings,
+    // 1 = auto-fit, else a fixed size that fitTileText leaves alone).
+    if (p.font) label.style.fontFamily = FONTS[p.font] || "";
+    if (p.font_size === 1) {
+      btn.dataset.fitMode = "auto";
+    } else if (p.font_size > 1) {
+      label.style.fontSize = `${p.font_size}px`;
+      btn.dataset.fitMode = "fixed";
+    }
     btn.appendChild(label);
     const typeIcon = p.file_path
       ? (kind === "video" ? ICON_VIDEO : kind ? ICON_IMAGE : PDF_EXT.test(p.file_path) ? ICON_PDF : ICON_FILE)
