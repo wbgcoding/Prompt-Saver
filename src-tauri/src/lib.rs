@@ -36174,11 +36174,25 @@ fn sync_write_all_impl(app: &AppHandle, prompts: &[Prompt], settings: &Settings)
             // it instead of disappearing. A conflict is rare, a silent loss is not
             // acceptable. The copy's name carries a dot, so it is neither a valid
             // prompt id (the poll skips it) nor something the orphan sweep may touch.
+            let copy = dir.join(format!("{}.conflict-{}.md", p.id, now_secs()));
+            let mut kept_copy = false;
             if !on_disk.is_empty() && sync_changed_since_seen(&path) {
-                let copy = dir.join(format!("{}.conflict-{}.md", p.id, now_secs()));
                 if write_file_atomic(&copy, &on_disk) {
+                    kept_copy = true;
                     append_crash_log(&format!(
                         "prompt-sync: {filename} was edited outside the app and in the app at the same time; the outside version was kept as {}",
+                        copy.file_name().unwrap_or_default().to_string_lossy()
+                    ));
+                }
+            }
+            // One more look right before the replace: the lock file is only ours, an
+            // external editor never honors it, so a save that landed after the first
+            // read has to end up in the conflict copy as well, not be overwritten.
+            let latest = fs::read_to_string(&path).unwrap_or_default();
+            if latest != on_disk && latest != content && !latest.is_empty() {
+                if write_file_atomic(&copy, &latest) && !kept_copy {
+                    append_crash_log(&format!(
+                        "prompt-sync: {filename} was edited outside the app while it was being written; the outside version was kept as {}",
                         copy.file_name().unwrap_or_default().to_string_lossy()
                     ));
                 }
