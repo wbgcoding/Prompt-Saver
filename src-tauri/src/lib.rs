@@ -33435,6 +33435,12 @@ fn run_import(
         store.forget_written_rows();
         return Err("save-failed".into());
     }
+    // The session key belongs to the salt it was derived from: once the import
+    // installed another salt, the old key would decrypt nothing and would seal
+    // new confidential prompts against a verifier that no longer matches.
+    if vault_keys_differ(&original_settings, &store.settings) {
+        *SECRET_SESSION.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    }
     Ok((count, dropped, backup_pw_dropped, vault_mismatch))
 }
 
@@ -47420,6 +47426,20 @@ mod tests {
         store.trash.push(t);
         let r = run_import(&mut store, foreign_backup(false), true, true, |_, _, _| true).unwrap();
         assert!(!r.3, "keys unchanged, nothing to warn about");
+    }
+
+    #[test]
+    fn an_import_that_swaps_the_vault_keys_ends_the_unlocked_session() {
+        let _serial = SETTINGS_LOCK_TEST.lock().unwrap_or_else(|e| e.into_inner());
+        let (settings, p, _) = vault_fixture();
+        for (foreign, expect_locked) in [(true, true), (false, false)] {
+            *SECRET_SESSION.lock().unwrap_or_else(|e| e.into_inner()) =
+                Some(SecretSession { key: [7u8; 32], unlocked_at: std::time::Instant::now() });
+            let mut store = vault_store(settings.clone(), p.clone());
+            run_import(&mut store, foreign_backup(foreign), true, true, |_, _, _| true).unwrap();
+            assert_eq!(secret_session_key(0).is_none(), expect_locked, "foreign keys: {foreign}");
+        }
+        *SECRET_SESSION.lock().unwrap_or_else(|e| e.into_inner()) = None;
     }
 
     #[test]
