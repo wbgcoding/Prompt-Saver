@@ -36398,6 +36398,39 @@ fn sync_seen_record_own_write(path: &Path) {
     sync_seen_lock().insert(sync_seen_key(path), SyncSeen { stamp, handled: true });
 }
 
+// What the app last knew to be in each synced file: a hash of the content it
+// rendered and the file's stamp right then. When the next render hashes the same
+// and the file still carries that stamp, the file is known to hold exactly that
+// content and is not read back at all. An outside edit changes the stamp, so it
+// is never skipped.
+type SyncWrittenMap = HashMap<String, (u64, SyncStamp)>;
+static SYNC_WRITTEN: std::sync::OnceLock<Mutex<SyncWrittenMap>> = std::sync::OnceLock::new();
+
+fn sync_written_lock() -> std::sync::MutexGuard<'static, SyncWrittenMap> {
+    SYNC_WRITTEN.get_or_init(|| Mutex::new(HashMap::new())).lock().unwrap_or_else(|e| e.into_inner())
+}
+
+fn sync_content_hash(content: &str) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    content.hash(&mut h);
+    h.finish()
+}
+
+// True when `path` is known to already hold the content with this hash.
+fn sync_file_known_current(path: &Path, hash: u64) -> bool {
+    let Some(now) = sync_stamp_of(path) else { return false };
+    sync_written_lock().get(&sync_seen_key(path)).is_some_and(|(h, stamp)| *h == hash && *stamp == now)
+}
+
+// Remember that `path` holds the content with this hash (call after a write, or
+// after a read that found it already equal).
+fn sync_file_note_current(path: &Path, hash: u64) {
+    if let Some(stamp) = sync_stamp_of(path) {
+        sync_written_lock().insert(sync_seen_key(path), (hash, stamp));
+    }
+}
+
 // Whether the file changed since the app last wrote or read it. `None` (never seen)
 // is deliberately NOT a conflict: on a fresh start every file is unknown, and
 // claiming a conflict there would litter the folder with copies of itself.
@@ -36570,8 +36603,15 @@ fn sync_write_all_impl(app: &AppHandle, prompts: &[Prompt], settings: &Settings)
         let filename = format!("{}.md", p.id);
         let path = dir.join(&filename);
         let content = prompt_to_md(p, &sync_placement_for(p, settings));
+        let hash = sync_content_hash(&content);
+        if sync_file_known_current(&path, hash) {
+            wanted.insert(filename);
+            continue; // unchanged since it was last written: no read, no compare
+        }
         let on_disk = fs::read_to_string(&path).unwrap_or_default();
-        if on_disk != content && sync_lock_acquire(&path) {
+        if on_disk == content {
+            sync_file_note_current(&path, hash);
+        } else if sync_lock_acquire(&path) {
             // Both sides changed: the file was edited outside the app since the app
             // last touched it, and the prompt in the app has since changed too. The
             // app's version wins the file, but the one being replaced is kept beside
@@ -36606,6 +36646,7 @@ fn sync_write_all_impl(app: &AppHandle, prompts: &[Prompt], settings: &Settings)
             sync_lock_release(&path);
             if ok {
                 sync_seen_record_own_write(&path);
+                sync_file_note_current(&path, hash);
             } else {
                 failed += 1;
                 append_crash_log(&format!("prompt-sync: writing {filename} failed"));
@@ -36614,6 +36655,8 @@ fn sync_write_all_impl(app: &AppHandle, prompts: &[Prompt], settings: &Settings)
         wanted.insert(filename);
     }
     sync_sweep_orphans(&dir, &wanted);
+    // Entries for files that are gone (deleted prompts, swept orphans) go too.
+    sync_written_lock().retain(|key, _| Path::new(key).exists());
     failed
 }
 
@@ -42616,6 +42659,23 @@ mod tests {
         sync_seen_lock().insert(to_read[0].key.clone(), SyncSeen { stamp: to_read[0].stamp, handled: true });
         let (to_read, _) = sync_scan_folder(&dir).unwrap();
         assert!(to_read.is_empty(), "an unchanged, handled folder needs no read and therefore no snapshot");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sync_known_current_holds_until_the_file_or_the_content_changes() {
+        let dir = std::env::temp_dir().join(format!("ps-written-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("p1.md");
+        fs::write(&file, "one").unwrap();
+        let h1 = sync_content_hash("one");
+        assert!(!sync_file_known_current(&file, h1), "a file never noted is read once");
+        sync_file_note_current(&file, h1);
+        assert!(sync_file_known_current(&file, h1), "unchanged file, same render: skipped");
+        assert!(!sync_file_known_current(&file, sync_content_hash("two")), "a changed render is compared again");
+        fs::write(&file, "edited outside").unwrap();
+        assert!(!sync_file_known_current(&file, h1), "an outside edit changes the stamp and is never skipped");
         let _ = fs::remove_dir_all(&dir);
     }
 

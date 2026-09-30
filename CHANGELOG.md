@@ -866,6 +866,9 @@ the video editor and the introduction tour ship on).
 - **The Markdown folder check no longer copies the whole library every few
   seconds.** The poll first looks at file sizes and dates only and copies the
   prompts and settings just when a file actually changed.
+- **Saving with Markdown folder sync on no longer rereads every file.** The
+  app remembers what it last wrote to each file and skips the ones that are
+  still exactly that; an edit made outside the app is still noticed.
 
 ### Fixed
 
