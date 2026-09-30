@@ -872,6 +872,9 @@ the video editor and the introduction tour ship on).
 - **Opening the trash no longer loads every trashed picture.** The list asks
   only for names, a short text preview and dates, and runs off the main
   thread, so a large trash opens at once.
+- **The batch export dialog reads the lengths of the selected recordings in
+  parallel.** Choosing many recordings opens the dialog faster and no longer
+  ties up a background worker one file at a time.
 
 ### Fixed
 

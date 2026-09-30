@@ -30710,13 +30710,18 @@ fn video_folder_cleanup(state: State<'_, Db>, dir: String, age_days: u32) -> usi
 // comes back as 0, the same "unknown" fallback probe_media_meta uses
 // everywhere else, rather than failing the whole batch over one bad file.
 fn video_folder_file_durations_ms_impl(ffprobe: Option<&Path>, dir: &Path, names: &[String]) -> Vec<u64> {
-    names.iter().map(|name| probe_media_meta(ffprobe, &dir.join(name)).0).collect()
+    use rayon::prelude::*;
+    // Probed in parallel (each one is a child process); collect keeps the order of `names`.
+    names.par_iter().map(|name| probe_media_meta(ffprobe, &dir.join(name)).0).collect()
 }
 
 #[tauri::command]
 async fn video_folder_file_durations_ms(app: AppHandle, dir: String, names: Vec<String>) -> Vec<u64> {
     let ffprobe = ffprobe_search_path(&app);
-    video_folder_file_durations_ms_impl(ffprobe.as_deref(), Path::new(&dir), &names)
+    // Off the async runtime: one process spawn per file would otherwise hold a worker.
+    tauri::async_runtime::spawn_blocking(move || video_folder_file_durations_ms_impl(ffprobe.as_deref(), Path::new(&dir), &names))
+        .await
+        .unwrap_or_default()
 }
 
 // Never overwrite an existing file at the target: "<stem>.<ext>", then
@@ -42757,6 +42762,20 @@ mod tests {
         let big = dir.join("big.keys.json");
         fs::write(&big, vec![b' '; (KEY_SIDECAR_MAX_COPY_BYTES + 1) as usize]).unwrap();
         assert!(read_key_sidecar_at(&big).is_none(), "an oversized sidecar is never read whole");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn video_folder_durations_keep_the_order_of_the_names_and_zero_a_missing_file() {
+        let dir = std::env::temp_dir().join(format!("ps-durations-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let names: Vec<String> = (0..12).map(|i| format!("missing-{i}.mp4")).collect();
+        let got = video_folder_file_durations_ms_impl(None, &dir, &names);
+        assert_eq!(got, vec![0u64; 12], "one value per name, unknown files as 0");
+        // Structural: the command runs the probes on the blocking pool, not a runtime worker.
+        let src = include_str!("lib.rs");
+        let at = src.find("async fn video_folder_file_durations_ms(").unwrap();
+        assert!(src[at..at + 600].contains("spawn_blocking"), "the durations command must use spawn_blocking");
         let _ = fs::remove_dir_all(&dir);
     }
 
