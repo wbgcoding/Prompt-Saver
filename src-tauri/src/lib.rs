@@ -14684,38 +14684,47 @@ struct EditorDraft {
     updated_at: i64,
 }
 
+// The text side is sealed like a prompt is: a draft holds whatever the user
+// was typing, and a plain row would leak it into data.db and every backup.
+// Old unsealed rows still read back (dec_str passes plaintext through).
+fn editor_draft_write(conn: &Connection, prompt_id: &str, name: &str, text: &str, variants: &str, updated_at: i64) -> Result<(), String> {
+    conn.execute(
+        "INSERT INTO editor_drafts(id, prompt_id, name, text, variants, updated_at) VALUES('current',?1,?2,?3,?4,?5)
+         ON CONFLICT(id) DO UPDATE SET prompt_id=excluded.prompt_id, name=excluded.name, text=excluded.text, variants=excluded.variants, updated_at=excluded.updated_at",
+        params![prompt_id, enc_str(name), enc_str(text), enc_str(variants), updated_at],
+    )
+    .map(|_| ())
+    .map_err(|e| e.to_string())
+}
+
+fn editor_draft_read(conn: &Connection) -> Option<EditorDraft> {
+    conn.query_row(
+        "SELECT prompt_id, name, text, variants, updated_at FROM editor_drafts WHERE id = 'current'",
+        [],
+        |r| {
+            Ok(EditorDraft {
+                prompt_id: r.get(0)?,
+                name: dec_str(&r.get::<_, String>(1)?),
+                text: dec_str(&r.get::<_, String>(2)?),
+                variants: dec_str(&r.get::<_, String>(3)?),
+                updated_at: r.get(4)?,
+            })
+        },
+    )
+    .ok()
+}
+
 #[tauri::command]
 async fn save_editor_draft(app: AppHandle, prompt_id: String, name: String, text: String, variants: String) -> Result<(), String> {
     let conn = db_conn(&app).ok_or_else(|| "db unavailable".to_string())?;
     let updated_at = (now_ms() / 1000) as i64;
-    conn.execute(
-        "INSERT INTO editor_drafts(id, prompt_id, name, text, variants, updated_at) VALUES('current',?1,?2,?3,?4,?5)
-         ON CONFLICT(id) DO UPDATE SET prompt_id=excluded.prompt_id, name=excluded.name, text=excluded.text, variants=excluded.variants, updated_at=excluded.updated_at",
-        params![prompt_id, name, text, variants, updated_at],
-    )
-    .map_err(|e| e.to_string())?;
-    Ok(())
+    editor_draft_write(&conn, &prompt_id, &name, &text, &variants, updated_at)
 }
 
 #[tauri::command]
 async fn load_editor_draft(app: AppHandle) -> Result<Option<EditorDraft>, String> {
     let conn = db_conn(&app).ok_or_else(|| "db unavailable".to_string())?;
-    let draft = conn
-        .query_row(
-            "SELECT prompt_id, name, text, variants, updated_at FROM editor_drafts WHERE id = 'current'",
-            [],
-            |r| {
-                Ok(EditorDraft {
-                    prompt_id: r.get(0)?,
-                    name: r.get(1)?,
-                    text: r.get(2)?,
-                    variants: r.get(3)?,
-                    updated_at: r.get(4)?,
-                })
-            },
-        )
-        .ok();
-    Ok(draft)
+    Ok(editor_draft_read(&conn))
 }
 
 #[tauri::command]
@@ -32932,6 +32941,12 @@ async fn set_prompt_secret(app: AppHandle, state: State<'_, Db>, id: String, sec
     };
     let mut store = lock(&state);
     apply_prompt_secret(&mut store, &id, secret, &key, |st| save_prompts(&app, st))?;
+    if secret {
+        // A draft written before the entry turned confidential holds its plain text.
+        if let Some(conn) = db_conn(&app) {
+            discard_editor_draft_if(&conn, |t| t == id);
+        }
+    }
     let secret_key = secret_session_key(timeout);
     Ok(AppState {
         prompts: slim_prompts(&store.prompts, secret_key),
@@ -44377,6 +44392,28 @@ mod tests {
         )
         .unwrap();
         conn
+    }
+
+    #[test]
+    fn editor_draft_is_sealed_at_rest_and_reads_back_plain() {
+        let conn = editor_drafts_test_conn();
+        editor_draft_write(&conn, "p1", "Secret name", "Secret body text", "[\"variant one\"]", 100).unwrap();
+        let raw: (String, String, String) = conn
+            .query_row("SELECT name, text, variants FROM editor_drafts WHERE id = 'current'", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .unwrap();
+        for (stored, plain) in [(&raw.0, "Secret name"), (&raw.1, "Secret body text"), (&raw.2, "variant one")] {
+            assert!(!stored.contains(plain), "the draft column must not hold the plaintext");
+        }
+        let d = editor_draft_read(&conn).unwrap();
+        assert_eq!((d.name.as_str(), d.text.as_str(), d.variants.as_str()), ("Secret name", "Secret body text", "[\"variant one\"]"));
+    }
+
+    #[test]
+    fn editor_draft_reads_an_old_unsealed_row() {
+        let conn = editor_drafts_test_conn();
+        conn.execute("INSERT INTO editor_drafts(id, prompt_id, name, text, variants, updated_at) VALUES('current','p1','Old','Old body','[]',5)", []).unwrap();
+        let d = editor_draft_read(&conn).unwrap();
+        assert_eq!((d.name.as_str(), d.text.as_str(), d.variants.as_str()), ("Old", "Old body", "[]"));
     }
 
     // Same upsert SQL as save_editor_draft, run directly against a bare

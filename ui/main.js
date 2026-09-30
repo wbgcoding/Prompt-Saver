@@ -8681,6 +8681,8 @@ function maybeCloseOnCopy() {
 // from writing that row over and over while the user reads rather than types.
 function draftEditorFields() {
   if (!modalState) return null;
+  // A confidential entry is never drafted: the draft row would hold its revealed text.
+  if (modalState.secret) return null;
   const rotating = rotationUiOn();
   const hasVariants = rotationActive();
   const entries = rotating
@@ -8767,6 +8769,7 @@ function openModal({ mode, id, name = "", text = "", color = "", image = "", sho
   syncModalImageUi(mode);
   modalInitial = modalSnapshot();
   armDraftAutosave();
+  if (secret) invoke("discard_editor_draft").catch(() => {});
   modal.name.focus();
   modal.name.select();
 }
