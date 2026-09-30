@@ -11017,8 +11017,8 @@ fn backup_is_due(newest_age_secs: Option<u64>, interval_h: u64) -> bool {
 // backup on disk, never from a counter this process keeps, so a restart neither
 // skips a due backup nor takes an extra one.
 fn auto_backup_tick(app: &AppHandle) {
-    // The lock is held across the snapshot, exactly like the manual "backup now"
-    // command, so no write races with the VACUUM read.
+    // The lock is held across the point-in-time copy, exactly like the manual
+    // "backup now" command, so no write races with the VACUUM read.
     let state = app.state::<Db>();
     let store = lock(&state);
     let on = store.settings.ui_flags.get("autoBackup") != Some(&false);
@@ -11037,7 +11037,9 @@ fn auto_backup_tick(app: &AppHandle) {
         // The manual "backup now" toast fires from the same command's own
         // success path in the frontend: the automatic one has no such call site,
         // so it needs its own signal here.
-        match do_backup(app, keep, gfs_from_settings(&store.settings)) {
+        let gfs = gfs_from_settings(&store.settings);
+        // Point-in-time copy under the lock, packing after it is released.
+        match backup_released(store, &data_dir(app), &backups_dir(app), keep, gfs, || {}) {
             Ok(_) => {
                 let _ = app.emit_to("main", "backup-done", ());
             }
@@ -11063,14 +11065,21 @@ fn backup_db_file(folder: &std::path::Path) -> Option<PathBuf> {
 
 fn gzip_to(src: &std::path::Path, dest: &std::path::Path) -> Result<(), String> {
     use flate2::{write::GzEncoder, Compression};
-    let raw = fs::read(src).map_err(|e| e.to_string())?;
-    let mut enc = GzEncoder::new(Vec::new(), Compression::best());
-    std::io::Write::write_all(&mut enc, &raw).map_err(|e| e.to_string())?;
-    let packed = enc.finish().map_err(|e| e.to_string())?;
     // Temp + rename: a snapshot half-written when the machine goes down would still
     // be picked up by backup_db_file and only fail at restore time, when it matters.
     let tmp = dest.with_extension("gz.part");
-    fs::write(&tmp, packed).map_err(|e| e.to_string())?;
+    // Streamed file to file: the library is never held in memory, raw or packed.
+    let packed = (|| -> std::io::Result<()> {
+        let mut input = fs::File::open(src)?;
+        let mut enc = GzEncoder::new(fs::File::create(&tmp)?, Compression::default());
+        std::io::copy(&mut input, &mut enc)?;
+        // finish() writes the gzip trailer; sync so a reported success is on disk.
+        enc.finish()?.sync_all()
+    })();
+    if let Err(e) = packed {
+        let _ = fs::remove_file(&tmp);
+        return Err(e.to_string());
+    }
     fs::rename(&tmp, dest).map_err(|e| {
         let _ = fs::remove_file(&tmp);
         e.to_string()
@@ -11099,12 +11108,33 @@ fn vacuum_and_check_size(src: &std::path::Path, tmp: &std::path::Path) -> Result
 }
 
 fn gunzip_to(src: &std::path::Path, dest: &std::path::Path) -> Result<(), String> {
+    gunzip_to_capped(src, dest, MAX_INFLATED)
+}
+
+// Streams the snapshot through the decoder straight into dest, never holding it in
+// memory. Capped like every other decompression here: a snapshot file is on disk
+// where anything could have replaced it, and an unbounded inflate is a free crash.
+// Any failure (truncated or corrupt stream, cap exceeded, full disk) removes the
+// partial output, so a half-inflated file is never mistaken for a database.
+fn gunzip_to_capped(src: &std::path::Path, dest: &std::path::Path, cap: u64) -> Result<(), String> {
     use flate2::read::GzDecoder;
-    let packed = fs::read(src).map_err(|e| e.to_string())?;
-    // Capped like every other decompression here: a snapshot file is on disk where
-    // anything could have replaced it, and an unbounded inflate is a free crash.
-    let out = inflate_capped(GzDecoder::new(&packed[..]))?;
-    fs::write(dest, out).map_err(|e| e.to_string())
+    use std::io::Read;
+    let input = fs::File::open(src).map_err(|e| e.to_string())?;
+    let out = fs::File::create(dest).map_err(|e| e.to_string())?;
+    let result = (|| -> Result<(), String> {
+        let mut out = out;
+        // cap + 1 byte: reaching the extra byte is what proves the stream was too big.
+        let n = std::io::copy(&mut GzDecoder::new(input).take(cap.saturating_add(1)), &mut out)
+            .map_err(|_| "corrupt backup".to_string())?;
+        if n > cap {
+            return Err("backup expands to more than 512 MB".to_string());
+        }
+        out.sync_all().map_err(|e| e.to_string())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(dest);
+    }
+    result
 }
 
 fn do_backup(app: &AppHandle, keep: usize, gfs: Option<GfsConfig>) -> Result<String, String> {
@@ -11115,6 +11145,22 @@ fn do_backup(app: &AppHandle, keep: usize, gfs: Option<GfsConfig>) -> Result<Str
 // snapshot, naming and rotation logic, working from two already-resolved
 // folders instead of an AppHandle.
 fn do_backup_at(dir: &std::path::Path, root: &std::path::Path, keep: usize, gfs: Option<GfsConfig>) -> Result<String, String> {
+    let pending = backup_snapshot(dir, root)?;
+    backup_pack(pending, root, keep, gfs)
+}
+
+// A claimed snapshot folder holding the vacuumed, still unpacked copy.
+struct PendingBackup {
+    name: String,
+    folder: PathBuf,
+    tmp: PathBuf,
+}
+
+// Phase one: claim the folder and take the point-in-time copy (VACUUM INTO reads
+// one consistent state). Callers hold the store lock across this so no write lands
+// mid-copy; everything after it (compression, names, rotation) only touches the
+// copy and runs without the lock.
+fn backup_snapshot(dir: &std::path::Path, root: &std::path::Path) -> Result<PendingBackup, String> {
     let src = dir.join("data.db");
     if !src.exists() {
         return Err("no-store".into());
@@ -11158,7 +11204,6 @@ fn do_backup_at(dir: &std::path::Path, root: &std::path::Path, keep: usize, gfs:
         }
     }
     let tmp = folder.join("data.db.tmp");
-    let dest = folder.join(BACKUP_DB_GZ);
     let _ = fs::remove_file(&tmp);
     // Same rule as the packed-copy failure below: a folder was already claimed
     // above, so any failure between here and a real snapshot existing must
@@ -11168,6 +11213,14 @@ fn do_backup_at(dir: &std::path::Path, root: &std::path::Path, keep: usize, gfs:
         let _ = fs::remove_dir_all(&folder);
         return Err(e);
     }
+    Ok(PendingBackup { name, folder, tmp })
+}
+
+// Phase two: compress the copy, record count and names, rotate. Works on files
+// only, so it needs no store lock. On any failure the claimed folder is removed.
+fn backup_pack(pending: PendingBackup, root: &std::path::Path, keep: usize, gfs: Option<GfsConfig>) -> Result<String, String> {
+    let PendingBackup { name, folder, tmp } = pending;
+    let dest = folder.join(BACKUP_DB_GZ);
     // Compress the vacuumed copy, then drop the raw one: never leave both behind.
     let packed = gzip_to(&tmp, &dest);
     // The count and names are taken from the vacuumed copy while it is still
@@ -11194,6 +11247,23 @@ fn do_backup_at(dir: &std::path::Path, root: &std::path::Path, keep: usize, gfs:
     }
     rotate_backups_at(root, keep.clamp(1, 50), gfs);
     Ok(name)
+}
+
+// Snapshot under the caller's store lock, then release it before the slow part.
+// `between` runs right after the release (tests use it to prove the lock is free).
+fn backup_released<G>(
+    guard: G,
+    dir: &std::path::Path,
+    root: &std::path::Path,
+    keep: usize,
+    gfs: Option<GfsConfig>,
+    between: impl FnOnce(),
+) -> Result<String, String> {
+    let pending = backup_snapshot(dir, root);
+    drop(guard);
+    let pending = pending?;
+    between();
+    backup_pack(pending, root, keep, gfs)
 }
 // A folder name "YYYY-MM-DD_HH-MM-SS" as seconds on a local civil timeline. Two of
 // these subtract cleanly (the zone offset cancels), which is all the schedule needs
@@ -11244,12 +11314,19 @@ fn open_backups_folder(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn create_backup(app: AppHandle, state: State<'_, Db>, keep: usize) -> Result<String, String> {
-    let store = lock(&state); // no writes race with the VACUUM read
-    let gfs = gfs_from_settings(&store.settings);
-    // The snapshot copies data.db: a collected counter write belongs in it.
-    flush_settings(&app, &store.settings);
-    do_backup(&app, keep, gfs)
+async fn create_backup(app: AppHandle, keep: usize) -> Result<String, String> {
+    // Off the async runtime: the lock wait, the VACUUM and the compression all block.
+    // The store lock is held only across the point-in-time copy, not the packing.
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<Db>();
+        let store = lock(&state); // no writes race with the VACUUM read
+        let gfs = gfs_from_settings(&store.settings);
+        // The snapshot copies data.db: a collected counter write belongs in it.
+        flush_settings(&app, &store.settings);
+        backup_released(store, &data_dir(&app), &backups_dir(&app), keep, gfs, || {})
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -44070,6 +44147,114 @@ mod tests {
         let conn = Connection::open(&tmp).unwrap();
         let n: i64 = conn.query_row("SELECT COUNT(*) FROM prompts", [], |r| r.get(0)).unwrap();
         assert_eq!(n, 1, "the vacuumed copy must contain the real data, not an empty placeholder");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn stream_test_dir(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("{}-test-stream-{tag}", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    // Deterministic, poorly compressible bytes, well past the 8 KiB copy buffer.
+    fn stream_test_bytes(len: usize) -> Vec<u8> {
+        let mut x: u32 = 0x1234_5678;
+        (0..len)
+            .map(|_| {
+                x = x.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                (x >> 24) as u8
+            })
+            .collect()
+    }
+
+    #[test]
+    fn gzip_and_gunzip_stream_a_file_larger_than_the_copy_buffer() {
+        let dir = stream_test_dir("roundtrip");
+        let raw = dir.join("raw.db");
+        let data = stream_test_bytes(3 * 1024 * 1024 + 17);
+        std::fs::write(&raw, &data).unwrap();
+        let gz = dir.join("data.db.gz");
+        gzip_to(&raw, &gz).unwrap();
+        assert!(!dir.join("data.db.gz.part").exists(), "the temp file must be renamed away");
+        let back = dir.join("back.db");
+        gunzip_to(&gz, &back).unwrap();
+        assert_eq!(std::fs::read(&back).unwrap(), data, "the round trip must be byte exact");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn gzip_to_leaves_no_part_file_when_the_source_is_missing() {
+        let dir = stream_test_dir("gzfail");
+        let gz = dir.join("data.db.gz");
+        assert!(gzip_to(&dir.join("absent.db"), &gz).is_err());
+        assert!(!gz.exists());
+        assert!(!dir.join("data.db.gz.part").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn gunzip_refuses_output_one_byte_above_the_cap_and_removes_it() {
+        let dir = stream_test_dir("cap");
+        let raw = dir.join("raw.db");
+        let data = stream_test_bytes(100_000);
+        std::fs::write(&raw, &data).unwrap();
+        let gz = dir.join("data.db.gz");
+        gzip_to(&raw, &gz).unwrap();
+        let out = dir.join("out.db");
+        gunzip_to_capped(&gz, &out, data.len() as u64).expect("exactly at the cap is allowed");
+        assert_eq!(std::fs::read(&out).unwrap().len(), data.len());
+        let err = gunzip_to_capped(&gz, &out, data.len() as u64 - 1).unwrap_err();
+        assert!(err.contains("expands"), "{err}");
+        assert!(!out.exists(), "a refused inflate must not leave partial output");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn gunzip_of_a_truncated_snapshot_fails_and_leaves_nothing() {
+        let dir = stream_test_dir("trunc");
+        let raw = dir.join("raw.db");
+        std::fs::write(&raw, stream_test_bytes(200_000)).unwrap();
+        let gz = dir.join("data.db.gz");
+        gzip_to(&raw, &gz).unwrap();
+        let bytes = std::fs::read(&gz).unwrap();
+        std::fs::write(&gz, &bytes[..bytes.len() / 2]).unwrap();
+        let out = dir.join("out.db");
+        assert!(gunzip_to(&gz, &out).is_err(), "a cut-off stream must never count as restored");
+        assert!(!out.exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // The store lock must be free while the copy is being packed, and still held
+    // while the point-in-time copy itself is taken.
+    #[test]
+    fn backup_releases_the_store_lock_before_packing() {
+        let dir = stream_test_dir("lock");
+        {
+            let conn = Connection::open(dir.join("data.db")).unwrap();
+            conn.execute_batch("CREATE TABLE prompts(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL); INSERT INTO prompts VALUES('a', 0, 'x');").unwrap();
+        }
+        let root = dir.join("backups");
+        let store = std::sync::Mutex::new(0u8);
+        let guard = store.lock().unwrap();
+        let mut free_while_paused = false;
+        let name = backup_released(guard, &dir, &root, 5, None, || {
+            free_while_paused = store.try_lock().is_ok();
+        })
+        .unwrap();
+        assert!(free_while_paused, "packing must run with the store lock released");
+        let folder = root.join(&name);
+        assert!(folder.join(BACKUP_DB_GZ).exists());
+        assert!(!folder.join("data.db.tmp").exists(), "the raw copy must not be left behind");
+        let check = dir.join("check.db");
+        gunzip_to(&folder.join(BACKUP_DB_GZ), &check).unwrap();
+        let n: i64 = Connection::open(&check).unwrap().query_row("SELECT COUNT(*) FROM prompts", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 1);
+        // A failing snapshot frees the lock too.
+        let guard = store.lock().unwrap();
+        let err = backup_released(guard, &dir.join("nowhere"), &root, 5, None, || {}).unwrap_err();
+        assert_eq!(err, "no-store");
+        assert!(store.try_lock().is_ok());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
