@@ -33731,28 +33731,30 @@ fn scrub_log_line(line: &str) -> String {
 // `append_crash_log` uses, so this can never interleave with a concurrent
 // append and leave the file half old, half rewritten.
 fn strip_user_path_lines(path: &Path) {
-    let Ok(bytes) = fs::read(path) else { return };
-    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
-    let mut changed = false;
-    for raw_line in bytes.split_inclusive(|&b| b == b'\n') {
-        let (body, had_newline) = match raw_line.strip_suffix(b"\n") {
-            Some(b) => (b, true),
-            None => (raw_line, false),
-        };
-        let text = String::from_utf8_lossy(body);
-        let cleaned = scrub_log_line(&text);
-        if cleaned != text {
-            changed = true;
-        }
-        out.extend_from_slice(cleaned.as_bytes());
-        if had_newline {
-            out.push(b'\n');
-        }
-    }
-    if !changed {
-        return;
-    }
+    // Read, transform and swap all under the one lock: an append landing between a
+    // read outside it and the rename would be overwritten by the older copy.
     with_crash_log_lock(path, || {
+        let Ok(bytes) = fs::read(path) else { return };
+        let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+        let mut changed = false;
+        for raw_line in bytes.split_inclusive(|&b| b == b'\n') {
+            let (body, had_newline) = match raw_line.strip_suffix(b"\n") {
+                Some(b) => (b, true),
+                None => (raw_line, false),
+            };
+            let text = String::from_utf8_lossy(body);
+            let cleaned = scrub_log_line(&text);
+            if cleaned != text {
+                changed = true;
+            }
+            out.extend_from_slice(cleaned.as_bytes());
+            if had_newline {
+                out.push(b'\n');
+            }
+        }
+        if !changed {
+            return;
+        }
         let tmp = path.with_extension("log.tmp");
         let Ok(mut f) = fs::File::create(&tmp) else { return };
         use std::io::Write;
@@ -51953,5 +51955,30 @@ mod tests {
         assert_eq!(got.text, "body line");
         assert_eq!(got.color, "#abcdef");
         assert_eq!(got.file_path, r"D:\x.txt");
+    }
+
+    // An append that lands between the scrub's read and its rename used to be
+    // overwritten by the rewritten copy: the read has to happen under the same lock.
+    #[test]
+    fn strip_user_path_lines_keeps_a_line_appended_while_it_waits_for_the_lock() {
+        let path = std::env::temp_dir().join(format!("ps-crashlog-scrub-race-{}", std::process::id()));
+        fs::write(&path, "[t=1 v1.0] panicked at C:\\Users\\example\\lib.rs:42\n").unwrap();
+        let held = CrashLogLock::acquire(&path);
+        let worker = {
+            let path = path.clone();
+            std::thread::spawn(move || strip_user_path_lines(&path))
+        };
+        std::thread::sleep(Duration::from_millis(100));
+        {
+            use std::io::Write;
+            let mut f = fs::OpenOptions::new().append(true).open(&path).unwrap();
+            f.write_all(b"[t=2 v1.0] LATE\n").unwrap();
+        }
+        drop(held);
+        worker.join().unwrap();
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(text.contains("LATE"), "the appended line must survive the scrub: {text:?}");
+        assert!(!text.to_ascii_lowercase().contains("\\users\\"), "the path is still scrubbed: {text:?}");
+        let _ = fs::remove_file(&path);
     }
 }
