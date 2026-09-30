@@ -26610,7 +26610,13 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
         notify_float_settings(&app);
         return result;
     }
-    let is_url_scheme_toggle = key == "urlScheme";
+    // The address scheme is a registry entry as well as a flag: changed together,
+    // and an error leaves both as they were.
+    if key == "urlScheme" {
+        let result = set_url_scheme_flag(&app, &state, enabled);
+        notify_float_settings(&app);
+        return result;
+    }
     // Turning either gate off must not leave a session silently running.
     let end_auto_session = !enabled && (key == "rotatingPrompts" || key == "rotateAuto");
     // "Off" means the list is empty, not just paused -- clear whatever is
@@ -26708,16 +26714,6 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
     if is_folders {
         let handle = app.clone();
         tauri::async_runtime::spawn(async move { sync_float_windows(&handle) });
-    }
-    // Best-effort: a registry write can fail (locked-down profile, odd ACLs)
-    // without the switch itself failing, the same tolerance apply_autostart's
-    // own caller does not need because that path already returns Result -- this
-    // one is folded into the same command as every other flag, so it logs
-    // instead of turning set_ui_flag itself into a hard error for everyone else.
-    if is_url_scheme_toggle {
-        if let Err(e) = remote::apply_url_scheme_registration(enabled) {
-            append_crash_log(&format!("promptsaver:// registration failed: {e}"));
-        }
     }
     notify_float_settings(&app);
     Ok(())
@@ -30434,28 +30430,229 @@ fn set_always_on_top(app: AppHandle, state: State<Db>, enabled: bool) {
     }
 }
 
+// The run entry as it stands right now (None = no entry), so a failed change can
+// put back exactly what was there.
+#[cfg(windows)]
+fn autostart_command() -> Result<Option<String>, String> {
+    use winreg::enums::{HKEY_CURRENT_USER, KEY_READ};
+    use winreg::RegKey;
+    let run = RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey_with_flags(r"Software\Microsoft\Windows\CurrentVersion\Run", KEY_READ)
+        .map_err(|e| e.to_string())?;
+    match run.get_value::<String, _>(AUTOSTART_KEY) {
+        Ok(v) => Ok(Some(v)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[cfg(not(windows))]
+fn autostart_command() -> Result<Option<String>, String> {
+    Ok(None)
+}
+
+#[cfg(windows)]
+fn autostart_restore(prior: Option<String>) -> Result<(), String> {
+    use winreg::enums::{HKEY_CURRENT_USER, KEY_SET_VALUE};
+    use winreg::RegKey;
+    let run = RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey_with_flags(r"Software\Microsoft\Windows\CurrentVersion\Run", KEY_SET_VALUE)
+        .map_err(|e| e.to_string())?;
+    match prior {
+        Some(cmd) => run.set_value(AUTOSTART_KEY, &cmd).map_err(|e| e.to_string()),
+        None => match run.delete_value(AUTOSTART_KEY) {
+            Ok(_) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(e.to_string()),
+        },
+    }
+}
+
+#[cfg(not(windows))]
+fn autostart_restore(_prior: Option<String>) -> Result<(), String> {
+    Ok(())
+}
+
+// One stored setting and one piece of Windows state that have to agree. The
+// setting is saved first; the Windows side is changed only once that landed. If
+// either step fails, whichever side did change is put back, so the stored value
+// and the registration both end up as they were and the caller reports an error
+// (the control then reverts). `restore_setting` gets `false` when nothing was
+// written, so it only undoes the in-memory change.
+fn two_state_change<C, P>(
+    ctx: &mut C,
+    prior_os: P,
+    set_setting: impl FnOnce(&mut C) -> bool,
+    restore_setting: impl FnOnce(&mut C, bool) -> bool,
+    apply_os: impl FnOnce() -> Result<(), String>,
+    restore_os: impl FnOnce(P) -> Result<(), String>,
+) -> Result<(), String> {
+    if !set_setting(ctx) {
+        restore_setting(ctx, false);
+        return Err("save-failed".to_string());
+    }
+    if let Err(e) = apply_os() {
+        if let Err(r) = restore_os(prior_os) {
+            append_crash_log(&format!("windows state could not be put back after a failed change: {r}"));
+        }
+        if !restore_setting(ctx, true) {
+            append_crash_log("the previous setting could not be saved again after a failed change");
+        }
+        return Err(e);
+    }
+    Ok(())
+}
+
+// Whose registration an entry is. Only our own (or one whose program is gone)
+// is ever rewritten or removed at start; another copy's entry is left alone.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+enum RegistryOwner {
+    Missing,
+    ThisExe,
+    Gone,
+    OtherExe,
+}
+
+// The program a registry command line starts: quoted path, or up to the first space.
+fn command_program(command: &str) -> Option<String> {
+    let c = command.trim();
+    let exe = match c.strip_prefix('"') {
+        Some(rest) => rest.split('"').next()?,
+        None => c.split(' ').next()?,
+    };
+    (!exe.is_empty()).then(|| exe.to_string())
+}
+
+fn same_program_path(a: &str, b: &str) -> bool {
+    let norm = |p: &str| p.trim_start_matches(r"\\?\").replace('/', "\\").to_lowercase();
+    norm(a) == norm(b)
+}
+
+fn registry_owner(command: Option<&str>, this_exe: &str, exists: impl Fn(&str) -> bool) -> RegistryOwner {
+    let Some(program) = command.and_then(command_program) else {
+        return RegistryOwner::Missing;
+    };
+    if same_program_path(&program, this_exe) {
+        RegistryOwner::ThisExe
+    } else if !exists(&program) {
+        RegistryOwner::Gone
+    } else {
+        RegistryOwner::OtherExe
+    }
+}
+
+// What start-up does to bring an entry in line with the stored setting: Some(true)
+// writes it, Some(false) removes it, None leaves it.
+fn reconcile_action(setting_on: bool, owner: RegistryOwner) -> Option<bool> {
+    match (setting_on, owner) {
+        (true, RegistryOwner::OtherExe) => None,
+        (true, _) => Some(true),
+        (false, RegistryOwner::ThisExe) => Some(false),
+        (false, _) => None,
+    }
+}
+
+// Start-up: make autostart and the address scheme match the stored settings,
+// touching only entries that are this program's own.
+fn reconcile_windows_state(autostart_on: bool, start_min: bool, url_scheme_on: bool) {
+    let Ok(exe) = std::env::current_exe() else { return };
+    let exe = exe.display().to_string();
+    let exists = |p: &str| std::path::Path::new(p).exists();
+    match autostart_command() {
+        Ok(cmd) => {
+            if let Some(on) = reconcile_action(autostart_on, registry_owner(cmd.as_deref(), &exe, exists)) {
+                if let Err(e) = apply_autostart(on, start_min) {
+                    append_crash_log(&format!("autostart reconcile failed: {e}"));
+                }
+            }
+        }
+        Err(e) => append_crash_log(&format!("autostart reconcile could not read the entry: {e}")),
+    }
+    match remote::url_scheme_command() {
+        Ok(cmd) => {
+            if let Some(on) = reconcile_action(url_scheme_on, registry_owner(cmd.as_deref(), &exe, exists)) {
+                if let Err(e) = remote::apply_url_scheme_registration(on) {
+                    append_crash_log(&format!("address scheme reconcile failed: {e}"));
+                }
+            }
+        }
+        Err(e) => append_crash_log(&format!("address scheme reconcile could not read the entry: {e}")),
+    }
+}
+
 #[tauri::command]
 fn set_autostart(app: AppHandle, state: State<Db>, enabled: bool) -> Result<bool, String> {
-    let minimized = lock(&state).settings.start_minimized;
-    apply_autostart(enabled, minimized)?;
+    // The store lock stays held across both steps so no other change slips in
+    // between the save and the registry write.
     let mut store = lock(&state);
-    store.settings.autostart = enabled;
-    save_settings(&app, &store.settings);
+    let prior = store.settings.autostart;
+    let minimized = store.settings.start_minimized;
+    let prior_os = autostart_command()?;
+    two_state_change(
+        &mut *store,
+        prior_os,
+        |st| {
+            st.settings.autostart = enabled;
+            save_settings(&app, &st.settings)
+        },
+        |st, persist| {
+            st.settings.autostart = prior;
+            !persist || save_settings(&app, &st.settings)
+        },
+        || apply_autostart(enabled, minimized),
+        autostart_restore,
+    )?;
     Ok(enabled)
 }
 
 #[tauri::command]
 fn set_start_minimized(app: AppHandle, state: State<Db>, enabled: bool) -> Result<bool, String> {
-    let autostart = {
-        let mut store = lock(&state);
-        store.settings.start_minimized = enabled;
-        save_settings(&app, &store.settings);
-        store.settings.autostart
-    };
-    if autostart {
-        apply_autostart(true, enabled)?;
-    }
+    let mut store = lock(&state);
+    let prior = store.settings.start_minimized;
+    let autostart = store.settings.autostart;
+    // Only an active autostart entry carries the flag; without one there is no
+    // Windows side to change.
+    let prior_os = if autostart { autostart_command()? } else { None };
+    two_state_change(
+        &mut *store,
+        prior_os,
+        |st| {
+            st.settings.start_minimized = enabled;
+            save_settings(&app, &st.settings)
+        },
+        |st, persist| {
+            st.settings.start_minimized = prior;
+            !persist || save_settings(&app, &st.settings)
+        },
+        || if autostart { apply_autostart(true, enabled) } else { Ok(()) },
+        |prior_os| if autostart { autostart_restore(prior_os) } else { Ok(()) },
+    )?;
     Ok(enabled)
+}
+
+// The address scheme switch: stored flag and registration change together, like
+// autostart. A failed registry change leaves the flag as it was and reports it.
+fn set_url_scheme_flag(app: &AppHandle, state: &State<Db>, enabled: bool) -> Result<(), String> {
+    let mut store = lock(state);
+    let prior = store.settings.ui_flags.get("urlScheme").copied();
+    let prior_os = remote::url_scheme_command()?;
+    two_state_change(
+        &mut *store,
+        prior_os,
+        |st| {
+            st.settings.ui_flags.insert("urlScheme".to_string(), enabled);
+            save_settings(app, &st.settings)
+        },
+        |st, persist| {
+            match prior {
+                Some(v) => st.settings.ui_flags.insert("urlScheme".to_string(), v),
+                None => st.settings.ui_flags.remove("urlScheme"),
+            };
+            !persist || save_settings(app, &st.settings)
+        },
+        || remote::apply_url_scheme_registration(enabled),
+        remote::url_scheme_restore,
+    )
 }
 
 // ---------- Import / export ----------
@@ -33805,6 +34002,7 @@ pub fn run() {
             let saved_geom = store.settings.window;
             let autostart = store.settings.autostart;
             let start_min = store.settings.start_minimized;
+            let url_scheme_on = remote::url_scheme_enabled(&store.settings);
             let backup_start_delay_s = store
                 .settings
                 .ui_values
@@ -34124,10 +34322,10 @@ pub fn run() {
             tray.build(app)?;
             apply_tray_menu(&handle); // Adds the quick-copy sections if they are on
 
-            // Re-apply autostart so the registry entry tracks the exe location.
-            if autostart {
-                let _ = apply_autostart(true, start_min);
-            }
+            // Bring autostart and the address scheme in line with the stored
+            // settings (also follows the exe when it moved). Another copy's entry
+            // is never touched.
+            reconcile_windows_state(autostart, start_min, url_scheme_on);
 
             // One place decides which pills and which folders belong on screen.
             sync_float_windows(&handle);
@@ -44256,6 +44454,114 @@ mod tests {
         assert_eq!(err, "no-store");
         assert!(store.try_lock().is_ok());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // Stand-in for one stored setting plus one registry value.
+    struct TwoStateWorld {
+        setting: bool,
+        os: Option<String>,
+        save_fails: bool,
+        os_fails: bool,
+        restore_save_fails: bool,
+    }
+
+    fn run_two_state(w: &mut TwoStateWorld, want: bool) -> Result<(), String> {
+        let prior = w.setting;
+        let prior_os = w.os.clone();
+        let os_cell = std::cell::RefCell::new(w.os.clone());
+        let (os_fails, save_fails, restore_save_fails) = (w.os_fails, w.save_fails, w.restore_save_fails);
+        let saved = std::cell::Cell::new(prior);
+        let mut setting = prior;
+        let result = two_state_change(
+            &mut setting,
+            prior_os,
+            |s| {
+                *s = want;
+                if save_fails {
+                    false
+                } else {
+                    saved.set(want);
+                    true
+                }
+            },
+            |s, persist| {
+                *s = prior;
+                if !persist {
+                    return true;
+                }
+                if restore_save_fails {
+                    false
+                } else {
+                    saved.set(prior);
+                    true
+                }
+            },
+            || {
+                // A failing registry write may still have changed the value.
+                *os_cell.borrow_mut() = Some(format!("new-{want}"));
+                if os_fails { Err("registry".to_string()) } else { Ok(()) }
+            },
+            |p| {
+                *os_cell.borrow_mut() = p;
+                Ok(())
+            },
+        );
+        w.setting = saved.get();
+        w.os = os_cell.into_inner();
+        result
+    }
+
+    #[test]
+    fn two_state_change_success_changes_both_sides() {
+        let mut w = TwoStateWorld { setting: false, os: None, save_fails: false, os_fails: false, restore_save_fails: false };
+        run_two_state(&mut w, true).unwrap();
+        assert!(w.setting);
+        assert_eq!(w.os.as_deref(), Some("new-true"));
+    }
+
+    #[test]
+    fn two_state_change_keeps_both_old_when_the_save_fails() {
+        let mut w = TwoStateWorld { setting: false, os: Some("old".into()), save_fails: true, os_fails: false, restore_save_fails: false };
+        assert_eq!(run_two_state(&mut w, true).unwrap_err(), "save-failed");
+        assert!(!w.setting);
+        assert_eq!(w.os.as_deref(), Some("old"), "the registry is not touched when the setting did not save");
+    }
+
+    #[test]
+    fn two_state_change_keeps_both_old_when_the_registry_fails_after_the_save() {
+        let mut w = TwoStateWorld { setting: false, os: Some("old".into()), save_fails: false, os_fails: true, restore_save_fails: false };
+        assert_eq!(run_two_state(&mut w, true).unwrap_err(), "registry");
+        assert!(!w.setting, "the saved setting is put back");
+        assert_eq!(w.os.as_deref(), Some("old"), "a half-applied registry change is put back");
+        let mut w = TwoStateWorld { setting: true, os: None, save_fails: false, os_fails: true, restore_save_fails: false };
+        assert!(run_two_state(&mut w, false).is_err());
+        assert!(w.setting);
+        assert_eq!(w.os, None);
+    }
+
+    #[test]
+    fn registry_owner_tells_this_copy_from_another() {
+        let here = r"C:\Apps\Prompt Saver\prompt-saver.exe";
+        let exists = |p: &str| p.to_lowercase().contains("other");
+        assert_eq!(registry_owner(None, here, exists), RegistryOwner::Missing);
+        assert_eq!(registry_owner(Some(r#""C:\Apps\Prompt Saver\prompt-saver.exe" --minimized"#), here, exists), RegistryOwner::ThisExe);
+        assert_eq!(registry_owner(Some(r#""c:/apps/prompt saver/PROMPT-SAVER.EXE" "%1""#), here, exists), RegistryOwner::ThisExe);
+        assert_eq!(registry_owner(Some(r#""D:\other\prompt-saver.exe""#), here, exists), RegistryOwner::OtherExe);
+        assert_eq!(registry_owner(Some(r#""E:\moved\prompt-saver.exe""#), here, exists), RegistryOwner::Gone);
+        assert_eq!(registry_owner(Some(""), here, exists), RegistryOwner::Missing);
+    }
+
+    #[test]
+    fn reconcile_only_touches_entries_that_are_ours() {
+        use RegistryOwner::*;
+        assert_eq!(reconcile_action(true, Missing), Some(true));
+        assert_eq!(reconcile_action(true, ThisExe), Some(true));
+        assert_eq!(reconcile_action(true, Gone), Some(true));
+        assert_eq!(reconcile_action(true, OtherExe), None);
+        assert_eq!(reconcile_action(false, ThisExe), Some(false));
+        assert_eq!(reconcile_action(false, OtherExe), None);
+        assert_eq!(reconcile_action(false, Gone), None);
+        assert_eq!(reconcile_action(false, Missing), None);
     }
 
     // allowMultipleInstances lets two full processes share one data directory.

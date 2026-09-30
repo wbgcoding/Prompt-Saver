@@ -1358,29 +1358,75 @@ fn scheme_consent_texts(lang: &str, kind: &str) -> (String, String) {
 // build (no installer to do it at setup time) and the installed one alike.
 
 #[cfg(windows)]
+fn classes_key() -> Result<winreg::RegKey, String> {
+    use winreg::enums::{HKEY_CURRENT_USER, KEY_ALL_ACCESS};
+    winreg::RegKey::predef(HKEY_CURRENT_USER).open_subkey_with_flags("Software\\Classes", KEY_ALL_ACCESS).map_err(|e| e.to_string())
+}
+
+#[cfg(windows)]
+fn write_scheme(command: &str) -> Result<(), String> {
+    let classes = classes_key()?;
+    let (proto, _) = classes.create_subkey(SCHEME_NAME).map_err(|e| e.to_string())?;
+    proto.set_value("", &format!("URL:{} Protocol", crate::brand::DISPLAY_NAME)).map_err(|e| e.to_string())?;
+    proto.set_value("URL Protocol", &"").map_err(|e| e.to_string())?;
+    let (open, _) = proto.create_subkey("shell\\open\\command").map_err(|e| e.to_string())?;
+    open.set_value("", &command).map_err(|e| e.to_string())
+}
+
+#[cfg(windows)]
+fn delete_scheme() -> Result<(), String> {
+    match classes_key()?.delete_subkey_all(SCHEME_NAME) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[cfg(windows)]
 pub(crate) fn apply_url_scheme_registration(enabled: bool) -> Result<(), String> {
-    use winreg::enums::HKEY_CURRENT_USER;
-    use winreg::RegKey;
-    let classes = RegKey::predef(HKEY_CURRENT_USER).open_subkey_with_flags("Software\\Classes", winreg::enums::KEY_ALL_ACCESS).map_err(|e| e.to_string())?;
     if enabled {
         let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-        let (proto, _) = classes.create_subkey(SCHEME_NAME).map_err(|e| e.to_string())?;
-        proto.set_value("", &format!("URL:{} Protocol", crate::brand::DISPLAY_NAME)).map_err(|e| e.to_string())?;
-        proto.set_value("URL Protocol", &"").map_err(|e| e.to_string())?;
-        let (command, _) = proto.create_subkey("shell\\open\\command").map_err(|e| e.to_string())?;
-        command.set_value("", &format!("\"{}\" \"%1\"", exe.display())).map_err(|e| e.to_string())?;
-        Ok(())
+        write_scheme(&format!("\"{}\" \"%1\"", exe.display()))
     } else {
-        match classes.delete_subkey_all(SCHEME_NAME) {
-            Ok(()) => Ok(()),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(e) => Err(e.to_string()),
-        }
+        delete_scheme()
     }
 }
 #[cfg(not(windows))]
 pub(crate) fn apply_url_scheme_registration(_enabled: bool) -> Result<(), String> {
     Err("the address scheme is only supported on Windows".to_string())
+}
+
+// The registered open command as it stands now (None = not registered), so a
+// failed change can put back exactly what was there.
+#[cfg(windows)]
+pub(crate) fn url_scheme_command() -> Result<Option<String>, String> {
+    use winreg::enums::{HKEY_CURRENT_USER, KEY_READ};
+    let path = format!("Software\\Classes\\{SCHEME_NAME}\\shell\\open\\command");
+    match winreg::RegKey::predef(HKEY_CURRENT_USER).open_subkey_with_flags(path, KEY_READ) {
+        Ok(key) => match key.get_value::<String, _>("") {
+            Ok(v) => Ok(Some(v)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(e.to_string()),
+        },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
+}
+#[cfg(not(windows))]
+pub(crate) fn url_scheme_command() -> Result<Option<String>, String> {
+    Ok(None)
+}
+
+#[cfg(windows)]
+pub(crate) fn url_scheme_restore(prior: Option<String>) -> Result<(), String> {
+    match prior {
+        Some(cmd) => write_scheme(&cmd),
+        None => delete_scheme(),
+    }
+}
+#[cfg(not(windows))]
+pub(crate) fn url_scheme_restore(_prior: Option<String>) -> Result<(), String> {
+    Ok(())
 }
 
 #[cfg(test)]
