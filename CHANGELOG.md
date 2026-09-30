@@ -869,6 +869,9 @@ the video editor and the introduction tour ship on).
 - **Saving with Markdown folder sync on no longer rereads every file.** The
   app remembers what it last wrote to each file and skips the ones that are
   still exactly that; an edit made outside the app is still noticed.
+- **Opening the trash no longer loads every trashed picture.** The list asks
+  only for names, a short text preview and dates, and runs off the main
+  thread, so a large trash opens at once.
 
 ### Fixed
 

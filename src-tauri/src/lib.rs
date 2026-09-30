@@ -8117,9 +8117,43 @@ async fn batch_prompts(
 
 // ---------- Trash ----------
 
+// What one row of the trash dialog reads, and nothing more: the dialog draws no
+// picture, so the stored images (hundreds of kilobytes each) never travel. `text`
+// is a short preview; a confidential entry's preview stays empty, since its stored
+// text is ciphertext.
+#[derive(Serialize)]
+struct TrashRow {
+    id: String,
+    name: String,
+    text: String,
+    file_path: String,
+    icon_path: String,
+    copy_image: bool,
+    has_image: bool,
+    trashed_at: u64,
+}
+
+const TRASH_PREVIEW_CHARS: usize = 400;
+
+fn trash_rows(trash: &[Prompt]) -> Vec<TrashRow> {
+    trash
+        .iter()
+        .map(|p| TrashRow {
+            id: p.id.clone(),
+            name: p.name.clone(),
+            text: if p.secret { String::new() } else { p.text.chars().take(TRASH_PREVIEW_CHARS).collect() },
+            file_path: p.file_path.clone(),
+            icon_path: p.icon_path.clone(),
+            copy_image: p.copy_image,
+            has_image: !p.image.is_empty(),
+            trashed_at: p.trashed_at,
+        })
+        .collect()
+}
+
 #[tauri::command]
-fn list_trash(state: State<Db>) -> Vec<Prompt> {
-    lock(&state).trash.clone()
+async fn list_trash(state: State<'_, Db>) -> Result<Vec<TrashRow>, String> {
+    Ok(trash_rows(&lock(&state).trash))
 }
 
 // Places the restored prompt in the ACTIVE view via the same first_free_cell scan
@@ -8218,30 +8252,30 @@ fn purge_ids(app: &AppHandle, store: &mut Store, ids: &[String]) -> Option<std::
 }
 
 #[tauri::command]
-fn purge_prompt(app: AppHandle, state: State<Db>, id: String) -> Vec<Prompt> {
+async fn purge_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Result<Vec<TrashRow>, String> {
     let (trash, orphan_scan) = {
         let mut store = lock(&state);
         let orphan_scan = purge_ids(&app, &mut store, std::slice::from_ref(&id));
-        (store.trash.clone(), orphan_scan)
+        (trash_rows(&store.trash), orphan_scan)
     };
     if let Some(referenced) = orphan_scan {
         sweep_orphan_files(&app, &referenced);
     }
-    trash
+    Ok(trash)
 }
 
 #[tauri::command]
-fn empty_trash(app: AppHandle, state: State<Db>) -> Vec<Prompt> {
+async fn empty_trash(app: AppHandle, state: State<'_, Db>) -> Result<Vec<TrashRow>, String> {
     let (trash, orphan_scan) = {
         let mut store = lock(&state);
         let ids: Vec<String> = store.trash.iter().map(|p| p.id.clone()).collect();
         let orphan_scan = purge_ids(&app, &mut store, &ids);
-        (store.trash.clone(), orphan_scan)
+        (trash_rows(&store.trash), orphan_scan)
     };
     if let Some(referenced) = orphan_scan {
         sweep_orphan_files(&app, &referenced);
     }
-    trash
+    Ok(trash)
 }
 
 // Drop anything past the retention window (0/off by settings default, same
@@ -42677,6 +42711,29 @@ mod tests {
         fs::write(&file, "edited outside").unwrap();
         assert!(!sync_file_known_current(&file, h1), "an outside edit changes the stamp and is never skipped");
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn trash_rows_carry_what_the_trash_list_draws_and_no_picture() {
+        let mut p = test_prompt("t1");
+        p.name = "Report".into();
+        p.text = "x".repeat(TRASH_PREVIEW_CHARS + 50);
+        p.image = "data:image/png;base64,AAAA".into();
+        p.file_path = "C:/files/a.pdf".into();
+        p.trashed_at = 1234;
+        let mut s = test_prompt("t2");
+        s.secret = true;
+        s.text = "ciphertext-that-must-not-show".into();
+        let rows = trash_rows(&[p, s]);
+        let json = serde_json::to_string(&rows).unwrap();
+        assert!(!json.contains("base64,AAAA") && !json.contains("\"image\""), "no picture in the trash payload: {json}");
+        assert_eq!(rows[0].id, "t1");
+        assert_eq!(rows[0].name, "Report");
+        assert_eq!(rows[0].text.chars().count(), TRASH_PREVIEW_CHARS);
+        assert_eq!(rows[0].file_path, "C:/files/a.pdf");
+        assert_eq!(rows[0].trashed_at, 1234);
+        assert!(rows[0].has_image);
+        assert_eq!(rows[1].text, "", "a confidential entry shows no stored text");
     }
 
     #[test]
