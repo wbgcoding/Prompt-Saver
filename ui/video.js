@@ -1545,7 +1545,21 @@ function endRectDrag() {
   renderSnapGuides();
   if (!drag || drag.kind !== "rect") return;
   const op = drag.op;
+  // A point op (text) has no rect: the move already changed x/y in place for
+  // the live preview, so put the old spot back before the op is re-pushed, or
+  // the undo step would restore nothing.
+  if (!drag.live) {
+    const p = drag.livePoint;
+    op.x = drag.orig.x;
+    op.y = drag.orig.y;
+    if (p.x === op.x && p.y === op.y) { renderRects(); return; }
+    pushReplacing((o) => o.id === op.id, { ...op, x: p.x, y: p.y }, { keepEditor: true });
+    return;
+  }
   const raw = drag.live && drag.live.w >= RECT_MIN_PX && drag.live.h >= RECT_MIN_PX ? drag.live : drag.orig;
+  // The move also changed op.rect in place; restore it so the undo step keeps
+  // the rect the op had before the drag.
+  op.rect = { ...drag.orig };
   if (op.tool === "crop") {
     const rect = snapRect(raw);
     // A click-release with no actual movement (or one that snaps right

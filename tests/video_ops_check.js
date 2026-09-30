@@ -67,6 +67,9 @@ function makeSandbox(extra) {
       extractBlock("scaleTarget", "function scaleTarget() {"),
       extractBlock("clipVideoLabel", "function clipVideoLabel(op, label, parts, fps) {"),
       extractBlock("buildVideoChain", "function buildVideoChain() {"),
+      extractBlock("undo", "function undo() {"),
+      extractLine("rectsEqual", "const rectsEqual = (a, b) => !!a && !!b && a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;"),
+      extractBlock("endRectDrag", "function endRectDrag() {"),
     ].join("\n"),
     sandbox,
     { filename: "video.js (extracted)" }
@@ -133,6 +136,53 @@ function baseState(ops) {
   expect("the edited overlay moved to the end of the op list", sb.VE.ops[sb.VE.ops.length - 1].id === "A");
   const g = vm.runInContext("buildVideoChain()", sb) || "";
   expect("the edited lower overlay is still drawn first", g.indexOf("0xff0000") !== -1 && g.indexOf("0xff0000") < g.indexOf("0x00ff00"), g);
+}
+
+// Dragging an overlay must leave a real undo step that restores where it was.
+// The live drag moves the op in place, so the step has to be built from the
+// original position; a text op has no rect and used to get an empty one.
+{
+  const sb = makeSandbox({
+    changed: 0,
+    afterOpsChanged: () => { sb.changed++; }, renderSnapGuides: () => {}, renderRects: () => {}, RECT_MIN_PX: 16,
+    snapRect: (r) => r,
+  });
+  sb.VE = baseState([]);
+  Object.assign(sb.VE, { floor: 0, undoMax: 50, redo: [], drag: null, guide: null });
+  const text = { tool: "overlay", id: "T", kind: "text", startMs: 0, endMs: 5000, x: 100, y: 100, text: "hi" };
+  vm.runInContext("pushOp", sb)(text);
+  const before = sb.VE.ops.length;
+  sb.changed = 0;
+  // What pointerdown and pointermove leave behind after a 50 px drag to the right.
+  text.x = 150;
+  sb.VE.drag = { kind: "rect", op: text, handle: null, start: { x: 0, y: 0 }, orig: { x: 100, y: 100, w: 0, h: 0 }, live: null, livePoint: { x: 150, y: 100 } };
+  vm.runInContext("endRectDrag()", sb);
+  const now = sb.VE.ops.find((o) => o.id === "T");
+  expect("a text drag creates one replacing op", sb.VE.ops.length === before && !!now._prev);
+  expect("a text drag keeps the new position", now.x === 150 && now.y === 100);
+  expect("a text drag never gives the text a rect", now.rect === undefined && now._prev.rect === undefined);
+  expect("a text drag runs the op-changed path (dirty flag, autosave)", sb.changed === 1, String(sb.changed));
+  vm.runInContext("undo()", sb);
+  const undone = sb.VE.ops.find((o) => o.id === "T");
+  expect("undoing a text drag restores the old position", undone.x === 100 && undone.y === 100, JSON.stringify(undone));
+
+  // A click without movement is no edit at all and must not add a rect.
+  const still = sb.VE.ops.find((o) => o.id === "T");
+  sb.VE.drag = { kind: "rect", op: still, handle: null, start: { x: 0, y: 0 }, orig: { x: 100, y: 100, w: 0, h: 0 }, live: null, livePoint: { x: 100, y: 100 } };
+  const len = sb.VE.ops.length, redoLen = sb.VE.redo.length;
+  vm.runInContext("endRectDrag()", sb);
+  expect("a text click without movement changes nothing", sb.VE.ops.length === len && sb.VE.redo.length === redoLen && still.rect === undefined);
+
+  // A frame overlay: the drag changes op.rect in place, undo must bring back the original.
+  const frame = { tool: "overlay", id: "F", kind: "frame", startMs: 0, endMs: 5000, rect: { x: 10, y: 10, w: 100, h: 100 } };
+  vm.runInContext("pushOp", sb)(frame);
+  frame.rect = { x: 60, y: 10, w: 100, h: 100 };
+  sb.VE.drag = { kind: "rect", op: frame, handle: null, start: { x: 0, y: 0 }, orig: { x: 10, y: 10, w: 100, h: 100 }, live: frame.rect, livePoint: null };
+  vm.runInContext("endRectDrag()", sb);
+  expect("a frame drag keeps the new rect", sb.VE.ops.find((o) => o.id === "F").rect.x === 60);
+  vm.runInContext("undo()", sb);
+  const back = sb.VE.ops.find((o) => o.id === "F");
+  expect("undoing a frame drag restores the original rect", back.rect.x === 10 && back.rect.w === 100, JSON.stringify(back.rect));
 }
 
 // An inserted clip that carries sound must be decoded into the audio graph,
