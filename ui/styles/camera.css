@@ -109,10 +109,12 @@
 .cam-field-label { font-size: 11px; opacity: 0.7; }
 select.field {
   width: 100%;
-  padding: 6px 8px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--surface-2);
+  padding: 6px 30px 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--control-border);
+  /* Colour only: the shorthand would wipe the chevron image the global select
+     rule draws. */
+  background-color: var(--surface-2);
   color: var(--fg);
   font-size: 12px;
 }

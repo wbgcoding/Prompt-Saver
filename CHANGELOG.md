@@ -851,6 +851,13 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **Every dropdown now opens the same rounded, themed list.** The library sort,
+  the export and save-as format pickers, the statistics export, the screenshot
+  editor's text options, the video editor's export and overlay dropdowns and the
+  camera window's microphone and resolution pickers used to open the square
+  Windows list. They share one popup now, also usable from the keyboard (Enter,
+  Space or Alt+Down opens it, arrows move, Escape closes it), and their closed
+  look (corner radius, arrow spacing, border) matches everywhere.
 - **The video export panel no longer has two "Save as" buttons.** The button
   that picked a file before exporting is gone (the name field and "Export to…"
   cover it), and the one shown after an export now reads "Move to…" with a

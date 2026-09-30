@@ -3774,7 +3774,7 @@ PROBE = """
           }
           viewSel.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
           await sleep(120);
-          const pop = document.querySelector('.num-pop');
+          const pop = document.querySelector('.select-pop');
           if (!pop || pop.classList.contains('hidden')) {
             out.errors.push('27: clicking the view select did not open the themed popup');
           } else {
@@ -3786,7 +3786,7 @@ PROBE = """
             rows[rows.length - 1].dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
             await sleep(120);
             if (viewSel.value !== wantId) out.errors.push('27: picking a popup entry did not update the select value');
-            if (!document.querySelector('.num-pop').classList.contains('hidden')) {
+            if (!document.querySelector('.select-pop').classList.contains('hidden')) {
               out.errors.push('27: the view popup stayed open after picking an entry');
             }
           }

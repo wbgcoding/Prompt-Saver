@@ -11,6 +11,7 @@ import { HELP_SKETCHES } from "./helpSketches.js";
 import { DRAG_OUT_MODS, FOLDER_SVG, fileUri, resolveLang, ffmpegDownloadPct, themeColorScheme, playCopySound, numberField, makeEtaEstimator, formatEta, a11yProgressText, parseFfmpegError, fmtBytes, makeHoldOrTapToggle, trapTabWithin } from "./floatShared.js";
 import { placePopover, placePopoverAt, setPopoverPad } from "./popover.js";
 import { createColorPop } from "./colorpop.js";
+import { attachSelectPicker } from "./selectpop.js";
 import { snapMove } from "./snap.js";
 import { withShortcut as withShortcutRaw, rowsForScope as rowsForScopeRaw } from "./shortcuts.js";
 
@@ -1032,82 +1033,6 @@ function closeNumPop(apply) {
   popInput = null;
   popApply = null;
   if (apply && done) done();
-}
-
-// Generic list popup for <select>-backed pickers (8 rows visible, scrollbar
-// only when the list overflows).
-let popOnPick = null;
-let popAnchor = null; // select that opened the popup (click again = close)
-let popSuppressOpen = false;
-
-function openValuePop(anchor, items, current, onPick) {
-  popInput = null;
-  popApply = null;
-  popOnPick = onPick;
-  popAnchor = anchor;
-  numPop.innerHTML = "";
-  let selected = null;
-  for (const item of items) {
-    const row = document.createElement("button");
-    row.type = "button";
-    row.textContent = item.label;
-    // Font entries preview themselves in their own typeface.
-    if (item.font) row.style.fontFamily = item.font;
-    // A disabled option is a section separator, not a choice.
-    if (item.disabled) {
-      row.className = "sep";
-      row.disabled = true;
-      numPop.appendChild(row);
-      continue;
-    }
-    if (String(item.value) === String(current)) {
-      row.className = "sel";
-      selected = row;
-    }
-    row.addEventListener("pointerdown", (e) => {
-      e.preventDefault();
-      const pick = popOnPick;
-      closeValuePop();
-      pick(item.value);
-    });
-    numPop.appendChild(row);
-  }
-  // Width follows the widest entry, not the anchor: so the clamp has to run on the
-  // real box, which is why it happens after the rows exist.
-  placePopover(numPop, anchor.getBoundingClientRect());
-  if (selected) selected.scrollIntoView({ block: "center" });
-}
-
-function closeValuePop() {
-  popOnPick = null;
-  popAnchor = null;
-  numPop.classList.add("hidden");
-}
-
-document.addEventListener("pointerdown", (e) => {
-  if (!popOnPick || numPop.contains(e.target)) return;
-  // Clicking the anchor of the open popup toggles it closed instead of
-  // letting the following mousedown reopen it immediately.
-  popSuppressOpen = !!popAnchor && popAnchor.contains(e.target);
-  closeValuePop();
-});
-
-// Replace the native dropdown of a <select> with the scrollable popup.
-function attachSelectPicker(sel) {
-  sel.addEventListener("mousedown", (e) => {
-    e.preventDefault();
-    if (popSuppressOpen) { popSuppressOpen = false; return; }
-    const items = [...sel.options].map((o) => ({
-      value: o.value,
-      label: o.textContent,
-      font: o.style.fontFamily,
-      disabled: o.disabled,
-    }));
-    openValuePop(sel, items, sel.value, (v) => {
-      sel.value = v;
-      sel.dispatchEvent(new Event("change"));
-    });
-  });
 }
 
 // Combo behaviour: typing stays possible, focus opens the picker,
@@ -8236,7 +8161,7 @@ function promptVarsDialog(vars) {
       else if (usedFixed) { control.title = t("fixedValueHint"); markFixed = true; }
       // A single option is a fixed value: still shown, but nothing to choose.
       if (options.length === 1) control.disabled = true;
-      else attachSelectPicker(control); // themed popup, 8 rows then scroll
+      attachSelectPicker(control); // themed popup, 8 rows then scroll (a locked select never opens)
       label.append(span, control);
       if (markFixed) label.appendChild(fixedMarker());
     } else {
@@ -9936,6 +9861,7 @@ async function renderStatsPanel(body) {
     opt.textContent = t(fmt === "csv" ? "exportCsv" : fmt === "txt" ? "exportTxt" : "exportJson");
     exportSelect.appendChild(opt);
   }
+  attachSelectPicker(exportSelect);
   const exportBtn = document.createElement("button");
   exportBtn.type = "button";
   exportBtn.id = "stats-export-btn";
@@ -18446,6 +18372,7 @@ function bind() {
     }
     select.value = value;
     select.addEventListener("change", () => onChange(select.value));
+    attachSelectPicker(select);
     wrap.appendChild(select);
     return wrap;
   }
@@ -20189,6 +20116,10 @@ function bind() {
   attachSelectPicker($("lib-batch-view"));
   attachSelectPicker($("lib-batch-format"));
   attachSelectPicker($("export-format"));
+  attachSelectPicker($("library-sort"));
+  attachSelectPicker($("batch-export-format"));
+  attachSelectPicker($("batch-export-quality"));
+  attachSelectPicker($("snip-modal-saveas-format"));
   attachSelectPicker($("video-cleanup-age"));
 
   // UI size + icon size: percentage-preset selects mirroring the expert scales.
