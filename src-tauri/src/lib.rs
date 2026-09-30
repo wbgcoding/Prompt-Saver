@@ -20137,6 +20137,17 @@ mod ocr {
         Ok(Some(caps))
     }
 
+    // Parses the install result file's text. Windows PowerShell's `Out-File
+    // -Encoding utf8` prepends a byte-order mark, which neither `trim` nor the
+    // JSON parser accepts; None means "not parseable (yet)".
+    pub(super) fn parse_install_result(text: &str) -> Option<OcrInstallResult> {
+        let text = text.trim_start_matches('\u{feff}').trim();
+        let value: serde_json::Value = serde_json::from_str(text).ok()?;
+        let ok = value.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
+        let error = value.get("error").and_then(|v| v.as_str()).map(|s| s.to_string());
+        Some(OcrInstallResult { ok, error })
+    }
+
     // Reads (and, once a terminal result is found, deletes) the result file
     // install_language's elevated process writes. Deleting on a terminal read
     // keeps a later poll from re-triggering the cache invalidation below on
@@ -20167,9 +20178,7 @@ mod ocr {
         // catch the file mid-write; the next poll a few seconds later normally
         // sees the finished JSON. A permanently corrupt file is caught by the
         // frontend's own poll cutoff instead of being declared a failure here.
-        let value: serde_json::Value = serde_json::from_str(text.trim()).ok()?;
-        let ok = value.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
-        let error = value.get("error").and_then(|v| v.as_str()).map(|s| s.to_string());
+        let OcrInstallResult { ok, error } = parse_install_result(&text)?;
         let _ = fs::remove_file(&path);
         finish_request(kind, &tag);
         if ok {
@@ -37048,6 +37057,18 @@ fn start_sync_poll(app: AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ---- the install result file is read with its byte-order mark ----
+
+    #[test]
+    fn install_result_parses_past_a_byte_order_mark() {
+        let ok = ocr::parse_install_result("\u{feff}{\r\n  \"ok\": true\r\n}\r\n").expect("parsed");
+        assert!(ok.ok && ok.error.is_none());
+        let bad = ocr::parse_install_result("\u{feff}{\"ok\":false,\"error\":\"x\"}").expect("parsed");
+        assert!(!bad.ok);
+        assert_eq!(bad.error.as_deref(), Some("x"));
+        assert!(ocr::parse_install_result("{\"ok\":").is_none());
+    }
 
     // ---- a start always brings up a window ----
 
