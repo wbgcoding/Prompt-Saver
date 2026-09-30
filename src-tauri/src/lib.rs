@@ -9148,21 +9148,33 @@ fn remap_colors(app: AppHandle, state: State<Db>, pairs: Vec<(String, String)>) 
     Ok(())
 }
 
-#[tauri::command]
-fn delete_view(app: AppHandle, state: State<Db>, id: String) -> Result<Settings, String> {
-    let mut store = lock(&state);
-    if store.settings.views.len() <= 1 {
+// The settings half of deleting a view, apart from the lock and the save so it is
+// testable. A grid folder of the deleted view goes with it, and it must go now:
+// left behind until the next start it would still claim its members in
+// normalize_tile_folders' one-folder-per-prompt rule and starve a new folder.
+fn remove_view_from_settings(settings: &mut Settings, id: &str, prompt_ids: &[String]) -> Result<(), String> {
+    if settings.views.len() <= 1 {
         return Err("cannot delete the last view".to_string());
     }
-    store.settings.views.retain(|v| v.id != id);
-    if store.settings.active_view == id {
-        let first_id = store.settings.views[0].id.clone();
-        store.settings.active_view.clone_from(&first_id);
+    settings.views.retain(|v| v.id != id);
+    if settings.active_view == id {
+        let first_id = settings.views[0].id.clone();
+        settings.active_view.clone_from(&first_id);
     }
     // The deleted view must not linger in a group, and a group that just lost its
     // last member dissolves instead of becoming an empty folder tab.
-    let views = store.settings.views.clone();
-    normalize_view_groups(&mut store.settings.view_groups, &views);
+    let views = settings.views.clone();
+    normalize_view_groups(&mut settings.view_groups, &views);
+    let view_ids: Vec<String> = views.iter().map(|v| v.id.clone()).collect();
+    normalize_tile_folders(&mut settings.tile_folders, prompt_ids, &view_ids);
+    Ok(())
+}
+
+#[tauri::command]
+fn delete_view(app: AppHandle, state: State<Db>, id: String) -> Result<Settings, String> {
+    let mut store = lock(&state);
+    let prompt_ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
+    remove_view_from_settings(&mut store.settings, &id, &prompt_ids)?;
     save_settings(&app, &store.settings);
     Ok(webview_settings(&store.settings))
 }
@@ -51424,5 +51436,25 @@ mod tests {
         let layout = &view.layouts[&key];
         assert_eq!(layout.get("occ"), Some(&[0, 0]));
         assert!(layout.get("new").is_none());
+    }
+
+    #[test]
+    fn deleting_a_view_also_drops_its_grid_folders() {
+        let mut settings = Settings::default();
+        settings.views = vec![test_view("a"), test_view("b")];
+        settings.active_view = "a".to_string();
+        settings.tile_folders.push(TileFolder {
+            id: "f".to_string(),
+            name: String::new(),
+            color: String::new(),
+            view_id: "a".to_string(),
+            cell: [0, 0],
+            members: vec!["x".to_string(), "y".to_string()],
+        });
+        let prompt_ids = vec!["x".to_string(), "y".to_string()];
+        remove_view_from_settings(&mut settings, "a", &prompt_ids).unwrap();
+        assert!(settings.tile_folders.is_empty(), "the orphan folder must not linger");
+        assert_eq!(settings.active_view, "b");
+        assert!(remove_view_from_settings(&mut settings, "b", &prompt_ids).is_err());
     }
 }
