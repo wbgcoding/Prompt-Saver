@@ -18436,7 +18436,9 @@ function bind() {
     } else if (dup.point) {
       dup.point = { x: snipEditClamp(dup.point.x + offset, 0, SE.w), y: snipEditClamp(dup.point.y + offset, 0, SE.h) };
     }
-    snipEditPushOp(dup);
+    // Only one spotlight may exist (two would dim each other's clear area), so a
+    // duplicate of it replaces the original rather than stacking a second layer.
+    if (dup.tool === "spotlight") snipEditPushUniqueOp("spotlight", dup); else snipEditPushOp(dup);
   }
   // Removes one specific op wherever it sits in SE.ops. The removal is an undo
   // entry too, so Ctrl+Z brings the op back at its old place.

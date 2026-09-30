@@ -16736,6 +16736,26 @@ def main():
       if (drawn.join() !== '5') errs.push('595: after a second resize the next marker reads ' + JSON.stringify(drawn) + ', expected 5');
     }
 """)
+        failed += ar_probe('ba598', 'screenshot editor: duplicating a spotlight never leaves two spotlights dimming each other', 'index', '1000x780', '', ba_common + r"""
+    if (!(await baOpen(''))) { errs.push('598: the editor did not open'); }
+    else {
+      await baTool('spotlight'); await baDrag(40, 30, 120, 80);
+      let img = await baExport();
+      if (!img || near(img.px(5, 5), BGC, 8) || !near(img.px(42, 32), BGC, 8)) errs.push('598: fixture: the spotlight does not dim the outside and keep the inside clear');
+      const pop = await baCtx(80, 55);
+      if (!pop) { errs.push('598: fixture: no context menu over the spotlight'); }
+      else {
+        const dup = [...pop.querySelectorAll('button')].find((b) => !b.classList.contains('danger'));
+        if (dup) { dup.click(); await sleep(80); }
+        img = await baExport();
+        // inside the copy (moved by the duplicate offset) but outside the original rectangle
+        if (!near(img.px(130, 90), BGC, 8)) errs.push('598: a point inside the duplicate is dimmed, a second spotlight layer exists: ' + JSON.stringify(img.px(130, 90)));
+        await baUndo();
+        img = await baExport();
+        if (!document.getElementById('snip-edit-undo').disabled) errs.push('598: more than one spotlight step is on the undo stack');
+      }
+    }
+""")
         # ---- main window findings: generated block end ----
         print("PASS" if not failed else f"{failed} problem(s)")
         return 1 if failed else 0
