@@ -36640,6 +36640,12 @@ fn sync_poll_apply(
             if store.prompts.iter().any(|p| p.id == stem) {
                 continue; // added by something else in the meantime
             }
+            if store.trash.iter().any(|p| p.id == stem) {
+                // Trashed here, written again by another machine that does not know:
+                // a second row with the same id would break restore, delete and purge.
+                // The orphan sweep takes the file along once the poll has seen it.
+                continue;
+            }
             let Some(np) = apply_md_to_prompt(&sync_blank_prompt(stem), &content) else { continue };
             let id = np.id.clone();
             store.prompts.push(np);
@@ -41985,6 +41991,17 @@ mod tests {
         assert!(sync_same_dir(&dir, &dir.join("inner")), "a folder inside the other counts too");
         let _ = fs::remove_dir_all(&dir);
         let _ = fs::remove_dir_all(&other);
+    }
+
+    #[test]
+    fn sync_poll_does_not_import_a_file_whose_id_sits_in_the_trash() {
+        let trashed = sync_test_prompt();
+        let content = prompt_to_md(&trashed, &SyncPlacement::default());
+        let mut store = sync_apply_store(Vec::new(), vec![trashed]);
+        let (changed, _) = sync_apply(&mut store, "p1", content, true);
+        assert!(!changed);
+        assert!(store.prompts.is_empty(), "a trashed id must not come back as a second, live prompt");
+        assert_eq!(store.trash.len(), 1);
     }
 
     #[test]
