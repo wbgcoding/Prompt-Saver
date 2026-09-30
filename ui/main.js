@@ -18032,6 +18032,9 @@ function bind() {
     if (targetW * targetH > SNIP_SCALE_MAX_AREA) { toast(t("snipScaleTooLarge")); return false; }
     if (SE.tool === "crop") snipEditCropCommit(); // same guard snipEditExportDataUrl uses for a drawn-but-uncommitted crop
     snipEditFinishTextIfOpen();
+    // With the original locked on, the base canvas shows only the raw capture and
+    // the bake below would drop every annotation; export resets it the same way.
+    snipOriginalToggle.reset();
     const prevW = SE.w, prevH = SE.h, prevImg = SE.img, prevRawCanvas = SE.rawCanvas, prevOps = SE.ops.slice();
     const sx = targetW / SE.w, sy = targetH / SE.h;
     snipEditRedrawBase(); // make sure snipEditBaseCv reflects every op (but crop) before it gets baked in

@@ -16678,6 +16678,25 @@ def main():
       if (!img || img.w !== 40 || img.h !== 25) errs.push('592: after a 50 percent resize the crop should export 40x25, got ' + (img ? img.w + 'x' + img.h : 'nothing'));
     }
 """)
+        failed += ar_probe('ba596', 'screenshot editor: a resize with the Original locked on keeps every annotation', 'index', '1000x780', '', ba_common + r"""
+    if (!(await baOpen(''))) { errs.push('596: the editor did not open'); }
+    else {
+      const hasInk = (img, x, y) => { for (let d = -3; d <= 3; d++) { if (!near(img.px(x, y + d), BGC, 30)) return true; } return false; };
+      await baTool('arrow'); await baDrag(20, 30, 120, 30);
+      const orig = document.getElementById('snip-edit-original');
+      orig.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 1 }));
+      document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1 }));
+      await sleep(80);
+      if (!orig.classList.contains('active')) errs.push('596: fixture: a tap on Original did not lock it on');
+      await baScale50();
+      let img = await baExport();
+      if (!img || img.w !== 100 || img.h !== 60) errs.push('596: fixture: the export is not 100x60 after the resize');
+      else if (!hasInk(img, 50, 15)) errs.push('596: the arrow is gone after resizing while Original was locked on');
+      await baUndo();
+      img = await baExport();
+      if (!img || img.w !== BAW || !hasInk(img, 100, 30)) errs.push('596: undoing the resize did not bring the arrow back at full size');
+    }
+""")
         # ---- main window findings: generated block end ----
         print("PASS" if not failed else f"{failed} problem(s)")
         return 1 if failed else 0
