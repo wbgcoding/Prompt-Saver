@@ -1463,7 +1463,9 @@ the video editor and the introduction tour ship on).
   with it, and closing the app now removes its own working copies at once.
 - **Switching off the picture text index erases it.** The text read out of
   attached pictures for searching is removed from every prompt (and the
-  trash) the moment "Search text inside pictures" goes off, not only hidden.
+  trash) the moment "Index text inside attached pictures for search" goes off, not only hidden.
+- **Switching off the clipboard collector asks what to do with what it
+  gathered.** Keep it or delete it; closing the question keeps it.
 
 ### Removed
 

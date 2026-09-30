@@ -2745,6 +2745,7 @@ function flagRow(key) {
     // cannot change which guard is already running.
     if (key === "allowMultipleInstances") toast(t("toastRestartNeeded"));
     applyFlags();
+    if (key === "clipWatcher" && !enabled) await offerClipInboxCleanup();
     // "only changed" has to recompute after EVERY flag (not just gating ones,
     // which is all a plain re-render used to care about): the row set depends on
     // this flag's own value now, not only on what it gates.
@@ -12159,6 +12160,22 @@ async function restoreClipInbox(items) {
   await refreshClipInbox();
 }
 
+// Switching the collector off leaves whatever it gathered in place, with the inbox
+// button hidden: ask once whether to keep it. Closing the dialog keeps it.
+async function offerClipInboxCleanup() {
+  const items = await invoke("clip_inbox_list").catch(() => []);
+  if (!items.length) return;
+  const drop = await confirmDialog({
+    title: t("flagClipWatcher"),
+    message: t("clipInboxKeepAsk"),
+    confirmLabel: t("delete"),
+    cancelLabel: t("clipInboxKeep"),
+  });
+  if (!drop) return;
+  try { await invoke("clip_inbox_clear"); } catch (e) { errToast(e); return; }
+  toast(t("clipInboxClearedToast"));
+}
+
 async function refreshClipInbox() {
   if (!optFlag("clipWatcher")) { clipCount = 0; updateClipBadge(); return; }
   let items = [];
@@ -19932,6 +19949,7 @@ function bind() {
     try { await invoke("set_ui_flag", { key: "clipWatcher", enabled: on }); }
     catch (e) { errToast(e); }
     applyFlags();
+    if (!on) await offerClipInboxCleanup();
     await refreshClipInbox();
     updateClipBadge();
   });
