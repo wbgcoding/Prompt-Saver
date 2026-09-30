@@ -17924,14 +17924,16 @@ async fn finalize_ocr_capture(app: &AppHandle, state: &State<'_, SnipState>, cro
 // Crop an image at a physical-pixel rect (clamped to its bounds).
 fn crop_rgba(img: &image::RgbaImage, x: i32, y: i32, width: u32, height: u32) -> Option<image::RgbaImage> {
     let (iw, ih) = img.dimensions();
-    let cx = x.max(0) as u32;
-    let cy = y.max(0) as u32;
-    let cw = width.min(iw.saturating_sub(cx));
-    let ch = height.min(ih.saturating_sub(cy));
-    if cw == 0 || ch == 0 {
+    // Both edges are clamped on their own: a rect that starts left of or above the
+    // image loses that part, it does not reach further right or down instead.
+    let x0 = (x as i64).max(0);
+    let y0 = (y as i64).max(0);
+    let x1 = (x as i64 + width as i64).min(iw as i64);
+    let y1 = (y as i64 + height as i64).min(ih as i64);
+    if x1 <= x0 || y1 <= y0 {
         return None;
     }
-    Some(image::imageops::crop_imm(img, cx, cy, cw, ch).to_image())
+    Some(image::imageops::crop_imm(img, x0 as u32, y0 as u32, (x1 - x0) as u32, (y1 - y0) as u32).to_image())
 }
 
 // Crop the frozen monitor capture at a physical-pixel rect.
@@ -52121,5 +52123,17 @@ mod tests {
         let fine: Result<u8, String> = Ok(7);
         assert_eq!(show_overlay_again_on_error(fine, || shown.set(shown.get() + 1)), Ok(7));
         assert_eq!(shown.get(), 1, "a finished capture leaves the overlay alone");
+    }
+
+    #[test]
+    fn crop_rgba_keeps_the_requested_right_and_bottom_edge_when_it_starts_off_the_image() {
+        let img = image::RgbaImage::new(100, 100);
+        let c = crop_rgba(&img, -10, 0, 50, 10).unwrap();
+        assert_eq!(c.dimensions(), (40, 10), "the 10 px left of the image are cut off, not added on the right");
+        let c = crop_rgba(&img, 0, -5, 20, 30).unwrap();
+        assert_eq!(c.dimensions(), (20, 25));
+        let c = crop_rgba(&img, 90, 90, 50, 50).unwrap();
+        assert_eq!(c.dimensions(), (10, 10), "past the far edge is still clamped");
+        assert!(crop_rgba(&img, -60, 0, 50, 10).is_none(), "a rect wholly outside is nothing");
     }
 }
