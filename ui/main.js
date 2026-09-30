@@ -6624,7 +6624,7 @@ let missingFiles = new Set();
 
 function applyMissingFiles(ids) {
   missingFiles = new Set(ids);
-  document.querySelectorAll(".tile").forEach((tile) => {
+  document.querySelectorAll(".tile, .folder-member-tile").forEach((tile) => {
     tile.classList.toggle("file-missing", missingFiles.has(tile.dataset.id));
   });
 }
@@ -7282,6 +7282,14 @@ function openTileFolderPop(f, anchor) {
       badge.className = "tile-type";
       badge.innerHTML = typeIcon;
       btn.appendChild(badge);
+    }
+    // Same missing-file banner as the grid tile, so a folder never hides a broken prompt.
+    if (p.file_path || p.icon_path) {
+      const err = document.createElement("span");
+      err.className = "tile-error";
+      err.textContent = t("fileMissing");
+      btn.appendChild(err);
+      if (missingFiles.has(p.id)) btn.classList.add("file-missing");
     }
     btn.addEventListener("contextmenu", (ev) => {
       ev.preventDefault();

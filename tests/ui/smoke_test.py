@@ -16118,6 +16118,27 @@ def main():
       if (!callsFor('paste_into_previous').length) errs.push('563-10: a fast second member click did not paste into the previous window');
     }
 """)
+        failed += ar_probe('f13', 'folder popover member: missing file banner like the grid tile', 'index', '1000x780', '', r"""
+    await bootReady();
+    const click = async (el) => { const [x, y] = centre(el); ptr('pointerdown', x, y, el); ptr('pointerup', x, y, window); await sleep(200); };
+    window.__FIRE__('missing-files', ['p11']);
+    await sleep(100);
+    await click(document.querySelector('#grid .folder-tile'));
+    const member = () => document.querySelector('.folder-member-tile[data-id="p11"]');
+    if (!member()) { errs.push('563-13: the folder popover did not open'); }
+    else {
+      if (!member().classList.contains('file-missing')) errs.push('563-13: a member whose file is missing has no file-missing class');
+      const banner = member().querySelector('.tile-error');
+      if (!banner) errs.push('563-13: a member with an attached file has no missing-file banner element');
+      else if (getComputedStyle(banner).display === 'none') errs.push('563-13: the missing-file banner of a member is not shown');
+      window.__FIRE__('missing-files', []);
+      await sleep(100);
+      if (member().classList.contains('file-missing')) errs.push('563-13: the open popover kept file-missing after the file came back');
+      window.__FIRE__('missing-files', ['p11']);
+      await sleep(100);
+      if (!member().classList.contains('file-missing')) errs.push('563-13: the open popover did not pick up a file going missing');
+    }
+""")
         # ---- main window findings: generated block end ----
         print("PASS" if not failed else f"{failed} problem(s)")
         return 1 if failed else 0
