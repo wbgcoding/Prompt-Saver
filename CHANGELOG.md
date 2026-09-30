@@ -859,6 +859,23 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **Full expert reset keeps the vault, the backup password and the
+  certificate.** It used to wipe the vault's key data, which left every
+  confidential entry unreadable for good, and the backup password. It now also
+  stops a running remote receiver and removes the promptsaver:// link
+  registration when the reset turns them off, and so does the settings reset.
+- **Importing a backup that brings another vault locks the vault.** The old
+  unlocked session no longer seals new confidential entries against a key that
+  does not match the imported vault.
+- **A failed restore from the trash no longer drops the remote access password
+  or certificate key** from the running settings.
+- **A command that was refused no longer changes the running app.** A delete,
+  add or setting change sent through the command line or remote access while
+  the data folder is read-only or locked is now turned away before it touches
+  anything, and a write that fails is undone in memory too.
+- **Changing the remote access port while it runs takes effect at once.**
+  If the new port cannot be used, the old one comes back.
+
 - **Restoring or importing entries takes the matching vault key along.**
   Confidential entries of a backup open with the backup's own vault password,
   and a backup without a vault keeps yours. If confidential entries in the
@@ -1326,6 +1343,11 @@ the video editor and the introduction tour ship on).
   bottom edge still, and a screenshot whose delete failed is not saved twice.
 
 ### Security
+
+- **`settings set` can no longer change access settings.** The command line
+  and remote access refuse folder locations, the vault keys, the backup
+  password, every remote access setting and the clipboard watcher and link
+  switches; they stay changeable in the app only.
 
 - **A settings or backup file can no longer switch on remote access or other
   machine features.** Importing settings from a file, or restoring a backup
