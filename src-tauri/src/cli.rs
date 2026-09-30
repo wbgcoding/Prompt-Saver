@@ -1857,26 +1857,49 @@ async fn run_in_process_inner(app: &AppHandle, argv: Vec<String>, cwd: PathBuf, 
 
     let state: tauri::State<Db> = app.state();
     let dir = data_dir(app);
-    let outcome = {
-        let mut store = lock(&state);
-        exec(&mut store, &dir, &cmd, &cwd)
-    };
-    if outcome.mutated_prompts || outcome.mutated_trash || outcome.mutated_settings {
-        let store = lock(&state);
-        let persisted = if outcome.mutated_trash {
-            crate::save_prompts_and_trash(app, &store)
-        } else if outcome.mutated_prompts {
-            crate::save_prompts(app, &store)
+    let mut store = lock(&state);
+    // The same refusal the standalone caller gives, up front: a store that is
+    // read-only, locked after a failed decrypt or settings-locked must not even
+    // be changed in memory, or the next save that succeeds would write it.
+    if is_mutating(&cmd)
+        && (crate::DATA_DIR_READONLY.load(Ordering::Relaxed) || store.prompts_locked || crate::SETTINGS_LOCKED.load(Ordering::Relaxed))
+    {
+        return (3, String::new(), "the store refused the write (locked or unavailable)
+".to_string());
+    }
+    let outcome = exec_persisted(&mut store, &dir, &cmd, &cwd, |st, o| {
+        let persisted = if o.mutated_trash {
+            crate::save_prompts_and_trash(app, st)
+        } else if o.mutated_prompts {
+            crate::save_prompts(app, st)
         } else {
             true
         };
-        let settings_persisted = if outcome.mutated_settings { crate::save_settings(app, &store.settings) } else { true };
-        drop(store);
-        if !persisted || !settings_persisted {
-            return (3, String::new(), "the store refused the write (locked or unavailable)\n".to_string());
-        }
-    }
+        let settings_persisted = if o.mutated_settings { crate::save_settings(app, &st.settings) } else { true };
+        persisted && settings_persisted
+    });
+    drop(store);
     (outcome.code, outcome.stdout, outcome.stderr)
+}
+
+// Runs a command on the live store and keeps its change only when `persist`
+// accepts it. A refused write puts prompts, trash and settings back exactly as
+// they were, so the caller's "refused" answer is true of the running app too.
+fn exec_persisted(store: &mut Store, dir: &Path, cmd: &Cmd, cwd: &Path, persist: impl FnOnce(&Store, &Outcome) -> bool) -> Outcome {
+    let before = (store.prompts.clone(), store.trash.clone(), store.settings.clone());
+    let outcome = exec(store, dir, cmd, cwd);
+    if !(outcome.mutated_prompts || outcome.mutated_trash || outcome.mutated_settings) {
+        return outcome;
+    }
+    if persist(store, &outcome) {
+        return outcome;
+    }
+    (store.prompts, store.trash, store.settings) = before;
+    // The row bookkeeping may have moved with the failed write: start it over so
+    // nothing is skipped as already written on the next save.
+    store.forget_written_rows();
+    Outcome::err(3, "the store refused the write (locked or unavailable)
+")
 }
 
 // ---------- Remote-caller path confinement ----------
@@ -2615,6 +2638,30 @@ mod tests {
             assert_ne!(set.code, 0, "{key} must not be writable");
             assert_eq!(store.settings.ui_texts.get(key).map(String::as_str), Some("sealed"));
         }
+    }
+
+    #[test]
+    fn a_refused_write_leaves_the_live_store_as_it_was() {
+        let mut store = fixture_store();
+        let dir = std::env::temp_dir();
+        let id = store.prompts[0].id.clone();
+        let before = (serde_json::to_string(&store.prompts).unwrap(), serde_json::to_string(&store.trash).unwrap(), serde_json::to_string(&store.settings).unwrap());
+        for items in [vec!["delete", id.as_str(), "--yes"], vec!["settings", "set", "myFlag", "true", "--yes"]] {
+            let parsed = match parse(&args(&items)).unwrap() {
+                Parsed::Run(c) => c,
+                Parsed::Help(_) => panic!("help"),
+            };
+            let out = exec_persisted(&mut store, &dir, &parsed, Path::new("."), |_, _| false);
+            assert_eq!(out.code, 3, "{items:?}");
+            let after = (serde_json::to_string(&store.prompts).unwrap(), serde_json::to_string(&store.trash).unwrap(), serde_json::to_string(&store.settings).unwrap());
+            assert_eq!(after, before, "{items:?} must not change the live store");
+        }
+        let ok = match parse(&args(&["settings", "set", "myFlag", "true", "--yes"])).unwrap() {
+            Parsed::Run(c) => c,
+            Parsed::Help(_) => panic!("help"),
+        };
+        assert_eq!(exec_persisted(&mut store, &dir, &ok, Path::new("."), |_, _| true).code, 0);
+        assert_eq!(store.settings.ui_flags.get("myFlag"), Some(&true));
     }
 
     #[test]
