@@ -500,6 +500,21 @@ impl Default for PeerState {
     }
 }
 
+// Past this many tracked peers, entries that are neither locked out nor inside
+// their rate window are dropped. A peer is tracked before it has authenticated, so
+// without a bound a LAN peer cycling addresses could grow the table without limit.
+const MAX_TRACKED_PEERS: usize = 1024;
+
+fn prune_peers(peers: &mut HashMap<IpAddr, PeerState>, now: Instant) {
+    if peers.len() <= MAX_TRACKED_PEERS {
+        return;
+    }
+    let window = Duration::from_secs(RATE_WINDOW_SECS);
+    peers.retain(|_, p| {
+        p.locked_until.is_some_and(|until| now < until) || now.saturating_duration_since(p.window_start) < window
+    });
+}
+
 pub(crate) struct RemoteGuard {
     peers: Mutex<HashMap<IpAddr, PeerState>>,
 }
@@ -511,6 +526,7 @@ impl RemoteGuard {
     // true while this peer is still serving out an earlier lockout.
     fn locked(&self, ip: IpAddr) -> bool {
         let mut peers = self.peers.lock().unwrap_or_else(|e| e.into_inner());
+        prune_peers(&mut peers, Instant::now());
         let entry = peers.entry(ip).or_default();
         match entry.locked_until {
             Some(until) if Instant::now() < until => true,
@@ -532,6 +548,7 @@ impl RemoteGuard {
             return true;
         }
         let mut peers = self.peers.lock().unwrap_or_else(|e| e.into_inner());
+        prune_peers(&mut peers, Instant::now());
         let entry = peers.entry(ip).or_default();
         if entry.window_start.elapsed() >= Duration::from_secs(RATE_WINDOW_SECS) {
             entry.window_start = Instant::now();
@@ -2272,5 +2289,44 @@ mod tests {
         assert_eq!(bound_total, 1, "only the last run may ever have owned the port");
         assert!(TcpStream::connect(addr).await.is_ok());
         assert!(!controller.current(1) && controller.current(controller.generation.load(Ordering::SeqCst)));
+    }
+
+    // ---- peer table bound ----
+
+    #[test]
+    fn the_peer_table_is_pruned_to_its_bound_once_windows_have_expired() {
+        let mut peers: HashMap<IpAddr, PeerState> = HashMap::new();
+        for i in 0..5000u32 {
+            peers.insert(IpAddr::V4(Ipv4Addr::from(0x0A00_0000 + i)), PeerState::default());
+        }
+        let later = Instant::now() + Duration::from_secs(RATE_WINDOW_SECS + 60);
+        let locked_ip = IpAddr::V4(Ipv4Addr::new(192, 168, 9, 9));
+        peers.insert(
+            locked_ip,
+            PeerState { locked_until: Some(later + Duration::from_secs(600)), ..PeerState::default() },
+        );
+        prune_peers(&mut peers, later);
+        assert!(peers.len() <= MAX_TRACKED_PEERS, "left {}", peers.len());
+        assert!(peers.contains_key(&locked_ip), "a peer that is still locked out is kept");
+    }
+
+    #[test]
+    fn a_small_peer_table_is_left_alone() {
+        let mut peers: HashMap<IpAddr, PeerState> = HashMap::new();
+        for i in 0..10u32 {
+            peers.insert(IpAddr::V4(Ipv4Addr::from(0x0A00_0000 + i)), PeerState::default());
+        }
+        prune_peers(&mut peers, Instant::now() + Duration::from_secs(RATE_WINDOW_SECS + 60));
+        assert_eq!(peers.len(), 10);
+    }
+
+    #[test]
+    fn busy_peers_inside_their_window_survive_the_prune() {
+        let mut peers: HashMap<IpAddr, PeerState> = HashMap::new();
+        for i in 0..2000u32 {
+            peers.insert(IpAddr::V4(Ipv4Addr::from(0x0A00_0000 + i)), PeerState::default());
+        }
+        prune_peers(&mut peers, Instant::now());
+        assert_eq!(peers.len(), 2000, "every window is still open, so nothing may be dropped");
     }
 }
