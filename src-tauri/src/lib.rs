@@ -11956,7 +11956,7 @@ fn keep_machine_in_staged(target: &std::path::Path, staged: &std::path::Path) ->
         // denied switches along.
         let conn = Connection::open(staged).map_err(|e| e.to_string())?;
         if let Some(mut restored) = read_settings_row(&conn, "main") {
-            restored.ui_flags.retain(|k, _| !is_import_denied_flag(k));
+            drop_machine_rows(&mut restored);
             db_write_settings(&conn, &restored).map_err(|e| e.to_string())?;
         }
         return Ok(());
@@ -12020,10 +12020,20 @@ fn restore_selective(target: &std::path::Path, staged: &std::path::Path, scope: 
                  ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 [],
             )?;
-            if let (Some(local), Some(mut restored)) = (local, read_settings_row(&tx, "main")) {
-                keep_machine_settings(&local, &mut restored);
-                clear_vault_keys(&mut restored);
-                carry_vault_keys(&local, &mut restored);
+            if let Some(mut restored) = read_settings_row(&tx, "main") {
+                match local {
+                    Some(local) => {
+                        keep_machine_settings(&local, &mut restored);
+                        clear_vault_keys(&mut restored);
+                        carry_vault_keys(&local, &mut restored);
+                    }
+                    // No settings on this machine yet: nothing to keep, but the
+                    // denied rows still stay out and so do the vault keys.
+                    None => {
+                        drop_machine_rows(&mut restored);
+                        clear_vault_keys(&mut restored);
+                    }
+                }
                 db_write_settings(&tx, &restored)?;
             }
         }
@@ -33907,13 +33917,18 @@ fn vault_keys_differ(a: &Settings, b: &Settings) -> bool {
     [SECRET_SALT_KEY, SECRET_VERIFY_KEY].iter().any(|k| a.ui_texts.get(*k) != b.ui_texts.get(*k))
 }
 
+// Removes every denied row from a settings block that came from a file.
+fn drop_machine_rows(incoming: &mut Settings) {
+    incoming.ui_flags.retain(|k, _| !is_import_denied_flag(k));
+    incoming.ui_values.retain(|k, _| !is_import_denied_value(k));
+    incoming.ui_texts.retain(|k, _| !is_machine_text_key(k));
+}
+
 // After a whole Settings block was replaced by an imported one: every denied
 // row goes back to what `local` had (or stays absent), plus the autostart
 // registration flag. Hotkeys, themes and layouts do come along.
 fn keep_machine_settings(local: &Settings, incoming: &mut Settings) {
-    incoming.ui_flags.retain(|k, _| !is_import_denied_flag(k));
-    incoming.ui_values.retain(|k, _| !is_import_denied_value(k));
-    incoming.ui_texts.retain(|k, _| !is_machine_text_key(k));
+    drop_machine_rows(incoming);
     for (k, v) in &local.ui_flags {
         if is_import_denied_flag(k) {
             incoming.ui_flags.insert(k.clone(), *v);
@@ -49607,6 +49622,28 @@ mod tests {
         let after = read_settings_row(&Connection::open(&staged).unwrap(), "main").unwrap();
         for k in CONSENT_KEYS {
             assert!(!after.ui_flags.contains_key(k), "{k} must not arrive");
+        }
+        assert_eq!(after.ui_flags.get("copyFlash"), Some(&false));
+        let _ = std::fs::remove_file(&target);
+        let _ = std::fs::remove_file(&staged);
+    }
+
+    #[test]
+    fn a_settings_restore_onto_a_machine_without_settings_drops_the_switches() {
+        let dir = std::env::temp_dir();
+        let target = dir.join(format!("{}-test-consent-selnone-target.db", brand::SLUG));
+        let staged = dir.join(format!("{}-test-consent-selnone-staged.db", brand::SLUG));
+        let t = full_schema_db(&target, "target");
+        drop(t);
+        let s = full_schema_db(&staged, "staged");
+        let mut hostile = hostile_consent_settings();
+        hostile.ui_flags.insert("remoteApi".into(), true);
+        db_write_settings(&s, &hostile).unwrap();
+        drop(s);
+        restore_selective(&target, &staged, "settings").unwrap();
+        let after = read_settings_row(&Connection::open(&target).unwrap(), "main").unwrap();
+        for k in CONSENT_KEYS.iter().chain(["remoteApi"].iter()) {
+            assert!(!after.ui_flags.contains_key(*k), "{k} must not arrive");
         }
         assert_eq!(after.ui_flags.get("copyFlash"), Some(&false));
         let _ = std::fs::remove_file(&target);
