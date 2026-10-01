@@ -1405,6 +1405,9 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
 /* The all-hotkeys list can now also be opened from inside the edit dialog's own
    error message, so it has to stack above that dialog too, not just settings. */
 #hotkeys-modal.overlay { z-index: 71; }
+/* The shortcut list is also opened from the screenshot editor (overlay at 90),
+   so it has to stack above that editor; the editor's pop-ups stay above it. */
+#shortcuts-modal.overlay { z-index: 100; }
 /* Confirm dialog stacks above everything (incl. the edit modal). */
 #confirm-modal.overlay { z-index: 80; }
 .modal {

@@ -70,6 +70,16 @@ function makeSandbox(extra) {
       extractBlock("clipVideoLabel", "function clipVideoLabel(op, label, parts, fps) {"),
       extractBlock("buildVideoChain", "function buildVideoChain() {"),
       extractBlock("undo", "function undo() {"),
+      extractBlock("redo", "function redo() {"),
+      extractBlock("removeOps", "function removeOps(match) {"),
+      extractLine("even", "const even = (v) => Math.max(0, Math.round(v / 2) * 2);"),
+      extractLine("scaleHeights", "const SCALE_HEIGHT_PRESETS = [2160, 1440, 1080, 720, 480, 360];"),
+      extractLine("scalePercents", "const SCALE_PERCENT_PRESETS = [50, 25];"),
+      extractBlock("scaleForHeightPreset", "function scaleForHeightPreset(h) {"),
+      extractBlock("scaleForPercent", "function scaleForPercent(pct) {"),
+      extractBlock("applyScalePresetKey", "function applyScalePresetKey(key) {"),
+      extractBlock("setScaleOp", "function setScaleOp(w, h) {"),
+      extractBlock("restoreRemoved", "function restoreRemoved(marker) {"),
       extractLine("rectsEqual", "const rectsEqual = (a, b) => !!a && !!b && a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;"),
       extractBlock("endRectDrag", "function endRectDrag() {"),
       extractBlock("closeWindow", "async function closeWindow() {"),
@@ -401,9 +411,103 @@ async function exportIdleCheck() {
       { filename: "video.js (extracted)" }
     );
     await vm.runInContext("startExport(false)", sb);
-    expect(`export that stops early (${name}) clears the status line`, els["ve-export-status"].textContent === "", els["ve-export-status"].textContent);
+    const wantStatus = name === "no folder picked" ? "veExportDestRefused" : "";
+    expect(`export that stops early (${name}) shows the right status line`, els["ve-export-status"].textContent === wantStatus, els["ve-export-status"].textContent);
     expect(`export that stops early (${name}) hides the progress row`, els["ve-export-progress-row"]._hidden === true);
   }
+}
+
+// Removing an operation is an undo step: undo brings it back with every
+// field in its old slot, redo removes it again, earlier edits stay as they were.
+{
+  const sb = makeSandbox({ afterOpsChanged() {} });
+  sb.VE = Object.assign(baseState([]), { floor: 0, redo: [], undoMax: 50 });
+  const run = (code) => vm.runInContext(code, sb);
+  const crop = { tool: "crop", rect: { x: 1, y: 2, w: 300, h: 200 } };
+  const text = { tool: "overlay", id: "T", kind: "text", startMs: 100, endMs: 900, text: "hi", z: 1 };
+  const speed = { tool: "speed", rate: 2, pitch: true };
+  run("pushOp")(crop);
+  run("pushOp")(text);
+  run("pushOp")(speed);
+  const live = () => sb.VE.ops.filter((o) => o.tool !== "removal");
+  run("removeOps((o) => o.id === 'T')");
+  expect("removing an overlay takes it out of the list", !live().some((o) => o.id === "T") && live().length === 2);
+  run("undo()");
+  expect("undo restores the removed overlay in its slot", sb.VE.ops.length === 3 && sb.VE.ops[1] === text && sb.VE.ops[1].text === "hi" && sb.VE.ops[1].endMs === 900, JSON.stringify(sb.VE.ops.map((o) => o.tool)));
+  expect("undo of a removal leaves earlier edits alone", sb.VE.ops[0] === crop && sb.VE.ops[2] === speed);
+  run("redo()");
+  expect("redo removes the overlay again", !live().some((o) => o.id === "T") && live().length === 2);
+  run("undo()");
+  run("undo()");
+  expect("a second undo steps back one edit, not the removal twice", sb.VE.ops.length === 2 && !sb.VE.ops.some((o) => o.tool === "speed"));
+  sb.VE.ops = []; sb.VE.redo = [];
+  run("pushOp")({ tool: "cut", startMs: 0, endMs: 10 });
+  run("pushOp")({ tool: "cut", startMs: 20, endMs: 30 });
+  run("removeOps((o) => o.tool === 'cut')");
+  run("undo()");
+  expect("removing several ops at once is one undo step", sb.VE.ops.length === 2 && sb.VE.ops[0].startMs === 0 && sb.VE.ops[1].startMs === 20);
+  expect("removeOps with no match pushes nothing", (() => { const n = sb.VE.ops.length; run("removeOps((o) => o.tool === 'fade')"); return sb.VE.ops.length === n; })());
+  expect("the removal marker never reaches the ops list or the saved state", src.includes('op.tool !== "clip" && op.tool !== "removal"') && src.includes('VE.ops.filter((o) => o.tool !== "removal")'));
+}
+
+// An explicit height preset may enlarge (with its hint); the "small for chat"
+// and GIF presets only ever shrink; the source size is "no scaling" and removes
+// the entry.
+{
+  const sb = makeSandbox({ afterOpsChanged() {} });
+  sb.VE = Object.assign(baseState([]), { floor: 0, redo: [], undoMax: 50, w: 640, h: 360 });
+  const run = (code) => vm.runInContext(code, sb);
+  const scaleOp = () => sb.VE.ops.find((o) => o.tool === "scale") || null;
+  run("applyScalePresetKey('720')");
+  expect("an explicit 720p preset on a 360p source enlarges", !!scaleOp() && scaleOp().h === 720 && scaleOp().w === 1280, JSON.stringify(scaleOp()));
+  const fields = {};
+  sb.$ = (id) => (fields[id] = fields[id] || { value: "" });
+  sb.persistExportSettings = () => {};
+  sb.updateExportNote = () => {};
+  run(extractBlock("applyPreset", "function applyPreset(format, quality, downscale) {"));
+  run("applyPreset('mp4', 'small', '720')");
+  expect("the chat preset on a smaller source keeps the source size", scaleOp() === null, JSON.stringify(scaleOp()));
+  run("applyPreset('gif', 'small', '480')");
+  expect("the GIF preset on a smaller source keeps the source size", scaleOp() === null, JSON.stringify(scaleOp()));
+  sb.VE.w = 1280; sb.VE.h = 720;
+  run("applyPreset('gif', 'small', '480')");
+  expect("the GIF preset on a larger source shrinks", !!scaleOp() && scaleOp().h === 480, JSON.stringify(scaleOp()));
+  run("applyScalePresetKey('720')");
+  expect("a preset equal to the source adds no entry", scaleOp() === null);
+  const p200 = run("scaleForPercent(200)");
+  run("setScaleOp")(p200.w, p200.h);
+  expect("the percent field may still enlarge", !!scaleOp() && scaleOp().w === 2560 && scaleOp().h === 1440, JSON.stringify(scaleOp()));
+  const p100 = run("scaleForPercent(100)");
+  run("setScaleOp")(p100.w, p100.h);
+  expect("100 percent removes the scale entry", scaleOp() === null);
+  run("setScaleOp")(640, 360);
+  run("setScaleOp")(1280, 720);
+  expect("typing the source size removes the scale entry", scaleOp() === null);
+}
+
+// A refresh rewrites every field except one the user is typing in right now.
+{
+  const els = {};
+  const fake = (id, value) => (els[id] = { id, value, checked: false, disabled: false, classList: { toggle() {} }, querySelectorAll: () => [], contains(n) { return n === this || (this.kids || []).includes(n); }, numFieldRefresh() {}, dataset: {} });
+  const ids = ["ve-trim-start-val", "ve-trim-end-val", "ve-crop-on", "ve-crop-fields", "ve-crop-x", "ve-crop-y", "ve-crop-w", "ve-crop-h", "ve-speed-steps", "ve-speed-custom", "ve-speed-pitch", "ve-fade-on", "ve-fade-fields", "ve-fade-in", "ve-fade-out"];
+  for (const id of ids) fake(id, "");
+  els["ve-crop-fields"].kids = [els["ve-crop-x"], els["ve-crop-y"], els["ve-crop-w"], els["ve-crop-h"]];
+  const sb = makeSandbox({ $: (id) => els[id], fmtTime: (ms) => String(ms), HTMLInputElement: function () {} });
+  vm.runInContext([
+    extractLine("uncommitted", "const uncommittedFields = new Set();"),
+    extractBlock("isUncommitted", "function isUncommitted(el) {"),
+    extractBlock("renderEditFields", "function renderEditFields() {"),
+  ].join(String.fromCharCode(10)), sb);
+  sb.VE = Object.assign(baseState([{ tool: "crop", rect: { x: 0, y: 0, w: 1920, h: 1080 } }]), { w: 1920, h: 1080 });
+  els["ve-crop-w"].value = "640";
+  vm.runInContext("renderEditFields()", sb);
+  expect("a reset refreshes a focused, committed crop field", els["ve-crop-w"].value === 1920 && els["ve-crop-h"].value === 1080 && els["ve-crop-x"].value === 0, els["ve-crop-w"].value);
+  els["ve-crop-w"].value = "6";
+  vm.runInContext("uncommittedFields", sb).add(els["ve-crop-w"]);
+  vm.runInContext("renderEditFields()", sb);
+  expect("a field mid-typing keeps its text", els["ve-crop-w"].value === "6", els["ve-crop-w"].value);
+  expect("only the uncommitted crop field is spared", els["ve-crop-h"].value === 1080);
+  expect("no refresh guard is tied to focus any more", !/document\.activeElement\s*!==\s*\$\("ve-(trim|speed|fade|scale)/.test(src));
 }
 
 cameraOverlayRaceCheck().then(exportIdleCheck).then(exportLoadRaceCheck).then(closeChecks).then(() => {
