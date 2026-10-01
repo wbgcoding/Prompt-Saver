@@ -35570,10 +35570,6 @@ fn sync_decode_text(bytes: Vec<u8>) -> Option<String> {
     Some(text.strip_prefix('\u{feff}').map(str::to_string).unwrap_or(text))
 }
 
-fn sync_read_text(path: &Path, max: u64) -> Option<String> {
-    sync_decode_text(read_file_capped(path, max).ok()?)
-}
-
 fn sync_safe_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 64
@@ -36341,6 +36337,7 @@ fn sync_seen_key(path: &Path) -> String {
 
 // Called right after the app writes a file itself: the content is ours and known,
 // so the poll neither has to re-read it nor may mistake it for someone's edit.
+#[cfg(test)]
 fn sync_seen_record_own_write(path: &Path) {
     sync_seen_record_own_write_of(path, 0);
 }
@@ -36589,6 +36586,7 @@ fn sync_write_all_impl(app: &AppHandle, prompts: &[Prompt], settings: &Settings)
 // The file half of sync_write_all_impl: one call writes every eligible prompt into
 // `dir`, then sweeps what this process knows to be orphaned. Free of any window or
 // state access so a test can run it against a temp folder.
+#[cfg(test)]
 fn sync_write_dir(dir: &Path, prompts: &[Prompt], settings: &Settings) -> usize {
     sync_write_dir_checked(dir, prompts, settings, &|_| false)
 }
@@ -36623,9 +36621,7 @@ fn sync_write_dir_checked(dir: &Path, prompts: &[Prompt], settings: &Settings, i
             // acceptable. The copy's name carries a dot, so it is neither a valid
             // prompt id (the poll skips it) nor something the orphan sweep may touch.
             let copy = dir.join(format!("{}.conflict-{}.md", p.id, now_secs()));
-            let mut kept_copy = false;
             if sync_edit_unsaved(&path, &on_disk, p, &placement) && write_bytes_atomic(&copy, &on_disk) {
-                kept_copy = true;
                 append_crash_log(&format!(
                     "prompt-sync: {filename} was edited outside the app and in the app at the same time; the outside version was kept as {}",
                     copy.file_name().unwrap_or_default().to_string_lossy()
@@ -36752,6 +36748,7 @@ fn spawn_sync_write_all(app: &AppHandle, store: &Store) {
 // swept: the sync folder is a directory the USER picks, so it can hold their own
 // documents. A document without our `---` frontmatter is never imported by
 // sync_poll_once either, so deleting it would destroy data the app does not own.
+#[cfg(test)]
 fn sync_sweep_orphans(dir: &Path, wanted: &std::collections::HashSet<String>) {
     sync_sweep_orphans_checked(dir, wanted, &|_| false);
 }
@@ -42435,7 +42432,7 @@ mod tests {
         let dir = sync_tmp_dir("touch-only");
         let path = dir.join("p1.md");
         let first = sync_test_prompt();
-        sync_write_dir(&dir, &[first.clone()], &Settings::default());
+        sync_write_dir(&dir, std::slice::from_ref(&first), &Settings::default());
         // A cloud client re-touches the file: same bytes, newer modification time.
         let bytes = fs::read(&path).unwrap();
         let f = fs::OpenOptions::new().write(true).open(&path).unwrap();
