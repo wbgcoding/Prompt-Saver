@@ -8352,7 +8352,7 @@ async fn restore_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Res
 // Returns the orphan-file set to sweep instead of sweeping itself, so the
 // caller can drop the store lock first: a big attachments folder used to stay
 // locked out from every other window for the whole fs scan.
-fn purge_ids(app: &AppHandle, store: &mut Store, ids: &[String]) -> Option<std::collections::HashSet<String>> {
+fn purge_ids(app: &AppHandle, store: &mut Store, ids: &[String]) -> Result<Option<std::collections::HashSet<String>>, String> {
     let idset: std::collections::HashSet<&str> = ids.iter().map(|s| s.as_str()).collect();
     let before = store.trash.clone();
     store.trash.retain(|p| !idset.contains(p.id.as_str()));
@@ -8380,14 +8380,14 @@ fn purge_ids(app: &AppHandle, store: &mut Store, ids: &[String]) -> Option<std::
                 "purge: no database connection, version history of the purged prompts was left in place",
             ),
         }
-        orphan_scan
+        Ok(orphan_scan)
     } else {
         // A failed save already means the disk-side trash still has these rows and
         // they will reappear on restart: restore the in-memory copy to match now,
         // so this session's trash view (and any callers returning store.trash) does
         // not show them as gone in the meantime.
         store.trash = before;
-        None
+        Err("save-failed".to_string())
     }
 }
 
@@ -8395,7 +8395,7 @@ fn purge_ids(app: &AppHandle, store: &mut Store, ids: &[String]) -> Option<std::
 async fn purge_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Result<Vec<TrashRow>, String> {
     let (trash, orphan_scan) = {
         let mut store = lock(&state);
-        let orphan_scan = purge_ids(&app, &mut store, std::slice::from_ref(&id));
+        let orphan_scan = purge_ids(&app, &mut store, std::slice::from_ref(&id))?;
         (trash_rows(&store.trash), orphan_scan)
     };
     if let Some(referenced) = orphan_scan {
@@ -8409,7 +8409,7 @@ async fn empty_trash(app: AppHandle, state: State<'_, Db>) -> Result<Vec<TrashRo
     let (trash, orphan_scan) = {
         let mut store = lock(&state);
         let ids: Vec<String> = store.trash.iter().map(|p| p.id.clone()).collect();
-        let orphan_scan = purge_ids(&app, &mut store, &ids);
+        let orphan_scan = purge_ids(&app, &mut store, &ids)?;
         (trash_rows(&store.trash), orphan_scan)
     };
     if let Some(referenced) = orphan_scan {
@@ -8450,7 +8450,7 @@ fn sweep_trash(app: &AppHandle, store: &mut Store) {
     if !stale.is_empty() {
         // Startup-only, before the store is behind its mutex: nothing else can
         // be waiting on the lock yet, so sweeping inline here is fine.
-        if let Some(referenced) = purge_ids(app, store, &stale) {
+        if let Ok(Some(referenced)) = purge_ids(app, store, &stale) {
             sweep_orphan_files(app, &referenced);
         }
     }
@@ -8483,7 +8483,9 @@ fn sweep_trash_now(app: AppHandle, state: State<'_, Db>) -> (u32, u64) {
             .collect();
         let (_, bytes) = attachments_bytes(&stale_paths);
         let count = stale.len() as u32;
-        let orphan_scan = purge_ids(&app, &mut store, &stale);
+        let Ok(orphan_scan) = purge_ids(&app, &mut store, &stale) else {
+            return (0, 0);
+        };
         (count, bytes, orphan_scan)
     };
     if let Some(referenced) = orphan_scan {
