@@ -6033,12 +6033,23 @@ fn decode_image_oriented<R: std::io::BufRead + std::io::Seek>(reader: image::Ima
 fn decode_image_with_orientation<R: std::io::BufRead + std::io::Seek>(
     reader: image::ImageReader<R>,
 ) -> Option<(image::DynamicImage, image::metadata::Orientation)> {
-    let mut reader = reader.with_guessed_format().ok()?;
     let mut limits = image::Limits::default();
     limits.max_image_width = Some(MAX_DECODE_DIM);
     limits.max_image_height = Some(MAX_DECODE_DIM);
+    decode_image_with_orientation_limits(reader, limits)
+}
+
+fn decode_image_with_orientation_limits<R: std::io::BufRead + std::io::Seek>(
+    reader: image::ImageReader<R>,
+    limits: image::Limits,
+) -> Option<(image::DynamicImage, image::metadata::Orientation)> {
+    let mut reader = reader.with_guessed_format().ok()?;
+    let mut budget = limits.clone();
     reader.limits(limits);
     let mut decoder = reader.into_decoder().ok()?;
+    // from_decoder skips the allocation reservation that ImageReader::decode makes,
+    // so charge the decoded size against the cap here.
+    budget.reserve(image::ImageDecoder::total_bytes(&decoder)).ok()?;
     let orientation = image::ImageDecoder::orientation(&mut decoder).unwrap_or(image::metadata::Orientation::NoTransforms);
     let mut img = image::DynamicImage::from_decoder(decoder).ok()?;
     img.apply_orientation(orientation);
@@ -37260,6 +37271,19 @@ mod tests {
         let flat = jpeg_with_orientation(1);
         let same = decode_image_oriented(image::ImageReader::new(std::io::Cursor::new(&flat))).expect("decodes");
         assert_eq!((same.width(), same.height()), (2, 1));
+    }
+
+    #[test]
+    fn decode_image_oriented_enforces_the_alloc_cap() {
+        let mut png = Vec::new();
+        image::DynamicImage::new_rgba8(100, 100)
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+            .unwrap();
+        let mut tight = image::Limits::default();
+        tight.max_alloc = Some(1000);
+        let r = decode_image_with_orientation_limits(image::ImageReader::new(std::io::Cursor::new(&png)), tight);
+        assert!(r.is_none(), "40000 decoded bytes must exceed a 1000 byte cap");
+        assert!(decode_image_mem_oriented(&png).is_some());
     }
 
     // ---- two shots with the same stem never overwrite each other ----
