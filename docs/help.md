@@ -436,7 +436,7 @@ A tile can hold a list of texts instead of one: each copy serves the next entry,
 in order or shuffled without repeats, instead of always the same text. On by
 default; the per-tile switch sits under Advanced options in the editor.
 
-- A small badge counts up (like "2/5") on a tile, floating pill, or pill-folder
+- A small badge counts up (like "2/5") on a tile, floating button, or floating button folder
   member; a grid-folder member shows only its file-type icon instead. In order
   mode it is the absolute position; in shuffle mode it counts draws within the
   current cycle and restarts at 1 once every entry has been shown once, rather
@@ -616,7 +616,7 @@ in the expert menu brings every floating window to the main screen at once.
 
 One gesture works in three places: drop one onto another to gather it into a
 folder. A view tab dropped onto another view tab makes a group tab. A floating
-button dropped onto another makes a pill folder. A tile dropped onto another
+button dropped onto another makes a floating button folder. A tile dropped onto another
 tile makes a grid folder, and belongs to only one grid folder at a time.
 
 <p>
@@ -1048,9 +1048,9 @@ Hilfe). Nur Englisch und Deutsch. Jede andere Sprache in der App fällt auf
 Englisch zurück.
 
 **Erste Schritte**: Eine Kachel ist ein gespeicherter Eintrag im Raster. Doppelklick
-auf eine leere Rasterzelle (oder die Plus-Schaltfläche) legt eine an, ein Klick kopiert sie.
+auf eine leere Rasterzelle (oder den Plus-Button) legt eine an, ein Klick kopiert sie.
 Drei Beispielkacheln (E-Mail mit Platzhaltern, Bild, Markdown-Vorlage) sind beim
-ersten Start bereits da; eine Schaltfläche über dem Raster entfernt sie mit einem Klick.
+ersten Start bereits da; ein Button über dem Raster entfernt sie mit einem Klick.
 
 **Einstellungen**: Das Zahnrad in der Kopfzeile öffnet das Einstellungsfenster
 mit den alltäglichen Entscheidungen; alles Optionale liegt im Experten-Menü, das
@@ -1058,7 +1058,7 @@ sich im selben Fenster öffnet. Dort stehen Sprache, Theme, Textgröße und Schr
 der Kacheln, ob das Fenster im Vordergrund bleibt, mit Windows startet, im
 Hintergrund startet und sich beim Schließen in den Hintergrund legt, der globale
 Hotkey, Auto-Einfügen bei Doppelklick und das Speichern von Screenshots im
-Screenshots-Ordner. Jede Änderung gilt sofort, ohne Speichern-Schaltfläche.
+Screenshots-Ordner. Jede Änderung gilt sofort, ohne Speichern-Button.
 „Automatisch“ als Sprache folgt Windows und fällt auf Englisch zurück.
 Zurücksetzen stellt jede Einstellung auf die Vorgabe zurück und behält die Kacheln;
 Löschen entfernt alle Daten und fragt vorher nach.
@@ -1120,7 +1120,7 @@ Ansicht): Breite, Höhe oder Prozentwert einstellbar, mit Voreinstellungen für
 machbarer Schritt.
 
 **Bildschirmaufnahme**: nimmt ein Fenster, einen Monitor oder einen gezogenen
-Bereich als Video auf, über den Aufnahme-Knopf neben dem Screenshot-Werkzeug.
+Bereich als Video auf, über den Aufnahme-Button neben dem Screenshot-Werkzeug.
 Eine Bereichsaufnahme zeigt einen dünnen Rahmen um den Bereich; er erscheint nie
 im Video, und das Experten-Menü schaltet ihn ab oder ändert seine Farbe.
 Aufgenommen wird immer MP4 (H.264); drei Qualitätsstufen wählen davor die
@@ -1140,8 +1140,8 @@ fehlgeschlagene oder abgebrochene Umwandlung lässt die ursprüngliche
 MP4-Aufnahme immer unangetastet. Ein Fehlschlag nennt den eigentlichen Grund
 in Klartext (Datei unvollständig, kein Platz mehr und so weiter) statt einer
 rohen ffmpeg-Protokollzeile; eine zugeklappte Zeile „Technische Angaben"
-darunter hält diese Zeile samt Kopierknopf für alle bereit, die sie brauchen.
-Ein Klick auf den Aufnahme-Knopf öffnet
+darunter hält diese Zeile samt Kopier-Button für alle bereit, die sie brauchen.
+Ein Klick auf den Aufnahme-Button öffnet
 dieselbe Bildschirm-Übersicht wie ein Screenshot: Fenster anklicken, Bereich
 ziehen oder auf den freien Desktop klicken für den ganzen Bildschirm. Ein
 Countdown zählt danach herunter, bevor die Aufnahme wirklich startet
@@ -1174,7 +1174,7 @@ Aufnahmen auch in einem Rutsch exportieren: Häkchen setzen, dann Format,
 Qualität und Zielordner für alle zusammen wählen. Wie viele davon
 gleichzeitig laufen, ist im Experten-Menü einstellbar. Die Aufnahmeordner-Zeile
 im Expertenmenü zeigt außerdem, wie viele Videos darin liegen und wie viel
-Platz sie belegen, mit einem „Aufräumen…"-Knopf daneben: 7, 30 oder 90 Tage
+Platz sie belegen, mit einem „Aufräumen…"-Button daneben: 7, 30 oder 90 Tage
 wählen, die genaue Dateiliste und die frei werdende Größe prüfen, dann
 bestätigen. Gelöscht wird nie im Hintergrund, immer nur hier und nur nach
 Bestätigung. Eine Tastenanzeige
@@ -1193,7 +1193,7 @@ für Aufnahmen mit vertraulichen Eingaben. Wie lange eine
 losgelassene Taste sichtbar bleibt, ist im Expertenmenü einstellbar.
 
 Eine optionale Kameraaufnahme (Standard aus, im Expertenmenü) fügt dem
-Rechtsklickmenü des Aufnahme-Knopfs den Eintrag „Kamera aufnehmen" hinzu. Sie
+Rechtsklickmenü des Aufnahme-Buttons den Eintrag „Kamera aufnehmen" hinzu. Sie
 öffnet ein eigenes kleines Fenster mit Live-Vorschau, eigenem
 Start/Pause/Stopp, einer Tonquelle, einer Auflösungswahl und einem
 Zielordner: denselben Bedienelementen wie die Bildschirmaufnahme selbst. Ein
@@ -1211,7 +1211,7 @@ Expertenmenü einstellbar.
 **Screenshot- und Video-Editor**: arbeiten bei den gemeinsamen Werkzeugen
 gleich: Strg+Plus, Strg+Minus und Strg+0 zoomen in beiden hinein, heraus und
 passen die Ansicht ein; Strg+Z, Strg+Y (oder Strg+Umschalt+Z) machen mit
-demselben Knopfpaar rückgängig oder wiederholen. Im Screenshot-Editor wählt
+demselben Button-Paar rückgängig oder wiederholen. Im Screenshot-Editor wählt
 ein Klick auf ein vorhandenes Rechteck, eine Ellipse, eine Linie oder einen
 Pfeil es mit denselben Anfassern aus, die auch beim frischen Ziehen
 erscheinen. Der Video-Editor wählt seine Überlagerungen weiter über seine
@@ -1235,7 +1235,7 @@ Ein Formatwechsel ändert nur die Endung, nie Ordner oder Namen, die man selbst 
 exportiert in eine Kopie, die sich selbst aufräumt (nach einer Stunde, und
 erneut beim nächsten Start, beides im Expertenmenü einstellbar), und legt die
 fertige Datei direkt in die Zwischenablage zum Einfügen in eine andere App,
-genauso wie der Kopieren-Knopf im Aufnahme-Dialog.
+genauso wie der Kopieren-Button im Aufnahme-Dialog.
 
 <p>
 <svg viewBox="0 0 560 130" xmlns="http://www.w3.org/2000/svg" role="img"><rect x="60" y="15" width="120" height="30" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="120" y="34" font-size="10" fill="currentColor" text-anchor="middle">Überlagerung</text><rect x="20" y="55" width="520" height="22" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="180" y1="55" x2="180" y2="77" stroke="currentColor" stroke-width="1.5"/><line x1="340" y1="55" x2="340" y2="77" stroke="currentColor" stroke-width="1.5"/><text x="180" y="95" font-size="10" fill="currentColor" text-anchor="middle">Schnittmarke</text><path d="M 20 115 q 15 -15 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0" fill="none" stroke="currentColor" stroke-width="1"/><text x="480" y="95" font-size="10" fill="currentColor" text-anchor="middle">Tonspur</text><text x="290" y="12" font-size="10" fill="currentColor" text-anchor="middle">Zeitleiste</text></svg>
@@ -1282,7 +1282,7 @@ Weiterschalten der Einzelbilder, und eine kurze Zeile über der Wiedergabeleiste
 zeigt immer, was die Pfeiltasten gerade tun. Escape hebt die Auswahl auf und
 gibt den Pfeiltasten ihre gewohnte Aufgabe zurück.
 
-Ein Knopf in der Werkzeugleiste beider Editoren vergleicht mit der
+Ein Button in der Werkzeugleiste beider Editoren vergleicht mit der
 unbearbeiteten Aufnahme: gedrückt gehalten zeigt er das Original, solange er
 gehalten wird, ein Klick lässt diese Ansicht stehen, bis erneut geklickt wird.
 Dieselbe Taste V tut dasselbe, und eine kleine Marke „Original" erscheint,
@@ -1292,15 +1292,15 @@ Auflösung zeigt die laufende Vorschau ohnehin nie), der laufende Schnitt
 bleibt dabei bestehen, weil ein Sprung an eine herausgeschnittene Stelle nur
 verwirren würde. Der Export bleibt davon unberührt.
 
-**Texterkennung (OCR)**: standardmäßig an; liest per Knopf in der Leiste und
+**Texterkennung (OCR)**: standardmäßig an; liest per Button in der Leiste und
 im Screenshot-Dialog Text aus einem Screenshot oder einer Bilddatei, komplett
-offline über die eigene Texterkennung von Windows. Der Knopf in der Leiste öffnet
+offline über die eigene Texterkennung von Windows. Der Button in der Leiste öffnet
 ein kleines Menü: aus einer Bilddatei oder aus einem Screenshot. Erkannter Text
 kann automatisch kopiert und umgebrochene Zeilen zu ganzen Sätzen zusammengefügt
 werden, beides einstellbar. Braucht ein Windows-Sprachpaket (siehe
 „Sprachpakete" unten).
 
-**Spracheingabe**: standardmäßig an; der Mikrofon-Knopf neben der Eingabeleiste
+**Spracheingabe**: standardmäßig an; der Mikrofon-Button neben der Eingabeleiste
 und im Kachel-Editor verwandelt Sprache in Text, komplett auf dem Gerät über die
 eigene Spracherkennung von Windows. Gesprochene Satzzeichen-Wörter („Komma",
 „neue Zeile" …) werden zu echten Zeichen; „wörtlich" vor einem Wort tippt es
@@ -1335,11 +1335,11 @@ EINER Kachel, Kette kopiert MEHRERE verschiedene Kacheln zusammen.
 **Wechselnde Kacheln**: eine Kachel trägt eine Liste von Texten, jede Kopie
 liefert den nächsten Eintrag (Reihenfolge oder Zufall). Standardmäßig an; der
 Schalter pro Kachel sitzt im Editor unter Erweiterte Optionen. Ein Badge auf
-Kachel/Pille/Pillen-Ordner-Mitglied zählt hoch: im Zufalls-Modus die Ziehungen
+Kachel/schwebender Button/Mitglied eines Ordners für schwebende Buttons zählt hoch: im Zufalls-Modus die Ziehungen
 im aktuellen Durchlauf statt einer springenden Position; übersteht Neustart und
-Sicherung, aber keinen CSV/TXT-Import (neue Kachel, neuer Zeiger). Eine geeignete
+Backup, aber keinen CSV/TXT-Import (neue Kachel, neuer Zeiger). Eine geeignete
 Kachel (2+ Einträge, kein Bild/Datei) kann zusätzlich **beim Einfügen
-automatisch weiterschalten**: Auto-Knopf im Editor oder Rechtsklickmenü,
+automatisch weiterschalten**: Auto-Button im Editor oder Rechtsklickmenü,
 solange Kachel- und App-Schalter beide an sind. Bei jedem echten Einfügen
 rückt der nächste Eintrag nach, nicht nur beim Kopieren; das Abzeichen zeigt
 eine Akzentfarbe, solange die Sitzung läuft. Platzhalter werden einmal pro
@@ -1351,7 +1351,7 @@ zu häufiges Einfügen pausiert die Sitzung mit einem Hinweis statt zu wiederhol
 Rotation oben; auch direkt über ein Kettensymbol an der Kachel, einzeln
 abschaltbar unter Kette im Experten-Menü). Eine Kette bleibt beim Wechsel in ein
 anderes Programm bestehen und endet erst durch erneutes Klicken auf den
-Ketten-Knopf oder Strg+V im App-Fenster. Was zwischen zwei verketteten
+Ketten-Button oder Strg+V im App-Fenster. Was zwischen zwei verketteten
 Kacheln steht, legt das Experten-Menü fest (ab Werk eine Leerzeile). Beim Verketten zeigt
 eine Leiste über dem Raster die gewählten
 Schritte der Reihe nach, mit Marken für die Platzhalter, die jeder Schritt
@@ -1383,17 +1383,17 @@ einer Kollision gewinnt der App-Hotkey, sonst die erste Kachel in der Liste.
 belegt jede Zeile direkt um, ohne den jeweiligen Editor zu öffnen. Eine Kachel
 mit eigenem Hotkey zeigt ein kleines Tastatursymbol.
 
-**Schwebende Schaltflächen:** kleine, immer sichtbare Kopier-Schaltflächen außerhalb des
+**Schwebende Buttons:** kleine, immer sichtbare Kopier-Buttons außerhalb des
 Hauptfensters, über jeder anderen App.
-Eine Schaltfläche, dessen gespeicherter Bildschirm nicht mehr angeschlossen ist, öffnet sich
+Ein Button, dessen gespeicherter Bildschirm nicht mehr angeschlossen ist, öffnet sich
 auf dem Hauptbildschirm, als geparkt markiert, und springt von selbst zurück, sobald
 dieser Bildschirm wieder da ist. Eine Aktion im Experten-Menü holt alle schwebenden
 Fenster auf einmal auf den Hauptbildschirm.
 
 **Ordner:** eine Geste an drei Stellen, ein Ziehen auf ein anderes fasst es zu
 einem Ordner zusammen. Ein Ansichts-Reiter auf einen anderen ergibt einen
-Gruppen-Reiter. Eine schwebende Schaltfläche auf einen anderen ergibt einen
-Pillen-Ordner. Eine Kachel auf eine andere ergibt einen Raster-Ordner, und
+Gruppen-Reiter. Ein schwebender Button auf einen anderen ergibt einen
+Ordner für schwebende Buttons. Eine Kachel auf eine andere ergibt einen Raster-Ordner, und
 gehört immer nur zu einem Raster-Ordner gleichzeitig.
 
 <p>
@@ -1449,7 +1449,7 @@ ein Wert für die Trefferzahl je Gruppe vor „weitere anzeigen".
 
 **Archiv**: Standardmäßig aus. Markiert eine Kachel als archiviert statt sie zu
 löschen; sie verschwindet aus Bibliothek und Raster, bleibt aber über Suche,
-Export und Sicherung erreichbar. Ein Schalter über der Liste holt archivierte
+Export und Backup erreichbar. Ein Schalter über der Liste holt archivierte
 Kacheln zurück; archivieren/entarchivieren geht per Rechtsklickmenü oder aus
 der Sammelleiste der Bibliothek.
 
@@ -1461,7 +1461,7 @@ zeigen außerdem die Länge eines Videos auf seinem Vorschaubild sowie Auflösun
 und Dateigröße in der Kurzhilfe; ältere Anhänge holen das im Hintergrund nach,
 sobald sie zum ersten Mal angezeigt werden. Das Hauptraster bleibt unverändert.
 
-**Werkzeugleiste**: welche Schaltflächen Kopf- und Composer-Leiste zeigen.
+**Werkzeugleiste**: welche Buttons Kopf- und Composer-Leiste zeigen.
 
 **Datenschutz**: Bildschirmaufnahme-Ausschluss (an; "Screenshots von Prompt
 Saver erlauben" gilt für jedes Aufnahmeprogramm, auch das eigene, nur die
@@ -1501,16 +1501,16 @@ abgedeckten Balken statt ihres Namens, kopiert nicht und bleibt bei der Suche
 außen vor. Sie bleibt auch bei der Markdown-Synchronisierung außen vor und
 wird bei einem einfachen Export standardmäßig ausgelassen; der Export bietet
 stattdessen die Wahl, sie verschlüsselt zu behalten, und eine vollständige
-Sicherung behält sie immer verschlüsselt.
+Backup behält sie immer verschlüsselt.
 
 Getrennt davon: Sollten die gespeicherten Einstellungen selbst auf der
 Festplatte unlesbar oder beschädigt sein (sehr selten), zeigt die App
 Standardwerte an, statt zu raten, und verweigert jede Einstellungsänderung, bis
 das behoben ist; die ursprünglichen, möglicherweise noch rettbaren Daten
-werden nie überschrieben. Es wird automatisch eine Sicherung der rohen
+werden nie überschrieben. Es wird automatisch ein Backup der rohen
 Datenbank angelegt, und eine dauerhafte Warnzeile (ebenfalls ohne Schalter)
 erscheint in derselben Datenschutz-Gruppe, solange es zutrifft. Ein Werksreset
-oder das Wiederherstellen der Einstellungen aus einer Sicherung löschen sie
+oder das Wiederherstellen der Einstellungen aus einem Backup löschen sie
 beide.
 
 Kann ein Einstellungs-Speichervorgang selbst nicht auf die Festplatte
@@ -1537,7 +1537,7 @@ für `docs/screenshot.png`: der genaue Ablauf steht im Abschnitt „Building
 from source" der README.
 
 **System**: Updates, Tastatur-Navigation, mehrere Instanzen, Datenordner.
-Lange Vorgänge (Export, Umwandlung, ffmpeg-Download, Sicherung, Import) füllen
+Lange Vorgänge (Export, Umwandlung, ffmpeg-Download, Backup, Import) füllen
 das Taskleistensymbol und zeigen ab einer eingestellten Schwelle „noch etwa …",
 beides abschaltbar.
 
@@ -1552,14 +1552,14 @@ speichern und wieder laden.
 **Papierkorb & Kacheln wiederherstellen**: gelöschte Kacheln landen zuerst im
 Papierkorb (Aufbewahrung in Tagen, 0 = für immer). Wiederherstellen legt in die
 erste freie Zelle der aktiven Ansicht, nicht zwingend an den Originalplatz, und
-ohne Pille, Ordner-Mitgliedschaft oder Hotkey von vorher.
+ohne schwebenden Button, Ordner-Mitgliedschaft oder Hotkey von vorher.
 
 **Rückgängig**: einige Aktionen außerhalb des Kachel-Papierkorbs tragen einen
-eigenen Rückgängig-Knopf direkt auf der Meldung: eine Ansicht löschen, den
+eigenen Rückgängig-Button direkt auf der Meldung: eine Ansicht löschen, den
 Kopierverlauf leeren, den Zwischenablage-Eingang leeren, einen Tag löschen, und
 eine Sammellöschung oder Sammeländerung von Tags in der Bibliothek. Es wartet
 immer nur eine einzige Rücknahme; eine spätere zerstörende Aktion ersetzt sie,
-und der Knopf verschwindet mit der Meldung selbst. Im Expertenmenü lässt sich
+und der Button verschwindet mit der Meldung selbst. Im Expertenmenü lässt sich
 das abschalten, dann bleibt die Meldung eine reine Bestätigung.
 
 **Duplikatfinder**: findet textlich sehr ähnliche Kacheln nach
@@ -1567,18 +1567,18 @@ das abschalten, dann bleibt die Meldung eine reine Bestätigung.
 aus. Eine wechselnde Kachel wird nur nach ihrem ersten Eintrag verglichen.
 Derselbe Ähnlichkeitswert steuert auch einen stillen Hinweis nach dem
 Speichern: gibt es einen ähnlichen vorhandenen Prompt, zeigt eine Meldung
-seinen Namen mit einem Knopf zum Öffnen und einem zum Vergleichen. Sie hält
+seinen Namen mit einem Button zum Öffnen und einem zum Vergleichen. Sie hält
 das Speichern nie auf und fragt nichts, wer sie ignoriert verliert nichts.
 Beide teilen sich eine Schwelle im Expertenmenü.
 
-**Import & Export**: CSV, TXT oder JSON für den reinen Text, volle Sicherung
-für alles. Ein Export-Knopf und eine Formatauswahl ersetzen die drei früheren
+**Import & Export**: CSV, TXT oder JSON für den reinen Text, volles Backup
+für alles. Ein Export-Button und eine Formatauswahl ersetzen die drei früheren
 Einzelknöpfe; nur JSON trägt eine rotierende Kachel mit allen Einträgen, Tags,
 Notiz, Tastenkürzel und Farbe vollständig, statt sie wie CSV und TXT in ein
 Feld zu quetschen. Bilder reisen in keinem der drei mit, dafür gibt es die
-volle Sicherung. Beim Import entscheidet der Dateiinhalt zwischen CSV und
+volles Backup. Beim Import entscheidet der Dateiinhalt zwischen CSV und
 JSON, nie die Dateiendung, und zeigt vorher eine Vorschau mit Name und
-Duplikat-Kennzeichnung; eine volle Sicherung stellt direkt wieder her. Ändert
+Duplikat-Kennzeichnung; ein volles Backup stellt direkt wieder her. Ändert
 sich die Datei nach der Vorschau, wird der Import verweigert statt etwas
 anderes zu importieren als angezeigt.
 
@@ -1672,7 +1672,7 @@ Markdown-Ordnersynchronisierung weiter unten der gebaute Weg.
 **Befehlszeile:** `prompt-saver.exe <Befehl> ...` nutzt die App als
 Kommandozeilen-Werkzeug statt ihr Fenster zu öffnen: Kacheln auflisten, lesen,
 kopieren, anlegen, ändern, löschen, wiederherstellen, Tags und Ansichten
-verwalten, suchen, exportieren, importieren, Sicherungen anlegen, auflisten oder
+verwalten, suchen, exportieren, importieren, Backups anlegen, auflisten oder
 wiederherstellen, dazu eine einzelne Einstellung lesen oder schreiben. Läuft
 die App bereits, geht der Befehl an diese laufende Kopie, und ihre Antwort
 erscheint hier. Sonst arbeitet der Befehl allein, direkt gegen die Datenbank,
@@ -1691,7 +1691,7 @@ nicht bestanden hat). Vollständige Befehlsliste: `prompt-saver.exe --help`.
 
 **Fernzugriff & Links**: zwei Schalter im Experten-Menü, beide
 standardmäßig aus. `promptsaver://open/<id>` holt eine Kachel ins geöffnete
-Fenster, `promptsaver://copy/<id>` kopiert sie, genau wie der Kopieren-Knopf.
+Fenster, `promptsaver://copy/<id>` kopiert sie, genau wie der Kopieren-Button.
 Ein Link kann nie etwas löschen oder ändern, eine unbekannte id tut einfach
 nichts, und das erste Öffnen sowie das erste Kopieren fragen je einmal nach
 Bestätigung. Der zweite Schalter startet eine lokale Schnittstelle, die
@@ -1706,7 +1706,7 @@ oder den vollen Inhalt. Eine gesperrte Kachel bleibt auch hier gesperrt. Eine
 Anzeige bleibt sichtbar, solange die Schnittstelle läuft, mit Portnummer und
 eigenem Ausschalter. Ist der Netzwerk-Schalter an, ist die Verbindung
 verschlüsselt (HTTPS), mit einem Zertifikat, das die App selbst erzeugt; eine
-unverschlüsselte `http://`-Anfrage bekommt gar keine Antwort. Der Knopf
+unverschlüsselte `http://`-Anfrage bekommt gar keine Antwort. Der Button
 **Zertifikat...** neben den Adressbereichen zeigt den Fingerabdruck des
 Zertifikats, speichert es, damit ein anderes Gerät ihm vertrauen kann (zum
 Beispiel `curl.exe --ssl-no-revoke --cacert <Datei>
@@ -1746,7 +1746,7 @@ unten) lässt Windows selbst dieses Paket herunterladen.
 
 **Was ist neu**, eine kleine Meldung nach einem Update zeigt, was sich seit
 der zuletzt gesehenen Version geändert hat; die Liste liegt bereits im
-Programm, nur ihr Knopf „Von GitHub aktualisieren" braucht Netz. Über den
+Programm, nur ihr Button „Von GitHub aktualisieren" braucht Netz. Über den
 Über-Dialog jederzeit für die laufende Version erneut aufrufbar.
 
 **Häufige Fragen**: Bildschirmaufnahme dieser App leer? Der
@@ -1757,32 +1757,32 @@ Einstellung nicht gefunden? Die Suche im Experten-Menü durchsucht alle Tabs
 auf einmal. Hotkey tut nichts? Eine andere App hält die Kombination
 vermutlich schon.
 
-**Eigenständig: Sicherungsverwaltung.** Verschlüsselte Sicherungen, GFS-Aufbewahrung,
+**Eigenständig: Backup-Verwaltung.** Verschlüsselte Backups, GFS-Aufbewahrung,
 gezieltes Wiederherstellen. Im selben Fenster außerdem eine
 Nutzungsstatistik (Summen, 14-Tage-Diagramm, meistgenutzte Kacheln),
-unabhängig von den Sicherungen selbst, mit einem eigenen Knopf, um die Statistik
+unabhängig von den Backups selbst, mit einem eigenen Button, um die Statistik
 als CSV, TXT oder JSON zu exportieren, sowie ein Speicherbereich, der zeigt,
-wie viel Platz Datenbank, Anhänge, Bildschirmfotos, Aufnahmen, Sicherungen,
-temporäre Dateien und das Fehlerprotokoll jeweils belegen, mit einem Knopf,
+wie viel Platz Datenbank, Anhänge, Bildschirmfotos, Aufnahmen, Backups,
+temporäre Dateien und das Fehlerprotokoll jeweils belegen, mit einem Button,
 um einen aufgeführten Ordner zu öffnen. Die Nutzungsstatistik listet außerdem
-die meistgenutzten Werkzeuge auf, von Bildschirmfotos bis Sicherungen, mit
+die meistgenutzten Werkzeuge auf, von Bildschirmfotos bis Backups, mit
 einer kurzen Liste der noch nie benutzten. Alles wird rein lokal gezählt und
 ist im Export enthalten. Ein Aufbewahrungsbereich listet eine Zeile je Art
 von Daten, die diese App selbst aufhebt (Papierkorb, Kopierverlauf,
 Zwischenablage-Eingang, Aufnahmen, verworfene Aufnahmen, temporäre Exporte
 und unfertige Bearbeitungsstände), mit dem aktuellen Stand, wie lange er
-bleibt, einem Knopf zum sofortigen Aufräumen und einem Knopf, der direkt zur
+bleibt, einem Button zum sofortigen Aufräumen und einem Button, der direkt zur
 zugehörigen Einstellung im Experten-Menü springt. Die Zahlen werden im
 Hintergrund ermittelt und mit dem Zeitpunkt der Messung beschriftet, genau
 wie beim Speicherbereich darüber, nicht bei jedem Öffnen neu berechnet. Zu
-jeder Sicherung in der Liste lässt sich auf Wunsch auch der volle Inhalt
+jedem Backup in der Liste lässt sich auf Wunsch auch der volle Inhalt
 anzeigen: Anzahl der Einträge, Ansichten und Tags, die jüngste Änderung
 darin, die Programmfassung, die sie erstellt hat, und ob ihre Zeilen normal
 versiegelt sind oder auf Klartext zurückgefallen sind. Darunter jeder
 enthaltene Prompt mit eigenem Änderungsdatum, Größe und Art, durchsuchbar
-nach Namen und nach jeder Spalte sortierbar, mit einem Knopf, um genau
+nach Namen und nach jeder Spalte sortierbar, mit einem Button, um genau
 diesen einen Prompt direkt aus der Liste wiederherzustellen statt der
-ganzen Sicherung.
+ganzen Backup.
 
 **Eigenständig: Schnellstarter.** Strg+Alt+P, unscharfe Suche, sofortiges Kopieren. Wie viele Treffer er zeigt, stellt das Experten-Menü ein (ab Werk 8).
 
