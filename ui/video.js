@@ -439,19 +439,33 @@ function capPrevChain(op, max) {
 // (the sort is stable).
 const overlayStack = () => opsOf("overlay").sort((a, b) => (a.z || 0) - (b.z || 0));
 
+// Removing an operation is one undo step too. A "removal" marker is pushed
+// after the entries are taken out; it remembers each removed op and its slot, so
+// undo puts them back exactly where they were and redo takes them out again.
+// The marker is bookkeeping only: it never shows in the list, is never saved and
+// no export step looks at it.
 function removeOps(match) {
-  const before = VE.ops.length;
-  VE.ops = VE.ops.filter((o) => !match(o));
-  if (VE.ops.length === before) return;
-  VE.floor = Math.max(0, VE.floor - (before - VE.ops.length));
-  afterOpsChanged();
+  const removed = [];
+  VE.ops.forEach((o, at) => { if (o.tool !== "removal" && match(o)) removed.push({ op: o, at }); });
+  if (!removed.length) return;
+  VE.ops = VE.ops.filter((o) => !removed.some((r) => r.op === o));
+  VE.floor = Math.max(0, VE.floor - removed.length);
+  pushOp({ tool: "removal", removed });
+}
+
+function restoreRemoved(marker) {
+  for (const { op, at } of marker.removed) VE.ops.splice(Math.min(at, VE.ops.length), 0, op);
 }
 
 function undo() {
   if (VE.ops.length <= VE.floor) return;
   const idx = VE.ops.length - 1;
   const cur = VE.ops[idx];
-  if (cur._prev) {
+  if (cur.tool === "removal") {
+    VE.ops.pop();
+    restoreRemoved(cur);
+    VE.redo.push(cur);
+  } else if (cur._prev) {
     // This slot was a replacement (pushReplacing) -- step it back to the
     // value it replaced rather than removing the row outright, and keep the
     // full entry (chain intact) on the redo stack so redo can restore it.
@@ -466,7 +480,10 @@ function undo() {
 function redo() {
   if (!VE.redo.length) return;
   const next = VE.redo.pop();
-  if (next._prev) {
+  if (next.tool === "removal") {
+    VE.ops = VE.ops.filter((o) => !next.removed.some((r) => r.op === o));
+    VE.ops.push(next);
+  } else if (next._prev) {
     // The matching undo left this slot holding next._prev -- put the newer
     // value back in the same slot instead of appending a second row.
     VE.ops[VE.ops.length - 1] = next;
@@ -515,6 +532,20 @@ function updateNudgeHint() {
 // Writes the current op's values into the overlay editor's own inputs without
 // touching the DOM node the user may still be focused on -- the inputs are
 // registered in VE.ovFields by renderOverlayEditor() while it builds the panel.
+// Number fields whose text the user has typed but not committed yet. Only
+// these keep their text across a refresh; any programmatic change (reset,
+// handle drag, undo, redo, preset) rewrites every other field, focused or not.
+const uncommittedFields = new Set();
+document.addEventListener("input", (e) => {
+  if (e.target instanceof HTMLInputElement) uncommittedFields.add(e.target);
+}, true);
+document.addEventListener("change", (e) => uncommittedFields.delete(e.target), true);
+document.addEventListener("focusout", (e) => uncommittedFields.delete(e.target), true);
+function isUncommitted(el) {
+  for (const n of uncommittedFields) if (n === el || (el.contains && el.contains(n))) return true;
+  return false;
+}
+
 function syncOverlayFields() {
   const fields = VE.ovFields;
   if (!fields) return;
@@ -524,7 +555,7 @@ function syncOverlayFields() {
     const { input, getValue } = fields[key];
     // A plain <input> contains itself, so this also covers the old case where
     // `input` was the field itself rather than a numberField() wrapper.
-    if (input.contains(document.activeElement)) continue;
+    if (isUncommitted(input)) continue;
     const value = getValue(op);
     if (value == null) continue;
     if (typeof input.setValue === "function") input.setValue(value);
@@ -564,7 +595,7 @@ function renderOps() {
   // Section clips are their own kind of thing (a whole inserted file, not a
   // filter applied to the source) and get their own list in the overlays
   // panel (renderClipList) instead of a line here.
-  const shown = VE.ops.filter((op) => op.tool !== "clip");
+  const shown = VE.ops.filter((op) => op.tool !== "clip" && op.tool !== "removal");
   if (!shown.length) {
     const empty = document.createElement("p");
     empty.className = "modal-hint";
@@ -1781,15 +1812,15 @@ function renderEditFields() {
   const trim = opOf("trim");
   const a = trim ? trim.startMs : 0;
   const b = trim ? trim.endMs : VE.dur;
-  if (document.activeElement !== $("ve-trim-start-val")) $("ve-trim-start-val").value = fmtTime(a);
-  if (document.activeElement !== $("ve-trim-end-val")) $("ve-trim-end-val").value = fmtTime(b);
+  if (!isUncommitted($("ve-trim-start-val"))) $("ve-trim-start-val").value = fmtTime(a);
+  if (!isUncommitted($("ve-trim-end-val"))) $("ve-trim-end-val").value = fmtTime(b);
 
   const crop = opOf("crop");
   $("ve-crop-on").checked = !!crop;
   $("ve-crop-fields").classList.toggle("ve-off", !crop);
   for (const input of $("ve-crop-fields").querySelectorAll("input, button")) input.disabled = !crop;
   const rect = crop ? crop.rect : { x: 0, y: 0, w: VE.w, h: VE.h };
-  if (document.activeElement?.closest?.("#ve-crop-fields") == null) {
+  if (!isUncommitted($("ve-crop-fields"))) {
     $("ve-crop-x").value = rect.x;
     $("ve-crop-y").value = rect.y;
     $("ve-crop-w").value = rect.w;
@@ -1802,7 +1833,7 @@ function renderEditFields() {
   for (const btn of $("ve-speed-steps").querySelectorAll("button")) {
     btn.classList.toggle("sel", Math.abs(Number(btn.dataset.rate) - rate) < 0.001);
   }
-  if (document.activeElement !== $("ve-speed-custom")) {
+  if (!isUncommitted($("ve-speed-custom"))) {
     $("ve-speed-custom").value = rate;
     $("ve-speed-custom").numFieldRefresh?.();
   }
@@ -1813,11 +1844,11 @@ function renderEditFields() {
   $("ve-fade-fields").classList.toggle("ve-off", !fade);
   for (const input of $("ve-fade-fields").querySelectorAll("input")) input.disabled = !fade;
   if (fade) {
-    if (document.activeElement !== $("ve-fade-in")) {
+    if (!isUncommitted($("ve-fade-in"))) {
       $("ve-fade-in").value = fade.inMs;
       $("ve-fade-in").numFieldRefresh?.();
     }
-    if (document.activeElement !== $("ve-fade-out")) {
+    if (!isUncommitted($("ve-fade-out"))) {
       $("ve-fade-out").value = fade.outMs;
       $("ve-fade-out").numFieldRefresh?.();
     }
@@ -1928,9 +1959,9 @@ function applyScalePresetKey(key) {
 
 function updateScaleCurrent() {
   const scale = opOf("scale");
-  if (document.activeElement !== $("ve-scale-w")) { $("ve-scale-w").value = scale ? scale.w : VE.w || ""; $("ve-scale-w").numFieldRefresh?.(); }
-  if (document.activeElement !== $("ve-scale-h")) { $("ve-scale-h").value = scale ? scale.h : VE.h || ""; $("ve-scale-h").numFieldRefresh?.(); }
-  if (document.activeElement !== $("ve-scale-pct")) {
+  if (!isUncommitted($("ve-scale-w"))) { $("ve-scale-w").value = scale ? scale.w : VE.w || ""; $("ve-scale-w").numFieldRefresh?.(); }
+  if (!isUncommitted($("ve-scale-h"))) { $("ve-scale-h").value = scale ? scale.h : VE.h || ""; $("ve-scale-h").numFieldRefresh?.(); }
+  if (!isUncommitted($("ve-scale-pct"))) {
     const pct = scale && VE.w ? Math.round((scale.w / VE.w) * 100) : 100;
     $("ve-scale-pct").value = pct;
     $("ve-scale-pct").numFieldRefresh?.();
@@ -4198,7 +4229,7 @@ async function saveEditStateNow() {
       target: VE.src,
       size: VE.editStateSize,
       mtime: VE.editStateMtime,
-      ops: JSON.stringify({ v: 1, ops: VE.ops }),
+      ops: JSON.stringify({ v: 1, ops: VE.ops.filter((o) => o.tool !== "removal") }),
     });
   } catch (_) {
     // Best-effort: a failed autosave tick is not worth bothering the user with,
