@@ -1578,7 +1578,27 @@ fn restore_backup_standalone(dir: &Path, name: &str, keep: usize, scope: &str, s
     }
     let _ = std::fs::remove_file(dir.join("data.db-wal"));
     let _ = std::fs::remove_file(dir.join("data.db-shm"));
+    // A restore that brings settings with it may have switched the picture-text
+    // index off while the prompts that stay still carry its text.
+    if scope != "data" {
+        clear_ocr_text_after_restore(dir, settings.ui_flags.get("ocrIndex").copied().unwrap_or(false))?;
+    }
     Ok(())
+}
+
+// Erases the picture text in the restored data when the index was on before and
+// the restored settings have it off; writes only when something was cleared.
+fn clear_ocr_text_after_restore(dir: &Path, was_on: bool) -> Result<(), String> {
+    if !was_on {
+        return Ok(());
+    }
+    let mut fresh = load_store_headless(dir);
+    if fresh.prompts_locked || !crate::clear_ocr_text_if_switched_off(true, &mut fresh) {
+        return Ok(());
+    }
+    let mut conn = db_conn_at(dir).ok_or_else(|| "could not open the restored store".to_string())?;
+    let ok = db_write_prompts_and_trash(&mut conn, &fresh.prompts, &fresh.trash, &mut fresh.written.borrow_mut()).is_ok();
+    if ok { Ok(()) } else { Err("could not write the restored store".to_string()) }
 }
 
 fn map_restore_err_code(e: &str) -> i32 {
@@ -2921,6 +2941,28 @@ mod tests {
         let after_restore = load_store_headless(tmp.path());
         assert!(after_restore.prompts.iter().any(|p| p.id == id));
         assert!(!after_restore.trash.iter().any(|p| p.id == id));
+    }
+
+    #[test]
+    fn standalone_restore_clears_picture_text_when_the_index_ended_up_off() {
+        let tmp = TempDir::new("standalone-ocr-off");
+        let (code, stdout) = standalone_roundtrip(tmp.path(), &["add", "--name", "Solo", "--text", "hi", "--yes"]);
+        assert_eq!(code, 0);
+        let id = stdout.trim().to_string();
+        let store = load_store_headless(tmp.path());
+        let mut prompts = store.prompts.clone();
+        prompts.iter_mut().find(|p| p.id == id).unwrap().image_text = "read from a picture".into();
+        {
+            let mut conn = db_conn_at(tmp.path()).unwrap();
+            db_write_prompts(&mut conn, &prompts, &mut store.written.borrow_mut()).unwrap();
+        }
+        // The restored settings have the index off (the default).
+        clear_ocr_text_after_restore(tmp.path(), false).unwrap();
+        let kept = load_store_headless(tmp.path());
+        assert_eq!(kept.prompts.iter().find(|p| p.id == id).unwrap().image_text, "read from a picture");
+        clear_ocr_text_after_restore(tmp.path(), true).unwrap();
+        let cleared = load_store_headless(tmp.path());
+        assert!(cleared.prompts.iter().all(|p| p.image_text.is_empty()));
     }
 
     #[test]

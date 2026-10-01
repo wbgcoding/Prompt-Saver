@@ -34110,8 +34110,13 @@ fn run_import(
     let original_prompts = store.prompts.clone();
     let original_settings = store.settings.clone();
     let original_prompts_locked = store.prompts_locked;
+    let original_trash = store.trash.clone();
     let original_settings_locked = SETTINGS_LOCKED.load(Ordering::Relaxed);
+    let ocr_was_on = ocr_index_flag_on(store);
     let (count, dropped, backup_pw_dropped) = apply_import(store, backup, want_data, want_settings);
+    // Imported settings may switch the picture-text index off while the prompts
+    // (and the trash) still carry its text.
+    let ocr_cleared = want_settings && clear_ocr_text_if_switched_off(ocr_was_on, store);
     // The trash is not part of an import: confidential entries in it stay sealed
     // with the key that was in use, which a replaced vault no longer matches.
     let vault_mismatch = want_data && store.trash.iter().any(|p| p.secret) && vault_keys_differ(&original_settings, &store.settings);
@@ -34120,9 +34125,10 @@ fn run_import(
     }
     // Colliding accelerators are dropped from the prompts whatever the scope, so
     // a settings-only import that dropped one has changed prompt rows too.
-    let write_prompts = want_data || dropped > 0;
+    let write_prompts = want_data || dropped > 0 || ocr_cleared;
     if !persist(store, write_prompts, want_settings) {
         store.prompts = original_prompts;
+        store.trash = original_trash;
         store.settings = original_settings;
         store.prompts_locked = original_prompts_locked;
         SETTINGS_LOCKED.store(original_settings_locked, Ordering::Relaxed);
@@ -34224,9 +34230,14 @@ async fn import_all(
 
     let (settings, count, dropped_hotkeys, backup_pw_dropped, vault_mismatch) = {
         let mut store = lock(&state);
+        let ocr_was_on = ocr_index_flag_on(&store);
         let (count, dropped, backup_pw_dropped, vault_mismatch) = run_import(&mut store, backup, want_data, want_settings, |st, prompts, settings| {
             save_import(&app, st, prompts, settings)
         })?;
+        // The import's own save covers the prompt rows; the trash is written here.
+        if want_settings && ocr_was_on && !ocr_index_flag_on(&store) {
+            save_prompts_and_trash(&app, &store);
+        }
         (store.settings.clone(), count, dropped, backup_pw_dropped, vault_mismatch)
     };
     // Re-apply the imported state without a restart, the same way a settings-only
@@ -49270,6 +49281,30 @@ mod tests {
         assert!(!clear_ocr_text_if_switched_off(false, &mut store), "was already off: left alone");
         assert!(clear_ocr_text_if_switched_off(true, &mut store));
         assert!(store.prompts[0].image_text.is_empty());
+    }
+
+    #[test]
+    fn a_full_import_that_switches_ocr_index_off_erases_prompt_and_trash_text() {
+        let mut store = Store { prompts: vec![sync_test_prompt()], trash: vec![sync_test_prompt()], settings: Settings::default(), prompts_locked: false, written: Default::default() };
+        store.prompts[0].image_text = "live".into();
+        store.trash[0].image_text = "trashed".into();
+        store.settings.ui_flags.insert("ocrIndex".into(), true);
+        let mut incoming = import_test_backup();
+        incoming.prompts[0].image_text = "kept by data".into();
+        let mut wrote_prompts = false;
+        run_import(&mut store, incoming, false, true, |_, prompts, _| {
+            wrote_prompts = prompts;
+            true
+        })
+        .unwrap();
+        assert!(wrote_prompts, "cleared prompt rows must be persisted");
+        assert!(store.prompts.iter().all(|p| p.image_text.is_empty()));
+        assert!(store.trash.iter().all(|p| p.image_text.is_empty()));
+        // A data-only import leaves the switch alone and the text with it.
+        store.settings.ui_flags.insert("ocrIndex".into(), true);
+        store.trash[0].image_text = "trashed".into();
+        run_import(&mut store, import_test_backup(), true, false, |_, _, _| true).unwrap();
+        assert_eq!(store.trash[0].image_text, "trashed");
     }
 
     #[test]
