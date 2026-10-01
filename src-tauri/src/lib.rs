@@ -15703,15 +15703,17 @@ fn set_snip_overlay_hidden(app: &AppHandle, hidden: bool) {
 static SNIP_PREVIEW_SEQ: AtomicU64 = AtomicU64::new(0);
 static SNIP_PREVIEW_FILE: Mutex<Option<PathBuf>> = Mutex::new(None);
 
-fn write_snip_preview(jpeg: &[u8]) -> Option<String> {
+// None when the file could not be written or when the session `gen` belongs to is
+// gone: a stale encode must never replace (and delete) the newer session's preview.
+fn write_snip_preview(jpeg: &[u8], gen: u64) -> Option<String> {
     let seq = SNIP_PREVIEW_SEQ.fetch_add(1, Ordering::Relaxed);
     let path = std::env::temp_dir().join(format!("{}-snip-{}.jpg", brand::TEMP_PREFIX, seq));
+    let mut slot = SNIP_PREVIEW_FILE.lock().unwrap_or_else(|e| e.into_inner());
+    if SNIP_GEN.load(Ordering::SeqCst) != gen {
+        return None;
+    }
     fs::write(&path, jpeg).ok()?;
-    if let Some(old) = SNIP_PREVIEW_FILE
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .replace(path.clone())
-    {
+    if let Some(old) = slot.replace(path.clone()) {
         let _ = fs::remove_file(old);
     }
     Some(path.to_string_lossy().into_owned())
@@ -16580,7 +16582,7 @@ async fn begin_capture(
         }
         // Encode the capture at NATIVE resolution: pixel-sharp overlay, no downscale.
         let bg = encode_snip_jpeg(enc_img.as_raw(), total_w, total_h, if pick { PICK_Q } else { snip_q }).map(|j| {
-            let (src, is_file) = match write_snip_preview(&j) {
+            let (src, is_file) = match write_snip_preview(&j, gen) {
                 Some(path) => (path, true),
                 None => (format!("data:image/jpeg;base64,{}", base64_encode(&j)), false),
             };
@@ -49543,9 +49545,13 @@ mod tests {
 
     #[test]
     fn snip_preview_rotates_and_cleans() {
-        let p1 = write_snip_preview(b"first").expect("write1");
+        let gen = SNIP_GEN.load(Ordering::SeqCst);
+        let p1 = write_snip_preview(b"first", gen).expect("write1");
         assert!(std::path::Path::new(&p1).exists());
-        let p2 = write_snip_preview(b"second").expect("write2");
+        // A stale encode neither writes nor touches the current preview.
+        assert!(write_snip_preview(b"stale", gen.wrapping_add(1)).is_none());
+        assert!(std::path::Path::new(&p1).exists(), "stale encode keeps the live preview");
+        let p2 = write_snip_preview(b"second", gen).expect("write2");
         assert_ne!(p1, p2);
         assert!(!std::path::Path::new(&p1).exists(), "previous preview deleted");
         assert!(std::path::Path::new(&p2).exists());
