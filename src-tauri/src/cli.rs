@@ -1166,6 +1166,10 @@ fn cmd_get(store: &Store, id: &str, json: bool) -> Outcome {
     let Some(p) = find_prompt(store, id) else {
         return Outcome::err(2, format!("no prompt with id {id}\n"));
     };
+    if p.secret {
+        return Outcome::err(1, format!("prompt {id} is confidential and can only be read in the app itself
+"));
+    }
     let trashed = p.trashed_at > 0;
     if json {
         let d = PromptDetail { id: &p.id, name: &p.name, text: &p.text, favorite: p.favorite, tags: &p.tags, notes: &p.notes, color: &p.color, trashed };
@@ -1591,7 +1595,9 @@ fn map_restore_err_code(e: &str) -> i32 {
 fn cmd_settings_get(store: &Store, key: &str, json: bool) -> Outcome {
     // The receiver's certificate values belong to this machine and never
     // travel over the command line, least of all the remote one.
-    if crate::remote::is_remote_secret_key(key) {
+    // The vault salt and verifier and the sealed backup password would give
+    // anyone with the receiver password what an offline guess needs.
+    if crate::remote::is_remote_secret_key(key) || crate::is_vault_key(key) || key == crate::BACKUP_PW_KEY {
         return Outcome::err(2, format!("no setting named \"{key}\"
 "));
     }
@@ -1627,6 +1633,20 @@ fn cmd_settings_get(store: &Store, key: &str, json: bool) -> Outcome {
 fn cmd_settings_set(store: &mut Store, key: &str, value: &str) -> Outcome {
     if crate::remote::is_remote_secret_key(key) {
         return Outcome::err(1, format!("{key} is managed by the app and cannot be set
+"));
+    }
+    // Folder authority, the vault keys, the backup password, the import-denied
+    // switches and every receiver setting have their own dedicated writers and
+    // are refused for an import too; this generic setter is reachable from the
+    // remote receiver, so it must not be a way around them.
+    if crate::is_protected_folder_key(key)
+        || crate::is_vault_key(key)
+        || key == crate::BACKUP_PW_KEY
+        || matches!(key, "voiceOnlineOk" | "dataDirLock" | "clipSkipSecrets")
+        || crate::is_import_denied_flag(key)
+        || crate::is_import_denied_value(key)
+    {
+        return Outcome::err(1, format!("{key} can only be changed in the app itself
 "));
     }
     let s = &mut store.settings;
@@ -1844,26 +1864,58 @@ async fn run_in_process_inner(app: &AppHandle, argv: Vec<String>, cwd: PathBuf, 
 
     let state: tauri::State<Db> = app.state();
     let dir = data_dir(app);
-    let outcome = {
-        let mut store = lock(&state);
-        exec(&mut store, &dir, &cmd, &cwd)
-    };
-    if outcome.mutated_prompts || outcome.mutated_trash || outcome.mutated_settings {
-        let store = lock(&state);
-        let persisted = if outcome.mutated_trash {
-            crate::save_prompts_and_trash(app, &store)
-        } else if outcome.mutated_prompts {
-            crate::save_prompts(app, &store)
+    let mut store = lock(&state);
+    // (This check also refuses a prompt-only command while only the settings
+    // are locked; the standalone caller does not look at SETTINGS_LOCKED.)
+    // The same refusal the standalone caller gives, up front: a store that is
+    // read-only, locked after a failed decrypt or settings-locked must not even
+    // be changed in memory, or the next save that succeeds would write it.
+    if is_mutating(&cmd)
+        && (crate::DATA_DIR_READONLY.load(Ordering::Relaxed) || store.prompts_locked || crate::SETTINGS_LOCKED.load(Ordering::Relaxed))
+    {
+        return (3, String::new(), "the store refused the write (locked or unavailable)
+".to_string());
+    }
+    let outcome = exec_persisted(&mut store, &dir, &cmd, &cwd, |st, o| {
+        let persisted = if o.mutated_trash {
+            crate::save_prompts_and_trash(app, st)
+        } else if o.mutated_prompts {
+            crate::save_prompts(app, st)
         } else {
             true
         };
-        let settings_persisted = if outcome.mutated_settings { crate::save_settings(app, &store.settings) } else { true };
-        drop(store);
-        if !persisted || !settings_persisted {
-            return (3, String::new(), "the store refused the write (locked or unavailable)\n".to_string());
-        }
-    }
+        let settings_persisted = if o.mutated_settings { crate::save_settings(app, &st.settings) } else { true };
+        persisted && settings_persisted
+    });
+    drop(store);
     (outcome.code, outcome.stdout, outcome.stderr)
+}
+
+// Runs a command on the live store and keeps its change only when `persist`
+// accepts it. A refused write puts prompts, trash and settings back exactly as
+// they were, so the caller's "refused" answer is true of the running app too.
+fn exec_persisted(store: &mut Store, dir: &Path, cmd: &Cmd, cwd: &Path, persist: impl FnOnce(&Store, &Outcome) -> bool) -> Outcome {
+    // Only a command that can change something needs the copy; a read over a
+    // large library stays free of it.
+    let before = is_mutating(cmd).then(|| (store.prompts.clone(), store.trash.clone(), store.settings.clone()));
+    let outcome = exec(store, dir, cmd, cwd);
+    if !(outcome.mutated_prompts || outcome.mutated_trash || outcome.mutated_settings) {
+        return outcome;
+    }
+    if persist(store, &outcome) {
+        return outcome;
+    }
+    if let Some(before) = before {
+        (store.prompts, store.trash, store.settings) = before;
+    }
+    // When the prompts write went through and only the settings write failed,
+    // memory is back but the disk keeps the prompt change until the next save,
+    // which rewrites everything (see the line below).
+    // The row bookkeeping may have moved with the failed write: start it over so
+    // nothing is skipped as already written on the next save.
+    store.forget_written_rows();
+    Outcome::err(3, "the store refused the write (locked or unavailable)
+")
 }
 
 // ---------- Remote-caller path confinement ----------
@@ -1965,7 +2017,7 @@ fn command_help(cmd: &str, sub: Option<&str>) -> String {
         ("backup", Some("restore")) => "prompt-saver backup restore <name> [--scope all|prompts|settings] [--keep N] --yes\n\nReplace the store with a backup. Always takes a safety snapshot first.".to_string(),
         ("settings", None) => "prompt-saver settings get <key> [--json]\nprompt-saver settings set <key> <value> --yes".to_string(),
         ("settings", Some("get")) => "prompt-saver settings get <key> [--json]\n\nRead one setting. Exit 2 if the key is unknown.".to_string(),
-        ("settings", Some("set")) => "prompt-saver settings set <key> <value> --yes\n\nWrite one setting. The value is read as a whole number/decimal, true/false, or plain text, in that order, unless the key is one of the app's own fixed settings (theme, language, autostart, alwaysOnTop).".to_string(),
+        ("settings", Some("set")) => "prompt-saver settings set <key> <value> --yes\n\nWrite one setting. The value is read as a whole number/decimal, true/false, or plain text, in that order, unless the key is one of the app's own fixed settings (theme, language, autostart, alwaysOnTop). Settings that grant access (folders, the vault, the backup password, the remote access switches and values, the link and clipboard switches, the voice consent and the data folder lock) are refused; change them in the app.".to_string(),
         ("version", _) => "prompt-saver version\n\nPrint the app name and version.".to_string(),
         _ => top_level_help(),
     }
@@ -2602,10 +2654,73 @@ mod tests {
             assert_ne!(set.code, 0, "{key} must not be writable");
             assert_eq!(store.settings.ui_texts.get(key).map(String::as_str), Some("sealed"));
         }
-        // The user-facing, non-secret receiver settings stay settable.
-        let ok = run_cmd(&mut store, &dir, &["settings", "set", "remoteAllowedRanges", "10.0.0.0/8", "--yes"]);
-        assert_eq!(ok.code, 0);
-        assert_eq!(store.settings.ui_texts.get("remoteAllowedRanges").map(String::as_str), Some("10.0.0.0/8"));
+    }
+
+    #[test]
+    fn a_refused_write_leaves_the_live_store_as_it_was() {
+        let mut store = fixture_store();
+        let dir = std::env::temp_dir();
+        let id = store.prompts[0].id.clone();
+        let before = (serde_json::to_string(&store.prompts).unwrap(), serde_json::to_string(&store.trash).unwrap(), serde_json::to_string(&store.settings).unwrap());
+        for items in [vec!["delete", id.as_str(), "--yes"], vec!["settings", "set", "myFlag", "true", "--yes"]] {
+            let parsed = match parse(&args(&items)).unwrap() {
+                Parsed::Run(c) => c,
+                Parsed::Help(_) => panic!("help"),
+            };
+            let out = exec_persisted(&mut store, &dir, &parsed, Path::new("."), |_, _| false);
+            assert_eq!(out.code, 3, "{items:?}");
+            let after = (serde_json::to_string(&store.prompts).unwrap(), serde_json::to_string(&store.trash).unwrap(), serde_json::to_string(&store.settings).unwrap());
+            assert_eq!(after, before, "{items:?} must not change the live store");
+        }
+        let ok = match parse(&args(&["settings", "set", "myFlag", "true", "--yes"])).unwrap() {
+            Parsed::Run(c) => c,
+            Parsed::Help(_) => panic!("help"),
+        };
+        assert_eq!(exec_persisted(&mut store, &dir, &ok, Path::new("."), |_, _| true).code, 0);
+        assert_eq!(store.settings.ui_flags.get("myFlag"), Some(&true));
+    }
+
+    #[test]
+    fn settings_set_refuses_every_key_with_its_own_dedicated_writer() {
+        let mut store = fixture_store();
+        let dir = std::env::temp_dir();
+        for key in [
+            "syncDir", "recordingDir", "screenshotDir", "videoExportDir", "secretVaultSalt", "secretVaultVerify",
+            "backupPw", "remoteNetworkFilter", "remoteApi", "remoteAllowedRanges", "remotePort", "remoteRateLimit",
+            "clipWatcher", "urlSchemeCopyAllowed", "urlScheme", "demoMode", "promptSync",
+            "voiceOnlineOk", "dataDirLock", "clipSkipSecrets",
+        ] {
+            let before = serde_json::to_string(&store.settings).unwrap();
+            for value in ["true", "12", "x"] {
+                let set = run_cmd(&mut store, &dir, &["settings", "set", key, value, "--yes"]);
+                assert_ne!(set.code, 0, "{key} must not be writable here");
+                assert!(!set.mutated_settings, "{key} must not flag a settings write");
+            }
+            assert_eq!(serde_json::to_string(&store.settings).unwrap(), before, "{key} changed the store");
+        }
+    }
+
+    #[test]
+    fn settings_get_and_get_keep_the_vault_material_to_themselves() {
+        let mut store = fixture_store();
+        let dir = std::env::temp_dir();
+        for key in ["secretVaultSalt", "secretVaultVerify", "backupPw"] {
+            store.settings.ui_texts.insert(key.to_string(), "sealed-bytes".to_string());
+            let got = run_cmd(&mut store, &dir, &["settings", "get", key]);
+            assert_ne!(got.code, 0, "{key} must not be readable here");
+            assert!(!got.stdout.contains("sealed-bytes"));
+        }
+        store.prompts[0].secret = true;
+        store.prompts[0].text = "CIPHERTEXT".to_string();
+        for extra in [&[][..], &["--json"][..]] {
+            let mut argv = vec!["get", "p1"];
+            argv.extend_from_slice(extra);
+            let got = run_cmd(&mut store, &dir, &argv);
+            assert_ne!(got.code, 0);
+            assert!(!got.stdout.contains("CIPHERTEXT") && !got.stderr.contains("CIPHERTEXT"));
+        }
+        let plain = run_cmd(&mut store, &dir, &["get", "p2"]);
+        assert_eq!(plain.code, 0);
     }
 
     #[test]

@@ -139,7 +139,7 @@ tests/automation_doc_check.py` fails the build if someone forgets.
 | `backup list` | `prompt-saver backup list [--json]` | no | List existing backups, newest first. |
 | `backup restore` | `prompt-saver backup restore <name> [--scope all\|prompts\|settings] [--keep N] --yes` | yes (needs `--yes`) | Replace the store with a backup. Always takes a safety snapshot first. |
 | `settings get` | `prompt-saver settings get <key> [--json]` | no | Read one setting. Exit 2 if the key is unknown. |
-| `settings set` | `prompt-saver settings set <key> <value> --yes` | yes (needs `--yes`) | Write one setting. The value is read as a whole number/decimal, true/false, or plain text, in that order, unless the key is one of the app's own fixed settings (theme, language, autostart, alwaysOnTop). |
+| `settings set` | `prompt-saver settings set <key> <value> --yes` | yes (needs `--yes`) | Write one setting. The value is read as a whole number/decimal, true/false, or plain text, in that order, unless the key is one of the app's own fixed settings (theme, language, autostart, alwaysOnTop). Settings that grant access (folders, the vault, the backup password, the remote access switches and values, the link and clipboard switches, the voice consent and the data folder lock) are refused; change them in the app. |
 | `version` | `prompt-saver version` | no | Print the app name and version. |
 <!-- COMMANDS:END -->
 

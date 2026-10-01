@@ -764,6 +764,7 @@ const ERROR_MSG_KEYS = {
   "save-failed": "persistFailed",
   "remote-off-not-saved": "remoteOffNotSaved",
   "remote-network-off-not-saved": "remoteNetworkOffNotSaved",
+  "port-unavailable": "remotePortUnavailable",
   "the certificate key could not be protected": "remoteTlsKeyNotProtected",
 };
 function errToast(err) {
@@ -2787,8 +2788,13 @@ function previewValue(key, value) {
   requestAnimationFrame(() => { liveRenderQueued = false; refreshTiles(key); });
 }
 async function commitValue(key, value) {
+  const before = (settings.ui_values || {})[key];
   settings.ui_values = { ...(settings.ui_values || {}), [key]: value };
-  try { await invoke("set_ui_value", { key, value }); } catch (err) { errToast(err); }
+  try { await invoke("set_ui_value", { key, value }); } catch (err) {
+    errToast(err);
+    // The backend kept the old port: show that one again.
+    if (key === "remotePort" && before !== undefined) settings.ui_values = { ...settings.ui_values, [key]: before };
+  }
   applyValues();
   await refreshTiles(key);
   // Fires once on release, not per drag frame: same "no flash mid-drag" reason

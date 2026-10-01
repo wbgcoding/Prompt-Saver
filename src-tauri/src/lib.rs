@@ -8111,6 +8111,41 @@ fn list_trash(state: State<Db>) -> Vec<Prompt> {
     lock(&state).trash.clone()
 }
 
+// Moves a trashed prompt back onto the active view and persists it. On a failed
+// write the store is put back exactly as it was: the rollback copy is the FULL
+// settings (never the window copy, which lacks the receiver's password hash and
+// TLS key), so a failed restore cannot strip them from the live store.
+fn restore_trashed_core(store: &mut Store, id: &str, save: impl FnOnce(&Store) -> bool) -> Result<(), String> {
+    let Some(pos) = store.trash.iter().position(|p| p.id == id) else {
+        return Err("not-found".into());
+    };
+    let original_settings = store.settings.clone();
+    let mut p = store.trash.remove(pos);
+    let original_trashed_at = p.trashed_at;
+    p.trashed_at = 0;
+    let folder_cells = active_view_folder_cells(&store.settings);
+    let view = store.settings.active_view_mut();
+    if let Some(cell) = first_free_cell_excluding(view, &folder_cells) {
+        let key = grid_key(view.cols, view.rows);
+        view.layouts.entry(key).or_default().insert(p.id.clone(), cell);
+    }
+    view.members.push(p.id.clone());
+    store.prompts.push(p);
+    // Same atomic prompts+trash write as delete_prompt - on failure, undo the
+    // in-memory move (including the layout cell claimed above) instead of
+    // reporting success for a restore that never reached disk.
+    if !save(store) {
+        if let Some(mut p) = store.prompts.pop() {
+            p.trashed_at = original_trashed_at;
+            let at = pos.min(store.trash.len());
+            store.trash.insert(at, p);
+        }
+        store.settings = original_settings;
+        return Err("save-failed".into());
+    }
+    Ok(())
+}
+
 // Places the restored prompt in the ACTIVE view via the same first_free_cell scan
 // add_prompt already uses for a brand-new prompt: if the view is full, the prompt
 // still comes back (reachable through the library) just without a grid cell of its
@@ -8121,34 +8156,7 @@ fn list_trash(state: State<Db>) -> Vec<Prompt> {
 async fn restore_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Result<AppState, String> {
     let (app_state, restored) = {
         let mut store = lock(&state);
-        let pos = store.trash.iter().position(|p| p.id == id);
-        let Some(pos) = pos else {
-            return Err("not-found".into());
-        };
-        let original_settings = webview_settings(&store.settings);
-        let mut p = store.trash.remove(pos);
-        let original_trashed_at = p.trashed_at;
-        p.trashed_at = 0;
-        let folder_cells = active_view_folder_cells(&store.settings);
-        let view = store.settings.active_view_mut();
-        if let Some(cell) = first_free_cell_excluding(view, &folder_cells) {
-            let key = grid_key(view.cols, view.rows);
-            view.layouts.entry(key).or_default().insert(p.id.clone(), cell);
-        }
-        view.members.push(p.id.clone());
-        store.prompts.push(p);
-        // Same atomic prompts+trash write as delete_prompt - on failure, undo the
-        // in-memory move (including the layout cell claimed above) instead of
-        // reporting success for a restore that never reached disk.
-        if !save_prompts_and_trash(&app, &store) {
-            if let Some(mut p) = store.prompts.pop() {
-                p.trashed_at = original_trashed_at;
-                let at = pos.min(store.trash.len());
-                store.trash.insert(at, p);
-            }
-            store.settings = original_settings;
-            return Err("save-failed".into());
-        }
+        restore_trashed_core(&mut store, &id, |st| save_prompts_and_trash(&app, st))?;
         save_settings(&app, &store.settings);
         let secret_key = secret_session_key(secret_timeout_min(&store.settings));
         (AppState { prompts: slim_prompts(&store.prompts, secret_key), settings: webview_settings(&store.settings) }, true)
@@ -8408,8 +8416,9 @@ async fn reset_settings(app: AppHandle, state: State<'_, Db>) -> Result<(), Stri
         }
     }
     let _ = apply_autostart(false, false);
-    {
+    let effects = {
         let mut store = lock(&state);
+        let old = store.settings.clone();
         let prompts = std::mem::take(&mut store.prompts); // keep the prompts
         // The backup password is a key, not a preference: dropping it would make
         // every password-protected backup permanently unreadable.
@@ -8422,7 +8431,9 @@ async fn reset_settings(app: AppHandle, state: State<'_, Db>) -> Result<(), Stri
         // than reasoning about what survived a factory reset.
         store.forget_written_rows();
         save_settings(&app, &store.settings);
-    }
+        remote::reset_side_effects(&old, &store.settings)
+    };
+    remote::run_reset_side_effects(&app, &effects);
     // Defaults mean the screenshot switch is off: open windows go back to excluded.
     apply_capture_exclusion_all(&app, true);
     Ok(())
@@ -27241,14 +27252,24 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
 
 // Set an expert numeric value (CSS var / behaviour tweak).
 #[tauri::command]
-fn set_ui_value(app: AppHandle, state: State<Db>, key: String, value: f64) {
+fn set_ui_value(app: AppHandle, state: State<Db>, key: String, value: f64) -> Result<(), String> {
     let is_tray = key == "trayRecentN" || key == "trayFavN" || key == "trayLabelMax";
     let is_folder_grid = key == "folderGridCols";
     let is_error_log_cap = key == "errorLogKeepKb";
-    {
+    let restart_port_from = {
         let mut store = lock(&state);
-        store.settings.ui_values.insert(key, value);
-        save_settings(&app, &store.settings);
+        let old = store.settings.ui_values.get(&key).copied();
+        if key == "remotePort" {
+            let restart = remote::commit_port_value(&mut store.settings, value, remote::probe_port, |s| save_settings(&app, s))?;
+            restart.then_some(old)
+        } else {
+            store.settings.ui_values.insert(key.clone(), value);
+            save_settings(&app, &store.settings);
+            None
+        }
+    };
+    if let Some(old) = restart_port_from {
+        remote::apply_port_change(&app, &state, old)?;
     }
     if is_tray {
         rebuild_tray(&app); // dragging a slider must not rebuild on every step
@@ -27267,6 +27288,7 @@ fn set_ui_value(app: AppHandle, state: State<Db>, key: String, value: f64) {
         ERROR_LOG_KEEP_BYTES.store((value.max(1.0) * 1024.0) as u64, Ordering::Relaxed);
     }
     notify_float_settings(&app);
+    Ok(())
 }
 
 // Settings that name a folder the backend itself writes into or deletes from.
@@ -27339,20 +27361,27 @@ fn set_recording_dir(app: AppHandle, state: State<Db>, dir: String) -> Result<()
     Ok(())
 }
 
+// Clears the expert flags, values and texts. The texts that are keys rather than
+// preferences stay: the backup password, the receiver's certificate values and
+// the vault's salt and verifier (the confidential prompts are sealed with it).
+fn reset_expert_settings(settings: &mut Settings) {
+    settings.ui_flags.clear();
+    settings.ui_values.clear();
+    let kept = settings_after_reset(settings).ui_texts;
+    settings.ui_texts = kept;
+}
+
 // Clear all expert overrides back to the shipped defaults.
 #[tauri::command]
 fn reset_expert(app: AppHandle, state: State<Db>) {
-    {
+    let effects = {
         let mut store = lock(&state);
-        store.settings.ui_flags.clear();
-        store.settings.ui_values.clear();
-        let tls_values = remote_tls::tls_values(&store.settings);
-        store.settings.ui_texts.clear();
-        for (k, v) in tls_values {
-            store.settings.ui_texts.insert(k, v);
-        }
+        let old = store.settings.clone();
+        reset_expert_settings(&mut store.settings);
         save_settings(&app, &store.settings);
-    }
+        remote::reset_side_effects(&old, &store.settings)
+    };
+    remote::run_reset_side_effects(&app, &effects);
     ERROR_LOG_KEEP_BYTES.store(256 * 1024, Ordering::Relaxed);
     // Cleared flags put the screenshot permission back to its default (off), which
     // means the exclusion is on: re-assert it on every window so it is immediate.
@@ -31361,6 +31390,15 @@ fn skip_registry_removal(enabled: bool, owner: RegistryOwner) -> bool {
     !enabled && owner == RegistryOwner::OtherExe
 }
 
+// A reset turns the address scheme off like the switch does, so it leaves
+// another copy's registration alone too.
+pub(crate) fn url_scheme_removal_skipped() -> bool {
+    match remote::url_scheme_command() {
+        Ok(cmd) => skip_registry_removal(false, current_registry_owner(cmd.as_deref())),
+        Err(_) => false,
+    }
+}
+
 fn current_registry_owner(command: Option<&str>) -> RegistryOwner {
     match std::env::current_exe() {
         Ok(exe) => registry_owner(command, &exe.display().to_string(), |p| std::path::Path::new(p).exists()),
@@ -33623,6 +33661,12 @@ fn run_import(
         // skipped as "already written" on the next save either.
         store.forget_written_rows();
         return Err("save-failed".into());
+    }
+    // The session key belongs to the salt it was derived from: once the import
+    // installed another salt, the old key would decrypt nothing and would seal
+    // new confidential prompts against a verifier that no longer matches.
+    if vault_keys_differ(&original_settings, &store.settings) {
+        *SECRET_SESSION.lock().unwrap_or_else(|e| e.into_inner()) = None;
     }
     Ok((count, dropped, backup_pw_dropped, vault_mismatch))
 }
@@ -44550,6 +44594,44 @@ mod tests {
     }
 
     #[test]
+    fn a_failed_trash_restore_keeps_the_receiver_secrets_in_the_live_settings() {
+        let mut settings = Settings::default();
+        settings.migrate();
+        let mut store = Store { prompts: Vec::new(), trash: Vec::new(), settings, prompts_locked: false, written: Default::default() };
+        let mut p = test_prompt("trashed");
+        p.id = "t1".into();
+        p.trashed_at = 5;
+        store.trash.push(p);
+        store.settings.ui_texts.insert("remotePasswordHash".into(), "hash".into());
+        store.settings.ui_texts.insert("remoteTlsKey".into(), "sealed".into());
+        let r = restore_trashed_core(&mut store, "t1", |_| false);
+        assert_eq!(r, Err("save-failed".to_string()));
+        assert_eq!(store.settings.ui_texts.get("remotePasswordHash").map(String::as_str), Some("hash"));
+        assert_eq!(store.settings.ui_texts.get("remoteTlsKey").map(String::as_str), Some("sealed"));
+        assert_eq!(store.trash.len(), 1);
+        assert_eq!(store.trash[0].trashed_at, 5);
+        assert!(store.prompts.is_empty());
+    }
+
+    #[test]
+    fn reset_expert_keeps_the_keys_and_drops_the_preferences() {
+        let mut s = Settings::default();
+        s.ui_texts.insert(SECRET_SALT_KEY.to_string(), "salt".into());
+        s.ui_texts.insert(SECRET_VERIFY_KEY.to_string(), "verify".into());
+        s.ui_texts.insert(BACKUP_PW_KEY.to_string(), "sealed".into());
+        s.ui_texts.insert("remoteTlsKey".to_string(), "tls".into());
+        s.ui_texts.insert("copyFont".to_string(), "mono".into());
+        s.ui_flags.insert("clipWatcher".to_string(), true);
+        s.ui_values.insert("trayRecentN".to_string(), 9.0);
+        reset_expert_settings(&mut s);
+        for (k, v) in [(SECRET_SALT_KEY, "salt"), (SECRET_VERIFY_KEY, "verify"), (BACKUP_PW_KEY, "sealed"), ("remoteTlsKey", "tls")] {
+            assert_eq!(s.ui_texts.get(k).map(String::as_str), Some(v), "{k} must survive");
+        }
+        assert!(!s.ui_texts.contains_key("copyFont"));
+        assert!(s.ui_flags.is_empty() && s.ui_values.is_empty());
+    }
+
+    #[test]
     fn reset_settings_keeps_the_backup_password() {
         // Mirrors what reset_settings does with the store's settings. The sealed
         // backup password must survive: without it every password-protected
@@ -47740,6 +47822,20 @@ mod tests {
         store.trash.push(t);
         let r = run_import(&mut store, foreign_backup(false), true, true, |_, _, _| true).unwrap();
         assert!(!r.3, "keys unchanged, nothing to warn about");
+    }
+
+    #[test]
+    fn an_import_that_swaps_the_vault_keys_ends_the_unlocked_session() {
+        let _serial = SETTINGS_LOCK_TEST.lock().unwrap_or_else(|e| e.into_inner());
+        let (settings, p, _) = vault_fixture();
+        for (foreign, expect_locked) in [(true, true), (false, false)] {
+            *SECRET_SESSION.lock().unwrap_or_else(|e| e.into_inner()) =
+                Some(SecretSession { key: [7u8; 32], unlocked_at: std::time::Instant::now() });
+            let mut store = vault_store(settings.clone(), p.clone());
+            run_import(&mut store, foreign_backup(foreign), true, true, |_, _, _| true).unwrap();
+            assert_eq!(secret_session_key(0).is_none(), expect_locked, "foreign keys: {foreign}");
+        }
+        *SECRET_SESSION.lock().unwrap_or_else(|e| e.into_inner()) = None;
     }
 
     #[test]
