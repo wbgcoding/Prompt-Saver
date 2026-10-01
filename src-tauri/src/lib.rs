@@ -6650,13 +6650,6 @@ fn store_files_enabled(store: &Store) -> bool {
     store.settings.ui_flags.get("storeFiles").copied().unwrap_or(false)
 }
 
-// Copy an attached file into <data>/files so the prompt keeps working even if the
-// original is moved or deleted. Returns the stored path, or the original unchanged
-// on any problem or if it is already inside the store (never loses the reference).
-fn store_attached_file(app: &AppHandle, path: &str) -> String {
-    store_attached_file_in(&data_dir(app).join("files"), path, None)
-}
-
 // Staged copies that are on disk (or about to be) but not yet referenced by any
 // prompt in the store. sweep_orphan_files treats them as referenced.
 static PENDING_ATTACHMENTS: Mutex<Option<std::collections::HashSet<String>>> = Mutex::new(None);
@@ -6706,6 +6699,9 @@ impl Drop for StagedCopies {
     }
 }
 
+// Copy an attached file into <data>/files so the prompt keeps working even if the
+// original is moved or deleted. Returns the stored path, or the original unchanged
+// on any problem or if it is already inside the store (never loses the reference).
 fn store_attached_file_in(files_dir: &std::path::Path, path: &str, staged: Option<&mut StagedCopies>) -> String {
     if path.is_empty() {
         return String::new();
@@ -7201,6 +7197,8 @@ async fn add_prompt(
         let mut store = lock(&state);
         let tags = sanitize_tags(tags.unwrap_or_default(), &canonical_tags(&store.prompts))?;
         let notes = sanitize_notes(&notes.unwrap_or_default())?;
+        // The OCR above ran against a flag snapshot: text only exists while the index is on.
+        let image_text = if ocr_index_flag_on(&store) { image_text } else { String::new() };
         let variants = sanitize_variants(variants.unwrap_or_default());
         let rotate_mode = sanitize_rotate_mode(rotate_mode.unwrap_or_default(), &variants);
         let rotate_auto = sanitize_rotate_auto(rotate_auto.unwrap_or(false), &variants);
@@ -8532,6 +8530,7 @@ async fn reset_settings(app: AppHandle, state: State<'_, Db>) -> Result<(), Stri
     let _ = apply_autostart(false, false);
     {
         let mut store = lock(&state);
+        let ocr_was_on = ocr_index_flag_on(&store);
         let prompts = std::mem::take(&mut store.prompts); // keep the prompts
         // The backup password is a key, not a preference: dropping it would make
         // every password-protected backup permanently unreadable.
@@ -8544,6 +8543,10 @@ async fn reset_settings(app: AppHandle, state: State<'_, Db>) -> Result<(), Stri
         // than reasoning about what survived a factory reset.
         store.forget_written_rows();
         save_settings(&app, &store.settings);
+        // Defaults switch the picture-text index off: erase its text as well.
+        if ocr_was_on && clear_ocr_index_text(&mut store) {
+            save_prompts_and_trash(&app, &store);
+        }
     }
     // Defaults mean the screenshot switch is off: open windows go back to excluded.
     apply_capture_exclusion_all(&app, true);
@@ -19225,6 +19228,43 @@ fn clear_image_text(prompts: &mut [Prompt]) -> bool {
     changed
 }
 
+// Bumped by every clear. A recognition pass remembers the value it started with and
+// never writes its text back once it changed (or the switch is off).
+static OCR_EPOCH: AtomicU64 = AtomicU64::new(0);
+
+fn ocr_epoch() -> u64 {
+    OCR_EPOCH.load(Ordering::SeqCst)
+}
+
+fn ocr_index_flag_on(store: &Store) -> bool {
+    store.settings.ui_flags.get("ocrIndex").copied().unwrap_or(false)
+}
+
+// Cancels a running pass, invalidates every pass in flight and erases the text in
+// prompts AND trash. Caller holds the store lock and saves when this returns true.
+fn clear_ocr_index_text(store: &mut Store) -> bool {
+    cancel_ocr_index_backfill();
+    OCR_EPOCH.fetch_add(1, Ordering::SeqCst);
+    let live = clear_image_text(&mut store.prompts);
+    let trashed = clear_image_text(&mut store.trash);
+    live || trashed
+}
+
+// Writes one recognized text back, only while the index is still on and no clear
+// happened since the pass started. Returns whether it was written.
+fn apply_ocr_backfill_text(store: &mut Store, id: &str, text: String, started_epoch: u64) -> bool {
+    if ocr_epoch() != started_epoch || !ocr_index_flag_on(store) {
+        return false;
+    }
+    match store.prompts.iter_mut().find(|p| p.id == id) {
+        Some(p) => {
+            p.image_text = text;
+            true
+        }
+        None => false,
+    }
+}
+
 // The expert-menu "read existing pictures" action: every prompt that carries
 // a picture but no index text yet, read once, one at a time -- a single
 // sequential pass, never a flood of parallel OCR calls. Progress and
@@ -19234,7 +19274,7 @@ fn clear_image_text(prompts: &mut [Prompt]) -> bool {
 #[tauri::command]
 async fn ocr_index_backfill(app: AppHandle, state: State<'_, Db>) -> Result<usize, String> {
     OCR_INDEX_CANCEL.store(false, Ordering::SeqCst);
-    let (ids, max_chars) = {
+    let (ids, max_chars, started_epoch) = {
         let store = lock(&state);
         let ids: Vec<String> = store
             .prompts
@@ -19242,7 +19282,7 @@ async fn ocr_index_backfill(app: AppHandle, state: State<'_, Db>) -> Result<usiz
             .filter(|p| !p.image.is_empty() && p.image_text.is_empty())
             .map(|p| p.id.clone())
             .collect();
-        (ids, ocr_index_max_chars(&store.settings))
+        (ids, ocr_index_max_chars(&store.settings), ocr_epoch())
     };
     let total = ids.len();
     push_bg_op(&app, "ocr-index", "ocr-index", if total == 0 { "done" } else { "running" }, Some(0), None);
@@ -19263,10 +19303,9 @@ async fn ocr_index_backfill(app: AppHandle, state: State<'_, Db>) -> Result<usiz
                     .map_err(|e| e.to_string())?;
                 if !text.is_empty() {
                     let mut store = lock(&state);
-                    if let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) {
-                        p.image_text = text;
+                    if apply_ocr_backfill_text(&mut store, &id, text, started_epoch) {
+                        save_prompts(&app, &store);
                     }
-                    save_prompts(&app, &store);
                 }
             }
         }
@@ -27261,10 +27300,7 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
         save_settings(&app, &store.settings);
         if clear_ocr_index {
             // A running "read existing pictures" pass would write the text straight back.
-            cancel_ocr_index_backfill();
-            let live = clear_image_text(&mut store.prompts);
-            let trashed = clear_image_text(&mut store.trash);
-            if live || trashed {
+            if clear_ocr_index_text(&mut store) {
                 save_prompts_and_trash(&app, &store);
             }
         }
@@ -27445,6 +27481,7 @@ fn set_recording_dir(app: AppHandle, state: State<Db>, dir: String) -> Result<()
 fn reset_expert(app: AppHandle, state: State<Db>) {
     {
         let mut store = lock(&state);
+        let ocr_was_on = ocr_index_flag_on(&store);
         store.settings.ui_flags.clear();
         store.settings.ui_values.clear();
         let tls_values = remote_tls::tls_values(&store.settings);
@@ -27453,6 +27490,10 @@ fn reset_expert(app: AppHandle, state: State<Db>) {
             store.settings.ui_texts.insert(k, v);
         }
         save_settings(&app, &store.settings);
+        // The reset turned the picture-text index back off: its text goes with it.
+        if ocr_was_on && clear_ocr_index_text(&mut store) {
+            save_prompts_and_trash(&app, &store);
+        }
     }
     ERROR_LOG_KEEP_BYTES.store(256 * 1024, Ordering::Relaxed);
     // Cleared flags put the screenshot permission back to its default (off), which
@@ -44692,6 +44733,32 @@ mod tests {
             prompts_locked: false,
             written: Default::default(),
         }
+    }
+
+    // A backfill pass is mid-recognition when the switch goes off and the clear runs:
+    // the text it returns afterwards must not land anywhere.
+    #[test]
+    fn a_pass_started_before_the_ocr_clear_never_writes_its_text() {
+        let mut store = secret_test_store(vec![image_text_prompt("a", "")]);
+        store.settings.ui_flags.insert("ocrIndex".into(), true);
+        // sanity: an uninterrupted pass writes
+        let started = ocr_epoch();
+        assert!(apply_ocr_backfill_text(&mut store, "a", "first".into(), started));
+        assert_eq!(store.prompts[0].image_text, "first");
+        // second pass: the recognizer "flips the flag off and clears" before returning
+        let started = ocr_epoch();
+        let recognize = |store: &mut Store| {
+            store.settings.ui_flags.insert("ocrIndex".into(), false);
+            assert!(clear_ocr_index_text(store));
+            "late text".to_string()
+        };
+        let text = recognize(&mut store);
+        assert!(!apply_ocr_backfill_text(&mut store, "a", text, started));
+        assert!(store.prompts.iter().chain(store.trash.iter()).all(|p| p.image_text.is_empty()));
+        // switched back on, but the stale pass (old epoch) still must not write
+        store.settings.ui_flags.insert("ocrIndex".into(), true);
+        assert!(!apply_ocr_backfill_text(&mut store, "a", "stale".into(), started));
+        assert!(store.prompts[0].image_text.is_empty());
     }
 
     fn prompts_json(store: &Store) -> String {
