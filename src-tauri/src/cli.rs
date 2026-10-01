@@ -1642,6 +1642,7 @@ fn cmd_settings_set(store: &mut Store, key: &str, value: &str) -> Outcome {
     if crate::is_protected_folder_key(key)
         || crate::is_vault_key(key)
         || key == crate::BACKUP_PW_KEY
+        || matches!(key, "voiceOnlineOk" | "dataDirLock" | "clipSkipSecrets")
         || crate::is_import_denied_flag(key)
         || crate::is_import_denied_value(key)
     {
@@ -2007,7 +2008,7 @@ fn command_help(cmd: &str, sub: Option<&str>) -> String {
         ("backup", Some("restore")) => "prompt-saver backup restore <name> [--scope all|prompts|settings] [--keep N] --yes\n\nReplace the store with a backup. Always takes a safety snapshot first.".to_string(),
         ("settings", None) => "prompt-saver settings get <key> [--json]\nprompt-saver settings set <key> <value> --yes".to_string(),
         ("settings", Some("get")) => "prompt-saver settings get <key> [--json]\n\nRead one setting. Exit 2 if the key is unknown.".to_string(),
-        ("settings", Some("set")) => "prompt-saver settings set <key> <value> --yes\n\nWrite one setting. The value is read as a whole number/decimal, true/false, or plain text, in that order, unless the key is one of the app's own fixed settings (theme, language, autostart, alwaysOnTop). Settings that grant access (folders, the vault, the backup password, the remote access switches and values, the link and clipboard switches) are refused; change them in the app.".to_string(),
+        ("settings", Some("set")) => "prompt-saver settings set <key> <value> --yes\n\nWrite one setting. The value is read as a whole number/decimal, true/false, or plain text, in that order, unless the key is one of the app's own fixed settings (theme, language, autostart, alwaysOnTop). Settings that grant access (folders, the vault, the backup password, the remote access switches and values, the link and clipboard switches, the voice consent and the data folder lock) are refused; change them in the app.".to_string(),
         ("version", _) => "prompt-saver version\n\nPrint the app name and version.".to_string(),
         _ => top_level_help(),
     }
@@ -2678,6 +2679,7 @@ mod tests {
             "syncDir", "recordingDir", "screenshotDir", "videoExportDir", "secretVaultSalt", "secretVaultVerify",
             "backupPw", "remoteNetworkFilter", "remoteApi", "remoteAllowedRanges", "remotePort", "remoteRateLimit",
             "clipWatcher", "urlSchemeCopyAllowed", "urlScheme", "demoMode", "promptSync",
+            "voiceOnlineOk", "dataDirLock", "clipSkipSecrets",
         ] {
             let before = serde_json::to_string(&store.settings).unwrap();
             for value in ["true", "12", "x"] {
