@@ -36268,6 +36268,16 @@ struct SyncStamp {
 struct SyncSeen {
     stamp: SyncStamp,
     handled: bool,
+    /// Hash of the file's bytes when the app wrote or read them, 0 when unknown. A
+    /// cloud client re-touching the modification time does not change it.
+    hash: u64,
+}
+
+fn sync_hash(bytes: &[u8]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    bytes.hash(&mut h);
+    h.finish().max(1)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -36325,8 +36335,12 @@ fn sync_seen_key(path: &Path) -> String {
 // Called right after the app writes a file itself: the content is ours and known,
 // so the poll neither has to re-read it nor may mistake it for someone's edit.
 fn sync_seen_record_own_write(path: &Path) {
+    sync_seen_record_own_write_of(path, 0);
+}
+
+fn sync_seen_record_own_write_of(path: &Path, hash: u64) {
     let Some(stamp) = sync_stamp_of(path) else { return };
-    sync_seen_lock().insert(sync_seen_key(path), SyncSeen { stamp, handled: true });
+    sync_seen_lock().insert(sync_seen_key(path), SyncSeen { stamp, handled: true, hash });
 }
 
 // The files this process knows belong to a prompt of this library: written for one,
@@ -36354,9 +36368,13 @@ fn sync_known_note(path: &Path) {
 // A stamp the poll noted but has not read yet (handled: false) counts as changed
 // too: the new stamp is already in the map, so comparing stamps alone would call an
 // edit the app never saw "unchanged" and overwrite it without keeping a copy.
-fn sync_changed_since_seen(path: &Path) -> bool {
+//
+// With a recorded hash the bytes decide: a changed stamp alone (a cloud client
+// touching the file, an identical rewrite by another instance) is no edit.
+fn sync_changed_since_seen(path: &Path, on_disk: &[u8]) -> bool {
     let seen = sync_seen_lock();
     match (seen.get(&sync_seen_key(path)), sync_stamp_of(path)) {
+        (Some(prev), Some(_)) if prev.hash != 0 => sync_hash(on_disk) != prev.hash,
         (Some(prev), Some(now)) => prev.stamp != now || !prev.handled,
         _ => false,
     }
@@ -36384,7 +36402,7 @@ fn sync_edit_unsaved(path: &Path, on_disk: &[u8], p: &Prompt, placement: &SyncPl
     if !sync_known_lock().contains(&sync_seen_key(path)) {
         return true;
     }
-    sync_changed_since_seen(path)
+    sync_changed_since_seen(path, on_disk)
 }
 
 // ---- How the folder itself is doing (shown in the expert menu) ----
@@ -36624,7 +36642,7 @@ fn sync_write_dir_checked(dir: &Path, prompts: &[Prompt], settings: &Settings, i
             let ok = write_file_atomic(&path, &content);
             sync_lock_release(&path);
             if ok {
-                sync_seen_record_own_write(&path);
+                sync_seen_record_own_write_of(&path, sync_hash(content.as_bytes()));
             } else {
                 failed += 1;
                 append_crash_log(&format!("prompt-sync: writing {filename} failed"));
@@ -36978,7 +36996,7 @@ fn sync_poll_once(app: &AppHandle) {
         let decision = sync_scan_decision(sync_seen_lock().get(&key).copied(), stamp);
         if decision != SyncScan::Read {
             if decision == SyncScan::Settle {
-                sync_seen_lock().insert(key, SyncSeen { stamp, handled: false });
+                sync_seen_lock().insert(key, SyncSeen { stamp, handled: false, hash: 0 });
             }
             continue;
         }
@@ -36990,11 +37008,13 @@ fn sync_poll_once(app: &AppHandle) {
         if !sync_lock_acquire(&path) {
             continue; // someone else is mid-write; retry next cycle
         }
-        let content = sync_read_text(&path, MAX_SYNC_MD_BYTES);
+        let bytes = read_file_capped(&path, MAX_SYNC_MD_BYTES).ok();
         sync_lock_release(&path);
+        let hash = bytes.as_deref().map(sync_hash).unwrap_or(0);
+        let content = bytes.and_then(sync_decode_text);
         // Whatever the read said, this stamp has now been dealt with: a file that
         // is too big or unreadable must not be retried (and re-logged) every round.
-        sync_seen_lock().insert(key, SyncSeen { stamp, handled: true });
+        sync_seen_lock().insert(key, SyncSeen { stamp, handled: true, hash });
         let Some(content) = content else {
             // Refused, never truncated: a half file would be imported as the whole
             // prompt. The user only ever learns why from the error log, so say it.
@@ -37317,9 +37337,14 @@ fn sync_seed_seen(dir: &Path, prompts: &[Prompt], settings: &Settings) {
             continue;
         }
         let Some(stamp) = sync_stamp_of(&path) else { continue };
-        let handled = sync_read_text(&path, MAX_SYNC_MD_BYTES)
+        let bytes = read_file_capped(&path, MAX_SYNC_MD_BYTES).ok();
+        let hash = bytes.as_deref().map(sync_hash).unwrap_or(0);
+        let handled = bytes
+            .and_then(sync_decode_text)
             .is_some_and(|c| sync_md_matches(p, &sync_placement_for(p, settings), &c));
-        sync_seen_lock().entry(key).or_insert(SyncSeen { stamp, handled });
+        // A file that differs stays unhandled with no hash, so it counts as changed.
+        let hash = if handled { hash } else { 0 };
+        sync_seen_lock().entry(key).or_insert(SyncSeen { stamp, handled, hash });
     }
 }
 
@@ -42194,7 +42219,7 @@ mod tests {
         fs::write(&path, prompt_to_md(&edited, &SyncPlacement::default())).unwrap();
         // The poll has seen this stamp (Settle) but has not read the file yet.
         let stamp = sync_stamp_of(&path).unwrap();
-        sync_seen_lock().insert(sync_seen_key(&path), SyncSeen { stamp, handled: false });
+        sync_seen_lock().insert(sync_seen_key(&path), SyncSeen { stamp, handled: false, hash: 0 });
         let mut app_side = sync_test_prompt();
         app_side.text = "changed inside the app".into();
         sync_write_dir(&dir, &[app_side], &Settings::default());
@@ -42226,7 +42251,7 @@ mod tests {
             let path = dir.join("p1.md");
             fs::write(&path, &bytes).unwrap();
             let stamp = sync_stamp_of(&path).unwrap();
-            sync_seen_lock().insert(sync_seen_key(&path), SyncSeen { stamp, handled });
+            sync_seen_lock().insert(sync_seen_key(&path), SyncSeen { stamp, handled, hash: 0 });
             let mut app_side = sync_test_prompt();
             app_side.text = "changed inside the app".into();
             sync_write_dir(&dir, &[app_side], &Settings::default());
@@ -42307,7 +42332,7 @@ mod tests {
         fs::write(&path, prompt_to_md(&theirs, &SyncPlacement::default())).unwrap();
         // The poll saw it and skipped the trashed id: handled, but never known.
         let stamp = sync_stamp_of(&path).unwrap();
-        sync_seen_lock().insert(sync_seen_key(&path), SyncSeen { stamp, handled: true });
+        sync_seen_lock().insert(sync_seen_key(&path), SyncSeen { stamp, handled: true, hash: 0 });
         sync_known_lock().remove(&sync_seen_key(&path));
         let mut restored = sync_test_prompt();
         restored.text = "the restored prompt".into();
@@ -42330,7 +42355,7 @@ mod tests {
         edited.text = "edited outside the app".into();
         fs::write(&path, prompt_to_md(&edited, &SyncPlacement::default())).unwrap();
         let stamp = sync_stamp_of(&path).unwrap();
-        sync_seen_lock().insert(sync_seen_key(&path), SyncSeen { stamp, handled: false });
+        sync_seen_lock().insert(sync_seen_key(&path), SyncSeen { stamp, handled: false, hash: 0 });
         sync_write_dir(&dir, &[a], &Settings::default());
         assert!(path.exists(), "an edit nobody has read must not be swept");
         let _ = fs::remove_dir_all(&dir);
@@ -42347,6 +42372,25 @@ mod tests {
         // A stale snapshot without b, while the library holds b by now (imported).
         sync_write_dir_checked(&dir, &[a], &Settings::default(), &|id| id == "b");
         assert!(dir.join("b.md").exists(), "a file whose prompt is live again must not be swept");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sync_write_ignores_a_touch_that_left_the_bytes_alone() {
+        let dir = sync_tmp_dir("touch-only");
+        let path = dir.join("p1.md");
+        let first = sync_test_prompt();
+        sync_write_dir(&dir, &[first.clone()], &Settings::default());
+        // A cloud client re-touches the file: same bytes, newer modification time.
+        let bytes = fs::read(&path).unwrap();
+        let f = fs::OpenOptions::new().write(true).open(&path).unwrap();
+        f.set_modified(std::time::SystemTime::now() + Duration::from_secs(30)).unwrap();
+        drop(f);
+        assert_eq!(fs::read(&path).unwrap(), bytes);
+        let mut edited = first;
+        edited.text = "changed inside the app".into();
+        sync_write_dir(&dir, &[edited], &Settings::default());
+        assert_eq!(sync_conflict_copies(&dir, "p1"), 0, "the app's own earlier content is no outside edit");
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -42591,12 +42635,12 @@ mod tests {
         // Never seen: remember it, read it next round. An editor that writes straight
         // into the file would otherwise be caught halfway through.
         assert_eq!(sync_scan_decision(None, a), SyncScan::Settle);
-        assert_eq!(sync_scan_decision(Some(SyncSeen { stamp: a, handled: false }), b), SyncScan::Settle);
+        assert_eq!(sync_scan_decision(Some(SyncSeen { stamp: a, handled: false, hash: 0 }), b), SyncScan::Settle);
         // Unchanged since the last look: now it is whole and worth reading.
-        assert_eq!(sync_scan_decision(Some(SyncSeen { stamp: a, handled: false }), a), SyncScan::Read);
+        assert_eq!(sync_scan_decision(Some(SyncSeen { stamp: a, handled: false, hash: 0 }), a), SyncScan::Read);
         // Already dealt with (read, or written by the app itself): no read at all.
-        assert_eq!(sync_scan_decision(Some(SyncSeen { stamp: a, handled: true }), a), SyncScan::Skip);
-        assert_eq!(sync_scan_decision(Some(SyncSeen { stamp: a, handled: true }), b), SyncScan::Settle);
+        assert_eq!(sync_scan_decision(Some(SyncSeen { stamp: a, handled: true, hash: 0 }), a), SyncScan::Skip);
+        assert_eq!(sync_scan_decision(Some(SyncSeen { stamp: a, handled: true, hash: 0 }), b), SyncScan::Settle);
     }
 
     #[test]
@@ -42750,7 +42794,7 @@ mod tests {
         let mut seen: SyncSeenMap = HashMap::new();
         for p in &prompts {
             let path = dir.join(format!("{}.md", p.id));
-            seen.insert(sync_seen_key(&path), SyncSeen { stamp: sync_stamp_of(&path).unwrap(), handled: true });
+            seen.insert(sync_seen_key(&path), SyncSeen { stamp: sync_stamp_of(&path).unwrap(), handled: true, hash: 0 });
         }
         let mut full_best = Duration::MAX;
         let mut stamped_best = Duration::MAX;
