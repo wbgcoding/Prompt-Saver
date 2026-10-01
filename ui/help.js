@@ -1124,7 +1124,7 @@ export const HELP_CONTENT = {
         "Klick auf Plus neben den Ansichts-Tabs fügt eine Ansicht hinzu.",
         "Rechtsklick auf einen Tab zum Umbenennen, Größenändern, Umfärben oder Löschen.",
         "Einen Ansichts-Tab auf einen anderen ziehen, um sie zu einer Gruppe zusammenzufassen.",
-        "Einen Reiter mit \"weiter nach links\" oder \"weiter nach rechts\" aus seinem Menü verschieben, oder ihn am äußeren Rand eines anderen Reiters ablegen; in der Mitte abgelegt, werden beide gruppiert.",
+        "Einen Tab mit \"weiter nach links\" oder \"weiter nach rechts\" aus seinem Menü verschieben, oder ihn am äußeren Rand eines anderen Tabs ablegen; in der Mitte abgelegt, werden beide gruppiert.",
       ],
       whatHappens: "Eine Kachel sitzt normalerweise in genau einer Ansicht (wird sie woanders abgelegt, wandert sie dorthin), außer \"Kachel in mehreren Ansichten\" ist aktiv, was ab Werk aus ist. Das Löschen einer Ansicht löscht nicht die dort platzierten Kacheln; eine auch anderswo gezeigte Kachel funktioniert dort weiter.",
       settings: ["Mehrere Ansichten, Ansichtsgruppen, Kachel in mehreren Ansichten, höchste Zahl an Ansichten: Experten-Menü → Funktionen → Ansichten und Schnellraster"],
@@ -1408,7 +1408,7 @@ export const HELP_CONTENT = {
       title: "Das Experten-Menü",
       whatItIs: "Das Experten-Menü hält jede optionale Funktion hinter einem eigenen Schalter mit ihren Parametern.",
       howTo: [
-        "Drei Schnellprofile stehen über den Reitern: Ruhig schaltet Töne, Blinken und Hinweise ab, Standard setzt alles auf die Vorgabe zurück, Alles an schaltet jede Funktion ein.",
+        "Drei Schnellprofile stehen über den Tabs: Ruhig schaltet Töne, Blinken und Hinweise ab, Standard setzt alles auf die Vorgabe zurück, Alles an schaltet jede Funktion ein.",
         "Einstellungen, dann das Experten-Menü öffnen.",
         "Einen Tab wählen, oder im Suchfeld tippen, um alle Tabs auf einmal zu durchsuchen.",
         "\"Nur geänderte\" einschalten, um nur das zu sehen, was an den Standardwerten angepasst wurde.",

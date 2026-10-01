@@ -1391,8 +1391,8 @@ dieser Bildschirm wieder da ist. Eine Aktion im Experten-Menü holt alle schwebe
 Fenster auf einmal auf den Hauptbildschirm.
 
 **Ordner:** eine Geste an drei Stellen, ein Ziehen auf ein anderes fasst es zu
-einem Ordner zusammen. Ein Ansichts-Reiter auf einen anderen ergibt einen
-Gruppen-Reiter. Ein schwebender Button auf einen anderen ergibt einen
+einem Ordner zusammen. Ein Ansichts-Tab auf einen anderen ergibt einen
+Gruppen-Tab. Ein schwebender Button auf einen anderen ergibt einen
 Ordner für schwebende Buttons. Eine Kachel auf eine andere ergibt einen Raster-Ordner, und
 gehört immer nur zu einem Raster-Ordner gleichzeitig.
 
@@ -1409,7 +1409,7 @@ einstellbar: die maximale Länge eines Eintragsnamens.
 System.
 
 **Kachel-Verhalten & -Aussehen**: Menü, Umsortieren, Hover-Anhebung, Optik. Die
-Schrift auf Kacheln, Ordnern, Ansichts-Reitern und Meldungen wählt automatisch
+Schrift auf Kacheln, Ordnern, Ansichts-Tabs und Meldungen wählt automatisch
 Schwarz oder Weiß; im Expertenmenü lässt sich das abschalten (immer Weiß) oder
 die Helligkeitsschwelle für Schwarz verschieben. Weiße Schrift auf einer hellen
 Farbe bekommt einen dunklen Schatten, damit sie lesbar bleibt; im Expertenmenü
@@ -1520,7 +1520,7 @@ sagt das genauso: einmal als Hinweis, und als dauerhafte Zeile in dieser
 Datenschutz-Gruppe, solange der letzte Speichervorgang fehlschlägt; sie
 verschwindet von selbst, sobald wieder erfolgreich gespeichert wird.
 
-**Vorführung**: Ein Schalter im Experten-Menü (Reiter System) schaltet das
+**Vorführung**: Ein Schalter im Experten-Menü (Tab System) schaltet das
 ganze Fenster auf einen mitgelieferten Beispielbestand um, der möglichst
 viele Funktionen auf einmal zeigt: Prompts mit und ohne Bild, ein
 rotierender, zwei einfache Prompts für den Anfang einer Kette, ein
@@ -1786,6 +1786,6 @@ ganzen Backup.
 
 **Eigenständig: Schnellstarter.** Strg+Alt+P, unscharfe Suche, sofortiges Kopieren. Wie viele Treffer er zeigt, stellt das Experten-Menü ein (ab Werk 8).
 
-**Eigenständig: Mehrfachansichten.** Mehrere Rasterseiten, Ansichtsgruppen als Reiter.
+**Eigenständig: Mehrfachansichten.** Mehrere Rasterseiten, Ansichtsgruppen als Tabs.
 
 **Eigenständig: Theme-Editor.** Eigene Farbvarianten bestehender Themes.
