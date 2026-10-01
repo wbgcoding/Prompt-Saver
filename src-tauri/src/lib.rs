@@ -37727,8 +37727,10 @@ fn sync_scan_folder(dir: &Path) -> std::io::Result<SyncScanOut> {
         }
     }
     // Files that are gone leave no entry behind: this map would otherwise grow for
-    // the life of the process in a folder with a lot of coming and going.
-    sync_seen_lock().retain(|key, _| present.contains(key));
+    // the life of the process in a folder with a lot of coming and going. Only this
+    // folder's entries: the map also holds other folders' files (the previous folder
+    // after a switch), whose records a scan of this one has no business dropping.
+    sync_seen_lock().retain(|key, _| Path::new(key).parent() != Some(dir) || present.contains(key));
     Ok((to_read, files, all))
 }
 
@@ -43397,6 +43399,22 @@ mod tests {
         sync_write_dir(&dir, &[app_side], &Settings::default());
         assert_eq!(sync_conflict_copies(&dir, "p1"), 1);
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sync_scan_keeps_the_records_of_other_folders() {
+        let a = sync_tmp_dir("scan-a");
+        let b = sync_tmp_dir("scan-b");
+        let in_b = b.join("p1.md");
+        fs::write(&in_b, "x").unwrap();
+        sync_seen_record_own_write(&in_b);
+        let gone = a.join("gone.md");
+        sync_seen_lock().insert(sync_seen_key(&gone), SyncSeen { stamp: SyncStamp { mtime_ns: 1, len: 1 }, handled: true, hash: 0 });
+        sync_scan_folder(&a).unwrap();
+        assert!(sync_seen_lock().contains_key(&sync_seen_key(&in_b)), "another folder's record must survive a scan");
+        assert!(!sync_seen_lock().contains_key(&sync_seen_key(&gone)), "a vanished file in the scanned folder is dropped");
+        let _ = fs::remove_dir_all(&a);
+        let _ = fs::remove_dir_all(&b);
     }
 
     #[test]
