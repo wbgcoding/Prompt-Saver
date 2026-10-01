@@ -1913,11 +1913,13 @@ function renderScalePresets() {
 }
 
 // The one place a scale op becomes literal pixels: a fixed-height preset
-// never makes the video larger than its source, so a preset at or above the
-// source height needs no op at all and stays "keep original". A percent value
-// applies as typed and may enlarge.
+// gives its own size whether that is smaller or larger than the source (a
+// region recording is often below 720 px, and refusing to enlarge would turn
+// every preset into "keep original"). Only a preset equal to the source
+// height needs no op at all and stays "keep original". A percent value always
+// applies as typed.
 function scaleForHeightPreset(h) {
-  if (!VE.w || !VE.h || h >= VE.h) return null;
+  if (!VE.w || !VE.h || h === VE.h) return null;
   return { w: even(Math.round((VE.w * h) / VE.h)), h: even(h) };
 }
 function scaleForPercent(pct) {
@@ -3982,7 +3984,10 @@ $("ve-export-choose-folder").addEventListener("click", async () => {
 function applyPreset(format, quality, downscale) {
   $("ve-export-format").value = format;
   $("ve-export-quality").value = quality;
-  applyScalePresetKey(downscale);
+  // These presets are about a smaller file: they only ever shrink, so a
+  // source already at or below their height keeps its own size.
+  const shrink = downscale && VE.h && Number(downscale) < VE.h ? downscale : "";
+  applyScalePresetKey(shrink);
   persistExportSettings();
   updateExportNote();
 }

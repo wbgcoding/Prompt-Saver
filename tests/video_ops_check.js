@@ -450,21 +450,28 @@ async function exportIdleCheck() {
   expect("the removal marker never reaches the ops list or the saved state", src.includes('op.tool !== "clip" && op.tool !== "removal"') && src.includes('VE.ops.filter((o) => o.tool !== "removal")'));
 }
 
-// A size preset never enlarges the video; the source size is "no scaling" and
-// removes the entry; the explicit percent field may still enlarge.
+// An explicit height preset may enlarge (with its hint); the "small for chat"
+// and GIF presets only ever shrink; the source size is "no scaling" and removes
+// the entry.
 {
   const sb = makeSandbox({ afterOpsChanged() {} });
-  sb.VE = Object.assign(baseState([]), { floor: 0, redo: [], undoMax: 50, w: 1280, h: 720 });
+  sb.VE = Object.assign(baseState([]), { floor: 0, redo: [], undoMax: 50, w: 640, h: 360 });
   const run = (code) => vm.runInContext(code, sb);
   const scaleOp = () => sb.VE.ops.find((o) => o.tool === "scale") || null;
-  run("applyScalePresetKey('1080')");
-  expect("a preset taller than the source keeps the source size", scaleOp() === null);
-  run("applyScalePresetKey('2160')");
-  expect("the 4K preset on a smaller source adds no scale entry", scaleOp() === null);
-  run("applyScalePresetKey('480')");
-  expect("a smaller preset scales down", !!scaleOp() && scaleOp().h === 480 && scaleOp().w === 854, JSON.stringify(scaleOp()));
-  run("applyScalePresetKey('1080')");
-  expect("picking a too-big preset after a smaller one returns to the source", scaleOp() === null);
+  run("applyScalePresetKey('720')");
+  expect("an explicit 720p preset on a 360p source enlarges", !!scaleOp() && scaleOp().h === 720 && scaleOp().w === 1280, JSON.stringify(scaleOp()));
+  const fields = {};
+  sb.$ = (id) => (fields[id] = fields[id] || { value: "" });
+  sb.persistExportSettings = () => {};
+  sb.updateExportNote = () => {};
+  run(extractBlock("applyPreset", "function applyPreset(format, quality, downscale) {"));
+  run("applyPreset('mp4', 'small', '720')");
+  expect("the chat preset on a smaller source keeps the source size", scaleOp() === null, JSON.stringify(scaleOp()));
+  run("applyPreset('gif', 'small', '480')");
+  expect("the GIF preset on a smaller source keeps the source size", scaleOp() === null, JSON.stringify(scaleOp()));
+  sb.VE.w = 1280; sb.VE.h = 720;
+  run("applyPreset('gif', 'small', '480')");
+  expect("the GIF preset on a larger source shrinks", !!scaleOp() && scaleOp().h === 480, JSON.stringify(scaleOp()));
   run("applyScalePresetKey('720')");
   expect("a preset equal to the source adds no entry", scaleOp() === null);
   const p200 = run("scaleForPercent(200)");
