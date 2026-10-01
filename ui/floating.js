@@ -4,7 +4,7 @@
 import { FONTS, fitText } from "./fonts.js";
 import { mediaKind, buildMediaBar, applyVideoPrefs, setMediaDefaults } from "./media.js";
 // Custom themes: shared with the folder window (floattheme.js).
-import { applyFloatTheme } from "./floattheme.js";
+import { applyFloatTheme, inkForColor, onInkChange } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
 import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT, COPY_SOUND_VOLUME_DEFAULT } from "./copyDefaults.js";
 import { COPIED_MS, RING_MIN, RING_MAX, DRAG_OUT_MODS, resolveLang, fileUri, playCopySound } from "./floatShared.js";
@@ -320,6 +320,26 @@ let copiedTimer = null;
 let imgRatio = 0;
 let borderW = 0;
 
+// The own-colour ink on the text pill; remembered so a changed ink rule can
+// repaint it without a reload.
+let ownColor = "";
+function paintOwnInk(color) {
+  ownColor = color || "";
+  const ink = inkForColor(ownColor);
+  // The pill's text and overlays read these variables, so setting them on the
+  // pill overrides the theme's ink for everything inside it.
+  if (ink) {
+    pill.style.setProperty("--pill-fg", ink.fg);
+    pill.style.setProperty("--pill-ink-shadow", ink.shadow);
+  } else {
+    pill.style.removeProperty("--pill-fg");
+    pill.style.removeProperty("--pill-ink-shadow");
+  }
+}
+onInkChange(() => {
+  if (ownColor) paintOwnInk(ownColor);
+});
+
 // Apply name, color and media (stored still, gif or video) onto the pill.
 const videoEl = document.getElementById("video");
 const imgEl = document.getElementById("img");
@@ -427,6 +447,7 @@ function applyPrompt(p) {
   if (showMedia) {
     pill.classList.add("has-image");
     pill.style.background = "transparent";
+    paintOwnInk("");
     // The chosen color frames the media; the window hugs the media box.
     borderW = p.color ? pillBorderW : 0;
     pill.style.border = p.color ? `${pillBorderW}px solid ${p.color}` : "none";
@@ -464,6 +485,7 @@ function applyPrompt(p) {
     imgEl.removeAttribute("src");
     pill.classList.remove("has-image");
     pill.style.background = p.color || "";
+    paintOwnInk(p.color);
     pill.style.border = "";
     imgRatio = 0;
     borderW = 0;

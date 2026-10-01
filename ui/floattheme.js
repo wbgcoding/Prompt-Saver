@@ -52,6 +52,21 @@ function inkShadow(hex) {
   return `0 0 2px rgba(0, 0, 0, ${Number(a1.toFixed(2))}), 0 1px 3px rgba(0, 0, 0, ${a2})`;
 }
 
+// Ink for a surface of its own colour (a floating button with a chosen colour):
+// the same rule the theme accent gets. Null when the colour is not a plain hex,
+// so the caller falls back to the theme's ink.
+export function inkForColor(hex) {
+  if (!FLOAT_HEX.test(hex || "")) return null;
+  return { fg: readableInk(hex), shadow: inkShadow(hex) };
+}
+
+// A window with own-colour surfaces registers here to repaint them when the
+// ink rule changes.
+let inkListener = null;
+export function onInkChange(fn) {
+  inkListener = fn;
+}
+
 export function applyFloatTheme(theme, vars) {
   lastTheme = theme;
   lastVars = vars;
@@ -71,6 +86,7 @@ export function applyFloatTheme(theme, vars) {
   const pillBg = style.getPropertyValue("--pill-bg").trim();
   if (FLOAT_HEX.test(pillBg)) style.setProperty("--pill-fg", readableInk(pillBg));
   style.setProperty("--pill-ink-shadow", FLOAT_HEX.test(pillBg) ? inkShadow(pillBg) : "none");
+  if (inkListener) inkListener();
 }
 
 // Keep INK current without waiting for the next theme change, and re-paint
