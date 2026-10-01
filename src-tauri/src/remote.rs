@@ -80,14 +80,15 @@ pub(crate) fn run_reset_side_effects(app: &AppHandle, effects: &ResetSideEffects
 pub(crate) fn url_scheme_enabled(settings: &Settings) -> bool {
     settings.ui_flags.get("urlScheme") == Some(&true)
 }
-fn remote_port(settings: &Settings) -> u16 {
-    settings
-        .ui_values
-        .get("remotePort")
-        .copied()
+// The port a stored value really means: clamped, with the default for none.
+fn port_from(value: Option<f64>) -> u16 {
+    value
         .filter(|v| v.is_finite())
         .map(|v| v.clamp(1024.0, 65535.0) as u16)
         .unwrap_or(DEFAULT_PORT)
+}
+fn remote_port(settings: &Settings) -> u16 {
+    port_from(settings.ui_values.get("remotePort").copied())
 }
 // 0 means no throttle at all (the slider's rightmost stop); every other
 // stored value still clamps into the normal 1..=100000 range.
@@ -397,7 +398,7 @@ pub(crate) fn set_network_flag(app: &AppHandle, state: &State<Db>, enabled: bool
         apply_network_switch(&mut store.settings, enabled, &names, |s| save_settings(app, s))
     };
     if result.restart {
-        if let Err(e) = restart_receiver(app) {
+        if let Err(e) = restart_receiver(app).and_then(|_| wait_bound(app)) {
             // The new mode could not start: go back to the old one.
             {
                 let mut store = lock(state);
@@ -417,13 +418,68 @@ pub(crate) fn set_network_flag(app: &AppHandle, state: &State<Db>, enabled: bool
 // The port is fixed for the life of one run, so a new value only takes effect
 // through a restart: needed when the receiver is on and the value really moved.
 pub(crate) fn needs_receiver_restart(key: &str, old: Option<f64>, new: f64, settings: &Settings) -> bool {
-    key == "remotePort" && old != Some(new) && remote_api_enabled(settings)
+    key == "remotePort" && port_from(old) != port_from(Some(new)) && remote_api_enabled(settings)
+}
+
+pub(crate) const ERR_PORT_UNAVAILABLE: &str = "port-unavailable";
+
+// Tries the address the receiver would bind, so a port something else holds is
+// refused before anything is stored.
+pub(crate) fn probe_port(ip: Ipv4Addr, port: u16) -> Result<(), String> {
+    std::net::TcpListener::bind((ip, port)).map(drop).map_err(|e| {
+        crate::append_crash_log(&format!("remote access: port {port} cannot be bound: {e}"));
+        ERR_PORT_UNAVAILABLE.to_string()
+    })
+}
+
+// Stores a new `remotePort`. When the running receiver would have to move, the
+// new port is probed first and a port that cannot be bound leaves the stored
+// value untouched; a failed write puts the old value back. Ok(true) means the
+// receiver has to be restarted.
+pub(crate) fn commit_port_value(
+    settings: &mut Settings,
+    value: f64,
+    probe: impl Fn(Ipv4Addr, u16) -> Result<(), String>,
+    mut save: impl FnMut(&Settings) -> bool,
+) -> Result<bool, String> {
+    let old = settings.ui_values.get("remotePort").copied();
+    let restart = needs_receiver_restart("remotePort", old, value, settings);
+    if restart {
+        let (ip, _) = bind_plan(settings);
+        probe(ip, port_from(Some(value)))?;
+    }
+    settings.ui_values.insert("remotePort".to_string(), value);
+    if !save(settings) {
+        match old {
+            Some(v) => settings.ui_values.insert("remotePort".to_string(), v),
+            None => settings.ui_values.remove("remotePort"),
+        };
+        return Err(ERR_SAVE_FAILED.to_string());
+    }
+    Ok(restart)
+}
+
+// Waits until the run that start() queued has bound its port. start() returns
+// before the bind, so only this tells whether the port was really usable.
+fn wait_bound(app: &AppHandle) -> Result<(), String> {
+    let state: State<RemoteApiState> = app.state();
+    for _ in 0..120 {
+        if state.port.load(Ordering::SeqCst) != 0 {
+            return Ok(());
+        }
+        if !state.running.load(Ordering::SeqCst) {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    Err(ERR_PORT_UNAVAILABLE.to_string())
 }
 
 // The `remotePort` branch of set_ui_value, run after the new value was saved.
-// A port the receiver cannot bind goes back to the old value and the old run.
-pub(crate) fn apply_port_change(app: &AppHandle, state: &State<Db>, old: Option<f64>) {
-    if let Err(e) = restart_receiver(app) {
+// A receiver that cannot come up on the new port goes back to the old value
+// and the old run; the error reaches the UI.
+pub(crate) fn apply_port_change(app: &AppHandle, state: &State<Db>, old: Option<f64>) -> Result<(), String> {
+    if let Err(e) = restart_receiver(app).and_then(|_| wait_bound(app)) {
         crate::append_crash_log(&format!("remote access: the new port could not be used: {e}"));
         {
             let mut store = lock(state);
@@ -434,7 +490,9 @@ pub(crate) fn apply_port_change(app: &AppHandle, state: &State<Db>, old: Option<
             let _ = save_settings(app, &store.settings);
         }
         let _ = start(app.clone());
+        return Err(e);
     }
+    Ok(())
 }
 
 // Stops the running receiver and starts it again from the stored settings. The
@@ -1524,6 +1582,44 @@ mod tests {
         assert!(!needs_receiver_restart("remotePort", Some(51900.0), 51900.0, &on), "same value");
         assert!(!needs_receiver_restart("remotePort", Some(51823.0), 51900.0, &off), "receiver off");
         assert!(!needs_receiver_restart("remoteRateLimit", Some(1.0), 2.0, &on), "other key");
+        assert!(!needs_receiver_restart("remotePort", None, 51823.0, &on), "default spelled out");
+        assert!(!needs_receiver_restart("remotePort", Some(70000.0), 65535.0, &on), "clamped to the same port");
+    }
+
+    #[test]
+    fn a_port_held_by_another_socket_is_refused_and_the_old_one_stays() {
+        let held = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let busy = held.local_addr().unwrap().port();
+        let mut s = Settings::default();
+        s.ui_flags.insert("remoteApi".into(), true);
+        s.ui_values.insert("remotePort".into(), 51900.0);
+        let mut saved = 0;
+        let r = commit_port_value(&mut s, busy as f64, |ip, p| probe_port(ip, p), |_| {
+            saved += 1;
+            true
+        });
+        assert_eq!(r, Err(ERR_PORT_UNAVAILABLE.to_string()));
+        assert_eq!(s.ui_values.get("remotePort"), Some(&51900.0));
+        assert_eq!(saved, 0, "nothing written");
+        drop(held);
+        let free = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let p = free.local_addr().unwrap().port();
+        drop(free);
+        assert_eq!(commit_port_value(&mut s, p as f64, |ip, p| probe_port(ip, p), |_| true), Ok(true));
+        assert_eq!(s.ui_values.get("remotePort"), Some(&(p as f64)));
+    }
+
+    #[test]
+    fn a_failed_write_puts_the_old_port_back() {
+        let mut s = Settings::default();
+        s.ui_flags.insert("remoteApi".into(), true);
+        s.ui_values.insert("remotePort".into(), 51900.0);
+        let r = commit_port_value(&mut s, 51901.0, |_, _| Ok(()), |_| false);
+        assert_eq!(r, Err(ERR_SAVE_FAILED.to_string()));
+        assert_eq!(s.ui_values.get("remotePort"), Some(&51900.0));
+        let mut t = Settings::default();
+        assert_eq!(commit_port_value(&mut t, 51901.0, |_, _| Err("x".into()), |_| false), Err(ERR_SAVE_FAILED.to_string()));
+        assert!(!t.ui_values.contains_key("remotePort"));
     }
 
     #[test]

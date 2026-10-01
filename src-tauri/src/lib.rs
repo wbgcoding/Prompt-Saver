@@ -27059,20 +27059,24 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
 
 // Set an expert numeric value (CSS var / behaviour tweak).
 #[tauri::command]
-fn set_ui_value(app: AppHandle, state: State<Db>, key: String, value: f64) {
+fn set_ui_value(app: AppHandle, state: State<Db>, key: String, value: f64) -> Result<(), String> {
     let is_tray = key == "trayRecentN" || key == "trayFavN" || key == "trayLabelMax";
     let is_folder_grid = key == "folderGridCols";
     let is_error_log_cap = key == "errorLogKeepKb";
     let restart_port_from = {
         let mut store = lock(&state);
         let old = store.settings.ui_values.get(&key).copied();
-        let restart = remote::needs_receiver_restart(&key, old, value, &store.settings);
-        store.settings.ui_values.insert(key, value);
-        save_settings(&app, &store.settings);
-        restart.then_some(old)
+        if key == "remotePort" {
+            let restart = remote::commit_port_value(&mut store.settings, value, remote::probe_port, |s| save_settings(&app, s))?;
+            restart.then_some(old)
+        } else {
+            store.settings.ui_values.insert(key.clone(), value);
+            save_settings(&app, &store.settings);
+            None
+        }
     };
     if let Some(old) = restart_port_from {
-        remote::apply_port_change(&app, &state, old);
+        remote::apply_port_change(&app, &state, old)?;
     }
     if is_tray {
         rebuild_tray(&app); // dragging a slider must not rebuild on every step
@@ -27091,6 +27095,7 @@ fn set_ui_value(app: AppHandle, state: State<Db>, key: String, value: f64) {
         ERROR_LOG_KEEP_BYTES.store((value.max(1.0) * 1024.0) as u64, Ordering::Relaxed);
     }
     notify_float_settings(&app);
+    Ok(())
 }
 
 // Settings that name a folder the backend itself writes into or deletes from.
