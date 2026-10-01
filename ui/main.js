@@ -17545,6 +17545,7 @@ function bind() {
   function openSnipCtxPop(op, x, y) {
     snipCtxOp = op;
     snipCtxDupBtn.textContent = t("duplicate");
+    snipCtxDupBtn.classList.toggle("hidden", op.tool === "spotlight");
     snipCtxDelBtn.textContent = t("delete");
     placePopoverAt(snipCtxPop, x, y);
   }
@@ -17906,7 +17907,9 @@ function bind() {
   // Full recomposite: base image, then every finished operation in sequence. Only
   // called on discrete events (undo/redo/crop-change/zoom-change/finalize) -- never
   // per mousemove, so a 4K capture never redraws its whole bitmap on a drag.
-  function snipEditRedrawBase() {
+  // `bare` leaves the crop dimming out, for the one caller that bakes this canvas
+  // into the image itself (a resize).
+  function snipEditRedrawBase(bare) {
     const ctx = snipEditBaseCtx;
     ctx.clearRect(0, 0, SE.w, SE.h);
     // Showing the original means the untouched capture, not just "before the
@@ -17915,15 +17918,19 @@ function bind() {
     // the same pixels the capture started with.
     if (SE.showRaw) { ctx.drawImage(SE.rawCanvas, 0, 0, SE.w, SE.h); return; }
     ctx.drawImage(SE.img, 0, 0, SE.w, SE.h);
-    let stepN = 0;
+    // A resize bakes the markers placed so far into SE.img; the scale op remembers
+    // how many, so the next marker carries on from there instead of restarting at 1.
+    const baked = SE.ops.find((o) => o.tool === "scale");
+    let stepN = baked ? baked.stepBase : 0;
     for (const op of SE.ops) {
       if (op.tool === "crop") continue; // drawn as an overlay pass below
       if (op.tool === "scale") continue; // already baked into SE.img, see snipEditApplyScale
+      if (op.tool === "edit") continue; // an undo record for a moved/deleted shape, nothing to draw
       if (op.tool === "step") stepN++;
       snipEditDrawOp(ctx, op, stepN);
     }
     const crop = SE.ops.find((o) => o.tool === "crop");
-    if (crop && SE.tool !== "crop") snipEditDrawCropDim(ctx, crop.rect); // crop tool shows its own live overlay instead
+    if (crop && SE.tool !== "crop" && !bare) snipEditDrawCropDim(ctx, crop.rect); // crop tool shows its own live overlay instead
   }
   function snipEditClearLive() { snipEditLiveCtx.clearRect(0, 0, SE.w, SE.h); }
 
@@ -17931,7 +17938,9 @@ function bind() {
     $("snip-edit-undo").disabled = SE.ops.length <= SE.floor;
     $("snip-edit-redo").disabled = !SE.redo.length;
   }
-  function snipEditPushOp(op) {
+  // `nudge` is what the arrow keys act on afterwards: the op itself by default, or
+  // whatever the caller names (an undo entry is not something to nudge).
+  function snipEditPushOp(op, nudge) {
     SE.ops.push(op);
     // SE.ops IS the render list -- never drop a rendered op. Once the undo
     // window is exceeded, advance the floor instead of shifting the oldest op out;
@@ -17939,15 +17948,65 @@ function bind() {
     // permanent, undo just can no longer walk back past it.
     if (SE.ops.length - SE.floor > SNIP_EDIT_UNDO_MAX()) SE.floor = SE.ops.length - SNIP_EDIT_UNDO_MAX();
     SE.redo.length = 0;
-    SE.lastNudged = op;
+    SE.lastNudged = nudge === undefined ? op : nudge;
     snipEditUpdateNudgeHint();
     snipEditRedrawBase();
     snipEditUpdateUndoRedoButtons();
+  }
+  // Moving, resizing, re-pointing or deleting a finished shape or text changes an
+  // op that already sits in SE.ops, so it gets an undo entry of its own: a
+  // {tool: "edit"} record that is never drawn, only applied backwards by undo and
+  // forwards again by redo (see snipEditUndoEdit / snipEditRedoEdit).
+  function snipEditGeom(op) {
+    const g = {};
+    if (op.points) g.points = op.points.map((p) => ({ ...p }));
+    if (op.rect) g.rect = { ...op.rect };
+    if (op.point) g.point = { ...op.point };
+    return g;
+  }
+  function snipEditApplyGeom(op, g) {
+    if (g.points) op.points = g.points.map((p) => ({ ...p }));
+    if (g.rect) op.rect = { ...g.rect };
+    if (g.point) op.point = { ...g.point };
+  }
+  function snipEditCommitGeomEdit(op, before) {
+    const after = snipEditGeom(op);
+    if (JSON.stringify(before) === JSON.stringify(after)) return;
+    snipEditPushOp({ tool: "edit", kind: "geom", op, before, after }, SE.lastNudged);
+  }
+  // Puts an op back next to the neighbours it had when it left SE.ops. Positions are
+  // never stored as raw indexes: a crop commit or discard in between filters an op
+  // out and would shift every index behind it.
+  function snipEditReinsert(op, prev, next) {
+    let i = next ? SE.ops.indexOf(next) : -1;
+    if (i < 0) {
+      const p = prev ? SE.ops.indexOf(prev) : -1;
+      i = p >= 0 ? p + 1 : (prev || next) ? SE.ops.length : 0;
+    }
+    SE.ops.splice(i, 0, op);
+  }
+  function snipEditUndoEdit(e) {
+    if (e.kind === "geom") snipEditApplyGeom(e.op, e.before);
+    else if (e.kind === "remove") { snipEditReinsert(e.op, e.prev, e.next); SE.floor += e.floorShift; }
+  }
+  function snipEditRedoEdit(e) {
+    if (e.kind === "geom") snipEditApplyGeom(e.op, e.after);
+    else if (e.kind === "remove") {
+      const i = SE.ops.indexOf(e.op);
+      if (i >= 0) SE.ops.splice(i, 1);
+      SE.floor = Math.max(0, SE.floor - e.floorShift);
+    }
   }
   // Spotlight/crop: exactly one may exist -- a new one replaces the old rather than
   // stacking two dimming layers.
   function snipEditPushUniqueOp(tool, op) {
     const before = SE.ops.length;
+    const at = SE.ops.findIndex((o) => o.tool === tool);
+    // A replaced spotlight is an annotation the user made: Ctrl+Z on its replacement
+    // must bring it back, so the new op remembers it and where it sat.
+    if (tool === "spotlight" && at >= 0) {
+      op.replaced = { op: SE.ops[at], prev: SE.ops[at - 1] || null, next: SE.ops[at + 1] || null, floorShift: at < SE.floor ? 1 : 0 };
+    }
     SE.ops = SE.ops.filter((o) => o.tool !== tool);
     // floor is a count-based boundary into SE.ops; removing an entry shifts every
     // later index down by one, so shrink the floor by the same amount to keep
@@ -18000,9 +18059,12 @@ function bind() {
     if (targetW * targetH > SNIP_SCALE_MAX_AREA) { toast(t("snipScaleTooLarge")); return false; }
     if (SE.tool === "crop") snipEditCropCommit(); // same guard snipEditExportDataUrl uses for a drawn-but-uncommitted crop
     snipEditFinishTextIfOpen();
+    // With the original locked on, the base canvas shows only the raw capture and
+    // the bake below would drop every annotation; export resets it the same way.
+    snipOriginalToggle.reset();
     const prevW = SE.w, prevH = SE.h, prevImg = SE.img, prevRawCanvas = SE.rawCanvas, prevOps = SE.ops.slice();
     const sx = targetW / SE.w, sy = targetH / SE.h;
-    snipEditRedrawBase(); // make sure snipEditBaseCv reflects every op (but crop) before it gets baked in
+    snipEditRedrawBase(true); // make sure snipEditBaseCv reflects every op (but crop) before it gets baked in
     const baked = snipEditScaleCanvas(snipEditBaseCv, targetW, targetH);
     const rawBaked = snipEditScaleCanvas(SE.rawCanvas, targetW, targetH);
     // Crop is never rasterized (it only ever dims an overlay preview, see
@@ -18014,8 +18076,10 @@ function bind() {
       .map((o) => ({ ...o, rect: { x: o.rect.x * sx, y: o.rect.y * sy, w: o.rect.w * sx, h: o.rect.h * sy } }));
     const prevFloor = SE.floor;
     SE.floor = Math.max(0, SE.floor - (prevOps.length - keptOps.length));
+    const prevScale = prevOps.find((o) => o.tool === "scale");
+    const stepBase = (prevScale ? prevScale.stepBase : 0) + prevOps.filter((o) => o.tool === "step").length;
     const op = {
-      tool: "scale", w: targetW, h: targetH, img: baked, rawCanvas: rawBaked, keptOps,
+      tool: "scale", w: targetW, h: targetH, img: baked, rawCanvas: rawBaked, keptOps, stepBase,
       prevW, prevH, prevImg, prevRawCanvas, prevOps, prevFloor,
     };
     SE.img = baked;
@@ -18028,6 +18092,7 @@ function bind() {
     snipEditLiveCv.width = targetW;
     snipEditLiveCv.height = targetH;
     snipEditPushOp(op);
+    snipEditSyncCropFromOps(); // the crop op was rescaled above, the editable box must follow
     snipEditFit();
     return true;
   }
@@ -18055,11 +18120,18 @@ function bind() {
     if (op.tool === "scale") {
       snipEditRestoreScaleState(op.prevW, op.prevH, op.prevImg, op.prevRawCanvas, op.prevOps);
       SE.floor = op.prevFloor; // the undo limit as it was before the resize
+    } else if (op.tool === "edit") {
+      snipEditUndoEdit(op);
+    } else if (op.tool === "spotlight" && op.replaced) {
+      const r = op.replaced;
+      snipEditReinsert(r.op, r.prev, r.next);
+      SE.floor += r.floorShift;
     }
     snipEditDeselectShape();
     SE.lastNudged = null;
     snipEditUpdateNudgeHint();
     snipEditRedrawBase();
+    snipEditSyncCropFromOps();
     snipEditUpdateUndoRedoButtons();
   }
   function snipEditRedo() {
@@ -18071,11 +18143,18 @@ function bind() {
       // The floor the resize itself produced, worked out the same way it was then.
       SE.floor = Math.max(0, op.prevFloor - (op.prevOps.length - op.keptOps.length));
       if (SE.ops.length - SE.floor > SNIP_EDIT_UNDO_MAX()) SE.floor = SE.ops.length - SNIP_EDIT_UNDO_MAX();
+    } else if (op.tool === "edit") {
+      snipEditRedoEdit(op);
+    } else if (op.tool === "spotlight" && op.replaced) {
+      const i = SE.ops.indexOf(op.replaced.op);
+      if (i >= 0) SE.ops.splice(i, 1);
+      SE.floor = Math.max(0, SE.floor - op.replaced.floorShift);
     }
     snipEditDeselectShape();
     SE.lastNudged = null;
     snipEditUpdateNudgeHint();
     snipEditRedrawBase();
+    snipEditSyncCropFromOps();
     snipEditUpdateUndoRedoButtons();
   }
   // Shown only while something is nudgeable -- the arrow keys have no other
@@ -18086,6 +18165,7 @@ function bind() {
     snipEditNudgeHintEl.classList.toggle("hidden", !SE.lastNudged);
   }
   function snipEditNudge(op, key, amount, resize) {
+    const before = snipEditGeom(op);
     const dx = key === "ArrowLeft" ? -amount : key === "ArrowRight" ? amount : 0;
     const dy = key === "ArrowUp" ? -amount : key === "ArrowDown" ? amount : 0;
     if (resize) {
@@ -18100,7 +18180,18 @@ function bind() {
       if (op.point) { op.point.x += dx; op.point.y += dy; }
       if (op.rect) { op.rect.x += dx; op.rect.y += dy; }
     }
-    snipEditRedrawBase();
+    // One undo step per run of nudges: a run on the same op and tool folds into the
+    // entry just below the top; a different op or tool, or any other action in
+    // between, starts a new one.
+    const last = SE.ops[SE.ops.length - 1];
+    if (last && last.tool === "edit" && last.kind === "geom" && last.nudgeOf === op && last.nudgeTool === SE.tool) {
+      last.after = snipEditGeom(op);
+      snipEditRedrawBase();
+    } else {
+      const after = snipEditGeom(op);
+      if (JSON.stringify(before) === JSON.stringify(after)) { snipEditRedrawBase(); }
+      else snipEditPushOp({ tool: "edit", kind: "geom", op, before, after, nudgeOf: op, nudgeTool: SE.tool }, op);
+    }
     // The move/resize above only touched the op's own coordinates -- the
     // selection handles are a separate live-layer drawing keyed to the same
     // op, and would otherwise keep showing the pre-nudge position/size.
@@ -18164,6 +18255,15 @@ function bind() {
     }
     snipEditLiveCtx.restore();
     snipEditDrawGuides();
+  }
+  // While the crop tool is active SE.cropRect is the editable copy of the crop op;
+  // whatever changes SE.ops behind its back (undo, redo, a resize) must pull it
+  // back in line, or the next export commits the stale rectangle again.
+  function snipEditSyncCropFromOps() {
+    if (SE.tool !== "crop") return;
+    const existing = SE.ops.find((o) => o.tool === "crop");
+    SE.cropRect = existing ? { ...existing.rect } : null;
+    snipEditDrawCropOverlayLive();
   }
   function snipEditCropPointerDown(pt) {
     const r = SE.cropRect;
@@ -18369,6 +18469,7 @@ function bind() {
   // always pops the last entry, so anything inserted mid-array would make undo
   // remove the wrong operation.
   function snipEditDuplicateOp(op) {
+    if (op.tool === "spotlight") return; // only one spotlight may exist, there is nothing to copy
     const offset = SNIP_DUP_OFFSET_PX();
     const dup = JSON.parse(JSON.stringify(op));
     if (dup.rect) {
@@ -18380,17 +18481,19 @@ function bind() {
     }
     snipEditPushOp(dup);
   }
-  // Removes one specific op wherever it sits in SE.ops, same floor bookkeeping
-  // as snipEditCropDiscard/snipEditPushUniqueOp.
+  // Removes one specific op wherever it sits in SE.ops. The removal is an undo
+  // entry too, so Ctrl+Z brings the op back at its old place.
   function snipEditRemoveOp(op) {
-    const before = SE.ops.length;
-    SE.ops = SE.ops.filter((o) => o !== op);
-    if (SE.ops.length === before) return;
-    SE.floor = Math.max(0, SE.floor - (before - SE.ops.length));
+    const index = SE.ops.indexOf(op);
+    if (index < 0) return;
+    SE.ops.splice(index, 1);
+    // The floor is a count: an op below it leaving shifts it down by one. Only that
+    // delta is stored, so a crop commit or discard in between cannot be undone by
+    // restoring an absolute value.
+    const floorShift = index < SE.floor ? 1 : 0;
+    SE.floor -= floorShift;
     if (SE.selOp === op) snipEditDeselectShape();
-    if (SE.lastNudged === op) { SE.lastNudged = null; snipEditUpdateNudgeHint(); }
-    snipEditUpdateUndoRedoButtons();
-    snipEditRedrawBase();
+    snipEditPushOp({ tool: "edit", kind: "remove", op, prev: SE.ops[index - 1] || null, next: SE.ops[index] || null, floorShift }, null);
   }
 
   // ---- text: a real <input> positioned over the canvas, in stage-local (i.e.
@@ -18662,11 +18765,7 @@ function bind() {
     // A grab cursor as soon as the Hand tool is picked, not only once a
     // drag actually starts -- the same affordance Space-hold already gets.
     snipEditWrap.classList.toggle("panning", tool === "hand");
-    if (tool === "crop") {
-      const existing = SE.ops.find((o) => o.tool === "crop");
-      SE.cropRect = existing ? { ...existing.rect } : null;
-      snipEditDrawCropOverlayLive();
-    }
+    snipEditSyncCropFromOps();
     snipEditRenderToolButtons();
     snipEditRenderContext();
     snipEditRedrawBase(); // toggles the crop-dim pass on/off for the new tool
@@ -18933,13 +19032,15 @@ function bind() {
         break;
       }
       case "crop-new": case "crop-move": case "crop-resize": snipEditCropPointerUp(); break;
-      case "text-move": if (d.newPoint) { d.op.point = d.newPoint; snipEditRedrawBase(); } break;
-      case "shape-move":
-        if (d.newPoints) d.op.points = d.newPoints; else if (d.newRect) d.op.rect = d.newRect;
+      case "text-move": case "shape-move": case "shape-resize": case "shape-endpoint": {
+        const before = snipEditGeom(d.op);
+        if (d.newPoint) d.op.point = d.newPoint;
+        else if (d.newPoints) d.op.points = d.newPoints;
+        else if (d.newRect) d.op.rect = d.newRect;
         snipEditRedrawBase();
+        snipEditCommitGeomEdit(d.op, before);
         break;
-      case "shape-resize": if (d.newRect) d.op.rect = d.newRect; snipEditRedrawBase(); break;
-      case "shape-endpoint": if (d.newPoints) d.op.points = d.newPoints; snipEditRedrawBase(); break;
+      }
     }
     // snipEditClearLive() above wiped the selection handles a plain click
     // (kind "shape-move" with no actual movement) just painted on mousedown --
@@ -19324,6 +19425,9 @@ function bind() {
   const snipModal = $("snip-modal");
   let pendingSnip = null;
   let pendingSnipPath = ""; // disk path if this shot was auto-saved to the folder
+  // Bumped by every new capture: an async save that finishes after a newer shot
+  // arrived must not touch that shot's state or files.
+  let snipCaptureGen = 0;
   let pendingSnipName = ""; // backend-suggested "Screenshot <app?> <timestamp>"
   // Set only for a file opened for editing from outside the app -- the folder
   // this "Save as..." should default into, since the original itself is never
@@ -19339,6 +19443,7 @@ function bind() {
   listen("snip-captured", (e) => {
     pendingSnip = e.payload?.data_url || "";
     if (!pendingSnip) return;
+    snipCaptureGen++;
     recordToolUsage("screenshot");
     pendingSnipPath = e.payload?.path || "";
     pendingSnipName = e.payload?.name || "";
@@ -19358,12 +19463,31 @@ function bind() {
         // finalize_capture already put the UNEDITED image on the clipboard (and,
         // optionally, on disk) -- redo both side effects on the edited result.
         invoke("copy_image_data", { dataUrl: editedDataUrl }).catch((err) => errToast(err));
+        let saveFailed = false;
         if (settings.ui_flags?.screenshotSave === true) {
-          if (pendingSnipPath) await invoke("delete_screenshot_file", { path: pendingSnipPath }).catch(() => {});
-          pendingSnipPath = (await invoke("save_screenshot_now", { dataUrl: editedDataUrl }).catch(() => "")) || "";
+          // Save the edited copy first and only then remove the unedited file, so a
+          // failed save (unwritable folder, full disk, too large) never leaves the
+          // user with neither of the two on disk.
+          const oldPath = pendingSnipPath;
+          const gen = snipCaptureGen;
+          const saved = (await invoke("save_screenshot_now", { dataUrl: editedDataUrl }).catch(() => "")) || "";
+          if (saved) {
+            // The same timestamp name overwrites the old file in place: then the old
+            // path IS the new one and must stay.
+            if (oldPath && oldPath !== saved) await invoke("delete_screenshot_file", { path: oldPath }).catch(() => {});
+            // A newer capture arrived while saving: it owns the state and the dialog now.
+            if (gen !== snipCaptureGen) return;
+            pendingSnipPath = saved;
+          } else {
+            if (gen !== snipCaptureGen) return;
+            // The unedited file stays where it is; the dialog's shot is simply not saved.
+            pendingSnipPath = "";
+            saveFailed = true;
+            toast(t("snipSaveFailed"));
+          }
         }
         $("snip-preview").src = pendingSnip;
-        $("snip-save-folder").checked = settings.ui_flags?.screenshotSave === true;
+        $("snip-save-folder").checked = settings.ui_flags?.screenshotSave === true && !saveFailed;
         $("snip-modal-saveas-format").value = txt("screenshotFormat") || "png";
         $("snip-modal-retry").classList.remove("hidden");
         snipModal.classList.remove("hidden");
@@ -19409,7 +19533,18 @@ function bind() {
     if (optBox) optBox.checked = on;
     if (on) {
       if (!pendingSnipPath && pendingSnip) {
-        pendingSnipPath = (await invoke("save_screenshot_now", { dataUrl: pendingSnip }).catch(() => "")) || "";
+        const gen = snipCaptureGen;
+        const savedNow = (await invoke("save_screenshot_now", { dataUrl: pendingSnip }).catch(() => "")) || "";
+        if (gen !== snipCaptureGen) return; // a newer capture owns the state now
+        pendingSnipPath = savedNow;
+        if (!pendingSnipPath) {
+          // Nothing reached the disk: say so and put the switch back off, setting included.
+          toast(t("snipSaveFailed"));
+          ev.target.checked = false;
+          settings.ui_flags = { ...(settings.ui_flags || {}), screenshotSave: false };
+          invoke("set_ui_flag", { key: "screenshotSave", enabled: false }).catch((err) => errToast(err));
+          if (optBox) optBox.checked = false;
+        }
       }
     } else if (pendingSnipPath) {
       // The command answers false (it does not reject) when the file could not be

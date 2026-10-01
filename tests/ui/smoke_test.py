@@ -16472,6 +16472,372 @@ def main():
     const saves = callsFor('save_screenshot_now').length;
     if (saves) errs.push('564-d1: switching back on saved a second copy (' + saves + ' save call) although the first file was never deleted');
 """)
+        ba_common = r"""
+    const BAW = 200, BAH = 120, BGC = [136, 170, 204];
+    const loadImg = (u) => new Promise((res) => { const i = new Image(); i.onload = () => res(i); i.src = u; });
+    const pixelsOf = async (u) => {
+      const i = await loadImg(u);
+      const c = document.createElement('canvas'); c.width = i.width; c.height = i.height;
+      const g = c.getContext('2d'); g.drawImage(i, 0, 0);
+      return { w: i.width, h: i.height, px: (x, y) => Array.from(g.getImageData(x, y, 1, 1).data) };
+    };
+    const near = (p, c, tol) => [0, 1, 2].every((i) => Math.abs(p[i] - c[i]) <= (tol || 8));
+    const captureFixture = () => {
+      const cv = document.createElement('canvas'); cv.width = BAW; cv.height = BAH;
+      const g = cv.getContext('2d'); g.fillStyle = '#88aacc'; g.fillRect(0, 0, BAW, BAH);
+      return cv.toDataURL('image/png');
+    };
+    const baOpen = async (path) => {
+      await bootReady();
+      window.__FIRE__('snip-captured', { data_url: captureFixture(), path: path || '', name: 'ba.png' });
+      await sleep(400);
+      return !document.getElementById('snip-edit').classList.contains('hidden');
+    };
+    const baTool = async (n) => { document.querySelector('#snip-edit-tools button[data-tool="' + n + '"]').click(); await sleep(60); };
+    const baPt = (x, y) => {
+      const c = document.getElementById('snip-edit-base'), r = c.getBoundingClientRect();
+      const z = r.width / c.width;
+      return [r.left + x * z, r.top + y * z];
+    };
+    const baPtr = (type, x, y, target) => (target || window).dispatchEvent(new PointerEvent(type, {
+      bubbles: true, cancelable: true, button: 0, pointerId: 1, isPrimary: true, clientX: x, clientY: y, altKey: true,
+    }));
+    const baDrag = async (x1, y1, x2, y2) => {
+      const live = document.getElementById('snip-edit-live');
+      // every position is worked out again after the previous event: a selection can
+      // re-render the context bar and shift the canvas
+      let a = baPt(x1, y1);
+      baPtr('pointerdown', a[0], a[1], live);
+      a = baPt((x1 + x2) / 2, (y1 + y2) / 2);
+      baPtr('pointermove', a[0], a[1], live);
+      a = baPt(x2, y2);
+      baPtr('pointermove', a[0], a[1], live);
+      baPtr('pointerup', a[0], a[1], window);
+      await sleep(40);
+    };
+    const baClick = async (x, y) => {
+      const live = document.getElementById('snip-edit-live');
+      const a = baPt(x, y);
+      baPtr('pointerdown', a[0], a[1], live);
+      baPtr('pointerup', a[0], a[1], window);
+      await sleep(40);
+    };
+    const baKey = (key, extra) => document.dispatchEvent(new KeyboardEvent('keydown', Object.assign({ key, bubbles: true, cancelable: true }, extra || {})));
+    const baExport = async () => {
+      window.__SMOKE_ARGS__.length = 0;
+      document.getElementById('snip-edit-copy').click();
+      await sleep(200);
+      const c = callsFor('copy_image_data');
+      return c.length ? pixelsOf(c[c.length - 1].dataUrl) : null;
+    };
+    const baScale50 = async () => {
+      document.getElementById('snip-edit-scale').click(); await sleep(150);
+      const pop = document.querySelector('.snip-scale-pop');
+      [...pop.querySelectorAll('.snip-scale-presets button')].find((b) => b.textContent === '50%').click();
+      await sleep(50);
+      pop.querySelector('.primary-btn').click(); await sleep(250);
+    };
+    const baUndo = async () => { document.getElementById('snip-edit-undo').click(); await sleep(60); };
+    const baRedo = async () => { document.getElementById('snip-edit-redo').click(); await sleep(60); };
+    const baCtxPop = () => [...document.body.children].find((e) => e.classList.contains('ctx') && !e.id && !e.classList.contains('hidden'));
+    const baCtx = async (x, y) => {
+      const a = baPt(x, y);
+      document.getElementById('snip-edit-live').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: a[0], clientY: a[1] }));
+      await sleep(60);
+      return baCtxPop();
+    };
+"""
+        ba_seed = '<script>window.__SEED_SETTINGS__ = { ui_flags: { screenshotSave: true } };</script>\n'
+        failed += ar_probe('ba597a', 'screenshot editor: a failed save keeps the unedited file and says so', 'index', '1000x780', ba_seed, ba_common + r"""
+    if (!(await baOpen('C:/shots/first.png'))) { errs.push('597: the editor did not open'); }
+    else {
+      RESULTS.save_screenshot_now = () => null;
+      RESULTS.delete_screenshot_file = () => true;
+      await baTool('pen'); await baDrag(20, 20, 90, 70);
+      window.__SMOKE_ARGS__.length = 0;
+      document.getElementById('toast').textContent = '';
+      document.getElementById('snip-edit-apply').click(); await sleep(500);
+      if (!callsFor('save_screenshot_now').length) errs.push('597: fixture: Apply did not try to save the edited shot');
+      if (callsFor('delete_screenshot_file').length) errs.push('597: the unedited file was deleted although the edited shot was not saved');
+      if (!/could not be saved/i.test(document.getElementById('toast').textContent)) errs.push('597: no error toast after the failed save, toast is ' + JSON.stringify(document.getElementById('toast').textContent));
+      if (document.getElementById('snip-save-folder').checked) errs.push('597: the folder switch stays checked after the failed save');
+      if (document.getElementById('snip-modal').classList.contains('hidden')) errs.push('597: fixture: the result dialog did not open');
+    }
+""")
+        failed += ar_probe('ba597b', 'screenshot editor: a good save removes the old file only after the new one exists, never the new one itself', 'index', '1000x780', ba_seed, ba_common + r"""
+    if (!(await baOpen('C:/shots/first.png'))) { errs.push('597: the editor did not open'); }
+    else {
+      RESULTS.save_screenshot_now = () => 'C:/shots/second.png';
+      RESULTS.delete_screenshot_file = () => true;
+      await baTool('pen'); await baDrag(20, 20, 90, 70);
+      window.__SMOKE_ARGS__.length = 0;
+      document.getElementById('snip-edit-apply').click(); await sleep(500);
+      const order = (window.__SMOKE_ARGS__ || []).map(([c]) => c).filter((c) => c === 'save_screenshot_now' || c === 'delete_screenshot_file');
+      if (order.join() !== 'save_screenshot_now,delete_screenshot_file') errs.push('597: expected save then delete, got ' + order.join());
+      const del = callsFor('delete_screenshot_file')[0];
+      if (!del || del.path !== 'C:/shots/first.png') errs.push('597: the wrong file was deleted: ' + JSON.stringify(del));
+      if (!document.getElementById('snip-save-folder').checked) errs.push('597: the folder switch is off after a good save');
+      // the same name comes back (same second): the old path is the new file, it must stay
+      document.getElementById('snip-modal-close').click(); await sleep(200);
+      window.__FIRE__('snip-captured', { data_url: captureFixture(), path: 'C:/shots/same.png', name: 'same.png' });
+      await sleep(400);
+      RESULTS.save_screenshot_now = () => 'C:/shots/same.png';
+      await baTool('pen'); await baDrag(20, 20, 90, 70);
+      window.__SMOKE_ARGS__.length = 0;
+      document.getElementById('snip-edit-apply').click(); await sleep(500);
+      if (callsFor('delete_screenshot_file').length) errs.push('597: the freshly saved file was deleted because it reused the old name');
+    }
+""")
+        failed += ar_probe('ba597c', 'screenshot dialog: switching the folder save on with a failing save says so and puts the switch back off', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { snipEditor: false, screenshotSave: false } };</script>\n', ba_common + r"""
+    await bootReady();
+    RESULTS.save_screenshot_now = () => null;
+    window.__FIRE__('snip-captured', { data_url: captureFixture(), path: '', name: 'x.png' });
+    await sleep(300);
+    const box = document.getElementById('snip-save-folder');
+    if (document.getElementById('snip-modal').classList.contains('hidden')) errs.push('597: fixture: the result dialog did not open');
+    window.__SMOKE_ARGS__.length = 0;
+    document.getElementById('toast').textContent = '';
+    box.checked = true; box.dispatchEvent(new Event('change', { bubbles: true })); await sleep(300);
+    if (!callsFor('save_screenshot_now').length) errs.push('597: fixture: switching on did not try to save');
+    if (box.checked) errs.push('597: the switch stays on although nothing was saved');
+    if (!/could not be saved/i.test(document.getElementById('toast').textContent)) errs.push('597: no error toast, toast is ' + JSON.stringify(document.getElementById('toast').textContent));
+    const last = callsFor('set_ui_flag').filter((a) => a && a.key === 'screenshotSave').pop();
+    if (!last || last.enabled !== false) errs.push('597: the stored setting was left on, last write ' + JSON.stringify(last));
+""")
+        failed += ar_probe('ba594', 'screenshot editor: moving, resizing or deleting a finished shape is one undo step of its own', 'index', '1000x780', '', ba_common + r"""
+    if (!(await baOpen(''))) { errs.push('594: the editor did not open'); }
+    else {
+      // rows of the arrow (y 30) and of the rectangle border (y 75), sampled in a small band
+      const hasInk = (img, x, y) => { for (let d = -3; d <= 3; d++) { if (!near(img.px(x, y + d), BGC, 30)) return true; } return false; };
+      await baTool('arrow'); await baDrag(20, 30, 120, 30);
+      await baTool('rect'); await baDrag(20, 75, 120, 105);
+      await baTool('arrow');
+      let img = await baExport();
+      if (!img || !hasInk(img, 60, 30) || !hasInk(img, 60, 75)) errs.push('594: fixture: arrow and rectangle are not both drawn');
+      // drag the arrow down by 20
+      await baDrag(60, 30, 60, 50);
+      img = await baExport();
+      if (!hasInk(img, 60, 50) || hasInk(img, 60, 22)) errs.push('594: fixture: the drag did not move the arrow');
+      await baUndo();
+      img = await baExport();
+      if (!hasInk(img, 60, 30)) errs.push('594: undo did not bring the moved arrow back to its place');
+      if (hasInk(img, 60, 50)) errs.push('594: the arrow is still at the moved place after undo');
+      if (!hasInk(img, 60, 75)) errs.push('594: undo removed the rectangle instead of the move');
+      await baRedo();
+      img = await baExport();
+      if (!hasInk(img, 60, 50) || hasInk(img, 60, 22)) errs.push('594: redo did not move the arrow again');
+      if (!hasInk(img, 60, 75)) errs.push('594: redo lost the rectangle');
+      // resize the rectangle by its corner handle, then undo
+      await baTool('rect');
+      await baClick(70, 75);
+      await baDrag(120, 105, 160, 112);
+      img = await baExport();
+      if (!hasInk(img, 140, 112)) errs.push('594: fixture: the rectangle was not resized');
+      await baUndo();
+      img = await baExport();
+      if (hasInk(img, 140, 112)) errs.push('594: undo left the rectangle at its enlarged size');
+      if (!hasInk(img, 60, 50)) errs.push('594: undoing the resize also undid the earlier arrow move');
+      // delete the rectangle through the right-click menu, then undo
+      const pop = await baCtx(60, 75);
+      if (!pop) { errs.push('594: fixture: no context menu over the rectangle'); }
+      else {
+        pop.querySelector('button.danger').click(); await sleep(80);
+        img = await baExport();
+        if (hasInk(img, 60, 75)) errs.push('594: fixture: Delete did not remove the rectangle');
+        await baUndo();
+        img = await baExport();
+        if (!hasInk(img, 60, 75)) errs.push('594: undo did not bring the deleted rectangle back');
+        await baRedo();
+        img = await baExport();
+        if (hasInk(img, 60, 75)) errs.push('594: redo did not delete the rectangle again');
+      }
+    }
+""")
+        failed += ar_probe('ba592a', 'screenshot editor: undoing a committed crop clears the crop box, export is the full image', 'index', '1000x780', '', ba_common + r"""
+    if (!(await baOpen(''))) { errs.push('592: the editor did not open'); }
+    else {
+      await baTool('crop'); await baDrag(60, 30, 140, 90);
+      baKey('Enter'); await sleep(80);
+      let img = await baExport();
+      if (!img || img.w !== 80 || img.h !== 60) errs.push('592: fixture: the crop did not export 80x60, got ' + (img ? img.w + 'x' + img.h : 'nothing'));
+      await baUndo();
+      img = await baExport();
+      if (!img || img.w !== BAW || img.h !== BAH) errs.push('592: after undo the export is ' + (img ? img.w + 'x' + img.h : 'nothing') + ', expected the full ' + BAW + 'x' + BAH);
+      if (!document.getElementById('snip-edit-undo').disabled) errs.push('592: exporting pushed the undone crop back onto the undo stack');
+      await baRedo();
+      img = await baExport();
+      if (!img || img.w !== 80 || img.h !== 60) errs.push('592: redo did not bring the crop back, export is ' + (img ? img.w + 'x' + img.h : 'nothing'));
+    }
+""")
+        failed += ar_probe('ba592b', 'screenshot editor: a resize keeps the crop box and the exported crop in step', 'index', '1000x780', '', ba_common + r"""
+    if (!(await baOpen(''))) { errs.push('592: the editor did not open'); }
+    else {
+      await baTool('crop'); await baDrag(100, 60, 180, 110);
+      await baScale50();
+      const img = await baExport();
+      if (!img || img.w !== 40 || img.h !== 25) errs.push('592: after a 50 percent resize the crop should export 40x25, got ' + (img ? img.w + 'x' + img.h : 'nothing'));
+    }
+""")
+        failed += ar_probe('ba596', 'screenshot editor: a resize with the Original locked on keeps every annotation', 'index', '1000x780', '', ba_common + r"""
+    if (!(await baOpen(''))) { errs.push('596: the editor did not open'); }
+    else {
+      const hasInk = (img, x, y) => { for (let d = -3; d <= 3; d++) { if (!near(img.px(x, y + d), BGC, 30)) return true; } return false; };
+      await baTool('arrow'); await baDrag(20, 30, 120, 30);
+      const orig = document.getElementById('snip-edit-original');
+      orig.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 1 }));
+      document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1 }));
+      await sleep(80);
+      if (!orig.classList.contains('active')) errs.push('596: fixture: a tap on Original did not lock it on');
+      await baScale50();
+      let img = await baExport();
+      if (!img || img.w !== 100 || img.h !== 60) errs.push('596: fixture: the export is not 100x60 after the resize');
+      else if (!hasInk(img, 50, 15)) errs.push('596: the arrow is gone after resizing while Original was locked on');
+      await baUndo();
+      img = await baExport();
+      if (!img || img.w !== BAW || !hasInk(img, 100, 30)) errs.push('596: undoing the resize did not bring the arrow back at full size');
+    }
+""")
+        failed += ar_probe('ba593', 'screenshot editor: a resize with a crop set does not bake the crop dimming into the image', 'index', '1000x780', '', ba_common + r"""
+    if (!(await baOpen(''))) { errs.push('593: the editor did not open'); }
+    else {
+      await baTool('crop'); await baDrag(60, 30, 140, 90);
+      baKey('Enter'); await sleep(80);
+      await baTool('arrow');
+      await baScale50();
+      await baTool('crop');
+      baKey('Escape'); await sleep(80);
+      const img = await baExport();
+      if (!img || img.w !== 100 || img.h !== 60) errs.push('593: fixture: expected the full 100x60 image, got ' + (img ? img.w + 'x' + img.h : 'nothing'));
+      else {
+        for (const [x, y] of [[0, 0], [99, 59], [5, 50]]) {
+          if (!near(img.px(x, y), BGC, 6)) errs.push('593: pixel ' + x + ',' + y + ' is ' + JSON.stringify(img.px(x, y)) + ', the capture is ' + JSON.stringify(BGC) + ' (the crop dimming was baked in)');
+        }
+      }
+    }
+""")
+        failed += ar_probe('ba595', 'screenshot editor: step numbers go on counting after a resize', 'index', '1000x780', '', ba_common + r"""
+    if (!(await baOpen(''))) { errs.push('595: the editor did not open'); }
+    else {
+      await baTool('step');
+      await baClick(30, 100); await baClick(60, 100); await baClick(90, 100);
+      await baScale50();
+      const drawn = [];
+      const orig = CanvasRenderingContext2D.prototype.fillText;
+      CanvasRenderingContext2D.prototype.fillText = function (text) { drawn.push(String(text)); return orig.apply(this, arguments); };
+      await baClick(40, 50);
+      CanvasRenderingContext2D.prototype.fillText = orig;
+      if (drawn.join() !== '4') errs.push('595: the marker placed after the resize reads ' + JSON.stringify(drawn) + ', expected 4');
+      // a second resize keeps the count as well
+      await baScale50();
+      drawn.length = 0;
+      CanvasRenderingContext2D.prototype.fillText = function (text) { drawn.push(String(text)); return orig.apply(this, arguments); };
+      await baClick(20, 25);
+      CanvasRenderingContext2D.prototype.fillText = orig;
+      if (drawn.join() !== '5') errs.push('595: after a second resize the next marker reads ' + JSON.stringify(drawn) + ', expected 5');
+    }
+""")
+        failed += ar_probe('ba598', 'screenshot editor: a spotlight offers no Duplicate, so two never dim each other', 'index', '1000x780', '', ba_common + r"""
+    if (!(await baOpen(''))) { errs.push('598: the editor did not open'); }
+    else {
+      await baTool('spotlight'); await baDrag(40, 30, 120, 80);
+      let img = await baExport();
+      if (!img || near(img.px(5, 5), BGC, 8) || !near(img.px(42, 32), BGC, 8)) errs.push('598: fixture: the spotlight does not dim the outside and keep the inside clear');
+      const pop = await baCtx(80, 55);
+      if (!pop) { errs.push('598: fixture: no context menu over the spotlight'); }
+      else {
+        const shown = [...pop.querySelectorAll('button')].filter((b) => !b.classList.contains('hidden') && b.offsetParent !== null);
+        if (shown.length !== 1 || !shown[0].classList.contains('danger')) errs.push('598: the spotlight menu offers ' + JSON.stringify(shown.map((b) => b.textContent)) + ', expected only Delete');
+      }
+      // a rectangle keeps both entries
+      document.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      await baTool('rect'); await baDrag(20, 100, 60, 115);
+      const pop2 = await baCtx(40, 100);
+      const shown2 = pop2 ? [...pop2.querySelectorAll('button')].filter((b) => b.offsetParent !== null) : [];
+      if (shown2.length !== 2) errs.push('598: fixture: a rectangle menu shows ' + shown2.length + ' entries, expected Duplicate and Delete');
+    }
+""")
+        failed += ar_probe('ba599', 'screenshot editor: a capture that arrives while Apply saves keeps its own file and state', 'index', '1000x780', ba_seed, ba_common + r"""
+    if (!(await baOpen('C:/shots/first.png'))) { errs.push('599: the editor did not open'); }
+    else {
+      let release = null;
+      RESULTS.save_screenshot_now = () => new Promise((res) => { release = () => res('C:/shots/e1.png'); });
+      RESULTS.delete_screenshot_file = () => true;
+      await baTool('pen'); await baDrag(20, 20, 90, 70);
+      window.__SMOKE_ARGS__.length = 0;
+      document.getElementById('snip-edit-apply').click(); await sleep(150);
+      // a hotkey capture lands while the re-encode is still running
+      window.__FIRE__('snip-captured', { data_url: captureFixture(), path: 'C:/shots/new.png', name: 'new.png' });
+      await sleep(400);
+      if (!release) { errs.push('599: fixture: the save never started'); }
+      else {
+        release(); await sleep(300);
+        const dels = callsFor('delete_screenshot_file').map((a) => a.path);
+        if (dels.includes('C:/shots/new.png')) errs.push('599: the new capture file was deleted: ' + dels.join());
+        if (!dels.includes('C:/shots/first.png')) errs.push('599: the replaced unedited file was not removed: ' + dels.join());
+        if (!document.getElementById('snip-modal').classList.contains('hidden')) errs.push('599: the stale apply opened the result dialog over the new capture');
+        // applying the new capture must delete its own file, never the first edit's file
+        RESULTS.save_screenshot_now = () => 'C:/shots/e2.png';
+        await baTool('pen'); await baDrag(20, 20, 90, 70);
+        window.__SMOKE_ARGS__.length = 0;
+        document.getElementById('snip-edit-apply').click(); await sleep(400);
+        const dels2 = callsFor('delete_screenshot_file').map((a) => a.path);
+        if (dels2.join() !== 'C:/shots/new.png') errs.push('599: applying the new capture deleted ' + JSON.stringify(dels2) + ', expected only its own file');
+      }
+    }
+""")
+        failed += ar_probe('ba600', 'screenshot editor: undoing a delete puts the shape back in its place even after a crop changed the list', 'index', '1000x780', '', ba_common + r"""
+    if (!(await baOpen(''))) { errs.push('600: the editor did not open'); }
+    else {
+      const baText = async (x, y, word) => {
+        await baClick(x, y);
+        const ti = document.getElementById('snip-edit-text-input');
+        ti.value = word;
+        ti.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+        await sleep(60);
+      };
+      await baTool('crop'); await baDrag(10, 10, 190, 110);
+      baKey('Enter'); await sleep(80);
+      await baTool('text');
+      await baText(30, 90, 'AAA'); await baText(120, 90, 'BBB');
+      const pop = await baCtx(32, 94);
+      const del = pop && pop.querySelector('button.danger');
+      if (!del) { errs.push('600: fixture: no delete entry over the first text'); }
+      else {
+        del.click(); await sleep(80);
+        // discarding the crop drops it from the list, every index behind it moves
+        await baTool('crop');
+        baKey('Escape'); await sleep(80);
+        const drawn = [];
+        const orig = CanvasRenderingContext2D.prototype.fillText;
+        CanvasRenderingContext2D.prototype.fillText = function (text) { drawn.push(String(text)); return orig.apply(this, arguments); };
+        await baUndo();
+        CanvasRenderingContext2D.prototype.fillText = orig;
+        if (drawn.join() !== 'AAA,BBB') errs.push('600: the texts are drawn in the order ' + JSON.stringify(drawn) + ', the restored one must come first');
+      }
+    }
+""")
+        failed += ar_probe('ba601', 'screenshot editor: a run of arrow-key nudges is one undo step and redo keeps it', 'index', '1000x780', '', ba_common + r"""
+    if (!(await baOpen(''))) { errs.push('601: the editor did not open'); }
+    else {
+      const hasInk = (img, x, y) => { for (let d = -3; d <= 3; d++) { if (!near(img.px(x + d, y), BGC, 30)) return true; } return false; };
+      await baTool('rect'); await baDrag(20, 75, 120, 105);
+      let img = await baExport();
+      if (!hasInk(img, 20, 90)) errs.push('601: fixture: the rectangle is not drawn');
+      baKey('ArrowRight', { shiftKey: true }); baKey('ArrowRight', { shiftKey: true }); await sleep(60);
+      img = await baExport();
+      if (hasInk(img, 20, 90)) errs.push('601: fixture: the nudges did not move the rectangle');
+      await baUndo();
+      img = await baExport();
+      if (!hasInk(img, 20, 90)) errs.push('601: undo did not take the nudges back');
+      if (!hasInk(img, 60, 75)) errs.push('601: undo removed the rectangle, the nudges were more than one step');
+      await baRedo();
+      img = await baExport();
+      if (hasInk(img, 20, 90)) errs.push('601: redo dropped the nudges');
+      await baUndo(); await baUndo();
+      img = await baExport();
+      if (hasInk(img, 60, 75)) errs.push('601: the second undo did not remove the rectangle');
+    }
+""")
         # ---- main window findings: generated block end ----
         print("PASS" if not failed else f"{failed} problem(s)")
         return 1 if failed else 0
