@@ -564,7 +564,7 @@ if not never_m or "demoMode" not in re.findall(r'"([^"]+)"', never_m.group(1)):
     problems.append("bulk: EXPERT_BULK_NEVER must list demoMode")
 if full_exclude_m:
     excluded = set(re.findall(r'"([^"]+)"', full_exclude_m.group(1)))
-    for key in ("remoteApi", "remoteNetworkFilter", "urlScheme", "promptSync"):
+    for key in ("remoteApi", "remoteNetworkFilter", "urlScheme", "promptSync", "dataDirLock", "allowMultipleInstances", "clipWatcher"):
         if key not in excluded:
             problems.append(f"bulk: EXPERT_PRESET_FULL_EXCLUDE does not keep '{key}' out of All on")
     if "...EXPERT_BULK_NEVER" not in full_exclude_m.group(1) and "demoMode" not in excluded:

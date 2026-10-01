@@ -2343,6 +2343,9 @@ const EXPERT_RESET_KEEP = ["demoMode"];
 const EXPERT_PRESET_FULL_EXCLUDE = [
   "ocrIndex", "voiceOnlineOk", ...EXPERT_BULK_NEVER,
   "remoteApi", "remoteNetworkFilter", "urlScheme", "promptSync",
+  // Locks and background collecting: switching them on silently would lock the
+  // data folder, block a second window or start watching the clipboard.
+  "dataDirLock", "allowMultipleInstances", "clipWatcher",
 ];
 const ALL_EXPERT_FLAG_KEYS = [...ALL_FLAG_KEYS, ...OPT_FLAG_KEYS];
 
