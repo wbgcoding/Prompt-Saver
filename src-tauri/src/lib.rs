@@ -36725,7 +36725,15 @@ fn sync_sweep_orphans(dir: &Path, wanted: &std::collections::HashSet<String>) {
         }
         let path = e.path();
         // Never a file the app has not known before (see SYNC_KNOWN).
-        if !sync_known_lock().contains(&sync_seen_key(&path)) {
+        let key = sync_seen_key(&path);
+        if !sync_known_lock().contains(&key) {
+            continue;
+        }
+        // Nor one with an edit the app has noted but not read back: it changed since
+        // the app last wrote or read it, so it is somebody's work, and the poll will
+        // read it first.
+        let seen = sync_seen_lock().get(&key).copied();
+        if !matches!((seen, sync_stamp_of(&path)), (Some(s), Some(now)) if s.handled && s.stamp == now) {
             continue;
         }
         let ours = read_text_capped(&path, MAX_SYNC_MD_BYTES)
@@ -41361,6 +41369,7 @@ mod tests {
         fs::write(dir.join("AGENTS.md"), sync_agents_md()).unwrap();
 
         sync_known_note(&mine);
+        sync_seen_record_own_write(&mine);
         sync_known_note(&theirs);
         sync_known_note(&obsidian);
         let mut wanted = std::collections::HashSet::new();
@@ -42095,6 +42104,7 @@ mod tests {
         let wanted: std::collections::HashSet<String> = ["p1.md".to_string()].into_iter().collect();
         sync_known_note(&dir.join("p1 - Copy.md"));
         sync_known_note(&dir.join("gone.md"));
+        sync_seen_record_own_write(&dir.join("gone.md"));
         sync_sweep_orphans(&dir, &wanted);
         assert!(dir.join("p1.md").exists(), "a live prompt's file stays");
         assert!(dir.join("p1 - Copy.md").exists(), "a name this app could never have written is never swept");
@@ -42280,6 +42290,26 @@ mod tests {
         restored.text = "the restored prompt".into();
         sync_write_dir(&dir, &[restored], &Settings::default());
         assert_eq!(sync_conflict_copies(&dir, "p1"), 1, "restoring must not overwrite the newer file silently");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sync_sweep_leaves_a_file_with_an_edit_not_read_yet() {
+        let dir = sync_tmp_dir("sweep-unread");
+        let mut a = sync_test_prompt();
+        a.id = "a".into();
+        let mut b = sync_test_prompt();
+        b.id = "b".into();
+        sync_write_dir(&dir, &[a.clone(), b.clone()], &Settings::default());
+        // An outside edit lands on b.md; the poll has noted its stamp, not read it.
+        let path = dir.join("b.md");
+        let mut edited = b.clone();
+        edited.text = "edited outside the app".into();
+        fs::write(&path, prompt_to_md(&edited, &SyncPlacement::default())).unwrap();
+        let stamp = sync_stamp_of(&path).unwrap();
+        sync_seen_lock().insert(sync_seen_key(&path), SyncSeen { stamp, handled: false });
+        sync_write_dir(&dir, &[a], &Settings::default());
+        assert!(path.exists(), "an edit nobody has read must not be swept");
         let _ = fs::remove_dir_all(&dir);
     }
 
