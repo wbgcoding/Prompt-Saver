@@ -1537,6 +1537,9 @@ const OPT_FLAG_LABELS = {
   // scheme. Both off by default -- this is the app's one new network surface.
   remoteApi: "flagRemoteApi",
   remoteNetworkFilter: "flagRemoteNetworkFilter",
+  // Certificate lifetime (825 days instead of ten years). Flipping it makes a
+  // new certificate, so it has its own confirmed command (toggleShortLivedCert).
+  remoteTlsShortLived: "remoteTlsShortLived",
   urlScheme: "flagUrlScheme",
 };
 const OPT_FLAG_KEYS = Object.keys(OPT_FLAG_LABELS);
@@ -2283,7 +2286,7 @@ const EXPERT_TABS = [
     // The only new network surface in the app, off by default.
     // A link can only open or copy an entry; the receiver can do everything
     // the command line can, gated by its own password and network switch.
-    { title: "expGroupRemote", flags: ["remoteApi", { key: "remoteNetworkFilter", gate: "remoteApi" }, "urlScheme"], values: ["remotePort", "remoteRateLimit"],
+    { title: "expGroupRemote", flags: ["remoteApi", { key: "remoteNetworkFilter", gate: "remoteApi" }, { key: "remoteTlsShortLived", gate: "remoteNetworkFilter" }, "urlScheme"], values: ["remotePort", "remoteRateLimit"],
       actions: [{ id: "remote-password-open", label: "remotePasswordAction", gate: "remoteApi" }, { id: "remote-ranges-open", label: "remoteRangesAction", gate: "remoteNetworkFilter" }, { id: "remote-tls-open", label: "remoteTlsAction", tip: "remoteTlsActionTip", gate: "remoteNetworkFilter" }] },
   ] },
 ];
@@ -2314,7 +2317,7 @@ const EXPERT_PRESET_QUIET = ["copyBubble", "copyFlash", "copySound", "undoToast"
 // a bulk write through set_ui_flag would skip.
 // Demo mode is a session with its own enable and disable commands and a restart,
 // so no bulk action (profile, category reset, reset all) may ever write it.
-const EXPERT_BULK_NEVER = ["demoMode"];
+const EXPERT_BULK_NEVER = ["demoMode", "remoteTlsShortLived"];
 const EXPERT_PRESET_FULL_EXCLUDE = [
   "ocrIndex", "voiceOnlineOk", ...EXPERT_BULK_NEVER,
   "remoteApi", "remoteNetworkFilter", "urlScheme", "promptSync",
@@ -2567,7 +2570,7 @@ const EXPERT_TIPS = [
   "journalLimit", "previewLen", "nameMaxLen", "searchRecentMax", "savedSearchMax", "maxViews", "gridMax",
   "viewBorder", "statsTopN", "viewGroups", "viewGroupMaxRows", "multiViewPrompt",
   "barToggles", "barToggleBoth", "quickGrid", "quickGridHoverOnly", "multiView", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "libraryCols", "copySize", "copyFont", "showLibrary", "showJournal", "composerScale", "primaryScale",
-  "remoteApi", "remoteNetworkFilter", "urlScheme", "remotePort", "remoteRateLimit",
+  "remoteApi", "remoteNetworkFilter", "remoteTlsShortLived", "urlScheme", "remotePort", "remoteRateLimit",
   "recOutline", "recOutlineColor", "chainSeparator", "gsRecentMax", "launcherMaxResults",
   "veOvTextOutlinePx", "veOvKeysActiveColor", "veOvVideoVolume",
 ];
@@ -2693,6 +2696,13 @@ function flagRow(key) {
         try { await invoke("disable_demo_mode"); }
         catch (err) { errToast(err); input.checked = true; }
       }
+      return;
+    }
+    // The certificate lifetime switch makes a new certificate: confirmed first,
+    // saved together with the certificate by its own command, and the switch
+    // goes back to where it was when it is cancelled or fails.
+    if (key === "remoteTlsShortLived") {
+      if (!(await toggleShortLivedCert(enabled))) input.checked = !enabled;
       return;
     }
     // Turning sync on starts writing every text prompt as a plain-text .md file
@@ -10655,6 +10665,25 @@ async function openRemoteTlsDialog() {
   }
 }
 EXPERT_ACTIONS["remote-tls-open"] = openRemoteTlsDialog;
+
+// The certificate lifetime switch. Switching makes a new certificate, so it asks
+// first; nothing is saved on cancel. The backend saves the flag and the new
+// certificate in one write and restarts a running receiver. True when applied.
+async function toggleShortLivedCert(enabled) {
+  const sure = await confirmDialog({ title: t("remoteTlsRenew"), message: t("remoteTlsRenewConfirm"), confirmLabel: t("remoteTlsRenew") });
+  if (!sure) return false;
+  try {
+    await invoke("remote_tls_set_short_lived", { enabled });
+  } catch (e) {
+    const msg = String(e);
+    if (msg === "save-failed") toast(t("persistFailed"));
+    else if (msg === "the certificate key could not be protected") toast(t("remoteTlsKeyNotProtected"));
+    else errToast(e);
+    return false;
+  }
+  settings.ui_flags = { ...(settings.ui_flags || {}), remoteTlsShortLived: enabled };
+  return true;
+}
 
 // Runs the same sweep on demand -- unlike the silent background sweep,
 // an explicit click always gets an answer, even "nothing to clean up".

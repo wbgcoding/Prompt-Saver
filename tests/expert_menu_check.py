@@ -44,6 +44,8 @@ NOT_IN_EXPERT = {
 # Adding a dependent setting without adding it here (and gating it) is the mistake
 # this file exists to catch: so add both together.
 DEPENDENCIES = {
+    # Remote access
+    "remoteTlsShortLived": "remoteNetworkFilter",
     # Creating prompts
     "storeFiles": "fileAttach",
     "cleanupFiles": "storeFiles",

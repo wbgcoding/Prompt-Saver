@@ -548,6 +548,24 @@ pub(crate) fn remote_tls_renew(app: AppHandle, state: State<Db>) -> Result<Strin
     fingerprint.ok_or_else(|| "no-certificate".to_string())
 }
 
+// The expert switch for the certificate lifetime: flag and a new certificate
+// with that lifetime are saved in one write (see `set_short_lived_core`), then
+// the receiver restarts like after a manual renewal. Only this command sets the
+// flag; the generic setters, the command line and imports all refuse it.
+#[tauri::command]
+pub(crate) fn remote_tls_set_short_lived(app: AppHandle, state: State<Db>, enabled: bool) -> Result<String, String> {
+    let names = crate::remote_tls::host_names();
+    let (fingerprint, restart) = {
+        let mut store = lock(&state);
+        let id = crate::remote_tls::set_short_lived_core(&mut store.settings, enabled, &names, |s| save_settings(&app, s))?;
+        (crate::remote_tls::fingerprint(&id.ca_pem), remote_api_enabled(&store.settings) && network_filter_enabled(&store.settings))
+    };
+    if restart {
+        restart_receiver(&app)?;
+    }
+    fingerprint.ok_or_else(|| "no-certificate".to_string())
+}
+
 // ---------- IPv4 CIDR matching ----------
 
 fn parse_ipv4_cidr(s: &str) -> Option<(u32, u32)> {
@@ -959,6 +977,9 @@ fn prepare_acceptor(app: &AppHandle) -> Result<TlsAcceptor, String> {
     };
     if source == crate::remote_tls::IdentitySource::KeyUnreadable {
         record_error_log("the receiver certificate key could not be read here, a new certificate was made", "remoteApi", None, 100);
+    }
+    if source == crate::remote_tls::IdentitySource::Expired {
+        record_error_log("the receiver certificate had expired, a new certificate was made", "remoteApi", None, 100);
     }
     Ok(TlsAcceptor::from(crate::remote_tls::build_server_config(&id)?))
 }
