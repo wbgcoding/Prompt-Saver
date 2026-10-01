@@ -16878,15 +16878,25 @@ async fn begin_capture(
     if !pick && snip_delay > 0 {
         tokio::time::sleep(std::time::Duration::from_millis(snip_delay)).await;
     }
+    // The session may have been cancelled (and a newer one started) during the
+    // waits above: then it is not ours any more and nothing below may run.
+    if !snip_session_current(gen) {
+        return Ok(());
+    }
     let (canvas, min_x, min_y) = match freeze_desktop() {
         Ok(v) => v,
         Err(e) => {
             // The session never got going: hide the parked overlay, clear the
             // flags and bring back whatever was hidden for it.
-            close_all_snip(&app);
+            if snip_session_current(gen) {
+                close_all_snip(&app);
+            }
             return Err(e);
         }
     };
+    if !snip_session_current(gen) {
+        return Ok(());
+    }
     let (total_w, total_h) = canvas.dimensions();
     // Arc'd so the preview encode (worker thread) and the stored capture (full-res
     // crops) share one buffer instead of each paying for their own ~80 MB copy.
