@@ -37111,6 +37111,29 @@ fn sync_changed_since_seen(path: &Path, on_disk: &[u8]) -> bool {
 // already holds files, a save ahead of the startup seed) is judged by its content: a
 // different one is somebody's edit, one equal to this prompt's own text, in today's
 // form or an older one, is not.
+// Writes `bytes` to a fresh `<id>.conflict-<secs>[-<n>]<tag>.md` in `dir`. The
+// name is claimed with create_new first, so two conflicts in the same second
+// (or an earlier copy) never overwrite each other.
+fn sync_write_conflict_copy(dir: &Path, id: &str, tag: &str, bytes: &[u8]) -> Option<PathBuf> {
+    let secs = now_secs();
+    for n in 0..1000u32 {
+        let suffix = if n == 0 { String::new() } else { format!("-{n}") };
+        let copy = dir.join(format!("{id}.conflict-{secs}{suffix}{tag}.md"));
+        match fs::OpenOptions::new().write(true).create_new(true).open(&copy) {
+            Ok(_) => {
+                if write_bytes_atomic(&copy, bytes) {
+                    return Some(copy);
+                }
+                let _ = fs::remove_file(&copy);
+                return None;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(_) => return None,
+        }
+    }
+    None
+}
+
 fn sync_edit_unsaved(path: &Path, on_disk: &[u8], p: &Prompt, placement: &SyncPlacement) -> bool {
     if on_disk.is_empty() {
         return false;
@@ -37346,27 +37369,25 @@ fn sync_write_dir_checked(dir: &Path, prompts: &[Prompt], settings: &Settings, i
             // it instead of disappearing. A conflict is rare, a silent loss is not
             // acceptable. The copy's name carries a dot, so it is neither a valid
             // prompt id (the poll skips it) nor something the orphan sweep may touch.
-            let copy = dir.join(format!("{}.conflict-{}.md", p.id, now_secs()));
-            if sync_edit_unsaved(&path, &on_disk, p, &placement) && write_bytes_atomic(&copy, &on_disk) {
-                append_crash_log(&format!(
-                    "prompt-sync: {filename} was edited outside the app and in the app at the same time; the outside version was kept as {}",
-                    copy.file_name().unwrap_or_default().to_string_lossy()
-                ));
+            if sync_edit_unsaved(&path, &on_disk, p, &placement) {
+                if let Some(copy) = sync_write_conflict_copy(&dir, &p.id, "", &on_disk) {
+                    append_crash_log(&format!(
+                        "prompt-sync: {filename} was edited outside the app and in the app at the same time; the outside version was kept as {}",
+                        copy.file_name().unwrap_or_default().to_string_lossy()
+                    ));
+                }
             }
             // One more look right before the replace: the lock file is only ours, an
             // external editor never honors it, so a save that landed after the first
             // read has to end up in the conflict copy as well, not be overwritten.
             let latest = fs::read(&path).unwrap_or_default();
-            let late_copy = dir.join(format!("{}.conflict-{}-late.md", p.id, now_secs()));
-            if latest != on_disk
-                && latest != content.as_bytes()
-                && !latest.is_empty()
-                && write_bytes_atomic(&late_copy, &latest)
-            {
-                append_crash_log(&format!(
-                    "prompt-sync: {filename} was edited outside the app while it was being written; the outside version was kept as {}",
-                    late_copy.file_name().unwrap_or_default().to_string_lossy()
-                ));
+            if latest != on_disk && latest != content.as_bytes() && !latest.is_empty() {
+                if let Some(late_copy) = sync_write_conflict_copy(&dir, &p.id, "-late", &latest) {
+                    append_crash_log(&format!(
+                        "prompt-sync: {filename} was edited outside the app while it was being written; the outside version was kept as {}",
+                        late_copy.file_name().unwrap_or_default().to_string_lossy()
+                    ));
+                }
             }
             let ok = write_file_atomic(&path, &content);
             sync_lock_release(&path);
@@ -43256,6 +43277,25 @@ mod tests {
             assert_eq!(fs::read(copies[0].path()).unwrap(), bytes, "{tag}: the copy must be byte-identical");
             let _ = fs::remove_dir_all(&dir);
         }
+    }
+
+    #[test]
+    fn conflict_copies_in_the_same_second_never_overwrite_each_other() {
+        let dir = sync_tmp_dir("conflict-names");
+        let a = sync_write_conflict_copy(&dir, "p1", "", b"one").unwrap();
+        let b = sync_write_conflict_copy(&dir, "p1", "", b"two").unwrap();
+        let c = sync_write_conflict_copy(&dir, "p1", "-late", b"three").unwrap();
+        let d = sync_write_conflict_copy(&dir, "p1", "-late", b"four").unwrap();
+        let all = [&a, &b, &c, &d];
+        for (i, x) in all.iter().enumerate() {
+            for y in &all[i + 1..] {
+                assert_ne!(x, y);
+            }
+        }
+        assert_eq!(fs::read(&a).unwrap(), b"one");
+        assert_eq!(fs::read(&b).unwrap(), b"two");
+        assert_eq!(fs::read(&d).unwrap(), b"four");
+        let _ = fs::remove_dir_all(&dir);
     }
 
     fn sync_conflict_copies(dir: &Path, id: &str) -> usize {
