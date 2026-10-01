@@ -45,7 +45,7 @@ if (typeof window === "undefined") {
   };
 }
 
-const { applyFloatTheme } = require(path.join(__dirname, "..", "ui", "floattheme.js"));
+const { applyFloatTheme, inkForColor } = require(path.join(__dirname, "..", "ui", "floattheme.js"));
 
 const problems = [];
 const check = (label, actual, expected) => {
@@ -104,6 +104,20 @@ async function run() {
   check("switch off: #4a7dd8 stays white", pillFg(), "#fff");
   applyFloatTheme("dark", { accent: "#ffd54f" });
   check("switch off: #ffd54f stays white too", pillFg(), "#fff");
+
+  // A button with its own colour is judged by that colour, whatever the
+  // theme accent is.
+  themeHandler({ payload: { ink: { auto: true, threshold: 60, halo: true, haloStrength: 75 } } });
+  applyFloatTheme("dark", { accent: "#1e3a8a" });
+  check("own colour #ffe066: black text", inkForColor("#ffe066").fg, "#000");
+  check("own colour #ffe066: no halo on black text", inkForColor("#ffe066").shadow, "none");
+  check("own colour #4fa3e0: white text", inkForColor("#4fa3e0").fg, "#fff");
+  check("own colour #4fa3e0: default halo", inkForColor("#4fa3e0").shadow,
+    "0 0 2px rgba(0, 0, 0, 0.75), 0 1px 3px rgba(0, 0, 0, 0.62)");
+  check("no own colour: no ink override", inkForColor(""), null);
+  check("non-hex own colour: no ink override", inkForColor("rgba(1,2,3,1)"), null);
+  themeHandler({ payload: { ink: { auto: false, threshold: 60, halo: true, haloStrength: 75 } } });
+  check("autoInk off: own colour #ffe066 stays white", inkForColor("#ffe066").fg, "#fff");
 
   if (problems.length) {
     console.log(`${problems.length} problem(s):`);

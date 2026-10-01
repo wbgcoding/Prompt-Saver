@@ -4,7 +4,7 @@
 import { FONTS, fitText } from "./fonts.js";
 import { mediaKind, buildMediaBar, applyVideoPrefs, setMediaDefaults } from "./media.js";
 // Custom themes: shared with the folder window (floattheme.js).
-import { applyFloatTheme } from "./floattheme.js";
+import { applyFloatTheme, inkForColor, onInkChange } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
 import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT, COPY_SOUND_VOLUME_DEFAULT } from "./copyDefaults.js";
 import { COPIED_MS, RING_MIN, RING_MAX, DRAG_OUT_MODS, resolveLang, fileUri, playCopySound } from "./floatShared.js";
@@ -319,6 +319,19 @@ let copiedTimer = null;
 // width is part of the window box (see pillBox).
 let imgRatio = 0;
 let borderW = 0;
+
+// The own-colour ink on the text pill; remembered so a changed ink rule can
+// repaint it without a reload.
+let ownColor = "";
+function paintOwnInk(color) {
+  ownColor = color || "";
+  const ink = inkForColor(ownColor);
+  pill.style.color = ink ? ink.fg : "";
+  pill.style.textShadow = ink ? ink.shadow : "";
+}
+onInkChange(() => {
+  if (ownColor) paintOwnInk(ownColor);
+});
 
 // Apply name, color and media (stored still, gif or video) onto the pill.
 const videoEl = document.getElementById("video");
