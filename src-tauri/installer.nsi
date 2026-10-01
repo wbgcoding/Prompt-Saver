@@ -568,6 +568,16 @@ Function un.PageData
   ${If} ${FileExists} "$DataDirPath\*.*"
     ${GetSize} "$DataDirPath" "/S=0K" $0 $1 $2
   ${EndIf}
+  ; Back to the install's own context: SHCTX in the uninstall section must
+  ; still point at HKLM for an all-users install, or its uninstall entry,
+  ; Start menu shortcut and install-location key stay behind.
+  !if "${INSTALLMODE}" == "both"
+    ${If} $MultiUser.InstallMode == "AllUsers"
+      SetShellVarContext all
+    ${EndIf}
+  !else if "${INSTALLMODE}" == "perMachine"
+    SetShellVarContext all
+  !endif
   Call un.FormatSizeKB
   StrCpy $DataSizeStr $0
 
