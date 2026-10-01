@@ -37264,11 +37264,18 @@ fn sync_status(state: State<Db>) -> SyncStatus {
 // identity (the resolved path), never by spelling: another letter case, a mapped
 // drive against its share path or a junction all reach the same files, and deleting
 // "the old folder" after writing into it would wipe what was just written.
+//
+// Case is ignored (this is a Windows-only app, and a share's server part can keep the
+// case it was typed in). A path that cannot be resolved right now (permissions, a
+// share briefly gone) counts as "maybe the same": the only thing this answer ever
+// gates is a delete, and a delete that wrongly does not happen loses nothing.
 fn sync_same_dir(a: &Path, b: &Path) -> bool {
     let (ca, cb) = match (fs::canonicalize(a), fs::canonicalize(b)) {
         (Ok(x), Ok(y)) => (x, y),
-        _ => (a.to_path_buf(), b.to_path_buf()),
+        _ => return true,
     };
+    let fold = |p: &Path| PathBuf::from(p.to_string_lossy().to_lowercase());
+    let (ca, cb) = (fold(&ca), fold(&cb));
     ca == cb || ca.starts_with(&cb) || cb.starts_with(&ca)
 }
 
@@ -42441,6 +42448,10 @@ mod tests {
         let other = sync_tmp_dir("same-dir-other");
         assert!(!sync_same_dir(&dir, &other));
         assert!(sync_same_dir(&dir, &dir.join("inner")), "a folder inside the other counts too");
+        assert!(
+            sync_same_dir(&dir, &dir.with_file_name("ps-sync-no-such-folder-anywhere")),
+            "a path that cannot be resolved is treated as maybe the same, so nothing gets deleted"
+        );
         let _ = fs::remove_dir_all(&dir);
         let _ = fs::remove_dir_all(&other);
     }
