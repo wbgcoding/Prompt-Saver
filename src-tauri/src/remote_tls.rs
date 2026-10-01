@@ -30,7 +30,9 @@ pub(crate) const REMOTE_TLS_KEYS: [&str; 3] = [REMOTE_TLS_KEY, REMOTE_TLS_CERT, 
 // Expert switch: the certificates are valid for 825 days instead of ten years,
 // the longest an Apple device accepts. Only `set_short_lived_core` writes it.
 pub(crate) const SHORT_LIVED_KEY: &str = "remoteTlsShortLived";
-const SHORT_LIVED_DAYS: i64 = 825;
+// notBefore to notAfter spans 823 days: two days inside the 825 a device accepts,
+// since validity counts inclusively and a device may add a second.
+const SHORT_LIVED_SPAN_DAYS: i64 = 823;
 
 pub(crate) const ERR_KEY_NOT_PROTECTED: &str = "the certificate key could not be protected";
 pub(crate) const ERR_SAVE_FAILED: &str = "save-failed";
@@ -171,13 +173,13 @@ fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
 type Ymd = (i32, u8, u8);
 
 // The validity window. Default: from the start of last year to the end of the
-// year ten years ahead. Short-lived: one day back and 824 days ahead (825 days
-// in all), counted from today, so no device sees a longer window than it allows.
+// year ten years ahead. Short-lived: from yesterday, 823 days in all, so no
+// device sees a longer window than it allows.
 fn validity(short: bool) -> (Ymd, Ymd) {
     let now = now_secs();
     if short {
         let today = now.div_euclid(86_400);
-        (civil_from_days(today - 1), civil_from_days(today + SHORT_LIVED_DAYS - 1))
+        (civil_from_days(today - 1), civil_from_days(today - 1 + SHORT_LIVED_SPAN_DAYS))
     } else {
         let year = 1970 + (now / 31_556_952) as i32;
         // Starts a year back so a device with a slightly wrong clock still accepts it.
@@ -254,23 +256,8 @@ fn der_next(b: &[u8]) -> Option<(u8, &[u8], &[u8])> {
     Some((tag, &b[head..end], &b[end..]))
 }
 
-// The notAfter of a certificate, as seconds since 1970, read straight from
-// the DER (UTCTime or GeneralizedTime).
-fn cert_not_after(der: &[u8]) -> Option<i64> {
-    let (_, cert, _) = der_next(der)?;
-    let (_, tbs, _) = der_next(cert)?;
-    let mut rest = tbs;
-    let (tag, _, after) = der_next(rest)?;
-    if tag == 0xa0 {
-        rest = after; // the optional version
-    }
-    // serial, signature algorithm, issuer
-    for _ in 0..3 {
-        rest = der_next(rest)?.2;
-    }
-    let (_, validity, _) = der_next(rest)?;
-    let (_, _, after_not_before) = der_next(validity)?;
-    let (tag, text, _) = der_next(after_not_before)?;
+// One DER time (UTCTime or GeneralizedTime) as seconds since 1970.
+fn der_time(tag: u8, text: &[u8]) -> Option<i64> {
     let digits = std::str::from_utf8(text).ok()?.strip_suffix('Z')?;
     if !digits.bytes().all(|b| b.is_ascii_digit()) {
         return None;
@@ -291,11 +278,47 @@ fn cert_not_after(der: &[u8]) -> Option<i64> {
     Some(days_from_civil(year, mo, d) * 86_400 + h * 3600 + mi * 60 + se)
 }
 
-// True when the PEM certificate is past its end date at `now`. A certificate
-// whose date cannot be read counts as expired: it is replaced, never trusted blind.
+// (notBefore, notAfter) of a certificate, as seconds since 1970, read straight
+// from the DER. The certificate, its TBS part and the validity must all be
+// SEQUENCEs, otherwise nothing is read.
+fn cert_validity(der: &[u8]) -> Option<(i64, i64)> {
+    let (tag, cert, _) = der_next(der)?;
+    if tag != 0x30 {
+        return None;
+    }
+    let (tag, tbs, _) = der_next(cert)?;
+    if tag != 0x30 {
+        return None;
+    }
+    let mut rest = tbs;
+    let (tag, _, after) = der_next(rest)?;
+    if tag == 0xa0 {
+        rest = after; // the optional version
+    }
+    // serial, signature algorithm, issuer
+    for _ in 0..3 {
+        rest = der_next(rest)?.2;
+    }
+    let (tag, validity, _) = der_next(rest)?;
+    if tag != 0x30 {
+        return None;
+    }
+    let (nb_tag, nb_text, after_not_before) = der_next(validity)?;
+    let (na_tag, na_text, _) = der_next(after_not_before)?;
+    Some((der_time(nb_tag, nb_text)?, der_time(na_tag, na_text)?))
+}
+
+fn cert_not_after(der: &[u8]) -> Option<i64> {
+    cert_validity(der).map(|v| v.1)
+}
+
+// True when the PEM certificate is past its end date at `now`, or starts more
+// than a day later (made under a clock that ran ahead: every client would reject
+// it as not yet valid). A certificate whose dates cannot be read counts as
+// expired: it is replaced, never trusted blind.
 fn pem_expired(pem: &str, now: i64) -> bool {
     match CertificateDer::from_pem_slice(pem.as_bytes()) {
-        Ok(der) => cert_not_after(der.as_ref()).map_or(true, |t| t <= now),
+        Ok(der) => cert_validity(der.as_ref()).map_or(true, |(nb, na)| na <= now || nb > now + 86_400),
         Err(_) => true,
     }
 }
@@ -566,6 +589,12 @@ mod tests {
     fn leaf_not_after(id: &TlsIdentity) -> i64 {
         cert_not_after(CertificateDer::from_pem_slice(id.cert_pem.as_bytes()).unwrap().as_ref()).expect("the end date must be readable")
     }
+    fn leaf_not_before(id: &TlsIdentity) -> i64 {
+        cert_validity(CertificateDer::from_pem_slice(id.cert_pem.as_bytes()).unwrap().as_ref()).expect("the dates must be readable").0
+    }
+    fn ca_not_before(id: &TlsIdentity) -> i64 {
+        cert_validity(CertificateDer::from_pem_slice(id.ca_pem.as_bytes()).unwrap().as_ref()).expect("the dates must be readable").0
+    }
     fn ca_not_after(id: &TlsIdentity) -> i64 {
         cert_not_after(CertificateDer::from_pem_slice(id.ca_pem.as_bytes()).unwrap().as_ref()).expect("the end date must be readable")
     }
@@ -592,7 +621,11 @@ mod tests {
         let short = generate(&names(), true).unwrap();
         for end in [leaf_not_after(&short), ca_not_after(&short)] {
             assert!(end <= now + 825 * day, "longer than 825 days: {}", (end - now) / day);
-            assert!(end >= now + 822 * day, "far shorter than 825 days: {}", (end - now) / day);
+            assert!(end >= now + 820 * day, "far shorter than expected: {}", (end - now) / day);
+        }
+        for (nb, na) in [(leaf_not_before(&short), leaf_not_after(&short)), (ca_not_before(&short), ca_not_after(&short))] {
+            assert!(na - nb <= 824 * day, "the whole window must stay inside 824 days: {}", (na - nb) / day);
+            assert!(nb <= now, "a short certificate is already valid");
         }
         let long = generate(&names(), false).unwrap();
         let (y_now, _, _) = civil_from_days(now.div_euclid(day));
@@ -636,6 +669,19 @@ mod tests {
         assert!(set_short_lived_core(&mut fresh, true, &names(), |_| false).is_err());
         assert!(!fresh.ui_flags.contains_key(SHORT_LIVED_KEY));
         assert!(!fresh.ui_texts.contains_key(REMOTE_TLS_KEY));
+    }
+
+    #[test]
+    fn a_certificate_that_starts_in_the_future_is_replaced() {
+        let day = now_secs().div_euclid(86_400);
+        let (y, m, d) = civil_from_days(day + 30);
+        let (y2, m2, d2) = civil_from_days(day + 400);
+        let future = generate_span(&names(), (y, m, d), (y2, m2, d2)).unwrap();
+        assert!(pem_expired(&future.cert_pem, now_secs()));
+        let (y, m, d) = civil_from_days(day - 1);
+        let ok = generate_span(&names(), (y, m, d), (y2, m2, d2)).unwrap();
+        assert!(!pem_expired(&ok.cert_pem, now_secs()));
+        assert!(cert_validity(&[0x31, 0x00]).is_none(), "a non-SEQUENCE certificate is refused");
     }
 
     #[test]
