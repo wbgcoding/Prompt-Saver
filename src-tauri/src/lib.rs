@@ -37290,21 +37290,25 @@ fn set_sync_dir(app: AppHandle, state: State<Db>, dir: String, delete_old: bool)
     if !trimmed.is_empty() && !consume_granted_dir(Path::new(trimmed), "sync") {
         return Err("dir-not-picked".to_string());
     }
-    let (old, new_dir, write_failures) = {
+    let (old, new_dir, write_failures, enabled) = {
         let mut store = lock(&state);
         let old = sync_dir_path(&app, &store.settings);
         store.settings.ui_texts.insert("syncDir".into(), trimmed.to_string());
         save_settings(&app, &store.settings);
         // Same synchronous, one-off treatment activation gets: when this returns, the
         // files are in the new folder. Deliberately inside the lock, as before.
-        let failures = if sync_enabled(&store.settings) {
+        let enabled = sync_enabled(&store.settings);
+        let failures = if enabled {
             sync_write_all_impl(&app, &store.prompts, &store.settings)
         } else {
             0
         };
-        (old, sync_dir_path(&app, &store.settings), failures)
+        (old, sync_dir_path(&app, &store.settings), failures, enabled)
     };
-    if write_failures == 0 && !sync_same_dir(&old, &new_dir) {
+    // Whenever the folder just took a full write (also when the same folder is picked
+    // again after its drive came back) it demonstrably works: the pause and its old
+    // reason end now, not after up to ten intervals.
+    if enabled && write_failures == 0 {
         sync_health_after_dir_change(&mut sync_health_lock());
         SYNC_WAKE.notify_one();
     }
