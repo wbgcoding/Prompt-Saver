@@ -6654,15 +6654,67 @@ fn store_files_enabled(store: &Store) -> bool {
 // original is moved or deleted. Returns the stored path, or the original unchanged
 // on any problem or if it is already inside the store (never loses the reference).
 fn store_attached_file(app: &AppHandle, path: &str) -> String {
+    store_attached_file_in(&data_dir(app).join("files"), path, None)
+}
+
+// Staged copies that are on disk (or about to be) but not yet referenced by any
+// prompt in the store. sweep_orphan_files treats them as referenced.
+static PENDING_ATTACHMENTS: Mutex<Option<std::collections::HashSet<String>>> = Mutex::new(None);
+
+fn pending_key(path: &str) -> String {
+    path.replace('/', "\\").to_lowercase()
+}
+
+fn pending_attachments_contain(path: &str) -> bool {
+    let guard = PENDING_ATTACHMENTS.lock().unwrap_or_else(|e| e.into_inner());
+    guard.as_ref().is_some_and(|s| s.contains(&pending_key(path)))
+}
+
+// Owns the copies one add/update made before the store lock. While alive they are
+// "pending" (never swept). Dropped: pending entries are released, and unless
+// `commit` ran, the copies are removed again (validation failure, vanished id).
+struct StagedCopies {
+    paths: Vec<String>,
+    committed: bool,
+}
+
+impl StagedCopies {
+    fn new() -> Self {
+        StagedCopies { paths: Vec::new(), committed: false }
+    }
+    fn commit(&mut self) {
+        self.committed = true;
+    }
+    fn stage(&mut self, files_dir: &std::path::Path, path: &str) -> String {
+        store_attached_file_in(files_dir, path, Some(self))
+    }
+}
+
+impl Drop for StagedCopies {
+    fn drop(&mut self) {
+        if !self.committed {
+            for p in &self.paths {
+                let _ = fs::remove_file(p);
+            }
+        }
+        let mut guard = PENDING_ATTACHMENTS.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(set) = guard.as_mut() {
+            for p in &self.paths {
+                set.remove(&pending_key(p));
+            }
+        }
+    }
+}
+
+fn store_attached_file_in(files_dir: &std::path::Path, path: &str, staged: Option<&mut StagedCopies>) -> String {
     if path.is_empty() {
         return String::new();
     }
     let src = std::path::Path::new(path);
-    let files_dir = data_dir(app).join("files");
-    if src.starts_with(&files_dir) || !src.is_file() {
+    if src.starts_with(files_dir) || !src.is_file() {
         return path.to_string();
     }
-    if fs::create_dir_all(&files_dir).is_err() {
+    if fs::create_dir_all(files_dir).is_err() {
         return path.to_string();
     }
     let name = src
@@ -6670,9 +6722,22 @@ fn store_attached_file(app: &AppHandle, path: &str) -> String {
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "file".to_string());
     let dest = files_dir.join(format!("{}_{}", gen_id(), name));
+    let dest_str = dest.to_string_lossy().to_string();
+    // Registered BEFORE the copy so a sweep can never see the file unprotected.
+    if let Some(st) = staged {
+        PENDING_ATTACHMENTS
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get_or_insert_with(Default::default)
+            .insert(pending_key(&dest_str));
+        st.paths.push(dest_str.clone());
+    }
     match fs::copy(src, &dest) {
-        Ok(_) => dest.to_string_lossy().to_string(),
-        Err(_) => path.to_string(),
+        Ok(_) => dest_str,
+        Err(_) => {
+            let _ = fs::remove_file(&dest);
+            path.to_string()
+        }
     }
 }
 
@@ -6688,7 +6753,20 @@ fn store_attached_file(app: &AppHandle, path: &str) -> String {
 // `orphan_cleanup_enabled` + `orphan_referenced_set` inside their locked block,
 // then call this once the lock is dropped.
 fn sweep_orphan_files(app: &AppHandle, referenced: &std::collections::HashSet<String>) {
-    let entries = match fs::read_dir(data_dir(app).join("files")) {
+    sweep_orphan_files_in(&data_dir(app).join("files"), referenced, || {
+        app.try_state::<Db>().map(|state| {
+            let store = lock(&state);
+            orphan_referenced_set(&store)
+        })
+    });
+}
+
+fn sweep_orphan_files_in(
+    files_dir: &std::path::Path,
+    referenced: &std::collections::HashSet<String>,
+    live_now: impl FnOnce() -> Option<std::collections::HashSet<String>>,
+) {
+    let entries = match fs::read_dir(files_dir) {
         Ok(e) => e,
         Err(_) => return, // no store folder yet -> nothing to clean
     };
@@ -6698,29 +6776,22 @@ fn sweep_orphan_files(app: &AppHandle, referenced: &std::collections::HashSet<St
     let mut candidates: Vec<std::path::PathBuf> = Vec::new();
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.is_file() && !referenced.contains(&norm(&path.to_string_lossy())) {
+        if path.is_file() && !referenced.contains(&norm(&path.to_string_lossy())) && !pending_attachments_contain(&path.to_string_lossy()) {
             candidates.push(path);
         }
     }
     if candidates.is_empty() {
         return;
     }
-    // `referenced` is a snapshot from before the lock was released -- store_attached_file
-    // (which copies a NEW attachment into this same folder) always runs while the lock is
-    // held, so another window's add/update can land a fresh file here while this sweep is
-    // still walking the directory. Re-check every candidate against the store's CURRENT
-    // state right before deleting it: one more cheap in-memory HashSet build (no filesystem
-    // work under the lock, so the whole point of splitting this sweep out still holds),
-    // closing the window that could otherwise delete a file another window just copied in.
-    let live = match app.try_state::<Db>() {
-        Some(state) => {
-            let store = lock(&state);
-            orphan_referenced_set(&store)
-        }
-        None => return,
-    };
+    // `referenced` is a snapshot from before the lock was released, and add/update copy
+    // a NEW attachment into this same folder BEFORE the prompt that references it is in
+    // the store (StagedCopies registers those copies as pending for the whole window).
+    // Re-check every candidate against the store's CURRENT state and the pending set right
+    // before deleting it: one more cheap in-memory HashSet build (no filesystem work under
+    // the lock, so the whole point of splitting this sweep out still holds).
+    let Some(live) = live_now() else { return };
     for path in candidates {
-        if !live.contains(&norm(&path.to_string_lossy())) {
+        if !live.contains(&norm(&path.to_string_lossy())) && !pending_attachments_contain(&path.to_string_lossy()) {
             let _ = fs::remove_file(&path);
         }
     }
@@ -7109,9 +7180,11 @@ async fn add_prompt(
     };
     let mut fp = file_path.unwrap_or_default();
     let mut ip = icon_path.unwrap_or_default();
+    let mut staged_copies = StagedCopies::new();
     if store_files {
-        fp = store_attached_file(&app, &fp);
-        ip = store_attached_file(&app, &ip);
+        let files_dir = data_dir(&app).join("files");
+        fp = staged_copies.stage(&files_dir, &fp);
+        ip = staged_copies.stage(&files_dir, &ip);
     }
     // Measured once, right here, never again on a render.
     let media_source = if !fp.is_empty() { Some(fp.as_str()) } else if !ip.is_empty() { Some(ip.as_str()) } else { None };
@@ -7194,6 +7267,7 @@ async fn add_prompt(
             store.settings.active_view_mut().members.retain(|m| *m != prompt.id);
             return Err("save-failed".into());
         }
+        staged_copies.commit();
         save_settings(&app, &store.settings);
         prompt
     };
@@ -7433,8 +7507,10 @@ async fn update_prompt(
             cur,
         )
     };
-    let file_path = file_path.map(|p| if store_files { store_attached_file(&app, &p) } else { p });
-    let icon_path = icon_path.map(|p| if store_files { store_attached_file(&app, &p) } else { p });
+    let mut staged_copies = StagedCopies::new();
+    let files_dir = data_dir(&app).join("files");
+    let file_path = file_path.map(|p| if store_files { staged_copies.stage(&files_dir, &p) } else { p });
+    let icon_path = icon_path.map(|p| if store_files { staged_copies.stage(&files_dir, &p) } else { p });
     let ffprobe = ffprobe_search_path(&app);
     let staged_image_text = staged_cur.as_ref().and_then(|(cur_img, _, _)| {
         image.as_deref().is_some_and(|v| v != cur_img).then(|| {
@@ -7580,6 +7656,7 @@ async fn update_prompt(
                     }
                     return Err("save-failed".into());
                 }
+                staged_copies.commit();
                 // Snapshot the PRE-edit name/text/variants only once the
                 // edit is durably saved: inserting it before save_prompts (the old
                 // order) left a version row for an edit that never actually happened
@@ -42678,6 +42755,56 @@ mod tests {
     // NOT a fresh one -- "Allow multiple instances" lets a second launch run this
     // same sweep while a concurrently open instance still has its own snip preview
     // in active use, so only files older than STALE_TEMP_FILE_AGE are fair game.
+    fn staging_test_dir(tag: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("ps-stage-{}-{}-{}", tag, std::process::id(), gen_id()));
+        fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    // The race: a staged copy sits in <data>/files while no prompt references it yet;
+    // a concurrent sweep (whose referenced sets lack it) must leave it alone, and it
+    // must still survive once the insert completed and the pending entry is released.
+    #[test]
+    fn sweep_keeps_a_staged_copy_while_the_add_is_in_flight() {
+        let base = staging_test_dir("race");
+        let files = base.join("files");
+        let orig = base.join("orig.txt");
+        fs::write(&orig, b"data").unwrap();
+        let mut staged = StagedCopies::new();
+        let copy = staged.stage(&files, &orig.to_string_lossy());
+        assert_ne!(copy, orig.to_string_lossy());
+        assert!(Path::new(&copy).is_file());
+        let empty = std::collections::HashSet::new();
+        sweep_orphan_files_in(&files, &empty, || Some(std::collections::HashSet::new()));
+        assert!(Path::new(&copy).is_file(), "an in-flight staged copy was swept");
+        // the insert completes: the store references it, the pending entry goes away
+        staged.commit();
+        drop(staged);
+        let mut live = std::collections::HashSet::new();
+        live.insert(copy.replace('/', "\\").to_lowercase());
+        sweep_orphan_files_in(&files, &empty, || Some(live));
+        assert!(Path::new(&copy).is_file(), "a referenced copy was swept after the insert");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    // A failed add (validation error after staging) must not leave the copy behind.
+    #[test]
+    fn a_failed_add_leaves_no_staged_copy_behind() {
+        let base = staging_test_dir("fail");
+        let files = base.join("files");
+        let orig = base.join("orig.txt");
+        fs::write(&orig, b"data").unwrap();
+        let copy = {
+            let mut staged = StagedCopies::new();
+            staged.stage(&files, &orig.to_string_lossy())
+            // dropped without commit: the add failed
+        };
+        assert!(!Path::new(&copy).exists(), "the copy of a failed add stayed on disk");
+        assert!(!pending_attachments_contain(&copy), "the pending entry leaked");
+        assert!(orig.is_file(), "the user's original must never be touched");
+        let _ = fs::remove_dir_all(&base);
+    }
+
     // Structural check (no timing-based red exists for "the lock is not held
     // during the copy"): in add_prompt the copy, the probe and the OCR pass all
     // sit before the lock that inserts, and update_prompt stages the same three
@@ -42691,15 +42818,15 @@ mod tests {
             &src[a..b]
         };
         let add = body("async fn add_prompt(", "// One example prompt as the frontend supplies it");
-        let insert_lock = add.rfind("let mut store = lock(&state);").expect("insert lock");
-        for call in ["store_attached_file(&app", "probe_media_meta(", "ocr_index_text(img"] {
+        let insert_lock = add.rfind(concat!("let mut store = lock(&", "state);")).expect("insert lock");
+        for call in ["staged_copies.stage(", "probe_media_meta(", "ocr_index_text(img"] {
             let at = add.find(call).unwrap_or_else(|| panic!("{call} missing"));
             assert!(at < insert_lock, "add_prompt must run {call} before taking the insert lock");
             assert!(!add[insert_lock..].contains(call), "add_prompt must not run {call} under the insert lock");
         }
         let upd = body("async fn update_prompt(", "// List a prompt's version snapshots");
         let staged_end = upd.find("let updated = {").expect("locked section");
-        for call in ["store_attached_file(&app", "probe_media_meta(", "ocr_index_text(img"] {
+        for call in ["staged_copies.stage(", "probe_media_meta(", "ocr_index_text(img"] {
             assert!(upd[..staged_end].contains(call), "update_prompt must stage {call} before its locked section");
         }
     }
