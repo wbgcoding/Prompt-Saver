@@ -611,6 +611,11 @@ the video editor and the introduction tour ship on).
 
 ### Improved
 
+- **Demo mode speaks your language.** The sample entries, tags, tabs, folder
+  and attached files are now shown in the language the app is set to, in all
+  eleven interface languages. Starting demo mode again after a language
+  switch uses the new language.
+
 - Text on tiles, folders, view tabs, messages and floating buttons only turns
   black on genuinely light colors now; a medium color that used to flip to black
   text keeps white text instead. Both the automatic choice and the brightness

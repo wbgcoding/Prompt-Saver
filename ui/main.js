@@ -2705,7 +2705,7 @@ function flagRow(key) {
     // about to disappear, then restarts back into the real one.
     if (key === "demoMode") {
       if (enabled) {
-        try { await invoke("enable_demo_mode"); } // the app restarts on success and never returns here
+        try { await invoke("enable_demo_mode", { lang: LANG }); } // the app restarts on success and never returns here
         catch (err) { errToast(err); input.checked = false; }
       } else {
         const ok = await confirmDialog({
