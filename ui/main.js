@@ -763,6 +763,7 @@ const ERROR_MSG_KEYS = {
   "recording-busy": "recBusy",
   "save-failed": "persistFailed",
   "remote-off-not-saved": "remoteOffNotSaved",
+  "remote-tls-short-lived-has-own-command": "remoteTlsShortLivedOwnCommand",
   "remote-network-off-not-saved": "remoteNetworkOffNotSaved",
   "port-unavailable": "remotePortUnavailable",
   "the certificate key could not be protected": "remoteTlsKeyNotProtected",
