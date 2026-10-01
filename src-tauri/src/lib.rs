@@ -36628,9 +36628,23 @@ fn sync_file_known_current(path: &Path, hash: u64) -> bool {
 
 // Remember that `path` holds the content with this hash (call after a write, or
 // after a read that found it already equal).
+// A stamp younger than SYNC_STAMP_TRUST_NS is not trusted: on a file system with a
+// coarse clock (FAT/exFAT/SMB) an outside edit of the same length inside the same tick
+// would carry the very same stamp. Such a file is simply compared by content next round.
+const SYNC_STAMP_TRUST_NS: u128 = 2_000_000_000;
+
+fn sync_stamp_is_settled(stamp: &SyncStamp) -> bool {
+    let now_ns = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+    now_ns.saturating_sub(stamp.mtime_ns) >= SYNC_STAMP_TRUST_NS
+}
+
 fn sync_file_note_current(path: &Path, hash: u64) {
     if let Some(stamp) = sync_stamp_of(path) {
-        sync_written_lock().insert(sync_seen_key(path), (hash, stamp));
+        if sync_stamp_is_settled(&stamp) {
+            sync_written_lock().insert(sync_seen_key(path), (hash, stamp));
+        } else {
+            sync_written_lock().remove(&sync_seen_key(path));
+        }
     }
 }
 
@@ -42921,14 +42935,27 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         let file = dir.join("p1.md");
+        let age = |f: &Path, secs: u64| {
+            let h = fs::OpenOptions::new().write(true).open(f).unwrap();
+            h.set_times(std::fs::FileTimes::new().set_modified(SystemTime::now() - Duration::from_secs(secs))).unwrap();
+        };
         fs::write(&file, "one").unwrap();
         let h1 = sync_content_hash("one");
         assert!(!sync_file_known_current(&file, h1), "a file never noted is read once");
+        // a stamp from the last couple of seconds is not trusted (coarse file system clocks)
+        sync_file_note_current(&file, h1);
+        assert!(!sync_file_known_current(&file, h1), "a fresh stamp is compared by content, not skipped");
+        age(&file, 60);
         sync_file_note_current(&file, h1);
         assert!(sync_file_known_current(&file, h1), "unchanged file, same render: skipped");
         assert!(!sync_file_known_current(&file, sync_content_hash("two")), "a changed render is compared again");
         fs::write(&file, "edited outside").unwrap();
         assert!(!sync_file_known_current(&file, h1), "an outside edit changes the stamp and is never skipped");
+        // same length, mtime restored to the noted value: a settled stamp still matches
+        // by design, but a differing length never does
+        fs::write(&file, "edited outside!!").unwrap();
+        age(&file, 60);
+        assert!(!sync_file_known_current(&file, h1), "a different length is never trusted");
         let _ = fs::remove_dir_all(&dir);
     }
 
