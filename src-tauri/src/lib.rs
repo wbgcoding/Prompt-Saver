@@ -12125,6 +12125,7 @@ fn restore_backup_core(app: AppHandle, state: State<'_, Db>, name: String, keep:
     };
     {
         let store = lock(&state);
+        let ocr_was_on = ocr_index_flag_on(&store);
         let gfs = gfs_from_settings(&store.settings);
         // The safety snapshot is the fallback if the restore goes wrong: it must
         // carry the collected counters too, not the state of a second ago.
@@ -12160,6 +12161,14 @@ fn restore_backup_core(app: AppHandle, state: State<'_, Db>, name: String, keep:
         // session wrote. The relaunch below rebuilds the store anyway, but a write
         // slipping in before it must not trust a single one of the old hashes.
         store.forget_written_rows();
+        // A restore that brings settings with it may have switched the picture-text
+        // index off while the prompts that stay still carry its text.
+        if ocr_was_on && scope != "data" {
+            let mut fresh = load_store(&app);
+            if clear_ocr_text_if_switched_off(true, &mut fresh) {
+                save_prompts_and_trash(&app, &fresh);
+            }
+        }
     }
     Ok(())
 }
@@ -19505,6 +19514,12 @@ fn ocr_index_flag_on(store: &Store) -> bool {
 
 // Cancels a running pass, invalidates every pass in flight and erases the text in
 // prompts AND trash. Caller holds the store lock and saves when this returns true.
+// Settings that arrive from outside (a settings import, a settings restore) may
+// switch the index off: its text goes with it, like the switch itself does.
+fn clear_ocr_text_if_switched_off(was_on: bool, store: &mut Store) -> bool {
+    was_on && !ocr_index_flag_on(store) && clear_ocr_index_text(store)
+}
+
 fn clear_ocr_index_text(store: &mut Store) -> bool {
     cancel_ocr_index_backfill();
     OCR_EPOCH.fetch_add(1, Ordering::SeqCst);
@@ -33992,7 +34007,11 @@ async fn apply_settings_import(app: AppHandle, state: State<'_, Db>, path: Strin
     strip_denied_import_keys(&mut incoming);
     let (changed, settings) = {
         let mut store = lock(&state);
+        let ocr_was_on = ocr_index_flag_on(&store);
         let changed = merge_settings_only(&mut store.settings, incoming, |s| save_settings(&app, s))?;
+        if clear_ocr_text_if_switched_off(ocr_was_on, &mut store) {
+            save_prompts_and_trash(&app, &store);
+        }
         (changed, store.settings.clone())
     };
     refresh_after_import(&app, &settings);
@@ -49238,6 +49257,19 @@ mod tests {
         assert!(is_protected_folder_key("syncDir"));
         assert!(!is_protected_folder_key("copyFont"), "an ordinary string setting must stay reachable");
         assert!(!is_protected_folder_key("dataDir"), "dataDir has its own separate command and storage, not a ui_texts key");
+    }
+
+    #[test]
+    fn outside_settings_that_switch_ocr_index_off_erase_the_picture_text() {
+        let mut store = Store { prompts: vec![sync_test_prompt()], trash: Vec::new(), settings: Settings::default(), prompts_locked: false, written: Default::default() };
+        store.prompts[0].image_text = "read from a picture".into();
+        store.settings.ui_flags.insert("ocrIndex".into(), true);
+        assert!(!clear_ocr_text_if_switched_off(true, &mut store), "still on: nothing to erase");
+        assert!(!store.prompts[0].image_text.is_empty());
+        store.settings.ui_flags.insert("ocrIndex".into(), false);
+        assert!(!clear_ocr_text_if_switched_off(false, &mut store), "was already off: left alone");
+        assert!(clear_ocr_text_if_switched_off(true, &mut store));
+        assert!(store.prompts[0].image_text.is_empty());
     }
 
     #[test]
