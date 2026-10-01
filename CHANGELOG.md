@@ -1391,6 +1391,11 @@ the video editor and the introduction tour ship on).
 
 ### Security
 
+- **Imports and restores can no longer grant consent or lift locks.** A
+  settings file, a full import or a backup restore (in the app and on the
+  command line) keeps this computer's own value for the online speech
+  consent, the data folder lock and the clipboard secret skipping.
+
 - **`settings set` can no longer change access settings.** The command line
   and remote access refuse folder locations, the vault keys, the backup
   password, every remote access setting and the clipboard watcher and link

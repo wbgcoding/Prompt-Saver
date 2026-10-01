@@ -11950,7 +11950,16 @@ fn keep_machine_in_staged(target: &std::path::Path, staged: &std::path::Path) ->
         Ok(conn) => read_settings_row(&conn, "main"),
         Err(_) => None,
     };
-    let Some(local) = local else { return Ok(()) };
+    let Some(local) = local else {
+        // No settings on this machine yet: the snapshot still must not bring the
+        // denied switches along.
+        let conn = Connection::open(staged).map_err(|e| e.to_string())?;
+        if let Some(mut restored) = read_settings_row(&conn, "main") {
+            restored.ui_flags.retain(|k, _| !is_import_denied_flag(k));
+            db_write_settings(&conn, &restored).map_err(|e| e.to_string())?;
+        }
+        return Ok(());
+    };
     let conn = Connection::open(staged).map_err(|e| e.to_string())?;
     if let Some(mut restored) = read_settings_row(&conn, "main") {
         keep_machine_settings(&local, &mut restored);
@@ -33844,7 +33853,7 @@ fn settings_import_diff(current: &Settings, incoming: &SettingsOnlyExport) -> (u
 // password hash and certificate values come in through the same helper the
 // generic setters use; every other `remote*` row is covered by the prefix, so
 // a receiver setting added later is denied without touching this list.
-const IMPORT_DENIED_FLAGS: [&str; 9] = [
+const IMPORT_DENIED_FLAGS: [&str; 12] = [
     "clipWatcher",
     "remoteApi",
     "remoteNetworkFilter",
@@ -33854,6 +33863,11 @@ const IMPORT_DENIED_FLAGS: [&str; 9] = [
     "demoMode",
     "allowMultipleInstances",
     "promptSync",
+    // Consent and lock switches: a file never grants the online speech consent,
+    // lifts the data-folder lock or turns off secret skipping for the clipboard.
+    "voiceOnlineOk",
+    "dataDirLock",
+    "clipSkipSecrets",
 ];
 
 fn is_import_denied_flag(key: &str) -> bool {
@@ -49390,6 +49404,123 @@ mod tests {
         }
         s.ui_texts.insert("copyFont".into(), "Consolas".into());
         s
+    }
+
+    // The three switches that grant consent or guard the data folder: a file,
+    // backup or snapshot says whatever it likes, this machine keeps its own.
+    const CONSENT_KEYS: [&str; 3] = ["voiceOnlineOk", "dataDirLock", "clipSkipSecrets"];
+
+    fn local_consent_settings() -> Settings {
+        let mut s = Settings::default();
+        s.ui_flags.insert("voiceOnlineOk".into(), false);
+        s.ui_flags.insert("dataDirLock".into(), true);
+        s.ui_flags.insert("clipSkipSecrets".into(), true);
+        s
+    }
+
+    fn hostile_consent_settings() -> Settings {
+        let mut s = Settings::default();
+        s.ui_flags.insert("voiceOnlineOk".into(), true);
+        s.ui_flags.insert("dataDirLock".into(), false);
+        s.ui_flags.insert("clipSkipSecrets".into(), false);
+        s.ui_flags.insert("copyFlash".into(), false);
+        s
+    }
+
+    fn assert_consent_kept(s: &Settings, what: &str) {
+        assert_eq!(s.ui_flags.get("voiceOnlineOk"), Some(&false), "{what}: voiceOnlineOk");
+        assert_eq!(s.ui_flags.get("dataDirLock"), Some(&true), "{what}: dataDirLock");
+        assert_eq!(s.ui_flags.get("clipSkipSecrets"), Some(&true), "{what}: clipSkipSecrets");
+    }
+
+    #[test]
+    fn a_settings_file_cannot_set_consent_or_lock_switches() {
+        let mut live = local_consent_settings();
+        let mut file = SettingsOnlyExport::default();
+        for k in CONSENT_KEYS {
+            file.ui_flags.insert(k.into(), k == "voiceOnlineOk");
+        }
+        file.ui_flags.insert("copyFlash".into(), false);
+        let skipped = strip_denied_import_keys(&mut file);
+        assert_eq!(skipped, 3, "the three rows count as skipped");
+        merge_settings_only(&mut live, file, |_| true).unwrap();
+        assert_consent_kept(&live, "settings-only import");
+        assert_eq!(live.ui_flags.get("copyFlash"), Some(&false), "ordinary rows still apply");
+    }
+
+    #[test]
+    fn a_full_import_cannot_set_consent_or_lock_switches() {
+        let mut store = Store { prompts: vec![], trash: Vec::new(), settings: local_consent_settings(), prompts_locked: false, written: Default::default() };
+        apply_import(&mut store, Backup { prompts: vec![], settings: hostile_consent_settings() }, false, true);
+        assert_consent_kept(&store.settings, "full import");
+        assert_eq!(store.settings.ui_flags.get("copyFlash"), Some(&false));
+        // A machine that never had the rows does not receive them either.
+        let mut bare = Store { prompts: vec![], trash: Vec::new(), settings: Settings::default(), prompts_locked: false, written: Default::default() };
+        apply_import(&mut bare, Backup { prompts: vec![], settings: hostile_consent_settings() }, false, true);
+        for k in CONSENT_KEYS {
+            assert!(!bare.settings.ui_flags.contains_key(k), "{k} must not arrive");
+        }
+    }
+
+    fn consent_restore_pair(tag: &str, local: &Settings, incoming: Option<&Settings>) -> (PathBuf, PathBuf) {
+        let dir = std::env::temp_dir();
+        let target = dir.join(format!("{}-test-consent-{tag}-target.db", brand::SLUG));
+        let staged = dir.join(format!("{}-test-consent-{tag}-staged.db", brand::SLUG));
+        let t = full_schema_db(&target, "target");
+        db_write_settings(&t, local).unwrap();
+        let s = full_schema_db(&staged, "staged");
+        if let Some(i) = incoming {
+            db_write_settings(&s, i).unwrap();
+        }
+        (target, staged)
+    }
+
+    #[test]
+    fn a_settings_restore_cannot_set_consent_or_lock_switches() {
+        let (target, staged) = consent_restore_pair("sel", &local_consent_settings(), Some(&hostile_consent_settings()));
+        restore_selective(&target, &staged, "settings").unwrap();
+        let after = read_settings_row(&Connection::open(&target).unwrap(), "main").unwrap();
+        assert_consent_kept(&after, "settings-scope restore");
+        assert_eq!(after.ui_flags.get("copyFlash"), Some(&false));
+        let _ = std::fs::remove_file(&target);
+        let _ = std::fs::remove_file(&staged);
+    }
+
+    #[test]
+    fn a_whole_snapshot_restore_cannot_set_consent_or_lock_switches() {
+        // Shared by the in-app restore and the command-line standalone restore.
+        let (target, staged) = consent_restore_pair("all", &local_consent_settings(), Some(&hostile_consent_settings()));
+        keep_machine_in_staged(&target, &staged).unwrap();
+        let after = read_settings_row(&Connection::open(&staged).unwrap(), "main").unwrap();
+        assert_consent_kept(&after, "whole-snapshot restore");
+        let _ = std::fs::remove_file(&target);
+        let _ = std::fs::remove_file(&staged);
+    }
+
+    #[test]
+    fn a_whole_snapshot_restore_onto_a_machine_without_settings_drops_the_switches() {
+        let dir = std::env::temp_dir();
+        let target = dir.join(format!("{}-test-consent-none-target.db", brand::SLUG));
+        let staged = dir.join(format!("{}-test-consent-none-staged.db", brand::SLUG));
+        let _ = full_schema_db(&target, "target");
+        let s = full_schema_db(&staged, "staged");
+        db_write_settings(&s, &hostile_consent_settings()).unwrap();
+        drop(s);
+        keep_machine_in_staged(&target, &staged).unwrap();
+        let after = read_settings_row(&Connection::open(&staged).unwrap(), "main").unwrap();
+        for k in CONSENT_KEYS {
+            assert!(!after.ui_flags.contains_key(k), "{k} must not arrive");
+        }
+        assert_eq!(after.ui_flags.get("copyFlash"), Some(&false));
+        let _ = std::fs::remove_file(&target);
+        let _ = std::fs::remove_file(&staged);
+    }
+
+    #[test]
+    fn the_cli_refusal_and_the_import_denylist_are_one_list() {
+        for k in CONSENT_KEYS {
+            assert!(is_import_denied_flag(k), "{k} must be on the import denylist");
+        }
     }
 
     #[test]

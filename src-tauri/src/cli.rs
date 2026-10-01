@@ -1659,7 +1659,6 @@ fn cmd_settings_set(store: &mut Store, key: &str, value: &str) -> Outcome {
     if crate::is_protected_folder_key(key)
         || crate::is_vault_key(key)
         || key == crate::BACKUP_PW_KEY
-        || matches!(key, "voiceOnlineOk" | "dataDirLock" | "clipSkipSecrets")
         || crate::is_import_denied_flag(key)
         || crate::is_import_denied_value(key)
     {
