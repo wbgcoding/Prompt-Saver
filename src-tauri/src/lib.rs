@@ -36546,13 +36546,31 @@ fn sync_write_all_impl(app: &AppHandle, prompts: &[Prompt], settings: &Settings)
     let prompts = strip_data_dir_prefix(&sync_source_dir, data_dir_is_demo(app, &sync_source_dir), prompts);
     let prompts = prompts.as_ref();
     let dir = sync_dir_path(app, settings);
-    sync_write_dir(&dir, prompts, settings)
+    // `prompts` is a snapshot and the write can take a while: right before a file is
+    // swept, ask whether the library holds that id by now (the poll may have imported
+    // it meanwhile). A store that is busy right now counts as "maybe", which only
+    // postpones the sweep to the next write.
+    let live = |id: &str| match app.try_state::<Db>() {
+        Some(state) => match state.try_lock() {
+            Ok(store) => store.prompts.iter().any(|p| p.id == id),
+            Err(std::sync::TryLockError::Poisoned(e)) => e.into_inner().prompts.iter().any(|p| p.id == id),
+            Err(std::sync::TryLockError::WouldBlock) => true,
+        },
+        None => true,
+    };
+    sync_write_dir_checked(&dir, prompts, settings, &live)
 }
 
 // The file half of sync_write_all_impl: one call writes every eligible prompt into
 // `dir`, then sweeps what this process knows to be orphaned. Free of any window or
 // state access so a test can run it against a temp folder.
 fn sync_write_dir(dir: &Path, prompts: &[Prompt], settings: &Settings) -> usize {
+    sync_write_dir_checked(dir, prompts, settings, &|_| false)
+}
+
+// `is_live` is asked right before a file would be swept: true means the library holds
+// that id now, so the file is not an orphan after all.
+fn sync_write_dir_checked(dir: &Path, prompts: &[Prompt], settings: &Settings, is_live: &dyn Fn(&str) -> bool) -> usize {
     let dir = dir.to_path_buf();
     if let Err(e) = fs::create_dir_all(&dir) {
         append_crash_log(&format!("prompt-sync: the sync folder could not be created: {e}"));
@@ -36615,7 +36633,7 @@ fn sync_write_dir(dir: &Path, prompts: &[Prompt], settings: &Settings) -> usize 
         sync_known_note(&path);
         wanted.insert(filename);
     }
-    sync_sweep_orphans(&dir, &wanted);
+    sync_sweep_orphans_checked(&dir, &wanted, is_live);
     failed
 }
 
@@ -36710,6 +36728,10 @@ fn spawn_sync_write_all(app: &AppHandle, store: &Store) {
 // documents. A document without our `---` frontmatter is never imported by
 // sync_poll_once either, so deleting it would destroy data the app does not own.
 fn sync_sweep_orphans(dir: &Path, wanted: &std::collections::HashSet<String>) {
+    sync_sweep_orphans_checked(dir, wanted, &|_| false);
+}
+
+fn sync_sweep_orphans_checked(dir: &Path, wanted: &std::collections::HashSet<String>, is_live: &dyn Fn(&str) -> bool) {
     let Ok(entries) = fs::read_dir(dir) else { return };
     for e in entries.flatten() {
         let name = e.file_name().to_string_lossy().to_string();
@@ -36739,7 +36761,8 @@ fn sync_sweep_orphans(dir: &Path, wanted: &std::collections::HashSet<String>) {
         let ours = read_text_capped(&path, MAX_SYNC_MD_BYTES)
             .and_then(|c| parse_frontmatter(&c))
             .is_some_and(|(fields, _)| md_is_ours(&fields));
-        if ours {
+        let stem = name.trim_end_matches(".md");
+        if ours && !is_live(stem) {
             let _ = fs::remove_file(&path);
             sync_known_lock().remove(&sync_seen_key(&path));
         }
@@ -42310,6 +42333,20 @@ mod tests {
         sync_seen_lock().insert(sync_seen_key(&path), SyncSeen { stamp, handled: false });
         sync_write_dir(&dir, &[a], &Settings::default());
         assert!(path.exists(), "an edit nobody has read must not be swept");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sync_sweep_spares_a_file_whose_prompt_came_back_meanwhile() {
+        let dir = sync_tmp_dir("sweep-live");
+        let mut a = sync_test_prompt();
+        a.id = "a".into();
+        let mut b = sync_test_prompt();
+        b.id = "b".into();
+        sync_write_dir(&dir, &[a.clone(), b], &Settings::default());
+        // A stale snapshot without b, while the library holds b by now (imported).
+        sync_write_dir_checked(&dir, &[a], &Settings::default(), &|id| id == "b");
+        assert!(dir.join("b.md").exists(), "a file whose prompt is live again must not be swept");
         let _ = fs::remove_dir_all(&dir);
     }
 
