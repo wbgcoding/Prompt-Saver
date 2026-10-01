@@ -39,7 +39,7 @@ const label = (lang, key) => labels[lang][key];
 
   const problems = [];
   let checked = 0;
-  const PREFIX = { en: "Expert menu", de: "Experten-Menü" };
+  const PREFIX = { en: "Expert menu", de: "Expertenmenü" };
   for (const lang of ["en", "de"]) {
     // "Expert menu → Tab → Group" (the group part is optional), ended by . , ; " or the end.
     const re = new RegExp(`${PREFIX[lang]} → ([^→.,;"]+?)(?: → ([^.,;"→]+?))?(?=[.,;"]|$)`, "g");

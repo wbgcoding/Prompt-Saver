@@ -756,10 +756,9 @@ it has run for the guess to mean something, both switchable off.
 
 ### Data maintenance
 
-Duplicate finder, trash (with its own retention setting), CSV/TXT export, and
-full backup export/import, all reached from the expert menu's data group. The
-duplicate finder also has a shortcut in the header of All prompts, so it does
-not take opening the expert menu to find it.
+Trash (with its own retention setting), CSV/TXT export, and full backup
+export/import, all reached from the expert menu's data group. The duplicate
+finder is opened from the "Find duplicates" button in All prompts.
 
 "Recent messages" keeps a short list of error messages that flashed by in a
 toast, with time and place; copy or clear the list from its window. Settings
@@ -1053,7 +1052,7 @@ Drei Beispielkacheln (E-Mail mit Platzhaltern, Bild, Markdown-Vorlage) sind beim
 ersten Start bereits da; ein Button über dem Raster entfernt sie mit einem Klick.
 
 **Einstellungen**: Das Zahnrad in der Kopfzeile öffnet das Einstellungsfenster
-mit den alltäglichen Entscheidungen; alles Optionale liegt im Experten-Menü, das
+mit den alltäglichen Entscheidungen; alles Optionale liegt im Expertenmenü, das
 sich im selben Fenster öffnet. Dort stehen Sprache, Theme, Textgröße und Schriftart
 der Kacheln, ob das Fenster im Vordergrund bleibt, mit Windows startet, im
 Hintergrund startet und sich beim Schließen in den Hintergrund legt, der globale
@@ -1067,7 +1066,7 @@ Löschen entfernt alle Daten und fragt vorher nach.
 Beispielkacheln; der letzte Schritt bietet an, Screenshot-Editor, Farbpipette,
 OCR oder Spracheingabe gleich einzuschalten; geschrieben wird erst, wenn die
 Tour tatsächlich beendet ist. Escape oder „Überspringen" fragt zuerst nach, statt
-sofort zu schließen. Jederzeit erneut aufrufbar über das Experten-Menü: dort
+sofort zu schließen. Jederzeit erneut aufrufbar über das Expertenmenü: dort
 wirkt ein Schalter auf dem letzten Schritt sofort statt erst bei „Fertig".
 
 **Kacheln anlegen**: Dateianhang, Screenshot-Werkzeug, Farbpipette (aus),
@@ -1075,7 +1074,7 @@ Ziehen & Ablegen.
 
 **Platzhalter**: `{#{Name}#}` im Text öffnet beim Kopieren ein Popup
 für jeden Wert. Dynamische Platzhalter (`{#{date}#}`, `{#{time}#}`,
-`{#{clipboard}#}`) füllen sich selbst. Feste Werte (im Experten-Menü, aus)
+`{#{clipboard}#}`) füllen sich selbst. Feste Werte (im Expertenmenü, aus)
 schlagen für einen passenden Namen eine gepflegte Liste von Werten vor, nur
 als Platzhaltertext im Feld, mit einer kleinen Stecknadel markiert, nie
 eingesetzt, bevor er getippt oder übernommen wird.
@@ -1089,19 +1088,19 @@ Notizen (Markdown-Vorschau und Notizen standardmäßig aus). Bei einer Datei-Kac
 mit eigenem Vorschaubild: das Bild über der Dateizeile ist nur die Kachel-Vorschau,
 der Anhang darunter ist eine eigene Sache, kopiert wird immer nur der Dateipfad.
 Ein Anhang als reiner Text, Markdown, JSON oder CSV zeigt seinen Anfang direkt
-unter der Dateizeile (im Experten-Menü abschaltbar, dort auch einstellbar, wie
+unter der Dateizeile (im Expertenmenü abschaltbar, dort auch einstellbar, wie
 viele Kilobyte gelesen werden). Immer als reiner Text, nie ausgeführt, also
 zeigt eine Markdown-Datei mit echter Formatierung trotzdem ihren rohen Quelltext.
 
 Der offene Editor sichert seinen Text alle paar Sekunden als Entwurf (standardmäßig
-an, der Abstand im Experten-Menü einstellbar), damit ein Absturz oder ein
+an, der Abstand im Expertenmenü einstellbar), damit ein Absturz oder ein
 geschlossenes Fenster nie ungesicherte Arbeit verliert. Gesichert wird nur der
 Text, nie ein angehängtes Bild, und Speichern oder Abbrechen entfernt den
 Entwurf sofort wieder. Ist beim nächsten Start noch ein Entwurf vorhanden, wird
 einmal gefragt, ob er wiederhergestellt werden soll.
 
 **Das Raster**: freie Platzierung, standardmäßig bis 20×20 Zellen (im
-Experten-Menü bis 200×200 einstellbar), eigenes Layout je Ansicht. Eine Kachel
+Expertenmenü bis 200×200 einstellbar), eigenes Layout je Ansicht. Eine Kachel
 auf einen Ansichtsreiter über dem Raster gezogen verschiebt sie in diese
 Ansicht, mit gedrückter Strg-Taste wird stattdessen kopiert und sie bleibt in
 beiden. Über einer eingeklappten Ansichtsgruppe verweilt klappt diese nach
@@ -1122,7 +1121,7 @@ machbarer Schritt.
 **Bildschirmaufnahme**: nimmt ein Fenster, einen Monitor oder einen gezogenen
 Bereich als Video auf, über den Aufnahme-Button neben dem Screenshot-Werkzeug.
 Eine Bereichsaufnahme zeigt einen dünnen Rahmen um den Bereich; er erscheint nie
-im Video, und das Experten-Menü schaltet ihn ab oder ändert seine Farbe.
+im Video, und das Expertenmenü schaltet ihn ab oder ändert seine Farbe.
 Aufgenommen wird immer MP4 (H.264); drei Qualitätsstufen wählen davor die
 Bitrate: Klein (4000 kbps), Hoch (12000 kbps, Standard) und Verlustfrei; dabei
 wird mit der aktuellen Bitrate aufgenommen und die Aufnahme danach automatisch
@@ -1169,10 +1168,10 @@ Abbrechen) statt einer Vorschau; eine fehlgeschlagene oder abgebrochene
 Umwandlung fällt immer auf die unangetastete Originalaufnahme zurück.
 Schließt sich das aufgenommene Fenster von selbst, stoppt die Aufnahme
 automatisch und behält, was bis dahin aufgenommen wurde. Der
-Aufräumen-Dialog im Aufnahmeordner (Experten-Menü) kann mehrere fertige
+Aufräumen-Dialog im Aufnahmeordner (Expertenmenü) kann mehrere fertige
 Aufnahmen auch in einem Rutsch exportieren: Häkchen setzen, dann Format,
 Qualität und Zielordner für alle zusammen wählen. Wie viele davon
-gleichzeitig laufen, ist im Experten-Menü einstellbar. Die Aufnahmeordner-Zeile
+gleichzeitig laufen, ist im Expertenmenü einstellbar. Die Aufnahmeordner-Zeile
 im Expertenmenü zeigt außerdem, wie viele Videos darin liegen und wie viel
 Platz sie belegen, mit einem „Aufräumen…"-Button daneben: 7, 30 oder 90 Tage
 wählen, die genaue Dateiliste und die frei werdende Größe prüfen, dann
@@ -1250,7 +1249,7 @@ richten sich Farbe, Stärke, Deckkraft und Schriftgröße einer neuen
 Überlagerung außerdem nach dem, was für dieselbe Art (Bild, Rahmen, Text,
 Verpixeln oder Spotlight) zuletzt benutzt wurde, auch über einen Neustart
 hinweg; ein Expertenschalter stellt stattdessen wieder feste Vorgabewerte ein.
-Das Experten-Menü legt außerdem die Anfangsbreite des Textumrisses, die Farbe
+Das Expertenmenü legt außerdem die Anfangsbreite des Textumrisses, die Farbe
 einer gedrückten Taste in einer neuen Tastenüberlagerung und die
 Anfangslautstärke einer neu eingefügten Videoüberlagerung fest.
 
@@ -1349,10 +1348,10 @@ zu häufiges Einfügen pausiert die Sitzung mit einem Hinweis statt zu wiederhol
 
 **Kopieren**: Verketten (mehrere verschiedene Kacheln als ein Text, anders als
 Rotation oben; auch direkt über ein Kettensymbol an der Kachel, einzeln
-abschaltbar unter Kette im Experten-Menü). Eine Kette bleibt beim Wechsel in ein
+abschaltbar unter Kette im Expertenmenü). Eine Kette bleibt beim Wechsel in ein
 anderes Programm bestehen und endet erst durch erneutes Klicken auf den
 Ketten-Button oder Strg+V im App-Fenster. Was zwischen zwei verketteten
-Kacheln steht, legt das Experten-Menü fest (ab Werk eine Leerzeile). Beim Verketten zeigt
+Kacheln steht, legt das Expertenmenü fest (ab Werk eine Leerzeile). Beim Verketten zeigt
 eine Leiste über dem Raster die gewählten
 Schritte der Reihe nach, mit Marken für die Platzhalter, die jeder Schritt
 braucht und die er selbst füllt; ein Schritt ohne Antwort aus einem früheren
@@ -1387,7 +1386,7 @@ mit eigenem Hotkey zeigt ein kleines Tastatursymbol.
 Hauptfensters, über jeder anderen App.
 Ein Button, dessen gespeicherter Bildschirm nicht mehr angeschlossen ist, öffnet sich
 auf dem Hauptbildschirm, als geparkt markiert, und springt von selbst zurück, sobald
-dieser Bildschirm wieder da ist. Eine Aktion im Experten-Menü holt alle schwebenden
+dieser Bildschirm wieder da ist. Eine Aktion im Expertenmenü holt alle schwebenden
 Fenster auf einmal auf den Hauptbildschirm.
 
 **Ordner:** eine Geste an drei Stellen, ein Ziehen auf ein anderes fasst es zu
@@ -1427,7 +1426,7 @@ lässt sich der Schatten abschalten oder seine Stärke einstellen.
 `tag:`/`var:`-Suchpräfixe (mit `-` auch verneint). Ein Stern neben dem Suchfeld
 speichert Anfrage, Tag-Filter und Sortierung als Kachel darüber; Rechtsklick
 bietet Umbenennen und Löschen, Ziehen sortiert die Zeile um. Standardmäßig
-höchstens fünf, im Experten-Menü einstellbar. Ein Umschalter neben dem
+höchstens fünf, im Expertenmenü einstellbar. Ein Umschalter neben dem
 Typfilter stellt die Liste als Kacheln dar: großes Vorschaubild, Name
 darunter, sonst nichts. Klick, Doppelklick, Rechtsklickmenü und
 Mehrfachauswahl verhalten sich genau wie in der Liste. Der Umschalter merkt
@@ -1441,8 +1440,8 @@ die Markierung über Gruppengrenzen hinweg; Eingabetaste löst die passende
 Aktion aus: kopiert einen Prompt oder Verlaufseintrag, öffnet einen Anhang,
 wechselt die Ansicht, öffnet und markiert eine Einstellung, oder öffnet das
 passende Hilfethema. Das Feld merkt sich die letzten Suchen (ab Werk fünf,
-im Experten-Menü einstellbar, bei 0 keine) und zeigt sie, wenn es leer ist. Escape, ein Klick daneben oder das Symbol schließen
-die Überlagerung wieder. Ein Schalter im Experten-Menü stellt sie ab, dazu
+im Expertenmenü einstellbar, bei 0 keine) und zeigt sie, wenn es leer ist. Escape, ein Klick daneben oder das Symbol schließen
+die Überlagerung wieder. Ein Schalter im Expertenmenü stellt sie ab, dazu
 ein Wert für die Trefferzahl je Gruppe vor „weitere anzeigen".
 
 **Tags**: freie Schlagwörter, UND/ODER-Filter.
@@ -1492,7 +1491,7 @@ Ein einzelner Prompt lässt sich im Editor als vertraulich markieren
 (standardmäßig aus). Sein Text und seine Varianten werden dann mit einem
 Tresor-Passwort verschlüsselt, das einmal je Sitzung abgefragt wird, sobald
 zum ersten Mal ein vertraulicher Prompt geöffnet oder kopiert wird, und beim
-Beenden oder nach einer im Experten-Menü einstellbaren Ruhezeit wieder
+Beenden oder nach einer im Expertenmenü einstellbaren Ruhezeit wieder
 vergessen wird (Vorgabe: erst beim Beenden). Ein vergessenes Tresor-Passwort
 bedeutet den endgültigen Verlust dieser Einträge: Es gibt keine
 Wiederherstellung, und der Einrichtungsdialog sagt das, bevor er weitermachen
@@ -1520,7 +1519,7 @@ sagt das genauso: einmal als Hinweis, und als dauerhafte Zeile in dieser
 Datenschutz-Gruppe, solange der letzte Speichervorgang fehlschlägt; sie
 verschwindet von selbst, sobald wieder erfolgreich gespeichert wird.
 
-**Vorführung**: Ein Schalter im Experten-Menü (Tab System) schaltet das
+**Vorführung**: Ein Schalter im Expertenmenü (Tab System) schaltet das
 ganze Fenster auf einen mitgelieferten Beispielbestand um, der möglichst
 viele Funktionen auf einmal zeigt: Prompts mit und ohne Bild, ein
 rotierender, zwei einfache Prompts für den Anfang einer Kette, ein
@@ -1541,9 +1540,8 @@ Lange Vorgänge (Export, Umwandlung, ffmpeg-Download, Backup, Import) füllen
 das Taskleistensymbol und zeigen ab einer eingestellten Schwelle „noch etwa …",
 beides abschaltbar.
 
-**Datenwartung**: Duplikatfinder, Papierkorb, Import/Export. Der Duplikatfinder
-hat zusätzlich eine Abkürzung in der Kopfleiste von „Alle Prompts“, damit man
-dafür nicht erst das Expertenmenü öffnen muss.
+**Datenwartung**: Papierkorb, Import/Export. Den Duplikatfinder öffnet der
+Button „Duplikate finden“ in „Alle Prompts“.
 „Letzte Meldungen“ hält eine kurze Liste der Fehlermeldungen fest, die nur kurz als
 Hinweis erschienen, mit Zeit und Ort; die Liste lässt sich in ihrem Fenster kopieren
 oder leeren. Die Einstellungen allein lassen sich in derselben Gruppe in eine Datei
@@ -1632,7 +1630,7 @@ geschieht nie stillschweigend:
   unter dem Ordner im Expertenmenü nennt den letzten gelesenen Stand, die Zahl
   der Dateien und den Grund der Pause.
 
-**Das Experten-Menü**: jede Funktion hat einen Schalter mit ihren Parametern
+**Das Expertenmenü**: jede Funktion hat einen Schalter mit ihren Parametern
 direkt darunter. Die Suche durchsucht alle Tabs auf einmal; ausgeschaltete
 Funktionen tragen ein kleines Punkt-Abzeichen. Zurücksetzen auf drei Ebenen:
 ein Wert, eine ganze Gruppe, oder alles auf einmal.
@@ -1650,7 +1648,7 @@ Profil schreibt einmal und bleibt danach kein eigener Zustand.
 (an), Enter oder Leertaste kopiert die fokussierte Kachel.
 
 **Wo die Daten liegen**: eine lokale SQLite-Datenbank (plus ihre kleine
-WAL-Datei). Installiert: unter AppData, im Experten-Menü einsehbar und
+WAL-Datei). Installiert: unter AppData, im Expertenmenü einsehbar und
 änderbar. Portabel: direkt neben der exe. Der Wechsel zwischen beiden wird
 erkannt und als einmalige Migration angeboten.
 
@@ -1665,7 +1663,7 @@ alles nur lesend und zeigt das dauerhaft in einer Kopfzeile, damit nichts
 still verloren geht, während eine länger nicht aufgefrischte Sperre (der
 andere Rechner ist vermutlich abgestürzt oder geschlossen) automatisch
 übernommen wird. Der zugehörige Schalter, standardmäßig an, liegt im
-Experten-Menü neben dem Datenordner-Feld. Das ist ein Sicherheitsnetz, kein
+Expertenmenü neben dem Datenordner-Feld. Das ist ein Sicherheitsnetz, kein
 Weg, die Bibliothek über Computer hinweg zu teilen: dafür ist die
 Markdown-Ordnersynchronisierung weiter unten der gebaute Weg.
 
@@ -1689,7 +1687,7 @@ Erfolg, 1 falscher Aufruf, 2 nicht gefunden, 3 Bestand gesperrt oder nicht
 erreichbar, 4 abgelehnt (fehlendes `--yes`, oder ein Wert, der die Prüfung
 nicht bestanden hat). Vollständige Befehlsliste: `prompt-saver.exe --help`.
 
-**Fernzugriff & Links**: zwei Schalter im Experten-Menü, beide
+**Fernzugriff & Links**: zwei Schalter im Expertenmenü, beide
 standardmäßig aus. `promptsaver://open/<id>` holt eine Kachel ins geöffnete
 Fenster, `promptsaver://copy/<id>` kopiert sie, genau wie der Kopieren-Button.
 Ein Link kann nie etwas löschen oder ändern, eine unbekannte id tut einfach
@@ -1751,9 +1749,9 @@ Programm, nur ihr Button „Von GitHub aktualisieren" braucht Netz. Über den
 
 **Häufige Fragen**: Bildschirmaufnahme dieser App leer? Der
 Datenschutz-Ausschluss wirkt wie vorgesehen, mit "Screenshots von Prompt
-Saver erlauben" im Experten-Menü aufhebbar. App
+Saver erlauben" im Expertenmenü aufhebbar. App
 startet nicht? Die WebView2-Laufzeit fehlt, der Installer bietet sie an.
-Einstellung nicht gefunden? Die Suche im Experten-Menü durchsucht alle Tabs
+Einstellung nicht gefunden? Die Suche im Expertenmenü durchsucht alle Tabs
 auf einmal. Hotkey tut nichts? Eine andere App hält die Kombination
 vermutlich schon.
 
@@ -1772,7 +1770,7 @@ von Daten, die diese App selbst aufhebt (Papierkorb, Kopierverlauf,
 Zwischenablage-Eingang, Aufnahmen, verworfene Aufnahmen, temporäre Exporte
 und unfertige Bearbeitungsstände), mit dem aktuellen Stand, wie lange er
 bleibt, einem Button zum sofortigen Aufräumen und einem Button, der direkt zur
-zugehörigen Einstellung im Experten-Menü springt. Die Zahlen werden im
+zugehörigen Einstellung im Expertenmenü springt. Die Zahlen werden im
 Hintergrund ermittelt und mit dem Zeitpunkt der Messung beschriftet, genau
 wie beim Speicherbereich darüber, nicht bei jedem Öffnen neu berechnet. Zu
 jedem Backup in der Liste lässt sich auf Wunsch auch der volle Inhalt
@@ -1784,7 +1782,7 @@ nach Namen und nach jeder Spalte sortierbar, mit einem Button, um genau
 diesen einen Prompt direkt aus der Liste wiederherzustellen statt der
 ganzen Backup.
 
-**Eigenständig: Schnellstarter.** Strg+Alt+P, unscharfe Suche, sofortiges Kopieren. Wie viele Treffer er zeigt, stellt das Experten-Menü ein (ab Werk 8).
+**Eigenständig: Schnellstarter.** Strg+Alt+P, unscharfe Suche, sofortiges Kopieren. Wie viele Treffer er zeigt, stellt das Expertenmenü ein (ab Werk 8).
 
 **Eigenständig: Mehrfachansichten.** Mehrere Rasterseiten, Ansichtsgruppen als Tabs.
 
