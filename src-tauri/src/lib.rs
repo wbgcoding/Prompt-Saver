@@ -6021,6 +6021,45 @@ fn decode_image<R: std::io::BufRead + std::io::Seek>(reader: image::ImageReader<
     reader.decode().ok()
 }
 
+// Decode for text recognition: the picture as a viewer shows it, upright. Phone
+// photos are stored sideways with an EXIF orientation flag that the decoder only
+// reports, it does not apply it.
+fn decode_image_oriented<R: std::io::BufRead + std::io::Seek>(reader: image::ImageReader<R>) -> Option<image::DynamicImage> {
+    decode_image_with_orientation(reader).map(|(img, _)| img)
+}
+
+// The upright image plus the transform that was applied (NoTransforms when the file
+// carries none), so a caller can tell whether the original pixels differ.
+fn decode_image_with_orientation<R: std::io::BufRead + std::io::Seek>(
+    reader: image::ImageReader<R>,
+) -> Option<(image::DynamicImage, image::metadata::Orientation)> {
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(MAX_DECODE_DIM);
+    limits.max_image_height = Some(MAX_DECODE_DIM);
+    decode_image_with_orientation_limits(reader, limits)
+}
+
+fn decode_image_with_orientation_limits<R: std::io::BufRead + std::io::Seek>(
+    reader: image::ImageReader<R>,
+    limits: image::Limits,
+) -> Option<(image::DynamicImage, image::metadata::Orientation)> {
+    let mut reader = reader.with_guessed_format().ok()?;
+    let mut budget = limits.clone();
+    reader.limits(limits);
+    let mut decoder = reader.into_decoder().ok()?;
+    // from_decoder skips the allocation reservation that ImageReader::decode makes,
+    // so charge the decoded size against the cap here.
+    budget.reserve(image::ImageDecoder::total_bytes(&decoder)).ok()?;
+    let orientation = image::ImageDecoder::orientation(&mut decoder).unwrap_or(image::metadata::Orientation::NoTransforms);
+    let mut img = image::DynamicImage::from_decoder(decoder).ok()?;
+    img.apply_orientation(orientation);
+    Some((img, orientation))
+}
+
+fn decode_image_mem_oriented(bytes: &[u8]) -> Option<image::DynamicImage> {
+    decode_image_oriented(image::ImageReader::new(std::io::Cursor::new(bytes)))
+}
+
 fn decode_image_mem(bytes: &[u8]) -> Option<image::DynamicImage> {
     decode_image(image::ImageReader::new(std::io::Cursor::new(bytes)))
 }
@@ -15504,14 +15543,40 @@ struct SnipModeState(Mutex<SnipMode>);
 // Overlay preview prepared in the background the instant the desktop is frozen,
 // so the (heavy) JPEG encode overlaps WebView creation instead of running after
 // it. None = still encoding, Some(None) = encode failed, Some(Some) = ready.
+// Each ready entry carries the session generation its encode belonged to.
+type SnipPreviewSlot = Option<(u64, Option<SnipBg>)>;
 #[derive(Clone)]
-// Frozen-desktop preview. None = still encoding, Some(None) = failed, Some(Some) = ready.
-struct SnipPreview(Arc<Mutex<Option<Option<SnipBg>>>>);
+struct SnipPreview(Arc<Mutex<SnipPreviewSlot>>);
+
+// Store a finished preview encode, unless a newer session has started since: a slow
+// encode of a cancelled snip must never become the next snip's background.
+fn preview_slot_store<T>(slot: &mut Option<(u64, T)>, gen_now: u64, gen_of_encode: u64, value: T) -> bool {
+    if gen_of_encode != gen_now {
+        return false;
+    }
+    *slot = Some((gen_of_encode, value));
+    true
+}
 
 // True while a snip session is on screen (between open_snip and capture/cancel).
 // The overlay window itself is kept alive and reused, so this flag: not the
 // window's existence: is what tells open_snip a snip is already in progress.
 static SNIP_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+// Bumped by begin_capture every time a session starts. A capture that is already
+// running when the session is cancelled (and maybe a new one started) compares the
+// number it saw at its start, so it can tell that its session is gone and must not
+// copy, save, announce or close anything.
+static SNIP_GEN: AtomicU64 = AtomicU64::new(0);
+
+// True while the session a capture started in is still the running one.
+fn finalize_allowed(gen_at_start: u64, gen_now: u64, active: bool) -> bool {
+    active && gen_at_start == gen_now
+}
+
+fn snip_session_current(gen_at_start: u64) -> bool {
+    finalize_allowed(gen_at_start, SNIP_GEN.load(Ordering::SeqCst), SNIP_ACTIVE.load(Ordering::SeqCst))
+}
 
 // The running session is a colour pick (loupe overlay) rather than a region
 // snip. Both share the freeze + overlay pipeline; only the overlay's mode differs.
@@ -15570,6 +15635,9 @@ fn close_all_snip(app: &AppHandle) {
     }
     restore_app_windows_after_snip(app);
     remove_snip_preview();
+    // Ending a session invalidates every capture still running for it at once, so a
+    // late one never ends, copies or announces on behalf of the next session.
+    SNIP_GEN.fetch_add(1, Ordering::SeqCst);
     SNIP_ACTIVE.store(false, Ordering::SeqCst);
     PICK_ACTIVE.store(false, Ordering::SeqCst);
     // Every path that ends a snip session (capture, cancel, window click)
@@ -15635,15 +15703,17 @@ fn set_snip_overlay_hidden(app: &AppHandle, hidden: bool) {
 static SNIP_PREVIEW_SEQ: AtomicU64 = AtomicU64::new(0);
 static SNIP_PREVIEW_FILE: Mutex<Option<PathBuf>> = Mutex::new(None);
 
-fn write_snip_preview(jpeg: &[u8]) -> Option<String> {
+// None when the file could not be written or when the session `gen` belongs to is
+// gone: a stale encode must never replace (and delete) the newer session's preview.
+fn write_snip_preview(jpeg: &[u8], gen: u64) -> Option<String> {
     let seq = SNIP_PREVIEW_SEQ.fetch_add(1, Ordering::Relaxed);
     let path = std::env::temp_dir().join(format!("{}-snip-{}.jpg", brand::TEMP_PREFIX, seq));
+    let mut slot = SNIP_PREVIEW_FILE.lock().unwrap_or_else(|e| e.into_inner());
+    if SNIP_GEN.load(Ordering::SeqCst) != gen {
+        return None;
+    }
     fs::write(&path, jpeg).ok()?;
-    if let Some(old) = SNIP_PREVIEW_FILE
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .replace(path.clone())
-    {
+    if let Some(old) = slot.replace(path.clone()) {
         let _ = fs::remove_file(old);
     }
     Some(path.to_string_lossy().into_owned())
@@ -16341,6 +16411,7 @@ fn build_snip_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String> {
     let app_evt = app.clone();
     win.on_window_event(move |event| {
         if matches!(event, WindowEvent::Destroyed) && SNIP_ACTIVE.load(Ordering::SeqCst) {
+            SNIP_GEN.fetch_add(1, Ordering::SeqCst);
             SNIP_ACTIVE.store(false, Ordering::SeqCst);
             restore_app_windows_after_snip(&app_evt);
         }
@@ -16439,6 +16510,7 @@ async fn begin_capture(
         SNIP_ACTIVE.store(true, Ordering::SeqCst);
     }
     PICK_ACTIVE.store(pick, Ordering::SeqCst);
+    let gen = SNIP_GEN.fetch_add(1, Ordering::SeqCst) + 1;
     // Loupe/quality/delay settings are read once here, in both capture modes,
     // while nothing else holds the store.
     let (cfg, hist_max, snip_q, snip_delay, hide_app) = app
@@ -16504,9 +16576,13 @@ async fn begin_capture(
     let slot = preview.0.clone();
     *slot.lock().unwrap_or_else(|e| e.into_inner()) = None;
     tauri::async_runtime::spawn_blocking(move || {
+        // A newer session already owns the slot (and the preview file): nothing to do.
+        if SNIP_GEN.load(Ordering::SeqCst) != gen {
+            return;
+        }
         // Encode the capture at NATIVE resolution: pixel-sharp overlay, no downscale.
         let bg = encode_snip_jpeg(enc_img.as_raw(), total_w, total_h, if pick { PICK_Q } else { snip_q }).map(|j| {
-            let (src, is_file) = match write_snip_preview(&j) {
+            let (src, is_file) = match write_snip_preview(&j, gen) {
                 Some(path) => (path, true),
                 None => (format!("data:image/jpeg;base64,{}", base64_encode(&j)), false),
             };
@@ -16531,7 +16607,8 @@ async fn begin_capture(
                 origin_y: min_y,
             }
         });
-        *slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(bg);
+        let gen_now = SNIP_GEN.load(Ordering::SeqCst);
+        preview_slot_store(&mut slot.lock().unwrap_or_else(|e| e.into_inner()), gen_now, gen, bg);
     });
 
     // Reuse the overlay if it already exists. A long-idle HIDDEN WebView2 is heavily
@@ -16633,6 +16710,42 @@ fn snip_should_begin() -> bool {
     SNIP_ACTIVE.load(Ordering::SeqCst)
 }
 
+// Rect (x, y, width, height) the overlay hit-tests and highlights for a window:
+// its visible frame when known, else the client rect xcap reports.
+fn snip_window_rect(frame: Option<(i32, i32, i32, i32)>, client: (i32, i32, i32, i32)) -> (i32, i32, i32, i32) {
+    frame.unwrap_or(client)
+}
+
+// The window's visible frame in global physical pixels (DWM extended frame
+// bounds: no invisible resize border, but title bar and borders included).
+#[cfg(windows)]
+fn window_frame_rect(id: u32) -> Option<(i32, i32, i32, i32)> {
+    #[repr(C)]
+    #[derive(Default)]
+    struct Rect {
+        left: i32,
+        top: i32,
+        right: i32,
+        bottom: i32,
+    }
+    #[link(name = "dwmapi")]
+    extern "system" {
+        fn DwmGetWindowAttribute(hwnd: isize, attr: u32, out: *mut Rect, size: u32) -> i32;
+    }
+    const DWMWA_EXTENDED_FRAME_BOUNDS: u32 = 9;
+    let mut r = Rect::default();
+    let hr = unsafe { DwmGetWindowAttribute(id as i32 as isize, DWMWA_EXTENDED_FRAME_BOUNDS, &mut r, std::mem::size_of::<Rect>() as u32) };
+    if hr != 0 || r.right <= r.left || r.bottom <= r.top {
+        return None;
+    }
+    Some((r.left, r.top, r.right - r.left, r.bottom - r.top))
+}
+
+#[cfg(not(windows))]
+fn window_frame_rect(_id: u32) -> Option<(i32, i32, i32, i32)> {
+    None
+}
+
 // Visible top-level windows overlapping the virtual desktop, topmost first, in
 // stitched-image physical pixels: for hover highlight + single-window capture.
 #[tauri::command]
@@ -16652,7 +16765,9 @@ fn snip_windows(state: State<SnipState>, index: usize) -> Vec<SnipWindow> {
             if w.is_minimized() || w.title().is_empty() {
                 continue;
             }
-            let (gx, gy, ww, wh) = (w.x(), w.y(), w.width() as i32, w.height() as i32);
+            // The hit-test rect is the window's visible frame (title bar and borders
+            // included); xcap's own x/y/width/height is only the client area.
+            let (gx, gy, ww, wh) = snip_window_rect(window_frame_rect(w.id()), (w.x(), w.y(), w.width() as i32, w.height() as i32));
             if ww <= 0 || wh <= 0 {
                 continue;
             }
@@ -16791,8 +16906,11 @@ async fn snip_background(preview: State<'_, SnipPreview>, index: usize) -> Resul
     let _ = index;
     for _ in 0..2000 {
         let ready = preview.0.lock().unwrap_or_else(|e| e.into_inner()).clone();
-        if let Some(bg) = ready {
-            return Ok(bg);
+        // An entry of an older session counts as "still encoding".
+        if let Some((g, bg)) = ready {
+            if g == SNIP_GEN.load(Ordering::SeqCst) {
+                return Ok(bg);
+            }
         }
         tokio::time::sleep(std::time::Duration::from_millis(5)).await;
     }
@@ -16904,13 +17022,27 @@ fn screenshot_dir(custom: &str) -> PathBuf {
 // Save already-encoded screenshot bytes into the given folder as "<stem>.<ext>".
 // "" on failure. Never re-encodes -- the caller decides the format up front.
 fn save_screenshot(bytes: &[u8], dir: &std::path::Path, stem: &str, ext: &str) -> String {
+    use std::io::Write;
     let _ = fs::create_dir_all(dir);
-    let path = dir.join(format!("{}.{}", stem, ext));
-    if fs::write(&path, bytes).is_ok() {
-        path.to_string_lossy().to_string()
-    } else {
-        String::new()
+    // Never replace a file that is already there (two shots in the same second
+    // share a stem): take the next free " (2)", " (3)" name instead.
+    for n in 1..1000u32 {
+        let name = if n == 1 { format!("{}.{}", stem, ext) } else { format!("{} ({}).{}", stem, n, ext) };
+        let path = dir.join(name);
+        match fs::OpenOptions::new().write(true).create_new(true).open(&path) {
+            Ok(mut f) => {
+                return if f.write_all(bytes).is_ok() {
+                    path.to_string_lossy().to_string()
+                } else {
+                    let _ = fs::remove_file(&path);
+                    String::new()
+                };
+            }
+            // Taken, or a directory of that name (PermissionDenied): try the next suffix.
+            Err(_) => continue,
+        }
     }
+    String::new()
 }
 
 // Decode a "data:...;base64,..." URL to its raw image bytes (format-agnostic).
@@ -17903,10 +18035,19 @@ fn clean_app_name(raw: &str) -> String {
 // sibling finalize_ocr_capture -- this used to run inline on the async worker thread,
 // blocking whichever other command happened to land on it for however long the encode
 // and disk write take.
-async fn finalize_capture(app: &AppHandle, crop: image::RgbaImage, app_name: Option<String>) -> Result<(), String> {
+fn discard_cancelled_file(path: &str) {
+    if !path.is_empty() {
+        let _ = fs::remove_file(path);
+    }
+}
+
+async fn finalize_capture(app: &AppHandle, gen: u64, crop: image::RgbaImage, app_name: Option<String>) -> Result<(), String> {
     let (cw, ch) = crop.dimensions();
     if cw == 0 || ch == 0 {
         return Err("empty region".to_string());
+    }
+    if !snip_session_current(gen) {
+        return Err("cancelled".to_string());
     }
 
     // "Screenshot" + a precise timestamp (+ the source app for a window shot): the
@@ -17946,6 +18087,10 @@ async fn finalize_capture(app: &AppHandle, crop: image::RgbaImage, app_name: Opt
             .then(|| encode_screenshot(crop.as_raw(), cw, ch, &format, save_q))
             .flatten();
         let data_url = format!("data:{};base64,{}", screenshot_format_mime(data_format), base64_encode(&data_bytes));
+        // The encode can take a while: a cancel that came in meanwhile wins.
+        if !snip_session_current(gen) {
+            return Err("cancelled".to_string());
+        }
         let _ = arboard::Clipboard::new().and_then(|mut c| {
             c.set_image(arboard::ImageData {
                 width: cw as usize,
@@ -17963,6 +18108,11 @@ async fn finalize_capture(app: &AppHandle, crop: image::RgbaImage, app_name: Opt
     })
     .await
     .map_err(|e| e.to_string())??;
+    if !snip_session_current(gen) {
+        // The cancel landed after the write: the folder file is this call's own, take it back.
+        discard_cancelled_file(&path);
+        return Err("cancelled".to_string());
+    }
 
     close_all_snip(app);
     reveal_main_for_snip_result(app);
@@ -18005,10 +18155,13 @@ fn ocr_settings_from(app: &AppHandle) -> (u32, bool, String, bool) {
 // finalize_capture, that failure runs BEFORE close_all_snip, so the overlay stays
 // open and the caller's showError() can offer a retry with the freeze still in
 // place, instead of silently ending the session on a failed recognition.
-async fn finalize_ocr_capture(app: &AppHandle, state: &State<'_, SnipState>, crop: image::RgbaImage) -> Result<(), String> {
+async fn finalize_ocr_capture(app: &AppHandle, state: &State<'_, SnipState>, gen: u64, crop: image::RgbaImage) -> Result<(), String> {
     let (cw, ch) = crop.dimensions();
     if cw == 0 || ch == 0 {
         return Err("empty region".to_string());
+    }
+    if !snip_session_current(gen) {
+        return Err("cancelled".to_string());
     }
     let (upscale, join, lang, auto_pick) = ocr_settings_from(app);
     #[cfg(windows)]
@@ -18016,6 +18169,9 @@ async fn finalize_ocr_capture(app: &AppHandle, state: &State<'_, SnipState>, cro
         let result = tauri::async_runtime::spawn_blocking(move || ocr::recognize_crop(crop, upscale, join, &lang, auto_pick))
             .await
             .map_err(|e| e.to_string())??;
+        if !snip_session_current(gen) {
+            return Err("cancelled".to_string());
+        }
         close_all_snip(app);
         reveal_main_for_snip_result(app);
         state.0.lock().unwrap_or_else(|e| e.into_inner()).clear();
@@ -18024,7 +18180,7 @@ async fn finalize_ocr_capture(app: &AppHandle, state: &State<'_, SnipState>, cro
     }
     #[cfg(not(windows))]
     {
-        let _ = (crop, upscale, join, lang, auto_pick);
+        let _ = (crop, upscale, join, lang, auto_pick, gen, state, app);
         Err("ocr is only available on Windows".to_string())
     }
 }
@@ -18112,12 +18268,13 @@ async fn capture_region(
     width: u32,
     height: u32,
 ) -> Result<(), String> {
+    let gen = SNIP_GEN.load(Ordering::SeqCst);
     let crop = crop_frozen(&state, index, x, y, width, height).ok_or("empty region")?;
     let ocr_armed = *snip_mode.0.lock().unwrap_or_else(|e| e.into_inner()) == SnipMode::Ocr;
     if ocr_armed {
-        return finalize_ocr_capture(&app, &state, crop).await;
+        return finalize_ocr_capture(&app, &state, gen, crop).await;
     }
-    finalize_capture(&app, crop, None).await
+    finalize_capture(&app, gen, crop, None).await
 }
 
 // Top-level windows stacked ABOVE the target that overlap its rect (global
@@ -18226,6 +18383,7 @@ async fn capture_window(
     // OCR mode (set_snip_mode) before calling finalize_capture() unconditionally --
     // otherwise clicking a WINDOW while OCR mode is armed silently produces a
     // normal screenshot instead of running OCR.
+    let gen = SNIP_GEN.load(Ordering::SeqCst);
     let ocr_armed = *snip_mode.0.lock().unwrap_or_else(|e| e.into_inner()) == SnipMode::Ocr;
     // Source app name for the button label (best-effort; empty for unknown windows).
     let app_name = xcap::Window::all()
@@ -18255,7 +18413,7 @@ async fn capture_window(
             .filter(|im| !capture_looks_bad(im))
     };
     if let Some(im) = direct {
-        return if ocr_armed { finalize_ocr_capture(&app, &state, im).await } else { finalize_capture(&app, im, app_name.clone()).await };
+        return if ocr_armed { finalize_ocr_capture(&app, &state, gen, im).await } else { finalize_capture(&app, gen, im, app_name.clone()).await };
     }
 
     // Target's global physical rect + frozen-image origin.
@@ -18281,7 +18439,7 @@ async fn capture_window(
             if let Some((ox, oy)) = origin {
                 if let Some(im) = crop_frozen(&state, 0, wx - ox, wy - oy, ww as u32, wh as u32) {
                     if !capture_is_blank(&im) {
-                        return if ocr_armed { finalize_ocr_capture(&app, &state, im).await } else { finalize_capture(&app, im, app_name.clone()).await };
+                        return if ocr_armed { finalize_ocr_capture(&app, &state, gen, im).await } else { finalize_capture(&app, gen, im, app_name.clone()).await };
                     }
                 }
             }
@@ -18290,6 +18448,9 @@ async fn capture_window(
         // 3. Workaround: minimize the covering windows, grab the cleared area live.
         const SW_SHOWMINNOACTIVE: i32 = 7;
         const SW_SHOWNOACTIVATE: i32 = 4;
+        if !snip_session_current(gen) {
+            return Err("cancelled".to_string());
+        }
         set_snip_overlay_hidden(&app, true);
         for &o in &occ {
             show_window(o, SW_SHOWMINNOACTIVE);
@@ -18303,13 +18464,20 @@ async fn capture_window(
         }
         match grab {
             Some(im) if !capture_is_blank(&im) => {
-                let res = if ocr_armed { finalize_ocr_capture(&app, &state, im).await } else { finalize_capture(&app, im, app_name.clone()).await };
+                let res = if ocr_armed { finalize_ocr_capture(&app, &state, gen, im).await } else { finalize_capture(&app, gen, im, app_name.clone()).await };
                 // The overlay was hidden for the grab; a failed OCR or save reports its
                 // error inside that overlay, so it has to come back with the error.
-                show_overlay_again_on_error(res, || set_snip_overlay_hidden(&app, false))
+                // A cancelled session must not get its overlay back (a new one may own it now).
+                show_overlay_again_on_error(res, || {
+                    if snip_session_current(gen) {
+                        set_snip_overlay_hidden(&app, false);
+                    }
+                })
             }
             _ => {
-                set_snip_overlay_hidden(&app, false);
+                if snip_session_current(gen) {
+                    set_snip_overlay_hidden(&app, false);
+                }
                 Err("blocked".to_string())
             }
         }
@@ -18321,7 +18489,7 @@ async fn capture_window(
             .filter(|im| !capture_is_blank(im));
         match img {
             Some(im) => {
-                if ocr_armed { finalize_ocr_capture(&app, &state, im).await } else { finalize_capture(&app, im, app_name.clone()).await }
+                if ocr_armed { finalize_ocr_capture(&app, &state, gen, im).await } else { finalize_capture(&app, gen, im, app_name.clone()).await }
             }
             None => Err("blocked".to_string()),
         }
@@ -18861,7 +19029,7 @@ async fn ocr_image_data(data_url: String, upscale_under_px: u32, join_lines: boo
         ));
     }
     let bytes = data_url_bytes(&data_url);
-    let img = decode_image_mem(&bytes).ok_or("could not decode image")?.to_rgba8();
+    let img = decode_image_mem_oriented(&bytes).ok_or("could not decode image")?.to_rgba8();
     let upscale_under_px = upscale_under_px.clamp(100, 800);
     #[cfg(windows)]
     {
@@ -18904,7 +19072,7 @@ fn ocr_index_text(data_url: &str, max_chars: usize) -> String {
         return String::new();
     }
     let bytes = data_url_bytes(data_url);
-    let Some(img) = decode_image_mem(&bytes) else { return String::new() };
+    let Some(img) = decode_image_mem_oriented(&bytes) else { return String::new() };
     #[cfg(windows)]
     let text = ocr::recognize_crop(img.to_rgba8(), 480, true, "auto", true).map(|r| r.text).unwrap_or_default();
     #[cfg(not(windows))]
@@ -18962,6 +19130,17 @@ fn cancel_ocr_index_backfill() {
     OCR_INDEX_CANCEL.store(true, Ordering::SeqCst);
 }
 
+// Writes recognized text onto a prompt only while it still shows the picture the text
+// came from and has no text yet: the user may have replaced or removed the picture
+// (or the text may have been refreshed) while the recognition ran.
+fn apply_backfill_text(p: &mut Prompt, recognized_from: &str, text: String) -> bool {
+    if p.image != recognized_from || !p.image_text.is_empty() {
+        return false;
+    }
+    p.image_text = text;
+    true
+}
+
 // The expert-menu "read existing pictures" action: every prompt that carries
 // a picture but no index text yet, read once, one at a time -- a single
 // sequential pass, never a flood of parallel OCR calls. Progress and
@@ -18995,15 +19174,15 @@ async fn ocr_index_backfill(app: AppHandle, state: State<'_, Db>) -> Result<usiz
         };
         if let Some(image) = image {
             if !image.is_empty() {
-                let text = tauri::async_runtime::spawn_blocking(move || ocr_index_text(&image, max_chars))
+                let (text, image) = tauri::async_runtime::spawn_blocking(move || (ocr_index_text(&image, max_chars), image))
                     .await
                     .map_err(|e| e.to_string())?;
                 if !text.is_empty() {
                     let mut store = lock(&state);
-                    if let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) {
-                        p.image_text = text;
+                    let applied = store.prompts.iter_mut().find(|p| p.id == id).is_some_and(|p| apply_backfill_text(p, &image, text));
+                    if applied {
+                        save_prompts(&app, &store);
                     }
-                    save_prompts(&app, &store);
                 }
             }
         }
@@ -19547,10 +19726,15 @@ mod ocr {
     // modified. Returns `path` unchanged, with no extra disk write at all, when
     // no resize is needed.
     fn resize_for_ocr(path: &Path, max_dim: u32, upscale_below_px: u32) -> Result<(PathBuf, TempFileGuard), String> {
-        let img = image::open(path).map_err(|e| e.to_string())?;
+        // The file is decoded upright (phone photos carry an EXIF rotation that
+        // BitmapDecoder would ignore) and handed on as a temp copy whenever its
+        // pixels differ from the file's own.
+        let reader = image::ImageReader::open(path).map_err(|e| e.to_string())?;
+        let (img, orientation) = super::decode_image_with_orientation(reader).ok_or_else(|| "could not decode image".to_string())?;
         let (w, h) = img.dimensions();
         let resized = super::ocr_resize_target(w, h, max_dim, upscale_below_px)
-            .map(|(nw, nh)| img.resize(nw, nh, FilterType::Lanczos3));
+            .map(|(nw, nh)| img.resize(nw, nh, FilterType::Lanczos3))
+            .or_else(|| (orientation != image::metadata::Orientation::NoTransforms).then_some(img));
         match resized {
             None => Ok((path.to_path_buf(), TempFileGuard(None))),
             Some(im) => {
@@ -20137,6 +20321,17 @@ mod ocr {
         Ok(Some(caps))
     }
 
+    // Parses the install result file's text. Windows PowerShell's `Out-File
+    // -Encoding utf8` prepends a byte-order mark, which neither `trim` nor the
+    // JSON parser accepts; None means "not parseable (yet)".
+    pub(super) fn parse_install_result(text: &str) -> Option<OcrInstallResult> {
+        let text = text.trim_start_matches('\u{feff}').trim();
+        let value: serde_json::Value = serde_json::from_str(text).ok()?;
+        let ok = value.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
+        let error = value.get("error").and_then(|v| v.as_str()).map(|s| s.to_string());
+        Some(OcrInstallResult { ok, error })
+    }
+
     // Reads (and, once a terminal result is found, deletes) the result file
     // install_language's elevated process writes. Deleting on a terminal read
     // keeps a later poll from re-triggering the cache invalidation below on
@@ -20167,9 +20362,7 @@ mod ocr {
         // catch the file mid-write; the next poll a few seconds later normally
         // sees the finished JSON. A permanently corrupt file is caught by the
         // frontend's own poll cutoff instead of being declared a failure here.
-        let value: serde_json::Value = serde_json::from_str(text.trim()).ok()?;
-        let ok = value.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
-        let error = value.get("error").and_then(|v| v.as_str()).map(|s| s.to_string());
+        let OcrInstallResult { ok, error } = parse_install_result(&text)?;
         let _ = fs::remove_file(&path);
         finish_request(kind, &tag);
         if ok {
@@ -37049,6 +37242,155 @@ fn start_sync_poll(app: AppHandle) {
 mod tests {
     use super::*;
 
+    // ---- the backfill never writes text for a picture that is gone ----
+
+    #[test]
+    fn backfill_text_is_dropped_when_the_picture_changed_meanwhile() {
+        let mut p = test_prompt("a");
+        p.image = "data:image/png;base64,NEW".to_string();
+        p.image_text = String::new();
+        assert!(!apply_backfill_text(&mut p, "data:image/png;base64,OLD", "old words".to_string()));
+        assert!(p.image_text.is_empty());
+        p.image = String::new();
+        assert!(!apply_backfill_text(&mut p, "data:image/png;base64,OLD", "old words".to_string()));
+        assert!(p.image_text.is_empty());
+        p.image = "data:image/png;base64,SAME".to_string();
+        assert!(apply_backfill_text(&mut p, "data:image/png;base64,SAME", "words".to_string()));
+        assert_eq!(p.image_text, "words");
+        assert!(!apply_backfill_text(&mut p, "data:image/png;base64,SAME", "other".to_string()));
+        assert_eq!(p.image_text, "words");
+    }
+
+    // ---- text recognition sees a photo upright ----
+
+    // A 2x1 JPEG carrying an EXIF Orientation tag of 6 (rotate 90 degrees clockwise).
+    fn jpeg_with_orientation(orientation: u8) -> Vec<u8> {
+        let mut plain = Vec::new();
+        image::DynamicImage::new_rgb8(2, 1)
+            .write_to(&mut std::io::Cursor::new(&mut plain), image::ImageFormat::Jpeg)
+            .unwrap();
+        let mut exif: Vec<u8> = b"Exif  MM *   ".to_vec();
+        exif.extend_from_slice(&[0, 1, 0x01, 0x12, 0, 3, 0, 0, 0, 1, 0, orientation, 0, 0, 0, 0, 0, 0]);
+        let mut out = vec![0xFF, 0xD8, 0xFF, 0xE1];
+        out.extend_from_slice(&((exif.len() + 2) as u16).to_be_bytes());
+        out.extend_from_slice(&exif);
+        out.extend_from_slice(&plain[2..]);
+        out
+    }
+
+    #[test]
+    fn decode_image_oriented_applies_the_exif_rotation() {
+        let bytes = jpeg_with_orientation(6);
+        let raw = decode_image_mem(&bytes).expect("decodes");
+        assert_eq!((raw.width(), raw.height()), (2, 1));
+        let up = decode_image_oriented(image::ImageReader::new(std::io::Cursor::new(&bytes))).expect("decodes");
+        assert_eq!((up.width(), up.height()), (1, 2));
+        let flat = jpeg_with_orientation(1);
+        let same = decode_image_oriented(image::ImageReader::new(std::io::Cursor::new(&flat))).expect("decodes");
+        assert_eq!((same.width(), same.height()), (2, 1));
+    }
+
+    #[test]
+    fn decode_image_oriented_handles_every_orientation_tag() {
+        // (tag, expected size of the 2x1 source after the transform)
+        for (tag, size) in [(1u8, (2, 1)), (2, (2, 1)), (3, (2, 1)), (4, (2, 1)), (5, (1, 2)), (6, (1, 2)), (7, (1, 2)), (8, (1, 2)), (0, (2, 1)), (9, (2, 1))] {
+            let bytes = jpeg_with_orientation(tag);
+            let img = decode_image_oriented(image::ImageReader::new(std::io::Cursor::new(&bytes))).expect("decodes");
+            assert_eq!((img.width(), img.height()), size, "orientation tag {tag}");
+        }
+    }
+
+    #[test]
+    fn save_screenshot_skips_a_name_taken_by_a_directory() {
+        let dir = std::env::temp_dir().join(format!("{}-shotdir-{}", brand::TEMP_PREFIX, std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("Shot.png")).unwrap();
+        let p = save_screenshot(b"x", &dir, "Shot", "png");
+        assert!(p.ends_with("Shot (2).png"), "{p}");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn decode_image_oriented_enforces_the_alloc_cap() {
+        let mut png = Vec::new();
+        image::DynamicImage::new_rgba8(100, 100)
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+            .unwrap();
+        let mut tight = image::Limits::default();
+        tight.max_alloc = Some(1000);
+        let r = decode_image_with_orientation_limits(image::ImageReader::new(std::io::Cursor::new(&png)), tight);
+        assert!(r.is_none(), "40000 decoded bytes must exceed a 1000 byte cap");
+        assert!(decode_image_mem_oriented(&png).is_some());
+    }
+
+    #[test]
+    fn a_cancelled_capture_leaves_no_folder_file() {
+        let dir = std::env::temp_dir().join(format!("{}-cancel-{}", brand::TEMP_PREFIX, std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let path = save_screenshot(b"x", &dir, "Screenshot-cancel", "png");
+        assert!(Path::new(&path).exists());
+        discard_cancelled_file(&path);
+        assert!(!Path::new(&path).exists());
+        discard_cancelled_file("");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // ---- two shots with the same stem never overwrite each other ----
+
+    #[test]
+    fn save_screenshot_keeps_both_files_for_the_same_stem() {
+        let dir = std::env::temp_dir().join(format!("{}-shot-{}", brand::TEMP_PREFIX, std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let first = save_screenshot(b"one", &dir, "Screenshot-2026-01-01_00-00-00", "png");
+        let second = save_screenshot(b"two", &dir, "Screenshot-2026-01-01_00-00-00", "png");
+        assert!(!first.is_empty() && !second.is_empty());
+        assert_ne!(first, second);
+        assert_eq!(fs::read(&first).unwrap(), b"one");
+        assert_eq!(fs::read(&second).unwrap(), b"two");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // ---- a stale preview encode never lands in the slot ----
+
+    #[test]
+    fn a_stale_preview_encode_leaves_the_slot_alone() {
+        let mut slot: Option<(u64, i32)> = None;
+        assert!(!preview_slot_store(&mut slot, 2, 1, 7));
+        assert!(slot.is_none());
+        assert!(preview_slot_store(&mut slot, 2, 2, 9));
+        assert_eq!(slot, Some((2, 9)));
+    }
+
+    // ---- a capture of a cancelled session finishes without side effects ----
+
+    #[test]
+    fn finalize_is_refused_for_a_session_that_ended_or_was_replaced() {
+        assert!(finalize_allowed(2, 2, true));
+        assert!(!finalize_allowed(1, 2, true));
+        assert!(!finalize_allowed(1, 1, false));
+    }
+
+    // ---- the overlay hit-tests a window by its frame, not its client area ----
+
+    #[test]
+    fn snip_window_rect_prefers_the_frame() {
+        let client = (0, 30, 100, 70);
+        assert_eq!(snip_window_rect(Some((0, 0, 100, 100)), client), (0, 0, 100, 100));
+        assert_eq!(snip_window_rect(None, client), client);
+    }
+
+    // ---- the install result file is read with its byte-order mark ----
+
+    #[test]
+    fn install_result_parses_past_a_byte_order_mark() {
+        let ok = ocr::parse_install_result("\u{feff}{\r\n  \"ok\": true\r\n}\r\n").expect("parsed");
+        assert!(ok.ok && ok.error.is_none());
+        let bad = ocr::parse_install_result("\u{feff}{\"ok\":false,\"error\":\"x\"}").expect("parsed");
+        assert!(!bad.ok);
+        assert_eq!(bad.error.as_deref(), Some("x"));
+        assert!(ocr::parse_install_result("{\"ok\":").is_none());
+    }
+
     // ---- a start always brings up a window ----
 
     #[test]
@@ -49223,9 +49565,13 @@ mod tests {
 
     #[test]
     fn snip_preview_rotates_and_cleans() {
-        let p1 = write_snip_preview(b"first").expect("write1");
+        let gen = SNIP_GEN.load(Ordering::SeqCst);
+        let p1 = write_snip_preview(b"first", gen).expect("write1");
         assert!(std::path::Path::new(&p1).exists());
-        let p2 = write_snip_preview(b"second").expect("write2");
+        // A stale encode neither writes nor touches the current preview.
+        assert!(write_snip_preview(b"stale", gen.wrapping_add(1)).is_none());
+        assert!(std::path::Path::new(&p1).exists(), "stale encode keeps the live preview");
+        let p2 = write_snip_preview(b"second", gen).expect("write2");
         assert_ne!(p1, p2);
         assert!(!std::path::Path::new(&p1).exists(), "previous preview deleted");
         assert!(std::path::Path::new(&p2).exists());

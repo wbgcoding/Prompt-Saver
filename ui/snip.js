@@ -593,15 +593,28 @@ async function pickHere() {
   }
 }
 
-// Topmost window under a CSS point; returns its id, CSS rect and image rect.
-function windowAt(cssX, cssY) {
-  const p = toImg(cssX, cssY);
-  for (const w of windows) {
-    if (p.x >= w.x && p.x < w.x + w.width && p.y >= w.y && p.y < w.y + w.height) {
-      return { id: w.id, css: toCss(w.x, w.y, w.width, w.height), img: w };
-    }
+// Text for a failed capture: a specific message for the one cause worth naming (no
+// OCR language installed), undefined for the generic failure text, null when the
+// session was cancelled underneath the capture (nothing to report).
+function snipErrorText(err, T) {
+  const msg = String((err && err.message) || err);
+  if (msg === "cancelled") return null;
+  return msg === "ocr-no-language" ? T.ocrNoLang : undefined;
+}
+
+// Topmost window of the z-ordered list that contains an image-space point, or null.
+// The list carries each window's visible frame (title bar and borders included).
+function pickWindow(list, p) {
+  for (const w of list) {
+    if (p.x >= w.x && p.x < w.x + w.width && p.y >= w.y && p.y < w.y + w.height) return w;
   }
   return null;
+}
+
+// Topmost window under a CSS point; returns its id, CSS rect and image rect.
+function windowAt(cssX, cssY) {
+  const w = pickWindow(windows, toImg(cssX, cssY));
+  return w ? { id: w.id, css: toCss(w.x, w.y, w.width, w.height), img: w } : null;
 }
 
 // Process at most once per frame: mousemove fires far faster than the screen
@@ -705,9 +718,15 @@ window.addEventListener("mouseup", async (e) => {
     const win = windowAt(s.x, s.y);
     if (win) {
       busy = true;
+      const tok = sessionSeq;
       try {
         await invoke("capture_window", { id: win.id });
-      } catch { busy = false; showError(); }
+      } catch (err) {
+        if (tok !== sessionSeq) return; // cancelled: a newer session owns busy now
+        busy = false;
+        const msg = snipErrorText(err, T);
+        if (msg !== null) showError(msg);
+      }
     } else {
       hint.classList.remove("hidden");
       fullDim();
@@ -716,6 +735,7 @@ window.addEventListener("mouseup", async (e) => {
   }
   const a = toImg(x, y), b = toImg(x + w, y + h);
   busy = true;
+  const tok = sessionSeq;
   try {
     await invoke("capture_region", {
       index: IDX,
@@ -725,12 +745,14 @@ window.addEventListener("mouseup", async (e) => {
       height: Math.round(b.y - a.y),
     });
   } catch (err) {
+    if (tok !== sessionSeq) return;
     busy = false;
     // A bare "something failed" is exactly wrong for this one cause -- no
     // OCR language installed at all. The overlay itself has no reach into the
     // main window's #ocr-langs-modal, so this stays a specific, honest message
     // rather than a generic retry hint; the overlay stays open either way.
-    showError(String(err) === "ocr-no-language" ? T.ocrNoLang : undefined);
+    const msg = snipErrorText(err, T);
+    if (msg !== null) showError(msg);
   }
 });
 
@@ -740,6 +762,8 @@ window.addEventListener("mouseup", async (e) => {
 const NUDGE = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
 const ZOOM_KEYS = { "+": 1, "=": 1, "-": -1, _: -1 };
 window.addEventListener("keydown", (e) => {
+  // Escape always cancels, also while a capture is in flight: the backend drops that
+  // capture's result and removes anything it already wrote.
   if (e.key === "Escape") { saveZoom(); invoke("snip_cancel").catch(() => {}); return; }
   if (!pickMode || pickBusy) return;
   const d = NUDGE[e.key];
