@@ -70,7 +70,7 @@ pub(crate) fn run_reset_side_effects(app: &AppHandle, effects: &ResetSideEffects
     if effects.stop_receiver {
         stop(app);
     }
-    if effects.unregister_scheme {
+    if effects.unregister_scheme && !crate::url_scheme_removal_skipped() {
         if let Err(e) = apply_url_scheme_registration(false) {
             crate::append_crash_log(&format!("reset: the address scheme could not be removed: {e}"));
         }

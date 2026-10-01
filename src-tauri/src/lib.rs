@@ -31197,6 +31197,15 @@ fn skip_registry_removal(enabled: bool, owner: RegistryOwner) -> bool {
     !enabled && owner == RegistryOwner::OtherExe
 }
 
+// A reset turns the address scheme off like the switch does, so it leaves
+// another copy's registration alone too.
+pub(crate) fn url_scheme_removal_skipped() -> bool {
+    match remote::url_scheme_command() {
+        Ok(cmd) => skip_registry_removal(false, current_registry_owner(cmd.as_deref())),
+        Err(_) => false,
+    }
+}
+
 fn current_registry_owner(command: Option<&str>) -> RegistryOwner {
     match std::env::current_exe() {
         Ok(exe) => registry_owner(command, &exe.display().to_string(), |p| std::path::Path::new(p).exists()),
