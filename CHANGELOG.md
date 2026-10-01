@@ -894,6 +894,9 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **Uninstalling an all-users install leaves no entry behind.** The app no
+  longer stays listed under installed apps, and its Start menu shortcut is
+  removed, after uninstalling an install made for all users.
 - **Full expert reset keeps the vault, the backup password and the
   certificate.** It used to wipe the vault's key data, which left every
   confidential entry unreadable for good, and the backup password. It now also
