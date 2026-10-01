@@ -37144,7 +37144,11 @@ fn sync_dir_scan(dir: &Path) -> SyncDirScan {
             // still ours. Once the user has rewritten it, it is their text and stays.
             fs::read_to_string(&path).is_ok_and(|c| c.starts_with(&sync_agents_md_head()))
         } else if let Some(stem) = name.strip_suffix(".md") {
+            // Only a file this process wrote or read back for a prompt of the library:
+            // another machine's new file or a hand-made one carries our header too,
+            // is not in the new folder, and would be lost with the old one.
             sync_safe_id(stem)
+                && sync_known_lock().contains(&sync_seen_key(&path))
                 && read_text_capped(&path, MAX_SYNC_MD_BYTES)
                     .and_then(|c| parse_frontmatter(&c))
                     .is_some_and(|(fields, _)| md_is_ours(&fields))
@@ -42617,6 +42621,8 @@ mod tests {
         let dir = sync_tmp_dir("del-ok");
         write_ours(&dir, "p1.md", "one");
         write_ours(&dir, "p2.md", "two");
+        sync_known_note(&dir.join("p1.md"));
+        sync_known_note(&dir.join("p2.md"));
         fs::write(dir.join("AGENTS.md"), sync_agents_md()).unwrap();
         fs::write(dir.join("p1.md.lock"), "1234").unwrap();
         let data = sync_tmp_dir("del-ok-data");
@@ -42639,6 +42645,22 @@ mod tests {
         assert!(dir.join("p1.md").exists());
         assert!(dir.join("my-taxes.txt").exists());
         assert!(dir.exists());
+        let _ = fs::remove_dir_all(&dir);
+        let _ = fs::remove_dir_all(&data);
+    }
+
+    #[test]
+    fn sync_delete_dir_keeps_a_file_the_library_never_had() {
+        let dir = sync_tmp_dir("del-unknown");
+        write_ours(&dir, "p1.md", "one");
+        sync_known_note(&dir.join("p1.md"));
+        // Another machine's new file: our header, a valid id, never imported here.
+        write_ours(&dir, "fresh-from-elsewhere.md", "not in this library yet");
+        let data = sync_tmp_dir("del-unknown-data");
+        let err = sync_delete_dir(&dir, &data).expect_err("an unimported file stops the delete");
+        assert!(err.contains("fresh-from-elsewhere.md"), "the file in the way is named: {err}");
+        assert!(dir.join("fresh-from-elsewhere.md").exists());
+        assert!(dir.join("p1.md").exists());
         let _ = fs::remove_dir_all(&dir);
         let _ = fs::remove_dir_all(&data);
     }
@@ -42669,6 +42691,7 @@ mod tests {
     fn sync_dir_scan_counts_our_files_apart_from_everything_else() {
         let dir = sync_tmp_dir("scan");
         write_ours(&dir, "p1.md", "one");
+        sync_known_note(&dir.join("p1.md"));
         fs::write(dir.join("AGENTS.md"), "the user rewrote this note").unwrap();
         fs::write(dir.join("notes.md"), "no header at all").unwrap();
         let scan = sync_dir_scan(&dir);
