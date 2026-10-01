@@ -4775,6 +4775,16 @@ fn load_store(app: &AppHandle) -> Store {
         if version_sweep_allowed(&dir, DATA_DIR_READONLY.load(Ordering::Relaxed)) {
             db_sweep_orphan_versions(&conn);
         }
+        // Seal every plain edit_state row an earlier version left behind, off the
+        // main thread; idempotent, so running it on each load costs one cheap scan.
+        {
+            let app = app.clone();
+            std::thread::spawn(move || {
+                if let Some(conn) = db_conn(&app) {
+                    edit_state_seal_all(&conn);
+                }
+            });
+        }
         store.normalize_folders(); // Drop members whose prompt is gone
         sweep_trash(app, &mut store); // drop anything past the retention window
         if needs_mig || migrated_log {
@@ -14815,6 +14825,35 @@ fn edit_state_write(conn: &Connection, kind: &str, target: &str, size: i64, mtim
     // The state now lives under the hashed id; drop an old plain-path row for it.
     let _ = conn.execute("DELETE FROM edit_state WHERE id = ?1", params![edit_state_legacy_id(kind, target)]);
     Ok(())
+}
+
+// Rewrites every row whose target or ops are still in clear through the sealing
+// writer, keeping each row's own timestamp. Returns how many rows it rewrote; a
+// second run finds nothing left to do.
+fn edit_state_seal_all(conn: &Connection) -> usize {
+    type Row = (String, String, i64, i64, String, String, i64);
+    let rows: Vec<Row> = {
+        let Ok(mut st) = conn.prepare("SELECT kind, target, size, mtime, ops, id, updated_at FROM edit_state WHERE target NOT LIKE 'enc:v1:%' OR ops NOT LIKE 'enc:v1:%'") else {
+            return 0;
+        };
+        let Ok(it) = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?))) else {
+            return 0;
+        };
+        it.flatten().collect()
+    };
+    let mut done = 0;
+    for (kind, target, size, mtime, ops, old_id, updated_at) in rows {
+        let plain_target = dec_str(&target);
+        let plain_ops = dec_str(&ops);
+        if edit_state_write(conn, &kind, &plain_target, size, mtime, &plain_ops, updated_at).is_ok() {
+            // A row that sat under some other id (legacy form) is dropped once the hashed one exists.
+            if old_id != edit_state_id(&kind, &plain_target) {
+                let _ = conn.execute("DELETE FROM edit_state WHERE id = ?1", params![old_id]);
+            }
+            done += 1;
+        }
+    }
+    done
 }
 
 // (row id, ops as stored, decrypted) for the exact (size, mtime) triple, hashed id first.
@@ -42858,6 +42897,26 @@ mod tests {
         let _ = fs::remove_dir_all(&base);
     }
 
+    #[test]
+    fn a_panic_with_a_live_guard_keeps_the_staged_copy_but_releases_the_pending_entry() {
+        let base = staging_test_dir("panic");
+        let files = base.join("files");
+        let orig = base.join("orig.txt");
+        fs::write(&orig, b"data").unwrap();
+        let mut copy = String::new();
+        let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let mut staged = StagedCopies::new();
+            copy = staged.stage(&files, &orig.to_string_lossy());
+            panic!("boom");
+        }));
+        assert!(res.is_err());
+        assert!(Path::new(&copy).is_file(), "a copy staged before a panic must survive");
+        let pending = PENDING_ATTACHMENTS.lock().unwrap_or_else(|e| e.into_inner());
+        assert!(!pending.as_ref().is_some_and(|s| s.contains(&pending_key(&copy))), "pending entry released");
+        drop(pending);
+        let _ = fs::remove_dir_all(&base);
+    }
+
     // A failed add (validation error after staging) must not leave the copy behind.
     #[test]
     fn a_failed_add_leaves_no_staged_copy_behind() {
@@ -42897,26 +42956,6 @@ mod tests {
         }
         let upd = body("async fn update_prompt(", "// List a prompt's version snapshots");
         let staged_end = upd.find("let updated = {").expect("locked section");
-    #[test]
-    fn a_panic_with_a_live_guard_keeps_the_staged_copy_but_releases_the_pending_entry() {
-        let base = staging_test_dir("panic");
-        let files = base.join("files");
-        let orig = base.join("orig.txt");
-        fs::write(&orig, b"data").unwrap();
-        let mut copy = String::new();
-        let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let mut staged = StagedCopies::new();
-            copy = staged.stage(&files, &orig.to_string_lossy());
-            panic!("boom");
-        }));
-        assert!(res.is_err());
-        assert!(Path::new(&copy).is_file(), "a copy staged before a panic must survive");
-        let pending = PENDING_ATTACHMENTS.lock().unwrap_or_else(|e| e.into_inner());
-        assert!(!pending.as_ref().is_some_and(|s| s.contains(&pending_key(&copy))), "pending entry released");
-        drop(pending);
-        let _ = fs::remove_dir_all(&base);
-    }
-
         for call in ["staged_copies.stage(", "probe_media_meta(", "ocr_index_text(img"] {
             assert!(upd[..staged_end].contains(call), "update_prompt must stage {call} before its locked section");
         }
@@ -45238,6 +45277,24 @@ mod tests {
         assert!(target.starts_with(ENC_PREFIX) && stored_ops.starts_with(ENC_PREFIX), "target and ops are sealed now");
         assert_eq!(updated, 77, "the retention clock keeps running");
         assert!(edit_state_read(&conn, "video", "c:/clips/old.mp4", 1, 2).unwrap().1.contains("overlay words"));
+    }
+
+    #[test]
+    fn startup_pass_seals_every_plain_edit_state_row_once() {
+        let conn = edit_state_test_conn();
+        for (id, target, ts) in [("video:c:/a/one.mp4", "c:/a/one.mp4", 11), ("video:c:/a/two.mp4", "c:/a/two.mp4", 22)] {
+            conn.execute("INSERT INTO edit_state VALUES(?1, 'video', ?2, 1, 2, '{\"v\":1,\"t\":\"words\"}', ?3)", params![id, target, ts]).unwrap();
+        }
+        assert_eq!(edit_state_seal_all(&conn), 2);
+        let mut st = conn.prepare("SELECT id, target, ops, updated_at FROM edit_state ORDER BY updated_at").unwrap();
+        let rows: Vec<(String, String, String, i64)> = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))).unwrap().flatten().collect();
+        assert_eq!(rows.len(), 2);
+        for ((id, target, ops, ts), (want_ts, path)) in rows.iter().zip([(11, "c:/a/one.mp4"), (22, "c:/a/two.mp4")]) {
+            assert_eq!(*id, edit_state_id("video", path));
+            assert!(target.starts_with(ENC_PREFIX) && ops.starts_with(ENC_PREFIX));
+            assert_eq!(*ts, want_ts);
+        }
+        assert_eq!(edit_state_seal_all(&conn), 0, "a second run writes nothing");
     }
 
     #[test]
