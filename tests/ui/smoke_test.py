@@ -7599,9 +7599,45 @@ PROBE = """
             out.errors.push('431: the minimum-length slider is still in the expert menu');
           }
         }
-        // Restore the shipped default (off) so later checks see it unchanged.
-        const watcherRowBack = await expertRow('Clipboard inbox');
-        if (watcherRowBack) watcherRowBack.querySelector('input.switch').click();
+        // Switching the inbox off with items still collected asks once whether to
+        // keep them (the fixture's inbox holds one item). Every answer is probed:
+        // keep, delete and Escape; the last leaves the switch off, the shipped default.
+        const confirmBox431 = document.getElementById('confirm-modal');
+        const clipCalls431 = (cmd) => (window.__SMOKE_ARGS__ || []).filter(([c]) => c === cmd).length;
+        const switchWatcher431 = async (answer) => {
+          const row = await expertRow('Clipboard inbox');
+          const sw = row && row.querySelector('input.switch');
+          if (!sw) { out.errors.push('431: the clipboard inbox switch vanished'); return false; }
+          window.__SMOKE_ARGS__ = [];
+          sw.click();
+          await sleep(300);
+          if (sw.checked) return true; // switched on: nothing to answer
+          if (confirmBox431.classList.contains('hidden')) {
+            out.errors.push('431: switching the inbox off with items did not ask what to do with them');
+            return false;
+          }
+          if (answer === 'keep') document.getElementById('confirm-cancel').click();
+          else if (answer === 'delete') document.getElementById('confirm-ok').click();
+          else document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+          await sleep(300);
+          if (!confirmBox431.classList.contains('hidden')) {
+            out.errors.push('431: the inbox keep/delete question stayed open after the answer ' + answer);
+            confirmBox431.classList.add('hidden');
+          }
+          const cleared = clipCalls431('clip_inbox_clear');
+          if (answer === 'delete' && cleared !== 1) out.errors.push('431: deleting the collected items called clip_inbox_clear ' + cleared + ' times');
+          if (answer !== 'delete' && cleared !== 0) out.errors.push('431: answer ' + answer + ' still cleared the inbox');
+          return true;
+        };
+        await switchWatcher431('keep');
+        await switchWatcher431('on');
+        await switchWatcher431('delete');
+        await switchWatcher431('on');
+        await switchWatcher431('escape');
+        const watcherEnd431 = await expertRow('Clipboard inbox');
+        if (watcherEnd431 && watcherEnd431.querySelector('input.switch').checked) {
+          out.errors.push('431: the inbox switch did not end up off');
+        }
         await sleep(200);
         const firstTab431 = document.querySelector('#expert-tabs-bar .expert-tab');
         if (firstTab431) { firstTab431.click(); await sleep(150); }
@@ -15024,13 +15060,13 @@ def main():
                  # clipboard inbox, batch delete, batch tag add/remove).
                  # The window has to hold the iframe plus Chrome's own frame.
                  f"--window-size={max(w + 30, 520)},{h + 140}",
-                 "--virtual-time-budget=220000", "--dump-dom",
+                 "--virtual-time-budget=250000", "--dump-dom",
                  wrapper.as_uri()],
                 # The dumped DOM carries all 20 languages; without an explicit
                 # codec Windows decodes it as cp1252 and the reader thread dies,
                 # leaving stdout empty.
                 capture_output=True, text=True, encoding="utf-8", errors="replace",
-                timeout=240)
+                timeout=270)
             m = re.search(r'<pre id="SMOKE">(\{.*?\})</pre>', proc.stdout, re.S)
             if not m:
                 print(f"FAIL {w}x{h}: the UI produced no probe result")
@@ -15079,10 +15115,10 @@ def main():
                  # its own group-survives-the-split probe, itself two full walks.
                  # Kept equal to the English sweep's own budget just above, since
                  # this runs the exact same probe script and had fallen behind it.
-                 "--virtual-time-budget=220000", "--dump-dom",
+                 "--virtual-time-budget=250000", "--dump-dom",
                  wrapper.as_uri()],
                 capture_output=True, text=True, encoding="utf-8", errors="replace",
-                timeout=240)
+                timeout=270)
             m = re.search(r'<pre id="SMOKE">(\{.*?\})</pre>', proc.stdout, re.S)
             if not m:
                 print(f"FAIL it {w}x{h}: the UI produced no probe result")
