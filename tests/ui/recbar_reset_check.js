@@ -38,6 +38,8 @@ async function main() {
   let active = true;
   let elapsed = 70000;
   const calls = [];
+  let stall = false;
+  let stalled = null;
   const sandbox = {
     console, navigator: { language: "en-US" },
     setTimeout, clearTimeout, setInterval, clearInterval,
@@ -52,6 +54,7 @@ async function main() {
     core: {
       invoke: async (cmd) => {
         calls.push(cmd);
+        if (cmd === "recording_status" && stall) return new Promise((r) => { stalled = r; });
         if (cmd === "recording_status") {
           return active ? {
             paused: false, elapsed_ms: elapsed, bytes: 0, show_size: false, target_switch_enabled: false,
@@ -104,6 +107,23 @@ async function main() {
   await tick(100);
   expect("third recording: buttons enabled", btns().join(), "false,false,false");
   expect("third recording: time", els.time.textContent, "00:00");
+
+  // A status call of the third recording still waiting when the fourth starts:
+  // its late "no recording" answer must not stop the new poll or hide the bar.
+  stall = true;
+  await tick(600);
+  stall = false;
+  if (!stalled) problems.push("stale poll: no status call was held");
+  elapsed = 3000;
+  listeners["rec-bar-reset"]();
+  await tick(50);
+  calls.length = 0;
+  if (stalled) stalled(null);
+  await tick(700);
+  expect("stale poll: bar not hidden", calls.includes("hide_rec_bar"), false);
+  expect("stale poll: buttons enabled", btns().join(), "false,false,false");
+  expect("stale poll: time follows the new recording", els.time.textContent, "00:03");
+  if (calls.filter((c) => c === "recording_status").length < 1) problems.push("stale poll: poll stopped");
   els["stop-btn"].disabled = true; // leave nothing running
   sandbox.clearInterval(0);
 

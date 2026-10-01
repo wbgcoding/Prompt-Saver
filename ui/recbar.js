@@ -197,9 +197,14 @@ function fitBar() {
 new ResizeObserver(fitBar).observe(bar);
 
 let pollTimer = 0;
+// Bumped for every new recording: a poll still waiting on the previous one's
+// status must not stop the new timer or hide the bar when it finally returns.
+let pollGen = 0;
 async function poll() {
+  const gen = pollGen;
   try {
     const status = await invoke("recording_status");
+    if (gen !== pollGen) return;
     if (!status) {
       // Stopped elsewhere -- the auto-stop path when the recorded window itself
       // closes, or any other race. This bar's own buttons would now just error
@@ -245,6 +250,7 @@ poll();
 // and the next recording would run behind a dead bar.
 function resetForNewRecording() {
   clearInterval(pollTimer);
+  pollGen++;
   paused = false;
   pauseBtn.disabled = false;
   stopBtn.disabled = false;
