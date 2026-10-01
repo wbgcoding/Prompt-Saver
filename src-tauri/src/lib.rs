@@ -19129,6 +19129,21 @@ fn ocr_resize_target(w: u32, h: u32, max_dim: u32, upscale_below_px: u32) -> Opt
     }
 }
 
+// StorageFile::GetFileFromPathAsync only takes a plain backslash path. A
+// forward-slash path (what a webview or a script hands over) or an
+// extended-length one fails with a bad-pathname error that used to reach the
+// user as raw Windows text.
+fn winrt_file_path(path: &str) -> String {
+    let flat = path.replace('/', r"\");
+    if let Some(rest) = flat.strip_prefix(r"\\?\UNC\") {
+        return format!(r"\\{rest}");
+    }
+    match flat.strip_prefix(r"\\?\") {
+        Some(rest) => rest.to_string(),
+        None => flat,
+    }
+}
+
 fn ocr_validate_path(path: &str) -> Result<PathBuf, String> {
     let p = Path::new(path);
     let meta = fs::metadata(p).map_err(|e| e.to_string())?;
@@ -20101,7 +20116,7 @@ mod ocr {
     }
 
     fn bitmap_from_path(path: &Path) -> Result<SoftwareBitmap, String> {
-        let hpath = HSTRING::from(path.to_string_lossy().as_ref());
+        let hpath = HSTRING::from(super::winrt_file_path(path.to_string_lossy().as_ref()));
         let file = StorageFile::GetFileFromPathAsync(&hpath)
             .map_err(|e| e.to_string())?
             .get()
@@ -42021,6 +42036,15 @@ mod tests {
         let result = ocr_validate_path(p.to_str().unwrap());
         let _ = fs::remove_file(&p);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn winrt_file_path_flattens_slashes_and_verbatim_prefixes() {
+        assert_eq!(winrt_file_path("C:/bfb/media/a.jpg"), r"C:\bfb\media\a.jpg");
+        assert_eq!(winrt_file_path(r"C:\x\a.jpg"), r"C:\x\a.jpg");
+        assert_eq!(winrt_file_path(r"\\?\C:\x\a.jpg"), r"C:\x\a.jpg");
+        assert_eq!(winrt_file_path(r"\\?\UNC\srv\share\a.jpg"), r"\\srv\share\a.jpg");
+        assert_eq!(winrt_file_path(r"\\srv/share/a.jpg"), r"\\srv\share\a.jpg");
     }
 
     #[test]
