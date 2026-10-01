@@ -17631,7 +17631,7 @@ function bind() {
   // Right-click menu for duplicating/deleting a shape, built once like the
   // other dynamic popovers (tileFolderPop, viewsPop) instead of static markup.
   const snipCtxPop = document.createElement("div");
-  snipCtxPop.className = "ctx hidden";
+  snipCtxPop.className = "ctx snip-ctx-pop hidden";
   snipCtxPop.setAttribute("role", "menu");
   const snipCtxDupBtn = document.createElement("button");
   snipCtxDupBtn.type = "button";

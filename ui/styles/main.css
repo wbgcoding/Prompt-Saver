@@ -2167,6 +2167,9 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   border-radius: 50%;
   background: linear-gradient(135deg, transparent 45%, var(--danger) 45%, var(--danger) 55%, transparent 55%);
 }
+/* The shape menu opens over the full-bleed editor overlay (z-index 90), so it
+   shares the editor popovers' layer instead of the plain context menu's. */
+.ctx.snip-ctx-pop { z-index: 130; }
 .snip-color-pop {
   position: fixed;
   z-index: 130;

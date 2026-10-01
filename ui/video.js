@@ -2387,8 +2387,14 @@ function colorRow(current, onPick) {
   return wrap;
 }
 
+// The editor panel keeps its field handlers (and the `op` they closed over)
+// alive across edits, so a handler can hold a copy older than the overlay now in
+// VE.ops. Every edit starts from the live one; a stale copy would write its old
+// values back over fields changed since.
+const liveOverlay = (op) => VE.ops.find((o) => o.id === op.id) || op;
+
 function commitOverlay(op, changes) {
-  pushReplacing((o) => o.id === op.id, { ...op, ...changes }, { keepEditor: true });
+  pushReplacing((o) => o.id === op.id, { ...liveOverlay(op), ...changes }, { keepEditor: true });
   rememberOverlayValues(op.kind, changes);
 }
 
@@ -2481,12 +2487,12 @@ function renderOverlayEditor() {
   range.className = "ve-row2";
   const startInput = ovTrack("startMs", textInput(fmtTime(op.startMs), (v) => {
     const ms = parseTime(v);
-    if (ms != null) commitOverlay(op, { startMs: clamp(ms, 0, op.endMs) });
+    if (ms != null) commitOverlay(op, { startMs: clamp(ms, 0, liveOverlay(op).endMs) });
     else renderOverlayEditor();
   }), (o) => fmtTime(o.startMs));
   const endInput = ovTrack("endMs", textInput(fmtTime(op.endMs), (v) => {
     const ms = parseTime(v);
-    if (ms != null) commitOverlay(op, { endMs: clamp(ms, op.startMs, VE.dur) });
+    if (ms != null) commitOverlay(op, { endMs: clamp(ms, liveOverlay(op).startMs, VE.dur) });
     else renderOverlayEditor();
   }), (o) => fmtTime(o.endMs));
   range.append(fieldRow(t("veOvFrom"), startInput), fieldRow(t("veOvTo"), endInput));
@@ -2623,7 +2629,7 @@ function renderOverlayEditor() {
   if (op.rect) {
     const grid = document.createElement("div");
     grid.className = "ve-row4";
-    const setRect = (key) => (v) => commitOverlay(op, { rect: snapRect({ ...op.rect, [key]: v }) });
+    const setRect = (key) => (v) => commitOverlay(op, { rect: snapRect({ ...liveOverlay(op).rect, [key]: v }) });
     grid.append(
       fieldRow(t("veCropX"), ovTrack("rect.x", numberInput(op.rect.x, 0, VE.w, 2, setRect("x")), (o) => String(o.rect.x))),
       fieldRow(t("veCropY"), ovTrack("rect.y", numberInput(op.rect.y, 0, VE.h, 2, setRect("y")), (o) => String(o.rect.y))),

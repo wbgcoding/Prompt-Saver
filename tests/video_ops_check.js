@@ -60,6 +60,8 @@ function makeSandbox(extra) {
       extractBlock("buildAudioChain", "function buildAudioChain() {"),
       extractBlock("pushOp", "function pushOp(op, opts) {"),
       extractBlock("pushReplacing", "function pushReplacing(match, op, opts) {"),
+      extractLine("liveOverlay", "const liveOverlay = (op) => VE.ops.find((o) => o.id === op.id) || op;"),
+      extractBlock("commitOverlay", "function commitOverlay(op, changes) {"),
       extractBlock("capPrevChain", "function capPrevChain(op, max) {"),
       extractLine("overlayStack", "const overlayStack = () => opsOf(\"overlay\").sort((a, b) => (a.z || 0) - (b.z || 0));"),
       extractBlock("enableExpr", "function enableExpr(op) {"),
@@ -86,6 +88,24 @@ function baseState(ops) {
     probe: { stream_copy_safe: true },
     audio: { sys: { mute: false, vol: 100 }, mic: { mute: false, vol: 100 } },
   };
+}
+
+// Overlay panel handlers keep the overlay copy they were built with. Editing the
+// volume and then the start time through that same stale copy must change only the
+// field being edited (the start time used to bring the volume back to 0).
+{
+  const sb = makeSandbox({ afterOpsChanged() {}, rememberOverlayValues() {} });
+  sb.VE = Object.assign(baseState([]), { floor: 0, redo: [], undoMax: 50 });
+  const stale = { tool: "overlay", kind: "video", id: "V", startMs: 0, endMs: 9000, volume: 0, opacity: 100, loop: false };
+  sb.VE.ops.push(stale);
+  vm.runInContext("commitOverlay", sb)(stale, { volume: 100 });
+  vm.runInContext("commitOverlay", sb)(stale, { startMs: 3000 });
+  vm.runInContext("commitOverlay", sb)(stale, { endMs: 8000 });
+  const cur = sb.VE.ops.find((o) => o.id === "V");
+  expect("overlay volume survives a later start edit", cur.volume === 100, cur.volume);
+  expect("overlay start survives a later end edit", cur.startMs === 3000, cur.startMs);
+  expect("overlay end is the edited value", cur.endMs === 8000, cur.endMs);
+  expect("overlay range handlers clamp against the live overlay", src.includes("clamp(ms, 0, liveOverlay(op).endMs)") && src.includes("clamp(ms, liveOverlay(op).startMs, VE.dur)"));
 }
 
 // An inserted section is only present as a movie= source inside the filter
