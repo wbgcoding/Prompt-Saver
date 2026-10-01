@@ -16734,7 +16734,7 @@ fn window_frame_rect(id: u32) -> Option<(i32, i32, i32, i32)> {
     }
     const DWMWA_EXTENDED_FRAME_BOUNDS: u32 = 9;
     let mut r = Rect::default();
-    let hr = unsafe { DwmGetWindowAttribute(id as isize, DWMWA_EXTENDED_FRAME_BOUNDS, &mut r, std::mem::size_of::<Rect>() as u32) };
+    let hr = unsafe { DwmGetWindowAttribute(id as i32 as isize, DWMWA_EXTENDED_FRAME_BOUNDS, &mut r, std::mem::size_of::<Rect>() as u32) };
     if hr != 0 || r.right <= r.left || r.bottom <= r.top {
         return None;
     }
@@ -17038,8 +17038,8 @@ fn save_screenshot(bytes: &[u8], dir: &std::path::Path, stem: &str, ext: &str) -
                     String::new()
                 };
             }
-            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(_) => return String::new(),
+            // Taken, or a directory of that name (PermissionDenied): try the next suffix.
+            Err(_) => continue,
         }
     }
     String::new()
@@ -37288,6 +37288,26 @@ mod tests {
         let flat = jpeg_with_orientation(1);
         let same = decode_image_oriented(image::ImageReader::new(std::io::Cursor::new(&flat))).expect("decodes");
         assert_eq!((same.width(), same.height()), (2, 1));
+    }
+
+    #[test]
+    fn decode_image_oriented_handles_every_orientation_tag() {
+        // (tag, expected size of the 2x1 source after the transform)
+        for (tag, size) in [(1u8, (2, 1)), (2, (2, 1)), (3, (2, 1)), (4, (2, 1)), (5, (1, 2)), (6, (1, 2)), (7, (1, 2)), (8, (1, 2)), (0, (2, 1)), (9, (2, 1))] {
+            let bytes = jpeg_with_orientation(tag);
+            let img = decode_image_oriented(image::ImageReader::new(std::io::Cursor::new(&bytes))).expect("decodes");
+            assert_eq!((img.width(), img.height()), size, "orientation tag {tag}");
+        }
+    }
+
+    #[test]
+    fn save_screenshot_skips_a_name_taken_by_a_directory() {
+        let dir = std::env::temp_dir().join(format!("{}-shotdir-{}", brand::TEMP_PREFIX, std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("Shot.png")).unwrap();
+        let p = save_screenshot(b"x", &dir, "Shot", "png");
+        assert!(p.ends_with("Shot (2).png"), "{p}");
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
