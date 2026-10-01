@@ -4,7 +4,7 @@
 // simple as a single pill's. All geometry (side, edge flipping, DPI) is decided in the
 // backend, which is the only place that knows the monitors.
 import { FONTS, fitText } from "./fonts.js";
-import { applyFloatTheme } from "./floattheme.js";
+import { applyFloatTheme, inkForColor, onInkChange } from "./floattheme.js";
 import { mediaKind } from "./media.js";
 import { APP_NAME } from "./brand.js";
 import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT, COPY_SOUND_VOLUME_DEFAULT } from "./copyDefaults.js";
@@ -132,6 +132,16 @@ function paintFace(el, p, withName) {
     if (p.color) el.style.boxShadow = `inset 0 0 0 2px ${p.color}`;
   } else {
     el.style.boxShadow = "";
+    // Text on a member's own colour takes its ink from that colour, like a
+    // floating button does; without one the theme's ink applies.
+    const ink = src ? null : inkForColor(p.color);
+    if (ink) {
+      el.style.setProperty("--pill-fg", ink.fg);
+      el.style.setProperty("--pill-ink-shadow", ink.shadow);
+    } else {
+      el.style.removeProperty("--pill-fg");
+      el.style.removeProperty("--pill-ink-shadow");
+    }
     const label = document.createElement("span");
     label.className = "face-text";
     label.textContent = withName ? p.name : (p.name || "").slice(0, 2);
@@ -141,6 +151,12 @@ function paintFace(el, p, withName) {
 
 // Ring thickness, in proportion to the icon: the same reasoning as the pill's:
 // a fixed band is a hairline on a large folder and swallows a small one whole.
+// A changed ink rule repaints the faces on screen without a reload.
+onInkChange(() => {
+  renderIcon();
+  if (open === "grid") renderGrid();
+});
+
 function renderIcon() {
   const box = FOLDER_BOX * state.scale;
   document.body.style.setProperty("--folder-box", px(box));
