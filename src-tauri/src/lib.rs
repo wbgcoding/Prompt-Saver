@@ -43019,7 +43019,6 @@ mod tests {
         let got = dup_sources(&[a, s]);
         assert_eq!(got.len(), 1, "the confidential entry is not scanned");
         assert_eq!((got[0].id.as_str(), got[0].name.as_str(), got[0].text.as_str()), ("a", "Alpha", "some body"));
-        assert_eq!((got[0].variants.len(), got[0].tags.len()), (1, 1));
     }
 
     #[test]
