@@ -13531,6 +13531,8 @@ async fn show_rec_bar(app: AppHandle, target_kind: String, id: i64) -> Result<()
         *REC_BAR_TARGET.lock().unwrap() = (target_kind.clone(), id as isize);
         position_rec_bar(&win, &target_kind, id as isize);
         let _ = win.show();
+        // A reused bar page still holds the last recording's state.
+        let _ = app.emit_to(label, "rec-bar-reset", ());
         if target_kind == "window" {
             spawn_rec_bar_follow(app.clone(), id as isize);
         }

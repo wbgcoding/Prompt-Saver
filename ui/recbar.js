@@ -239,6 +239,30 @@ async function poll() {
 pollTimer = setInterval(poll, 500);
 poll();
 
+// The window is only hidden between recordings, never closed, so this page
+// outlives a recording. show_rec_bar announces every new one; without it the
+// buttons Stop/Cancel disabled and the stopped poll timer would stay that way
+// and the next recording would run behind a dead bar.
+function resetForNewRecording() {
+  clearInterval(pollTimer);
+  paused = false;
+  pauseBtn.disabled = false;
+  stopBtn.disabled = false;
+  cancelBtn.disabled = false;
+  continueBtn.disabled = true;
+  applyPaused(false);
+  timeEl.textContent = fmtTimeMMSS(0);
+  sizeEl.textContent = "";
+  sizeEl.title = "";
+  sizeEl.classList.remove("rec-size-warn");
+  diskWarnEl.classList.add("hidden");
+  continueGapEl.classList.add("hidden");
+  clearTimeout(gapHideTimer);
+  pollTimer = setInterval(poll, 500);
+  poll();
+}
+listen("rec-bar-reset", resetForNewRecording);
+
 // Opens the same overlay recording itself starts from, in "pick a switch
 // target" mode -- recorder-target-picked (below) is what actually acts on
 // the result, since the overlay closes and reopens no window of its own.
