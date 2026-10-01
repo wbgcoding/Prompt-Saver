@@ -1865,6 +1865,8 @@ async fn run_in_process_inner(app: &AppHandle, argv: Vec<String>, cwd: PathBuf, 
     let state: tauri::State<Db> = app.state();
     let dir = data_dir(app);
     let mut store = lock(&state);
+    // (This check also refuses a prompt-only command while only the settings
+    // are locked; the standalone caller does not look at SETTINGS_LOCKED.)
     // The same refusal the standalone caller gives, up front: a store that is
     // read-only, locked after a failed decrypt or settings-locked must not even
     // be changed in memory, or the next save that succeeds would write it.
@@ -1893,7 +1895,9 @@ async fn run_in_process_inner(app: &AppHandle, argv: Vec<String>, cwd: PathBuf, 
 // accepts it. A refused write puts prompts, trash and settings back exactly as
 // they were, so the caller's "refused" answer is true of the running app too.
 fn exec_persisted(store: &mut Store, dir: &Path, cmd: &Cmd, cwd: &Path, persist: impl FnOnce(&Store, &Outcome) -> bool) -> Outcome {
-    let before = (store.prompts.clone(), store.trash.clone(), store.settings.clone());
+    // Only a command that can change something needs the copy; a read over a
+    // large library stays free of it.
+    let before = is_mutating(cmd).then(|| (store.prompts.clone(), store.trash.clone(), store.settings.clone()));
     let outcome = exec(store, dir, cmd, cwd);
     if !(outcome.mutated_prompts || outcome.mutated_trash || outcome.mutated_settings) {
         return outcome;
@@ -1901,7 +1905,12 @@ fn exec_persisted(store: &mut Store, dir: &Path, cmd: &Cmd, cwd: &Path, persist:
     if persist(store, &outcome) {
         return outcome;
     }
-    (store.prompts, store.trash, store.settings) = before;
+    if let Some(before) = before {
+        (store.prompts, store.trash, store.settings) = before;
+    }
+    // When the prompts write went through and only the settings write failed,
+    // memory is back but the disk keeps the prompt change until the next save,
+    // which rewrites everything (see the line below).
     // The row bookkeeping may have moved with the failed write: start it over so
     // nothing is skipped as already written on the next save.
     store.forget_written_rows();
