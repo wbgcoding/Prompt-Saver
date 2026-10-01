@@ -36937,6 +36937,17 @@ fn sync_poll_apply(
 // written back). Only the cheap "does this file differ from the snapshot" check
 // and the file-level lock happen unlocked; apply_md_to_prompt runs once the
 // store lock is back, against each prompt's CURRENT state.
+// Puts the files of candidates that were never applied back to "noted, not read".
+fn sync_requeue_candidates(dir: &Path, candidates: &[(String, String, bool)]) {
+    let mut seen = sync_seen_lock();
+    for (stem, _, _) in candidates {
+        if let Some(entry) = seen.get_mut(&sync_seen_key(&dir.join(format!("{stem}.md")))) {
+            entry.handled = false;
+            entry.hash = 0;
+        }
+    }
+}
+
 fn sync_poll_once(app: &AppHandle) {
     let Some(state) = app.try_state::<Db>() else { return };
     let (dir, snapshot, settings_snapshot) = {
@@ -37054,6 +37065,9 @@ fn sync_poll_once(app: &AppHandle) {
     }
     let mut store = lock(&state);
     if store.prompts_locked || !sync_enabled(&store.settings) {
+        // Not applied, so not dealt with: the files are read again once the library is
+        // free, instead of being dropped and later overwritten without a copy.
+        sync_requeue_candidates(&dir, &candidates);
         return;
     }
     let (changed, settings_changed) = sync_poll_apply(&mut store, candidates, &mut |settings, old, updated| {
@@ -42391,6 +42405,28 @@ mod tests {
         edited.text = "changed inside the app".into();
         sync_write_dir(&dir, &[edited], &Settings::default());
         assert_eq!(sync_conflict_copies(&dir, "p1"), 0, "the app's own earlier content is no outside edit");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sync_requeued_candidate_is_read_again_and_not_overwritten_unseen() {
+        let dir = sync_tmp_dir("requeue");
+        let path = dir.join("p1.md");
+        let mut edited = sync_test_prompt();
+        edited.text = "edited outside the app".into();
+        fs::write(&path, prompt_to_md(&edited, &SyncPlacement::default())).unwrap();
+        let stamp = sync_stamp_of(&path).unwrap();
+        let key = sync_seen_key(&path);
+        // The poll read the file and marked it handled, but could not apply it.
+        sync_seen_lock().insert(key.clone(), SyncSeen { stamp, handled: true, hash: sync_hash(&fs::read(&path).unwrap()) });
+        sync_requeue_candidates(&dir, &[("p1".to_string(), String::new(), false)]);
+        let entry = sync_seen_lock().get(&key).copied().unwrap();
+        assert!(!entry.handled);
+        assert_eq!(sync_scan_decision(Some(entry), stamp), SyncScan::Read);
+        let mut app_side = sync_test_prompt();
+        app_side.text = "changed inside the app".into();
+        sync_write_dir(&dir, &[app_side], &Settings::default());
+        assert_eq!(sync_conflict_copies(&dir, "p1"), 1);
         let _ = fs::remove_dir_all(&dir);
     }
 
