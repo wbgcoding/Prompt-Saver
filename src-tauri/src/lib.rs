@@ -36379,6 +36379,11 @@ fn sync_edit_unsaved(path: &Path, on_disk: &[u8], p: &Prompt, placement: &SyncPl
     if !sync_seen_lock().contains_key(&sync_seen_key(path)) {
         return !sync_md_matches(p, placement, &text);
     }
+    // Seen but never known as a live prompt's file (it arrived while the prompt sat in
+    // the trash and was only skipped): a restore must not overwrite it silently.
+    if !sync_known_lock().contains(&sync_seen_key(path)) {
+        return true;
+    }
     sync_changed_since_seen(path)
 }
 
@@ -36795,7 +36800,8 @@ fn sync_poll_apply(
             if store.trash.iter().any(|p| p.id == stem) {
                 // Trashed here, written again by another machine that does not know:
                 // a second row with the same id would break restore, delete and purge.
-                // The orphan sweep takes the file along once the poll has seen it.
+                // The file stays: the sweep only takes files this process wrote or read
+                // for a live prompt, and a later restore keeps this one as a copy.
                 continue;
             }
             let Some(np) = apply_md_to_prompt(&sync_blank_prompt(stem), &content) else { continue };
@@ -42256,6 +42262,24 @@ mod tests {
         sync_write_dir(&dir, &[stored, other], &Settings::default());
         assert_eq!(sync_conflict_copies(&dir, "p1"), 1, "a differing file must be kept as a copy");
         assert_eq!(sync_conflict_copies(&dir, "p2"), 0, "a file in an older format of the same prompt is no conflict");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sync_write_keeps_a_copy_of_a_file_that_arrived_while_its_prompt_was_trashed() {
+        let dir = sync_tmp_dir("trash-restore");
+        let path = dir.join("p1.md");
+        let mut theirs = sync_test_prompt();
+        theirs.text = "written by another machine meanwhile".into();
+        fs::write(&path, prompt_to_md(&theirs, &SyncPlacement::default())).unwrap();
+        // The poll saw it and skipped the trashed id: handled, but never known.
+        let stamp = sync_stamp_of(&path).unwrap();
+        sync_seen_lock().insert(sync_seen_key(&path), SyncSeen { stamp, handled: true });
+        sync_known_lock().remove(&sync_seen_key(&path));
+        let mut restored = sync_test_prompt();
+        restored.text = "the restored prompt".into();
+        sync_write_dir(&dir, &[restored], &Settings::default());
+        assert_eq!(sync_conflict_copies(&dir, "p1"), 1, "restoring must not overwrite the newer file silently");
         let _ = fs::remove_dir_all(&dir);
     }
 
