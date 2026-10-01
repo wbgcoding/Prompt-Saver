@@ -13,6 +13,18 @@ button) to create one, click any tile to copy it. Three sample tiles (an email w
 placeholders, an image, and a Markdown template) are already there on first launch;
 a button above the grid removes them with one click once they're no longer needed.
 
+### Settings
+
+The gear button in the header opens the settings window with the everyday
+choices; everything optional lives in the expert menu, opened from the same
+window. It holds the language, the theme, the text size and font of the tiles,
+whether the window stays on top, starts with Windows, starts in the background
+and goes to the background instead of quitting when closed, the global hotkey,
+auto-paste on double-click, and whether screenshots always go to the screenshots
+folder. Every change applies at once, with no save button. "Automatic" as the
+language follows Windows and falls back to English. Reset puts every setting
+back to its default and keeps the tiles; Delete removes all data and asks first.
+
 ### Introduction tour
 
 A five-step walkthrough shown once on first launch, right after the sample tiles
@@ -464,6 +476,8 @@ fast too often pauses the session with a toast instead of looping.
   still be started. Drag a row to reorder the chain right there, right-click a row to
   remove that step; the clipboard follows either change. Switchable
   off on its own in the expert menu.
+- Chain double-click latch: with it on, chain mode stays on after copying, for
+  building several chains in a row.
 - Per-tile hotkeys: copy a specific tile from anywhere, without opening the app
 - Drag-out: hold the modifier key and drag a tile onto another window to paste
   directly, no clipboard round-trip. An expert switch swaps the two gestures, so a
@@ -593,6 +607,10 @@ main grid stays as it always was.
 
 Small always-on-top copy buttons that sit outside the main window, over
 whatever app is in use.
+
+A button whose saved screen is no longer connected opens on the main screen,
+marked as parked, and jumps back on its own once that screen returns. An action
+in the expert menu brings every floating window to the main screen at once.
 
 ### Folders
 
@@ -742,6 +760,10 @@ Duplicate finder, trash (with its own retention setting), CSV/TXT export, and
 full backup export/import, all reached from the expert menu's data group. The
 duplicate finder also has a shortcut in the header of All prompts, so it does
 not take opening the expert menu to find it.
+
+"Recent messages" keeps a short list of error messages that flashed by in a
+toast, with time and place; copy or clear the list from its window. Settings
+alone can be saved to a file and loaded again from the same group.
 
 ### Trash & restoring tiles
 
@@ -940,6 +962,12 @@ names this computer's addresses as they were when it was made: after the
 network address changes, New certificate refreshes it. Without the network
 switch the receiver only listens on this computer and stays plain HTTP.
 
+The certificate is valid for 10 years, or for 825 days with "Short certificate
+for Apple devices", which iPhone, iPad and Mac require; devices then need the
+new certificate about every two years. Switching asks first and then makes a
+new certificate. An expired certificate is renewed when the receiver starts,
+with a message.
+
 For a script or another program driving either of these two, `prompt-saver
 describe` prints the full command list as JSON, and
 [docs/automation.md](automation.md) has the complete reference: every
@@ -1023,6 +1051,17 @@ Englisch zurück.
 auf eine leere Rasterzelle (oder der Plus-Button) legt eine an, ein Klick kopiert sie.
 Drei Beispielkacheln (E-Mail mit Platzhaltern, Bild, Markdown-Vorlage) sind beim
 ersten Start bereits da; ein Button über dem Raster entfernt sie mit einem Klick.
+
+**Einstellungen**: Das Zahnrad in der Kopfzeile öffnet das Einstellungsfenster
+mit den alltäglichen Entscheidungen; alles Optionale liegt im Experten-Menü, das
+sich im selben Fenster öffnet. Dort stehen Sprache, Theme, Textgröße und Schriftart
+der Kacheln, ob das Fenster im Vordergrund bleibt, mit Windows startet, im
+Hintergrund startet und sich beim Schließen in den Hintergrund legt, der globale
+Hotkey, Auto-Einfügen bei Doppelklick und das Speichern von Screenshots im
+Screenshots-Ordner. Jede Änderung gilt sofort, ohne Speichern-Schaltfläche.
+„Automatisch“ als Sprache folgt Windows und fällt auf Englisch zurück.
+Zurücksetzen stellt jede Einstellung auf die Vorgabe zurück und behält die Kacheln;
+Löschen entfernt alle Daten und fragt vorher nach.
 
 **Einführungstour**: fünf Schritte beim ersten Start, direkt nach den
 Beispielkacheln; der letzte Schritt bietet an, Screenshot-Editor, Farbpipette,
@@ -1320,6 +1359,8 @@ braucht und die er selbst füllt; ein Schritt ohne Antwort aus einem früheren
 Schritt wird rot markiert, lässt sich aber trotzdem starten. Die Zeilen lassen
 sich per Ziehen umsortieren und per Rechtsklick entfernen (die Zwischenablage
 folgt), die Leiste selbst ist einzeln abschaltbar.
+Mit eingeschalteter Doppelklick-Dauer-an-Funktion bleibt der Kettenmodus nach dem
+Kopieren an, um mehrere Ketten nacheinander zu bauen.
 Hotkeys pro Kachel, Herausziehen (mit oder, per Schalter, ohne
 Modifikatortaste), automatisches Einfügen. Formatiert kopieren (im Rechtsklick
 und im Editor, nur bei Text mit echter Markdown-Syntax): legt zusätzlich zur
@@ -1344,6 +1385,10 @@ mit eigenem Hotkey zeigt ein kleines Tastatursymbol.
 
 **Schwebende Buttons:** kleine, immer sichtbare Kopier-Buttons außerhalb des
 Hauptfensters, über jeder anderen App.
+Ein Button, dessen gespeicherter Bildschirm nicht mehr angeschlossen ist, öffnet sich
+auf dem Hauptbildschirm, als geparkt markiert, und springt von selbst zurück, sobald
+dieser Bildschirm wieder da ist. Eine Aktion im Experten-Menü holt alle schwebenden
+Fenster auf einmal auf den Hauptbildschirm.
 
 **Ordner:** eine Geste an drei Stellen, ein Ziehen auf ein anderes fasst es zu
 einem Ordner zusammen. Ein Ansichts-Reiter auf einen anderen ergibt einen
@@ -1499,6 +1544,10 @@ beides abschaltbar.
 **Datenwartung**: Duplikatfinder, Papierkorb, Import/Export. Der Duplikatfinder
 hat zusätzlich eine Abkürzung in der Kopfleiste von „Alle Prompts“, damit man
 dafür nicht erst das Expertenmenü öffnen muss.
+„Letzte Meldungen“ hält eine kurze Liste der Fehlermeldungen fest, die nur kurz als
+Hinweis erschienen, mit Zeit und Ort; die Liste lässt sich in ihrem Fenster kopieren
+oder leeren. Die Einstellungen allein lassen sich in derselben Gruppe in eine Datei
+speichern und wieder laden.
 
 **Papierkorb & Kacheln wiederherstellen**: gelöschte Kacheln landen zuerst im
 Papierkorb (Aufbewahrung in Tagen, 0 = für immer). Wiederherstellen legt in die
@@ -1667,6 +1716,11 @@ muss also neu eingerichtet werden. Das Zertifikat nennt außerdem die
 Adressen dieses Rechners, wie sie bei seiner Erzeugung waren: ändert sich die
 Netzwerkadresse, frischt "Neues Zertifikat" es auf. Ohne den Netzwerk-Schalter lauscht die
 Schnittstelle nur auf diesem Rechner und bleibt einfaches HTTP.
+
+Das Zertifikat gilt 10 Jahre, mit „Kurzes Zertifikat für Apple-Geräte“ 825 Tage, was
+iPhone, iPad und Mac verlangen; Geräte brauchen dann etwa alle zwei Jahre das neue
+Zertifikat. Das Umschalten fragt zuerst nach und erzeugt dann ein neues Zertifikat.
+Ein abgelaufenes Zertifikat wird beim Start des Empfängers erneuert, mit einer Meldung.
 
 Für ein Skript oder ein anderes Programm, das eines der beiden steuert, gibt
 `prompt-saver describe` die vollständige Befehlsliste als JSON aus, und
