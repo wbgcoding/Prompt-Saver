@@ -718,9 +718,11 @@ window.addEventListener("mouseup", async (e) => {
     const win = windowAt(s.x, s.y);
     if (win) {
       busy = true;
+      const tok = sessionSeq;
       try {
         await invoke("capture_window", { id: win.id });
       } catch (err) {
+        if (tok !== sessionSeq) return; // cancelled: a newer session owns busy now
         busy = false;
         const msg = snipErrorText(err, T);
         if (msg !== null) showError(msg);
@@ -733,6 +735,7 @@ window.addEventListener("mouseup", async (e) => {
   }
   const a = toImg(x, y), b = toImg(x + w, y + h);
   busy = true;
+  const tok = sessionSeq;
   try {
     await invoke("capture_region", {
       index: IDX,
@@ -742,6 +745,7 @@ window.addEventListener("mouseup", async (e) => {
       height: Math.round(b.y - a.y),
     });
   } catch (err) {
+    if (tok !== sessionSeq) return;
     busy = false;
     // A bare "something failed" is exactly wrong for this one cause -- no
     // OCR language installed at all. The overlay itself has no reach into the
@@ -758,9 +762,9 @@ window.addEventListener("mouseup", async (e) => {
 const NUDGE = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
 const ZOOM_KEYS = { "+": 1, "=": 1, "-": -1, _: -1 };
 window.addEventListener("keydown", (e) => {
-  // A capture already in flight finishes or fails on its own: cancelling under it
-  // would hide the overlay while the shot is still copied and saved.
-  if (e.key === "Escape") { if (busy) return; saveZoom(); invoke("snip_cancel").catch(() => {}); return; }
+  // Escape always cancels, also while a capture is in flight: the backend drops that
+  // capture's result and removes anything it already wrote.
+  if (e.key === "Escape") { saveZoom(); invoke("snip_cancel").catch(() => {}); return; }
   if (!pickMode || pickBusy) return;
   const d = NUDGE[e.key];
   const zk = ZOOM_KEYS[e.key];

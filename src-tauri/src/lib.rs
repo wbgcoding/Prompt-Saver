@@ -15635,6 +15635,9 @@ fn close_all_snip(app: &AppHandle) {
     }
     restore_app_windows_after_snip(app);
     remove_snip_preview();
+    // Ending a session invalidates every capture still running for it at once, so a
+    // late one never ends, copies or announces on behalf of the next session.
+    SNIP_GEN.fetch_add(1, Ordering::SeqCst);
     SNIP_ACTIVE.store(false, Ordering::SeqCst);
     PICK_ACTIVE.store(false, Ordering::SeqCst);
     // Every path that ends a snip session (capture, cancel, window click)
@@ -16406,6 +16409,7 @@ fn build_snip_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String> {
     let app_evt = app.clone();
     win.on_window_event(move |event| {
         if matches!(event, WindowEvent::Destroyed) && SNIP_ACTIVE.load(Ordering::SeqCst) {
+            SNIP_GEN.fetch_add(1, Ordering::SeqCst);
             SNIP_ACTIVE.store(false, Ordering::SeqCst);
             restore_app_windows_after_snip(&app_evt);
         }
@@ -18029,6 +18033,12 @@ fn clean_app_name(raw: &str) -> String {
 // sibling finalize_ocr_capture -- this used to run inline on the async worker thread,
 // blocking whichever other command happened to land on it for however long the encode
 // and disk write take.
+fn discard_cancelled_file(path: &str) {
+    if !path.is_empty() {
+        let _ = fs::remove_file(path);
+    }
+}
+
 async fn finalize_capture(app: &AppHandle, gen: u64, crop: image::RgbaImage, app_name: Option<String>) -> Result<(), String> {
     let (cw, ch) = crop.dimensions();
     if cw == 0 || ch == 0 {
@@ -18097,6 +18107,8 @@ async fn finalize_capture(app: &AppHandle, gen: u64, crop: image::RgbaImage, app
     .await
     .map_err(|e| e.to_string())??;
     if !snip_session_current(gen) {
+        // The cancel landed after the write: the folder file is this call's own, take it back.
+        discard_cancelled_file(&path);
         return Err("cancelled".to_string());
     }
 
@@ -18434,6 +18446,9 @@ async fn capture_window(
         // 3. Workaround: minimize the covering windows, grab the cleared area live.
         const SW_SHOWMINNOACTIVE: i32 = 7;
         const SW_SHOWNOACTIVATE: i32 = 4;
+        if !snip_session_current(gen) {
+            return Err("cancelled".to_string());
+        }
         set_snip_overlay_hidden(&app, true);
         for &o in &occ {
             show_window(o, SW_SHOWMINNOACTIVE);
@@ -37284,6 +37299,18 @@ mod tests {
         let r = decode_image_with_orientation_limits(image::ImageReader::new(std::io::Cursor::new(&png)), tight);
         assert!(r.is_none(), "40000 decoded bytes must exceed a 1000 byte cap");
         assert!(decode_image_mem_oriented(&png).is_some());
+    }
+
+    #[test]
+    fn a_cancelled_capture_leaves_no_folder_file() {
+        let dir = std::env::temp_dir().join(format!("{}-cancel-{}", brand::TEMP_PREFIX, std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let path = save_screenshot(b"x", &dir, "Screenshot-cancel", "png");
+        assert!(Path::new(&path).exists());
+        discard_cancelled_file(&path);
+        assert!(!Path::new(&path).exists());
+        discard_cancelled_file("");
+        let _ = fs::remove_dir_all(&dir);
     }
 
     // ---- two shots with the same stem never overwrite each other ----
