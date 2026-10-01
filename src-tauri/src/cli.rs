@@ -1663,6 +1663,14 @@ fn cmd_settings_set(store: &mut Store, key: &str, value: &str) -> Outcome {
         },
         _ => {
             if let Ok(b) = value.parse::<bool>() {
+                // Switching the picture-text index off here erases its text, the same
+                // as the switch in the app does: that text was read out of pictures.
+                if key == "ocrIndex" && !b && s.ui_flags.get(key).copied().unwrap_or(false) {
+                    let cleared = crate::clear_ocr_index_text(store);
+                    store.settings.ui_flags.insert(key.to_string(), b);
+                    let out = Outcome::ok(String::new()).mutating_settings();
+                    return if cleared { out.mutating().mutating_trash() } else { out };
+                }
                 s.ui_flags.insert(key.to_string(), b);
             } else if let Ok(n) = value.parse::<f64>() {
                 s.ui_values.insert(key.to_string(), n);
@@ -2678,6 +2686,19 @@ mod tests {
         };
         assert_eq!(exec_persisted(&mut store, &dir, &ok, Path::new("."), |_, _| true).code, 0);
         assert_eq!(store.settings.ui_flags.get("myFlag"), Some(&true));
+    }
+
+    #[test]
+    fn settings_set_ocr_index_off_erases_the_picture_text() {
+        let mut store = fixture_store();
+        let dir = std::env::temp_dir();
+        store.settings.ui_flags.insert("ocrIndex".into(), true);
+        store.prompts[0].image_text = "read from a picture".into();
+        let set = run_cmd(&mut store, &dir, &["settings", "set", "ocrIndex", "false", "--yes"]);
+        assert_eq!(set.code, 0);
+        assert!(set.mutated_settings && set.mutated_prompts && set.mutated_trash);
+        assert_eq!(store.settings.ui_flags.get("ocrIndex"), Some(&false));
+        assert!(store.prompts.iter().all(|p| p.image_text.is_empty()));
     }
 
     #[test]
