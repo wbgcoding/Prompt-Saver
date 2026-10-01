@@ -239,7 +239,7 @@ fn take_matching(slot: &mut Option<CamSession>, path: &Path) -> Result<CamSessio
 // instead of a JSON array of numbers -- about a third bigger than raw
 // instead of three to four times bigger, for every chunk of every take.
 #[tauri::command]
-pub fn camera_append_chunk(cam: State<'_, CameraState>, path: String, bytes_b64: String) -> Result<(), String> {
+pub async fn camera_append_chunk(cam: State<'_, CameraState>, path: String, bytes_b64: String) -> Result<(), String> {
     let guard = cam.0.lock().unwrap_or_else(|e| e.into_inner());
     let session = guard.as_ref().ok_or_else(|| "no active camera recording".to_string())?;
     if session.output_path != Path::new(&path) {
@@ -549,6 +549,17 @@ fn install_permission_handler(_app: &AppHandle, _win: &tauri::WebviewWindow) -> 
 
 #[cfg(test)]
 mod tests {
+    // The append command must not run on the main thread (it is called every
+    // second with a base64 chunk), and because an async command can overlap with
+    // itself, camera.js has to chain the calls so the chunks stay in order.
+    #[test]
+    fn camera_append_chunk_is_async_and_the_page_orders_its_calls() {
+        let rs = include_str!("camera.rs");
+        assert!(rs.contains("pub async fn camera_append_chunk("), "camera_append_chunk must be an async command");
+        let js = include_str!("../../ui/camera.js");
+        assert!(js.contains("const append = appendChain"), "camera.js must start each append after the previous one");
+    }
+
     use super::*;
 
     #[test]

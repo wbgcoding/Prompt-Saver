@@ -2706,9 +2706,11 @@ function flagRow(key) {
       if (!ok) { input.checked = false; return; }
     }
     settings.ui_flags = { ...(settings.ui_flags || {}), [key]: enabled };
+    let accepted = true;
     try {
       await invoke("set_ui_flag", { key, enabled });
     } catch (err) {
+      accepted = false;
       // The backend refused to switch the feature on (today: prompt sync, whose
       // safety backup or first folder write failed). It left the flag off, so the switch has to follow:
       // a checkbox that shows a state the store does not have is worse than the error.
@@ -2746,6 +2748,7 @@ function flagRow(key) {
     // cannot change which guard is already running.
     if (key === "allowMultipleInstances") toast(t("toastRestartNeeded"));
     applyFlags();
+    if (key === "clipWatcher" && !enabled && accepted) await offerClipInboxCleanup();
     // "only changed" has to recompute after EVERY flag (not just gating ones,
     // which is all a plain re-render used to care about): the row set depends on
     // this flag's own value now, not only on what it gates.
@@ -8685,6 +8688,8 @@ function maybeCloseOnCopy() {
 // from writing that row over and over while the user reads rather than types.
 function draftEditorFields() {
   if (!modalState) return null;
+  // A confidential entry is never drafted: the draft row would hold its revealed text.
+  if (modalState.secret) return null;
   const rotating = rotationUiOn();
   const hasVariants = rotationActive();
   const entries = rotating
@@ -8771,6 +8776,7 @@ function openModal({ mode, id, name = "", text = "", color = "", image = "", sho
   syncModalImageUi(mode);
   modalInitial = modalSnapshot();
   armDraftAutosave();
+  if (secret) invoke("discard_editor_draft").catch(() => {});
   modal.name.focus();
   modal.name.select();
 }
@@ -9227,10 +9233,12 @@ const SEARCH_DEBOUNCE_MS = 120;
 // in when the debounced wrapper was created).
 function debounced(fn, ms = SEARCH_DEBOUNCE_MS) {
   let timer = 0;
-  return () => {
+  const run = () => {
     clearTimeout(timer);
     timer = setTimeout(fn, typeof ms === "function" ? ms() : ms);
   };
+  run.cancel = () => clearTimeout(timer);
+  return run;
 }
 
 // ---- Markdown preview + code highlighting (editor) ----
@@ -12160,6 +12168,22 @@ async function restoreClipInbox(items) {
   await refreshClipInbox();
 }
 
+// Switching the collector off leaves whatever it gathered in place, with the inbox
+// button hidden: ask once whether to keep it. Closing the dialog keeps it.
+async function offerClipInboxCleanup() {
+  const items = await invoke("clip_inbox_list").catch(() => []);
+  if (!items.length) return;
+  const drop = await confirmDialog({
+    title: t("flagClipWatcher"),
+    message: t("clipInboxKeepAsk"),
+    confirmLabel: t("delete"),
+    cancelLabel: t("clipInboxKeep"),
+  });
+  if (!drop) return;
+  try { await invoke("clip_inbox_clear"); } catch (e) { errToast(e); return; }
+  toast(t("clipInboxClearedToast"));
+}
+
 async function refreshClipInbox() {
   if (!optFlag("clipWatcher")) { clipCount = 0; updateClipBadge(); return; }
   let items = [];
@@ -14197,6 +14221,8 @@ async function refreshImageHits(rawInput) {
   }
   let ids = [];
   try { ids = (await invoke("search_image_text", { query: rawInput })) || []; } catch { ids = []; }
+  // A slower reply for an older query must not draw its hit set over the newer one.
+  if (rawInput !== libQuery.trim().toLowerCase()) return;
   imageHitIds = new Set(ids);
   imageHitQuery = rawInput;
   libScoreCache.clear();
@@ -19896,8 +19922,15 @@ function bind() {
   const refreshImageHitsDebounced = debounced(() => refreshImageHits(libQuery.trim().toLowerCase()), () => val("searchDebounceMs"));
   $("library-q").addEventListener("input", (e) => {
     libQuery = e.target.value;
-    renderLibraryDebounced();
-    refreshImageHitsDebounced();
+    // With picture text search on and a query typed, the lookup renders once its
+    // answer is in; rendering first as well would draw the whole library twice.
+    if (optFlag("ocrIndex") && libQuery.trim()) {
+      renderLibraryDebounced.cancel(); // a render queued by an earlier blank query
+      refreshImageHitsDebounced();
+    } else {
+      renderLibraryDebounced();
+      refreshImageHitsDebounced();
+    }
   });
   wireSearchSuggest($("library-q"), "recentSearchLib");
   $("library-search-save").addEventListener("click", () => saveSavedSearch());
@@ -20065,9 +20098,11 @@ function bind() {
   $("clip-toggle").addEventListener("click", async () => {
     const on = !optFlag("clipWatcher");
     settings.ui_flags = { ...(settings.ui_flags || {}), clipWatcher: on };
+    let accepted = true;
     try { await invoke("set_ui_flag", { key: "clipWatcher", enabled: on }); }
-    catch (e) { errToast(e); }
+    catch (e) { accepted = false; errToast(e); }
     applyFlags();
+    if (!on && accepted) await offerClipInboxCleanup();
     await refreshClipInbox();
     updateClipBadge();
   });

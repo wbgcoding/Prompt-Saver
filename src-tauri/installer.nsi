@@ -71,6 +71,11 @@ ${StrLoc}
 ; rebrand. The uninstall data page and the delete step both read this one
 ; define instead of each spelling the folder name out separately.
 !define DATAFOLDER "Prompt-Saver"
+; Must match brand::TEMP_DIR and brand::TEMP_PREFIX (src-tauri/src/brand.rs): the
+; scratch folder and the loose screenshot previews the app leaves in %TEMP%. The
+; delete step removes both. Stamped by tools/brand.js on rebrand.
+!define TEMPFOLDER "prompt-saver"
+!define TEMPPREFIX "promptsaver"
 
 Var PassiveMode
 Var UpdateMode
@@ -1285,6 +1290,11 @@ Section Uninstall
     RmDir /r "$APPDATA\${DATAFOLDER}"
     RmDir /r "$APPDATA\${BUNDLEID}"
     RmDir /r "$LOCALAPPDATA\${BUNDLEID}"
+    ; Scratch files hold picture crops, filmstrips and working copies of the user's
+    ; own files, so "delete my data" takes them along. Only the app's own folder
+    ; and its own prefixed preview files are touched, never %TEMP% itself.
+    RmDir /r "$TEMP\${TEMPFOLDER}"
+    Delete "$TEMP\${TEMPPREFIX}-snip-*"
   ${EndIf}
 
   !ifmacrodef NSIS_HOOK_POSTUNINSTALL

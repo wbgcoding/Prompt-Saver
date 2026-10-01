@@ -856,6 +856,30 @@ the video editor and the introduction tour ship on).
 - The dark shadow behind white text on a coloured tile, folder or floating
   button can now be switched off or dialed to a different strength in the
   expert menu, next to the black/white text switch.
+- **Saving a prompt with a large attachment no longer freezes the other
+  windows.** Copying the file, reading its properties and recognizing text in
+  a new picture now happen before the library is locked, so copying and
+  searching keep working while a big save runs.
+- **Camera recording no longer stalls the window every second.** Saving each
+  recorded chunk moved off the main thread, and the chunks are still written
+  strictly in order.
+- **The Markdown folder check no longer copies the whole library every few
+  seconds.** The poll first looks at file sizes and dates only and copies the
+  prompts and settings just when a file actually changed.
+- **Saving with Markdown folder sync on no longer rereads every file.** The
+  app remembers what it last wrote to each file and skips the ones that are
+  still exactly that; an edit made outside the app is still noticed.
+- **Opening the trash no longer loads every trashed picture.** The list asks
+  only for names, a short text preview and dates, and runs off the main
+  thread, so a large trash opens at once.
+- **The batch export dialog reads the lengths of the selected recordings in
+  parallel.** Choosing many recordings opens the dialog faster and no longer
+  ties up a background worker one file at a time.
+- **Searching the library with picture text search on draws the list once per
+  keystroke pause instead of twice.**
+- **Finding duplicates copies far less data while the library is locked.**
+  Only names, texts, variants and tags are copied for the scan, not the stored
+  pictures.
 
 ### Fixed
 
@@ -1354,6 +1378,10 @@ the video editor and the introduction tour ship on).
   clipboard inbox clear offers no undo, undoing a resize no longer unlocks
   steps behind the undo limit, a shift-drag of a top crop corner keeps the
   bottom edge still, and a screenshot whose delete failed is not saved twice.
+- **A failed still-frame extraction no longer leaves its picture in the temp
+  folder, and abandoned ones are swept.** A frame cut from a video that
+  failed half way is removed at once; leftovers from a crash are cleaned up
+  with the other temporary files.
 
 ### Security
 
@@ -1484,6 +1512,27 @@ the video editor and the introduction tour ship on).
   switch, the URL scheme and the Markdown sync are skipped by "All on", and
   demo mode is never written by a profile or a reset, so a running demo session
   also survives "Reset expert menu".
+- **Editor drafts are stored encrypted, and a confidential prompt is never
+  drafted.** The automatic draft of the open editor is sealed for your Windows
+  account like the prompts themselves, so a revealed confidential prompt no
+  longer lands in the data file or in a backup as plain text. Drafts saved by
+  an earlier version still load, and a prompt turned confidential loses its
+  draft.
+- **The key overlay record next to a screen recording is stored encrypted.**
+  The keys typed during a recording are sealed for your Windows account; older
+  recordings with a plain record still open.
+- **Uninstalling with "delete my data" also removes the temporary working
+  files.** Picture crops, filmstrips and working copies in the temp folder go
+  with it, and closing the app now removes its own working copies at once.
+- **Switching off the picture text index erases it.** The text read out of
+  attached pictures for searching is removed from every prompt (and the
+  trash) the moment "Index text inside attached pictures for search" goes off, not only hidden.
+- **Switching off the clipboard collector asks what to do with what it
+  gathered.** Keep it or delete it; closing the question keeps it.
+- **Saved editor work for pictures and videos is stored encrypted.** The
+  remembered edits (including text overlays) and the file path they belong to
+  are sealed for your Windows account; work saved by an earlier version still
+  loads and is replaced in the new form on the next save.
 
 ### Removed
 

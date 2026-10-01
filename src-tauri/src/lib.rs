@@ -4781,6 +4781,16 @@ fn load_store(app: &AppHandle) -> Store {
         if version_sweep_allowed(&dir, DATA_DIR_READONLY.load(Ordering::Relaxed)) {
             db_sweep_orphan_versions(&conn);
         }
+        // Seal every plain edit_state row an earlier version left behind, off the
+        // main thread; idempotent, so running it on each load costs one cheap scan.
+        {
+            let app = app.clone();
+            std::thread::spawn(move || {
+                if let Some(conn) = db_conn(&app) {
+                    edit_state_seal_all(&conn);
+                }
+            });
+        }
         store.normalize_folders(); // Drop members whose prompt is gone
         sweep_trash(app, &mut store); // drop anything past the retention window
         if needs_mig || migrated_log {
@@ -6695,19 +6705,69 @@ fn store_files_enabled(store: &Store) -> bool {
     store.settings.ui_flags.get("storeFiles").copied().unwrap_or(false)
 }
 
+// Staged copies that are on disk (or about to be) but not yet referenced by any
+// prompt in the store. sweep_orphan_files treats them as referenced.
+static PENDING_ATTACHMENTS: Mutex<Option<std::collections::HashSet<String>>> = Mutex::new(None);
+
+fn pending_key(path: &str) -> String {
+    path.replace('/', "\\").to_lowercase()
+}
+
+fn pending_attachments_contain(path: &str) -> bool {
+    let guard = PENDING_ATTACHMENTS.lock().unwrap_or_else(|e| e.into_inner());
+    guard.as_ref().is_some_and(|s| s.contains(&pending_key(path)))
+}
+
+// Owns the copies one add/update made before the store lock. While alive they are
+// "pending" (never swept). Dropped: pending entries are released, and unless
+// `commit` ran, the copies are removed again (validation failure, vanished id).
+struct StagedCopies {
+    paths: Vec<String>,
+    committed: bool,
+}
+
+impl StagedCopies {
+    fn new() -> Self {
+        StagedCopies { paths: Vec::new(), committed: false }
+    }
+    fn commit(&mut self) {
+        self.committed = true;
+    }
+    fn stage(&mut self, files_dir: &std::path::Path, path: &str) -> String {
+        store_attached_file_in(files_dir, path, Some(self))
+    }
+}
+
+impl Drop for StagedCopies {
+    fn drop(&mut self) {
+        // While unwinding, the in-memory prompt may already point at the staged path;
+        // keep the file and let a later sweep collect a true orphan.
+        if !self.committed && !std::thread::panicking() {
+            for p in &self.paths {
+                let _ = fs::remove_file(p);
+            }
+        }
+        let mut guard = PENDING_ATTACHMENTS.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(set) = guard.as_mut() {
+            for p in &self.paths {
+                set.remove(&pending_key(p));
+            }
+        }
+    }
+}
+
 // Copy an attached file into <data>/files so the prompt keeps working even if the
 // original is moved or deleted. Returns the stored path, or the original unchanged
 // on any problem or if it is already inside the store (never loses the reference).
-fn store_attached_file(app: &AppHandle, path: &str) -> String {
+fn store_attached_file_in(files_dir: &std::path::Path, path: &str, staged: Option<&mut StagedCopies>) -> String {
     if path.is_empty() {
         return String::new();
     }
     let src = std::path::Path::new(path);
-    let files_dir = data_dir(app).join("files");
-    if src.starts_with(&files_dir) || !src.is_file() {
+    if src.starts_with(files_dir) || !src.is_file() {
         return path.to_string();
     }
-    if fs::create_dir_all(&files_dir).is_err() {
+    if fs::create_dir_all(files_dir).is_err() {
         return path.to_string();
     }
     let name = src
@@ -6715,9 +6775,22 @@ fn store_attached_file(app: &AppHandle, path: &str) -> String {
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "file".to_string());
     let dest = files_dir.join(format!("{}_{}", gen_id(), name));
+    let dest_str = dest.to_string_lossy().to_string();
+    // Registered BEFORE the copy so a sweep can never see the file unprotected.
+    if let Some(st) = staged {
+        PENDING_ATTACHMENTS
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get_or_insert_with(Default::default)
+            .insert(pending_key(&dest_str));
+        st.paths.push(dest_str.clone());
+    }
     match fs::copy(src, &dest) {
-        Ok(_) => dest.to_string_lossy().to_string(),
-        Err(_) => path.to_string(),
+        Ok(_) => dest_str,
+        Err(_) => {
+            let _ = fs::remove_file(&dest);
+            path.to_string()
+        }
     }
 }
 
@@ -6733,7 +6806,20 @@ fn store_attached_file(app: &AppHandle, path: &str) -> String {
 // `orphan_cleanup_enabled` + `orphan_referenced_set` inside their locked block,
 // then call this once the lock is dropped.
 fn sweep_orphan_files(app: &AppHandle, referenced: &std::collections::HashSet<String>) {
-    let entries = match fs::read_dir(data_dir(app).join("files")) {
+    sweep_orphan_files_in(&data_dir(app).join("files"), referenced, || {
+        app.try_state::<Db>().map(|state| {
+            let store = lock(&state);
+            orphan_referenced_set(&store)
+        })
+    });
+}
+
+fn sweep_orphan_files_in(
+    files_dir: &std::path::Path,
+    referenced: &std::collections::HashSet<String>,
+    live_now: impl FnOnce() -> Option<std::collections::HashSet<String>>,
+) {
+    let entries = match fs::read_dir(files_dir) {
         Ok(e) => e,
         Err(_) => return, // no store folder yet -> nothing to clean
     };
@@ -6743,29 +6829,22 @@ fn sweep_orphan_files(app: &AppHandle, referenced: &std::collections::HashSet<St
     let mut candidates: Vec<std::path::PathBuf> = Vec::new();
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.is_file() && !referenced.contains(&norm(&path.to_string_lossy())) {
+        if path.is_file() && !referenced.contains(&norm(&path.to_string_lossy())) && !pending_attachments_contain(&path.to_string_lossy()) {
             candidates.push(path);
         }
     }
     if candidates.is_empty() {
         return;
     }
-    // `referenced` is a snapshot from before the lock was released -- store_attached_file
-    // (which copies a NEW attachment into this same folder) always runs while the lock is
-    // held, so another window's add/update can land a fresh file here while this sweep is
-    // still walking the directory. Re-check every candidate against the store's CURRENT
-    // state right before deleting it: one more cheap in-memory HashSet build (no filesystem
-    // work under the lock, so the whole point of splitting this sweep out still holds),
-    // closing the window that could otherwise delete a file another window just copied in.
-    let live = match app.try_state::<Db>() {
-        Some(state) => {
-            let store = lock(&state);
-            orphan_referenced_set(&store)
-        }
-        None => return,
-    };
+    // `referenced` is a snapshot from before the lock was released, and add/update copy
+    // a NEW attachment into this same folder BEFORE the prompt that references it is in
+    // the store (StagedCopies registers those copies as pending for the whole window).
+    // Re-check every candidate against the store's CURRENT state and the pending set right
+    // before deleting it: one more cheap in-memory HashSet build (no filesystem work under
+    // the lock, so the whole point of splitting this sweep out still holds).
+    let Some(live) = live_now() else { return };
     for path in candidates {
-        if !live.contains(&norm(&path.to_string_lossy())) {
+        if !live.contains(&norm(&path.to_string_lossy())) && !pending_attachments_contain(&path.to_string_lossy()) {
             let _ = fs::remove_file(&path);
         }
     }
@@ -7141,12 +7220,42 @@ async fn add_prompt(
     rotate_mode: Option<String>,
     rotate_auto: Option<bool>,
 ) -> Result<Prompt, String> {
-    // One lock for the whole op so the storeFiles flag can't change mid-insert.
+    // The slow steps (copying a large attachment, ffprobe, OCR) run before the
+    // store lock is taken, so every other window keeps working meanwhile. The
+    // lock is taken again only to validate and insert.
+    let (store_files, ocr_index_on, max_chars) = {
+        let store = lock(&state);
+        (
+            store_files_enabled(&store),
+            store.settings.ui_flags.get("ocrIndex").copied().unwrap_or(false),
+            ocr_index_max_chars(&store.settings),
+        )
+    };
+    let mut fp = file_path.unwrap_or_default();
+    let mut ip = icon_path.unwrap_or_default();
+    let mut staged_copies = StagedCopies::new();
+    if store_files {
+        let files_dir = data_dir(&app).join("files");
+        fp = staged_copies.stage(&files_dir, &fp);
+        ip = staged_copies.stage(&files_dir, &ip);
+    }
+    // Measured once, right here, never again on a render.
+    let media_source = if !fp.is_empty() { Some(fp.as_str()) } else if !ip.is_empty() { Some(ip.as_str()) } else { None };
+    let (media_duration_ms, media_width, media_height, media_size_bytes) = match media_source {
+        Some(p) => probe_media_meta(ffprobe_search_path(&app).as_deref(), Path::new(p)),
+        None => (0, 0, 0, 0),
+    };
+    let image_value = image.unwrap_or_default();
+    // Read once and indexed once, right here, on purpose: a search index that
+    // costs an OCR pass on every render would be exactly the defect this is
+    // meant not to be.
+    let image_text = resolved_image_text(&image_value, ocr_index_on, |img| ocr_index_text(img, max_chars));
     let prompt = {
         let mut store = lock(&state);
-        let store_files = store_files_enabled(&store);
         let tags = sanitize_tags(tags.unwrap_or_default(), &canonical_tags(&store.prompts))?;
         let notes = sanitize_notes(&notes.unwrap_or_default())?;
+        // The OCR above ran against a flag snapshot: text only exists while the index is on.
+        let image_text = if ocr_index_flag_on(&store) { image_text } else { String::new() };
         let variants = sanitize_variants(variants.unwrap_or_default());
         let rotate_mode = sanitize_rotate_mode(rotate_mode.unwrap_or_default(), &variants);
         let rotate_auto = sanitize_rotate_auto(rotate_auto.unwrap_or(false), &variants);
@@ -7159,25 +7268,6 @@ async fn add_prompt(
         } else {
             sanitize_hotkey_mode(&hotkey_paste.unwrap_or_default())
         };
-        let mut fp = file_path.unwrap_or_default();
-        let mut ip = icon_path.unwrap_or_default();
-        if store_files {
-            fp = store_attached_file(&app, &fp);
-            ip = store_attached_file(&app, &ip);
-        }
-        // Measured once, right here, never again on a render.
-        let media_source = if !fp.is_empty() { Some(fp.as_str()) } else if !ip.is_empty() { Some(ip.as_str()) } else { None };
-        let (media_duration_ms, media_width, media_height, media_size_bytes) = match media_source {
-            Some(p) => probe_media_meta(ffprobe_search_path(&app).as_deref(), Path::new(p)),
-            None => (0, 0, 0, 0),
-        };
-        let image_value = image.unwrap_or_default();
-        // Read once and indexed once, right here, on purpose: a search index that
-        // costs an OCR pass on every render would be exactly the defect this is
-        // meant not to be.
-        let ocr_index_on = store.settings.ui_flags.get("ocrIndex").copied().unwrap_or(false);
-        let max_chars = ocr_index_max_chars(&store.settings);
-        let image_text = resolved_image_text(&image_value, ocr_index_on, |img| ocr_index_text(img, max_chars));
         let prompt = Prompt {
             id: gen_id(),
             trashed_at: 0,
@@ -7232,6 +7322,7 @@ async fn add_prompt(
             store.settings.active_view_mut().members.retain(|m| *m != prompt.id);
             return Err("save-failed".into());
         }
+        staged_copies.commit();
         save_settings(&app, &store.settings);
         prompt
     };
@@ -7456,9 +7547,46 @@ async fn update_prompt(
 ) -> Result<Option<Prompt>, String> {
     let variants = sanitize_variants(variants);
     let rotate_mode = sanitize_rotate_mode(rotate_mode, &variants);
+    // Copying an attachment, probing it and OCR-ing a new picture all happen
+    // before the store lock is taken, against a short snapshot of what the
+    // prompt holds now. The locked section below uses those results only when
+    // the prompt still holds exactly that (a concurrent edit falls back to doing
+    // the work inline, as before).
+    let (store_files, staged_ocr_on, staged_ocr_max, staged_cur) = {
+        let store = lock(&state);
+        let cur = store.prompts.iter().find(|p| p.id == id).map(|p| (p.image.clone(), p.file_path.clone(), p.icon_path.clone()));
+        (
+            store_files_enabled(&store),
+            store.settings.ui_flags.get("ocrIndex").copied().unwrap_or(false),
+            ocr_index_max_chars(&store.settings),
+            cur,
+        )
+    };
+    let mut staged_copies = StagedCopies::new();
+    let files_dir = data_dir(&app).join("files");
+    let file_path = file_path.map(|p| if store_files { staged_copies.stage(&files_dir, &p) } else { p });
+    let icon_path = icon_path.map(|p| if store_files { staged_copies.stage(&files_dir, &p) } else { p });
+    let ffprobe = ffprobe_search_path(&app);
+    let staged_image_text = staged_cur.as_ref().and_then(|(cur_img, _, _)| {
+        image.as_deref().is_some_and(|v| v != cur_img).then(|| {
+            resolved_image_text(&merge_image(cur_img, image.clone()), staged_ocr_on, |img| ocr_index_text(img, staged_ocr_max))
+        })
+    });
+    let staged_media = staged_cur.as_ref().and_then(|(_, cur_fp, cur_ip)| {
+        let changed = file_path.as_deref().is_some_and(|v| v != cur_fp) || icon_path.as_deref().is_some_and(|v| v != cur_ip);
+        if !changed {
+            return None;
+        }
+        let fp_now = file_path.clone().unwrap_or_else(|| cur_fp.clone());
+        let ip_now = icon_path.clone().unwrap_or_else(|| cur_ip.clone());
+        let source = if !fp_now.is_empty() { Some(fp_now) } else if !ip_now.is_empty() { Some(ip_now) } else { None };
+        Some(match source {
+            Some(mp) => probe_media_meta(ffprobe.as_deref(), Path::new(&mp)),
+            None => (0, 0, 0, 0),
+        })
+    });
     let updated = {
         let mut store = lock(&state);
-        let store_files = store_files_enabled(&store);
         let tags = match tags {
             Some(list) => Some(sanitize_tags(list, &canonical_tags(&store.prompts))?),
             None => None,
@@ -7476,12 +7604,9 @@ async fn update_prompt(
             }
             None => None,
         };
-        let file_path = file_path.map(|p| if store_files { store_attached_file(&app, &p) } else { p });
-        let icon_path = icon_path.map(|p| if store_files { store_attached_file(&app, &p) } else { p });
         // Read before the mutable prompt borrow below (a MutexGuard can't be
         // split into disjoint field borrows) -- only actually run if the
         // attachment turns out to have changed.
-        let ffprobe = ffprobe_search_path(&app);
         let ocr_index_on = store.settings.ui_flags.get("ocrIndex").copied().unwrap_or(false);
         let ocr_max_chars = ocr_index_max_chars(&store.settings);
         // Read history settings before the mutable prompt borrow (a MutexGuard
@@ -7500,6 +7625,9 @@ async fn update_prompt(
                 // had taken (they would silently revert on the next restart). Also
                 // doubles as the version-history snapshot source below.
                 let original = p.clone();
+                // The staged results above are valid only for the state they were
+                // computed against.
+                let staged_valid = staged_cur.as_ref().is_some_and(|(i, f, c)| *i == p.image && *f == p.file_path && *c == p.icon_path);
                 // A confidential entry's text/variants must never land in storage
                 // as whatever the editor sent -- that is the plain text while
                 // unlocked, so it is re-encrypted here before it touches p; while
@@ -7527,7 +7655,10 @@ async fn update_prompt(
                 let image_changed = image.as_deref().is_some_and(|v| v != p.image);
                 p.image = merge_image(&p.image, image);
                 if image_changed {
-                    p.image_text = resolved_image_text(&p.image, ocr_index_on, |img| ocr_index_text(img, ocr_max_chars));
+                    p.image_text = match &staged_image_text {
+                        Some(t) if staged_valid && staged_ocr_on == ocr_index_on && staged_ocr_max == ocr_max_chars => t.clone(),
+                        _ => resolved_image_text(&p.image, ocr_index_on, |img| ocr_index_text(img, ocr_max_chars)),
+                    };
                 }
                 if let Some(si) = show_image { p.show_image = si; }
                 if let Some(ci) = copy_image { p.copy_image = ci; }
@@ -7540,10 +7671,15 @@ async fn update_prompt(
                 if let Some(pp) = pdf_page { p.pdf_page = pp; }
                 if let Some(ip) = icon_path { p.icon_path = ip; }
                 if attachment_changed {
-                    let media_source = if !p.file_path.is_empty() { Some(p.file_path.as_str()) } else if !p.icon_path.is_empty() { Some(p.icon_path.as_str()) } else { None };
-                    let (d, w, h, sz) = match media_source {
-                        Some(mp) => probe_media_meta(ffprobe.as_deref(), Path::new(mp)),
-                        None => (0, 0, 0, 0),
+                    let (d, w, h, sz) = match staged_media {
+                        Some(m) if staged_valid => m,
+                        _ => {
+                            let media_source = if !p.file_path.is_empty() { Some(p.file_path.as_str()) } else if !p.icon_path.is_empty() { Some(p.icon_path.as_str()) } else { None };
+                            match media_source {
+                                Some(mp) => probe_media_meta(ffprobe.as_deref(), Path::new(mp)),
+                                None => (0, 0, 0, 0),
+                            }
+                        }
                     };
                     p.media_duration_ms = d;
                     p.media_width = w;
@@ -7575,6 +7711,7 @@ async fn update_prompt(
                     }
                     return Err("save-failed".into());
                 }
+                staged_copies.commit();
                 // Snapshot the PRE-edit name/text/variants only once the
                 // edit is durably saved: inserting it before save_prompts (the old
                 // order) left a version row for an edit that never actually happened
@@ -8112,9 +8249,43 @@ async fn batch_prompts(
 
 // ---------- Trash ----------
 
+// What one row of the trash dialog reads, and nothing more: the dialog draws no
+// picture, so the stored images (hundreds of kilobytes each) never travel. `text`
+// is a short preview; a confidential entry's preview stays empty, since its stored
+// text is ciphertext.
+#[derive(Serialize)]
+struct TrashRow {
+    id: String,
+    name: String,
+    text: String,
+    file_path: String,
+    icon_path: String,
+    copy_image: bool,
+    has_image: bool,
+    trashed_at: u64,
+}
+
+const TRASH_PREVIEW_CHARS: usize = 400;
+
+fn trash_rows(trash: &[Prompt]) -> Vec<TrashRow> {
+    trash
+        .iter()
+        .map(|p| TrashRow {
+            id: p.id.clone(),
+            name: p.name.clone(),
+            text: if p.secret { String::new() } else { p.text.chars().take(TRASH_PREVIEW_CHARS).collect() },
+            file_path: p.file_path.clone(),
+            icon_path: p.icon_path.clone(),
+            copy_image: p.copy_image,
+            has_image: !p.image.is_empty(),
+            trashed_at: p.trashed_at,
+        })
+        .collect()
+}
+
 #[tauri::command]
-fn list_trash(state: State<Db>) -> Vec<Prompt> {
-    lock(&state).trash.clone()
+async fn list_trash(state: State<'_, Db>) -> Result<Vec<TrashRow>, String> {
+    Ok(trash_rows(&lock(&state).trash))
 }
 
 // Moves a trashed prompt back onto the active view and persists it. On a failed
@@ -8221,30 +8392,30 @@ fn purge_ids(app: &AppHandle, store: &mut Store, ids: &[String]) -> Option<std::
 }
 
 #[tauri::command]
-fn purge_prompt(app: AppHandle, state: State<Db>, id: String) -> Vec<Prompt> {
+async fn purge_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Result<Vec<TrashRow>, String> {
     let (trash, orphan_scan) = {
         let mut store = lock(&state);
         let orphan_scan = purge_ids(&app, &mut store, std::slice::from_ref(&id));
-        (store.trash.clone(), orphan_scan)
+        (trash_rows(&store.trash), orphan_scan)
     };
     if let Some(referenced) = orphan_scan {
         sweep_orphan_files(&app, &referenced);
     }
-    trash
+    Ok(trash)
 }
 
 #[tauri::command]
-fn empty_trash(app: AppHandle, state: State<Db>) -> Vec<Prompt> {
+async fn empty_trash(app: AppHandle, state: State<'_, Db>) -> Result<Vec<TrashRow>, String> {
     let (trash, orphan_scan) = {
         let mut store = lock(&state);
         let ids: Vec<String> = store.trash.iter().map(|p| p.id.clone()).collect();
         let orphan_scan = purge_ids(&app, &mut store, &ids);
-        (store.trash.clone(), orphan_scan)
+        (trash_rows(&store.trash), orphan_scan)
     };
     if let Some(referenced) = orphan_scan {
         sweep_orphan_files(&app, &referenced);
     }
-    trash
+    Ok(trash)
 }
 
 // Drop anything past the retention window (0/off by settings default, same
@@ -8425,6 +8596,7 @@ async fn reset_settings(app: AppHandle, state: State<'_, Db>) -> Result<(), Stri
     let effects = {
         let mut store = lock(&state);
         let old = store.settings.clone();
+        let ocr_was_on = ocr_index_flag_on(&store);
         let prompts = std::mem::take(&mut store.prompts); // keep the prompts
         // The backup password is a key, not a preference: dropping it would make
         // every password-protected backup permanently unreadable.
@@ -8437,6 +8609,10 @@ async fn reset_settings(app: AppHandle, state: State<'_, Db>) -> Result<(), Stri
         // than reasoning about what survived a factory reset.
         store.forget_written_rows();
         save_settings(&app, &store.settings);
+        // Defaults switch the picture-text index off: erase its text as well.
+        if ocr_was_on && clear_ocr_index_text(&mut store) {
+            save_prompts_and_trash(&app, &store);
+        }
         remote::reset_side_effects(&old, &store.settings)
     };
     remote::run_reset_side_effects(&app, &effects);
@@ -10706,6 +10882,23 @@ fn dup_pair_is_ignored(groups: &[Vec<String>], a: &str, b: &str) -> bool {
     groups.iter().any(|g| g.iter().any(|id| id == a) && g.iter().any(|id| id == b))
 }
 
+// The few fields the duplicate scan reads. Cloning whole prompts under the store
+// lock would copy every stored image (hundreds of kilobytes each) for nothing.
+// A confidential entry is left out here: its stored text is ciphertext.
+struct DupSource {
+    id: String,
+    name: String,
+    text: String,
+}
+
+fn dup_sources(prompts: &[Prompt]) -> Vec<DupSource> {
+    prompts
+        .iter()
+        .filter(|p| !p.secret)
+        .map(|p| DupSource { id: p.id.clone(), name: p.name.clone(), text: p.text.clone() })
+        .collect()
+}
+
 // Find near-duplicate prompts by trigram/Dice similarity. Rayon-parallel over the
 // upper-triangle of pairs; 1000 prompts finish well under a second.
 #[tauri::command]
@@ -10721,7 +10914,7 @@ async fn find_duplicates(state: State<'_, Db>, threshold: f64) -> Result<Vec<Dup
     let (prompts, dup_ignored, views, usage) = {
         let store = lock(&state);
         (
-            store.prompts.clone(),
+            dup_sources(&store.prompts),
             store.settings.dup_ignored.clone(),
             store.settings.views.clone(),
             store.settings.usage.clone(),
@@ -10735,13 +10928,10 @@ async fn find_duplicates(state: State<'_, Db>, threshold: f64) -> Result<Vec<Dup
     // two prompts that happen to share their FIRST entry but differ in the rest are
     // not "near duplicates" of each other, and comparing every entry pair would
     // turn this already-O(n^2) scan into O(n^2 * entries).
-    let items: Vec<(&Prompt, String)> = prompts
+    let items: Vec<(&DupSource, String)> = prompts
         .iter()
-        // A confidential entry's stored text is ciphertext, never a real body to
-        // compare -- same reason the library search skips it, this scan does too
-        // rather than group entries by coincidental ciphertext similarity or show
-        // the ciphertext in a match's preview.
-        .filter(|p| !p.secret)
+        // Confidential entries were already left out of the snapshot (their stored
+        // text is ciphertext, never a real body to compare).
         .map(|p| {
             let base = if !p.text.is_empty() { p.text.as_str() } else { p.name.as_str() };
             (p, normalize_dup(base))
@@ -14668,31 +14858,103 @@ async fn stat_file(path: String) -> Result<(i64, i64), String> {
     Ok((meta.len() as i64, mtime))
 }
 
+// Rows are keyed by a hash of the file path and carry the path and the ops
+// sealed, so the table no longer lists recording paths or text overlay
+// contents in clear. A row an earlier version wrote (plain "kind:path" id,
+// plain columns) is still found through its legacy id and read as is.
+fn edit_state_id(kind: &str, target: &str) -> String {
+    use sha2::{Digest, Sha256};
+    format!("{kind}:{:x}", Sha256::digest(target.as_bytes()))
+}
+
+fn edit_state_legacy_id(kind: &str, target: &str) -> String {
+    format!("{kind}:{target}")
+}
+
+fn edit_state_write(conn: &Connection, kind: &str, target: &str, size: i64, mtime: i64, ops: &str, updated_at: i64) -> Result<(), String> {
+    conn.execute(
+        "INSERT INTO edit_state(id, kind, target, size, mtime, ops, updated_at) VALUES(?1,?2,?3,?4,?5,?6,?7)
+         ON CONFLICT(id) DO UPDATE SET target=excluded.target, size=excluded.size, mtime=excluded.mtime, ops=excluded.ops, updated_at=excluded.updated_at",
+        params![edit_state_id(kind, target), kind, enc_str(target), size, mtime, enc_str(ops), updated_at],
+    )
+    .map_err(|e| e.to_string())?;
+    // The state now lives under the hashed id; drop an old plain-path row for it.
+    let _ = conn.execute("DELETE FROM edit_state WHERE id = ?1", params![edit_state_legacy_id(kind, target)]);
+    Ok(())
+}
+
+// Rewrites every row whose target or ops are still in clear through the sealing
+// writer, keeping each row's own timestamp. Returns how many rows it rewrote; a
+// second run finds nothing left to do.
+fn edit_state_seal_all(conn: &Connection) -> usize {
+    type Row = (String, String, i64, i64, String, String, i64);
+    let rows: Vec<Row> = {
+        let Ok(mut st) = conn.prepare("SELECT kind, target, size, mtime, ops, id, updated_at FROM edit_state WHERE target NOT LIKE 'enc:v1:%' OR ops NOT LIKE 'enc:v1:%'") else {
+            return 0;
+        };
+        let Ok(it) = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?))) else {
+            return 0;
+        };
+        it.flatten().collect()
+    };
+    let mut done = 0;
+    for (kind, target, size, mtime, ops, old_id, updated_at) in rows {
+        let plain_target = dec_str(&target);
+        let plain_ops = dec_str(&ops);
+        if edit_state_write(conn, &kind, &plain_target, size, mtime, &plain_ops, updated_at).is_ok() {
+            // A row that sat under some other id (legacy form) is dropped once the hashed one exists.
+            if old_id != edit_state_id(&kind, &plain_target) {
+                let _ = conn.execute("DELETE FROM edit_state WHERE id = ?1", params![old_id]);
+            }
+            done += 1;
+        }
+    }
+    done
+}
+
+// (row id, ops as stored, decrypted) for the exact (size, mtime) triple, hashed id first.
+fn edit_state_read(conn: &Connection, kind: &str, target: &str, size: i64, mtime: i64) -> Option<(String, String)> {
+    for id in [edit_state_id(kind, target), edit_state_legacy_id(kind, target)] {
+        let row = conn
+            .query_row(
+                "SELECT ops, target, updated_at FROM edit_state WHERE id = ?1 AND size = ?2 AND mtime = ?3",
+                params![id, size, mtime],
+                |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, i64>(2)?)),
+            )
+            .ok();
+        if let Some((ops, stored_target, updated_at)) = row {
+            let plain_ops = dec_str(&ops);
+            // A row an earlier version wrote in clear is sealed the first time it is
+            // read: rewritten under the hashed id (the legacy row is dropped), keeping
+            // its own timestamp so the retention clock does not restart.
+            if !ops.starts_with(ENC_PREFIX) || !stored_target.starts_with(ENC_PREFIX) {
+                let _ = edit_state_write(conn, kind, target, size, mtime, &plain_ops, updated_at);
+                let hashed = edit_state_id(kind, target);
+                return Some((hashed, plain_ops));
+            }
+            return Some((id, plain_ops));
+        }
+    }
+    None
+}
+
+fn edit_state_discard(conn: &Connection, kind: &str, target: &str) -> Result<(), String> {
+    for id in [edit_state_id(kind, target), edit_state_legacy_id(kind, target)] {
+        conn.execute("DELETE FROM edit_state WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 async fn save_edit_state(app: AppHandle, kind: String, target: String, size: i64, mtime: i64, ops: String) -> Result<(), String> {
     let conn = db_conn(&app).ok_or_else(|| "db unavailable".to_string())?;
-    let id = format!("{kind}:{target}");
     let updated_at = (now_ms() / 1000) as i64;
-    conn.execute(
-        "INSERT INTO edit_state(id, kind, target, size, mtime, ops, updated_at) VALUES(?1,?2,?3,?4,?5,?6,?7)
-         ON CONFLICT(id) DO UPDATE SET size=excluded.size, mtime=excluded.mtime, ops=excluded.ops, updated_at=excluded.updated_at",
-        params![id, kind, target, size, mtime, ops, updated_at],
-    )
-    .map_err(|e| e.to_string())?;
-    Ok(())
+    edit_state_write(&conn, &kind, &target, size, mtime, &ops, updated_at)
 }
 #[tauri::command]
 async fn load_edit_state(app: AppHandle, kind: String, target: String, size: i64, mtime: i64) -> Result<Option<String>, String> {
     let conn = db_conn(&app).ok_or_else(|| "db unavailable".to_string())?;
-    let id = format!("{kind}:{target}");
-    let ops = conn
-        .query_row(
-            "SELECT ops FROM edit_state WHERE id = ?1 AND size = ?2 AND mtime = ?3",
-            params![id, size, mtime],
-            |r| r.get::<_, String>(0),
-        )
-        .ok();
-    let Some(ops) = ops else { return Ok(None) };
+    let Some((id, ops)) = edit_state_read(&conn, &kind, &target, size, mtime) else { return Ok(None) };
     // Malformed JSON, or a "v" this build does not recognise, must never reach the
     // editor -- it would try to replay operations it cannot make sense of. Decided
     // here rather than in JS, so there is exactly one place "usable" is defined;
@@ -14700,7 +14962,10 @@ async fn load_edit_state(app: AppHandle, kind: String, target: String, size: i64
     // logged, so a real corruption pattern is still visible somewhere.
     let is_known_version = edit_state_ops_version(&ops) == Some(1);
     if !is_known_version {
-        append_crash_log(&format!("load_edit_state: discarding unreadable saved state for {target}"));
+        // The file name only: the full path would put the recording location back into
+        // the log that sealing the row keeps out of the database.
+        let shown = std::path::Path::new(&target).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        append_crash_log(&format!("load_edit_state: discarding unreadable saved state for {shown}"));
         let _ = conn.execute("DELETE FROM edit_state WHERE id = ?1", params![id]);
         return Ok(None);
     }
@@ -14718,9 +14983,7 @@ fn edit_state_ops_version(ops: &str) -> Option<i64> {
 #[tauri::command]
 async fn discard_edit_state(app: AppHandle, kind: String, target: String) -> Result<(), String> {
     let conn = db_conn(&app).ok_or_else(|| "db unavailable".to_string())?;
-    let id = format!("{kind}:{target}");
-    conn.execute("DELETE FROM edit_state WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
-    Ok(())
+    edit_state_discard(&conn, &kind, &target)
 }
 
 // ---- Editor draft autosave ----
@@ -14740,38 +15003,53 @@ struct EditorDraft {
     updated_at: i64,
 }
 
+// The text side is sealed like a prompt is: a draft holds whatever the user
+// was typing, and a plain row would leak it into data.db and every backup.
+// Old unsealed rows still read back (dec_str passes plaintext through).
+fn editor_draft_write(conn: &Connection, prompt_id: &str, name: &str, text: &str, variants: &str, updated_at: i64) -> Result<(), String> {
+    conn.execute(
+        "INSERT INTO editor_drafts(id, prompt_id, name, text, variants, updated_at) VALUES('current',?1,?2,?3,?4,?5)
+         ON CONFLICT(id) DO UPDATE SET prompt_id=excluded.prompt_id, name=excluded.name, text=excluded.text, variants=excluded.variants, updated_at=excluded.updated_at",
+        params![prompt_id, enc_str(name), enc_str(text), enc_str(variants), updated_at],
+    )
+    .map(|_| ())
+    .map_err(|e| e.to_string())
+}
+
+fn editor_draft_read(conn: &Connection) -> Option<EditorDraft> {
+    let (prompt_id, raw_name, raw_text, raw_variants, updated_at) = conn
+        .query_row(
+            "SELECT prompt_id, name, text, variants, updated_at FROM editor_drafts WHERE id = 'current'",
+            [],
+            |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, String>(3)?, r.get::<_, i64>(4)?)),
+        )
+        .ok()?;
+    let (name, text, variants) = (dec_str(&raw_name), dec_str(&raw_text), dec_str(&raw_variants));
+    // A sealed draft that no longer decrypts (data.db restored on another account or
+    // machine) reads back empty: that is no draft, never an empty one to "restore".
+    let sealed = [&raw_name, &raw_text, &raw_variants].iter().any(|v| v.starts_with(ENC_PREFIX));
+    if sealed && name.is_empty() && text.is_empty() && variants.is_empty() {
+        let _ = conn.execute("DELETE FROM editor_drafts WHERE id = 'current'", []);
+        return None;
+    }
+    // An old draft written in clear is sealed on this first read.
+    if ![&raw_name, &raw_text, &raw_variants].iter().all(|v| v.is_empty() || v.starts_with(ENC_PREFIX)) {
+        let _ = editor_draft_write(conn, &prompt_id, &name, &text, &variants, updated_at);
+    }
+    Some(EditorDraft { prompt_id, name, text, variants, updated_at })
+}
+
 #[tauri::command]
 async fn save_editor_draft(app: AppHandle, prompt_id: String, name: String, text: String, variants: String) -> Result<(), String> {
     let conn = db_conn(&app).ok_or_else(|| "db unavailable".to_string())?;
     let updated_at = (now_ms() / 1000) as i64;
-    conn.execute(
-        "INSERT INTO editor_drafts(id, prompt_id, name, text, variants, updated_at) VALUES('current',?1,?2,?3,?4,?5)
-         ON CONFLICT(id) DO UPDATE SET prompt_id=excluded.prompt_id, name=excluded.name, text=excluded.text, variants=excluded.variants, updated_at=excluded.updated_at",
-        params![prompt_id, name, text, variants, updated_at],
-    )
-    .map_err(|e| e.to_string())?;
-    Ok(())
+    editor_draft_write(&conn, &prompt_id, &name, &text, &variants, updated_at)
 }
 
 #[tauri::command]
 async fn load_editor_draft(app: AppHandle) -> Result<Option<EditorDraft>, String> {
     let conn = db_conn(&app).ok_or_else(|| "db unavailable".to_string())?;
-    let draft = conn
-        .query_row(
-            "SELECT prompt_id, name, text, variants, updated_at FROM editor_drafts WHERE id = 'current'",
-            [],
-            |r| {
-                Ok(EditorDraft {
-                    prompt_id: r.get(0)?,
-                    name: r.get(1)?,
-                    text: r.get(2)?,
-                    variants: r.get(3)?,
-                    updated_at: r.get(4)?,
-                })
-            },
-        )
-        .ok();
-    Ok(draft)
+    Ok(editor_draft_read(&conn))
 }
 
 #[tauri::command]
@@ -14818,6 +15096,7 @@ fn sweep_edit_state_conn(conn: &Connection, exists: impl Fn(&str) -> bool, keep_
     drop(stmt);
     let mut removed = 0usize;
     for (id, target, updated_at) in rows {
+        let target = dec_str(&target);
         let gone = !exists(&target);
         let expired = keep_days > 0.0 && updated_at < cutoff;
         if (gone || expired) && conn.execute("DELETE FROM edit_state WHERE id = ?1", params![id]).is_ok() {
@@ -15827,14 +16106,44 @@ fn sweep_stale_temp_files() {
     // copy. The editor itself never deletes this once the window is closed,
     // so without this sweep the folder would only ever grow.
     let openedit_prefix = format!("{}-openedit-", brand::TEMP_PREFIX);
+    // Still frames cut out of a video land in the same folder; a crash or kill
+    // mid-extraction leaves the frame behind.
+    let still_prefix = format!("{}-still-", brand::TEMP_PREFIX);
     if let Ok(entries) = fs::read_dir(&ocr_dir) {
         for e in entries.flatten() {
             let name = e.file_name().to_string_lossy().to_string();
             if name.starts_with(&openedit_prefix) && is_stale(&e) {
                 let _ = fs::remove_dir_all(e.path());
+            } else if name.starts_with(&still_prefix) && e.path().is_file() && is_stale(&e) {
+                let _ = fs::remove_file(e.path());
             }
         }
     }
+}
+
+// Orderly exit: drop this process's own scratch files right away instead of
+// leaving them for the age-based sweep. Only names carrying this pid are touched
+// (working copies opened for editing, still frames), so a second running
+// instance keeps its own files.
+fn remove_own_temp_leftovers_in(temp_root: &Path, pid: u32) {
+    let dir = temp_root.join(brand::TEMP_DIR);
+    let openedit_prefix = format!("{}-openedit-", brand::TEMP_PREFIX);
+    let openedit_suffix = format!("-{pid}");
+    let still_prefix = format!("{}-still-{pid}-", brand::TEMP_PREFIX);
+    let Ok(entries) = fs::read_dir(&dir) else { return };
+    for e in entries.flatten() {
+        let name = e.file_name().to_string_lossy().to_string();
+        if name.starts_with(&openedit_prefix) && name.ends_with(&openedit_suffix) && e.path().is_dir() {
+            let _ = fs::remove_dir_all(e.path());
+        } else if name.starts_with(&still_prefix) && e.path().is_file() {
+            let _ = fs::remove_file(e.path());
+        }
+    }
+}
+
+fn remove_own_temp_leftovers() {
+    remove_snip_preview();
+    remove_own_temp_leftovers_in(&std::env::temp_dir(), std::process::id());
 }
 
 // The "Copy to clipboard" export's own throwaway files, in the same
@@ -19158,6 +19467,50 @@ fn apply_backfill_text(p: &mut Prompt, recognized_from: &str, text: String) -> b
     true
 }
 
+// Switching the picture-text index off must not leave the recognized text
+// behind: it is searchable content read out of the user's pictures. Returns
+// whether anything was cleared, so the caller saves only when needed.
+fn clear_image_text(prompts: &mut [Prompt]) -> bool {
+    let mut changed = false;
+    for p in prompts.iter_mut().filter(|p| !p.image_text.is_empty()) {
+        p.image_text.clear();
+        changed = true;
+    }
+    changed
+}
+
+// Bumped by every clear. A recognition pass remembers the value it started with and
+// never writes its text back once it changed (or the switch is off).
+static OCR_EPOCH: AtomicU64 = AtomicU64::new(0);
+
+fn ocr_epoch() -> u64 {
+    OCR_EPOCH.load(Ordering::SeqCst)
+}
+
+fn ocr_index_flag_on(store: &Store) -> bool {
+    store.settings.ui_flags.get("ocrIndex").copied().unwrap_or(false)
+}
+
+// Cancels a running pass, invalidates every pass in flight and erases the text in
+// prompts AND trash. Caller holds the store lock and saves when this returns true.
+fn clear_ocr_index_text(store: &mut Store) -> bool {
+    cancel_ocr_index_backfill();
+    OCR_EPOCH.fetch_add(1, Ordering::SeqCst);
+    let live = clear_image_text(&mut store.prompts);
+    let trashed = clear_image_text(&mut store.trash);
+    live || trashed
+}
+
+// Writes one recognized text back, only while the index is still on and no clear
+// happened since the pass started and the prompt still shows the same picture.
+// Returns whether it was written.
+fn apply_ocr_backfill_text(store: &mut Store, id: &str, recognized_from: &str, text: String, started_epoch: u64) -> bool {
+    if ocr_epoch() != started_epoch || !ocr_index_flag_on(store) {
+        return false;
+    }
+    store.prompts.iter_mut().find(|p| p.id == id).is_some_and(|p| apply_backfill_text(p, recognized_from, text))
+}
+
 // The expert-menu "read existing pictures" action: every prompt that carries
 // a picture but no index text yet, read once, one at a time -- a single
 // sequential pass, never a flood of parallel OCR calls. Progress and
@@ -19167,7 +19520,7 @@ fn apply_backfill_text(p: &mut Prompt, recognized_from: &str, text: String) -> b
 #[tauri::command]
 async fn ocr_index_backfill(app: AppHandle, state: State<'_, Db>) -> Result<usize, String> {
     OCR_INDEX_CANCEL.store(false, Ordering::SeqCst);
-    let (ids, max_chars) = {
+    let (ids, max_chars, started_epoch) = {
         let store = lock(&state);
         let ids: Vec<String> = store
             .prompts
@@ -19175,7 +19528,7 @@ async fn ocr_index_backfill(app: AppHandle, state: State<'_, Db>) -> Result<usiz
             .filter(|p| !p.image.is_empty() && p.image_text.is_empty())
             .map(|p| p.id.clone())
             .collect();
-        (ids, ocr_index_max_chars(&store.settings))
+        (ids, ocr_index_max_chars(&store.settings), ocr_epoch())
     };
     let total = ids.len();
     push_bg_op(&app, "ocr-index", "ocr-index", if total == 0 { "done" } else { "running" }, Some(0), None);
@@ -19196,8 +19549,7 @@ async fn ocr_index_backfill(app: AppHandle, state: State<'_, Db>) -> Result<usiz
                     .map_err(|e| e.to_string())?;
                 if !text.is_empty() {
                     let mut store = lock(&state);
-                    let applied = store.prompts.iter_mut().find(|p| p.id == id).is_some_and(|p| apply_backfill_text(p, &image, text));
-                    if applied {
+                    if apply_ocr_backfill_text(&mut store, &id, &image, text, started_epoch) {
                         save_prompts(&app, &store);
                     }
                 }
@@ -23870,7 +24222,9 @@ mod keylog {
 
     fn write_sidecar(output_path: &Path, sidecar: &KeySidecar) {
         if let Ok(json) = serde_json::to_string(sidecar) {
-            let _ = fs::write(sidecar_path(output_path), json);
+            // Sealed like the rest of the local store: the events are the keys
+            // typed during the recording. Readers pass old plain files through.
+            let _ = fs::write(sidecar_path(output_path), super::enc_str(&json));
         }
     }
 
@@ -24067,6 +24421,25 @@ mod keylog {
             let mut gap_keys: Vec<&str> = gap.as_object().unwrap().keys().map(|s| s.as_str()).collect();
             gap_keys.sort();
             assert_eq!(gap_keys, vec!["end_ms", "start_ms"]);
+        }
+
+        #[test]
+        fn written_sidecar_is_sealed_on_disk_and_parses_back() {
+            let dir = std::env::temp_dir().join(format!("ps-keys-sealed-{}", std::process::id()));
+            fs::create_dir_all(&dir).unwrap();
+            let video = dir.join("rec-sealed.mp4");
+            let sc = KeySidecar { hold_ms: 777, ..Default::default() };
+            write_sidecar(&video, &sc);
+            let raw = fs::read_to_string(sidecar_path(&video)).unwrap();
+            assert!(!raw.contains("hold_ms") && !raw.starts_with('{'), "the sidecar must not sit on disk as plain JSON");
+            assert_eq!(crate::parse_key_sidecar(&raw), Some(sc));
+            let _ = fs::remove_dir_all(&dir);
+        }
+
+        #[test]
+        fn an_old_plain_sidecar_still_parses() {
+            let parsed = crate::parse_key_sidecar(r#"{"events":[],"gaps":[],"hold_ms":500}"#).unwrap();
+            assert_eq!(parsed.hold_ms, 500);
         }
 
         #[test]
@@ -27180,10 +27553,17 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
     // lock rather than with the lock held, the way spawn_sync_write_all already
     // does: otherwise every copy, every save and every other window waits for
     // the whole thing to finish.
+    let clear_ocr_index = key == "ocrIndex" && !enabled;
     let snapshot = {
         let mut store = lock(&state);
         store.settings.ui_flags.insert(key, enabled);
         save_settings(&app, &store.settings);
+        if clear_ocr_index {
+            // A running "read existing pictures" pass would write the text straight back.
+            if clear_ocr_index_text(&mut store) {
+                save_prompts_and_trash(&app, &store);
+            }
+        }
         is_sync_enable.then(|| (store.prompts.clone(), store.settings.clone()))
     };
     if let Some((prompts, settings)) = snapshot {
@@ -27383,8 +27763,13 @@ fn reset_expert(app: AppHandle, state: State<Db>) {
     let effects = {
         let mut store = lock(&state);
         let old = store.settings.clone();
+        let ocr_was_on = ocr_index_flag_on(&store);
         reset_expert_settings(&mut store.settings);
         save_settings(&app, &store.settings);
+        // The reset turned the picture-text index back off: its text goes with it.
+        if ocr_was_on && clear_ocr_index_text(&mut store) {
+            save_prompts_and_trash(&app, &store);
+        }
         remote::reset_side_effects(&old, &store.settings)
     };
     remote::run_reset_side_effects(&app, &effects);
@@ -29202,18 +29587,29 @@ fn probe_recording_blocking(ffprobe: &Path, src: &Path) -> Result<RecordingProbe
 // so both ever accept exactly the same shape of file.
 #[cfg(windows)]
 fn parse_key_sidecar(data: &str) -> Option<keylog::KeySidecar> {
-    serde_json::from_str(data).ok()
+    // dec_str passes an old unsealed file through unchanged.
+    serde_json::from_str(&dec_str(data)).ok()
+}
+
+// Reads through the same size cap the copy check uses, so an oversized or
+// replaced file is refused instead of being read into memory whole.
+#[cfg(windows)]
+fn read_key_sidecar_at(sidecar: &Path) -> Option<keylog::KeySidecar> {
+    let bytes = read_file_capped(sidecar, KEY_SIDECAR_MAX_COPY_BYTES).ok()?;
+    parse_key_sidecar(std::str::from_utf8(&bytes).ok()?)
 }
 
 #[cfg(windows)]
 #[tauri::command]
-fn read_key_sidecar(path: String) -> Option<keylog::KeySidecar> {
-    let data = fs::read_to_string(keylog::sidecar_path(Path::new(&path))).ok()?;
-    parse_key_sidecar(&data)
+async fn read_key_sidecar(path: String) -> Option<keylog::KeySidecar> {
+    tauri::async_runtime::spawn_blocking(move || read_key_sidecar_at(&keylog::sidecar_path(Path::new(&path))))
+        .await
+        .ok()
+        .flatten()
 }
 #[cfg(not(windows))]
 #[tauri::command]
-fn read_key_sidecar(path: String) -> Option<()> {
+async fn read_key_sidecar(path: String) -> Option<()> {
     let _ = path;
     None
 }
@@ -29561,12 +29957,25 @@ fn extract_still_frame_blocking(ffmpeg: &Path, src: &Path, at_ms: u64, format: &
     cmd.stdin(std::process::Stdio::null());
     cmd.stdout(std::process::Stdio::null());
     cmd.stderr(std::process::Stdio::null());
-    let status = status_in_job(&mut cmd).map_err(|e| format!("could not start ffmpeg: {e}"))?;
-    if !status.success() || !tmp.is_file() {
-        return Err("still-frame extraction failed".to_string());
-    }
-    let bytes = fs::read(&tmp).map_err(|e| e.to_string());
-    let _ = fs::remove_file(&tmp);
+    let status = match status_in_job(&mut cmd) {
+        Ok(s) => s,
+        Err(e) => {
+            let _ = take_still_output(&tmp, false);
+            return Err(format!("could not start ffmpeg: {e}"));
+        }
+    };
+    take_still_output(&tmp, status.success())
+}
+
+// Reads the extracted frame and removes it; on a failed run the file is removed
+// too, since ffmpeg can leave a partial one behind.
+fn take_still_output(tmp: &Path, succeeded: bool) -> Result<Vec<u8>, String> {
+    let bytes = if succeeded && tmp.is_file() {
+        fs::read(tmp).map_err(|e| e.to_string())
+    } else {
+        Err("still-frame extraction failed".to_string())
+    };
+    let _ = fs::remove_file(tmp);
     bytes
 }
 
@@ -30715,13 +31124,18 @@ fn video_folder_cleanup(state: State<'_, Db>, dir: String, age_days: u32) -> usi
 // comes back as 0, the same "unknown" fallback probe_media_meta uses
 // everywhere else, rather than failing the whole batch over one bad file.
 fn video_folder_file_durations_ms_impl(ffprobe: Option<&Path>, dir: &Path, names: &[String]) -> Vec<u64> {
-    names.iter().map(|name| probe_media_meta(ffprobe, &dir.join(name)).0).collect()
+    use rayon::prelude::*;
+    // Probed in parallel (each one is a child process); collect keeps the order of `names`.
+    names.par_iter().map(|name| probe_media_meta(ffprobe, &dir.join(name)).0).collect()
 }
 
 #[tauri::command]
 async fn video_folder_file_durations_ms(app: AppHandle, dir: String, names: Vec<String>) -> Vec<u64> {
     let ffprobe = ffprobe_search_path(&app);
-    video_folder_file_durations_ms_impl(ffprobe.as_deref(), Path::new(&dir), &names)
+    // Off the async runtime: one process spawn per file would otherwise hold a worker.
+    tauri::async_runtime::spawn_blocking(move || video_folder_file_durations_ms_impl(ffprobe.as_deref(), Path::new(&dir), &names))
+        .await
+        .unwrap_or_default()
 }
 
 // Never overwrite an existing file at the target: "<stem>.<ext>", then
@@ -33169,6 +33583,12 @@ async fn set_prompt_secret(app: AppHandle, state: State<'_, Db>, id: String, sec
     };
     let mut store = lock(&state);
     apply_prompt_secret(&mut store, &id, secret, &key, |st| save_prompts(&app, st))?;
+    if secret {
+        // A draft written before the entry turned confidential holds its plain text.
+        if let Some(conn) = db_conn(&app) {
+            discard_editor_draft_if(&conn, |t| t == id);
+        }
+    }
     let secret_key = secret_session_key(timeout);
     Ok(AppState {
         prompts: slim_prompts(&store.prompts, secret_key),
@@ -35652,6 +36072,7 @@ pub fn run() {
                 // The timer thread is normally parked for hours; tell it to leave
                 // rather than tearing the process down around a sleeping thread.
                 scheduler::shutdown(Duration::from_millis(SCHEDULER_STOP_WAIT_MS));
+                remove_own_temp_leftovers();
             }
         });
 }
@@ -36602,6 +37023,53 @@ fn sync_known_note(path: &Path) {
     sync_known_lock().insert(sync_seen_key(path));
 }
 
+// What the app last knew to be in each synced file: a hash of the content it
+// rendered and the file's stamp right then. When the next render hashes the same
+// and the file still carries that stamp, the file is known to hold exactly that
+// content and is not read back at all. An outside edit changes the stamp, so it
+// is never skipped.
+type SyncWrittenMap = HashMap<String, (u64, SyncStamp)>;
+static SYNC_WRITTEN: std::sync::OnceLock<Mutex<SyncWrittenMap>> = std::sync::OnceLock::new();
+
+fn sync_written_lock() -> std::sync::MutexGuard<'static, SyncWrittenMap> {
+    SYNC_WRITTEN.get_or_init(|| Mutex::new(HashMap::new())).lock().unwrap_or_else(|e| e.into_inner())
+}
+
+fn sync_content_hash(content: &str) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    content.hash(&mut h);
+    h.finish()
+}
+
+// True when `path` is known to already hold the content with this hash.
+fn sync_file_known_current(path: &Path, hash: u64) -> bool {
+    let Some(now) = sync_stamp_of(path) else { return false };
+    sync_written_lock().get(&sync_seen_key(path)).is_some_and(|(h, stamp)| *h == hash && *stamp == now)
+}
+
+// Remember that `path` holds the content with this hash (call after a write, or
+// after a read that found it already equal).
+// A stamp younger than SYNC_STAMP_TRUST_NS is not trusted: on a file system with a
+// coarse clock (FAT/exFAT/SMB) an outside edit of the same length inside the same tick
+// would carry the very same stamp. Such a file is simply compared by content next round.
+const SYNC_STAMP_TRUST_NS: u128 = 2_000_000_000;
+
+fn sync_stamp_is_settled(stamp: &SyncStamp) -> bool {
+    let now_ns = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+    now_ns.saturating_sub(stamp.mtime_ns) >= SYNC_STAMP_TRUST_NS
+}
+
+fn sync_file_note_current(path: &Path, hash: u64) {
+    if let Some(stamp) = sync_stamp_of(path) {
+        if sync_stamp_is_settled(&stamp) {
+            sync_written_lock().insert(sync_seen_key(path), (hash, stamp));
+        } else {
+            sync_written_lock().remove(&sync_seen_key(path));
+        }
+    }
+}
+
 // Whether the file changed since the app last wrote or read it. `None` (never seen)
 // is not decided here: sync_edit_unsaved judges such a file by its content, so a
 // fresh start does not litter the folder with copies of what the app wrote itself.
@@ -36847,10 +37315,18 @@ fn sync_write_dir_checked(dir: &Path, prompts: &[Prompt], settings: &Settings, i
         let path = dir.join(&filename);
         let placement = sync_placement_for(p, settings);
         let content = prompt_to_md(p, &placement);
+        let hash = sync_content_hash(&content);
+        if sync_file_known_current(&path, hash) {
+            sync_known_note(&path);
+            wanted.insert(filename);
+            continue; // unchanged since it was last written: no read, no compare
+        }
         // Raw bytes, never decoded text: a UTF-16 or ANSI file would read as empty
         // through read_to_string and be overwritten without a trace.
         let on_disk = fs::read(&path).unwrap_or_default();
-        if on_disk != content.as_bytes() && sync_lock_acquire(&path) {
+        if on_disk == content.as_bytes() {
+            sync_file_note_current(&path, hash);
+        } else if sync_lock_acquire(&path) {
             // Both sides changed: the file was edited outside the app since the app
             // last touched it, and the prompt in the app has since changed too. The
             // app's version wins the file, but the one being replaced is kept beside
@@ -36883,6 +37359,7 @@ fn sync_write_dir_checked(dir: &Path, prompts: &[Prompt], settings: &Settings, i
             sync_lock_release(&path);
             if ok {
                 sync_seen_record_own_write_of(&path, sync_hash(content.as_bytes()));
+                sync_file_note_current(&path, hash);
             } else {
                 failed += 1;
                 append_crash_log(&format!("prompt-sync: writing {filename} failed"));
@@ -36892,6 +37369,8 @@ fn sync_write_dir_checked(dir: &Path, prompts: &[Prompt], settings: &Settings, i
         wanted.insert(filename);
     }
     sync_sweep_orphans_checked(&dir, &wanted, is_live);
+    // Entries for files that are gone (deleted prompts, swept orphans) go too.
+    sync_written_lock().retain(|key, _| Path::new(key).exists());
     failed
 }
 
@@ -37189,36 +37668,27 @@ fn sync_requeue_candidates(dir: &Path, candidates: &[(String, String, bool)]) {
     }
 }
 
-fn sync_poll_once(app: &AppHandle) {
-    let Some(state) = app.try_state::<Db>() else { return };
-    let (dir, snapshot, settings_snapshot) = {
-        let store = lock(&state);
-        if store.prompts_locked || !sync_enabled(&store.settings) {
-            return;
-        }
-        (sync_dir_path(app, &store.settings), store.prompts.clone(), store.settings.clone())
-    };
-    let entries = match fs::read_dir(&dir) {
-        Ok(e) => e,
-        Err(e) => {
-            // An unreachable folder (a network share that is not mounted, a removed
-            // drive) must not turn into a failure every few seconds for the rest of
-            // the session. After enough failed rounds the poll pauses and says so.
-            let max = SYNC_FAIL_MAX;
-            let just_paused = {
-                let mut h = sync_health_lock();
-                sync_health_note_fail(&mut h, max, &e.to_string())
-            };
-            if just_paused {
-                append_crash_log(&format!(
-                    "prompt-sync: paused after {max} rounds that could not read {}: {e}",
-                    dir.display()
-                ));
-            }
-            return;
-        }
-    };
-    let mut candidates: Vec<(String, String, bool)> = Vec::new(); // (stem, content, is_new)
+// A file the stat scan wants read this round.
+struct SyncToRead {
+    path: PathBuf,
+    key: String,
+    stem: String,
+    name: String,
+    stamp: SyncStamp,
+}
+
+// Stat-only pass over the folder: decides which files changed and have settled,
+// without reading a file or touching the store. A folder nothing changed in
+// costs one stat per file, and the caller copies no prompts or settings.
+//
+// Also returns (stem, key) of every file in the folder: the caller marks the files of
+// known prompts as known (SYNC_KNOWN) once it has the library's ids, every round and
+// for every such file, changed or not, so the sweep's gate stays as strict as before.
+type SyncScanOut = (Vec<SyncToRead>, usize, Vec<(String, String)>);
+fn sync_scan_folder(dir: &Path) -> std::io::Result<SyncScanOut> {
+    let entries = fs::read_dir(dir)?;
+    let mut to_read = Vec::new();
+    let mut all: Vec<(String, String)> = Vec::new();
     let mut present: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut files = 0usize;
     for entry in entries.flatten() {
@@ -37238,20 +37708,88 @@ fn sync_poll_once(app: &AppHandle) {
         }
         files += 1;
         let key = sync_seen_key(&path);
-        if snapshot.iter().any(|p| p.id == stem) {
-            sync_known_note(&path);
-        }
+        all.push((stem.clone(), key.clone()));
         present.insert(key.clone());
         let Some(stamp) = sync_stamp_of(&path) else { continue };
         // Metadata only, for every file in the folder: a folder whose files have not
         // changed since the last round costs one stat each and not a single read.
         let decision = sync_scan_decision(sync_seen_lock().get(&key).copied(), stamp);
-        if decision != SyncScan::Read {
-            if decision == SyncScan::Settle {
-                sync_seen_lock().insert(key, SyncSeen { stamp, handled: false, hash: 0 });
-            }
-            continue;
+        if decision == SyncScan::Read {
+            to_read.push(SyncToRead { path, key, stem, name, stamp });
+        } else if decision == SyncScan::Settle {
+            sync_seen_lock().insert(key, SyncSeen { stamp, handled: false, hash: 0 });
         }
+    }
+    // Files that are gone leave no entry behind: this map would otherwise grow for
+    // the life of the process in a folder with a lot of coming and going.
+    sync_seen_lock().retain(|key, _| present.contains(key));
+    Ok((to_read, files, all))
+}
+
+fn sync_poll_once(app: &AppHandle) {
+    let Some(state) = app.try_state::<Db>() else { return };
+    let dir = {
+        let store = lock(&state);
+        if store.prompts_locked || !sync_enabled(&store.settings) {
+            return;
+        }
+        sync_dir_path(app, &store.settings)
+    };
+    let (to_read, files, all) = match sync_scan_folder(&dir) {
+        Ok(r) => r,
+        Err(e) => {
+            // An unreachable folder (a network share that is not mounted, a removed
+            // drive) must not turn into a failure every few seconds for the rest of
+            // the session. After enough failed rounds the poll pauses and says so.
+            let max = SYNC_FAIL_MAX;
+            let just_paused = {
+                let mut h = sync_health_lock();
+                sync_health_note_fail(&mut h, max, &e.to_string())
+            };
+            if just_paused {
+                append_crash_log(&format!(
+                    "prompt-sync: paused after {max} rounds that could not read {}: {e}",
+                    dir.display()
+                ));
+            }
+            return;
+        }
+    };
+    {
+        let mut h = sync_health_lock();
+        sync_health_note_ok(&mut h, files, now_secs());
+    }
+    {
+        // The files of known prompts count as known (SYNC_KNOWN) every round, changed
+        // or not, taken against the library's ids (no prompt copy). The scan is stat
+        // only and has no snapshot, so the step lives here; the guards are rechecked
+        // under the same lock as before.
+        let store = lock(&state);
+        if store.prompts_locked || !sync_enabled(&store.settings) {
+            return;
+        }
+        let ids: std::collections::HashSet<&str> = store.prompts.iter().map(|p| p.id.as_str()).collect();
+        let mut known = sync_known_lock();
+        for (stem, key) in &all {
+            if ids.contains(stem.as_str()) {
+                known.insert(key.clone());
+            }
+        }
+    }
+    if to_read.is_empty() {
+        return; // nothing changed: no prompt or settings copy is made
+    }
+    // Only now, with at least one file to read, is the library copied for the
+    // comparison against what each file would be written as.
+    let (snapshot, settings_snapshot) = {
+        let store = lock(&state);
+        if store.prompts_locked || !sync_enabled(&store.settings) {
+            return;
+        }
+        (store.prompts.clone(), store.settings.clone())
+    };
+    let mut candidates: Vec<(String, String, bool)> = Vec::new(); // (stem, content, is_new)
+    for SyncToRead { path, key, stem, name, stamp } in to_read {
         // Acquire the file lock BEFORE reading, not after - the
         // lock is meant to protect the read from a concurrent writer, which it did
         // not while the read happened first and the lock was only taken afterward
@@ -37294,13 +37832,6 @@ fn sync_poll_once(app: &AppHandle) {
             candidates.push((stem, content, true));
         }
     }
-    {
-        let mut h = sync_health_lock();
-        sync_health_note_ok(&mut h, files, now_secs());
-    }
-    // Files that are gone leave no entry behind: this map would otherwise grow for
-    // the life of the process in a folder with a lot of coming and going.
-    sync_seen_lock().retain(|key, _| present.contains(key));
     if candidates.is_empty() {
         return;
     }
@@ -41695,6 +42226,14 @@ mod tests {
     }
 
     #[test]
+    fn clear_image_text_empties_every_index_and_reports_whether_it_changed() {
+        let mut prompts = vec![image_text_prompt("a", "invoice total"), image_text_prompt("b", ""), image_text_prompt("c", "receipt")];
+        assert!(clear_image_text(&mut prompts));
+        assert!(prompts.iter().all(|p| p.image_text.is_empty()));
+        assert!(!clear_image_text(&mut prompts), "nothing left to clear the second time");
+    }
+
+    #[test]
     fn image_text_matches_is_empty_with_the_switch_off_even_for_a_real_hit() {
         let prompts = vec![image_text_prompt("a", "invoice total due friday")];
         assert!(image_text_matches(&prompts, false, "invoice").is_empty());
@@ -43584,6 +44123,273 @@ mod tests {
     // NOT a fresh one -- "Allow multiple instances" lets a second launch run this
     // same sweep while a concurrently open instance still has its own snip preview
     // in active use, so only files older than STALE_TEMP_FILE_AGE are fair game.
+    fn staging_test_dir(tag: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("ps-stage-{}-{}-{}", tag, std::process::id(), gen_id()));
+        fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    // The race: a staged copy sits in <data>/files while no prompt references it yet;
+    // a concurrent sweep (whose referenced sets lack it) must leave it alone, and it
+    // must still survive once the insert completed and the pending entry is released.
+    #[test]
+    fn sweep_keeps_a_staged_copy_while_the_add_is_in_flight() {
+        let base = staging_test_dir("race");
+        let files = base.join("files");
+        let orig = base.join("orig.txt");
+        fs::write(&orig, b"data").unwrap();
+        let mut staged = StagedCopies::new();
+        let copy = staged.stage(&files, &orig.to_string_lossy());
+        assert_ne!(copy, orig.to_string_lossy());
+        assert!(Path::new(&copy).is_file());
+        let empty = std::collections::HashSet::new();
+        sweep_orphan_files_in(&files, &empty, || Some(std::collections::HashSet::new()));
+        assert!(Path::new(&copy).is_file(), "an in-flight staged copy was swept");
+        // the insert completes: the store references it, the pending entry goes away
+        staged.commit();
+        drop(staged);
+        let mut live = std::collections::HashSet::new();
+        live.insert(copy.replace('/', "\\").to_lowercase());
+        sweep_orphan_files_in(&files, &empty, || Some(live));
+        assert!(Path::new(&copy).is_file(), "a referenced copy was swept after the insert");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_panic_with_a_live_guard_keeps_the_staged_copy_but_releases_the_pending_entry() {
+        let base = staging_test_dir("panic");
+        let files = base.join("files");
+        let orig = base.join("orig.txt");
+        fs::write(&orig, b"data").unwrap();
+        let mut copy = String::new();
+        let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let mut staged = StagedCopies::new();
+            copy = staged.stage(&files, &orig.to_string_lossy());
+            panic!("boom");
+        }));
+        assert!(res.is_err());
+        assert!(Path::new(&copy).is_file(), "a copy staged before a panic must survive");
+        let pending = PENDING_ATTACHMENTS.lock().unwrap_or_else(|e| e.into_inner());
+        assert!(!pending.as_ref().is_some_and(|s| s.contains(&pending_key(&copy))), "pending entry released");
+        drop(pending);
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    // A failed add (validation error after staging) must not leave the copy behind.
+    #[test]
+    fn a_failed_add_leaves_no_staged_copy_behind() {
+        let base = staging_test_dir("fail");
+        let files = base.join("files");
+        let orig = base.join("orig.txt");
+        fs::write(&orig, b"data").unwrap();
+        let copy = {
+            let mut staged = StagedCopies::new();
+            staged.stage(&files, &orig.to_string_lossy())
+            // dropped without commit: the add failed
+        };
+        assert!(!Path::new(&copy).exists(), "the copy of a failed add stayed on disk");
+        assert!(!pending_attachments_contain(&copy), "the pending entry leaked");
+        assert!(orig.is_file(), "the user's original must never be touched");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    // Structural check (no timing-based red exists for "the lock is not held
+    // during the copy"): in add_prompt the copy, the probe and the OCR pass all
+    // sit before the lock that inserts, and update_prompt stages the same three
+    // before its locked section.
+    #[test]
+    fn add_and_update_prompt_do_the_slow_work_before_the_insert_lock() {
+        let src = include_str!("lib.rs");
+        let body = |from: &str, to: &str| {
+            let a = src.find(from).expect("start marker");
+            let b = a + src[a..].find(to).expect("end marker");
+            &src[a..b]
+        };
+        let add = body("async fn add_prompt(", "// One example prompt as the frontend supplies it");
+        let insert_lock = add.rfind(concat!("let mut store = lock(&", "state);")).expect("insert lock");
+        for call in ["staged_copies.stage(", "probe_media_meta(", "ocr_index_text(img"] {
+            let at = add.find(call).unwrap_or_else(|| panic!("{call} missing"));
+            assert!(at < insert_lock, "add_prompt must run {call} before taking the insert lock");
+            assert!(!add[insert_lock..].contains(call), "add_prompt must not run {call} under the insert lock");
+        }
+        let upd = body("async fn update_prompt(", "// List a prompt's version snapshots");
+        let staged_end = upd.find("let updated = {").expect("locked section");
+        for call in ["staged_copies.stage(", "probe_media_meta(", "ocr_index_text(img"] {
+            assert!(upd[..staged_end].contains(call), "update_prompt must stage {call} before its locked section");
+        }
+    }
+
+    // The stat scan alone decides whether anything needs reading; with nothing to
+    // read the poll returns before it copies the library.
+    #[test]
+    fn sync_scan_folder_asks_for_a_read_only_once_a_changed_file_has_settled() {
+        let dir = std::env::temp_dir().join(format!("ps-scan-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("abc123.md");
+        fs::write(&file, "hello").unwrap();
+        fs::write(dir.join("AGENTS.md"), "readme").unwrap();
+        fs::write(dir.join("notes.txt"), "not markdown").unwrap();
+        // First sight: the stamp is only remembered, nothing is read yet.
+        let (to_read, files, _) = sync_scan_folder(&dir).unwrap();
+        assert!(to_read.is_empty() && files == 1, "a file seen for the first time is not read yet");
+        // Next round, stamp unchanged: now it settles into a read.
+        let (to_read, _, _) = sync_scan_folder(&dir).unwrap();
+        assert_eq!(to_read.len(), 1);
+        assert_eq!(to_read[0].stem, "abc123");
+        // Once handled, an unchanged folder asks for nothing.
+        sync_seen_lock().insert(to_read[0].key.clone(), SyncSeen { stamp: to_read[0].stamp, handled: true, hash: 0 });
+        let (to_read, _, _) = sync_scan_folder(&dir).unwrap();
+        assert!(to_read.is_empty(), "an unchanged, handled folder needs no read and therefore no snapshot");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sync_known_current_holds_until_the_file_or_the_content_changes() {
+        let dir = std::env::temp_dir().join(format!("ps-written-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("p1.md");
+        let age = |f: &Path, secs: u64| {
+            let h = fs::OpenOptions::new().write(true).open(f).unwrap();
+            h.set_times(std::fs::FileTimes::new().set_modified(SystemTime::now() - Duration::from_secs(secs))).unwrap();
+        };
+        fs::write(&file, "one").unwrap();
+        let h1 = sync_content_hash("one");
+        assert!(!sync_file_known_current(&file, h1), "a file never noted is read once");
+        // a stamp from the last couple of seconds is not trusted (coarse file system clocks)
+        sync_file_note_current(&file, h1);
+        assert!(!sync_file_known_current(&file, h1), "a fresh stamp is compared by content, not skipped");
+        age(&file, 60);
+        sync_file_note_current(&file, h1);
+        assert!(sync_file_known_current(&file, h1), "unchanged file, same render: skipped");
+        assert!(!sync_file_known_current(&file, sync_content_hash("two")), "a changed render is compared again");
+        fs::write(&file, "edited outside").unwrap();
+        assert!(!sync_file_known_current(&file, h1), "an outside edit changes the stamp and is never skipped");
+        // same length, mtime restored to the noted value: a settled stamp still matches
+        // by design, but a differing length never does
+        fs::write(&file, "edited outside!!").unwrap();
+        age(&file, 60);
+        assert!(!sync_file_known_current(&file, h1), "a different length is never trusted");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn trash_rows_carry_what_the_trash_list_draws_and_no_picture() {
+        let mut p = test_prompt("t1");
+        p.name = "Report".into();
+        p.text = "x".repeat(TRASH_PREVIEW_CHARS + 50);
+        p.image = "data:image/png;base64,AAAA".into();
+        p.file_path = "C:/files/a.pdf".into();
+        p.trashed_at = 1234;
+        let mut s = test_prompt("t2");
+        s.secret = true;
+        s.text = "ciphertext-that-must-not-show".into();
+        let rows = trash_rows(&[p, s]);
+        let json = serde_json::to_string(&rows).unwrap();
+        assert!(!json.contains("base64,AAAA") && !json.contains("\"image\""), "no picture in the trash payload: {json}");
+        assert_eq!(rows[0].id, "t1");
+        assert_eq!(rows[0].name, "Report");
+        assert_eq!(rows[0].text.chars().count(), TRASH_PREVIEW_CHARS);
+        assert_eq!(rows[0].file_path, "C:/files/a.pdf");
+        assert_eq!(rows[0].trashed_at, 1234);
+        assert!(rows[0].has_image);
+        assert_eq!(rows[1].text, "", "a confidential entry shows no stored text");
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn read_key_sidecar_at_refuses_a_file_past_the_size_cap() {
+        let dir = std::env::temp_dir().join(format!("ps-keyread-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let small = dir.join("small.keys.json");
+        fs::write(&small, br#"{"events":[],"gaps":[],"hold_ms":450}"#).unwrap();
+        assert_eq!(read_key_sidecar_at(&small).map(|s| s.hold_ms), Some(450));
+        let big = dir.join("big.keys.json");
+        fs::write(&big, vec![b' '; (KEY_SIDECAR_MAX_COPY_BYTES + 1) as usize]).unwrap();
+        assert!(read_key_sidecar_at(&big).is_none(), "an oversized sidecar is never read whole");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn video_folder_durations_keep_the_order_of_the_names_and_zero_a_missing_file() {
+        let dir = std::env::temp_dir().join(format!("ps-durations-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let names: Vec<String> = (0..12).map(|i| format!("missing-{i}.mp4")).collect();
+        let got = video_folder_file_durations_ms_impl(None, &dir, &names);
+        assert_eq!(got, vec![0u64; 12], "one value per name, unknown files as 0");
+        // Structural: the command runs the probes on the blocking pool, not a runtime worker.
+        let src = include_str!("lib.rs");
+        let at = src.find("async fn video_folder_file_durations_ms(").unwrap();
+        assert!(src[at..at + 600].contains("spawn_blocking"), "the durations command must use spawn_blocking");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn dup_sources_keep_only_what_the_scan_reads_and_skip_confidential_entries() {
+        let mut a = test_prompt("a");
+        a.name = "Alpha".into();
+        a.text = "some body".into();
+        a.image = "data:image/png;base64,BBBB".into();
+        a.tags = vec!["t".into()];
+        a.variants = vec!["v".into()];
+        let mut s = test_prompt("s");
+        s.secret = true;
+        let got = dup_sources(&[a, s]);
+        assert_eq!(got.len(), 1, "the confidential entry is not scanned");
+        assert_eq!((got[0].id.as_str(), got[0].name.as_str(), got[0].text.as_str()), ("a", "Alpha", "some body"));
+    }
+
+    #[test]
+    fn take_still_output_removes_a_partial_frame_after_a_failed_run() {
+        let dir = std::env::temp_dir().join(format!("ps-still-fail-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let partial = dir.join(format!("{}-still-1-2.png", brand::TEMP_PREFIX));
+        fs::write(&partial, b"half a frame").unwrap();
+        assert!(take_still_output(&partial, false).is_err());
+        assert!(!partial.exists(), "a failed extraction must not leave its partial frame");
+        let good = dir.join(format!("{}-still-1-3.png", brand::TEMP_PREFIX));
+        fs::write(&good, b"frame").unwrap();
+        assert_eq!(take_still_output(&good, true).unwrap(), b"frame");
+        assert!(!good.exists(), "a read frame is removed as before");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sweep_stale_temp_files_also_reclaims_an_abandoned_still_frame() {
+        let sub = std::env::temp_dir().join(brand::TEMP_DIR);
+        fs::create_dir_all(&sub).unwrap();
+        let pid = std::process::id();
+        let old = sub.join(format!("{}-still-{}-sweeptest-old.png", brand::TEMP_PREFIX, pid));
+        let fresh = sub.join(format!("{}-still-{}-sweeptest-fresh.png", brand::TEMP_PREFIX, pid));
+        fs::write(&old, b"x").unwrap();
+        fs::write(&fresh, b"x").unwrap();
+        backdate(&old, STALE_TEMP_FILE_AGE + Duration::from_secs(60));
+        sweep_stale_temp_files();
+        assert!(!old.exists(), "a stale still frame must be swept");
+        assert!(fresh.exists(), "a young still frame may belong to a running extraction");
+        let _ = fs::remove_file(&fresh);
+    }
+
+    #[test]
+    fn remove_own_temp_leftovers_takes_only_this_pids_files() {
+        let root = std::env::temp_dir().join(format!("ps-ownexit-{}", std::process::id()));
+        let dir = root.join(brand::TEMP_DIR);
+        let mine_copy = dir.join(format!("{}-openedit-20260101-1000-4242", brand::TEMP_PREFIX));
+        let other_copy = dir.join(format!("{}-openedit-20260101-1000-4243", brand::TEMP_PREFIX));
+        fs::create_dir_all(&mine_copy).unwrap();
+        fs::create_dir_all(&other_copy).unwrap();
+        fs::write(mine_copy.join("a.png"), b"x").unwrap();
+        let mine_still = dir.join(format!("{}-still-4242-9.png", brand::TEMP_PREFIX));
+        let other_still = dir.join(format!("{}-still-4243-9.png", brand::TEMP_PREFIX));
+        fs::write(&mine_still, b"x").unwrap();
+        fs::write(&other_still, b"x").unwrap();
+        remove_own_temp_leftovers_in(&root, 4242);
+        assert!(!mine_copy.exists() && !mine_still.exists(), "this process's own scratch files go on exit");
+        assert!(other_copy.exists() && other_still.exists(), "another instance's files stay");
+        let _ = fs::remove_dir_all(&root);
+    }
+
     #[test]
     fn sweep_stale_temp_files_removes_only_its_own_stale_leftovers() {
         let dir = std::env::temp_dir();
@@ -45288,6 +46094,38 @@ mod tests {
         }
     }
 
+    // A backfill pass is mid-recognition when the switch goes off and the clear runs:
+    // the text it returns afterwards must not land anywhere.
+    #[test]
+    fn a_pass_started_before_the_ocr_clear_never_writes_its_text() {
+        let mut store = secret_test_store(vec![image_text_prompt("a", "")]);
+        store.settings.ui_flags.insert("ocrIndex".into(), true);
+        let pic = store.prompts[0].image.clone();
+        // sanity: an uninterrupted pass writes
+        let started = ocr_epoch();
+        assert!(apply_ocr_backfill_text(&mut store, "a", &pic, "first".into(), started));
+        assert_eq!(store.prompts[0].image_text, "first");
+        // a picture swapped while the pass ran blocks the write
+        store.prompts[0].image_text.clear();
+        assert!(!apply_ocr_backfill_text(&mut store, "a", "other-picture.png", "wrong".into(), started));
+        assert!(store.prompts[0].image_text.is_empty());
+        store.prompts[0].image_text = "first".into();
+        // second pass: the recognizer "flips the flag off and clears" before returning
+        let started = ocr_epoch();
+        let recognize = |store: &mut Store| {
+            store.settings.ui_flags.insert("ocrIndex".into(), false);
+            assert!(clear_ocr_index_text(store));
+            "late text".to_string()
+        };
+        let text = recognize(&mut store);
+        assert!(!apply_ocr_backfill_text(&mut store, "a", &pic, text, started));
+        assert!(store.prompts.iter().chain(store.trash.iter()).all(|p| p.image_text.is_empty()));
+        // switched back on, but the stale pass (old epoch) still must not write
+        store.settings.ui_flags.insert("ocrIndex".into(), true);
+        assert!(!apply_ocr_backfill_text(&mut store, "a", &pic, "stale".into(), started));
+        assert!(store.prompts[0].image_text.is_empty());
+    }
+
     fn prompts_json(store: &Store) -> String {
         serde_json::to_string(&store.prompts).unwrap()
     }
@@ -45555,6 +46393,45 @@ mod tests {
     }
 
     #[test]
+    fn edit_state_is_sealed_and_keyed_without_the_path_and_reads_back() {
+        let conn = edit_state_test_conn();
+        let path = "c:/clips/secret-meeting.mp4";
+        edit_state_write(&conn, "video", path, 10, 20, "{\"v\":1,\"ops\":[\"hello overlay text\"]}", (now_ms() / 1000) as i64).unwrap();
+        let (id, target, ops): (String, String, String) = conn
+            .query_row("SELECT id, target, ops FROM edit_state", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .unwrap();
+        for stored in [&id, &target, &ops] {
+            assert!(!stored.contains("secret-meeting") && !stored.contains("hello overlay"), "no plain path or overlay text at rest: {stored}");
+        }
+        let (_, back) = edit_state_read(&conn, "video", path, 10, 20).unwrap();
+        assert!(back.contains("hello overlay text"));
+        assert!(edit_state_read(&conn, "video", path, 10, 21).is_none(), "a changed mtime still misses");
+        // The sweep reads the sealed path and drops the row once the file is gone.
+        assert_eq!(sweep_edit_state_conn(&conn, |p| p == path, 30.0), 0);
+        assert_eq!(sweep_edit_state_conn(&conn, |_| false, 30.0), 1);
+    }
+
+    #[test]
+    fn edit_state_reads_an_old_plain_row_and_replaces_it_on_save() {
+        let conn = edit_state_test_conn();
+        let path = "c:/clips/old.mp4";
+        let now = (now_ms() / 1000) as i64;
+        conn.execute(
+            "INSERT INTO edit_state VALUES('video:c:/clips/old.mp4', 'video', 'c:/clips/old.mp4', 1, 2, '{\"v\":1}', ?1)",
+            params![now],
+        )
+        .unwrap();
+        assert_eq!(edit_state_read(&conn, "video", path, 1, 2).unwrap().1, "{\"v\":1}");
+        assert_eq!(sweep_edit_state_conn(&conn, |_| true, 30.0), 0, "a plain legacy target still resolves in the sweep");
+        edit_state_write(&conn, "video", path, 1, 2, "{\"v\":1,\"x\":1}", now).unwrap();
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM edit_state", [], |r| r.get(0)).unwrap();
+        assert_eq!(count, 1, "the legacy row is replaced, not duplicated");
+        edit_state_discard(&conn, "video", path).unwrap();
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM edit_state", [], |r| r.get(0)).unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
     fn sweep_edit_state_removes_a_row_whose_target_is_gone() {
         let conn = edit_state_test_conn();
         let now = (now_ms() / 1000) as i64;
@@ -45656,6 +46533,78 @@ mod tests {
         )
         .unwrap();
         conn
+    }
+
+    #[test]
+    fn editor_draft_is_sealed_at_rest_and_reads_back_plain() {
+        let conn = editor_drafts_test_conn();
+        editor_draft_write(&conn, "p1", "Secret name", "Secret body text", "[\"variant one\"]", 100).unwrap();
+        let raw: (String, String, String) = conn
+            .query_row("SELECT name, text, variants FROM editor_drafts WHERE id = 'current'", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .unwrap();
+        for (stored, plain) in [(&raw.0, "Secret name"), (&raw.1, "Secret body text"), (&raw.2, "variant one")] {
+            assert!(!stored.contains(plain), "the draft column must not hold the plaintext");
+        }
+        let d = editor_draft_read(&conn).unwrap();
+        assert_eq!((d.name.as_str(), d.text.as_str(), d.variants.as_str()), ("Secret name", "Secret body text", "[\"variant one\"]"));
+    }
+
+    #[test]
+    fn an_undecryptable_sealed_draft_is_dropped_not_offered_empty() {
+        let conn = editor_drafts_test_conn();
+        conn.execute(
+            "INSERT INTO editor_drafts(id, prompt_id, name, text, variants, updated_at) VALUES('current','p1','enc:v1:AAAA','enc:v1:AAAA','enc:v1:AAAA',5)",
+            [],
+        )
+        .unwrap();
+        assert!(editor_draft_read(&conn).is_none());
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM editor_drafts", [], |r| r.get(0)).unwrap();
+        assert_eq!(count, 0, "the unreadable row is deleted");
+    }
+
+    #[test]
+    fn an_old_plain_edit_state_row_is_sealed_on_first_read() {
+        let conn = edit_state_test_conn();
+        conn.execute(
+            "INSERT INTO edit_state VALUES('video:c:/clips/old.mp4', 'video', 'c:/clips/old.mp4', 1, 2, '{\"v\":1,\"t\":\"overlay words\"}', 77)",
+            [],
+        )
+        .unwrap();
+        let (_, ops) = edit_state_read(&conn, "video", "c:/clips/old.mp4", 1, 2).unwrap();
+        assert!(ops.contains("overlay words"));
+        let (id, target, stored_ops, updated): (String, String, String, i64) = conn
+            .query_row("SELECT id, target, ops, updated_at FROM edit_state", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+            .unwrap();
+        assert!(!id.contains("old.mp4"), "the legacy id is gone");
+        assert!(target.starts_with(ENC_PREFIX) && stored_ops.starts_with(ENC_PREFIX), "target and ops are sealed now");
+        assert_eq!(updated, 77, "the retention clock keeps running");
+        assert!(edit_state_read(&conn, "video", "c:/clips/old.mp4", 1, 2).unwrap().1.contains("overlay words"));
+    }
+
+    #[test]
+    fn startup_pass_seals_every_plain_edit_state_row_once() {
+        let conn = edit_state_test_conn();
+        for (id, target, ts) in [("video:c:/a/one.mp4", "c:/a/one.mp4", 11), ("video:c:/a/two.mp4", "c:/a/two.mp4", 22)] {
+            conn.execute("INSERT INTO edit_state VALUES(?1, 'video', ?2, 1, 2, '{\"v\":1,\"t\":\"words\"}', ?3)", params![id, target, ts]).unwrap();
+        }
+        assert_eq!(edit_state_seal_all(&conn), 2);
+        let mut st = conn.prepare("SELECT id, target, ops, updated_at FROM edit_state ORDER BY updated_at").unwrap();
+        let rows: Vec<(String, String, String, i64)> = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))).unwrap().flatten().collect();
+        assert_eq!(rows.len(), 2);
+        for ((id, target, ops, ts), (want_ts, path)) in rows.iter().zip([(11, "c:/a/one.mp4"), (22, "c:/a/two.mp4")]) {
+            assert_eq!(*id, edit_state_id("video", path));
+            assert!(target.starts_with(ENC_PREFIX) && ops.starts_with(ENC_PREFIX));
+            assert_eq!(*ts, want_ts);
+        }
+        assert_eq!(edit_state_seal_all(&conn), 0, "a second run writes nothing");
+    }
+
+    #[test]
+    fn editor_draft_reads_an_old_unsealed_row() {
+        let conn = editor_drafts_test_conn();
+        conn.execute("INSERT INTO editor_drafts(id, prompt_id, name, text, variants, updated_at) VALUES('current','p1','Old','Old body','[]',5)", []).unwrap();
+        let d = editor_draft_read(&conn).unwrap();
+        assert_eq!((d.name.as_str(), d.text.as_str(), d.variants.as_str()), ("Old", "Old body", "[]"));
     }
 
     // Same upsert SQL as save_editor_draft, run directly against a bare
