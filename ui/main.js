@@ -10798,6 +10798,9 @@ EXPERT_ACTIONS["settings-import"] = async () => {
 EXPERT_ACTIONS["ocr-index-backfill"] = async () => {
   try {
     await invoke("ocr_index_backfill");
+    // New picture text is searchable now: refresh the hits of a query already typed.
+    const q = libQuery.trim().toLowerCase();
+    if (q) refreshImageHits(q);
   } catch (e) {
     errToast(e);
   }
