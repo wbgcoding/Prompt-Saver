@@ -17973,6 +17973,10 @@ fn demo_settings(has_video: bool, lang: &str) -> Settings {
     let mut settings = Settings::default();
     settings.ui_flags.insert("demoMode".to_string(), true);
     settings.active_view = "home".to_string();
+    // The demo store starts with its own settings; without this its gear and
+    // banner would follow the system language while the samples follow the
+    // language the interface was using when demo mode was switched on.
+    settings.language = lang.to_string();
     let mut home = View {
         id: "home".to_string(),
         name: d.view_home.to_string(),
@@ -48406,6 +48410,12 @@ mod tests {
         assert_eq!(demo_text::demo_text("pt-BR").welcome_name, demo_text::demo_text("pt").welcome_name);
         assert_eq!(demo_text::demo_text("zh_CN").welcome_name, demo_text::demo_text("zh").welcome_name);
         assert_eq!(demo_text::demo_text("DE").welcome_name, "Willkommen");
+    }
+
+    #[test]
+    fn demo_settings_keep_the_interface_language() {
+        assert_eq!(demo_settings(false, "en").language, "en");
+        assert_eq!(demo_settings(false, "fr").language, "fr");
     }
 
     #[test]
