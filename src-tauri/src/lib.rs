@@ -27695,10 +27695,17 @@ fn is_protected_folder_key(key: &str) -> bool {
     PROTECTED_FOLDER_KEYS.contains(&key)
 }
 
+// Text rows with their own validated writer (folders, receiver secrets and
+// ranges, sealed backup password, vault salt and verifier): the generic string
+// setter never writes them.
+fn is_generic_text_write_denied(key: &str) -> bool {
+    is_machine_text_key(key) || is_vault_key(key)
+}
+
 // Set an expert string option (e.g. the copy-feedback font key).
 #[tauri::command]
 fn set_ui_text(app: AppHandle, state: State<Db>, key: String, value: String) {
-    if is_protected_folder_key(&key) || remote::is_remote_secret_key(&key) {
+    if is_generic_text_write_denied(&key) {
         return;
     }
     {
@@ -49179,6 +49186,16 @@ mod tests {
         assert!(is_protected_folder_key("syncDir"));
         assert!(!is_protected_folder_key("copyFont"), "an ordinary string setting must stay reachable");
         assert!(!is_protected_folder_key("dataDir"), "dataDir has its own separate command and storage, not a ui_texts key");
+    }
+
+    #[test]
+    fn the_generic_text_setter_refuses_every_row_with_a_dedicated_writer() {
+        for k in ["remoteAllowedRanges", "remotePasswordHash", "backupPw", "secretVaultSalt", "secretVaultVerify", "remoteTlsKey", "screenshotDir", "syncDir"] {
+            assert!(is_generic_text_write_denied(k), "{k} must not be writable generically");
+        }
+        for k in ["copyFont", "palette", "librarySort", "globalSearchRecent"] {
+            assert!(!is_generic_text_write_denied(k), "{k} stays reachable");
+        }
     }
 
     // Finding 1 (security pass 348): a settings-only import file is untrusted
