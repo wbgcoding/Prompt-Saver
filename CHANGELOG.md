@@ -875,7 +875,6 @@ the video editor and the introduction tour ship on).
   anything, and a write that fails is undone in memory too.
 - **Changing the remote access port while it runs takes effect at once.**
   If the new port cannot be used, the old one comes back.
-
 - **Markdown folder sync no longer loses or damages data.** A file with the id
   of a confidential entry can no longer overwrite it, a file whose prompt sits
   in the trash no longer comes back as a second prompt, and the cleanup of
