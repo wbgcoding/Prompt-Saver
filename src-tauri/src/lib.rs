@@ -36348,8 +36348,8 @@ fn sync_known_note(path: &Path) {
 }
 
 // Whether the file changed since the app last wrote or read it. `None` (never seen)
-// is deliberately NOT a conflict: on a fresh start every file is unknown, and
-// claiming a conflict there would litter the folder with copies of itself.
+// is not decided here: sync_edit_unsaved judges such a file by its content, so a
+// fresh start does not litter the folder with copies of what the app wrote itself.
 //
 // A stamp the poll noted but has not read yet (handled: false) counts as changed
 // too: the new stamp is already in the map, so comparing stamps alone would call an
@@ -36366,11 +36366,20 @@ fn sync_changed_since_seen(path: &Path) -> bool {
 // itself. A file that is not readable as text at all (an ANSI editor, a broken
 // encoding) is always worth a copy: the poll cannot import it, so the file is the
 // only place that version exists.
-fn sync_edit_unsaved(path: &Path, on_disk: &[u8]) -> bool {
+//
+// A file the app has no record of at all (activation, a switch to a folder that
+// already holds files, a save ahead of the startup seed) is judged by its content: a
+// different one is somebody's edit, one equal to this prompt's own text, in today's
+// form or an older one, is not.
+fn sync_edit_unsaved(path: &Path, on_disk: &[u8], p: &Prompt, placement: &SyncPlacement) -> bool {
     if on_disk.is_empty() {
         return false;
     }
-    sync_decode_text(on_disk.to_vec()).is_none() || sync_changed_since_seen(path)
+    let Some(text) = sync_decode_text(on_disk.to_vec()) else { return true };
+    if !sync_seen_lock().contains_key(&sync_seen_key(path)) {
+        return !sync_md_matches(p, placement, &text);
+    }
+    sync_changed_since_seen(path)
 }
 
 // ---- How the folder itself is doing (shown in the expert menu) ----
@@ -36553,7 +36562,8 @@ fn sync_write_dir(dir: &Path, prompts: &[Prompt], settings: &Settings) -> usize 
         }
         let filename = format!("{}.md", p.id);
         let path = dir.join(&filename);
-        let content = prompt_to_md(p, &sync_placement_for(p, settings));
+        let placement = sync_placement_for(p, settings);
+        let content = prompt_to_md(p, &placement);
         // Raw bytes, never decoded text: a UTF-16 or ANSI file would read as empty
         // through read_to_string and be overwritten without a trace.
         let on_disk = fs::read(&path).unwrap_or_default();
@@ -36566,7 +36576,7 @@ fn sync_write_dir(dir: &Path, prompts: &[Prompt], settings: &Settings) -> usize 
             // prompt id (the poll skips it) nor something the orphan sweep may touch.
             let copy = dir.join(format!("{}.conflict-{}.md", p.id, now_secs()));
             let mut kept_copy = false;
-            if sync_edit_unsaved(&path, &on_disk) && write_bytes_atomic(&copy, &on_disk) {
+            if sync_edit_unsaved(&path, &on_disk, p, &placement) && write_bytes_atomic(&copy, &on_disk) {
                 kept_copy = true;
                 append_crash_log(&format!(
                     "prompt-sync: {filename} was edited outside the app and in the app at the same time; the outside version was kept as {}",
@@ -37252,6 +37262,30 @@ fn sync_poll_release() {
     SYNC_POLL_RUNNING.store(false, Ordering::SeqCst);
 }
 
+// Run once before the first save of a session: every file that already sits in the
+// folder under the id of a library prompt is noted as known, and its stamp is
+// recorded. One that matches what this machine would write is handled; one that
+// differs (edited while the app was closed, or by another machine through the
+// cloud) stays unhandled, so a save landing before the poll has imported it keeps
+// a copy of it instead of overwriting it.
+fn sync_seed_seen(dir: &Path, prompts: &[Prompt], settings: &Settings) {
+    for p in prompts.iter().filter(|p| sync_eligible(p)) {
+        let path = dir.join(format!("{}.md", p.id));
+        if !path.is_file() {
+            continue;
+        }
+        sync_known_note(&path);
+        let key = sync_seen_key(&path);
+        if sync_seen_lock().contains_key(&key) {
+            continue;
+        }
+        let Some(stamp) = sync_stamp_of(&path) else { continue };
+        let handled = sync_read_text(&path, MAX_SYNC_MD_BYTES)
+            .is_some_and(|c| sync_md_matches(p, &sync_placement_for(p, settings), &c));
+        sync_seen_lock().entry(key).or_insert(SyncSeen { stamp, handled });
+    }
+}
+
 fn start_sync_poll(app: AppHandle) {
     if !sync_poll_try_claim() {
         return; // already running - set_ui_flag calls this again on every activation
@@ -37261,16 +37295,11 @@ fn start_sync_poll(app: AppHandle) {
         // first save can sweep anything: a prompt deleted in the first seconds of a
         // session must still take its file along.
         if let Some(state) = app.try_state::<Db>() {
-            let (dir, ids) = {
+            let (dir, prompts, settings) = {
                 let s = lock(&state);
-                (sync_dir_path(&app, &s.settings), s.prompts.iter().map(|p| p.id.clone()).collect::<Vec<_>>())
+                (sync_dir_path(&app, &s.settings), s.prompts.clone(), s.settings.clone())
             };
-            for id in ids.iter().filter(|id| sync_safe_id(id)) {
-                let path = dir.join(format!("{id}.md"));
-                if path.is_file() {
-                    sync_known_note(&path);
-                }
-            }
+            let _ = tauri::async_runtime::spawn_blocking(move || sync_seed_seen(&dir, &prompts, &settings)).await;
         }
         loop {
             let Some(state) = app.try_state::<Db>() else {
@@ -42171,6 +42200,63 @@ mod tests {
             assert_eq!(fs::read(copies[0].path()).unwrap(), bytes, "{tag}: the copy must be byte-identical");
             let _ = fs::remove_dir_all(&dir);
         }
+    }
+
+    fn sync_conflict_copies(dir: &Path, id: &str) -> usize {
+        fs::read_dir(dir)
+            .unwrap()
+            .flatten()
+            .filter(|e| e.file_name().to_string_lossy().starts_with(&format!("{id}.conflict-")))
+            .count()
+    }
+
+    fn sync_legacy_md(p: &Prompt) -> String {
+        prompt_to_md_impl(p, &SyncPlacement::default(), true)
+    }
+
+    #[test]
+    fn sync_startup_seed_keeps_an_edit_made_while_the_app_was_closed() {
+        let dir = sync_tmp_dir("startup-seed");
+        let mut stored = sync_test_prompt();
+        stored.text = "the text this library holds".into();
+        let mut other = sync_test_prompt();
+        other.id = "p2".into();
+        other.text = "ends with a newline\n".into();
+        other.notes = "two\nlines".into();
+        // p1 was edited by hand while the app was closed; p2 is an older build's file.
+        let mut hand = stored.clone();
+        hand.text = "typed by hand in the editor".into();
+        fs::write(dir.join("p1.md"), prompt_to_md(&hand, &SyncPlacement::default())).unwrap();
+        fs::write(dir.join("p2.md"), sync_legacy_md(&other)).unwrap();
+        sync_seed_seen(&dir, &[stored.clone(), other.clone()], &Settings::default());
+        let mut edited = stored.clone();
+        edited.text = "changed inside the app".into();
+        let mut edited2 = other.clone();
+        edited2.text = "changed inside the app too".into();
+        sync_write_dir(&dir, &[edited, edited2], &Settings::default());
+        assert_eq!(sync_conflict_copies(&dir, "p1"), 1, "the hand edit must survive as a copy");
+        assert_eq!(sync_conflict_copies(&dir, "p2"), 0, "a file matching the stored prompt needs no copy");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sync_first_write_into_a_folder_keeps_a_differing_file_and_not_a_matching_one() {
+        let dir = sync_tmp_dir("activation");
+        let mut stored = sync_test_prompt();
+        stored.text = "the text this library holds".into();
+        let mut other = stored.clone();
+        other.id = "p2".into();
+        other.text = "ends with a newline\n".into();
+        other.notes = "two\nlines".into();
+        let mut foreign = stored.clone();
+        foreign.text = "another machine's version".into();
+        fs::write(dir.join("p1.md"), prompt_to_md(&foreign, &SyncPlacement::default())).unwrap();
+        fs::write(dir.join("p2.md"), sync_legacy_md(&other)).unwrap();
+        // No seed, no SYNC_SEEN entry: activation, or a switch to a folder with files.
+        sync_write_dir(&dir, &[stored, other], &Settings::default());
+        assert_eq!(sync_conflict_copies(&dir, "p1"), 1, "a differing file must be kept as a copy");
+        assert_eq!(sync_conflict_copies(&dir, "p2"), 0, "a file in an older format of the same prompt is no conflict");
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
