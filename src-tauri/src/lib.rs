@@ -3101,6 +3101,12 @@ fn write_sealed_json<T: Serialize>(path: &PathBuf, data: &T) -> bool {
 // only touches one specific extension (sync_sweep_orphans' ".md" check) leaves a
 // leftover temp file alone if the rename is ever interrupted.
 fn write_file_atomic(path: &Path, content: &str) -> bool {
+    write_bytes_atomic(path, content.as_bytes())
+}
+
+// The same, for bytes that are not necessarily text (a conflict copy keeps a file
+// exactly as it was, whatever encoding an editor saved it in).
+fn write_bytes_atomic(path: &Path, content: &[u8]) -> bool {
     let tmp = path.with_extension("tmp");
     fs::write(&tmp, content).is_ok() && fs::rename(&tmp, path).is_ok()
 }
@@ -36356,6 +36362,17 @@ fn sync_changed_since_seen(path: &Path) -> bool {
     }
 }
 
+// Whether the bytes about to be replaced hold something the app has not saved
+// itself. A file that is not readable as text at all (an ANSI editor, a broken
+// encoding) is always worth a copy: the poll cannot import it, so the file is the
+// only place that version exists.
+fn sync_edit_unsaved(path: &Path, on_disk: &[u8]) -> bool {
+    if on_disk.is_empty() {
+        return false;
+    }
+    sync_decode_text(on_disk.to_vec()).is_none() || sync_changed_since_seen(path)
+}
+
 // ---- How the folder itself is doing (shown in the expert menu) ----
 #[derive(Clone, Default)]
 struct SyncHealth {
@@ -36537,8 +36554,10 @@ fn sync_write_dir(dir: &Path, prompts: &[Prompt], settings: &Settings) -> usize 
         let filename = format!("{}.md", p.id);
         let path = dir.join(&filename);
         let content = prompt_to_md(p, &sync_placement_for(p, settings));
-        let on_disk = fs::read_to_string(&path).unwrap_or_default();
-        if on_disk != content && sync_lock_acquire(&path) {
+        // Raw bytes, never decoded text: a UTF-16 or ANSI file would read as empty
+        // through read_to_string and be overwritten without a trace.
+        let on_disk = fs::read(&path).unwrap_or_default();
+        if on_disk != content.as_bytes() && sync_lock_acquire(&path) {
             // Both sides changed: the file was edited outside the app since the app
             // last touched it, and the prompt in the app has since changed too. The
             // app's version wins the file, but the one being replaced is kept beside
@@ -36547,7 +36566,7 @@ fn sync_write_dir(dir: &Path, prompts: &[Prompt], settings: &Settings) -> usize 
             // prompt id (the poll skips it) nor something the orphan sweep may touch.
             let copy = dir.join(format!("{}.conflict-{}.md", p.id, now_secs()));
             let mut kept_copy = false;
-            if !on_disk.is_empty() && sync_changed_since_seen(&path) && write_file_atomic(&copy, &on_disk) {
+            if sync_edit_unsaved(&path, &on_disk) && write_bytes_atomic(&copy, &on_disk) {
                 kept_copy = true;
                 append_crash_log(&format!(
                     "prompt-sync: {filename} was edited outside the app and in the app at the same time; the outside version was kept as {}",
@@ -36557,16 +36576,16 @@ fn sync_write_dir(dir: &Path, prompts: &[Prompt], settings: &Settings) -> usize 
             // One more look right before the replace: the lock file is only ours, an
             // external editor never honors it, so a save that landed after the first
             // read has to end up in the conflict copy as well, not be overwritten.
-            let latest = fs::read_to_string(&path).unwrap_or_default();
+            let latest = fs::read(&path).unwrap_or_default();
+            let late_copy = dir.join(format!("{}.conflict-{}-late.md", p.id, now_secs()));
             if latest != on_disk
-                && latest != content
+                && latest != content.as_bytes()
                 && !latest.is_empty()
-                && write_file_atomic(&copy, &latest)
-                && !kept_copy
+                && write_bytes_atomic(&late_copy, &latest)
             {
                 append_crash_log(&format!(
                     "prompt-sync: {filename} was edited outside the app while it was being written; the outside version was kept as {}",
-                    copy.file_name().unwrap_or_default().to_string_lossy()
+                    late_copy.file_name().unwrap_or_default().to_string_lossy()
                 ));
             }
             let ok = write_file_atomic(&path, &content);
@@ -42118,6 +42137,40 @@ mod tests {
             .count();
         assert_eq!(copies, 1, "the unread outside edit must be kept as a conflict copy");
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sync_write_copies_an_undecodable_outside_edit_byte_for_byte() {
+        let mut edited = sync_test_prompt();
+        edited.text = "edited outside the app".into();
+        let md = prompt_to_md(&edited, &SyncPlacement::default());
+        let mut utf16 = vec![0xFFu8, 0xFE];
+        for u in md.encode_utf16() {
+            utf16.extend_from_slice(&u.to_le_bytes());
+        }
+        let mut ansi = md.clone().into_bytes();
+        ansi.extend_from_slice(b"caf");
+        ansi.push(0xE4);
+        ansi.push(b'\n');
+        // (tag, bytes, the poll already marked the stamp handled)
+        for (tag, bytes, handled) in [("utf16", utf16, false), ("ansi", ansi, true)] {
+            let dir = sync_tmp_dir(tag);
+            let path = dir.join("p1.md");
+            fs::write(&path, &bytes).unwrap();
+            let stamp = sync_stamp_of(&path).unwrap();
+            sync_seen_lock().insert(sync_seen_key(&path), SyncSeen { stamp, handled });
+            let mut app_side = sync_test_prompt();
+            app_side.text = "changed inside the app".into();
+            sync_write_dir(&dir, &[app_side], &Settings::default());
+            let copies: Vec<_> = fs::read_dir(&dir)
+                .unwrap()
+                .flatten()
+                .filter(|e| e.file_name().to_string_lossy().starts_with("p1.conflict-"))
+                .collect();
+            assert_eq!(copies.len(), 1, "{tag}: the outside edit must be kept as a conflict copy");
+            assert_eq!(fs::read(copies[0].path()).unwrap(), bytes, "{tag}: the copy must be byte-identical");
+            let _ = fs::remove_dir_all(&dir);
+        }
     }
 
     #[test]
