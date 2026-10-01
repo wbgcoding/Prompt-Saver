@@ -14822,15 +14822,24 @@ fn edit_state_write(conn: &Connection, kind: &str, target: &str, size: i64, mtim
 // (row id, ops as stored, decrypted) for the exact (size, mtime) triple, hashed id first.
 fn edit_state_read(conn: &Connection, kind: &str, target: &str, size: i64, mtime: i64) -> Option<(String, String)> {
     for id in [edit_state_id(kind, target), edit_state_legacy_id(kind, target)] {
-        let ops = conn
+        let row = conn
             .query_row(
-                "SELECT ops FROM edit_state WHERE id = ?1 AND size = ?2 AND mtime = ?3",
+                "SELECT ops, target, updated_at FROM edit_state WHERE id = ?1 AND size = ?2 AND mtime = ?3",
                 params![id, size, mtime],
-                |r| r.get::<_, String>(0),
+                |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, i64>(2)?)),
             )
             .ok();
-        if let Some(ops) = ops {
-            return Some((id, dec_str(&ops)));
+        if let Some((ops, stored_target, updated_at)) = row {
+            let plain_ops = dec_str(&ops);
+            // A row an earlier version wrote in clear is sealed the first time it is
+            // read: rewritten under the hashed id (the legacy row is dropped), keeping
+            // its own timestamp so the retention clock does not restart.
+            if !ops.starts_with(ENC_PREFIX) || !stored_target.starts_with(ENC_PREFIX) {
+                let _ = edit_state_write(conn, kind, target, size, mtime, &plain_ops, updated_at);
+                let hashed = edit_state_id(kind, target);
+                return Some((hashed, plain_ops));
+            }
+            return Some((id, plain_ops));
         }
     }
     None
@@ -14860,7 +14869,10 @@ async fn load_edit_state(app: AppHandle, kind: String, target: String, size: i64
     // logged, so a real corruption pattern is still visible somewhere.
     let is_known_version = edit_state_ops_version(&ops) == Some(1);
     if !is_known_version {
-        append_crash_log(&format!("load_edit_state: discarding unreadable saved state for {target}"));
+        // The file name only: the full path would put the recording location back into
+        // the log that sealing the row keeps out of the database.
+        let shown = std::path::Path::new(&target).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        append_crash_log(&format!("load_edit_state: discarding unreadable saved state for {shown}"));
         let _ = conn.execute("DELETE FROM edit_state WHERE id = ?1", params![id]);
         return Ok(None);
     }
@@ -14912,20 +14924,26 @@ fn editor_draft_write(conn: &Connection, prompt_id: &str, name: &str, text: &str
 }
 
 fn editor_draft_read(conn: &Connection) -> Option<EditorDraft> {
-    conn.query_row(
-        "SELECT prompt_id, name, text, variants, updated_at FROM editor_drafts WHERE id = 'current'",
-        [],
-        |r| {
-            Ok(EditorDraft {
-                prompt_id: r.get(0)?,
-                name: dec_str(&r.get::<_, String>(1)?),
-                text: dec_str(&r.get::<_, String>(2)?),
-                variants: dec_str(&r.get::<_, String>(3)?),
-                updated_at: r.get(4)?,
-            })
-        },
-    )
-    .ok()
+    let (prompt_id, raw_name, raw_text, raw_variants, updated_at) = conn
+        .query_row(
+            "SELECT prompt_id, name, text, variants, updated_at FROM editor_drafts WHERE id = 'current'",
+            [],
+            |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, String>(3)?, r.get::<_, i64>(4)?)),
+        )
+        .ok()?;
+    let (name, text, variants) = (dec_str(&raw_name), dec_str(&raw_text), dec_str(&raw_variants));
+    // A sealed draft that no longer decrypts (data.db restored on another account or
+    // machine) reads back empty: that is no draft, never an empty one to "restore".
+    let sealed = [&raw_name, &raw_text, &raw_variants].iter().any(|v| v.starts_with(ENC_PREFIX));
+    if sealed && name.is_empty() && text.is_empty() && variants.is_empty() {
+        let _ = conn.execute("DELETE FROM editor_drafts WHERE id = 'current'", []);
+        return None;
+    }
+    // An old draft written in clear is sealed on this first read.
+    if ![&raw_name, &raw_text, &raw_variants].iter().all(|v| v.is_empty() || v.starts_with(ENC_PREFIX)) {
+        let _ = editor_draft_write(conn, &prompt_id, &name, &text, &variants, updated_at);
+    }
+    Some(EditorDraft { prompt_id, name, text, variants, updated_at })
 }
 
 #[tauri::command]
@@ -45144,6 +45162,38 @@ mod tests {
         }
         let d = editor_draft_read(&conn).unwrap();
         assert_eq!((d.name.as_str(), d.text.as_str(), d.variants.as_str()), ("Secret name", "Secret body text", "[\"variant one\"]"));
+    }
+
+    #[test]
+    fn an_undecryptable_sealed_draft_is_dropped_not_offered_empty() {
+        let conn = editor_drafts_test_conn();
+        conn.execute(
+            "INSERT INTO editor_drafts(id, prompt_id, name, text, variants, updated_at) VALUES('current','p1','enc:v1:AAAA','enc:v1:AAAA','enc:v1:AAAA',5)",
+            [],
+        )
+        .unwrap();
+        assert!(editor_draft_read(&conn).is_none());
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM editor_drafts", [], |r| r.get(0)).unwrap();
+        assert_eq!(count, 0, "the unreadable row is deleted");
+    }
+
+    #[test]
+    fn an_old_plain_edit_state_row_is_sealed_on_first_read() {
+        let conn = edit_state_test_conn();
+        conn.execute(
+            "INSERT INTO edit_state VALUES('video:c:/clips/old.mp4', 'video', 'c:/clips/old.mp4', 1, 2, '{\"v\":1,\"t\":\"overlay words\"}', 77)",
+            [],
+        )
+        .unwrap();
+        let (_, ops) = edit_state_read(&conn, "video", "c:/clips/old.mp4", 1, 2).unwrap();
+        assert!(ops.contains("overlay words"));
+        let (id, target, stored_ops, updated): (String, String, String, i64) = conn
+            .query_row("SELECT id, target, ops, updated_at FROM edit_state", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+            .unwrap();
+        assert!(!id.contains("old.mp4"), "the legacy id is gone");
+        assert!(target.starts_with(ENC_PREFIX) && stored_ops.starts_with(ENC_PREFIX), "target and ops are sealed now");
+        assert_eq!(updated, 77, "the retention clock keeps running");
+        assert!(edit_state_read(&conn, "video", "c:/clips/old.mp4", 1, 2).unwrap().1.contains("overlay words"));
     }
 
     #[test]
