@@ -3101,6 +3101,12 @@ fn write_sealed_json<T: Serialize>(path: &PathBuf, data: &T) -> bool {
 // only touches one specific extension (sync_sweep_orphans' ".md" check) leaves a
 // leftover temp file alone if the rename is ever interrupted.
 fn write_file_atomic(path: &Path, content: &str) -> bool {
+    write_bytes_atomic(path, content.as_bytes())
+}
+
+// The same, for bytes that are not necessarily text (a conflict copy keeps a file
+// exactly as it was, whatever encoding an editor saved it in).
+fn write_bytes_atomic(path: &Path, content: &[u8]) -> bool {
     let tmp = path.with_extension("tmp");
     fs::write(&tmp, content).is_ok() && fs::rename(&tmp, path).is_ok()
 }
@@ -35783,6 +35789,24 @@ fn sync_eligible(p: &Prompt) -> bool {
 // skipped instead of being pulled into memory every cycle.
 const MAX_SYNC_MD_BYTES: u64 = 8 * 1024 * 1024;
 
+// Text as an editor may have saved it: plain UTF-8, UTF-8 with a byte order mark, or
+// UTF-16 (Windows PowerShell's default for `>`). Anything else is not text.
+fn sync_decode_text(bytes: Vec<u8>) -> Option<String> {
+    if let Some(rest) = bytes.strip_prefix(&[0xFF, 0xFE]).or_else(|| bytes.strip_prefix(&[0xFE, 0xFF])) {
+        if rest.len() % 2 != 0 {
+            return None;
+        }
+        let little = bytes[0] == 0xFF;
+        let units: Vec<u16> = rest
+            .chunks_exact(2)
+            .map(|c| if little { u16::from_le_bytes([c[0], c[1]]) } else { u16::from_be_bytes([c[0], c[1]]) })
+            .collect();
+        return String::from_utf16(&units).ok();
+    }
+    let text = String::from_utf8(bytes).ok()?;
+    Some(text.strip_prefix('\u{feff}').map(str::to_string).unwrap_or(text))
+}
+
 fn sync_safe_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 64
@@ -35793,6 +35817,49 @@ fn sync_safe_id(id: &str) -> bool {
 // than a real multi-line frontmatter parser for what are normally short values.
 fn md_escape_line(s: &str) -> String {
     s.replace(['\n', '\r'], " ")
+}
+
+// Notes are typed into a multi-line box, so they are the one header field where a
+// line break is real content. A note with one is written escaped (\n, \r, \\) and
+// flagged with a `notes_enc` line; one without stays exactly as it always was, so
+// older files and single-line notes (which may hold a path with backslashes) read
+// back unchanged.
+fn md_escape_notes(s: &str) -> Option<String> {
+    if !s.contains(['\n', '\r']) {
+        return None;
+    }
+    let mut out = String::with_capacity(s.len() + 8);
+    for c in s.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            _ => out.push(c),
+        }
+    }
+    Some(out)
+}
+
+fn md_unescape_notes(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            out.push(c);
+            continue;
+        }
+        match chars.next() {
+            Some('n') => out.push('\n'),
+            Some('r') => out.push('\r'),
+            Some('\\') => out.push('\\'),
+            Some(other) => {
+                out.push('\\');
+                out.push(other);
+            }
+            None => out.push('\\'),
+        }
+    }
+    out
 }
 
 // What a prompt's synced .md file's placement header lines should say:
@@ -35863,6 +35930,23 @@ fn sync_placement_for(p: &Prompt, settings: &Settings) -> SyncPlacement {
 }
 
 fn prompt_to_md(p: &Prompt, placement: &SyncPlacement) -> String {
+    prompt_to_md_impl(p, placement, false)
+}
+
+// Whether a file's content is what this machine would write for the prompt, in
+// today's format or in the one before notes and a trailing newline round-tripped
+// (notes flattened to one line, no extra newline after a text that ends with one).
+// Without the second form, every file an older version wrote would read as an edit
+// by someone else right after the update.
+fn sync_md_matches(p: &Prompt, placement: &SyncPlacement, content: &str) -> bool {
+    prompt_to_md_impl(p, placement, false) == content || prompt_to_md_impl(p, placement, true) == content
+}
+
+fn prompt_to_md_impl(p: &Prompt, placement: &SyncPlacement, legacy: bool) -> String {
+    let (notes, notes_enc) = match (legacy, md_escape_notes(&p.notes)) {
+        (false, Some(escaped)) => (escaped, "notes_enc: escaped\n"),
+        _ => (md_escape_line(&p.notes), ""),
+    };
     let tags = p.tags.iter().map(|t| md_escape_line(t)).collect::<Vec<_>>().join(", ");
     // `variants` is informational only (a human glancing at the header sees the
     // entry count at a glance): NEVER read back by apply_md_to_prompt, which always
@@ -35871,11 +35955,12 @@ fn prompt_to_md(p: &Prompt, placement: &SyncPlacement) -> String {
     // and the six placement fields below (2) are additive, which md_is_ours()
     // already tolerates.
     let mut out = format!(
-        "---\nname: {}\ncolor: {}\ntags: {}\nnotes: {}\nvariants: {}\nview: {}\ngrid: {}\ncell: {}\ntile_folder: {}\ntile_folder_color: {}\nfloat_folder: {}\nfile: {}\nicon: {}\npdf_page: {}\n---\n",
+        "---\nname: {}\ncolor: {}\ntags: {}\nnotes: {}\n{}variants: {}\nview: {}\ngrid: {}\ncell: {}\ntile_folder: {}\ntile_folder_color: {}\nfloat_folder: {}\nfile: {}\nicon: {}\npdf_page: {}\n---\n",
         md_escape_line(&p.name),
         md_escape_line(&p.color),
         tags,
-        md_escape_line(&p.notes),
+        notes,
+        notes_enc,
         p.variants.len(),
         md_escape_line(&placement.view),
         placement.grid,
@@ -35889,7 +35974,9 @@ fn prompt_to_md(p: &Prompt, placement: &SyncPlacement) -> String {
     );
     let text = join_variants(&p.text, &p.variants);
     out.push_str(&text);
-    if !text.is_empty() && !text.ends_with('\n') {
+    // The newline closing the body always belongs to the file: a text that ends with
+    // one gets a second, and apply_md_to_prompt takes exactly one off again.
+    if !text.is_empty() && (!legacy || !text.ends_with('\n')) {
         out.push('\n');
     }
     out
@@ -35898,6 +35985,7 @@ fn prompt_to_md(p: &Prompt, placement: &SyncPlacement) -> String {
 // `None` means "not a file this feature wrote" (no opening `---` header): the
 // caller leaves such files alone rather than guessing at a malformed one.
 fn parse_frontmatter(content: &str) -> Option<(HashMap<String, String>, String)> {
+    let content = content.strip_prefix('\u{feff}').unwrap_or(content);
     let mut lines = content.split('\n');
     if lines.next()?.trim_end_matches('\r') != "---" {
         return None;
@@ -35958,7 +36046,7 @@ fn apply_md_to_prompt(base: &Prompt, content: &str) -> Option<Prompt> {
             .collect();
     }
     if let Some(v) = fields.get("notes") {
-        p.notes.clone_from(v);
+        p.notes = if fields.contains_key("notes_enc") { md_unescape_notes(v) } else { v.clone() };
     }
     // Media by reference. Absent field = an older or hand-written file that does not
     // describe media at all: leave whatever the prompt already has. Present but
@@ -36043,8 +36131,15 @@ fn apply_md_placement(settings: &mut Settings, prompt_id: &str, fields: &HashMap
             } else {
                 sync_find_or_create_view(settings, view_name, cols, rows)
             };
-            if sync_join_tile_folder(settings, prompt_id, name, color, &view_id, cell.unwrap_or([0, 0])) {
+            if sync_join_tile_folder(settings, prompt_id, name, color, &view_id, cell) {
                 folders_touched = true;
+                // The key is always written, so an empty value means the folder has no
+                // colour on that machine: a cleared colour has to spread as well.
+                if fields.get("tile_folder_color").is_some_and(|c| c.trim().is_empty()) {
+                    if let Some(f) = settings.tile_folders.iter_mut().find(|f| f.members.iter().any(|m| m == prompt_id)) {
+                        f.color.clear();
+                    }
+                }
                 return (true, folders_touched);
             }
             // An unusable folder name (too long, control characters only) falls
@@ -36201,7 +36296,7 @@ fn sync_leave_float_folder(settings: &mut Settings, prompt_id: &str) -> bool {
 // carries the same name/color/place, so any one of them can recreate it. Mirrors
 // save_tile_folder: pulled out of every OTHER folder first, and a folder member is
 // not a tile of its own, so its own layout entry is dropped the moment it joins.
-fn sync_join_tile_folder(settings: &mut Settings, prompt_id: &str, name: &str, color: &str, view_id: &str, cell: [u32; 2]) -> bool {
+fn sync_join_tile_folder(settings: &mut Settings, prompt_id: &str, name: &str, color: &str, view_id: &str, cell: Option<[u32; 2]>) -> bool {
     let Ok(name) = folder_name_of(name) else { return false };
     if name.is_empty() {
         return false;
@@ -36210,10 +36305,35 @@ fn sync_join_tile_folder(settings: &mut Settings, prompt_id: &str, name: &str, c
     // Match on (name, view_id): a bare name match merges same-named folders
     // from DIFFERENT views into whichever one the scan happens to find first.
     let exists = settings.tile_folders.iter().any(|f| f.name == name && f.view_id == view_id);
-    let cell = if exists { cell } else { sync_resolve_cell(settings, view_id, prompt_id, cell).unwrap_or(cell) };
+    let incoming = cell;
+    let wanted = cell.unwrap_or([0, 0]);
+    let cell = if exists { wanted } else { sync_resolve_cell(settings, view_id, prompt_id, wanted).unwrap_or(wanted) };
     sync_leave_tile_folder(settings, prompt_id);
+    // An existing folder is not moved or recoloured by a plain join, so two machines
+    // that disagree about its cell or colour would rewrite every member file forever.
+    // Adopt what the file says when this machine can: the cell only if it is free in
+    // that view (the folder's own cell excluded), the colour only if it is a valid one.
+    let mut adopt_cell = None;
+    if let (true, Some(want)) = (exists, incoming) {
+        let idx = settings.tile_folders.iter().position(|f| f.name == name && f.view_id == view_id);
+        if let Some(i) = idx.filter(|&i| settings.tile_folders[i].cell != want) {
+            let own = std::mem::replace(&mut settings.tile_folders[i].cell, [u32::MAX, u32::MAX]);
+            if sync_resolve_cell(settings, view_id, prompt_id, want) == Some(want) {
+                adopt_cell = Some(want);
+            }
+            settings.tile_folders[i].cell = own;
+        }
+    }
     match settings.tile_folders.iter_mut().find(|f| f.name == name && f.view_id == view_id) {
-        Some(folder) => folder.members.push(prompt_id.to_string()),
+        Some(folder) => {
+            folder.members.push(prompt_id.to_string());
+            if let Some(c) = adopt_cell {
+                folder.cell = c;
+            }
+            if !color.is_empty() {
+                folder.color.clone_from(&color);
+            }
+        }
         None => settings.tile_folders.push(TileFolder {
             id: gen_id(),
             name,
@@ -36388,6 +36508,16 @@ struct SyncStamp {
 struct SyncSeen {
     stamp: SyncStamp,
     handled: bool,
+    /// Hash of the file's bytes when the app wrote or read them, 0 when unknown. A
+    /// cloud client re-touching the modification time does not change it.
+    hash: u64,
+}
+
+fn sync_hash(bytes: &[u8]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    bytes.hash(&mut h);
+    h.finish().max(1)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -36444,20 +36574,76 @@ fn sync_seen_key(path: &Path) -> String {
 
 // Called right after the app writes a file itself: the content is ours and known,
 // so the poll neither has to re-read it nor may mistake it for someone's edit.
+#[cfg(test)]
 fn sync_seen_record_own_write(path: &Path) {
+    sync_seen_record_own_write_of(path, 0);
+}
+
+fn sync_seen_record_own_write_of(path: &Path, hash: u64) {
     let Some(stamp) = sync_stamp_of(path) else { return };
-    sync_seen_lock().insert(sync_seen_key(path), SyncSeen { stamp, handled: true });
+    sync_seen_lock().insert(sync_seen_key(path), SyncSeen { stamp, handled: true, hash });
+}
+
+// The files this process knows belong to a prompt of this library: written for one,
+// or read back as one. Only these may ever be swept as orphans. A file whose id the
+// app has never known (another machine's folder the user just pointed us at, a file
+// made or renamed by hand, one that arrived a moment ago) is not ours to delete, even
+// when it carries our header: the poll has to import it first.
+static SYNC_KNOWN: std::sync::OnceLock<Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
+
+fn sync_known_lock() -> std::sync::MutexGuard<'static, std::collections::HashSet<String>> {
+    SYNC_KNOWN
+        .get_or_init(|| Mutex::new(std::collections::HashSet::new()))
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+}
+
+fn sync_known_note(path: &Path) {
+    sync_known_lock().insert(sync_seen_key(path));
 }
 
 // Whether the file changed since the app last wrote or read it. `None` (never seen)
-// is deliberately NOT a conflict: on a fresh start every file is unknown, and
-// claiming a conflict there would litter the folder with copies of itself.
-fn sync_changed_since_seen(path: &Path) -> bool {
+// is not decided here: sync_edit_unsaved judges such a file by its content, so a
+// fresh start does not litter the folder with copies of what the app wrote itself.
+//
+// A stamp the poll noted but has not read yet (handled: false) counts as changed
+// too: the new stamp is already in the map, so comparing stamps alone would call an
+// edit the app never saw "unchanged" and overwrite it without keeping a copy.
+//
+// With a recorded hash the bytes decide: a changed stamp alone (a cloud client
+// touching the file, an identical rewrite by another instance) is no edit.
+fn sync_changed_since_seen(path: &Path, on_disk: &[u8]) -> bool {
     let seen = sync_seen_lock();
     match (seen.get(&sync_seen_key(path)), sync_stamp_of(path)) {
-        (Some(prev), Some(now)) => prev.stamp != now,
+        (Some(prev), Some(_)) if prev.hash != 0 => sync_hash(on_disk) != prev.hash,
+        (Some(prev), Some(now)) => prev.stamp != now || !prev.handled,
         _ => false,
     }
+}
+
+// Whether the bytes about to be replaced hold something the app has not saved
+// itself. A file that is not readable as text at all (an ANSI editor, a broken
+// encoding) is always worth a copy: the poll cannot import it, so the file is the
+// only place that version exists.
+//
+// A file the app has no record of at all (activation, a switch to a folder that
+// already holds files, a save ahead of the startup seed) is judged by its content: a
+// different one is somebody's edit, one equal to this prompt's own text, in today's
+// form or an older one, is not.
+fn sync_edit_unsaved(path: &Path, on_disk: &[u8], p: &Prompt, placement: &SyncPlacement) -> bool {
+    if on_disk.is_empty() {
+        return false;
+    }
+    let Some(text) = sync_decode_text(on_disk.to_vec()) else { return true };
+    if !sync_seen_lock().contains_key(&sync_seen_key(path)) {
+        return !sync_md_matches(p, placement, &text);
+    }
+    // Seen but never known as a live prompt's file (it arrived while the prompt sat in
+    // the trash and was only skipped): a restore must not overwrite it silently.
+    if !sync_known_lock().contains(&sync_seen_key(path)) {
+        return true;
+    }
+    sync_changed_since_seen(path, on_disk)
 }
 
 // ---- How the folder itself is doing (shown in the expert menu) ----
@@ -36502,6 +36688,18 @@ fn sync_health_note_ok(h: &mut SyncHealth, files: usize, now: u64) {
     h.files = files;
     h.last_ok = now;
 }
+
+// Switching to a folder that was written fine ends whatever the old one caused: the
+// pause and its reason describe a folder the app no longer uses.
+fn sync_health_after_dir_change(h: &mut SyncHealth) {
+    h.fails = 0;
+    h.paused = false;
+    h.reason.clear();
+}
+
+// Wakes the poll loop out of its (possibly stretched) sleep, so a new folder is read
+// at once instead of after up to ten intervals.
+static SYNC_WAKE: tokio::sync::Notify = tokio::sync::Notify::const_new();
 
 // A paused poll still comes back, just far less often.
 fn sync_wait_secs(paused: bool, poll: u64) -> u64 {
@@ -36607,6 +36805,33 @@ fn sync_write_all_impl(app: &AppHandle, prompts: &[Prompt], settings: &Settings)
     let prompts = strip_data_dir_prefix(&sync_source_dir, data_dir_is_demo(app, &sync_source_dir), prompts);
     let prompts = prompts.as_ref();
     let dir = sync_dir_path(app, settings);
+    // `prompts` is a snapshot and the write can take a while: right before a file is
+    // swept, ask whether the library holds that id by now (the poll may have imported
+    // it meanwhile). A store that is busy right now counts as "maybe", which only
+    // postpones the sweep to the next write.
+    let live = |id: &str| match app.try_state::<Db>() {
+        Some(state) => match state.try_lock() {
+            Ok(store) => store.prompts.iter().any(|p| p.id == id),
+            Err(std::sync::TryLockError::Poisoned(e)) => e.into_inner().prompts.iter().any(|p| p.id == id),
+            Err(std::sync::TryLockError::WouldBlock) => true,
+        },
+        None => true,
+    };
+    sync_write_dir_checked(&dir, prompts, settings, &live)
+}
+
+// The file half of sync_write_all_impl: one call writes every eligible prompt into
+// `dir`, then sweeps what this process knows to be orphaned. Free of any window or
+// state access so a test can run it against a temp folder.
+#[cfg(test)]
+fn sync_write_dir(dir: &Path, prompts: &[Prompt], settings: &Settings) -> usize {
+    sync_write_dir_checked(dir, prompts, settings, &|_| false)
+}
+
+// `is_live` is asked right before a file would be swept: true means the library holds
+// that id now, so the file is not an orphan after all.
+fn sync_write_dir_checked(dir: &Path, prompts: &[Prompt], settings: &Settings, is_live: &dyn Fn(&str) -> bool) -> usize {
+    let dir = dir.to_path_buf();
     if let Err(e) = fs::create_dir_all(&dir) {
         append_crash_log(&format!("prompt-sync: the sync folder could not be created: {e}"));
         return prompts.iter().filter(|p| sync_eligible(p)).count().max(1);
@@ -36620,9 +36845,12 @@ fn sync_write_all_impl(app: &AppHandle, prompts: &[Prompt], settings: &Settings)
         }
         let filename = format!("{}.md", p.id);
         let path = dir.join(&filename);
-        let content = prompt_to_md(p, &sync_placement_for(p, settings));
-        let on_disk = fs::read_to_string(&path).unwrap_or_default();
-        if on_disk != content && sync_lock_acquire(&path) {
+        let placement = sync_placement_for(p, settings);
+        let content = prompt_to_md(p, &placement);
+        // Raw bytes, never decoded text: a UTF-16 or ANSI file would read as empty
+        // through read_to_string and be overwritten without a trace.
+        let on_disk = fs::read(&path).unwrap_or_default();
+        if on_disk != content.as_bytes() && sync_lock_acquire(&path) {
             // Both sides changed: the file was edited outside the app since the app
             // last touched it, and the prompt in the app has since changed too. The
             // app's version wins the file, but the one being replaced is kept beside
@@ -36630,9 +36858,7 @@ fn sync_write_all_impl(app: &AppHandle, prompts: &[Prompt], settings: &Settings)
             // acceptable. The copy's name carries a dot, so it is neither a valid
             // prompt id (the poll skips it) nor something the orphan sweep may touch.
             let copy = dir.join(format!("{}.conflict-{}.md", p.id, now_secs()));
-            let mut kept_copy = false;
-            if !on_disk.is_empty() && sync_changed_since_seen(&path) && write_file_atomic(&copy, &on_disk) {
-                kept_copy = true;
+            if sync_edit_unsaved(&path, &on_disk, p, &placement) && write_bytes_atomic(&copy, &on_disk) {
                 append_crash_log(&format!(
                     "prompt-sync: {filename} was edited outside the app and in the app at the same time; the outside version was kept as {}",
                     copy.file_name().unwrap_or_default().to_string_lossy()
@@ -36641,30 +36867,31 @@ fn sync_write_all_impl(app: &AppHandle, prompts: &[Prompt], settings: &Settings)
             // One more look right before the replace: the lock file is only ours, an
             // external editor never honors it, so a save that landed after the first
             // read has to end up in the conflict copy as well, not be overwritten.
-            let latest = fs::read_to_string(&path).unwrap_or_default();
+            let latest = fs::read(&path).unwrap_or_default();
+            let late_copy = dir.join(format!("{}.conflict-{}-late.md", p.id, now_secs()));
             if latest != on_disk
-                && latest != content
+                && latest != content.as_bytes()
                 && !latest.is_empty()
-                && write_file_atomic(&copy, &latest)
-                && !kept_copy
+                && write_bytes_atomic(&late_copy, &latest)
             {
                 append_crash_log(&format!(
                     "prompt-sync: {filename} was edited outside the app while it was being written; the outside version was kept as {}",
-                    copy.file_name().unwrap_or_default().to_string_lossy()
+                    late_copy.file_name().unwrap_or_default().to_string_lossy()
                 ));
             }
             let ok = write_file_atomic(&path, &content);
             sync_lock_release(&path);
             if ok {
-                sync_seen_record_own_write(&path);
+                sync_seen_record_own_write_of(&path, sync_hash(content.as_bytes()));
             } else {
                 failed += 1;
                 append_crash_log(&format!("prompt-sync: writing {filename} failed"));
             }
         }
+        sync_known_note(&path);
         wanted.insert(filename);
     }
-    sync_sweep_orphans(&dir, &wanted);
+    sync_sweep_orphans_checked(&dir, &wanted, is_live);
     failed
 }
 
@@ -36758,7 +36985,12 @@ fn spawn_sync_write_all(app: &AppHandle, store: &Store) {
 // swept: the sync folder is a directory the USER picks, so it can hold their own
 // documents. A document without our `---` frontmatter is never imported by
 // sync_poll_once either, so deleting it would destroy data the app does not own.
+#[cfg(test)]
 fn sync_sweep_orphans(dir: &Path, wanted: &std::collections::HashSet<String>) {
+    sync_sweep_orphans_checked(dir, wanted, &|_| false);
+}
+
+fn sync_sweep_orphans_checked(dir: &Path, wanted: &std::collections::HashSet<String>, is_live: &dyn Fn(&str) -> bool) {
     let Ok(entries) = fs::read_dir(dir) else { return };
     for e in entries.flatten() {
         let name = e.file_name().to_string_lossy().to_string();
@@ -36773,11 +37005,25 @@ fn sync_sweep_orphans(dir: &Path, wanted: &std::collections::HashSet<String>) {
             continue;
         }
         let path = e.path();
+        // Never a file the app has not known before (see SYNC_KNOWN).
+        let key = sync_seen_key(&path);
+        if !sync_known_lock().contains(&key) {
+            continue;
+        }
+        // Nor one with an edit the app has noted but not read back: it changed since
+        // the app last wrote or read it, so it is somebody's work, and the poll will
+        // read it first.
+        let seen = sync_seen_lock().get(&key).copied();
+        if !matches!((seen, sync_stamp_of(&path)), (Some(s), Some(now)) if s.handled && s.stamp == now) {
+            continue;
+        }
         let ours = read_text_capped(&path, MAX_SYNC_MD_BYTES)
             .and_then(|c| parse_frontmatter(&c))
             .is_some_and(|(fields, _)| md_is_ours(&fields));
-        if ours {
+        let stem = name.trim_end_matches(".md");
+        if ours && !is_live(stem) {
             let _ = fs::remove_file(&path);
+            sync_known_lock().remove(&sync_seen_key(&path));
         }
     }
 }
@@ -36818,6 +37064,103 @@ fn sync_blank_prompt(id: String) -> Prompt {
     }
 }
 
+// The apply half of sync_poll_once, free of any window or file access so a test can
+// drive it: takes the candidates the scan collected (stem, file content, is_new)
+// and folds them into the store. `on_replace` sees a prompt right before a file
+// replaces it (the caller keeps a restore point). Returns (prompts_changed,
+// settings_changed); the caller persists whichever is set.
+fn sync_poll_apply(
+    store: &mut Store,
+    candidates: Vec<(String, String, bool)>,
+    on_replace: &mut dyn FnMut(&Settings, &Prompt, &Prompt),
+) -> (bool, bool) {
+    let mut changed = false;
+    let mut settings_changed = false;
+    let mut placements_touched = false;
+    for (stem, content, is_new) in candidates {
+        // Fields lives alongside content/name/etc: parse_frontmatter is cheap
+        // (string splitting) and apply_md_to_prompt already re-parses it itself, so
+        // a second pass here isn't worth threading through that function's own
+        // signature just to share one HashMap.
+        let fields = parse_frontmatter(&content).filter(|(f, _)| md_is_ours(f)).map(|(f, _)| f);
+        if is_new {
+            if store.prompts.iter().any(|p| p.id == stem) {
+                continue; // added by something else in the meantime
+            }
+            if store.trash.iter().any(|p| p.id == stem) {
+                // Trashed here, written again by another machine that does not know:
+                // a second row with the same id would break restore, delete and purge.
+                // The file stays: the sweep only takes files this process wrote or read
+                // for a live prompt, and a later restore keeps this one as a copy.
+                continue;
+            }
+            let Some(np) = apply_md_to_prompt(&sync_blank_prompt(stem), &content) else { continue };
+            let id = np.id.clone();
+            store.prompts.push(np);
+            let (placed, folders_touched_here) = fields
+                .as_ref()
+                .map(|f| apply_md_placement(&mut store.settings, &id, f))
+                .unwrap_or((false, false));
+            if folders_touched_here {
+                placements_touched = true;
+                settings_changed = true;
+            }
+            if placed {
+                settings_changed = true;
+            } else {
+                let folder_cells = active_view_folder_cells(&store.settings);
+                let view = store.settings.active_view_mut();
+                if let Some(cell) = first_free_cell_excluding(view, &folder_cells) {
+                    let key = grid_key(view.cols, view.rows);
+                    view.layouts.entry(key).or_default().insert(id, cell);
+                    settings_changed = true;
+                }
+            }
+            changed = true;
+        } else if let Some(idx) = store.prompts.iter().position(|p| p.id == stem) {
+            if store.prompts[idx].secret {
+                // A confidential entry never has a file of its own: its text here is
+                // ciphertext, and a stray plaintext file with the same id (written by a
+                // machine that does not know it is confidential) must not replace it.
+                continue;
+            }
+            let placement = sync_placement_for(&store.prompts[idx], &store.settings);
+            let unchanged = sync_md_matches(&store.prompts[idx], &placement, &content);
+            if unchanged {
+                continue; // a concurrent edit already made this file's content current
+            }
+            if let Some(updated) = apply_md_to_prompt(&store.prompts[idx], &content) {
+                // A file that only moved or recoloured a tile leaves the prompt itself
+                // as it was: replacing it would count as a change, save the prompts and
+                // write every file again for nothing.
+                let blank = SyncPlacement::default();
+                if prompt_to_md(&store.prompts[idx], &blank) != prompt_to_md(&updated, &blank) {
+                    on_replace(&store.settings, &store.prompts[idx], &updated);
+                    store.prompts[idx] = updated;
+                    changed = true;
+                }
+            }
+            if let Some(f) = fields.as_ref() {
+                let (placed, folders_touched_here) = apply_md_placement(&mut store.settings, &stem, f);
+                if placed {
+                    settings_changed = true;
+                }
+                if folders_touched_here {
+                    placements_touched = true;
+                    settings_changed = true;
+                }
+            }
+        } // else: deleted while we were reading files; nothing left to update
+    }
+    if placements_touched {
+        let prompt_ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
+        let view_ids: Vec<String> = store.settings.views.iter().map(|v| v.id.clone()).collect();
+        sync_normalize_tile_folders(&mut store.settings.tile_folders, &prompt_ids, &view_ids);
+        sync_normalize_float_folders(&mut store.settings.float_folders, &prompt_ids);
+    }
+    (changed, settings_changed)
+}
+
 // The inbound half: files -> DB. Runs on a timer (see start_sync_poll) rather than
 // a filesystem watcher, see the module note above for why.
 //
@@ -36835,6 +37178,17 @@ fn sync_blank_prompt(id: String) -> Prompt {
 // written back). Only the cheap "does this file differ from the snapshot" check
 // and the file-level lock happen unlocked; apply_md_to_prompt runs once the
 // store lock is back, against each prompt's CURRENT state.
+// Puts the files of candidates that were never applied back to "noted, not read".
+fn sync_requeue_candidates(dir: &Path, candidates: &[(String, String, bool)]) {
+    let mut seen = sync_seen_lock();
+    for (stem, _, _) in candidates {
+        if let Some(entry) = seen.get_mut(&sync_seen_key(&dir.join(format!("{stem}.md")))) {
+            entry.handled = false;
+            entry.hash = 0;
+        }
+    }
+}
+
 fn sync_poll_once(app: &AppHandle) {
     let Some(state) = app.try_state::<Db>() else { return };
     let (dir, snapshot, settings_snapshot) = {
@@ -36884,6 +37238,9 @@ fn sync_poll_once(app: &AppHandle) {
         }
         files += 1;
         let key = sync_seen_key(&path);
+        if snapshot.iter().any(|p| p.id == stem) {
+            sync_known_note(&path);
+        }
         present.insert(key.clone());
         let Some(stamp) = sync_stamp_of(&path) else { continue };
         // Metadata only, for every file in the folder: a folder whose files have not
@@ -36891,7 +37248,7 @@ fn sync_poll_once(app: &AppHandle) {
         let decision = sync_scan_decision(sync_seen_lock().get(&key).copied(), stamp);
         if decision != SyncScan::Read {
             if decision == SyncScan::Settle {
-                sync_seen_lock().insert(key, SyncSeen { stamp, handled: false });
+                sync_seen_lock().insert(key, SyncSeen { stamp, handled: false, hash: 0 });
             }
             continue;
         }
@@ -36903,11 +37260,13 @@ fn sync_poll_once(app: &AppHandle) {
         if !sync_lock_acquire(&path) {
             continue; // someone else is mid-write; retry next cycle
         }
-        let content = read_text_capped(&path, MAX_SYNC_MD_BYTES);
+        let bytes = read_file_capped(&path, MAX_SYNC_MD_BYTES).ok();
         sync_lock_release(&path);
+        let hash = bytes.as_deref().map(sync_hash).unwrap_or(0);
+        let content = bytes.and_then(sync_decode_text);
         // Whatever the read said, this stamp has now been dealt with: a file that
         // is too big or unreadable must not be retried (and re-logged) every round.
-        sync_seen_lock().insert(key, SyncSeen { stamp, handled: true });
+        sync_seen_lock().insert(key, SyncSeen { stamp, handled: true, hash });
         let Some(content) = content else {
             // Refused, never truncated: a half file would be imported as the whole
             // prompt. The user only ever learns why from the error log, so say it.
@@ -36922,8 +37281,12 @@ fn sync_poll_once(app: &AppHandle) {
             continue;
         };
         if let Some(idx) = snapshot.iter().position(|p| p.id == stem) {
+            if snapshot[idx].secret {
+                append_crash_log(&format!("prompt-sync: {name} belongs to a confidential prompt, skipped"));
+                continue;
+            }
             let placement = sync_placement_for(&snapshot[idx], &settings_snapshot);
-            if prompt_to_md(&snapshot[idx], &placement) == content {
+            if sync_md_matches(&snapshot[idx], &placement, &content) {
                 continue; // matches what we would write ourselves: not a real change
             }
             candidates.push((stem, content, false));
@@ -36943,90 +37306,31 @@ fn sync_poll_once(app: &AppHandle) {
     }
     let mut store = lock(&state);
     if store.prompts_locked || !sync_enabled(&store.settings) {
+        // Not applied, so not dealt with: the files are read again once the library is
+        // free, instead of being dropped and later overwritten without a copy.
+        sync_requeue_candidates(&dir, &candidates);
         return;
     }
-    let mut changed = false;
-    let mut settings_changed = false;
-    let mut placements_touched = false;
-    for (stem, content, is_new) in candidates {
-        // Fields lives alongside content/name/etc: parse_frontmatter is cheap
-        // (string splitting) and apply_md_to_prompt already re-parses it itself, so
-        // a second pass here isn't worth threading through that function's own
-        // signature just to share one HashMap.
-        let fields = parse_frontmatter(&content).filter(|(f, _)| md_is_ours(f)).map(|(f, _)| f);
-        if is_new {
-            if store.prompts.iter().any(|p| p.id == stem) {
-                continue; // added by something else in the meantime
-            }
-            let Some(np) = apply_md_to_prompt(&sync_blank_prompt(stem), &content) else { continue };
-            let id = np.id.clone();
-            store.prompts.push(np);
-            let (placed, folders_touched_here) = fields
-                .as_ref()
-                .map(|f| apply_md_placement(&mut store.settings, &id, f))
-                .unwrap_or((false, false));
-            if folders_touched_here {
-                placements_touched = true;
-                settings_changed = true;
-            }
-            if placed {
-                settings_changed = true;
-            } else {
-                let folder_cells = active_view_folder_cells(&store.settings);
-                let view = store.settings.active_view_mut();
-                if let Some(cell) = first_free_cell_excluding(view, &folder_cells) {
-                    let key = grid_key(view.cols, view.rows);
-                    view.layouts.entry(key).or_default().insert(id, cell);
-                    settings_changed = true;
+    let (changed, settings_changed) = sync_poll_apply(&mut store, candidates, &mut |settings, old, updated| {
+        // The file wins this round, so whatever the prompt said before is about to
+        // be gone. If both sides changed since the last sync this is the losing
+        // side of a conflict, so keep it as a restore point instead of dropping it,
+        // the same way an edit in the app keeps one.
+        if !history_enabled(settings)
+            || (old.name == updated.name && old.text == updated.text && old.variants == updated.variants)
+        {
+            return;
+        }
+        let cap = history_cap(settings);
+        match db_conn(app) {
+            Some(c) => {
+                if let Err(e) = db_add_version(&c, &old.id, now_secs(), &old.name, &old.text, &old.variants, cap) {
+                    append_crash_log(&format!("prompt-sync: no restore point kept for {}: {e}", old.id));
                 }
             }
-            changed = true;
-        } else if let Some(idx) = store.prompts.iter().position(|p| p.id == stem) {
-            let placement = sync_placement_for(&store.prompts[idx], &store.settings);
-            let unchanged = prompt_to_md(&store.prompts[idx], &placement) == content;
-            if unchanged {
-                continue; // a concurrent edit already made this file's content current
-            }
-            if let Some(updated) = apply_md_to_prompt(&store.prompts[idx], &content) {
-                // The file wins this round, so whatever the prompt said before is
-                // about to be gone. If both sides changed since the last sync this is
-                // the losing side of a conflict, so keep it as a restore point instead
-                // of dropping it, the same way an edit in the app keeps one.
-                let old = &store.prompts[idx];
-                if history_enabled(&store.settings)
-                    && (old.name != updated.name || old.text != updated.text || old.variants != updated.variants)
-                {
-                    let cap = history_cap(&store.settings);
-                    match db_conn(app) {
-                        Some(c) => {
-                            if let Err(e) = db_add_version(&c, &stem, now_secs(), &old.name, &old.text, &old.variants, cap) {
-                                append_crash_log(&format!("prompt-sync: no restore point kept for {stem}: {e}"));
-                            }
-                        }
-                        None => append_crash_log(&format!("prompt-sync: no restore point kept for {stem}: no DB connection")),
-                    }
-                }
-                store.prompts[idx] = updated;
-                changed = true;
-            }
-            if let Some(f) = fields.as_ref() {
-                let (placed, folders_touched_here) = apply_md_placement(&mut store.settings, &stem, f);
-                if placed {
-                    settings_changed = true;
-                }
-                if folders_touched_here {
-                    placements_touched = true;
-                    settings_changed = true;
-                }
-            }
-        } // else: deleted while we were reading files; nothing left to update
-    }
-    if placements_touched {
-        let prompt_ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
-        let view_ids: Vec<String> = store.settings.views.iter().map(|v| v.id.clone()).collect();
-        sync_normalize_tile_folders(&mut store.settings.tile_folders, &prompt_ids, &view_ids);
-        sync_normalize_float_folders(&mut store.settings.float_folders, &prompt_ids);
-    }
+            None => append_crash_log(&format!("prompt-sync: no restore point kept for {}: no DB connection", old.id)),
+        }
+    });
     // Prompts and Settings are separate tables/files (save_prompts never touches
     // settings): a placement-only change with no content change would otherwise be
     // applied in memory, echoed straight back out to the sync folder by
@@ -37037,6 +37341,15 @@ fn sync_poll_once(app: &AppHandle) {
     }
     if changed {
         save_prompts(app, &store);
+    }
+    drop(store);
+    if changed || settings_changed {
+        // Every open window still holds what it fetched last. Tell them, or a stale
+        // grid shows old names and a later drag in it would write its old layout
+        // back over what the other machine just moved.
+        let _ = app.emit_to("main", "store-synced", ());
+        notify_float_settings(app);
+        rebuild_tray(app);
     }
 }
 
@@ -37072,7 +37385,11 @@ fn sync_dir_scan(dir: &Path) -> SyncDirScan {
             // still ours. Once the user has rewritten it, it is their text and stays.
             fs::read_to_string(&path).is_ok_and(|c| c.starts_with(&sync_agents_md_head()))
         } else if let Some(stem) = name.strip_suffix(".md") {
+            // Only a file this process wrote or read back for a prompt of the library:
+            // another machine's new file or a hand-made one carries our header too,
+            // is not in the new folder, and would be lost with the old one.
             sync_safe_id(stem)
+                && sync_known_lock().contains(&sync_seen_key(&path))
                 && read_text_capped(&path, MAX_SYNC_MD_BYTES)
                     .and_then(|c| parse_frontmatter(&c))
                     .is_some_and(|(fields, _)| md_is_ours(&fields))
@@ -37188,6 +37505,25 @@ fn sync_status(state: State<Db>) -> SyncStatus {
     SyncStatus { enabled, last_ok: h.last_ok, files: h.files, paused: h.paused, reason: h.reason }
 }
 
+// Whether two paths name the same folder, or one lies inside the other. Compared by
+// identity (the resolved path), never by spelling: another letter case, a mapped
+// drive against its share path or a junction all reach the same files, and deleting
+// "the old folder" after writing into it would wipe what was just written.
+//
+// Case is ignored (this is a Windows-only app, and a share's server part can keep the
+// case it was typed in). A path that cannot be resolved right now (permissions, a
+// share briefly gone) counts as "maybe the same": the only thing this answer ever
+// gates is a delete, and a delete that wrongly does not happen loses nothing.
+fn sync_same_dir(a: &Path, b: &Path) -> bool {
+    let (ca, cb) = match (fs::canonicalize(a), fs::canonicalize(b)) {
+        (Ok(x), Ok(y)) => (x, y),
+        _ => return true,
+    };
+    let fold = |p: &Path| PathBuf::from(p.to_string_lossy().to_lowercase());
+    let (ca, cb) = (fold(&ca), fold(&cb));
+    ca == cb || ca.starts_with(&cb) || cb.starts_with(&ca)
+}
+
 // Point the sync at another folder. `delete_old` is an explicit decision the WINDOW
 // made after asking the user. A backend that deleted a folder on its own initiative
 // is exactly the kind of surprise this app does not do. The folder that may be
@@ -37199,20 +37535,28 @@ fn set_sync_dir(app: AppHandle, state: State<Db>, dir: String, delete_old: bool)
     if !trimmed.is_empty() && !consume_granted_dir(Path::new(trimmed), "sync") {
         return Err("dir-not-picked".to_string());
     }
-    let (old, write_failures) = {
+    let (old, new_dir, write_failures, enabled) = {
         let mut store = lock(&state);
         let old = sync_dir_path(&app, &store.settings);
         store.settings.ui_texts.insert("syncDir".into(), trimmed.to_string());
         save_settings(&app, &store.settings);
         // Same synchronous, one-off treatment activation gets: when this returns, the
         // files are in the new folder. Deliberately inside the lock, as before.
-        let failures = if sync_enabled(&store.settings) {
+        let enabled = sync_enabled(&store.settings);
+        let failures = if enabled {
             sync_write_all_impl(&app, &store.prompts, &store.settings)
         } else {
             0
         };
-        (old, failures)
+        (old, sync_dir_path(&app, &store.settings), failures, enabled)
     };
+    // Whenever the folder just took a full write (also when the same folder is picked
+    // again after its drive came back) it demonstrably works: the pause and its old
+    // reason end now, not after up to ten intervals.
+    if enabled && write_failures == 0 {
+        sync_health_after_dir_change(&mut sync_health_lock());
+        SYNC_WAKE.notify_one();
+    }
     notify_float_settings(&app);
     if !delete_old {
         return Ok(0);
@@ -37222,11 +37566,8 @@ fn set_sync_dir(app: AppHandle, state: State<Db>, dir: String, delete_old: bool)
     if write_failures > 0 {
         return Err(format!("the new folder could not be written ({write_failures} files), so nothing was deleted"));
     }
-    let new = {
-        let store = lock(&state);
-        sync_dir_path(&app, &store.settings)
-    };
-    if old == new {
+    let new = new_dir;
+    if sync_same_dir(&old, &new) {
         return Ok(0); // nothing moved, so there is no old folder to let go of
     }
     sync_delete_dir(&old, &data_dir(&app))
@@ -37248,11 +37589,50 @@ fn sync_poll_release() {
     SYNC_POLL_RUNNING.store(false, Ordering::SeqCst);
 }
 
+// Run once before the first save of a session: every file that already sits in the
+// folder under the id of a library prompt is noted as known, and its stamp is
+// recorded. One that matches what this machine would write is handled; one that
+// differs (edited while the app was closed, or by another machine through the
+// cloud) stays unhandled, so a save landing before the poll has imported it keeps
+// a copy of it instead of overwriting it.
+fn sync_seed_seen(dir: &Path, prompts: &[Prompt], settings: &Settings) {
+    for p in prompts.iter().filter(|p| sync_eligible(p)) {
+        let path = dir.join(format!("{}.md", p.id));
+        if !path.is_file() {
+            continue;
+        }
+        sync_known_note(&path);
+        let key = sync_seen_key(&path);
+        if sync_seen_lock().contains_key(&key) {
+            continue;
+        }
+        let Some(stamp) = sync_stamp_of(&path) else { continue };
+        let bytes = read_file_capped(&path, MAX_SYNC_MD_BYTES).ok();
+        let hash = bytes.as_deref().map(sync_hash).unwrap_or(0);
+        let handled = bytes
+            .and_then(sync_decode_text)
+            .is_some_and(|c| sync_md_matches(p, &sync_placement_for(p, settings), &c));
+        // A file that differs stays unhandled with no hash, so it counts as changed.
+        let hash = if handled { hash } else { 0 };
+        sync_seen_lock().entry(key).or_insert(SyncSeen { stamp, handled, hash });
+    }
+}
+
 fn start_sync_poll(app: AppHandle) {
     if !sync_poll_try_claim() {
         return; // already running - set_ui_flag calls this again on every activation
     }
     tauri::async_runtime::spawn(async move {
+        // Learn which files on disk belong to prompts we already have before the
+        // first save can sweep anything: a prompt deleted in the first seconds of a
+        // session must still take its file along.
+        if let Some(state) = app.try_state::<Db>() {
+            let (dir, prompts, settings) = {
+                let s = lock(&state);
+                (sync_dir_path(&app, &s.settings), s.prompts.clone(), s.settings.clone())
+            };
+            let _ = tauri::async_runtime::spawn_blocking(move || sync_seed_seen(&dir, &prompts, &settings)).await;
+        }
         loop {
             let Some(state) = app.try_state::<Db>() else {
                 sync_poll_release();
@@ -37276,7 +37656,10 @@ fn start_sync_poll(app: AppHandle) {
             // slows down: never a second timer, and never a thread that has to be
             // stopped and started again when the interval changes.
             let paused = sync_health_lock().paused;
-            tokio::time::sleep(std::time::Duration::from_secs(sync_wait_secs(paused, secs))).await;
+            tokio::select! {
+                _ = tokio::time::sleep(std::time::Duration::from_secs(sync_wait_secs(paused, secs))) => {}
+                _ = SYNC_WAKE.notified() => {}
+            }
             sync_poll_once(&app);
         }
     });
@@ -41452,6 +41835,10 @@ mod tests {
         fs::write(&kept, prompt_to_md(&sync_test_prompt(), &SyncPlacement::default())).unwrap();
         fs::write(dir.join("AGENTS.md"), sync_agents_md()).unwrap();
 
+        sync_known_note(&mine);
+        sync_seen_record_own_write(&mine);
+        sync_known_note(&theirs);
+        sync_known_note(&obsidian);
         let mut wanted = std::collections::HashSet::new();
         wanted.insert("p_live.md".to_string());
         sync_sweep_orphans(&dir, &wanted);
@@ -41605,6 +41992,25 @@ mod tests {
         assert_eq!(apply_md_placement(&mut settings, "p1", &fields), (true, false));
         let key = grid_key(2, 1);
         assert_eq!(settings.views[0].layouts.get(&key).and_then(|m| m.get("p1")), Some(&[1, 0]));
+    }
+
+    #[test]
+    fn apply_md_placement_adopts_a_cleared_folder_colour() {
+        let mut settings = Settings::default();
+        settings.views.push(test_view("v1"));
+        let mut fields = HashMap::from([
+            ("view".to_string(), "V1".to_string()),
+            ("grid".to_string(), grid_key(default_cols(), default_rows())),
+            ("cell".to_string(), "0,0".to_string()),
+            ("tile_folder".to_string(), "Team".to_string()),
+            ("tile_folder_color".to_string(), "#00ff00".to_string()),
+        ]);
+        apply_md_placement(&mut settings, "p1", &fields);
+        assert_eq!(settings.tile_folders[0].color, "#00ff00");
+        fields.insert("tile_folder_color".to_string(), String::new());
+        apply_md_placement(&mut settings, "p2", &fields);
+        assert_eq!(settings.tile_folders.len(), 1);
+        assert_eq!(settings.tile_folders[0].color, "", "the other machine cleared the colour");
     }
 
     #[test]
@@ -41791,7 +42197,7 @@ mod tests {
         settings.tile_folders[0].name = "Work".to_string();
 
         // Same name, DIFFERENT view -> must NOT merge into v1's folder.
-        let ok = sync_join_tile_folder(&mut settings, "b", "Work", "", "v2", [0, 0]);
+        let ok = sync_join_tile_folder(&mut settings, "b", "Work", "", "v2", Some([0, 0]));
         assert!(ok);
         assert_eq!(settings.tile_folders.len(), 2, "same name in a different view must not merge");
         let v1_folder = settings.tile_folders.iter().find(|f| f.view_id == "v1").unwrap();
@@ -41800,7 +42206,7 @@ mod tests {
         assert_eq!(v2_folder.members, vec!["b".to_string()]);
 
         // Same name, SAME view -> must merge.
-        let ok2 = sync_join_tile_folder(&mut settings, "c", "Work", "", "v1", [0, 0]);
+        let ok2 = sync_join_tile_folder(&mut settings, "c", "Work", "", "v1", Some([0, 0]));
         assert!(ok2);
         let v1_folder2 = settings.tile_folders.iter().find(|f| f.view_id == "v1").unwrap();
         assert!(v1_folder2.members.contains(&"c".to_string()));
@@ -42182,6 +42588,9 @@ mod tests {
         write_ours(&dir, "p1 - Copy.md", "the user's own copy");
         write_ours(&dir, "gone.md", "belongs to a prompt that no longer exists");
         let wanted: std::collections::HashSet<String> = ["p1.md".to_string()].into_iter().collect();
+        sync_known_note(&dir.join("p1 - Copy.md"));
+        sync_known_note(&dir.join("gone.md"));
+        sync_seen_record_own_write(&dir.join("gone.md"));
         sync_sweep_orphans(&dir, &wanted);
         assert!(dir.join("p1.md").exists(), "a live prompt's file stays");
         assert!(dir.join("p1 - Copy.md").exists(), "a name this app could never have written is never swept");
@@ -42189,11 +42598,440 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    fn sync_apply_store(prompts: Vec<Prompt>, trash: Vec<Prompt>) -> Store {
+        Store { prompts, trash, settings: Settings::default(), prompts_locked: false, written: Default::default() }
+    }
+
+    fn sync_apply(store: &mut Store, stem: &str, content: String, is_new: bool) -> (bool, bool) {
+        sync_poll_apply(store, vec![(stem.to_string(), content, is_new)], &mut |_, _, _| {})
+    }
+
+    #[test]
+    fn sync_poll_never_writes_a_files_plaintext_into_a_confidential_prompt() {
+        let mut secret = sync_test_prompt();
+        secret.secret = true;
+        secret.text = "CIPHERTEXT".into();
+        let mut plain = sync_test_prompt();
+        plain.text = "plaintext from another machine".into();
+        let content = prompt_to_md(&plain, &SyncPlacement::default());
+        let mut store = sync_apply_store(vec![secret], Vec::new());
+        let (changed, _) = sync_apply(&mut store, "p1", content, false);
+        assert!(!changed);
+        assert_eq!(store.prompts[0].text, "CIPHERTEXT");
+        assert!(store.prompts[0].secret);
+    }
+
+    #[test]
+    fn sync_write_leaves_a_file_the_app_has_never_known() {
+        let dir = sync_tmp_dir("foreign-file");
+        write_ours(&dir, "foreign.md", "another machine's prompt, not imported yet");
+        let mut keep = sync_test_prompt();
+        keep.id = "mine".into();
+        sync_write_dir(&dir, &[keep], &Settings::default());
+        assert!(dir.join("foreign.md").exists(), "a file the app never knew must survive the sweep");
+        assert!(dir.join("mine.md").exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sync_write_still_sweeps_the_file_of_a_prompt_that_was_deleted() {
+        let dir = sync_tmp_dir("deleted-file");
+        let mut a = sync_test_prompt();
+        a.id = "a".into();
+        let mut b = sync_test_prompt();
+        b.id = "b".into();
+        sync_write_dir(&dir, &[a.clone(), b], &Settings::default());
+        assert!(dir.join("b.md").exists());
+        sync_write_dir(&dir, &[a], &Settings::default());
+        assert!(!dir.join("b.md").exists(), "a deleted prompt takes its own file along");
+        assert!(dir.join("a.md").exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sync_write_keeps_a_conflict_copy_of_an_edit_the_poll_noted_but_not_read() {
+        let dir = sync_tmp_dir("unread-edit");
+        let path = dir.join("p1.md");
+        let mut edited = sync_test_prompt();
+        edited.text = "edited outside the app".into();
+        fs::write(&path, prompt_to_md(&edited, &SyncPlacement::default())).unwrap();
+        // The poll has seen this stamp (Settle) but has not read the file yet.
+        let stamp = sync_stamp_of(&path).unwrap();
+        sync_seen_lock().insert(sync_seen_key(&path), SyncSeen { stamp, handled: false, hash: 0 });
+        let mut app_side = sync_test_prompt();
+        app_side.text = "changed inside the app".into();
+        sync_write_dir(&dir, &[app_side], &Settings::default());
+        let copies = fs::read_dir(&dir)
+            .unwrap()
+            .flatten()
+            .filter(|e| e.file_name().to_string_lossy().starts_with("p1.conflict-"))
+            .count();
+        assert_eq!(copies, 1, "the unread outside edit must be kept as a conflict copy");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sync_write_copies_an_undecodable_outside_edit_byte_for_byte() {
+        let mut edited = sync_test_prompt();
+        edited.text = "edited outside the app".into();
+        let md = prompt_to_md(&edited, &SyncPlacement::default());
+        let mut utf16 = vec![0xFFu8, 0xFE];
+        for u in md.encode_utf16() {
+            utf16.extend_from_slice(&u.to_le_bytes());
+        }
+        let mut ansi = md.clone().into_bytes();
+        ansi.extend_from_slice(b"caf");
+        ansi.push(0xE4);
+        ansi.push(b'\n');
+        // (tag, bytes, the poll already marked the stamp handled)
+        for (tag, bytes, handled) in [("utf16", utf16, false), ("ansi", ansi, true)] {
+            let dir = sync_tmp_dir(tag);
+            let path = dir.join("p1.md");
+            fs::write(&path, &bytes).unwrap();
+            let stamp = sync_stamp_of(&path).unwrap();
+            sync_seen_lock().insert(sync_seen_key(&path), SyncSeen { stamp, handled, hash: 0 });
+            let mut app_side = sync_test_prompt();
+            app_side.text = "changed inside the app".into();
+            sync_write_dir(&dir, &[app_side], &Settings::default());
+            let copies: Vec<_> = fs::read_dir(&dir)
+                .unwrap()
+                .flatten()
+                .filter(|e| e.file_name().to_string_lossy().starts_with("p1.conflict-"))
+                .collect();
+            assert_eq!(copies.len(), 1, "{tag}: the outside edit must be kept as a conflict copy");
+            assert_eq!(fs::read(copies[0].path()).unwrap(), bytes, "{tag}: the copy must be byte-identical");
+            let _ = fs::remove_dir_all(&dir);
+        }
+    }
+
+    fn sync_conflict_copies(dir: &Path, id: &str) -> usize {
+        fs::read_dir(dir)
+            .unwrap()
+            .flatten()
+            .filter(|e| e.file_name().to_string_lossy().starts_with(&format!("{id}.conflict-")))
+            .count()
+    }
+
+    fn sync_legacy_md(p: &Prompt) -> String {
+        prompt_to_md_impl(p, &SyncPlacement::default(), true)
+    }
+
+    #[test]
+    fn sync_startup_seed_keeps_an_edit_made_while_the_app_was_closed() {
+        let dir = sync_tmp_dir("startup-seed");
+        let mut stored = sync_test_prompt();
+        stored.text = "the text this library holds".into();
+        let mut other = sync_test_prompt();
+        other.id = "p2".into();
+        other.text = "ends with a newline\n".into();
+        other.notes = "two\nlines".into();
+        // p1 was edited by hand while the app was closed; p2 is an older build's file.
+        let mut hand = stored.clone();
+        hand.text = "typed by hand in the editor".into();
+        fs::write(dir.join("p1.md"), prompt_to_md(&hand, &SyncPlacement::default())).unwrap();
+        fs::write(dir.join("p2.md"), sync_legacy_md(&other)).unwrap();
+        sync_seed_seen(&dir, &[stored.clone(), other.clone()], &Settings::default());
+        let mut edited = stored.clone();
+        edited.text = "changed inside the app".into();
+        let mut edited2 = other.clone();
+        edited2.text = "changed inside the app too".into();
+        sync_write_dir(&dir, &[edited, edited2], &Settings::default());
+        assert_eq!(sync_conflict_copies(&dir, "p1"), 1, "the hand edit must survive as a copy");
+        assert_eq!(sync_conflict_copies(&dir, "p2"), 0, "a file matching the stored prompt needs no copy");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sync_first_write_into_a_folder_keeps_a_differing_file_and_not_a_matching_one() {
+        let dir = sync_tmp_dir("activation");
+        let mut stored = sync_test_prompt();
+        stored.text = "the text this library holds".into();
+        let mut other = stored.clone();
+        other.id = "p2".into();
+        other.text = "ends with a newline\n".into();
+        other.notes = "two\nlines".into();
+        let mut foreign = stored.clone();
+        foreign.text = "another machine's version".into();
+        fs::write(dir.join("p1.md"), prompt_to_md(&foreign, &SyncPlacement::default())).unwrap();
+        fs::write(dir.join("p2.md"), sync_legacy_md(&other)).unwrap();
+        // No seed, no SYNC_SEEN entry: activation, or a switch to a folder with files.
+        sync_write_dir(&dir, &[stored, other], &Settings::default());
+        assert_eq!(sync_conflict_copies(&dir, "p1"), 1, "a differing file must be kept as a copy");
+        assert_eq!(sync_conflict_copies(&dir, "p2"), 0, "a file in an older format of the same prompt is no conflict");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sync_write_keeps_a_copy_of_a_file_that_arrived_while_its_prompt_was_trashed() {
+        let dir = sync_tmp_dir("trash-restore");
+        let path = dir.join("p1.md");
+        let mut theirs = sync_test_prompt();
+        theirs.text = "written by another machine meanwhile".into();
+        fs::write(&path, prompt_to_md(&theirs, &SyncPlacement::default())).unwrap();
+        // The poll saw it and skipped the trashed id: handled, but never known.
+        let stamp = sync_stamp_of(&path).unwrap();
+        sync_seen_lock().insert(sync_seen_key(&path), SyncSeen { stamp, handled: true, hash: 0 });
+        sync_known_lock().remove(&sync_seen_key(&path));
+        let mut restored = sync_test_prompt();
+        restored.text = "the restored prompt".into();
+        sync_write_dir(&dir, &[restored], &Settings::default());
+        assert_eq!(sync_conflict_copies(&dir, "p1"), 1, "restoring must not overwrite the newer file silently");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sync_sweep_leaves_a_file_with_an_edit_not_read_yet() {
+        let dir = sync_tmp_dir("sweep-unread");
+        let mut a = sync_test_prompt();
+        a.id = "a".into();
+        let mut b = sync_test_prompt();
+        b.id = "b".into();
+        sync_write_dir(&dir, &[a.clone(), b.clone()], &Settings::default());
+        // An outside edit lands on b.md; the poll has noted its stamp, not read it.
+        let path = dir.join("b.md");
+        let mut edited = b.clone();
+        edited.text = "edited outside the app".into();
+        fs::write(&path, prompt_to_md(&edited, &SyncPlacement::default())).unwrap();
+        let stamp = sync_stamp_of(&path).unwrap();
+        sync_seen_lock().insert(sync_seen_key(&path), SyncSeen { stamp, handled: false, hash: 0 });
+        sync_write_dir(&dir, &[a], &Settings::default());
+        assert!(path.exists(), "an edit nobody has read must not be swept");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sync_sweep_spares_a_file_whose_prompt_came_back_meanwhile() {
+        let dir = sync_tmp_dir("sweep-live");
+        let mut a = sync_test_prompt();
+        a.id = "a".into();
+        let mut b = sync_test_prompt();
+        b.id = "b".into();
+        sync_write_dir(&dir, &[a.clone(), b], &Settings::default());
+        // A stale snapshot without b, while the library holds b by now (imported).
+        sync_write_dir_checked(&dir, &[a], &Settings::default(), &|id| id == "b");
+        assert!(dir.join("b.md").exists(), "a file whose prompt is live again must not be swept");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sync_write_ignores_a_touch_that_left_the_bytes_alone() {
+        let dir = sync_tmp_dir("touch-only");
+        let path = dir.join("p1.md");
+        let first = sync_test_prompt();
+        sync_write_dir(&dir, std::slice::from_ref(&first), &Settings::default());
+        // A cloud client re-touches the file: same bytes, newer modification time.
+        let bytes = fs::read(&path).unwrap();
+        let f = fs::OpenOptions::new().write(true).open(&path).unwrap();
+        f.set_modified(std::time::SystemTime::now() + Duration::from_secs(30)).unwrap();
+        drop(f);
+        assert_eq!(fs::read(&path).unwrap(), bytes);
+        let mut edited = first;
+        edited.text = "changed inside the app".into();
+        sync_write_dir(&dir, &[edited], &Settings::default());
+        assert_eq!(sync_conflict_copies(&dir, "p1"), 0, "the app's own earlier content is no outside edit");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sync_requeued_candidate_is_read_again_and_not_overwritten_unseen() {
+        let dir = sync_tmp_dir("requeue");
+        let path = dir.join("p1.md");
+        let mut edited = sync_test_prompt();
+        edited.text = "edited outside the app".into();
+        fs::write(&path, prompt_to_md(&edited, &SyncPlacement::default())).unwrap();
+        let stamp = sync_stamp_of(&path).unwrap();
+        let key = sync_seen_key(&path);
+        // The poll read the file and marked it handled, but could not apply it.
+        sync_seen_lock().insert(key.clone(), SyncSeen { stamp, handled: true, hash: sync_hash(&fs::read(&path).unwrap()) });
+        sync_requeue_candidates(&dir, &[("p1".to_string(), String::new(), false)]);
+        let entry = sync_seen_lock().get(&key).copied().unwrap();
+        assert!(!entry.handled);
+        assert_eq!(sync_scan_decision(Some(entry), stamp), SyncScan::Read);
+        let mut app_side = sync_test_prompt();
+        app_side.text = "changed inside the app".into();
+        sync_write_dir(&dir, &[app_side], &Settings::default());
+        assert_eq!(sync_conflict_copies(&dir, "p1"), 1);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sync_same_dir_compares_by_identity_not_spelling() {
+        let dir = sync_tmp_dir("same-dir");
+        let name = dir.file_name().unwrap().to_string_lossy().to_uppercase();
+        let shouting = dir.with_file_name(name);
+        assert_ne!(dir, shouting, "a plain path compare (the old check) calls them different");
+        assert!(sync_same_dir(&dir, &shouting), "the same folder in another letter case is the same folder");
+        assert!(sync_same_dir(&dir, &dir.join(".")));
+        let other = sync_tmp_dir("same-dir-other");
+        assert!(!sync_same_dir(&dir, &other));
+        assert!(sync_same_dir(&dir, &dir.join("inner")), "a folder inside the other counts too");
+        assert!(
+            sync_same_dir(&dir, &dir.with_file_name("ps-sync-no-such-folder-anywhere")),
+            "a path that cannot be resolved is treated as maybe the same, so nothing gets deleted"
+        );
+        let _ = fs::remove_dir_all(&dir);
+        let _ = fs::remove_dir_all(&other);
+    }
+
+    #[test]
+    fn sync_poll_does_not_import_a_file_whose_id_sits_in_the_trash() {
+        let trashed = sync_test_prompt();
+        let content = prompt_to_md(&trashed, &SyncPlacement::default());
+        let mut store = sync_apply_store(Vec::new(), vec![trashed]);
+        let (changed, _) = sync_apply(&mut store, "p1", content, true);
+        assert!(!changed);
+        assert!(store.prompts.is_empty(), "a trashed id must not come back as a second, live prompt");
+        assert_eq!(store.trash.len(), 1);
+    }
+
+    #[test]
+    fn sync_poll_apply_reports_settings_changed_for_a_placement_only_file() {
+        let p = sync_test_prompt();
+        let mut settings = Settings::default();
+        settings.views.push(test_view("v1"));
+        let key = grid_key(settings.views[0].cols, settings.views[0].rows);
+        settings.views[0].layouts.entry(key.clone()).or_default().insert("p1".into(), [0, 0]);
+        let mut moved = settings.clone();
+        moved.views[0].layouts.get_mut(&key).unwrap().insert("p1".into(), [2, 1]);
+        let content = prompt_to_md(&p, &sync_placement_for(&p, &moved));
+        let mut store = sync_apply_store(vec![p], Vec::new());
+        store.settings = settings;
+        let (changed, settings_changed) = sync_apply(&mut store, "p1", content, false);
+        assert!(!changed, "a file that only moved the tile must not count as a changed prompt");
+        assert!(settings_changed, "the flag the store-synced event keys on must be set for a moved tile");
+        assert_eq!(store.settings.views[0].layouts[&key]["p1"], [2, 1]);
+    }
+
+    #[test]
+    fn sync_join_adopts_the_cell_and_colour_of_an_existing_grid_folder() {
+        let p = sync_test_prompt();
+        let mut settings = Settings::default();
+        settings.views.push(test_view("v1"));
+        settings.tile_folders.push({
+            let mut f = test_tile_folder("f1", "v1", [0, 0], &["p1"]);
+            f.name = "F".to_string();
+            f
+        });
+        let grid = grid_key(settings.views[0].cols, settings.views[0].rows);
+        let incoming_placement = SyncPlacement {
+            view: "V1".into(),
+            grid,
+            cell: "3,1".into(),
+            tile_folder: "F".into(),
+            tile_folder_color: "#ef4444".into(),
+            float_folder: String::new(),
+        };
+        let incoming = prompt_to_md(&p, &incoming_placement);
+        let (_, fields_body) = parse_frontmatter(&incoming).unwrap();
+        let _ = fields_body;
+        let fields = parse_frontmatter(&incoming).unwrap().0;
+        apply_md_placement(&mut settings, "p1", &fields);
+        assert_eq!(settings.tile_folders.len(), 1);
+        assert_eq!(settings.tile_folders[0].cell, [3, 1]);
+        assert_eq!(settings.tile_folders[0].color, "#ef4444");
+        assert_eq!(
+            prompt_to_md(&p, &sync_placement_for(&p, &settings)),
+            incoming,
+            "after adopting, this machine writes exactly what it read, so the two stop rewriting each other"
+        );
+    }
+
+    #[test]
+    fn sync_join_keeps_a_folders_cell_when_the_file_carries_none() {
+        let mut settings = Settings::default();
+        settings.views.push(test_view("v1"));
+        settings.tile_folders.push({
+            let mut f = test_tile_folder("f1", "v1", [2, 2], &["a"]);
+            f.name = "F".to_string();
+            f
+        });
+        assert!(sync_join_tile_folder(&mut settings, "b", "F", "", "v1", None));
+        assert_eq!(settings.tile_folders[0].cell, [2, 2]);
+    }
+
+    #[test]
+    fn a_byte_order_mark_does_not_hide_an_edited_file() {
+        let base = sync_test_prompt();
+        let mut edited = sync_test_prompt();
+        edited.text = "edited in an editor that adds a BOM".into();
+        let content = format!("\u{feff}{}", prompt_to_md(&edited, &SyncPlacement::default()));
+        let got = apply_md_to_prompt(&base, &content).expect("a BOM must not make the header unreadable");
+        assert_eq!(got.text, edited.text);
+    }
+
+    #[test]
+    fn sync_decode_text_reads_utf8_bom_and_utf16_files() {
+        let md = prompt_to_md(&sync_test_prompt(), &SyncPlacement::default());
+        assert_eq!(sync_decode_text(md.clone().into_bytes()).as_deref(), Some(md.as_str()));
+        let mut bom8 = vec![0xEF, 0xBB, 0xBF];
+        bom8.extend_from_slice(md.as_bytes());
+        assert_eq!(sync_decode_text(bom8).as_deref(), Some(md.as_str()));
+        let mut le = vec![0xFF, 0xFE];
+        le.extend(md.encode_utf16().flat_map(|u| u.to_le_bytes()));
+        assert_eq!(sync_decode_text(le).as_deref(), Some(md.as_str()));
+        let mut be = vec![0xFE, 0xFF];
+        be.extend(md.encode_utf16().flat_map(|u| u.to_be_bytes()));
+        assert_eq!(sync_decode_text(be).as_deref(), Some(md.as_str()));
+        assert!(sync_decode_text(vec![0xFF, 0xFE, 0x41]).is_none(), "an odd UTF-16 length is not text");
+        assert!(sync_decode_text(vec![0xC3, 0x28]).is_none());
+    }
+
+    #[test]
+    fn a_round_trip_keeps_multi_line_notes_and_a_trailing_newline() {
+        let mut p = sync_test_prompt();
+        p.notes = "a\nb\\c\r\nd".into();
+        p.text = "abc\n".into();
+        let back = apply_md_to_prompt(&p, &prompt_to_md(&p, &SyncPlacement::default())).unwrap();
+        assert_eq!(back.notes, p.notes);
+        assert_eq!(back.text, p.text);
+        p.text = "one\n\n".into();
+        p.variants = vec!["two".into()];
+        let back = apply_md_to_prompt(&p, &prompt_to_md(&p, &SyncPlacement::default())).unwrap();
+        assert_eq!(back.text, p.text);
+        assert_eq!(back.variants, p.variants);
+        // A note without a line break keeps its exact old form: no churn for files that round-tripped fine.
+        let mut plain = sync_test_prompt();
+        plain.notes = "C:\\new\\file is fine".into();
+        let md = prompt_to_md(&plain, &SyncPlacement::default());
+        assert!(!md.contains("notes_enc"), "{md}");
+        assert_eq!(apply_md_to_prompt(&plain, &md).unwrap().notes, "C:\\new\\file is fine");
+    }
+
+    #[test]
+    fn a_file_in_the_previous_format_does_not_read_as_an_outside_edit() {
+        let mut p = sync_test_prompt();
+        p.notes = "line one\nline two".into();
+        p.text = "ends with a newline\n".into();
+        let placement = SyncPlacement::default();
+        let old_form = prompt_to_md_impl(&p, &placement, true);
+        assert_ne!(old_form, prompt_to_md(&p, &placement));
+        assert!(sync_md_matches(&p, &placement, &old_form));
+        assert!(sync_md_matches(&p, &placement, &prompt_to_md(&p, &placement)));
+        let mut other = p.clone();
+        other.name = "renamed".into();
+        assert!(!sync_md_matches(&other, &placement, &old_form));
+    }
+
+    #[test]
+    fn a_new_sync_folder_clears_a_paused_health() {
+        let mut h = SyncHealth::default();
+        for _ in 0..SYNC_FAIL_MAX {
+            sync_health_note_fail(&mut h, SYNC_FAIL_MAX, "the drive is gone");
+        }
+        assert!(h.paused);
+        sync_health_after_dir_change(&mut h);
+        assert!(!h.paused);
+        assert_eq!(h.fails, 0);
+        assert!(h.reason.is_empty());
+    }
+
     #[test]
     fn sync_delete_dir_removes_only_the_files_the_app_wrote() {
         let dir = sync_tmp_dir("del-ok");
         write_ours(&dir, "p1.md", "one");
         write_ours(&dir, "p2.md", "two");
+        sync_known_note(&dir.join("p1.md"));
+        sync_known_note(&dir.join("p2.md"));
         fs::write(dir.join("AGENTS.md"), sync_agents_md()).unwrap();
         fs::write(dir.join("p1.md.lock"), "1234").unwrap();
         let data = sync_tmp_dir("del-ok-data");
@@ -42216,6 +43054,22 @@ mod tests {
         assert!(dir.join("p1.md").exists());
         assert!(dir.join("my-taxes.txt").exists());
         assert!(dir.exists());
+        let _ = fs::remove_dir_all(&dir);
+        let _ = fs::remove_dir_all(&data);
+    }
+
+    #[test]
+    fn sync_delete_dir_keeps_a_file_the_library_never_had() {
+        let dir = sync_tmp_dir("del-unknown");
+        write_ours(&dir, "p1.md", "one");
+        sync_known_note(&dir.join("p1.md"));
+        // Another machine's new file: our header, a valid id, never imported here.
+        write_ours(&dir, "fresh-from-elsewhere.md", "not in this library yet");
+        let data = sync_tmp_dir("del-unknown-data");
+        let err = sync_delete_dir(&dir, &data).expect_err("an unimported file stops the delete");
+        assert!(err.contains("fresh-from-elsewhere.md"), "the file in the way is named: {err}");
+        assert!(dir.join("fresh-from-elsewhere.md").exists());
+        assert!(dir.join("p1.md").exists());
         let _ = fs::remove_dir_all(&dir);
         let _ = fs::remove_dir_all(&data);
     }
@@ -42246,6 +43100,7 @@ mod tests {
     fn sync_dir_scan_counts_our_files_apart_from_everything_else() {
         let dir = sync_tmp_dir("scan");
         write_ours(&dir, "p1.md", "one");
+        sync_known_note(&dir.join("p1.md"));
         fs::write(dir.join("AGENTS.md"), "the user rewrote this note").unwrap();
         fs::write(dir.join("notes.md"), "no header at all").unwrap();
         let scan = sync_dir_scan(&dir);
@@ -42263,12 +43118,12 @@ mod tests {
         // Never seen: remember it, read it next round. An editor that writes straight
         // into the file would otherwise be caught halfway through.
         assert_eq!(sync_scan_decision(None, a), SyncScan::Settle);
-        assert_eq!(sync_scan_decision(Some(SyncSeen { stamp: a, handled: false }), b), SyncScan::Settle);
+        assert_eq!(sync_scan_decision(Some(SyncSeen { stamp: a, handled: false, hash: 0 }), b), SyncScan::Settle);
         // Unchanged since the last look: now it is whole and worth reading.
-        assert_eq!(sync_scan_decision(Some(SyncSeen { stamp: a, handled: false }), a), SyncScan::Read);
+        assert_eq!(sync_scan_decision(Some(SyncSeen { stamp: a, handled: false, hash: 0 }), a), SyncScan::Read);
         // Already dealt with (read, or written by the app itself): no read at all.
-        assert_eq!(sync_scan_decision(Some(SyncSeen { stamp: a, handled: true }), a), SyncScan::Skip);
-        assert_eq!(sync_scan_decision(Some(SyncSeen { stamp: a, handled: true }), b), SyncScan::Settle);
+        assert_eq!(sync_scan_decision(Some(SyncSeen { stamp: a, handled: true, hash: 0 }), a), SyncScan::Skip);
+        assert_eq!(sync_scan_decision(Some(SyncSeen { stamp: a, handled: true, hash: 0 }), b), SyncScan::Settle);
     }
 
     #[test]
@@ -42422,7 +43277,7 @@ mod tests {
         let mut seen: SyncSeenMap = HashMap::new();
         for p in &prompts {
             let path = dir.join(format!("{}.md", p.id));
-            seen.insert(sync_seen_key(&path), SyncSeen { stamp: sync_stamp_of(&path).unwrap(), handled: true });
+            seen.insert(sync_seen_key(&path), SyncSeen { stamp: sync_stamp_of(&path).unwrap(), handled: true, hash: 0 });
         }
         let mut full_best = Duration::MAX;
         let mut stamped_best = Duration::MAX;
