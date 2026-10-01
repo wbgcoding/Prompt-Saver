@@ -9229,10 +9229,12 @@ const SEARCH_DEBOUNCE_MS = 120;
 // in when the debounced wrapper was created).
 function debounced(fn, ms = SEARCH_DEBOUNCE_MS) {
   let timer = 0;
-  return () => {
+  const run = () => {
     clearTimeout(timer);
     timer = setTimeout(fn, typeof ms === "function" ? ms() : ms);
   };
+  run.cancel = () => clearTimeout(timer);
+  return run;
 }
 
 // ---- Markdown preview + code highlighting (editor) ----
@@ -14215,6 +14217,8 @@ async function refreshImageHits(rawInput) {
   }
   let ids = [];
   try { ids = (await invoke("search_image_text", { query: rawInput })) || []; } catch { ids = []; }
+  // A slower reply for an older query must not draw its hit set over the newer one.
+  if (rawInput !== libQuery.trim().toLowerCase()) return;
   imageHitIds = new Set(ids);
   imageHitQuery = rawInput;
   libScoreCache.clear();
@@ -19782,6 +19786,7 @@ function bind() {
     // With picture text search on and a query typed, the lookup renders once its
     // answer is in; rendering first as well would draw the whole library twice.
     if (optFlag("ocrIndex") && libQuery.trim()) {
+      renderLibraryDebounced.cancel(); // a render queued by an earlier blank query
       refreshImageHitsDebounced();
     } else {
       renderLibraryDebounced();
