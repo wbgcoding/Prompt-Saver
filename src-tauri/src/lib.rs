@@ -10821,17 +10821,13 @@ struct DupSource {
     id: String,
     name: String,
     text: String,
-    #[allow(dead_code)]
-    variants: Vec<String>,
-    #[allow(dead_code)]
-    tags: Vec<String>,
 }
 
 fn dup_sources(prompts: &[Prompt]) -> Vec<DupSource> {
     prompts
         .iter()
         .filter(|p| !p.secret)
-        .map(|p| DupSource { id: p.id.clone(), name: p.name.clone(), text: p.text.clone(), variants: p.variants.clone(), tags: p.tags.clone() })
+        .map(|p| DupSource { id: p.id.clone(), name: p.name.clone(), text: p.text.clone() })
         .collect()
 }
 
