@@ -1594,7 +1594,7 @@ mod tests {
         s.ui_flags.insert("remoteApi".into(), true);
         s.ui_values.insert("remotePort".into(), 51900.0);
         let mut saved = 0;
-        let r = commit_port_value(&mut s, busy as f64, |ip, p| probe_port(ip, p), |_| {
+        let r = commit_port_value(&mut s, busy as f64, probe_port, |_| {
             saved += 1;
             true
         });
@@ -1605,7 +1605,7 @@ mod tests {
         let free = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
         let p = free.local_addr().unwrap().port();
         drop(free);
-        assert_eq!(commit_port_value(&mut s, p as f64, |ip, p| probe_port(ip, p), |_| true), Ok(true));
+        assert_eq!(commit_port_value(&mut s, p as f64, probe_port, |_| true), Ok(true));
         assert_eq!(s.ui_values.get("remotePort"), Some(&(p as f64)));
     }
 
