@@ -2705,9 +2705,11 @@ function flagRow(key) {
       if (!ok) { input.checked = false; return; }
     }
     settings.ui_flags = { ...(settings.ui_flags || {}), [key]: enabled };
+    let accepted = true;
     try {
       await invoke("set_ui_flag", { key, enabled });
     } catch (err) {
+      accepted = false;
       // The backend refused to switch the feature on (today: prompt sync, whose
       // safety backup or first folder write failed). It left the flag off, so the switch has to follow:
       // a checkbox that shows a state the store does not have is worse than the error.
@@ -2745,7 +2747,7 @@ function flagRow(key) {
     // cannot change which guard is already running.
     if (key === "allowMultipleInstances") toast(t("toastRestartNeeded"));
     applyFlags();
-    if (key === "clipWatcher" && !enabled) await offerClipInboxCleanup();
+    if (key === "clipWatcher" && !enabled && accepted) await offerClipInboxCleanup();
     // "only changed" has to recompute after EVERY flag (not just gating ones,
     // which is all a plain re-render used to care about): the row set depends on
     // this flag's own value now, not only on what it gates.
@@ -19952,10 +19954,11 @@ function bind() {
   $("clip-toggle").addEventListener("click", async () => {
     const on = !optFlag("clipWatcher");
     settings.ui_flags = { ...(settings.ui_flags || {}), clipWatcher: on };
+    let accepted = true;
     try { await invoke("set_ui_flag", { key: "clipWatcher", enabled: on }); }
-    catch (e) { errToast(e); }
+    catch (e) { accepted = false; errToast(e); }
     applyFlags();
-    if (!on) await offerClipInboxCleanup();
+    if (!on && accepted) await offerClipInboxCleanup();
     await refreshClipInbox();
     updateClipBadge();
   });
