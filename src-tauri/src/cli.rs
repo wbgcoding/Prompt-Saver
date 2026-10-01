@@ -1167,8 +1167,7 @@ fn cmd_get(store: &Store, id: &str, json: bool) -> Outcome {
         return Outcome::err(2, format!("no prompt with id {id}\n"));
     };
     if p.secret {
-        return Outcome::err(1, format!("prompt {id} is confidential and can only be read in the app itself
-"));
+        return Outcome::err(1, format!("prompt {id} is confidential and can only be read in the app itself\n"));
     }
     let trashed = p.trashed_at > 0;
     if json {
@@ -1598,8 +1597,7 @@ fn cmd_settings_get(store: &Store, key: &str, json: bool) -> Outcome {
     // The vault salt and verifier and the sealed backup password would give
     // anyone with the receiver password what an offline guess needs.
     if crate::remote::is_remote_secret_key(key) || crate::is_vault_key(key) || key == crate::BACKUP_PW_KEY {
-        return Outcome::err(2, format!("no setting named \"{key}\"
-"));
+        return Outcome::err(2, format!("no setting named \"{key}\"\n"));
     }
     let s = &store.settings;
     let value: serde_json::Value = match key {
@@ -1632,8 +1630,7 @@ fn cmd_settings_get(store: &Store, key: &str, json: bool) -> Outcome {
 
 fn cmd_settings_set(store: &mut Store, key: &str, value: &str) -> Outcome {
     if crate::remote::is_remote_secret_key(key) {
-        return Outcome::err(1, format!("{key} is managed by the app and cannot be set
-"));
+        return Outcome::err(1, format!("{key} is managed by the app and cannot be set\n"));
     }
     // Folder authority, the vault keys, the backup password, the import-denied
     // switches and every receiver setting have their own dedicated writers and
@@ -1646,8 +1643,7 @@ fn cmd_settings_set(store: &mut Store, key: &str, value: &str) -> Outcome {
         || crate::is_import_denied_flag(key)
         || crate::is_import_denied_value(key)
     {
-        return Outcome::err(1, format!("{key} can only be changed in the app itself
-"));
+        return Outcome::err(1, format!("{key} can only be changed in the app itself\n"));
     }
     let s = &mut store.settings;
     match key {
@@ -1922,8 +1918,7 @@ fn exec_persisted(store: &mut Store, dir: &Path, cmd: &Cmd, cwd: &Path, persist:
     // The row bookkeeping may have moved with the failed write: start it over so
     // nothing is skipped as already written on the next save.
     store.forget_written_rows();
-    Outcome::err(3, "the store refused the write (locked or unavailable)
-")
+    Outcome::err(3, "the store refused the write (locked or unavailable)\n")
 }
 
 // ---------- Remote-caller path confinement ----------
