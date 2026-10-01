@@ -11951,16 +11951,10 @@ fn keep_machine_in_staged(target: &std::path::Path, staged: &std::path::Path) ->
         Ok(conn) => read_settings_row(&conn, "main"),
         Err(_) => None,
     };
-    let Some(local) = local else {
-        // No settings on this machine yet: the snapshot still must not bring the
-        // denied switches along.
-        let conn = Connection::open(staged).map_err(|e| e.to_string())?;
-        if let Some(mut restored) = read_settings_row(&conn, "main") {
-            drop_machine_rows(&mut restored);
-            db_write_settings(&conn, &restored).map_err(|e| e.to_string())?;
-        }
-        return Ok(());
-    };
+    // No settings on this machine yet: the snapshot still must not bring the
+    // denied switches or its autostart registration along, so it gets the
+    // values a fresh install has.
+    let local = local.unwrap_or_default();
     let conn = Connection::open(staged).map_err(|e| e.to_string())?;
     if let Some(mut restored) = read_settings_row(&conn, "main") {
         keep_machine_settings(&local, &mut restored);
@@ -12027,10 +12021,11 @@ fn restore_selective(target: &std::path::Path, staged: &std::path::Path, scope: 
                         clear_vault_keys(&mut restored);
                         carry_vault_keys(&local, &mut restored);
                     }
-                    // No settings on this machine yet: nothing to keep, but the
-                    // denied rows still stay out and so do the vault keys.
+                    // No settings on this machine yet: the denied rows, the
+                    // autostart registration and the vault keys get a fresh
+                    // install's values.
                     None => {
-                        drop_machine_rows(&mut restored);
+                        keep_machine_settings(&Settings::default(), &mut restored);
                         clear_vault_keys(&mut restored);
                     }
                 }
@@ -49674,6 +49669,7 @@ mod tests {
         let s = full_schema_db(&staged, "staged");
         let mut hostile = hostile_consent_settings();
         hostile.ui_flags.insert("remoteApi".into(), true);
+        hostile.autostart = true;
         db_write_settings(&s, &hostile).unwrap();
         drop(s);
         restore_selective(&target, &staged, "settings").unwrap();
@@ -49681,6 +49677,29 @@ mod tests {
         for k in CONSENT_KEYS.iter().chain(["remoteApi"].iter()) {
             assert!(!after.ui_flags.contains_key(*k), "{k} must not arrive");
         }
+        assert!(!after.autostart, "a restore must not register autostart on a bare machine");
+        assert_eq!(after.ui_flags.get("copyFlash"), Some(&false));
+        let _ = std::fs::remove_file(&target);
+        let _ = std::fs::remove_file(&staged);
+    }
+
+    #[test]
+    fn a_snapshot_restore_onto_a_machine_without_settings_drops_the_switches() {
+        let dir = std::env::temp_dir();
+        let target = dir.join(format!("{}-test-consent-stagednone-target.db", brand::SLUG));
+        let staged = dir.join(format!("{}-test-consent-stagednone-staged.db", brand::SLUG));
+        let _ = std::fs::remove_file(&target);
+        let s = full_schema_db(&staged, "staged");
+        let mut hostile = hostile_consent_settings();
+        hostile.autostart = true;
+        db_write_settings(&s, &hostile).unwrap();
+        drop(s);
+        keep_machine_in_staged(&target, &staged).unwrap();
+        let after = read_settings_row(&Connection::open(&staged).unwrap(), "main").unwrap();
+        for k in CONSENT_KEYS {
+            assert!(!after.ui_flags.contains_key(k), "{k} must not arrive");
+        }
+        assert!(!after.autostart, "a restore must not register autostart on a bare machine");
         assert_eq!(after.ui_flags.get("copyFlash"), Some(&false));
         let _ = std::fs::remove_file(&target);
         let _ = std::fs::remove_file(&staged);
