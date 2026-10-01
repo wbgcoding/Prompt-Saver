@@ -6685,7 +6685,9 @@ impl StagedCopies {
 
 impl Drop for StagedCopies {
     fn drop(&mut self) {
-        if !self.committed {
+        // While unwinding, the in-memory prompt may already point at the staged path;
+        // keep the file and let a later sweep collect a true orphan.
+        if !self.committed && !std::thread::panicking() {
             for p in &self.paths {
                 let _ = fs::remove_file(p);
             }
@@ -42895,6 +42897,26 @@ mod tests {
         }
         let upd = body("async fn update_prompt(", "// List a prompt's version snapshots");
         let staged_end = upd.find("let updated = {").expect("locked section");
+    #[test]
+    fn a_panic_with_a_live_guard_keeps_the_staged_copy_but_releases_the_pending_entry() {
+        let base = staging_test_dir("panic");
+        let files = base.join("files");
+        let orig = base.join("orig.txt");
+        fs::write(&orig, b"data").unwrap();
+        let mut copy = String::new();
+        let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let mut staged = StagedCopies::new();
+            copy = staged.stage(&files, &orig.to_string_lossy());
+            panic!("boom");
+        }));
+        assert!(res.is_err());
+        assert!(Path::new(&copy).is_file(), "a copy staged before a panic must survive");
+        let pending = PENDING_ATTACHMENTS.lock().unwrap_or_else(|e| e.into_inner());
+        assert!(!pending.as_ref().is_some_and(|s| s.contains(&pending_key(&copy))), "pending entry released");
+        drop(pending);
+        let _ = fs::remove_dir_all(&base);
+    }
+
         for call in ["staged_copies.stage(", "probe_media_meta(", "ocr_index_text(img"] {
             assert!(upd[..staged_end].contains(call), "update_prompt must stage {call} before its locked section");
         }
