@@ -560,11 +560,15 @@ pub(crate) fn remote_tls_set_short_lived(app: AppHandle, state: State<Db>, enabl
         let id = crate::remote_tls::set_short_lived_core(&mut store.settings, enabled, &names, |s| save_settings(&app, s))?;
         (crate::remote_tls::fingerprint(&id.ca_pem), remote_api_enabled(&store.settings) && network_filter_enabled(&store.settings))
     };
+    // From here the flag and the certificate are saved: a receiver that does not come
+    // back up is reported under its own code, so the switch keeps the new state.
     if restart {
-        restart_receiver(&app)?;
+        restart_receiver(&app).map_err(|e| format!("{RESTART_FAILED_PREFIX}{e}"))?;
     }
     fingerprint.ok_or_else(|| "no-certificate".to_string())
 }
+
+pub(crate) const RESTART_FAILED_PREFIX: &str = "restart-failed:";
 
 // ---------- IPv4 CIDR matching ----------
 

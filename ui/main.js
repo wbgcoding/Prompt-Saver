@@ -10679,6 +10679,13 @@ async function toggleShortLivedCert(enabled) {
     await invoke("remote_tls_set_short_lived", { enabled });
   } catch (e) {
     const msg = String(e);
+    // Flag and certificate were saved; only the receiver failed to come back up.
+    // The switch keeps the saved state and the restart error is shown on its own.
+    if (msg.startsWith("restart-failed:")) {
+      settings.ui_flags = { ...(settings.ui_flags || {}), remoteTlsShortLived: enabled };
+      errToast(msg.slice("restart-failed:".length));
+      return true;
+    }
     if (msg === "save-failed") toast(t("persistFailed"));
     else if (msg === "the certificate key could not be protected") toast(t("remoteTlsKeyNotProtected"));
     else errToast(e);

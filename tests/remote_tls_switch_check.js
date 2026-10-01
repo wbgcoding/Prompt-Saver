@@ -48,6 +48,11 @@ const build = (answer, invokeImpl) => {
   need(r.settings.ui_flags.remoteTlsShortLived === true, "confirm must record the new state");
   r = build(true, () => { throw "save-failed"; });
   need((await r.fn(true)) === false && r.log.toasts.includes("persistFailed") && r.settings.ui_flags.remoteTlsShortLived === undefined, "a failed save must restore the switch and show the error");
+  r = build(true, () => { throw "restart-failed:port busy"; });
+  need((await r.fn(true)) === true && r.settings.ui_flags.remoteTlsShortLived === true, "a restart failure after the save must keep the new state");
+  need(r.log.errs.length === 1 && r.log.errs[0] === "port busy", "the restart error must be shown once, without the code");
+  r = build(true, () => { throw "restart-failed:x"; });
+  need((await r.fn(false)) === true && r.settings.ui_flags.remoteTlsShortLived === false, "a restart failure keeps the new off state too");
   // An expert reset: the certificate switch is not written back, no error shows.
   {
     const rs = src.indexOf("async function onResetExpert");
