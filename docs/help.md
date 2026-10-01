@@ -28,7 +28,7 @@ back to its default and keeps the tiles; Delete removes all data and asks first.
 ### Introduction tour
 
 A five-step walkthrough shown once on first launch, right after the sample tiles
-appear. The last step offers to switch on the screenshot editor, colour picker,
+appear. The last step offers to switch on the screenshot editor, color picker,
 OCR or voice dictation right there. Nothing is written until the tour actually
 finishes. Escape or "Skip" asks to confirm first instead of closing right away.
 Reopen it anytime from the expert menu; reopened this way, a switch on that
@@ -37,14 +37,14 @@ last step takes effect immediately instead of waiting for a Finish click.
 ### Creating tiles
 
 Beyond plain text, a tile can carry an attached file, a screenshot, or a picked
-screen colour.
+screen color.
 
 - File attach: clicking the tile copies the file itself, not text
 - Screenshot tool: capture a region or a whole window straight into a new tile
-- Colour picker: pick any on-screen pixel, copies as hex/RGB/HSL
+- Color picker: pick any on-screen pixel, copies as hex/RGB/HSL
 - Drag and drop: drop a file or image straight onto the grid
 
-### Variables & placeholders
+### Placeholders
 
 Placeholder markup inside a tile's text opens a small popup asking for each value
 before the finished text reaches the clipboard.
@@ -132,7 +132,7 @@ original file's own folder.
 Records a window, a monitor, or a dragged region as a video, via the record
 button next to the screenshot tool. A region recording shows a thin frame
 around the recorded area; it never appears in the video, and the expert menu
-can switch it off or change its colour. MP4 (H.264) is always what gets written
+can switch it off or change its color. MP4 (H.264) is always what gets written
 while recording; three quality steps trade file size for detail before you
 start:
 
@@ -314,27 +314,27 @@ Right-clicking a shape (screenshot editor) or an overlay's row (video editor)
 opens a small menu to duplicate or delete it. A duplicate keeps the same
 values and time range and is offset a little so it sits next to the
 original instead of exactly on top of it; how far is set in an expert setting
-shared by both editors. In the video editor, the colour, thickness, opacity
+shared by both editors. In the video editor, the color, thickness, opacity
 and font size a new overlay starts with also follow whatever was last used
 for that same kind (image, frame, text, pixelation or spotlight), across
-restarts too; an expert switch turns that off again in favour of the fixed
+restarts too; an expert switch turns that off again in favor of the fixed
 starting values. The expert menu also sets the starting text outline width,
-the colour of a pressed key in a new keys overlay and the starting volume of a
+the color of a pressed key in a new keys overlay and the starting volume of a
 newly inserted video overlay.
 
 Dragging a shape (screenshot editor) or a crop box or overlay (video editor)
 snaps to the canvas or frame edges, its centre in both directions, and the
 edges and centre of every other shape or overlay already placed, once the
-pointer gets close enough. A thin accent-coloured line marks which one it
+pointer gets close enough. A thin accent-colored line marks which one it
 caught, and disappears the instant the drag ends. Holding Alt while dragging
 turns snapping off for that one drag. Each editor has its own switch for this,
 sharing one distance setting between them.
 
 The text tool's background is a choice of none, a solid plate or an outline,
-so white or light-coloured text stays readable on a light background too;
+so white or light-colored text stays readable on a light background too;
 plate was the only option before, and stays the default. An expert setting
-picks the outline width, and its colour, black or white, follows the text
-colour automatically for the best contrast.
+picks the outline width, and its color, black or white, follows the text
+color automatically for the best contrast.
 
 A selected shape (screenshot editor) or overlay (video editor) can be nudged
 with the arrow keys, a step at a time; holding Ctrl changes its size instead
@@ -375,7 +375,7 @@ On by default. A microphone button on the composer and in the edit dialog turns
 speech into text using Windows' own on-device recognizer; nothing is uploaded
 unless online recognition is explicitly allowed (off by default; a one-time
 dialog asks the first time it's actually needed). Click to start: the button
-turns the accent colour and pulses while listening, and its title switches from
+turns the accent color and pulses while listening, and its title switches from
 "Dictate" to "Stop dictating"; a second click, Escape in the field, saving the
 prompt, or closing the window all end the session the same way. Text lands at
 the cursor (or always at the end, an expert setting) and can stop itself after
@@ -415,7 +415,7 @@ Windows update silently removed, without asking to reinstall right away:
 "remind me later" dismisses it for a while, or the background check can be
 switched off entirely.
 
-### Colour picker & pick history
+### Color picker & pick history
 
 A pipette that freezes the screen, magnifies the pixel under the cursor, and copies
 it as hex, rgb, or hsl. Right-click the pipette icon to reopen the last few picks;
@@ -532,7 +532,7 @@ per-entry delete, and usage statistics including a 14-day activity chart.
 ### Library & search
 
 The library lists every tile as a searchable, filterable list: fuzzy search,
-smart sort (most-used / most-recent), and type/colour filters. Type -word to
+smart sort (most-used / most-recent), and type/color filters. Type -word to
 exclude matches, or tag:word / var:word to search only tags or placeholder
 names. A star next to the search field saves the current query, tag filters
 and sort as a chip shown above the field; click it to bring the whole search
@@ -573,9 +573,9 @@ above the library list brings archived tiles back into view. Archive or
 unarchive a tile from its right-click menu, or several at once from the
 library's batch bar.
 
-### Favourites
+### Favorites
 
-A star marks a tile as a favourite; an optional dedicated view lists only
+A star marks a tile as a favorite; an optional dedicated view lists only
 starred tiles.
 
 ### Standalone: Multiple views
@@ -583,13 +583,13 @@ starred tiles.
 A view is one grid page with its own size and arrangement; a tile can live in
 several views. View groups turn views into tabs instead of a dropdown.
 
-### Tile behaviour & appearance
+### Tile behavior & appearance
 
 Tile menu, drag-to-reorder, hover lift, type badges, shadows, gradients, rounded
-corners, bold/uppercase/monospace text: behaviour and pure looks, all adjustable.
-Tile, folder, view-tab and message text on a coloured area picks black or white
+corners, bold/uppercase/monospace text: behavior and pure looks, all adjustable.
+Tile, folder, view-tab and message text on a colored area picks black or white
 automatically; the expert menu can switch this off (always white) or move the
-brightness cutoff where black text starts. White text on a light colour gets a
+brightness cutoff where black text starts. White text on a light color gets a
 dark shadow behind it so it stays readable; the expert menu can switch that
 shadow off or dial its strength.
 
@@ -626,14 +626,14 @@ tile makes a grid folder, and belongs to only one grid folder at a time.
 ### Tray
 
 The system tray icon's right-click menu offers a "recently copied" and a
-"favourites" section for quick access without opening the main window. It draws
+"favorites" section for quick access without opening the main window. It draws
 as a rounded, themed window matching the rest of the app rather than the plain
 Windows popup; the expert menu can switch back to the plain system menu if the
 custom one ever misbehaves on your setup. The expert menu also caps how long a
 prompt name may get before it is cut off with an ellipsis in that menu.
 
 A search field at the top of that menu filters as you type, across every
-prompt rather than just the favourites and recents already shown. Arrow keys
+prompt rather than just the favorites and recents already shown. Arrow keys
 pick a result, Enter copies it the same way a click does, and the field clears
 itself back to the normal selection once emptied. It ships on, and the expert
 menu caps how many matches it lists at once.
@@ -650,12 +650,12 @@ default).
 ### Appearance & themes
 
 Seven built-in themes: system/light, dark, Programmer, Neon Violet, Ocean,
-Cyberpunk, and Black & White. The theme editor adjusts any theme's colours and
+Cyberpunk, and Black & White. The theme editor adjusts any theme's colors and
 saves the result as a custom theme.
 
 ### Standalone: Theme editor
 
-Starts from any built-in theme, changes individual colours, and saves the result
+Starts from any built-in theme, changes individual colors, and saves the result
 as a new theme; the original stays untouched.
 
 ### Scaling & zoom
@@ -799,10 +799,10 @@ menu.
 ### Import & export
 
 Plain CSV, TXT or JSON export for the text alone, or a full backup file with
-everything: tiles, views, layouts, colours, styles, and language. A single
+everything: tiles, views, layouts, colors, styles, and language. A single
 "Export" button and a format dropdown replace three separate buttons; JSON is
 the only one of the three that can carry a rotating tile's full list of
-entries, tags, notes, a hotkey, and colour, rather than joining them into one
+entries, tags, notes, a hotkey, and color, rather than joining them into one
 field the way CSV and TXT have to. Images never travel in any of the three,
 to keep the file small; use a full backup for those. Importing decides CSV or
 JSON by looking at the file itself, never its extension, and shows a preview
@@ -1048,9 +1048,9 @@ Hilfe). Nur Englisch und Deutsch. Jede andere Sprache in der App fällt auf
 Englisch zurück.
 
 **Erste Schritte**: Eine Kachel ist ein gespeicherter Eintrag im Raster. Doppelklick
-auf eine leere Rasterzelle (oder der Plus-Button) legt eine an, ein Klick kopiert sie.
+auf eine leere Rasterzelle (oder die Plus-Schaltfläche) legt eine an, ein Klick kopiert sie.
 Drei Beispielkacheln (E-Mail mit Platzhaltern, Bild, Markdown-Vorlage) sind beim
-ersten Start bereits da; ein Button über dem Raster entfernt sie mit einem Klick.
+ersten Start bereits da; eine Schaltfläche über dem Raster entfernt sie mit einem Klick.
 
 **Einstellungen**: Das Zahnrad in der Kopfzeile öffnet das Einstellungsfenster
 mit den alltäglichen Entscheidungen; alles Optionale liegt im Experten-Menü, das
@@ -1073,7 +1073,7 @@ wirkt ein Schalter auf dem letzten Schritt sofort statt erst bei „Fertig".
 **Kacheln anlegen**: Dateianhang, Screenshot-Werkzeug, Farbpipette (aus),
 Ziehen & Ablegen.
 
-**Variablen & Platzhalter**: `{#{Name}#}` im Text öffnet beim Kopieren ein Popup
+**Platzhalter**: `{#{Name}#}` im Text öffnet beim Kopieren ein Popup
 für jeden Wert. Dynamische Platzhalter (`{#{date}#}`, `{#{time}#}`,
 `{#{clipboard}#}`) füllen sich selbst. Feste Werte (im Experten-Menü, aus)
 schlagen für einen passenden Namen eine gepflegte Liste von Werten vor, nur
@@ -1383,16 +1383,16 @@ einer Kollision gewinnt der App-Hotkey, sonst die erste Kachel in der Liste.
 belegt jede Zeile direkt um, ohne den jeweiligen Editor zu öffnen. Eine Kachel
 mit eigenem Hotkey zeigt ein kleines Tastatursymbol.
 
-**Schwebende Buttons:** kleine, immer sichtbare Kopier-Buttons außerhalb des
+**Schwebende Schaltflächen:** kleine, immer sichtbare Kopier-Schaltflächen außerhalb des
 Hauptfensters, über jeder anderen App.
-Ein Button, dessen gespeicherter Bildschirm nicht mehr angeschlossen ist, öffnet sich
+Eine Schaltfläche, dessen gespeicherter Bildschirm nicht mehr angeschlossen ist, öffnet sich
 auf dem Hauptbildschirm, als geparkt markiert, und springt von selbst zurück, sobald
 dieser Bildschirm wieder da ist. Eine Aktion im Experten-Menü holt alle schwebenden
 Fenster auf einmal auf den Hauptbildschirm.
 
 **Ordner:** eine Geste an drei Stellen, ein Ziehen auf ein anderes fasst es zu
 einem Ordner zusammen. Ein Ansichts-Reiter auf einen anderen ergibt einen
-Gruppen-Reiter. Ein schwebender Button auf einen anderen ergibt einen
+Gruppen-Reiter. Eine schwebende Schaltfläche auf einen anderen ergibt einen
 Pillen-Ordner. Eine Kachel auf eine andere ergibt einen Raster-Ordner, und
 gehört immer nur zu einem Raster-Ordner gleichzeitig.
 
@@ -1400,7 +1400,7 @@ gehört immer nur zu einem Raster-Ordner gleichzeitig.
 <svg viewBox="0 0 560 120" xmlns="http://www.w3.org/2000/svg" role="img"><rect x="20" y="20" width="150" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="30" y="30" width="40" height="16" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="74" y="30" width="40" height="16" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="30" y="52" width="120" height="30" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="95" y="108" font-size="11" fill="currentColor" text-anchor="middle">Ansichtsgruppe</text><circle cx="255" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="295" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="335" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="295" y="108" font-size="11" fill="currentColor" text-anchor="middle">Pill-Ordner</text><rect x="430" y="20" width="100" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="430" y1="55" x2="530" y2="55" stroke="currentColor" stroke-width="1"/><line x1="480" y1="20" x2="480" y2="90" stroke="currentColor" stroke-width="1"/><text x="480" y="108" font-size="11" fill="currentColor" text-anchor="middle">Kachel-Ordner</text></svg>
 </p>
 
-**Taskleistenmenü**: Zuletzt kopiert, Favoriten. Erscheint als abgerundetes,
+**Infobereich-Menü**: Zuletzt kopiert, Favoriten. Erscheint als abgerundetes,
 zum Thema passendes Fenster statt des einfachen Windows-Menüs; im Expertenmenü
 lässt sich bei Bedarf auf das einfache Systemmenü zurückschalten. Dort auch
 einstellbar: die maximale Länge eines Eintragsnamens.
@@ -1461,7 +1461,7 @@ zeigen außerdem die Länge eines Videos auf seinem Vorschaubild sowie Auflösun
 und Dateigröße in der Kurzhilfe; ältere Anhänge holen das im Hintergrund nach,
 sobald sie zum ersten Mal angezeigt werden. Das Hauptraster bleibt unverändert.
 
-**Werkzeugleiste**: welche Buttons Kopf- und Composer-Leiste zeigen.
+**Werkzeugleiste**: welche Schaltflächen Kopf- und Composer-Leiste zeigen.
 
 **Datenschutz**: Bildschirmaufnahme-Ausschluss (an; "Screenshots von Prompt
 Saver erlauben" gilt für jedes Aufnahmeprogramm, auch das eigene, nur die
@@ -1510,7 +1510,7 @@ das behoben ist; die ursprünglichen, möglicherweise noch rettbaren Daten
 werden nie überschrieben. Es wird automatisch eine Sicherung der rohen
 Datenbank angelegt, und eine dauerhafte Warnzeile (ebenfalls ohne Schalter)
 erscheint in derselben Datenschutz-Gruppe, solange es zutrifft. Ein Werksreset
-oder das Wiederherstellen der Einstellungen aus einem Backup löschen sie
+oder das Wiederherstellen der Einstellungen aus einer Sicherung löschen sie
 beide.
 
 Kann ein Einstellungs-Speichervorgang selbst nicht auf die Festplatte
@@ -1672,7 +1672,7 @@ Markdown-Ordnersynchronisierung weiter unten der gebaute Weg.
 **Befehlszeile:** `prompt-saver.exe <Befehl> ...` nutzt die App als
 Kommandozeilen-Werkzeug statt ihr Fenster zu öffnen: Kacheln auflisten, lesen,
 kopieren, anlegen, ändern, löschen, wiederherstellen, Tags und Ansichten
-verwalten, suchen, exportieren, importieren, Backups anlegen, auflisten oder
+verwalten, suchen, exportieren, importieren, Sicherungen anlegen, auflisten oder
 wiederherstellen, dazu eine einzelne Einstellung lesen oder schreiben. Läuft
 die App bereits, geht der Befehl an diese laufende Kopie, und ihre Antwort
 erscheint hier. Sonst arbeitet der Befehl allein, direkt gegen die Datenbank,
@@ -1757,10 +1757,10 @@ Einstellung nicht gefunden? Die Suche im Experten-Menü durchsucht alle Tabs
 auf einmal. Hotkey tut nichts? Eine andere App hält die Kombination
 vermutlich schon.
 
-**Eigenständig: Backup-Manager.** Verschlüsselte Backups, GFS-Aufbewahrung,
+**Eigenständig: Sicherungsverwaltung.** Verschlüsselte Sicherungen, GFS-Aufbewahrung,
 gezieltes Wiederherstellen. Im selben Fenster außerdem eine
 Nutzungsstatistik (Summen, 14-Tage-Diagramm, meistgenutzte Kacheln),
-unabhängig von den Backups selbst, mit einem eigenen Knopf, um die Statistik
+unabhängig von den Sicherungen selbst, mit einem eigenen Knopf, um die Statistik
 als CSV, TXT oder JSON zu exportieren, sowie ein Speicherbereich, der zeigt,
 wie viel Platz Datenbank, Anhänge, Bildschirmfotos, Aufnahmen, Sicherungen,
 temporäre Dateien und das Fehlerprotokoll jeweils belegen, mit einem Knopf,

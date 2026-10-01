@@ -29,10 +29,7 @@ for (const [code, next] of [["en", "de"], ["de", "es"]]) {
   labels[code] = Object.fromEntries(
     [...block.matchAll(/\b((?:expTab|expGroup)\w+): "([^"]*)"/g)].map((m) => [m[1], m[2]]));
 }
-// A group heading whose string is not in i18n.js yet falls back to its agreed wording,
-// so the help can be checked before that string lands; once it exists the real one wins.
-const PENDING = { expGroupRemote: { en: "Remote access", de: "Fernzugriff" } };
-const label = (lang, key) => labels[lang][key] ?? (PENDING[key] && PENDING[key][lang]);
+const label = (lang, key) => labels[lang][key];
 
 (async () => {
   const tmp = path.join(os.tmpdir(), `help-paths-${process.pid}.mjs`);

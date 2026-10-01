@@ -50,26 +50,26 @@ export const HELP_CONTENT = {
         "←/→ or the dots move between steps, Enter continues, Escape or \"Skip\" leaves any time; both ask to confirm first.",
       ],
       whatHappens:
-        "The last step offers to switch on the screenshot editor, colour picker, or text recognition right there, showing each one's shipped default; nothing is written until the tour is actually finished, and only the switches actually changed. A first-launch data-folder or WebView2 prompt always takes priority; the tour just waits for its turn.",
+        "The last step offers to switch on the screenshot editor, color picker, or text recognition right there, showing each one's shipped default; nothing is written until the tour is actually finished, and only the switches actually changed. A first-launch data-folder or WebView2 prompt always takes priority; the tour just waits for its turn.",
       settings: ["Open automatically on first launch: Expert menu → System & data → Help"],
     },
     {
       section: "basics",
       title: "Creating tiles",
-      whatItIs: "Beyond plain text, a tile can carry an attached file, a screenshot, or a picked screen colour.",
+      whatItIs: "Beyond plain text, a tile can carry an attached file, a screenshot, or a picked screen color.",
       howTo: [
         "File attach: clicking the tile copies the file itself, not text.",
         "Screenshot tool: capture a region or a whole window into a new tile.",
-        "Colour picker: pick any on-screen pixel; copies as hex, RGB, or HSL.",
+        "Color picker: pick any on-screen pixel; copies as hex, RGB, or HSL.",
         "Drag and drop: drop a file or image onto the grid.",
       ],
-      whatHappens: "The attached file, screenshot, or colour becomes the tile's content; a later copy delivers that file, image, or colour, never text. A plain text, Markdown, JSON or CSV attachment shows its first lines right in the editor, below the file row, always as plain text.",
-      settings: ["File attach, keep a copy of an attached file and delete that copy with its tile, text preview for attachments, paste, drag and drop: Expert menu → Features → Attachments and input", "Screenshot tool: Expert menu → Capture → Screenshot", "Colour picker: Expert menu → Capture → Colour picker"],
-      tip: "Pick a colour format (hex, RGB, or HSL) from the toast that appears right after a pick.",
+      whatHappens: "The attached file, screenshot, or color becomes the tile's content; a later copy delivers that file, image, or color, never text. A plain text, Markdown, JSON or CSV attachment shows its first lines right in the editor, below the file row, always as plain text.",
+      settings: ["File attach, keep a copy of an attached file and delete that copy with its tile, text preview for attachments, paste, drag and drop: Expert menu → Features → Attachments and input", "Screenshot tool: Expert menu → Capture → Screenshot", "Color picker: Expert menu → Capture → Color picker"],
+      tip: "Pick a color format (hex, RGB, or HSL) from the toast that appears right after a pick.",
     },
     {
       section: "basics",
-      title: "Variables & placeholders",
+      title: "Placeholders",
       whatItIs:
         "Placeholder markup inside a tile's text opens a fill-in popup before the finished text reaches the clipboard.",
       howTo: [
@@ -141,7 +141,7 @@ export const HELP_CONTENT = {
       section: "alwaysOnTop",
       title: "Tray",
       whatItIs: "The tray icon's right-click menu offers quick access without opening the main window.",
-      howTo: ["Right-click the tray icon.", "Pick an item from \"Recently copied\" or \"Favourites\" to copy it immediately."],
+      howTo: ["Right-click the tray icon.", "Pick an item from \"Recently copied\" or \"Favorites\" to copy it immediately."],
       whatHappens: "The menu copies straight from the tray; the main window never has to open for this. The menu is drawn as a rounded window in the app's own theme; switch that off for the plain Windows menu. An optional search row at the top filters every tile while typing, not just the ones listed.",
       settings: ["Windows 11-style menu, search field, recently copied section, favorites section, entry counts, label length: Expert menu → Features → Tray menu"],
     },
@@ -161,7 +161,7 @@ export const HELP_CONTENT = {
     },
     {
       section: "organising",
-      title: "Tile behaviour & appearance",
+      title: "Tile behavior & appearance",
       whatItIs: "These settings control how a tile reacts to the mouse and what it looks like.",
       howTo: [
         "Right-click a tile for its menu: edit, pin, hide, delete, and more.",
@@ -170,8 +170,8 @@ export const HELP_CONTENT = {
       ],
       whatHappens: "These are interaction and looks only; none of them change what a tile copies.",
       settings: [
-        "Tile menu, drag-to-reorder, hover lift: Expert menu → Buttons → Tiles",
-        "Type badges, shadows, gradients, rounded corners, bold, uppercase, or monospace text: Expert menu → Buttons → Tile appearance",
+        "Tile menu, drag-to-reorder, hover lift: Expert menu → Tiles → Tiles",
+        "Type badges, shadows, gradients, rounded corners, bold, uppercase, or monospace text: Expert menu → Tiles → Tile appearance",
       ],
     },
     {
@@ -183,15 +183,15 @@ export const HELP_CONTENT = {
         "Adjust delay, auto-hide timeout, or width in the expert menu if needed.",
       ],
       whatHappens: "The tooltip auto-hides after its timeout even if the mouse stays put.",
-      settings: ["Delay before showing, auto-hide timeout, tooltip width: Expert menu → Buttons → Tooltips"],
+      settings: ["Delay before showing, auto-hide timeout, tooltip width: Expert menu → Tiles → Tooltips"],
     },
     {
       section: "organising",
-      title: "Favourites",
-      whatItIs: "A star marks a tile as a favourite for quick access later.",
-      howTo: ["Click the star on a tile, or use \"Favourite\" from its menu.", "Open the dedicated favourites view to see only starred tiles."],
-      whatHappens: "Favourites get their own reorderable view, independent of wherever else the tile lives.",
-      settings: ["Favourites view, its own reordering: Expert menu → Buttons → Favorites"],
+      title: "Favorites",
+      whatItIs: "A star marks a tile as a favorite for quick access later.",
+      howTo: ["Click the star on a tile, or use \"Favorite\" from its menu.", "Open the dedicated favorites view to see only starred tiles."],
+      whatHappens: "Favorites get their own reorderable view, independent of wherever else the tile lives.",
+      settings: ["Favorites view, its own reordering: Expert menu → Tiles → Favorites"],
     },
     {
       section: "look",
@@ -205,9 +205,9 @@ export const HELP_CONTENT = {
       section: "look",
       title: "Appearance & themes",
       whatItIs: "Eight built-in themes cover system, light, dark, and five accent styles.",
-      howTo: ["Pick a theme from Settings.", "Open the theme editor, once enabled, to adjust any theme's colours and save a custom one."],
+      howTo: ["Pick a theme from Settings.", "Open the theme editor, once enabled, to adjust any theme's colors and save a custom one."],
       whatHappens: "\"System\" follows the OS light or dark setting live. A custom theme is saved separately; the built-in it was based on stays untouched.",
-      settings: ["Theme choice: Settings", "Theme editor: Expert menu → Appearance → Global colour palette", "Accent-coloured header, frosted dialogs, hidden or accent-coloured scrollbars, smooth scrolling: Expert menu → Appearance → Visual"],
+      settings: ["Theme choice: Settings", "Theme editor: Expert menu → Appearance → Global color palette", "Accent-colored header, frosted dialogs, hidden or accent-colored scrollbars, smooth scrolling: Expert menu → Appearance → Visual"],
       tip: "Custom themes are on out of the box; switching them off in the expert menu also hides the editor button {icon:themeEditor}.",
     },
     {
@@ -216,7 +216,7 @@ export const HELP_CONTENT = {
       whatItIs: "The library lists every tile as a searchable, filterable list, unlike the grid, which shows only what fits.",
       howTo: [
         "Click the library button {icon:library} in the toolbar to open it.",
-        "Type to search, or use the type and colour filters to narrow the list.",
+        "Type to search, or use the type and color filters to narrow the list.",
         "Click a row to copy.",
         "Use its menu to edit, drag onto the grid, tag, or delete.",
         "Keep a search with its tag filters and sort order as a chip above the field; one click brings it back.",
@@ -224,7 +224,7 @@ export const HELP_CONTENT = {
         "Pick two rows and click \"Compare\" in the selection bar to see both side by side with the differences marked.",
       ],
       whatHappens: "Search is typo-tolerant by default and, unless turned off, sorts by most-used or most-recently-used. In the comparison, either side's text can be taken over into the other. Tiles view behaves exactly like the list for clicks, menus and multi-select.",
-      settings: ["Fuzzy search, smart sort, type and colour filters: Expert menu → Library & History → Library", "Focus the search field on opening, multi-select for batch actions, image and video previews in the rows: Expert menu → Library & History → Library", "Recent searches kept by the search window, results in the quick launcher: Expert menu → Library & History → Library", "Saved searches, tiles view, close the library after copying and its quick toggle: Expert menu → Library & History → Library"],
+      settings: ["Fuzzy search, smart sort, type and color filters: Expert menu → Library & History → Library", "Focus the search field on opening, multi-select for batch actions, image and video previews in the rows: Expert menu → Library & History → Library", "Recent searches kept by the search window, results in the quick launcher: Expert menu → Library & History → Library", "Saved searches, tiles view, close the library after copying and its quick toggle: Expert menu → Library & History → Library"],
     },
     {
       section: "organising",
@@ -247,7 +247,7 @@ export const HELP_CONTENT = {
         "Type a tag name in a tile's editor to add it, or pick an existing one.",
         "Use the tag filter row in the library to narrow the list.",
       ],
-      whatHappens: "Renaming, recolouring, or deleting a tag from the tag manager applies everywhere it is used, in one step.",
+      whatHappens: "Renaming, recoloring, or deleting a tag from the tag manager applies everywhere it is used, in one step.",
       settings: ["Tag filter mode (match any selected tag, or all of them): Expert menu → Library & History → Tags"],
     },
     {
@@ -270,7 +270,7 @@ export const HELP_CONTENT = {
       whatItIs: "Copy history logs what was copied and when, separate from the clipboard watcher.",
       howTo: [
         "Click \"Copy history\" to open the journal.",
-        "Search, filter by type or colour, or star a favourite from the list.",
+        "Search, filter by type or color, or star a favorite from the list.",
         "Delete a single row, or clear the whole history.",
       ],
       whatHappens: "Grouped view shows one row per tile (its most recent copy) instead of every event. History older than the retention setting is dropped automatically.",
@@ -326,7 +326,7 @@ export const HELP_CONTENT = {
     {
       section: "system",
       title: "System",
-      whatItIs: "System settings cover app-level behaviour that is not about any single tile.",
+      whatItIs: "System settings cover app-level behavior that is not about any single tile.",
       howTo: ["Open the expert menu's System group for updates, navigation, instances, and the data folder."],
       whatHappens:
         "Update checks are on by default and never install anything without asking first. Changing the data folder migrates the existing database there. Allowing multiple instances takes a restart to apply. Pointing the data folder at a cloud-synced folder shows a one-time warning. A small lock file then tracks which computer uses the database: a second computer that finds a fresh lock from another one opens everything read-only and says so in a banner, while a lock nobody refreshed for a while is taken over. Long jobs can fill the taskbar icon as a progress bar and show an estimate of the time left.",
@@ -373,7 +373,7 @@ export const HELP_CONTENT = {
         "A view is one grid page with its own size and arrangement.",
       howTo: [
         "Click plus next to the view tabs to add a view.",
-        "Right-click a tab to rename, resize, recolour, or delete it.",
+        "Right-click a tab to rename, resize, recolor, or delete it.",
         "Drag one view tab onto another to merge them into a group.",
         "Move a tab with \"move further left\" or \"move further right\" in its menu, or drop it on the outer edge of another tab; dropping it in the middle groups them instead.",
       ],
@@ -383,11 +383,11 @@ export const HELP_CONTENT = {
     {
       section: "look",
       title: "Standalone: Theme editor",
-      whatItIs: "The theme editor adjusts any built-in theme's colours and saves the result as a new theme.",
+      whatItIs: "The theme editor adjusts any built-in theme's colors and saves the result as a new theme.",
       howTo: [
-        "Open the theme editor: Expert menu → Appearance → Global colour palette.",
+        "Open the theme editor: Expert menu → Appearance → Global color palette.",
         "Custom themes must be on, which they are by default.",
-        "Pick a base theme, adjust colours, and save under a new name.",
+        "Pick a base theme, adjust colors, and save under a new name.",
       ],
       whatHappens: "A custom theme appears in the regular theme dropdown alongside the built-ins; deleting it does not affect the theme it was based on.",
       settings: [],
@@ -426,7 +426,7 @@ export const HELP_CONTENT = {
       settings: [
         "Global hotkey, all hotkeys: Settings",
         "Per-tile hotkeys, paste-after-copy: Expert menu → Features → Copying",
-        "Hotkey badge, badge opacity: Expert menu → Buttons → Tiles",
+        "Hotkey badge, badge opacity: Expert menu → Tiles → Tiles",
       ],
     },
     {
@@ -478,7 +478,7 @@ export const HELP_CONTENT = {
         "Confirm to actually import, or cancel and nothing changes.",
         "\"Import folder\" in Settings turns a folder of .md or .txt files into tiles, one per file, after a preview with a checkbox per file.",
       ],
-      whatHappens: "CSV and TXT round-trip text alone; JSON also carries a rotating tile's full entry list, tags, notes, hotkey, and colour, none of which fit cleanly into the other two. Images, files, layout, and settings need the full backup format instead. Import decides CSV or JSON by the file's own content, never its extension. A folder import only reads: nothing is moved or deleted. The file name becomes the name, each sub-folder becomes a tag, and an unreadable file is grayed out with the reason.",
+      whatHappens: "CSV and TXT round-trip text alone; JSON also carries a rotating tile's full entry list, tags, notes, hotkey, and color, none of which fit cleanly into the other two. Images, files, layout, and settings need the full backup format instead. Import decides CSV or JSON by the file's own content, never its extension. A folder import only reads: nothing is moved or deleted. The file name becomes the name, each sub-folder becomes a tag, and an unreadable file is grayed out with the reason.",
       settings: ["Import and export: Expert menu → System & data → Data & maintenance", "Folder import depth and file limit: Expert menu → System & data → Data & maintenance"],
     },
     {
@@ -551,7 +551,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "MP4 (H.264) is always what gets written while recording; three quality steps (Small/High/Lossless) trade file size for detail, and a format setting can turn the result into WebM, AVI, MOV, MKV, animated WebP or APNG afterward (the last three carry no audio and are capped at 30 seconds). Anything other than plain MP4, or the Lossless step, needs ffmpeg (a separate download, offered inline when missing); a failed or cancelled conversion always falls back to the untouched original recording. System audio and microphone audio both record on by default, each into its own track: the microphone track is captured but not mixed in audibly until you bring it in yourself from the video editor; unplugging the microphone mid-recording keeps picture and system audio going and just marks that track as lost. The control bar's two audio buttons can mute either source instantly while recording without dropping its track: a muted source keeps recording silence and can be unmuted again in the same recording. Save and Copy share one recording folder; Edit opens the clip in the video editor without deciding its fate, so closing the dialog afterward without saving or copying still discards the file. Dragging the bar itself (not its buttons) moves it anywhere, including onto another monitor, and stops it following the recorded window for the rest of that one recording; the next recording starts following again, and the bar is otherwise never part of the recording. If the recorded window closes on its own, the recording stops automatically and keeps what was captured so far. A recording that never reached its own stop path (a crash, a forced shutdown) is removed automatically once it clears a grace period, so a just-stopped recording that is still finalising is never touched. The recording folder's row in the expert menu shows how many videos are in it and how much space they use, with a \"Clean up…\" button that lists files older than 7, 30 or 90 days and the space they would free before deleting anything; nothing is removed without that confirmation. An optional keys overlay records which keys are pressed while a recording runs, as key identifiers and timestamps only, never any text; it shows every key by default, including typed text, and skips a password field when Windows reports it as such, though this is not guaranteed. A \"Shortcuts only\" switch restricts capture to combinations with Ctrl, Alt or Win plus Enter, Tab, Esc, Backspace, Delete, Insert, arrows, Home, End, Page Up, Page Down and F keys, for a recording with confidential input. The same cleanup dialog has a checkbox per file: \"Export selected\" converts every checked recording in one go, to a chosen format, quality and folder, and reports how many finished.",
-      settings: ["Screen recording, cursor, countdown, audio sources and device, bitrate, quality, format, recording folder and cleanup, stop/pause hotkeys, tray entries, auto-remove broken recordings, keys overlay: Expert menu → Capture → Screen recording", "Frame around a recorded region, its colour: Expert menu → Capture → Screen recording"],
+      settings: ["Screen recording, cursor, countdown, audio sources and device, bitrate, quality, format, recording folder and cleanup, stop/pause hotkeys, tray entries, auto-remove broken recordings, keys overlay: Expert menu → Capture → Screen recording", "Frame around a recorded region, its color: Expert menu → Capture → Screen recording"],
     },
     {
       section: "basics",
@@ -600,10 +600,10 @@ export const HELP_CONTENT = {
       section: "basics",
       title: "Voice dictation",
       id: "voiceDictation",
-      whatItIs: "The microphone button {icon:mic} turns speech into text, recognised entirely on-device.",
+      whatItIs: "The microphone button {icon:mic} turns speech into text, recognized entirely on-device.",
       howTo: [
         "Click the microphone icon next to the composer, or in a tile's editor.",
-        "Speak; the text appears as it is recognised.",
+        "Speak; the text appears as it is recognized.",
         "Click the icon again, press Escape, or save/close to stop.",
       ],
       whatHappens:
@@ -625,18 +625,18 @@ export const HELP_CONTENT = {
     },
     {
       section: "basics",
-      title: "Colour picker & pick history",
+      title: "Color picker & pick history",
       id: "colorPicker",
-      whatItIs: "The colour picker is a pipette that reads any on-screen pixel as hex, RGB, or HSL.",
+      whatItIs: "The color picker is a pipette that reads any on-screen pixel as hex, RGB, or HSL.",
       howTo: [
         "Click the pipette icon in the composer bar.",
         "Move the loupe to the pixel wanted; scroll or use plus/minus to zoom.",
-        "Click to copy the colour; right-click the pipette icon to reopen the last few picks.",
+        "Click to copy the color; right-click the pipette icon to reopen the last few picks.",
       ],
       whatHappens:
-        "Nothing is ever saved to a tile automatically; a pick only reaches the clipboard. The pick history holds the last few colours and survives a restart, capped by its own setting.",
-      settings: ["Colour picker, zoom, format, pick-history length: Expert menu → Capture → Colour picker"],
-      tip: "Pick a colour format (hex, RGB, or HSL) from the toast that appears right after a pick.",
+        "Nothing is ever saved to a tile automatically; a pick only reaches the clipboard. The pick history holds the last few colors and survives a restart, capped by its own setting.",
+      settings: ["Color picker, zoom, format, pick-history length: Expert menu → Capture → Color picker"],
+      tip: "Pick a color format (hex, RGB, or HSL) from the toast that appears right after a pick.",
     },
     {
       section: "basics",
@@ -766,12 +766,12 @@ export const HELP_CONTENT = {
       title: "Erste Schritte",
       whatItIs: "Eine Kachel ist ein gespeicherter Eintrag im Raster; ein Klick darauf kopiert ihren Text in die Zwischenablage.",
       howTo: [
-        "Doppelklick auf eine leere Rasterzelle oder den Plus-Button erstellt eine Kachel.",
+        "Doppelklick auf eine leere Rasterzelle oder die Plus-Schaltfläche erstellt eine Kachel.",
         "Text eingeben oder einfügen, dann Speichern.",
         "Klick auf eine beliebige Kachel kopiert sie.",
       ],
       whatHappens:
-        "Drei Beispielkacheln sind beim ersten Start bereits da: eine E-Mail mit Platzhaltern, ein Bild und eine Markdown-Vorlage. Ein Button über dem Raster entfernt sie mit einem Klick, sobald sie nicht mehr gebraucht werden.",
+        "Drei Beispielkacheln sind beim ersten Start bereits da: eine E-Mail mit Platzhaltern, ein Bild und eine Markdown-Vorlage. Eine Schaltfläche über dem Raster entfernt sie mit einem Klick, sobald sie nicht mehr gebraucht werden.",
       settings: [],
     },
     {
@@ -812,12 +812,12 @@ export const HELP_CONTENT = {
         "Ziehen und Ablegen: eine Datei oder ein Bild direkt auf das Raster ziehen.",
       ],
       whatHappens: "Die angehängte Datei, der Screenshot oder die Farbe wird zum Inhalt der Kachel; ein späteres Kopieren liefert diese Datei, dieses Bild oder diese Farbe, nie Text. Ein Anhang aus reinem Text, Markdown, JSON oder CSV zeigt seine ersten Zeilen direkt im Editor unter der Dateizeile, immer als reiner Text.",
-      settings: ["Dateianhang, Kopie einer angehängten Datei behalten und mit der Kachel löschen, Textvorschau für Anhänge, Einfügen, Ziehen und Ablegen: Experten-Menü → Funktionen → Anhänge und Eingabe", "Screenshot-Tool: Experten-Menü → Aufnehmen → Bildschirmfoto", "Farbpipette: Experten-Menü → Aufnehmen → Farbwähler"],
+      settings: ["Dateianhang, Kopie einer angehängten Datei behalten und mit der Kachel löschen, Textvorschau für Anhänge, Einfügen, Ziehen und Ablegen: Experten-Menü → Funktionen → Anhänge und Eingabe", "Screenshot-Tool: Experten-Menü → Aufnehmen → Screenshot", "Farbpipette: Experten-Menü → Aufnehmen → Farbpipette"],
       tip: "Farbformat (Hex, RGB oder HSL) im Hinweis wählen, der direkt nach der Auswahl erscheint.",
     },
     {
       section: "basics",
-      title: "Variablen & Platzhalter",
+      title: "Platzhalter",
       whatItIs:
         "Platzhalter-Markup im Text einer Kachel öffnet ein Ausfüll-Popup, bevor der fertige Text die Zwischenablage erreicht.",
       howTo: [
@@ -828,7 +828,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Nur der ausgefüllte Text erreicht die Zwischenablage; das rohe {#{...}#}-Markup wird nie kopiert. Ein dynamischer Platzhalter (Datum, Uhrzeit, Zwischenablage, UUID) nutzt eine eigene Schreibweise, {#{/date\\}#}, und füllt sich ganz ohne Popup selbst aus. Das Popup kann sich den zuletzt eingetippten Wert eines Platzhalters merken und ihn wieder anbieten. Eine Liste fester Werte im Experten-Menü wird für einen gleichnamigen Platzhalter vorgeschlagen; sie wird immer nur vorgeschlagen, nie von selbst eingesetzt.",
-      settings: ["Dynamische Platzhalter, Auswahl-Platzhalter, Auswahl merken, eingetippte Werte merken, Liste fester Werte, Datums- und Zeitformat, Popup im eigenen Fenster: Experten-Menü → Funktionen → Variablen"],
+      settings: ["Dynamische Platzhalter, Auswahl-Platzhalter, Auswahl merken, eingetippte Werte merken, Liste fester Werte, Datums- und Zeitformat, Popup im eigenen Fenster: Experten-Menü → Funktionen → Platzhalter"],
       sketches: ["placeholderAnatomy"],
     },
     {
@@ -860,14 +860,14 @@ export const HELP_CONTENT = {
     },
     {
       section: "alwaysOnTop",
-      title: "Schwebende Buttons",
-      whatItIs: "Schwebende Buttons sind kleine, immer im Vordergrund liegende Kopier-Buttons außerhalb des Hauptfensters, über jeder anderen App.",
+      title: "Schwebende Schaltflächen",
+      whatItIs: "Schwebende Schaltflächen sind kleine, immer im Vordergrund liegende Kopier-Schaltflächen außerhalb des Hauptfensters, über jeder anderen App.",
       howTo: [
         "Rechtsklick auf eine Kachel, dann \"Schwebenden Button umschalten\", um sie als Pille anzuheften.",
         "Die Pille ziehen, um sie zu bewegen; Rechtsklick für Größe, Bearbeiten oder Entfernen.",
       ],
-      whatHappens: "Positionen bleiben nach Neustarts erhalten. Ein Button, dessen gespeicherter Bildschirm nicht mehr angeschlossen ist, öffnet sich auf dem Hauptbildschirm, als geparkt markiert, und springt von selbst zurück, sobald dieser Bildschirm wieder da ist. Eine Aktion im Experten-Menü holt alle schwebenden Fenster auf einmal auf den Hauptbildschirm.",
-      settings: ["Schwebende Buttons: Experten-Menü → Funktionen → Schwebende Buttons & Ordner", "Buttons parken, wenn ihr Bildschirm fehlt, lange geparkte ausblenden, alle zurückholen: Experten-Menü → Funktionen → Schwebende Buttons & Ordner"],
+      whatHappens: "Positionen bleiben nach Neustarts erhalten. Eine Schaltfläche, dessen gespeicherter Bildschirm nicht mehr angeschlossen ist, öffnet sich auf dem Hauptbildschirm, als geparkt markiert, und springt von selbst zurück, sobald dieser Bildschirm wieder da ist. Eine Aktion im Experten-Menü holt alle schwebenden Fenster auf einmal auf den Hauptbildschirm.",
+      settings: ["Schwebende Schaltflächen: Experten-Menü → Funktionen → Schwebende Buttons & Ordner", "Schaltflächen parken, wenn ihr Bildschirm fehlt, lange geparkte ausblenden, alle zurückholen: Experten-Menü → Funktionen → Schwebende Buttons & Ordner"],
     },
     {
       section: "alwaysOnTop",
@@ -875,7 +875,7 @@ export const HELP_CONTENT = {
       whatItIs: "Dieselbe Geste gruppiert an drei Stellen: ein Element auf ein gleichartiges ziehen, um es in einen Ordner aufzunehmen.",
       howTo: [
         "Einen Ansichts-Tab auf einen anderen ziehen, um einen Gruppen-Tab zu bilden.",
-        "Einen schwebenden Button auf einen anderen ziehen, um einen Pillen-Ordner zu bilden.",
+        "Eine schwebende Schaltfläche auf einen anderen ziehen, um einen Pillen-Ordner zu bilden.",
         "Im Hauptfenster eine Kachel auf eine andere ziehen, um einen Raster-Ordner zu bilden.",
         "Ein Mitglied wieder herausziehen, um es freizugeben.",
       ],
@@ -887,11 +887,11 @@ export const HELP_CONTENT = {
     },
     {
       section: "alwaysOnTop",
-      title: "Taskleistenmenü",
-      whatItIs: "Das Rechtsklick-Menü des Taskleisten-Icons bietet schnellen Zugriff, ohne das Hauptfenster zu öffnen.",
-      howTo: ["Rechtsklick auf das Taskleisten-Icon.", "Einen Eintrag aus \"Zuletzt kopiert\" oder \"Favoriten\" wählen, um ihn sofort zu kopieren."],
-      whatHappens: "Das Menü kopiert direkt aus der Taskleiste; das Hauptfenster muss dafür nicht geöffnet werden. Das Menü erscheint als abgerundetes Fenster im Theme der App; ausgeschaltet kommt das schlichte Windows-Menü. Eine optionale Suchzeile oben filtert beim Tippen alle Kacheln, nicht nur die aufgelisteten.",
-      settings: ["Taskleistenmenü im Windows-11-Stil, Suchfeld, Bereich für zuletzt Kopiertes, Bereich für Favoriten, Anzahl der Einträge, Länge der Beschriftung: Experten-Menü → Funktionen → Taskleistenmenü"],
+      title: "Infobereich-Menü",
+      whatItIs: "Das Rechtsklick-Menü des Infobereich-Symbols bietet schnellen Zugriff, ohne das Hauptfenster zu öffnen.",
+      howTo: ["Rechtsklick auf das Infobereich-Symbol.", "Einen Eintrag aus \"Zuletzt kopiert\" oder \"Favoriten\" wählen, um ihn sofort zu kopieren."],
+      whatHappens: "Das Menü kopiert direkt aus dem Infobereich; das Hauptfenster muss dafür nicht geöffnet werden. Das Menü erscheint als abgerundetes Fenster im Theme der App; ausgeschaltet kommt das schlichte Windows-Menü. Eine optionale Suchzeile oben filtert beim Tippen alle Kacheln, nicht nur die aufgelisteten.",
+      settings: ["Infobereich-Menü im Windows-11-Stil, Suchfeld, Bereich für zuletzt Kopiertes, Bereich für Favoriten, Anzahl der Einträge, Länge der Beschriftung: Experten-Menü → Funktionen → Infobereich-Menü"],
     },
     {
       section: "copying",
@@ -919,8 +919,8 @@ export const HELP_CONTENT = {
       ],
       whatHappens: "Das sind nur Interaktion und Optik; nichts davon ändert, was eine Kachel kopiert.",
       settings: [
-        "Kachel-Menü, Drag-to-Reorder, Hover-Lift: Experten-Menü → Schaltflächen → Kacheln",
-        "Typ-Badges, Schatten, Farbverläufe, abgerundete Ecken, fetter, großgeschriebener oder dicktengleicher Text: Experten-Menü → Schaltflächen → Kachel-Aussehen",
+        "Kachel-Menü, Drag-to-Reorder, Hover-Lift: Experten-Menü → Kacheln → Kacheln",
+        "Typ-Badges, Schatten, Farbverläufe, abgerundete Ecken, fetter, großgeschriebener oder dicktengleicher Text: Experten-Menü → Kacheln → Kachel-Aussehen",
       ],
     },
     {
@@ -932,7 +932,7 @@ export const HELP_CONTENT = {
         "Verzögerung, automatisches Ausblenden oder Breite im Experten-Menü anpassen, falls der Standard nicht passt.",
       ],
       whatHappens: "Der Tooltip blendet sich nach seinem Timeout automatisch aus, selbst wenn die Maus stehen bleibt.",
-      settings: ["Verzögerung vor Anzeige, automatisches Ausblenden, Tooltip-Breite: Experten-Menü → Schaltflächen → Tooltips"],
+      settings: ["Verzögerung vor Anzeige, automatisches Ausblenden, Tooltip-Breite: Experten-Menü → Kacheln → Tooltips"],
     },
     {
       section: "organising",
@@ -940,7 +940,7 @@ export const HELP_CONTENT = {
       whatItIs: "Ein Stern markiert eine Kachel als Favorit für schnellen späteren Zugriff.",
       howTo: ["Auf den Stern einer Kachel klicken, oder \"Favorisieren\" in ihrem Menü nutzen.", "Die eigene Favoriten-Ansicht öffnen, um nur markierte Kacheln zu sehen."],
       whatHappens: "Favoriten erhalten ihre eigene sortierbare Ansicht, unabhängig davon, wo die Kachel sonst liegt.",
-      settings: ["Favoriten-Ansicht, eigene Sortierung: Experten-Menü → Schaltflächen → Favoriten"],
+      settings: ["Favoriten-Ansicht, eigene Sortierung: Experten-Menü → Kacheln → Favoriten"],
     },
     {
       section: "look",
@@ -956,15 +956,15 @@ export const HELP_CONTENT = {
       whatItIs: "Acht integrierte Themes decken System, Hell, Dunkel und fünf Akzent-Varianten ab.",
       howTo: ["Ein Theme in den Einstellungen wählen.", "Den Theme-Editor, sobald aktiviert, öffnen, um Farben eines Themes anzupassen und ein eigenes zu speichern."],
       whatHappens: "\"System\" folgt live der Hell-/Dunkel-Einstellung des Betriebssystems. Ein benutzerdefiniertes Theme wird separat gespeichert; das integrierte, auf dem es basierte, bleibt unangetastet.",
-      settings: ["Theme-Wahl: Einstellungen", "Theme-Editor: Experten-Menü → Aussehen → Globale Farbauswahl", "Kopfzeile in Akzentfarbe, milchige Dialoge, versteckte oder eingefärbte Scrollbalken, weiches Scrollen: Experten-Menü → Aussehen → Visuell"],
-      tip: "Benutzerdefinierte Themes sind ab Werk an; werden sie im Experten-Menü ausgeschaltet, verschwindet auch der Editor-Button {icon:themeEditor}.",
+      settings: ["Theme-Wahl: Einstellungen", "Theme-Editor: Experten-Menü → Aussehen → Globale Farbpalette", "Kopfzeile in Akzentfarbe, milchige Dialoge, versteckte oder eingefärbte Scrollbalken, weiches Scrollen: Experten-Menü → Aussehen → Visuell"],
+      tip: "Benutzerdefinierte Themes sind ab Werk an; werden sie im Experten-Menü ausgeschaltet, verschwindet auch die Editor-Schaltfläche {icon:themeEditor}.",
     },
     {
       section: "organising",
       title: "Bibliothek & Suche",
       whatItIs: "Die Bibliothek listet jede Kachel als durchsuchbare, filterbare Liste, anders als das Raster, das nur zeigt, was passt.",
       howTo: [
-        "Klick auf den Bibliothek-Button {icon:library} in der Werkzeugleiste öffnet sie.",
+        "Klick auf die Bibliothek-Schaltfläche {icon:library} in der Werkzeugleiste öffnet sie.",
         "Tippen zum Suchen, oder Typ- und Farb-Filter zum Eingrenzen der Liste nutzen.",
         "Klick auf eine Zeile zum Kopieren.",
         "Das Menü zum Bearbeiten, auf das Raster Ziehen, Taggen oder Löschen nutzen.",
@@ -1039,9 +1039,9 @@ export const HELP_CONTENT = {
     {
       section: "look",
       title: "Werkzeugleiste",
-      whatItIs: "Die Werkzeugleiste bestimmt, welche Buttons der Kopfbereich und die Composer-Leiste zeigen.",
+      whatItIs: "Die Werkzeugleiste bestimmt, welche Schaltflächen der Kopfbereich und die Composer-Leiste zeigen.",
       howTo: ["Rechtsklick auf den Kopfbereich für eine schnelle Umschaltliste, oder das Experten-Menü für das komplette Set nutzen."],
-      whatHappens: "Das Ausblenden eines Buttons blendet ihn nur aus; die dahinterliegende Funktion funktioniert weiterhin über ihren eigenen Hotkey oder Menüeintrag.",
+      whatHappens: "Das Ausblenden einer Schaltfläche blendet sie nur aus; die dahinterliegende Funktion funktioniert weiterhin über ihren eigenen Hotkey oder Menüeintrag.",
       settings: ["Anheft-Schaltfläche, Bibliothek- und Verlauf-Schaltflächen, Logo, Titel, Trennlinien, Schaltflächen zum Einklappen der Leisten: Experten-Menü → System & Daten → Werkzeugleiste", "Die ganze Leiste bis zum Hovern abdunkeln, Schaltflächen abgeschalteter Funktionen sichtbar lassen: Experten-Menü → System & Daten → Werkzeugleiste", "Schnelle Rastergrößen-Steuerung und sie erst beim Hovern zeigen, mehrere Ansichten, Ansichtsgruppen: Experten-Menü → Funktionen → Ansichten und Schnellraster"],
     },
     {
@@ -1092,18 +1092,18 @@ export const HELP_CONTENT = {
     },
     {
       section: "system",
-      title: "Eigenständig: Backup-Manager",
-      whatItIs: "Der Backup-Manager erstellt verschlüsselte, komprimierte Snapshots der gesamten Bibliothek und Einstellungen.",
+      title: "Eigenständig: Sicherungsverwaltung",
+      whatItIs: "Die Sicherungsverwaltung erstellt verschlüsselte, komprimierte Snapshots der gesamten Bibliothek und Einstellungen.",
       howTo: [
-        "Den Backup-Manager in den Einstellungen öffnen.",
-        "Automatische Backups aktivieren und ein Intervall wählen, oder manuell eines erstellen.",
+        "Die Sicherungsverwaltung in den Einstellungen öffnen.",
+        "Automatische Sicherungen aktivieren und ein Intervall wählen, oder manuell eines erstellen.",
         "Aus der Snapshot-Liste wiederherstellen und dabei nur Daten, nur Einstellungen oder beides wählen.",
       ],
       whatHappens:
-        "Aufbewahrungsstufen (täglich, wöchentlich, monatlich, jährlich) dünnen ältere Snapshots automatisch aus, statt jeden für immer zu behalten. Ein Backup ist entweder vollständig oder gar nicht vorhanden; ein fehlgeschlagenes hinterlässt nichts. Dasselbe Fenster enthält außerdem eine Nutzungsstatistik (Gesamtzahlen, ein 14-Tage-Diagramm, meistgenutzte Kacheln, meistgenutzte Werkzeuge mit einer Liste der nie benutzten), unabhängig von den Backups selbst, dazu einen Speicherüberblick, was auf der Festplatte wie viel Platz belegt. Jeder Snapshot kann seinen Inhalt zeigen: Anzahlen, die jüngste Änderung darin, die Version, die ihn erstellt hat, und jede enthaltene Kachel, durchsuchbar und sortierbar, mit einer Schaltfläche, die eine einzelne Kachel wiederherstellt. Die Statistik lässt sich als CSV, TXT oder JSON speichern. Je eine Zeile pro Art aufbewahrter Daten (Papierkorb, Kopierverlauf, Zwischenablage-Eingang, Aufnahmen, temporäre Exporte, Bearbeitungsstände) zeigt, wie viel sie enthält und wie lange sie bleibt, springt zu ihrer Einstellung und kann sie sofort aufräumen.",
+        "Aufbewahrungsstufen (täglich, wöchentlich, monatlich, jährlich) dünnen ältere Snapshots automatisch aus, statt jeden für immer zu behalten. Eine Sicherung ist entweder vollständig oder gar nicht vorhanden; ein fehlgeschlagenes hinterlässt nichts. Dasselbe Fenster enthält außerdem eine Nutzungsstatistik (Gesamtzahlen, ein 14-Tage-Diagramm, meistgenutzte Kacheln, meistgenutzte Werkzeuge mit einer Liste der nie benutzten), unabhängig von den Sicherungen selbst, dazu einen Speicherüberblick, was auf der Festplatte wie viel Platz belegt. Jeder Snapshot kann seinen Inhalt zeigen: Anzahlen, die jüngste Änderung darin, die Version, die ihn erstellt hat, und jede enthaltene Kachel, durchsuchbar und sortierbar, mit einer Schaltfläche, die eine einzelne Kachel wiederherstellt. Die Statistik lässt sich als CSV, TXT oder JSON speichern. Je eine Zeile pro Art aufbewahrter Daten (Papierkorb, Kopierverlauf, Zwischenablage-Eingang, Aufnahmen, temporäre Exporte, Bearbeitungsstände) zeigt, wie viel sie enthält und wie lange sie bleibt, springt zu ihrer Einstellung und kann sie sofort aufräumen.",
       settings: [
-        "Intervall, Aufbewahrungsstufen, Passwort, Wiederherstellungsumfang: Backup-Manager (eigenes Fenster, geöffnet aus Einstellungen)",
-        "Nutzungsstatistiken, wie viele Kacheln dort gelistet werden: selbes Fenster, unter den Backups",
+        "Intervall, Aufbewahrungsstufen, Passwort, Wiederherstellungsumfang: Sicherungsverwaltung (eigenes Fenster, geöffnet aus Einstellungen)",
+        "Nutzungsstatistiken, wie viele Kacheln dort gelistet werden: selbes Fenster, unter den Sicherungen",
       ],
     },
     {
@@ -1134,7 +1134,7 @@ export const HELP_CONTENT = {
       title: "Eigenständig: Theme-Editor",
       whatItIs: "Der Theme-Editor passt die Farben eines beliebigen integrierten Themes an und speichert das Ergebnis als neues Theme.",
       howTo: [
-        "Den Theme-Editor öffnen: Experten-Menü → Aussehen → Globale Farbauswahl.",
+        "Den Theme-Editor öffnen: Experten-Menü → Aussehen → Globale Farbpalette.",
         "Benutzerdefinierte Themes müssen an sein, was ab Werk der Fall ist.",
         "Ein Basis-Theme wählen, Farben anpassen und unter neuem Namen speichern.",
       ],
@@ -1171,11 +1171,11 @@ export const HELP_CONTENT = {
         "Ist eine Kombination bereits vergeben, erklärt das Feld den Grund, statt sie stillschweigend zu akzeptieren.",
       ],
       whatHappens:
-        "Eine Kombination muss Strg oder Alt enthalten; Shift allein oder eine bloße Taste wird abgelehnt, damit normales Tippen nie verschluckt wird. Der App-Hotkey gewinnt bei einem Konflikt immer; bei Kacheln behält die erste in der Liste eine geteilte Kombination. Der Import eines Backups mit kollidierendem Hotkey verwirft den verlierenden, statt den Import abzubrechen, und die Zusammenfassung nennt die Anzahl der verworfenen. Eine Kachel mit eigenem Hotkey zeigt ein kleines Tastatursymbol.",
+        "Eine Kombination muss Strg oder Alt enthalten; Shift allein oder eine bloße Taste wird abgelehnt, damit normales Tippen nie verschluckt wird. Der App-Hotkey gewinnt bei einem Konflikt immer; bei Kacheln behält die erste in der Liste eine geteilte Kombination. Der Import einer Sicherung mit kollidierendem Hotkey verwirft den verlierenden, statt den Import abzubrechen, und die Zusammenfassung nennt die Anzahl der verworfenen. Eine Kachel mit eigenem Hotkey zeigt ein kleines Tastatursymbol.",
       settings: [
         "Globaler Hotkey, alle Hotkeys: Einstellungen",
         "Eigene Hotkeys pro Kachel, Einfügen nach Kopieren: Experten-Menü → Funktionen → Kopieren",
-        "Hotkey-Abzeichen, Deckkraft des Abzeichens: Experten-Menü → Schaltflächen → Kacheln",
+        "Hotkey-Abzeichen, Deckkraft des Abzeichens: Experten-Menü → Kacheln → Kacheln",
       ],
     },
     {
@@ -1183,12 +1183,12 @@ export const HELP_CONTENT = {
       title: "Papierkorb & Kacheln wiederherstellen",
       whatItIs: "Eine gelöschte Kachel wandert zuerst in den Papierkorb, nicht direkt in die endgültige Löschung.",
       howTo: [
-        "Eine Kachel wie gewohnt löschen: ein zweiter Klick auf den Löschen-Button bestätigt es.",
+        "Eine Kachel wie gewohnt löschen: ein zweiter Klick auf die Löschen-Schaltfläche bestätigt es.",
         "Den Papierkorb aus der Daten-Gruppe des Experten-Menüs öffnen.",
         "Eine Kachel dort wiederherstellen oder sie durch die Aufbewahrungsdauer automatisch löschen lassen.",
       ],
       whatHappens:
-        "Die Aufbewahrungsdauer wird in Tagen festgelegt; null bedeutet für immer behalten. Das Wiederherstellen platziert die Kachel in die erste freie Zelle der aktiven Ansicht, nicht zwingend die ursprüngliche Ansicht oder Zelle, und bringt weder schwebenden Button noch Ordner-Mitgliedschaft oder Hotkey von vorher zurück; die müssen neu eingerichtet werden.",
+        "Die Aufbewahrungsdauer wird in Tagen festgelegt; null bedeutet für immer behalten. Das Wiederherstellen platziert die Kachel in die erste freie Zelle der aktiven Ansicht, nicht zwingend die ursprüngliche Ansicht oder Zelle, und bringt weder schwebende Schaltfläche noch Ordner-Mitgliedschaft oder Hotkey von vorher zurück; die müssen neu eingerichtet werden.",
       settings: ["Papierkorb-Aufbewahrung: Experten-Menü → System & Daten → Daten & Wartung"],
     },
     {
@@ -1219,15 +1219,15 @@ export const HELP_CONTENT = {
     {
       section: "system",
       title: "Import & Export",
-      whatItIs: "Einfacher CSV-, TXT- oder JSON-Export deckt nur den Text ab; eine vollständige Backup-Datei deckt alles ab.",
+      whatItIs: "Einfacher CSV-, TXT- oder JSON-Export deckt nur den Text ab; eine vollständige Sicherungsdatei deckt alles ab.",
       howTo: [
         "Aus der Daten-Gruppe des Experten-Menüs exportieren oder importieren.",
         "Ein Format aus der Auswahl neben dem Export-Knopf wählen; ein CSV- oder JSON-Import zeigt zuerst Name und Duplikat-Status je Eintrag.",
-        "Ein vollständiges Backup stellt direkt wieder her, aus seinem eigenen Fenster.",
+        "Eine vollständige Sicherung stellt direkt wieder her, aus seinem eigenen Fenster.",
         "Zum tatsächlichen Import bestätigen, oder abbrechen, wodurch sich nichts ändert.",
         "\"Ordner importieren\" in den Einstellungen macht aus einem Ordner mit .md- oder .txt-Dateien Kacheln, eine pro Datei, nach einer Vorschau mit einem Häkchen pro Datei.",
       ],
-      whatHappens: "CSV und TXT transportieren nur Text; JSON trägt zusätzlich die volle Eintragsliste einer rotierenden Kachel, Tags, Notiz, Tastenkürzel und Farbe, die in den anderen beiden nicht sauber Platz finden. Bilder, Dateien, Layout und Einstellungen benötigen weiterhin das vollständige Backup-Format. Der Import entscheidet anhand des Dateiinhalts zwischen CSV und JSON, nie anhand der Endung. Ein Ordner-Import liest nur: Nichts wird verschoben oder gelöscht. Der Dateiname wird zum Namen, jeder Unterordner zum Tag, und eine unlesbare Datei erscheint ausgegraut mit dem Grund.",
+      whatHappens: "CSV und TXT transportieren nur Text; JSON trägt zusätzlich die volle Eintragsliste einer rotierenden Kachel, Tags, Notiz, Tastenkürzel und Farbe, die in den anderen beiden nicht sauber Platz finden. Bilder, Dateien, Layout und Einstellungen benötigen weiterhin das vollständige Sicherungsformat. Der Import entscheidet anhand des Dateiinhalts zwischen CSV und JSON, nie anhand der Endung. Ein Ordner-Import liest nur: Nichts wird verschoben oder gelöscht. Der Dateiname wird zum Namen, jeder Unterordner zum Tag, und eine unlesbare Datei erscheint ausgegraut mit dem Grund.",
       settings: ["Import und Export: Experten-Menü → System & Daten → Daten & Wartung", "Tiefe und Dateigrenze des Ordner-Imports: Experten-Menü → System & Daten → Daten & Wartung"],
     },
     {
@@ -1240,7 +1240,7 @@ export const HELP_CONTENT = {
         "Eine Kachel normal bearbeiten, oder ihre Markdown-Datei direkt bearbeiten; beide Richtungen bleiben synchron.",
       ],
       whatHappens:
-        "Anders als die Datenbank sind die Markdown-Dateien Klartext: wer Zugriff auf diesen Ordner hat, kann den Inhalt lesen; ein synchronisierter oder geteilter Ordner sollte deshalb für Sensibles vermieden werden. Eine Kachel mit angehängter Datei, Bild oder PDF wird als Verweis synchronisiert: Der Kopf trägt Pfad und PDF-Seite, nie die Datei selbst; der andere Rechner braucht also denselben Pfad, damit der Button dort funktioniert. Ein direkt eingefügter Screenshot hat gar keinen Pfad und bleibt nur in der Datenbank. Eine vertrauliche Kachel wird nie in den Ordner geschrieben, und eine Datei ändert nie eine vertrauliche Kachel. Eine Datei, deren Kachel im Papierkorb liegt, holt sie nicht als zweite Kachel zurück. Eine in einer eingehenden Datei genannte Ansicht oder ein Ordner, den es hier noch nicht gibt, wird automatisch angelegt, per Namensabgleich. Eine im Ordner gelöschte Datei löscht die Kachel nicht (sie wird im nächsten Durchlauf neu geschrieben); wer die Kachel in der App löscht, löscht auch ihre Datei. Der Dateiname ist die feste Kennung der Kachel, von Hand umbenennen erzeugt deshalb eine zweite Kachel statt einer umbenannten. Wurden Kachel und Datei gleichzeitig geändert, gewinnt in diesem Durchlauf die Datei, und die ersetzte Fassung bleibt in der Versionsgeschichte der Kachel; umgekehrt gewinnt die App die Datei, und deren Text bleibt als Konfliktkopie daneben liegen. Dateien, die diese App nicht geschrieben oder noch nie gesehen hat, werden nie geändert oder gelöscht, und eine Datei über 8 MB wird ganz übersprungen statt abgeschnitten. Ein Ordnerwechsel fragt, ob der alte Ordner gelöscht werden soll; gelöscht wird dabei nur, was diese App selbst geschrieben hat, nie ein Unterordner, und gar nichts, wenn etwas Fremdes darin liegt. Ein nicht erreichbarer Ordner pausiert die Synchronisierung nach einigen Fehlversuchen, statt endlos weiterzuversuchen.",
+        "Anders als die Datenbank sind die Markdown-Dateien Klartext: wer Zugriff auf diesen Ordner hat, kann den Inhalt lesen; ein synchronisierter oder geteilter Ordner sollte deshalb für Sensibles vermieden werden. Eine Kachel mit angehängter Datei, Bild oder PDF wird als Verweis synchronisiert: Der Kopf trägt Pfad und PDF-Seite, nie die Datei selbst; der andere Rechner braucht also denselben Pfad, damit die Schaltfläche dort funktioniert. Ein direkt eingefügter Screenshot hat gar keinen Pfad und bleibt nur in der Datenbank. Eine vertrauliche Kachel wird nie in den Ordner geschrieben, und eine Datei ändert nie eine vertrauliche Kachel. Eine Datei, deren Kachel im Papierkorb liegt, holt sie nicht als zweite Kachel zurück. Eine in einer eingehenden Datei genannte Ansicht oder ein Ordner, den es hier noch nicht gibt, wird automatisch angelegt, per Namensabgleich. Eine im Ordner gelöschte Datei löscht die Kachel nicht (sie wird im nächsten Durchlauf neu geschrieben); wer die Kachel in der App löscht, löscht auch ihre Datei. Der Dateiname ist die feste Kennung der Kachel, von Hand umbenennen erzeugt deshalb eine zweite Kachel statt einer umbenannten. Wurden Kachel und Datei gleichzeitig geändert, gewinnt in diesem Durchlauf die Datei, und die ersetzte Fassung bleibt in der Versionsgeschichte der Kachel; umgekehrt gewinnt die App die Datei, und deren Text bleibt als Konfliktkopie daneben liegen. Dateien, die diese App nicht geschrieben oder noch nie gesehen hat, werden nie geändert oder gelöscht, und eine Datei über 8 MB wird ganz übersprungen statt abgeschnitten. Ein Ordnerwechsel fragt, ob der alte Ordner gelöscht werden soll; gelöscht wird dabei nur, was diese App selbst geschrieben hat, nie ein Unterordner, und gar nichts, wenn etwas Fremdes darin liegt. Ein nicht erreichbarer Ordner pausiert die Synchronisierung nach einigen Fehlversuchen, statt endlos weiterzuversuchen.",
       settings: ["Ordner-Sync, Synchronisierungsordner, Abfragetakt, Pause nach Fehlversuchen: Experten-Menü → Funktionen → Prompt-Synchronisierung"],
       tip: "Dies ist eine Beta-Funktion: den Synchronisierungsordner nur dort ablegen, wo niemand Unbefugtes mitliest.",
     },
@@ -1255,7 +1255,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Die eigenen Fenster der App werden für den Moment der Aufnahme ausgeblendet, sodass sie nie im Bild landen. Das Ergebnis erreicht sofort die Zwischenablage; das Speichern als Kachel oder Datei ist ein separater, optionaler Schritt. Beim Speichern im Screenshots-Ordner wird nie eine vorhandene Datei ersetzt; die Aufnahme bekommt den nächsten freien Namen.",
-      settings: ["Screenshot-Tool, Speicherort, Format und Qualität, Vorschaugröße, Aufnahmeverzögerung: Experten-Menü → Aufnehmen → Bildschirmfoto", "Screenshots immer im Screenshots-Ordner speichern: Einstellungen"],
+      settings: ["Screenshot-Tool, Speicherort, Format und Qualität, Vorschaugröße, Aufnahmeverzögerung: Experten-Menü → Aufnehmen → Screenshot", "Screenshots immer im Screenshots-Ordner speichern: Einstellungen"],
     },
     {
       section: "basics",
@@ -1308,7 +1308,7 @@ export const HELP_CONTENT = {
       whatItIs: "Nimmt die Webcam in ein eigenes Video auf, allein oder neben einer Bildschirmaufnahme.",
       howTo: [
         "Die Kameraaufnahme im Experten-Menü einschalten.",
-        "Rechtsklick auf den Aufnahme-Schaltfläche {icon:record} und \"Kamera aufnehmen\" wählen.",
+        "Rechtsklick auf die Aufnahme-Schaltfläche {icon:record} und \"Kamera aufnehmen\" wählen.",
         "Im eigenen Fenster die Vorschau prüfen, Tonquelle, Auflösung und Ordner wählen, dann Start.",
       ],
       whatHappens:
@@ -1337,8 +1337,8 @@ export const HELP_CONTENT = {
       id: "ocr",
       whatItIs: "Liest mit der geräteeigenen Erkennung von Windows Text aus einem Screenshot oder einer Bilddatei. Das läuft vollständig offline und nichts verlässt das Gerät.",
       howTo: [
-        "Über die Eingabeleiste: der OCR-Button {icon:ocr} bietet einen Screenshot oder eine vorhandene Bilddatei an.",
-        "Bei einem bereits aufgenommenen Screenshot: über den Button „Text erkennen“ im Aufnahme-Dialog.",
+        "Über die Eingabeleiste: die OCR-Schaltfläche {icon:ocr} bietet einen Screenshot oder eine vorhandene Bilddatei an.",
+        "Bei einem bereits aufgenommenen Screenshot: über die Schaltfläche „Text erkennen“ im Aufnahme-Dialog.",
         "Das Ergebnis prüfen und anschließend kopieren oder direkt einfügen.",
       ],
       whatHappens:
@@ -1349,7 +1349,7 @@ export const HELP_CONTENT = {
       section: "basics",
       title: "Spracheingabe",
       id: "voiceDictation",
-      whatItIs: "Der Mikrofon-Button {icon:mic} verwandelt Sprache in Text. Die Erkennung läuft komplett auf dem Gerät.",
+      whatItIs: "Die Mikrofon-Schaltfläche {icon:mic} verwandelt Sprache in Text. Die Erkennung läuft komplett auf dem Gerät.",
       howTo: [
         "Auf das Mikrofon-Icon neben der Eingabeleiste klicken, oder im Editor einer Kachel.",
         "Sprechen; der Text erscheint, während er erkannt wird.",
@@ -1369,7 +1369,7 @@ export const HELP_CONTENT = {
         "„Sprachen verwalten…“ am unteren Rand des Sprach-Dropdowns öffnet denselben Dialog jederzeit erneut.",
       ],
       whatHappens:
-        "Bei manchen Windows-Versionen sind selbst zum Auflisten der installierten Pakete Administratorrechte erforderlich. In diesem Fall führt ein Button die Prüfung über dieselbe Administratorabfrage erneut aus. Eine Hintergrundüberwachung erkennt, wenn sich die Version eines installierten Pakets geändert hat oder ein Windows-Update es unbemerkt entfernt hat, und kennzeichnet es, ohne sofort zur Neuinstallation aufzufordern. Mit „Später erinnern“ lässt sich der Hinweis vorübergehend ausblenden; die Überwachung kann auch vollständig deaktiviert werden.",
+        "Bei manchen Windows-Versionen sind selbst zum Auflisten der installierten Pakete Administratorrechte erforderlich. In diesem Fall führt eine Schaltfläche die Prüfung über dieselbe Administratorabfrage erneut aus. Eine Hintergrundüberwachung erkennt, wenn sich die Version eines installierten Pakets geändert hat oder ein Windows-Update es unbemerkt entfernt hat, und kennzeichnet es, ohne sofort zur Neuinstallation aufzufordern. Mit „Später erinnern“ lässt sich der Hinweis vorübergehend ausblenden; die Überwachung kann auch vollständig deaktiviert werden.",
       settings: ["Erkennungssprache automatisch wählen, Hintergrundüberwachung für fehlende oder geänderte Pakete: Experten-Menü → Aufnehmen → Texterkennung, und noch einmal unter Experten-Menü → Funktionen → Diktat"],
     },
     {
@@ -1384,7 +1384,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Es wird nie automatisch etwas in einer Kachel gespeichert; eine Auswahl landet nur in der Zwischenablage. Der Auswahlverlauf hält die letzten paar Farben und übersteht einen Neustart, begrenzt durch eine eigene Einstellung.",
-      settings: ["Farbpipette, Zoom, Format, Länge des Auswahlverlaufs: Experten-Menü → Aufnehmen → Farbwähler"],
+      settings: ["Farbpipette, Zoom, Format, Länge des Auswahlverlaufs: Experten-Menü → Aufnehmen → Farbpipette"],
       tip: "Farbformat (Hex, RGB oder HSL) im Hinweis wählen, der direkt nach der Auswahl erscheint.",
     },
     {
@@ -1400,7 +1400,7 @@ export const HELP_CONTENT = {
         "Die Kachel wie gewohnt kopieren: sie liefert immer den nächsten Eintrag, ohne zu fragen, welchen.",
       ],
       whatHappens:
-        "Ein kleines Badge zählt auf einer Raster-Kachel, einer schwebenden Pille und einem Pillen-Ordner-Mitglied hoch, wie \"2/5\"; ein Raster-Ordner-Mitglied zeigt nur sein Dateityp-Icon, nicht dieses Badge. Im Reihenfolge-Modus ist das die absolute Position; im Zufalls-Modus zählt es die Ziehungen im aktuellen Durchlauf und beginnt wieder bei 1, sobald jeder Eintrag einmal drankam, statt auf eine beliebige Position zu springen. Der Zählerstand übersteht Neustarts und vollständige Backups; ein CSV/TXT-Import erstellt eine neue Kachel mit frischem Zeiger, sodass nur die Textliste und ihr Reihenfolge- oder Misch-Modus übernommen werden, nicht die genaue Position. Wird die Rotation bei einer Kachel mit mehreren Einträgen ausgeschaltet, bleiben alle erhalten; nur der erste wird genutzt, bis sie wieder aktiviert wird. Ein optionales Weiterschalten bringt eine wechselnde Kachel bei jedem echten Einfügen zum nächsten Eintrag, nicht nur beim Kopieren.",
+        "Ein kleines Badge zählt auf einer Raster-Kachel, einer schwebenden Pille und einem Pillen-Ordner-Mitglied hoch, wie \"2/5\"; ein Raster-Ordner-Mitglied zeigt nur sein Dateityp-Icon, nicht dieses Badge. Im Reihenfolge-Modus ist das die absolute Position; im Zufalls-Modus zählt es die Ziehungen im aktuellen Durchlauf und beginnt wieder bei 1, sobald jeder Eintrag einmal drankam, statt auf eine beliebige Position zu springen. Der Zählerstand übersteht Neustarts und vollständige Sicherungen; ein CSV/TXT-Import erstellt eine neue Kachel mit frischem Zeiger, sodass nur die Textliste und ihr Reihenfolge- oder Misch-Modus übernommen werden, nicht die genaue Position. Wird die Rotation bei einer Kachel mit mehreren Einträgen ausgeschaltet, bleiben alle erhalten; nur der erste wird genutzt, bis sie wieder aktiviert wird. Ein optionales Weiterschalten bringt eine wechselnde Kachel bei jedem echten Einfügen zum nächsten Eintrag, nicht nur beim Kopieren.",
       settings: ["Wechselnde Kacheln (standardmäßig an), Standard Reihenfolge oder Mischen, Badge, maximale Einträge, bei jedem Einfügen weiterschalten: Experten-Menü → Funktionen → Wechselnde Einträge. Der Schalter pro Kachel sitzt im Editor unter Erweiterten Optionen."],
     },
     {
@@ -1424,7 +1424,7 @@ export const HELP_CONTENT = {
       howTo: [
         "Die Tastaturnavigation ist ab Werk an; abschaltbar in Experten-Menü → System & Daten.",
         "Die Pfeiltasten bewegen den Fokusring, Enter oder Leertaste kopiert.",
-        "Tab springt wie gewohnt weiterhin durch Buttons und Felder überall sonst in der App.",
+        "Tab springt wie gewohnt weiterhin durch Schaltflächen und Felder überall sonst in der App.",
       ],
       whatHappens: "Der Fokusring blendet sich kurz nach Fokusverlust des Fensters aus, damit er nicht auf einer Kachel verweilt, sobald eine andere App genutzt wird.",
       settings: ["Tastaturnavigation, Ausblend-Verzögerung: Experten-Menü → System & Daten → System"],
