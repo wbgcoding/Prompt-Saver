@@ -24,6 +24,7 @@
 
 pub mod brand;
 mod camera;
+mod demo_text;
 mod cli;
 mod remote;
 mod remote_tls;
@@ -11950,7 +11951,16 @@ fn keep_machine_in_staged(target: &std::path::Path, staged: &std::path::Path) ->
         Ok(conn) => read_settings_row(&conn, "main"),
         Err(_) => None,
     };
-    let Some(local) = local else { return Ok(()) };
+    let Some(local) = local else {
+        // No settings on this machine yet: the snapshot still must not bring the
+        // denied switches along.
+        let conn = Connection::open(staged).map_err(|e| e.to_string())?;
+        if let Some(mut restored) = read_settings_row(&conn, "main") {
+            drop_machine_rows(&mut restored);
+            db_write_settings(&conn, &restored).map_err(|e| e.to_string())?;
+        }
+        return Ok(());
+    };
     let conn = Connection::open(staged).map_err(|e| e.to_string())?;
     if let Some(mut restored) = read_settings_row(&conn, "main") {
         keep_machine_settings(&local, &mut restored);
@@ -12010,10 +12020,20 @@ fn restore_selective(target: &std::path::Path, staged: &std::path::Path, scope: 
                  ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 [],
             )?;
-            if let (Some(local), Some(mut restored)) = (local, read_settings_row(&tx, "main")) {
-                keep_machine_settings(&local, &mut restored);
-                clear_vault_keys(&mut restored);
-                carry_vault_keys(&local, &mut restored);
+            if let Some(mut restored) = read_settings_row(&tx, "main") {
+                match local {
+                    Some(local) => {
+                        keep_machine_settings(&local, &mut restored);
+                        clear_vault_keys(&mut restored);
+                        carry_vault_keys(&local, &mut restored);
+                    }
+                    // No settings on this machine yet: nothing to keep, but the
+                    // denied rows still stay out and so do the vault keys.
+                    None => {
+                        drop_machine_rows(&mut restored);
+                        clear_vault_keys(&mut restored);
+                    }
+                }
                 db_write_settings(&tx, &restored)?;
             }
         }
@@ -17884,55 +17904,44 @@ fn demo_prompt(id: &str, name: &str, text: &str) -> Prompt {
 // placeholder, a favorite, two members of the sample folder, and (best
 // effort, skipped if ffmpeg is not on hand) a real attached video next to a
 // plain attached text file.
-fn demo_prompts(dir: &Path, ffmpeg: Option<&Path>) -> Vec<Prompt> {
+fn demo_prompts(dir: &Path, ffmpeg: Option<&Path>, lang: &str) -> Vec<Prompt> {
+    let d = demo_text::demo_text(lang);
     let mut list = vec![
         Prompt {
-            tags: vec!["Demo".to_string()],
-            ..demo_prompt(
-                "demo-welcome",
-                "Willkommen",
-                "Das hier ist ein Beispieleintrag im Vorführmodus. Ein Klick kopiert ihn wie jeden anderen.",
-            )
+            tags: vec![d.tag_demo.to_string()],
+            ..demo_prompt("demo-welcome", d.welcome_name, d.welcome_text)
         },
         Prompt {
             image: format!("data:image/png;base64,{DEMO_IMAGE_PNG_BASE64}"),
             show_image: true,
-            ..demo_prompt(
-                "demo-image",
-                "Bild-Kachel",
-                "Diese Kachel zeigt ein Bild statt ihres Namens.",
-            )
+            ..demo_prompt("demo-image", d.image_name, d.image_text)
         },
         Prompt {
-            variants: vec!["Guten Tag!".to_string(), "Guten Abend!".to_string()],
-            ..demo_prompt("demo-rotating", "Rotierender Gruß", "Guten Morgen!")
+            variants: vec![d.rotating_a.to_string(), d.rotating_b.to_string()],
+            ..demo_prompt("demo-rotating", d.rotating_name, d.rotating_text)
         },
-        demo_prompt(
-            "demo-placeholder",
-            "Persönliche Anrede",
-            "Hallo {#{Name}#}, vielen Dank für deine Nachricht.",
-        ),
+        demo_prompt("demo-placeholder", d.placeholder_name, d.placeholder_text),
         Prompt {
             favorite: true,
-            tags: vec!["Demo".to_string(), "Favorit".to_string()],
-            ..demo_prompt("demo-favorite", "Lieblingsprompt", "Ein favorisierter Beispieleintrag.")
+            tags: vec![d.tag_demo.to_string(), d.tag_favorite.to_string()],
+            ..demo_prompt("demo-favorite", d.favorite_name, d.favorite_text)
         },
-        demo_prompt("demo-chain-a", "Erster Baustein", "Der erste Teil einer möglichen Kette."),
-        demo_prompt("demo-chain-b", "Zweiter Baustein", "Der zweite Teil einer möglichen Kette."),
+        demo_prompt("demo-chain-a", d.chain_a_name, d.chain_a_text),
+        demo_prompt("demo-chain-b", d.chain_b_name, d.chain_b_text),
         Prompt {
             // Relative, not dir.join(...): an absolute path here would bake the
             // Windows account name (part of %APPDATA%) into a row shown in demo
             // mode's own screenshots. load_store() resolves it back to a real
             // path at read time.
-            file_path: "Anhang.txt".to_string(),
-            ..demo_prompt("demo-attachment", "Angehängte Datei", "")
+            file_path: d.attach_file.to_string(),
+            ..demo_prompt("demo-attachment", d.attach_name, "")
         },
-        demo_prompt("demo-folder-a", "Ordner-Eintrag 1", "Erster Eintrag im Beispielordner."),
-        demo_prompt("demo-folder-b", "Ordner-Eintrag 2", "Zweiter Eintrag im Beispielordner."),
+        demo_prompt("demo-folder-a", d.folder_a_name, d.folder_a_text),
+        demo_prompt("demo-folder-b", d.folder_b_name, d.folder_b_text),
     ];
-    let _ = fs::write(dir.join("Anhang.txt"), "Eine harmlose Beispieldatei für den Vorführmodus.\n");
+    let _ = fs::write(dir.join(d.attach_file), d.attach_body);
     if let Some(ffmpeg) = ffmpeg {
-        let video = dir.join("Videoaufnahme.mp4");
+        let video = dir.join(d.video_file);
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;
@@ -17948,8 +17957,8 @@ fn demo_prompts(dir: &Path, ffmpeg: Option<&Path>) -> Vec<Prompt> {
                 list.push(Prompt {
                     // Same reasoning as the attachment row above: relative, resolved
                     // back to a real path by load_store().
-                    file_path: "Videoaufnahme.mp4".to_string(),
-                    ..demo_prompt("demo-video", "Videoaufnahme", "")
+                    file_path: d.video_file.to_string(),
+                    ..demo_prompt("demo-video", d.video_name, "")
                 });
             }
         }
@@ -17959,13 +17968,14 @@ fn demo_prompts(dir: &Path, ffmpeg: Option<&Path>) -> Vec<Prompt> {
 
 // Two views and one grid folder, arranged the same way every time a fresh
 // sample store is built.
-fn demo_settings(has_video: bool) -> Settings {
+fn demo_settings(has_video: bool, lang: &str) -> Settings {
+    let d = demo_text::demo_text(lang);
     let mut settings = Settings::default();
     settings.ui_flags.insert("demoMode".to_string(), true);
     settings.active_view = "home".to_string();
     let mut home = View {
         id: "home".to_string(),
-        name: "Start".to_string(),
+        name: d.view_home.to_string(),
         cols: default_cols(),
         rows: default_rows(),
         layouts: HashMap::new(),
@@ -17990,7 +18000,7 @@ fn demo_settings(has_video: bool) -> Settings {
     };
     let folder = TileFolder {
         id: "demo-folder".to_string(),
-        name: "Beispielordner".to_string(),
+        name: d.folder.to_string(),
         color: String::new(),
         view_id: "home".to_string(),
         cell: [0, 0],
@@ -18001,7 +18011,7 @@ fn demo_settings(has_video: bool) -> Settings {
     rebuild_view_layout(&mut home, &folder_cells, &folder_members);
     let mut team = View {
         id: "team".to_string(),
-        name: "Team".to_string(),
+        name: d.view_team.to_string(),
         cols: default_cols(),
         rows: default_rows(),
         layouts: HashMap::new(),
@@ -18019,7 +18029,7 @@ fn demo_settings(has_video: bool) -> Settings {
 // absent or already carries the marker this function itself writes below --
 // a pre-existing, unrelated folder that merely happens to sit at that path
 // is left completely alone.
-fn build_demo_store(dir: &Path, ffmpeg: Option<&Path>) -> Result<(), String> {
+fn build_demo_store(dir: &Path, ffmpeg: Option<&Path>, lang: &str) -> Result<(), String> {
     if dir.is_dir() && !dir.join(DEMO_MARKER_FILE).is_file() {
         return Err("a folder already exists at the demo data path and was not created by demo mode; refusing to touch it".to_string());
     }
@@ -18058,10 +18068,10 @@ fn build_demo_store(dir: &Path, ffmpeg: Option<&Path>) -> Result<(), String> {
         return Err("could not prepare the demo store".to_string());
     }
     let mut written = WrittenRows::new();
-    let prompts = demo_prompts(dir, ffmpeg);
+    let prompts = demo_prompts(dir, ffmpeg, lang);
     let has_video = prompts.iter().any(|p| p.id == "demo-video");
     db_write_prompts(&mut conn, &prompts, &mut written).map_err(|e| e.to_string())?;
-    db_write_settings(&conn, &demo_settings(has_video)).map_err(|e| e.to_string())?;
+    db_write_settings(&conn, &demo_settings(has_video, lang)).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -18105,7 +18115,7 @@ fn flip_pointer_to_demo(canonical: &Path, demo: &Path) -> Result<(), String> {
 fn enter_demo_mode(canonical: &Path, ffmpeg: Option<&Path>) -> Result<PathBuf, String> {
     fs::create_dir_all(canonical).map_err(|e| e.to_string())?;
     let demo = canonical.join(DEMO_SUBFOLDER);
-    build_demo_store(&demo, ffmpeg)?;
+    build_demo_store(&demo, ffmpeg, "de")?;
     flip_pointer_to_demo(canonical, &demo)?;
     Ok(demo)
 }
@@ -18269,7 +18279,7 @@ fn exit_demo_mode(canonical: &Path) -> Result<(), String> {
 // a full data swap. The real store is flushed first so nothing pending is
 // lost, then never touched again by anything below.
 #[tauri::command]
-async fn enable_demo_mode(app: AppHandle, state: State<'_, Db>) -> Result<(), String> {
+async fn enable_demo_mode(app: AppHandle, state: State<'_, Db>, lang: Option<String>) -> Result<(), String> {
     let canonical = default_data_dir(&app);
     // A real second process (see other_instance_running's own comment), not
     // the allowMultipleInstances setting: that flag lives inside the very
@@ -18286,7 +18296,8 @@ async fn enable_demo_mode(app: AppHandle, state: State<'_, Db>) -> Result<(), St
     // rebuilt demo store instead of the real one it was meant for).
     let ffmpeg = ffmpeg_search_path(&app);
     let demo = canonical.join(DEMO_SUBFOLDER);
-    build_demo_store(&demo, ffmpeg.as_deref())?;
+    // The language the interface resolved, sent by the window; none means English.
+    build_demo_store(&demo, ffmpeg.as_deref(), lang.as_deref().unwrap_or("en"))?;
     {
         let store = lock(&state);
         if !store.prompts_locked {
@@ -33844,7 +33855,7 @@ fn settings_import_diff(current: &Settings, incoming: &SettingsOnlyExport) -> (u
 // password hash and certificate values come in through the same helper the
 // generic setters use; every other `remote*` row is covered by the prefix, so
 // a receiver setting added later is denied without touching this list.
-const IMPORT_DENIED_FLAGS: [&str; 9] = [
+const IMPORT_DENIED_FLAGS: [&str; 12] = [
     "clipWatcher",
     "remoteApi",
     "remoteNetworkFilter",
@@ -33854,6 +33865,11 @@ const IMPORT_DENIED_FLAGS: [&str; 9] = [
     "demoMode",
     "allowMultipleInstances",
     "promptSync",
+    // Consent and lock switches: a file never grants the online speech consent,
+    // lifts the data-folder lock or turns off secret skipping for the clipboard.
+    "voiceOnlineOk",
+    "dataDirLock",
+    "clipSkipSecrets",
 ];
 
 fn is_import_denied_flag(key: &str) -> bool {
@@ -33901,13 +33917,18 @@ fn vault_keys_differ(a: &Settings, b: &Settings) -> bool {
     [SECRET_SALT_KEY, SECRET_VERIFY_KEY].iter().any(|k| a.ui_texts.get(*k) != b.ui_texts.get(*k))
 }
 
+// Removes every denied row from a settings block that came from a file.
+fn drop_machine_rows(incoming: &mut Settings) {
+    incoming.ui_flags.retain(|k, _| !is_import_denied_flag(k));
+    incoming.ui_values.retain(|k, _| !is_import_denied_value(k));
+    incoming.ui_texts.retain(|k, _| !is_machine_text_key(k));
+}
+
 // After a whole Settings block was replaced by an imported one: every denied
 // row goes back to what `local` had (or stays absent), plus the autostart
 // registration flag. Hotkeys, themes and layouts do come along.
 fn keep_machine_settings(local: &Settings, incoming: &mut Settings) {
-    incoming.ui_flags.retain(|k, _| !is_import_denied_flag(k));
-    incoming.ui_values.retain(|k, _| !is_import_denied_value(k));
-    incoming.ui_texts.retain(|k, _| !is_machine_text_key(k));
+    drop_machine_rows(incoming);
     for (k, v) in &local.ui_flags {
         if is_import_denied_flag(k) {
             incoming.ui_flags.insert(k.clone(), *v);
@@ -48319,11 +48340,116 @@ mod tests {
     // The sample store itself: every prompt kind the spec asks for is present,
     // and the sample library and settings load back exactly as any other store's
     // would through the normal reader.
+    fn demo_structure(lang: &str, tag: &str) -> String {
+        let dir = std::env::temp_dir().join(format!("{}-test-demo-lang-{tag}", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let prompts = demo_prompts(&dir, None, lang);
+        let settings = demo_settings(false, lang);
+        let _ = std::fs::remove_dir_all(&dir);
+        let ids = prompts.iter().map(|p| p.id.clone()).collect();
+        let shape = prompts
+            .iter()
+            .map(|p| (!p.image.is_empty(), p.show_image, p.variants.len(), !p.file_path.is_empty(), p.favorite, p.tags.len()))
+            .collect();
+        let views = settings.views.iter().map(|v| (v.id.clone(), v.members.clone())).collect();
+        let folders = settings.tile_folders.iter().map(|f| format!("{}|{:?}", f.id, f.members)).collect();
+        let ids: Vec<String> = ids;
+        let shape: Vec<(bool, bool, usize, bool, bool, usize)> = shape;
+        let views: Vec<(String, Vec<String>)> = views;
+        let folders: Vec<String> = folders;
+        format!("{ids:?}{shape:?}{views:?}{folders:?}")
+    }
+
+    #[test]
+    fn demo_content_has_the_same_structure_in_every_language() {
+        let base = demo_structure("en", "base");
+        for lang in demo_text::DEMO_LANGS {
+            assert_eq!(demo_structure(lang, lang), base, "{lang}: ids and structure must not change with the language");
+        }
+    }
+
+    #[test]
+    fn demo_text_is_complete_dash_free_and_keeps_the_placeholder_in_every_language() {
+        let en = demo_text::demo_text("en");
+        for lang in demo_text::DEMO_LANGS {
+            let d = demo_text::demo_text(lang);
+            let all = [
+                d.tag_demo, d.tag_favorite, d.welcome_name, d.welcome_text, d.image_name, d.image_text, d.rotating_name,
+                d.rotating_text, d.rotating_a, d.rotating_b, d.placeholder_name, d.placeholder_text, d.favorite_name,
+                d.favorite_text, d.chain_a_name, d.chain_a_text, d.chain_b_name, d.chain_b_text, d.attach_name,
+                d.attach_file, d.attach_body, d.folder_a_name, d.folder_a_text, d.folder_b_name, d.folder_b_text,
+                d.video_name, d.video_file, d.view_home, d.view_team, d.folder,
+            ];
+            for t in all {
+                assert!(!t.trim().is_empty(), "{lang}: empty text");
+                assert!(!t.contains('\u{2014}') && !t.contains('\u{2013}'), "{lang}: dash in {t:?}");
+                assert!(!t.contains("_name") && !t.contains("_text") && !t.contains("demo."), "{lang}: raw key in {t:?}");
+            }
+            assert!(d.placeholder_text.contains("{#{") && d.placeholder_text.contains("}#}"), "{lang}: placeholder syntax");
+            for f in [d.attach_file, d.video_file] {
+                assert!(!f.contains(['/', '\\', ':', '*', '?', '"', '<', '>', '|']), "{lang}: {f:?} is not a file name");
+            }
+            assert!(d.attach_file.ends_with(".txt") && d.video_file.ends_with(".mp4"), "{lang}: file extensions");
+            if lang != "en" {
+                assert_ne!(d.welcome_text, en.welcome_text, "{lang} is still the English text");
+            }
+        }
+    }
+
+    #[test]
+    fn demo_text_falls_back_to_english_and_ignores_a_region() {
+        let en = demo_text::demo_text("en");
+        for odd in ["", "xx", "klingon", "fr-FR"] {
+            assert_eq!(demo_text::demo_text(odd).welcome_name, en.welcome_name, "{odd:?} must fall back to EN");
+        }
+        assert_eq!(demo_text::demo_text("pt-BR").welcome_name, demo_text::demo_text("pt").welcome_name);
+        assert_eq!(demo_text::demo_text("zh_CN").welcome_name, demo_text::demo_text("zh").welcome_name);
+        assert_eq!(demo_text::demo_text("DE").welcome_name, "Willkommen");
+    }
+
+    #[test]
+    fn demo_german_content_is_what_it_was_before_the_table() {
+        let dir = std::env::temp_dir().join(format!("{}-test-demo-de-same", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let prompts = demo_prompts(&dir, None, "de");
+        let by = |id: &str| prompts.iter().find(|p| p.id == id).unwrap();
+        assert_eq!(by("demo-welcome").name, "Willkommen");
+        assert_eq!(by("demo-welcome").text, "Das hier ist ein Beispieleintrag im Vorführmodus. Ein Klick kopiert ihn wie jeden anderen.");
+        assert_eq!(by("demo-image").name, "Bild-Kachel");
+        assert_eq!(by("demo-rotating").variants, vec!["Guten Tag!".to_string(), "Guten Abend!".to_string()]);
+        assert_eq!(by("demo-placeholder").text, "Hallo {#{Name}#}, vielen Dank für deine Nachricht.");
+        assert_eq!(by("demo-favorite").tags, vec!["Demo".to_string(), "Favorit".to_string()]);
+        assert_eq!(by("demo-attachment").file_path, "Anhang.txt");
+        assert_eq!(std::fs::read_to_string(dir.join("Anhang.txt")).unwrap(), "Eine harmlose Beispieldatei für den Vorführmodus.\n");
+        assert_eq!(demo_settings(false, "de").tile_folders[0].name, "Beispielordner");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn demo_store_rebuilt_in_another_language_holds_only_that_language() {
+        let dir = std::env::temp_dir().join(format!("{}-test-demo-switch", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&dir);
+        build_demo_store(&dir, None, "de").unwrap();
+        assert!(dir.join("Anhang.txt").is_file());
+        build_demo_store(&dir, None, "en").unwrap();
+        assert!(!dir.join("Anhang.txt").exists(), "the German attachment must be gone after a rebuild");
+        assert!(dir.join("Attachment.txt").is_file());
+        let conn = db_conn_at(&dir).unwrap();
+        let mut written = WrittenRows::new();
+        let (prompts, settings, _p, _f, _l) = db_load(&conn, &mut written);
+        assert_eq!(prompts.iter().find(|p| p.id == "demo-welcome").unwrap().name, "Welcome");
+        assert_eq!(settings.unwrap().tile_folders[0].name, "Sample folder");
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn demo_store_contains_every_sample_kind() {
         let dir = std::env::temp_dir().join(format!("{}-test-demo-contents", brand::SLUG));
         let _ = std::fs::remove_dir_all(&dir);
-        build_demo_store(&dir, None).unwrap();
+        build_demo_store(&dir, None, "de").unwrap();
 
         let conn = db_conn_at(&dir).unwrap();
         let mut written = WrittenRows::new();
@@ -48544,7 +48670,7 @@ mod tests {
         let sentinel = dir.join("not-mine.txt");
         std::fs::write(&sentinel, b"a user's own file, nothing to do with demo mode").unwrap();
 
-        let result = build_demo_store(&dir, None);
+        let result = build_demo_store(&dir, None, "de");
         assert!(result.is_err(), "an existing, unmarked folder must never be wiped: {result:?}");
         assert!(sentinel.exists(), "the user's own file must survive");
 
@@ -48557,10 +48683,10 @@ mod tests {
     fn build_demo_store_rebuilds_its_own_marked_folder() {
         let dir = std::env::temp_dir().join(format!("{}-test-demo-marked-folder", brand::SLUG));
         let _ = std::fs::remove_dir_all(&dir);
-        build_demo_store(&dir, None).unwrap();
+        build_demo_store(&dir, None, "de").unwrap();
         std::fs::write(dir.join("left-over.txt"), b"session leftover").unwrap();
 
-        build_demo_store(&dir, None).unwrap();
+        build_demo_store(&dir, None, "de").unwrap();
         assert!(!dir.join("left-over.txt").exists(), "a marked folder must still be wiped and rebuilt");
         assert!(dir.join(DEMO_MARKER_FILE).is_file(), "the rebuild must leave the marker in place");
 
@@ -48579,7 +48705,7 @@ mod tests {
         use std::os::windows::fs::OpenOptionsExt;
         let dir = std::env::temp_dir().join(format!("{}-test-demo-locked-file", brand::SLUG));
         let _ = std::fs::remove_dir_all(&dir);
-        build_demo_store(&dir, None).unwrap();
+        build_demo_store(&dir, None, "de").unwrap();
 
         // share_mode(0) denies every other handle -- including this same
         // process's own attempt to remove or reopen it -- any access at all.
@@ -48587,7 +48713,7 @@ mod tests {
 
         // The rebuild's own data.db step will fail while this handle is open;
         // what matters here is only that the marker survives it regardless.
-        let _ = build_demo_store(&dir, None);
+        let _ = build_demo_store(&dir, None, "de");
         assert!(
             dir.join(DEMO_MARKER_FILE).is_file(),
             "the marker must survive a locked file elsewhere in the folder"
@@ -48595,7 +48721,7 @@ mod tests {
 
         drop(locked);
         // Once unlocked, a later enable must not be refused forever either.
-        assert!(build_demo_store(&dir, None).is_ok(), "a retry once the lock clears must succeed");
+        assert!(build_demo_store(&dir, None, "de").is_ok(), "a retry once the lock clears must succeed");
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -48673,7 +48799,7 @@ mod tests {
     fn demo_attachment_path_is_relative_not_absolute() {
         let dir = std::env::temp_dir().join(format!("{}-test-demo-relative-path", brand::SLUG));
         let _ = std::fs::remove_dir_all(&dir);
-        build_demo_store(&dir, None).unwrap();
+        build_demo_store(&dir, None, "de").unwrap();
 
         let conn = db_conn_at(&dir).unwrap();
         let mut written = WrittenRows::new();
@@ -48702,7 +48828,7 @@ mod tests {
     fn strip_data_dir_prefix_reverses_load_stores_own_resolution() {
         let dir = std::env::temp_dir().join(format!("{}-test-demo-strip-prefix", brand::SLUG)).join(DEMO_SUBFOLDER);
         let _ = std::fs::remove_dir_all(&dir);
-        build_demo_store(&dir, None).unwrap();
+        build_demo_store(&dir, None, "de").unwrap();
 
         let conn = db_conn_at(&dir).unwrap();
         let mut written = WrittenRows::new();
@@ -49390,6 +49516,145 @@ mod tests {
         }
         s.ui_texts.insert("copyFont".into(), "Consolas".into());
         s
+    }
+
+    // The three switches that grant consent or guard the data folder: a file,
+    // backup or snapshot says whatever it likes, this machine keeps its own.
+    const CONSENT_KEYS: [&str; 3] = ["voiceOnlineOk", "dataDirLock", "clipSkipSecrets"];
+
+    fn local_consent_settings() -> Settings {
+        let mut s = Settings::default();
+        s.ui_flags.insert("voiceOnlineOk".into(), false);
+        s.ui_flags.insert("dataDirLock".into(), true);
+        s.ui_flags.insert("clipSkipSecrets".into(), true);
+        s
+    }
+
+    fn hostile_consent_settings() -> Settings {
+        let mut s = Settings::default();
+        s.ui_flags.insert("voiceOnlineOk".into(), true);
+        s.ui_flags.insert("dataDirLock".into(), false);
+        s.ui_flags.insert("clipSkipSecrets".into(), false);
+        s.ui_flags.insert("copyFlash".into(), false);
+        s
+    }
+
+    fn assert_consent_kept(s: &Settings, what: &str) {
+        assert_eq!(s.ui_flags.get("voiceOnlineOk"), Some(&false), "{what}: voiceOnlineOk");
+        assert_eq!(s.ui_flags.get("dataDirLock"), Some(&true), "{what}: dataDirLock");
+        assert_eq!(s.ui_flags.get("clipSkipSecrets"), Some(&true), "{what}: clipSkipSecrets");
+    }
+
+    #[test]
+    fn a_settings_file_cannot_set_consent_or_lock_switches() {
+        let mut live = local_consent_settings();
+        let mut file = SettingsOnlyExport::default();
+        for k in CONSENT_KEYS {
+            file.ui_flags.insert(k.into(), k == "voiceOnlineOk");
+        }
+        file.ui_flags.insert("copyFlash".into(), false);
+        let skipped = strip_denied_import_keys(&mut file);
+        assert_eq!(skipped, 3, "the three rows count as skipped");
+        merge_settings_only(&mut live, file, |_| true).unwrap();
+        assert_consent_kept(&live, "settings-only import");
+        assert_eq!(live.ui_flags.get("copyFlash"), Some(&false), "ordinary rows still apply");
+    }
+
+    #[test]
+    fn a_full_import_cannot_set_consent_or_lock_switches() {
+        let mut store = Store { prompts: vec![], trash: Vec::new(), settings: local_consent_settings(), prompts_locked: false, written: Default::default() };
+        apply_import(&mut store, Backup { prompts: vec![], settings: hostile_consent_settings() }, false, true);
+        assert_consent_kept(&store.settings, "full import");
+        assert_eq!(store.settings.ui_flags.get("copyFlash"), Some(&false));
+        // A machine that never had the rows does not receive them either.
+        let mut bare = Store { prompts: vec![], trash: Vec::new(), settings: Settings::default(), prompts_locked: false, written: Default::default() };
+        apply_import(&mut bare, Backup { prompts: vec![], settings: hostile_consent_settings() }, false, true);
+        for k in CONSENT_KEYS {
+            assert!(!bare.settings.ui_flags.contains_key(k), "{k} must not arrive");
+        }
+    }
+
+    fn consent_restore_pair(tag: &str, local: &Settings, incoming: Option<&Settings>) -> (PathBuf, PathBuf) {
+        let dir = std::env::temp_dir();
+        let target = dir.join(format!("{}-test-consent-{tag}-target.db", brand::SLUG));
+        let staged = dir.join(format!("{}-test-consent-{tag}-staged.db", brand::SLUG));
+        let t = full_schema_db(&target, "target");
+        db_write_settings(&t, local).unwrap();
+        let s = full_schema_db(&staged, "staged");
+        if let Some(i) = incoming {
+            db_write_settings(&s, i).unwrap();
+        }
+        (target, staged)
+    }
+
+    #[test]
+    fn a_settings_restore_cannot_set_consent_or_lock_switches() {
+        let (target, staged) = consent_restore_pair("sel", &local_consent_settings(), Some(&hostile_consent_settings()));
+        restore_selective(&target, &staged, "settings").unwrap();
+        let after = read_settings_row(&Connection::open(&target).unwrap(), "main").unwrap();
+        assert_consent_kept(&after, "settings-scope restore");
+        assert_eq!(after.ui_flags.get("copyFlash"), Some(&false));
+        let _ = std::fs::remove_file(&target);
+        let _ = std::fs::remove_file(&staged);
+    }
+
+    #[test]
+    fn a_whole_snapshot_restore_cannot_set_consent_or_lock_switches() {
+        // Shared by the in-app restore and the command-line standalone restore.
+        let (target, staged) = consent_restore_pair("all", &local_consent_settings(), Some(&hostile_consent_settings()));
+        keep_machine_in_staged(&target, &staged).unwrap();
+        let after = read_settings_row(&Connection::open(&staged).unwrap(), "main").unwrap();
+        assert_consent_kept(&after, "whole-snapshot restore");
+        let _ = std::fs::remove_file(&target);
+        let _ = std::fs::remove_file(&staged);
+    }
+
+    #[test]
+    fn a_whole_snapshot_restore_onto_a_machine_without_settings_drops_the_switches() {
+        let dir = std::env::temp_dir();
+        let target = dir.join(format!("{}-test-consent-none-target.db", brand::SLUG));
+        let staged = dir.join(format!("{}-test-consent-none-staged.db", brand::SLUG));
+        let _ = full_schema_db(&target, "target");
+        let s = full_schema_db(&staged, "staged");
+        db_write_settings(&s, &hostile_consent_settings()).unwrap();
+        drop(s);
+        keep_machine_in_staged(&target, &staged).unwrap();
+        let after = read_settings_row(&Connection::open(&staged).unwrap(), "main").unwrap();
+        for k in CONSENT_KEYS {
+            assert!(!after.ui_flags.contains_key(k), "{k} must not arrive");
+        }
+        assert_eq!(after.ui_flags.get("copyFlash"), Some(&false));
+        let _ = std::fs::remove_file(&target);
+        let _ = std::fs::remove_file(&staged);
+    }
+
+    #[test]
+    fn a_settings_restore_onto_a_machine_without_settings_drops_the_switches() {
+        let dir = std::env::temp_dir();
+        let target = dir.join(format!("{}-test-consent-selnone-target.db", brand::SLUG));
+        let staged = dir.join(format!("{}-test-consent-selnone-staged.db", brand::SLUG));
+        let t = full_schema_db(&target, "target");
+        drop(t);
+        let s = full_schema_db(&staged, "staged");
+        let mut hostile = hostile_consent_settings();
+        hostile.ui_flags.insert("remoteApi".into(), true);
+        db_write_settings(&s, &hostile).unwrap();
+        drop(s);
+        restore_selective(&target, &staged, "settings").unwrap();
+        let after = read_settings_row(&Connection::open(&target).unwrap(), "main").unwrap();
+        for k in CONSENT_KEYS.iter().chain(["remoteApi"].iter()) {
+            assert!(!after.ui_flags.contains_key(*k), "{k} must not arrive");
+        }
+        assert_eq!(after.ui_flags.get("copyFlash"), Some(&false));
+        let _ = std::fs::remove_file(&target);
+        let _ = std::fs::remove_file(&staged);
+    }
+
+    #[test]
+    fn the_cli_refusal_and_the_import_denylist_are_one_list() {
+        for k in CONSENT_KEYS {
+            assert!(is_import_denied_flag(k), "{k} must be on the import denylist");
+        }
     }
 
     #[test]

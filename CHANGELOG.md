@@ -611,6 +611,11 @@ the video editor and the introduction tour ship on).
 
 ### Improved
 
+- **Demo mode speaks your language.** The sample entries, tags, tabs, folder
+  and attached files are now shown in the language the app is set to, in all
+  eleven interface languages. Starting demo mode again after a language
+  switch uses the new language.
+
 - Text on tiles, folders, view tabs, messages and floating buttons only turns
   black on genuinely light colors now; a medium color that used to flip to black
   text keeps white text instead. Both the automatic choice and the brightness
@@ -1390,6 +1395,11 @@ the video editor and the introduction tour ship on).
   with the other temporary files.
 
 ### Security
+
+- **Imports and restores can no longer grant consent or lift locks.** A
+  settings file, a full import or a backup restore (in the app and on the
+  command line) keeps this computer's own value for the online speech
+  consent, the data folder lock and the clipboard secret skipping.
 
 - **`settings set` can no longer change access settings.** The command line
   and remote access refuse folder locations, the vault keys, the backup
