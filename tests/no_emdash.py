@@ -11,6 +11,10 @@ is code, not prose, and stays whatever it already needs to be (error strings
 matched verbatim against the Rust backend, dictation targets, the stats
 no-value placeholder, and so on -- see EXCEPTIONS below).
 
+Two further checks cover shipped text: a pseudo dash (space, two hyphens,
+space) inside a Rust or UI string literal, and any dash character anywhere in
+the NSIS installer script and its language files (strings and comments alike).
+
 Range display keeps a plain ASCII hyphen with no spaces (e.g. `00:12-00:34`,
 `{low}-{high}`, `(A-Z)`) -- that is not a dash character this guard looks
 for, so it needs no exception.
@@ -30,6 +34,8 @@ SCOPE_GLOBS = [
     "tests/ui/*.py",
     "tests/ui/*.js",
     "tools/*.js",
+    "src-tauri/*.nsi",
+    "src-tauri/nsis-languages/*.nsh",
 ]
 
 DASH_CHARS = "—–―‒"
@@ -216,6 +222,115 @@ def check_file(rel_path, text):
     return violations
 
 
+PSEUDO_DASH = " -- "
+
+# String literals that legitimately contain " -- ": command lines that pass a
+# flag after cargo's own separator, and a captured encoder log line used as a
+# test fixture.
+PSEUDO_DASH_OK = ("cargo test", "cargo run", "Error initializing output stream")
+
+
+def string_literals(text, suffix):
+    """Yield (line number, literal text) for every string literal in Rust or JS
+    source. Comments are skipped, Rust char literals and lifetimes are not
+    mistaken for string starts, raw strings and JS template literals are
+    handled well enough for a hygiene check."""
+    rust = suffix == ".rs"
+    i, n, line = 0, len(text), 1
+    while i < n:
+        c = text[i]
+        two = text[i:i + 2]
+        if c == "\n":
+            line += 1
+            i += 1
+        elif two == "//":
+            j = text.find("\n", i)
+            i = n if j == -1 else j
+        elif two == "/*":
+            j = text.find("*/", i + 2)
+            j = n if j == -1 else j + 2
+            line += text.count("\n", i, j)
+            i = j
+        elif not rust and c == "/" and re.search(r"(^|[(,=:\[!&|?{};+\-*%<>~^]|\breturn|\btypeof)\s*$", text[max(0, i - 40):i]):
+            j = i + 1
+            in_class = False
+            while j < n and text[j] != "\n":
+                if text[j] == chr(92):
+                    j += 1
+                elif text[j] == "[":
+                    in_class = True
+                elif text[j] == "]":
+                    in_class = False
+                elif text[j] == "/" and not in_class:
+                    break
+                j += 1
+            i = j + 1
+        elif rust and c == "'":
+            if text[i + 1:i + 2] == "\\":
+                j = text.find("'", i + 2)
+                i = n if j == -1 else j + 1
+            elif text[i + 2:i + 3] == "'":
+                i += 3
+            else:
+                i += 1
+        elif rust and c == "r" and re.match(r'r#*"', text[i:i + 8]) and (i == 0 or not (text[i - 1].isalnum() or text[i - 1] == "_")):
+            hashes = len(re.match(r"r(#*)", text[i:]).group(1))
+            start = i + 1 + hashes + 1
+            end = text.find('"' + "#" * hashes, start)
+            end = n if end == -1 else end
+            yield line, text[start:end]
+            line += text.count("\n", i, end)
+            i = end + 1 + hashes
+        elif c == '"' or (not rust and c in "'`"):
+            j = i + 1
+            while j < n and text[j] != c:
+                if text[j] == "\\":
+                    j += 1
+                if j < n and text[j] == "\n":
+                    if c == "'" or (c == '"' and not rust):
+                        break
+                    line += 1
+                j += 1
+            yield line, text[i + 1:j]
+            if c == "`":
+                line += text.count("\n", i, j)
+            i = j + 1
+        else:
+            i += 1
+
+
+def check_pseudo_dash(rel_path, text):
+    suffix = "." + rel_path.rsplit(".", 1)[-1]
+    if suffix not in (".rs", ".js"):
+        return []
+    lines = text.split("\n")
+    out = []
+    for lineno, lit in string_literals(text, suffix):
+        if PSEUDO_DASH not in lit:
+            continue
+        shown = lines[min(lineno, len(lines)) - 1].strip()
+        if any(ok in lit for ok in PSEUDO_DASH_OK):
+            continue
+        out.append((lineno, "pseudo dash ' -- ' in a string literal", shown))
+    return out
+
+
+def check_nsis(rel_path, text):
+    """The installer script and its language files: no dash character on any
+    line, and no ' -- ' inside a quoted string."""
+    out = []
+    for lineno, raw in enumerate(text.split("\n"), start=1):
+        m = DASH_RE.search(raw)
+        if m:
+            out.append((lineno, "dash character %r" % m.group(0), raw.strip()))
+            continue
+        for sm in re.finditer(r'"[^"]*"', raw):
+            if PSEUDO_DASH in sm.group(0):
+                out.append((lineno, "pseudo dash ' -- ' in a string", raw.strip()))
+                break
+    return out
+
+
 def main():
     global ROOT
     ROOT = subprocess.run(
@@ -230,7 +345,10 @@ def main():
                 text = f.read()
         except (FileNotFoundError, UnicodeDecodeError):
             continue
-        violations = sorted(check_file(rel_path, text))
+        if rel_path.endswith((".nsi", ".nsh")):
+            violations = sorted(check_nsis(rel_path, text))
+        else:
+            violations = sorted(check_file(rel_path, text) + check_pseudo_dash(rel_path, text))
         for lineno, kind, snippet in violations:
             print(f"{rel_path}:{lineno}: {kind}: {snippet}")
         total += len(violations)

@@ -30,7 +30,7 @@ if (!match) {
 // what export actually produces.
 const imageMatch = css.match(/\.ve-live-image\s*\{([^}]*)\}/);
 if (imageMatch && /object-fit\s*:\s*contain\b/.test(imageMatch[1])) {
-  problems.push(".ve-live-image should stay object-fit: fill -- an image overlay's export filter scales to the exact rect with no aspect preservation, unlike a video overlay");
+  problems.push(".ve-live-image should stay object-fit: fill; an image overlay's export filter scales to the exact rect with no aspect preservation, unlike a video overlay");
 }
 
 if (problems.length) {
