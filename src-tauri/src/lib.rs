@@ -2532,7 +2532,7 @@ fn set_tray_recording(app: &AppHandle, recording: bool) {
 // Tray tooltip text while a voice-dictation session is running.
 fn tray_recording_label(lang: &str) -> &'static str {
     match lang {
-        "de" => "Nimmt auf …",
+        "de" => "Aufnahme läuft…",
         "es" => "Grabando…",
         "it" => "Registrazione…",
         "pt" => "A gravar…",
@@ -16699,7 +16699,7 @@ fn pick_history(app: AppHandle) -> Vec<String> {
 // Re-copy one entry from that popover in the currently configured notation.
 #[tauri::command]
 fn copy_pick_history_entry(app: AppHandle, hex: String) -> Result<String, String> {
-    let rgb = hex_to_rgb(&hex).ok_or("not a hex colour")?;
+    let rgb = hex_to_rgb(&hex).ok_or("not a hex color")?;
     let fmt = app
         .try_state::<Db>()
         .map(|s| pick_cfg(&s.lock().unwrap_or_else(|e| e.into_inner()).settings).format)
@@ -17616,7 +17616,7 @@ fn folder_picker_title(purpose: &str, lang: &str) -> Option<&'static str> {
         "screenshot" => Some(if de { "Screenshot-Ordner wählen" } else { "Choose the screenshot folder" }),
         "videoExport" => Some(if de { "Exportordner für Videos wählen" } else { "Choose the video export folder" }),
         "recording" => Some(if de { "Aufnahmeordner wählen" } else { "Choose the recording folder" }),
-        "sync" => Some(if de { "Synchronisationsordner wählen" } else { "Choose the sync folder" }),
+        "sync" => Some(if de { "Sync-Ordner wählen" } else { "Choose the sync folder" }),
         "data" => Some(if de { "Datenordner wählen" } else { "Choose the data folder" }),
         _ => None,
     }
@@ -25244,7 +25244,7 @@ mod keylog {
             let json = serde_json::to_string(&flags).unwrap();
             let restored: std::collections::HashMap<String, bool> = serde_json::from_str(&json).unwrap();
             assert!(shortcuts_only(&restored));
-            assert!(!shortcuts_only(&std::collections::HashMap::new()), "absent -- default off");
+            assert!(!shortcuts_only(&std::collections::HashMap::new()), "absent, default off");
         }
 
         #[test]
@@ -28047,11 +28047,11 @@ fn install_update_blocking(url: String) -> Result<(), String> {
         .and_then(|r| r.into_string().ok())
         .map(|t| t.split_whitespace().next().unwrap_or("").to_ascii_lowercase())
         .filter(|w| w.len() == 64 && w.chars().all(|c| c.is_ascii_hexdigit()))
-        .ok_or_else(|| "no usable checksum published for this update — download rejected".to_string())?;
+        .ok_or_else(|| "no usable checksum published for this update, download rejected".to_string())?;
     {
         use sha2::{Digest, Sha256};
         if format!("{:x}", Sha256::digest(&bytes)) != want {
-            return Err("update hash mismatch — download rejected".to_string());
+            return Err("update hash mismatch: download rejected".to_string());
         }
     }
     // Stage into a fresh, uniquely-named temp subdir so a local attacker can't pre-plant
@@ -28624,7 +28624,7 @@ fn verify_ffmpeg_zip_against(bytes: &[u8], want_hex: &str) -> Result<(), String>
     let got = Sha256::digest(bytes);
     let want = hex_decode(want_hex).ok_or_else(|| "bad pinned hash".to_string())?;
     if !ct_eq(got.as_slice(), &want) {
-        return Err("ffmpeg download hash mismatch -- rejected".to_string());
+        return Err("ffmpeg download hash mismatch, rejected".to_string());
     }
     Ok(())
 }
@@ -29767,7 +29767,7 @@ fn mux_mic_track_blocking(ffmpeg: &Path, video: &Path, sidecar: &Path, audio_kbp
     }
     fs::rename(&staged, video).map_err(|e| {
         let _ = fs::remove_file(&staged);
-        format!("could not finalise the muxed file: {e}")
+        format!("could not finalize the muxed file: {e}")
     })?;
     let _ = fs::remove_file(sidecar);
     Ok(())
@@ -40080,7 +40080,7 @@ mod tests {
         let capped_len = fs::metadata(&capped_dest).unwrap().len();
         assert!(
             lossless_len > capped_len * 2,
-            "a crf-0 lossless re-encode ({lossless_len} bytes) must be dramatically larger than a 300kbps-capped one ({capped_len} bytes) -- otherwise Lossless quality is silently falling back to a bitrate cap again"
+            "a crf-0 lossless re-encode ({lossless_len} bytes) must be dramatically larger than a 300kbps-capped one ({capped_len} bytes), otherwise Lossless quality is silently falling back to a bitrate cap again"
         );
         let _ = fs::remove_dir_all(&dir);
     }
@@ -44888,7 +44888,7 @@ mod tests {
         assert_eq!(folder_picker_title("recording", "en"), Some("Choose the recording folder"));
         assert_eq!(folder_picker_title("recording", "de"), Some("Aufnahmeordner wählen"));
         assert_eq!(folder_picker_title("sync", "en"), Some("Choose the sync folder"));
-        assert_eq!(folder_picker_title("sync", "de"), Some("Synchronisationsordner wählen"));
+        assert_eq!(folder_picker_title("sync", "de"), Some("Sync-Ordner wählen"));
         assert_eq!(folder_picker_title("data", "en"), Some("Choose the data folder"));
         assert_eq!(folder_picker_title("data", "de"), Some("Datenordner wählen"));
         // Any other UI language falls back to English, same as the rest of
@@ -50695,7 +50695,7 @@ mod tests {
     // skips the content, while absence or an explicit "allow" never does.
     #[test]
     fn dword_clipboard_formats_are_excluded_only_on_an_explicit_zero() {
-        assert!(!dword_format_excludes(false, None), "format absent -- nothing to exclude on");
+        assert!(!dword_format_excludes(false, None), "format absent, nothing to exclude on");
         assert!(!dword_format_excludes(false, Some(0)), "absent format's stray value must not matter");
         assert!(dword_format_excludes(true, Some(0)), "an explicit 0 excludes");
         assert!(!dword_format_excludes(true, Some(1)), "an explicit allow must not exclude");

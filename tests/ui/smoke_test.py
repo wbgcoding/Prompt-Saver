@@ -5228,11 +5228,11 @@ PROBE = """
     if (!await expertRow('Markdown preview')) {
       out.errors.push('the Markdown preview toggle is missing from the expert menu');
     } else {
-      if (!rowFor('Syntax colours in code blocks')) {
+      if (!rowFor('Syntax colors in code blocks')) {
         out.errors.push('the highlighter toggle is missing although the preview is on');
       }
       await flip('Markdown preview');
-      for (const gone of ['Syntax colours in code blocks', 'Detect code without fences', 'Code text size']) {
+      for (const gone of ['Syntax colors in code blocks', 'Detect code without fences', 'Code text size']) {
         if (rowFor(gone)) out.errors.push('"' + gone + '" survived switching the preview off');
       }
       await flip('Markdown preview');
@@ -5761,7 +5761,7 @@ PROBE = """
       };
       await checkRenamedFlag('Hide window after copy', 'flag-hideWindowOnCopy');
       await checkRenamedFlag('Dim toolbar until hover', 'flag-toolbarHoverDim');
-      await checkRenamedFlag('Dim other buttons on hover', 'flag-tilesHoverDim');
+      await checkRenamedFlag('Dim other tiles on hover', 'flag-tilesHoverDim');
       await checkRenamedFlag('Dim media', 'flag-mediaHoverDim');
     }
     // P68: the expert-menu search also matches a word that lives only in a
@@ -6057,15 +6057,15 @@ PROBE = """
         out.errors.push('could not find "Prompt version history" for the gated-hidden-row reset test');
       } else {
         if (!historySw.checked) { historySw.click(); await sleep(120); } // reveal the gated child
-        const diffSw = rowByLabel5('Word-level diff in history')?.querySelector('input.switch');
+        const diffSw = rowByLabel5('Word-by-word comparison in history')?.querySelector('input.switch');
         if (!diffSw) {
-          out.errors.push('could not find the gated "Word-level diff in history" row');
+          out.errors.push('could not find the gated "Word-by-word comparison in history" row');
         } else {
           if (diffSw.checked) { diffSw.click(); await sleep(120); } // move it away from its default (on)
           // Hide it again by switching its own parent back off.
           rowByLabel5('Prompt version history')?.querySelector('input.switch')?.click();
           await sleep(120);
-          if (rowByLabel5('Word-level diff in history')) {
+          if (rowByLabel5('Word-by-word comparison in history')) {
             out.errors.push('405 setup: the gated row is still visible, cannot test the hidden-row case');
           } else {
             const groupSec = rowByLabel5('Prompt version history')?.closest('.expert-group');
@@ -6088,7 +6088,7 @@ PROBE = """
               if (!historySwAfter || !historySwAfter.checked) {
                 out.errors.push('405: group reset did not restore the parent flag to its own default');
               }
-              const diffSwAfter = rowByLabel5('Word-level diff in history')?.querySelector('input.switch');
+              const diffSwAfter = rowByLabel5('Word-by-word comparison in history')?.querySelector('input.switch');
               if (!diffSwAfter || !diffSwAfter.checked) {
                 out.errors.push('405: group reset left a row that was hidden behind its own gate still changed from its default');
               }

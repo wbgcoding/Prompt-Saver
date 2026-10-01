@@ -63,7 +63,7 @@ ${StrLoc}
 !define UNINSTALLERSIGNCOMMAND "{{uninstaller_sign_cmd}}"
 !define ESTIMATEDSIZE "{{estimated_size}}"
 !define STARTMENUFOLDER "{{start_menu_folder}}"
-; Must match brand::AUTOSTART_KEY (src-tauri/src/brand.rs) — the app writes the Run
+; Must match brand::AUTOSTART_KEY (src-tauri/src/brand.rs): the app writes the Run
 ; value under this name, not ${PRODUCTNAME}. Stamped by tools/brand.js on rebrand.
 !define AUTOSTARTKEY "PromptSaver"
 ; Must match brand::DATA_FOLDER (src-tauri/src/brand.rs), the folder under
@@ -647,13 +647,13 @@ FunctionEnd
 LangString dirTitle ${LANG_ENGLISH} "Choose location"
 LangString dirInfo ${LANG_ENGLISH} "Select the folder to install ${PRODUCTNAME} into:"
 LangString portableSubtitle ${LANG_ENGLISH} "Where and how to install ${PRODUCTNAME}"
-LangString portableCheck ${LANG_ENGLISH} "Portable Installation"
-LangString portableInfo ${LANG_ENGLISH} "Portable mode skips the Start-menu, registry entries and the uninstaller — the app is simply placed in the folder above. Leave unchecked for a normal installation."
+LangString portableCheck ${LANG_ENGLISH} "Portable installation"
+LangString portableInfo ${LANG_ENGLISH} "Portable mode skips the Start menu, registry entries and the uninstaller; the app is simply placed in the folder above. Leave unchecked for a normal installation."
 LangString dirTitle ${LANG_GERMAN} "Speicherort wählen"
 LangString dirInfo ${LANG_GERMAN} "Wählen Sie den Ordner für die Installation von ${PRODUCTNAME}:"
 LangString portableSubtitle ${LANG_GERMAN} "Wohin und wie ${PRODUCTNAME} installiert wird"
 LangString portableCheck ${LANG_GERMAN} "Portable Installation"
-LangString portableInfo ${LANG_GERMAN} "Der portable Modus verzichtet auf Startmenü, Registry-Einträge und den Deinstaller — die App wird einfach im oben gewählten Ordner abgelegt. Für eine normale Installation nicht ankreuzen."
+LangString portableInfo ${LANG_GERMAN} "Der portable Modus verzichtet auf Startmenü, Registry-Einträge und den Deinstaller; die App wird einfach im oben gewählten Ordner abgelegt. Für eine normale Installation nicht ankreuzen."
 
 LangString dirTitle ${LANG_SPANISH} "Elegir ubicación"
 LangString dirInfo ${LANG_SPANISH} "Seleccione la carpeta de instalación:"
@@ -1076,7 +1076,7 @@ Section Install
     WriteRegStr SHCTX "Software\Classes\\{{protocol}}\shell\open\command" "" "$\"$INSTDIR\${MAINBINARYNAME}.exe$\" $\"%1$\""
   {{/each}}
 
-  ; Portable mode: skip every registry write + the uninstaller — leave only the
+  ; Portable mode: skip every registry write + the uninstaller, leave only the
   ; copied files in the chosen folder. Standard mode does the full integration.
   ${If} $PortableMode != 1
   ; Create uninstaller
