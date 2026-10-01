@@ -48,6 +48,29 @@ const build = (answer, invokeImpl) => {
   need(r.settings.ui_flags.remoteTlsShortLived === true, "confirm must record the new state");
   r = build(true, () => { throw "save-failed"; });
   need((await r.fn(true)) === false && r.log.toasts.includes("persistFailed") && r.settings.ui_flags.remoteTlsShortLived === undefined, "a failed save must restore the switch and show the error");
+  // An expert reset: the certificate switch is not written back, no error shows.
+  {
+    const rs = src.indexOf("async function onResetExpert");
+    let d = 0, re = rs, sn = false;
+    for (let i = src.indexOf("{", rs); i < src.length; i++) {
+      if (src[i] === "{") { d++; sn = true; } else if (src[i] === "}") d--;
+      if (sn && d === 0) { re = i + 1; break; }
+    }
+    const keepDecl = src.match(/const EXPERT_RESET_KEEP = [^;]*;/);
+    need(keepDecl, "EXPERT_RESET_KEEP is missing");
+    const log = { calls: [], errs: [] };
+    const st = { ui_flags: { demoMode: true, remoteTlsShortLived: true }, ui_values: {}, ui_texts: {} };
+    const noop = () => {};
+    const run = new Function("invoke", "errToast", "settings", "flag", "t", "toast", "loadPalette", "refreshColorUI", "applyFlags", "renderExpert", "syncSettingsControls", "refreshFavViewUi", "renderViews", "renderGrid",
+      `${keepDecl ? keepDecl[0] : ""}\n${src.slice(rs, re)}\nreturn onResetExpert;`)(
+      async (cmd, args) => { log.calls.push([cmd, args]); },
+      (e) => log.errs.push(String(e)), st, (k) => st.ui_flags[k] === true, (k) => k, noop, noop, noop, noop, noop, noop, noop, noop, async () => {});
+    await run();
+    need(!log.calls.some(([c, a]) => c === "set_ui_flag" && a.key === "remoteTlsShortLived"), "a reset must not write the certificate switch back");
+    need(log.calls.some(([c, a]) => c === "set_ui_flag" && a.key === "demoMode"), "a reset keeps the demo marker");
+    need(log.errs.length === 0, "a reset must show no error");
+    need(st.ui_flags.remoteTlsShortLived === undefined, "the switch must read off after a reset");
+  }
   for (const p of problems) console.log("FAIL", p);
   console.log(problems.length ? `${problems.length} problem(s)` : "PASS");
   process.exit(problems.length ? 1 : 0);

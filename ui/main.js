@@ -2318,6 +2318,9 @@ const EXPERT_PRESET_QUIET = ["copyBubble", "copyFlash", "copySound", "undoToast"
 // Demo mode is a session with its own enable and disable commands and a restart,
 // so no bulk action (profile, category reset, reset all) may ever write it.
 const EXPERT_BULK_NEVER = ["demoMode", "remoteTlsShortLived"];
+// What an expert reset writes back: the backend clears the certificate lifetime flag
+// itself (the certificate stays), so only the demo session marker survives it.
+const EXPERT_RESET_KEEP = ["demoMode"];
 const EXPERT_PRESET_FULL_EXCLUDE = [
   "ocrIndex", "voiceOnlineOk", ...EXPERT_BULK_NEVER,
   "remoteApi", "remoteNetworkFilter", "urlScheme", "promptSync",
@@ -4419,7 +4422,7 @@ async function onResetExpert() {
   // The backend wipes every stored flag, demo mode included. A running demo
   // session must stay one (leaving it is the switch's own confirmed restart), so
   // its marker is written back straight after.
-  const keep = EXPERT_BULK_NEVER.filter((k) => flag(k));
+  const keep = EXPERT_RESET_KEEP.filter((k) => flag(k));
   settings.ui_flags = Object.fromEntries(keep.map((k) => [k, true]));
   settings.ui_values = {};
   settings.ui_texts = {};
