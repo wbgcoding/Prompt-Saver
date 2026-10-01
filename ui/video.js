@@ -2932,7 +2932,7 @@ function keysPickerRow(op) {
       box.type = "checkbox";
       box.checked = (op.keys || []).includes(vk);
       box.addEventListener("change", () => {
-        const keys = new Set(op.keys || []);
+        const keys = new Set(liveOverlay(op).keys || []);
         if (box.checked) keys.add(vk); else keys.delete(vk);
         commitOverlay(op, { keys: [...keys] });
       });
