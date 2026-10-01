@@ -570,9 +570,15 @@ if full_exclude_m:
     if "...EXPERT_BULK_NEVER" not in full_exclude_m.group(1) and "demoMode" not in excluded:
         problems.append("bulk: EXPERT_PRESET_FULL_EXCLUDE does not keep demoMode out of All on")
 for fn in ("function expertPresetTarget", "function isRowChanged", "async function resetExpertGroup",
-           "async function resetOneExpertValue", "async function onResetExpert"):
+           "async function resetOneExpertValue"):
     if "EXPERT_BULK_NEVER" not in block(fn, "{", "}"):
         problems.append(f"bulk: {fn}() does not honour EXPERT_BULK_NEVER")
+# A full reset has its own keep list: the backend clears the certificate lifetime
+# flag itself, so only the demo marker is written back.
+if "EXPERT_RESET_KEEP" not in block("async function onResetExpert", "{", "}"):
+    problems.append("bulk: onResetExpert() does not honour EXPERT_RESET_KEEP")
+if "demoMode" not in re.findall(r'"([^"]+)"', (re.search(r"const EXPERT_RESET_KEEP = \[([^\]]*)\]", SRC) or [None, ""])[1]):
+    problems.append("bulk: EXPERT_RESET_KEEP must list demoMode")
 
 for p in problems:
     print("FAIL", p)

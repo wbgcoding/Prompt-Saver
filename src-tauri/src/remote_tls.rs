@@ -308,6 +308,7 @@ fn cert_validity(der: &[u8]) -> Option<(i64, i64)> {
     Some((der_time(nb_tag, nb_text)?, der_time(na_tag, na_text)?))
 }
 
+#[cfg(test)]
 fn cert_not_after(der: &[u8]) -> Option<i64> {
     cert_validity(der).map(|v| v.1)
 }
