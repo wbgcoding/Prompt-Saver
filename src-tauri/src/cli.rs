@@ -2686,7 +2686,7 @@ mod tests {
         let dir = std::env::temp_dir();
         for key in [
             "syncDir", "recordingDir", "screenshotDir", "videoExportDir", "secretVaultSalt", "secretVaultVerify",
-            "backupPw", "remoteNetworkFilter", "remoteApi", "remoteAllowedRanges", "remotePort", "remoteRateLimit",
+            "backupPw", "remoteNetworkFilter", "remoteApi", "remoteAllowedRanges", "remotePort", "remoteRateLimit", "remoteTlsShortLived",
             "clipWatcher", "urlSchemeCopyAllowed", "urlScheme", "demoMode", "promptSync",
             "voiceOnlineOk", "dataDirLock", "clipSkipSecrets",
         ] {

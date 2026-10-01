@@ -21,6 +21,12 @@ the video editor and the introduction tour ship on).
 
 ### Added
 
+- **A short-lived certificate for Apple devices.** A new expert switch in the
+  remote access group makes the receiver's certificate valid for 825 days
+  instead of ten years, which iPhone, iPad and Mac require. Switching asks
+  first and creates a new certificate, so devices have to trust it again. A
+  stored certificate that has run out is now replaced when the receiver
+  starts.
 - **Eight more expert settings for things that were fixed values.** A switch
   and a colour for the frame around a region recording (it still never appears
   in the video), a choice of what goes between two chained prompts (blank line,

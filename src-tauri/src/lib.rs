@@ -27513,6 +27513,11 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
         notify_float_settings(&app);
         return result;
     }
+    // The certificate lifetime switch changes the certificate with it, in one
+    // write: only its own command may set it.
+    if key == remote_tls::SHORT_LIVED_KEY {
+        return Err("remote-tls-short-lived-has-own-command".to_string());
+    }
     // Widening or narrowing the receiver's reach restarts it with the matching
     // protocol and is saved first, like its own switch.
     if key == "remoteNetworkFilter" {
@@ -35897,6 +35902,7 @@ pub fn run() {
             remote::remote_tls_fingerprint,
             remote::remote_tls_save_cert,
             remote::remote_tls_renew,
+            remote::remote_tls_set_short_lived,
             remote::run_pending_launch_url,
             skip_version,
             whats_new_check,
@@ -46315,8 +46321,12 @@ mod tests {
         s.ui_texts.insert("remoteTlsKey".to_string(), "tls".into());
         s.ui_texts.insert("copyFont".to_string(), "mono".into());
         s.ui_flags.insert("clipWatcher".to_string(), true);
+        s.ui_flags.insert("remoteTlsShortLived".to_string(), true);
+        s.ui_texts.insert("remoteTlsCert".to_string(), "cert".into());
         s.ui_values.insert("trayRecentN".to_string(), 9.0);
         reset_expert_settings(&mut s);
+        assert!(!s.ui_flags.contains_key("remoteTlsShortLived"), "the switch goes back to off");
+        assert_eq!(s.ui_texts.get("remoteTlsCert").map(String::as_str), Some("cert"), "without rotating the certificate");
         for (k, v) in [(SECRET_SALT_KEY, "salt"), (SECRET_VERIFY_KEY, "verify"), (BACKUP_PW_KEY, "sealed"), ("remoteTlsKey", "tls")] {
             assert_eq!(s.ui_texts.get(k).map(String::as_str), Some(v), "{k} must survive");
         }
@@ -49211,7 +49221,7 @@ mod tests {
     // value for each of them (or the absence of one).
     fn hostile_settings() -> Settings {
         let mut s = Settings { autostart: true, ..Settings::default() };
-        for k in ["remoteApi", "remoteNetworkFilter", "urlScheme", "urlSchemeOpenAllowed", "urlSchemeCopyAllowed", "demoMode", "allowMultipleInstances", "promptSync"] {
+        for k in ["remoteApi", "remoteNetworkFilter", "remoteTlsShortLived", "urlScheme", "urlSchemeOpenAllowed", "urlSchemeCopyAllowed", "demoMode", "allowMultipleInstances", "promptSync"] {
             s.ui_flags.insert(k.into(), true);
         }
         s.ui_flags.insert("copyFlash".into(), false);
@@ -49236,7 +49246,7 @@ mod tests {
         let backup = Backup { prompts: vec![], settings: hostile_settings() };
         apply_import(&mut store, backup, false, true);
         let s = &store.settings;
-        for k in ["remoteNetworkFilter", "urlScheme", "urlSchemeOpenAllowed", "urlSchemeCopyAllowed", "demoMode", "allowMultipleInstances", "promptSync"] {
+        for k in ["remoteNetworkFilter", "remoteTlsShortLived", "urlScheme", "urlSchemeOpenAllowed", "urlSchemeCopyAllowed", "demoMode", "allowMultipleInstances", "promptSync"] {
             assert!(!s.ui_flags.contains_key(k), "{k} must not be imported");
         }
         assert_eq!(s.ui_flags.get("remoteApi"), Some(&false), "this machine's own value stays");
@@ -49256,8 +49266,8 @@ mod tests {
         incoming.ui_texts.insert(SECRET_SALT_KEY.into(), "foreign".into());
         incoming.ui_texts.insert(SECRET_VERIFY_KEY.into(), "foreign".into());
         let skipped = strip_denied_import_keys(&mut incoming);
-        // 8 flags, 2 values, 4 texts + 3 certificate values + 2 vault keys
-        assert_eq!(skipped, 8 + 2 + 4 + 3, "the vault rows are dropped silently");
+        // 9 flags, 2 values, 4 texts + 3 certificate values + 2 vault keys
+        assert_eq!(skipped, 9 + 2 + 4 + 3, "the vault rows are dropped silently");
         assert_eq!(incoming.ui_flags.keys().collect::<Vec<_>>(), vec!["copyFlash"]);
         assert_eq!(incoming.ui_values.keys().collect::<Vec<_>>(), vec!["tileGap"]);
         assert_eq!(incoming.ui_texts.keys().collect::<Vec<_>>(), vec!["copyFont"]);

@@ -27,6 +27,13 @@ pub(crate) const REMOTE_TLS_CA: &str = "remoteTlsCa";
 // shown to a window) and they survive both resets.
 pub(crate) const REMOTE_TLS_KEYS: [&str; 3] = [REMOTE_TLS_KEY, REMOTE_TLS_CERT, REMOTE_TLS_CA];
 
+// Expert switch: the certificates are valid for 825 days instead of ten years,
+// the longest an Apple device accepts. Only `set_short_lived_core` writes it.
+pub(crate) const SHORT_LIVED_KEY: &str = "remoteTlsShortLived";
+// notBefore to notAfter spans 823 days: two days inside the 825 a device accepts,
+// since validity counts inclusively and a device may add a second.
+const SHORT_LIVED_SPAN_DAYS: i64 = 823;
+
 pub(crate) const ERR_KEY_NOT_PROTECTED: &str = "the certificate key could not be protected";
 pub(crate) const ERR_SAVE_FAILED: &str = "save-failed";
 
@@ -44,6 +51,12 @@ pub(crate) enum IdentitySource {
     Stored,
     Created,
     KeyUnreadable,
+    // The stored certificate (or its CA) is past its end date.
+    Expired,
+}
+
+fn short_lived(settings: &Settings) -> bool {
+    settings.ui_flags.get(SHORT_LIVED_KEY) == Some(&true)
 }
 
 fn names_for(dns_host: Option<&str>, computer_name: Option<&str>) -> Vec<String> {
@@ -129,16 +142,59 @@ fn dns_host_name() -> Option<String> {
     None
 }
 
-fn year_now() -> i32 {
-    let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-    1970 + (secs / 31_556_952) as i32
+fn now_secs() -> i64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
 }
 
-fn generate(names: &[String]) -> Result<TlsIdentity, String> {
-    let year = year_now();
-    // Starts a year back so a device with a slightly wrong clock still accepts it.
-    let not_before = rcgen::date_time_ymd(year - 1, 1, 1);
-    let not_after = rcgen::date_time_ymd(year + VALIDITY_YEARS, 12, 31);
+// Calendar date (year, month, day) of a day count since 1970-01-01.
+fn civil_from_days(z: i64) -> (i32, u8, u8) {
+    let z = z + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u8;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u8;
+    let y = yoe + era * 400 + if m <= 2 { 1 } else { 0 };
+    (y as i32, m, d)
+}
+
+// Day count since 1970-01-01 of a calendar date.
+fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = y.div_euclid(400);
+    let yoe = y.rem_euclid(400);
+    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe - 719_468
+}
+
+type Ymd = (i32, u8, u8);
+
+// The validity window. Default: from the start of last year to the end of the
+// year ten years ahead. Short-lived: from yesterday, 823 days in all, so no
+// device sees a longer window than it allows.
+fn validity(short: bool) -> (Ymd, Ymd) {
+    let now = now_secs();
+    if short {
+        let today = now.div_euclid(86_400);
+        (civil_from_days(today - 1), civil_from_days(today - 1 + SHORT_LIVED_SPAN_DAYS))
+    } else {
+        let year = 1970 + (now / 31_556_952) as i32;
+        // Starts a year back so a device with a slightly wrong clock still accepts it.
+        ((year - 1, 1, 1), (year + VALIDITY_YEARS, 12, 31))
+    }
+}
+
+fn generate(names: &[String], short: bool) -> Result<TlsIdentity, String> {
+    let (nb, na) = validity(short);
+    generate_span(names, nb, na)
+}
+
+fn generate_span(names: &[String], nb: Ymd, na: Ymd) -> Result<TlsIdentity, String> {
+    let not_before = rcgen::date_time_ymd(nb.0, nb.1, nb.2);
+    let not_after = rcgen::date_time_ymd(na.0, na.1, na.2);
 
     let ca_key = KeyPair::generate().map_err(|e| e.to_string())?;
     let mut ca_params = CertificateParams::default();
@@ -174,6 +230,98 @@ fn generate(names: &[String]) -> Result<TlsIdentity, String> {
     let server_cert = server_params.signed_by(&server_key, &issuer).map_err(|e| e.to_string())?;
     // ca_key goes out of scope here and is never written anywhere.
     Ok(TlsIdentity { cert_pem: server_cert.pem(), key_pem: server_key.serialize_pem(), ca_pem: ca_cert.pem() })
+}
+
+// One DER element at the start of `b`: (tag, content, rest).
+fn der_next(b: &[u8]) -> Option<(u8, &[u8], &[u8])> {
+    let tag = *b.first()?;
+    let first = *b.get(1)?;
+    let (len, head) = if first < 0x80 {
+        (first as usize, 2)
+    } else {
+        let n = (first & 0x7f) as usize;
+        if n == 0 || n > 4 {
+            return None;
+        }
+        let mut len = 0usize;
+        for i in 0..n {
+            len = (len << 8) | *b.get(2 + i)? as usize;
+        }
+        (len, 2 + n)
+    };
+    let end = head.checked_add(len)?;
+    if end > b.len() {
+        return None;
+    }
+    Some((tag, &b[head..end], &b[end..]))
+}
+
+// One DER time (UTCTime or GeneralizedTime) as seconds since 1970.
+fn der_time(tag: u8, text: &[u8]) -> Option<i64> {
+    let digits = std::str::from_utf8(text).ok()?.strip_suffix('Z')?;
+    if !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let (year, tail) = match tag {
+        0x17 if digits.len() == 12 => {
+            let yy: i64 = digits[..2].parse().ok()?;
+            (if yy >= 50 { 1900 + yy } else { 2000 + yy }, &digits[2..])
+        }
+        0x18 if digits.len() == 14 => (digits[..4].parse().ok()?, &digits[4..]),
+        _ => return None,
+    };
+    let part = |i: usize| -> Option<i64> { tail[i..i + 2].parse().ok() };
+    let (mo, d, h, mi, se) = (part(0)?, part(2)?, part(4)?, part(6)?, part(8)?);
+    if !(1..=12).contains(&mo) || !(1..=31).contains(&d) || h > 23 || mi > 59 || se > 60 {
+        return None;
+    }
+    Some(days_from_civil(year, mo, d) * 86_400 + h * 3600 + mi * 60 + se)
+}
+
+// (notBefore, notAfter) of a certificate, as seconds since 1970, read straight
+// from the DER. The certificate, its TBS part and the validity must all be
+// SEQUENCEs, otherwise nothing is read.
+fn cert_validity(der: &[u8]) -> Option<(i64, i64)> {
+    let (tag, cert, _) = der_next(der)?;
+    if tag != 0x30 {
+        return None;
+    }
+    let (tag, tbs, _) = der_next(cert)?;
+    if tag != 0x30 {
+        return None;
+    }
+    let mut rest = tbs;
+    let (tag, _, after) = der_next(rest)?;
+    if tag == 0xa0 {
+        rest = after; // the optional version
+    }
+    // serial, signature algorithm, issuer
+    for _ in 0..3 {
+        rest = der_next(rest)?.2;
+    }
+    let (tag, validity, _) = der_next(rest)?;
+    if tag != 0x30 {
+        return None;
+    }
+    let (nb_tag, nb_text, after_not_before) = der_next(validity)?;
+    let (na_tag, na_text, _) = der_next(after_not_before)?;
+    Some((der_time(nb_tag, nb_text)?, der_time(na_tag, na_text)?))
+}
+
+#[cfg(test)]
+fn cert_not_after(der: &[u8]) -> Option<i64> {
+    cert_validity(der).map(|v| v.1)
+}
+
+// True when the PEM certificate is past its end date at `now`, or starts more
+// than a day later (made under a clock that ran ahead: every client would reject
+// it as not yet valid). A certificate whose dates cannot be read counts as
+// expired: it is replaced, never trusted blind.
+fn pem_expired(pem: &str, now: i64) -> bool {
+    match CertificateDer::from_pem_slice(pem.as_bytes()) {
+        Ok(der) => cert_validity(der.as_ref()).map_or(true, |(nb, na)| na <= now || nb > now + 86_400),
+        Err(_) => true,
+    }
 }
 
 pub(crate) fn build_server_config(id: &TlsIdentity) -> Result<Arc<ServerConfig>, String> {
@@ -214,14 +362,19 @@ fn load_stored(settings: &Settings) -> Result<TlsIdentity, IdentitySource> {
         return Err(IdentitySource::KeyUnreadable);
     }
     let id = TlsIdentity { cert_pem: cert, key_pem, ca_pem: ca };
-    build_server_config(&id).map(|_| id).map_err(|_| IdentitySource::KeyUnreadable)
+    build_server_config(&id).map_err(|_| IdentitySource::KeyUnreadable)?;
+    let now = now_secs();
+    if pem_expired(&id.cert_pem, now) || pem_expired(&id.ca_pem, now) {
+        return Err(IdentitySource::Expired);
+    }
+    Ok(id)
 }
 
 // Makes a fresh identity and stores it: the sealed key, the server certificate
 // and the CA certificate. Refuses, storing nothing, when the key did not come
 // back sealed; a failed write restores what was there.
 fn create_and_store(settings: &mut Settings, names: &[String], mut save: impl FnMut(&Settings) -> bool) -> Result<TlsIdentity, String> {
-    let id = generate(names)?;
+    let id = generate(names, short_lived(settings))?;
     let sealed = enc_str(&id.key_pem);
     if !sealed.starts_with(ENC_PREFIX) {
         return Err(ERR_KEY_NOT_PROTECTED.to_string());
@@ -244,6 +397,28 @@ fn create_and_store(settings: &mut Settings, names: &[String], mut save: impl Fn
         return Err(ERR_SAVE_FAILED.to_string());
     }
     Ok(id)
+}
+
+// The expert switch for the certificate lifetime. The flag and the new
+// identity (made with the new lifetime) are saved together in one write; when
+// anything fails, flag and identity are both as they were. Nothing else sets
+// this flag, so it never changes without the certificate changing with it.
+pub(crate) fn set_short_lived_core(
+    settings: &mut Settings,
+    enabled: bool,
+    names: &[String],
+    save: impl FnMut(&Settings) -> bool,
+) -> Result<TlsIdentity, String> {
+    let old = settings.ui_flags.get(SHORT_LIVED_KEY).copied();
+    settings.ui_flags.insert(SHORT_LIVED_KEY.to_string(), enabled);
+    let result = create_and_store(settings, names, save);
+    if result.is_err() {
+        match old {
+            Some(v) => settings.ui_flags.insert(SHORT_LIVED_KEY.to_string(), v),
+            None => settings.ui_flags.remove(SHORT_LIVED_KEY),
+        };
+    }
+    result
 }
 
 // Called before the listener is spawned. Returns the identity and where it came
@@ -317,7 +492,7 @@ mod tests {
     #[test]
     fn an_unusable_name_is_skipped_and_addresses_become_ip_names() {
         let names = vec!["localhost".to_string(), "127.0.0.1".to_string(), "bücher-pc".to_string(), "192.168.7.42".to_string()];
-        let id = generate(&names).expect("a non-ASCII name must not fail the identity");
+        let id = generate(&names, false).expect("a non-ASCII name must not fail the identity");
         assert!(build_server_config(&id).is_ok());
         let der = CertificateDer::from_pem_slice(id.cert_pem.as_bytes()).unwrap();
         assert!(contains_bytes(der.as_ref(), &[192, 168, 7, 42]), "the address must be a name of the certificate");
@@ -410,5 +585,135 @@ mod tests {
         assert!(s.ui_texts.contains_key(REMOTE_TLS_CA));
         strip_tls_keys(&mut s.ui_texts);
         assert!(REMOTE_TLS_KEYS.iter().all(|k| !s.ui_texts.contains_key(*k)));
+    }
+
+    fn leaf_not_after(id: &TlsIdentity) -> i64 {
+        cert_not_after(CertificateDer::from_pem_slice(id.cert_pem.as_bytes()).unwrap().as_ref()).expect("the end date must be readable")
+    }
+    fn leaf_not_before(id: &TlsIdentity) -> i64 {
+        cert_validity(CertificateDer::from_pem_slice(id.cert_pem.as_bytes()).unwrap().as_ref()).expect("the dates must be readable").0
+    }
+    fn ca_not_before(id: &TlsIdentity) -> i64 {
+        cert_validity(CertificateDer::from_pem_slice(id.ca_pem.as_bytes()).unwrap().as_ref()).expect("the dates must be readable").0
+    }
+    fn ca_not_after(id: &TlsIdentity) -> i64 {
+        cert_not_after(CertificateDer::from_pem_slice(id.ca_pem.as_bytes()).unwrap().as_ref()).expect("the end date must be readable")
+    }
+
+    #[test]
+    fn the_end_date_reader_agrees_with_the_calendar() {
+        assert_eq!(days_from_civil(1970, 1, 1), 0);
+        assert_eq!(days_from_civil(2000, 3, 1), 11_017);
+        for day in [0i64, 11_017, 20_000, 29_000, -400] {
+            let (y, m, d) = civil_from_days(day);
+            assert_eq!(days_from_civil(y as i64, m as i64, d as i64), day);
+        }
+        let id = generate_span(&names(), (2020, 1, 1), (2031, 12, 31)).unwrap();
+        assert_eq!(leaf_not_after(&id), days_from_civil(2031, 12, 31) * 86_400);
+        // Past 2049 the date is a GeneralizedTime, which must read the same way.
+        let far = generate_span(&names(), (2020, 1, 1), (2061, 6, 15)).unwrap();
+        assert_eq!(leaf_not_after(&far), days_from_civil(2061, 6, 15) * 86_400);
+    }
+
+    #[test]
+    fn the_short_lived_certificate_ends_within_825_days_and_the_default_in_ten_years() {
+        let now = now_secs();
+        let day = 86_400;
+        let short = generate(&names(), true).unwrap();
+        for end in [leaf_not_after(&short), ca_not_after(&short)] {
+            assert!(end <= now + 825 * day, "longer than 825 days: {}", (end - now) / day);
+            assert!(end >= now + 820 * day, "far shorter than expected: {}", (end - now) / day);
+        }
+        for (nb, na) in [(leaf_not_before(&short), leaf_not_after(&short)), (ca_not_before(&short), ca_not_after(&short))] {
+            assert!(na - nb <= 824 * day, "the whole window must stay inside 824 days: {}", (na - nb) / day);
+            assert!(nb <= now, "a short certificate is already valid");
+        }
+        let long = generate(&names(), false).unwrap();
+        let (y_now, _, _) = civil_from_days(now.div_euclid(day));
+        let end_year = civil_from_days(leaf_not_after(&long).div_euclid(day)).0;
+        assert_eq!(end_year, y_now + VALIDITY_YEARS, "the default stays ten years");
+        assert!(leaf_not_after(&long) > now + 9 * 365 * day);
+    }
+
+    #[test]
+    fn the_flag_picks_the_lifetime_for_a_new_and_a_renewed_identity() {
+        let now = now_secs();
+        let mut s = Settings::default();
+        s.ui_flags.insert(SHORT_LIVED_KEY.into(), true);
+        let (made, _) = ensure_tls_identity(&mut s, &names(), |_| true).unwrap();
+        assert!(leaf_not_after(&made) <= now + 825 * 86_400);
+        let renewed = renew_tls_identity(&mut s, &names(), |_| true).unwrap();
+        assert!(leaf_not_after(&renewed) <= now + 825 * 86_400);
+        s.ui_flags.insert(SHORT_LIVED_KEY.into(), false);
+        let renewed = renew_tls_identity(&mut s, &names(), |_| true).unwrap();
+        assert!(leaf_not_after(&renewed) > now + 9 * 365 * 86_400);
+    }
+
+    #[test]
+    fn the_switch_saves_flag_and_new_certificate_together_and_undoes_both_on_failure() {
+        let mut s = Settings::default();
+        let (old, _) = ensure_tls_identity(&mut s, &names(), |_| true).unwrap();
+        let mut seen = Vec::new();
+        let new = set_short_lived_core(&mut s, true, &names(), |st| {
+            seen.push(st.ui_flags.get(SHORT_LIVED_KEY).copied());
+            true
+        })
+        .unwrap();
+        assert_eq!(seen, vec![Some(true)], "one write that already holds the flag");
+        assert_ne!(new.ca_pem, old.ca_pem, "switching makes a new certificate");
+        assert!(leaf_not_after(&new) <= now_secs() + 825 * 86_400);
+        let before_ca = s.ui_texts.get(REMOTE_TLS_CA).cloned();
+        assert!(set_short_lived_core(&mut s, false, &names(), |_| false).is_err());
+        assert_eq!(s.ui_flags.get(SHORT_LIVED_KEY), Some(&true), "a failed write leaves the flag");
+        assert_eq!(s.ui_texts.get(REMOTE_TLS_CA).cloned(), before_ca, "and the certificate");
+        let mut fresh = Settings::default();
+        assert!(set_short_lived_core(&mut fresh, true, &names(), |_| false).is_err());
+        assert!(!fresh.ui_flags.contains_key(SHORT_LIVED_KEY));
+        assert!(!fresh.ui_texts.contains_key(REMOTE_TLS_KEY));
+    }
+
+    #[test]
+    fn a_certificate_that_starts_in_the_future_is_replaced() {
+        let day = now_secs().div_euclid(86_400);
+        let (y, m, d) = civil_from_days(day + 30);
+        let (y2, m2, d2) = civil_from_days(day + 400);
+        let future = generate_span(&names(), (y, m, d), (y2, m2, d2)).unwrap();
+        assert!(pem_expired(&future.cert_pem, now_secs()));
+        let (y, m, d) = civil_from_days(day - 1);
+        let ok = generate_span(&names(), (y, m, d), (y2, m2, d2)).unwrap();
+        assert!(!pem_expired(&ok.cert_pem, now_secs()));
+        assert!(cert_validity(&[0x31, 0x00]).is_none(), "a non-SEQUENCE certificate is refused");
+    }
+
+    #[test]
+    fn an_expired_stored_identity_is_replaced_never_kept() {
+        let mut s = Settings::default();
+        let old = generate_span(&names(), (2018, 1, 1), (2020, 1, 1)).unwrap();
+        s.ui_texts.insert(REMOTE_TLS_KEY.into(), enc_str(&old.key_pem));
+        s.ui_texts.insert(REMOTE_TLS_CERT.into(), old.cert_pem.clone());
+        s.ui_texts.insert(REMOTE_TLS_CA.into(), old.ca_pem.clone());
+        assert_eq!(load_stored(&s).err(), Some(IdentitySource::Expired));
+        let (fresh, source) = ensure_tls_identity(&mut s, &names(), |_| true).unwrap();
+        assert_eq!(source, IdentitySource::Expired);
+        assert_ne!(fresh.ca_pem, old.ca_pem);
+        assert!(leaf_not_after(&fresh) > now_secs());
+        // A valid CA with an expired server certificate is replaced too.
+        let valid = generate(&names(), false).unwrap();
+        s.ui_texts.insert(REMOTE_TLS_KEY.into(), enc_str(&old.key_pem));
+        s.ui_texts.insert(REMOTE_TLS_CERT.into(), old.cert_pem.clone());
+        s.ui_texts.insert(REMOTE_TLS_CA.into(), valid.ca_pem.clone());
+        assert_eq!(load_stored(&s).err(), Some(IdentitySource::Expired));
+        // The new identity honours the current lifetime setting.
+        s.ui_flags.insert(SHORT_LIVED_KEY.into(), true);
+        s.ui_texts.insert(REMOTE_TLS_CA.into(), old.ca_pem.clone());
+        let (short, _) = ensure_tls_identity(&mut s, &names(), |_| true).unwrap();
+        assert!(leaf_not_after(&short) <= now_secs() + 825 * 86_400);
+        assert!(load_stored(&s).is_ok(), "a current identity is kept");
+    }
+
+    #[test]
+    fn a_certificate_without_a_readable_end_date_counts_as_expired() {
+        assert!(pem_expired("not a certificate", 0));
+        assert!(cert_not_after(&[0x30, 0x03, 0x02, 0x01]).is_none());
     }
 }
