@@ -28051,7 +28051,7 @@ fn install_update_blocking(url: String) -> Result<(), String> {
     {
         use sha2::{Digest, Sha256};
         if format!("{:x}", Sha256::digest(&bytes)) != want {
-            return Err("update hash mismatch — download rejected".to_string());
+            return Err("update hash mismatch: download rejected".to_string());
         }
     }
     // Stage into a fresh, uniquely-named temp subdir so a local attacker can't pre-plant
@@ -28624,7 +28624,7 @@ fn verify_ffmpeg_zip_against(bytes: &[u8], want_hex: &str) -> Result<(), String>
     let got = Sha256::digest(bytes);
     let want = hex_decode(want_hex).ok_or_else(|| "bad pinned hash".to_string())?;
     if !ct_eq(got.as_slice(), &want) {
-        return Err("ffmpeg download hash mismatch -- rejected".to_string());
+        return Err("ffmpeg download hash mismatch, rejected".to_string());
     }
     Ok(())
 }
