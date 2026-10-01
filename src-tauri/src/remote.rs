@@ -513,11 +513,20 @@ pub(crate) fn remote_tls_fingerprint(state: State<Db>) -> Option<String> {
 #[tauri::command]
 pub(crate) async fn remote_tls_save_cert(app: AppHandle, state: State<'_, Db>) -> Result<String, String> {
     let names = crate::remote_tls::host_names();
-    let ca = {
+    let (ca, restart) = {
         let mut store = lock(&state);
-        let (id, _) = crate::remote_tls::ensure_tls_identity(&mut store.settings, &names, |s| save_settings(&app, s))?;
-        id.ca_pem
+        let (id, source) = crate::remote_tls::ensure_tls_identity(&mut store.settings, &names, |s| save_settings(&app, s))?;
+        let renewed = source != crate::remote_tls::IdentitySource::Stored;
+        (id.ca_pem, renewed && remote_api_enabled(&store.settings) && network_filter_enabled(&store.settings))
     };
+    // A running receiver still serves the certificate that was just replaced: restart
+    // it so the exported CA is the one it offers.
+    if restart {
+        if let Err(e) = restart_receiver(&app) {
+            record_error_log(&format!("the receiver did not restart after the certificate was renewed: {e}"), "remoteApi", None, 100);
+        }
+        let _ = app.emit("remote-tls-renewed", ());
+    }
     let file = crate::file_dialog(&app)
         .set_file_name(format!("{}-remote.pem", crate::brand::SLUG))
         .add_filter("PEM", &["pem"])
@@ -557,6 +566,13 @@ pub(crate) fn remote_tls_set_short_lived(app: AppHandle, state: State<Db>, enabl
     let names = crate::remote_tls::host_names();
     let (fingerprint, restart) = {
         let mut store = lock(&state);
+        // Nothing to switch: keep the certificate devices already trust.
+        let current = store.settings.ui_flags.get(crate::remote_tls::SHORT_LIVED_KEY) == Some(&true);
+        if current == enabled {
+            if let Some(fp) = crate::remote_tls::stored_ca(&store.settings).and_then(|pem| crate::remote_tls::fingerprint(&pem)) {
+                return Ok(fp);
+            }
+        }
         let id = crate::remote_tls::set_short_lived_core(&mut store.settings, enabled, &names, |s| save_settings(&app, s))?;
         (crate::remote_tls::fingerprint(&id.ca_pem), remote_api_enabled(&store.settings) && network_filter_enabled(&store.settings))
     };
@@ -984,8 +1000,15 @@ fn prepare_acceptor(app: &AppHandle) -> Result<TlsAcceptor, String> {
     }
     if source == crate::remote_tls::IdentitySource::Expired {
         record_error_log("the receiver certificate had expired, a new certificate was made", "remoteApi", None, 100);
+        announce_tls_renewed(app);
     }
     Ok(TlsAcceptor::from(crate::remote_tls::build_server_config(&id)?))
+}
+
+// Tells the main window that the certificate was replaced on its own, so it can
+// show the same notice as after a manual renewal.
+fn announce_tls_renewed(app: &AppHandle) {
+    let _ = app.emit("remote-tls-renewed", ());
 }
 
 pub(crate) fn stop(app: &AppHandle) {
@@ -1597,6 +1620,19 @@ pub(crate) fn url_scheme_restore(_prior: Option<String>) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    // The receiver cannot be started inside a unit test, so the wiring is checked on
+    // the source: both places that replace an expired certificate tell the window.
+    #[test]
+    fn renewing_an_expired_certificate_announces_it_and_a_save_restarts_the_receiver() {
+        let src = include_str!("remote.rs");
+        let prep = &src[src.find("fn prepare_acceptor").unwrap()..];
+        let expired = &prep[prep.find("IdentitySource::Expired").unwrap()..];
+        assert!(expired[..400].contains("announce_tls_renewed(app)"));
+        let save = &src[src.find("async fn remote_tls_save_cert").unwrap()..];
+        let body = &save[..save.find("let file =").unwrap()];
+        assert!(body.contains("restart_receiver(&app)") && body.contains("remote-tls-renewed"));
+    }
+
     #[test]
     fn a_port_change_restarts_the_receiver_only_while_it_runs() {
         let mut on = Settings::default();

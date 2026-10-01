@@ -10656,7 +10656,10 @@ async function openRemoteTlsDialog() {
     if (answer === "alt") {
       const sure = await confirmDialog({ title: t("remoteTlsRenew"), message: t("remoteTlsRenewConfirm"), confirmLabel: t("remoteTlsRenew") });
       if (!sure) continue;
-      try { await invoke("remote_tls_renew"); } catch (e) { errToast(e); }
+      try {
+        await invoke("remote_tls_renew");
+        toast(t("remoteTlsRenewed"));
+      } catch (e) { errToast(e); }
       continue;
     }
     try {
@@ -10692,6 +10695,7 @@ async function toggleShortLivedCert(enabled) {
     return false;
   }
   settings.ui_flags = { ...(settings.ui_flags || {}), remoteTlsShortLived: enabled };
+  toast(t("remoteTlsRenewed"));
   return true;
 }
 
@@ -21191,6 +21195,8 @@ function bind() {
     }
   }
   listen("remote-api-status", (e) => updateRemoteApiBanner(e.payload));
+  // The receiver replaced an expired certificate by itself: say so, like a manual renewal.
+  listen("remote-tls-renewed", () => toast(t("remoteTlsRenewed")));
   invoke("remote_api_status").then(updateRemoteApiBanner).catch(() => {});
   $("remote-api-banner-off").addEventListener("click", async () => {
     try { await invoke("remote_api_stop_now"); } catch (e) { errToast(e); }
