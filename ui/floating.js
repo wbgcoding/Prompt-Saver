@@ -326,8 +326,15 @@ let ownColor = "";
 function paintOwnInk(color) {
   ownColor = color || "";
   const ink = inkForColor(ownColor);
-  pill.style.color = ink ? ink.fg : "";
-  pill.style.textShadow = ink ? ink.shadow : "";
+  // The pill's text and overlays read these variables, so setting them on the
+  // pill overrides the theme's ink for everything inside it.
+  if (ink) {
+    pill.style.setProperty("--pill-fg", ink.fg);
+    pill.style.setProperty("--pill-ink-shadow", ink.shadow);
+  } else {
+    pill.style.removeProperty("--pill-fg");
+    pill.style.removeProperty("--pill-ink-shadow");
+  }
 }
 onInkChange(() => {
   if (ownColor) paintOwnInk(ownColor);
@@ -440,6 +447,7 @@ function applyPrompt(p) {
   if (showMedia) {
     pill.classList.add("has-image");
     pill.style.background = "transparent";
+    paintOwnInk("");
     // The chosen color frames the media; the window hugs the media box.
     borderW = p.color ? pillBorderW : 0;
     pill.style.border = p.color ? `${pillBorderW}px solid ${p.color}` : "none";
@@ -477,6 +485,7 @@ function applyPrompt(p) {
     imgEl.removeAttribute("src");
     pill.classList.remove("has-image");
     pill.style.background = p.color || "";
+    paintOwnInk(p.color);
     pill.style.border = "";
     imgRatio = 0;
     borderW = 0;

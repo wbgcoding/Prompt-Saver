@@ -86,6 +86,7 @@ export function applyFloatTheme(theme, vars) {
   const pillBg = style.getPropertyValue("--pill-bg").trim();
   if (FLOAT_HEX.test(pillBg)) style.setProperty("--pill-fg", readableInk(pillBg));
   style.setProperty("--pill-ink-shadow", FLOAT_HEX.test(pillBg) ? inkShadow(pillBg) : "none");
+  if (inkListener) inkListener();
 }
 
 // Keep INK current without waiting for the next theme change, and re-paint
