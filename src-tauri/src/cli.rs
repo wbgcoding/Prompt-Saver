@@ -1166,6 +1166,10 @@ fn cmd_get(store: &Store, id: &str, json: bool) -> Outcome {
     let Some(p) = find_prompt(store, id) else {
         return Outcome::err(2, format!("no prompt with id {id}\n"));
     };
+    if p.secret {
+        return Outcome::err(1, format!("prompt {id} is confidential and can only be read in the app itself
+"));
+    }
     let trashed = p.trashed_at > 0;
     if json {
         let d = PromptDetail { id: &p.id, name: &p.name, text: &p.text, favorite: p.favorite, tags: &p.tags, notes: &p.notes, color: &p.color, trashed };
@@ -1591,7 +1595,9 @@ fn map_restore_err_code(e: &str) -> i32 {
 fn cmd_settings_get(store: &Store, key: &str, json: bool) -> Outcome {
     // The receiver's certificate values belong to this machine and never
     // travel over the command line, least of all the remote one.
-    if crate::remote::is_remote_secret_key(key) {
+    // The vault salt and verifier and the sealed backup password would give
+    // anyone with the receiver password what an offline guess needs.
+    if crate::remote::is_remote_secret_key(key) || crate::is_vault_key(key) || key == crate::BACKUP_PW_KEY {
         return Outcome::err(2, format!("no setting named \"{key}\"
 "));
     }
@@ -2681,6 +2687,29 @@ mod tests {
             }
             assert_eq!(serde_json::to_string(&store.settings).unwrap(), before, "{key} changed the store");
         }
+    }
+
+    #[test]
+    fn settings_get_and_get_keep_the_vault_material_to_themselves() {
+        let mut store = fixture_store();
+        let dir = std::env::temp_dir();
+        for key in ["secretVaultSalt", "secretVaultVerify", "backupPw"] {
+            store.settings.ui_texts.insert(key.to_string(), "sealed-bytes".to_string());
+            let got = run_cmd(&mut store, &dir, &["settings", "get", key]);
+            assert_ne!(got.code, 0, "{key} must not be readable here");
+            assert!(!got.stdout.contains("sealed-bytes"));
+        }
+        store.prompts[0].secret = true;
+        store.prompts[0].text = "CIPHERTEXT".to_string();
+        for extra in [&[][..], &["--json"][..]] {
+            let mut argv = vec!["get", "p1"];
+            argv.extend_from_slice(extra);
+            let got = run_cmd(&mut store, &dir, &argv);
+            assert_ne!(got.code, 0);
+            assert!(!got.stdout.contains("CIPHERTEXT") && !got.stderr.contains("CIPHERTEXT"));
+        }
+        let plain = run_cmd(&mut store, &dir, &["get", "p2"]);
+        assert_eq!(plain.code, 0);
     }
 
     #[test]
