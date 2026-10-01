@@ -72,6 +72,13 @@ function makeSandbox(extra) {
       extractBlock("undo", "function undo() {"),
       extractBlock("redo", "function redo() {"),
       extractBlock("removeOps", "function removeOps(match) {"),
+      extractLine("even", "const even = (v) => Math.max(0, Math.round(v / 2) * 2);"),
+      extractLine("scaleHeights", "const SCALE_HEIGHT_PRESETS = [2160, 1440, 1080, 720, 480, 360];"),
+      extractLine("scalePercents", "const SCALE_PERCENT_PRESETS = [50, 25];"),
+      extractBlock("scaleForHeightPreset", "function scaleForHeightPreset(h) {"),
+      extractBlock("scaleForPercent", "function scaleForPercent(pct) {"),
+      extractBlock("applyScalePresetKey", "function applyScalePresetKey(key) {"),
+      extractBlock("setScaleOp", "function setScaleOp(w, h) {"),
       extractBlock("restoreRemoved", "function restoreRemoved(marker) {"),
       extractLine("rectsEqual", "const rectsEqual = (a, b) => !!a && !!b && a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;"),
       extractBlock("endRectDrag", "function endRectDrag() {"),
@@ -440,6 +447,34 @@ async function exportIdleCheck() {
   expect("removing several ops at once is one undo step", sb.VE.ops.length === 2 && sb.VE.ops[0].startMs === 0 && sb.VE.ops[1].startMs === 20);
   expect("removeOps with no match pushes nothing", (() => { const n = sb.VE.ops.length; run("removeOps((o) => o.tool === 'fade')"); return sb.VE.ops.length === n; })());
   expect("the removal marker never reaches the ops list or the saved state", src.includes('op.tool !== "clip" && op.tool !== "removal"') && src.includes('VE.ops.filter((o) => o.tool !== "removal")'));
+}
+
+// A size preset never enlarges the video; the source size is "no scaling" and
+// removes the entry; the explicit percent field may still enlarge.
+{
+  const sb = makeSandbox({ afterOpsChanged() {} });
+  sb.VE = Object.assign(baseState([]), { floor: 0, redo: [], undoMax: 50, w: 1280, h: 720 });
+  const run = (code) => vm.runInContext(code, sb);
+  const scaleOp = () => sb.VE.ops.find((o) => o.tool === "scale") || null;
+  run("applyScalePresetKey('1080')");
+  expect("a preset taller than the source keeps the source size", scaleOp() === null);
+  run("applyScalePresetKey('2160')");
+  expect("the 4K preset on a smaller source adds no scale entry", scaleOp() === null);
+  run("applyScalePresetKey('480')");
+  expect("a smaller preset scales down", !!scaleOp() && scaleOp().h === 480 && scaleOp().w === 854, JSON.stringify(scaleOp()));
+  run("applyScalePresetKey('1080')");
+  expect("picking a too-big preset after a smaller one returns to the source", scaleOp() === null);
+  run("applyScalePresetKey('720')");
+  expect("a preset equal to the source adds no entry", scaleOp() === null);
+  const p200 = run("scaleForPercent(200)");
+  run("setScaleOp")(p200.w, p200.h);
+  expect("the percent field may still enlarge", !!scaleOp() && scaleOp().w === 2560 && scaleOp().h === 1440, JSON.stringify(scaleOp()));
+  const p100 = run("scaleForPercent(100)");
+  run("setScaleOp")(p100.w, p100.h);
+  expect("100 percent removes the scale entry", scaleOp() === null);
+  run("setScaleOp")(640, 360);
+  run("setScaleOp")(1280, 720);
+  expect("typing the source size removes the scale entry", scaleOp() === null);
 }
 
 // A refresh rewrites every field except one the user is typing in right now.

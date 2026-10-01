@@ -1913,13 +1913,11 @@ function renderScalePresets() {
 }
 
 // The one place a scale op becomes literal pixels: a fixed-height preset
-// gives its own size whether that is smaller or larger than the source (a
-// region recording is often below 720 px, and refusing to enlarge would turn
-// every preset into "keep original"). Only a preset equal to the source
-// height needs no op at all and stays "keep original". A percent value always
-// applies as typed.
+// never makes the video larger than its source, so a preset at or above the
+// source height needs no op at all and stays "keep original". A percent value
+// applies as typed and may enlarge.
 function scaleForHeightPreset(h) {
-  if (!VE.w || !VE.h || h === VE.h) return null;
+  if (!VE.w || !VE.h || h >= VE.h) return null;
   return { w: even(Math.round((VE.w * h) / VE.h)), h: even(h) };
 }
 function scaleForPercent(pct) {
@@ -3825,6 +3823,8 @@ function setScaleOp(w, h) {
   if (w == null || h == null) { removeOps((o) => o.tool === "scale"); return; }
   const cw = even(clamp(Math.round(w), 16, 7680));
   const ch = even(clamp(Math.round(h), 16, 7680));
+  // Back at the source size is no scaling at all, so the entry goes away.
+  if (VE.w && VE.h && cw === even(VE.w) && ch === even(VE.h)) { removeOps((o) => o.tool === "scale"); return; }
   pushReplacing((o) => o.tool === "scale", { tool: "scale", w: cw, h: ch });
 }
 
