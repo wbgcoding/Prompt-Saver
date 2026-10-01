@@ -35900,6 +35900,13 @@ fn apply_md_placement(settings: &mut Settings, prompt_id: &str, fields: &HashMap
             };
             if sync_join_tile_folder(settings, prompt_id, name, color, &view_id, cell) {
                 folders_touched = true;
+                // The key is always written, so an empty value means the folder has no
+                // colour on that machine: a cleared colour has to spread as well.
+                if fields.get("tile_folder_color").is_some_and(|c| c.trim().is_empty()) {
+                    if let Some(f) = settings.tile_folders.iter_mut().find(|f| f.members.iter().any(|m| m == prompt_id)) {
+                        f.color.clear();
+                    }
+                }
                 return (true, folders_touched);
             }
             // An unusable folder name (too long, control characters only) falls
@@ -41602,6 +41609,25 @@ mod tests {
         assert_eq!(apply_md_placement(&mut settings, "p1", &fields), (true, false));
         let key = grid_key(2, 1);
         assert_eq!(settings.views[0].layouts.get(&key).and_then(|m| m.get("p1")), Some(&[1, 0]));
+    }
+
+    #[test]
+    fn apply_md_placement_adopts_a_cleared_folder_colour() {
+        let mut settings = Settings::default();
+        settings.views.push(test_view("v1"));
+        let mut fields = HashMap::from([
+            ("view".to_string(), "V1".to_string()),
+            ("grid".to_string(), grid_key(default_cols(), default_rows())),
+            ("cell".to_string(), "0,0".to_string()),
+            ("tile_folder".to_string(), "Team".to_string()),
+            ("tile_folder_color".to_string(), "#00ff00".to_string()),
+        ]);
+        apply_md_placement(&mut settings, "p1", &fields);
+        assert_eq!(settings.tile_folders[0].color, "#00ff00");
+        fields.insert("tile_folder_color".to_string(), String::new());
+        apply_md_placement(&mut settings, "p2", &fields);
+        assert_eq!(settings.tile_folders.len(), 1);
+        assert_eq!(settings.tile_folders[0].color, "", "the other machine cleared the colour");
     }
 
     #[test]
