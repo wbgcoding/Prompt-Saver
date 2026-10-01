@@ -3533,7 +3533,13 @@ async function startExport(toClipboard) {
         if (!toClipboard && !destRetried && raw.includes("export destination not recognized")) {
           destRetried = true;
           const folder = await invoke("pick_export_folder").catch(() => null);
-          if (!folder) { clearExportStatus(); return; } // cancelled: no export, no error toast
+          if (!folder) {
+            // Nothing was chosen (cancelled, or no dialog could open): the
+            // export did not happen, and the status line says why.
+            clearExportStatus();
+            if (stillHere()) $("ve-export-status").textContent = t("veExportDestRefused");
+            return;
+          }
           const base = dest.replace(/^.*[\\/]/, "");
           dest = `${folder.replace(/[\\/]+$/, "")}/${base}`;
           continue;
@@ -3555,6 +3561,8 @@ async function startExport(toClipboard) {
       $("ve-export-status").textContent = t("veExportCancelled");
     } else if (raw.includes("ffmpeg-missing")) {
       $("ve-export-status").textContent = t("recFfmpegMissingHint");
+    } else if (raw.includes("export destination not recognized")) {
+      $("ve-export-status").textContent = t("veExportDestRefused");
     } else {
       const { message, details } = parseFfmpegError(err, t);
       $("ve-export-status").textContent = message;

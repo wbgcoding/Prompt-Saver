@@ -411,7 +411,8 @@ async function exportIdleCheck() {
       { filename: "video.js (extracted)" }
     );
     await vm.runInContext("startExport(false)", sb);
-    expect(`export that stops early (${name}) clears the status line`, els["ve-export-status"].textContent === "", els["ve-export-status"].textContent);
+    const wantStatus = name === "no folder picked" ? "veExportDestRefused" : "";
+    expect(`export that stops early (${name}) shows the right status line`, els["ve-export-status"].textContent === wantStatus, els["ve-export-status"].textContent);
     expect(`export that stops early (${name}) hides the progress row`, els["ve-export-progress-row"]._hidden === true);
   }
 }
