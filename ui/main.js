@@ -12757,17 +12757,41 @@ function renderTagBar(bar, activeSet, rerender) {
 // rename_tag_in dedupes per-prompt and its color rule (keep the target's color,
 // only borrow the source's if the target has none) already matches what a merge
 // needs. Shared by the explicit Merge button and a rename that collides with an
-// existing tag, so both funnel through the same confirmation and backend call.
-async function confirmAndMergeTag(from, into, refresh) {
-  const n = tagUsage().get(tagKey(from)) || 0;
-  const ok = await confirmDialog({
-    title: t("tagMergeConfirmTitle"),
-    message: t("tagMergeConfirmMsg").replace("{from}", from).replace("{into}", into).replace("{n}", String(n)),
-    confirmLabel: t("tagMerge"),
-  });
-  if (!ok) return;
+// existing tag. It runs at once: the snapshot taken here is what the undo toast
+// puts back.
+async function mergeTagWithUndo(from, into, refresh) {
+  const fromKey = tagKey(from);
+  const intoKey = tagKey(into);
+  const hasTag = (p, key) => (p.tags || []).some((x) => tagKey(x) === key);
+  const fromIds = prompts.filter((p) => hasTag(p, fromKey)).map((p) => p.id);
+  const intoIds = prompts.filter((p) => hasTag(p, intoKey)).map((p) => p.id);
+  const fromColor = tagColor(from);
+  const intoColor = tagColor(into);
   try { settings = await invoke("rename_tag", { old: from, new: into }); }
   catch (err) { errToast(err); return; }
+  await refresh();
+  undoToast(
+    t("tagMergeDone").replace("{from}", from).replace("{into}", into),
+    () => undoTagMerge(from, into, fromIds, intoIds, fromColor, intoColor, refresh),
+  );
+}
+
+// Undo for a merge: the source tag goes back onto its prompts, the target leaves
+// the prompts that only got it through the merge, and the colours return to what
+// they were (the merge lends the source's colour to a target that had none).
+async function undoTagMerge(from, into, fromIds, intoIds, fromColor, intoColor, refresh) {
+  try {
+    if (fromIds.length) {
+      settings = await invoke("batch_prompts", { ids: fromIds, action: "tag-add", tag: from, color: null, favorite: null, viewId: null });
+      const intoSet = new Set(intoIds);
+      const onlyMerged = fromIds.filter((id) => !intoSet.has(id));
+      if (onlyMerged.length) {
+        settings = await invoke("batch_prompts", { ids: onlyMerged, action: "tag-remove", tag: into, color: null, favorite: null, viewId: null });
+      }
+    }
+    if (fromColor) settings = await invoke("set_tag_color", { name: from, color: fromColor });
+    if (tagColor(into) !== intoColor) settings = await invoke("set_tag_color", { name: into, color: intoColor });
+  } catch (err) { errToast(err); }
   await refresh();
 }
 
@@ -12859,11 +12883,10 @@ function renderTagManager() {
       if (next == null || !next.trim()) return;
       const nextTrimmed = next.trim();
       if (tagKey(nextTrimmed) === tagKey(name)) return; // unchanged
-      // Renaming onto an existing tag is really a merge -- name it that way and
-      // show what it actually affects before it happens, same as the explicit
-      // Merge button below.
+      // Renaming onto an existing tag is really a merge. The name was typed on
+      // purpose, so it runs at once and the undo toast covers a slip.
       const existing = allTags().find((n2) => tagKey(n2) === tagKey(nextTrimmed));
-      if (existing) { await confirmAndMergeTag(name, existing, refresh); return; }
+      if (existing) { await mergeTagWithUndo(name, existing, refresh); return; }
       try { settings = await invoke("rename_tag", { old: name, new: nextTrimmed }); }
       catch (err) { errToast(err); return; }
       await refresh();
@@ -12876,7 +12899,7 @@ function renderTagManager() {
       const others = allTags().filter((n2) => tagKey(n2) !== tagKey(name));
       const target = await confirmDialog({
         title: t("tagMergeTargetTitle"),
-        message: t("tagMergeTargetMsg").replace("{name}", name),
+        message: t("tagMergeTargetMsg").replace("{name}", name).replace("{n}", String(counts.get(tagKey(name)) || 0)),
         confirmLabel: t("tagMerge"),
         danger: false,
         input: { type: "text", placeholder: t("tagsPh"), datalist: others },
@@ -12884,7 +12907,7 @@ function renderTagManager() {
       const trimmed = (target || "").trim();
       if (!trimmed || tagKey(trimmed) === tagKey(name)) return;
       const existing = others.find((n2) => tagKey(n2) === tagKey(trimmed)) || trimmed;
-      await confirmAndMergeTag(name, existing, refresh);
+      await mergeTagWithUndo(name, existing, refresh);
     });
     const del = document.createElement("button");
     del.type = "button";

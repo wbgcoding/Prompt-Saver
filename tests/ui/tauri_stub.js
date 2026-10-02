@@ -1019,6 +1019,17 @@ const RESULTS = {
     if (a && a.action === "color") {
       for (const id of ids) { const p = PROMPTS.find((x) => x.id === id); if (p) p.color = a.color || ""; }
     }
+    // Tag actions touch the prompts' own tag lists, the way the backend does.
+    if (a && (a.action === "tag-add" || a.action === "tag-remove")) {
+      const key = String(a.tag || "").trim().toLowerCase();
+      for (const id of ids) {
+        const p = PROMPTS.find((x) => x.id === id);
+        if (!p) continue;
+        const has = (p.tags || []).some((t) => t.toLowerCase() === key);
+        if (a.action === "tag-add" && !has) p.tags = [...(p.tags || []), String(a.tag).trim()];
+        if (a.action === "tag-remove") p.tags = (p.tags || []).filter((t) => t.toLowerCase() !== key);
+      }
+    }
     // 51: mirrors the real backend enough for the "also show in" popover to see a
     // genuine placement change, not just a settings echo.
     if (a && (a.action === "addView" || a.action === "removeView")) {

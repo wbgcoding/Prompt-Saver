@@ -983,14 +983,31 @@ PROBE = """
         if (!srcRow || !mergeBtn) {
           out.errors.push('423: the tag manager has no Merge button for "MergeSrcTmp"');
         } else {
-          mergeBtn.click();
-          await sleep(150);
-          document.getElementById('confirm-input').value = 'MergeDstTmp';
-          document.getElementById('confirm-ok').click(); // target picker
-          await sleep(150);
-          document.getElementById('confirm-ok').click(); // "N prompts affected" confirmation
-          await sleep(250);
+          const runMerge = async () => {
+            rowFor('MergeSrcTmp').querySelectorAll('.ghost-btn')[1].click();
+            await sleep(150);
+            document.getElementById('confirm-input').value = 'MergeDstTmp';
+            document.getElementById('confirm-ok').click(); // target picker: the only dialog
+            await sleep(250);
+          };
+          await runMerge();
+          if (!document.getElementById('confirm-modal').classList.contains('hidden')) {
+            out.errors.push('676: a second confirmation dialog opened after picking the merge target');
+          }
           if (rowFor('MergeSrcTmp')) out.errors.push('423: "MergeSrcTmp" is still listed after merging it into "MergeDstTmp"');
+          // The merge ran at once and its toast carries an Undo that brings the
+          // source tag back; then merge again so the later checks start as before.
+          const mergeUndoBtn = document.getElementById('toast').querySelector('.toast-btn');
+          if (!mergeUndoBtn) {
+            out.errors.push('676: merging two tags did not offer an undo toast');
+          } else {
+            mergeUndoBtn.click();
+            await sleep(400);
+            if (!rowFor('MergeSrcTmp')) out.errors.push('676: undoing a tag merge did not bring the source tag back');
+            if (!rowFor('MergeDstTmp')) out.errors.push('676: undoing a tag merge lost the target tag');
+            await runMerge();
+            if (rowFor('MergeSrcTmp')) out.errors.push('676: merging again after an undo left the source tag listed');
+          }
           const stillShown = [...document.querySelectorAll('#library-list .tag-chip')].some((c) => c.textContent === 'MergeSrcTmp');
           if (stillShown) out.errors.push('423: a library row still shows the merged-away tag');
         }
