@@ -15174,13 +15174,21 @@ async fn restore_clip_inbox(app: AppHandle, state: State<'_, Db>, items: Vec<Cli
     let Some(conn) = db_conn(&app) else {
         return Err("history-failed".into());
     };
-    for item in &items {
-        if db_add_clip(&conn, item.ts, &item.text, cap).is_err() {
-            append_crash_log("restore_clip_inbox: an item could not be reinserted");
-            return Err("history-failed".into());
-        }
+    if db_restore_clips(&conn, &items, cap).is_err() {
+        append_crash_log("restore_clip_inbox: the items could not be reinserted");
+        return Err("history-failed".into());
     }
     Ok(())
+}
+
+// The insert loop behind restore_clip_inbox in one transaction: an item that
+// fails leaves the inbox as it was instead of a partial restore.
+fn db_restore_clips(conn: &Connection, items: &[ClipRestoreItem], cap: usize) -> rusqlite::Result<()> {
+    let tx = conn.unchecked_transaction()?;
+    for item in items {
+        db_add_clip(&tx, item.ts, &item.text, cap)?;
+    }
+    tx.commit()
 }
 
 // Unfinished screenshot/video editor work, remembered so closing the window by
@@ -52003,18 +52011,6 @@ mod tests {
     }
 
     #[test]
-    fn clearing_the_history_keeps_the_counters_when_the_delete_fails() {
-        let mut s = Settings::default();
-        s.usage.insert("a".into(), 4);
-        s.last_used.insert("a".into(), 77);
-        assert!(!clear_history_core(|| false, &mut s));
-        assert_eq!(s.usage.get("a"), Some(&4));
-        assert_eq!(s.last_used.get("a"), Some(&77));
-        assert!(clear_history_core(|| true, &mut s));
-        assert!(s.usage.is_empty() && s.last_used.is_empty());
-    }
-
-    #[test]
     fn a_failing_row_leaves_the_copy_history_untouched() {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(
@@ -52034,6 +52030,37 @@ mod tests {
         assert!(db_restore_copy_log(&conn, &rows[..1]).is_ok());
         let n: i64 = conn.query_row("SELECT COUNT(*) FROM copy_log", [], |r| r.get(0)).unwrap();
         assert_eq!(n, 2);
+    }
+
+    #[test]
+    fn a_failing_item_leaves_the_clip_inbox_untouched() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE clip_inbox(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, text TEXT NOT NULL);
+             CREATE TRIGGER no_bad BEFORE INSERT ON clip_inbox WHEN NEW.ts = 99 BEGIN SELECT RAISE(ABORT, 'no'); END;",
+        )
+        .unwrap();
+        let items = [
+            ClipRestoreItem { ts: 1, text: "a".into() },
+            ClipRestoreItem { ts: 99, text: "bad".into() },
+            ClipRestoreItem { ts: 3, text: "b".into() },
+        ];
+        assert!(db_restore_clips(&conn, &items, 50).is_err());
+        assert!(db_list_clips(&conn).is_empty(), "no partial restore");
+        assert!(db_restore_clips(&conn, &[ClipRestoreItem { ts: 1, text: "a".into() }, ClipRestoreItem { ts: 3, text: "b".into() }], 50).is_ok());
+        assert_eq!(db_list_clips(&conn).len(), 2);
+    }
+
+    #[test]
+    fn clearing_the_history_keeps_the_counters_when_the_delete_fails() {
+        let mut s = Settings::default();
+        s.usage.insert("a".into(), 4);
+        s.last_used.insert("a".into(), 77);
+        assert!(!clear_history_core(|| false, &mut s));
+        assert_eq!(s.usage.get("a"), Some(&4));
+        assert_eq!(s.last_used.get("a"), Some(&77));
+        assert!(clear_history_core(|| true, &mut s));
+        assert!(s.usage.is_empty() && s.last_used.is_empty());
     }
 
     #[test]
