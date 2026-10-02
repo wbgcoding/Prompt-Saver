@@ -2414,7 +2414,7 @@ function applyFlags() {
   applyValues();
   // An open library must follow a flag flip (the tag row appears/disappears).
   if (prompts.length && !$("library")?.classList.contains("hidden")) renderLibrary();
-  refreshClipInbox(); // Reflect the watcher toggle + badge count
+  refreshClipInbox(); // the copy history follows the watcher switch
   applyBarToggleTips();
   syncBannerStack(); // demo mode is a flag-driven notice
 }
