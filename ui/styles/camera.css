@@ -137,5 +137,18 @@ select.field {
   padding: 0 12px 14px;
   flex: none;
 }
-.cam-btn { width: 36px; height: 36px; }
-.cam-btn-danger { color: var(--danger); }
+.cam-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--fg);
+  cursor: pointer;
+}
+.cam-btn:hover { background: var(--surface-2); }
+.cam-btn-danger:hover { background: var(--danger); color: #fff; }
+.cam-btn:disabled { opacity: 0.35; cursor: default; }

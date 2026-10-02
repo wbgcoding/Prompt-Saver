@@ -78,6 +78,16 @@ function t(key) {
   return (i18nDict && i18nDict[key]) || key;
 }
 
+// Icon, tooltip and accessible name of the pause button follow the state, with
+// the same texts the recording bar uses.
+function applyPauseState() {
+  pauseIcon.classList.toggle("hidden", paused);
+  resumeIcon.classList.toggle("hidden", !paused);
+  const label = t(paused ? "recBarResume" : "recBarPause");
+  pauseBtn.title = label;
+  pauseBtn.setAttribute("aria-label", label);
+}
+
 function setStatus(state) {
   // state: "idle" | "recording" | "paused"
   statusDot.classList.toggle("on", state !== "idle");
@@ -388,6 +398,7 @@ async function startRecording() {
     return;
   }
   paused = false;
+  applyPauseState();
   setStatus("recording");
   recBadge.classList.remove("hidden");
   startBtn.classList.add("hidden");
@@ -425,8 +436,7 @@ pauseBtn.addEventListener("click", () => {
     recorder.pause();
     paused = true;
   }
-  pauseIcon.classList.toggle("hidden", paused);
-  resumeIcon.classList.toggle("hidden", !paused);
+  applyPauseState();
   setStatus(paused ? "paused" : "recording");
 });
 stopBtn.addEventListener("click", stopRecording);
