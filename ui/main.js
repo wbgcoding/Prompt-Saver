@@ -1216,7 +1216,6 @@ const FLAG_LABELS = {
   libraryTiles: "flagLibraryTiles",
   colorFilter: "flagColorFilter",
   closeAfterCopy: "flagCloseAfterCopy",
-  libraryCloseToggle: "flagLibraryCloseToggle",
   imagePreview: "flagImagePreview",
   libraryVideoPreview: "flagLibraryVideoPreview",
   confirmDiscard: "flagConfirmDiscard",
@@ -2286,7 +2285,7 @@ const EXPERT_TABS = [
     { title: "expGroupLimits", values: ["previewLen", "nameMaxLen"] },
   ] },
   { title: "expTabLibrary", groups: [
-    { title: "expGroupLibrary", flags: ["librarySearch", "globalSearch", "searchSuggest", "savedSearches", "fuzzySearch", "smartSort", "batchOps", "libraryTypeFilter", "colorFilter", "searchAutofocus", "imagePreview", "libraryVideoPreview", "closeAfterCopy", "libraryCloseToggle", "ocrIndex", "archiveTag", "libraryTiles"], values: ["searchRecentMax", "savedSearchMax", "libraryCols", "libraryWidth", "libPreviewLines", "searchDebounceMs", "globalSearchLimit", "gsRecentMax", "launcherMaxResults", "ocrIndexMaxChars", "libraryTileSize"], dropdowns: ["fuzzyMaxTypos"],
+    { title: "expGroupLibrary", flags: ["librarySearch", "globalSearch", "searchSuggest", "savedSearches", "fuzzySearch", "smartSort", "batchOps", "libraryTypeFilter", "colorFilter", "searchAutofocus", "imagePreview", "libraryVideoPreview", "ocrIndex", "archiveTag", "libraryTiles"], values: ["searchRecentMax", "savedSearchMax", "libraryCols", "libraryWidth", "libPreviewLines", "searchDebounceMs", "globalSearchLimit", "gsRecentMax", "launcherMaxResults", "ocrIndexMaxChars", "libraryTileSize"], dropdowns: ["fuzzyMaxTypos"],
       actions: [{ id: "ocr-index-backfill", label: "ocrIndexBackfillAction", gate: "ocrIndex" }] },
     { title: "expGroupTags", flags: ["tags"], values: ["tagChipPx", "tagPopCols"], dropdowns: ["tagFilterMode", "tagSort"] },
     // Everything that records or shows copy history lives with the history view.
@@ -2579,7 +2578,7 @@ const EXPERT_TIPS = [
   "dragThreshold", "composerMaxH", "toastWidth", "toastPos", "modalMaxVh",
   // Library / privacy
   "mediaMeta", "mediaMetaBackfill", "ocrIndex", "ocrIndexMaxChars",
-  "smartSort", "fuzzySearch", "batchOps", "searchSuggest", "searchAutofocus", "libraryCloseToggle", "searchDebounceMs",
+  "smartSort", "fuzzySearch", "batchOps", "searchSuggest", "searchAutofocus", "searchDebounceMs",
   "globalSearch", "globalSearchLimit",
   "tags", "tagChipPx", "tagFilterMode", "tagPopCols", "tagSort",
   "allowScreenshot", "copyHistory", "historyTimestamps", "historyGrouped", "journalWidth",
@@ -3886,6 +3885,7 @@ const SETTINGS_DIRECTORY = [
   { key: "opt-autoupdate", area: "normal", label: "autoUpdate", tip: "autoUpdateHint" },
   { key: "quick-grid", area: "toolbar", label: "gridSize" },
   { key: "library-sort", area: "library", label: "sortBy" },
+  { key: "library-close-toggle", area: "library", label: "flagCloseAfterCopy" },
   { key: "backup-auto", area: "backup", label: "flagAutoBackup" },
   { key: "backup-interval", area: "backup", label: "valBackupInterval", gate: "autoBackup" },
   { key: "backup-start-delay", area: "backup", label: "valBackupStartDelay", gate: "autoBackup" },
@@ -15218,7 +15218,6 @@ function syncLibraryToggle() {
   const on = flag("closeAfterCopy");
   btn.classList.toggle("active", on);
   btn.setAttribute("aria-pressed", String(on));
-  btn.classList.toggle("hidden", !flag("libraryCloseToggle"));
 }
 
 // Library list columns. ONE place decides it: the expert value. The segmented

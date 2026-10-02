@@ -2685,7 +2685,7 @@ fn removed_ui_value_keys() -> &'static [&'static str] {
 
 // Expert switches that no longer exist. A loaded store drops them once, like removed values.
 fn removed_ui_flag_keys() -> &'static [&'static str] {
-    &["pinButton", "favView"]
+    &["pinButton", "favView", "libraryCloseToggle"]
 }
 
 impl Settings {

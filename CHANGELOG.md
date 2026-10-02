@@ -1696,6 +1696,8 @@ the video editor and the introduction tour ship on).
   values.
 - **One switch for the favorites view.** The settings switch and the expert
   switch for the favorites star are now the same setting.
+- **Close after copy is one button.** The library's own button decides and
+  remembers it; the two expert switches for it are gone.
 
 ## 2.6.3 (2026-07-26)
 

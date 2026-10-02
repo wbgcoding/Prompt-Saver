@@ -4428,7 +4428,6 @@ body.drag-over::after {
    would win at equal specificity, so re-assert the danger colour more specifically. */
 .head-toggle.head-clear { color: var(--danger); }
 .head-toggle.head-clear:hover { border-color: var(--danger); }
-.noflag-libraryCloseToggle #library-close-toggle { display: none; }
 /* Library sort dropdown. */
 .head-sort { display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .lib-sort {
