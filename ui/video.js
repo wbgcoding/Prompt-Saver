@@ -3413,7 +3413,6 @@ async function startExport(toClipboard) {
   VE.exporting = true;
   $("ve-export-start").disabled = true;
   $("ve-export-clip").disabled = true;
-  $("ve-export-cancel").classList.remove("hidden");
   $("ve-export-saveas").classList.add("hidden");
   $("ve-export-status").textContent = t("veExporting");
   showExportErrorDetails("");
@@ -3530,7 +3529,6 @@ async function startExport(toClipboard) {
   } finally {
     VE.exporting = false;
     applyExportGate();
-    $("ve-export-cancel").classList.add("hidden");
     $("ve-export-eta").textContent = "";
   }
 }
@@ -3955,7 +3953,12 @@ $("ve-preset-gif").addEventListener("click", () => applyPreset("gif", "small", "
 
 $("ve-export-start").addEventListener("click", () => startExport(false));
 $("ve-export-clip").addEventListener("click", () => startExport(true));
-$("ve-export-cancel").addEventListener("click", () => invoke("cancel_export").catch(() => {}));
+// Always visible, like the screenshot editor's Cancel: it stops a running export,
+// and with nothing running it closes the window (asking first when edits are unsaved).
+$("ve-export-cancel").addEventListener("click", () => {
+  if (VE.exporting) invoke("cancel_export").catch(() => {});
+  else closeWindow();
+});
 $("ve-export-saveas").addEventListener("click", async () => {
   if (!VE.lastExport) return;
   const moved = await invoke("save_recording_as", { srcPath: VE.lastExport }).catch((err) => { toast(String(err).includes("source-not-allowed") ? t("veMoveNotAllowed") : String(err)); return null; });

@@ -12700,17 +12700,22 @@ VIDEO_PROBE = """
     if (document.getElementById('ve-export-saveas').classList.contains('hidden')) {
       errs.push('503: the retried export did not complete successfully');
     }
-    // The one control that acts on a finished export reads "Move to..." with a
-    // tooltip, and the old pre-export file picker is gone: the name field plus
-    // "Export to..." cover it.
+    // The one control that acts on a finished export reads "Save as..." (it moves
+    // the file) with a tooltip, and the old pre-export file picker is gone: the name
+    // field plus "Export to..." cover it. The row reads like the screenshot editor's:
+    // Cancel, Save as, Copy, then the primary Export; Cancel is always there.
     {
       const moveBtn = document.getElementById('ve-export-saveas');
       const moveText = moveBtn.textContent.trim();
-      if (moveText !== 'Move to…') errs.push('547: the post-export button reads ' + JSON.stringify(moveText) + ', expected Move to...');
-      if (!moveBtn.title || !moveBtn.title.includes('exported')) errs.push('547: the Move to button has no tooltip: ' + JSON.stringify(moveBtn.title));
+      if (moveText !== 'Save as…') errs.push('547: the post-export button reads ' + JSON.stringify(moveText) + ', expected Save as...');
+      if (!moveBtn.title || !moveBtn.title.includes('exported')) errs.push('547: the Save as button has no tooltip: ' + JSON.stringify(moveBtn.title));
       if (document.getElementById('ve-export-choose-file')) errs.push('547: the pre-export Save as button still exists');
-      const saveAsLike = [...document.querySelectorAll('#ve-panel-export button')].filter((b) => /Save as|Speichern unter/.test(b.textContent));
+      const saveAsLike = [...document.querySelectorAll('#ve-panel-export button')].filter((b) => /Save as|Speichern unter/.test(b.textContent) && b.id !== 've-export-saveas');
       if (saveAsLike.length) errs.push('547: a Save as button is still in the export panel: ' + saveAsLike.map((b) => b.id).join(','));
+      const rowIds = [...document.getElementById('ve-export-cancel').parentElement.querySelectorAll('button')].map((b) => b.id).join(',');
+      if (rowIds !== 've-export-cancel,ve-export-saveas,ve-export-clip,ve-export-start') errs.push('673: the export row order is ' + rowIds);
+      if (document.getElementById('ve-export-cancel').classList.contains('hidden')) errs.push('673: Cancel is hidden although no export runs');
+      if (document.getElementById('ve-export-clip').textContent.trim() !== 'Copy') errs.push('673: the clipboard button reads ' + JSON.stringify(document.getElementById('ve-export-clip').textContent.trim()));
     }
     window.__PICK_FOLDER__ = null;
 

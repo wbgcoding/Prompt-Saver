@@ -1613,6 +1613,7 @@ the video editor and the introduction tour ship on).
 - Pause and stop look the same in the camera window as on the recording bar: round buttons that turn red only when you hover Stop, each with a tooltip.
 - Placeholders are always asked for in their own small window; the dialog inside the main window is gone.
 - The keyboard shortcut overview lists every window: view switching, quick launcher, tray menu, placeholder window, floating buttons, screenshot selection, recording bar and camera.
+- The video editor's actions read like the screenshot editor's: Cancel, Save as, Copy, then Export.
 - **The small buttons on a tile no longer show a tooltip.** Select, start a
   chain and the actions menu stay quiet on hover; screen readers still get
   their names.
