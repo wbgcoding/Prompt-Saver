@@ -2685,7 +2685,7 @@ fn removed_ui_value_keys() -> &'static [&'static str] {
 
 // Expert switches that no longer exist. A loaded store drops them once, like removed values.
 fn removed_ui_flag_keys() -> &'static [&'static str] {
-    &["pinButton"]
+    &["pinButton", "favView"]
 }
 
 impl Settings {
@@ -2696,6 +2696,21 @@ impl Settings {
 
     // Ensure at least one view exists; migrate legacy single-grid data.
     fn migrate(&mut self) {
+        // Merges that read an old key run first, before the removal loops below.
+        //
+        // The favorites view used to be two switches: "favView" (settings) and
+        // "favViewButton" (header star, on unless stored false). It is one now,
+        // "favViewButton", off by default. The view stays on exactly when it was
+        // visible before: favView on and the star not hidden. Runs only while
+        // favView is stored, and removes it, so it happens once.
+        if let Some(on) = self.ui_flags.remove("favView") {
+            let star = self.ui_flags.get("favViewButton") != Some(&false);
+            if on && star {
+                self.ui_flags.insert("favViewButton".into(), true);
+            } else {
+                self.ui_flags.remove("favViewButton");
+            }
+        }
         if !self.retention_defaults_v2 {
             for k in ["historyDays", "recordingRetentionDays"] {
                 self.ui_values.entry(k.to_string()).or_insert(0.0);
@@ -51604,6 +51619,34 @@ mod tests {
             assert_eq!(s.ui_flags.get("barToggles"), Some(&false));
             assert!(!s.has_removed_ui_values());
         }
+    }
+
+    #[test]
+    fn fav_view_merges_into_star() {
+        let run = |view: Option<bool>, star: Option<bool>| {
+            let mut s = Settings::default();
+            if let Some(v) = view {
+                s.ui_flags.insert("favView".into(), v);
+            }
+            if let Some(v) = star {
+                s.ui_flags.insert("favViewButton".into(), v);
+            }
+            let dirty = s.has_removed_ui_values();
+            s.migrate();
+            assert!(!s.ui_flags.contains_key("favView"));
+            assert_eq!(dirty, view.is_some());
+            s.ui_flags.get("favViewButton").copied()
+        };
+        // Visible before (view on, star never hidden): stays on.
+        assert_eq!(run(Some(true), None), Some(true));
+        assert_eq!(run(Some(true), Some(true)), Some(true));
+        // View on but star hidden, or view off: falls to the new default (off, no key).
+        assert_eq!(run(Some(true), Some(false)), None);
+        assert_eq!(run(Some(false), None), None);
+        assert_eq!(run(Some(false), Some(true)), None);
+        // No old key: a stored star value is the one source and is left alone.
+        assert_eq!(run(None, Some(true)), Some(true));
+        assert_eq!(run(None, None), None);
     }
 
     #[test]

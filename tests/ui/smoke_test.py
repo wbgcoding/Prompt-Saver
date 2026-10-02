@@ -16139,7 +16139,7 @@ def main():
       if (!p9 || p9.dataset.col !== '2' || p9.dataset.row !== '2') errs.push('563-2: the original view lost the moved tile position');
     }
 """)
-        failed += ar_probe('f4', 'favorites grid: switching to it clears the grid selection', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { favView: true, favViewButton: true } };</script>\n', r"""
+        failed += ar_probe('f4', 'favorites grid: switching to it clears the grid selection', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { favViewButton: true } };</script>\n', r"""
     await bootReady();
     const bar = document.getElementById('grid-batch-bar');
     tileEl('p1').querySelector('.tile-select').click();

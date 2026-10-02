@@ -1252,7 +1252,6 @@ const FLAG_LABELS = {
   favorites: "flagFavorites",
   keyboardNav: "flagKeyboardNav",
   varDefaults: "flagVarDefaults",
-  favViewButton: "flagFavViewButton",
   favViewReorder: "flagFavViewReorder",
   tileShadow: "flagTileShadow",
   autoInk: "expAutoInk",
@@ -1434,6 +1433,9 @@ const ALL_FLAG_KEYS = Object.keys(FLAG_LABELS);
 // class that is present exactly when the option is on.
 const OPT_FLAG_LABELS = {
   // Features extras
+  // Favorites view: the header star that opens a live grid of favorites. Ships OFF,
+  // like the old settings switch it replaced.
+  favViewButton: "flagFavViewButton",
   viewGroups: "flagViewGroups",                 // folder tabs for views
   // The tile's own chain-start icon otherwise only appears on hover -- kept as an
   // opt-in for whoever prefers it dimly visible on every tile all the time (04.09.
@@ -4499,9 +4501,9 @@ const viewsContaining = (id, exceptViewId) =>
   settings.views.filter((v) => v.id !== exceptViewId && Object.prototype.hasOwnProperty.call(layoutOf(v), id));
 
 // ---- Favorites view: a live, auto-sized grid of every starred prompt.
-// Enabled by the favView setting (off by default); the header star toggles it.
+// Enabled by favViewButton (off by default); the header star toggles it.
 let favView = false; // currently showing the favorites grid
-const favViewEnabled = () => settings.ui_flags?.favView === true;
+const favViewEnabled = () => flag("favorites") && optFlag("favViewButton");
 
 // Favorites layout: prompt id -> [col,row]. Free placement (gaps allowed), saved
 // in ui_texts; the grid grows to fit the count and to cover any hand-placed cell.
@@ -4520,7 +4522,7 @@ function saveFavLayout(map) {
 function refreshFavViewUi() {
   const btn = $("fav-view-btn");
   if (btn) {
-    btn.classList.toggle("hidden", !(favViewEnabled() && flag("favViewButton")));
+    btn.classList.toggle("hidden", !favViewEnabled());
     btn.classList.toggle("active", favView);
   }
   const qg = $("quick-grid");
@@ -7717,13 +7719,6 @@ function buildToolbarMenu() {
       const next = !toolFlagOn(key);
       settings.ui_flags = { ...(settings.ui_flags || {}), [key]: next };
       await invoke("set_ui_flag", { key, enabled: next }).catch((e) => errToast(e));
-      // The ★ button only shows/works when the favorites-view feature is on, so
-      // enabling it from the toolbar turns the feature on too (otherwise the menu
-      // shows a checkmark but no star appears).
-      if (key === "favViewButton" && next && !favViewEnabled()) {
-        settings.ui_flags.favView = true;
-        await invoke("set_ui_flag", { key: "favView", enabled: true }).catch((e) => errToast(e));
-      }
       applyFlags();
       renderViews();
       refreshFavViewUi();
@@ -20448,9 +20443,10 @@ function bind() {
   // Favorites view: setting enables the header star; the star toggles the grid.
   $("opt-favview").addEventListener("change", (e) => {
     const on = e.target.checked;
-    settings.ui_flags = { ...(settings.ui_flags || {}), favView: on };
-    invoke("set_ui_flag", { key: "favView", enabled: on }).catch((err) => errToast(err));
+    settings.ui_flags = { ...(settings.ui_flags || {}), favViewButton: on };
+    invoke("set_ui_flag", { key: "favViewButton", enabled: on }).catch((err) => errToast(err));
     if (!on && favView) favView = false;
+    applyFlags();
     refreshFavViewUi();
     renderGrid(true);
   });
@@ -22093,6 +22089,7 @@ function syncSettingsControls() {
     $("opt-startmin").checked = settings.start_minimized === true;
     $("opt-ontop").checked = settings.always_on_top === true;
     $("opt-favview").checked = favViewEnabled();
+    $("opt-favview").closest(".field").classList.toggle("hidden", !flag("favorites"));
     refreshFavViewUi();
     $("opt-hotkey").value = prettyAccel(settings.hotkey);
     $("opt-voice-hotkey").value = prettyAccel(settings.voice_hotkey);

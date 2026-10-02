@@ -1694,6 +1694,8 @@ the video editor and the introduction tour ship on).
 - **Interface and icon size live only in Settings.** The duplicate sliders
   in the expert menu are gone; the two size choices in Settings set the same
   values.
+- **One switch for the favorites view.** The settings switch and the expert
+  switch for the favorites star are now the same setting.
 
 ## 2.6.3 (2026-07-26)
 
