@@ -258,8 +258,8 @@ expert menu.
 
 ### Video editor
 
-On by default, reachable from a recording's own result dialog (the Edit
-button above) or from any video prompt's right-click menu ("Edit video"). It
+On by default, reachable from a recording's own result dialog (More, then
+Video editor) or from any video prompt's right-click menu ("Edit video"). It
 opens the clip in its own window with a live preview and no processing until
 you actually export: trim and cut (frame-exact, keeps the original quality
 when nothing else changes), crop, change speed, fade in/out, resize (typed

@@ -572,7 +572,7 @@ export const HELP_CONTENT = {
       title: "Video editor",
       whatItIs: "A small editor for a finished recording or any attached video, opened from the recording's own result dialog or a video prompt's right-click menu.",
       howTo: [
-        "From a fresh recording: click Edit in the result dialog.",
+        "From a fresh recording: click More, then Video editor, in the result dialog.",
         "From any video already saved as a prompt: right-click it and choose \"Edit video\".",
         "Trim, crop, change speed, fade in/out, resize (typed dimensions, a percentage, or a quick preset), and add image, freeze-frame, text, pixelate or spotlight overlays on the timeline.",
         "Export: a lossless fast path applies when only trimming; otherwise the whole clip re-encodes once.",
@@ -1321,7 +1321,7 @@ export const HELP_CONTENT = {
       title: "Video-Editor",
       whatItIs: "Ein kleiner Editor für eine fertige Aufnahme oder ein angehängtes Video, geöffnet aus dem Ergebnisdialog einer Aufnahme oder über das Rechtsklick-Menü eines Video-Prompts.",
       howTo: [
-        "Bei einer frischen Aufnahme: im Ergebnisdialog auf Bearbeiten klicken.",
+        "Bei einer frischen Aufnahme: im Ergebnisdialog auf Mehr, dann auf Video-Editor klicken.",
         "Bei einem bereits gespeicherten Video-Prompt: rechtsklicken und „Video bearbeiten“ wählen.",
         "Zuschneiden, Kürzen, Geschwindigkeit ändern, Ein-/Ausblenden, Größe ändern (eingegebene Maße, ein Prozentwert oder eine Schnellauswahl) sowie Bild-, Standbild-, Text-, Verpixelungs- oder Spotlight-Overlays auf der Zeitleiste hinzufügen.",
         "Exportieren: bei reinem Kürzen greift ein verlustfreier Schnellpfad, sonst wird der ganze Clip einmal neu kodiert.",
