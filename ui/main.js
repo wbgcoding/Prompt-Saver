@@ -14,7 +14,7 @@ import { createColorPop } from "./colorpop.js";
 import { attachSelectPicker } from "./selectpop.js";
 import { snapMove } from "./snap.js";
 import { confirmDialog, infoDialog, dismissConfirm, initDialogs, EYE_SVG } from "./dialog.js";
-import { withShortcut as withShortcutRaw, rowsForScope as rowsForScopeRaw } from "./shortcuts.js";
+import { withShortcut as withShortcutRaw, rowsForScope as rowsForScopeRaw, sectionsForScopes as sectionsForScopesRaw, SCOPE_TITLE_KEYS } from "./shortcuts.js";
 
 const { invoke, convertFileSrc } = window.__TAURI__.core;
 const { listen, emit } = window.__TAURI__.event;
@@ -305,6 +305,9 @@ applyBrand();
 // this window's own t()/LANG, so every call site just names the action.
 const withShortcut = (el, action) => withShortcutRaw(el, action, t, LANG);
 const shortcutRows = (scope) => rowsForScopeRaw(scope, t, LANG);
+const shortcutSections = (scopes) => sectionsForScopesRaw(scopes, t, LANG);
+// Every window that has keys of its own, in the order the overview lists them.
+const ALL_SHORTCUT_SCOPES = ["mainWindow", "library", "launcher", "tray", "vars", "floating", "snipOverlay", "recBar", "camera"];
 
 function applyI18n() {
   document.documentElement.lang = LANG;
@@ -12113,7 +12116,8 @@ function closeModal() {
 let shortcutsModalOpener = null;
 // `withGlobal` adds the rebindable global/per-tile hotkey list on top (and gives the
 // dialog the width it needs); the editors' "?" buttons open the plain key list.
-function openShortcutsModal(scope, { withGlobal = false } = {}) {
+// `allWindows` lists one titled section per window instead of one flat table.
+function openShortcutsModal(scope, { withGlobal = false, allWindows = false } = {}) {
   shortcutsModalOpener = document.activeElement;
   $("shortcuts-global").classList.toggle("hidden", !withGlobal);
   $("shortcuts-modal").querySelector(".modal").classList.toggle("modal-narrow", !withGlobal);
@@ -12123,23 +12127,45 @@ function openShortcutsModal(scope, { withGlobal = false } = {}) {
   }
   const list = $("shortcuts-modal-list");
   list.innerHTML = "";
-  for (const row of shortcutRows(scope)) {
-    const r = document.createElement("div");
-    r.className = "shortcuts-row";
-    const desc = document.createElement("span");
-    desc.className = "shortcuts-row-desc";
-    desc.textContent = row.desc;
-    const keys = document.createElement("span");
-    keys.className = "shortcuts-row-keys";
-    keys.textContent = row.keys;
-    r.append(desc, keys);
-    list.appendChild(r);
+  const addRows = (rows) => {
+    for (const row of rows) {
+      const r = document.createElement("div");
+      r.className = "shortcuts-row";
+      const desc = document.createElement("span");
+      desc.className = "shortcuts-row-desc";
+      desc.textContent = row.desc;
+      const keys = document.createElement("span");
+      keys.className = "shortcuts-row-keys";
+      keys.textContent = row.keys;
+      r.append(desc, keys);
+      list.appendChild(r);
+    }
+  };
+  if (allWindows) {
+    // The library has no keys of its own: its rows (if any) belong to the main window.
+    const sections = [];
+    for (const s of shortcutSections(Array.isArray(scope) ? scope : [scope])) {
+      const key = s.scope === "library" ? "mainWindow" : s.scope;
+      const into = sections.find((x) => x.key === key);
+      if (into) into.rows.push(...s.rows);
+      else sections.push({ key, rows: [...s.rows] });
+    }
+    for (const s of sections) {
+      if (!s.rows.length) continue;
+      const h = document.createElement("h3");
+      h.className = "shortcuts-section-title";
+      h.textContent = t(SCOPE_TITLE_KEYS[s.key]);
+      list.appendChild(h);
+      addRows(s.rows);
+    }
+  } else {
+    addRows(shortcutRows(scope));
   }
   $("shortcuts-modal").classList.remove("hidden");
 }
 // Every shortcut in one dialog: global hotkeys on top, the keys of each window below.
 function openAllShortcuts() {
-  openShortcutsModal(["mainWindow", "library"], { withGlobal: true });
+  openShortcutsModal(ALL_SHORTCUT_SCOPES, { withGlobal: true, allWindows: true });
   $("hotkeys-search").focus();
 }
 function closeShortcutsModal() {
@@ -19772,7 +19798,7 @@ function bind() {
   const helpEl = $("help");
   $("help-open").addEventListener("click", openHelp);
   $("help-close").addEventListener("click", () => helpEl.classList.add("hidden"));
-  $("help-shortcuts").addEventListener("click", () => openShortcutsModal(["mainWindow", "library"], { withGlobal: true }));
+  $("help-shortcuts").addEventListener("click", () => openShortcutsModal(ALL_SHORTCUT_SCOPES, { withGlobal: true, allWindows: true }));
   helpEl.addEventListener("pointerdown", (e) => {
     if (e.target === helpEl) helpEl.classList.add("hidden");
   });

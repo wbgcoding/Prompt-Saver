@@ -13,12 +13,16 @@
 // scopes: "snipEditor" (the screenshot editor overlay in the main window),
 // "videoEditor" (the video editor window), "mainWindow" (the main window
 // itself, outside either editor) and "library" (reserved for a library-only
-// shortcut, none exist yet).
+// shortcut, none exist yet). The scopes "launcher", "tray", "vars", "floating",
+// "snipOverlay", "recBar" and "camera" are list-only: their keys are handled by
+// each window's own key listener and are documented here for the overview.
 
 export const SHORTCUTS = [
   // ---- main window ----
   { action: "mainCreate", code: "Enter", mods: ["ctrl"], scopes: ["mainWindow"], descKey: "save" },
   { action: "mainGlobalSearch", code: "KeyK", mods: ["ctrl"], scopes: ["mainWindow"], descKey: "globalSearchBtn" },
+  { action: "mainNextView", code: "Tab", mods: ["ctrl"], scopes: ["mainWindow"], descKey: "shortcutNextView" },
+  { action: "mainPrevView", code: "Tab", mods: ["ctrl", "shift"], scopes: ["mainWindow"], descKey: "shortcutPrevView" },
 
   // ---- screenshot editor ----
   { action: "snipUndo", code: "KeyZ", mods: ["ctrl"], scopes: ["snipEditor"], descKey: "snipEditUndoTip" },
@@ -61,15 +65,38 @@ export const SHORTCUTS = [
   { action: "veMarkOut", code: "KeyO", mods: [], scopes: ["videoEditor"], descKey: "veMarkOutTip" },
   { action: "veCutSel", code: "KeyC", mods: [], scopes: ["videoEditor"], descKey: "veCutSelTip" },
   { action: "veShowOriginal", code: "KeyV", mods: [], scopes: ["videoEditor"], descKey: "showOriginalTip" },
+
+  // ---- list-only: windows that handle their own keys ----
+  { action: "launcherClose", code: "Escape", mods: [], scopes: ["launcher"], descKey: "close" },
+  { action: "launcherCopy", code: "Enter", mods: [], scopes: ["launcher"], descKey: "shortcutCopySelected" },
+  { action: "launcherNext", code: "ArrowDown", mods: [], scopes: ["launcher"], descKey: "shortcutNextEntry" },
+  { action: "launcherPrev", code: "ArrowUp", mods: [], scopes: ["launcher"], descKey: "shortcutPrevEntry" },
+  { action: "trayClose", code: "Escape", mods: [], scopes: ["tray"], descKey: "close" },
+  { action: "trayCopy", code: "Enter", mods: [], scopes: ["tray"], descKey: "shortcutCopySelected" },
+  { action: "trayNext", code: "ArrowDown", mods: [], scopes: ["tray"], descKey: "shortcutNextEntry" },
+  { action: "trayPrev", code: "ArrowUp", mods: [], scopes: ["tray"], descKey: "shortcutPrevEntry" },
+  { action: "varsCancel", code: "Escape", mods: [], scopes: ["vars"], descKey: "cancel" },
+  { action: "varsConfirm", code: "Enter", mods: [], scopes: ["vars"], descKey: "varsCopy" },
+  { action: "floatingCloseMenu", code: "Escape", mods: [], scopes: ["floating"], descKey: "shortcutCloseMenu" },
+  { action: "floatingNudge", code: "Arrows", mods: [], scopes: ["floating"], descKey: "shortcutNudgeButton" },
+  { action: "snipOverlayCancel", code: "Escape", mods: [], scopes: ["snipOverlay"], descKey: "cancel" },
+  { action: "snipOverlayPick", code: "Enter", mods: [], scopes: ["snipOverlay"], descKey: "shortcutCaptureWindow" },
+  { action: "recBarPauseKey", code: "Space", mods: [], scopes: ["recBar"], descKey: "shortcutPauseResume" },
+  { action: "recBarStopKey", code: "Escape", mods: [], scopes: ["recBar"], descKey: "shortcutStopRecording" },
+  { action: "cameraPauseKey", code: "Space", mods: [], scopes: ["camera"], descKey: "shortcutPauseResume" },
+  { action: "cameraEscKey", code: "Escape", mods: [], scopes: ["camera"], descKey: "shortcutCameraEsc" },
 ];
 
 // KeyboardEvent.code -> the character shown to the user. Only the codes this
 // app actually binds are listed; an unlisted code falls back to itself.
+// "Arrows" is not a real code: it is a display-only entry standing for any of
+// the four arrow keys.
 const CODE_LABELS = {
   Equal: "+", Minus: "-", Comma: ",", Period: ".", Space: "Space",
   Enter: "Enter", Escape: "Esc", Tab: "Tab",
   ArrowLeft: "Left", ArrowRight: "Right", ArrowUp: "Up", ArrowDown: "Down",
   Home: "Home", End: "End",
+  Arrows: "↑↓←→",
 };
 function codeLabel(code) {
   if (CODE_LABELS[code]) return CODE_LABELS[code];
@@ -138,4 +165,22 @@ export function rowsForScope(scope, t, lang) {
     rows.push({ desc: stripTrailingHint(t(entry.descKey)), keys: formatKeys(entry, lang) });
   }
   return rows;
+}
+
+// Which heading each list-only window gets in the all-windows overview.
+export const SCOPE_TITLE_KEYS = {
+  mainWindow: "shortcutsScopeMain",
+  launcher: "shortcutsScopeLauncher",
+  tray: "shortcutsScopeTray",
+  vars: "shortcutsScopeVars",
+  floating: "shortcutsScopeFloating",
+  snipOverlay: "shortcutsScopeSnip",
+  recBar: "shortcutsScopeRecBar",
+  camera: "shortcutsScopeCamera",
+};
+
+// One block of rows per scope, in the order given, so two windows that both
+// have a "Close" row each keep their own (de-duplication is per scope only).
+export function sectionsForScopes(scopes, t, lang) {
+  return scopes.map((scope) => ({ scope, rows: rowsForScope(scope, t, lang) }));
 }

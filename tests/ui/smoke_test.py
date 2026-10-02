@@ -2961,6 +2961,16 @@ PROBE = """
             out.errors.push('expected 4 rows in the "All hotkeys" popup (global, one prompt, two recording), got ' +
               document.querySelectorAll('.hotkeys-row').length);
           }
+          // 672: the same dialog lists the keys of every window, one titled section each,
+          // including view switching in the main window.
+          const secTitles = [...document.querySelectorAll('#shortcuts-modal-list .shortcuts-section-title')].map((h) => h.textContent);
+          const wantTitles = ['Main window', 'Quick launcher', 'Tray menu', 'Placeholder window', 'Floating buttons and folders', 'Screenshot selection', 'Recording bar', 'Camera'];
+          if (secTitles.join('|') !== wantTitles.join('|')) {
+            out.errors.push('672: the shortcut overview sections are: ' + secTitles.join(', '));
+          }
+          if (![...document.querySelectorAll('#shortcuts-modal-list .shortcuts-row-keys')].some((k) => k.textContent === 'Ctrl+Tab')) {
+            out.errors.push('672: the shortcut overview does not list Ctrl+Tab');
+          }
           // Search filters by name — a prompt-name query hides the global row.
           const search = document.getElementById('hotkeys-search');
           search.value = 'Prompt 1';

@@ -13,7 +13,9 @@ Checks:
      snip-tool factory's template-literal form) names a real action.
   5. Every action that is not an alt binding (does not end in "Alt") is
      referenced by at least one button, static or dynamic -- an entry nobody
-     ever shows is dead weight in the table.
+     ever shows is dead weight in the table. Exempt: entries whose scopes are
+     all list-only (windows with their own key handling) and the view
+     switching keys.
   6. Every `openShortcutsModal(...)` call site names a scope that at least one
      SHORTCUTS entry actually uses -- catches a typo'd scope name silently
      opening an empty table.
@@ -26,6 +28,11 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
+
+# Windows that handle their own keys: their entries are documented in the overview
+# only, so no button has to show them. Ctrl+Tab has no button either.
+LIST_ONLY_SCOPES = {"launcher", "tray", "vars", "floating", "snipOverlay", "recBar", "camera"}
+LIST_ONLY_ACTIONS = {"mainNextView", "mainPrevView"}
 
 ENTRY_RE = re.compile(
     r'\{\s*action:\s*"(?P<action>[^"]+)"\s*,\s*code:\s*"(?P<code>[^"]+)"\s*,\s*'
@@ -103,6 +110,10 @@ def open_modal_scopes():
             expr = m.group("expr").strip()
             for s in re.findall(r'"([^"]+)"', expr):
                 found.append((js, s))
+        # The all-windows overview takes its scopes from one named list.
+        for m in re.finditer(r'ALL_SHORTCUT_SCOPES\s*=\s*\[(?P<list>[^\]]*)\]', src):
+            for s in re.findall(r'"([^"]+)"', m.group("list")):
+                found.append((js, s))
     return found
 
 
@@ -153,9 +164,13 @@ def main():
         if any(action.startswith(p) for p in prefixes):
             referenced.add(action)
 
-    # Every non-alt action needs at least one button that shows it.
+    # Every non-alt action needs at least one button that shows it, except the
+    # list-only windows and view switching (see LIST_ONLY_* above).
+    by_action = {e["action"]: e for e in entries}
     for action in sorted(actions):
         if action.endswith("Alt"):
+            continue
+        if action in LIST_ONLY_ACTIONS or set(by_action[action]["scopes"]) <= LIST_ONLY_SCOPES:
             continue
         if action not in referenced:
             bad.append(f"shortcuts.js: action '{action}' is never shown by a button (static or dynamic)")

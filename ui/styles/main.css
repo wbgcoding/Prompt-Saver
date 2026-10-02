@@ -5250,6 +5250,8 @@ button.tag-chip:hover { border-color: var(--accent); }
    import preview above. */
 .shortcuts-list { display: flex; flex-direction: column; gap: 2px; max-height: 360px; overflow-y: auto; min-height: 0; }
 .shortcuts-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 5px 6px; border-radius: 6px; }
+.shortcuts-list .shortcuts-section-title { margin: 12px 6px 2px; }
+.shortcuts-list .shortcuts-section-title:first-child { margin-top: 2px; }
 .shortcuts-row-desc { flex: 1; min-width: 0; font-size: 13px; }
 .shortcuts-row-keys { flex: 0 0 auto; font-size: 12px; color: var(--muted); font-family: monospace; }
 /* Select all/none above a checkbox-per-row preview (the folder import). */
