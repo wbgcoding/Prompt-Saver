@@ -7562,11 +7562,12 @@ PROBE = """
         out.errors.push('update-actions, settings-btn-row or update-version missing from the settings panel');
       }
     }
-    // 108: neither reset-settings nor delete-data wraps to a second line, even
-    // with the longest of the 11 translations' one-word labels (German
-    // "Zuruecksetzen", Dutch "Verwijderen") -- flex-row default stretch means a
-    // single wrapped button grows the WHOLE row, so compare against the row's
-    // own single-line reference height rather than siblings.
+    // 108: reset-settings and delete-data carry their full labels. In English
+    // they stay on one line; a long translation (German "Einstellungen
+    // zurücksetzen", Dutch "Alle gegevens verwijderen") may wrap to two lines.
+    // The flex-row default stretch means a single wrapped button grows the WHOLE
+    // row, so compare against the row's own single-line reference height rather
+    // than siblings.
     {
       if (document.getElementById('settings-main').classList.contains('hidden')) {
         document.getElementById('expert-open').click();
@@ -7580,16 +7581,35 @@ PROBE = """
       } else if (help.getBoundingClientRect().height < 10) {
         out.errors.push('settings-btn-row is not visible at ' + window.innerWidth + 'px');
       } else {
-        const baseH = Math.round(help.getBoundingClientRect().height);
         const prevReset = reset.textContent;
         const prevDel = del.textContent;
-        reset.textContent = 'Zuruecksetzen';
-        del.textContent = 'Verwijderen';
-        const longH = Math.round(help.getBoundingClientRect().height);
+        const rowH = () => Math.round(help.getBoundingClientRect().height);
+        reset.textContent = 'Reset';
+        del.textContent = 'Delete';
+        const baseH = rowH();
+        // The full English labels stay on one line.
+        reset.textContent = 'Reset settings';
+        del.textContent = 'Delete all data';
+        if (rowH() > baseH + 1) {
+          out.errors.push('settings-btn-row wraps with the English labels at ' + window.innerWidth + 'px: ' + baseH + ' -> ' + rowH());
+        }
+        // Long translations may wrap to two lines, but all three buttons grow
+        // together, never beyond two lines, and no label spills sideways.
+        reset.textContent = 'Einstellungen zurücksetzen';
+        del.textContent = 'Alle gegevens verwijderen';
+        const longH = rowH();
+        const hs = [reset, del, help].map((b) => Math.round(b.getBoundingClientRect().height));
+        const spill = [reset, del].some((b) => b.scrollWidth > b.clientWidth + 1);
         reset.textContent = prevReset;
         del.textContent = prevDel;
-        if (longH > baseH + 1) {
-          out.errors.push('settings-btn-row grows with the longest one-word translation at ' + window.innerWidth + 'px: ' + baseH + ' -> ' + longH);
+        if (longH > baseH * 2) {
+          out.errors.push('settings-btn-row grows past two lines with long labels at ' + window.innerWidth + 'px: ' + baseH + ' -> ' + longH);
+        }
+        if (new Set(hs).size > 1) {
+          out.errors.push('settings-btn-row buttons differ in height with long labels at ' + window.innerWidth + 'px: ' + hs.join('/'));
+        }
+        if (spill) {
+          out.errors.push('a settings-btn-row label overflows its button at ' + window.innerWidth + 'px');
         }
       }
     }

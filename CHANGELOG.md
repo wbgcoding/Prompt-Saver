@@ -1757,6 +1757,7 @@ the video editor and the introduction tour ship on).
   texts is right above the entry list in the editor instead of under Advanced
   options.
 - **The library has one name.** The list of every prompt is called the library everywhere: header button, window title, settings and help. The "All hotkeys" list names the global hotkey after what it opens, the quick launcher.
+- **Clearer danger buttons in the settings.** The two buttons at the bottom of the settings now say "Reset settings" and "Delete all data", and their tooltips say what is kept.
 
 ## 2.6.3 (2026-07-26)
 
