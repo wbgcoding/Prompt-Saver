@@ -50,7 +50,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | **One click** | Click a tile and the text is copied; a bubble confirms it |
 | **Floating buttons** | Pin any prompt as a frameless, always-on-top pill. Drag to move, right-click for size, edit or remove; positions survive restarts |
 | **Auto-paste** | A fast second click (or Enter) copies **and** pastes into the app you were just in |
-| **Variables** | Write `{#{Name}#}` placeholders and fill them in on copy, or `{#{tone\|formal,casual}#}` for a dropdown; an optional fixed-value list suggests a value for a name you use often, shown only as a placeholder |
+| **Placeholders** | Write `{#{Name}#}` placeholders and fill them in on copy, or `{#{tone\|formal,casual}#}` for a dropdown; an optional fixed-value list suggests a value for a name you use often, shown only as a placeholder |
 | **Self-filling** | `date`, `time`, `weekday`, `clipboard` and `uuid` fill themselves in, no dialog, in your language |
 | **Rotation** | Give a prompt a list of texts instead of one: each copy serves the next rotation text, in order or shuffled, with a small badge showing where you are |
 | **Prompt hotkeys** | Give a prompt its own global key combination that copies, and optionally pastes, from any app, with a small keyboard badge on its tile |

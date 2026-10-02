@@ -7,7 +7,7 @@ All notable changes to **Prompt Saver**. Download the latest version from the
 ## 2.7.0 (unreleased)
 
 Twenty-four new features: tags, custom themes, folders for
-floating buttons, self-filling and choice variables, a markdown preview with
+floating buttons, self-filling and choice placeholders, a markdown preview with
 syntax colors, private notes, per-prompt hotkeys, drag-out into other apps, a
 tray quick-copy menu, a screen color picker, a standalone quick launcher,
 multi-select in the grid, a trash for deleted prompts, placing one prompt in
@@ -78,12 +78,12 @@ the video editor and the introduction tour ship on).
 - **Drag a tile onto a view tab** — files it into that view; hold Ctrl while
   dropping to copy it there instead, so it stays in both. A target with no room left refuses the whole drop and says how many cells
   are missing.
-- **Self-filling variables** — `date`, `time`, `datetime`, `weekday`,
+- **Self-filling placeholders** — `date`, `time`, `datetime`, `weekday`,
   `clipboard` and `uuid` fill themselves in on copy, with no dialog; a prompt
-  mixing them with your own variables only asks for yours. Date and time follow
+  mixing them with your own placeholders only asks for yours. Date and time follow
   the app language, with the format switchable in the expert menu. The editor
   lists all six as insertable chips with a one-line explanation each.
-- **Choice variables** — write `{#{tone|formal,casual,witty}#}` and the copy
+- **Choice placeholders** — write `{#{tone|formal,casual,witty}#}` and the copy
   dialog offers a dropdown instead of a text field, remembering your last pick.
 - **Markdown preview** — the editor shows the prompt rendered: headings, lists,
   quotes, rules, emphasis and fenced code blocks. It is ONE field, not two: the
@@ -746,11 +746,11 @@ the video editor and the introduction tour ship on).
   new one, prefilled with everything from the original — so you can change
   something before it exists, or cancel and leave nothing behind, instead of a
   silent copy landing in the grid.
-- The variable fill-in dialog gets a "Clear all" button, so starting over on a
+- The placeholder fill-in dialog gets a "Clear all" button, so starting over on a
   prompt with several placeholders is one click instead of one per field.
 - Saving a prompt with an empty `{#{ }#}` placeholder now warns first — it would
   otherwise sit in the copied text exactly like that, since it never becomes an
-  actual variable.
+  actual placeholder.
 - The backups window can open its snapshot folder in Explorer directly.
 - A long export, recording conversion, ffmpeg download, backup or import now
   fills the Windows taskbar icon with its progress, so it stays visible while
@@ -789,8 +789,8 @@ the video editor and the introduction tour ship on).
   deleting everything already did, if that expert option is on.
 - Creating a prompt by hand now gets the same near-duplicate warning that
   importing already gave.
-- The variable fill-in dialog now says when a field's value is the one from
-  last time, for both a free-text field and a choice variable (which had no
+- The placeholder fill-in dialog now says when a field's value is the one from
+  last time, for both a free-text field and a choice placeholder (which had no
   checkbox to hint at it at all).
 - Every copy-history row gets an edit icon, same as the library, so you can
   open a prompt from its history without going to find it in the grid or
@@ -1077,7 +1077,7 @@ the video editor and the introduction tour ship on).
 - **Typing in the library search no longer stutters** on large libraries — the
   result list is rebuilt once you pause, not on every keystroke.
 - **Window titles in the Alt-Tab switcher were always English.** The floating
-  pill, folder, variables and quick-launcher windows now carry the app name.
+  pill, folder, placeholder and quick-launcher windows now carry the app name.
 - Importing a file far too large to be a prompt export (a video, a disk image)
   now fails with a clear message instead of trying to load all of it into memory.
 - **The tag manager was unreachable until you'd already tagged something.**
@@ -1132,7 +1132,7 @@ the video editor and the introduction tour ship on).
   live in a strip of their own above the hint line, where they can actually be
   clicked — inside the loupe they moved away with the cursor.
 - **The editor's text box could be drawn over the colour swatches** once the
-  variable helper above it was expanded.
+  placeholder helper above it was expanded.
 - **An unreadable recovery file could silently empty your whole library or
   settings** the next time anything saved. It is now left alone and logged
   instead of being treated as "nothing to restore."
@@ -1182,7 +1182,7 @@ the video editor and the introduction tour ship on).
   was switched off.
 - The folder window did not pick up a changed grid-column count while
   already open.
-- Enter inside a choice-style variable field could confirm the dialog with a
+- Enter inside a choice-style placeholder field could confirm the dialog with a
   stale value, or do nothing at all on a single-option choice.
 - The colour-history strip's copy failures were silent, and a failed colour
   pick reused an unrelated error message.

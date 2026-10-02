@@ -828,7 +828,7 @@ PROBE = """
         if (!cm || cm.classList.contains('hidden')) {
           out.errors.push('saving a prompt with an unnamed {#{ }#} variable did not warn');
         } else {
-          if (document.getElementById('confirm-title').textContent !== 'Empty variable') {
+          if (document.getElementById('confirm-title').textContent !== 'Empty placeholder') {
             out.errors.push('the empty-variable warning has the wrong title');
           }
           document.getElementById('confirm-cancel').click(); // back to editing, not saved
