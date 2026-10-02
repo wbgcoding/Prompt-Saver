@@ -110,7 +110,7 @@ it as a file, or leaving it on the clipboard.
 Before that dialog, an editor opens on the capture (on by default): crop, a
 freehand pen and highlighter marker, straight lines and arrows, rectangles and
 ellipses, text labels, numbered step markers, a pixelate tool for blurring out
-sensitive details, and a spotlight that dims everything outside a chosen area,
+sensitive details, and a focus area that dims everything outside a chosen area,
 with undo/redo. Zoom in for pixel-precise work and pan around with the Hand
 tool (or hold Space, or the middle mouse button) while zoomed in. Resize
 changes the image's actual pixel size (not just the view): set a width,
@@ -266,7 +266,7 @@ when nothing else changes), crop, change speed, fade in/out, resize (typed
 width/height or a percentage, an aspect-ratio lock, and quick presets from
 4K down to 25%; a preset larger than the source enlarges the video and says
 so, one equal to the source height keeps the original), and overlay images,
-freeze-frames, text, pixelation, a spotlight or a keys overlay (four
+freeze-frames, text, pixelation, a focus area or a keys overlay (four
 keyboard-layout presets plus a free selection of keys, filled from a
 recording's own key data if it captured any) anywhere on the timeline. A
 filmstrip and waveform give you a zoomable overview to navigate by. The preview itself also zooms (scroll wheel, up to 8×) and pans by
@@ -316,14 +316,14 @@ values and time range and is offset a little so it sits next to the
 original instead of exactly on top of it; how far is set in an expert setting
 shared by both editors. In the video editor, the color, thickness, opacity
 and font size a new overlay starts with also follow whatever was last used
-for that same kind (image, frame, text, pixelation or spotlight), across
+for that same kind (image, frame, text, pixelation or focus area), across
 restarts too; an expert switch turns that off again in favor of the fixed
 starting values. The expert menu also sets the starting text outline width,
 the color of a pressed key in a new keys overlay and the starting volume of a
 newly inserted video overlay.
 
 Dragging a shape (screenshot editor) or a crop box or overlay (video editor)
-snaps to the canvas or frame edges, its centre in both directions, and the
+snaps to the image or frame edges, its centre in both directions, and the
 edges and centre of every other shape or overlay already placed, once the
 pointer gets close enough. A thin accent-colored line marks which one it
 caught, and disappears the instant the drag ends. Holding Alt while dragging
@@ -1012,7 +1012,7 @@ Reopen the current version's list any time from the About dialog.
 ### Standalone: Backup manager
 
 Encrypted, compressed snapshots of the entire library and settings, on an
-automatic schedule with smart GFS-style retention tiers, and a restore that can
+automatic schedule with daily, weekly, monthly and yearly retention tiers, and a restore that can
 target data only, settings only, or both. Two buttons beside Create backup
 save a backup to a file of your choice or import one from a file. The same
 window also has a usage-statistics section (totals, a 14-day activity chart, most-used tiles),
@@ -1113,7 +1113,7 @@ Raster unter Rastergröße.
 **Screenshot-Werkzeug**: Bereich oder ganzes Fenster (auch geschützte wie den
 Task-Manager) direkt zu einer neuen Kachel. Davor öffnet sich standardmäßig ein
 Editor: Zuschneiden, Stift, Marker, Linien, Pfeile, Rechtecke, Ellipsen, Text,
-nummerierte Schritte, Pixelieren und ein Spotlight, das alles außerhalb eines
+nummerierte Schritte, Pixelieren und ein Fokusbereich, der alles außerhalb eines
 Bereichs abdunkelt, mit Rückgängig/Wiederholen. Zum Heranzoomen für
 pixelgenaues Arbeiten lässt sich das Bild mit dem Hand-Werkzeug (oder
 gehaltener Leertaste bzw. der mittleren Maustaste) verschieben. Die
@@ -1252,7 +1252,7 @@ verschoben, damit es neben dem Original liegt statt genau darauf. Wie weit, legt
 eine Expertenzeile fest, die sich beide Editoren teilen. Im Video-Editor
 richten sich Farbe, Stärke, Deckkraft und Schriftgröße einer neuen
 Überlagerung außerdem nach dem, was für dieselbe Art (Bild, Rahmen, Text,
-Verpixeln oder Spotlight) zuletzt benutzt wurde, auch über einen Neustart
+Verpixeln oder Fokusbereich) zuletzt benutzt wurde, auch über einen Neustart
 hinweg; ein Expertenschalter stellt stattdessen wieder feste Vorgabewerte ein.
 Das Expertenmenü legt außerdem die Anfangsbreite des Textumrisses, die Farbe
 einer gedrückten Taste in einer neuen Tastenüberlagerung und die
@@ -1764,7 +1764,7 @@ Einstellung nicht gefunden? Die Suche im Expertenmenü durchsucht alle Tabs
 auf einmal. Hotkey tut nichts? Eine andere App hält die Kombination
 vermutlich schon.
 
-**Eigenständig: Backup-Verwaltung.** Verschlüsselte Backups, GFS-Aufbewahrung,
+**Eigenständig: Backup-Verwaltung.** Verschlüsselte Backups, Aufbewahrung nach Tag, Woche, Monat und Jahr,
 gezieltes Wiederherstellen. Mit den zwei Knöpfen neben Backup erstellen lässt
 sich ein Backup in eine Datei deiner Wahl speichern oder aus einer Datei
 importieren. Im selben Fenster außerdem eine

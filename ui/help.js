@@ -515,8 +515,8 @@ export const HELP_CONTENT = {
       whatItIs: "Opens right after a capture, before the shot is saved: crop, mark up, and annotate it before it becomes a tile.",
       howTo: [
         "Take a screenshot; the editor opens automatically over the capture.",
-        "Pick a tool from the toolbar: crop, pen, marker, line, arrow, rectangle, ellipse, text, step number, pixelate, spotlight, or hand.",
-        "Right-click a rectangle, ellipse, line, arrow or pixelated area to duplicate or delete it; a spotlight can only be deleted.",
+        "Pick a tool from the toolbar: crop, pen, marker, line, arrow, rectangle, ellipse, text, step number, pixelate, focus area, or hand.",
+        "Right-click a rectangle, ellipse, line, arrow or pixelated area to duplicate or delete it; a focus area can only be deleted.",
         "Arrow keys move the selected shape, Ctrl+arrow resizes it, Shift takes bigger steps, Escape deselects.",
         "\"Resize\" changes the image's real pixel size; \"Show original\" (or V) shows the untouched capture while held, a tap locks it.",
         "Undo/redo steps back through edits; save when done.",
@@ -546,7 +546,7 @@ export const HELP_CONTENT = {
       howTo: [
         "Click the record button {icon:record}; pick a window, drag a region, or click empty desktop for the whole screen. It is the same overlay as the screenshot tool.",
         "An optional countdown toast counts down before capture actually starts.",
-        "A small floating control bar shows elapsed time and file size, two audio mute buttons, and offers Pause/Resume, Stop and Discard; two optional global hotkeys and the tray menu can stop or pause/resume it too, live only while it is actually running. A window recording using the every-display or current-display canvas also gets a switch-target button, to swap what it is capturing without starting over.",
+        "A small floating control bar shows elapsed time and file size, two audio mute buttons, and offers Pause/Resume, Stop and Discard; two optional global hotkeys and the tray menu can stop or pause/resume it too, live only while it is actually running. A window recording whose recording area is All screens or Current screen also gets a switch-target button, to swap what it is capturing without starting over.",
         "Stopping offers Save, Save as…, Copy, Edit or Discard.",
       ],
       whatHappens:
@@ -574,7 +574,7 @@ export const HELP_CONTENT = {
       howTo: [
         "From a fresh recording: click More, then Video editor, in the result dialog.",
         "From any video already saved as a prompt: right-click it and choose \"Edit video\".",
-        "Trim, crop, change speed, fade in/out, resize (typed dimensions, a percentage, or a quick preset), and add image, freeze-frame, text, pixelate or spotlight overlays on the timeline.",
+        "Trim, crop, change speed, fade in/out, resize (typed dimensions, a percentage, or a quick preset), and add image, freeze-frame, text, pixelate or focus area overlays on the timeline.",
         "Export: a lossless fast path applies when only trimming; otherwise the whole clip re-encodes once.",
       ],
       whatHappens:
@@ -594,7 +594,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Recognition runs entirely on the device through Windows' own engine. The result dialog can auto-copy the text and join broken lines back into paragraphs, both switchable. A missing language pack opens the same dialog voice dictation uses; see \"Language packs\" below.",
-      settings: ["Text recognition, auto-copy the result, join lines, upscale small images, recognition language: Expert menu → Capture → Text recognition"],
+      settings: ["Text recognition, auto-copy the result, join lines, enlarge small images, recognition language: Expert menu → Capture → Text recognition"],
     },
     {
       section: "basics",
@@ -1264,8 +1264,8 @@ export const HELP_CONTENT = {
       whatItIs: "Öffnet sich direkt nach einer Aufnahme, bevor der Screenshot gespeichert wird: zum Zuschneiden, Markieren und Beschriften, bevor daraus eine Kachel wird.",
       howTo: [
         "Einen Screenshot aufnehmen; der Editor öffnet sich automatisch über der Aufnahme.",
-        "Ein Werkzeug aus der Symbolleiste wählen: Zuschneiden, Stift, Marker, Linie, Pfeil, Rechteck, Ellipse, Text, Schrittnummer, Verpixeln, Spotlight oder Hand.",
-        "Rechtsklick auf ein Rechteck, eine Ellipse, Linie, einen Pfeil oder eine verpixelte Fläche, um es zu duplizieren oder zu löschen; ein Spotlight lässt sich nur löschen.",
+        "Ein Werkzeug aus der Symbolleiste wählen: Zuschneiden, Stift, Marker, Linie, Pfeil, Rechteck, Ellipse, Text, Schrittnummer, Verpixeln, Fokusbereich oder Hand.",
+        "Rechtsklick auf ein Rechteck, eine Ellipse, Linie, einen Pfeil oder eine verpixelte Fläche, um es zu duplizieren oder zu löschen; ein Fokusbereich lässt sich nur löschen.",
         "Pfeiltasten verschieben die gewählte Form, Strg+Pfeil ändert ihre Größe, Umschalt macht größere Schritte, Escape hebt die Auswahl auf.",
         "\"Größe ändern\" ändert die echte Pixelgröße des Bildes; \"Original zeigen\" (oder V) zeigt die unbearbeitete Aufnahme, solange gedrückt, ein Tippen hält sie fest.",
         "Mit Rückgängig/Wiederholen schrittweise durch die Bearbeitungen gehen; anschließend speichern.",
@@ -1323,7 +1323,7 @@ export const HELP_CONTENT = {
       howTo: [
         "Bei einer frischen Aufnahme: im Ergebnisdialog auf Mehr, dann auf Video-Editor klicken.",
         "Bei einem bereits gespeicherten Video-Prompt: rechtsklicken und „Video bearbeiten“ wählen.",
-        "Zuschneiden, Kürzen, Geschwindigkeit ändern, Ein-/Ausblenden, Größe ändern (eingegebene Maße, ein Prozentwert oder eine Schnellauswahl) sowie Bild-, Standbild-, Text-, Verpixelungs- oder Spotlight-Overlays auf der Zeitleiste hinzufügen.",
+        "Zuschneiden, Kürzen, Geschwindigkeit ändern, Ein-/Ausblenden, Größe ändern (eingegebene Maße, ein Prozentwert oder eine Schnellauswahl) sowie Bild-, Standbild-, Text-, Verpixelungs- oder Fokusbereich-Overlays auf der Zeitleiste hinzufügen.",
         "Exportieren: bei reinem Kürzen greift ein verlustfreier Schnellpfad, sonst wird der ganze Clip einmal neu kodiert.",
       ],
       whatHappens:
@@ -1343,7 +1343,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Die Erkennung läuft vollständig auf dem Gerät über die eigene Erkennungs-Engine von Windows. Der Ergebnisdialog kann den Text automatisch kopieren und getrennte Zeilen wieder zu Absätzen verbinden; beides lässt sich separat ein- und ausschalten. Fehlt ein Sprachpaket, öffnet sich derselbe Dialog wie bei der Spracheingabe; siehe „Sprachpakete“ unten.",
-      settings: ["Texterkennung, Ergebnis automatisch kopieren, Zeilen verbinden, kleine Bilder hochskalieren, Erkennungssprache: Expertenmenü → Aufnehmen → Texterkennung"],
+      settings: ["Texterkennung, Ergebnis automatisch kopieren, Zeilen verbinden, kleine Bilder vergrößern, Erkennungssprache: Expertenmenü → Aufnehmen → Texterkennung"],
     },
     {
       section: "basics",

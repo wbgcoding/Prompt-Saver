@@ -204,7 +204,7 @@ the video editor and the introduction tour ship on).
   it reaches a tile, the clipboard or a folder. Thirteen tools: crop, pen, marker,
   highlighter-style multiply blend, line, arrow, rectangle, ellipse, text, a
   self-numbering step marker for annotating instructions, pixelation, a
-  spotlight that dims everything outside a chosen area, and a hand tool to pan
+  focus area that dims everything outside a chosen area, and a hand tool to pan
   around while zoomed in (also reachable by holding Space or the middle mouse
   button) for pixel-precise work on a large capture. The crop tool shows a
   directional resize cursor at each handle and a move cursor inside the current
@@ -228,7 +228,7 @@ the video editor and the introduction tour ship on).
   reliably, wrapped lines can be joined back into paragraphs, and the result can
   copy itself to the clipboard automatically — all three tunable in the expert
   menu, along with which installed language to use. Missing a language pack? A
-  "Manage languages" dialog lists everything Windows can recognize, installed or
+  "Manage text recognition languages" dialog lists everything Windows can recognize, installed or
   not, with the download size right on the button so nothing downloads blind;
   picking one walks through Windows' own installer, asking for administrator
   rights exactly once and explaining why beforehand. On systems where Windows
@@ -250,7 +250,7 @@ the video editor and the introduction tour ship on).
   each their own switch; insertion position (cursor or end), the recognition
   language and a global hotkey (delivering to the focused field, the
   clipboard, or pasted directly) round it out. Missing a language pack opens
-  the same "Manage languages" dialog OCR uses, shared install and elevation
+  the same language dialog OCR uses (opened by "Manage dictation languages"), shared install and elevation
   flow included.
 - **Introduction tour** (expert menu, on by default) — a five-step walkthrough
   on first launch, opened right after the example prompts are seeded so step
@@ -302,7 +302,7 @@ the video editor and the introduction tour ship on).
   height/percent fields, an aspect-ratio lock, and presets from 4K down to
   25% — a preset never enlarges past the source, but the percent field and
   free typing can), and overlay images, freeze-frames, text, pixelation or a
-  spotlight anywhere on a zoomable filmstrip-and-waveform timeline. The preview itself zooms with the
+  focus area anywhere on a zoomable filmstrip-and-waveform timeline. The preview itself zooms with the
   scroll wheel (up to 8×) and pans by dragging — the middle mouse button
   always, the left button once zoomed in — for placing a small overlay
   precisely on a large recording. A few export presets (unchanged quality, a
@@ -362,7 +362,7 @@ the video editor and the introduction tour ship on).
   library is also the source for the help window's picture and for
   `docs/screenshot.png`.
 - **Duplicate a shape or overlay** — right-click a rectangle, ellipse, line,
-  arrow, spotlight or pixelation in the screenshot editor, or an overlay's row
+  arrow, focus area or pixelation in the screenshot editor, or an overlay's row
   in the video editor, for a menu to duplicate or delete it. A duplicate keeps
   the same values and time range and is offset slightly so it is easy to spot
   next to the original; the offset is adjustable. The video editor also
@@ -370,7 +370,7 @@ the video editor and the introduction tour ship on).
   overlay kind and starts the next one of that kind from it, across restarts
   too, with an expert switch to turn that off again.
 - **Snapping while dragging, in both editors.** A shape (screenshot editor) or
-  a crop box or overlay (video editor) now snaps to the canvas or frame edges,
+  a crop box or overlay (video editor) now snaps to the image or frame edges,
   its centre in both directions, and the edges and centre of every other shape
   or overlay already placed. A thin accent-coloured guide line marks whichever
   line it caught, gone again the instant the drag ends. Holding Alt turns it

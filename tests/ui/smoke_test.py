@@ -5969,11 +5969,11 @@ PROBE = """
       // A hit that lives in the backup manager -- a dialog of its own, not the
       // settings page -- must close Settings entirely and open that dialog.
       const search2 = document.getElementById('expert-search');
-      search2.value = 'smart retention';
+      search2.value = 'weekly, monthly';
       search2.dispatchEvent(new Event('input', { bubbles: true }));
       await sleep(200);
       const backupRow = [...document.querySelectorAll('.expert-foreign-row')]
-        .find(r => (r.querySelector('span') || {}).textContent === 'Smart retention');
+        .find(r => (r.querySelector('span') || {}).textContent === 'Keep daily, weekly, monthly and yearly backups');
       if (!backupRow) {
         out.errors.push('403: search for a backup-only word found no foreign hit');
       } else {
@@ -7140,13 +7140,13 @@ PROBE = """
         out.errors.push('a stored backup password is not shown as empty dots');
       }
       // 25: a plain number field replaces the light/normal/heavy preset tiles;
-      // "Smart retention" is a switch above it that greys the field out and
+      // The "Keep daily, weekly, monthly and yearly backups" switch sits above it, greys the field out and
       // activates the tier grid below. The panel re-renders on every change, so
       // elements have to be looked up again after each one.
       const settle = async (fn) => { for (let i = 0; i < 60 && !fn(); i++) await sleep(50); return fn(); };
       const keepInput = () => document.querySelector('#backup-panel .backup-keep-row input[type=number]');
       const gfsSwitch = () => [...document.querySelectorAll('#backup-panel .switch-field')]
-        .find((l) => l.querySelector('span')?.textContent.trim() === 'Smart retention')
+        .find((l) => l.querySelector('span')?.textContent.trim() === 'Keep daily, weekly, monthly and yearly backups')
         ?.querySelector('input[type=checkbox]');
       const tierNode = () => document.querySelector('#backup-panel .backup-tier-grid');
       if (!keepInput() || !gfsSwitch()) {
