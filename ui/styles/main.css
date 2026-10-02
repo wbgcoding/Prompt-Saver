@@ -236,7 +236,6 @@ body.win-maximized { border-radius: 0; }
 body.noflag-showLogo .logo { display: none; }
 body.noflag-showTitle .title { display: none; }
 body.noflag-showLibrary #library-btn { display: none; }
-body.noflag-showJournal #journal-btn { display: none; }
 
 /* Favorites-view star, hugging the title / first view (negative margin trims the
    brand's 10px gap right down); size is expert-tunable. */
@@ -1386,8 +1385,26 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
    the whole dialog, and the list below keeps a minimum height (see .library-list);
    the dialog then scrolls to it instead of crushing it out of existence. */
 #library .modal { width: min(var(--lib-width, 900px), 95vw); height: var(--full-modal-h); max-height: var(--full-modal-h); overflow: hidden auto; }
-/* Copy history fills the window height too; the lists scroll inside it. */
-#journal .modal { width: min(var(--journal-width, 980px), 95vw); height: var(--full-modal-h); max-height: var(--full-modal-h); overflow: hidden auto; }
+/* The two tabs of the library: one panel each, the dialog keeps one size. */
+.lib-tabs { display: flex; gap: 4px; margin-left: 12px; }
+.lib-tab {
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.lib-tab:hover { color: var(--fg); }
+.lib-tab.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.lib-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#library[data-tab="history"] .lib-prompts-only,
+#library[data-tab="prompts"] .lib-history-only { display: none !important; }
+.lib-panel { display: flex; flex-direction: column; gap: 12px; flex: 1 1 auto; min-height: 120px; }
+.lib-panel.hidden { display: none; }
+#library-panel-history .journal-body { flex: 1 1 auto; }
 #journal-search { flex: 0 0 auto; }
 .head-clear { color: var(--danger); }
 .head-clear:hover { border-color: var(--danger); }
@@ -3959,7 +3976,6 @@ option:checked { background-color: var(--accent); color: var(--accent-fg); }
 
 /* Header icons hidden when their feature flag is off */
 /* Hidden when copy history is off, unless the user keeps paused buttons around. */
-.noflag-copyHistory:not(.flag-pausedIcons) #journal-btn { display: none; }
 .noflag-colorFilter #library-colors { display: none; }
 
 /* Drag & drop highlight while a file/text hovers the window */

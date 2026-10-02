@@ -446,7 +446,7 @@ function refreshColorUI() {
     if (wrap) { wrap.innerHTML = ""; buildColorFilter(wrap, cur); }
   }
   if (!libraryEl.classList.contains("hidden")) renderLibrary();
-  if (!$("journal").classList.contains("hidden")) renderJournal();
+  if (isHistoryTabOpen()) renderJournal();
 }
 
 function applyTileStyle() {
@@ -1215,7 +1215,6 @@ const FLAG_LABELS = {
   showLogo: "flagShowLogo",
   showTitle: "flagShowTitle",
   showLibrary: "library",   // top-bar library button visibility (toolbar menu)
-  showJournal: "journal",   // top-bar copy-history button visibility (toolbar menu)
   chainPrompts: "flagChainPrompts",
   // Windows taskbar icon progress during export, conversion, backup, import
   // and the ffmpeg download; and the shared "about how long is left" estimate
@@ -1639,7 +1638,6 @@ const EXPERT_VALUES = {
   historyMax: { label: "valHistoryMax", def: 100, unit: "", stops: HISTORY_STOPS, gate: "copyHistory" },
   // Max copy-history rows the journal renders at once (UI cap, not storage).
   // Copy-history dialog width.
-  journalWidth: { label: "valJournalWidth", min: 520, max: 1400, step: 20, def: 980, unit: "px", gate: "copyHistory" },
   // Block re-copying the SAME prompt within this window (0 = off). Never blocks others.
   copyCooldownMs: { label: "valCopyCooldown", min: 0, max: 10000, step: 100, def: COOLDOWN_MS_DEFAULT, unit: "ms" },
   copySoundVolume: { label: "valCopySoundVolume", min: 0, max: 100, step: 5, def: COPY_SOUND_VOLUME_DEFAULT, unit: "%", gate: "copySound" },
@@ -2242,11 +2240,11 @@ const EXPERT_TABS = [
     { title: "expGroupLibrary", flags: ["smartSort", "batchOps", "imagePreview", "libraryVideoPreview", "archiveTag", "libraryTiles"], values: ["libraryWidth", "libPreviewLines", "libraryTileSize"] },
     { title: "expGroupTags", flags: ["tags"], values: ["tagChipPx", "tagPopCols"], dropdowns: ["tagFilterMode", "tagSort"] },
     // Everything that records or shows copy history lives with the history view.
-    { title: "expGroupJournal", flags: ["copyHistory", "historyTimestamps", "historyGrouped", "dedupCopyLog", "journalSearch", "journalTypeFilter", "journalColorFilter", { key: "journalTagFilter", gate: "tags" }, "journalRecent", "journalMostUsed", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "journalClear", "confirmClearHistory", "clipWatcher", { key: "clipSkipSecrets", gate: "clipWatcher" }], values: ["historyMax", "journalWidth", "clipMinChars", "clipInboxMax"], selects: ["historyDays"] },
+    { title: "expGroupJournal", flags: ["copyHistory", "historyTimestamps", "historyGrouped", "dedupCopyLog", "journalSearch", "journalTypeFilter", "journalColorFilter", { key: "journalTagFilter", gate: "tags" }, "journalRecent", "journalMostUsed", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "journalClear", "confirmClearHistory", "clipWatcher", { key: "clipSkipSecrets", gate: "clipWatcher" }], values: ["historyMax", "clipMinChars", "clipInboxMax"], selects: ["historyDays"] },
   ] },
   { title: "expTabSystem", groups: [
     // Toolbar button visibility (mirrors the header right-click tool list).
-    { title: "expGroupToolbar", flags: ["barToggles", { key: "barToggleBoth", gate: "barToggles" }, "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons", "headerSeparators"] },
+    { title: "expGroupToolbar", flags: ["barToggles", { key: "barToggleBoth", gate: "barToggles" }, "showLibrary", "showLogo", "showTitle", "pausedIcons", "headerSeparators"] },
     { title: "expGroupPrivacy", notices: ["storeUnsealed", "settingsLocked", "settingsWriteFailed"], flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "secretPrompts"], values: ["tileBlur", "mediaBlur", "secretTimeoutMin"] },
     { title: "expGroupSystem", notices: ["dataDirReadOnly"], flags: ["keyboardNav", "allowMultipleInstances", "dataDirLock", "demoMode", "taskbarProgress", "etaShow"], values: ["bgDoneKeepMin"], paths: ["dataDir"],
       actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }] },
@@ -2493,7 +2491,6 @@ function applyValues() {
   root.setProperty("--toast-width", `${val("toastWidth")}px`);
   root.setProperty("--modal-max-vh", `${val("modalMaxVh")}vh`);
   root.setProperty("--tag-pop-cols", String(Math.round(val("tagPopCols"))));
-  root.setProperty("--journal-width", `${val("journalWidth")}px`);
   // Caps/lengths that were fixed constants, now expert-tunable.
   ROTATE_SHORT_MAX = Math.round(val("rotateTipLen"));
   HISTORY_PREVIEW_LEN = Math.round(val("historyPreviewLen"));
@@ -2566,7 +2563,7 @@ const EXPERT_TIPS = [
   "smartSort", "fuzzySearch", "batchOps", "searchSuggest", "searchAutofocus", "searchDebounceMs",
   "globalSearch",
   "tags", "tagChipPx", "tagFilterMode", "tagPopCols", "tagSort",
-  "allowScreenshot", "copyHistory", "historyTimestamps", "historyGrouped", "journalWidth",
+  "allowScreenshot", "copyHistory", "historyTimestamps", "historyGrouped",
   "dedupCopyLog", "cleanupFiles", "blurTilesUntilHover",
   // Tools / data
   "dupFinder", "clipWatcher", "backupGfs", "backupBeforeReset", "backupBeforeDelete", "disarmMs",
@@ -2581,7 +2578,7 @@ const EXPERT_TIPS = [
   "historyPerPrompt", "similarThreshold", "similarHint", "clipMinChars", "clipInboxMax", "historyMax",
   "nameMaxLen", "searchListMax", "savedSearchMax", "maxViews", "gridMax",
   "viewBorder", "statsTopN", "multiViewPrompt",
-  "barToggles", "barToggleBoth", "quickGrid", "quickGridHoverOnly", "multiView", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "libraryCols", "copySize", "copyFont", "showLibrary", "showJournal", "composerScale", "primaryScale",
+  "barToggles", "barToggleBoth", "quickGrid", "quickGridHoverOnly", "multiView", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "libraryCols", "copySize", "copyFont", "showLibrary", "composerScale", "primaryScale",
   "remoteApi", "remoteNetworkFilter", "remoteTlsShortLived", "urlScheme", "remotePort", "remoteRateLimit",
   "recOutline", "recOutlineColor", "chainSeparator",
   "veOvTextOutlinePx", "veOvKeysActiveColor", "veOvVideoVolume",
@@ -3953,6 +3950,7 @@ async function openSettingsDirectoryEntry(entry) {
     hideSettings();
   } else if (entry.area === "library") {
     hideSettings();
+    libraryTab = "prompts";
     $("library-btn").click();
   } else if (entry.area === "backup") {
     hideSettings();
@@ -6050,7 +6048,7 @@ function scheduleImagePaint() {
       } else {
         // A library / copy-history row preview: its panel owns the element cache,
         // so drop the placeholder entry before asking for a fresh thumbnail.
-        const cache = el.closest("#journal") ? journalThumbCache : libThumbCache;
+        const cache = el.closest("#library-panel-history") ? journalThumbCache : libThumbCache;
         cache.delete(p.id);
         el.replaceWith(thumbEl(p, cache));
       }
@@ -7373,7 +7371,7 @@ function openGridTagPop() {
 }
 
 // ---- Right-click toolbar menu: show or hide header buttons. Whole features (views, quick grid, clipboard watcher, chaining) are switched in the expert menu, never here. ----
-const TOOLBAR_TOOLS = ["favViewButton", "showLibrary", "showJournal", "barToggles", "showLogo", "showTitle"];
+const TOOLBAR_TOOLS = ["favViewButton", "showLibrary", "barToggles", "showLogo", "showTitle"];
 const TB_CHECK = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7"/></svg>';
 // Little glyph shown beside each tool name so the menu reads at a glance.
 const tbIcon = (d, fill) => `<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path ${fill ? 'fill="currentColor"' : 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'} d="${d}"/></svg>`;
@@ -7382,7 +7380,6 @@ const tbIcon = (d, fill) => `<svg viewBox="0 0 24 24" width="15" height="15" ari
 const TOOL_ICONS = {
   favViewButton: tbIcon("M12 3.5l2.5 5.2 5.7.8-4.1 4 1 5.7L12 16.9l-5.1 2.6 1-5.7-4.1-4 5.7-.8z", true),
   showLibrary: tbIcon("M4 6h2v2H4V6Zm4 0h12v2H8V6ZM4 11h2v2H4v-2Zm4 0h12v2H8v-2ZM4 16h2v2H4v-2Zm4 0h12v2H8v-2Z", true),
-  showJournal: tbIcon("M12 8v4l3 2M21 12a9 9 0 1 1-2.6-6.3M21 4v4h-4"),
   barToggles: tbIcon("M6 9l6 6 6-6"),
   showLogo: tbIcon("M4 5h16v14H4zM7 15l3.5-3.5 3 3 2.5-2.5 2 2M8.6 10a1.4 1.4 0 1 1-2.8 0 1.4 1.4 0 0 1 2.8 0"),
   showTitle: tbIcon("M6 7V5h12v2M12 5v14M9 19h6"),
@@ -9887,6 +9884,7 @@ function jumpToPrompt(name) {
   // The settings and the backups dialog stay open underneath: the library is only
   // raised above them, so closing it lands back on the statistics it was opened from.
   document.body.classList.add("library-front");
+  libraryTab = "prompts";
   $("library-btn").click(); // resets + opens the library
   libQuery = name || "";
   $("library-q").value = libQuery;
@@ -11953,7 +11951,7 @@ async function offerClipInboxCleanup() {
 
 // Something changed in the stored entries: reload the copy history if it is on screen.
 async function refreshClipInbox() {
-  if (!$("journal").classList.contains("hidden")) await loadJournal();
+  if (isHistoryTabOpen()) await loadJournal();
 }
 
 // Keep all image/file modal controls consistent with modalState.
@@ -15052,7 +15050,7 @@ function journalClipRow(it) {
   const save = document.createElement("button");
   save.type = "button"; save.className = "ghost-btn"; save.textContent = t("clipSave");
   save.addEventListener("click", () => {
-    $("journal").classList.add("hidden");
+    hideLibrary();
     openModal({ mode: "create", text: it.text, title: t("nameModalTitle") });
   });
   const copy = document.createElement("button");
@@ -15516,7 +15514,31 @@ function openHelpAt(id) {
   $("help").classList.remove("hidden");
 }
 
-async function openJournal() {
+// Which tab of the library is showing; the library reopens on the one used last.
+let libraryTab = "prompts"; // "prompts" | "history"
+const isHistoryTabOpen = () => !libraryEl.classList.contains("hidden") && libraryTab === "history";
+// The copy history tab exists while it records something: app copies or copies from other apps.
+const historyTabAvailable = () => flag("copyHistory") || optFlag("clipWatcher");
+
+function setLibraryTab(tab) {
+  const avail = historyTabAvailable();
+  if (tab === "history" && !avail) tab = "prompts";
+  // The batch bar belongs to the prompts tab.
+  if (tab === "history" && libSelectMode) setLibSelectMode(false);
+  libraryTab = tab;
+  libraryEl.dataset.tab = tab;
+  $("library-tabs").classList.toggle("hidden", !avail);
+  $("library-panel-prompts").classList.toggle("hidden", tab !== "prompts");
+  $("library-panel-history").classList.toggle("hidden", tab !== "history");
+  for (const [id, key] of [["library-tab-prompts", "prompts"], ["library-tab-history", "history"]]) {
+    $(id).classList.toggle("active", tab === key);
+    $(id).setAttribute("aria-selected", String(tab === key));
+  }
+  if (tab === "history") resetAndLoadJournal();
+  else renderLibrary();
+}
+
+async function resetAndLoadJournal() {
   settings = await invoke("get_settings");
   journalQuery = "";
   if ($("journal-q")) $("journal-q").value = "";
@@ -15530,7 +15552,6 @@ async function openJournal() {
   // The filter bar hides itself when every filter is switched off (expert menu);
   // renderJournal decides, so it also follows the source chips.
   await loadJournal();
-  $("journal").classList.remove("hidden");
   if (flag("journalSearch") && flag("searchAutofocus")) $("journal-q").focus();
 }
 
@@ -19713,10 +19734,12 @@ function bind() {
     $("library-select-btn").setAttribute("aria-pressed", "false");
     $("lib-batch-bar").classList.add("hidden");
     syncLibraryToggle();
-    renderLibrary();
     libraryEl.classList.remove("hidden");
-    if (flag("librarySearch") && flag("searchAutofocus")) $("library-q").focus();
+    setLibraryTab(libraryTab);
+    if (libraryTab === "prompts" && flag("librarySearch") && flag("searchAutofocus")) $("library-q").focus();
   });
+  $("library-tab-prompts").addEventListener("click", () => setLibraryTab("prompts"));
+  $("library-tab-history").addEventListener("click", () => setLibraryTab("history"));
   // "Close after copy" toggle in the library header (mirrors the expert flag).
   $("library-close-toggle").addEventListener("click", async () => {
     const enabled = !flag("closeAfterCopy");
@@ -20030,13 +20053,7 @@ function bind() {
   });
 
   // Copy history & usage journal.
-  const journalEl = $("journal");
   buildColorFilter($("journal-colors"), journalColor);
-  $("journal-btn").addEventListener("click", openJournal);
-  $("journal-close").addEventListener("click", () => journalEl.classList.add("hidden"));
-  journalEl.addEventListener("pointerdown", (e) => {
-    if (e.target === journalEl) journalEl.classList.add("hidden");
-  });
   const renderJournalDebounced = debounced(renderJournal);
   $("journal-q").addEventListener("input", (e) => { journalQuery = e.target.value; renderJournalDebounced(); });
   wireSearchSuggest($("journal-q"), "recentSearchJournal");
@@ -20265,7 +20282,7 @@ function bind() {
     $("tile-size").value = String(normSize(Number(settings.tile_size ?? 0)));
     await renderGrid(); // fresh state: tooltips + a renamed default view
     if (!libraryEl.classList.contains("hidden")) renderLibrary();
-    if (!$("journal").classList.contains("hidden")) renderJournal();
+    if (isHistoryTabOpen()) renderJournal();
   });
 
   // Prompt-tile font + size.
@@ -20472,7 +20489,6 @@ function bind() {
     if (!$("trash-modal").classList.contains("hidden")) { trapTabWithin($("trash-modal"), e); return; }
     if (document.body.classList.contains("library-front") && !libraryEl.classList.contains("hidden")) { trapTabWithin(libraryEl, e); return; }
     if (!$("backup-modal").classList.contains("hidden")) { trapTabWithin($("backup-modal"), e); return; }
-    if (!journalEl.classList.contains("hidden")) { trapTabWithin(journalEl, e); return; }
     if (!libraryEl.classList.contains("hidden")) { trapTabWithin(libraryEl, e); return; }
     if (!helpEl.classList.contains("hidden")) { trapTabWithin(helpEl, e); return; }
     if (!settingsEl.classList.contains("hidden")) { trapTabWithin(settingsEl, e); return; }
@@ -20509,7 +20525,6 @@ function bind() {
     // A library raised over the backups dialog is the topmost thing: it closes first.
     else if (document.body.classList.contains("library-front") && !libraryEl.classList.contains("hidden")) hideLibrary();
     else if (!$("backup-modal").classList.contains("hidden")) closeBackups();
-    else if (!journalEl.classList.contains("hidden")) journalEl.classList.add("hidden");
     else if (!libraryEl.classList.contains("hidden")) hideLibrary();
     // Help opens over the settings panel (from expGroupHelp): close it before the
     // settings underneath, same pattern as library-front/journal above.

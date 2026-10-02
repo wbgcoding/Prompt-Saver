@@ -1513,9 +1513,10 @@ PROBE = """
       await click('library-select-btn'); // back out of select mode
     }
     await click('library-close');
-    await click('journal-btn');
+    await click('library-btn');
+    await click('library-tab-history');
     layoutScan('copy history');
-    mustReach('copy history', '#journal .modal-head-actions > button');
+    mustReach('copy history', '#library .modal-head-actions > button');
     // P55: an edit icon on each history row opens the editor without copying.
     {
       const jRow = document.querySelector('#journal-body .journal-item');
@@ -1711,7 +1712,7 @@ PROBE = """
         out.errors.push('198: the journal tag row overlaps the filter row instead of sitting below it');
       }
     }
-    await click('journal-close');
+    await click('library-close');
     // Search everything: the toolbar icon and Ctrl+K both open the overlay, all
     // six source groups can each turn up a hit, arrow keys move the highlight
     // across group boundaries, and Enter runs the right action per source.
@@ -16499,7 +16500,8 @@ def main():
     // 2) the copy history itself, under the Elsewhere filter
     document.getElementById('backup-modal').classList.add('hidden');
     document.getElementById('toast').classList.remove('show');
-    document.getElementById('journal-btn').click(); await sleep(400);
+    document.getElementById('library-btn').click(); await sleep(400);
+    document.getElementById('library-tab-history').click(); await sleep(400);
     const srcEl = document.querySelector('#journal-source [data-source="elsewhere"]');
     if (!srcEl || document.getElementById('journal-source').classList.contains('hidden')) { errs.push('564-c3: the source chips are not shown in the fixture'); }
     else {

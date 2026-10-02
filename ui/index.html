@@ -37,11 +37,6 @@
           <path fill="currentColor" d="M4 6h2v2H4V6Zm4 0h12v2H8V6ZM4 11h2v2H4v-2Zm4 0h12v2H8v-2ZM4 16h2v2H4v-2Zm4 0h12v2H8v-2Z"/>
         </svg>
       </button>
-      <button id="journal-btn" class="icon-btn" data-i18n-title="journal" data-i18n-aria="journal">
-        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-          <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 2M21 12a9 9 0 1 1-2.6-6.3M21 4v4h-4"/>
-        </svg>
-      </button>
       <!-- Search everything: prompts, copy history, attachments, views,
            settings and help in one overlay. Also opened with Ctrl+K. -->
       <button id="global-search-btn" class="icon-btn" data-i18n-title="globalSearchBtn" data-i18n-aria="globalSearchBtn" data-shortcut="mainGlobalSearch">
@@ -588,19 +583,35 @@
   </div>
 
   <!-- Prompt library: every saved prompt, click to edit -->
-  <div id="library" class="overlay hidden" role="dialog" aria-modal="true">
+  <div id="library" class="overlay hidden" role="dialog" aria-modal="true" data-tab="prompts">
     <div class="modal">
       <div class="modal-head">
         <h2 class="modal-title" data-i18n="library">All prompts</h2>
-        <span id="library-count" class="modal-count"></span>
+        <div id="library-tabs" class="lib-tabs" role="tablist">
+          <button id="library-tab-prompts" type="button" role="tab" class="lib-tab active" aria-selected="true" data-i18n="libraryTabItems">Prompts</button>
+          <button id="library-tab-history" type="button" role="tab" class="lib-tab" aria-selected="false" data-i18n="journal">Copy history</button>
+        </div>
+        <span id="library-count" class="modal-count lib-prompts-only"></span>
+        <span id="journal-count" class="modal-count lib-history-only"></span>
         <div class="modal-head-actions">
-          <button id="library-dupes" type="button" class="head-toggle" data-i18n="dupTitle">Find duplicates</button>
-          <label class="head-sort">
+          <!-- Pause/resume recording copies from other apps without leaving the list -->
+          <button id="clip-toggle" type="button" class="icon-btn watch-toggle lib-history-only hidden" data-i18n-title="flagClipWatcher" data-i18n-aria="flagClipWatcher">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 3.6v7.2"/>
+              <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M17.4 6.3a7.2 7.2 0 1 1-10.8 0"/>
+            </svg>
+          </button>
+          <!-- Emergency wipe: something sensitive got copied and may still be sitting
+               inside a rotating backup snapshot, DPAPI-sealed but not gone. -->
+          <button id="clip-purge-backups" type="button" class="head-toggle danger-btn lib-history-only hidden" data-i18n="clipPurgeBackups" data-i18n-title="tipClipPurgeBackups">Purge from all backups</button>
+          <button id="journal-clear" type="button" class="head-toggle head-clear lib-history-only" data-i18n="clearHistory">Clear history</button>
+          <button id="library-dupes" type="button" class="head-toggle lib-prompts-only" data-i18n="dupTitle">Find duplicates</button>
+          <label class="head-sort lib-prompts-only">
             <span class="cols-label" data-i18n="sortBy">Sort</span>
             <select id="library-sort" class="lib-sort" data-i18n-aria="sortBy"></select>
           </label>
-          <button id="library-select-btn" type="button" class="head-toggle" aria-pressed="false" data-i18n="selectMode">Select</button>
-          <button id="library-close-toggle" type="button" class="head-toggle" aria-pressed="true" data-i18n="closeAfterCopy">Close after copy</button>
+          <button id="library-select-btn" type="button" class="head-toggle lib-prompts-only" aria-pressed="false" data-i18n="selectMode">Select</button>
+          <button id="library-close-toggle" type="button" class="head-toggle lib-prompts-only" aria-pressed="true" data-i18n="closeAfterCopy">Close after copy</button>
           <button id="library-close" class="icon-btn" data-i18n-aria="close">
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
               <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
@@ -608,60 +619,85 @@
           </button>
         </div>
       </div>
-      <div id="library-search" class="library-search">
-        <!-- Saved searches: one-click chips above the field, only shown once at
-             least one search is saved (feature-gated via body.noflag-savedSearches). -->
-        <div id="library-saved-searches" class="lib-saved-searches"></div>
-        <div class="lib-q-wrap">
-          <input id="library-q" class="modal-input" type="text" data-i18n-ph="searchPh" data-i18n-aria="searchPh" data-i18n-title="tipSearchExclude" />
-          <button id="library-search-save" type="button" class="icon-btn lib-search-save" data-i18n-title="saveSearchAction" data-i18n-aria="saveSearchAction">☆</button>
-        </div>
-        <!-- Type chips are additive (several at once); the colours sit on the same
-             line, exactly as in the copy history. -->
-        <div class="journal-filters">
-          <div id="library-types" class="lib-types">
-            <button type="button" class="lib-type active" data-type="all" data-i18n="filterAll">All</button>
-            <button type="button" class="lib-type" data-type="image" data-i18n="filterImage">Image</button>
-            <button type="button" class="lib-type" data-type="video" data-i18n="filterVideo">Video</button>
-            <button type="button" class="lib-type" data-type="pdf" data-i18n="filterPdf">PDF</button>
-            <button type="button" class="lib-type" data-type="file" data-i18n="filterFile">File</button>
-            <button id="library-fav" type="button" class="lib-type lib-fav-chip" data-i18n-title="favoritesOnly" data-i18n-aria="favoritesOnly">★</button>
-            <button id="library-archive" type="button" class="lib-type lib-archive-chip" data-i18n-title="showArchiveToggle" data-i18n-aria="showArchiveToggle">🗄</button>
+      <div id="library-panel-prompts" class="lib-panel" role="tabpanel">
+        <div id="library-search" class="library-search">
+          <!-- Saved searches: one-click chips above the field, only shown once at
+               least one search is saved (feature-gated via body.noflag-savedSearches). -->
+          <div id="library-saved-searches" class="lib-saved-searches"></div>
+          <div class="lib-q-wrap">
+            <input id="library-q" class="modal-input" type="text" data-i18n-ph="searchPh" data-i18n-aria="searchPh" data-i18n-title="tipSearchExclude" />
+            <button id="library-search-save" type="button" class="icon-btn lib-search-save" data-i18n-title="saveSearchAction" data-i18n-aria="saveSearchAction">☆</button>
           </div>
-          <div id="library-colors" class="lib-colors" data-i18n-title="filterColor"></div>
-          <button id="library-view-toggle" type="button" class="icon-btn lib-view-toggle" data-i18n-title="libraryTilesToggle" data-i18n-aria="libraryTilesToggle">▦</button>
+          <!-- Type chips are additive (several at once); the colours sit on the same
+               line, exactly as in the copy history. -->
+          <div class="journal-filters">
+            <div id="library-types" class="lib-types">
+              <button type="button" class="lib-type active" data-type="all" data-i18n="filterAll">All</button>
+              <button type="button" class="lib-type" data-type="image" data-i18n="filterImage">Image</button>
+              <button type="button" class="lib-type" data-type="video" data-i18n="filterVideo">Video</button>
+              <button type="button" class="lib-type" data-type="pdf" data-i18n="filterPdf">PDF</button>
+              <button type="button" class="lib-type" data-type="file" data-i18n="filterFile">File</button>
+              <button id="library-fav" type="button" class="lib-type lib-fav-chip" data-i18n-title="favoritesOnly" data-i18n-aria="favoritesOnly">★</button>
+              <button id="library-archive" type="button" class="lib-type lib-archive-chip" data-i18n-title="showArchiveToggle" data-i18n-aria="showArchiveToggle">🗄</button>
+            </div>
+            <div id="library-colors" class="lib-colors" data-i18n-title="filterColor"></div>
+            <button id="library-view-toggle" type="button" class="icon-btn lib-view-toggle" data-i18n-title="libraryTilesToggle" data-i18n-aria="libraryTilesToggle">▦</button>
+          </div>
+          <!-- Tag filter chips + manager button (feature-gated via body.flag-tags) -->
+          <div id="library-tagbar" class="lib-tagbar"></div>
         </div>
-        <!-- Tag filter chips + manager button (feature-gated via body.flag-tags) -->
-        <div id="library-tagbar" class="lib-tagbar"></div>
+        <div id="library-list" class="library-list"></div>
+        <!-- Batch action bar (visible only in selection mode) -->
+        <div id="lib-batch-bar" class="lib-batch-bar hidden">
+          <span id="lib-batch-count" class="lib-batch-count"></span>
+          <button id="lib-batch-all" type="button" class="ghost-btn" data-i18n="selectAll">All</button>
+          <button id="lib-batch-none" type="button" class="ghost-btn" data-i18n="selectNone">None</button>
+          <span class="lib-batch-sep" aria-hidden="true"></span>
+          <div id="lib-batch-colors" class="lib-colors lib-batch-colors" data-i18n-title="batchColor"></div>
+          <button id="lib-batch-fav" type="button" class="ghost-btn" data-i18n="batchFavorite">★</button>
+          <button id="lib-batch-unfav" type="button" class="ghost-btn" data-i18n="batchUnfavorite">☆</button>
+          <select id="lib-batch-view" class="batch-view-select" data-i18n-aria="batchView"></select>
+          <button id="lib-batch-addview" type="button" class="ghost-btn" data-i18n="batchAddView">Add</button>
+          <button id="lib-batch-removeview" type="button" class="ghost-btn" data-i18n="batchRemoveView">Remove</button>
+          <button id="lib-batch-tag-add" type="button" class="ghost-btn" data-i18n="batchTagAdd">Add tag</button>
+          <button id="lib-batch-tag-remove" type="button" class="ghost-btn" data-i18n="batchTagRemove">Remove tag</button>
+          <button id="lib-batch-archive" type="button" class="ghost-btn" data-i18n="archiveAction">Archive</button>
+          <button id="lib-batch-unarchive" type="button" class="ghost-btn" data-i18n="unarchiveAction">Unarchive</button>
+          <span class="lib-batch-sep" aria-hidden="true"></span>
+          <select id="lib-batch-format" class="batch-view-select" data-i18n-aria="exportFormatLabel">
+            <option value="csv" data-i18n="exportCsv">CSV</option>
+            <option value="txt" data-i18n="exportTxt">TXT</option>
+            <option value="json" data-i18n="exportJson">JSON</option>
+          </select>
+          <button id="lib-batch-export" type="button" class="ghost-btn" data-i18n="exportBtn">Export</button>
+          <!-- Compares the two selected entries -- only meaningful at exactly two
+               selected, updateBatchBar disables it otherwise. -->
+          <button id="lib-batch-compare" type="button" class="ghost-btn" data-i18n="compareBtn">Compare</button>
+          <button id="lib-batch-delete" type="button" class="ghost-btn danger-btn" data-i18n="delete">Delete</button>
+        </div>
       </div>
-      <div id="library-list" class="library-list"></div>
-      <!-- Batch action bar (visible only in selection mode) -->
-      <div id="lib-batch-bar" class="lib-batch-bar hidden">
-        <span id="lib-batch-count" class="lib-batch-count"></span>
-        <button id="lib-batch-all" type="button" class="ghost-btn" data-i18n="selectAll">All</button>
-        <button id="lib-batch-none" type="button" class="ghost-btn" data-i18n="selectNone">None</button>
-        <span class="lib-batch-sep" aria-hidden="true"></span>
-        <div id="lib-batch-colors" class="lib-colors lib-batch-colors" data-i18n-title="batchColor"></div>
-        <button id="lib-batch-fav" type="button" class="ghost-btn" data-i18n="batchFavorite">★</button>
-        <button id="lib-batch-unfav" type="button" class="ghost-btn" data-i18n="batchUnfavorite">☆</button>
-        <select id="lib-batch-view" class="batch-view-select" data-i18n-aria="batchView"></select>
-        <button id="lib-batch-addview" type="button" class="ghost-btn" data-i18n="batchAddView">Add</button>
-        <button id="lib-batch-removeview" type="button" class="ghost-btn" data-i18n="batchRemoveView">Remove</button>
-        <button id="lib-batch-tag-add" type="button" class="ghost-btn" data-i18n="batchTagAdd">Add tag</button>
-        <button id="lib-batch-tag-remove" type="button" class="ghost-btn" data-i18n="batchTagRemove">Remove tag</button>
-        <button id="lib-batch-archive" type="button" class="ghost-btn" data-i18n="archiveAction">Archive</button>
-        <button id="lib-batch-unarchive" type="button" class="ghost-btn" data-i18n="unarchiveAction">Unarchive</button>
-        <span class="lib-batch-sep" aria-hidden="true"></span>
-        <select id="lib-batch-format" class="batch-view-select" data-i18n-aria="exportFormatLabel">
-          <option value="csv" data-i18n="exportCsv">CSV</option>
-          <option value="txt" data-i18n="exportTxt">TXT</option>
-          <option value="json" data-i18n="exportJson">JSON</option>
-        </select>
-        <button id="lib-batch-export" type="button" class="ghost-btn" data-i18n="exportBtn">Export</button>
-        <!-- Compares the two selected entries -- only meaningful at exactly two
-             selected, updateBatchBar disables it otherwise. -->
-        <button id="lib-batch-compare" type="button" class="ghost-btn" data-i18n="compareBtn">Compare</button>
-        <button id="lib-batch-delete" type="button" class="ghost-btn danger-btn" data-i18n="delete">Delete</button>
+      <div id="library-panel-history" class="lib-panel hidden" role="tabpanel">
+        <div id="journal-search" class="library-search">
+          <input id="journal-q" class="modal-input" type="text" data-i18n-ph="searchPh" data-i18n-aria="searchPh" />
+          <div class="journal-filters">
+            <div id="journal-source" class="lib-types hidden">
+              <button type="button" class="lib-type active" data-source="all" data-i18n="filterAll">All</button>
+              <button type="button" class="lib-type" data-source="app" data-i18n="sourceApp">In the app</button>
+              <button type="button" class="lib-type" data-source="elsewhere" data-i18n="sourceElsewhere">Elsewhere</button>
+            </div>
+            <div id="journal-types" class="lib-types">
+              <button type="button" class="lib-type active" data-type="all" data-i18n="filterAll">All</button>
+              <button type="button" class="lib-type" data-type="image" data-i18n="filterImage">Image</button>
+              <button type="button" class="lib-type" data-type="video" data-i18n="filterVideo">Video</button>
+              <button type="button" class="lib-type" data-type="pdf" data-i18n="filterPdf">PDF</button>
+              <button type="button" class="lib-type" data-type="file" data-i18n="filterFile">File</button>
+              <button id="journal-fav" type="button" class="lib-type lib-fav-chip" data-i18n-title="favoritesOnly" data-i18n-aria="favoritesOnly">★</button>
+            </div>
+            <div id="journal-colors" class="lib-colors" data-i18n-title="filterColor"></div>
+          </div>
+          <div id="journal-tags" class="lib-tagbar hidden"></div>
+        </div>
+        <div id="journal-body" class="journal-body"></div>
       </div>
     </div>
   </div>
@@ -869,55 +905,6 @@
         <button id="theme-edit-cancel" class="ghost-btn" type="button" data-i18n="cancel">Cancel</button>
         <button id="theme-edit-save" class="primary-btn" type="button" data-i18n="save">Save</button>
       </div>
-    </div>
-  </div>
-
-  <!-- Copy history & usage journal -->
-  <div id="journal" class="overlay hidden" role="dialog" aria-modal="true">
-    <div class="modal">
-      <div class="modal-head">
-        <h2 class="modal-title" data-i18n="journal">Copy history</h2>
-        <span id="journal-count" class="modal-count"></span>
-        <div class="modal-head-actions">
-          <!-- Pause/resume recording copies from other apps without leaving the list -->
-          <button id="clip-toggle" type="button" class="icon-btn watch-toggle hidden" data-i18n-title="flagClipWatcher" data-i18n-aria="flagClipWatcher">
-            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-              <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 3.6v7.2"/>
-              <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M17.4 6.3a7.2 7.2 0 1 1-10.8 0"/>
-            </svg>
-          </button>
-          <!-- Emergency wipe: something sensitive got copied and may still be sitting
-               inside a rotating backup snapshot, DPAPI-sealed but not gone. -->
-          <button id="clip-purge-backups" type="button" class="head-toggle danger-btn hidden" data-i18n="clipPurgeBackups" data-i18n-title="tipClipPurgeBackups">Purge from all backups</button>
-          <button id="journal-clear" type="button" class="head-toggle head-clear" data-i18n="clearHistory">Clear history</button>
-          <button id="journal-close" class="icon-btn" data-i18n-aria="close">
-            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-              <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
-            </svg>
-          </button>
-        </div>
-      </div>
-      <div id="journal-search" class="library-search">
-        <input id="journal-q" class="modal-input" type="text" data-i18n-ph="searchPh" data-i18n-aria="searchPh" />
-        <div class="journal-filters">
-          <div id="journal-source" class="lib-types hidden">
-            <button type="button" class="lib-type active" data-source="all" data-i18n="filterAll">All</button>
-            <button type="button" class="lib-type" data-source="app" data-i18n="sourceApp">In the app</button>
-            <button type="button" class="lib-type" data-source="elsewhere" data-i18n="sourceElsewhere">Elsewhere</button>
-          </div>
-          <div id="journal-types" class="lib-types">
-            <button type="button" class="lib-type active" data-type="all" data-i18n="filterAll">All</button>
-            <button type="button" class="lib-type" data-type="image" data-i18n="filterImage">Image</button>
-            <button type="button" class="lib-type" data-type="video" data-i18n="filterVideo">Video</button>
-            <button type="button" class="lib-type" data-type="pdf" data-i18n="filterPdf">PDF</button>
-            <button type="button" class="lib-type" data-type="file" data-i18n="filterFile">File</button>
-            <button id="journal-fav" type="button" class="lib-type lib-fav-chip" data-i18n-title="favoritesOnly" data-i18n-aria="favoritesOnly">★</button>
-          </div>
-          <div id="journal-colors" class="lib-colors" data-i18n-title="filterColor"></div>
-        </div>
-        <div id="journal-tags" class="lib-tagbar hidden"></div>
-      </div>
-      <div id="journal-body" class="journal-body"></div>
     </div>
   </div>
 

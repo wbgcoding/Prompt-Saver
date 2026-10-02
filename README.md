@@ -59,7 +59,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | **Button folders** | Drag one floating button onto another and they merge into a folder that opens in place |
 | **Chaining** | Combine several prompts into one clipboard entry, with a strip that shows what each picked step needs and fills before you start it; the expert menu sets what goes between two steps |
 | **Copy formatted** | For a prompt with real Markdown syntax: a second copy that puts the rendered version on the clipboard too, so Word, Outlook or a browser shows the formatting while a plain text field still gets the Markdown source |
-| **Copy history** | A journal of recent and most-used prompts, with optional timestamps and adjustable retention |
+| **Copy history** | A tab of the library listing recent and most-used prompts, with optional timestamps and adjustable retention; with the watcher on it also records copies from other apps, filterable by source |
 
 ### 🖼️ More than text
 

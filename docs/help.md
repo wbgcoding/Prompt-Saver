@@ -526,7 +526,7 @@ growing unbounded.
 
 ### Copy history
 
-A log of what was copied and when, through the app and, if "Record copies from
+A tab of the library (Library → Copy history): a log of what was copied and when, through the app and, if "Record copies from
 other apps" is on, elsewhere. Grouped view, automatic retention
 (30 days for a new install, adjustable, 0 keeps everything),
 per-entry delete, and usage statistics including a 14-day activity chart.
@@ -674,7 +674,7 @@ The delay and the width are adjustable.
 ### Toolbar
 
 Which buttons the header and composer bar show: quick grid-size control,
-library and history buttons, and multiple views.
+the library button, and multiple views.
 
 ## System and data
 
@@ -1459,7 +1459,7 @@ Export und Backup erreichbar. Ein Schalter über der Liste holt archivierte
 Kacheln zurück; archivieren/entarchivieren geht per Rechtsklickmenü oder aus
 der Sammelleiste der Bibliothek.
 
-**Kopierverlauf**: Protokoll, Gruppierung, Aufbewahrung (bei einer neuen
+**Kopierverlauf** (Bibliothek → Reiter Kopierverlauf): Protokoll, Gruppierung, Aufbewahrung (bei einer neuen
 Installation 30 Tage, einstellbar, 0 behält alles), Einzeleintrag löschen,
 Statistik mit 14-Tage-Diagramm.
 
