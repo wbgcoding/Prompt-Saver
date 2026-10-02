@@ -1738,6 +1738,9 @@ the video editor and the introduction tour ship on).
 - **Backup save and import moved into the backup manager.** Saving a backup to
   a file and importing one moved into the backup manager; the settings row
   keeps import, folder import and export.
+- **Start in the background only shows while autostart is on.** The switch is
+  hidden with autostart off and the settings search does not offer it; your
+  saved choice stays.
 
 ## 2.6.3 (2026-07-26)
 

@@ -5801,11 +5801,34 @@ PROBE = """
     // page, reveals the right dialog and flashes the right row.
     {
       const search = document.getElementById('expert-search');
-      search.value = 'start in the background';
+      // The background-start switch only exists while autostart is on: hidden
+      // with it off, never offered by the search, shown again once it is on.
+      {
+        const autostartEl = document.getElementById('opt-autostart');
+        const startminRow = document.getElementById('opt-startmin').closest('.field');
+        const startminHit = () => [...document.querySelectorAll('.expert-foreign-row')]
+          .find(r => (r.querySelector('span') || {}).textContent === 'Start in the background on autostart');
+        const typeSearch = async (q) => { search.value = q; search.dispatchEvent(new Event('input', { bubbles: true })); await sleep(200); };
+        if (autostartEl.checked) out.errors.push('659: autostart is on in the fresh fixture');
+        if (!startminRow.classList.contains('hidden')) out.errors.push('659: the background-start row shows while autostart is off');
+        await typeSearch('start in the background');
+        if (startminHit()) out.errors.push('659: the search offers the hidden background-start row');
+        autostartEl.checked = true;
+        autostartEl.dispatchEvent(new Event('change', { bubbles: true }));
+        await sleep(200);
+        if (startminRow.classList.contains('hidden')) out.errors.push('659: the background-start row stays hidden after autostart is switched on');
+        await typeSearch('start in the background');
+        if (!startminHit()) out.errors.push('659: the search misses the background-start row while autostart is on');
+        autostartEl.checked = false;
+        autostartEl.dispatchEvent(new Event('change', { bubbles: true }));
+        await sleep(200);
+        if (!startminRow.classList.contains('hidden')) out.errors.push('659: the background-start row stays visible after autostart is switched off');
+      }
+      search.value = 'auto-paste';
       search.dispatchEvent(new Event('input', { bubbles: true }));
       await sleep(200);
       const foreignRow = [...document.querySelectorAll('.expert-foreign-row')]
-        .find(r => (r.querySelector('span') || {}).textContent === 'Start in the background on autostart');
+        .find(r => (r.querySelector('span') || {}).textContent === 'Auto-paste on double-click');
       if (!foreignRow) {
         out.errors.push('403: search for a normal-settings-only word found no foreign hit');
       } else {
@@ -5820,7 +5843,7 @@ PROBE = """
         if (document.getElementById('settings-main').classList.contains('hidden')) {
           out.errors.push('403: clicking a foreign hit did not reveal the normal settings page');
         }
-        if (!document.getElementById('opt-startmin').closest('.field').classList.contains('settings-search-hit')) {
+        if (!document.getElementById('opt-autopaste').closest('.field').classList.contains('settings-search-hit')) {
           out.errors.push('403: clicking a foreign hit did not flash the target row');
         }
       }

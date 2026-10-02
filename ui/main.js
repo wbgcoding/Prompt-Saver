@@ -3902,7 +3902,7 @@ const SETTINGS_DIRECTORY = [
   { key: "opt-ontop", area: "normal", label: "alwaysOnTop" },
   { key: "opt-minimize", area: "normal", label: "minimizeOnClose" },
   { key: "opt-autostart", area: "normal", label: "autostart" },
-  { key: "opt-startmin", area: "normal", label: "startMinimized" },
+  { key: "opt-startmin", area: "normal", label: "startMinimized", when: () => $("opt-autostart").checked },
   { key: "opt-autopaste", area: "normal", label: "autoPasteSetting", tip: "tipAutoPaste" },
   { key: "opt-tooltips", area: "normal", label: "showTooltips", tip: "tipTooltips" },
   { key: "opt-screenshot-folder", area: "normal", label: "screenshotToFolder", tip: "tipScreenshotFolder" },
@@ -3929,6 +3929,7 @@ const SETTINGS_DIRECTORY = [
 const SETTINGS_AREA_LABEL = { normal: "settingsAreaNormal", toolbar: "settingsAreaToolbar", library: "settingsAreaLibrary", backup: "settingsAreaBackup" };
 
 function settingsDirectoryHit(entry, q) {
+  if (entry.when && !entry.when()) return false;
   if (!gateOpen(entry.gate)) return false;
   return i18nHit(entry.label, q) || (entry.tip && i18nHit(entry.tip, q));
 }
@@ -20495,6 +20496,7 @@ function bind() {
       e.target.checked = !e.target.checked;
       errToast(err);
     }
+    syncStartMinRow(); // a failed call flips the box back and re-hides the row
   });
   $("opt-startmin").addEventListener("change", async (e) => {
     try {
@@ -22202,6 +22204,11 @@ async function init() {
 }
 
 // Push the loaded settings into the settings-dialog controls.
+// "Start in the background" only means something while autostart is on. The
+// stored choice stays untouched while the row is hidden.
+function syncStartMinRow() {
+  $("opt-startmin").closest(".field").classList.toggle("hidden", !$("opt-autostart").checked);
+}
 function syncSettingsControls() {
     fillThemeSelect();
     setLangSelect();
@@ -22211,6 +22218,7 @@ function syncSettingsControls() {
     $("opt-autopaste").checked = settings.ui_flags?.autoPaste !== false;
     $("opt-autostart").checked = settings.autostart === true;
     $("opt-startmin").checked = settings.start_minimized === true;
+    syncStartMinRow();
     $("opt-ontop").checked = settings.always_on_top === true;
     $("opt-favview").checked = favViewEnabled();
     $("opt-favview").closest(".field").classList.toggle("hidden", !flag("favorites"));

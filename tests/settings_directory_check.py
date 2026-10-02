@@ -66,7 +66,8 @@ def block(name, src, opener="[", closer="]"):
 
 ENTRY_RE = re.compile(
     r'\{\s*key:\s*"([^"]+)"\s*,\s*area:\s*"([^"]+)"\s*,\s*label:\s*"([^"]+)"'
-    r'(?:\s*,\s*tip:\s*"([^"]+)")?(?:\s*,\s*gate:\s*"([^"]+)")?\s*,?\s*\}'
+    r'(?:\s*,\s*tip:\s*"([^"]+)")?(?:\s*,\s*gate:\s*"([^"]+)")?'
+    r'(?:\s*,\s*when:\s*\(\)\s*=>[^}]*?)?\s*,?\s*\}'
 )
 
 
