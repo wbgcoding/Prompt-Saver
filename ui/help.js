@@ -647,7 +647,7 @@ export const HELP_CONTENT = {
       whatItIs: "A tile can hold a list of texts instead of one; each copy serves the next entry.",
       howTo: [
         "Rotating tiles are on by default; turn them off in the expert menu if unused.",
-        "In a tile's editor, open Advanced options and turn on \"Rotating texts\".",
+        "In a tile's editor, turn on \"Rotating texts\" above the entry area.",
         "The entry list then replaces the plain text field.",
         "Add more entries with \"+ Entry\"; icons beside each one reorder or remove it.",
         "Choose order (sequential) or shuffle (random, no repeats until every entry is used).",
@@ -655,7 +655,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "A small badge counts up on a grid tile, a floating button, and a floating button folder member, like \"2/5\"; a grid-folder member shows only its file-type icon, not this badge. In order mode it is the absolute position; in shuffle mode it counts draws within the current cycle and restarts at 1 once every entry has been shown once, so it never jumps to an arbitrary position. The count survives restarts and full backups; a CSV/TXT import creates a new tile with a fresh pointer, so only the list of texts and its order or shuffle mode carry over, not the exact position. Turning rotation off on a tile with several entries keeps them all; only the first one is used until it is turned back on. An optional auto-advance moves a rotating tile to its next entry on every real paste, not only when it is copied.",
-      settings: ["Rotating tiles (on by default), default order or shuffle, badge, maximum entries, advance on every paste: Expert menu → Features → Rotating entries. The per-tile switch itself sits under Advanced options in the editor."],
+      settings: ["Rotating tiles (on by default), default order or shuffle, badge, maximum entries, advance on every paste: Expert menu → Features → Rotating entries. The per-tile switch itself sits above the entry area in the editor."],
     },
     {
       section: "system",
@@ -1399,7 +1399,7 @@ export const HELP_CONTENT = {
       whatItIs: "Eine Kachel kann eine Liste von Texten statt nur einem tragen; jede Kopie liefert den nächsten Eintrag.",
       howTo: [
         "Wechselnde Kacheln sind standardmäßig an; die Funktion im Expertenmenü ausschalten, falls nie genutzt.",
-        "Im Editor einer Kachel Erweiterte Optionen öffnen und \"Wechselnde Texte\" einschalten.",
+        "Im Editor einer Kachel \"Wechselnde Texte\" über dem Eintragsbereich einschalten.",
         "Die Eintragsliste ersetzt dann das normale Textfeld.",
         "Mit \"+ Eintrag\" weitere Texteinträge hinzufügen; Icons daneben sortieren um oder entfernen sie.",
         "Reihenfolge (der Reihe nach) oder Mischen (zufällig, ohne Wiederholung) wählen.",
@@ -1407,7 +1407,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Ein kleines Badge zählt auf einer Raster-Kachel, einem schwebenden Button und einem Mitglied eines Ordners für schwebende Buttons hoch, wie \"2/5\"; ein Raster-Ordner-Mitglied zeigt nur sein Dateityp-Icon, nicht dieses Badge. Im Reihenfolge-Modus ist das die absolute Position; im Zufalls-Modus zählt es die Ziehungen im aktuellen Durchlauf und beginnt wieder bei 1, sobald jeder Eintrag einmal drankam, statt auf eine beliebige Position zu springen. Der Zählerstand übersteht Neustarts und vollständige Backups; ein CSV/TXT-Import erstellt eine neue Kachel mit frischem Zeiger, sodass nur die Textliste und ihr Reihenfolge- oder Misch-Modus übernommen werden, nicht die genaue Position. Wird die Rotation bei einer Kachel mit mehreren Einträgen ausgeschaltet, bleiben alle erhalten; nur der erste wird genutzt, bis sie wieder aktiviert wird. Ein optionales Weiterschalten bringt eine wechselnde Kachel bei jedem echten Einfügen zum nächsten Eintrag, nicht nur beim Kopieren.",
-      settings: ["Wechselnde Kacheln (standardmäßig an), Standard Reihenfolge oder Mischen, Badge, maximale Einträge, bei jedem Einfügen weiterschalten: Expertenmenü → Funktionen → Wechselnde Einträge. Der Schalter pro Kachel sitzt im Editor unter Erweiterten Optionen."],
+      settings: ["Wechselnde Kacheln (standardmäßig an), Standard Reihenfolge oder Mischen, Badge, maximale Einträge, bei jedem Einfügen weiterschalten: Expertenmenü → Funktionen → Wechselnde Einträge. Der Schalter pro Kachel sitzt im Editor über dem Eintragsbereich."],
     },
     {
       section: "system",

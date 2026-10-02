@@ -1744,6 +1744,9 @@ the video editor and the introduction tour ship on).
 - **Image, GIF and video rows in the library have the full right-click menu.**
   The same entries as a tile, plus Edit image for pictures; Open a file in the
   editor stays on the screenshot and record buttons.
+- **The rotation switch sits above the entry list.** The switch for rotation
+  texts is right above the entry list in the editor instead of under Advanced
+  options.
 
 ## 2.6.3 (2026-07-26)
 

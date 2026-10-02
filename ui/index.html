@@ -358,9 +358,12 @@
            picked, so the editor's existing flex rules keep applying unchanged. -->
       <!-- Only for a text prompt while the expert flag is on; converts the plain
            textarea above into a list of variants one copy at a time serves through.
-           The on/off switch lives under Advanced options (#modal-rotate-toggle-row);
-           the entry list stays inline here since it IS the editing surface
-           while rotation is active, not a rarely-touched setting. -->
+           The on/off switch sits right above the entry list, which is the editing
+           surface while rotation is active. -->
+      <label id="modal-rotate-toggle-row" class="field switch-field modal-rotate-toggle hidden" data-i18n-title="rotateVsChainHint">
+        <span data-i18n="rotateToggle">Rotating texts</span>
+        <input type="checkbox" id="modal-rotate-switch" class="switch" />
+      </label>
       <div id="modal-rotate-list" class="modal-rotate-list hidden">
         <div id="modal-rotate-entries" class="modal-rotate-entries"></div>
         <div class="modal-rotate-controls-row">
@@ -417,14 +420,6 @@
           </span>
         </button>
         <div id="modal-advanced-body" class="modal-collapse-body hidden">
-          <!-- Only for a text prompt while the expert flag is on; converts the
-               plain textarea above into a list of variants one copy at a time serves
-               through. The entry list itself (#modal-rotate-list) stays inline in the
-               main body; only this on/off switch is tucked away here. -->
-          <label id="modal-rotate-toggle-row" class="field switch-field modal-rotate-toggle modal-advanced-sub hidden" data-i18n-title="rotateVsChainHint">
-            <span data-i18n="rotateToggle">Rotating texts</span>
-            <input type="checkbox" id="modal-rotate-switch" class="switch" />
-          </label>
           <!-- Tags: assigned chips + type-ahead input (feature-gated via body.flag-tags) -->
           <div id="modal-tags" class="modal-tags modal-advanced-sub">
             <span class="modal-tags-label" data-i18n="tagsLabel">Tags</span>

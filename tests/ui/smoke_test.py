@@ -6377,10 +6377,16 @@ PROBE = """
         const advBody = document.getElementById('modal-advanced-body');
         if (!rotRow || rotRow.classList.contains('hidden')) {
           out.errors.push('the rotating-texts switch did not appear in the editor with the flag on');
-        } else if (!advBody.contains(rotRow)) {
-          out.errors.push('the rotating-texts switch is not under Advanced options (33)');
+        } else if (advBody.contains(rotRow)) {
+          out.errors.push('the rotating-texts switch is still inside Advanced options');
+        } else if (rotRow.nextElementSibling !== document.getElementById('modal-rotate-list')) {
+          out.errors.push('the rotating-texts switch is not the element right above the entry list');
         } else if (!advBody.classList.contains('hidden')) {
           out.errors.push('advanced options does not start collapsed');
+        } else if (!(rotRow.getBoundingClientRect().height > 0)) {
+          out.errors.push('the rotating-texts switch has no height with Advanced collapsed');
+        } else if (rotRow.getBoundingClientRect().bottom > document.getElementById('modal-rotate-list').getBoundingClientRect().top + 1 && !document.getElementById('modal-rotate-list').classList.contains('hidden')) {
+          out.errors.push('the rotating-texts switch sits below the entry list');
         } else {
           document.getElementById('modal-advanced-head').click();
           await sleep(150);
@@ -6393,6 +6399,12 @@ PROBE = """
           await sleep(120);
           if (!document.getElementById('modal-text').classList.contains('hidden')) {
             out.errors.push('the plain textarea stayed visible after turning rotation on');
+          }
+          {
+            // Measured with rotation on: the switch row ends where the entry list begins.
+            const rl = document.getElementById('modal-rotate-list').getBoundingClientRect();
+            const sr = rotRow.getBoundingClientRect();
+            if (!(rl.height > 0) || sr.bottom > rl.top + 1) out.errors.push('the rotating-texts switch is not above the entry list: switch bottom ' + Math.round(sr.bottom) + ', list top ' + Math.round(rl.top));
           }
           // B4: neither the clear-X wrapper around the textarea nor the rendered
           // Markdown pane may keep a box while the variants list is the editor —

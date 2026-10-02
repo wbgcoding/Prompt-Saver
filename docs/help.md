@@ -437,7 +437,7 @@ as one text.
 
 A tile can hold a list of texts instead of one: each copy serves the next entry,
 in order or shuffled without repeats, instead of always the same text. On by
-default; the per-tile switch sits under Advanced options in the editor.
+default; the per-tile switch sits above the entry area in the editor.
 
 - A small badge counts up (like "2/5") on a tile, floating button, or floating button folder
   member; a grid-folder member shows only its file-type icon instead. In order
@@ -1344,7 +1344,7 @@ EINER Kachel, Kette kopiert MEHRERE verschiedene Kacheln zusammen.
 
 **Wechselnde Kacheln**: eine Kachel trägt eine Liste von Texten, jede Kopie
 liefert den nächsten Eintrag (Reihenfolge oder Zufall). Standardmäßig an; der
-Schalter pro Kachel sitzt im Editor unter Erweiterte Optionen. Ein Badge auf
+Schalter pro Kachel sitzt im Editor über dem Eintragsbereich. Ein Badge auf
 Kachel/schwebender Button/Mitglied eines Ordners für schwebende Buttons zählt hoch: im Zufalls-Modus die Ziehungen
 im aktuellen Durchlauf statt einer springenden Position; übersteht Neustart und
 Backup, aber keinen CSV/TXT-Import (neue Kachel, neuer Zeiger). Eine geeignete
