@@ -451,7 +451,7 @@ export const HELP_CONTENT = {
         "Click Undo on the message that appears.",
       ],
       whatHappens:
-        "Only the latest action can be undone; a newer one replaces it, and the button goes away with the message.",
+        "Only the latest action can be undone; a newer one replaces it, and the button goes away with the message. With the undo time set to Off, deleting a view or merging tags asks first instead.",
       settings: ["Undo button, how long the message stays: Expert menu → System & data → Data & maintenance"],
     },
     {
@@ -1200,7 +1200,7 @@ export const HELP_CONTENT = {
         "In der erscheinenden Meldung auf Rückgängig klicken.",
       ],
       whatHappens:
-        "Nur die letzte Aktion lässt sich zurücknehmen; eine neuere ersetzt sie, und der Button verschwindet mit der Meldung.",
+        "Nur die letzte Aktion lässt sich zurücknehmen; eine neuere ersetzt sie, und der Button verschwindet mit der Meldung. Steht die Rückgängig-Zeit auf Aus, fragen das Löschen einer Ansicht und das Zusammenführen von Tags vorher nach.",
       settings: ["Rückgängig-Button, wie lange die Meldung bleibt: Expertenmenü → System & Daten → Daten & Wartung"],
     },
     {

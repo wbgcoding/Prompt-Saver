@@ -781,7 +781,8 @@ A few actions outside the tile trash carry their own one-step Undo button on the
 confirmation message: deleting a prompt or a batch of them, deleting a view, clearing the copy history, deleting or merging tags, and a batch tag change. There is only ever one undo waiting; a later destructive action
 replaces it, and the button disappears once the message itself does. Turn it
 off in the expert menu if you would rather the message stayed a plain
-confirmation.
+confirmation; deleting a view or merging tags then asks first, since nothing
+could bring them back.
 
 ### Duplicate finder
 

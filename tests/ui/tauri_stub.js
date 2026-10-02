@@ -296,6 +296,11 @@ if (window.__DRAG_VIEW_TEST__) {
   if (work) { work.cols = 1; work.rows = 1; }
 }
 
+// The Undo time Off (the Quiet preset, or a store that had the old switch off): the
+// undo-off probe boots with it so the actions that only an Undo could bring back
+// have to ask first.
+if (window.__UNDO_OFF_TEST__) SETTINGS.ui_values.undoToastMs = 0;
+
 const clone = () => JSON.parse(JSON.stringify(SETTINGS));
 
 const clipInboxSeed = () => [

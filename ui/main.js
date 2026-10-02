@@ -843,6 +843,15 @@ function undoToast(msg, restore) {
   toast(msg, { label: t("undo"), onClick: runPendingUndo }, "", null, val("undoToastMs"));
 }
 
+// For the actions that cannot go to the trash and have nothing to bring them back
+// but the Undo toast (a deleted view, a merged tag): with the Undo time Off nothing
+// would be kept, so ask first. With Undo on, the toast is the safety net and this
+// resolves true at once.
+async function confirmIfNoUndo(opts) {
+  if (val("undoToastMs") > 0) return true;
+  return !!(await confirmDialog(opts));
+}
+
 function autoGrow(el) {
   el.style.height = "auto";
   const target = el.scrollHeight + 2;
@@ -12748,6 +12757,13 @@ function renderTagBar(bar, activeSet, rerender) {
 // existing tag. It runs at once: the snapshot taken here is what the undo toast
 // puts back.
 async function mergeTagWithUndo(from, into, refresh) {
+  const sure = await confirmIfNoUndo({
+    title: t("tagMergeTargetTitle"),
+    message: t("tagMergeConfirmMsg").replace("{from}", from).replace("{into}", into),
+    confirmLabel: t("tagMerge"),
+    danger: false,
+  });
+  if (!sure) return;
   const fromKey = tagKey(from);
   const intoKey = tagKey(into);
   const hasTag = (p, key) => (p.tags || []).some((x) => tagKey(x) === key);
@@ -19927,6 +19943,14 @@ function bind() {
     const deleted = settings.views.find((v) => v.id === viewModalId);
     const wasActive = settings.active_view === viewModalId;
     const prevActive = settings.active_view;
+    if (deleted) {
+      const sure = await confirmIfNoUndo({
+        title: t("viewDeleteTitle"),
+        message: t("viewDeleteMsg").replace("{name}", deleted.name),
+        confirmLabel: t("delete"),
+      });
+      if (!sure) return;
+    }
     try {
       settings = await invoke("delete_view", { id: viewModalId });
     } catch (err) {

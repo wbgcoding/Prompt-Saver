@@ -13612,6 +13612,103 @@ SECRET_PROBE = """
 """
 
 
+# With the Undo time Off nothing can bring back a deleted view or a merged tag, so
+# both ask first (a prompt delete goes to the trash and stays one click). Its own
+# boot: window.__UNDO_OFF_TEST__ (see tauri_stub.js) starts the store with
+# undoToastMs at 0.
+UNDO_OFF_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const beat = setInterval(() => {
+    document.documentElement.style.setProperty('--undo-off-tick', String(Date.now()));
+    document.body.getBoundingClientRect();
+  }, 40);
+  const click = async (id) => { const e = document.getElementById(id); if (e) { e.click(); await sleep(200); } };
+  const confirmOpen = () => !document.getElementById('confirm-modal').classList.contains('hidden');
+  const undoShown = () => {
+    const toast = document.getElementById('toast');
+    return toast.classList.contains('show') && !!toast.querySelector('.toast-btn');
+  };
+  const menuItem = (text) => [...document.querySelectorAll('.tab-menu button[role="menuitem"]')]
+    .find(el => el.textContent.trim() === text);
+  const copyTab = () => [...document.querySelectorAll('#views .view-btn:not(.view-add-top)')]
+    .find(b => (b.querySelector('span') || {}).textContent === 'Home (copy)');
+  try {
+    for (let i = 0; i < 80 && !document.querySelector('.view-btn[data-view-id="home"]'); i++) await sleep(100);
+    // View delete.
+    const home = document.querySelector('.view-btn[data-view-id="home"]');
+    home.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+    await sleep(150);
+    menuItem('Duplicate').click();
+    await sleep(300);
+    if (!copyTab()) errs.push('the duplicate view for the delete check was not created');
+    else {
+      copyTab().dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+      await sleep(150);
+      menuItem('Edit view').click();
+      await sleep(200);
+      await click('view-modal-delete');
+      if (!confirmOpen()) errs.push('with Undo off, deleting a view did not ask first');
+      if (!copyTab()) errs.push('with Undo off, a view was deleted before the question was answered');
+      await click('confirm-cancel');
+      if (!copyTab()) errs.push('cancelling the question still deleted the view');
+      await click('view-modal-delete');
+      await click('confirm-ok');
+      await sleep(200);
+      if (copyTab()) errs.push('confirming the question did not delete the view');
+      if (undoShown()) errs.push('with Undo off, the delete toast still carries an Undo button');
+    }
+    // Tag merge: two disposable tags on one prompt, merged from the tag manager.
+    await click('library-btn');
+    await click('library-select-btn');
+    document.querySelector('#library-list .lib-item[data-id="p1"]')?.click();
+    await sleep(150);
+    const add = document.getElementById('lib-batch-tag-add');
+    for (const name of ['UoSrcTmp', 'UoDstTmp']) {
+      add.click();
+      await sleep(150);
+      document.getElementById('confirm-input').value = name;
+      document.getElementById('confirm-ok').click();
+      await sleep(150);
+    }
+    document.getElementById('lib-batch-none').click();
+    await click('library-select-btn');
+    const mgr = [...document.querySelectorAll('#library-tagbar .tag-action')].pop();
+    if (mgr) { mgr.click(); await sleep(250); }
+    const rowFor = (name) => [...document.querySelectorAll('#tag-modal-list .tag-manage-row')]
+      .find(r => (r.querySelector('.tag-manage-name') || {}).textContent === name);
+    const pickTarget = async () => {
+      rowFor('UoSrcTmp').querySelectorAll('.ghost-btn')[1].click();
+      await sleep(150);
+      document.getElementById('confirm-input').value = 'UoDstTmp';
+      document.getElementById('confirm-ok').click();
+      await sleep(250);
+    };
+    if (!rowFor('UoSrcTmp') || !rowFor('UoDstTmp')) errs.push('the disposable tags for the merge check are not listed');
+    else {
+      await pickTarget();
+      if (!confirmOpen()) errs.push('with Undo off, merging tags did not ask first');
+      if (!rowFor('UoSrcTmp')) errs.push('with Undo off, tags were merged before the question was answered');
+      await click('confirm-cancel');
+      if (!rowFor('UoSrcTmp')) errs.push('cancelling the question still merged the tags');
+      await pickTarget();
+      await click('confirm-ok');
+      await sleep(250);
+      if (rowFor('UoSrcTmp')) errs.push('confirming the question did not merge the tags');
+      if (undoShown()) errs.push('with Undo off, the merge toast still carries an Undo button');
+    }
+  } catch (e) { errs.push('probe: ' + e.message); }
+  clearInterval(beat);
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
 # 420: dragging a grid tile onto a view tab. Its own boot, same reasoning as
 # SEAL_PROBE above: the fixture's "work" view is shrunk to its own single cell
 # (window.__DRAG_VIEW_TEST__, see tauri_stub.js) so one placement fills it,
@@ -15598,6 +15695,32 @@ def main():
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- video.html restore dialog (superseded by a second recording)")
+        for e in errs:
+            print(f"   FAIL: {e}")
+        failed += len(errs)
+        if not errs:
+            print("   ok")
+
+        # Undo time Off: a deleted view and a merged tag ask first. Own boot, the
+        # store starts with undoToastMs at 0.
+        side = tmp / "ui" / "undo-off.html"
+        side.write_text(
+            (REPO / "ui" / "index.html").read_text(encoding="utf-8")
+            .replace("<script",
+                     '<script>window.__UNDO_OFF_TEST__ = true;</script>\n'
+                     '<script src="tauri_stub.js"></script>\n<script', 1)
+            .replace("</body>", UNDO_OFF_PROBE + "</body>"),
+            encoding="utf-8")
+        proc = subprocess.run(
+            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+             f"--user-data-dir={tmp / 'profile-undo-off'}", "--allow-file-access-from-files",
+             "--window-size=1000,780", "--virtual-time-budget=45000",
+             "--dump-dom", side.as_uri()],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=180)
+        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        print("-- Undo off: view delete and tag merge ask first")
         for e in errs:
             print(f"   FAIL: {e}")
         failed += len(errs)

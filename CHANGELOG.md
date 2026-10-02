@@ -430,7 +430,8 @@ the video editor and the introduction tour ship on).
   delete it.
 - **Undo right in the message.** Deleting a view, clearing the copy history or
   the clipboard inbox, deleting a tag, and batch deletes or tag changes now
-  offer an undo button on the message that confirms them.
+  offer an undo button on the message that confirms them. With the undo time
+  set to Off, deleting a view or merging tags asks first instead.
 - **An archive.** Set a prompt aside without deleting it: archived prompts
   leave the library and the grid, stay findable by search, and travel with
   exports and backups. A toggle above the library brings them back into view.
