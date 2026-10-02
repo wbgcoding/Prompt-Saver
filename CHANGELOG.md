@@ -1735,6 +1735,9 @@ the video editor and the introduction tour ship on).
 - **The composer button tooltips name their right-click function.** The
   screenshot, screen recording and attach file buttons now say what a right-
   click does, like the color picker already did.
+- **Backup save and import moved into the backup manager.** Saving a backup to
+  a file and importing one moved into the backup manager; the settings row
+  keeps import, folder import and export.
 
 ## 2.6.3 (2026-07-26)
 

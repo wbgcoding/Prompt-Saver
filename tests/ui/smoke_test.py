@@ -6738,6 +6738,26 @@ PROBE = """
     // Backups live in their own dialog now, reached from settings.
     document.getElementById('expert-back').click();
     await sleep(250);
+    // The settings keep one import/export row with the backup manager button at its
+    // end; the file-based backup buttons are gone from here. Measured live.
+    {
+      const settingsEl = document.getElementById('settings');
+      const wasHidden = settingsEl.classList.contains('hidden');
+      settingsEl.classList.remove('hidden');
+      await sleep(150);
+      const field = document.getElementById('impexp-field');
+      const rows = field ? field.querySelectorAll('.export-row') : [];
+      if (rows.length !== 1) out.errors.push('settings: expected one import/export row, found ' + rows.length);
+      else {
+        const kids = [...rows[0].children];
+        if (kids[kids.length - 1].id !== 'settings-backup-btn') out.errors.push('settings: the backup manager button is not last in the import/export row');
+        const eb = document.getElementById('export-btn').getBoundingClientRect(), bb = document.getElementById('settings-backup-btn').getBoundingClientRect();
+        if (!bb.width || !bb.height) out.errors.push('settings: the backup manager button has no size');
+        else if (!(bb.left > eb.right - 1 || bb.top > eb.bottom - 1)) out.errors.push('settings: the backup manager button does not follow the export button');
+      }
+      if (document.getElementById('export-all') || document.getElementById('import-all')) out.errors.push('settings: the old save/import backup buttons are still in the settings row');
+      if (wasHidden) settingsEl.classList.add('hidden');
+    }
     document.getElementById('settings-backup-btn').click();
     await sleep(400);
     const bm = document.getElementById('backup-modal');
@@ -6756,6 +6776,25 @@ PROBE = """
     } else {
       layoutScan('backups');
       mustReach('backups', '#backup-modal .modal-head-actions > button');
+      // The manager's left column holds Create backup, Open in Explorer, Save
+      // backup, Import backup, stacked in that order inside the column.
+      {
+        const col = document.querySelector('#backup-panel .backup-col');
+        const kids = col ? [...col.children].filter(c => c.tagName === 'BUTTON') : [];
+        if (kids.length < 4 || !kids[0].classList.contains('backup-now-btn') || kids[2].id !== 'backup-save-file' || kids[3].id !== 'backup-import-file') {
+          out.errors.push('backup manager: the left column does not start with the four backup buttons in order: ' + kids.map(k => k.id || k.className).join(','));
+        } else {
+          const cr = col.getBoundingClientRect();
+          let prevBottom = -1;
+          for (const k of kids.slice(0, 4)) {
+            const r = k.getBoundingClientRect();
+            if (!r.width || !r.height) out.errors.push('backup manager: a backup button has no size: ' + (k.id || k.className));
+            if (r.left < cr.left - 1 || r.right > cr.right + 1) out.errors.push('backup manager: a backup button sticks out of its column: ' + (k.id || k.className));
+            if (r.top < prevBottom - 1) out.errors.push('backup manager: the backup buttons overlap: ' + (k.id || k.className));
+            prevBottom = r.bottom;
+          }
+        }
+      }
       // P63: the consequence of forgetting the backup password is spelled out
       // right where the field is, not just in a toast after saving it.
       const pwHint = document.querySelector('#backup-panel .backup-pw-hint');
@@ -7293,7 +7332,9 @@ PROBE = """
     const until = async (fn) => { for (let i = 0; i < 40 && !fn(); i++) await sleep(100); return fn(); };
     const pwShown = () => !document.getElementById('confirm-input-row').classList.contains('hidden');
     const scopeShown = () => document.getElementById('confirm-cb-data') && !document.getElementById('confirm-modal').classList.contains('hidden');
-    document.getElementById('import-all').click();
+    document.getElementById('settings-backup-btn').click();
+    await sleep(400);
+    document.getElementById('backup-import-file').click();
     // 107: a scope-pick dialog (data/settings checkboxes, both preselected) now
     // comes first -- confirm it before the password prompt can appear.
     if (!await until(scopeShown)) {
@@ -7323,6 +7364,7 @@ PROBE = """
       }
       await click('confirm-ok');
     }
+    if (!document.getElementById('backup-modal').classList.contains('hidden')) { await click('backup-close'); await sleep(150); }
     // 96: the short "Latest X.Y.Z" status keeps update-actions no taller than
     // before, with the longest of the 11 translations (Romanian) -- and exactly
     // as tall as the button row below it once the window has real room (740px+;

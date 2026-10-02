@@ -1018,8 +1018,9 @@ Reopen the current version's list any time from the About dialog.
 
 Encrypted, compressed snapshots of the entire library and settings, on an
 automatic schedule with smart GFS-style retention tiers, and a restore that can
-target data only, settings only, or both. The same window also has a
-usage-statistics section (totals, a 14-day activity chart, most-used tiles),
+target data only, settings only, or both. Two buttons beside Create backup
+save a backup to a file of your choice or import one from a file. The same
+window also has a usage-statistics section (totals, a 14-day activity chart, most-used tiles),
 unrelated to the backups themselves, with its own button to export the
 statistics as CSV, TXT or JSON, and a storage section that shows how much disk
 space the database, attachments, screenshots, recordings, backups, temporary
@@ -1768,7 +1769,9 @@ auf einmal. Hotkey tut nichts? Eine andere App hält die Kombination
 vermutlich schon.
 
 **Eigenständig: Backup-Verwaltung.** Verschlüsselte Backups, GFS-Aufbewahrung,
-gezieltes Wiederherstellen. Im selben Fenster außerdem eine
+gezieltes Wiederherstellen. Mit den zwei Knöpfen neben Backup erstellen lässt
+sich ein Backup in eine Datei deiner Wahl speichern oder aus einer Datei
+importieren. Im selben Fenster außerdem eine
 Nutzungsstatistik (Summen, 14-Tage-Diagramm, meistgenutzte Kacheln),
 unabhängig von den Backups selbst, mit einem eigenen Button, um die Statistik
 als CSV, TXT oder JSON zu exportieren, sowie ein Speicherbereich, der zeigt,

@@ -11842,6 +11842,24 @@ async function renderBackupPanel(body) {
   openFolderBtn.textContent = t("backupOpenFolder");
   openFolderBtn.addEventListener("click", () => invoke("open_backups_folder").catch((e) => errToast(e)));
   left.appendChild(openFolderBtn);
+  // Saving to and importing from a file of the user's choice live next to the
+  // other backup actions.
+  const saveFileBtn = document.createElement("button");
+  saveFileBtn.type = "button";
+  saveFileBtn.id = "backup-save-file";
+  saveFileBtn.className = "ghost-btn";
+  saveFileBtn.dataset.settingRow = "backup-save-file";
+  saveFileBtn.textContent = t("backupSave");
+  saveFileBtn.addEventListener("click", () => runExportAll());
+  left.appendChild(saveFileBtn);
+  const importFileBtn = document.createElement("button");
+  importFileBtn.type = "button";
+  importFileBtn.id = "backup-import-file";
+  importFileBtn.className = "ghost-btn";
+  importFileBtn.dataset.settingRow = "backup-import-file";
+  importFileBtn.textContent = t("backupImport");
+  importFileBtn.addEventListener("click", async () => { await runImportAll(); renderBackupPanel(body); });
+  left.appendChild(importFileBtn);
   const autoBackupRow = switchRow(t("flagAutoBackup"), flag("autoBackup"), async (on) => {
     await saveBackupSetting("flag", "autoBackup", on);
     renderBackupPanel(body);
@@ -20551,8 +20569,6 @@ function bind() {
   $("import-btn").addEventListener("click", runImport);
   $("import-folder-btn").addEventListener("click", runImportFolder);
   $("export-btn").addEventListener("click", () => runExport($("export-format").value));
-  $("import-all").addEventListener("click", runImportAll);
-  $("export-all").addEventListener("click", runExportAll);
   $("reset-settings").addEventListener("click", resetSettings);
   $("delete-data").addEventListener("click", deleteData);
   $("settings-backup-btn").addEventListener("click", openBackups);

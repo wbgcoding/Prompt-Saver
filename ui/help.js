@@ -350,6 +350,7 @@ export const HELP_CONTENT = {
       howTo: [
         "Open the Backup manager from Settings.",
         "Turn on automatic backups and pick an interval, or create one manually.",
+        "Save a backup to a file of your choice or import one from a file with the two buttons beside Create backup.",
         "Restore from the snapshot list, choosing data only, settings only, or both.",
       ],
       whatHappens:
@@ -1101,6 +1102,7 @@ export const HELP_CONTENT = {
       howTo: [
         "Die Backup-Verwaltung in den Einstellungen öffnen.",
         "Automatische Backups aktivieren und ein Intervall wählen, oder manuell eines erstellen.",
+        "Mit den zwei Knöpfen neben Backup erstellen ein Backup in eine Datei deiner Wahl speichern oder aus einer Datei importieren.",
         "Aus der Snapshot-Liste wiederherstellen und dabei nur Daten, nur Einstellungen oder beides wählen.",
       ],
       whatHappens:
