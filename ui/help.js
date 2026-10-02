@@ -337,7 +337,7 @@ export const HELP_CONTENT = {
       section: "system",
       title: "Data maintenance",
       whatItIs: "Data maintenance gathers housekeeping tools reached from the expert menu's data group.",
-      howTo: ["Open the expert menu → System & data → Data & maintenance.", "Open the trash or import or export from there. The duplicate finder has its own \"Find duplicates\" button in All prompts."],
+      howTo: ["Open the expert menu → System & data → Data & maintenance.", "Open the trash or import or export from there. The duplicate finder has its own \"Find duplicates\" button in the library."],
       whatHappens:
         "A deleted tile sits in the trash, with its own retention setting, before it is gone for good. The duplicate finder only flags near-identical tiles by text similarity; it never deletes anything on its own. \"Recent messages\" keeps a short list of error messages that flashed by in a toast, with time and place; copy or clear the list from its window. Settings alone can be saved to a file and loaded again from the same group.",
       settings: ["Duplicate finder, trash retention, import and export: Expert menu → System & data → Data & maintenance", "Take a backup before a reset or a delete-everything: Expert menu → System & data → Data & maintenance", "Recent messages and how much it keeps, settings export and import, undo button: Expert menu → System & data → Data & maintenance"],
@@ -459,12 +459,12 @@ export const HELP_CONTENT = {
       title: "Duplicate finder",
       whatItIs: "The duplicate finder flags tiles that are textually very similar without deleting anything.",
       howTo: [
-        "Click \"Find duplicates\" in All prompts.",
+        "Click \"Find duplicates\" in the library.",
         "Review each flagged pair side by side.",
         "Keep one, or mark the pair as not a duplicate to stop it being flagged again.",
       ],
       whatHappens:
-        "Matching compares each tile's main text (or its name, if it has no text) by similarity, not by exact match; the threshold controls how close counts as close enough. A rotating tile is only compared on its first entry. The only way in is the \"Find duplicates\" button in All prompts; the expert menu only holds its on/off switch and the threshold.",
+        "Matching compares each tile's main text (or its name, if it has no text) by similarity, not by exact match; the threshold controls how close counts as close enough. A rotating tile is only compared on its first entry. The only way in is the \"Find duplicates\" button in the library; the expert menu only holds its on/off switch and the threshold.",
       settings: ["Duplicate finder, similarity threshold: Expert menu → System & data → Data & maintenance"],
     },
     {
@@ -1086,7 +1086,7 @@ export const HELP_CONTENT = {
       section: "system",
       title: "Datenwartung",
       whatItIs: "Die Datenwartung bündelt Wartungswerkzeuge aus der Daten-Gruppe des Expertenmenüs.",
-      howTo: ["Im Expertenmenü unter System & Daten die Gruppe Daten & Wartung öffnen.", "Den Papierkorb öffnen oder von dort importieren oder exportieren. Der Duplikat-Finder hat seinen eigenen Button „Duplikate finden“ in Alle Prompts."],
+      howTo: ["Im Expertenmenü unter System & Daten die Gruppe Daten & Wartung öffnen.", "Den Papierkorb öffnen oder von dort importieren oder exportieren. Der Duplikat-Finder hat seinen eigenen Button „Duplikate finden“ in der Bibliothek."],
       whatHappens:
         "Eine gelöschte Kachel liegt zunächst im Papierkorb mit eigener Aufbewahrungsdauer, bevor sie endgültig verschwindet. Der Duplikat-Finder markiert nur textlich fast identische Kacheln; er löscht von sich aus nichts. \"Letzte Meldungen\" hält eine kurze Liste der Fehlermeldungen fest, die nur kurz als Hinweis erschienen, mit Zeit und Ort; die Liste lässt sich in ihrem Fenster kopieren oder leeren. Die Einstellungen allein lassen sich in derselben Gruppe in eine Datei speichern und wieder laden.",
       settings: ["Duplikat-Finder, Papierkorb-Aufbewahrung, Import und Export: Expertenmenü → System & Daten → Daten & Wartung", "Vor einem Zurücksetzen oder Alles-Löschen ein Backup anlegen: Expertenmenü → System & Daten → Daten & Wartung", "Letzte Meldungen und wie viel davon bleibt, Einstellungen exportieren und importieren, Rückgängig-Button: Expertenmenü → System & Daten → Daten & Wartung"],
@@ -1208,12 +1208,12 @@ export const HELP_CONTENT = {
       title: "Duplikat-Finder",
       whatItIs: "Der Duplikat-Finder markiert textlich sehr ähnliche Kacheln, ohne selbst etwas zu löschen.",
       howTo: [
-        "In „Alle Prompts“ auf „Duplikate finden“ klicken.",
+        "In der Bibliothek auf „Duplikate finden“ klicken.",
         "Jedes markierte Paar Seite an Seite prüfen.",
         "Eine Kachel behalten, oder das Paar als kein Duplikat markieren, damit es nicht erneut markiert wird.",
       ],
       whatHappens:
-        "Der Abgleich vergleicht den Haupttext jeder Kachel (oder ihren Namen, falls sie keinen Text hat) nach Ähnlichkeit, nicht nach exakter Übereinstimmung; der Schwellenwert steuert, wie nah als nah genug gilt. Eine rotierende Kachel wird nur nach ihrem ersten Eintrag verglichen. Der einzige Zugang ist der Button „Duplikate finden“ in Alle Prompts; das Expertenmenü enthält nur den Schalter und die Schwelle.",
+        "Der Abgleich vergleicht den Haupttext jeder Kachel (oder ihren Namen, falls sie keinen Text hat) nach Ähnlichkeit, nicht nach exakter Übereinstimmung; der Schwellenwert steuert, wie nah als nah genug gilt. Eine rotierende Kachel wird nur nach ihrem ersten Eintrag verglichen. Der einzige Zugang ist der Button „Duplikate finden“ in der Bibliothek; das Expertenmenü enthält nur den Schalter und die Schwelle.",
       settings: ["Duplikat-Finder, Ähnlichkeitsschwelle: Expertenmenü → System & Daten → Daten & Wartung"],
     },
     {

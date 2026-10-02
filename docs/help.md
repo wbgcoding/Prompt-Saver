@@ -760,7 +760,7 @@ check off.
 
 Trash (with its own retention setting), CSV/TXT export, and full backup
 export/import, all reached from the expert menu's data group. The duplicate
-finder is opened from the "Find duplicates" button in All prompts.
+finder is opened from the "Find duplicates" button in the library.
 
 "Recent messages" keeps a short list of error messages that flashed by in a
 toast, with time and place; copy or clear the list from its window. Settings
@@ -1547,7 +1547,7 @@ Neben Auto-Update im Einstellungsfenster steht das Intervall; Nie schaltet die
 automatische Prüfung ab.
 
 **Datenwartung**: Papierkorb, Import/Export. Den Duplikatfinder öffnet der
-Button „Duplikate finden“ in „Alle Prompts“.
+Button „Duplikate finden“ in der Bibliothek.
 „Letzte Meldungen“ hält eine kurze Liste der Fehlermeldungen fest, die nur kurz als
 Hinweis erschienen, mit Zeit und Ort; die Liste lässt sich in ihrem Fenster kopieren
 oder leeren. Die Einstellungen allein lassen sich in derselben Gruppe in eine Datei

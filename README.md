@@ -145,7 +145,7 @@ Full version history: [CHANGELOG.md](CHANGELOG.md)
 | Copy a prompt | Click its tile |
 | Move a tile | Drag it to any grid cell; drop on an occupied cell to swap, or onto a view tab to file it there (Ctrl to copy) |
 | Edit / hide / pin / delete | Right-click a tile (or hover **⋮**); deleting takes one click and shows an Undo notice |
-| All prompts | List icon in the header: search, edit and place every prompt |
+| Library | List icon in the header: search, edit and place every prompt |
 | Screenshot | Camera icon: drag a region or click a window to save it as a copy button |
 | Screen recording | Record icon next to the camera: pick a window, region or the whole screen, then Stop to save, copy, edit or discard |
 | Video editor | Edit button in a recording's result dialog, or "Edit video" on any video prompt's right-click menu |
