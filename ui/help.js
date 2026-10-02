@@ -879,7 +879,7 @@ export const HELP_CONTENT = {
         "Ein Mitglied wieder herausziehen, um es freizugeben.",
       ],
       whatHappens:
-        "Ein Button-Ordner oder ein Kachelordner zeigt bis zu vier Vorschauen seiner Mitglieder und eine Anzahl; das Herausziehen eines Mitglieds gibt es frei, und der Ordner löst sich auf, sobald nur noch eines übrig ist. Eine Kachel gehört immer nur zu einem Kachelordner gleichzeitig. Ein Gruppen-Tab öffnet stattdessen beim Anklicken die Liste seiner Ansichten.",
+        "Ein Button-Ordner oder ein Kachelordner zeigt bis zu vier Vorschauen seiner Mitglieder und eine Anzahl; das Herausziehen eines Mitglieds gibt es frei, und der Ordner löst sich auf, sobald nur noch eines übrig ist. Eine Kachel gehört immer nur zu einem Kachelordner gleichzeitig.",
       settings: ["Button-Ordner, Kachelordner: Expertenmenü → Funktionen → Schwebende Buttons & Button-Ordner"],
       tip: "Beide Arten sind ab Werk an; jede einzeln im Expertenmenü abschaltbar, wenn Elemente so nie gruppiert werden sollen.",
       sketches: ["folderTypes"],
