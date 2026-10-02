@@ -9,8 +9,7 @@ import { APP_NAME } from "./brand.js";
 // Static, not dynamic: this window has to boot instantly (it opens on a hotkey
 // press) and unlike floating.js's pill, it needs the translated placeholder/empty
 // text from the very first frame, not after a lazy follow-up load.
-import { FLOAT_TXT, LANGS } from "./i18n.js";
-import { applyTerms } from "./terms.js";
+import { LANGS, compactTexts } from "./i18n.js";
 import { resolveLang } from "./floatShared.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
@@ -173,8 +172,7 @@ async function boot() {
   applyFloatTheme(await invoke("current_theme").catch(() => null), await invoke("theme_vars").catch(() => ({})));
   listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars));
 
-  const lang = resolveLang(state.language, LANGS);
-  TXT = Object.fromEntries(Object.entries(FLOAT_TXT[lang]).map(([k, v]) => [k, applyTerms(v, lang)]));
+  TXT = compactTexts(resolveLang(state.language, LANGS));
   searchEl.placeholder = TXT.searchPh;
 
   prompts = state.prompts || [];

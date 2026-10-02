@@ -3249,8 +3249,8 @@ PROBE = """
         out.errors.push('the standalone window was handed the wrong rows');
       } else if (req.rows.map(r => r.name).join(',') !== 'Text,Language') {
         out.errors.push('the standalone rows are ' + req.rows.map(r => r.name).join(','));
-      } else if (!req.title || !req.ok) {
-        out.errors.push('the standalone window was handed no labels');
+      } else if (!req.lang) {
+        out.errors.push('the standalone window was handed no language');
       } else {
         // 425: same prefill rule as the in-window dialog -- the standalone
         // window is handed the resolved value, not just the raw token.

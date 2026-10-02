@@ -10,6 +10,7 @@
 // this file waits for the camera-permission-ready event before ever calling
 // it, closing the race where the page could ask before the handler exists.
 import { fmtTimeMMSS } from "./floatShared.js";
+import { LANGS, fullTexts } from "./i18n.js";
 import { attachSelectPicker } from "./selectpop.js";
 
 const { invoke } = window.__TAURI__.core;
@@ -41,7 +42,7 @@ const resumeIcon = document.getElementById("cam-resume-icon");
 const stopBtn = document.getElementById("cam-stop-btn");
 const closeBtn = document.getElementById("cam-close");
 
-let i18nDict = null;
+let tx = null; // the text lookup, set once the language has loaded
 let stream = null;
 let recorder = null;
 let recPath = null;
@@ -75,7 +76,7 @@ let frameRate = 30;
 let previewGen = 0;
 
 function t(key) {
-  return (i18nDict && i18nDict[key]) || key;
+  return tx ? tx(key) : key;
 }
 
 // Icon, tooltip and accessible name of the pause button follow the state, with
@@ -510,13 +511,12 @@ import("./floattheme.js").then(({ applyFloatTheme }) => {
     .then(([theme, vars]) => applyFloatTheme(theme, vars))
     .catch(() => {});
 });
-Promise.all([invoke("get_settings"), import("./i18n.js"), import("./floatShared.js"), invoke("default_recording_dir")])
-  .then(([s, { I18N, LANGS }, { resolveLang }, defaultDir]) => {
-    const lang = resolveLang(s.language, LANGS);
-    i18nDict = I18N[lang] || I18N.en;
+Promise.all([invoke("get_settings"), import("./floatShared.js"), invoke("default_recording_dir")])
+  .then(async ([s, { resolveLang }, defaultDir]) => {
+    ({ tx } = await fullTexts(resolveLang(s.language, LANGS)));
     audioLabel.textContent = t("cameraAudioSource");
     resLabel.textContent = t("cameraResolution");
-    folderLabel.textContent = i18nDict.valRecordingDir || "";
+    folderLabel.textContent = t("valRecordingDir");
     startBtn.textContent = t("cameraStart");
     folderPathEl.textContent = s.ui_texts?.recordingDir || defaultDir || "";
     videoDeviceId = s.ui_texts?.cameraDevice || "";
@@ -524,9 +524,9 @@ Promise.all([invoke("get_settings"), import("./i18n.js"), import("./floatShared.
     const savedRes = s.ui_texts?.cameraResolution;
     if (savedRes && resSelect.querySelector(`option[value="${savedRes}"]`)) resSelect.value = savedRes;
     for (const el of document.querySelectorAll("[data-i18n-title]")) {
-      const key = el.getAttribute("data-i18n-title");
-      const text = i18nDict[key] ?? I18N.en[key];
-      if (text) { el.title = text; el.setAttribute("aria-label", text); }
+      const text = t(el.getAttribute("data-i18n-title"));
+      el.title = text;
+      el.setAttribute("aria-label", text);
     }
     populateAudioDevices();
   })

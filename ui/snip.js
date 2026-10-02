@@ -199,15 +199,14 @@ async function beginSession() {
 // when the language changes or the old texts would stay until the next restart.
 function loadTexts() {
   Promise.all([invoke("get_settings"), import("./i18n.js"), import("./floatShared.js")])
-    .then(([s, { I18N, LANGS }, { resolveLang }]) => {
-      const lang = resolveLang(s.language, LANGS);
-      const d = I18N[lang] || I18N.en;
-      T.hint = d.snipHint ?? I18N.en.snipHint;
-      T.failed = d.snipFailed ?? I18N.en.snipFailed ?? T.failed;
-      T.pick = d.pickHint ?? I18N.en.pickHint ?? T.pick;
-      T.pickFailed = d.pickFailed ?? I18N.en.pickFailed ?? T.pickFailed;
-      T.ocrNoLang = d.snipOcrNoLang ?? I18N.en.snipOcrNoLang ?? T.ocrNoLang;
-      T.recHint = d.recPickHint ?? I18N.en.recPickHint ?? T.recHint;
+    .then(async ([s, { LANGS, fullTexts }, { resolveLang }]) => {
+      const { tx } = await fullTexts(resolveLang(s.language, LANGS));
+      T.hint = tx("snipHint");
+      T.failed = tx("snipFailed");
+      T.pick = tx("pickHint");
+      T.pickFailed = tx("pickFailed");
+      T.ocrNoLang = tx("snipOcrNoLang");
+      T.recHint = tx("recPickHint");
       if (!hint.classList.contains("error")) hint.textContent = pickMode ? T.pick : recordMode ? T.recHint : T.hint;
     })
     .catch(() => {});

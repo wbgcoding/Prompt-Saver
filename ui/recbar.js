@@ -35,7 +35,7 @@ const diskWarnEl = document.getElementById("disk-warn");
 function applySize(bytes, etaSecs) {
   sizeEl.textContent = fmtSizeCompact(bytes);
   sizeEl.classList.toggle("rec-size-warn", etaSecs != null);
-  sizeEl.title = etaSecs != null && i18nDict ? (i18nDict.recBarSizeEta || "").replace("{time}", fmtTimeMMSS(etaSecs * 1000)) : "";
+  sizeEl.title = etaSecs != null && tx ? tx("recBarSizeEta").replace("{time}", fmtTimeMMSS(etaSecs * 1000)) : "";
 }
 
 // recTargetSwitch's own button: stays visible even when it cannot do
@@ -49,8 +49,8 @@ let switchEnabled = false;
 function applyTargetSwitch(enabled) {
   switchEnabled = enabled;
   switchBtn.disabled = !enabled;
-  if (!i18nDict) return;
-  const label = enabled ? i18nDict.recBarSwitchTarget : i18nDict.recTargetSwitchUnsupported;
+  if (!tx) return;
+  const label = enabled ? tx("recBarSwitchTarget") : tx("recTargetSwitchUnsupported");
   if (label) { switchBtn.title = label; switchBtn.setAttribute("aria-label", label); }
 }
 
@@ -76,11 +76,11 @@ function showContinueGap(gapMs) {
 }
 
 let paused = false;
-let i18nDict = null;
+let tx = null; // the text lookup, set once the language has loaded
 function pauseBtnLabel() {
-  if (!i18nDict) return null;
+  if (!tx) return null;
   const key = paused ? "recBarResume" : "recBarPause";
-  return i18nDict[key] ?? i18nDict.recBarPause;
+  return tx(key);
 }
 function applyPaused(p) {
   const changed = paused !== p;
@@ -119,16 +119,16 @@ function applyAudio({ audio_system, audio_mic, audio_system_muted, audio_mic_mut
   audioMicEl.classList.toggle("on", lastAudio.mic && !lastAudio.micMuted && !lastAudio.micLost);
   audioMicEl.classList.toggle("lost", lastAudio.mic && lastAudio.micLost);
   audioMicEl.disabled = !lastAudio.mic || lastAudio.micLost;
-  if (!i18nDict) return;
+  if (!tx) return;
   const sysLabel = !lastAudio.system
-    ? i18nDict.recBarSystemAudioOff
-    : (lastAudio.systemMuted ? i18nDict.recBarUnmuteSystemAudio : i18nDict.recBarMuteSystemAudio);
+    ? tx("recBarSystemAudioOff")
+    : (lastAudio.systemMuted ? tx("recBarUnmuteSystemAudio") : tx("recBarMuteSystemAudio"));
   if (sysLabel) { audioSysEl.title = sysLabel; audioSysEl.setAttribute("aria-label", sysLabel); }
   const micLabel = lastAudio.micLost
-    ? i18nDict.recBarMicLost
+    ? tx("recBarMicLost")
     : !lastAudio.mic
-      ? i18nDict.recBarMicOff
-      : (lastAudio.micMuted ? i18nDict.recBarUnmuteMic : i18nDict.recBarMuteMic);
+      ? tx("recBarMicOff")
+      : (lastAudio.micMuted ? tx("recBarUnmuteMic") : tx("recBarMuteMic"));
   if (micLabel) { audioMicEl.title = micLabel; audioMicEl.setAttribute("aria-label", micLabel); }
 }
 audioSysEl.addEventListener("click", async () => {
@@ -155,10 +155,10 @@ audioMicEl.addEventListener("click", async () => {
 function applyHotkeyWarn(stopOk, pauseOk) {
   const show = !stopOk || !pauseOk;
   hotkeyWarnEl.classList.toggle("hidden", !show);
-  if (!show || !i18nDict) return;
+  if (!show || !tx) return;
   const label = !stopOk && !pauseOk
-    ? i18nDict.recBarHotkeyBlockedBoth
-    : !stopOk ? i18nDict.recBarHotkeyBlockedStop : i18nDict.recBarHotkeyBlockedPause;
+    ? tx("recBarHotkeyBlockedBoth")
+    : !stopOk ? tx("recBarHotkeyBlockedStop") : tx("recBarHotkeyBlockedPause");
   if (label) { hotkeyWarnEl.title = label; hotkeyWarnEl.setAttribute("aria-label", label); }
 }
 
@@ -167,9 +167,9 @@ function applyHotkeyWarn(stopOk, pauseOk) {
 // reminder rather than a toast this narrow bar has no room for, and free
 // space recovering mid-recording does not make the earlier warning untrue.
 function applyDiskLow(diskLow) {
-  if (!diskLow || !i18nDict) return;
+  if (!diskLow || !tx) return;
   const [mb, min] = diskLow;
-  const label = (i18nDict.recDiskLow || "").replace("{mb}", String(mb)).replace("{min}", String(min));
+  const label = tx("recDiskLow").replace("{mb}", String(mb)).replace("{min}", String(min));
   diskWarnEl.classList.remove("hidden");
   diskWarnEl.title = label;
   diskWarnEl.setAttribute("aria-label", label);
@@ -387,19 +387,15 @@ import("./floattheme.js").then(({ applyFloatTheme }) => {
     .catch(() => {});
 });
 Promise.all([invoke("get_settings"), import("./i18n.js"), import("./floatShared.js")])
-  .then(([s, { I18N, LANGS }, { resolveLang }]) => {
-    const lang = resolveLang(s.language, LANGS);
-    const d = I18N[lang] || I18N.en;
-    i18nDict = d;
+  .then(async ([s, { LANGS, fullTexts }, { resolveLang }]) => {
+    ({ tx } = await fullTexts(resolveLang(s.language, LANGS)));
     for (const el of document.querySelectorAll("[data-i18n-title]")) {
-      const key = el.getAttribute("data-i18n-title");
-      const text = d[key] ?? I18N.en[key];
-      if (text) { el.title = text; el.setAttribute("aria-label", text); }
+      const text = tx(el.getAttribute("data-i18n-title"));
+      el.title = text;
+      el.setAttribute("aria-label", text);
     }
     for (const el of document.querySelectorAll("[data-i18n]")) {
-      const key = el.getAttribute("data-i18n");
-      const text = d[key] ?? I18N.en[key];
-      if (text) el.textContent = text;
+      el.textContent = tx(el.getAttribute("data-i18n"));
     }
     const label = pauseBtnLabel();
     if (label) { pauseBtn.title = label; pauseBtn.setAttribute("aria-label", label); }

@@ -1473,10 +1473,7 @@ const RESULTS = {
 const VAR_REQUEST = {
   theme: "dark",
   vars: { accent: "#ff00aa" },
-  title: "Fill in the prompt",
-  ok: "Copy",
-  cancel: "Cancel",
-  rememberLabel: "Remember",
+  lang: "en",
   askRemember: true,
   rows: [
     { name: "Topic", options: [], value: "roadmap", remember: true },

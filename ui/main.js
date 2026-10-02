@@ -8069,11 +8069,7 @@ async function promptVarsWindow(tokens) {
   const payload = {
     theme: document.documentElement.getAttribute("data-theme") || "",
     vars: activeThemeVars(),
-    title: t("varsTitle"),
-    ok: t("varsCopy"),
-    cancel: t("cancel"),
-    rememberLabel: t("rememberValue"),
-    fixedHint: t("fixedValueHint"),
+    lang: LANG,
     askRemember: useRemember,
     rows: rows.map(({ name, options, value, remember, fixed, placeholder }) => ({ name, options, value, remember, fixed, placeholder })),
   };

@@ -11,7 +11,7 @@ soon as the run has been evaluated; only `target/release/` ships.
 
 | Command | What it guards |
 | --- | --- |
-| `node tests/i18n_check.js` | Key parity across the 11 languages, substitution tokens matching `en`, keys used in `ui/` that do not exist, unreferenced strings, the same key and token parity for the compact strings in `ui/i18n/float.js`, and one language file per code in `LANGS`. Every static `data-i18n` fallback text in `ui/*.html` matches its `en` string (keys containing `{app}` excepted). |
+| `node tests/i18n_check.js` | Key parity across the 11 languages, substitution tokens matching `en`, keys used in `ui/` that do not exist, unreferenced strings, the same key and token parity for the compact strings in `ui/i18n/float.js`, and one language file per code in `LANGS`. Every window loads texts through `compactTexts` or `fullTexts` from `ui/i18n.js`; the tray is fed by the backend. Every static `data-i18n` fallback text in `ui/*.html` matches its `en` string (keys containing `{app}` excepted). |
 | `node tests/terms_check.js` | A brand's fork vocabulary covers every form of the word, per language, once it opts that language in. |
 | `node tests/voice_check.js` | `applyVoiceCommands()`: punctuation attaches to the previous word with no leading space, auto-capitalization, spoken command words resolve per language. |
 | `node tests/search_check.js` | `parseSearchQuery()`: `tag:`/`var:` search terms (and their negated forms) are pulled out of a query correctly, everything else is left untouched. |

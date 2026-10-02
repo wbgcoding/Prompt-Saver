@@ -82,6 +82,22 @@ for (const f of ["floating.js", "folder.js", "launcher.js", "vars.js"]) {
   if (/i18n\//.test(text)) problems.push(`ui/${f} reaches into a path under i18n/`);
 }
 
+// No window besides the loader and main.js touches a dictionary object: the others
+// go through compactTexts() or fullTexts() only, and a window uses just one of the two
+// (the compact windows never ask for the full dictionary, the big ones never read the
+// compact strings).
+const stripComments = (text) => text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+const COMPACT_WINDOWS = ["floating.js", "folder.js", "launcher.js", "vars.js"];
+const FULL_WINDOWS = ["camera.js", "video.js", "recbar.js", "snip.js"];
+for (const f of fs.readdirSync(UI).filter((n) => n.endsWith(".js") && n !== "i18n.js" && n !== "main.js")) {
+  const text = stripComments(fs.readFileSync(path.join(UI, f), "utf8"));
+  if (/\bI18N\b/.test(text)) problems.push(`ui/${f} reads the I18N dictionary directly`);
+  if (/FLOAT_TXT\[/.test(text)) problems.push(`ui/${f} reads FLOAT_TXT directly`);
+  if (FULL_WINDOWS.includes(f) && /\bcompactTexts\b/.test(text)) problems.push(`ui/${f} should use fullTexts only`);
+  if (FULL_WINDOWS.includes(f) && !/\bfullTexts\b/.test(text)) problems.push(`ui/${f} never calls fullTexts`);
+  if (COMPACT_WINDOWS.includes(f) && !/\bcompactTexts\b/.test(text)) problems.push(`ui/${f} never calls compactTexts`);
+}
+
 // Keys actually referenced from the UI code.
 const code = fs
   .readdirSync(UI)

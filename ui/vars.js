@@ -5,6 +5,7 @@
 // main.js. Esc, the Cancel button and losing focus all mean "cancelled".
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
+import { compactTexts } from "./i18n.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
 // switcher, so it comes from the brand rather than a hardcoded English word.
@@ -90,9 +91,10 @@ function buildText(row, initial, placeholder) {
 
 function render(data) {
   applyFloatTheme(data.theme, data.vars);
-  titleEl.textContent = data.title || "";
-  okEl.textContent = data.ok || "";
-  cancelEl.textContent = data.cancel || "";
+  const T = compactTexts(data.lang || "en");
+  titleEl.textContent = T.varsTitle;
+  okEl.textContent = T.varsCopy;
+  cancelEl.textContent = T.cancel;
   fieldsEl.innerHTML = "";
   rows = (data.rows || []).map((spec) => {
     const row = document.createElement("label");
@@ -106,7 +108,7 @@ function render(data) {
     if (spec.fixed) {
       const marker = document.createElement("span");
       marker.className = "vars-fixed-marker";
-      marker.title = data.fixedHint || "";
+      marker.title = T.fixedValueHint;
       marker.innerHTML = FIXED_PIN_SVG;
       nameRow.appendChild(marker);
     }
@@ -124,7 +126,7 @@ function render(data) {
       box.type = "checkbox";
       box.checked = !!spec.remember;
       const text = document.createElement("span");
-      text.textContent = data.rememberLabel || "";
+      text.textContent = T.rememberValue;
       keep.append(box, text);
       row.appendChild(keep);
     }
