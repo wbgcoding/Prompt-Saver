@@ -2687,6 +2687,8 @@ fn removed_ui_value_keys() -> &'static [&'static str] {
         "gsRecentMax",
         "launcherMaxResults",
         "trayMenuMax",
+        "tooltipTimeoutMs",
+        "previewLen",
     ]
 }
 
@@ -2700,6 +2702,10 @@ fn removed_ui_flag_keys() -> &'static [&'static str] {
         "undoToast",
         "editorDraft",
         "tooltipDelay",
+        "tilePreview",
+        "iconTooltips",
+        "tooltipTimeout",
+        "tileTimeTip",
     ]
 }
 

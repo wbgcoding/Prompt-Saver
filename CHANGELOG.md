@@ -1708,6 +1708,8 @@ the video editor and the introduction tour ship on).
 - **Fewer switches in the expert menu.** The copy bubble, the undo button, the
   editor's draft autosave and the tooltip delay are each one number now;
   setting it to Off turns the feature off.
+- **Tooltips have four settings.** On or off, delay, width, and notes in the
+  tooltip; the rest is fixed at its old default.
 
 ## 2.6.3 (2026-07-26)
 

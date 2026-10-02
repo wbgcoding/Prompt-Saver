@@ -97,7 +97,7 @@ let DRAG_THRESHOLD = DRAG_THRESHOLD_DEFAULT; // expert-tunable
 let INPUT_MAX = 160; // keep in sync with .input max-height, expert-tunable via composerMaxH
 // Grid-dimension and view-count limits are expert values: val("gridMax") /
 // val("maxViews"). The backend keeps a hard ceiling of 100 for both.
-let PREVIEW_MAX = 600; // tooltip preview length (expert-tunable)
+const TOOLTIP_PREVIEW_CHARS = 600; // how much of a prompt a tile tooltip shows
 let BUBBLE_MS = 950; // "Copied!" bubble lifetime (expert-tunable)
 let TOAST_MS = 1400; // toast lifetime for plain messages (expert-tunable)
 const SIZE_MIN = 10; // text size range, steps of 2 (keep in sync with backend)
@@ -1184,9 +1184,7 @@ const FLAG_LABELS = {
   barToggleBoth: "flagBarToggleBoth",
   tileMenu: "flagTileMenu",
   tileHover: "flagTileHover",
-  tilePreview: "flagTilePreview",
-  iconTooltips: "flagIconTooltips",
-  tooltipTimeout: "flagTooltipTimeout",
+  tooltipsEnabled: "showTooltips", // the Settings switch; the master for every tooltip
   typeBadges: "flagTypeBadges",
   tileHotkeyBadge: "flagTileHotkeyBadge",
   captions: "flagCaptions",
@@ -1290,7 +1288,6 @@ const FLAG_LABELS = {
   codeHighlight: "flagCodeHighlight",   // syntax colours in the preview's code blocks
   codeAutoDetect: "flagCodeAutoDetect", // render an unfenced code prompt as code
   notesInTooltip: "flagNotesInTooltip", // show the private note in the tile tooltip
-  tileTimeTip: "flagTileTimeTip",       // show last-copied/last-edited in the tile/library tooltip
   promptHotkeys: "flagPromptHotkeys",   // per-prompt global hotkeys
   // Sub-toggle of promptHotkeys, default on -- moved from
   // OPT_FLAG_LABELS; no CSS class keys on this flag, so the move is risk-free.
@@ -1612,7 +1609,6 @@ const EXPERT_VALUES = {
   overlayDim: { label: "valOverlayDim", min: 0, max: 80, step: 5, def: 40, unit: "%" },
   bubbleMs: { label: "valBubbleMs", min: 0, max: 6000, step: 50, def: 950, unit: "ms", zeroLabel: "valOff", offAtZero: true },
   toastMs: { label: "valToastMs", min: 800, max: 10000, step: 100, def: 1400, unit: "ms" },
-  previewLen: { label: "valPreviewLen", min: 0, max: 4000, step: 20, def: 600, unit: "" },
   viewBorder: { label: "valViewBorder", min: 1, max: 12, step: 1, def: 3, unit: "px", gate: "multiView" },
   attachPreviewKb: { label: "valAttachPreviewKb", min: 1, max: 64, step: 1, def: 8, unit: "KB", gate: "attachTextPreview" },
   // Floating-button opacity (%). Floored at 20% so the pill never vanishes.
@@ -1638,12 +1634,10 @@ const EXPERT_VALUES = {
   // folder popover's own tile size / gap / padding.
   pillFolderTileSize: { label: "valPillFolderTileSize", min: 48, max: 120, step: 4, def: 72, unit: "px", gate: "pillFolders" },
   // Custom tile tooltip max width (it wraps + grows taller instead of widening).
-  tooltipWidth: { label: "valTooltipWidth", min: 180, max: 640, step: 10, def: 340, unit: "px", gate: "tilePreview" },
+  tooltipWidth: { label: "valTooltipWidth", min: 180, max: 640, step: 10, def: 340, unit: "px", gate: "tooltipsEnabled" },
   // How long the pointer must rest on an element before its tooltip appears, so a
   // casual sweep across the window shows nothing. 0 shows it at once.
-  tooltipDelayMs: { label: "valTooltipDelay", min: 0, max: 2000, step: 50, def: 500, unit: "ms", zeroLabel: "valOff", offAtZero: true },
-  // How long the hover tooltip stays before auto-hiding (paired with tooltipTimeout).
-  tooltipTimeoutMs: { label: "valTooltipTimeout", min: 2000, max: 60000, step: 1000, def: 15000, unit: "ms", gate: "tooltipTimeout" },
+  tooltipDelayMs: { label: "valTooltipDelay", min: 0, max: 2000, step: 50, def: 500, unit: "ms", zeroLabel: "valOff", offAtZero: true, gate: "tooltipsEnabled" },
   // Appearance scales (percent, 100 = unchanged). Applied as CSS zoom.
   uiScale: { label: "valUiScale", min: 75, max: 300, step: 5, def: 100, unit: "%" },
   modalScale: { label: "valModalScale", min: 75, max: 300, step: 5, def: 100, unit: "%" },
@@ -2257,7 +2251,7 @@ const EXPERT_TABS = [
     // Split by what a setting actually does: acting on a tile, the hover tooltip,
     // and pure looks. One 26-entry blob made everything hard to find.
     { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "dragToView", "tileHover", { key: "tileHoverLift", gate: "tileHover" }, "tilePressScale", "tileHotkeyBadge"], values: ["hoverLift", "dragThreshold", "viewDropHoverMs", "tileHotkeyBadgeOpacity"] },
-    { title: "expGroupTooltips", flags: ["tilePreview", "iconTooltips", "tooltipTimeout", "tileTimeTip"], values: ["tooltipWidth", "tooltipDelayMs", "tooltipTimeoutMs"] },
+    { title: "expGroupTooltips", values: ["tooltipWidth", "tooltipDelayMs"] },
     { title: "expGroupTileLook", flags: ["tileShadow", "typeBadges", "captions", "compactTiles", "tileGradient", "gridLines", "uppercaseTiles", "boldTileNames", "monospaceTiles", "italicTiles", "tileTextShadow", "autoInk", "inkHalo"], values: ["tileRadius", "tileBorderWidth", "inkThreshold", "inkHaloStrength"] },
     { title: "expGroupFavorites", flags: ["favorites", { key: "favViewButton", gate: "favorites" }, { key: "favViewReorder", gate: "favViewButton" }], values: ["favStarSize", "favMaxCols"] },
   ] },
@@ -2265,7 +2259,7 @@ const EXPERT_TABS = [
     { title: "expGroupScales", values: ["modalScale", "composerScale", "primaryScale"] },
     { title: "expGroupAppearanceDetails", flags: ["animations", "accentHeader", "hideScrollbars", { key: "accentScrollbar", gate: "!hideScrollbars" }, "smoothScroll", "frostedModals"], values: ["animSpeed", "gridGap", "gridPad", "modalRadius", "overlayDim", "scrollbarWidth", "frostedBlur", "composerMaxH", "toastWidth", "toastMs", "modalMaxVh"], dropdowns: ["toastPos"] },
     { title: "expGroupColors", flags: ["customThemes"], values: ["customThemeMax"], palette: true },
-    { title: "expGroupLimits", values: ["previewLen", "nameMaxLen"] },
+    { title: "expGroupLimits", values: ["nameMaxLen"] },
   ] },
   { title: "expTabLibrary", groups: [
     { title: "expGroupLibrary", flags: ["librarySearch", "globalSearch", "searchSuggest", "savedSearches", "fuzzySearch", "smartSort", "batchOps", "libraryTypeFilter", "colorFilter", "searchAutofocus", "imagePreview", "libraryVideoPreview", "ocrIndex", "archiveTag", "libraryTiles"], values: ["searchListMax", "savedSearchMax", "libraryCols", "libraryWidth", "libPreviewLines", "searchDebounceMs", "ocrIndexMaxChars", "libraryTileSize"], dropdowns: ["fuzzyMaxTypos"],
@@ -2521,7 +2515,6 @@ function applyValues() {
   document.body.classList.toggle("toast-top", settings.ui_texts?.toastPos === "top");
   BUBBLE_MS = val("bubbleMs");
   TOAST_MS = val("toastMs");
-  PREVIEW_MAX = val("previewLen");
   const nameMax = val("nameMaxLen");
   for (const id of ["modal-name", "modal-caption", "view-modal-name"]) {
     const el = $(id);
@@ -2573,9 +2566,9 @@ const EXPERT_TIPS = [
   "rotateAuto", "rotateAutoTimeoutMin", "rotateAutoCooldownMs",
   "helpTips", "helpHighlight", "helpSketches", "firstRunTour",
   // Tiles / copying
-  "tilePreview", "tileMenu", "typeBadges", "tileHotkeyBadge", "bubbleMs", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "chainQuickStart", "chainStartAlwaysVisible", "chainVarCheck", "autoPasteEnter", "hideWindowOnCopy",
+  "tileMenu", "typeBadges", "tileHotkeyBadge", "bubbleMs", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "chainQuickStart", "chainStartAlwaysVisible", "chainVarCheck", "autoPasteEnter", "hideWindowOnCopy",
   "promptHotkeys", "promptHotkeyPaste", "dragOut", "dragOutInvert", "dragOutModifier",
-  "tooltipDelayMs", "tooltipTimeout", "iconTooltips",
+  "tooltipDelayMs",
   "dragToView", "viewDropHoverMs",
   // Appearance
   "hideScrollbars", "gridLines", "pausedIcons", "autoInk", "inkThreshold", "inkHalo", "inkHaloStrength",
@@ -2599,7 +2592,7 @@ const EXPERT_TIPS = [
   // Values that need a unit/behaviour explanation
   "copyCooldownMs", "dblClickMs", "autoPasteDelayMs", "snipPreviewVh",
   "historyPerPrompt", "similarThreshold", "similarHint", "clipMinChars", "clipInboxMax", "historyMax",
-  "previewLen", "nameMaxLen", "searchListMax", "savedSearchMax", "maxViews", "gridMax",
+  "nameMaxLen", "searchListMax", "savedSearchMax", "maxViews", "gridMax",
   "viewBorder", "statsTopN", "viewGroups", "viewGroupMaxRows", "multiViewPrompt",
   "barToggles", "barToggleBoth", "quickGrid", "quickGridHoverOnly", "multiView", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "libraryCols", "copySize", "copyFont", "showLibrary", "showJournal", "composerScale", "primaryScale",
   "remoteApi", "remoteNetworkFilter", "remoteTlsShortLived", "urlScheme", "remotePort", "remoteRateLimit",
@@ -2680,7 +2673,7 @@ async function resetOneExpertValue(kind, key, after) {
 // rotatingPrompts/rotateBadge gate a tile's own rotate-badge element -- without
 // a full rebuild here, an already-open grid keeps showing (or hiding) it until some
 // unrelated re-render happens to catch up.
-const TILE_DOM_FLAGS = new Set(["tilePreview", "captions", "promptNotes", "notesInTooltip", "tileTimeTip", "rotatingPrompts", "rotateBadge", "tileHotkeyBadge", "autoInk", "inkHalo"]);
+const TILE_DOM_FLAGS = new Set(["captions", "promptNotes", "notesInTooltip", "rotatingPrompts", "rotateBadge", "tileHotkeyBadge", "autoInk", "inkHalo"]);
 
 function flagRow(key) {
   const row = document.createElement("label");
@@ -2801,8 +2794,6 @@ function flagRow(key) {
     // so a full grid rebuild (and its flash) is unnecessary.
     if (TILE_DOM_FLAGS.has(key)) await renderGrid(true);
     else fitAllTiles();
-    // The only TILE_DOM_FLAGS member that also changes a library row's tooltip.
-    if (key === "tileTimeTip" && !libraryEl.classList.contains("hidden")) renderLibrary();
   });
   const resetBtn = rowResetBtn("flags", key);
   if (resetBtn) row.append(resetBtn);
@@ -2813,7 +2804,7 @@ function flagRow(key) {
 // Almost every expert value only drives a CSS variable, so rebuilding the whole grid
 // for it threw away and recreated every tile: visible as a flash through the
 // translucent settings overlay. Only these actually change tile DOM.
-const GRID_DOM_VALUES = new Set(["previewLen", "gridMax", "notesTipLen", "inkThreshold", "inkHaloStrength"]);
+const GRID_DOM_VALUES = new Set(["gridMax", "notesTipLen", "inkThreshold", "inkHaloStrength"]);
 // Re-fit the tile text to the new box size without touching the DOM.
 const refreshTiles = (key) => {
   // A view tab paints its ink as an inline style, so it needs its own
@@ -5853,6 +5844,7 @@ function onChainClick() {
 let tipEl = null;
 let tipCur = null;   // element the tooltip is currently anchored to
 let tipTimer = null;   // auto-hide (AFK) timer once a tip is shown
+const TOOLTIP_HIDE_MS = 15000; // how long a shown tooltip stays before it hides itself
 let tipShowTimer = null; // hover show-delay timer before a tip appears
 let tipPending = null;   // element whose tip is scheduled but not yet shown
 let tipExpired = null; // element whose tooltip timed out; suppressed until another is hovered
@@ -5987,9 +5979,7 @@ function wireTooltips() {
     tipEl.classList.add("show");
     // AFK cleanness: auto-hide after the timeout, then don't reshow on this same
     // element until the pointer visits a different one.
-    if (flag("tooltipTimeout")) {
-      tipTimer = setTimeout(() => { tipExpired = el; hideTileTip(); }, val("tooltipTimeoutMs"));
-    }
+    tipTimer = setTimeout(() => { tipExpired = el; hideTileTip(); }, TOOLTIP_HIDE_MS);
   };
   document.addEventListener("pointerover", (e) => {
     if (drag) return; // no hover hints mid-drag
@@ -5999,8 +5989,6 @@ function wireTooltips() {
     // and a tooltip right under the cursor there is only in the way.
     if (!el || el.closest(".win-controls")) { if (tipCur) hideTileTip(); clearTipShow(); return; }
     if (el.hasAttribute("title")) { el.dataset.tip = el.getAttribute("title"); el.removeAttribute("title"); }
-    const rich = !!el.dataset.tipName;
-    if (!rich && !flag("iconTooltips")) { hideTileTip(); return; } // icon hints off
     const name = el.dataset.tipName || el.dataset.tip || "";
     if (!name) { hideTileTip(); return; }
     if (el === tipCur) return;     // already showing on this element
@@ -6247,7 +6235,7 @@ function applyRotateState(tile, id) {
   const badge = tile.querySelector(".tile-rotate-badge");
   if (badge) badge.textContent = rotateBadgeLabel(id);
   const s = rotateState.get(id);
-  if (s && flag("tilePreview")) {
+  if (s) {
     // 0 = show the whole entry, same convention as notesTipLen/clipNote.
     const short = ROTATE_SHORT_MAX > 0 && s.text.length > ROTATE_SHORT_MAX
       ? `${s.text.slice(0, ROTATE_SHORT_MAX)}…` : s.text;
@@ -6418,28 +6406,26 @@ function buildTile(p) {
     tile.appendChild(chainBtn);
   }
   const raw = p.file_path || p.text || "";
-  const preview = PREVIEW_MAX <= 0 ? "" : raw.length > PREVIEW_MAX ? `${raw.slice(0, PREVIEW_MAX)}…` : raw;
+  const preview = raw.length > TOOLTIP_PREVIEW_CHARS ? `${raw.slice(0, TOOLTIP_PREVIEW_CHARS)}…` : raw;
   // Themed hover tooltip (rendered by wireTooltips' shared popup, not the native
   // title): stash name + preview on the tile; the popup wraps + grows tall so long
   // prompts read comfortably at a constrained width.
-  if (flag("tilePreview")) {
-    tile.dataset.tipName = p.name;
-    if (preview && preview !== p.name) tile.dataset.tipBody = preview;
-    // Two prompts of wildly different length look identical on the tile itself:
-    // the same char/~token readout the editor already shows, reused here so there is
-    // only one formula for "how long is this" in the whole app.
-    if (p.text) {
-      const chars = [...p.text].length;
-      const tokens = Math.ceil(chars / 4);
-      const nf = (n) => n.toLocaleString(LANG);
-      tile.dataset.tipLen = `${nf(chars)} ${t("lenChars")} · ~${nf(tokens)} ${t("lenTokens")}`;
-    }
-    // The private note rides along as its own dimmed section (opt-out flag).
-    const note = notesOn() && flag("notesInTooltip") ? (p.notes || "").trim() : "";
-    if (note) tile.dataset.tipNotes = clipNote(note);
-    const times = tileTimeLines(p.id);
-    if (times) tile.dataset.tipTimes = times;
+  tile.dataset.tipName = p.name;
+  if (preview && preview !== p.name) tile.dataset.tipBody = preview;
+  // Two prompts of wildly different length look identical on the tile itself:
+  // the same char/~token readout the editor already shows, reused here so there is
+  // only one formula for "how long is this" in the whole app.
+  if (p.text) {
+    const chars = [...p.text].length;
+    const tokens = Math.ceil(chars / 4);
+    const nf = (n) => n.toLocaleString(LANG);
+    tile.dataset.tipLen = `${nf(chars)} ${t("lenChars")} · ~${nf(tokens)} ${t("lenTokens")}`;
   }
+  // The private note rides along as its own dimmed section (opt-out flag).
+  const note = notesOn() && flag("notesInTooltip") ? (p.notes || "").trim() : "";
+  if (note) tile.dataset.tipNotes = clipNote(note);
+  const times = tileTimeLines(p.id);
+  if (times) tile.dataset.tipTimes = times;
 
   // Media on the tile: stored still, or gif/video from the icon/file path.
   const kind = p.file_path ? mediaKind(p.file_path) : "";
@@ -7255,10 +7241,8 @@ function buildFolderTile(f) {
   name.className = "folder-title";
   name.textContent = folderTitle(f);
   tile.appendChild(name);
-  if (flag("tilePreview")) {
-    tile.dataset.tipName = folderTitle(f);
-    tile.dataset.tipBody = members.map((p) => p.name).join(", ");
-  }
+  tile.dataset.tipName = folderTitle(f);
+  tile.dataset.tipBody = members.map((p) => p.name).join(", ");
   tile.addEventListener("contextmenu", (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -15344,7 +15328,6 @@ const fmtCopyTime = (ts) => {
 // timestamp off promptHistory's lastEdited map -- so a value missing because its
 // own feature is off (or just never happened yet) drops only its own line.
 function tileTimeLines(id) {
-  if (!flag("tileTimeTip")) return "";
   const lines = [];
   const copied = settings.last_used?.[id];
   if (copied) lines.push(t("tipLastCopied").replace("{time}", fmtCopyTime(copied)));
@@ -16318,7 +16301,7 @@ async function runImport() {
     fillScaleSelect("icon-scale", "iconScale");
     $("opt-minimize").checked = settings.minimize_to_tray === true;
     $("opt-screenshot-folder").checked = settings.ui_flags?.screenshotSave === true;
-    $("opt-tooltips").checked = settings.ui_flags?.tooltipsEnabled !== false;
+    $("opt-tooltips").checked = flag("tooltipsEnabled");
     $("opt-autopaste").checked = settings.ui_flags?.autoPaste !== false;
     $("opt-autoupdate").checked = settings.auto_update !== false;
     applyTheme(await invoke("current_theme"));
@@ -22095,7 +22078,7 @@ function syncSettingsControls() {
     setLangSelect();
     $("opt-minimize").checked = settings.minimize_to_tray === true;
     $("opt-screenshot-folder").checked = settings.ui_flags?.screenshotSave === true;
-    $("opt-tooltips").checked = settings.ui_flags?.tooltipsEnabled !== false;
+    $("opt-tooltips").checked = flag("tooltipsEnabled");
     $("opt-autopaste").checked = settings.ui_flags?.autoPaste !== false;
     $("opt-autostart").checked = settings.autostart === true;
     $("opt-startmin").checked = settings.start_minimized === true;

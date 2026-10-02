@@ -40,6 +40,8 @@ NOT_IN_EXPERT = {
     "uiScale", "iconScale",
     # Remembered by the library's own Close-after-copy button.
     "closeAfterCopy",
+    # The tooltip switch on the normal settings page.
+    "tooltipsEnabled",
 }
 
 # Every setting that only makes sense while another feature is on, and the gate it
@@ -136,8 +138,8 @@ DEPENDENCIES = {
     "tileHotkeyBadgeOpacity": "tileHotkeyBadge",
     "copySize": "bubbleMs",
     "copyFont": "bubbleMs",
-    "tooltipWidth": "tilePreview",
-    "tooltipTimeoutMs": "tooltipTimeout",
+    "tooltipWidth": "tooltipsEnabled",
+    "tooltipDelayMs": "tooltipsEnabled",
     "tileHoverLift": "tileHover",
     "hoverLift": "tileHoverLift",
     "favViewButton": "favorites",

@@ -667,7 +667,7 @@ Independent size sliders for the overall UI, dialogs, the composer, and icons.
 ### Tooltips
 
 Hovering a tile shows its full text, length, and (if present) its private note.
-Delay, auto-hide timeout, and width are all adjustable.
+The delay and the width are adjustable.
 
 ### Toolbar
 
@@ -1418,7 +1418,7 @@ die Helligkeitsschwelle für Schwarz verschieben. Weiße Schrift auf einer helle
 Farbe bekommt einen dunklen Schatten, damit sie lesbar bleibt; im Expertenmenü
 lässt sich der Schatten abschalten oder seine Stärke einstellen.
 
-**Tooltips**: Verzögerung, Ausblenden, Breite.
+**Tooltips**: Verzögerung, Breite.
 
 **Favoriten**: Stern-Markierung, eigene Favoriten-Ansicht.
 

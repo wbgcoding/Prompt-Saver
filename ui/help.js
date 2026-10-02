@@ -180,10 +180,10 @@ export const HELP_CONTENT = {
       whatItIs: "Hovering a tile shows its full text, length, and any private note.",
       howTo: [
         "Hover a tile and wait for the delay to elapse.",
-        "Adjust delay, auto-hide timeout, or width in the expert menu if needed.",
+        "Adjust delay or width in the expert menu if needed.",
       ],
       whatHappens: "The tooltip auto-hides after its timeout even if the mouse stays put.",
-      settings: ["Delay before showing, auto-hide timeout, tooltip width: Expert menu → Tiles → Tooltips"],
+      settings: ["Delay before showing, tooltip width: Expert menu → Tiles → Tooltips"],
     },
     {
       section: "organising",
@@ -930,10 +930,10 @@ export const HELP_CONTENT = {
       whatItIs: "Das Überfahren einer Kachel mit der Maus zeigt ihren vollständigen Text, ihre Länge und eine eventuelle private Notiz.",
       howTo: [
         "Über eine Kachel fahren und die Verzögerung abwarten.",
-        "Verzögerung, automatisches Ausblenden oder Breite im Expertenmenü anpassen, falls der Standard nicht passt.",
+        "Verzögerung oder Breite im Expertenmenü anpassen, falls der Standard nicht passt.",
       ],
       whatHappens: "Der Tooltip blendet sich nach seinem Timeout automatisch aus, selbst wenn die Maus stehen bleibt.",
-      settings: ["Verzögerung vor Anzeige, automatisches Ausblenden, Tooltip-Breite: Expertenmenü → Kacheln → Tooltips"],
+      settings: ["Verzögerung vor Anzeige, Tooltip-Breite: Expertenmenü → Kacheln → Tooltips"],
     },
     {
       section: "organising",
