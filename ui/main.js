@@ -2526,9 +2526,9 @@ const EXPERT_TIPS = [
   "tileFolders", "tileFolderHoverMs", "tileFolderCols",
   "rotatingPrompts", "rotateDefaultMode", "rotateMaxEntries", "rotateBadge", "rotateTipLen",
   "rotateAuto", "rotateAutoTimeoutMin", "rotateAutoCooldownMs",
-  "helpTips", "helpHighlight", "helpSketches", "firstRunTour",
+  "helpTips", "helpSketches", "firstRunTour",
   // Tiles / copying
-  "tileMenu", "typeBadges", "tileHotkeyBadge", "bubbleMs", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "chainQuickStart", "chainStartAlwaysVisible", "chainVarCheck", "autoPasteEnter", "hideWindowOnCopy",
+  "tileMenu", "typeBadges", "tileHotkeyBadge", "bubbleMs", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "chainQuickStart", "chainStartAlwaysVisible", "chainVarCheck", "autoPasteEnter",
   "promptHotkeys", "promptHotkeyPaste", "dragOut", "dragOutInvert", "dragOutModifier",
   "tooltipDelayMs",
   "dragToView",
@@ -2553,7 +2553,7 @@ const EXPERT_TIPS = [
   "archiveTag",
   // Values that need a unit/behaviour explanation
   "copyCooldownMs", "dblClickMs", "autoPasteDelayMs", "snipPreviewVh",
-  "historyPerPrompt", "similarThreshold", "similarHint", "clipMinChars", "clipInboxMax", "historyMax",
+  "similarThreshold", "similarHint", "clipMinChars", "clipInboxMax", "historyMax",
   "nameMaxLen", "searchListMax", "savedSearchMax", "maxViews", "gridMax",
   "viewBorder", "statsTopN", "multiViewPrompt",
   "barToggles", "barToggleBoth", "quickGrid", "quickGridHoverOnly", "multiView", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "libraryCols", "copySize", "copyFont", "showLibrary", "composerScale", "primaryScale",
