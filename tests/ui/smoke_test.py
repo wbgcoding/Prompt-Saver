@@ -16595,6 +16595,41 @@ def main():
       if (undoBtn()) errs.push('564-c3: the copy history offered Undo after the clear failed');
     }
 """)
+        failed += ar_probe('m2', 'copy history: Clear follows the source filter, names both counts, stops on a failed clear and ignores an empty target', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { clipWatcher: true } };</script>\n', r"""
+    await bootReady();
+    const undoBtn = () => document.querySelector('#toast .toast-btn');
+    const confirmOpen = () => !document.getElementById('confirm-modal').classList.contains('hidden');
+    document.getElementById('library-btn').click(); await sleep(400);
+    document.getElementById('library-tab-history').click(); await sleep(400);
+    // All = both stores: the confirm names both counts and cancelling clears nothing.
+    window.__SMOKE_ARGS__.length = 0;
+    document.getElementById('journal-clear').click(); await sleep(300);
+    if (!confirmOpen()) errs.push('564-m2: Clear history under All asked nothing');
+    else {
+      const msg = document.getElementById('confirm-msg').textContent;
+      if (!/\(4 entries\)/.test(msg) || !/\(2 entries\)/.test(msg)) errs.push('564-m2: the confirm text does not name both counts: ' + msg);
+      document.getElementById('confirm-cancel').click(); await sleep(200);
+    }
+    if (callsFor('clear_copy_history').length || callsFor('clip_inbox_clear').length) errs.push('564-m2: a cancelled clear still deleted something');
+    // A failed copy-log clear stops: nothing else is cleared, no undo.
+    RESULTS.clear_copy_history = () => { throw 'boom'; };
+    window.__SMOKE_ARGS__.length = 0;
+    document.getElementById('journal-clear').click(); await sleep(300);
+    if (confirmOpen()) { document.getElementById('confirm-ok').click(); await sleep(300); }
+    if (!callsFor('clear_copy_history').length) errs.push('564-m2: fixture: the copy log clear was never attempted');
+    if (callsFor('clip_inbox_clear').length) errs.push('564-m2: the stored entries were cleared although the copy log clear failed');
+    if (undoBtn()) errs.push('564-m2: an Undo was offered after the clear failed');
+    delete RESULTS.clear_copy_history;
+    // An empty target does nothing: no dialog, no toast, no undo.
+    RESULTS.clip_inbox_list = () => [];
+    document.getElementById('toast').classList.remove('show', 'actionable');
+    document.querySelector('#journal-source [data-source="elsewhere"]').click(); await sleep(300);
+    window.__SMOKE_ARGS__.length = 0;
+    document.getElementById('journal-clear').click(); await sleep(300);
+    if (confirmOpen()) errs.push('564-m2: clearing an empty store opened a dialog');
+    if (callsFor('clip_inbox_clear').length) errs.push('564-m2: clearing an empty store still called clip_inbox_clear');
+    if (undoBtn() || document.getElementById('toast').classList.contains('show')) errs.push('564-m2: clearing an empty store showed a toast');
+""")
         failed += ar_probe('s1', 'screenshot editor: undoing a resize does not unlock operations behind the undo limit', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_values: { snipEditUndoMax: 10 } };</script>\n', r"""
     await bootReady();
     const cv = document.createElement('canvas'); cv.width = 200; cv.height = 120;

@@ -20137,42 +20137,47 @@ function bind() {
     const btn = e.target.closest(".lib-color");
     if (btn) { setJournalColor(btn.dataset.color); renderJournal(); }
   });
-  // Clears what the source filter shows: "all" the copy log and the copies from other
-  // apps, "app" the copy log only, "elsewhere" the stored entries from other apps only.
+  // Clears exactly what the source filter shows: "all" the copy log and the copies from
+  // other apps, "app" the copy log only, "elsewhere" the stored entries from other apps
+  // only. The confirm names the counts of every store it is about to empty; an empty
+  // target does nothing at all (no toast, no undo), and a failed clear stops right there.
   $("journal-clear").addEventListener("click", async () => {
-    if (flag("confirmClearHistory")) {
-      const ok = await confirmDialog({
-        title: t("clearHistory"),
-        message: t("clearHistoryConfirm"),
-        confirmLabel: t("clearHistory"),
-      });
-      if (!ok) return;
-    }
-    const clearApp = journalSource !== "elsewhere";
-    const clearElsewhere = journalSource !== "app";
+    const sourcesOn = optFlag("clipWatcher") || journalInbox.length > 0;
+    const source = sourcesOn ? journalSource : "all";
+    const clearApp = source !== "elsewhere";
+    const clearElsewhere = source !== "app";
     // Snapshot everything the clears are about to wipe, so Undo can write it all
     // back: the row-level log (reused via the same call the journal itself uses to
     // fill its list) plus the two counter maps, and the stored entries.
     let rows = [];
+    let items = [];
     const usage = { ...(settings.usage || {}) };
     const lastUsed = { ...(settings.last_used || {}) };
-    if (clearApp) {
-      try { rows = await invoke("recent_copies", { limit: 1000000, grouped: false }); } catch { /* best effort */ }
-      await invoke("clear_copy_history").catch((e) => errToast(e));
+    try {
+      if (clearApp) rows = await invoke("recent_copies", { limit: 1000000, grouped: false });
+      if (clearElsewhere) items = await invoke("clip_inbox_list");
+    } catch (e) { errToast(e); return; }
+    const appAffected = clearApp && (rows.length > 0 || Object.keys(usage).length > 0 || Object.keys(lastUsed).length > 0);
+    const clipAffected = clearElsewhere && items.length > 0;
+    if (!appAffected && !clipAffected) return;
+    if (flag("confirmClearHistory")) {
+      const message = appAffected && clipAffected
+        ? t("clearHistoryConfirmBoth").replace("{n}", String(rows.length)).replace("{m}", String(items.length))
+        : appAffected ? t("clearHistoryConfirm") : t("clearClipConfirm").replace("{m}", String(items.length));
+      const ok = await confirmDialog({ title: t("clearHistory"), message, confirmLabel: t("clearHistory") });
+      if (!ok) return;
+    }
+    if (appAffected) {
+      try { await invoke("clear_copy_history"); } catch (e) { errToast(e); return; }
       settings.usage = {};
       settings.last_used = {};
     }
-    let items = [];
-    if (clearElsewhere) {
-      items = await invoke("clip_inbox_list").catch(() => []);
-      // A clear that failed left every row in place: no "cleared" toast, no undo.
-      if (items.length) {
-        try { await invoke("clip_inbox_clear"); } catch (e) { errToast(e); items = []; if (!clearApp) return; }
-      }
+    if (clipAffected) {
+      try { await invoke("clip_inbox_clear"); } catch (e) { errToast(e); items = []; if (!appAffected) return; }
     }
     await loadJournal();
-    undoToast(t(clearApp ? "historyClearedToast" : "clipInboxClearedToast"), async () => {
-      if (clearApp) await restoreCopyHistory(rows, usage, lastUsed);
+    undoToast(t(appAffected ? "historyClearedToast" : "clipInboxClearedToast"), async () => {
+      if (appAffected) await restoreCopyHistory(rows, usage, lastUsed);
       await restoreClipInbox(items);
     });
   });
