@@ -13267,20 +13267,23 @@ struct CopyLogRow {
     id: String,
 }
 
-// The plain insert loop behind restore_copy_history, kept apart from the
-// command so it can be exercised with a bare in-memory connection.
+// The insert loop behind restore_copy_history, kept apart from the command so it
+// can be exercised with a bare in-memory connection. One transaction: a row that
+// fails leaves the table exactly as it was, never a half-restored history.
 fn db_restore_copy_log(conn: &Connection, rows: &[CopyLogRow]) -> rusqlite::Result<()> {
+    let tx = conn.unchecked_transaction()?;
     for row in rows {
-        conn.execute("INSERT INTO copy_log(ts, id) VALUES(?1, ?2)", params![row.ts as i64, row.id])?;
+        tx.execute("INSERT INTO copy_log(ts, id) VALUES(?1, ?2)", params![row.ts as i64, row.id])?;
     }
-    Ok(())
+    tx.commit()
 }
 
 // Undo for "clear copy history": writes the row-level log and the two counter
 // maps back. The frontend is the one holding the snapshot (it read it through
 // recent_copies before calling clear_copy_history), so this only ever replays
 // what genuinely existed a moment ago, through the same insert clause a live
-// copy uses -- never a raw table swap.
+// copy uses -- never a raw table swap. The counters are written only after the
+// rows are committed, so a failed restore changes nothing.
 #[tauri::command]
 async fn restore_copy_history(
     app: AppHandle,
@@ -13289,20 +13292,23 @@ async fn restore_copy_history(
     usage: HashMap<String, u32>,
     last_used: HashMap<String, u64>,
 ) -> Result<(), String> {
-    {
-        let mut store = lock(&state);
-        store.settings.usage = usage;
-        store.settings.last_used = last_used;
-        save_settings(&app, &store.settings);
-    }
     let Some(conn) = db_conn(&app) else {
         return Err("history-failed".into());
     };
     if db_restore_copy_log(&conn, &entries).is_err() {
-        append_crash_log("restore_copy_history: a row could not be reinserted");
+        append_crash_log("restore_copy_history: the rows could not be reinserted");
         return Err("history-failed".into());
     }
+    let saved = {
+        let mut store = lock(&state);
+        store.settings.usage = usage;
+        store.settings.last_used = last_used;
+        save_settings(&app, &store.settings)
+    };
     rebuild_tray(&app);
+    if !saved {
+        return Err("save-failed".into());
+    }
     Ok(())
 }
 
@@ -52006,6 +52012,28 @@ mod tests {
         assert_eq!(s.last_used.get("a"), Some(&77));
         assert!(clear_history_core(|| true, &mut s));
         assert!(s.usage.is_empty() && s.last_used.is_empty());
+    }
+
+    #[test]
+    fn a_failing_row_leaves_the_copy_history_untouched() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE copy_log(ts INTEGER NOT NULL, id TEXT NOT NULL);
+             INSERT INTO copy_log VALUES(1, 'keep');
+             CREATE TRIGGER no_bad BEFORE INSERT ON copy_log WHEN NEW.id = 'bad' BEGIN SELECT RAISE(ABORT, 'no'); END;",
+        )
+        .unwrap();
+        let rows = [
+            CopyLogRow { ts: 2, id: "a".into() },
+            CopyLogRow { ts: 3, id: "bad".into() },
+            CopyLogRow { ts: 4, id: "b".into() },
+        ];
+        assert!(db_restore_copy_log(&conn, &rows).is_err());
+        let n: i64 = conn.query_row("SELECT COUNT(*) FROM copy_log", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 1, "the rows before the failing one must not stay");
+        assert!(db_restore_copy_log(&conn, &rows[..1]).is_ok());
+        let n: i64 = conn.query_row("SELECT COUNT(*) FROM copy_log", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 2);
     }
 
     #[test]
