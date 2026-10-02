@@ -9166,49 +9166,66 @@ PROBE = """
       document.getElementById('modal-close-x').click();
       await sleep(30);
 
-      // 384: the "window size" canvas default's reactive notice -- appears
-      // BEFORE the result menu, names the reported second, its confirm
-      // button writes recCanvasMode to "all", and its checkbox turns off
-      // recCropNotice so a later occurrence stays silent.
+      // The "window size" canvas default's reactive notice is a toast: it names the
+      // reported second, its button writes recCanvasMode to "all", the result menu
+      // opens without waiting for it, and the expert flag recCropNotice silences it.
       const confirmModal = document.getElementById('confirm-modal');
+      const cropToast = document.getElementById('toast');
+      if (!confirmModal.classList.contains('hidden')) {
+        // closing the edit modal above left its discard prompt open
+        document.getElementById('confirm-ok').click();
+        await sleep(30);
+      }
       window.__SMOKE_ARGS__ = [];
       window.__FIRE__('recording-captured', { path: 'C:/fake/raw5-cropnotice.mp4', resize_crop_at_ms: 4200 });
       await sleep(30);
-      if (confirmModal.classList.contains('hidden')) {
-        out.errors.push('rec-modal: resize-crop notice did not appear for resize_crop_at_ms');
-      }
-      if (!document.getElementById('confirm-msg').textContent.includes('4')) {
-        out.errors.push('rec-modal: resize-crop notice message did not mention the reported second');
-      }
-      if (!recModal.classList.contains('hidden')) {
-        out.errors.push('rec-modal: the result menu must not open before the resize-crop notice is dismissed');
-      }
-      document.getElementById('confirm-cb-dontShowAgain').checked = true;
-      document.getElementById('confirm-ok').click();
-      await sleep(30);
       if (!confirmModal.classList.contains('hidden')) {
-        out.errors.push('rec-modal: resize-crop notice did not close on confirm');
+        out.errors.push('rec-modal: resize-crop notice must be a toast, not a dialog');
+      }
+      const cropBtn = cropToast.querySelector('.toast-btn');
+      if (!cropBtn) {
+        out.errors.push('rec-modal: resize-crop toast did not appear for resize_crop_at_ms');
+      } else {
+        if (!cropToast.textContent.includes('4')) {
+          out.errors.push('rec-modal: resize-crop toast did not mention the reported second');
+        }
+        cropBtn.click();
+        await sleep(30);
+        const canvasCall = window.__SMOKE_ARGS__.find(([cmd, args]) => cmd === 'set_ui_text' && args && args.key === 'recCanvasMode');
+        if (!canvasCall || canvasCall[1].value !== 'all') {
+          out.errors.push('rec-modal: the resize-crop toast button did not set recCanvasMode to all');
+        }
       }
       if (recModal.classList.contains('hidden')) {
-        out.errors.push('rec-modal: the result menu did not open once the resize-crop notice was dismissed');
-      }
-      const canvasCall = window.__SMOKE_ARGS__.find(([cmd, args]) => cmd === 'set_ui_text' && args && args.key === 'recCanvasMode');
-      if (!canvasCall || canvasCall[1].value !== 'all') {
-        out.errors.push('rec-modal: confirming the resize-crop notice did not set recCanvasMode to all');
-      }
-      const noticeFlagCall = window.__SMOKE_ARGS__.find(([cmd, args]) => cmd === 'set_ui_flag' && args && args.key === 'recCropNotice');
-      if (!noticeFlagCall || noticeFlagCall[1].enabled !== false) {
-        out.errors.push('rec-modal: checking "do not show again" did not turn off recCropNotice');
+        out.errors.push('rec-modal: the result menu did not open next to the resize-crop toast');
       }
       document.getElementById('rec-modal-close').click();
       await sleep(30);
 
-      // A later occurrence must stay silent once recCropNotice is off, but
-      // the result menu must still open normally.
+      // With recCropNotice off the toast stays away, the result menu still opens.
+      await click('expert-open');
+      let cropRow = null;
+      for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+        tb.click();
+        cropRow = [...document.querySelectorAll('#expert-flags .switch-field')]
+          .find(r => (r.querySelector('span') || {}).textContent === 'Notice when a recording gets cut off');
+        if (cropRow) break;
+      }
+      if (!cropRow) {
+        out.errors.push('rec-modal: the recCropNotice flag row was not found in the expert menu');
+      } else {
+        const cropCb = cropRow.querySelector('input.switch');
+        cropCb.checked = false;
+        cropCb.dispatchEvent(new Event('change'));
+        await sleep(150);
+      }
+      await click('expert-back');
+      await sleep(50);
+      document.getElementById('toast').textContent = '';
       window.__FIRE__('recording-captured', { path: 'C:/fake/raw6-cropnotice-off.mp4', resize_crop_at_ms: 1000 });
       await sleep(30);
-      if (!confirmModal.classList.contains('hidden')) {
-        out.errors.push('rec-modal: resize-crop notice must stay off once "do not show again" was checked');
+      if (cropToast.querySelector('.toast-btn')) {
+        out.errors.push('rec-modal: resize-crop toast must stay away while recCropNotice is off');
       }
       if (recModal.classList.contains('hidden')) {
         out.errors.push('rec-modal: the result menu must still open once the notice is suppressed');
@@ -9835,38 +9852,25 @@ PROBE = """
             }
           }
         }
-        // Background click asks first (point 193) -- Continue leaves the tour open.
+        // A click on the backdrop does nothing: no dialog, the tour stays open.
         const confirmModal = document.getElementById('confirm-modal');
         tourEl.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
         await sleep(80);
-        if (confirmModal.classList.contains('hidden')) out.errors.push('Tour: background click did not open the skip-confirm dialog');
-        if (tourEl.classList.contains('hidden')) out.errors.push('Tour: background click closed the tour before confirming');
-        // .click() bypasses hit-testing, so it would pass even if the confirm
-        // dialog rendered visually BEHIND the tour -- check the actual stacking
-        // order (point 185, track 5) so a real mouse click would land on it too.
-        const tourZ = parseInt(getComputedStyle(tourEl).zIndex, 10) || 0;
-        const confirmZ = parseInt(getComputedStyle(confirmModal).zIndex, 10) || 0;
-        if (confirmZ <= tourZ) {
-          out.errors.push('Tour: skip-confirm dialog z-index (' + confirmZ + ') does not sit above the tour (' + tourZ + ')');
-        }
-        document.getElementById('confirm-cancel').click();
-        await sleep(80);
-        if (!confirmModal.classList.contains('hidden')) out.errors.push('Tour: Continue did not close the skip-confirm dialog');
-        if (tourEl.classList.contains('hidden')) out.errors.push('Tour: Continue on the skip-confirm dialog closed the tour');
-        // Escape follows the same path, and must not also fall through to tourKeydown's
-        // own Escape handling while the confirm dialog sits on top of the tour. This is
-        // also the block's one and only close -- a second open/close cycle in the same
-        // probe run has been observed to stall the headless browser's virtual clock, so
-        // the top-right Skip button (which stays deliberately direct, no confirmation)
-        // is covered by inspection instead of a second live cycle here.
+        if (!confirmModal.classList.contains('hidden')) out.errors.push('Tour: a background click opened a dialog');
+        if (tourEl.classList.contains('hidden')) out.errors.push('Tour: a background click closed the tour');
+        // Escape skips at once and shows a toast with Undo. This is the block's one
+        // and only close -- a second open/close cycle in the same probe run has been
+        // observed to stall the headless browser's virtual clock, so the Undo click
+        // and the top-right Skip button are covered by inspection instead.
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-        await sleep(80);
-        if (confirmModal.classList.contains('hidden')) out.errors.push('Tour: Escape did not open the skip-confirm dialog');
-        document.getElementById('confirm-ok').click();
-        await sleep(80);
-        if (!confirmModal.classList.contains('hidden')) out.errors.push('Tour: confirming skip did not close the skip-confirm dialog');
-        if (!tourEl.classList.contains('hidden')) out.errors.push('Tour: confirming skip did not close the tour');
-        if (!window.__SMOKE_CALLS__.includes('set_ui_flag')) out.errors.push('Tour: confirming skip did not write tourSeen');
+        await sleep(120);
+        if (!confirmModal.classList.contains('hidden')) out.errors.push('Tour: Escape opened a confirm dialog');
+        if (!tourEl.classList.contains('hidden')) out.errors.push('Tour: Escape did not close the tour');
+        if (!window.__SMOKE_CALLS__.includes('set_ui_flag')) out.errors.push('Tour: Escape did not write tourSeen');
+        const tourSkipToast = document.getElementById('toast');
+        if (!/Tour skipped|Einf.hrung .bersprungen/.test(tourSkipToast.textContent) || !tourSkipToast.querySelector('.toast-btn')) {
+          out.errors.push('Tour: Escape did not show the "Tour skipped" toast with an Undo button');
+        }
       }
       document.getElementById('settings').classList.add('hidden');
       await sleep(50);

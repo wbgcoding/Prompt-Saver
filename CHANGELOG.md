@@ -1615,6 +1615,7 @@ the video editor and the introduction tour ship on).
 - The keyboard shortcut overview lists every window: view switching, quick launcher, tray menu, placeholder window, floating buttons, screenshot selection, recording bar and camera.
 - The video editor's actions read like the screenshot editor's: Cancel, Save as, Copy, then Export.
 - The dialog after a recording shows Discard, Save and Attach; editing, Save as, Copy and the folder choice sit under More.
+- Fewer interruptions: skipping the tour, a found FFmpeg, a moved data folder and a cropped recording are reported in a short notice instead of a dialog.
 - **The small buttons on a tile no longer show a tooltip.** Select, start a
   chain and the actions menu stay quiet on hover; screen readers still get
   their names.

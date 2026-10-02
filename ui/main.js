@@ -16047,15 +16047,7 @@ async function offerTakeover() {
     await reloadEverything();
     const newDir = await invoke("current_data_dir").catch(() => null);
     if (newDir) {
-      const openIt = await confirmDialog({
-        title: t("takeoverDoneTitle"),
-        message: t("takeoverDoneBody").replace("{path}", newDir),
-        confirmLabel: t("close"),
-        altLabel: t("backupOpenFolder"),
-        oneButton: true,
-        danger: false,
-      });
-      if (openIt === "alt") await invoke("open_storage_folder", { path: newDir }).catch((e) => errToast(e));
+      toast(t("takeoverDoneBody").replace("{path}", newDir), { label: t("backupOpenFolder"), onClick: () => invoke("open_storage_folder", { path: newDir }).catch((e) => errToast(e)) }, "", null, 8000);
     }
   }
   return true;
@@ -16873,23 +16865,13 @@ function bind() {
     const cropMs = e.payload?.resize_crop_at_ms;
     if (cropMs != null && flag("recCropNotice")) {
       const secs = Math.floor(cropMs / 1000);
-      const switchNow = await confirmDialog({
-        title: t("recCropNoticeTitle"),
-        message: t("recCropNoticeMsg").replace("{s}", String(secs)),
-        confirmLabel: t("recCropNoticeSwitch"),
-        cancelLabel: t("recCropNoticeOk"),
-        danger: false,
-        checkboxes: [{ key: "dontShowAgain", label: t("recCropNoticeDontShowAgain"), checked: false }],
-        checkboxesOptional: true,
-      });
-      if ($("confirm-cb-dontShowAgain").checked) {
-        settings.ui_flags = { ...(settings.ui_flags || {}), recCropNotice: false };
-        invoke("set_ui_flag", { key: "recCropNotice", enabled: false }).catch(() => {});
-      }
-      if (switchNow) {
-        settings.ui_texts = { ...(settings.ui_texts || {}), recCanvasMode: "all" };
-        invoke("set_ui_text", { key: "recCanvasMode", value: "all" }).catch(() => {});
-      }
+      toast(t("recCropNoticeMsg").replace("{s}", String(secs)), {
+        label: t("recCropNoticeSwitch"),
+        onClick: () => {
+          settings.ui_texts = { ...(settings.ui_texts || {}), recCanvasMode: "all" };
+          invoke("set_ui_text", { key: "recCanvasMode", value: "all" }).catch(() => {});
+        },
+      }, "", null, 12000);
     }
     // "Finish and continue" split this recording into several files -- the
     // result dialog below still only ever opens the LAST one (opening every
@@ -19815,8 +19797,6 @@ function bind() {
   $("tour-skip").addEventListener("click", tourSkip);
   $("tour-back").addEventListener("click", () => tourGoto(tourStep - 1));
   $("tour-next").addEventListener("click", () => (tourStep === TOUR_LAST_STEP ? tourFinish() : tourGoto(tourStep + 1)));
-  const tourEl = $("tour-modal");
-  tourEl.addEventListener("pointerdown", (e) => { if (e.target === tourEl) tourAskSkip(); });
 
   // In-app documentation.
   const helpEl = $("help");
@@ -20262,7 +20242,7 @@ function bind() {
     if (e.key !== "Tab" || e.ctrlKey) return; // Ctrl+Tab is the view-switcher above
     if (!snipEdit.classList.contains("hidden")) return;
     // tourKeydown owns Tab while the tour is the topmost thing on screen, but it
-    // bows out the moment a confirm dialog (tourAskSkip) opens on top of it -- and
+    // bows out the moment a confirm dialog opens on top of it -- and
     // that dialog's own trap below is never reached if this bails unconditionally
     // just because the tour is still open underneath. Only defer to the tour when
     // nothing is layered above it.
@@ -20698,7 +20678,7 @@ function bind() {
     const found = await invoke("ffmpeg_status").catch(() => null);
     ffmpegAvailable = !!found;
     if (found) {
-      await infoDialog(t("ffmpegFoundTitle"), t("ffmpegFoundMsg").replace("{path}", found));
+      toast(t("ffmpegFoundMsg").replace("{path}", found));
       renderExpert();
       return;
     }
@@ -21319,11 +21299,11 @@ function tourGoto(i) {
 // level so both bind()'s screenshot-editor code and the tour code below can
 // call it without a second implementation.
 function tourKeydown(e) {
-  // A confirmation dialog on top (tourAskSkip) owns every key while it is open --
+  // A confirmation dialog on top owns every key while it is open --
   // otherwise Escape would close both it and the tour underneath on one press.
   if (!$("confirm-modal").classList.contains("hidden")) return;
   if (e.key === "Tab") { trapTabWithin($("tour-modal"), e); return; }
-  if (e.key === "Escape") { e.preventDefault(); tourAskSkip(); return; }
+  if (e.key === "Escape") { e.preventDefault(); tourSkipWithUndo(); return; }
   if (e.key === "ArrowLeft") { e.preventDefault(); tourGoto(tourStep - 1); return; }
   if (e.key === "ArrowRight") { e.preventDefault(); tourGoto(tourStep + 1); return; }
   if (e.key === "Enter" && !e.target.closest("button")) {
@@ -21378,18 +21358,11 @@ async function tourSkip() {
   await saveUiState("tourSeen", true); // Skip writes nothing else
 }
 
-// Escape and a stray background click are easy to trigger by accident, so both
-// route here instead of skipping straight away; the top-right Skip button is a
-// deliberate action and stays direct.
-async function tourAskSkip() {
-  const ok = await confirmDialog({
-    title: t("tourSkipConfirmTitle"),
-    message: t("tourSkipConfirmMsg"),
-    confirmLabel: t("tourSkipConfirmOk"),
-    cancelLabel: t("tourNext"),
-    danger: false,
-  });
-  if (ok) await tourSkip();
+// Escape skips at once; the toast's Undo reopens the tour where it started.
+async function tourSkipWithUndo() {
+  const firstRun = tourFirstRun;
+  await tourSkip();
+  undoToast(t("tourSkippedToast"), () => openTour({ firstRun }));
 }
 
 // Only the switches that differ from the shipped default get written: an
