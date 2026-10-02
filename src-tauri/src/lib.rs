@@ -8759,13 +8759,37 @@ async fn placement_snapshot(state: State<'_, Db>, ids: Vec<String>) -> Result<Ve
     Ok(capture_placements(&lock(&state).settings, &ids))
 }
 
-// Undo of a batch delete with the snapshot taken before it: one atomic write for all.
+// Two writes that must both land: the first, then the second. When the first fails
+// nothing is written; when the second fails the first is taken back, so the disk
+// never holds placements for prompts that are still in the trash while the call
+// reports an error.
+fn save_pair_or_undo_first(first: impl FnOnce() -> bool, second: impl FnOnce() -> bool, undo_first: impl FnOnce()) -> bool {
+    if !first() {
+        return false;
+    }
+    if second() {
+        return true;
+    }
+    undo_first();
+    false
+}
+
+// Undo of a batch delete with the snapshot taken before it: the placements and
+// the prompts are written together or not at all.
 #[tauri::command]
 async fn restore_prompts_batch(app: AppHandle, state: State<'_, Db>, placements: Vec<PromptPlacement>) -> Result<AppState, String> {
     let app_state = {
         let mut store = lock(&state);
-        restore_placed_core(&mut store, &placements, |st| save_prompts_and_trash(&app, st))?;
-        save_settings(&app, &store.settings);
+        let original_settings = store.settings.clone();
+        restore_placed_core(&mut store, &placements, |st| {
+            save_pair_or_undo_first(
+                || save_settings(&app, &st.settings),
+                || save_prompts_and_trash(&app, st),
+                || {
+                    save_settings(&app, &original_settings);
+                },
+            )
+        })?;
         let secret_key = secret_session_key(secret_timeout_min(&store.settings));
         AppState { prompts: slim_prompts(&store.prompts, secret_key), settings: webview_settings(&store.settings) }
     };
@@ -52061,6 +52085,23 @@ mod tests {
         assert_eq!(s.last_used.get("a"), Some(&77));
         assert!(clear_history_core(|| true, &mut s));
         assert!(s.usage.is_empty() && s.last_used.is_empty());
+    }
+
+    #[test]
+    fn a_pair_of_writes_lands_together_or_not_at_all() {
+        use std::cell::Cell;
+        let undone = Cell::new(false);
+        let second_ran = Cell::new(false);
+        // The first write fails: the second never starts, nothing to undo.
+        assert!(!save_pair_or_undo_first(|| false, || { second_ran.set(true); true }, || undone.set(true)));
+        assert!(!second_ran.get() && !undone.get());
+        // The second fails: the first is taken back and the call reports failure.
+        assert!(!save_pair_or_undo_first(|| true, || false, || undone.set(true)));
+        assert!(undone.get());
+        // Both land: no undo.
+        undone.set(false);
+        assert!(save_pair_or_undo_first(|| true, || true, || undone.set(true)));
+        assert!(!undone.get());
     }
 
     #[test]
