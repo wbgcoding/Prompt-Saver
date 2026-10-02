@@ -1710,12 +1710,10 @@ const EXPERT_VALUES = {
   viewDropHoverMs: { label: "valViewDropHoverMs", min: 100, max: 3000, step: 100, def: 600, unit: "ms", gate: "dragToView" },
   // Header vertical padding + screenshot-preview max height.
   snipPreviewVh: { label: "valSnipPreviewVh", min: 30, max: 92, step: 1, def: 74, unit: "%", gate: "screenshot" },
-  // Screenshot JPEG quality + a delay before the capture (lets a menu stay open in shot).
-  snipQuality: { label: "valSnipQuality", min: 50, max: 100, step: 5, def: 80, unit: "%", gate: "screenshot" },
+  // A delay before the capture (lets a menu stay open in the shot).
   snipDelayMs: { label: "valSnipDelayMs", min: 0, max: 5000, step: 100, def: 0, unit: "ms", gate: "screenshot" },
   // The actual saved/copied/exported JPEG quality -- every save/copy path, edited
-  // or not, shares this one value (see SNIP_SAVE_Q in lib.rs). Not the same
-  // setting as snipQuality above, which only affects the live capture preview.
+  // or not, shares this one value (see SNIP_SAVE_Q in lib.rs).
   snipSaveQuality: { label: "valSnipSaveQuality", min: 50, max: 100, step: 5, def: 90, unit: "%", gate: "screenshot" },
   // Screenshot-editor drawing defaults.
   snipPenPx: { label: "valSnipPenPx", min: 1, max: 40, step: 1, def: 6, unit: "px", gate: "snipEditor" },
@@ -2149,7 +2147,7 @@ const EXPERT_DROPDOWNS = {
   // paths AND the video editor's "export still frame" (same setting, one format
   // for anything this app calls a screenshot). webp and bmp/tiff are always
   // lossless (see encode_screenshot in lib.rs); only jpeg has a quality of its
-  // own, which is why snipQuality/snipSaveQuality below only show for jpeg.
+  // own, which is why snipSaveQuality only shows for jpeg.
   screenshotFormat: enumDropdown("screenshotFormat", "valScreenshotFormat",
     [["png", "optScreenshotFormatPng"], ["jpeg", "optScreenshotFormatJpeg"], ["webp", "optScreenshotFormatWebp"],
       ["bmp", "optScreenshotFormatBmp"], ["tiff", "optScreenshotFormatTiff"]], "png", "screenshot"),
@@ -2256,7 +2254,7 @@ const EXPERT_TABS = [
   { title: "expTabCapture", groups: [
     // Everything below is a capture tool: it reads something off the screen or the
     // microphone rather than putting typed content into the app.
-    { title: "expGroupScreenshot", flags: ["screenshot"], values: ["snipPreviewVh", "snipQuality", "snipSaveQuality", "snipDelayMs"], dropdowns: ["screenshotFormat"], paths: ["screenshotDir"] },
+    { title: "expGroupScreenshot", flags: ["screenshot"], values: ["snipPreviewVh", "snipSaveQuality", "snipDelayMs"], dropdowns: ["screenshotFormat"], paths: ["screenshotDir"] },
     { title: "expGroupSnipEditor", flags: [{ key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }], values: ["snipPenPx", "snipMarkerPx", "snipLinePx", "snipArrowPx", "snipRectPx", "snipEllipsePx", "snipStepPx", "snipArrowHeadScale", "snipTextPx", "snipTextOutlinePx", "snipPixelBlock", "snipSpotlightDim", "snipEditUndoMax"], dropdowns: ["snipEditDefaultTool", "snipScaleFilter", "snipTextBack"], colors: ["snipDefaultColor"] },
     // Opens #ocr-langs-modal -- same gate as the rest of the feature.
     { title: "expGroupOcr", flags: ["ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }, { key: "ocrAutoPickLang", gate: "ocr" }, { key: "ocrLangAutoUpdate", gate: "ocr" }], values: ["ocrUpscaleUnderPx"], dropdowns: ["ocrLang"],
@@ -2549,7 +2547,7 @@ const EXPERT_TIPS = [
   "veDefaultPanel", "videoExportDir", "veExtraClipsMax",
   "numFieldWheel", "zoomStepPct", "zoomMaxPct", "errorLogKeepKb", "veOvDupOffsetPx", "editSnapTolerancePx",
   "editStateKeep", "editStateKeepDays", "editorOpenMaxMb", "editorDraft", "editorDraftSecs",
-  "snipQuality", "snipSaveQuality", "snipDelayMs",
+  "snipSaveQuality", "snipDelayMs",
   "snipPenPx", "snipMarkerPx", "snipLinePx", "snipArrowPx", "snipRectPx", "snipEllipsePx", "snipStepPx",
   "snipArrowHeadScale", "snipDefaultColor", "snipTextPx", "snipTextOutlinePx", "snipPixelBlock", "snipSpotlightDim",
   "snipEditUndoMax", "snipEditSnap", "snipTextBack", "snipEditDefaultTool", "snipScaleFilter",
@@ -2932,12 +2930,12 @@ function valueRow(key) {
   if (resetBtn) right.append(resetBtn);
   head.append(span, right);
   row.append(head, slider);
-  // Both quality sliders are a JPEG-only concept -- every other screenshot
+  // The quality slider is a JPEG-only concept -- every other screenshot
   // format is always lossless (see encode_screenshot in lib.rs), so a
   // quality percentage would apply to nothing. renderExpert() rebuilds this
   // row whenever screenshotFormat itself changes (dropdownRow's own change
   // handler), so this stays in sync without a dedicated listener of its own.
-  if (key === "snipQuality" || key === "snipSaveQuality") {
+  if (key === "snipSaveQuality") {
     row.classList.toggle("hidden", txt("screenshotFormat") !== "jpeg");
   }
   return row;

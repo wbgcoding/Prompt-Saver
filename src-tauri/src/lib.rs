@@ -2681,6 +2681,7 @@ fn removed_ui_value_keys() -> &'static [&'static str] {
         "etaMinPct",
         "etaMinSecs",
         "journalLimit",
+        "snipQuality",
     ]
 }
 
@@ -16912,18 +16913,17 @@ async fn begin_capture(
     let gen = SNIP_GEN.fetch_add(1, Ordering::SeqCst) + 1;
     // Loupe/quality/delay settings are read once here, in both capture modes,
     // while nothing else holds the store.
-    let (cfg, hist_max, snip_q, snip_delay, hide_app) = app
+    let (cfg, hist_max, snip_delay, hide_app) = app
         .try_state::<Db>()
         .map(|s| {
             let guard = s.lock().unwrap_or_else(|e| e.into_inner());
             let settings = &guard.settings;
-            let snip_q = settings.ui_values.get("snipQuality").copied().unwrap_or(80.0).clamp(50.0, 100.0) as u8;
             let snip_delay = settings.ui_values.get("snipDelayMs").copied().unwrap_or(0.0).clamp(0.0, 5000.0) as u64;
             let cfg = if pick { pick_cfg(settings) } else { PickCfg { zoom: 8, format: "hex".to_string(), cells: 15 } };
             let hist_max = if pick { pick_history_max(settings) } else { PICK_HISTORY_DEFAULT };
-            (cfg, hist_max, snip_q, snip_delay, capture_hides_app_windows(capture_excluded(settings)))
+            (cfg, hist_max, snip_delay, capture_hides_app_windows(capture_excluded(settings)))
         })
-        .unwrap_or((PickCfg { zoom: 8, format: "hex".to_string(), cells: 15 }, PICK_HISTORY_DEFAULT, 80, 0, true));
+        .unwrap_or((PickCfg { zoom: 8, format: "hex".to_string(), cells: 15 }, PICK_HISTORY_DEFAULT, 0, true));
     // Wake the overlay's WebView2 NOW (off-screen) so a long-idle, background-throttled
     // webview un-throttles DURING the freeze+encode below. Without this head start the
     // icon path (overlay idle a while) lags behind a retry (whose webview was just
@@ -16990,7 +16990,7 @@ async fn begin_capture(
             return;
         }
         // Encode the capture at NATIVE resolution: pixel-sharp overlay, no downscale.
-        let bg = encode_snip_jpeg(enc_img.as_raw(), total_w, total_h, if pick { PICK_Q } else { snip_q }).map(|j| {
+        let bg = encode_snip_jpeg(enc_img.as_raw(), total_w, total_h, if pick { PICK_Q } else { SNIP_PREVIEW_Q }).map(|j| {
             let (src, is_file) = match write_snip_preview(&j, gen) {
                 Some(path) => (path, true),
                 None => (format!("data:image/jpeg;base64,{}", base64_encode(&j)), false),
@@ -17197,8 +17197,9 @@ fn snip_windows(state: State<SnipState>, index: usize) -> Vec<SnipWindow> {
     out
 }
 
-// Overlay preview JPEG quality (encoded at native resolution: pixel-sharp) is the
-// expert-tunable snipQuality value now (default 80), read as snip_q in begin_capture.
+// Overlay preview JPEG quality, encoded at native resolution: fixed, it only affects
+// how fast the frozen desktop appears.
+const SNIP_PREVIEW_Q: u8 = 80;
 // The colour picker shows the frozen desktop as the reference for the colour it is
 // about to copy, so its background must not carry JPEG's subsampled chroma: below
 // quality 90 the encoder halves the colour resolution, which is exactly the "washed
@@ -51600,6 +51601,16 @@ mod tests {
         assert!(!s.ui_values.contains_key("syncFailMax"));
         assert_eq!(s.ui_values.get("errorLogKeepKb"), Some(&512.0));
         assert!(!s.has_removed_ui_values());
+    }
+
+    #[test]
+    fn removed_key_lists_have_no_duplicates() {
+        for list in [removed_ui_value_keys(), removed_ui_flag_keys()] {
+            let mut seen = std::collections::HashSet::new();
+            for k in list {
+                assert!(seen.insert(*k), "{k} is listed twice");
+            }
+        }
     }
 
     #[test]

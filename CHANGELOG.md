@@ -1700,6 +1700,8 @@ the video editor and the introduction tour ship on).
   remembers it; the two expert switches for it are gone.
 - **One length for the copy history.** The window lists what the history
   keeps; the separate row limit is gone.
+- **One screenshot quality.** The expert menu keeps only the quality that is
+  saved, copied and exported; the preview quality is fixed.
 
 ## 2.6.3 (2026-07-26)
 

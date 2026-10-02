@@ -74,7 +74,6 @@ DEPENDENCIES = {
     "pickSwatchPx": "colorPicker",
     "loupeCells": "colorPicker",
     "screenshotFormat": "screenshot",
-    "snipQuality": "screenshot",
     "snipDelayMs": "screenshot",
     "snipSaveQuality": "screenshot",
     # 117/118: screenshot editor
