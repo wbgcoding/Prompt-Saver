@@ -39,7 +39,7 @@ const fmtTime = (s) => {
 };
 
 // Global fallbacks (expert menu) used when a prompt has no saved player state.
-let MEDIA_DEFAULTS = { volume: 100, muted: true, looped: true };
+let MEDIA_DEFAULTS = { volume: 100, muted: true, looped: false };
 export function setMediaDefaults(d) {
   MEDIA_DEFAULTS = { ...MEDIA_DEFAULTS, ...d };
 }

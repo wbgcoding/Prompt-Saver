@@ -1396,6 +1396,9 @@ the video editor and the introduction tour ship on).
   folder, and abandoned ones are swept.** A frame cut from a video that
   failed half way is removed at once; leftovers from a crash are cleaned up
   with the other temporary files.
+- **Key overlay and camera recording were shown as on.** Both are off until
+  you switch them on, as intended; before, the expert menu showed them on
+  while recording ignored them.
 
 ### Security
 
@@ -1684,6 +1687,8 @@ the video editor and the introduction tour ship on).
   preview and private notes are on by default, and opening the library puts
   the cursor in its search field. A switch you changed yourself stays as it
   is.
+- **Quieter defaults.** Tile videos no longer autoplay or loop. A switch you
+  changed yourself stays as it is.
 
 ## 2.6.3 (2026-07-26)
 

@@ -1193,9 +1193,7 @@ const FLAG_LABELS = {
   captions: "flagCaptions",
   copyBubble: "flagCopyBubble",
   videoControls: "flagVideoControls",
-  videoAutoplay: "flagVideoAutoplay",
   videoMuted: "flagVideoMuted",
-  videoLoop: "flagVideoLoop",
   // Duration badge + resolution/size tooltip line in the library and copy
   // history -- the main grid tile never reads either field.
   mediaMeta: "flagMediaMeta",
@@ -1384,18 +1382,6 @@ const FLAG_LABELS = {
   // Trims the black border the larger-than-window recording area leaves.
   // Ships ON, matching today's unconditional automatic crop exactly.
   recAutoCrop: "flagRecAutoCrop",
-  // System-wide key capture for the video editor's "keys" overlay. Ships
-  // OFF -- a low-level keyboard hook exists nowhere in this app unless the
-  // user turns this on for a specific recording.
-  keyOverlay: "flagKeyOverlay",
-  // Sub-toggle of keyOverlay: restricts capture to shortcut and navigation
-  // keys only (see mod keylog's resolve_verdict), for a recording with
-  // confidential input. Ships OFF -- the plain default records every key.
-  keyOverlayShortcutsOnly: "flagKeyOverlayShortcutsOnly",
-  // The record button's right-click "Record camera" entry and its own window.
-  // Ships OFF, like every feature that can turn a camera light on -- see
-  // camera.rs for the WebView2 permission handling this switch gates.
-  cameraRecord: "flagCameraRecord",
   numFieldWheel: "flagNumFieldWheel",
   editStateKeep: "flagEditStateKeep",
   recStopHotkey: "flagRecStopHotkey",
@@ -1560,6 +1546,22 @@ const OPT_FLAG_LABELS = {
   // new certificate, so it has its own confirmed command (toggleShortLivedCert).
   remoteTlsShortLived: "remoteTlsShortLived",
   urlScheme: "flagUrlScheme",
+  // System-wide key capture for the video editor's "keys" overlay. Ships
+  // OFF -- a low-level keyboard hook exists nowhere in this app unless the
+  // user turns this on for a specific recording.
+  keyOverlay: "flagKeyOverlay",
+  // Sub-toggle of keyOverlay: restricts capture to shortcut and navigation
+  // keys only (see mod keylog's resolve_verdict), for a recording with
+  // confidential input. Ships OFF -- the plain default records every key.
+  keyOverlayShortcutsOnly: "flagKeyOverlayShortcutsOnly",
+  // The record button's right-click "Record camera" entry and its own window.
+  // Ships OFF, like every feature that can turn a camera light on -- see
+  // camera.rs for the WebView2 permission handling this switch gates.
+  cameraRecord: "flagCameraRecord",
+  // Tile videos start playing on their own. Ships OFF.
+  videoAutoplay: "flagVideoAutoplay",
+  // Tile videos loop. Ships OFF.
+  videoLoop: "flagVideoLoop",
 };
 const OPT_FLAG_KEYS = Object.keys(OPT_FLAG_LABELS);
 const isOptFlag = (key) => key in OPT_FLAG_LABELS;
@@ -2520,7 +2522,7 @@ function applyValues() {
     const el = $(id);
     if (el) el.maxLength = nameMax;
   }
-  setMediaDefaults({ volume: val("videoVolume"), muted: flag("videoMuted"), looped: flag("videoLoop") });
+  setMediaDefaults({ volume: val("videoVolume"), muted: flag("videoMuted"), looped: optFlag("videoLoop") });
 }
 
 // Expert settings whose name alone doesn't explain what they do get a themed
@@ -6604,7 +6606,7 @@ function getVideoWrap(p, src) {
   video.src = src;
   video.muted = true;
   video.loop = true;
-  video.autoplay = flag("videoAutoplay");
+  video.autoplay = optFlag("videoAutoplay");
   video.playsInline = true;
   wrap.append(video);
   if (flag("videoControls")) {
@@ -6616,7 +6618,7 @@ function getVideoWrap(p, src) {
   applyVideoPrefs(video, settings.video_prefs?.[p.id]);
   // Ensure a freshly added video actually starts: the autoplay attribute alone
   // can be unreliable for dynamically created elements. Muted videos may play.
-  if (flag("videoAutoplay")) video.play().catch(() => {});
+  if (optFlag("videoAutoplay")) video.play().catch(() => {});
   videoCache.set(p.id, { src, wrap });
   return wrap;
 }

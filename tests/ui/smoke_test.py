@@ -3648,6 +3648,23 @@ PROBE = """
     try {
       document.getElementById('settings').classList.remove('hidden');
       await click('expert-open');
+      // The sub-switch only shows while the keys overlay itself is on, and that
+      // ships off: switch it on through its own row first.
+      const findKeysRow = () => [...document.querySelectorAll('#expert-flags .switch-field')]
+        .find(r => ((r.querySelector('span') || {}).textContent || '').includes('Show pressed keys'));
+      let keysRow = findKeysRow();
+      for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+        if (keysRow) break;
+        tb.click();
+        await sleep(150);
+        keysRow = findKeysRow();
+      }
+      const keysBox = keysRow && keysRow.querySelector('input.switch');
+      if (keysBox && !keysBox.checked) {
+        keysBox.checked = true;
+        keysBox.dispatchEvent(new Event('change'));
+        await sleep(250);
+      }
       const findRow = () => [...document.querySelectorAll('#expert-flags .switch-field')]
         .find(r => ((r.querySelector('span') || {}).textContent || '').includes('Shortcuts only'));
       let shortcutsRow = findRow();

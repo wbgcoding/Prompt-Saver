@@ -598,7 +598,7 @@ shadow off or dial its strength.
 
 ### Media
 
-Video controls, autoplay, mute, loop, plus grayscale/dim-until-hovered looks for
+Video controls, autoplay and loop (both off by default), mute, plus grayscale/dim-until-hovered looks for
 privacy-leaning media tiles. The library and copy history also show a video's
 length on its thumbnail and its resolution and file size in the tooltip; older
 attachments pick this up in the background the first time they are shown. The
@@ -1461,7 +1461,7 @@ der Sammelleiste der Bibliothek.
 Installation 30 Tage, einstellbar, 0 behält alles), Einzeleintrag löschen,
 Statistik mit 14-Tage-Diagramm.
 
-**Medien**: Video-Steuerung, Graustufen/Abdunkeln. Bibliothek und Kopierverlauf
+**Medien**: Video-Steuerung, Autoplay und Schleife (beide ab Werk aus), Graustufen/Abdunkeln. Bibliothek und Kopierverlauf
 zeigen außerdem die Länge eines Videos auf seinem Vorschaubild sowie Auflösung
 und Dateigröße in der Kurzhilfe; ältere Anhänge holen das im Hintergrund nach,
 sobald sie zum ersten Mal angezeigt werden. Das Hauptraster bleibt unverändert.

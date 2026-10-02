@@ -285,7 +285,7 @@ export const HELP_CONTENT = {
         "Adjust playback and privacy-leaning looks in the expert menu.",
       ],
       whatHappens: "Video settings (autoplay, mute, loop, volume) apply to every video tile; grayscale or dim-until-hovered only changes how media looks, never what gets copied. The library and copy history also show a video's length on its thumbnail, and its resolution and file size in the tooltip; the main grid never shows either.",
-      settings: ["Video controls, autoplay, mute, loop: Expert menu → Media → Media", "Grayscale, or dim until hovered: Expert menu → Media → Media", "Accent border and rounded corners around media: Expert menu → Media → Media", "Duration/resolution/size in the library and copy history: Expert menu → Media → Media", "Fill in media info for older attachments: Expert menu → Media → Media"],
+      settings: ["Video controls, autoplay and loop (off by default), mute: Expert menu → Media → Media", "Grayscale, or dim until hovered: Expert menu → Media → Media", "Accent border and rounded corners around media: Expert menu → Media → Media", "Duration/resolution/size in the library and copy history: Expert menu → Media → Media", "Fill in media info for older attachments: Expert menu → Media → Media"],
     },
     {
       section: "look",
@@ -1034,7 +1034,7 @@ export const HELP_CONTENT = {
         "Wiedergabe und privatsphärefreundliche Optiken im Expertenmenü anpassen.",
       ],
       whatHappens: "Video-Einstellungen (Autoplay, Stumm, Schleife, Lautstärke) gelten für jede Video-Kachel; Graustufen oder Abgedunkelt-bis-Hover ändert nur das Aussehen, nie den kopierten Inhalt. Bibliothek und Kopierverlauf zeigen außerdem die Länge eines Videos auf dem Vorschaubild sowie Auflösung und Dateigröße in der Kurzhilfe; das Hauptraster zeigt keins von beidem.",
-      settings: ["Video-Steuerung, Autoplay, Stumm, Schleife: Expertenmenü → Medien → Medien", "Graustufen oder abgedunkelt bis gehovert: Expertenmenü → Medien → Medien", "Akzentrahmen und abgerundete Ecken um Medien: Expertenmenü → Medien → Medien", "Dauer/Auflösung/Größe in Bibliothek und Kopierverlauf: Expertenmenü → Medien → Medien", "Medienangaben bei älteren Anhängen nachtragen: Expertenmenü → Medien → Medien"],
+      settings: ["Video-Steuerung, Autoplay und Schleife (ab Werk aus), Stumm: Expertenmenü → Medien → Medien", "Graustufen oder abgedunkelt bis gehovert: Expertenmenü → Medien → Medien", "Akzentrahmen und abgerundete Ecken um Medien: Expertenmenü → Medien → Medien", "Dauer/Auflösung/Größe in Bibliothek und Kopierverlauf: Expertenmenü → Medien → Medien", "Medienangaben bei älteren Anhängen nachtragen: Expertenmenü → Medien → Medien"],
     },
     {
       section: "look",

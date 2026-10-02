@@ -42,7 +42,7 @@ let copyFont = ""; // expert copy-text font key ("" = pill font)
 let pFont = ""; // per-prompt overrides ("" / 0 = follow settings)
 let cooldownMs = COOLDOWN_MS_DEFAULT; // re-copy throttle for this pill (expert value)
 let videoControlsOn = true; // gates the hover media bar, mirrors flag("videoControls") in main.js
-let videoAutoplayOn = true; // gates the initial auto-start, mirrors flag("videoAutoplay") in main.js
+let videoAutoplayOn = false; // gates the initial auto-start, mirrors optFlag("videoAutoplay") in main.js
 let lastCopyTs = 0;
 // Auto-paste on this pill (autoPaste itself defaults on; the rest default off;
 // a fast second click pastes).
@@ -229,8 +229,8 @@ function applyPrefs(s) {
   // Pills used media.js's hardcoded {volume:100, muted:true, looped:true} --
   // the expert videoVolume/videoMuted/videoLoop settings never reached them. Same
   // defaults main.js's applyValues() pushes for the grid tiles.
-  setMediaDefaults({ volume: Number(s.ui_values?.videoVolume) || 100, muted: s.ui_flags?.videoMuted !== false, looped: s.ui_flags?.videoLoop !== false });
-  videoAutoplayOn = s.ui_flags?.videoAutoplay !== false; // default on, matches flag("videoAutoplay")
+  setMediaDefaults({ volume: Number(s.ui_values?.videoVolume) || 100, muted: s.ui_flags?.videoMuted !== false, looped: s.ui_flags?.videoLoop === true });
+  videoAutoplayOn = s.ui_flags?.videoAutoplay === true; // default off, matches optFlag("videoAutoplay")
   videoControlsOn = s.ui_flags?.videoControls !== false; // default on, matches flag("videoControls")
   if (!videoControlsOn) mediaBar.classList.add("hidden"); // off mid-hover must not leave it stuck open
   // Clamp to the backend's stored range (SCALE_MIN to SCALE_MAX): a corrupt
