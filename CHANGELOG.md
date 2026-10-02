@@ -1720,6 +1720,10 @@ the video editor and the introduction tour ship on).
   had several on, the first of them in that order is kept.
 - **The screenshot editor remembers tool sizes.** Each tool starts with the size
   you used last; the twelve default-size sliders are gone.
+- **Expert menu regrouped.** Screen recording, while recording and camera
+  recording are separate groups, the library splits into Search and Display,
+  colours and media moved into their neighbours, and the header's right-click
+  list only shows or hides buttons.
 
 ## 2.6.3 (2026-07-26)
 

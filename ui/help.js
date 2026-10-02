@@ -208,7 +208,7 @@ export const HELP_CONTENT = {
       whatItIs: "Eight built-in themes cover system, light, dark, and five accent styles.",
       howTo: ["Pick a theme from Settings.", "Open the theme editor, once enabled, to adjust any theme's colors and save a custom one."],
       whatHappens: "\"System\" follows the OS light or dark setting live. A custom theme is saved separately; the built-in it was based on stays untouched.",
-      settings: ["Theme choice: Settings", "Theme editor: Expert menu → Appearance → Global color palette", "Accent-colored header, frosted dialogs, hidden or accent-colored scrollbars, smooth scrolling: Expert menu → Appearance → Visual"],
+      settings: ["Theme choice: Settings", "Theme editor: Expert menu → Appearance → Visual", "Accent-colored header, frosted dialogs, hidden or accent-colored scrollbars, smooth scrolling: Expert menu → Appearance → Visual"],
       tip: "Custom themes are on out of the box; switching them off in the expert menu also hides the editor button {icon:themeEditor}.",
     },
     {
@@ -287,7 +287,7 @@ export const HELP_CONTENT = {
         "Adjust playback and privacy-leaning looks in the expert menu.",
       ],
       whatHappens: "Video settings (autoplay, mute, loop, volume) apply to every video tile; grayscale or dimming only changes how media looks, never what gets copied. The library and copy history also show a video's length on its thumbnail, and its resolution and file size in the tooltip; the main grid never shows either.",
-      settings: ["Video controls, autoplay and loop (off by default), mute: Expert menu → Media → Media", "Grayscale: Expert menu → Media → Media", "Accent border and rounded corners around media: Expert menu → Media → Media", "Duration/resolution/size in the library and copy history: Expert menu → Media → Media", "Fill in media info for older attachments: Expert menu → Media → Media"],
+      settings: ["Video controls, autoplay and loop (off by default), mute: Expert menu → Tiles → Media", "Grayscale: Expert menu → Tiles → Media", "Accent border and rounded corners around media: Expert menu → Tiles → Media", "Duration/resolution/size in the library and copy history: Expert menu → Tiles → Media", "Fill in media info for older attachments: Expert menu → Tiles → Media"],
     },
     {
       section: "look",
@@ -387,7 +387,7 @@ export const HELP_CONTENT = {
       title: "Standalone: Theme editor",
       whatItIs: "The theme editor adjusts any built-in theme's colors and saves the result as a new theme.",
       howTo: [
-        "Open the theme editor: Expert menu → Appearance → Global color palette.",
+        "Open the theme editor: Expert menu → Appearance → Visual.",
         "Custom themes must be on, which they are by default.",
         "Pick a base theme, adjust colors, and save under a new name.",
       ],
@@ -959,7 +959,7 @@ export const HELP_CONTENT = {
       whatItIs: "Acht integrierte Themes decken System, Hell, Dunkel und fünf Akzent-Varianten ab.",
       howTo: ["Ein Theme in den Einstellungen wählen.", "Den Theme-Editor, sobald aktiviert, öffnen, um Farben eines Themes anzupassen und ein eigenes zu speichern."],
       whatHappens: "\"System\" folgt live der Hell-/Dunkel-Einstellung des Betriebssystems. Ein benutzerdefiniertes Theme wird separat gespeichert; das integrierte, auf dem es basierte, bleibt unangetastet.",
-      settings: ["Theme-Wahl: Einstellungen", "Theme-Editor: Expertenmenü → Aussehen → Globale Farbpalette", "Kopfzeile in Akzentfarbe, milchige Dialoge, versteckte oder eingefärbte Scrollbalken, weiches Scrollen: Expertenmenü → Aussehen → Visuell"],
+      settings: ["Theme-Wahl: Einstellungen", "Theme-Editor: Expertenmenü → Aussehen → Visuell", "Kopfzeile in Akzentfarbe, milchige Dialoge, versteckte oder eingefärbte Scrollbalken, weiches Scrollen: Expertenmenü → Aussehen → Visuell"],
       tip: "Benutzerdefinierte Themes sind ab Werk an; werden sie im Expertenmenü ausgeschaltet, verschwindet auch der Editor-Button {icon:themeEditor}.",
     },
     {
@@ -1038,7 +1038,7 @@ export const HELP_CONTENT = {
         "Wiedergabe und privatsphärefreundliche Optiken im Expertenmenü anpassen.",
       ],
       whatHappens: "Video-Einstellungen (Autoplay, Stumm, Schleife, Lautstärke) gelten für jede Video-Kachel; Graustufen oder Abgedunkelt-bis-Hover ändert nur das Aussehen, nie den kopierten Inhalt. Bibliothek und Kopierverlauf zeigen außerdem die Länge eines Videos auf dem Vorschaubild sowie Auflösung und Dateigröße in der Kurzhilfe; das Hauptraster zeigt keins von beidem.",
-      settings: ["Video-Steuerung, Autoplay und Schleife (ab Werk aus), Stumm: Expertenmenü → Medien → Medien", "Graustufen: Expertenmenü → Medien → Medien", "Akzentrahmen und abgerundete Ecken um Medien: Expertenmenü → Medien → Medien", "Dauer/Auflösung/Größe in Bibliothek und Kopierverlauf: Expertenmenü → Medien → Medien", "Medienangaben bei älteren Anhängen nachtragen: Expertenmenü → Medien → Medien"],
+      settings: ["Video-Steuerung, Autoplay und Schleife (ab Werk aus), Stumm: Expertenmenü → Kacheln → Medien", "Graustufen: Expertenmenü → Kacheln → Medien", "Akzentrahmen und abgerundete Ecken um Medien: Expertenmenü → Kacheln → Medien", "Dauer/Auflösung/Größe in Bibliothek und Kopierverlauf: Expertenmenü → Kacheln → Medien", "Medienangaben bei älteren Anhängen nachtragen: Expertenmenü → Kacheln → Medien"],
     },
     {
       section: "look",
@@ -1138,7 +1138,7 @@ export const HELP_CONTENT = {
       title: "Eigenständig: Theme-Editor",
       whatItIs: "Der Theme-Editor passt die Farben eines beliebigen integrierten Themes an und speichert das Ergebnis als neues Theme.",
       howTo: [
-        "Den Theme-Editor öffnen: Expertenmenü → Aussehen → Globale Farbpalette.",
+        "Den Theme-Editor öffnen: Expertenmenü → Aussehen → Visuell.",
         "Benutzerdefinierte Themes müssen an sein, was ab Werk der Fall ist.",
         "Ein Basis-Theme wählen, Farben anpassen und unter neuem Namen speichern.",
       ],
