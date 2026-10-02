@@ -17050,12 +17050,13 @@ function bind() {
     const btn = $("record-btn");
     btn.classList.toggle("is-recording", state === "recording");
     btn.classList.toggle("is-paused", state === "paused");
-    // Idle keeps its own data-i18n-title tooltip (recordTitle); the click now
-    // stops the recording instead of trying to start a second one while
-    // either indicator is glowing, so the tooltip has to say that.
-    const label = state === "idle" ? t(btn.dataset.i18nTitle) : t("recBtnStopTip");
-    btn.title = label;
-    btn.setAttribute("aria-label", label);
+    // Idle keeps its own data-i18n-title tooltip (with the right-click hint) and
+    // the plain name as accessible name; the click now stops the recording instead
+    // of trying to start a second one while either indicator is glowing, so the
+    // tooltip has to say that.
+    const idle = state === "idle";
+    btn.title = idle ? t(btn.dataset.i18nTitle) : t("recBtnStopTip");
+    btn.setAttribute("aria-label", idle ? t(btn.dataset.i18nAria) : t("recBtnStopTip"));
   }
   async function syncRecordBtnFromStatus() {
     // Skipped while the window is hidden (minimized to tray) -- the button

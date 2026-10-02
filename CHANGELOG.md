@@ -1732,6 +1732,9 @@ the video editor and the introduction tour ship on).
   right-click menu or a right-click on an empty spot of the grid.
 - **Notices above the grid share one line.** Only the most important one
   shows, a counter beside it steps through the rest.
+- **The composer button tooltips name their right-click function.** The
+  screenshot, screen recording and attach file buttons now say what a right-
+  click does, like the color picker already did.
 
 ## 2.6.3 (2026-07-26)
 

@@ -2995,6 +2995,22 @@ PROBE = """
     if (!snipBtnEl || !recordBtnEl) {
       out.errors.push('417: the screenshot or record button is missing');
     } else {
+      // Every composer button with a right-click function names it in parentheses
+      // in its tooltip; the accessible name of the first two stays the plain name.
+      for (const id of ['snip-btn', 'record-btn', 'picker-btn', 'file-btn']) {
+        const btnEl = document.getElementById(id) || {};
+        // A running recording swaps the record tooltip for its stop text.
+        if (id === 'record-btn' && btnEl.classList && (btnEl.classList.contains('is-recording') || btnEl.classList.contains('is-paused'))) {
+          if (btnEl.dataset.i18nTitle !== 'recordBtnTip') out.errors.push('the record button idle tooltip is not the one with the right-click hint');
+          continue;
+        }
+        const tip = btnEl.title || '';
+        if (!/[(（].+[:：].+[)）]/.test(tip)) out.errors.push('composer button ' + id + ' tooltip does not name its right-click function: ' + tip);
+      }
+      for (const b of [snipBtnEl, recordBtnEl]) {
+        const al = b.getAttribute('aria-label') || '';
+        if (!al || /[(（]/.test(al)) out.errors.push('composer button ' + b.id + ' has no plain accessible name: ' + al);
+      }
       recordBtnEl.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
       await sleep(150);
       let openEditPop = document.querySelector('.open-editor-pop');
