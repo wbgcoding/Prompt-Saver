@@ -2789,10 +2789,9 @@ impl Settings {
         // the new default is 0. An install that stored none of the three keys takes
         // the new default; one that stored any of them keeps exactly the lift it
         // shows today, where an unstored switch counts as its old default, on.
-        if self.ui_flags.contains_key("tileHoverLift")
-            || self.ui_flags.contains_key("tileHover")
-            || self.ui_values.contains_key("hoverLift")
-        {
+        // Only while an old switch is still stored: afterwards "hoverLift" is the
+        // distance alone and a stored 0 (off) must survive every launch.
+        if self.ui_flags.contains_key("tileHoverLift") || self.ui_flags.contains_key("tileHover") {
             let on = self.ui_flags.get("tileHover") != Some(&false)
                 && self.ui_flags.get("tileHoverLift") != Some(&false);
             if on {
@@ -51892,6 +51891,11 @@ mod tests {
         // Either switch stored off means no lift.
         assert_eq!(lift(&run(&[("tileHoverLift", false)], &[("hoverLift", 3.0)])), None);
         assert_eq!(lift(&run(&[("tileHover", false)], &[])), None);
+        // A lift of 0 (off) with no old switch left stays 0 through repeated launches.
+        let mut s = run(&[], &[("hoverLift", 0.0)]);
+        s.migrate();
+        s.migrate();
+        assert_eq!(lift(&s), Some(0.0));
     }
 
     #[test]
