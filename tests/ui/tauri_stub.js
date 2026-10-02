@@ -298,6 +298,13 @@ if (window.__DRAG_VIEW_TEST__) {
 
 const clone = () => JSON.parse(JSON.stringify(SETTINGS));
 
+const clipInboxSeed = () => [
+  { id: 1, ts: 1750000000, text: "Smoke clip inbox item" },
+  { id: 2, ts: 1750000100, text: "Second copy from another app" },
+];
+let CLIP_INBOX = clipInboxSeed();
+window.__resetClipInbox = () => { CLIP_INBOX = clipInboxSeed(); };
+
 // Mirrors the backend's first_free_cell_excluding: row-major scan of the view's own
 // layout, also skipping any cell in `extra` (another grid folder's own cell, which
 // lives outside view.layouts).
@@ -832,9 +839,11 @@ const RESULTS = {
     SETTINGS.example_prompt_seeds = {};
     return null;
   },
-  // 434: one fixture row, so the "clear then undo" round trip has something
-  // real to snapshot and replay instead of a no-op on an empty list.
-  clip_inbox_list: () => [{ id: 1, ts: 1750000000, text: "Smoke clip inbox item" }],
+  // Two stored copies from other apps, so the copy history has real entries to list as
+  // "copied elsewhere", to dismiss one of, and to snapshot and replay on a clear.
+  // Clear and restore stay no-ops so every later check still finds both.
+  clip_inbox_list: () => CLIP_INBOX.map((x) => ({ ...x })),
+  clip_inbox_dismiss: (a) => { CLIP_INBOX = CLIP_INBOX.filter((x) => x.id !== (a && a.id)); return null; },
   restore_clip_inbox: () => null,
   // P31: two snapshots for p6, each one word off from the next, so the diff
   // view has something real to highlight (list_versions is newest-first).

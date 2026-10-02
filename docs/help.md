@@ -516,17 +516,18 @@ clearing one no longer means opening that tile's editor.
 
 A tile with its own hotkey shows a small keyboard symbol.
 
-### Clipboard watcher
+### Copies from other apps
 
-Off by default. When switched on, everything copied anywhere on the system (not
-just from this app) is logged into an inbox that can be reviewed and turned into
-tiles later; a minimum-length filter and an inbox cap keep it from growing
-unbounded.
+Off by default. When switched on, text copied anywhere on the system (not just
+from this app) is also recorded in the copy history, marked as copied elsewhere;
+the source filter in Library → Copy history shows only those, and a useful one
+can be saved as a tile. A minimum-length filter and a cap keep the list from
+growing unbounded.
 
 ### Copy history
 
-A log of what was copied and when, separate from the clipboard watcher (this
-only records copies made through the app). Grouped view, automatic retention
+A log of what was copied and when, through the app and, if "Record copies from
+other apps" is on, elsewhere. Grouped view, automatic retention
 (30 days for a new install, adjustable, 0 keeps everything),
 per-entry delete, and usage statistics including a 14-day activity chart.
 
@@ -780,8 +781,7 @@ deletion; those need setting up again.
 ### Undo
 
 A few actions outside the tile trash carry their own one-step Undo button on the
-confirmation message: deleting a view, clearing the copy history, clearing the
-clipboard inbox, deleting a tag, and a batch delete or batch tag change in the
+confirmation message: deleting a view, clearing the copy history, deleting a tag, and a batch delete or batch tag change in the
 library. There is only ever one undo waiting; a later destructive action
 replaces it, and the button disappears once the message itself does. Turn it
 off in the expert menu if you would rather the message stayed a plain
@@ -1029,7 +1029,7 @@ with a short list of the ones never used, all counted locally and included in
 the export.
 
 A retention section lists one row per kind of data this app keeps around on
-its own (trash, copy history, the clipboard inbox, recordings, discarded
+its own (trash, copy history, copies from other apps, recordings, discarded
 recordings, temporary exports, and unfinished-edit states), with how much is
 there right now, how long it is kept, a button to clean it up on the spot, and
 a button that jumps straight to the matching expert-menu setting. The numbers
@@ -1412,8 +1412,8 @@ zum Thema passendes Fenster statt des einfachen Windows-Menüs; im Expertenmenü
 lässt sich bei Bedarf auf das einfache Systemmenü zurückschalten. Dort auch
 einstellbar: die maximale Länge eines Eintragsnamens.
 
-**Zwischenablage-Überwachung**: aus, protokolliert bei Bedarf alles Kopierte im
-System.
+**Kopien aus anderen Apps**: aus; eingeschaltet nimmt der Kopierverlauf auch Text
+auf, der in anderen Apps kopiert wurde, filterbar nach Herkunft.
 
 **Kachel-Verhalten & -Aussehen**: Menü, Umsortieren, Hover-Anhebung, Optik. Die
 Schrift auf Kacheln, Ordnern, Ansichts-Tabs und Meldungen wählt automatisch
@@ -1564,7 +1564,7 @@ ohne schwebenden Button, Ordner-Mitgliedschaft oder Hotkey von vorher.
 
 **Rückgängig**: einige Aktionen außerhalb des Kachel-Papierkorbs tragen einen
 eigenen Rückgängig-Button direkt auf der Meldung: eine Ansicht löschen, den
-Kopierverlauf leeren, den Zwischenablage-Eingang leeren, einen Tag löschen, und
+Kopierverlauf leeren, einen Tag löschen, und
 eine Sammellöschung oder Sammeländerung von Tags in der Bibliothek. Es wartet
 immer nur eine einzige Rücknahme; eine spätere zerstörende Aktion ersetzt sie,
 und der Button verschwindet mit der Meldung selbst. Im Expertenmenü lässt sich
@@ -1779,7 +1779,7 @@ die meistgenutzten Werkzeuge auf, von Bildschirmfotos bis Backups, mit
 einer kurzen Liste der noch nie benutzten. Alles wird rein lokal gezählt und
 ist im Export enthalten. Ein Aufbewahrungsbereich listet eine Zeile je Art
 von Daten, die diese App selbst aufhebt (Papierkorb, Kopierverlauf,
-Zwischenablage-Eingang, Aufnahmen, verworfene Aufnahmen, temporäre Exporte
+Kopien aus anderen Apps, Aufnahmen, verworfene Aufnahmen, temporäre Exporte
 und unfertige Bearbeitungsstände), mit dem aktuellen Stand, wie lange er
 bleibt, einem Button zum sofortigen Aufräumen und einem Button, der direkt zur
 zugehörigen Einstellung im Expertenmenü springt. Die Zahlen werden im

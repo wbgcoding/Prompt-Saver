@@ -1330,13 +1330,10 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
    Every dialog reached from EXPERT_ACTIONS belongs here: the expert menu leaves
    settings open behind it, so a base-z overlay opens invisible. */
 #dupes-modal.overlay,
-#trash-modal.overlay,
-#clip-modal.overlay { z-index: 65; }
+#trash-modal.overlay { z-index: 65; }
 /* Help is opened from inside settings, but both shared the base z-index and
    help sits earlier in the DOM; it rendered behind the dialog that opened it. */
 #help.overlay { z-index: 60; }
-/* Wide enough that the title, the on/off switch and "Clear all" stay on one line. */
-#clip-modal .modal { width: min(580px, 92vw); }
 /* Recording on/off: greyed out while paused, accent-filled while collecting. */
 .watch-toggle { color: var(--muted); }
 .watch-toggle:hover { color: var(--fg); }
@@ -3706,8 +3703,7 @@ input[type="password"]::-ms-clear { display: none; }
 .bg-ops-pct { flex: 0 0 auto; color: var(--muted); font-variant-numeric: tabular-nums; }
 .bg-ops-action { flex: 0 0 auto; padding: 2px 8px; font-size: 12px; }
 
-/* Clipboard inbox. */
-.clip-inbox-btn { position: relative; }
+/* Copies from other apps: badge (also used by the background-tasks button) and row chrome. */
 .clip-badge {
   position: absolute; top: -2px; right: -2px;
   display: grid; place-items: center;
@@ -3860,6 +3856,7 @@ input[type="password"]::-ms-clear { display: none; }
 .journal-filters { display: flex; gap: 12px; align-items: center; flex-wrap: nowrap; }
 .journal-filters > .lib-colors { flex: 1 1 auto; min-width: 0; }
 .journal-col { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.journal-body.journal-single { grid-template-columns: 1fr; }
 .journal-body::-webkit-scrollbar { width: var(--sb-width, 12px); }
 .journal-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; border: 3px solid var(--surface); }
 .journal-body::-webkit-scrollbar-thumb:hover { background: var(--muted); }

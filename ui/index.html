@@ -49,13 +49,6 @@
           <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14Zm10 17-5.6-5.6"/>
         </svg>
       </button>
-      <!-- Clipboard inbox (shown only while the watcher is on and non-empty) -->
-      <button id="clip-btn" class="icon-btn clip-inbox-btn hidden" data-i18n-title="clipInbox" data-i18n-aria="clipInbox">
-        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-          <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 4h6a1 1 0 0 1 1 1v1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h1V5a1 1 0 0 1 1-1Zm0 2v1h6V6M9 4h6"/>
-        </svg>
-        <span id="clip-badge" class="clip-badge">0</span>
-      </button>
       <!-- Prompt chaining, sitting just left of the window/app controls -->
       <button id="chain-btn" class="icon-btn chain-toggle" type="button" aria-pressed="false" data-i18n-title="chainVsRotateHint" data-i18n-aria="chainTooltip">
         <!-- Off: broken link (bar split). Active: joined link (solid bar). First click
@@ -495,34 +488,6 @@
     </div>
   </div>
 
-  <!-- Clipboard inbox -->
-  <div id="clip-modal" class="overlay hidden" role="dialog" aria-modal="true">
-    <div class="modal">
-      <div class="modal-head">
-        <h2 class="modal-title" data-i18n="clipInbox">Clipboard inbox</h2>
-        <div class="modal-head-actions">
-          <!-- Pause/resume collecting without leaving the inbox -->
-          <button id="clip-toggle" type="button" class="icon-btn watch-toggle" data-i18n-title="flagClipWatcher" data-i18n-aria="flagClipWatcher">
-            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-              <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 3.6v7.2"/>
-              <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M17.4 6.3a7.2 7.2 0 1 1-10.8 0"/>
-            </svg>
-          </button>
-          <button id="clip-clear" type="button" class="head-toggle" data-i18n="clearAll">Clear all</button>
-          <!-- Emergency wipe: something sensitive got copied and may still be sitting
-               inside a rotating backup snapshot, DPAPI-sealed but not gone. -->
-          <button id="clip-purge-backups" type="button" class="head-toggle danger-btn" data-i18n="clipPurgeBackups" data-i18n-title="tipClipPurgeBackups">Purge from all backups</button>
-          <button id="clip-close" class="icon-btn" data-i18n-aria="close">
-            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-              <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
-            </svg>
-          </button>
-        </div>
-      </div>
-      <div id="clip-list" class="clip-list"></div>
-    </div>
-  </div>
-
   <!-- Duplicate finder -->
   <div id="dupes-modal" class="overlay hidden" role="dialog" aria-modal="true">
     <div class="modal">
@@ -914,6 +879,16 @@
         <h2 class="modal-title" data-i18n="journal">Copy history</h2>
         <span id="journal-count" class="modal-count"></span>
         <div class="modal-head-actions">
+          <!-- Pause/resume recording copies from other apps without leaving the list -->
+          <button id="clip-toggle" type="button" class="icon-btn watch-toggle hidden" data-i18n-title="flagClipWatcher" data-i18n-aria="flagClipWatcher">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 3.6v7.2"/>
+              <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M17.4 6.3a7.2 7.2 0 1 1-10.8 0"/>
+            </svg>
+          </button>
+          <!-- Emergency wipe: something sensitive got copied and may still be sitting
+               inside a rotating backup snapshot, DPAPI-sealed but not gone. -->
+          <button id="clip-purge-backups" type="button" class="head-toggle danger-btn hidden" data-i18n="clipPurgeBackups" data-i18n-title="tipClipPurgeBackups">Purge from all backups</button>
           <button id="journal-clear" type="button" class="head-toggle head-clear" data-i18n="clearHistory">Clear history</button>
           <button id="journal-close" class="icon-btn" data-i18n-aria="close">
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
@@ -925,6 +900,11 @@
       <div id="journal-search" class="library-search">
         <input id="journal-q" class="modal-input" type="text" data-i18n-ph="searchPh" data-i18n-aria="searchPh" />
         <div class="journal-filters">
+          <div id="journal-source" class="lib-types hidden">
+            <button type="button" class="lib-type active" data-source="all" data-i18n="filterAll">All</button>
+            <button type="button" class="lib-type" data-source="app" data-i18n="sourceApp">In the app</button>
+            <button type="button" class="lib-type" data-source="elsewhere" data-i18n="sourceElsewhere">Elsewhere</button>
+          </div>
           <div id="journal-types" class="lib-types">
             <button type="button" class="lib-type active" data-type="all" data-i18n="filterAll">All</button>
             <button type="button" class="lib-type" data-type="image" data-i18n="filterImage">Image</button>

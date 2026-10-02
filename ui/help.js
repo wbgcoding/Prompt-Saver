@@ -146,16 +146,16 @@ export const HELP_CONTENT = {
     },
     {
       section: "copying",
-      title: "Clipboard watcher",
-      whatItIs: "The clipboard watcher logs everything copied anywhere on the system into a reviewable inbox.",
+      title: "Copies from other apps",
+      whatItIs: "When switched on, the copy history also records text copied anywhere on the system, marked as copied elsewhere.",
       howTo: [
-        "Turn the watcher on in the expert menu.",
-        "Copy text anywhere on the system as normal.",
-        "Open the clipboard inbox to review captured entries and save the useful ones as tiles.",
+        "Turn on \"Record copies from other apps\" in the expert menu.",
+        "Copy text anywhere on the system as usual.",
+        "Open Library → Copy history, set the source filter to \"Elsewhere\" and save the useful entries as tiles.",
       ],
       whatHappens:
-        "Nothing is watched until it is turned on. Copies shorter than the minimum length are ignored, and the oldest entries drop once the inbox grows past its cap. With \"Skip likely passwords\" on, a copy that looks like a password (one line, no spaces, mixed letters, digits and symbols) is never added; it is a best guess, so it skips rather than risks keeping one. Switching the watcher off asks whether to keep or delete what was collected; closing that question keeps it. Clearing the inbox offers an undo button on its message.",
-      settings: ["Skip likely passwords, minimum length, inbox cap: Expert menu → Features → Clipboard watcher"],
+        "Nothing is watched until it is turned on. Copies shorter than the minimum length are ignored, and the oldest of these entries drop once they pass their cap. With \"Skip likely passwords\" on, a copy that looks like a password (one line, no spaces, mixed letters, digits and symbols) is never added; it is a best guess, so it skips rather than risks keeping one. Switching the watcher off asks whether to keep or delete what was collected; closing that question keeps it. Clearing the inbox offers an undo button on its message.",
+      settings: ["Skip likely passwords, minimum length, cap: Expert menu → Library & History → Copy history"],
       tip: "Off by default: nothing is watched until it is turned on.",
     },
     {
@@ -268,7 +268,7 @@ export const HELP_CONTENT = {
     {
       section: "copying",
       title: "Copy history",
-      whatItIs: "Copy history logs what was copied and when, separate from the clipboard watcher.",
+      whatItIs: "Copy history logs what was copied and when, in the app and, if switched on, in other apps.",
       howTo: [
         "Click \"Copy history\" to open the journal.",
         "Search, filter by type or color, or star a favorite from the list.",
@@ -353,7 +353,7 @@ export const HELP_CONTENT = {
         "Restore from the snapshot list, choosing data only, settings only, or both.",
       ],
       whatHappens:
-        "Retention tiers (daily, weekly, monthly, yearly) thin out older snapshots automatically instead of keeping every one forever. A backup is either whole or absent; a failed one leaves nothing behind. The same window also has a usage-statistics section (totals, a 14-day activity chart, most-used tiles, most-used tools with a list of the ones never touched), unrelated to the backups themselves, plus a storage breakdown of what is taking up disk space. Each snapshot can open its contents: counts, the newest change inside it, the version that made it, and every tile it holds, searchable and sortable, with a button to restore one tile on its own. The statistics can be saved as CSV, TXT or JSON. One row per kind of kept data (trash, copy history, clipboard inbox, recordings, temporary exports, edit states) shows how much it holds and how long it is kept, jumps to its setting and can clean it up on the spot.",
+        "Retention tiers (daily, weekly, monthly, yearly) thin out older snapshots automatically instead of keeping every one forever. A backup is either whole or absent; a failed one leaves nothing behind. The same window also has a usage-statistics section (totals, a 14-day activity chart, most-used tiles, most-used tools with a list of the ones never touched), unrelated to the backups themselves, plus a storage breakdown of what is taking up disk space. Each snapshot can open its contents: counts, the newest change inside it, the version that made it, and every tile it holds, searchable and sortable, with a button to restore one tile on its own. The statistics can be saved as CSV, TXT or JSON. One row per kind of kept data (trash, copy history, copies from other apps, recordings, temporary exports, edit states) shows how much it holds and how long it is kept, jumps to its setting and can clean it up on the spot.",
       settings: [
         "Interval, retention tiers, password, restore scope: Backup manager (its own window, opened from Settings)",
         "Usage statistics, how many tiles it lists: same window, below the backups",
@@ -447,7 +447,7 @@ export const HELP_CONTENT = {
       title: "Undo button",
       whatItIs: "Some actions outside the trash offer a one-step undo right on their confirmation message.",
       howTo: [
-        "Delete a view, clear the copy history or the clipboard inbox, delete a tag, or run a batch delete or tag change.",
+        "Delete a view, clear the copy history, delete a tag, or run a batch delete or tag change.",
         "Click Undo on the message that appears.",
       ],
       whatHappens:
@@ -718,7 +718,7 @@ export const HELP_CONTENT = {
         "Add --json for machine-readable output, and --yes to any command that changes something.",
       ],
       whatHappens:
-        "If the app is already running, the command goes to it and its answer is printed; otherwise the command runs on its own without a window. Only one copy ever touches the data at a time. Without --yes a changing command only says what it would do. Folder locations, the vault, the backup password and every remote access setting, the clipboard inbox and the link switch cannot be changed from here, only in the app.",
+        "If the app is already running, the command goes to it and its answer is printed; otherwise the command runs on its own without a window. Only one copy ever touches the data at a time. Without --yes a changing command only says what it would do. Folder locations, the vault, the backup password and every remote access setting, recording copies from other apps and the link switch cannot be changed from here, only in the app.",
       settings: [],
     },
     {
@@ -894,17 +894,17 @@ export const HELP_CONTENT = {
     },
     {
       section: "copying",
-      title: "Zwischenablage-Überwachung",
+      title: "Kopien aus anderen Apps",
       whatItIs:
-        "Die Zwischenablage-Überwachung protokolliert alles, was irgendwo auf dem System kopiert wird, in einem einsehbaren Posteingang.",
+        "Eingeschaltet nimmt der Kopierverlauf auch Text auf, der irgendwo im System kopiert wurde, markiert als anderswo kopiert.",
       howTo: [
-        "Die Überwachung im Expertenmenü einschalten.",
-        "Text ganz normal irgendwo auf dem System kopieren.",
-        "Den Posteingang öffnen, um erfasste Einträge zu prüfen und nützliche als Kacheln zu speichern.",
+        "„Kopien aus anderen Apps aufnehmen“ im Expertenmenü einschalten.",
+        "Text wie gewohnt irgendwo im System kopieren.",
+        "Bibliothek → Kopierverlauf öffnen, den Herkunftsfilter auf „Anderswo“ stellen und nützliche Einträge als Kacheln speichern.",
       ],
       whatHappens:
-        "Es wird nichts überwacht, bis die Funktion eingeschaltet ist. Kopien unter der Mindestlänge werden ignoriert, und die ältesten Einträge fallen weg, sobald der Posteingang seine Kapazität überschreitet. Mit \"Vermutete Passwörter überspringen\" landet eine Kopie, die wie ein Passwort aussieht (eine Zeile, keine Leerzeichen, gemischte Buchstaben, Ziffern und Zeichen), nie im Eingang; das ist eine Schätzung, die im Zweifel lieber überspringt. Beim Ausschalten fragt die App, ob das Gesammelte behalten oder gelöscht werden soll; wer die Frage schließt, behält es. Nach dem Leeren des Eingangs bietet die Meldung einen Rückgängig-Button.",
-      settings: ["Vermutete Passwörter überspringen, Mindestlänge, Posteingang-Kapazität: Expertenmenü → Funktionen → Zwischenablage-Überwachung"],
+        "Es wird nichts überwacht, bis die Funktion eingeschaltet ist. Kopien unter der Mindestlänge werden ignoriert, und die ältesten dieser Einträge fallen weg, sobald sie ihre Obergrenze überschreiten. Mit \"Vermutete Passwörter überspringen\" landet eine Kopie, die wie ein Passwort aussieht (eine Zeile, keine Leerzeichen, gemischte Buchstaben, Ziffern und Zeichen), nie im Eingang; das ist eine Schätzung, die im Zweifel lieber überspringt. Beim Ausschalten fragt die App, ob das Gesammelte behalten oder gelöscht werden soll; wer die Frage schließt, behält es. Nach dem Leeren des Eingangs bietet die Meldung einen Rückgängig-Button.",
+      settings: ["Vermutete Passwörter überspringen, Mindestlänge, Obergrenze: Expertenmenü → Bibliothek & Verlauf → Kopierverlauf"],
       tip: "Standardmäßig aus: es wird nichts überwacht, bis die Funktion eingeschaltet ist.",
     },
     {
@@ -1017,7 +1017,7 @@ export const HELP_CONTENT = {
     {
       section: "copying",
       title: "Kopierverlauf",
-      whatItIs: "Der Kopierverlauf protokolliert, was wann kopiert wurde, getrennt von der Zwischenablage-Überwachung.",
+      whatItIs: "Der Kopierverlauf protokolliert, was wann kopiert wurde, in der App und, wenn eingeschaltet, in anderen Apps.",
       howTo: [
         "Klick auf \"Kopierverlauf\" öffnet das Journal.",
         "Suchen, nach Typ oder Farbe filtern, oder einen Favoriten aus der Liste markieren.",
@@ -1102,7 +1102,7 @@ export const HELP_CONTENT = {
         "Aus der Snapshot-Liste wiederherstellen und dabei nur Daten, nur Einstellungen oder beides wählen.",
       ],
       whatHappens:
-        "Aufbewahrungsstufen (täglich, wöchentlich, monatlich, jährlich) dünnen ältere Snapshots automatisch aus, statt jeden für immer zu behalten. Ein Backup ist entweder vollständig oder gar nicht vorhanden; ein fehlgeschlagenes hinterlässt nichts. Dasselbe Fenster enthält außerdem eine Nutzungsstatistik (Gesamtzahlen, ein 14-Tage-Diagramm, meistgenutzte Kacheln, meistgenutzte Werkzeuge mit einer Liste der nie benutzten), unabhängig von den Backups selbst, dazu einen Speicherüberblick, was auf der Festplatte wie viel Platz belegt. Jeder Snapshot kann seinen Inhalt zeigen: Anzahlen, die jüngste Änderung darin, die Version, die ihn erstellt hat, und jede enthaltene Kachel, durchsuchbar und sortierbar, mit einem Button, der eine einzelne Kachel wiederherstellt. Die Statistik lässt sich als CSV, TXT oder JSON speichern. Je eine Zeile pro Art aufbewahrter Daten (Papierkorb, Kopierverlauf, Zwischenablage-Eingang, Aufnahmen, temporäre Exporte, Bearbeitungsstände) zeigt, wie viel sie enthält und wie lange sie bleibt, springt zu ihrer Einstellung und kann sie sofort aufräumen.",
+        "Aufbewahrungsstufen (täglich, wöchentlich, monatlich, jährlich) dünnen ältere Snapshots automatisch aus, statt jeden für immer zu behalten. Ein Backup ist entweder vollständig oder gar nicht vorhanden; ein fehlgeschlagenes hinterlässt nichts. Dasselbe Fenster enthält außerdem eine Nutzungsstatistik (Gesamtzahlen, ein 14-Tage-Diagramm, meistgenutzte Kacheln, meistgenutzte Werkzeuge mit einer Liste der nie benutzten), unabhängig von den Backups selbst, dazu einen Speicherüberblick, was auf der Festplatte wie viel Platz belegt. Jeder Snapshot kann seinen Inhalt zeigen: Anzahlen, die jüngste Änderung darin, die Version, die ihn erstellt hat, und jede enthaltene Kachel, durchsuchbar und sortierbar, mit einem Button, der eine einzelne Kachel wiederherstellt. Die Statistik lässt sich als CSV, TXT oder JSON speichern. Je eine Zeile pro Art aufbewahrter Daten (Papierkorb, Kopierverlauf, Kopien aus anderen Apps, Aufnahmen, temporäre Exporte, Bearbeitungsstände) zeigt, wie viel sie enthält und wie lange sie bleibt, springt zu ihrer Einstellung und kann sie sofort aufräumen.",
       settings: [
         "Intervall, Aufbewahrungsstufen, Passwort, Wiederherstellungsumfang: Backup-Verwaltung (eigenes Fenster, geöffnet aus Einstellungen)",
         "Nutzungsstatistiken, wie viele Kacheln dort gelistet werden: selbes Fenster, unter den Backups",
@@ -1196,7 +1196,7 @@ export const HELP_CONTENT = {
       title: "Rückgängig-Button",
       whatItIs: "Einige Aktionen außerhalb des Papierkorbs bieten direkt in ihrer Bestätigungsmeldung ein einstufiges Rückgängig.",
       howTo: [
-        "Eine Ansicht löschen, den Kopierverlauf oder den Zwischenablage-Eingang leeren, einen Tag löschen oder mehrere Einträge auf einmal löschen oder taggen.",
+        "Eine Ansicht löschen, den Kopierverlauf leeren, einen Tag löschen oder mehrere Einträge auf einmal löschen oder taggen.",
         "In der erscheinenden Meldung auf Rückgängig klicken.",
       ],
       whatHappens:
@@ -1467,7 +1467,7 @@ export const HELP_CONTENT = {
         "--json für maschinenlesbare Ausgabe anhängen, und --yes an jeden Befehl, der etwas ändert.",
       ],
       whatHappens:
-        "Läuft die App bereits, geht der Befehl an sie und ihre Antwort wird ausgegeben; sonst läuft der Befehl allein, ohne Fenster. Es greift immer nur eine Kopie auf die Daten zu. Ohne --yes sagt ein ändernder Befehl nur, was er täte. Ordnerorte, der Tresor, das Backup-Passwort und jede Fernzugriff-Einstellung, der Zwischenablage-Eingang und der Link-Schalter lassen sich hier nicht ändern, nur in der App.",
+        "Läuft die App bereits, geht der Befehl an sie und ihre Antwort wird ausgegeben; sonst läuft der Befehl allein, ohne Fenster. Es greift immer nur eine Kopie auf die Daten zu. Ohne --yes sagt ein ändernder Befehl nur, was er täte. Ordnerorte, der Tresor, das Backup-Passwort und jede Fernzugriff-Einstellung, das Aufnehmen von Kopien aus anderen Apps und der Link-Schalter lassen sich hier nicht ändern, nur in der App.",
       settings: [],
     },
     {

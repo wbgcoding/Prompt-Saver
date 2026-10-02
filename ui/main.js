@@ -2193,8 +2193,6 @@ const EXPERT_TABS = [
       actions: [{ id: "float-recall", label: "floatRecallAction", gate: "floating" }] },
     // The quick-copy sections of the tray menu, each with its own entry count.
     { title: "expGroupTray", flags: ["trayCustomMenu", "trayRecent", "trayFavs", "traySearch"], values: ["trayRecentN", "trayFavN", "trayLabelMax"] },
-    // The watcher that collects what you copy elsewhere.
-    { title: "expGroupClipboard", flags: ["clipWatcher", { key: "clipSkipSecrets", gate: "clipWatcher" }], values: ["clipMinChars", "clipInboxMax"] },
     // Prompt folders as Markdown (beta): mirrors text-only prompts as .md files.
     { title: "expGroupSync", flags: ["promptSync"], values: ["syncPollSecs"], paths: ["syncDir"] },
     // Auto-advancing through a rotation -- not a capture tool, stays in tab 1.
@@ -2244,7 +2242,7 @@ const EXPERT_TABS = [
     { title: "expGroupLibrary", flags: ["smartSort", "batchOps", "imagePreview", "libraryVideoPreview", "archiveTag", "libraryTiles"], values: ["libraryWidth", "libPreviewLines", "libraryTileSize"] },
     { title: "expGroupTags", flags: ["tags"], values: ["tagChipPx", "tagPopCols"], dropdowns: ["tagFilterMode", "tagSort"] },
     // Everything that records or shows copy history lives with the history view.
-    { title: "expGroupJournal", flags: ["copyHistory", "historyTimestamps", "historyGrouped", "dedupCopyLog", "journalSearch", "journalTypeFilter", "journalColorFilter", { key: "journalTagFilter", gate: "tags" }, "journalRecent", "journalMostUsed", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "journalClear", "confirmClearHistory"], values: ["historyMax", "journalWidth"], selects: ["historyDays"] },
+    { title: "expGroupJournal", flags: ["copyHistory", "historyTimestamps", "historyGrouped", "dedupCopyLog", "journalSearch", "journalTypeFilter", "journalColorFilter", { key: "journalTagFilter", gate: "tags" }, "journalRecent", "journalMostUsed", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "journalClear", "confirmClearHistory", "clipWatcher", { key: "clipSkipSecrets", gate: "clipWatcher" }], values: ["historyMax", "journalWidth", "clipMinChars", "clipInboxMax"], selects: ["historyDays"] },
   ] },
   { title: "expTabSystem", groups: [
     // Toolbar button visibility (mirrors the header right-click tool list).
@@ -11926,33 +11924,9 @@ async function renderBackupContent(box, name) {
   renderRows();
 }
 
-// ---- Clipboard inbox ----
-let clipCount = 0; // number of collected clipboard items currently waiting in the inbox
-function updateClipBadge() {
-  const btn = $("clip-btn");
-  if (!btn) return;
-  // The icon stays while the watcher runs: or always, if the user asked to keep
-  // the paused buttons around (expert: pausedIcons).
-  btn.classList.toggle("hidden", !optFlag("clipWatcher") && !optFlag("pausedIcons"));
-  const tgl = $("clip-toggle");
-  if (tgl) tgl.classList.toggle("active", optFlag("clipWatcher"));
-  const badge = $("clip-badge");
-  badge.classList.toggle("hidden", clipCount <= 0); // only the number hides at 0
-  badge.textContent = clipCount > 99 ? "99+" : String(clipCount);
-}
-// The badge counts what the user has NOT looked at yet, so opening the inbox clears
-// it. Inbox ids are row ids and only grow, which makes the highest one a cheap
-// "seen up to here" marker that survives a restart.
-const clipSeenId = () => Number(settings.ui_values?.clipSeenId) || 0;
-const clipUnseen = (items) => items.filter((it) => Number(it.id) > clipSeenId()).length;
-async function markClipSeen(items) {
-  const top = items.reduce((m, it) => Math.max(m, Number(it.id) || 0), 0);
-  if (top <= clipSeenId()) return;
-  settings.ui_values = { ...(settings.ui_values || {}), clipSeenId: top };
-  try { await invoke("set_ui_value", { key: "clipSeenId", value: top }); } catch (_) {}
-}
-// Undo for "clear clipboard inbox": re-inserts the rows clip_inbox_clear just
-// removed, oldest first, through the same capped insert path a new watcher hit uses.
+// ---- Copies from other apps (the stored clipboard entries, listed in the copy history) ----
+// Undo for clearing the copies from other apps: re-inserts the rows clip_inbox_clear
+// just removed, oldest first, through the same capped insert path a new watcher hit uses.
 async function restoreClipInbox(items) {
   if (!items || !items.length) return;
   try {
@@ -11977,62 +11951,9 @@ async function offerClipInboxCleanup() {
   toast(t("clipInboxClearedToast"));
 }
 
+// Something changed in the stored entries: reload the copy history if it is on screen.
 async function refreshClipInbox() {
-  if (!optFlag("clipWatcher")) { clipCount = 0; updateClipBadge(); return; }
-  let items = [];
-  try { items = await invoke("clip_inbox_list"); } catch (_) {}
-  const open = !$("clip-modal").classList.contains("hidden");
-  if (open) await markClipSeen(items); // arriving while the list is on screen counts as seen
-  clipCount = clipUnseen(items);
-  updateClipBadge();
-  if (open) renderClipList(items);
-}
-function renderClipList(items) {
-  const list = $("clip-list");
-  list.innerHTML = "";
-  if (!items.length) {
-    const e = document.createElement("div");
-    e.className = "hint";
-    e.textContent = t("clipEmpty");
-    list.appendChild(e);
-    return;
-  }
-  for (const it of items) {
-    const row = document.createElement("div");
-    row.className = "clip-row";
-    const time = document.createElement("span");
-    time.className = "clip-time";
-    time.textContent = new Date(it.ts * 1000).toLocaleString(LANG);
-    const prev = document.createElement("div");
-    prev.className = "clip-preview";
-    prev.textContent = it.text;
-    const actions = document.createElement("div");
-    actions.className = "clip-actions";
-    const save = document.createElement("button");
-    save.type = "button"; save.className = "ghost-btn"; save.textContent = t("clipSave");
-    save.addEventListener("click", () => {
-      $("clip-modal").classList.add("hidden");
-      openModal({ mode: "create", text: it.text, title: t("nameModalTitle") });
-    });
-    const copy = document.createElement("button");
-    copy.type = "button"; copy.className = "ghost-btn"; copy.textContent = t("clipCopy");
-    copy.addEventListener("click", () => { invoke("copy_text", { text: it.text }).then(() => toast(t("copied"))).catch((e) => errToast(e)); });
-    const dismiss = document.createElement("button");
-    dismiss.type = "button"; dismiss.className = "ghost-btn"; dismiss.textContent = t("clipDismiss");
-    dismiss.addEventListener("click", async () => { await invoke("clip_inbox_dismiss", { id: it.id }).catch((e) => errToast(e)); refreshClipInbox(); });
-    actions.append(save, copy, dismiss);
-    row.append(time, prev, actions);
-    list.appendChild(row);
-  }
-}
-async function openClipInbox() {
-  let items = [];
-  try { items = await invoke("clip_inbox_list"); } catch (_) {}
-  await markClipSeen(items); // everything on this list has now been seen
-  clipCount = 0;
-  updateClipBadge();
-  renderClipList(items);
-  $("clip-modal").classList.remove("hidden");
+  if (!$("journal").classList.contains("hidden")) await loadJournal();
 }
 
 // Keep all image/file modal controls consistent with modalState.
@@ -15062,6 +14983,8 @@ function setJournalColor(color) {
 }
 
 let journalLog = []; // cached newest copy events; refetched only on open/group/copy
+let journalInbox = []; // text copied in other apps (the stored clipboard entries), newest first
+let journalSource = "all"; // source filter of the copy history: "all" | "app" | "elsewhere"
 let journalRecentRev = false; // recently-copied sorted oldest-first
 let journalUsedRev = false; // most-used sorted least-first
 
@@ -15069,6 +14992,7 @@ let journalUsedRev = false; // most-used sorted least-first
 async function loadJournal() {
   const grouped = flag("historyGrouped");
   journalLog = await invoke("recent_copies", { limit: Math.min(val("historyMax"), JOURNAL_ROWS_MAX), grouped }).catch(() => []);
+  journalInbox = await invoke("clip_inbox_list").catch(() => []);
   renderJournal();
 }
 
@@ -15112,6 +15036,51 @@ function renderJournalTagFilter() {
   renderTagBar(bar, journalTags, renderJournal);
 }
 
+// One entry copied in another app: time, a two-line text preview and the three
+// actions (save as a prompt, copy again, dismiss). Shown inside the copy history.
+function journalClipRow(it) {
+  const row = document.createElement("div");
+  row.className = "clip-row";
+  const time = document.createElement("span");
+  time.className = "clip-time";
+  time.textContent = new Date(it.ts * 1000).toLocaleString(LANG);
+  const prev = document.createElement("div");
+  prev.className = "clip-preview";
+  prev.textContent = it.text;
+  const actions = document.createElement("div");
+  actions.className = "clip-actions";
+  const save = document.createElement("button");
+  save.type = "button"; save.className = "ghost-btn"; save.textContent = t("clipSave");
+  save.addEventListener("click", () => {
+    $("journal").classList.add("hidden");
+    openModal({ mode: "create", text: it.text, title: t("nameModalTitle") });
+  });
+  const copy = document.createElement("button");
+  copy.type = "button"; copy.className = "ghost-btn"; copy.textContent = t("clipCopy");
+  copy.addEventListener("click", () => { invoke("copy_text", { text: it.text }).then(() => toast(t("copied"))).catch((e) => errToast(e)); });
+  const dismiss = document.createElement("button");
+  dismiss.type = "button"; dismiss.className = "ghost-btn"; dismiss.textContent = t("clipDismiss");
+  dismiss.addEventListener("click", async () => { await invoke("clip_inbox_dismiss", { id: it.id }).catch((e) => errToast(e)); refreshClipInbox(); });
+  actions.append(save, copy, dismiss);
+  row.append(time, prev, actions);
+  return row;
+}
+
+// The source chips and the two buttons that only concern copies from other apps
+// (pause/resume recording, purge from backups) show together, and only while the
+// recorder is on or entries are still stored.
+function syncJournalSourceBar(on) {
+  $("journal-source").classList.toggle("hidden", !on);
+  $("clip-toggle").classList.toggle("hidden", !on);
+  $("clip-purge-backups").classList.toggle("hidden", !on);
+  $("clip-toggle").classList.toggle("active", optFlag("clipWatcher"));
+  for (const b of $("journal-source").querySelectorAll(".lib-type")) {
+    b.classList.toggle("active", b.dataset.source === journalSource);
+  }
+  const anyFilter = flag("journalSearch") || flag("journalTypeFilter") || flag("journalColorFilter") || (flag("journalTagFilter") && tagsOn()) || flag("favorites");
+  $("journal-search").classList.toggle("hidden", !anyFilter && !on);
+}
+
 // Render from the cached log. Filters run client-side, so typing in the search
 // box re-renders instantly without an IPC roundtrip (and without a render race).
 function renderJournal() {
@@ -15123,23 +15092,46 @@ function renderJournal() {
   const byId = new Map(prompts.map((p) => [p.id, p]));
   const grouped = flag("historyGrouped");
   const showTime = flag("historyTimestamps");
-  let recent = journalLog
-    .map((e) => [byId.get(e.id), e.ts, e.rowid])
-    .filter(([p]) => p && journalMatches(p));
-  if (journalRecentRev) recent = recent.slice().reverse();
+  // Copies from other apps share the list when the recorder is on or entries are still
+  // stored; the source chips (and the buttons that only concern those entries) follow.
+  const sourcesOn = optFlag("clipWatcher") || journalInbox.length > 0;
+  if (!sourcesOn) journalSource = "all";
+  syncJournalSourceBar(sourcesOn);
+  const showApp = journalSource !== "elsewhere";
+  const showElsewhere = sourcesOn && journalSource !== "app";
+  let recent = showApp
+    ? journalLog
+      .map((e) => [byId.get(e.id), e.ts, e.rowid])
+      .filter(([p]) => p && journalMatches(p))
+      .map(([p, ts, rowid]) => ({ p, ts, rowid }))
+    : [];
+  // An entry copied elsewhere has no type, colour, tag or favourite, so any of
+  // those filters being narrowed leaves it out; the search matches its text.
+  const narrowed = journalTypes.size > 0 || journalColor !== "all" || journalFav ||
+    (flag("journalTagFilter") && journalTags.size > 0);
+  const clipQuery = journalQuery.trim().toLowerCase();
+  if (showElsewhere && !narrowed) {
+    for (const it of journalInbox) {
+      if (!clipQuery || String(it.text || "").toLowerCase().includes(clipQuery)) recent.push({ clip: it, ts: it.ts });
+    }
+  }
+  // Newest first; the sort is stable, so equal timestamps keep the copy log first.
+  recent.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+  if (journalRecentRev) recent.reverse();
   // How hard the filters are biting, in the header where the filters are:
   // same wording/element as the library, counted against entries with a
   // still-existing prompt (a log row for a deleted prompt is not "all").
   const jcount = $("journal-count");
   if (jcount) {
-    const all = journalLog.filter((e) => byId.get(e.id)).length;
+    const all = (showApp ? journalLog.filter((e) => byId.get(e.id)).length : 0) +
+      (showElsewhere ? journalInbox.length : 0);
     jcount.textContent = recent.length === all
       ? String(all)
       : t("libraryCount").replace("{n}", recent.length).replace("{v}", all);
   }
   // Most used: copy count + last-used timestamp, busiest first (or least-first).
   const lastUsed = settings.last_used || {};
-  const used = Object.entries(settings.usage || {})
+  const used = (journalSource === "elsewhere" ? [] : Object.entries(settings.usage || {}))
     .map(([id, n]) => [byId.get(id), n, lastUsed[id] || 0])
     .filter(([p]) => p && journalMatches(p))
     .sort((a, b) => (journalUsedRev ? a[1] - b[1] : b[1] - a[1]))
@@ -15156,7 +15148,7 @@ function renderJournal() {
   };
   // `rows` items are [prompt, meta]. `extra` is an optional control rendered to the
   // right of the column title.
-  const column = (titleKey, rows, extra, cls) => {
+  const column = (titleKey, rows, extra, cls, emptyKey, rowEl) => {
     const col = document.createElement("div");
     col.className = "journal-col" + (cls ? " " + cls : "");
     const head = document.createElement("div");
@@ -15169,10 +15161,10 @@ function renderJournal() {
     if (!rows.length) {
       const e = document.createElement("div");
       e.className = "hint";
-      e.textContent = t("journalEmpty");
+      e.textContent = t(emptyKey || "journalEmpty");
       col.appendChild(e);
     } else {
-      for (const [p, meta] of rows) col.appendChild(journalRow(p, meta, copyAgain(p)));
+      for (const row of rows) col.appendChild(rowEl ? rowEl(row) : journalRow(row[0], row[1], copyAgain(row[0])));
     }
     return col;
   };
@@ -15215,18 +15207,24 @@ function renderJournal() {
   const usedSort = flag("journalUsedSort")
     ? sortBtn(journalUsedRev, () => { journalUsedRev = !journalUsedRev; renderJournal(); })
     : null;
+  // "Most used" only knows prompts of the app, so it steps aside for the elsewhere filter.
+  body.classList.toggle("journal-single", journalSource === "elsewhere");
   body.append(
     column("recentlyCopied",
       // Rowid rides along so journalRow() can offer a per-entry delete:
       // "most used" (below) has no single copy_log row to point at, so it stays
       // without one.
-      recent.map(([p, ts, rowid]) => [p, { left: showTime ? fmtCopyTime(ts) : "", rowid }]),
-      headExtras(groupBtn, recentSort), "journal-col-recent"),
+      recent,
+      headExtras(groupBtn, recentSort), "journal-col-recent",
+      journalSource === "elsewhere" ? "clipEmpty" : "journalEmpty",
+      (e) => (e.clip
+        ? journalClipRow(e.clip)
+        : journalRow(e.p, { left: showTime ? fmtCopyTime(e.ts) : "", rowid: e.rowid }, copyAgain(e.p)))),
     // One meta line: last-used time on the left, copy count on the right.
-    column("mostUsed", used.map(([p, n, ts]) => [
+    ...(journalSource === "elsewhere" ? [] : [column("mostUsed", used.map(([p, n, ts]) => [
       p,
       { left: showTime && ts ? fmtCopyTime(ts) : "", right: t("usedTimes").replace("{n}", n) },
-    ]), headExtras(usedSort), "journal-col-used"),
+    ]), headExtras(usedSort), "journal-col-used")]),
   );
 }
 
@@ -15528,9 +15526,9 @@ async function openJournal() {
   journalFav = false;
   $("journal-fav").classList.remove("active");
   setJournalColor("all");
-  // Hide the whole filter bar when every filter is switched off (expert menu).
-  const anyFilter = flag("journalSearch") || flag("journalTypeFilter") || flag("journalColorFilter") || (flag("journalTagFilter") && tagsOn()) || flag("favorites");
-  $("journal-search").classList.toggle("hidden", !anyFilter);
+  journalSource = "all";
+  // The filter bar hides itself when every filter is switched off (expert menu);
+  // renderJournal decides, so it also follows the source chips.
   await loadJournal();
   $("journal").classList.remove("hidden");
   if (flag("journalSearch") && flag("searchAutofocus")) $("journal-q").focus();
@@ -19901,9 +19899,8 @@ function bind() {
   $("error-log-modal").addEventListener("pointerdown", (e) => { if (e.target === $("error-log-modal")) $("error-log-modal").classList.add("hidden"); });
   $("error-log-copy").addEventListener("click", () => copyErrorLogAll());
   $("error-log-clear").addEventListener("click", () => clearErrorLogAll());
-  // Clipboard inbox.
-  $("clip-btn").addEventListener("click", openClipInbox);
-  // Pause/resume collecting straight from the inbox: same switch as the expert one.
+  // Pause/resume recording copies from other apps straight from the copy history: same
+  // switch as the expert one.
   $("clip-toggle").addEventListener("click", async () => {
     const on = !optFlag("clipWatcher");
     settings.ui_flags = { ...(settings.ui_flags || {}), clipWatcher: on };
@@ -19913,16 +19910,12 @@ function bind() {
     applyFlags();
     if (!on && accepted) await offerClipInboxCleanup();
     await refreshClipInbox();
-    updateClipBadge();
   });
-  $("clip-close").addEventListener("click", () => $("clip-modal").classList.add("hidden"));
-  $("clip-modal").addEventListener("pointerdown", (e) => { if (e.target === $("clip-modal")) $("clip-modal").classList.add("hidden"); });
-  $("clip-clear").addEventListener("click", async () => {
-    const items = await invoke("clip_inbox_list").catch(() => []);
-    // A clear that failed left every row in place: no "cleared" toast, no undo.
-    try { await invoke("clip_inbox_clear"); } catch (e) { errToast(e); return; }
-    refreshClipInbox();
-    undoToast(t("clipInboxClearedToast"), () => restoreClipInbox(items));
+  $("journal-source").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-source]");
+    if (!btn) return;
+    journalSource = btn.dataset.source;
+    renderJournal();
   });
   // Emergency wipe: clears the live inbox AND scrubs clip_inbox rows out of every
   // rotating backup snapshot. Irreversible and touches every backup, so it asks
@@ -20061,6 +20054,8 @@ function bind() {
     const btn = e.target.closest(".lib-color");
     if (btn) { setJournalColor(btn.dataset.color); renderJournal(); }
   });
+  // Clears what the source filter shows: "all" the copy log and the copies from other
+  // apps, "app" the copy log only, "elsewhere" the stored entries from other apps only.
   $("journal-clear").addEventListener("click", async () => {
     if (flag("confirmClearHistory")) {
       const ok = await confirmDialog({
@@ -20070,18 +20065,33 @@ function bind() {
       });
       if (!ok) return;
     }
-    // Snapshot everything clear_copy_history is about to wipe, so Undo can
-    // write it all back: the row-level log (reused via the same call the
-    // journal itself uses to fill its list) plus the two counter maps.
+    const clearApp = journalSource !== "elsewhere";
+    const clearElsewhere = journalSource !== "app";
+    // Snapshot everything the clears are about to wipe, so Undo can write it all
+    // back: the row-level log (reused via the same call the journal itself uses to
+    // fill its list) plus the two counter maps, and the stored entries.
     let rows = [];
-    try { rows = await invoke("recent_copies", { limit: 1000000, grouped: false }); } catch { /* best effort */ }
     const usage = { ...(settings.usage || {}) };
     const lastUsed = { ...(settings.last_used || {}) };
-    await invoke("clear_copy_history").catch((e) => errToast(e));
-    settings.usage = {};
-    settings.last_used = {};
+    if (clearApp) {
+      try { rows = await invoke("recent_copies", { limit: 1000000, grouped: false }); } catch { /* best effort */ }
+      await invoke("clear_copy_history").catch((e) => errToast(e));
+      settings.usage = {};
+      settings.last_used = {};
+    }
+    let items = [];
+    if (clearElsewhere) {
+      items = await invoke("clip_inbox_list").catch(() => []);
+      // A clear that failed left every row in place: no "cleared" toast, no undo.
+      if (items.length) {
+        try { await invoke("clip_inbox_clear"); } catch (e) { errToast(e); items = []; if (!clearApp) return; }
+      }
+    }
     await loadJournal();
-    undoToast(t("historyClearedToast"), () => restoreCopyHistory(rows, usage, lastUsed));
+    undoToast(t(clearApp ? "historyClearedToast" : "clipInboxClearedToast"), async () => {
+      if (clearApp) await restoreCopyHistory(rows, usage, lastUsed);
+      await restoreClipInbox(items);
+    });
   });
   $("settings-close").addEventListener("click", hideSettings);
   // pointerdown (not click): selecting text that ends outside an input must not close.
@@ -20458,7 +20468,6 @@ function bind() {
     if (!$("rec-modal").classList.contains("hidden")) { trapTabWithin($("rec-modal"), e); return; }
     if (!viewModal.root.classList.contains("hidden")) { trapTabWithin(viewModal.root, e); return; }
     if (!modal.root.classList.contains("hidden")) { trapTabWithin(modal.root, e); return; }
-    if (!$("clip-modal").classList.contains("hidden")) { trapTabWithin($("clip-modal"), e); return; }
     if (!$("dupes-modal").classList.contains("hidden")) { trapTabWithin($("dupes-modal"), e); return; }
     if (!$("trash-modal").classList.contains("hidden")) { trapTabWithin($("trash-modal"), e); return; }
     if (document.body.classList.contains("library-front") && !libraryEl.classList.contains("hidden")) { trapTabWithin(libraryEl, e); return; }
@@ -20495,7 +20504,6 @@ function bind() {
     else if (!$("rec-modal").classList.contains("hidden")) closeRecModal();
     else if (!viewModal.root.classList.contains("hidden")) closeViewModal();
     else if (!modal.root.classList.contains("hidden")) confirmDiscardIfDirty().then((ok) => { if (ok) closeModal(); });
-    else if (!$("clip-modal").classList.contains("hidden")) $("clip-modal").classList.add("hidden");
     else if (!$("dupes-modal").classList.contains("hidden")) $("dupes-modal").classList.add("hidden");
     else if (!$("trash-modal").classList.contains("hidden")) $("trash-modal").classList.add("hidden");
     // A library raised over the backups dialog is the topmost thing: it closes first.

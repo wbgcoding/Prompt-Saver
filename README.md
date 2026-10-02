@@ -40,7 +40,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | **Private notes** | A notes field per prompt for context you keep but never copy, searchable and shown in the tooltip |
 | **Favorites** | Star prompts for a live favorites view |
 | **Batch editing** | Multi-select in the library to recolor, favorite, move between views, export or delete in one go |
-| **Undo** | Deleting a view, clearing the copy history, clearing the clipboard inbox, deleting a tag, or a batch delete or tag change offers an Undo button right on the confirmation |
+| **Undo** | Deleting a view, clearing the copy history, deleting a tag, or a batch delete or tag change offers an Undo button right on the confirmation |
 | **Duplicate finder** | Finds near-identical prompts, shows them side by side, keeps the one you pick; the same threshold also drives a quiet "similar to..." hint right after saving a prompt |
 
 ### ⚡ Copy
@@ -60,7 +60,6 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | **Chaining** | Combine several prompts into one clipboard entry, with a strip that shows what each picked step needs and fills before you start it; the expert menu sets what goes between two steps |
 | **Copy formatted** | For a prompt with real Markdown syntax: a second copy that puts the rendered version on the clipboard too, so Word, Outlook or a browser shows the formatting while a plain text field still gets the Markdown source |
 | **Copy history** | A journal of recent and most-used prompts, with optional timestamps and adjustable retention |
-| **Clipboard inbox** | An optional watcher collects text you copy anywhere, so you can turn the good bits into prompts later |
 
 ### 🖼️ More than text
 

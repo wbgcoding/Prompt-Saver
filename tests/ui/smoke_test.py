@@ -1600,51 +1600,68 @@ PROBE = """
         }
       }
     }
-    // 434: clearing the clipboard inbox offers an Undo button that replays the
-    // snapshotted rows through restore_clip_inbox. The toolbar icon itself is
-    // gated on the (default-off) clipWatcher/pausedIcons flags -- unrelated to
-    // this check, so it is just unhidden here instead of toggling either flag.
+    // Copies from other apps are part of the copy history: source chips, a list of
+    // exactly the stored entries under the Elsewhere filter, a per-entry dismiss and a
+    // clear that follows the filter (only the stored entries, with its own Undo).
     {
-      const clipBtn = document.getElementById('clip-btn');
-      clipBtn.classList.remove('hidden');
-      window.__SMOKE_ARGS__ = [];
-      clipBtn.click();
-      await sleep(200);
-      const clipModal = document.getElementById('clip-modal');
-      if (!clipModal || clipModal.classList.contains('hidden')) {
-        out.errors.push('434: the clipboard inbox button did not open its modal');
+      const srcBar = document.getElementById('journal-source');
+      const srcBtn = (k) => srcBar && srcBar.querySelector('[data-source="' + k + '"]');
+      const clipRows = () => [...document.querySelectorAll('#journal-body .clip-row')];
+      if (!srcBar || srcBar.classList.contains('hidden')) {
+        out.errors.push('434: the source chips are hidden although copies from other apps are stored');
       } else {
-        const clipClearBtn = document.getElementById('clip-clear');
-        if (!clipClearBtn) {
-          out.errors.push('434: the clipboard inbox has no clear-all button');
+        if (document.querySelectorAll('#journal-body .journal-item').length === 0 || clipRows().length !== 2) {
+          out.errors.push('434: the unfiltered history does not mix app copies and the two stored entries (' +
+            document.querySelectorAll('#journal-body .journal-item').length + ' app rows, ' + clipRows().length + ' elsewhere rows)');
+        }
+        srcBtn('elsewhere').click();
+        await sleep(150);
+        if (clipRows().length !== 2) out.errors.push('434: the Elsewhere filter lists ' + clipRows().length + ' rows instead of 2');
+        if (document.querySelector('#journal-body .journal-item')) out.errors.push('434: the Elsewhere filter still lists copies made in the app');
+        // Dismiss removes one entry.
+        window.__SMOKE_ARGS__ = [];
+        const dismissBtn = clipRows()[0]?.querySelector('.clip-actions button:last-child');
+        if (!dismissBtn) {
+          out.errors.push('434: an entry copied elsewhere has no dismiss button');
+        } else {
+          dismissBtn.click();
+          await sleep(250);
+          if (!window.__SMOKE_ARGS__.some(([cmd]) => cmd === 'clip_inbox_dismiss')) out.errors.push('434: dismissing did not call clip_inbox_dismiss');
+          if (clipRows().length !== 1) out.errors.push('434: dismissing left ' + clipRows().length + ' rows instead of 1');
+        }
+        // Clearing under the Elsewhere filter touches only the stored entries and offers
+        // an Undo that replays them through restore_clip_inbox.
+        window.__SMOKE_ARGS__ = [];
+        document.getElementById('journal-clear').click();
+        await sleep(150);
+        const cmClip = document.getElementById('confirm-modal');
+        if (cmClip && !cmClip.classList.contains('hidden')) {
+          document.getElementById('confirm-ok').click();
+          await sleep(200);
+        }
+        if (!window.__SMOKE_ARGS__.some(([cmd]) => cmd === 'clip_inbox_clear')) out.errors.push('434: clearing under Elsewhere did not call clip_inbox_clear');
+        if (window.__SMOKE_ARGS__.some(([cmd]) => cmd === 'clear_copy_history')) out.errors.push('434: clearing under Elsewhere also cleared the copy log');
+        const clipUndoToast = document.getElementById('toast');
+        const clipUndoBtn = clipUndoToast.querySelector('.toast-btn');
+        if (!clipUndoToast.classList.contains('actionable') || !clipUndoBtn) {
+          out.errors.push('434: clearing the copies from other apps did not offer an undo toast');
         } else {
           window.__SMOKE_ARGS__ = [];
-          clipClearBtn.click();
-          await sleep(200);
-          if (!window.__SMOKE_ARGS__.some(([cmd]) => cmd === 'clip_inbox_clear')) {
-            out.errors.push('434: clearing the clipboard inbox did not call clip_inbox_clear');
-          }
-          const clipUndoToast = document.getElementById('toast');
-          const clipUndoBtn = clipUndoToast.querySelector('.toast-btn');
-          if (!clipUndoToast.classList.contains('actionable') || !clipUndoBtn) {
-            out.errors.push('434: clearing the clipboard inbox did not offer an undo toast');
-          } else {
-            window.__SMOKE_ARGS__ = [];
-            clipUndoBtn.click();
-            await sleep(250);
-            // The fixture's clip_inbox_list is empty, so an empty replay is the
-            // correct outcome here -- the call itself still has to happen.
-            if (!window.__SMOKE_ARGS__.some(([cmd]) => cmd === 'restore_clip_inbox')) {
-              out.errors.push('434: undoing a cleared clipboard inbox did not call restore_clip_inbox');
-            }
-            if (clipUndoToast.classList.contains('show')) {
-              out.errors.push('434: the clip-inbox-undo toast is still showing after being clicked');
-            }
+          clipUndoBtn.click();
+          await sleep(250);
+          if (!window.__SMOKE_ARGS__.some(([cmd]) => cmd === 'restore_clip_inbox')) {
+            out.errors.push('434: undoing the clear did not call restore_clip_inbox');
           }
         }
-        document.getElementById('clip-close')?.click();
+        // The app filter hides the stored entries again; All brings them back.
+        srcBtn('app').click();
+        await sleep(150);
+        if (clipRows().length) out.errors.push('434: the app filter still lists entries copied elsewhere');
+        srcBtn('all').click();
         await sleep(150);
       }
+      window.__resetClipInbox();
+      await window.__TAURI__.core.invoke('clip_inbox_list');
     }
     // 105: the copy-history tag filter -- same picking logic as the library's own
     // tag bar (tagMatches/tagFilterMode), narrows both journal columns.
@@ -2149,8 +2166,6 @@ PROBE = """
         }
       }
     }
-    await click('clip-btn');
-    await click('clip-close');
     // 141: get_state carries has_image + image_rev, never the bytes. A tile fetches
     // the picture it needs through prompt_image and then keeps it, so the many
     // re-renders the walk above already caused must have cost exactly ONE call.
@@ -7606,9 +7621,9 @@ PROBE = """
         .find(r => ((r.querySelector('.value-head span') || {}).textContent || '').includes(label));
       document.getElementById('settings').classList.remove('hidden');
       await click('expert-open');
-      const watcherRow = await expertRow('Clipboard inbox');
+      const watcherRow = await expertRow('Record copies from other apps');
       if (!watcherRow) {
-        out.errors.push('431: the clipboard inbox option is missing from the expert menu');
+        out.errors.push('431: the record-copies option is missing from the expert menu');
       } else {
         watcherRow.querySelector('input.switch').click();
         await sleep(200);
@@ -7629,9 +7644,9 @@ PROBE = """
         const confirmBox431 = document.getElementById('confirm-modal');
         const clipCalls431 = (cmd) => (window.__SMOKE_ARGS__ || []).filter(([c]) => c === cmd).length;
         const switchWatcher431 = async (answer) => {
-          const row = await expertRow('Clipboard inbox');
+          const row = await expertRow('Record copies from other apps');
           const sw = row && row.querySelector('input.switch');
-          if (!sw) { out.errors.push('431: the clipboard inbox switch vanished'); return false; }
+          if (!sw) { out.errors.push('431: the record-copies switch vanished'); return false; }
           window.__SMOKE_ARGS__ = [];
           sw.click();
           await sleep(300);
@@ -7658,7 +7673,7 @@ PROBE = """
         await switchWatcher431('delete');
         await switchWatcher431('on');
         await switchWatcher431('escape');
-        const watcherEnd431 = await expertRow('Clipboard inbox');
+        const watcherEnd431 = await expertRow('Record copies from other apps');
         if (watcherEnd431 && watcherEnd431.querySelector('input.switch').checked) {
           out.errors.push('431: the inbox switch did not end up off');
         }
@@ -16463,7 +16478,7 @@ def main():
     await sleep(100);
     if (input.value.trim() !== 'hello world') errs.push('564-v2: the late final text should replace the partial, field holds ' + JSON.stringify(input.value));
 """)
-        failed += ar_probe('c3', 'clipboard inbox: a failed clear offers no undo (storage panel and inbox dialog)', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { clipWatcher: true } };</script>\n', r"""
+        failed += ar_probe('c3', 'copies from other apps: a failed clear offers no undo (storage panel and copy history)', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { clipWatcher: true } };</script>\n', r"""
     await bootReady();
     RESULTS.clip_inbox_clear = () => { throw 'delete-incomplete'; };
     const undoBtn = () => document.querySelector('#toast .toast-btn');
@@ -16472,7 +16487,7 @@ def main():
     document.getElementById('settings-backup-btn').click(); await sleep(400);
     const row = document.querySelector('#retention-panel [data-setting-row="retention-clipInbox"]');
     const clean = row && row.querySelectorAll('.import-preview-actions button')[1];
-    if (!clean) { errs.push('564-c3: the clipboard inbox cleanup button was not found'); }
+    if (!clean) { errs.push('564-c3: the cleanup button for copies from other apps was not found'); }
     else {
       window.__SMOKE_ARGS__.length = 0;
       clean.click(); await sleep(400);
@@ -16481,17 +16496,20 @@ def main():
       const msg = document.getElementById('toast').textContent;
       if (/cleared/i.test(msg)) errs.push('564-c3: the storage panel reported a clear that failed: ' + msg);
     }
-    // 2) the inbox dialog itself
+    // 2) the copy history itself, under the Elsewhere filter
     document.getElementById('backup-modal').classList.add('hidden');
     document.getElementById('toast').classList.remove('show');
-    const cb = document.getElementById('clip-btn');
-    if (cb.classList.contains('hidden')) { errs.push('564-c3: the inbox button is not shown in the fixture'); }
+    document.getElementById('journal-btn').click(); await sleep(400);
+    const srcEl = document.querySelector('#journal-source [data-source="elsewhere"]');
+    if (!srcEl || document.getElementById('journal-source').classList.contains('hidden')) { errs.push('564-c3: the source chips are not shown in the fixture'); }
     else {
-      cb.click(); await sleep(300);
+      srcEl.click(); await sleep(200);
       window.__SMOKE_ARGS__.length = 0;
-      document.getElementById('clip-clear').click(); await sleep(400);
-      if (!callsFor('clip_inbox_clear').length) errs.push('564-c3: fixture: the inbox dialog clear was never attempted');
-      if (undoBtn()) errs.push('564-c3: the inbox dialog offered Undo after the clear failed');
+      document.getElementById('journal-clear').click(); await sleep(300);
+      const cmC3 = document.getElementById('confirm-modal');
+      if (cmC3 && !cmC3.classList.contains('hidden')) { document.getElementById('confirm-ok').click(); await sleep(300); }
+      if (!callsFor('clip_inbox_clear').length) errs.push('564-c3: fixture: the history clear was never attempted');
+      if (undoBtn()) errs.push('564-c3: the copy history offered Undo after the clear failed');
     }
 """)
         failed += ar_probe('s1', 'screenshot editor: undoing a resize does not unlock operations behind the undo limit', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_values: { snipEditUndoMax: 10 } };</script>\n', r"""
