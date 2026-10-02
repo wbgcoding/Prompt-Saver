@@ -171,8 +171,18 @@ let toastTimer = null;
 let deleteAllTimer = null;
 let resetSettingsTimer = null;
 let expertResetTimer = null;
-let versionLabel = ""; // "Version 1.6.0", shown as the clickable releases link
 let appVersion = ""; // raw "1.6.0", for the About dialog
+
+// A status line that carries a live value ("Version 1.6.0", a port, a host) is
+// remembered as key + token + value, so applyI18n can draw it again after a
+// language switch instead of leaving the old language standing.
+function setStatusText(el, key, token, value) {
+  if (!el) return;
+  el.dataset.statusKey = key;
+  el.dataset.statusToken = token;
+  el.dataset.statusValue = String(value);
+  el.textContent = t(key).replace("{" + token + "}", String(value));
+}
 
 // Whatever had focus right before the settings/expert panel opened, so
 // closing it returns focus there (same reasoning as modalOpener above).
@@ -184,7 +194,7 @@ let settingsOpener = null;
 function hideSettings() {
   settingsEl.classList.add("hidden");
   const uv = $("update-version");
-  if (uv && versionLabel && !uv.classList.contains("update-avail")) uv.textContent = versionLabel;
+  if (uv && appVersion && !uv.classList.contains("update-avail")) setStatusText(uv, "versionInstalled", "v", appVersion);
   settingsOpener?.focus?.();
   settingsOpener = null;
 }
@@ -333,6 +343,12 @@ function applyI18n() {
     else el.title = t(el.dataset.i18nTitle);
   });
   document.querySelectorAll("[data-i18n-aria]").forEach((el) => { el.setAttribute("aria-label", t(el.dataset.i18nAria)); });
+  // The maximize button's title flips between maximize and restore with the window state.
+  document.querySelectorAll("[data-status-key]").forEach((el) => {
+    el.textContent = t(el.dataset.statusKey).replace("{" + el.dataset.statusToken + "}", el.dataset.statusValue);
+  });
+  const winMax = document.getElementById("win-max");
+  if (winMax) winMax.title = t(document.body.classList.contains("win-maximized") ? "winRestore" : "winMaximize");
   // Cached video tiles keep their media bar across a language switch: its
   // button labels are not markup, so data-i18n above never reaches them. Walk
   // videoCache itself, not just the live DOM: a tile from a view that is not
@@ -3143,7 +3159,7 @@ function renderDataDirReadOnlyBanner() {
   const banner = $("data-dir-readonly-banner");
   if (!banner) return;
   if (!dataDirLockStatus.readOnly) { banner.classList.add("hidden"); syncBannerStack(); return; }
-  $("data-dir-readonly-text").textContent = t("dataDirReadOnlyBanner").replace("{host}", dataDirLockStatus.otherHost || "?");
+  setStatusText($("data-dir-readonly-text"), "dataDirReadOnlyBanner", "host", dataDirLockStatus.otherHost || "?");
   banner.classList.remove("hidden");
   syncBannerStack();
 }
@@ -5581,6 +5597,7 @@ function wireClear(el) {
   btn.type = "button";
   btn.className = "clear-btn";
   btn.tabIndex = -1;
+  btn.dataset.i18nAria = "clearField"; // applyI18n keeps it current across a language switch
   btn.setAttribute("aria-label", t("clearField"));
   btn.innerHTML = CLEAR_SVG;
   wrap.appendChild(btn);
@@ -12699,7 +12716,7 @@ function renderTagFilter() {
   // A tag renamed or deleted elsewhere must not keep filtering the list.
   const live = new Set(names.map(tagKey));
   for (const key of [...libTags]) if (!live.has(key)) libTags.delete(key);
-  const sig = names.join("") + "" + [...libTags].sort().join("");
+  const sig = LANG + "|" + names.join("") + "" + [...libTags].sort().join("");
   if (sig === _lastTagFilterSig) return;
   _lastTagFilterSig = sig;
   renderTagBar(bar, libTags, renderLibrary);
@@ -14856,7 +14873,7 @@ function renderJournalTagFilter() {
   // Same as the library's own bar: "manage tags" stays reachable even with
   // zero tags, so this no longer hides on an empty tag set.
   bar.classList.remove("hidden");
-  const sig = names.join("") + "" + [...journalTags].sort().join("");
+  const sig = LANG + "|" + names.join("") + "" + [...journalTags].sort().join("");
   if (sig === _lastJournalTagFilterSig) return;
   _lastJournalTagFilterSig = sig;
   renderTagBar(bar, journalTags, renderJournal);
@@ -20345,7 +20362,7 @@ function bind() {
   // never changes: it always offers a fresh manual check.
   const offerUpdate = (info) => {
     updateInfo = info;
-    updateVersion.textContent = t("updateAvailableBtn").replace("{v}", info.version);
+    setStatusText(updateVersion, "updateAvailableBtn", "v", info.version);
     updateVersion.classList.add("update-avail");
     // Undo a previous "up to date" check's tooltip override, if any.
     updateVersion.dataset.i18nTitle = "openReleases";
@@ -20482,7 +20499,7 @@ function bind() {
         // sentence used to wrap at; the full sentence survives as a tooltip.
         // dataset.i18nTitle (not just .title) keeps it correct across a later
         // language switch too, the same as every other data-i18n-title element.
-        updateVersion.textContent = t("upToDate").replace("{v}", appVersion);
+        setStatusText(updateVersion, "upToDate", "v", appVersion);
         updateVersion.dataset.i18nTitle = "upToDateTip";
         updateVersion.title = t("upToDateTip");
         updateVersion.classList.remove("update-avail");
@@ -20509,7 +20526,7 @@ function bind() {
     if (!v) return;
     try { await invoke("skip_version", { version: v }); } catch (err) { errToast(err); }
     updateInfo = null;
-    updateVersion.textContent = versionLabel;
+    setStatusText(updateVersion, "versionInstalled", "v", appVersion);
     updateVersion.classList.remove("update-avail");
     closeUpdateModal();
     toast(t("versionSkipped").replace("{v}", v));
@@ -20826,7 +20843,7 @@ function bind() {
     const running = !!status?.running;
     $("remote-api-banner").classList.toggle("hidden", !running);
     if (running) {
-      $("remote-api-banner-text").textContent = t("remoteApiBadge").replace("{port}", String(status.port));
+      setStatusText($("remote-api-banner-text"), "remoteApiBadge", "port", status.port);
     }
     syncBannerStack();
   }
@@ -21573,9 +21590,8 @@ async function init() {
     await applySettingsUi();
     invoke("app_version").then((v) => {
       appVersion = v;
-      versionLabel = t("versionInstalled").replace("{v}", v);
-      $("update-version").textContent = versionLabel;
-      $("about-version").textContent = t("versionInstalled").replace("{v}", appVersion);
+      setStatusText($("update-version"), "versionInstalled", "v", v);
+      setStatusText($("about-version"), "versionInstalled", "v", appVersion);
     }).catch(() => {});
     invoke("current_data_dir").then((d) => { currentDataDir = d || ""; }).catch(() => {});
     // Awaited, unlike the informational calls around it: the reveal below asks the

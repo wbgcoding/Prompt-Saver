@@ -8033,6 +8033,41 @@ PROBE = """
       mustReach('main window in ' + lang, '.win-btn, .composer > button');
       await click('library-btn');
       layoutScan('library in ' + lang);
+      // A string built once in script and never refreshed stays in the old
+      // language after a live switch: the library's manage-tags button, the
+      // maximize button title and the clear-field buttons.
+      {
+        const wantTag = document.querySelector('#tag-modal [data-i18n="tagManager"]').textContent;
+        const tagBtns = [...document.querySelectorAll('#library-tagbar .tag-action')];
+        const manageBtn = tagBtns[tagBtns.length - 1];
+        if (!manageBtn) out.errors.push('lang switch: no manage-tags button in the library tag bar in ' + lang);
+        else if (manageBtn.textContent !== wantTag) {
+          out.errors.push('lang switch: manage-tags button reads "' + manageBtn.textContent + '" in ' + lang + ', expected "' + wantTag + '"');
+        }
+        const winMax = document.getElementById('win-max');
+        const wantMax = document.getElementById('win-max').getAttribute('aria-label');
+        if (document.body.classList.contains('win-maximized') === false && winMax.title !== wantMax) {
+          out.errors.push('lang switch: maximize button title is "' + winMax.title + '" in ' + lang + ', expected "' + wantMax + '"');
+        }
+        const clearLabels = new Set([...document.querySelectorAll('.clear-btn')].map((b) => b.getAttribute('aria-label')));
+        if (clearLabels.size !== 1) {
+          out.errors.push('lang switch: clear-field buttons carry ' + clearLabels.size + ' different labels in ' + lang + ': ' + [...clearLabels].join(' | '));
+        } else if (window.__PREV_CLEAR_LABEL__ === [...clearLabels][0]) {
+          out.errors.push('lang switch: clear-field label did not change on the switch to ' + lang);
+        }
+        window.__PREV_CLEAR_LABEL__ = [...clearLabels][0];
+        // The version status lines carry a live value and are redrawn from
+        // their remembered key, so both read the same in the new language.
+        const uvEl = document.getElementById('update-version'), avEl = document.getElementById('about-version');
+        if (avEl.textContent && !uvEl.classList.contains('update-avail') && uvEl.textContent !== avEl.textContent) {
+          out.errors.push('lang switch: update status line reads "' + uvEl.textContent + '" but About reads "' + avEl.textContent + '" in ' + lang);
+        }
+        if (!avEl.textContent) out.errors.push('lang switch: About version line is empty in ' + lang);
+        if (window.__PREV_VER__ !== undefined && window.__PREV_VER__ === avEl.textContent) {
+          out.errors.push('lang switch: About version line did not change on the switch to ' + lang);
+        }
+        window.__PREV_VER__ = avEl.textContent;
+      }
       await click('library-close');
       layoutScan('settings in ' + lang);
       mustReach('settings in ' + lang, '#settings-main button, #settings-main select');
