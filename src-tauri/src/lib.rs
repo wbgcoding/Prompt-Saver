@@ -8990,6 +8990,14 @@ async fn delete_all_data(app: AppHandle, state: State<'_, Db>) -> Result<(), Str
 fn settings_after_reset(old: &Settings) -> Settings {
     let mut fresh = Settings::default();
     fresh.migrate();
+    // A reset must never start deleting what the old settings kept: each retention
+    // window stays at whichever of the old value and the default keeps longer.
+    for (k, def) in [("historyDays", HISTORY_DAYS_DEFAULT), ("recordingRetentionDays", RECORDING_RETENTION_DAYS_DEFAULT)] {
+        let was = old.ui_values.get(k).copied().unwrap_or(def);
+        if was <= 0.0 || was > def {
+            fresh.ui_values.insert(k.to_string(), was.max(0.0));
+        }
+    }
     if let Some(pw) = old.ui_texts.get(BACKUP_PW_KEY) {
         fresh.ui_texts.insert(BACKUP_PW_KEY.to_string(), pw.clone());
     }
@@ -50345,6 +50353,26 @@ mod tests {
         assert_eq!(fresh.theme, default_theme(), "everything else is reset");
         assert_eq!(fresh.ui_texts.get(BACKUP_PW_KEY).map(String::as_str), Some("sealed"));
         assert!(still_opens(&fresh, &p), "the same password must open the prompt after a reset");
+    }
+
+    #[test]
+    fn a_reset_never_shortens_what_the_old_settings_kept() {
+        let mut old = Settings { retention_defaults_v2: false, ..Settings::default() };
+        old.migrate(); // an install from before the 30/90-day defaults: keep forever
+        let fresh = settings_after_reset(&old);
+        assert_eq!(history_max_age(&fresh), None, "a reset must not start pruning the copy history");
+        assert_eq!(fresh.ui_values.get("recordingRetentionDays"), Some(&0.0));
+        // A window longer than the default is kept as well; a shorter one takes the default.
+        let mut old = Settings::default();
+        old.ui_values.insert("historyDays".into(), 365.0);
+        old.ui_values.insert("recordingRetentionDays".into(), 7.0);
+        let fresh = settings_after_reset(&old);
+        assert_eq!(fresh.ui_values.get("historyDays"), Some(&365.0));
+        assert!(!fresh.ui_values.contains_key("recordingRetentionDays"));
+        // A fresh install resets to the defaults.
+        let fresh = settings_after_reset(&Settings::default());
+        assert!(!fresh.ui_values.contains_key("historyDays"));
+        assert!(!fresh.ui_values.contains_key("recordingRetentionDays"));
     }
 
     fn vault_store(settings: Settings, p: Prompt) -> Store {
