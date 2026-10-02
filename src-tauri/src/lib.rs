@@ -2680,6 +2680,7 @@ fn removed_ui_value_keys() -> &'static [&'static str] {
         "kbFocusFadeMs",
         "etaMinPct",
         "etaMinSecs",
+        "journalLimit",
     ]
 }
 

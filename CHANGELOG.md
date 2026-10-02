@@ -1698,6 +1698,8 @@ the video editor and the introduction tour ship on).
   switch for the favorites star are now the same setting.
 - **Close after copy is one button.** The library's own button decides and
   remembers it; the two expert switches for it are gone.
+- **One length for the copy history.** The window lists what the history
+  keeps; the separate row limit is gone.
 
 ## 2.6.3 (2026-07-26)
 

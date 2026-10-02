@@ -1597,6 +1597,9 @@ const gateOpen = (gate, seen) => {
   return inv ? !on : on;
 };
 
+// Rendering ceiling for the copy history window, the same top the old row slider had.
+const JOURNAL_ROWS_MAX = 10000;
+
 // Copy-history slider stops: coarser steps as the value grows (10s -> 100s ->
 // 1000s -> 10000s -> 100000s) so the slider stays smooth all the way to 1,000,000.
 const HISTORY_STOPS = (() => {
@@ -1665,7 +1668,6 @@ const EXPERT_VALUES = {
   // Copy-history length (0 = keep none).
   historyMax: { label: "valHistoryMax", def: 100, unit: "", stops: HISTORY_STOPS, gate: "copyHistory" },
   // Max copy-history rows the journal renders at once (UI cap, not storage).
-  journalLimit: { label: "valJournalLimit", min: 50, max: 10000, step: 50, def: 100, unit: "", gate: "copyHistory" },
   // Copy-history dialog width.
   journalWidth: { label: "valJournalWidth", min: 520, max: 1400, step: 20, def: 980, unit: "px", gate: "copyHistory" },
   // Block re-copying the SAME prompt within this window (0 = off). Never blocks others.
@@ -2289,7 +2291,7 @@ const EXPERT_TABS = [
       actions: [{ id: "ocr-index-backfill", label: "ocrIndexBackfillAction", gate: "ocrIndex" }] },
     { title: "expGroupTags", flags: ["tags"], values: ["tagChipPx", "tagPopCols"], dropdowns: ["tagFilterMode", "tagSort"] },
     // Everything that records or shows copy history lives with the history view.
-    { title: "expGroupJournal", flags: ["copyHistory", "historyTimestamps", "historyGrouped", "dedupCopyLog", "journalSearch", "journalTypeFilter", "journalColorFilter", { key: "journalTagFilter", gate: "tags" }, "journalRecent", "journalMostUsed", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "journalClear", "confirmClearHistory"], values: ["historyMax", "journalLimit", "journalWidth"], selects: ["historyDays"] },
+    { title: "expGroupJournal", flags: ["copyHistory", "historyTimestamps", "historyGrouped", "dedupCopyLog", "journalSearch", "journalTypeFilter", "journalColorFilter", { key: "journalTagFilter", gate: "tags" }, "journalRecent", "journalMostUsed", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "journalClear", "confirmClearHistory"], values: ["historyMax", "journalWidth"], selects: ["historyDays"] },
   ] },
   { title: "expTabMedia", groups: [
     { title: "expGroupMedia", flags: ["videoControls", "videoAutoplay", "videoMuted", "videoLoop", "mediaMeta", "mediaMetaBackfill", "grayscaleMedia", "mediaHoverDim", "mediaBorder", "roundMedia"], values: ["videoVolume", "mediaHoverOpacity", "mediaRadius"] },
@@ -2594,7 +2596,7 @@ const EXPERT_TIPS = [
   // Values that need a unit/behaviour explanation
   "copyCooldownMs", "dblClickMs", "autoPasteDelayMs", "snipPreviewVh",
   "historyPerPrompt", "similarThreshold", "similarHint", "clipMinChars", "clipInboxMax", "historyMax",
-  "journalLimit", "previewLen", "nameMaxLen", "searchRecentMax", "savedSearchMax", "maxViews", "gridMax",
+  "previewLen", "nameMaxLen", "searchRecentMax", "savedSearchMax", "maxViews", "gridMax",
   "viewBorder", "statsTopN", "viewGroups", "viewGroupMaxRows", "multiViewPrompt",
   "barToggles", "barToggleBoth", "quickGrid", "quickGridHoverOnly", "multiView", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "libraryCols", "copySize", "copyFont", "showLibrary", "showJournal", "composerScale", "primaryScale",
   "remoteApi", "remoteNetworkFilter", "remoteTlsShortLived", "urlScheme", "remotePort", "remoteRateLimit",
@@ -15362,7 +15364,7 @@ let journalUsedRev = false; // most-used sorted least-first
 // Refetch the copy log (the query changes: open, grouped toggle, after a copy).
 async function loadJournal() {
   const grouped = flag("historyGrouped");
-  journalLog = await invoke("recent_copies", { limit: val("journalLimit"), grouped }).catch(() => []);
+  journalLog = await invoke("recent_copies", { limit: Math.min(val("historyMax"), JOURNAL_ROWS_MAX), grouped }).catch(() => []);
   renderJournal();
 }
 

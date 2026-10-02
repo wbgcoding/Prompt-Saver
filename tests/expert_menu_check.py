@@ -160,7 +160,6 @@ DEPENDENCIES = {
     "tagPopCols": "tags",
     "tagSort": "tags",
     "historyMax": "copyHistory",
-    "journalLimit": "copyHistory",
     "journalWidth": "copyHistory",
     "historyDays": "copyHistory",
     "journalTagFilter": "tags",
