@@ -16630,6 +16630,22 @@ def main():
     if (callsFor('clip_inbox_clear').length) errs.push('564-m2: clearing an empty store still called clip_inbox_clear');
     if (undoBtn() || document.getElementById('toast').classList.contains('show')) errs.push('564-m2: clearing an empty store showed a toast');
 """)
+        failed += ar_probe('l3', 'copies from other apps: stored entries keep the history tab and the purge button while nothing records', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { copyHistory: false, clipWatcher: false } };</script>\n', r"""
+    await bootReady();
+    const tabsHidden = () => document.getElementById('library-tabs').classList.contains('hidden');
+    document.getElementById('library-btn').click(); await sleep(500);
+    if (tabsHidden()) errs.push('564-l3: the history tab is gone although entries from other apps are stored');
+    else {
+      document.getElementById('library-tab-history').click(); await sleep(400);
+      if (document.getElementById('clip-purge-backups').classList.contains('hidden')) errs.push('564-l3: the purge button is not reachable');
+      if (document.querySelectorAll('#journal-body .clip-row').length !== 2) errs.push('564-l3: the stored entries are not listed');
+    }
+    // With nothing stored and nothing recording, the tab is gone again.
+    document.getElementById('library-close').click(); await sleep(200);
+    RESULTS.clip_inbox_list = () => [];
+    document.getElementById('library-btn').click(); await sleep(500);
+    if (!tabsHidden()) errs.push('564-l3: the history tab is offered with nothing to show and nothing recording');
+""")
         failed += ar_probe('s1', 'screenshot editor: undoing a resize does not unlock operations behind the undo limit', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_values: { snipEditUndoMax: 10 } };</script>\n', r"""
     await bootReady();
     const cv = document.createElement('canvas'); cv.width = 200; cv.height = 120;

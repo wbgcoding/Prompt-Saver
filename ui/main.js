@@ -11340,7 +11340,7 @@ async function retentionCleanupResult(promise, nothingKey) {
 // One backend action per row -- several already existed for their own
 // button elsewhere (discarded recordings, temporary exports); trash and copy
 // history get a new on-demand command each, since neither had one before.
-// The clipboard inbox reuses the SAME full clear its own panel already
+// The clipboard inbox reuses the SAME full clear the copy history already
 // offers: it is always kept at its cap on every insert, so there is nothing
 // "expired" to sweep, and building a second, fake "clean up" that only ever
 // removes zero items would be worse than being honest about that. Recordings
@@ -11923,8 +11923,8 @@ async function restoreClipInbox(items) {
   await refreshClipInbox();
 }
 
-// Switching the collector off leaves whatever it gathered in place, with the inbox
-// button hidden: ask once whether to keep it. Closing the dialog keeps it.
+// Switching the collector off leaves whatever it gathered in place, still listed in the
+// copy history: ask once whether to keep it. Closing the dialog keeps it.
 async function offerClipInboxCleanup() {
   const items = await invoke("clip_inbox_list").catch(() => []);
   if (!items.length) return;
@@ -11941,7 +11941,8 @@ async function offerClipInboxCleanup() {
 
 // Something changed in the stored entries: reload the copy history if it is on screen.
 async function refreshClipInbox() {
-  if (isHistoryTabOpen()) await loadJournal();
+  if (isHistoryTabOpen()) { await loadJournal(); return; }
+  clipStored = (await invoke("clip_inbox_list").catch(() => [])).length;
 }
 
 // Keep all image/file modal controls consistent with modalState.
@@ -15070,6 +15071,7 @@ function setJournalColor(color) {
 
 let journalLog = []; // cached newest copy events; refetched only on open/group/copy
 let journalInbox = []; // text copied in other apps (the stored clipboard entries), newest first
+let clipStored = 0; // how many of those are stored: the history tab stays reachable while any are
 let journalSource = "all"; // source filter of the copy history: "all" | "app" | "elsewhere"
 let journalRecentRev = false; // recently-copied sorted oldest-first
 let journalUsedRev = false; // most-used sorted least-first
@@ -15079,6 +15081,7 @@ async function loadJournal() {
   const grouped = flag("historyGrouped");
   journalLog = await invoke("recent_copies", { limit: Math.min(val("historyMax"), JOURNAL_ROWS_MAX), grouped }).catch(() => []);
   journalInbox = await invoke("clip_inbox_list").catch(() => []);
+  clipStored = journalInbox.length;
   renderJournal();
 }
 
@@ -15605,8 +15608,10 @@ function openHelpAt(id) {
 // Which tab of the library is showing; the library reopens on the one used last.
 let libraryTab = "prompts"; // "prompts" | "history"
 const isHistoryTabOpen = () => !libraryEl.classList.contains("hidden") && libraryTab === "history";
-// The copy history tab exists while it records something: app copies or copies from other apps.
-const historyTabAvailable = () => flag("copyHistory") || optFlag("clipWatcher");
+// The copy history tab exists while it records something (app copies or copies from other
+// apps) and while stored entries from other apps remain, so they can still be seen,
+// dismissed and purged from every backup after the recorder was switched off.
+const historyTabAvailable = () => flag("copyHistory") || optFlag("clipWatcher") || clipStored > 0;
 
 function setLibraryTab(tab) {
   const avail = historyTabAvailable();
@@ -19804,6 +19809,7 @@ function bind() {
   buildColorFilter($("library-colors"), libColor);
   $("library-btn").addEventListener("click", async () => {
     await refreshLastEdited();
+    await refreshClipInbox(); // decides whether the history tab is offered
     libQuery = "";
     $("library-q").value = "";
     // The type pick is remembered per window; search, colour and favourites are not.
