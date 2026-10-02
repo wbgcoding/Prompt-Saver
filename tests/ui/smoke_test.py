@@ -5997,7 +5997,7 @@ PROBE = """
       }
       gridSw && gridSw.click(); await sleep(120);
       captionSw && captionSw.click(); await sleep(120);
-      const otherSw = rowByLabel2('Close library after copying')?.querySelector('input.switch');
+      const otherSw = rowByLabel2('Smart sort (usage-based)')?.querySelector('input.switch');
       if (!gridSw || !captionSw || !otherSw) {
         out.errors.push('could not find the rows needed for the "reset category" test');
       } else {
@@ -6019,7 +6019,7 @@ PROBE = """
             await sleep(300);
             const gridAfter = rowByLabel2('Always show grid lines')?.querySelector('input.switch');
             const captionAfter = rowByLabel2('Media captions')?.querySelector('input.switch');
-            const otherAfter = rowByLabel2('Close library after copying')?.querySelector('input.switch');
+            const otherAfter = rowByLabel2('Smart sort (usage-based)')?.querySelector('input.switch');
             if (!gridAfter || gridAfter.checked) {
               out.errors.push('"reset category" left a flag in the reset category still non-default');
             }
@@ -6031,7 +6031,7 @@ PROBE = """
             }
             // Restore the cross-group control flag so later blocks see the default state.
             if (otherAfter && otherAfter.checked !== undefined) {
-              const backSw = rowByLabel2('Close library after copying')?.querySelector('input.switch');
+              const backSw = rowByLabel2('Smart sort (usage-based)')?.querySelector('input.switch');
               if (backSw && backSw.checked === otherWasChecked) { backSw.click(); await sleep(120); }
             }
           }
