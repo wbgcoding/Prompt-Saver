@@ -40,10 +40,10 @@ EXPECTED = [
     ("flag", "gridViewBorder", "expTabFeatures", "expGroupViews", 1),
     ("value", "maxViews", "expTabFeatures", "expGroupViews", 1),
     ("value", "gridMax", "expTabFeatures", "expGroupViews", 0),
-    ("flag", "recSweepBroken", "expTabCapture", "expGroupRecording", 1),
+    ("flag", "recSweepBroken", "expTabCapture", "expGroupRecWhile", 0),
     ("value", "recDiscardKeepH", "expTabCapture", "expGroupRecording", 1),
     ("select", "recordingRetentionDays", "expTabCapture", "expGroupRecording", 1),
-    ("action", "rec-sweep-now", "expTabCapture", "expGroupRecording", 2),
+    ("action", "rec-sweep-now", "expTabCapture", "expGroupRecWhile", 1),
     ("value", "videoClipTtlMin", "expTabCapture", "expGroupVideoEditor", 1),
     ("action", "ocr-index-backfill", "expTabLibrary", "expGroupLibrary", 1),
     ("action", "float-recall", "expTabFeatures", "expGroupFolders", 1),
@@ -54,8 +54,9 @@ EXPECTED = [
     ("action", "error-log-open", "expTabSystem", "expGroupData", 1),
     ("color", "snipDefaultColor", "expTabCapture", "expGroupSnipEditor", 1),
     ("color", "veOvColor", "expTabCapture", "expGroupVideoEditor", 1),
-    ("flag", "recOutline", "expTabCapture", "expGroupRecording", 1),
-    ("color", "recOutlineColor", "expTabCapture", "expGroupRecording", 2),
+    ("flag", "recOutline", "expTabCapture", "expGroupRecWhile", 0),
+    ("color", "recOutlineColor", "expTabCapture", "expGroupRecWhile", 1),
+    ("value", "cameraFramerate", "expTabCapture", "expGroupCamera", 1),
     ("dropdown", "chainSeparator", "expTabFeatures", "expGroupChain", 1),
     ("value", "searchListMax", "expTabLibrary", "expGroupLibrary", 0),
     ("value", "veOvTextOutlinePx", "expTabCapture", "expGroupVideoEditor", 1),
@@ -70,7 +71,7 @@ STAYS = ["flag:chainPrompts", "value:gridMax", "value:searchListMax"]
 # The parent switches the rows above hang off.
 GATES = ["chainQuickStart", "multiView", "screenRecord", "recSweepBroken", "videoEditor",
          "ocrIndex", "floating", "promptVars", "dynVars", "varFixed", "errorLog", "screenshot", "snipEditor",
-         "globalSearch", "recOutline"]
+         "globalSearch", "recOutline", "cameraRecord"]
 
 FIND = """
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
