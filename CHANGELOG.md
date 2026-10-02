@@ -1258,7 +1258,7 @@ the video editor and the introduction tour ship on).
   you switched away before the restore finished loading.
 - Changing a PDF's active page did not count as an unsaved change, so closing
   the editor right after skipped the usual "discard changes?" prompt.
-- A pill unpinning itself (its own "Remove" button) left the tile's context
+- A pill unpinning itself (its own "Remove floating button" entry) left the tile's context
   menu unaware: it kept offering "Remove floating button" for a prompt that no
   longer had one, and clicking it brought the pill back instead.
 - Copying a prompt from a floating pill, the folder window or the tray did not
