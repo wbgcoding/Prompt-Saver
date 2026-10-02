@@ -21180,12 +21180,6 @@ function bind() {
   });
   // A quick-copy entry in the tray menu: same activation, never auto-paste.
   listen("prompt-tray-copy", (e) => onPromptHotkey(String(e.payload), false));
-  // The very first close-to-tray: backend held the window open, we explain
-  // the tray menu, then hide it ourselves once the hint is dismissed.
-  listen("first-tray-hide", async () => {
-    await infoDialog(t("trayHintTitle"), t("trayHintMsg"));
-    try { await window.__TAURI__?.window?.getCurrentWindow?.()?.hide?.(); } catch { /* no-op */ }
-  });
   // The automatic backup has no frontend call site of its own to toast
   // from: the backend says so once the snapshot is really on disk.
   listen("backup-done", () => toast(t("backupDone")));
@@ -21511,6 +21505,9 @@ const TOUR_SETUP = [
   { key: "autostart", labelKey: "autostart", textKey: "tourSetAutostart",
     get: () => settings.autostart === true,
     setLive: (v) => tourSetSettingLive("set_autostart", "autostart", v) },
+  { key: "minimizeOnClose", labelKey: "minimizeOnClose", textKey: "tourSetMinimize",
+    get: () => settings.minimize_to_tray === true,
+    setLive: (v) => tourSetSettingLive("set_minimize_on_close", "minimize_to_tray", v) },
   { key: "autoUpdate", labelKey: "autoUpdate", textKey: "tourSetUpdate",
     get: () => settings.auto_update !== false,
     setLive: (v) => tourSetSettingLive("set_auto_update", "auto_update", v) },
@@ -21748,7 +21745,9 @@ function tourMeasureMaxStepHeight() {
     const wrap = i < TOUR_STEPS.length ? renderTourDrawingStep(TOUR_STEPS[i]) : renderTourOptionsStep();
     body.innerHTML = "";
     body.appendChild(wrap);
-    max = Math.max(max, wrap.getBoundingClientRect().height);
+    // Layout height, not the painted rect: the open animation scales the dialog
+    // while it is measured, which made the tallest step read about 3% short.
+    max = Math.max(max, wrap.offsetHeight);
   }
   return max;
 }

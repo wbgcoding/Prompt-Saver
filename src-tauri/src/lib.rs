@@ -180,27 +180,9 @@ fn build_main_window(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow> {
                     .unwrap_or(false);
             if minimize {
                 api.prevent_close();
-                // A hidden window never keeps listening.
+                // Hide instead of quitting; a hidden window never keeps listening.
                 voice_shutdown(&handle2);
-                // The very first time, explain that the tray menu
-                // still copies while hidden: JS shows it, then hides
-                // itself once dismissed. Every later close hides at once.
-                let first_time = handle2
-                    .try_state::<Db>()
-                    .map(|s| {
-                        !s.lock().unwrap_or_else(|e| e.into_inner())
-                            .settings
-                            .seen_tray_hint
-                    })
-                    .unwrap_or(false);
-                if first_time {
-                    if let Some(state) = handle2.try_state::<Db>() {
-                        let mut store = state.lock().unwrap_or_else(|e| e.into_inner());
-                        store.settings.seen_tray_hint = true;
-                        save_settings(&handle2, &store.settings);
-                    }
-                    let _ = handle2.emit_to("main", "first-tray-hide", ());
-                } else if let Some(w) = handle2.get_webview_window("main") {
+                if let Some(w) = handle2.get_webview_window("main") {
                     let _ = w.hide();
                 }
             } else {
@@ -2199,11 +2181,8 @@ struct Settings {
     video_prefs: HashMap<String, VideoPrefs>,
     #[serde(default)]
     window: Option<WindowGeom>,
-    #[serde(default)]
+    #[serde(default = "default_on")]
     minimize_to_tray: bool,
-    // One-time hint: explains that the tray menu still copies while hidden.
-    #[serde(default)]
-    seen_tray_hint: bool,
     #[serde(default)]
     autostart: bool,
     #[serde(default)]
@@ -2371,8 +2350,7 @@ impl Default for Settings {
             float_folders: Vec::new(),
             video_prefs: HashMap::new(),
             window: None,
-            minimize_to_tray: false,
-            seen_tray_hint: false,
+            minimize_to_tray: true,
             autostart: false,
             start_minimized: false,
             always_on_top: false,
@@ -55267,5 +55245,14 @@ mod tests {
         assert_eq!(result.unwrap_err(), "cancelled");
         assert!(took < Duration::from_secs(2), "the cancel must not wait for ffmpeg's next line: {took:?}");
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn fresh_settings_close_to_tray() {
+        assert!(Settings::default().minimize_to_tray);
+        let bare: Settings = serde_json::from_str("{}").unwrap();
+        assert!(bare.minimize_to_tray, "a store without the field gets the new default");
+        let kept: Settings = serde_json::from_str(r#"{"minimize_to_tray":false}"#).unwrap();
+        assert!(!kept.minimize_to_tray, "a stored false stays false");
     }
 }

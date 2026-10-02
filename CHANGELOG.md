@@ -1670,6 +1670,10 @@ the video editor and the introduction tour ship on).
 - An inserted video overlay now starts at its own beginning and stays in
   sync with its own sound, instead of showing a later moment of the clip
   while the sound played from the start.
+- **Closing the window keeps the app running.** A new install now hides to the
+  tray on close, so floating buttons, the tray menu and the hotkeys keep
+  working; the one-time hint on the first close is gone. Existing installs
+  keep their setting.
 
 ## 2.6.3 (2026-07-26)
 

@@ -19,7 +19,8 @@ The gear button in the header opens the settings window with the everyday
 choices; everything optional lives in the expert menu, opened from the same
 window. It holds the language, the theme, the text size and font of the tiles,
 whether the window stays on top, starts with Windows, starts in the background
-and goes to the background instead of quitting when closed, the global hotkey,
+and goes to the background instead of quitting when closed (on by default for a
+new install; a portable copy always quits), the global hotkey,
 auto-paste on double-click, and whether screenshots always go to the screenshots
 folder. Every change applies at once, with no save button. "Automatic" as the
 language follows Windows and falls back to English. Reset puts every setting
@@ -1055,7 +1056,8 @@ ersten Start bereits da; ein Button über dem Raster entfernt sie mit einem Klic
 mit den alltäglichen Entscheidungen; alles Optionale liegt im Expertenmenü, das
 sich im selben Fenster öffnet. Dort stehen Sprache, Theme, Textgröße und Schriftart
 der Kacheln, ob das Fenster im Vordergrund bleibt, mit Windows startet, im
-Hintergrund startet und sich beim Schließen in den Hintergrund legt, der globale
+Hintergrund startet und sich beim Schließen in den Hintergrund legt (bei einer
+neuen Installation ab Werk an; eine portable Kopie beendet sich immer), der globale
 Hotkey, Auto-Einfügen bei Doppelklick und das Speichern von Screenshots im
 Screenshots-Ordner. Jede Änderung gilt sofort, ohne Speichern-Button.
 „Automatisch“ als Sprache folgt Windows und fällt auf Englisch zurück.

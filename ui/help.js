@@ -33,7 +33,7 @@ export const HELP_CONTENT = {
       howTo: [
         "Click the gear button in the header to open it.",
         "Pick the language, the theme, and the text size and font of the tiles.",
-        "Choose whether the window stays on top, starts with Windows, starts in the background, and goes to the background instead of quitting when closed.",
+        "Choose whether the window stays on top, starts with Windows, starts in the background, and goes to the background instead of quitting when closed (on by default for a new install; a portable copy always quits).",
         "Set the global hotkey, auto-paste on double-click, and whether screenshots always go to the screenshots folder.",
       ],
       whatHappens:
@@ -781,7 +781,7 @@ export const HELP_CONTENT = {
       howTo: [
         "Auf das Zahnrad in der Kopfzeile klicken, um es zu öffnen.",
         "Sprache, Theme sowie Textgröße und Schriftart der Kacheln wählen.",
-        "Festlegen, ob das Fenster im Vordergrund bleibt, mit Windows startet, im Hintergrund startet und sich beim Schließen in den Hintergrund legt, statt zu beenden.",
+        "Festlegen, ob das Fenster im Vordergrund bleibt, mit Windows startet, im Hintergrund startet und sich beim Schließen in den Hintergrund legt, statt zu beenden (bei einer neuen Installation ab Werk an; eine portable Kopie beendet sich immer).",
         "Den globalen Hotkey, Auto-Einfügen bei Doppelklick und das Speichern von Screenshots im Screenshots-Ordner einstellen.",
       ],
       whatHappens:
