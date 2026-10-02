@@ -1841,14 +1841,24 @@ fn tray_window_close(app: AppHandle) {
 }
 
 // The tray filter row hands its first keystroke to the quick launcher: what was typed
-// becomes the launcher's starting query, the tray window closes, the launcher opens.
+// becomes the launcher's starting query and the launcher opens. The tray window stays
+// until it has passed on whatever was typed meanwhile (tray_launcher_prefill) and
+// closes itself then.
 // Must stay async: it builds the launcher window, and window creation from a sync
 // command deadlocks on Windows (sync commands run on the main thread).
 #[tauri::command]
 async fn tray_open_launcher(app: AppHandle, query: String) {
     *LAUNCHER_PREFILL.lock().unwrap_or_else(|e| e.into_inner()) = launcher_prefill_text(&query);
-    tray_window_close(app.clone());
     open_launcher_window(&app);
+}
+
+// Characters typed in the tray before the launcher had focus: the newer text replaces the
+// pending starting query and is pushed to the launcher in case it has already booted.
+#[tauri::command]
+fn tray_launcher_prefill(app: AppHandle, query: String) {
+    let text = launcher_prefill_text(&query);
+    *LAUNCHER_PREFILL.lock().unwrap_or_else(|e| e.into_inner()) = text.clone();
+    let _ = app.emit_to(LAUNCHER_WIN_LABEL, "launcher-prefill", text);
 }
 
 // The starting query is user input crossing a window boundary: capped like the launcher's own field.
@@ -36200,6 +36210,7 @@ pub fn run() {
             tray_window_activate,
             tray_window_close,
             tray_open_launcher,
+            tray_launcher_prefill,
             copy_prompt,
             rotation_peek,
             rotation_commit,

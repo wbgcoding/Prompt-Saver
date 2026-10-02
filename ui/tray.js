@@ -167,10 +167,18 @@ function render(plan) {
 }
 
 // The first keystroke in the filter field hands over to the quick launcher: the
-// backend closes this window and opens the launcher with what was typed already in
-// its search box. Arrow keys and Enter on the fixed rows keep working before typing.
+// backend opens it with what was typed already in its search box. Characters typed
+// while it is still coming up stay in this field and are passed on once, right before
+// this window closes. Arrow keys and Enter on the fixed rows work before typing.
+let handover = null; // set once the first keystroke started the hand-off
 function onSearchInput() {
-  invoke("tray_open_launcher", { query: searchEl.value }).catch(() => {});
+  if (handover) return;
+  const first = searchEl.value;
+  handover = invoke("tray_open_launcher", { query: first }).catch(() => {}).then(async () => {
+    const latest = searchEl.value;
+    if (latest !== first) await invoke("tray_launcher_prefill", { query: latest }).catch(() => {});
+    close();
+  });
 }
 
 document.addEventListener("keydown", (e) => {
@@ -196,6 +204,7 @@ document.addEventListener("keydown", (e) => {
 const OPENED_AT = Date.now();
 const BLUR_GRACE_MS = 400;
 window.addEventListener("blur", () => {
+  if (handover) return; // the hand-off closes this window itself
   const left = BLUR_GRACE_MS - (Date.now() - OPENED_AT);
   if (left <= 0) close();
   // A blur landing inside the hand-off window itself (the backend showing the
@@ -204,10 +213,10 @@ window.addEventListener("blur", () => {
   // outright left this always-on-top menu stranded on screen with nothing left
   // to close it. Defer instead: close once the grace window actually ends,
   // unless this window is focused again before then.
-  else setTimeout(() => { if (!document.hasFocus()) close(); }, left);
+  else setTimeout(() => { if (!document.hasFocus() && !handover) close(); }, left);
 });
 document.body.addEventListener("mousedown", (e) => {
-  if (!cardEl.contains(e.target)) close();
+  if (!cardEl.contains(e.target) && !handover) close();
 });
 
 async function boot() {

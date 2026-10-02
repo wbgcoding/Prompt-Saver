@@ -10883,6 +10883,11 @@ window.__LAUNCHER_PREFILL__ = 'Translate';
     const rows = [...document.querySelectorAll('#results .launcher-row')];
     if (rows.length !== 1 || rows[0].dataset.id !== 'p1') errs.push('the prefilled query did not filter the list: ' + rows.length + ' rows');
     if (search.selectionStart !== 9 || search.selectionEnd !== 9) errs.push('the caret is not at the end of the prefill');
+    // Characters the tray passes on after this window is up replace the starting query.
+    window.__FIRE__('launcher-prefill', 'Translate it');
+    await sleep(60);
+    if (search.value !== 'Translate it') errs.push('a late prefill did not reach the search field: ' + search.value);
+    if (search.selectionStart !== 12) errs.push('the caret is not at the end after a late prefill');
   } catch (e) { errs.push('probe: ' + e.message); }
   const pre = document.createElement('pre');
   pre.id = 'SMOKE';
@@ -10924,17 +10929,6 @@ TRAY_PROBE = """
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
     await sleep(30);
     if (!rows()[0].classList.contains('active')) errs.push('ArrowUp did not move the highlight back to row 0');
-    // The filter row at the very top hands the first keystroke to the quick
-    // launcher: what was typed travels along, the tray list itself stays as it was.
-    const field = document.getElementById('tray-search');
-    if (!field || field.hidden) errs.push('the search field is missing or hidden while traySearch is on');
-    field.value = 'alpha';
-    field.dispatchEvent(new Event('input', { bubbles: true }));
-    await sleep(60);
-    if (window.__TRAY_LAUNCHER_QUERY__ !== 'alpha') {
-      errs.push('typing in the tray filter did not hand the text to the launcher: ' + window.__TRAY_LAUNCHER_QUERY__);
-    }
-    if (rows().length !== 5) errs.push('typing changed the tray rows, found ' + rows().length);
     // Enter on a fixed row still goes through the plain activation.
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     await sleep(30);
@@ -10946,6 +10940,25 @@ TRAY_PROBE = """
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     await sleep(30);
     if (window.__TRAY_CLOSED__) errs.push('closing fired even though an activation already had');
+    // The filter row at the very top hands the first keystroke to the quick
+    // launcher: what was typed travels along, the tray list itself stays as it was.
+    // Characters typed before the launcher has focus are passed on once, not lost,
+    // and never start a second hand-off.
+    const field = document.getElementById('tray-search');
+    if (!field || field.hidden) errs.push('the search field is missing or hidden while traySearch is on');
+    field.value = 'alpha';
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    field.value = 'alphabet';
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    await sleep(80);
+    if (window.__TRAY_LAUNCHER_QUERY__ !== 'alpha') {
+      errs.push('typing in the tray filter did not hand the text to the launcher: ' + window.__TRAY_LAUNCHER_QUERY__);
+    }
+    if (window.__TRAY_LAUNCHER_CALLS__ !== 1) errs.push('typing twice started ' + window.__TRAY_LAUNCHER_CALLS__ + ' hand-offs instead of 1');
+    if (window.__TRAY_LAUNCHER_PREFILL__ !== 'alphabet') {
+      errs.push('the characters typed during the hand-off were not passed on: ' + window.__TRAY_LAUNCHER_PREFILL__);
+    }
+    if (rows().length !== 5) errs.push('typing changed the tray rows, found ' + rows().length);
   } catch (e) { errs.push('probe: ' + e.message); }
   const pre = document.createElement('pre');
   pre.id = 'SMOKE';

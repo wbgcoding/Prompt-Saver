@@ -614,7 +614,9 @@ const RESULTS = {
   tray_window_activate: (a) => { window.__TRAY_ACTIVATED__ = a && a.id; return null; },
   tray_window_close: () => { window.__TRAY_CLOSED__ = true; return null; },
   // The filter row hands what was typed to the launcher; the probe reads it back.
-  tray_open_launcher: (a) => { window.__TRAY_LAUNCHER_QUERY__ = a && a.query; return null; },
+  tray_open_launcher: (a) => { window.__TRAY_LAUNCHER_QUERY__ = a && a.query; window.__TRAY_LAUNCHER_CALLS__ = (window.__TRAY_LAUNCHER_CALLS__ || 0) + 1; return null; },
+  // Text typed in the tray after the hand-off started.
+  tray_launcher_prefill: (a) => { window.__TRAY_LAUNCHER_PREFILL__ = a && a.query; return null; },
   set_theme: () => "dark",
   // Saving hands back the settings blob with the edited theme in place.
   save_custom_theme: (a) => {

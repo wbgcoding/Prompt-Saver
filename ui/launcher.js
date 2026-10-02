@@ -149,7 +149,21 @@ document.body.addEventListener("mousedown", (e) => {
   if (!cardEl.contains(e.target)) close();
 });
 
+// Text the tray filter row sends after this window was opened (the characters typed
+// before it had focus): applied at once, or held until the first render has happened.
+let bootDone = false;
+let lateFill = null;
+function applyPrefill(text) {
+  searchEl.value = String(text || "").slice(0, 200);
+  render();
+  searchEl.setSelectionRange(searchEl.value.length, searchEl.value.length);
+}
+
 async function boot() {
+  await listen("launcher-prefill", (e) => {
+    if (bootDone) applyPrefill(e.payload);
+    else lateFill = String(e.payload || "");
+  });
   // A lean command instead of get_state: this window has to be ready the instant
   // its hotkey fires, and it needs four small fields, not a whole prompt each.
   const state = await invoke("launcher_items").catch(() => ({ prompts: [], language: "", usage: {}, last_used: {}, prefill: "" }));
@@ -168,8 +182,10 @@ async function boot() {
   usage = state.usage || {};
   lastUsed = state.last_used || {};
   if (state.prefill) searchEl.value = state.prefill;
+  if (lateFill !== null) searchEl.value = lateFill.slice(0, 200);
   render();
   searchEl.focus();
   searchEl.setSelectionRange(searchEl.value.length, searchEl.value.length);
+  bootDone = true;
 }
 boot();
