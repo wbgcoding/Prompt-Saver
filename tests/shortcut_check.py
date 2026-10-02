@@ -27,6 +27,8 @@ import re
 import sys
 from pathlib import Path
 
+from i18n_files import combined_source
+
 REPO = Path(__file__).resolve().parents[1]
 
 # Windows that handle their own keys: their entries are documented in the overview
@@ -58,7 +60,7 @@ def parse_shortcuts():
 
 
 def i18n_has_key(key):
-    src = (REPO / "ui" / "i18n.js").read_text(encoding="utf-8")
+    src = combined_source()
     return re.search(rf'(?<![\w.]){re.escape(key)}:\s*"', src) is not None
 
 

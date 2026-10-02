@@ -9,7 +9,7 @@ minimum size of ZERO, which is what used to squeeze the open history down to a
 sliver instead of letting the modal scroll. This test locks that behaviour in.
 
 Everything is measured three times over: in English and in the two wordiest UI
-languages, with the labels taken straight from ui/i18n.js. A row that fits an
+languages, with the labels taken straight from ui/i18n/. A row that fits an
 English word can still burst once it reads "Restaurează" or "Przywróć".
 
 Run:  python tests/layout/modal_scroll_test.py
@@ -30,10 +30,13 @@ STYLES = REPO / "ui" / "styles"
 
 # A row is only as tight as its longest label, so every measurement runs three
 # times: English, Polish and Romanian, the two wordiest of the eleven UI
-# languages. The texts are read out of ui/i18n.js instead of being copied here,
+# languages. The texts are read out of ui/i18n/ instead of being copied here,
 # so a retranslation cannot leave this test measuring words the app dropped.
 LANGS = ["en", "pl", "ro"]
-_I18N = (REPO / "ui" / "i18n.js").read_text(encoding="utf-8")
+sys.path.insert(0, str(REPO / "tests"))
+from i18n_files import combined_source  # noqa: E402
+
+_I18N = combined_source()
 
 
 def strings(lang: str) -> dict:

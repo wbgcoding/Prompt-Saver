@@ -21,6 +21,8 @@ import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO / "tests"))
+from i18n_files import combined_source  # noqa: E402
 HERE = Path(__file__).parent
 
 CHROME_CANDIDATES = [
@@ -492,8 +494,8 @@ def run(browser, tmp, name, probe, seed, size=(1280, 900), budget=60000, head=""
 
 
 def english_titles():
-    """Tab and group title key -> English text, read from the en block of i18n.js."""
-    text = (REPO / "ui" / "i18n.js").read_text(encoding="utf-8")
+    """Tab and group title key -> English text, read from the en block of the dictionary."""
+    text = combined_source()
     en = re.search(r"\n  en: \{(.*?)\n  de: \{", text, re.S).group(1)
     return dict(re.findall(r'^    ((?:expTab|expGroup)\w+): "([^"]*)"', en, re.M))
 
@@ -501,8 +503,8 @@ def english_titles():
 def source_problems():
     """Help texts must not name a group that no longer exists."""
     out = []
-    for rel in ("ui/help.js", "docs/help.md", "README.md", "ui/i18n.js"):
-        text = (REPO / rel).read_text(encoding="utf-8")
+    for rel in ("ui/help.js", "docs/help.md", "README.md", "ui/i18n/*"):
+        text = combined_source() if rel == "ui/i18n/*" else (REPO / rel).read_text(encoding="utf-8")
         for old in ("Tiles & copying", "Kacheln & Kopieren", "Tiles &amp; copying"):
             if old in text:
                 out.append(f"{rel} still names the old group '{old}'")

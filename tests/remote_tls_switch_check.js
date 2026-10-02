@@ -3,7 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const src = fs.readFileSync(path.join(__dirname, "..", "ui", "main.js"), "utf8").replace(/\r\n/g, "\n");
-const i18n = fs.readFileSync(path.join(__dirname, "..", "ui", "i18n.js"), "utf8");
+const i18n = require("./i18n_load.js").combinedSource();
 const problems = [];
 const need = (ok, msg) => { if (!ok) problems.push(msg); };
 

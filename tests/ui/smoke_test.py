@@ -26,6 +26,12 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).parent
+# A dynamic import that was not preloaded never resolves under --virtual-time-budget,
+# and the language passes switch the UI language at run time, so every language file
+# is preloaded in the staged main page.
+LANG_PRELOADS = "".join(
+    f'<link rel="modulepreload" href="i18n/{c}.js" />'
+    for c in ("en", "de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro"))
 
 # The floor is the app's own minimum window size: read it, so this sweep follows
 # tauri.conf.json instead of drifting away from it.
@@ -11334,6 +11340,7 @@ CAMERA_PROBE = """
 # untouched.
 CAMERA_REC_STUB = """
 <script type="module" src="i18n.js"></script>
+<script type="module" src="i18n/en.js"></script>
 <script type="module" src="floatShared.js"></script>
 <script>
 window.__CAM = { gum: [], calls: [], order: [], gumFail: null, ctorThrow: false, startThrow: false,
@@ -15311,7 +15318,7 @@ def main():
         shutil.copy(HERE / "tauri_stub.js", tmp / "ui" / "tauri_stub.js")
         page = tmp / "ui" / "index.html"
         html = page.read_text(encoding="utf-8")
-        html = html.replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
+        html = html.replace("<script", '<script src="tauri_stub.js"></script>' + LANG_PRELOADS + '\n<script', 1)
         html = html.replace("</body>", PROBE + "</body>")
         page.write_text(html, encoding="utf-8")
 

@@ -19,6 +19,8 @@ import re
 import sys
 from pathlib import Path
 
+from i18n_files import combined_source
+
 MAIN = Path(__file__).resolve().parents[1] / "ui" / "main.js"
 SRC = MAIN.read_text(encoding="utf-8")
 # Comments carry words like "// Duplicate finder: threshold" that the key scanner
@@ -378,7 +380,7 @@ for gate in re.findall(r'gate:\s*"([^"]+)"', tabs):
 # The "(default off)" suffix is appended at render time from the `defaultOff`
 # string, so no label may carry it inline: that would double up or, worse, stick
 # to a feature that is on by default.
-i18n = (Path(__file__).resolve().parents[1] / "ui" / "i18n.js").read_text(encoding="utf-8")
+i18n = combined_source()
 for line in i18n.splitlines():
     if "(Standard Aus)" in line and not line.lstrip().startswith("defaultOff:"):
         problems.append(f"i18n: label carries the default-off suffix inline: {line.strip()[:70]}")

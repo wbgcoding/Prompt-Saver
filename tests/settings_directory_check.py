@@ -21,14 +21,15 @@ import re
 import sys
 from pathlib import Path
 
+from i18n_files import combined_source
+
 ROOT = Path(__file__).resolve().parents[1]
 MAIN = ROOT / "ui" / "main.js"
 INDEX = ROOT / "ui" / "index.html"
-I18N = ROOT / "ui" / "i18n.js"
 
 MAIN_SRC = MAIN.read_text(encoding="utf-8")
 INDEX_SRC = INDEX.read_text(encoding="utf-8")
-I18N_SRC = I18N.read_text(encoding="utf-8")
+I18N_SRC = combined_source()
 
 # Comments would otherwise read as directory entries or data-setting-row hits.
 MAIN_NC = re.sub(r"/\*.*?\*/", "", MAIN_SRC, flags=re.S)

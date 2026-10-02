@@ -1,7 +1,8 @@
 // Main-window controller. Uses Tauri's global API (withGlobalTauri).
 import { APP_NAME, FLAG_DEFAULTS } from "./brand.js";
 import { applyTerms } from "./terms.js";
-import { I18N, LANGS } from "./i18n.js";
+import { LANGS, loadLang, primeLang } from "./i18n.js";
+import EN from "./i18n/en.js";
 import { FONTS, FONT_LABELS, fitText } from "./fonts.js";
 import { IMAGE_EXT, mediaKind, buildMediaBar, applyVideoPrefs, setMediaDefaults } from "./media.js";
 import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT, COPY_SOUND_VOLUME_DEFAULT } from "./copyDefaults.js";
@@ -15,6 +16,7 @@ import { attachSelectPicker } from "./selectpop.js";
 import { snapMove } from "./snap.js";
 import { confirmDialog, infoDialog, dismissConfirm, initDialogs, EYE_SVG } from "./dialog.js";
 import { withShortcut as withShortcutRaw, rowsForScope as rowsForScopeRaw, sectionsForScopes as sectionsForScopesRaw, SCOPE_TITLE_KEYS } from "./shortcuts.js";
+primeLang("en", EN);
 
 const { invoke, convertFileSrc } = window.__TAURI__.core;
 const { listen, emit } = window.__TAURI__.event;
@@ -271,6 +273,7 @@ function makeKeyboardActivatable(el) {
 }
 
 let LANG = "en";
+let DICT = EN;
 // A language that was stored before it was retired has no option left, which would
 // leave the select blank; show what the app actually falls back to instead.
 function setLangSelect() {
@@ -280,10 +283,19 @@ function setLangSelect() {
   if (!sel.value) sel.value = "auto";
 }
 const pickLang = (pref) => resolveLang(pref, LANGS);
+// Loads the dictionary of the chosen language before LANG flips, so a caller that awaits
+// this never renders a half-switched state. English is primed, so it never waits.
+let langSeq = 0;
+async function setLang(pref) {
+  const code = pickLang(pref), seq = ++langSeq;
+  const dict = await loadLang(code);
+  if (seq !== langSeq) return;
+  LANG = code; DICT = dict;
+}
 // {app} stands for the product name in every translation, so no string spells it.
 // Filling it here means callers never have to pass it.
 const t = (key) =>
-  applyTerms(String(I18N[LANG][key] ?? I18N.en[key] ?? key).replaceAll("{app}", APP_NAME), LANG);
+  applyTerms(String(DICT[key] ?? EN[key] ?? key).replaceAll("{app}", APP_NAME), LANG);
 
 // buildMediaBar (media.js) is shared with the floating pill, which has no
 // synchronous access to t(): so it takes plain resolved strings, not keys.
@@ -3839,7 +3851,7 @@ const EXPERT_ACTIONS = {};
 // A search matches if the term is in the active language OR in English: English
 // is the lingua franca, so a non-native speaker's query still finds the setting.
 function i18nHit(key, q) {
-  return (I18N[LANG][key] || "").toLowerCase().includes(q) || (I18N.en[key] || "").toLowerCase().includes(q);
+  return (DICT[key] || "").toLowerCase().includes(q) || (EN[key] || "").toLowerCase().includes(q);
 }
 // Expert-menu search also matches a setting's tooltip text, not just its
 // label: a setting is often findable only by a word that lives in the tip.
@@ -15827,7 +15839,7 @@ async function runImport() {
     if (count == null) return;
     await renderGrid(); // refreshes prompts AND settings
     // Imported preferences apply on the spot: no restart needed.
-    LANG = pickLang(settings.language);
+    await setLang(settings.language);
     applyI18n();
     fillSizeSelects();
     fillFontSelects();
@@ -20051,7 +20063,7 @@ function bind() {
   // no restart, no reload.
   $("lang-select").addEventListener("change", async (e) => {
     await invoke("set_language", { lang: e.target.value });
-    LANG = pickLang(e.target.value);
+    await setLang(e.target.value);
     applyI18n();
     // Re-fill the JS-built selects, then restore their current values.
     fillSizeSelects();
@@ -21478,7 +21490,7 @@ async function maybeOfferEditorDraftRecovery() {
 async function applySettingsCore() {
   settings = await invoke("get_settings");
   loadPalette();
-  LANG = pickLang(settings.language);
+  await setLang(settings.language);
   applyI18n();
   fillSizeSelects();
   fillFontSelects();

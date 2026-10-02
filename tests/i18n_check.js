@@ -9,23 +9,12 @@
 // Run:  node tests/i18n_check.js      Exit: 0 = clean, 1 = problems.
 const fs = require("fs");
 const path = require("path");
-const vm = require("vm");
+const { LANGS, I18N, FLOAT_TXT } = require("./i18n_load.js");
 
 const REPO = path.resolve(__dirname, "..");
 const UI = path.join(REPO, "ui");
 
-const src = fs.readFileSync(path.join(UI, "i18n.js"), "utf8");
-// i18n.js is a plain script, not a module: evaluate it in a bare sandbox and read
-// the object it declares.
-// It is an ES module; drop the `export` keywords so a plain sandbox can run it.
-const plain = src.replace(/^export\s+/gm, "");
-const sandbox = { window: {}, document: {}, navigator: { language: "en" } };
-vm.runInNewContext(plain + "\nthis.__I18N = typeof I18N !== 'undefined' ? I18N : null;", sandbox);
-const I18N = sandbox.__I18N;
-if (!I18N) {
-  console.log("FAIL i18n.js did not define I18N");
-  process.exit(1);
-}
+// The dictionaries live in ui/i18n/<code>.js; tests/i18n_load.js evaluates them.
 
 const langs = Object.keys(I18N);
 const en = new Set(Object.keys(I18N.en));
@@ -48,6 +37,34 @@ for (const lang of langs) {
       const want = holes(I18N.en[k]);
       const got = holes(I18N[lang][k]);
       if (want !== got) problems.push(`${lang}: '${k}' has placeholders [${got}] instead of [${want}]`);
+    }
+  }
+}
+
+// Every language file under ui/i18n/ (float.js aside) must belong to a code in LANGS,
+// and every code in LANGS must have its file.
+const files = fs.readdirSync(path.join(UI, "i18n")).filter((f) => f.endsWith(".js") && f !== "float.js").map((f) => f.slice(0, -3));
+for (const f of files) if (!LANGS.includes(f)) problems.push(`ui/i18n/${f}.js has no matching code in LANGS`);
+for (const c of LANGS) if (!files.includes(c)) problems.push(`LANGS lists '${c}' but ui/i18n/${c}.js is missing`);
+// The loader's own list must be the same set (it cannot be required from Node: it is
+// an ES module that imports the DOM-side helpers).
+const loaderLangs = (fs.readFileSync(path.join(UI, "i18n.js"), "utf8").match(/export const LANGS = \[([^\]]*)\]/) || [])[1];
+const loaderSet = (loaderLangs || "").match(/"([a-z]+)"/g) || [];
+if (loaderSet.map((x) => x.slice(1, -1)).join(",") !== LANGS.join(",")) problems.push("ui/i18n.js LANGS differs from the language files");
+
+// Compact strings (FLOAT_TXT): every language carries exactly the en keys and the
+// same {...} tokens as en.
+{
+  const fen = new Set(Object.keys(FLOAT_TXT.en));
+  const tok = (s) => (String(s).match(/\{[^}]*\}/g) || []).sort().join(",");
+  for (const lang of LANGS) {
+    const dict = FLOAT_TXT[lang];
+    if (!dict) { problems.push(`FLOAT_TXT: no block for '${lang}'`); continue; }
+    for (const k of fen) if (!(k in dict)) problems.push(`FLOAT_TXT ${lang}: missing '${k}'`);
+    for (const k of Object.keys(dict)) {
+      if (!fen.has(k)) { problems.push(`FLOAT_TXT ${lang}: has '${k}' which en does not`); continue; }
+      if (!String(dict[k]).trim()) problems.push(`FLOAT_TXT ${lang}: '${k}' is empty`);
+      if (tok(dict[k]) !== tok(FLOAT_TXT.en[k])) problems.push(`FLOAT_TXT ${lang}: '${k}' has tokens [${tok(dict[k])}] instead of [${tok(FLOAT_TXT.en[k])}]`);
     }
   }
 }

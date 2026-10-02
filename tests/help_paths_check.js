@@ -21,7 +21,7 @@ for (const m of main.slice(start, end).matchAll(/title: "(expTab\w+|expGroup\w+)
 }
 
 // Labels per language from the i18n blocks.
-const lines = read("ui/i18n.js").split("\n");
+const lines = require("./i18n_load.js").combinedSource().split("\n");
 const blockStart = (code) => lines.findIndex((l) => l.startsWith(`  ${code}: {`));
 const labels = {};
 for (const [code, next] of [["en", "de"], ["de", "es"]]) {

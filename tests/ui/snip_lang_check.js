@@ -75,7 +75,7 @@ async function main() {
 
   const tick = () => new Promise((r) => setTimeout(r, 120));
   const hint = () => els["snip-hint"].textContent;
-  const { I18N } = await import(pathToFileURL(path.join(uiDir, "i18n.js")).href);
+  const { I18N } = require("../i18n_load.js");
   const problems = [];
   const expect = (label, got, want) => {
     if (got !== want) problems.push(`${label}: got ${JSON.stringify(got)}, want ${JSON.stringify(want)}`);

@@ -14,9 +14,10 @@ import re
 import sys
 from pathlib import Path
 
+from i18n_files import combined_source
+
 ROOT = Path(__file__).resolve().parent.parent
 MAIN = ROOT / "ui" / "main.js"
-I18N = ROOT / "ui" / "i18n.js"
 
 
 def registry_keys(source, name):
@@ -61,7 +62,7 @@ def main():
     opt_flag_labels = set(registry_keys(src_nc, "OPT_FLAG_LABELS"))
     known_flags = flag_labels | opt_flag_labels
 
-    i18n_src = I18N.read_text(encoding="utf-8")
+    i18n_src = combined_source()
     en_start = i18n_src.index("\n  en: {")
     en_end = i18n_src.index("\n  de: {", en_start)
     en_keys = set(re.findall(r"\n\s+([A-Za-z_$][\w$]*):", i18n_src[en_start:en_end]))

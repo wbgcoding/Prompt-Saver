@@ -36,11 +36,7 @@ const FAMILY = {
   ja: /プロンプト/g,
 };
 
-const src = fs.readFileSync(path.join(UI, "i18n.js"), "utf8").replace(/^export\s+/gm, "");
-const sandbox = { window: {}, document: {}, navigator: { language: "en" } };
-vm.runInNewContext(src + "\nthis.__I18N = I18N;\nthis.__FLOAT = FLOAT_TXT;", sandbox);
-const I18N = sandbox.__I18N;
-const FLOAT = sandbox.__FLOAT;
+const { I18N, FLOAT_TXT: FLOAT } = require("./i18n_load.js");
 
 // 63: a stray English loanword ("Prompt"/"Prompts") can leak into ANY opted-in
 // language regardless of its own native word family -- checked in ADDITION to
