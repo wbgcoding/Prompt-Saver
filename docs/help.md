@@ -673,7 +673,7 @@ Delay, auto-hide timeout, and width are all adjustable.
 ### Toolbar
 
 Which buttons the header and composer bar show: quick grid-size control,
-library/history/pin buttons, multiple views, and view groups.
+library and history buttons, multiple views, and view groups.
 
 ## System and data
 

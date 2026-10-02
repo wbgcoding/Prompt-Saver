@@ -1681,7 +1681,6 @@ body:not(.flag-voiceHotkey) #voice-hotkey-row { display: none; }
 .noflag-quickGrid #quick-grid { display: none; }
 .flag-quickGridHoverOnly .header #quick-grid { opacity: 0; pointer-events: none; }
 .flag-quickGridHoverOnly .header:hover #quick-grid, .flag-quickGridHoverOnly .header:focus-within #quick-grid { opacity: 1; pointer-events: auto; }
-.noflag-pinButton #pin-top { display: none; }
 .noflag-tags #grid-tag-btn { display: none; }
 .noflag-librarySearch #library-q { display: none; }
 .noflag-savedSearches #library-search-save,

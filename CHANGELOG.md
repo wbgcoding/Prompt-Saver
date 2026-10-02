@@ -1601,6 +1601,8 @@ the video editor and the introduction tour ship on).
   timers and retry counts, size limits and pixel values nobody could judge
   without reading the code are no longer settings; the app keeps using their
   previous defaults.
+- **The switch that hid the pin button.** The always-on-top pin in the
+  header is always there; Settings keeps its own switch.
 
 ### Changed
 

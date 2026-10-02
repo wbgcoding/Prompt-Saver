@@ -2683,9 +2683,15 @@ fn removed_ui_value_keys() -> &'static [&'static str] {
     ]
 }
 
+// Expert switches that no longer exist. A loaded store drops them once, like removed values.
+fn removed_ui_flag_keys() -> &'static [&'static str] {
+    &["pinButton"]
+}
+
 impl Settings {
     fn has_removed_ui_values(&self) -> bool {
         removed_ui_value_keys().iter().any(|k| self.ui_values.contains_key(*k))
+            || removed_ui_flag_keys().iter().any(|k| self.ui_flags.contains_key(*k))
     }
 
     // Ensure at least one view exists; migrate legacy single-grid data.
@@ -2698,6 +2704,9 @@ impl Settings {
         }
         for k in removed_ui_value_keys() {
             self.ui_values.remove(*k);
+        }
+        for k in removed_ui_flag_keys() {
+            self.ui_flags.remove(*k);
         }
         // The privacy switch used to be "hide from screen capture" (on unless stored
         // false); it is now "allow screenshots" (off unless stored true). Anyone who
@@ -51575,6 +51584,26 @@ mod tests {
         assert!(!s.ui_values.contains_key("syncFailMax"));
         assert_eq!(s.ui_values.get("errorLogKeepKb"), Some(&512.0));
         assert!(!s.has_removed_ui_values());
+    }
+
+    #[test]
+    fn removed_flags_are_dropped() {
+        // Every listed key, whatever the stored value (true or false), is dropped
+        // once; a live switch next to it is untouched.
+        for stored in [true, false] {
+            let mut s = Settings::default();
+            for k in removed_ui_flag_keys() {
+                s.ui_flags.insert((*k).into(), stored);
+            }
+            s.ui_flags.insert("barToggles".into(), false);
+            assert!(s.has_removed_ui_values());
+            s.migrate();
+            for k in removed_ui_flag_keys() {
+                assert!(!s.ui_flags.contains_key(*k), "{k} survived migrate");
+            }
+            assert_eq!(s.ui_flags.get("barToggles"), Some(&false));
+            assert!(!s.has_removed_ui_values());
+        }
     }
 
     #[test]
