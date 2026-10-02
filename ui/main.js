@@ -1183,7 +1183,6 @@ const FLAG_LABELS = {
   barToggles: "flagBarToggles",
   barToggleBoth: "flagBarToggleBoth",
   tileMenu: "flagTileMenu",
-  tileHover: "flagTileHover",
   tooltipsEnabled: "showTooltips", // the Settings switch; the master for every tooltip
   typeBadges: "flagTypeBadges",
   tileHotkeyBadge: "flagTileHotkeyBadge",
@@ -1251,7 +1250,6 @@ const FLAG_LABELS = {
   autoInk: "expAutoInk",
   inkHalo: "flagInkHalo",
   tilePressScale: "flagTilePressScale",
-  tileHoverLift: "flagTileHoverLift",
   copyFlash: "flagCopyFlash",
   headerSeparators: "flagHeaderSeparators",
   cleanupFiles: "flagCleanupFiles",
@@ -1451,10 +1449,8 @@ const OPT_FLAG_LABELS = {
   blurTilesUntilHover: "flagBlurTilesUntilHover",
   blurMediaUntilHover: "flagBlurMediaUntilHover",
   hideTileNames: "flagHideTileNames",
-  tilesHoverDim: "flagTilesHoverDim",
   // Media extras
   grayscaleMedia: "flagGrayscaleMedia",
-  mediaHoverDim: "flagMediaHoverDim",
   mediaBorder: "flagMediaBorder",
   roundMedia: "flagRoundMedia",
   // New features (default off).
@@ -1463,7 +1459,6 @@ const OPT_FLAG_LABELS = {
   backupGfs: "flagBackupGfs",           // period-based retention
   // v2.6.0 additions (all default off → "(Standard Aus)").
   editorMonospace: "flagEditorMonospace",       // monospace editor textarea
-  toolbarHoverDim: "flagToolbarHoverDim",        // header dims until hovered
   hideWindowOnCopy: "flagHideWindowOnCopy",     // hide window after copying a prompt
   dedupCopyLog: "flagDedupCopyLog",             // skip identical consecutive copies
   // Keep the clipboard-inbox and copy-history buttons in the toolbar even while
@@ -1674,8 +1669,11 @@ const EXPERT_VALUES = {
   // Tile geometry.
   tileRadius: { label: "valTileRadius", min: 0, max: 30, step: 1, def: 10, unit: "px" },
   tileBorderWidth: { label: "valTileBorderWidth", min: 0, max: 6, step: 1, def: 1, unit: "px" },
-  // Tile hover-lift travel (paired with the tileHoverLift toggle).
-  hoverLift: { label: "valHoverLift", min: 1, max: 12, step: 1, def: 1, unit: "px", gate: "tileHoverLift" },
+  // How far a tile lifts when the pointer is on it; 0 is off.
+  hoverLift: { label: "valHoverLift", min: 0, max: 12, step: 1, def: 0, unit: "px", zeroLabel: "valOff", offAtZero: true },
+  // How strongly everything but the hovered item fades (tiles, media, the top bar
+  // together); 0 is off.
+  hoverDim: { label: "valHoverDim", min: 0, max: 90, step: 5, def: 0, unit: "%", zeroLabel: "valOff", offAtZero: true },
   // Drag-vs-click distance before a pointer-down turns into a drag (tiles, tabs, folders).
   dragThreshold: { label: "valDragThreshold", min: 2, max: 20, step: 1, def: DRAG_THRESHOLD_DEFAULT, unit: "px" },
   // Dragging a tile onto a collapsed view group's tab: how long it has to rest
@@ -1803,9 +1801,6 @@ const EXPERT_VALUES = {
   // Privacy blur strength (each paired with its "blur until hover" toggle).
   tileBlur: { label: "valTileBlur", min: 1, max: 16, step: 1, def: 4, unit: "px", gate: "blurTilesUntilHover" },
   mediaBlur: { label: "valMediaBlur", min: 1, max: 30, step: 1, def: 10, unit: "px", gate: "blurMediaUntilHover" },
-  // Dim strength for the "dim unhovered / dim media" toggles (lower = dimmer).
-  tilesHoverOpacity: { label: "valTilesHoverOpacity", min: 10, max: 90, step: 5, def: 45, unit: "%", gate: "tilesHoverDim" },
-  mediaHoverOpacity: { label: "valMediaHoverOpacity", min: 10, max: 95, step: 5, def: 80, unit: "%", gate: "mediaHoverDim" },
   // Default matches the type badge's own fixed dim level (0.4) so a hotkey
   // badge reads the same as every other passive tile badge out of the box.
   tileHotkeyBadgeOpacity: { label: "valTileHotkeyBadgeOpacity", min: 10, max: 100, step: 5, def: 40, unit: "%", gate: "tileHotkeyBadge" },
@@ -2244,7 +2239,7 @@ const EXPERT_TABS = [
   { title: "expTabTiles", groups: [
     // Split by what a setting actually does: acting on a tile, the hover tooltip,
     // and pure looks. One 26-entry blob made everything hard to find.
-    { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "dragToView", "tileHover", { key: "tileHoverLift", gate: "tileHover" }, "tilePressScale", "tileHotkeyBadge"], values: ["hoverLift", "dragThreshold", "viewDropHoverMs", "tileHotkeyBadgeOpacity"] },
+    { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "dragToView", "tilePressScale", "tileHotkeyBadge"], values: ["hoverLift", "hoverDim", "dragThreshold", "viewDropHoverMs", "tileHotkeyBadgeOpacity"] },
     { title: "expGroupTooltips", values: ["tooltipWidth", "tooltipDelayMs"] },
     { title: "expGroupTileLook", flags: ["tileShadow", "typeBadges", "captions", "compactTiles", "tileGradient", "gridLines", "uppercaseTiles", "boldTileNames", "monospaceTiles", "italicTiles", "tileTextShadow", "autoInk", "inkHalo"], values: ["tileRadius", "tileBorderWidth", "inkThreshold", "inkHaloStrength"] },
     { title: "expGroupFavorites", flags: ["favorites", { key: "favViewButton", gate: "favorites" }, { key: "favViewReorder", gate: "favViewButton" }], values: ["favStarSize", "favMaxCols"] },
@@ -2263,12 +2258,12 @@ const EXPERT_TABS = [
     { title: "expGroupJournal", flags: ["copyHistory", "historyTimestamps", "historyGrouped", "dedupCopyLog", "journalSearch", "journalTypeFilter", "journalColorFilter", { key: "journalTagFilter", gate: "tags" }, "journalRecent", "journalMostUsed", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "journalClear", "confirmClearHistory"], values: ["historyMax", "journalWidth"], selects: ["historyDays"] },
   ] },
   { title: "expTabMedia", groups: [
-    { title: "expGroupMedia", flags: ["videoControls", "videoAutoplay", "videoMuted", "videoLoop", "mediaMeta", "mediaMetaBackfill", "grayscaleMedia", "mediaHoverDim", "mediaBorder", "roundMedia"], values: ["videoVolume", "mediaHoverOpacity", "mediaRadius"] },
+    { title: "expGroupMedia", flags: ["videoControls", "videoAutoplay", "videoMuted", "videoLoop", "mediaMeta", "mediaMetaBackfill", "grayscaleMedia", "mediaBorder", "roundMedia"], values: ["videoVolume", "mediaRadius"] },
   ] },
   { title: "expTabSystem", groups: [
     // Toolbar button visibility (mirrors the header right-click tool list).
-    { title: "expGroupToolbar", flags: ["barToggles", { key: "barToggleBoth", gate: "barToggles" }, "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons", "headerSeparators", "toolbarHoverDim"] },
-    { title: "expGroupPrivacy", notices: ["storeUnsealed", "settingsLocked", "settingsWriteFailed"], flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "tilesHoverDim", "secretPrompts"], values: ["tileBlur", "mediaBlur", "tilesHoverOpacity", "secretTimeoutMin"] },
+    { title: "expGroupToolbar", flags: ["barToggles", { key: "barToggleBoth", gate: "barToggles" }, "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons", "headerSeparators"] },
+    { title: "expGroupPrivacy", notices: ["storeUnsealed", "settingsLocked", "settingsWriteFailed"], flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "secretPrompts"], values: ["tileBlur", "mediaBlur", "secretTimeoutMin"] },
     { title: "expGroupSystem", notices: ["dataDirReadOnly"], flags: ["keyboardNav", "allowMultipleInstances", "dataDirLock", "demoMode", "taskbarProgress", "etaShow"], values: ["bgDoneKeepMin"], paths: ["dataDir"],
       actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }] },
     { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "helpSketches", "firstRunTour"],
@@ -2487,8 +2482,9 @@ function applyValues() {
   root.setProperty("--tooltip-width", `${val("tooltipWidth")}px`);
   root.setProperty("--blur-tiles", `${val("tileBlur")}px`);
   root.setProperty("--blur-media", `${val("mediaBlur")}px`);
-  root.setProperty("--dim-unhovered", val("tilesHoverOpacity") / 100);
-  root.setProperty("--dim-media", val("mediaHoverOpacity") / 100);
+  const dim = val("hoverDim");
+  document.body.classList.toggle("hover-dim", dim > 0);
+  root.setProperty("--hover-dim-opacity", String((100 - dim) / 100));
   root.setProperty("--hotkey-badge-opacity", val("tileHotkeyBadgeOpacity") / 100);
   root.setProperty("--media-radius", `${val("mediaRadius")}px`);
   root.setProperty("--tag-chip-px", `${val("tagChipPx")}px`);
@@ -2549,7 +2545,7 @@ const EXPERT_TIPS = [
   "voiceLang", "voiceInsert", "voiceOnlineOk", "voiceAutoPickLang", "voiceLangAutoUpdate",
   "voiceHotkey", "voiceHotkeyTarget",
   "trayCustomMenu", "trayRecent", "trayFavs", "trayRecentN", "trayFavN", "trayLabelMax", "traySearch",
-  "importExport", "toolbarHoverDim", "keyboardNav", "allowMultipleInstances",
+  "importExport", "hoverDim", "keyboardNav", "allowMultipleInstances",
   "taskbarProgress", "etaShow", "dataDir", "dataDirLock", "demoMode",
   "headerSeparators", "floating", "floatPark", "floatParkCleanupH",
   "pillFolders", "pillFontSize", "pillTextMinW", "pillBorderW",

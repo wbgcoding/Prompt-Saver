@@ -692,7 +692,7 @@ body.drag-active .cell.drag-over {
 /* Hover lift and press scale compose through variables. A plain `transform` on the
    :hover rule outranks the :active rule (same specificity, later in the file), which
    silently killed the press feedback for anyone hovering, i.e. always. */
-.tile:hover { --tile-lift: calc(var(--hover-lift, 1px) * -1); }
+.tile:hover { --tile-lift: calc(var(--hover-lift, 0px) * -1); }
 /* No press-scale while the pointer is in the video-control zone
    (.media-hover): works on every WebView2 build, unlike :has(). */
 .tile:active:not(.media-hover) { --tile-press: 0.97; }
@@ -1864,8 +1864,15 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .flag-italicTiles .tile-name { font-style: italic; }
 /* v2.6.0 opt features */
 .flag-editorMonospace .modal-text { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; }
-.flag-toolbarHoverDim .header { opacity: 0.5; transition: opacity var(--transition); }
-.flag-toolbarHoverDim .header:hover, .flag-toolbarHoverDim .header:focus-within { opacity: 1; }
+/* Dim until hovered: one strength drives the other tiles, media and the top bar.
+   Driven by a value, so the class has no flag- prefix. */
+.hover-dim .grid:hover .tile:not(:hover) { opacity: var(--hover-dim-opacity); }
+.hover-dim .tile-img,
+.hover-dim .tile-video { opacity: var(--hover-dim-opacity); }
+.hover-dim .tile:hover .tile-img,
+.hover-dim .tile:hover .tile-video { opacity: 1; }
+.hover-dim .header { opacity: var(--hover-dim-opacity); transition: opacity var(--transition); }
+.hover-dim .header:hover, .hover-dim .header:focus-within { opacity: 1; }
 .tile-name, .folder-mini-cell { text-shadow: var(--ink-shadow, none); }
 .flag-tileTextShadow .tile-name { text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
 /* Appearance extras */
@@ -1914,12 +1921,9 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .flag-blurMediaUntilHover .tile:hover .tile-video { filter: none; }
 .flag-hideTileNames .tile-name { opacity: 0; transition: opacity var(--transition); }
 .flag-hideTileNames .tile:hover .tile-name { opacity: 1; }
-.flag-tilesHoverDim .grid:hover .tile:not(:hover) { opacity: var(--dim-unhovered, 0.45); }
 /* Media extras */
 .flag-grayscaleMedia .tile-img,
 .flag-grayscaleMedia .tile-video { filter: grayscale(1); }
-.flag-mediaHoverDim .tile-img,
-.flag-mediaHoverDim .tile-video { opacity: var(--dim-media, 0.8); }
 .flag-mediaBorder .tile.has-image { border-color: var(--accent); }
 .flag-roundMedia .tile-img,
 .flag-roundMedia .tile-video { border-radius: var(--media-radius, 8px); }
@@ -1987,7 +1991,6 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .noflag-tileShadow .tile,
 .noflag-tileShadow .tile:hover { box-shadow: none !important; }
 .noflag-tilePressScale .tile:active:not(.media-hover) { --tile-press: 1; }
-.noflag-tileHoverLift .tile:hover { --tile-lift: 0px; }
 .noflag-copyFlash .tile.copied { border-color: var(--border); background: var(--surface); }
 /* Screenshot keep-as-button popup: scales with the main window so the
    preview is as large as possible while keeping a comfortable margin. */
@@ -2286,11 +2289,6 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .snip-question span:last-child { color: var(--muted); font-size: 13px; }
 .noflag-barToggles .bar-toggle,
 .noflag-barToggles .bar-restore { display: none !important; }
-/* Neutralise the tile hover highlight without affecting layout. */
-.noflag-tileHover .tile:hover {
-  border-color: var(--border);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-}
 /* Kill all motion when animations are switched off in the expert menu. */
 .noflag-animations *,
 .noflag-animations *::before,

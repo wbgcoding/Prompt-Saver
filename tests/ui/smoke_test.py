@@ -5698,8 +5698,7 @@ PROBE = """
         }
       }
     }
-    // 373: closeOnCopy/dimUnhovered/dimMedia/dimToolbar were renamed to
-    // hideWindowOnCopy/tilesHoverDim/mediaHoverDim/toolbarHoverDim -- a rename
+    // 373: closeOnCopy was renamed to hideWindowOnCopy -- a rename
     // silently breaks if the CSS class the flag drives on <body> is missed,
     // so flip each switch and check the class right on the body element.
     {
@@ -5728,9 +5727,6 @@ PROBE = """
         await sleep(80);
       };
       await checkRenamedFlag('Hide window after copy', 'flag-hideWindowOnCopy');
-      await checkRenamedFlag('Dim toolbar until hover', 'flag-toolbarHoverDim');
-      await checkRenamedFlag('Dim other tiles on hover', 'flag-tilesHoverDim');
-      await checkRenamedFlag('Dim media', 'flag-mediaHoverDim');
     }
     // P68: the expert-menu search also matches a word that lives only in a
     // setting's tooltip, not its label.

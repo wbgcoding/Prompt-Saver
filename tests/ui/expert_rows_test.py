@@ -211,6 +211,28 @@ FINISH = """
   };
 """
 
+# hoverDim / hoverLift: one strength drives the dimming, one distance the lift, 0 is off.
+HOVER_PROBE = """
+<script>
+(async () => {""" + FINISH + """
+  const errs = [];
+  try {
+    await until(() => document.querySelectorAll('#grid .tile').length > 6);
+    await sleep(400);
+    const dimOn = document.body.classList.contains('hover-dim');
+    const st = document.documentElement.style;
+    const opacity = st.getPropertyValue('--hover-dim-opacity');
+    const lift = st.getPropertyValue('--hover-lift');
+    if (dimOn !== __DIMON__) errs.push('hover-dim class is ' + dimOn + ', expected __DIMON__');
+    if (opacity !== '__OPACITY__') errs.push('dim opacity is ' + opacity + ', expected __OPACITY__');
+    if (lift !== '__LIFT__') errs.push('hover lift is ' + lift + ', expected __LIFT__');
+  } catch (e) { errs.push('probe threw: ' + (e && e.stack || e)); }
+  finish(errs);
+})();
+</script>
+"""
+
+
 # chainSeparator: two static prompts chained, the copied text carries the chosen separator.
 CHAIN_PROBE = """
 <script>
@@ -400,6 +422,10 @@ def consumer_problems(browser, tmp):
     for values, want in (({}, "true"), ({"bubbleMs": 0}, "false")):
         label = "bubbleMs gate " + str(values.get("bubbleMs", "default"))
         check(label, "index.html", VALUE_GATE_PROBE.replace("__WANT__", want).replace("__BUBBLE__", str(values.get("bubbleMs", "default"))),
+              {"ui_values": values})
+    for values, dim_on, opacity, lift in (({}, "false", "1", "0px"), ({"hoverDim": 50, "hoverLift": 3}, "true", "0.5", "3px")):
+        label = "hover dim and lift " + ("default" if not values else "seeded")
+        check(label, "index.html", HOVER_PROBE.replace("__DIMON__", dim_on).replace("__OPACITY__", opacity).replace("__LIFT__", lift),
               {"ui_values": values})
     seeded = {"ui_values": {"veOvTextOutlinePx": 7, "veOvVideoVolume": 40},
               "ui_texts": {"veOvKeysActiveColor": "#ff00aa"}}

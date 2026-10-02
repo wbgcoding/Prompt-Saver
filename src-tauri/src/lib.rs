@@ -2689,6 +2689,8 @@ fn removed_ui_value_keys() -> &'static [&'static str] {
         "trayMenuMax",
         "tooltipTimeoutMs",
         "previewLen",
+        "tilesHoverOpacity",
+        "mediaHoverOpacity",
     ]
 }
 
@@ -2709,6 +2711,11 @@ fn removed_ui_flag_keys() -> &'static [&'static str] {
         "showUpdates",
         "checkUpdateOnStart",
         "whatsNew",
+        "tileHover",
+        "tileHoverLift",
+        "tilesHoverDim",
+        "mediaHoverDim",
+        "toolbarHoverDim",
     ]
 }
 
@@ -2755,6 +2762,43 @@ impl Settings {
             .fold(None, |m: Option<f64>, v| Some(m.map_or(v, |m| m.max(v))));
             if let Some(v) = largest {
                 self.ui_values.insert("searchListMax".into(), v.clamp(3.0, 20.0));
+            }
+        }
+        //
+        // Tile lift on hover was a highlight switch, a lift switch and a distance
+        // (the lift was on unless stored off). It is one distance now, 0 = off, and
+        // the new default is 0. An install that stored none of the three keys takes
+        // the new default; one that stored any of them keeps exactly the lift it
+        // shows today, where an unstored switch counts as its old default, on.
+        if self.ui_flags.contains_key("tileHoverLift")
+            || self.ui_flags.contains_key("tileHover")
+            || self.ui_values.contains_key("hoverLift")
+        {
+            let on = self.ui_flags.get("tileHover") != Some(&false)
+                && self.ui_flags.get("tileHoverLift") != Some(&false);
+            if on {
+                let v = self.ui_values.get("hoverLift").copied().unwrap_or(1.0).max(1.0);
+                self.ui_values.insert("hoverLift".into(), v);
+            } else {
+                self.ui_values.remove("hoverLift");
+            }
+        }
+        // Three dim-until-hovered switches (tiles, media, top bar) with two opacity
+        // sliders became one strength. Whoever dimmed anything keeps the strongest dim
+        // they had, now on all three. Never overwrites a stored strength.
+        if !self.ui_values.contains_key("hoverDim") {
+            let mut s: f64 = 0.0;
+            if self.ui_flags.get("tilesHoverDim") == Some(&true) {
+                s = s.max(100.0 - self.ui_values.get("tilesHoverOpacity").copied().unwrap_or(45.0));
+            }
+            if self.ui_flags.get("mediaHoverDim") == Some(&true) {
+                s = s.max(100.0 - self.ui_values.get("mediaHoverOpacity").copied().unwrap_or(80.0));
+            }
+            if self.ui_flags.get("toolbarHoverDim") == Some(&true) {
+                s = s.max(50.0);
+            }
+            if s > 0.0 {
+                self.ui_values.insert("hoverDim".into(), (s / 5.0).round() * 5.0);
             }
         }
         //
@@ -51732,6 +51776,55 @@ mod tests {
         // Nothing stored: nothing written.
         let s = run(&[], &[]);
         assert!(s.ui_values.is_empty());
+    }
+
+    #[test]
+    fn hover_settings_merge() {
+        let run = |flags: &[(&str, bool)], values: &[(&str, f64)]| {
+            let mut s = Settings::default();
+            for (k, v) in flags {
+                s.ui_flags.insert((*k).into(), *v);
+            }
+            for (k, v) in values {
+                s.ui_values.insert((*k).into(), *v);
+            }
+            s.migrate();
+            for (k, _) in flags {
+                assert!(!s.ui_flags.contains_key(*k), "{k} survived migrate");
+            }
+            s
+        };
+        let dim = |s: &Settings| s.ui_values.get("hoverDim").copied();
+        let lift = |s: &Settings| s.ui_values.get("hoverLift").copied();
+        // Dim: the strongest dim wins, rounded to a slider step.
+        let s = run(&[("tilesHoverDim", true)], &[("tilesHoverOpacity", 45.0)]);
+        assert_eq!(dim(&s), Some(55.0));
+        assert!(!s.ui_values.contains_key("tilesHoverOpacity"));
+        let s = run(&[("toolbarHoverDim", true)], &[]);
+        assert_eq!(dim(&s), Some(50.0));
+        let s = run(&[("mediaHoverDim", true)], &[]);
+        assert_eq!(dim(&s), Some(20.0));
+        let s = run(
+            &[("tilesHoverDim", true), ("mediaHoverDim", true), ("toolbarHoverDim", true)],
+            &[("tilesHoverOpacity", 70.0), ("mediaHoverOpacity", 30.0)],
+        );
+        assert_eq!(dim(&s), Some(70.0));
+        // A switch stored off dims nothing, and nothing stored writes no key.
+        let s = run(&[("tilesHoverDim", false), ("toolbarHoverDim", false)], &[("tilesHoverOpacity", 20.0)]);
+        assert_eq!(dim(&s), None);
+        assert_eq!(dim(&run(&[], &[])), None);
+        // A stored strength is never overwritten.
+        let s = run(&[("tilesHoverDim", true)], &[("hoverDim", 30.0)]);
+        assert_eq!(dim(&s), Some(30.0));
+        // Lift: an install that stored none of the keys takes the new default (no key).
+        assert_eq!(lift(&run(&[], &[])), None);
+        // Stored on, or a stored distance: the lift it showed stays.
+        assert_eq!(lift(&run(&[("tileHoverLift", true)], &[("hoverLift", 3.0)])), Some(3.0));
+        assert_eq!(lift(&run(&[("tileHover", true)], &[])), Some(1.0));
+        assert_eq!(lift(&run(&[], &[("hoverLift", 4.0)])), Some(4.0));
+        // Either switch stored off means no lift.
+        assert_eq!(lift(&run(&[("tileHoverLift", false)], &[("hoverLift", 3.0)])), None);
+        assert_eq!(lift(&run(&[("tileHover", false)], &[])), None);
     }
 
     #[test]

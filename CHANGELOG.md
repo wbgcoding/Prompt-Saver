@@ -1713,6 +1713,8 @@ the video editor and the introduction tour ship on).
 - **Updates have two settings.** Auto update and its interval sit together in
   Settings, and Never turns the automatic check off; the three expert switches
   for updates are gone.
+- **Two hover settings.** Dim until hovered (tiles, media and the top bar
+  together) and lift on hover are one number each; 0 turns them off.
 
 ## 2.6.3 (2026-07-26)
 

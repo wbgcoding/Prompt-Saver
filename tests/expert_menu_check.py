@@ -141,8 +141,6 @@ DEPENDENCIES = {
     "copyFont": "bubbleMs",
     "tooltipWidth": "tooltipsEnabled",
     "tooltipDelayMs": "tooltipsEnabled",
-    "tileHoverLift": "tileHover",
-    "hoverLift": "tileHoverLift",
     "favViewButton": "favorites",
     "favViewReorder": "favViewButton",
     "favStarSize": "favViewButton",
@@ -167,10 +165,8 @@ DEPENDENCIES = {
     "journalTagFilter": "tags",
     "tileBlur": "blurTilesUntilHover",
     "mediaBlur": "blurMediaUntilHover",
-    "tilesHoverOpacity": "tilesHoverDim",
     # Media
     "videoVolume": "!videoMuted",
-    "mediaHoverOpacity": "mediaHoverDim",
     "mediaRadius": "roundMedia",
     # Tools + data
     "viewGroups": "multiView",
