@@ -11155,6 +11155,13 @@ TRAY_PROBE = """
       errs.push('typing in the tray filter did not hand the text to the launcher: ' + window.__TRAY_LAUNCHER_QUERY__);
     }
     if (window.__TRAY_LAUNCHER_CALLS__ !== 1) errs.push('typing twice started ' + window.__TRAY_LAUNCHER_CALLS__ + ' hand-offs instead of 1');
+    // The text is held back while the tray still owns the focus, and passed on in one
+    // piece the moment the launcher takes the focus (the tray blurs).
+    if (window.__TRAY_LAUNCHER_PREFILL__ !== undefined) {
+      errs.push('the tray passed its text on before the launcher took the focus: ' + window.__TRAY_LAUNCHER_PREFILL__);
+    }
+    window.dispatchEvent(new Event('blur'));
+    await sleep(60);
     if (window.__TRAY_LAUNCHER_PREFILL__ !== 'alphabet') {
       errs.push('the characters typed during the hand-off were not passed on: ' + window.__TRAY_LAUNCHER_PREFILL__);
     }
