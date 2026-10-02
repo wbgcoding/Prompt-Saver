@@ -15474,6 +15474,17 @@ async fn purge_clip_inbox_from_backups(app: AppHandle) -> Result<(usize, usize),
     Ok(purge_clip_inbox_from_backups_impl(&backups_dir(&app)))
 }
 
+// Empties clip_inbox in one snapshot and repacks it so the freed pages are
+// overwritten. Some(rows removed) only when both steps worked: a delete whose
+// repack failed leaves the old bytes in the free pages, so it is no scrub.
+fn scrub_clip_inbox(conn: &Connection) -> Option<i64> {
+    let removed = conn.execute("DELETE FROM clip_inbox", []).ok()? as i64;
+    if removed > 0 && conn.execute("VACUUM", []).is_err() {
+        return None;
+    }
+    Some(removed)
+}
+
 fn purge_clip_inbox_from_backups_impl(dir: &std::path::Path) -> (usize, usize) {
     let mut purged = 0usize;
     let mut failed = 0usize;
@@ -15510,14 +15521,12 @@ fn purge_clip_inbox_from_backups_impl(dir: &std::path::Path) -> (usize, usize) {
                 )
                 .unwrap_or(0);
             if has_table > 0 {
-                // Err here means "could not confirm the rows are actually gone" --
-                // inspected stays false, counted as a failure below.
-                if let Ok(n) = conn.execute("DELETE FROM clip_inbox", []) {
+                // None here means "could not confirm the rows are actually gone"
+                // (the delete or the repack failed) -- inspected stays false,
+                // counted as a failure below.
+                if let Some(n) = scrub_clip_inbox(&conn) {
                     inspected = true;
-                    removed = n as i64;
-                    if removed > 0 {
-                        let _ = conn.execute("VACUUM", []);
-                    }
+                    removed = n;
                 }
             } else {
                 inspected = true; // genuinely nothing to remove, not a failure
@@ -51954,6 +51963,22 @@ mod tests {
         assert!(!s.ui_values.contains_key("syncFailMax"));
         assert_eq!(s.ui_values.get("errorLogKeepKb"), Some(&512.0));
         assert!(!s.has_removed_ui_values());
+    }
+
+    #[test]
+    fn a_failed_repack_makes_the_inbox_scrub_a_failure() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE clip_inbox(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, text TEXT NOT NULL);
+             INSERT INTO clip_inbox(ts, text) VALUES(1, 'secret');",
+        )
+        .unwrap();
+        // A VACUUM cannot run inside a transaction, so the repack step fails here.
+        conn.execute_batch("BEGIN").unwrap();
+        assert_eq!(scrub_clip_inbox(&conn), None);
+        conn.execute_batch("ROLLBACK").unwrap();
+        assert_eq!(scrub_clip_inbox(&conn), Some(1));
+        assert_eq!(scrub_clip_inbox(&conn), Some(0), "nothing left: no repack needed, still a success");
     }
 
     #[test]
