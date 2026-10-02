@@ -89,10 +89,12 @@ function applyPauseState() {
   pauseBtn.setAttribute("aria-label", label);
 }
 
+let statusState = "idle";
 function setStatus(state) {
   // state: "idle" | "recording" | "paused"
   statusDot.classList.toggle("on", state !== "idle");
   statusDot.classList.toggle("paused", state === "paused");
+  statusState = state;
   statusText.textContent = state === "idle" ? "" : t("cameraRecording");
   statusText.title = "";
 }
@@ -514,23 +516,43 @@ import("./floattheme.js").then(({ applyFloatTheme }) => {
 Promise.all([invoke("get_settings"), import("./floatShared.js"), invoke("default_recording_dir")])
   .then(async ([s, { resolveLang }, defaultDir]) => {
     ({ tx } = await fullTexts(resolveLang(s.language, LANGS)));
-    audioLabel.textContent = t("cameraAudioSource");
-    resLabel.textContent = t("cameraResolution");
-    folderLabel.textContent = t("valRecordingDir");
-    startBtn.textContent = t("cameraStart");
+    applyTexts();
     folderPathEl.textContent = s.ui_texts?.recordingDir || defaultDir || "";
     videoDeviceId = s.ui_texts?.cameraDevice || "";
     frameRate = Number(s.ui_values?.cameraFramerate) || 30;
     const savedRes = s.ui_texts?.cameraResolution;
     if (savedRes && resSelect.querySelector(`option[value="${savedRes}"]`)) resSelect.value = savedRes;
-    for (const el of document.querySelectorAll("[data-i18n-title]")) {
-      const text = t(el.getAttribute("data-i18n-title"));
-      el.title = text;
-      el.setAttribute("aria-label", text);
-    }
     populateAudioDevices();
   })
   .catch(() => {});
+
+// Every text this window shows, drawn again from the current language. The window
+// stays open while the language can be switched in the main window, so this runs
+// at load and on every language-changed.
+function applyTexts() {
+  audioLabel.textContent = t("cameraAudioSource");
+  resLabel.textContent = t("cameraResolution");
+  folderLabel.textContent = t("valRecordingDir");
+  startBtn.textContent = t("cameraStart");
+  for (const el of document.querySelectorAll("[data-i18n-title]")) {
+    const text = t(el.getAttribute("data-i18n-title"));
+    el.title = text;
+    el.setAttribute("aria-label", text);
+  }
+  applyPauseState();
+  setStatus(statusState);
+  const silent = audioSelect.options[0];
+  if (silent && silent.value === "") silent.textContent = t("cameraAudioNone");
+  if (!noDeviceEl.classList.contains("hidden")) noDeviceEl.textContent = t("cameraNoDevice");
+}
+listen("language-changed", () => {
+  Promise.all([invoke("get_settings"), import("./floatShared.js")])
+    .then(async ([s, { resolveLang }]) => {
+      ({ tx } = await fullTexts(resolveLang(s.language, LANGS)));
+      applyTexts();
+    })
+    .catch(() => {});
+});
 
 // A fallback in case the permission-ready event is somehow missed (e.g. this
 // window is reopened while WebView2 already answered it once for this

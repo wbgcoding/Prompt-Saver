@@ -166,8 +166,10 @@ function applyHotkeyWarn(stopOk, pauseOk) {
 // already only reports it once), never hides again: a quiet standing
 // reminder rather than a toast this narrow bar has no room for, and free
 // space recovering mid-recording does not make the earlier warning untrue.
+let lastDiskLow = null;
 function applyDiskLow(diskLow) {
   if (!diskLow || !tx) return;
+  lastDiskLow = diskLow;
   const [mb, min] = diskLow;
   const label = tx("recDiskLow").replace("{mb}", String(mb)).replace("{min}", String(min));
   diskWarnEl.classList.remove("hidden");
@@ -262,6 +264,7 @@ function resetForNewRecording() {
   sizeEl.title = "";
   sizeEl.classList.remove("rec-size-warn");
   diskWarnEl.classList.add("hidden");
+  lastDiskLow = null;
   continueGapEl.classList.add("hidden");
   clearTimeout(gapHideTimer);
   pollTimer = setInterval(poll, 500);
@@ -386,23 +389,30 @@ import("./floattheme.js").then(({ applyFloatTheme }) => {
     .then(([theme, vars]) => applyFloatTheme(theme, vars))
     .catch(() => {});
 });
-Promise.all([invoke("get_settings"), import("./i18n.js"), import("./floatShared.js")])
-  .then(async ([s, { LANGS, fullTexts }, { resolveLang }]) => {
-    ({ tx } = await fullTexts(resolveLang(s.language, LANGS)));
-    for (const el of document.querySelectorAll("[data-i18n-title]")) {
-      const text = tx(el.getAttribute("data-i18n-title"));
-      el.title = text;
-      el.setAttribute("aria-label", text);
-    }
-    for (const el of document.querySelectorAll("[data-i18n]")) {
-      el.textContent = tx(el.getAttribute("data-i18n"));
-    }
-    const label = pauseBtnLabel();
-    if (label) { pauseBtn.title = label; pauseBtn.setAttribute("aria-label", label); }
-    applyTargetSwitch(switchEnabled);
-    applyAudio({
-      audio_system: lastAudio.system, audio_mic: lastAudio.mic,
-      audio_system_muted: lastAudio.systemMuted, audio_mic_muted: lastAudio.micMuted, mic_lost: lastAudio.micLost,
-    });
-  })
-  .catch(() => {});
+// The bar window is only hidden between recordings, so a language switch in the
+// settings has to reach it through this same loader, not just at page load.
+function loadTexts() {
+  Promise.all([invoke("get_settings"), import("./i18n.js"), import("./floatShared.js")])
+    .then(async ([s, { LANGS, fullTexts }, { resolveLang }]) => {
+      ({ tx } = await fullTexts(resolveLang(s.language, LANGS)));
+      for (const el of document.querySelectorAll("[data-i18n-title]")) {
+        const text = tx(el.getAttribute("data-i18n-title"));
+        el.title = text;
+        el.setAttribute("aria-label", text);
+      }
+      for (const el of document.querySelectorAll("[data-i18n]")) {
+        el.textContent = tx(el.getAttribute("data-i18n"));
+      }
+      const label = pauseBtnLabel();
+      if (label) { pauseBtn.title = label; pauseBtn.setAttribute("aria-label", label); }
+      applyTargetSwitch(switchEnabled);
+      applyAudio({
+        audio_system: lastAudio.system, audio_mic: lastAudio.mic,
+        audio_system_muted: lastAudio.systemMuted, audio_mic_muted: lastAudio.micMuted, mic_lost: lastAudio.micLost,
+      });
+      applyDiskLow(lastDiskLow);
+    })
+    .catch(() => {});
+}
+loadTexts();
+listen("language-changed", loadTexts);
