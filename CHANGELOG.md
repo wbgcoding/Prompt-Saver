@@ -1614,6 +1614,7 @@ the video editor and the introduction tour ship on).
 - Placeholders are always asked for in their own small window; the dialog inside the main window is gone.
 - The keyboard shortcut overview lists every window: view switching, quick launcher, tray menu, placeholder window, floating buttons, screenshot selection, recording bar and camera.
 - The video editor's actions read like the screenshot editor's: Cancel, Save as, Copy, then Export.
+- The dialog after a recording shows Discard, Save and Attach; editing, Save as, Copy and the folder choice sit under More.
 - **The small buttons on a tile no longer show a tooltip.** Select, start a
   chain and the actions menu stay quiet on hover; screen readers still get
   their names.

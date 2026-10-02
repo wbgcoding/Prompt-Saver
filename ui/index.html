@@ -1348,16 +1348,20 @@
            here updates that same setting -- one place, not a second hidden one. -->
       <div id="rec-modal-folder-row" class="rec-modal-folder-row">
         <span id="rec-modal-folder" class="rec-modal-folder-path"></span>
-        <button id="rec-modal-folder-change" type="button" class="ghost-btn" data-i18n="pathChange">Change…</button>
       </div>
       <div class="modal-actions">
         <button id="rec-modal-discard" class="ghost-btn" data-i18n="recDiscard">Discard</button>
-        <button id="rec-modal-edit" class="ghost-btn" data-i18n="recEdit">Edit</button>
+        <button id="rec-modal-more" class="ghost-btn" type="button" data-i18n="recMore" aria-haspopup="menu" aria-expanded="false">More…</button>
         <button id="rec-modal-save" class="ghost-btn" data-i18n="recSave">Save</button>
-        <button id="rec-modal-saveas" class="ghost-btn" data-i18n="screenshotSaveAs">Save as…</button>
-        <button id="rec-modal-copy" class="ghost-btn" data-i18n="recCopy">Copy</button>
         <button id="rec-modal-yes" class="primary-btn" data-i18n="recAttach">Attach as button</button>
       </div>
+    </div>
+    <!-- The rarer actions: editing, Save as, Copy and the save folder. -->
+    <div id="rec-modal-more-pop" class="ctx hidden" role="menu">
+      <button id="rec-modal-edit" type="button" role="menuitem" data-i18n="recEdit">Edit</button>
+      <button id="rec-modal-saveas" type="button" role="menuitem" data-i18n="screenshotSaveAs">Save as…</button>
+      <button id="rec-modal-copy" type="button" role="menuitem" data-i18n="recCopy">Copy</button>
+      <button id="rec-modal-folder-change" type="button" role="menuitem" data-i18n="recChangeFolder">Change save folder…</button>
     </div>
   </div>
 

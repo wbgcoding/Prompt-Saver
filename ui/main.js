@@ -16629,6 +16629,16 @@ function bind() {
   const recStatus = $("rec-modal-status");
   const recFolderOut = $("rec-modal-folder");
   const recFolderChangeBtn = $("rec-modal-folder-change");
+  const recMoreBtn = $("rec-modal-more");
+  const recMorePop = $("rec-modal-more-pop");
+  // The menu behind "More...": editing, Save as, Copy and the save folder.
+  function closeRecMorePop() {
+    if (recMorePop.classList.contains("hidden")) return;
+    const hadFocus = recMorePop.contains(document.activeElement);
+    recMorePop.classList.add("hidden");
+    recMoreBtn.setAttribute("aria-expanded", "false");
+    if (hadFocus) recMoreBtn.focus();
+  }
   let pendingRecPath = "";
   let recGen = 0; // invalidated on every close/discard so a late progress tick or a
                    // finished conversion from a superseded recording is ignored
@@ -16693,6 +16703,7 @@ function bind() {
     invoke("cancel_recording_convert").catch(() => {});
     invoke("cancel_recording_crop").catch(() => {});
     if (recProgressOff) { recProgressOff(); recProgressOff = null; }
+    closeRecMorePop();
     recModal.classList.add("hidden");
     recPreview.classList.add("hidden");
     recPreview.removeAttribute("src");
@@ -16894,6 +16905,19 @@ function bind() {
     if (e.target === recModal) closeRecModal();
   });
   $("rec-modal-discard").addEventListener("click", () => closeRecModal());
+  recMoreBtn.addEventListener("click", () => {
+    if (!recMorePop.classList.contains("hidden")) { closeRecMorePop(); return; }
+    placePopover(recMorePop, recMoreBtn.getBoundingClientRect());
+    recMoreBtn.setAttribute("aria-expanded", "true");
+    recMorePop.querySelector("button:not(.hidden)")?.focus();
+  });
+  // Capture phase: any menu item closes the menu first, then runs its own listener.
+  recMorePop.addEventListener("click", (e) => { if (e.target.closest("button")) closeRecMorePop(); }, true);
+  document.addEventListener("pointerdown", (e) => {
+    if (recMorePop.classList.contains("hidden")) return;
+    if (recMorePop.contains(e.target) || recMoreBtn.contains(e.target)) return;
+    closeRecMorePop();
+  });
   // Opening the editor hands the raw file to another window that keeps working
   // with it -- treat this like Save/Attach so closing this modal afterward never
   // deletes a file the editor might still be reading from.
@@ -20251,6 +20275,7 @@ function bind() {
     if (!moveToFolderPop.classList.contains("hidden")) { trapTabWithin(moveToFolderPop, e); return; }
     if (!gridTagPop.classList.contains("hidden")) { trapTabWithin(gridTagPop, e); return; }
     if (!openEditorPop.classList.contains("hidden")) { trapTabWithin(openEditorPop, e); return; }
+    if (!$("rec-modal-more-pop").classList.contains("hidden")) { trapTabWithin($("rec-modal-more-pop"), e); return; }
     if (!$("lightbox").classList.contains("hidden")) { trapTabWithin($("lightbox"), e); return; }
     if (!$("confirm-modal").classList.contains("hidden")) { trapTabWithin($("confirm-modal"), e); return; }
     if (!colorPop.classList.contains("hidden")) { trapTabWithin(colorPop, e); return; }
@@ -20283,6 +20308,7 @@ function bind() {
     if (!moveToFolderPop.classList.contains("hidden")) { closeMoveToFolderPop(); return; }
     if (!gridTagPop.classList.contains("hidden")) { closeGridTagPop(); return; }
     if (!openEditorPop.classList.contains("hidden")) { closeOpenEditorPop(); return; }
+    if (!$("rec-modal-more-pop").classList.contains("hidden")) { closeRecMorePop(); return; }
     if (!$("lightbox").classList.contains("hidden")) closeLightbox();
     else if (dismissConfirm()) { /* the dialog closed itself */ }
     else if (!colorPop.classList.contains("hidden")) closeColorPop();
