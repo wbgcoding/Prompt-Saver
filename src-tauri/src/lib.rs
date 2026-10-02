@@ -2717,23 +2717,30 @@ impl Settings {
         }
         //
         // Five separate search-list caps became one, "searchListMax". The largest value
-        // a user set wins, so nobody loses rows they asked for. A stored 0 ("keep no
-        // recent searches") cannot be kept: the merged list has no off stop. A value
-        // already stored under the new key is never overwritten.
+        // a user set wins, so nobody loses rows they asked for; a cap that was never
+        // stored counts with the default it showed before, so lowering one cap does
+        // not shrink the lists the other four kept at their defaults. A stored 0
+        // ("keep no recent searches") cannot be kept: the merged list has no off
+        // stop. A value already stored under the new key is never overwritten.
         if !self.ui_values.contains_key("searchListMax") {
-            let largest = [
-                "searchRecentMax",
-                "globalSearchLimit",
-                "gsRecentMax",
-                "launcherMaxResults",
-                "trayMenuMax",
-            ]
-            .iter()
-            .filter_map(|k| self.ui_values.get(*k).copied())
-            .filter(|v| *v > 0.0)
-            .fold(None, |m: Option<f64>, v| Some(m.map_or(v, |m| m.max(v))));
-            if let Some(v) = largest {
-                self.ui_values.insert("searchListMax".into(), v.clamp(3.0, 20.0));
+            let caps: [(&str, f64); 5] = [
+                ("searchRecentMax", 8.0),
+                ("globalSearchLimit", 5.0),
+                ("gsRecentMax", 5.0),
+                ("launcherMaxResults", 8.0),
+                ("trayMenuMax", 8.0),
+            ];
+            let stored_max = caps
+                .iter()
+                .filter_map(|(k, _)| self.ui_values.get(*k).copied())
+                .filter(|v| *v > 0.0)
+                .fold(None, |m: Option<f64>, v| Some(m.map_or(v, |m| m.max(v))));
+            if let Some(stored) = stored_max {
+                let largest = caps
+                    .iter()
+                    .filter(|(k, _)| !self.ui_values.contains_key(*k))
+                    .fold(stored, |m, (_, def)| m.max(*def));
+                self.ui_values.insert("searchListMax".into(), largest.clamp(3.0, 20.0));
             }
         }
         //
@@ -51968,10 +51975,16 @@ mod tests {
         // The largest stored value wins; a stored 0 is ignored.
         assert_eq!(run(&[("searchRecentMax", 12.0), ("gsRecentMax", 0.0)], None), Some(12.0));
         assert_eq!(run(&[("globalSearchLimit", 5.0), ("trayMenuMax", 15.0), ("launcherMaxResults", 8.0)], None), Some(15.0));
+        // A cap that was never stored counts with the default it had: one lowered cap
+        // must not shrink the lists the others kept at their defaults.
+        assert_eq!(run(&[("gsRecentMax", 3.0)], None), Some(8.0));
+        assert_eq!(run(&[("searchRecentMax", 1.0), ("globalSearchLimit", 4.0)], None), Some(8.0));
+        assert_eq!(run(&[("searchRecentMax", 12.0), ("gsRecentMax", 0.0)], None), Some(12.0));
         // Only a zero stored: nothing to carry over.
         assert_eq!(run(&[("gsRecentMax", 0.0)], None), None);
         // Out-of-range old values land inside the new range.
-        assert_eq!(run(&[("searchRecentMax", 1.0)], None), Some(3.0));
+        assert_eq!(run(&[("searchRecentMax", 1.0)], None), Some(8.0));
+        assert_eq!(run(&[("searchRecentMax", 1.0), ("globalSearchLimit", 1.0), ("gsRecentMax", 1.0), ("launcherMaxResults", 1.0), ("trayMenuMax", 1.0)], None), Some(3.0));
         assert_eq!(run(&[("launcherMaxResults", 99.0)], None), Some(20.0));
         // Nothing stored: no key. A value already under the new key is kept.
         assert_eq!(run(&[], None), None);
