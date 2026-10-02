@@ -16936,6 +16936,20 @@ def main():
       else if (!parsed.pen || parsed.pen.width !== 10) errs.push('649: saving line dropped the remembered pen size: ' + last);
     }
 """)
+        failed += ar_probe('bl646', 'update interval: a stored 0 hours with Auto update on shows the shortest interval, never Never', 'index', '1000x780', r"""<script>window.__SEED_SETTINGS__ = { auto_update: true, ui_values: { updateCheckH: 0 } };</script>
+""", r"""
+    await bootReady();
+    document.getElementById('gear').click();
+    await sleep(200);
+    const sw = document.getElementById('opt-autoupdate');
+    const sel = document.getElementById('opt-update-interval');
+    if (!sel) errs.push('646: the interval select is missing');
+    else {
+      if (!sw.checked) errs.push('646: Auto update should be on');
+      if (sel.value === '0') errs.push('646: a stored 0 hours with Auto update on shows Never');
+      if (sel.value !== '1') errs.push('646: a stored 0 hours should show the 1 hour the backend uses, got ' + sel.value);
+    }
+""")
         # ---- main window findings: generated block end ----
         print("PASS" if not failed else f"{failed} problem(s)")
         return 1 if failed else 0

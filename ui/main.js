@@ -21360,7 +21360,10 @@ const UPDATE_INTERVALS = [[0, "updateNever"], [6, "updateEvery6h"], [12, "update
 function fillUpdateIntervalSelect() {
   const sel = $("opt-update-interval");
   if (!sel) return;
-  const cur = val("updateCheckH");
+  // Never comes from the Auto update switch alone; a stored 0 or an out-of-range
+  // number shows as the interval the backend actually uses.
+  const raw = Number(val("updateCheckH"));
+  const cur = Number.isFinite(raw) ? Math.min(168, Math.max(1, raw)) : 24;
   const rows = UPDATE_INTERVALS.map(([h, key]) => [h, t(key)]);
   if (!rows.some(([h]) => h === cur)) rows.push([cur, `${cur}h`]);
   rows.sort((a, b) => a[0] - b[0]);

@@ -2858,6 +2858,9 @@ impl Settings {
             }
             self.retention_defaults_v2 = true;
         }
+        if let Some(h) = self.ui_values.get_mut("updateCheckH") {
+            *h = clamp_update_hours(*h);
+        }
         for k in removed_ui_value_keys() {
             self.ui_values.remove(*k);
         }
@@ -27646,6 +27649,16 @@ fn updater_check() -> Option<UpdateInfo> {
 // Far enough past launch that the first check never competes with window build.
 const UPDATE_CHECK_FIRST_DELAY_SECS: u64 = 2;
 
+// Hours between automatic update checks, kept inside what the setting offers. Never
+// means "off" here: that is the Auto update switch, not a short or zero interval.
+fn clamp_update_hours(hours: f64) -> f64 {
+    if hours.is_finite() {
+        hours.clamp(1.0, 168.0)
+    } else {
+        24.0
+    }
+}
+
 // Expert-tunable, clamped to the range the setting offers.
 fn update_check_interval(app: &AppHandle) -> Duration {
     let hours = app
@@ -27659,9 +27672,8 @@ fn update_check_interval(app: &AppHandle) -> Duration {
                 .copied()
                 .unwrap_or(24.0)
         })
-        .unwrap_or(24.0)
-        .clamp(1.0, 168.0);
-    Duration::from_secs((hours * 3600.0) as u64)
+        .unwrap_or(24.0);
+    Duration::from_secs((clamp_update_hours(hours) * 3600.0) as u64)
 }
 
 // One round of the automatic update check.
@@ -27886,6 +27898,9 @@ fn set_ui_value(app: AppHandle, state: State<Db>, key: String, value: f64) -> Re
     let is_tray = key == "trayRecentN" || key == "trayFavN" || key == "trayLabelMax";
     let is_folder_grid = key == "folderGridCols";
     let is_error_log_cap = key == "errorLogKeepKb";
+    // A stored interval outside what the setting offers would show as one thing and
+    // run as another.
+    let value = if key == "updateCheckH" { clamp_update_hours(value) } else { value };
     let restart_port_from = {
         let mut store = lock(&state);
         let old = store.settings.ui_values.get(&key).copied();
@@ -51842,6 +51857,27 @@ mod tests {
         assert_eq!(run(&[("boldTileNames", false)], &[]), None);
         // A stored choice is never overwritten.
         assert_eq!(run(&[("boldTileNames", true)], &[("tileStyle", "mono")]).as_deref(), Some("mono"));
+    }
+
+    #[test]
+    fn stored_update_interval_is_kept_in_range() {
+        let run = |h: f64| {
+            let mut s = Settings::default();
+            s.ui_values.insert("updateCheckH".into(), h);
+            s.migrate();
+            s.ui_values.get("updateCheckH").copied()
+        };
+        // 0 never means "off" here (that is the Auto update switch); it is the shortest wait.
+        assert_eq!(run(0.0), Some(1.0));
+        assert_eq!(run(0.5), Some(1.0));
+        assert_eq!(run(-4.0), Some(1.0));
+        assert_eq!(run(500.0), Some(168.0));
+        assert_eq!(run(f64::NAN), Some(24.0));
+        assert_eq!(run(12.0), Some(12.0));
+        // Nothing stored: nothing written.
+        let mut s = Settings::default();
+        s.migrate();
+        assert!(!s.ui_values.contains_key("updateCheckH"));
     }
 
     #[test]
