@@ -36,6 +36,8 @@ NOT_IN_EXPERT = {
     "backupDaily", "backupWeekly", "backupMonthly", "backupYearly",
     # Statistics, rendered by renderStatsPanel.
     "usageStats", "statsTopN",
+    # Interface and icon size, set by the two selects on the normal settings page.
+    "uiScale", "iconScale",
 }
 
 # Every setting that only makes sense while another feature is on, and the gate it

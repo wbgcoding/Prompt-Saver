@@ -1689,6 +1689,9 @@ the video editor and the introduction tour ship on).
   is.
 - **Quieter defaults.** Tile videos no longer autoplay or loop. A switch you
   changed yourself stays as it is.
+- **Interface and icon size live only in Settings.** The duplicate sliders
+  in the expert menu are gone; the two size choices in Settings set the same
+  values.
 
 ## 2.6.3 (2026-07-26)
 

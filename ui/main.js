@@ -2279,7 +2279,7 @@ const EXPERT_TABS = [
     { title: "expGroupFavorites", flags: ["favorites", { key: "favViewButton", gate: "favorites" }, { key: "favViewReorder", gate: "favViewButton" }], values: ["favStarSize", "favMaxCols"] },
   ] },
   { title: "expTabAppearance", groups: [
-    { title: "expGroupScales", values: ["uiScale", "modalScale", "composerScale", "iconScale", "primaryScale"] },
+    { title: "expGroupScales", values: ["modalScale", "composerScale", "primaryScale"] },
     { title: "expGroupAppearanceDetails", flags: ["animations", "accentHeader", "hideScrollbars", { key: "accentScrollbar", gate: "!hideScrollbars" }, "smoothScroll", "frostedModals"], values: ["animSpeed", "gridGap", "gridPad", "modalRadius", "overlayDim", "scrollbarWidth", "frostedBlur", "composerMaxH", "toastWidth", "toastMs", "modalMaxVh"], dropdowns: ["toastPos"] },
     { title: "expGroupColors", flags: ["customThemes"], values: ["customThemeMax"], palette: true },
     { title: "expGroupLimits", values: ["previewLen", "nameMaxLen"] },
