@@ -363,13 +363,13 @@
            The on/off switch sits right above the entry list, which is the editing
            surface while rotation is active. -->
       <label id="modal-rotate-toggle-row" class="field switch-field modal-rotate-toggle hidden" data-i18n-title="rotateVsChainHint">
-        <span data-i18n="rotateToggle">Rotating texts</span>
+        <span data-i18n="rotateToggle">Rotation</span>
         <input type="checkbox" id="modal-rotate-switch" class="switch" />
       </label>
       <div id="modal-rotate-list" class="modal-rotate-list hidden">
         <div id="modal-rotate-entries" class="modal-rotate-entries"></div>
         <div class="modal-rotate-controls-row">
-          <button type="button" id="modal-rotate-add" class="ghost-btn modal-rotate-add" data-i18n="rotateAddEntry">+ Entry</button>
+          <button type="button" id="modal-rotate-add" class="ghost-btn modal-rotate-add" data-i18n="rotateAddEntry">+ Rotation text</button>
           <div class="modal-rotate-mode-group">
             <span id="modal-rotate-next" class="modal-rotate-next hidden"></span>
             <button type="button" id="modal-rotate-reset" class="ghost-btn hidden" data-i18n="rotateFromStart">From the start</button>
@@ -380,7 +380,7 @@
             <!-- Auto-advance on every real paste, not just on copy. Disabled
                  (with a reason in the tooltip) for image/file prompts and single-entry
                  prompts, never a silent no-op button. -->
-            <button type="button" id="modal-rotate-auto" class="ghost-btn modal-rotate-auto" aria-pressed="false" data-i18n="rotateAuto" data-i18n-title="rotateAutoTip">Auto</button>
+            <button type="button" id="modal-rotate-auto" class="ghost-btn modal-rotate-auto" aria-pressed="false" data-i18n="rotateAuto" data-i18n-title="rotateAutoTip">Rotate on paste</button>
           </div>
         </div>
       </div>
@@ -731,7 +731,7 @@
           </svg>
         </button>
       </div>
-      <p class="modal-hint" data-i18n="importFolderRules">A file name (without its extension) becomes the name. A short first line becomes the note, and the rest continues as the text. Each subfolder becomes a tag, one per level. A file containing the rotation separator becomes a rotating entry.</p>
+      <p class="modal-hint" data-i18n="importFolderRules">A file name (without its extension) becomes the name. A short first line becomes the note, and the rest continues as the text. Each subfolder becomes a tag, one per level. A file containing the rotation separator becomes a prompt with rotation texts.</p>
       <p class="modal-hint" data-i18n="importFolderReadOnly">Files are only read here, never moved or deleted.</p>
       <p id="import-folder-summary" class="modal-hint"></p>
       <div class="import-preview-list-head">
@@ -1561,7 +1561,7 @@
          cannot do anything. -->
     <button data-act="rotateAutoMenu" role="menuitemcheckbox" class="hidden">
       <span class="tb-check"></span>
-      <span data-i18n="rotateAutoMenu">Auto-advance on paste</span>
+      <span data-i18n="rotateAutoMenu">Rotate on paste</span>
     </button>
     <button data-act="delete" role="menuitem" class="danger" data-i18n="delete">Delete</button>
   </div>

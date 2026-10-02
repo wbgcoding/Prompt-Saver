@@ -2310,7 +2310,7 @@ PROBE = """
       // setting/icon tip. It used to survive the switch, so the last hovered
       // tile-s next-entry text stayed glued under every plain tooltip.
       const rotLine = () => document.querySelector('.tile-tip .tile-tip-rotate');
-      noteTile.dataset.tipRotate = 'Rotating, next entry: probe';
+      noteTile.dataset.tipRotate = 'Rotation, next text: probe';
       await hover(noteTile, 30);
       const withRot = rotLine();
       if (!withRot || !withRot.textContent.includes('probe')) {
@@ -6382,7 +6382,7 @@ PROBE = """
         for (const tb of tabs) { tb.click(); const hit = find(); if (hit) return hit; }
         return null;
       };
-      const rotSw = rowByLabel5('Rotating', '.switch-field')?.querySelector('input.switch');
+      const rotSw = rowByLabel5('Rotation', '.switch-field')?.querySelector('input.switch');
       if (!rotSw) {
         out.errors.push('the rotating-prompts toggle is missing from the expert menu');
       } else {
@@ -6391,10 +6391,10 @@ PROBE = """
         if (!rowByLabel5('starts in', '.expert-dropdown-row')) {
           out.errors.push('the rotation-mode dropdown does not show while rotating prompts is on by default');
         }
-        if (!rowByLabel5('Max. entries per', '.value-field')) {
+        if (!rowByLabel5('Max. rotation texts per', '.value-field')) {
           out.errors.push('the max-entries slider does not show while rotating prompts is on by default');
         }
-        const badgeSw = rowByLabel5('Show the next-entry badge', '.switch-field')?.querySelector('input.switch');
+        const badgeSw = rowByLabel5('Show the next rotation text', '.switch-field')?.querySelector('input.switch');
         if (!badgeSw) {
           out.errors.push('the badge sub-flag does not show while rotating prompts is on by default');
         } else if (!badgeSw.checked) {
@@ -6413,15 +6413,15 @@ PROBE = """
         if (rowByLabel5('starts in', '.expert-dropdown-row')) {
           out.errors.push('the rotation-mode dropdown still shows after turning rotating prompts off');
         }
-        if (rowByLabel5('Max. entries per', '.value-field')) {
+        if (rowByLabel5('Max. rotation texts per', '.value-field')) {
           out.errors.push('the max-entries slider still shows after turning rotating prompts off');
         }
-        if (rowByLabel5('Show the next-entry badge', '.switch-field')) {
+        if (rowByLabel5('Show the next rotation text', '.switch-field')) {
           out.errors.push('the badge sub-flag still shows after turning rotating prompts off');
         }
         // Restore the default so later blocks (and a real re-run of this suite) see
         // the same starting state.
-        const backSw = rowByLabel5('Rotating', '.switch-field')?.querySelector('input.switch');
+        const backSw = rowByLabel5('Rotation', '.switch-field')?.querySelector('input.switch');
         if (backSw) { backSw.checked = true; backSw.dispatchEvent(new Event('change', { bubbles: true })); }
         await sleep(120);
       }
@@ -6439,7 +6439,7 @@ PROBE = """
       };
       await click('gear');
       await click('expert-open');
-      const rotSw2 = rowByLabel6('Rotating', '.switch-field')?.querySelector('input.switch');
+      const rotSw2 = rowByLabel6('Rotation', '.switch-field')?.querySelector('input.switch');
       if (rotSw2 && !rotSw2.checked) { rotSw2.checked = true; rotSw2.dispatchEvent(new Event('change', { bubbles: true })); }
       await sleep(150);
       document.getElementById('settings-close')?.click();
@@ -6665,7 +6665,7 @@ PROBE = """
       // off must hide the badge too, not just leave it keyed to its own toggle.
       await click('gear');
       await click('expert-open');
-      const rotSwOff = rowByLabel6('Rotating', '.switch-field')?.querySelector('input.switch');
+      const rotSwOff = rowByLabel6('Rotation', '.switch-field')?.querySelector('input.switch');
       if (rotSwOff && rotSwOff.checked) { rotSwOff.checked = false; rotSwOff.dispatchEvent(new Event('change', { bubbles: true })); }
       await sleep(150);
       document.getElementById('settings-close')?.click();
@@ -6680,7 +6680,7 @@ PROBE = """
       // Restore the flag to its default (on, since 33) for later blocks / a re-run.
       await click('gear');
       await click('expert-open');
-      const rotSw3 = rowByLabel6('Rotating', '.switch-field')?.querySelector('input.switch');
+      const rotSw3 = rowByLabel6('Rotation', '.switch-field')?.querySelector('input.switch');
       if (rotSw3 && !rotSw3.checked) { rotSw3.checked = true; rotSw3.dispatchEvent(new Event('change', { bubbles: true })); }
       await sleep(120);
       document.getElementById('settings-close')?.click();

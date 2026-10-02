@@ -12,7 +12,7 @@ syntax colors, private notes, per-prompt hotkeys, drag-out into other apps, a
 tray quick-copy menu, a screen color picker, a standalone quick launcher,
 multi-select in the grid, a trash for deleted prompts, placing one prompt in
 several views at once, restoring a backup's data and settings separately,
-rotating prompts, a screenshot editor, offline text recognition (OCR), offline
+prompts with rotation, a screenshot editor, offline text recognition (OCR), offline
 voice dictation, screen recording, a video editor, and a first-run
 introduction tour.
 Everything new is an expert-menu switch, most of it off until you turn it on
@@ -142,13 +142,13 @@ the video editor and the introduction tour ship on).
   checkboxes instead of an all-or-nothing swap: bring back your prompts
   without touching your current setup, or the other way around. Importing a
   `.psb`/`.json` backup file gets the same choice.
-- **Rotating prompts** — a text prompt can hold a list of texts instead of one;
-  each copy serves the next entry, in order or shuffled, and a small badge on
+- **Rotation** — a text prompt can hold a list of texts instead of one;
+  each copy serves the next rotation text, in order or shuffled, and a small badge on
   the tile shows the position. The editor turns the text field into a numbered
   list with a mode switch and a "from the start" reset. Entries survive
   export/import, backups, Markdown-sync and version history, and the library
   search finds a match inside any entry, not just the first. An eligible entry
-  (2+ items, no image/file) can also auto-advance on every real paste instead
+  (2+ items, no image/file) can also rotate on every real paste instead
   of only on copy — a per-tile switch in the editor or a tile's right-click
   menu, tunable session timeout and timing window in the expert menu, and a
   toast instead of a loop if pasting happens too fast too often.
@@ -192,7 +192,7 @@ the video editor and the introduction tour ship on).
   always matches, instead of only the word.
 - **Twenty-one settings that were fixed constants are now expert values**: the
   colour-history swatch size, the colour-picker loupe grid size, screenshot
-  quality and an optional capture delay, a rotating prompt's tooltip preview
+  quality and an optional capture delay, the rotation tooltip preview
   length, the Markdown-preview and
   syntax-highlight size caps, the version-history diff word cap and preview
   length (with a switch to turn the word diff off entirely), the drag-vs-click
@@ -354,7 +354,7 @@ the video editor and the introduction tour ship on).
   for how many hits each group shows.
 - **Demo mode**: an expert-menu switch swaps the whole window to a bundled
   sample library covering most features at once (prompts with and without
-  an image, a rotating prompt, a placeholder, tags, a favorite, two views,
+  an image, a prompt with rotation, a placeholder, tags, a favorite, two views,
   a folder, an attachment and a video), never touching the real data.
   Rebuilds the sample library fresh every time and restarts into it. A
   permanent marker stays visible while it is on; switching back asks first,
@@ -453,7 +453,7 @@ the video editor and the introduction tour ship on).
 - **Most-used tools in the statistics.** A new rubric next to the entry
   statistics counts how often each tool gets used: screenshots, the
   screenshot editor, text recognition, screen recording, the video editor and
-  its export, dictation, the color picker, chaining, rotating prompts,
+  its export, dictation, the color picker, chaining, rotation,
   creating a grid folder, the duplicate finder and making a backup. A short
   list beside it names the tools nobody has touched yet. Counted only while
   usage statistics are on, stays on this computer, and is included in the
@@ -506,7 +506,7 @@ the video editor and the introduction tour ship on).
 - **Import from a folder.** Turns a folder of .md/.txt files into tiles, one
   per file, read only, nothing is ever moved or deleted. The file name becomes
   the name, a short first line becomes the note, each subfolder becomes a tag,
-  and a file already using the rotation separator becomes a rotating tile. A
+  and a file already using the rotation separator becomes a prompt with rotation texts. A
   preview lists every file with its tags, size and a checkbox, and grays out
   anything unreadable with the reason why. How deep it looks into subfolders
   and how many files it stops at are both adjustable in the expert menu.
@@ -576,8 +576,8 @@ the video editor and the introduction tour ship on).
   rate are all adjustable in the expert menu.
 - **JSON export and import for prompts**, alongside CSV and TXT: one Export
   button plus a format dropdown replaces the three separate buttons. JSON is
-  the only one of the three that can carry a rotating prompt's full entry
-  list, tags, notes, a hotkey and a colour without joining them into a
+  the only one of the three that can carry a prompt's full rotation
+  texts, tags, notes, a hotkey and a colour without joining them into a
   single field. Import decides CSV or JSON from the file's own content, never
   its extension. Images stay out of all three, same as before.
 - **The recording control bar can be dragged to move it**, including onto
@@ -646,9 +646,9 @@ the video editor and the introduction tour ship on).
   the prompts that actually changed are written, and moving prompts around updates
   nothing but their position. With 500 prompts, 60 of them carrying a screenshot,
   a single rename takes 36 ms instead of 1900 ms.
-- Copying no longer writes to the disk on every single copy. Which entry a rotating
-  prompt serves next, how often a prompt has been used and the date of its last use
-  were saved the instant any of them changed — with auto-advance switched on, that
+- Copying no longer writes to the disk on every single copy. Which text a prompt with
+  rotation serves next, how often a prompt has been used and the date of its last use
+  were saved the instant any of them changed — with rotate on paste switched on, that
   meant a full save on every Ctrl+V. They are now collected and written once the
   copying has been quiet for a second: 100 pastes in quick succession cost 100 disk
   writes before and one or two now. Closing the app, logging off Windows, a backup,
@@ -1154,20 +1154,20 @@ the video editor and the introduction tour ship on).
   setting check.
 - **The folder window stayed visible, and could appear in a screenshot,**
   while screen-capture-safe mode hid every other window.
-- **Copying a rotating prompt from a tile, a folder member, or the library
+- **Copying a prompt with rotation from a tile, a folder member, or the library
   skipped rotation and always copied the first entry**; the placeholder-fill
   dialog could also fail to appear when only a later entry had a placeholder.
   Rotation also no longer advances on copying an image or file entry.
 - The usage-statistics panel grew an extra header every time it was toggled.
 - A number field could not be set to `0` (it fell back to the default),
   blocking a GFS backup tier from being turned off entirely.
-- The rotation badge ignored the rotating-prompts toggle and kept polling in
+- The rotation badge ignored the rotation toggle and kept polling in
   the background even with the feature switched off.
 - Cached video thumbnails stopped starting or pausing with scroll after the
   library had been re-rendered once.
 - A slow response for one prompt's history or rotation state could land in a
   different prompt's editor if you switched prompts quickly.
-- The editor could get stuck showing a rotating-prompt variant list even
+- The editor could get stuck showing the rotation text list even
   after the feature was switched off.
 - A pill hidden with "hide for now" could reappear on its own after being
   unpinned and re-pinned.
@@ -1200,8 +1200,8 @@ the video editor and the introduction tour ship on).
   pointer move.
 - The help text had the screen-capture-protection default backwards, and
   documented the wrong syntax for self-filling placeholders.
-- **The version-history diff never showed a change if only a rotating
-  prompt's later entries changed** — only entry 1 was ever compared, and
+- **The version-history diff never showed a change if only a prompt's later
+  rotation texts changed** — only entry 1 was ever compared, and
   restoring a version left the editor's still-open rotation entries in place,
   so the next save quietly overwrote what had just been restored. Prompts
   with no visible text (images, files, colours) never showed version history
@@ -1264,7 +1264,7 @@ the video editor and the introduction tour ship on).
 - Copying a prompt from a floating pill, the folder window or the tray did not
   update the library's "most used"/"recently used" sort in the main window —
   it stayed frozen at whatever it last saw until the next full reload.
-- A fast double click on the same rotating prompt while picking a chain could
+- A fast double click on the same prompt with rotation while picking a chain could
   leave the tile visibly selected with its text silently missing from the
   chain, instead of either staying picked or unpicking cleanly.
 - A failed automatic backup used to fail completely silently; it is now logged
@@ -1288,9 +1288,9 @@ the video editor and the introduction tour ship on).
 - A second click on a language pack's Install button while the elevated
   install was still starting could launch a second concurrent install for the
   same language.
-- A rotating prompt's preview, fetched right as its rotation state changed
+- The preview of a prompt with rotation, fetched right as its rotation state changed
   elsewhere, could briefly land after and silently override the newer state.
-- **A rotating prompt's "advance on paste" only worked from the floating
+- **"Rotate on paste" only worked from the floating
   buttons and folder windows.** Copying the same prompt from the grid, the
   library, the copy history, a hotkey or the tray never started the waiting
   session, so the entry never moved on. It now does, everywhere. Entries that

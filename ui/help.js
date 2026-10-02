@@ -106,7 +106,7 @@ export const HELP_CONTENT = {
         "Ctrl-drag a tile onto another window to drop its text directly, with no clipboard round-trip.",
       ],
       whatHappens:
-        "A short confirmation bubble or flash confirms the copy. Chaining, clicking several tiles in a row, combines them into one clipboard entry instead of overwriting each other; hovering a text tile also shows a small chain icon next to its selection checkbox that starts a chain with that tile first. A chain stays when you switch to another program; it ends when you click the chain button again or paste with Ctrl+V in the app window. While chaining, drag a step in the strip above the grid to reorder it, or right-click it to remove it. Chaining is not the same as rotation: chaining combines several different tiles, rotation changes what a single tile holds from copy to copy (see Rotating tiles). With the double-click latch on, chain mode stays on after copying, for building several chains in a row. The strip can also mark a step red when it needs a placeholder that no earlier step fills; the chain still runs.",
+        "A short confirmation bubble or flash confirms the copy. Chaining, clicking several tiles in a row, combines them into one clipboard entry instead of overwriting each other; hovering a text tile also shows a small chain icon next to its selection checkbox that starts a chain with that tile first. A chain stays when you switch to another program; it ends when you click the chain button again or paste with Ctrl+V in the app window. While chaining, drag a step in the strip above the grid to reorder it, or right-click it to remove it. Chaining is not the same as rotation: chaining combines several different tiles, rotation changes what a single tile holds from copy to copy (see Rotation). With the double-click latch on, chain mode stays on after copying, for building several chains in a row. The strip can also mark a step red when it needs a placeholder that no earlier step fills; the chain still runs.",
       settings: ["Chaining, and the chain icon shown on a tile: Expert menu → Features → Chain", "What goes between two chained steps: Expert menu → Features → Chain", "Keep chain mode on after copying, show what each chain step needs: Expert menu → Features → Chain", "Auto-paste on double-click: Settings", "Per-tile hotkeys, press Enter after auto-paste, drag-out, hide the window after copying: Expert menu → Features → Copying", "Which key drags a tile out, and whether that key drags out or moves it: Expert menu → Features → Copying"],
       sketches: ["flowToTarget", "chainSteps"],
     },
@@ -464,7 +464,7 @@ export const HELP_CONTENT = {
         "Keep one, or mark the pair as not a duplicate to stop it being flagged again.",
       ],
       whatHappens:
-        "Matching compares each tile's main text (or its name, if it has no text) by similarity, not by exact match; the threshold controls how close counts as close enough. A rotating tile is only compared on its first entry. The only way in is the \"Find duplicates\" button in the library; the expert menu only holds its on/off switch and the threshold.",
+        "Matching compares each tile's main text (or its name, if it has no text) by similarity, not by exact match; the threshold controls how close counts as close enough. A tile with rotation is only compared on its first text. The only way in is the \"Find duplicates\" button in the library; the expert menu only holds its on/off switch and the threshold.",
       settings: ["Duplicate finder, similarity threshold: Expert menu → System & data → Data & maintenance"],
     },
     {
@@ -478,7 +478,7 @@ export const HELP_CONTENT = {
         "Confirm to actually import, or cancel and nothing changes.",
         "\"Import folder\" in Settings turns a folder of .md or .txt files into tiles, one per file, after a preview with a checkbox per file.",
       ],
-      whatHappens: "CSV and TXT round-trip text alone; JSON also carries a rotating tile's full entry list, tags, notes, hotkey, and color, none of which fit cleanly into the other two. Images, files, layout, and settings need the full backup format instead. Import decides CSV or JSON by the file's own content, never its extension. A folder import only reads: nothing is moved or deleted. The file name becomes the name, each sub-folder becomes a tag, and an unreadable file is grayed out with the reason.",
+      whatHappens: "CSV and TXT round-trip text alone; JSON also carries the full rotation texts of a tile with rotation, tags, notes, hotkey, and color, none of which fit cleanly into the other two. Images, files, layout, and settings need the full backup format instead. Import decides CSV or JSON by the file's own content, never its extension. A folder import only reads: nothing is moved or deleted. The file name becomes the name, each sub-folder becomes a tag, and an unreadable file is grayed out with the reason.",
       settings: ["Import and export: Expert menu → System & data → Data & maintenance", "Folder import depth and file limit: Expert menu → System & data → Data & maintenance"],
     },
     {
@@ -640,19 +640,19 @@ export const HELP_CONTENT = {
     },
     {
       section: "basics",
-      title: "Rotating tiles",
-      whatItIs: "A tile can hold a list of texts instead of one; each copy serves the next entry.",
+      title: "Rotation",
+      whatItIs: "A tile can hold a list of texts instead of one; each copy serves the next rotation text.",
       howTo: [
-        "Rotating tiles are on by default; turn them off in the expert menu if unused.",
-        "In a tile's editor, turn on \"Rotating texts\" above the entry area.",
-        "The entry list then replaces the plain text field.",
-        "Add more entries with \"+ Entry\"; icons beside each one reorder or remove it.",
-        "Choose order (sequential) or shuffle (random, no repeats until every entry is used).",
-        "Copy the tile as normal: it always serves the next entry, never asks which one.",
+        "Rotation is on by default; turn it off in the expert menu if unused.",
+        "In a tile's editor, turn on \"Rotation\" above the text area.",
+        "The list of rotation texts then replaces the plain text field.",
+        "Add more rotation texts with \"+ Rotation text\"; icons beside each one reorder or remove it.",
+        "Choose order (sequential) or shuffle (random, no repeats until every rotation text is used).",
+        "Copy the tile as normal: it always serves the next rotation text, never asks which one.",
       ],
       whatHappens:
-        "A small badge counts up on a grid tile, a floating button, and a floating button folder member, like \"2/5\"; a grid-folder member shows only its file-type icon, not this badge. In order mode it is the absolute position; in shuffle mode it counts draws within the current cycle and restarts at 1 once every entry has been shown once, so it never jumps to an arbitrary position. The count survives restarts and full backups; a CSV/TXT import creates a new tile with a fresh pointer, so only the list of texts and its order or shuffle mode carry over, not the exact position. Turning rotation off on a tile with several entries keeps them all; only the first one is used until it is turned back on. An optional auto-advance moves a rotating tile to its next entry on every real paste, not only when it is copied.",
-      settings: ["Rotating tiles (on by default), default order or shuffle, badge, maximum entries, advance on every paste: Expert menu → Features → Rotating entries. The per-tile switch itself sits above the entry area in the editor."],
+        "A small badge counts up on a grid tile, a floating button, and a floating button folder member, like \"2/5\"; a grid-folder member shows only its file-type icon, not this badge. In order mode it is the absolute position; in shuffle mode it counts draws within the current cycle and restarts at 1 once every entry has been shown once, so it never jumps to an arbitrary position. The count survives restarts and full backups; a CSV/TXT import creates a new tile with a fresh pointer, so only the list of texts and its order or shuffle mode carry over, not the exact position. Turning rotation off on a tile with several entries keeps them all; only the first one is used until it is turned back on. The optional \"Rotate on paste\" moves a tile with rotation to its next text on every real paste, not only when it is copied.",
+      settings: ["Rotation (on by default), default order or shuffle, badge, maximum rotation texts, rotate on paste: Expert menu → Features → Rotation. The per-tile switch itself sits above the entry area in the editor."],
     },
     {
       section: "system",
@@ -731,7 +731,7 @@ export const HELP_CONTENT = {
         "Turn it off to go back; the app asks first and restarts into your own data.",
       ],
       whatHappens:
-        "The sample library is built fresh each time and covers most features: tiles with and without a picture, a rotating tile, a placeholder, tags, a favorite, two views, a folder, an attachment and a video. Your own data is never opened or changed while it runs. Anything changed during the demo is discarded when it ends.",
+        "The sample library is built fresh each time and covers most features: tiles with and without a picture, a tile with rotation, a placeholder, tags, a favorite, two views, a folder, an attachment and a video. Your own data is never opened or changed while it runs. Anything changed during the demo is discarded when it ends.",
       settings: ["Demo mode: Expert menu → System & data → System"],
     },
     {
@@ -854,7 +854,7 @@ export const HELP_CONTENT = {
         "Strg-Ziehen einer Kachel auf ein anderes Fenster legt ihren Text direkt dort ab.",
       ],
       whatHappens:
-        "Eine kurze Bestätigungsblase oder ein Aufblinken bestätigt den Kopiervorgang. Verketten, mehrere Kacheln hintereinander anklicken, fasst sie zu einem Eintrag in der Zwischenablage zusammen, statt sie zu überschreiben; beim Überfahren einer Text-Kachel erscheint zusätzlich ein kleines Ketten-Symbol neben ihrer Auswahlbox, das direkt eine Kette mit dieser Kachel beginnt. Eine Kette bleibt beim Wechsel in ein anderes Programm bestehen und endet erst durch erneutes Klicken auf den Ketten-Button oder Strg+V im App-Fenster. Beim Verketten lässt sich ein Schritt in der Leiste über dem Raster ziehen, um ihn umzusortieren, oder per Rechtsklick entfernen. Verketten ist nicht dasselbe wie Rotation: Verketten fasst mehrere verschiedene Kacheln zusammen, Rotation ändert, was eine einzelne Kachel von Kopie zu Kopie enthält (siehe Wechselnde Kacheln). Ist die Doppelklick-Dauer-an-Funktion eingeschaltet, bleibt der Kettenmodus nach dem Kopieren an, um mehrere Ketten nacheinander zu bauen. Der Streifen kann außerdem einen Schritt rot markieren, wenn er einen Platzhalter braucht, den kein früherer Schritt füllt; die Kette läuft trotzdem.",
+        "Eine kurze Bestätigungsblase oder ein Aufblinken bestätigt den Kopiervorgang. Verketten, mehrere Kacheln hintereinander anklicken, fasst sie zu einem Eintrag in der Zwischenablage zusammen, statt sie zu überschreiben; beim Überfahren einer Text-Kachel erscheint zusätzlich ein kleines Ketten-Symbol neben ihrer Auswahlbox, das direkt eine Kette mit dieser Kachel beginnt. Eine Kette bleibt beim Wechsel in ein anderes Programm bestehen und endet erst durch erneutes Klicken auf den Ketten-Button oder Strg+V im App-Fenster. Beim Verketten lässt sich ein Schritt in der Leiste über dem Raster ziehen, um ihn umzusortieren, oder per Rechtsklick entfernen. Verketten ist nicht dasselbe wie Rotation: Verketten fasst mehrere verschiedene Kacheln zusammen, Rotation ändert, was eine einzelne Kachel von Kopie zu Kopie enthält (siehe Rotation). Ist die Doppelklick-Dauer-an-Funktion eingeschaltet, bleibt der Kettenmodus nach dem Kopieren an, um mehrere Ketten nacheinander zu bauen. Der Streifen kann außerdem einen Schritt rot markieren, wenn er einen Platzhalter braucht, den kein früherer Schritt füllt; die Kette läuft trotzdem.",
       settings: ["Verketten und das Ketten-Symbol an der Kachel: Expertenmenü → Funktionen → Kette", "Was zwischen zwei verketteten Schritten steht: Expertenmenü → Funktionen → Kette", "Kettenmodus nach dem Kopieren eingeschaltet lassen, zeigen, was jeder Kettenschritt braucht: Expertenmenü → Funktionen → Kette", "Auto-Einfügen bei Doppelklick: Einstellungen", "Eigene Hotkeys pro Kachel, Enter nach Auto-Einfügen, Drag-out, Fenster nach dem Kopieren ausblenden: Expertenmenü → Funktionen → Kopieren", "Welche Taste eine Kachel herauszieht und ob diese Taste herauszieht oder sie verschiebt: Expertenmenü → Funktionen → Kopieren"],
       sketches: ["flowToTarget", "chainSteps"],
     },
@@ -1213,7 +1213,7 @@ export const HELP_CONTENT = {
         "Eine Kachel behalten, oder das Paar als kein Duplikat markieren, damit es nicht erneut markiert wird.",
       ],
       whatHappens:
-        "Der Abgleich vergleicht den Haupttext jeder Kachel (oder ihren Namen, falls sie keinen Text hat) nach Ähnlichkeit, nicht nach exakter Übereinstimmung; der Schwellenwert steuert, wie nah als nah genug gilt. Eine rotierende Kachel wird nur nach ihrem ersten Eintrag verglichen. Der einzige Zugang ist der Button „Duplikate finden“ in der Bibliothek; das Expertenmenü enthält nur den Schalter und die Schwelle.",
+        "Der Abgleich vergleicht den Haupttext jeder Kachel (oder ihren Namen, falls sie keinen Text hat) nach Ähnlichkeit, nicht nach exakter Übereinstimmung; der Schwellenwert steuert, wie nah als nah genug gilt. Eine Kachel mit Rotation wird nur nach ihrem ersten Text verglichen. Der einzige Zugang ist der Button „Duplikate finden“ in der Bibliothek; das Expertenmenü enthält nur den Schalter und die Schwelle.",
       settings: ["Duplikat-Finder, Ähnlichkeitsschwelle: Expertenmenü → System & Daten → Daten & Wartung"],
     },
     {
@@ -1227,7 +1227,7 @@ export const HELP_CONTENT = {
         "Zum tatsächlichen Import bestätigen, oder abbrechen, wodurch sich nichts ändert.",
         "\"Ordner importieren\" in den Einstellungen macht aus einem Ordner mit .md- oder .txt-Dateien Kacheln, eine pro Datei, nach einer Vorschau mit einem Häkchen pro Datei.",
       ],
-      whatHappens: "CSV und TXT transportieren nur Text; JSON trägt zusätzlich die volle Eintragsliste einer rotierenden Kachel, Tags, Notiz, Tastenkürzel und Farbe, die in den anderen beiden nicht sauber Platz finden. Bilder, Dateien, Layout und Einstellungen benötigen weiterhin das vollständige Backup-Format. Der Import entscheidet anhand des Dateiinhalts zwischen CSV und JSON, nie anhand der Endung. Ein Ordner-Import liest nur: Nichts wird verschoben oder gelöscht. Der Dateiname wird zum Namen, jeder Unterordner zum Tag, und eine unlesbare Datei erscheint ausgegraut mit dem Grund.",
+      whatHappens: "CSV und TXT transportieren nur Text; JSON trägt zusätzlich die vollen Rotationstexte einer Kachel mit Rotation, Tags, Notiz, Tastenkürzel und Farbe, die in den anderen beiden nicht sauber Platz finden. Bilder, Dateien, Layout und Einstellungen benötigen weiterhin das vollständige Backup-Format. Der Import entscheidet anhand des Dateiinhalts zwischen CSV und JSON, nie anhand der Endung. Ein Ordner-Import liest nur: Nichts wird verschoben oder gelöscht. Der Dateiname wird zum Namen, jeder Unterordner zum Tag, und eine unlesbare Datei erscheint ausgegraut mit dem Grund.",
       settings: ["Import und Export: Expertenmenü → System & Daten → Daten & Wartung", "Tiefe und Dateigrenze des Ordner-Imports: Expertenmenü → System & Daten → Daten & Wartung"],
     },
     {
@@ -1389,19 +1389,19 @@ export const HELP_CONTENT = {
     },
     {
       section: "basics",
-      title: "Wechselnde Kacheln",
+      title: "Rotation",
       whatItIs: "Eine Kachel kann eine Liste von Texten statt nur einem tragen; jede Kopie liefert den nächsten Eintrag.",
       howTo: [
-        "Wechselnde Kacheln sind standardmäßig an; die Funktion im Expertenmenü ausschalten, falls nie genutzt.",
-        "Im Editor einer Kachel \"Wechselnde Texte\" über dem Eintragsbereich einschalten.",
-        "Die Eintragsliste ersetzt dann das normale Textfeld.",
-        "Mit \"+ Eintrag\" weitere Texteinträge hinzufügen; Icons daneben sortieren um oder entfernen sie.",
+        "Die Rotation ist standardmäßig an; die Funktion im Expertenmenü ausschalten, falls nie genutzt.",
+        "Im Editor einer Kachel \"Rotation\" über dem Textbereich einschalten.",
+        "Die Liste der Rotationstexte ersetzt dann das normale Textfeld.",
+        "Mit \"+ Rotationstext\" weitere Rotationstexte hinzufügen; Icons daneben sortieren um oder entfernen sie.",
         "Reihenfolge (der Reihe nach) oder Mischen (zufällig, ohne Wiederholung) wählen.",
         "Die Kachel wie gewohnt kopieren: sie liefert immer den nächsten Eintrag, ohne zu fragen, welchen.",
       ],
       whatHappens:
-        "Ein kleines Badge zählt auf einer Raster-Kachel, einem schwebenden Button und einem Mitglied eines Ordners für schwebende Buttons hoch, wie \"2/5\"; ein Raster-Ordner-Mitglied zeigt nur sein Dateityp-Icon, nicht dieses Badge. Im Reihenfolge-Modus ist das die absolute Position; im Zufalls-Modus zählt es die Ziehungen im aktuellen Durchlauf und beginnt wieder bei 1, sobald jeder Eintrag einmal drankam, statt auf eine beliebige Position zu springen. Der Zählerstand übersteht Neustarts und vollständige Backups; ein CSV/TXT-Import erstellt eine neue Kachel mit frischem Zeiger, sodass nur die Textliste und ihr Reihenfolge- oder Misch-Modus übernommen werden, nicht die genaue Position. Wird die Rotation bei einer Kachel mit mehreren Einträgen ausgeschaltet, bleiben alle erhalten; nur der erste wird genutzt, bis sie wieder aktiviert wird. Ein optionales Weiterschalten bringt eine wechselnde Kachel bei jedem echten Einfügen zum nächsten Eintrag, nicht nur beim Kopieren.",
-      settings: ["Wechselnde Kacheln (standardmäßig an), Standard Reihenfolge oder Mischen, Badge, maximale Einträge, bei jedem Einfügen weiterschalten: Expertenmenü → Funktionen → Wechselnde Einträge. Der Schalter pro Kachel sitzt im Editor über dem Eintragsbereich."],
+        "Ein kleines Badge zählt auf einer Raster-Kachel, einem schwebenden Button und einem Mitglied eines Ordners für schwebende Buttons hoch, wie \"2/5\"; ein Raster-Ordner-Mitglied zeigt nur sein Dateityp-Icon, nicht dieses Badge. Im Reihenfolge-Modus ist das die absolute Position; im Zufalls-Modus zählt es die Ziehungen im aktuellen Durchlauf und beginnt wieder bei 1, sobald jeder Eintrag einmal drankam, statt auf eine beliebige Position zu springen. Der Zählerstand übersteht Neustarts und vollständige Backups; ein CSV/TXT-Import erstellt eine neue Kachel mit frischem Zeiger, sodass nur die Textliste und ihr Reihenfolge- oder Misch-Modus übernommen werden, nicht die genaue Position. Wird die Rotation bei einer Kachel mit mehreren Einträgen ausgeschaltet, bleiben alle erhalten; nur der erste wird genutzt, bis sie wieder aktiviert wird. Das optionale \"Beim Einfügen rotieren\" bringt eine Kachel mit Rotation bei jedem echten Einfügen zum nächsten Text, nicht nur beim Kopieren.",
+      settings: ["Rotation (standardmäßig an), Standard Reihenfolge oder Mischen, Badge, maximale Rotationstexte, beim Einfügen rotieren: Expertenmenü → Funktionen → Rotation. Der Schalter pro Kachel sitzt im Editor über dem Eintragsbereich."],
     },
     {
       section: "system",
@@ -1480,7 +1480,7 @@ export const HELP_CONTENT = {
         "Zum Zurückkehren ausschalten; die App fragt zuerst nach und startet neu in die eigenen Daten.",
       ],
       whatHappens:
-        "Die Beispiel-Bibliothek wird jedes Mal frisch erzeugt und deckt die meisten Funktionen ab: Kacheln mit und ohne Bild, eine wechselnde Kachel, einen Platzhalter, Tags, einen Favoriten, zwei Ansichten, einen Ordner, einen Anhang und ein Video. Die eigenen Daten werden währenddessen nie geöffnet oder geändert. Was während der Vorführung geändert wurde, wird beim Beenden verworfen.",
+        "Die Beispiel-Bibliothek wird jedes Mal frisch erzeugt und deckt die meisten Funktionen ab: Kacheln mit und ohne Bild, eine Kachel mit Rotation, einen Platzhalter, Tags, einen Favoriten, zwei Ansichten, einen Ordner, einen Anhang und ein Video. Die eigenen Daten werden währenddessen nie geöffnet oder geändert. Was während der Vorführung geändert wurde, wird beim Beenden verworfen.",
       settings: ["Vorführung: Expertenmenü → System & Daten → System"],
     },
     {

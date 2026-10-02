@@ -52,7 +52,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | **Auto-paste** | A fast second click (or Enter) copies **and** pastes into the app you were just in |
 | **Variables** | Write `{#{Name}#}` placeholders and fill them in on copy, or `{#{tone\|formal,casual}#}` for a dropdown; an optional fixed-value list suggests a value for a name you use often, shown only as a placeholder |
 | **Self-filling** | `date`, `time`, `weekday`, `clipboard` and `uuid` fill themselves in, no dialog, in your language |
-| **Rotating prompts** | Give a prompt a list of texts instead of one: each copy serves the next entry, in order or shuffled, with a small badge showing where you are |
+| **Rotation** | Give a prompt a list of texts instead of one: each copy serves the next rotation text, in order or shuffled, with a small badge showing where you are |
 | **Prompt hotkeys** | Give a prompt its own global key combination that copies, and optionally pastes, from any app, with a small keyboard badge on its tile |
 | **Tray menu** | Copy a recent or favorite prompt straight from the tray, without opening the window; a filter field at the top searches every prompt as you type |
 | **Drag-out** | Ctrl-drag a tile, library row or floating button into any other app to drop its text |
@@ -104,7 +104,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | **Backup password** | Optional: protects new backup files with a key derived from your password |
 | **Versions** | Every prompt keeps its earlier versions; preview and restore any of them |
 | **Editor draft autosave** | The open editor saves its text every few seconds so a crash or a closed window never loses unsaved work; a save or cancel removes the draft, and the next start asks once whether to restore one it still finds |
-| **Import / export** | One backup file with prompts, views, layouts, colors, styles and language. Plain CSV, TXT or JSON export for the texts alone, picked from one Export button and a format dropdown; JSON also carries a rotating prompt's full entry list, tags, notes, hotkey and colour, which CSV and TXT cannot. Import decides CSV or JSON from the file's own content, never its extension |
+| **Import / export** | One backup file with prompts, views, layouts, colors, styles and language. Plain CSV, TXT or JSON export for the texts alone, picked from one Export button and a format dropdown; JSON also carries the full rotation texts of a prompt with rotation, tags, notes, hotkey and colour, which CSV and TXT cannot. Import decides CSV or JSON from the file's own content, never its extension |
 | **Import from a folder** | Turns a folder of .md/.txt files into tiles, one per file, read only; subfolders become tags and a short first line becomes the note |
 | **Careful resets** | "Delete data" and "Reset settings" are separate, both guarded, both with an optional safety backup |
 | **Data folder lock** | Pointing the data folder at a synced folder (OneDrive, Dropbox, Google Drive, iCloud Drive, Nextcloud) shows a one-time warning about the risk of two computers writing to the same database at once. A small lock file then guards it: a second computer that finds another machine's fresh lock opens read-only instead and says so, until that lock frees up or goes stale and is taken over automatically |

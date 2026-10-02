@@ -421,7 +421,7 @@ A pipette that freezes the screen, magnifies the pixel under the cursor, and cop
 it as hex, rgb, or hsl. Right-click the pipette icon to reopen the last few picks;
 the history is mirrored into settings, so it survives a restart too.
 
-### Rotating tiles
+### Rotation
 
 Not the same as chaining (see Copying below): rotation changes the text inside
 ONE tile from copy to copy, chaining copies several DIFFERENT tiles together
@@ -432,8 +432,8 @@ as one text.
 | several wordings of the same prompt | rotation |
 | several different prompts, one after another | chaining |
 
-A tile can hold a list of texts instead of one: each copy serves the next entry,
-in order or shuffled without repeats, instead of always the same text. On by
+A tile can hold a list of texts instead of one: each copy serves the next rotation
+text, in order or shuffled without repeats, instead of always the same text. On by
 default; the per-tile switch sits above the entry area in the editor.
 
 - A small badge counts up (like "2/5") on a tile, floating button, or floating button folder
@@ -444,13 +444,13 @@ default; the per-tile switch sits above the entry area in the editor.
 - The count survives restarts and full backups; a CSV/TXT import starts a
   fresh pointer, since the imported tile gets a new id
 
-An eligible tile (2+ entries, no image/file attached) can also **auto-advance on
-paste**: switch it on with the Auto button next to the order/random control, or
+An eligible tile (2+ entries, no image/file attached) can also **rotate on
+paste**: switch it on with the "Rotate on paste" button next to the order/random control, or
 from a tile's right-click menu once both the per-tile and the app-wide switch
-allow it. With auto-advance on, the next entry loads on every real Ctrl+V or
+allow it. With rotate on paste on, the next text loads on every real Ctrl+V or
 right-click-Paste, not only when copying again; the badge picks up an accent
 while a session is running. Placeholders still work; the popup asks once per
-session and the same values are reused for every entry. Five expert-menu
+session and the same values are reused for every rotation text. Five expert-menu
 settings (all under the same toggle) tune the session timeout and the timing
 window that tells a real paste apart from other clipboard activity; pasting too
 fast too often pauses the session with a toast instead of looping.
@@ -459,7 +459,7 @@ fast too often pauses the session with a toast instead of looping.
 
 ### Copying
 
-- Chaining: not the same as rotation (see Rotating tiles above). Several
+- Chaining: not the same as rotation (see Rotation above). Several
   DIFFERENT tiles copied together as one text, rather than one tile changing
   what it holds. Click several tiles in a row, they combine into one clipboard
   copy. Hovering a text tile also shows a small chain icon next to its
@@ -734,7 +734,7 @@ failing; it clears itself the moment a save reaches disk again.
 
 An expert-menu switch (System tab) swaps the whole window to a bundled sample
 library covering most features at once: prompts with and without an image, a
-rotating prompt, a couple of plain prompts to start a chain with, a
+prompt with rotation, a couple of plain prompts to start a chain with, a
 placeholder, tags, a favorite, two views, a folder, an attachment and (when
 available) a video. Turning it on rebuilds the sample library fresh every
 time and restarts the app into it; the real library is never opened, written
@@ -787,7 +787,7 @@ confirmation.
 Flags tiles that are textually very similar, by a similarity score rather than
 an exact match, without deleting anything on its own. Review a flagged pair side
 by side, keep one, or mark the pair as not a duplicate to stop it being flagged
-again. A rotating tile is only compared on its first entry.
+again. A tile with rotation is only compared on its first text.
 
 The same similarity score also drives a quiet hint after saving a prompt: if an
 existing one is close enough, a message names it with a button to open it and
@@ -800,8 +800,8 @@ menu.
 Plain CSV, TXT or JSON export for the text alone, or a full backup file with
 everything: tiles, views, layouts, colors, styles, and language. A single
 "Export" button and a format dropdown replace three separate buttons; JSON is
-the only one of the three that can carry a rotating tile's full list of
-entries, tags, notes, a hotkey, and color, rather than joining them into one
+the only one of the three that can carry the full rotation texts of a tile
+with rotation, tags, notes, a hotkey, and color, rather than joining them into one
 field the way CSV and TXT have to. Images never travel in any of the three,
 to keep the file small; use a full backup for those. Importing decides CSV or
 JSON by looking at the file itself, never its extension, and shows a preview
@@ -814,7 +814,7 @@ than importing something different from what was previewed.
 file, without touching the original files at all. The file name becomes the
 tile's name. A short first line becomes the note, with the rest carrying on as
 the text. Each subfolder becomes a tag, one per level. A file that already
-contains the rotation separator becomes a rotating tile. The preview lists
+contains the rotation separator becomes a prompt with rotation texts. The preview lists
 every file with its tags, size, and a checkbox, and grays out anything that
 could not be read (too large or not plain text) with the reason why. How deep
 into subfolders it looks and how many files it stops at are both expert-menu
@@ -1335,18 +1335,18 @@ EINER Kachel, Kette kopiert MEHRERE verschiedene Kacheln zusammen.
 | verschiedene Formulierungen desselben Prompts | Rotation |
 | mehrere verschiedene Prompts hintereinander | Kette |
 
-**Wechselnde Kacheln**: eine Kachel trägt eine Liste von Texten, jede Kopie
-liefert den nächsten Eintrag (Reihenfolge oder Zufall). Standardmäßig an; der
+**Rotation**: eine Kachel trägt eine Liste von Texten, jede Kopie
+liefert den nächsten Rotationstext (Reihenfolge oder Zufall). Standardmäßig an; der
 Schalter pro Kachel sitzt im Editor über dem Eintragsbereich. Ein Badge auf
 Kachel/schwebender Button/Mitglied eines Ordners für schwebende Buttons zählt hoch: im Zufalls-Modus die Ziehungen
 im aktuellen Durchlauf statt einer springenden Position; übersteht Neustart und
 Backup, aber keinen CSV/TXT-Import (neue Kachel, neuer Zeiger). Eine geeignete
 Kachel (2+ Einträge, kein Bild/Datei) kann zusätzlich **beim Einfügen
-automatisch weiterschalten**: Auto-Button im Editor oder Rechtsklickmenü,
+rotieren**: Button „Beim Einfügen rotieren“ im Editor oder Rechtsklickmenü,
 solange Kachel- und App-Schalter beide an sind. Bei jedem echten Einfügen
 rückt der nächste Eintrag nach, nicht nur beim Kopieren; das Abzeichen zeigt
 eine Akzentfarbe, solange die Sitzung läuft. Platzhalter werden einmal pro
-Sitzung abgefragt, dieselben Werte gelten für jeden Eintrag. Fünf
+Sitzung abgefragt, dieselben Werte gelten für jeden Rotationstext. Fünf
 Experteneinstellungen regeln Zeitlimit und Erkennungsfenster; zu schnelles,
 zu häufiges Einfügen pausiert die Sitzung mit einem Hinweis statt zu wiederholen.
 
@@ -1526,7 +1526,7 @@ verschwindet von selbst, sobald wieder erfolgreich gespeichert wird.
 **Vorführung**: Ein Schalter im Expertenmenü (Tab System) schaltet das
 ganze Fenster auf einen mitgelieferten Beispielbestand um, der möglichst
 viele Funktionen auf einmal zeigt: Prompts mit und ohne Bild, ein
-rotierender, zwei einfache Prompts für den Anfang einer Kette, ein
+Prompt mit Rotation, zwei einfache Prompts für den Anfang einer Kette, ein
 Platzhalter, Tags, ein Favorit, zwei Ansichten, ein Ordner, ein Anhang und
 (wenn vorhanden) ein Video. Das Einschalten baut den Beispielbestand jedes
 Mal frisch auf und startet die App darin neu; der echte Bestand wird dabei
@@ -1569,7 +1569,7 @@ das abschalten, dann bleibt die Meldung eine reine Bestätigung.
 
 **Duplikatfinder**: findet textlich sehr ähnliche Kacheln nach
 Ähnlichkeitswert, keine exakte Übereinstimmung nötig, löscht nichts von sich
-aus. Eine wechselnde Kachel wird nur nach ihrem ersten Eintrag verglichen.
+aus. Eine Kachel mit Rotation wird nur nach ihrem ersten Text verglichen.
 Derselbe Ähnlichkeitswert steuert auch einen stillen Hinweis nach dem
 Speichern: gibt es einen ähnlichen vorhandenen Prompt, zeigt eine Meldung
 seinen Namen mit einem Button zum Öffnen und einem zum Vergleichen. Sie hält
@@ -1578,7 +1578,7 @@ Beide teilen sich eine Schwelle im Expertenmenü.
 
 **Import & Export**: CSV, TXT oder JSON für den reinen Text, volles Backup
 für alles. Ein Export-Button und eine Formatauswahl ersetzen die drei früheren
-Einzelknöpfe; nur JSON trägt eine rotierende Kachel mit allen Einträgen, Tags,
+Einzelknöpfe; nur JSON trägt die Rotationstexte einer Kachel mit Rotation, Tags,
 Notiz, Tastenkürzel und Farbe vollständig, statt sie wie CSV und TXT in ein
 Feld zu quetschen. Bilder reisen in keinem der drei mit, dafür gibt es die
 volles Backup. Beim Import entscheidet der Dateiinhalt zwischen CSV und
@@ -1591,7 +1591,7 @@ anderes zu importieren als angezeigt.
 Dateien Kacheln, eine je Datei, ohne die Originaldateien anzurühren. Der
 Dateiname wird der Name der Kachel. Eine kurze erste Zeile wird die Notiz, der
 Rest wird der Text. Jeder Unterordner wird ein Tag, einer je Ebene. Eine Datei,
-die den Rotationstrenner schon enthält, wird eine rotierende Kachel. Die
+die den Rotationstrenner schon enthält, wird ein Prompt mit Rotationstexten. Die
 Vorschau listet jede Datei mit ihren Tags, ihrer Größe und einem Häkchen und
 graut aus, was nicht gelesen werden konnte (zu groß oder kein reiner Text),
 mit dem Grund dafür. Wie tief in Unterordner gesucht wird und bei wie vielen
