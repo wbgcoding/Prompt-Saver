@@ -19961,7 +19961,7 @@ function bind() {
     settings.ui_flags = { ...(settings.ui_flags || {}), autoPaste: e.target.checked };
     invoke("set_ui_flag", { key: "autoPaste", enabled: e.target.checked }).catch((err) => errToast(err));
   });
-  // Clipboard inbox is toggled from the expert menu + toolbar right-click only.
+  // Recording copies from other apps is switched in the expert menu and in the copy history tab.
   $("opt-autostart").addEventListener("change", async (e) => {
     try {
       await invoke("set_autostart", { enabled: e.target.checked });
