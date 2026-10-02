@@ -226,7 +226,7 @@ export const HELP_CONTENT = {
         "Pick two rows and click \"Compare\" in the selection bar to see both side by side with the differences marked.",
       ],
       whatHappens: "Search is typo-tolerant by default and, unless turned off, sorts by most-used or most-recently-used. In the comparison, either side's text can be taken over into the other. Tiles view behaves exactly like the list for clicks, menus and multi-select.",
-      settings: ["Fuzzy search, smart sort, type and color filters: Expert menu → Library & History → Library", "Focus the search field on opening, multi-select for batch actions, image and video previews in the rows: Expert menu → Library & History → Library", "Entries per search list (library, Search everything, quick launcher): Expert menu → Library & History → Library", "Saved searches, tiles view: Expert menu → Library & History → Library"],
+      settings: ["Fuzzy search, type and color filters, saved searches: Expert menu → Library & History → Search", "Focus the search field on opening: Expert menu → Library & History → Search", "Entries per search list (library, Search everything, quick launcher): Expert menu → Library & History → Search", "Smart sort, multi-select for batch actions, image and video previews in the rows, tiles view: Expert menu → Library & History → Display"],
     },
     {
       section: "organising",
@@ -239,7 +239,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Enter does what fits the hit: it copies a tile or history entry, opens an attachment, switches to a view, opens and highlights a setting, or opens the help article. Each group shows a few hits and a \"show more\". With the box empty, recent searches are offered. Escape, a click outside, or the magnifier again closes it.",
-      settings: ["Search everything: Expert menu → Library & History → Library"],
+      settings: ["Search everything: Expert menu → Library & History → Search"],
     },
     {
       section: "organising",
@@ -263,7 +263,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "An archived tile leaves the grid and the library list, but search still finds it, and exports and backups keep it like any other tile. \"Unarchive\" in the same menu brings it back.",
-      settings: ["Archive: Expert menu → Library & History → Library"],
+      settings: ["Archive: Expert menu → Library & History → Display"],
       tip: "Off by default.",
     },
     {
@@ -307,7 +307,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Screen-capture exclusion makes the window invisible to screenshot and recording tools, including its own, so if a capture comes out empty, check this setting first. An optional, off-by-default setting reads text out of an attached picture so the library search can find it too; a hit found only there carries a \"found in image\" badge, so it never looks like a random match. That recognized text stays out of the app otherwise: it is never shown, never exported, never synchronized, and its length is capped. Removing or replacing the picture clears it right away, and switching the setting off removes it from every tile, the trash included. A single tile can also be marked confidential; see \"Confidential tiles\" below.",
-      settings: ["Exclude from screen capture, blur tiles or media, hide names: Expert menu → System & data → Privacy", "Index text inside attached pictures for search, image text length limit: Expert menu → Library & History → Library", "Mark a tile confidential, vault lock timeout: Expert menu → System & data → Privacy"],
+      settings: ["Exclude from screen capture, blur tiles or media, hide names: Expert menu → System & data → Privacy", "Index text inside attached pictures for search, image text length limit: Expert menu → Library & History → Search", "Mark a tile confidential, vault lock timeout: Expert menu → System & data → Privacy"],
       tip: "Screen-capture exclusion ships on: turn it off for normal screenshots or recordings of this window.",
     },
     {
@@ -977,7 +977,7 @@ export const HELP_CONTENT = {
         "Zwei Zeilen auswählen und in der Auswahlleiste \"Vergleichen\" klicken, um beide nebeneinander mit markierten Unterschieden zu sehen.",
       ],
       whatHappens: "Die Suche ist standardmäßig fehlertolerant und sortiert, falls nicht deaktiviert, nach am häufigsten oder zuletzt Verwendetem. Im Vergleich lässt sich der Text einer Seite in die andere übernehmen. Die Kachelansicht verhält sich bei Klicks, Menüs und Mehrfachauswahl genau wie die Liste.",
-      settings: ["Fuzzy-Suche, clevere Sortierung, Typ- und Farb-Filter: Expertenmenü → Bibliothek & Verlauf → Bibliothek", "Suchfeld beim Öffnen fokussieren, Mehrfachauswahl für Stapelaktionen, Bild- und Video-Vorschau in den Zeilen: Expertenmenü → Bibliothek & Verlauf → Bibliothek", "Einträge je Suchliste (Bibliothek, Alles durchsuchen, Schnellstarter): Expertenmenü → Bibliothek & Verlauf → Bibliothek", "Gespeicherte Suchen, Kachelansicht: Expertenmenü → Bibliothek & Verlauf → Bibliothek"],
+      settings: ["Fuzzy-Suche, Typ- und Farb-Filter, gespeicherte Suchen: Expertenmenü → Bibliothek & Verlauf → Suche", "Suchfeld beim Öffnen fokussieren: Expertenmenü → Bibliothek & Verlauf → Suche", "Einträge je Suchliste (Bibliothek, Alles durchsuchen, Schnellstarter): Expertenmenü → Bibliothek & Verlauf → Suche", "Clevere Sortierung, Mehrfachauswahl für Stapelaktionen, Bild- und Video-Vorschau in den Zeilen, Kachelansicht: Expertenmenü → Bibliothek & Verlauf → Anzeige"],
     },
     {
       section: "organising",
@@ -990,7 +990,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Enter tut, was zum Treffer passt: Es kopiert eine Kachel oder einen Verlaufseintrag, öffnet einen Anhang, wechselt in eine Ansicht, öffnet und markiert eine Einstellung oder öffnet den Hilfeartikel. Jede Gruppe zeigt einige Treffer und ein \"Mehr anzeigen\". Ist das Feld leer, werden die letzten Suchen angeboten. Escape, ein Klick daneben oder die Lupe schließt es wieder.",
-      settings: ["Alles durchsuchen: Expertenmenü → Bibliothek & Verlauf → Bibliothek"],
+      settings: ["Alles durchsuchen: Expertenmenü → Bibliothek & Verlauf → Suche"],
     },
     {
       section: "organising",
@@ -1014,7 +1014,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Eine archivierte Kachel verschwindet aus dem Raster und der Bibliotheksliste, die Suche findet sie aber weiterhin, und Exporte und Backups behalten sie wie jede andere Kachel. \"Aus dem Archiv\" im selben Menü holt sie zurück.",
-      settings: ["Archiv: Expertenmenü → Bibliothek & Verlauf → Bibliothek"],
+      settings: ["Archiv: Expertenmenü → Bibliothek & Verlauf → Anzeige"],
       tip: "Ab Werk aus.",
     },
     {
@@ -1058,7 +1058,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Der Ausschluss von Bildschirmaufnahmen macht das Fenster für Screenshot- und Aufnahmeprogramme unsichtbar, auch für die eigenen. Bleibt eine Aufnahme also leer, zuerst diese Einstellung prüfen. Eine optionale, standardmäßig ausgeschaltete Einstellung liest Text aus einem angehängten Bild, damit die Bibliothekssuche ihn auch findet; ein Treffer nur dort trägt die Kennzeichnung \"im Bild gefunden\", damit er nie wie ein zufälliger Treffer wirkt. Dieser erkannte Text bleibt sonst außerhalb der App: nirgends angezeigt, nie exportiert, nie synchronisiert, und in der Länge begrenzt. Wird das Bild entfernt oder ersetzt, ist der Text sofort weg, und das Ausschalten der Einstellung entfernt ihn aus jeder Kachel, auch im Papierkorb. Eine einzelne Kachel kann außerdem als vertraulich markiert werden; siehe \"Vertrauliche Kacheln\" weiter unten.",
-      settings: ["Von Bildschirmaufnahmen ausschließen, Kacheln oder Medien unscharf machen, Namen verbergen: Expertenmenü → System & Daten → Datenschutz", "Text in angehängten Bildern für die Suche erfassen, Bildtext-Grenze: Expertenmenü → Bibliothek & Verlauf → Bibliothek", "Eine Kachel als vertraulich markieren, Sperr-Zeit des Tresors: Expertenmenü → System & Daten → Datenschutz"],
+      settings: ["Von Bildschirmaufnahmen ausschließen, Kacheln oder Medien unscharf machen, Namen verbergen: Expertenmenü → System & Daten → Datenschutz", "Text in angehängten Bildern für die Suche erfassen, Bildtext-Grenze: Expertenmenü → Bibliothek & Verlauf → Suche", "Eine Kachel als vertraulich markieren, Sperr-Zeit des Tresors: Expertenmenü → System & Daten → Datenschutz"],
       tip: "Der Ausschluss von Bildschirmaufnahmen ist standardmäßig an: für normale Screenshots oder Aufnahmen dieses Fensters ausschalten.",
     },
     {
