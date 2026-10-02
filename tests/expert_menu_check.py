@@ -84,12 +84,6 @@ DEPENDENCIES = {
     "snipEditor": "screenshot",
     "snipEditSnap": "snipEditor",
     "snipTextBack": "snipEditor",
-    "snipPenPx": "snipEditor",
-    "snipMarkerPx": "snipEditor",
-    "snipTextPx": "snipEditor",
-    "snipTextOutlinePx": "snipEditor",
-    "snipPixelBlock": "snipEditor",
-    "snipSpotlightDim": "snipEditor",
     "snipEditUndoMax": "snipEditor",
     "snipEditDefaultTool": "snipEditor",
     # 121: OCR -- "ocr" itself stands alone (no parent flag; its group placement

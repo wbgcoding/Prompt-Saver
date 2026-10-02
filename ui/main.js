@@ -1679,19 +1679,7 @@ const EXPERT_VALUES = {
   // The actual saved/copied/exported JPEG quality -- every save/copy path, edited
   // or not, shares this one value (see SNIP_SAVE_Q in lib.rs).
   snipSaveQuality: { label: "valSnipSaveQuality", min: 50, max: 100, step: 5, def: 90, unit: "%", gate: "screenshot" },
-  // Screenshot-editor drawing defaults.
-  snipPenPx: { label: "valSnipPenPx", min: 1, max: 40, step: 1, def: 6, unit: "px", gate: "snipEditor" },
-  snipMarkerPx: { label: "valSnipMarkerPx", min: 4, max: 60, step: 2, def: 18, unit: "px", gate: "snipEditor" },
-  snipLinePx: { label: "valSnipLinePx", min: 1, max: 40, step: 1, def: 4, unit: "px", gate: "snipEditor" },
-  snipArrowPx: { label: "valSnipArrowPx", min: 1, max: 40, step: 1, def: 4, unit: "px", gate: "snipEditor" },
-  snipRectPx: { label: "valSnipRectPx", min: 1, max: 40, step: 1, def: 4, unit: "px", gate: "snipEditor" },
-  snipEllipsePx: { label: "valSnipEllipsePx", min: 1, max: 40, step: 1, def: 4, unit: "px", gate: "snipEditor" },
-  snipStepPx: { label: "valSnipStepPx", min: 1, max: 40, step: 1, def: 8, unit: "px", gate: "snipEditor" },
-  snipArrowHeadScale: { label: "valSnipArrowHeadScale", min: 1, max: 6, step: 0.1, def: 3.2, unit: "x", gate: "snipEditor" },
-  snipTextPx: { label: "valSnipTextPx", min: 10, max: 96, step: 2, def: 24, unit: "px", gate: "snipEditor" },
-  snipTextOutlinePx: { label: "valSnipTextOutlinePx", min: 1, max: 12, step: 1, def: 3, unit: "px", gate: "snipEditor" },
-  snipPixelBlock: { label: "valSnipPixelBlock", min: 4, max: 64, step: 2, def: 12, unit: "px", gate: "snipEditor" },
-  snipSpotlightDim: { label: "valSnipSpotlightDim", min: 10, max: 90, step: 5, def: 55, unit: "%", gate: "snipEditor" },
+  // Screenshot-editor undo depth. Tool sizes are remembered per tool, not set here.
   snipEditUndoMax: { label: "valSnipEditUndoMax", min: 10, max: 200, step: 10, def: 50, unit: "", gate: "snipEditor" },
   videoEditUndoMax: { label: "valVideoEditUndoMax", min: 10, max: 200, step: 10, def: 50, unit: "", gate: "videoEditor" },
   // The H.264 bitrate each export-quality tier actually encodes at -- the
@@ -2218,7 +2206,7 @@ const EXPERT_TABS = [
     // Everything below is a capture tool: it reads something off the screen or the
     // microphone rather than putting typed content into the app.
     { title: "expGroupScreenshot", flags: ["screenshot"], values: ["snipPreviewVh", "snipSaveQuality", "snipDelayMs"], dropdowns: ["screenshotFormat"], paths: ["screenshotDir"] },
-    { title: "expGroupSnipEditor", flags: [{ key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }], values: ["snipPenPx", "snipMarkerPx", "snipLinePx", "snipArrowPx", "snipRectPx", "snipEllipsePx", "snipStepPx", "snipArrowHeadScale", "snipTextPx", "snipTextOutlinePx", "snipPixelBlock", "snipSpotlightDim", "snipEditUndoMax"], dropdowns: ["snipEditDefaultTool", "snipScaleFilter", "snipTextBack"], colors: ["snipDefaultColor"] },
+    { title: "expGroupSnipEditor", flags: [{ key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }], values: ["snipEditUndoMax"], dropdowns: ["snipEditDefaultTool", "snipScaleFilter", "snipTextBack"], colors: ["snipDefaultColor"] },
     // Opens #ocr-langs-modal -- same gate as the rest of the feature.
     { title: "expGroupOcr", flags: ["ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }, { key: "ocrAutoPickLang", gate: "ocr" }, { key: "ocrLangAutoUpdate", gate: "ocr" }], values: ["ocrUpscaleUnderPx"], dropdowns: ["ocrLang"],
       actions: [{ id: "ocr-langs-open", label: "ocrLangsManage", gate: "ocr" }] },
@@ -2545,8 +2533,7 @@ const EXPERT_TIPS = [
   "numFieldWheel", "zoomStepPct", "zoomMaxPct", "errorLogKeepKb", "veOvDupOffsetPx", "editSnapTolerancePx",
   "editStateKeep", "editStateKeepDays", "editorOpenMaxMb", "editorDraftSecs",
   "snipSaveQuality", "snipDelayMs",
-  "snipPenPx", "snipMarkerPx", "snipLinePx", "snipArrowPx", "snipRectPx", "snipEllipsePx", "snipStepPx",
-  "snipArrowHeadScale", "snipDefaultColor", "snipTextPx", "snipTextOutlinePx", "snipPixelBlock", "snipSpotlightDim",
+  "snipDefaultColor",
   "snipEditUndoMax", "snipEditSnap", "snipTextBack", "snipEditDefaultTool", "snipScaleFilter",
   "ocr", "ocrUpscaleUnderPx", "ocrLang",
   "ocrAutoPickLang", "ocrLangAutoUpdate",
@@ -17560,11 +17547,33 @@ function bind() {
   // Opens right after a capture, before #snip-modal. Pure frontend: it receives a
   // data URL and hands back an edited one; everything downstream of #snip-modal is
   // untouched. Every knob below reads live from the expert menu.
-  const SNIP_EDIT_PEN_PX = () => val("snipPenPx");
-  const SNIP_EDIT_MARKER_PX = () => val("snipMarkerPx");
-  const SNIP_EDIT_TEXT_PX = () => val("snipTextPx");
-  const SNIP_EDIT_PIXELATE_PX = () => val("snipPixelBlock");
-  const SNIP_EDIT_SPOTLIGHT_DIM = () => val("snipSpotlightDim") / 100;
+  // Starting sizes of a tool nobody has used yet. After that each tool starts with
+  // the size it was last used at (ui_texts "snipToolSizes", see snipRememberSize).
+  const SNIP_DEFAULT_SIZES = { pen: 6, marker: 18, line: 4, arrow: 4, rect: 4, ellipse: 4, step: 8, textPx: 24, outlinePx: 3, blockPx: 12, dim: 0.55 };
+  const SNIP_ARROW_HEAD_SCALE = 3.2;
+  const SNIP_SIZE_LIMITS = { width: [1, 80], fontPx: [10, 96], outlinePx: [1, 12], blockPx: [4, 64], dim: [0.1, 0.9] };
+  function snipSizesRead() {
+    try {
+      const all = JSON.parse(txt("snipToolSizes") || "{}");
+      return all && typeof all === "object" && !Array.isArray(all) ? all : {};
+    } catch (e) { return {}; }
+  }
+  let snipSizesTimer = 0;
+  function snipRememberSize(tool, field, value) {
+    const lim = SNIP_SIZE_LIMITS[field];
+    const n = Number(value);
+    if (!lim || !Number.isFinite(n)) return;
+    const all = snipSizesRead();
+    const entry = all[tool] && typeof all[tool] === "object" ? all[tool] : {};
+    entry[field] = Math.round(Math.min(lim[1], Math.max(lim[0], n)) * 100) / 100;
+    all[tool] = entry;
+    const json = JSON.stringify(all);
+    settings.ui_texts = { ...(settings.ui_texts || {}), snipToolSizes: json };
+    clearTimeout(snipSizesTimer);
+    snipSizesTimer = setTimeout(() => {
+      invoke("set_ui_text", { key: "snipToolSizes", value: json }).catch(() => {});
+    }, 400);
+  }
   const SNIP_EDIT_UNDO_MAX = () => val("snipEditUndoMax");
   const SNIP_SCALE_FILTER = () => settings.ui_texts?.snipScaleFilter || "high";
   // Refuse a target this large outright rather than risk an out-of-memory
@@ -17572,20 +17581,18 @@ function bind() {
   const SNIP_SCALE_MAX_AREA = 80_000_000;
   const SNIP_EDIT_SNAP = () => flag("snipEditSnap");
   const SNIP_TEXT_BACK = () => EXPERT_DROPDOWNS.snipTextBack.get();
-  const SNIP_EDIT_TEXT_OUTLINE_PX = () => val("snipTextOutlinePx");
   const SNIP_EDIT_DEFAULT_TOOL = () => txt("snipEditDefaultTool") || "hand";
   const SNIP_EDIT_SNAP_TOL = () => val("editSnapTolerancePx") || 6; // px (screen)
   const SNIP_DUP_OFFSET_PX = () => val("veOvDupOffsetPx");
-  // Function, not a static object: pen/marker's middle preset tracks the live
-  // expert-menu default, so a changed snipPenPx/snipMarkerPx shows up next open.
+  // Small / medium / large stroke widths per tool; the middle one is the starting size.
   const SNIP_WIDTH_PRESETS_OF = (tool) => ({
-    pen: [2, SNIP_EDIT_PEN_PX(), 14],
-    marker: [10, SNIP_EDIT_MARKER_PX(), 28],
-    line: [2, val("snipLinePx"), 8],
-    arrow: [2, val("snipArrowPx"), 8],
-    rect: [2, val("snipRectPx"), 8],
-    ellipse: [2, val("snipEllipsePx"), 8],
-    step: [4, val("snipStepPx"), 14],
+    pen: [2, SNIP_DEFAULT_SIZES.pen, 14],
+    marker: [10, SNIP_DEFAULT_SIZES.marker, 28],
+    line: [2, SNIP_DEFAULT_SIZES.line, 8],
+    arrow: [2, SNIP_DEFAULT_SIZES.arrow, 8],
+    rect: [2, SNIP_DEFAULT_SIZES.rect, 8],
+    ellipse: [2, SNIP_DEFAULT_SIZES.ellipse, 8],
+    step: [4, SNIP_DEFAULT_SIZES.step, 14],
   }[tool] || [2, 4, 8]);
   const SNIP_TOOL_SVG = {
     crop: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M6 2v14a2 2 0 0 0 2 2h14M2 6h14a2 2 0 0 1 2 2v14"/></svg>',
@@ -17767,15 +17774,23 @@ function bind() {
   function snipEditToolState(tool) {
     if (!SE.perTool[tool]) {
       const widths = SNIP_WIDTH_PRESETS_OF(tool);
+      const saved = snipSizesRead()[tool];
+      // A remembered size counts only when it is a number inside the field's range;
+      // anything else (a broken or hand-edited entry) falls back to the start size.
+      const pick = (field, def) => {
+        const lim = SNIP_SIZE_LIMITS[field];
+        const v = saved && typeof saved === "object" ? Number(saved[field]) : NaN;
+        return Number.isFinite(v) && v >= lim[0] && v <= lim[1] ? v : def;
+      };
       SE.perTool[tool] = {
         color: txt("snipDefaultColor") || COLORS[1] || "#ef4444",
-        width: widths[1],
+        width: pick("width", widths[1]),
         filled: false,
-        fontPx: SNIP_EDIT_TEXT_PX(),
+        fontPx: pick("fontPx", SNIP_DEFAULT_SIZES.textPx),
         back: SNIP_TEXT_BACK(),
-        outlinePx: SNIP_EDIT_TEXT_OUTLINE_PX(),
-        blockPx: SNIP_EDIT_PIXELATE_PX(),
-        dim: SNIP_EDIT_SPOTLIGHT_DIM(),
+        outlinePx: pick("outlinePx", SNIP_DEFAULT_SIZES.outlinePx),
+        blockPx: pick("blockPx", SNIP_DEFAULT_SIZES.blockPx),
+        dim: pick("dim", SNIP_DEFAULT_SIZES.dim),
       };
     }
     return SE.perTool[tool];
@@ -17864,7 +17879,7 @@ function bind() {
     // Capped at the actual drag distance -- otherwise a drag shorter than one
     // arrowhead put the shaft's "back" point PAST the start point, flipping
     // the shaft to point backwards during the first few pixels of every drag.
-    const headLen = Math.min(7 + op.width * val("snipArrowHeadScale"), dist); // tip-to-back distance along the shaft
+    const headLen = Math.min(7 + op.width * SNIP_ARROW_HEAD_SCALE, dist); // tip-to-back distance along the shaft
     const headHalfAngle = Math.PI / 9;  // ~20 deg either side -- slender, not dumpy
     const backX = b.x - headLen * Math.cos(angle);
     const backY = b.y - headLen * Math.sin(angle);
@@ -17924,7 +17939,7 @@ function bind() {
     ctx.shadowOffsetX = 1;
     ctx.shadowOffsetY = 1;
     if (op.back === "outline") {
-      ctx.lineWidth = op.outlinePx || SNIP_EDIT_TEXT_OUTLINE_PX();
+      ctx.lineWidth = op.outlinePx || SNIP_DEFAULT_SIZES.outlinePx;
       ctx.strokeStyle = snipEditContrastColor(op.color);
       ctx.strokeText(op.text, op.point.x, op.point.y);
     }
@@ -18665,13 +18680,13 @@ function bind() {
       b.innerHTML = `<svg viewBox="0 0 20 12" width="20" height="12" aria-hidden="true"><line x1="2" y1="6" x2="18" y2="6" stroke="currentColor" stroke-width="${STROKE_ICON_W[i]}" stroke-linecap="round"/></svg>`;
       b.title = `${t(lab)} (${px}px)`;
       b.setAttribute("aria-label", `${t(lab)} (${px}px)`);
-      b.addEventListener("click", () => { ts.width = px; snipEditRenderContext(); });
+      b.addEventListener("click", () => { ts.width = px; snipRememberSize(tool, "width", px); snipEditRenderContext(); });
       row.appendChild(b);
     });
     wrap.appendChild(row);
     const control = numberField({
       value: ts.width, min: 1, max: 80, step: 1, presets: [1, 2, 4, 8, 16],
-      onChange: (v) => { ts.width = v; snipEditRenderContext(); },
+      onChange: (v) => { ts.width = v; snipRememberSize(tool, "width", v); snipEditRenderContext(); },
       decreaseLabel: t("numFieldDecrease"), increaseLabel: t("numFieldIncrease"), presetsLabel: t("numFieldPresets"),
       decreaseAriaKey: "numFieldDecrease", increaseAriaKey: "numFieldIncrease", presetsAriaKey: "numFieldPresets",
     });
@@ -18787,7 +18802,7 @@ function bind() {
     range.step = "5";
     range.value = String(Math.round(ts.dim * 100));
     range.title = t("snipEditDimTip");
-    range.addEventListener("input", () => { ts.dim = Number(range.value) / 100; });
+    range.addEventListener("input", () => { ts.dim = Number(range.value) / 100; snipRememberSize("spotlight", "dim", ts.dim); });
     wrap.appendChild(range);
     return wrap;
   }
@@ -18804,16 +18819,16 @@ function bind() {
       box.appendChild(snipEditBuildToggle(t("snipEditFilled"), !!ts.filled, (v) => { ts.filled = v; }));
     }
     if (tool === "text") {
-      box.appendChild(snipEditBuildNumField(t("snipEditTextSize"), ts.fontPx, 10, 96, t("snipEditTextSizeTip"), (v) => { ts.fontPx = v; }, [12, 16, 24, 32, 48, 64, 96]));
+      box.appendChild(snipEditBuildNumField(t("snipEditTextSize"), ts.fontPx, 10, 96, t("snipEditTextSizeTip"), (v) => { ts.fontPx = v; snipRememberSize("text", "fontPx", v); }, [12, 16, 24, 32, 48, 64, 96]));
       box.appendChild(snipEditBuildSelectField(t("snipEditTextBack"), ts.back, [
         ["none", t("optSnipTextBackNone")], ["plate", t("optSnipTextBackPlate")], ["outline", t("optSnipTextBackOutline")],
       ], (v) => { ts.back = v; snipEditRenderContext(); }));
       if (ts.back === "outline") {
-        box.appendChild(snipEditBuildNumField(t("snipEditTextOutline"), ts.outlinePx, 1, 12, t("snipEditTextOutlineTip"), (v) => { ts.outlinePx = v; }));
+        box.appendChild(snipEditBuildNumField(t("snipEditTextOutline"), ts.outlinePx, 1, 12, t("snipEditTextOutlineTip"), (v) => { ts.outlinePx = v; snipRememberSize("text", "outlinePx", v); }));
       }
     }
     if (tool === "pixelate") {
-      box.appendChild(snipEditBuildNumField(t("snipEditBlockSize"), ts.blockPx, 4, 64, t("snipEditBlockSizeTip"), (v) => { ts.blockPx = v; }, [8, 12, 16, 24, 32]));
+      box.appendChild(snipEditBuildNumField(t("snipEditBlockSize"), ts.blockPx, 4, 64, t("snipEditBlockSizeTip"), (v) => { ts.blockPx = v; snipRememberSize("pixelate", "blockPx", v); }, [8, 12, 16, 24, 32]));
     }
     if (tool === "spotlight") box.appendChild(snipEditBuildDimField(ts));
   }

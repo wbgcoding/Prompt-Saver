@@ -1718,6 +1718,8 @@ the video editor and the introduction tour ship on).
 - **One tile style instead of seven switches.** Bold, uppercase, monospace,
   italic, shadowed names, compact and gradient tiles are one choice now. If you
   had several on, the first of them in that order is kept.
+- **The screenshot editor remembers tool sizes.** Each tool starts with the size
+  you used last; the twelve default-size sliders are gone.
 
 ## 2.6.3 (2026-07-26)
 

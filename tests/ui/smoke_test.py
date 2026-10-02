@@ -16912,6 +16912,30 @@ def main():
       if (hasInk(img, 60, 75)) errs.push('601: the second undo did not remove the rectangle');
     }
 """)
+        failed += ar_probe('bl649', 'screenshot editor: a tool starts with the size it was last used at, and a change is saved', 'index', '1000x780', r"""<script>window.__SEED_SETTINGS__ = { ui_texts: { snipToolSizes: '{"pen":{"width":10},"marker":{"width":999},"rect":"junk"}' } };</script>
+""", ba_common + r"""
+    if (!(await baOpen(''))) { errs.push('649: the editor did not open'); }
+    else {
+      const widthOf = () => { const i = document.querySelector('#snip-edit-context .snip-edit-field input'); return i ? i.value : '(no field)'; };
+      await baTool('pen');
+      if (widthOf() !== '10') errs.push('649: pen starts at ' + widthOf() + ', the remembered size is 10');
+      await baTool('marker');
+      if (widthOf() !== '18') errs.push('649: marker with an out-of-range remembered size starts at ' + widthOf() + ', expected 18');
+      await baTool('rect');
+      if (widthOf() !== '4') errs.push('649: rect with a broken entry starts at ' + widthOf() + ', expected 4');
+      await baTool('line');
+      if (widthOf() !== '4') errs.push('649: line with nothing remembered starts at ' + widthOf() + ', expected 4');
+      window.__SMOKE_ARGS__ = [];
+      document.querySelector('#snip-edit-context .snip-edit-width-btn:last-child').click();
+      await sleep(700);
+      const saved = (window.__SMOKE_ARGS__ || []).filter(([cmd, a]) => cmd === 'set_ui_text' && a && a.key === 'snipToolSizes');
+      const last = saved.length ? saved[saved.length - 1][1].value : '';
+      let parsed = null;
+      try { parsed = JSON.parse(last); } catch (e) { parsed = null; }
+      if (!parsed || !parsed.line || parsed.line.width !== 8) errs.push('649: choosing the large width did not save line width 8: ' + last);
+      else if (!parsed.pen || parsed.pen.width !== 10) errs.push('649: saving line dropped the remembered pen size: ' + last);
+    }
+""")
         # ---- main window findings: generated block end ----
         print("PASS" if not failed else f"{failed} problem(s)")
         return 1 if failed else 0

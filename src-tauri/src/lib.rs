@@ -2646,6 +2646,18 @@ const HOME_NAMES: [&str; 18] = [
 // key that is added back later never inherits a stale stored value.
 fn removed_ui_value_keys() -> &'static [&'static str] {
     &[
+        "snipPenPx",
+        "snipMarkerPx",
+        "snipLinePx",
+        "snipArrowPx",
+        "snipRectPx",
+        "snipEllipsePx",
+        "snipStepPx",
+        "snipArrowHeadScale",
+        "snipTextPx",
+        "snipTextOutlinePx",
+        "snipPixelBlock",
+        "snipSpotlightDim",
         "voiceLangCacheH",
         "voiceLangCheckH",
         "voiceLangNoticeMs",
