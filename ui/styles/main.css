@@ -1858,10 +1858,10 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .noflag-importExport #impexp-field { display: none; }
 /* Opt-in visual toggles (off by default; `flag-<key>` present only when on). */
 .flag-gridLines .cell { border-color: var(--border); }
-.flag-uppercaseTiles .tile-name { text-transform: uppercase; letter-spacing: 0.03em; }
-.flag-boldTileNames .tile-name { font-weight: 800; }
-.flag-monospaceTiles .tile-name { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; }
-.flag-italicTiles .tile-name { font-style: italic; }
+.tile-style-uppercase .tile-name { text-transform: uppercase; letter-spacing: 0.03em; }
+.tile-style-bold .tile-name { font-weight: 800; }
+.tile-style-mono .tile-name { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; }
+.tile-style-italic .tile-name { font-style: italic; }
 /* v2.6.0 opt features */
 .flag-editorMonospace .modal-text { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; }
 /* Dim until hovered: one strength drives the other tiles, media and the top bar.
@@ -1874,10 +1874,10 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .hover-dim .header { opacity: var(--hover-dim-opacity); transition: opacity var(--transition); }
 .hover-dim .header:hover, .hover-dim .header:focus-within { opacity: 1; }
 .tile-name, .folder-mini-cell { text-shadow: var(--ink-shadow, none); }
-.flag-tileTextShadow .tile-name { text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
+.tile-style-shadow .tile-name { text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
 /* Appearance extras */
-.flag-compactTiles .tile { padding: 2px; }
-.flag-tileGradient .tile:not(.has-image) { background: linear-gradient(160deg, var(--surface), var(--surface-2)); }
+.tile-style-compact .tile { padding: 2px; }
+.tile-style-gradient .tile:not(.has-image) { background: linear-gradient(160deg, var(--surface), var(--surface-2)); }
 .flag-accentHeader .header { background: color-mix(in srgb, var(--accent) 8%, var(--bg)); }
 .flag-frostedModals .overlay { backdrop-filter: blur(var(--frosted-blur, 4px)); }
 /* GLOBAL themed scrollbar: every scrollable element gets the same look, so the

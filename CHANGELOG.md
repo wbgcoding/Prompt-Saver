@@ -1715,6 +1715,9 @@ the video editor and the introduction tour ship on).
   for updates are gone.
 - **Two hover settings.** Dim until hovered (tiles, media and the top bar
   together) and lift on hover are one number each; 0 turns them off.
+- **One tile style instead of seven switches.** Bold, uppercase, monospace,
+  italic, shadowed names, compact and gradient tiles are one choice now. If you
+  had several on, the first of them in that order is kept.
 
 ## 2.6.3 (2026-07-26)
 

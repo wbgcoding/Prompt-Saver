@@ -166,13 +166,13 @@ export const HELP_CONTENT = {
       howTo: [
         "Right-click a tile for its menu: edit, pin, hide, delete, and more.",
         "Drag a tile to any grid cell; drop it on an occupied cell to swap.",
-        "Turn on hover lift, shadows, gradients, badges, and similar looks in the expert menu.",
+        "Turn on hover lift, shadows, badges, and similar looks in the expert menu, and pick a tile style (bold, uppercase, monospace, italic, shadowed names, compact, gradient).",
       ],
       whatHappens: "These are interaction and looks only; none of them change what a tile copies.",
       settings: [
         "Tile menu, drag-to-reorder: Expert menu → Tiles → Tiles",
         "Dim until hovered, lift on hover: Expert menu → Tiles → Tiles",
-        "Type badges, shadows, gradients, rounded corners, bold, uppercase, or monospace text: Expert menu → Tiles → Tile appearance",
+        "Type badges, shadows, rounded corners, tile style (bold, uppercase, monospace, italic, shadowed names, compact, gradient): Expert menu → Tiles → Tile appearance",
       ],
     },
     {
@@ -917,13 +917,13 @@ export const HELP_CONTENT = {
       howTo: [
         "Rechtsklick auf eine Kachel für ihr Menü: Bearbeiten, Anheften, Verbergen, Löschen und mehr.",
         "Eine Kachel auf eine beliebige Rasterzelle ziehen; auf einer besetzten Zelle loslassen, um zu tauschen.",
-        "Hover-Lift, Schatten, Farbverläufe, Badges und ähnliche Optiken im Expertenmenü aktivieren.",
+        "Hover-Lift, Schatten, Badges und ähnliche Optiken im Expertenmenü aktivieren und einen Kachelstil wählen (fett, Großbuchstaben, Monospace, kursiv, Namen mit Schatten, kompakt, Verlauf).",
       ],
       whatHappens: "Das sind nur Interaktion und Optik; nichts davon ändert, was eine Kachel kopiert.",
       settings: [
         "Kachel-Menü, Drag-to-Reorder: Expertenmenü → Kacheln → Kacheln",
         "Abblenden bis zum Überfahren, Anheben beim Überfahren: Expertenmenü → Kacheln → Kacheln",
-        "Typ-Badges, Schatten, Farbverläufe, abgerundete Ecken, fetter, großgeschriebener oder dicktengleicher Text: Expertenmenü → Kacheln → Kachel-Aussehen",
+        "Typ-Badges, Schatten, abgerundete Ecken, Kachelstil (fett, Großbuchstaben, Monospace, kursiv, Namen mit Schatten, kompakt, Verlauf): Expertenmenü → Kacheln → Kachel-Aussehen",
       ],
     },
     {

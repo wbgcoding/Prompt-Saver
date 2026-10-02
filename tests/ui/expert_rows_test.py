@@ -233,6 +233,26 @@ HOVER_PROBE = """
 """
 
 
+# tileStyle: one choice for the tile text look; exactly the chosen style class is on the body.
+STYLE_PROBE = """
+<script>
+(async () => {""" + FINISH + """
+  const errs = [];
+  try {
+    await until(() => document.querySelectorAll('#grid .tile').length > 6);
+    await sleep(400);
+    const on = [...document.body.classList].filter((c) => c.startsWith('tile-style-'));
+    if (on.join(',') !== '__ON__') errs.push('style classes are [' + on.join(',') + '], expected [__ON__]');
+    const name = document.querySelector('#grid .tile .tile-name');
+    const tt = name ? getComputedStyle(name).textTransform : '(no tile name)';
+    if (tt !== '__TT__') errs.push('text-transform is ' + tt + ', expected __TT__');
+  } catch (e) { errs.push('probe threw: ' + (e && e.stack || e)); }
+  finish(errs);
+})();
+</script>
+"""
+
+
 # chainSeparator: two static prompts chained, the copied text carries the chosen separator.
 CHAIN_PROBE = """
 <script>
@@ -427,6 +447,10 @@ def consumer_problems(browser, tmp):
         label = "hover dim and lift " + ("default" if not values else "seeded")
         check(label, "index.html", HOVER_PROBE.replace("__DIMON__", dim_on).replace("__OPACITY__", opacity).replace("__LIFT__", lift),
               {"ui_values": values})
+    for style, on, tt in (({}, "", "none"), ({"tileStyle": "uppercase"}, "tile-style-uppercase", "uppercase"),
+                          ({"tileStyle": "bold"}, "tile-style-bold", "none")):
+        label = "tile style " + (style.get("tileStyle") or "default")
+        check(label, "index.html", STYLE_PROBE.replace("__ON__", on).replace("__TT__", tt), {"ui_texts": style})
     seeded = {"ui_values": {"veOvTextOutlinePx": 7, "veOvVideoVolume": 40},
               "ui_texts": {"veOvKeysActiveColor": "#ff00aa"}}
     plain = {"ui_values": {}}

@@ -2716,6 +2716,13 @@ fn removed_ui_flag_keys() -> &'static [&'static str] {
         "tilesHoverDim",
         "mediaHoverDim",
         "toolbarHoverDim",
+        "boldTileNames",
+        "uppercaseTiles",
+        "monospaceTiles",
+        "italicTiles",
+        "tileTextShadow",
+        "compactTiles",
+        "tileGradient",
     ]
 }
 
@@ -2799,6 +2806,25 @@ impl Settings {
             }
             if s > 0.0 {
                 self.ui_values.insert("hoverDim".into(), (s / 5.0).round() * 5.0);
+            }
+        }
+        // Seven look switches for tile text became one choice, "tileStyle". Styles that
+        // were combined cannot be kept by a single choice: the first one in this order
+        // wins. A choice already stored is never overwritten.
+        if !self.ui_texts.contains_key("tileStyle") {
+            for (flag, style) in [
+                ("boldTileNames", "bold"),
+                ("uppercaseTiles", "uppercase"),
+                ("monospaceTiles", "mono"),
+                ("italicTiles", "italic"),
+                ("tileTextShadow", "shadow"),
+                ("compactTiles", "compact"),
+                ("tileGradient", "gradient"),
+            ] {
+                if self.ui_flags.get(flag) == Some(&true) {
+                    self.ui_texts.insert("tileStyle".into(), style.into());
+                    break;
+                }
             }
         }
         //
@@ -51776,6 +51802,35 @@ mod tests {
         // Nothing stored: nothing written.
         let s = run(&[], &[]);
         assert!(s.ui_values.is_empty());
+    }
+
+    #[test]
+    fn tile_flags_merge_to_style() {
+        let run = |flags: &[(&str, bool)], texts: &[(&str, &str)]| {
+            let mut s = Settings::default();
+            for (k, v) in flags {
+                s.ui_flags.insert((*k).into(), *v);
+            }
+            for (k, v) in texts {
+                s.ui_texts.insert((*k).into(), (*v).into());
+            }
+            s.migrate();
+            for (k, _) in flags {
+                assert!(!s.ui_flags.contains_key(*k), "{k} survived migrate");
+            }
+            s.ui_texts.get("tileStyle").cloned()
+        };
+        // One style on: that style.
+        assert_eq!(run(&[("uppercaseTiles", true)], &[]).as_deref(), Some("uppercase"));
+        assert_eq!(run(&[("tileGradient", true)], &[]).as_deref(), Some("gradient"));
+        // Several on: the first in the merge order wins.
+        assert_eq!(run(&[("italicTiles", true), ("boldTileNames", true)], &[]).as_deref(), Some("bold"));
+        assert_eq!(run(&[("compactTiles", true), ("tileTextShadow", true)], &[]).as_deref(), Some("shadow"));
+        // Nothing on, or stored off: no key, so the default "plain" applies.
+        assert_eq!(run(&[], &[]), None);
+        assert_eq!(run(&[("boldTileNames", false)], &[]), None);
+        // A stored choice is never overwritten.
+        assert_eq!(run(&[("boldTileNames", true)], &[("tileStyle", "mono")]).as_deref(), Some("mono"));
     }
 
     #[test]

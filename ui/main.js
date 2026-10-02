@@ -1427,19 +1427,12 @@ const OPT_FLAG_LABELS = {
   allowScreenshot: "flagAllowScreenshot",
   storeFiles: "flagStoreFiles",
   gridLines: "flagGridLines",
-  uppercaseTiles: "flagUppercaseTiles",
-  boldTileNames: "flagBoldTileNames",
-  monospaceTiles: "flagMonospaceTiles",
-  italicTiles: "flagItalicTiles",
-  tileTextShadow: "flagTileTextShadow",
   // Library/search extras
   // Reads text out of an attached picture and adds it to the library search,
   // lowest priority behind the name and the prompt body. Ships off: text
   // recognition costs time and reads a picture the user may not expect read.
   ocrIndex: "flagOcrIndex",
   // Appearance extras
-  compactTiles: "flagCompactTiles",
-  tileGradient: "flagTileGradient",
   accentHeader: "flagAccentHeader",
   frostedModals: "flagFrostedModals",
   hideScrollbars: "flagHideScrollbars",
@@ -1955,6 +1948,10 @@ const EXPERT_DROPDOWNS = {
   // Live counter unit selection.
   counterUnits: enumDropdown("counterUnits", "valCounterUnits",
     [["all", "optAll"], ["chars", "lenChars"], ["words", "lenWords"], ["tokens", "lenTokens"]], "all", "lengthCounter"),
+  // How the text on a tile looks: one choice instead of seven switches. Several
+  // styles combined cannot be kept by a single choice (see Settings::migrate).
+  tileStyle: enumDropdown("tileStyle", "valTileStyle",
+    [["plain", "optTileStylePlain"], ["bold", "optTileStyleBold"], ["uppercase", "optTileStyleUpper"], ["mono", "optTileStyleMono"], ["italic", "optTileStyleItalic"], ["shadow", "optTileStyleShadow"], ["compact", "optTileStyleCompact"], ["gradient", "optTileStyleGradient"]], "plain"),
   // Fuzzy-search typo tolerance.
   fuzzyMaxTypos: enumDropdown("fuzzyMaxTypos", "valFuzzyTypos",
     [["auto", "optAuto"], ["1", "opt1"], ["2", "opt2"]], "auto", "fuzzySearch"),
@@ -2241,7 +2238,7 @@ const EXPERT_TABS = [
     // and pure looks. One 26-entry blob made everything hard to find.
     { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "dragToView", "tilePressScale", "tileHotkeyBadge"], values: ["hoverLift", "hoverDim", "dragThreshold", "viewDropHoverMs", "tileHotkeyBadgeOpacity"] },
     { title: "expGroupTooltips", values: ["tooltipWidth", "tooltipDelayMs"] },
-    { title: "expGroupTileLook", flags: ["tileShadow", "typeBadges", "captions", "compactTiles", "tileGradient", "gridLines", "uppercaseTiles", "boldTileNames", "monospaceTiles", "italicTiles", "tileTextShadow", "autoInk", "inkHalo"], values: ["tileRadius", "tileBorderWidth", "inkThreshold", "inkHaloStrength"] },
+    { title: "expGroupTileLook", flags: ["tileShadow", "typeBadges", "captions", "gridLines", "autoInk", "inkHalo"], values: ["tileRadius", "tileBorderWidth", "inkThreshold", "inkHaloStrength"], dropdowns: ["tileStyle"] },
     { title: "expGroupFavorites", flags: ["favorites", { key: "favViewButton", gate: "favorites" }, { key: "favViewReorder", gate: "favViewButton" }], values: ["favStarSize", "favMaxCols"] },
   ] },
   { title: "expTabAppearance", groups: [
@@ -2431,9 +2428,9 @@ function applyFlags() {
   // with no speech engine at all must hide the button regardless of the flag.
   document.body.classList.toggle("no-voice-engine", !voiceSupport.supported);
   refreshCustomThemes(); // The feature may have just been switched on or off
-  // uppercaseTiles/boldTileNames/monospaceTiles/italicTiles change .tile-name
-  // metrics via CSS but are plain flags (no dedicated apply* path), so a cached fit
-  // size from before the toggle would otherwise linger until fitCache's own 1000-entry eviction.
+  // Flags that change .tile-name metrics via CSS have no dedicated apply* path, so a
+  // cached fit size from before the toggle would otherwise linger until fitCache's
+  // own 1000-entry eviction. (The tile style refits itself in applyValues.)
   fitCache.clear();
   if (chainMode && !flag("chainPrompts")) setChainMode(false); // killed in expert menu
   if (chainLock && !flag("chainLock")) { chainLock = false; $("chain-btn")?.classList.remove("chain-locked"); }
@@ -2446,8 +2443,20 @@ function applyFlags() {
 
 // Apply every numeric tweak to its live target (CSS vars + JS constants).
 let _lastUiZoom = null; // last native-zoom factor pushed to the backend (throttle)
+const TILE_STYLES = ["bold", "uppercase", "mono", "italic", "shadow", "compact", "gradient"];
+let _lastTileStyle = null; // last tile style applied (refit only when it changes)
 function applyValues() {
   const root = document.documentElement.style;
+  // The tile style restyles .tile-name (and, for compact, the tile padding), so a
+  // change refits every tile against a freshly measured box.
+  const tileStyle = txt("tileStyle") || "plain";
+  for (const s of TILE_STYLES) document.body.classList.toggle(`tile-style-${s}`, s === tileStyle);
+  if (tileStyle !== _lastTileStyle) {
+    _lastTileStyle = tileStyle;
+    fitCache.clear();
+    fitBox.key = "";
+    fitAllTiles();
+  }
   root.setProperty("--transition", `${val("animSpeed")}ms cubic-bezier(0.4, 0, 0.2, 1)`);
   root.setProperty("--transition-ms", `${val("animSpeed")}ms`); // bare duration for effects that scale it (e.g. a slower fade)
   root.setProperty("--gap", `${val("gridGap")}px`);
@@ -2563,7 +2572,7 @@ const EXPERT_TIPS = [
   // Appearance
   "hideScrollbars", "gridLines", "pausedIcons", "autoInk", "inkThreshold", "inkHalo", "inkHaloStrength",
   "customThemes", "customThemeMax",
-  "dragThreshold", "composerMaxH", "toastWidth", "toastPos", "modalMaxVh",
+  "dragThreshold", "composerMaxH", "toastWidth", "toastPos", "modalMaxVh", "tileStyle",
   // Library / privacy
   "mediaMeta", "mediaMetaBackfill", "ocrIndex", "ocrIndexMaxChars",
   "smartSort", "fuzzySearch", "batchOps", "searchSuggest", "searchAutofocus", "searchDebounceMs",

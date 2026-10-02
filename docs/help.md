@@ -587,8 +587,9 @@ several views. View groups turn views into tabs instead of a dropdown.
 
 ### Tile behavior & appearance
 
-Tile menu, drag-to-reorder, hover lift, type badges, shadows, gradients, rounded
-corners, bold/uppercase/monospace text: behavior and pure looks, all adjustable.
+Tile menu, drag-to-reorder, hover lift, type badges, shadows, rounded corners and
+one tile style (bold, uppercase, monospace, italic, shadowed names, compact,
+gradient): behavior and pure looks, all adjustable.
 Tile, folder, view-tab and message text on a colored area picks black or white
 automatically; the expert menu can switch this off (always white) or move the
 brightness cutoff where black text starts. White text on a light color gets a
