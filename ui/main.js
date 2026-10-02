@@ -1874,7 +1874,7 @@ const EXPERT_VALUES = {
   clipMinChars: { label: "valClipMin", min: 1, max: 100, step: 1, def: 3, unit: "", gate: "clipWatcher" },
   clipInboxMax: { label: "valClipMax", min: 10, max: 200, step: 10, def: 50, unit: "", gate: "clipWatcher" },
   // Confidential-entry vault: how long an unlocked session stays unlocked. 0 = until quit.
-  secretTimeoutMin: { label: "valSecretTimeoutMin", min: 0, max: 240, step: 5, def: 0, unit: "min", gate: "secretPrompts" },
+  secretTimeoutMin: { label: "valSecretTimeoutMin", min: 0, max: 240, step: 5, def: 15, unit: "min", zeroLabel: "secretTimeoutNever", gate: "secretPrompts" },
   // Keyboard grid focus fades this long after the window loses focus.
   // Tag chip text size (editor, library filter row, manager).
   tagChipPx: { label: "valTagChipPx", min: 10, max: 20, step: 1, def: 12, unit: "px", gate: "tags" },

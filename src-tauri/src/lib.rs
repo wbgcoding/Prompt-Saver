@@ -33454,8 +33454,8 @@ fn secret_encrypt_if_plain(value: &str, key: &[u8; 32]) -> String {
 }
 
 // One derived key for the whole running session, forgotten on quit (never
-// written anywhere) and on an idle timeout (secretTimeoutMin, 0 = never until
-// quit). Every confidential entry shares this one key; nothing about it is
+// written anywhere) and on an idle timeout (secretTimeoutMin, 15 minutes by
+// default, 0 = only on quit). Every confidential entry shares this one key; nothing about it is
 // per-entry, matching "own salt, own verification value" for the FEATURE, not
 // for each prompt.
 struct SecretSession {
@@ -33464,12 +33464,14 @@ struct SecretSession {
 }
 static SECRET_SESSION: Mutex<Option<SecretSession>> = Mutex::new(None);
 
+const SECRET_TIMEOUT_DEFAULT_MIN: f64 = 15.0;
+
 fn secret_timeout_min(settings: &Settings) -> u32 {
     settings
         .ui_values
         .get("secretTimeoutMin")
         .copied()
-        .unwrap_or(0.0)
+        .unwrap_or(SECRET_TIMEOUT_DEFAULT_MIN)
         .clamp(0.0, 240.0) as u32
 }
 
@@ -33665,7 +33667,7 @@ async fn secret_vault_lock(state: State<'_, Db>) -> Result<AppState, String> {
 // text field holds.
 #[tauri::command]
 async fn set_prompt_secret(app: AppHandle, state: State<'_, Db>, id: String, secret: bool) -> Result<AppState, String> {
-    let timeout = { lock(&state).settings.ui_values.get("secretTimeoutMin").copied().unwrap_or(0.0).clamp(0.0, 240.0) as u32 };
+    let timeout = secret_timeout_min(&lock(&state).settings);
     let Some(key) = secret_session_key(timeout) else {
         return Err("locked".to_string());
     };
@@ -55356,5 +55358,15 @@ mod tests {
         assert!(write_sealed_json(&current.join("settings.json"), &Settings::default()));
         assert_eq!(history_max_age(&load_store_from_json(&current).settings), Some(30 * 86_400));
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn secret_timeout_defaults_to_15() {
+        let mut s = Settings::default();
+        assert_eq!(secret_timeout_min(&s), 15, "an untouched store locks after 15 minutes");
+        s.ui_values.insert("secretTimeoutMin".into(), 0.0);
+        assert_eq!(secret_timeout_min(&s), 0, "a stored 0 stays 'only on quit'");
+        s.ui_values.insert("secretTimeoutMin".into(), 60.0);
+        assert_eq!(secret_timeout_min(&s), 60);
     }
 }

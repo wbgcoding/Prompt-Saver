@@ -711,7 +711,7 @@ A single prompt can be marked confidential from its editor (off by default).
 Its text and any variants are then encrypted with a vault password, asked
 once per session the first time a confidential prompt is opened or copied,
 and forgotten again on quit or after an idle timeout set in the expert menu
-(default: only on quit). Forgetting the vault password means those entries
+(default: 15 minutes). Forgetting the vault password means those entries
 are lost for good: there is no recovery, and the setup dialog says so before
 it lets you continue. While the vault is locked, a confidential tile shows a
 redacted bar instead of its name, does not copy, and is left out of search.
@@ -1498,7 +1498,7 @@ Ein einzelner Prompt lässt sich im Editor als vertraulich markieren
 Tresor-Passwort verschlüsselt, das einmal je Sitzung abgefragt wird, sobald
 zum ersten Mal ein vertraulicher Prompt geöffnet oder kopiert wird, und beim
 Beenden oder nach einer im Expertenmenü einstellbaren Ruhezeit wieder
-vergessen wird (Vorgabe: erst beim Beenden). Ein vergessenes Tresor-Passwort
+vergessen wird (Vorgabe: 15 Minuten). Ein vergessenes Tresor-Passwort
 bedeutet den endgültigen Verlust dieser Einträge: Es gibt keine
 Wiederherstellung, und der Einrichtungsdialog sagt das, bevor er weitermachen
 lässt. Solange der Tresor gesperrt ist, zeigt eine vertrauliche Kachel einen

@@ -1677,6 +1677,9 @@ the video editor and the introduction tour ship on).
 - **Shorter retention for new installs.** Copy history is kept 30 days and
   unused recordings 90 days by default. Existing installs keep everything as
   before.
+- **Confidential entries lock after 15 minutes.** The vault now locks again
+  after 15 minutes by default instead of only on quit; a value you set
+  yourself is kept.
 
 ## 2.6.3 (2026-07-26)
 
