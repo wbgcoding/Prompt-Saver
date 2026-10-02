@@ -200,7 +200,7 @@ def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html", vars_op
     # only faithful with it in place. 456: the notes field is no longer
     # collapsible -- it sits right under the name row and always takes its space.
     html = f"""<!doctype html><html lang="{lang}"><head><meta charset="utf-8">
-<link rel="stylesheet" href="styles/main.css"><style>body{{margin:0}}</style></head><body class="flag-tags flag-promptNotes">
+<link rel="stylesheet" href="styles/main.css"><style>body{{margin:0}}</style></head><body class="flag-tags">
 <div id="modal" class="overlay tall{' history-open' if history_open else ''}" role="dialog" aria-modal="true"><div class="modal">
   <div class="modal-titlebar"><h2 class="modal-title">{L('editModalTitle')}</h2>
     <button class="icon-btn modal-x" type="button">X</button></div>

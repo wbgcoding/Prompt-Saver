@@ -5077,7 +5077,7 @@ body.toast-top .toast.show { transform: translateX(-50%) translateY(0); }
 body.noflag-tags #modal-tags,
 body.noflag-tags .lib-tagbar { display: none; }
 /* Private notes: the editor row only exists while the feature is on. */
-body:not(.flag-promptNotes) #modal-notes { display: none; }
+body.noflag-promptNotes #modal-notes { display: none; }
 /* Archive: reserved-tag feature is opt-in, so its chip/menu/batch controls
    only exist once it is switched on. */
 body:not(.flag-archiveTag) #library-archive,

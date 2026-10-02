@@ -1209,6 +1209,7 @@ const FLAG_LABELS = {
   historyTimestamps: "flagHistoryTimestamps",
   historyGrouped: "flagHistoryGrouped",
   librarySearch: "flagLibrarySearch",
+  searchAutofocus: "flagSearchAutofocus",
   // A search overlay reaching across prompts, copy history, attachments,
   // views, settings and help all at once -- separate from librarySearch,
   // which only ever covers the prompt grid.
@@ -1278,6 +1279,8 @@ const FLAG_LABELS = {
   fuzzySearch: "flagFuzzySearch",
   batchOps: "flagBatchOps",
   promptHistory: "flagPromptHistory",
+  mdPreview: "flagMdPreview",           // rendered Markdown preview in the editor
+  promptNotes: "flagPromptNotes",               // private notes row in the editor
   usageStats: "statsEnable",            // only ever rendered in the backups dialog
   dupFinder: "flagDupFinder",
   // A background check after every save, naming the closest existing prompt
@@ -1465,7 +1468,6 @@ const OPT_FLAG_LABELS = {
   italicTiles: "flagItalicTiles",
   tileTextShadow: "flagTileTextShadow",
   // Library/search extras
-  searchAutofocus: "flagSearchAutofocus",
   // Reads text out of an attached picture and adds it to the library search,
   // lowest priority behind the name and the prompt body. Ships off: text
   // recognition costs time and reads a picture the user may not expect read.
@@ -1489,7 +1491,6 @@ const OPT_FLAG_LABELS = {
   mediaBorder: "flagMediaBorder",
   roundMedia: "flagRoundMedia",
   // New features (default off).
-  mdPreview: "flagMdPreview",           // rendered Markdown preview in the editor
   autoPasteEnter: "flagAutoPasteEnter",
   clipWatcher: "flagClipWatcher",
   backupGfs: "flagBackupGfs",           // period-based retention
@@ -1501,7 +1502,6 @@ const OPT_FLAG_LABELS = {
   // Keep the clipboard-inbox and copy-history buttons in the toolbar even while
   // their feature is switched off, so the feature can be paused, not hidden.
   pausedIcons: "flagPausedIcons",
-  promptNotes: "flagPromptNotes",               // private notes row in the editor
   dragOut: "flagDragOut",                       // drag a prompt into another app
   // Swaps the two gestures: off (shipped) = hold the key to drag out, plain drag
   // moves the tile; on = plain drag leaves the app and the key moves the tile.
@@ -6196,7 +6196,7 @@ function wireLightbox() {
 
 // ---- Private notes: context the user keeps next to a prompt. Read in the
 // editor, the tile tooltip and the library search: never in any copy path.
-const notesOn = () => optFlag("promptNotes");
+const notesOn = () => flag("promptNotes");
 // Cap what the tooltip shows so one long note can never fill the screen.
 const clipNote = (s) => {
   const max = val("notesTipLen");
@@ -9605,6 +9605,16 @@ function syncMdUi(textVisible, rotating = false) {
   }
 }
 
+// Focus the prompt text field. With the Markdown preview standing in for it, the
+// field is hidden until handed over, so a plain focus() would land nowhere.
+function focusModalText() {
+  if (flag("mdPreview") && !mdEditing && !modal.mdWrap.classList.contains("hidden")) {
+    mdEditing = true;
+    syncMdUi(true);
+  }
+  modal.text.focus();
+}
+
 // Word-level diff between two texts via a classic LCS backtrack: no
 // dependency, the whole thing is a couple dozen lines. O(n*m) on word count, so
 // a pathologically huge pasted text falls back to plain text (DIFF_WORD_CAP)
@@ -12891,7 +12901,7 @@ async function confirmModal() {
       confirmLabel: t("emptyVarSaveAnyway"),
       danger: false,
     });
-    if (!proceed) { if (!rotating) modal.text.focus(); return; }
+    if (!proceed) { if (!rotating) focusModalText(); return; }
   }
   // "empty entries are dropped on save" applies to entry 1 too: the first
   // surviving non-blank entry becomes the prompt's own text.
@@ -12932,7 +12942,7 @@ async function confirmModal() {
       const text = (rotating || hasVariants) ? (rotateFilled[0] || "") : modal.text.value.trim();
       // Nothing to save yet: keep the dialog (and everything else typed into it)
       // and point at the missing text, like a missing name does.
-      if (!text) { if (!rotating) modal.text.focus(); return; }
+      if (!text) { if (!rotating) focusModalText(); return; }
       saved = await invoke("add_prompt", { name, text, color, image, showImage, copyImage, filePath, pdfPage, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste, variants, rotateMode, rotateAuto });
       inputEl.value = "";
       autoGrow(inputEl);
@@ -15823,7 +15833,7 @@ async function openJournal() {
   $("journal-search").classList.toggle("hidden", !anyFilter);
   await loadJournal();
   $("journal").classList.remove("hidden");
-  if (flag("journalSearch") && optFlag("searchAutofocus")) $("journal-q").focus();
+  if (flag("journalSearch") && flag("searchAutofocus")) $("journal-q").focus();
 }
 
 // ---- Search everything ----
@@ -19977,7 +19987,7 @@ function bind() {
     syncLibraryToggle();
     renderLibrary();
     libraryEl.classList.remove("hidden");
-    if (flag("librarySearch") && optFlag("searchAutofocus")) $("library-q").focus();
+    if (flag("librarySearch") && flag("searchAutofocus")) $("library-q").focus();
   });
   // "Close after copy" toggle in the library header (mirrors the expert flag).
   $("library-close-toggle").addEventListener("click", async () => {

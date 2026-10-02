@@ -70,8 +70,8 @@ before the finished text reaches the clipboard.
 
 ### The editor
 
-The editor is a plain text box by default; a few opt-in features (**Markdown
-preview**, **private notes**: both off by default) add structure and history to it:
+The editor is a plain text box at heart; a few features (**Markdown preview**,
+**private notes**: both on by default, switchable in the expert menu) add structure and history to it:
 a rendered Markdown preview with syntax-highlighted code blocks, a full version
 history, and a private note field never copied or exported with the text.
 
@@ -1088,7 +1088,7 @@ eingesetzt, bevor er getippt oder übernommen wird.
 </p>
 
 **Der Editor**: Markdown-Vorschau, Syntax-Hervorhebung, Versionsverlauf, private
-Notizen (Markdown-Vorschau und Notizen standardmäßig aus). Bei einer Datei-Kachel
+Notizen (Markdown-Vorschau und Notizen ab Werk an, im Expertenmenü abschaltbar). Bei einer Datei-Kachel
 mit eigenem Vorschaubild: das Bild über der Dateizeile ist nur die Kachel-Vorschau,
 der Anhang darunter ist eine eigene Sache, kopiert wird immer nur der Dateipfad.
 Ein Anhang als reiner Text, Markdown, JSON oder CSV zeigt seinen Anfang direkt

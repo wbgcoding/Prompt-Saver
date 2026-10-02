@@ -2771,12 +2771,12 @@ PROBE = """
         if (notesBg === promptBg) out.errors.push('the notes field looks identical to the prompt field');
         // 456: with the feature off, the gate hides the wrapper itself (not just
         // the textarea), so no empty gap is left where the field used to be.
-        document.body.classList.remove('flag-promptNotes');
+        document.body.classList.add('noflag-promptNotes');
         await sleep(30);
         if (getComputedStyle(nRow).display !== 'none') {
           out.errors.push('promptNotes off does not hide the notes row');
         }
-        document.body.classList.add('flag-promptNotes');
+        document.body.classList.remove('noflag-promptNotes');
         await sleep(30);
       }
       // F20: the hotkey row opens collapsed (28: as part of "Advanced options" now),

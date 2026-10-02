@@ -1680,6 +1680,10 @@ the video editor and the introduction tour ship on).
 - **Confidential entries lock after 15 minutes.** The vault now locks again
   after 15 minutes by default instead of only on quit; a value you set
   yourself is kept.
+- **Markdown preview, notes and search focus ship on.** The editor's Markdown
+  preview and private notes are on by default, and opening the library puts
+  the cursor in its search field. A switch you changed yourself stays as it
+  is.
 
 ## 2.6.3 (2026-07-26)
 

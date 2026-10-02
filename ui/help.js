@@ -86,15 +86,15 @@ export const HELP_CONTENT = {
     {
       section: "basics",
       title: "The editor",
-      whatItIs: "The editor is a plain text box by default; a few opt-in features add structure and history to it.",
+      whatItIs: "The editor is a plain text box at heart; a few features (Markdown preview and private notes are on by default, switchable in the expert menu) add structure and history to it.",
       howTo: [
         "Open a tile's editor: double-click the tile, or Edit from its menu.",
-        "Turn on Markdown preview, syntax highlighting, version history, or private notes in the expert menu.",
+        "Adjust Markdown preview, syntax highlighting, version history, or private notes in the expert menu.",
       ],
       whatHappens:
         "Version history keeps every saved change so an earlier version can be restored. Markdown preview renders next to, or instead of, the text box without altering what is actually stored. Private notes are never copied or exported with the text. The open text is saved as a draft every few seconds; if the window or the app closes before saving, the next start offers the draft back once. A confidential tile never gets a draft. Saving a new tile that closely matches an existing one shows a quiet hint instead of blocking the save. For a text with Markdown in it, \"Copy formatted\" in the editor and the tile menu puts the rendered version on the clipboard as well, so Word or a mail program shows the formatting. In the version history, a second button next to Restore keeps the chosen version as a new tile and leaves the current one untouched.",
       settings: ["Markdown preview, syntax highlighting, version history, private notes: Expert menu → Features → Editor", "Monospace text box: Expert menu → Features → Editor", "Formatted copy, live length counter, word-level diff in history, confirm discarding changes, draft autosave and its interval: Expert menu → Features → Editor", "Similar-prompt hint on save: Expert menu → System & data → Data & maintenance"],
-      tip: "Markdown preview and private notes both ship off.",
+      tip: "Markdown preview and private notes both ship on.",
     },
     {
       section: "copying",
@@ -834,15 +834,15 @@ export const HELP_CONTENT = {
     {
       section: "basics",
       title: "Der Editor",
-      whatItIs: "Der Editor ist standardmäßig ein einfaches Textfeld; einige optionale Funktionen verleihen ihm Struktur und einen Verlauf.",
+      whatItIs: "Der Editor ist im Kern ein einfaches Textfeld; einige Funktionen (Markdown-Vorschau und private Notizen sind ab Werk an, im Expertenmenü abschaltbar) verleihen ihm Struktur und einen Verlauf.",
       howTo: [
         "Editor einer Kachel öffnen: Doppelklick auf die Kachel oder Bearbeiten in ihrem Menü.",
-        "Markdown-Vorschau, Syntax-Hervorhebung, Versionsverlauf oder private Notizen im Expertenmenü aktivieren.",
+        "Markdown-Vorschau, Syntax-Hervorhebung, Versionsverlauf oder private Notizen im Expertenmenü anpassen.",
       ],
       whatHappens:
         "Der Versionsverlauf speichert jede Änderung, sodass eine frühere Version wiederhergestellt werden kann. Die Markdown-Vorschau erscheint neben oder anstelle des Textfelds, ohne den gespeicherten Inhalt zu verändern. Private Notizen werden nie mit dem Text kopiert oder exportiert. Der offene Text wird alle paar Sekunden als Entwurf gesichert; schließt sich das Fenster oder die App vor dem Speichern, bietet der nächste Start den Entwurf einmal wieder an. Eine vertrauliche Kachel bekommt nie einen Entwurf. Wer eine neue Kachel speichert, die einer vorhandenen sehr ähnelt, sieht einen leisen Hinweis, das Speichern wird nicht aufgehalten. Bei einem Text mit Markdown legt \"Formatiert kopieren\" im Editor und im Kachel-Menü zusätzlich die gerenderte Fassung in die Zwischenablage, sodass Word oder ein Mailprogramm die Formatierung zeigt. Im Versionsverlauf behält ein zweiter Button neben Wiederherstellen die gewählte Fassung als neue Kachel und lässt die aktuelle unverändert.",
       settings: ["Markdown-Vorschau, Syntax-Hervorhebung, Versionsverlauf, private Notizen: Expertenmenü → Funktionen → Editor", "Textfeld in dicktengleicher Schrift: Expertenmenü → Funktionen → Editor", "Formatiert kopieren, Live-Längenzähler, wortweiser Vergleich im Verlauf, Verwerfen bestätigen, Entwurf automatisch sichern und wie oft: Expertenmenü → Funktionen → Editor", "Hinweis auf ähnliche Prompts beim Speichern: Expertenmenü → System & Daten → Daten & Wartung"],
-      tip: "Markdown-Vorschau und private Notizen sind standardmäßig deaktiviert.",
+      tip: "Markdown-Vorschau und private Notizen sind ab Werk aktiviert.",
     },
     {
       section: "copying",
