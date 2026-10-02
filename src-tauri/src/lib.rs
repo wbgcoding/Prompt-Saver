@@ -2648,6 +2648,10 @@ fn removed_ui_value_keys() -> &'static [&'static str] {
         "previewLen",
         "tilesHoverOpacity",
         "mediaHoverOpacity",
+        "journalWidth",
+        "viewDropHoverMs",
+        "viewGroupMaxRows",
+        "clipSeenId",
     ]
 }
 
@@ -2680,6 +2684,9 @@ fn removed_ui_flag_keys() -> &'static [&'static str] {
         "tileTextShadow",
         "compactTiles",
         "tileGradient",
+        "showJournal",
+        "varPopupWindow",
+        "viewGroups",
     ]
 }
 
@@ -52131,6 +52138,25 @@ mod tests {
             for k in list {
                 assert!(seen.insert(*k), "{k} is listed twice");
             }
+        }
+    }
+
+    #[test]
+    fn keys_of_removed_controls_are_dropped() {
+        // The history window, the inbox badge, the view groups and the placeholder
+        // window switch are gone; their stored keys must not linger.
+        let mut s = Settings::default();
+        for k in ["showJournal", "varPopupWindow", "viewGroups"] {
+            s.ui_flags.insert(k.into(), false);
+        }
+        for k in ["journalWidth", "viewDropHoverMs", "viewGroupMaxRows", "clipSeenId"] {
+            s.ui_values.insert(k.into(), 7.0);
+        }
+        assert!(s.has_removed_ui_values());
+        s.migrate();
+        assert!(s.ui_flags.is_empty(), "left: {:?}", s.ui_flags);
+        for k in ["journalWidth", "viewDropHoverMs", "viewGroupMaxRows", "clipSeenId"] {
+            assert!(!s.ui_values.contains_key(k), "{k} survived migrate");
         }
     }
 
