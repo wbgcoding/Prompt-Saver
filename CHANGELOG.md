@@ -1674,6 +1674,9 @@ the video editor and the introduction tour ship on).
   tray on close, so floating buttons, the tray menu and the hotkeys keep
   working; the one-time hint on the first close is gone. Existing installs
   keep their setting.
+- **Shorter retention for new installs.** Copy history is kept 30 days and
+  unused recordings 90 days by default. Existing installs keep everything as
+  before.
 
 ## 2.6.3 (2026-07-26)
 

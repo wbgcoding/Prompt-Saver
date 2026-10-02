@@ -2183,6 +2183,10 @@ struct Settings {
     window: Option<WindowGeom>,
     #[serde(default = "default_on")]
     minimize_to_tray: bool,
+    // False for a store written before the 30/90-day retention defaults; migrate()
+    // pins such a store to keep-forever once.
+    #[serde(default)]
+    retention_defaults_v2: bool,
     #[serde(default)]
     autostart: bool,
     #[serde(default)]
@@ -2351,6 +2355,7 @@ impl Default for Settings {
             video_prefs: HashMap::new(),
             window: None,
             minimize_to_tray: true,
+            retention_defaults_v2: true,
             autostart: false,
             start_minimized: false,
             always_on_top: false,
@@ -2685,6 +2690,12 @@ impl Settings {
 
     // Ensure at least one view exists; migrate legacy single-grid data.
     fn migrate(&mut self) {
+        if !self.retention_defaults_v2 {
+            for k in ["historyDays", "recordingRetentionDays"] {
+                self.ui_values.entry(k.to_string()).or_insert(0.0);
+            }
+            self.retention_defaults_v2 = true;
+        }
         for k in removed_ui_value_keys() {
             self.ui_values.remove(*k);
         }
@@ -3937,6 +3948,14 @@ fn early_allow_multiple_instances() -> bool {
         .unwrap_or(false)
 }
 
+// Whether any copy-history row exists; an unreadable table counts as yes, so an
+// unsure case is treated as an existing install.
+fn copy_log_has_rows(conn: &Connection) -> bool {
+    conn.query_row("SELECT EXISTS(SELECT 1 FROM copy_log)", [], |r| r.get::<_, i64>(0))
+        .map(|v| v != 0)
+        .unwrap_or(true)
+}
+
 // Append one copy event, then trim to the cap and the retention window. The cap
 // trim uses the rowid (monotonic insertion order): "keep rows whose rowid is
 // within `cap` of the newest" deletes at most one row per call in steady state
@@ -4594,6 +4613,8 @@ fn load_store(app: &AppHandle) -> Store {
         }
         SETTINGS_LOCKED.store(settings_unreadable, Ordering::Relaxed);
         let mut settings = settings_opt.clone().unwrap_or_default();
+        // True while `settings` is a blank default rather than something read from disk.
+        let mut settings_defaulted = settings_opt.is_none();
         // Empty DB but legacy JSON present → import it once, then own the data.
         // A corrupt-but-present settings row must never be mistaken for "nothing
         // here yet" -- that would silently paper over the SETTINGS_LOCKED case set
@@ -4616,7 +4637,10 @@ fn load_store(app: &AppHandle) -> Store {
                     _ => Vec::new(),
                 };
                 let j_settings = match j_settings_r {
-                    SealedRead::Loaded(v) => v,
+                    SealedRead::Loaded(v) => {
+                        settings_defaulted = false;
+                        v
+                    }
                     _ => Settings::default(),
                 };
                 if !j_prompts.is_empty() || dir.join("settings.json").exists() {
@@ -4667,6 +4691,7 @@ fn load_store(app: &AppHandle) -> Store {
                     match read_sealed_json::<Settings>(&sj) {
                         SealedRead::Loaded(s) => {
                             settings = s;
+                            settings_defaulted = false;
                             if db_write_settings(&conn, &settings).is_ok() {
                                 let _ = fs::remove_file(&sj);
                             }
@@ -4686,6 +4711,14 @@ fn load_store(app: &AppHandle) -> Store {
         let theme_ai_before =
             settings.theme == "ai" || settings.custom_themes.iter().any(|c| c.base == "ai");
         let pruned_removed_values = settings.has_removed_ui_values();
+        // An unreadable settings row, or a missing one next to existing data, belongs
+        // to an existing install: it must never start pruning under the new defaults.
+        if settings_unreadable
+            || (settings_defaulted && (!prompts.is_empty() || copy_log_has_rows(&conn)))
+        {
+            settings.retention_defaults_v2 = false;
+        }
+        let pin_retention = !settings.retention_defaults_v2;
         settings.migrate();
         load_pick_history(&settings); // restore the colour-pick history mirror
         // One-time: move any legacy in-blob copy history into the copy_log table.
@@ -4776,7 +4809,7 @@ fn load_store(app: &AppHandle) -> Store {
             // One-time: re-encrypt legacy plaintext rows / drop the migrated log from the blob.
             save_prompts(app, &store);
             save_settings(app, &store.settings);
-        } else if theme_ai_before || pruned_removed_values {
+        } else if theme_ai_before || pruned_removed_values || pin_retention {
             save_settings(app, &store.settings);
         }
         return store;
@@ -4806,13 +4839,19 @@ fn data_dir_lock_enabled(settings: &Settings) -> bool {
 // present (and then save) an empty store.
 fn load_store_from_json(dir: &Path) -> Store {
     let mut unreadable = false;
+    let mut settings_missing = false;
     let mut settings = match read_sealed_json::<Settings>(&dir.join("settings.json")) {
         SealedRead::Loaded(s) => s,
         SealedRead::Unreadable => {
             unreadable = true;
+            let mut s = Settings::default();
+            s.retention_defaults_v2 = false;
+            s
+        }
+        SealedRead::Missing => {
+            settings_missing = true;
             Settings::default()
         }
-        SealedRead::Missing => Settings::default(),
     };
     settings.migrate();
     load_pick_history(&settings); // restore the colour-pick history mirror
@@ -4830,6 +4869,11 @@ fn load_store_from_json(dir: &Path) -> Store {
         }
     };
     migrate_prompts(&mut prompts);
+    // Missing settings next to existing prompts is an existing install, not a new one.
+    if settings_missing && !prompts.is_empty() {
+        settings.retention_defaults_v2 = false;
+        settings.migrate();
+    }
     // A previous session already wrote data.db, so its rows still exist on disk:
     // db_conn just could not open it this time (e.g. a transient ALTER failure).
     // Without prompts.json either, this launch has literally no way to see the real
@@ -6988,13 +7032,12 @@ fn recording_sweep_grace(app: &AppHandle) -> (bool, Duration) {
 }
 
 // How long a KEPT recording (referenced or not) is allowed to age before
-// an unreferenced one becomes fair game for the sweep above -- 0 (the
-// shipped default) disables this leg entirely, same "0 = forever" convention
-// as trashRetentionDays.
+// an unreferenced one becomes fair game for the sweep above -- 0 disables this
+// leg; a new install ships 90 days.
 fn recording_retention_age(app: &AppHandle) -> Option<Duration> {
     let days = app
         .try_state::<Db>()
-        .map(|s| s.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("recordingRetentionDays").copied().unwrap_or(0.0))
+        .map(|s| s.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("recordingRetentionDays").copied().unwrap_or(RECORDING_RETENTION_DAYS_DEFAULT))
         .unwrap_or(0.0);
     if days <= 0.0 {
         None
@@ -12778,11 +12821,12 @@ fn now_secs() -> u64 {
 }
 
 // Retention window in seconds from the expert "history retention" setting
-// (days). Default 0 = keep forever: the copy history is bounded by its entry
-// count (historyMax), so a time-based prune would only surprise users who copy
-// infrequently by silently emptying "recently copied". 0 or negative = forever.
+// (days). Default 30 days for a new install; 0 or negative = forever. Stores
+// older than this default are pinned to 0 in migrate().
+const HISTORY_DAYS_DEFAULT: f64 = 30.0;
+const RECORDING_RETENTION_DAYS_DEFAULT: f64 = 90.0;
 fn history_max_age(settings: &Settings) -> Option<u64> {
-    let days = settings.ui_values.get("historyDays").copied().unwrap_or(0.0);
+    let days = settings.ui_values.get("historyDays").copied().unwrap_or(HISTORY_DAYS_DEFAULT);
     if days <= 0.0 {
         None
     } else {
@@ -35354,7 +35398,7 @@ pub fn run() {
             {
                 let referenced = orphan_referenced_set(&store);
                 let broken_on = store.settings.ui_flags.get("recSweepBroken") != Some(&false);
-                let retention_days = store.settings.ui_values.get("recordingRetentionDays").copied().unwrap_or(0.0);
+                let retention_days = store.settings.ui_values.get("recordingRetentionDays").copied().unwrap_or(RECORDING_RETENTION_DAYS_DEFAULT);
                 let retention_age = (retention_days > 0.0).then(|| Duration::from_secs(retention_days as u64 * 86_400));
                 let (count, bytes) = sweep_stale_recordings(&handle, &referenced, broken_on, Duration::from_secs((REC_BROKEN_GRACE_MIN * 60.0) as u64), retention_age);
                 if count > 0 {
@@ -45943,11 +45987,11 @@ mod tests {
     }
 
     #[test]
-    fn history_retention_defaults_to_forever() {
-        // Regression: the default used to be 7 days, which silently emptied the copy
-        // history for anyone who copied less than weekly. Default is now keep-forever.
+    fn history_retention_default_and_explicit_values() {
+        // A new store prunes after 30 days; stores that predate that default are
+        // pinned to 0 (keep forever) by migrate(), so nobody loses history silently.
         let mut s = Settings::default();
-        assert_eq!(history_max_age(&s), None, "no historyDays set => keep forever");
+        assert_eq!(history_max_age(&s), Some(30 * 86_400), "no historyDays set => the new-install default");
         s.ui_values.insert("historyDays".into(), 0.0);
         assert_eq!(history_max_age(&s), None, "0 => keep forever");
         s.ui_values.insert("historyDays".into(), 7.0);
@@ -55254,5 +55298,63 @@ mod tests {
         assert!(bare.minimize_to_tray, "a store without the field gets the new default");
         let kept: Settings = serde_json::from_str(r#"{"minimize_to_tray":false}"#).unwrap();
         assert!(!kept.minimize_to_tray, "a stored false stays false");
+    }
+
+    #[test]
+    fn old_store_keeps_retention_forever() {
+        let mut s: Settings = serde_json::from_str("{}").unwrap();
+        assert!(!s.retention_defaults_v2, "a store without the marker predates the new defaults");
+        s.migrate();
+        assert_eq!(s.ui_values.get("historyDays"), Some(&0.0));
+        assert_eq!(s.ui_values.get("recordingRetentionDays"), Some(&0.0));
+        assert_eq!(history_max_age(&s), None);
+        assert!(s.retention_defaults_v2);
+    }
+
+    #[test]
+    fn old_store_keeps_explicit_retention() {
+        let mut s: Settings = serde_json::from_str(r#"{"ui_values":{"historyDays":7.0}}"#).unwrap();
+        s.migrate();
+        assert_eq!(s.ui_values.get("historyDays"), Some(&7.0), "a stored value is never touched");
+        assert_eq!(s.ui_values.get("recordingRetentionDays"), Some(&0.0));
+        assert_eq!(history_max_age(&s), Some(7 * 86_400));
+    }
+
+    #[test]
+    fn new_store_gets_retention_defaults() {
+        let mut s = Settings::default();
+        s.migrate();
+        assert!(!s.ui_values.contains_key("historyDays"));
+        assert!(!s.ui_values.contains_key("recordingRetentionDays"));
+        assert_eq!(history_max_age(&s), Some(30 * 86_400));
+        assert_eq!(RECORDING_RETENTION_DAYS_DEFAULT, 90.0);
+    }
+
+    #[test]
+    fn json_fallback_pins_retention_next_to_existing_data() {
+        let base = std::env::temp_dir().join(format!("{}-test-retention-pin", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&base);
+        // No settings next to a prompt list: an existing install.
+        let with_prompts = base.join("prompts");
+        std::fs::create_dir_all(&with_prompts).unwrap();
+        assert!(write_sealed_json(&with_prompts.join("prompts.json"), &numbered_prompts(2)));
+        let store = load_store_from_json(&with_prompts);
+        assert_eq!(history_max_age(&store.settings), None);
+        assert_eq!(store.settings.ui_values.get("recordingRetentionDays"), Some(&0.0));
+        // Unreadable settings: also an existing install.
+        let garbled = base.join("garbled");
+        std::fs::create_dir_all(&garbled).unwrap();
+        std::fs::write(garbled.join("settings.json"), "not json at all").unwrap();
+        assert_eq!(history_max_age(&load_store_from_json(&garbled).settings), None);
+        // Nothing at all: a new install gets the defaults.
+        let fresh = base.join("fresh");
+        std::fs::create_dir_all(&fresh).unwrap();
+        assert_eq!(history_max_age(&load_store_from_json(&fresh).settings), Some(30 * 86_400));
+        // Settings written by this version carry the marker and are left alone.
+        let current = base.join("current");
+        std::fs::create_dir_all(&current).unwrap();
+        assert!(write_sealed_json(&current.join("settings.json"), &Settings::default()));
+        assert_eq!(history_max_age(&load_store_from_json(&current).settings), Some(30 * 86_400));
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

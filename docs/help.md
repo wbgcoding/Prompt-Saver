@@ -219,7 +219,8 @@ shutdown) leaves behind a file with no usable video track. The app checks
 for these in the background and removes them once they clear a short grace
 period, so a just-stopped recording that is still finalising is never
 touched; both the grace period and the check interval are adjustable in the
-expert menu, alongside a manual "clean up now" action.
+expert menu, alongside a manual "clean up now" action. A new install deletes
+unused recordings after 90 days (expert menu, 0 = keep forever).
 
 The same cleanup dialog can also export several finished recordings at once.
 A checkbox per file, plus Select all/none, picks which ones; "Export
@@ -525,7 +526,8 @@ unbounded.
 ### Copy history
 
 A log of what was copied and when, separate from the clipboard watcher (this
-only records copies made through the app). Grouped view, automatic retention,
+only records copies made through the app). Grouped view, automatic retention
+(30 days for a new install, adjustable, 0 keeps everything),
 per-entry delete, and usage statistics including a 14-day activity chart.
 
 ## Organising
@@ -1178,7 +1180,8 @@ im Expertenmenü zeigt außerdem, wie viele Videos darin liegen und wie viel
 Platz sie belegen, mit einem „Aufräumen…"-Button daneben: 7, 30 oder 90 Tage
 wählen, die genaue Dateiliste und die frei werdende Größe prüfen, dann
 bestätigen. Gelöscht wird nie im Hintergrund, immer nur hier und nur nach
-Bestätigung. Eine Tastenanzeige
+Bestätigung. Eine neue Installation löscht nicht verwendete Aufnahmen nach 90
+Tagen (Expertenmenü, 0 = für immer). Eine Tastenanzeige
 (Standard aus, im Expertenmenü) zeichnet während einer Aufnahme systemweit
 mit, welche Tasten gedrückt werden, damit eine Anleitung sie hinterher über
 die „Tasten"-Überlagerung des Video-Editors zeigen kann. Aufgezeichnet werden
@@ -1454,7 +1457,8 @@ Export und Backup erreichbar. Ein Schalter über der Liste holt archivierte
 Kacheln zurück; archivieren/entarchivieren geht per Rechtsklickmenü oder aus
 der Sammelleiste der Bibliothek.
 
-**Kopierverlauf**: Protokoll, Gruppierung, Aufbewahrung, Einzeleintrag löschen,
+**Kopierverlauf**: Protokoll, Gruppierung, Aufbewahrung (bei einer neuen
+Installation 30 Tage, einstellbar, 0 behält alles), Einzeleintrag löschen,
 Statistik mit 14-Tage-Diagramm.
 
 **Medien**: Video-Steuerung, Graustufen/Abdunkeln. Bibliothek und Kopierverlauf

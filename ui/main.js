@@ -1940,7 +1940,7 @@ const EXPERT_VALUES = {
 
 // Preset-or-custom numeric settings (dropdown with a free-entry option).
 const EXPERT_SELECTS = {
-  historyDays: { label: "valHistoryDays", options: [0, 7, 30, 90, 365], def: 0, unit: "d", zeroLabel: "retentionForever", gate: "copyHistory" },
+  historyDays: { label: "valHistoryDays", options: [0, 7, 30, 90, 365], def: 30, unit: "d", zeroLabel: "retentionForever", gate: "copyHistory" },
   // Backup interval (hours): a preset-or-custom select right under backupKeep.
   backupIntervalH: { label: "valBackupInterval", options: [6, 12, 24, 48, 168], def: 24, unit: "h", gate: "autoBackup" },
   // How long a deleted prompt sits in the trash before it is purged automatically.
@@ -1951,7 +1951,7 @@ const EXPERT_SELECTS = {
   // Off by default (0), same "0 = forever" convention, so nothing changes for
   // anyone who never opens this row -- a referenced recording never qualifies
   // regardless of this value.
-  recordingRetentionDays: { label: "valRecordingRetentionDays", options: [0, 7, 30, 90, 365], def: 0, unit: "d", zeroLabel: "retentionForever", gate: "screenRecord" },
+  recordingRetentionDays: { label: "valRecordingRetentionDays", options: [0, 7, 30, 90, 365], def: 90, unit: "d", zeroLabel: "retentionForever", gate: "screenRecord" },
   // How often the background thread checks for a new release.
   updateCheckH: { label: "valUpdateCheckH", options: [6, 12, 24, 48, 168], def: 24, unit: "h", gate: "showUpdates" },
 };
