@@ -7,6 +7,7 @@ import { FONTS, fitText } from "./fonts.js";
 import { applyFloatTheme, inkForColor, onInkChange } from "./floattheme.js";
 import { mediaKind } from "./media.js";
 import { APP_NAME } from "./brand.js";
+import { LANGS, compactTexts } from "./i18n.js";
 import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT, COPY_SOUND_VOLUME_DEFAULT } from "./copyDefaults.js";
 import { COPIED_MS, RING_MIN, RING_MAX, DRAG_OUT_MODS, FOLDER_SVG, resolveLang, fileUri, playCopySound } from "./floatShared.js";
 
@@ -20,13 +21,6 @@ const { getCurrentWebviewWindow } = window.__TAURI__.webviewWindow;
 
 const appWin = getCurrentWebviewWindow();
 const folderId = appWin.label.replace(/^folder-/, "");
-
-// Started here, at module evaluation time, rather than inside applyTexts()
-// below: the lazily imported translations must never hold up behaviour, so
-// the (large) fetch must not sit behind the get_settings invoke it used to be
-// nested under. applyTexts() awaits this same promise, so it resolves
-// instantly once already in flight.
-const textsImportPromise = Promise.all([import("./i18n.js"), import("./terms.js")]);
 
 const iconEl = document.getElementById("icon");
 const previewEl = document.getElementById("preview");
@@ -59,7 +53,7 @@ let seq = 0;
 let openReq = 0;
 // "edit" starts empty, not a hardcoded English literal -- unlike every other
 // field here it spells the item word, which must only ever reach the screen
-// through the real (lazily loaded) i18n text and its fork-brand substitution.
+// through the compact strings and their fork-brand substitution.
 let TXT = { copied: "Copied!", size: "Size", edit: "", close: "Close", rename: "Rename", dissolve: "Ungroup", takeOut: "Take out of folder" };
 
 // Copy behaviour, mirrored from the pill window.
@@ -385,10 +379,7 @@ async function applySettings() {
 }
 
 async function applyTexts(s) {
-  const [i18n, { applyTerms }] = await textsImportPromise;
-  const lang = resolveLang(s.language, i18n.LANGS);
-  TXT = Object.fromEntries(
-    Object.entries(i18n.FLOAT_TXT[lang]).map(([k, v]) => [k, applyTerms(v, lang)]));
+  TXT = compactTexts(resolveLang(s.language, LANGS));
   document.getElementById("size-label").textContent = TXT.size;
   parkedBadge.title = TXT.parked;
   document.getElementById("menu-rename").textContent = TXT.rename;

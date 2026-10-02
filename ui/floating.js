@@ -1,11 +1,11 @@
 // Floating quick-copy pill. Click copies; press-and-move drags the window;
 // right-click opens a small menu (size, edit prompt, remove).
-// i18n is loaded lazily (dynamic import) so the pill window opens fast.
 import { FONTS, fitText } from "./fonts.js";
 import { mediaKind, buildMediaBar, applyVideoPrefs, setMediaDefaults } from "./media.js";
 // Custom themes: shared with the folder window (floattheme.js).
 import { applyFloatTheme, inkForColor, onInkChange } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
+import { LANGS, compactTexts } from "./i18n.js";
 import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT, COPY_SOUND_VOLUME_DEFAULT } from "./copyDefaults.js";
 import { COPIED_MS, RING_MIN, RING_MAX, DRAG_OUT_MODS, resolveLang, fileUri, playCopySound } from "./floatShared.js";
 
@@ -20,12 +20,6 @@ const { getCurrentWebviewWindow } = window.__TAURI__.webviewWindow;
 const appWin = getCurrentWebviewWindow();
 let copiedText = ""; // localized "Copied!", re-announced on every copy (see showCopied)
 const promptId = appWin.label.replace(/^float-/, "");
-
-// Started here, at module evaluation time, rather than inside applyTexts()
-// below: the pill has to open fast, so the (large) translation fetch must not
-// sit behind the get_settings invoke it used to be nested under. applyTexts()
-// awaits this same promise, so it resolves instantly once already in flight.
-const textsImportPromise = Promise.all([import("./i18n.js"), import("./terms.js")]);
 
 const pill = document.getElementById("pill");
 const label = document.getElementById("label");
@@ -197,10 +191,7 @@ async function applySettings() {
 }
 
 async function applyTexts(s) {
-  const [{ FLOAT_TXT: TXT, LANGS }, { applyTerms }] = await textsImportPromise;
-  const lang = resolveLang(s.language, LANGS);
-  const t = Object.fromEntries(
-    Object.entries(TXT[lang]).map(([k, v]) => [k, applyTerms(v, lang)]));
+  const t = compactTexts(resolveLang(s.language, LANGS));
   copiedText = t.copied;
   document.getElementById("feedback").textContent = copiedText;
   document.getElementById("size-label").textContent = t.size;

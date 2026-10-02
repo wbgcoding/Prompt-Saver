@@ -69,6 +69,19 @@ if (loaderSet.map((x) => x.slice(1, -1)).join(",") !== LANGS.join(",")) problems
   }
 }
 
+// The compact windows (pill, pill folder, quick launcher, placeholder prompt) take
+// their texts from compactTexts() through a static import: no dynamic import of the
+// loader, no full dictionary, no reach into a language file.
+for (const f of ["floating.js", "folder.js", "launcher.js", "vars.js"]) {
+  const text = fs
+    .readFileSync(path.join(UI, f), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "");
+  if (/import\(\s*["'`]\.\/i18n/.test(text)) problems.push(`ui/${f} imports the text loader dynamically`);
+  if (/\b(fullTexts|loadLang)\b/.test(text)) problems.push(`ui/${f} uses the full dictionary loader`);
+  if (/i18n\//.test(text)) problems.push(`ui/${f} reaches into a path under i18n/`);
+}
+
 // Keys actually referenced from the UI code.
 const code = fs
   .readdirSync(UI)
