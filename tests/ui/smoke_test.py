@@ -11803,7 +11803,7 @@ VIDEO_PROBE = """
           if (!pop.classList.contains('hidden')) {
             errs.push('370: Escape did not close the shared colour popup');
           }
-          if (!document.getElementById('ve-confirm').classList.contains('hidden')) {
+          if (!document.getElementById('confirm-modal').classList.contains('hidden')) {
             errs.push('370: Escape while the colour popup was open also triggered the close-window confirm dialog');
           }
         }
@@ -12164,7 +12164,7 @@ VIDEO_PROBE = """
         // rather than also popping the close-window confirm dialog.
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
         await sleep(30);
-        if (!document.getElementById('ve-confirm').classList.contains('hidden')) {
+        if (!document.getElementById('confirm-modal').classList.contains('hidden')) {
           errs.push('395: Escape while an overlay was selected also opened the close-window confirm dialog');
         }
         if (!hintEl.classList.contains('hidden')) {
@@ -12959,7 +12959,7 @@ EDIT_STATE_PROBE = """
     return fn();
   };
   try {
-    const overlay = document.getElementById('ve-confirm');
+    const overlay = document.getElementById('confirm-modal');
     // The dialog only opens once loadRecording's own probe/mux/texts-ready
     // chain has fully settled -- generous relative to the default 5s used
     // elsewhere in this file (still well inside the page's 30s virtual-time
@@ -12968,12 +12968,12 @@ EDIT_STATE_PROBE = """
     if (!shown) {
       errs.push(which + 'the restore dialog never opened although a saved edit state was planted');
     } else {
-      const title = document.getElementById('ve-confirm-title').textContent.trim();
-      const msg = document.getElementById('ve-confirm-msg').textContent.trim();
+      const title = document.getElementById('confirm-title').textContent.trim();
+      const msg = document.getElementById('confirm-msg').textContent.trim();
       if (!title || /^editStateRestore/.test(title)) errs.push(which + 'the dialog title is empty or a raw i18n key: ' + title);
       if (!msg.includes('(2)')) errs.push(which + 'the dialog message does not name the saved op count: ' + msg);
-      const okBtn = document.getElementById('ve-confirm-ok');
-      const cancelBtn = document.getElementById('ve-confirm-cancel');
+      const okBtn = document.getElementById('confirm-ok');
+      const cancelBtn = document.getElementById('confirm-cancel');
       if (!okBtn.textContent.trim() || !cancelBtn.textContent.trim()) {
         errs.push(which + 'the dialog buttons carry no label');
       }
@@ -13079,7 +13079,7 @@ window.requestAnimationFrame = (fn) => {
     return fn();
   };
   try {
-    const overlay = document.getElementById('ve-confirm');
+    const overlay = document.getElementById('confirm-modal');
     const shown = await until(() => overlay && !overlay.classList.contains('hidden'), 300);
     if (!shown) errs.push('the first restore dialog never opened');
     else {
@@ -13092,7 +13092,7 @@ window.requestAnimationFrame = (fn) => {
       const reopened = await until(() => !overlay.classList.contains('hidden'), 100);
       if (!reopened) errs.push('the second recording got no restore dialog of its own');
       else {
-        document.getElementById('ve-confirm-ok').click();
+        document.getElementById('confirm-ok').click();
         await sleep(200);
         const rows = document.querySelectorAll('#ve-ops-list .ve-op-row').length;
         if (rows !== 2) errs.push('answering the second dialog did not restore the saved ops: ' + rows + ' rows');

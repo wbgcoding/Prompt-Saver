@@ -292,7 +292,7 @@ async function closeChecks() {
   for (const [keep, dirty, warns] of [[false, true, true], [true, true, false], [false, false, false]]) {
     const texts = [];
     const sb = makeSandbox({
-      t: (k) => k, veConfirm: async (title, text) => { texts.push(text); return false; },
+      t: (k) => k, confirmDialog: async ({ message }) => { texts.push(message); return false; },
       invoke: () => Promise.resolve(), saveEditStateNow: async () => {}, appWin: { close: () => Promise.resolve() },
     });
     sb.VE = baseState([{ tool: "cut", startMs: 0, endMs: 1000 }]);
@@ -350,7 +350,7 @@ async function exportLoadRaceCheck() {
     formatExt: () => "mp4", destPath: () => "C:/out/a.mp4", showExportErrorDetails: () => {},
     exportEta: { reset() {} }, setProgress: () => {},
     buildVideoChain: () => null, buildAudioChain: () => null, keptSegments: () => [{ a: 0, b: 5000 }],
-    videoKbps: () => 1000, fmtBytes: String, veConfirm: async () => false, noteFfmpeg: () => {},
+    videoKbps: () => 1000, fmtBytes: String, confirmDialog: async () => false, noteFfmpeg: () => {},
     parseFfmpegError: () => ({ message: "x", details: "" }), applyExportGate: () => {},
   };
   vm.createContext(sb);
@@ -398,7 +398,7 @@ async function exportIdleCheck() {
       formatExt: () => "mp4", destPath: () => "C:/out/a.mp4", showExportErrorDetails: () => {},
       exportEta: { reset() {} }, setProgress: () => el("ve-export-progress-row").classList.remove("hidden"),
       buildVideoChain: () => null, buildAudioChain: () => null, keptSegments: () => [{ a: 0, b: 5000 }],
-      videoKbps: () => 1000, fmtBytes: String, veConfirm: async () => false, noteFfmpeg: () => {},
+      videoKbps: () => 1000, fmtBytes: String, confirmDialog: async () => false, noteFfmpeg: () => {},
       parseFfmpegError: () => ({ message: "x", details: "" }), applyExportGate: () => {},
     };
     vm.createContext(sb);

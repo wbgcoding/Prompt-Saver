@@ -15,6 +15,7 @@ import { attachSelectPicker } from "./selectpop.js";
 import { placePopoverAt } from "./popover.js";
 import { snapMove } from "./snap.js";
 import { exportNameIsValid } from "./exportName.js";
+import { confirmDialog, dismissConfirm, initDialogs } from "./dialog.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
 // switcher, so it comes from the brand rather than a hardcoded English word.
@@ -26,6 +27,9 @@ const { getCurrentWebviewWindow } = window.__TAURI__.webviewWindow;
 
 const appWin = getCurrentWebviewWindow();
 const $ = (id) => document.getElementById(id);
+// The shared confirm dialog; this window never offers a copy-to-clipboard prompt,
+// so its toast hook stays empty.
+initDialogs({ t, toast: () => {} });
 // The shared custom-colour popup -- see colorRow() below.
 const { el: colorPop, open: openColorPop, close: closeColorPop } = createColorPop();
 
@@ -310,50 +314,8 @@ function toast(message) {
   toastTimer = setTimeout(() => el.classList.add("hidden"), 2600);
 }
 
-// ---------------------------------------------------------------- confirm dialog
-
-// The main window's confirmDialog lives in main.js and is not reachable from a
-// separate window, so this one carries the same markup, classes and behaviour.
-let confirmState = null;
-
-// opts.cancelLabel/opts.thirdLabel let a caller turn this into a 3-way choice
-// (see closeWindow()'s export-in-progress case) -- the third button is click-only,
-// with no Escape/Enter shortcut of its own, and resolves the promise to "third"
-// rather than a boolean.
-//
-// Only one dialog can be open. A newer one settles a still-pending older one
-// with null (superseded, not an answer) so its await never hangs; every caller
-// treats null as "do nothing" and only an explicit false means "discard".
-function veConfirm(title, message, okLabel, opts = {}) {
-  closeConfirm(null);
-  return new Promise((resolve) => {
-    const overlay = $("ve-confirm");
-    confirmState = { resolve, prev: document.activeElement };
-    $("ve-confirm-title").textContent = title;
-    $("ve-confirm-msg").textContent = message;
-    $("ve-confirm-ok").textContent = okLabel || t("veDiscard");
-    $("ve-confirm-cancel").textContent = opts.cancelLabel || t("cancel");
-    const third = $("ve-confirm-third");
-    third.textContent = opts.thirdLabel || "";
-    third.classList.toggle("hidden", !opts.thirdLabel);
-    overlay.classList.remove("hidden");
-    $("ve-confirm-ok").focus();
-  });
-}
-
-function closeConfirm(answer) {
-  if (!confirmState) return;
-  const { resolve, prev } = confirmState;
-  confirmState = null;
-  $("ve-confirm").classList.add("hidden");
-  // Focus goes back where it was: a dialog that dumps focus on the body leaves
-  // the next Tab starting from nowhere.
-  if (prev && prev.isConnected && typeof prev.focus === "function") prev.focus();
-  resolve(answer);
-}
-
 // The "?" overview -- same modal/modal-narrow/modal-titlebar shell as
-// ve-confirm above, filled straight from SHORTCUTS.
+// the shared confirm dialog, filled straight from SHORTCUTS.
 let shortcutsModalOpener = null;
 function openShortcutsModal(scope) {
   shortcutsModalOpener = document.activeElement;
@@ -378,11 +340,6 @@ function closeShortcutsModal() {
   if (shortcutsModalOpener?.isConnected && typeof shortcutsModalOpener.focus === "function") shortcutsModalOpener.focus();
   shortcutsModalOpener = null;
 }
-
-// Keeps Tab inside the open dialog instead of letting it walk the editor behind it.
-$("ve-confirm-ok").addEventListener("click", () => closeConfirm(true));
-$("ve-confirm-cancel").addEventListener("click", () => closeConfirm(false));
-$("ve-confirm-third").addEventListener("click", () => closeConfirm("third"));
 
 // ---------------------------------------------------------------- operation list
 
@@ -3501,7 +3458,7 @@ async function startExport(toClipboard) {
             .replace("{drive}", diskWarn.drive)
             .replace("{free}", fmtBytes(diskWarn.free_mb * 1024 * 1024))
             .replace("{needed}", fmtBytes(diskWarn.needed_mb * 1024 * 1024));
-          const proceed = await veConfirm(t("recDiskWarnTitle"), msg, t("recDiskWarnExportAnyway"));
+          const proceed = await confirmDialog({ title: t("recDiskWarnTitle"), message: msg, confirmLabel: t("recDiskWarnExportAnyway"), danger: false });
           if (!proceed) { clearExportStatus(); return; }
         }
       }
@@ -4025,18 +3982,22 @@ async function closeWindow() {
     // Three-way choice: keep it running in the background (the export is
     // Rust-driven now, so it survives this window closing), cancel it and
     // close, or stay put. "Keep running" is the safe default (Enter key);
-    // cancelling is the click-only, visually flagged destructive option.
+    // cancelling is the third, click-only choice.
     // With the edit state not kept, edits made after the export started would
     // be lost on close, so say so too.
     const unsaved = VE.dirty && !VE.editStateKeepOn ? ` ${t("veCloseUnsaved")}` : "";
-    const choice = await veConfirm(t("veCloseTitle"), t("veCloseExporting") + unsaved, t("bgKeepRunning"), {
+    const choice = await confirmDialog({
+      title: t("veCloseTitle"),
+      message: t("veCloseExporting") + unsaved,
+      confirmLabel: t("bgKeepRunning"),
       cancelLabel: t("bgStayOpen"),
-      thirdLabel: t("bgCancelClose"),
+      altLabel: t("bgCancelClose"),
+      danger: false,
     });
-    if (choice === false || choice === null) return;
-    if (choice === "third") invoke("cancel_export").catch(() => {});
+    if (choice === false) return;
+    if (choice === "alt") invoke("cancel_export").catch(() => {});
   } else if (VE.ops.length && VE.dirty) {
-    const ok = await veConfirm(t("veCloseTitle"), t("veCloseUnsaved"), t("veDiscard"));
+    const ok = await confirmDialog({ title: t("veCloseTitle"), message: t("veCloseUnsaved"), confirmLabel: t("veDiscard"), danger: true });
     if (!ok) return;
   }
   // Best-effort: the periodic autosave (armEditStateAutosave) is the real safety
@@ -4050,10 +4011,9 @@ async function closeWindow() {
 const TYPING = new Set(["INPUT", "TEXTAREA", "SELECT"]);
 
 document.addEventListener("keydown", (e) => {
-  if (confirmState) {
-    if (e.key === "Escape") { e.preventDefault(); closeConfirm(false); }
-    else if (e.key === "Tab") trapTabWithin($("ve-confirm"), e);
-    else if (e.key === "Enter") { e.preventDefault(); closeConfirm(true); }
+  if (!$("confirm-modal").classList.contains("hidden")) {
+    if (e.key === "Escape") { e.preventDefault(); dismissConfirm(); }
+    else if (e.key === "Tab") trapTabWithin($("confirm-modal"), e);
     return;
   }
   if (!$("shortcuts-modal").classList.contains("hidden")) {
@@ -4154,8 +4114,9 @@ document.addEventListener("keyup", (e) => {
 
 function resetForNewSource() {
   // A confirm still open from the previous source (the restore question) must
-  // not stay up over the new one, and its waiting caller must be released.
-  closeConfirm(null);
+  // not stay up over the new one, and its waiting caller must be released
+  // (it sees the load generation has moved on and does nothing).
+  dismissConfirm();
   VE.ops = [];
   VE.redo = [];
   VE.floor = 0;
@@ -4319,16 +4280,21 @@ async function checkEditState(path, myGen) {
     // the editor opens with a stale badge state for a moment rather than
     // waiting on a stat per extra source first.
     refreshExtraSourceAvailability(myGen);
-  } else if (ok === false) {
+  } else {
     // Only an explicit "start fresh" answer drops the saved state; a dialog that
-    // was superseded by another source (null) leaves it for the next open.
+    // was superseded by another source never gets here (the load generation check
+    // above returns first) and leaves it for the next open.
     invoke("discard_edit_state", { kind: "video", target: path }).catch(() => {});
   }
 }
 
 function askRestoreEditState(opCount) {
-  return veConfirm(t("editStateRestoreTitle"), t("editStateRestoreMsg").replace("{count}", String(opCount)), t("editStateRestoreContinue"), {
+  return confirmDialog({
+    title: t("editStateRestoreTitle"),
+    message: t("editStateRestoreMsg").replace("{count}", String(opCount)),
+    confirmLabel: t("editStateRestoreContinue"),
     cancelLabel: t("editStateRestoreDiscard"),
+    danger: false,
   });
 }
 
@@ -4468,7 +4434,7 @@ listen("video-editor-load", async (e) => {
   // discarding whatever was unsaved -- the same case closeWindow() already
   // guards, reusing its exact confirm.
   if (VE.ops.length && VE.dirty) {
-    const ok = await veConfirm(t("veCloseTitle"), t("veCloseUnsaved"), t("veDiscard"));
+    const ok = await confirmDialog({ title: t("veCloseTitle"), message: t("veCloseUnsaved"), confirmLabel: t("veDiscard"), danger: true });
     if (!ok) return;
   }
   loadRecording(path, originDir, overlayPath);
