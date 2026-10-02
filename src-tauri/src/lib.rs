@@ -13221,25 +13221,40 @@ async fn record_copy(app: AppHandle, state: State<'_, Db>, id: String) -> Result
     Ok(())
 }
 
+// The counters go only once the log rows are gone: a delete that failed leaves
+// both the rows and the counters as they were, so the two never disagree.
+fn clear_history_core(delete_log: impl FnOnce() -> bool, settings: &mut Settings) -> bool {
+    if !delete_log() {
+        return false;
+    }
+    settings.usage.clear();
+    settings.last_used.clear();
+    true
+}
+
 // Wipe copy history + usage counters (privacy / journal "clear").
 #[tauri::command]
 async fn clear_copy_history(app: AppHandle, state: State<'_, Db>) -> Result<(), String> {
-    {
-        let mut store = lock(&state);
-        store.settings.usage.clear();
-        store.settings.last_used.clear();
-        save_settings(&app, &store.settings);
-    }
     // A "clear" the user asked for is a privacy action -- a DB error here must
     // not be reported as success while the log rows are still on disk.
-    let cleared = match db_conn(&app) {
-        Some(conn) => conn.execute("DELETE FROM copy_log", []).is_ok(),
-        None => false,
+    let (cleared, saved) = {
+        let mut store = lock(&state);
+        let cleared = clear_history_core(
+            || match db_conn(&app) {
+                Some(conn) => conn.execute("DELETE FROM copy_log", []).is_ok(),
+                None => false,
+            },
+            &mut store.settings,
+        );
+        (cleared, cleared && save_settings(&app, &store.settings))
     };
     rebuild_tray(&app); // A wiped history empties the "recently used" section
     if !cleared {
         append_crash_log("clear_copy_history: copy_log could not be cleared");
         return Err("delete-incomplete".into());
+    }
+    if !saved {
+        return Err("save-failed".into());
     }
     Ok(())
 }
@@ -51979,6 +51994,18 @@ mod tests {
         conn.execute_batch("ROLLBACK").unwrap();
         assert_eq!(scrub_clip_inbox(&conn), Some(1));
         assert_eq!(scrub_clip_inbox(&conn), Some(0), "nothing left: no repack needed, still a success");
+    }
+
+    #[test]
+    fn clearing_the_history_keeps_the_counters_when_the_delete_fails() {
+        let mut s = Settings::default();
+        s.usage.insert("a".into(), 4);
+        s.last_used.insert("a".into(), 77);
+        assert!(!clear_history_core(|| false, &mut s));
+        assert_eq!(s.usage.get("a"), Some(&4));
+        assert_eq!(s.last_used.get("a"), Some(&77));
+        assert!(clear_history_core(|| true, &mut s));
+        assert!(s.usage.is_empty() && s.last_used.is_empty());
     }
 
     #[test]
