@@ -69,9 +69,9 @@ before the finished text reaches the clipboard.
 ### The editor
 
 The editor is a plain text box at heart; a few features (**Markdown preview**,
-**private notes**: both on by default, switchable in the expert menu) add structure and history to it:
-a rendered Markdown preview with syntax-highlighted code blocks, a full version
-history, and a private note field never copied or exported with the text.
+**private notes**: both on by default, switchable in the expert menu) add structure and versions to it:
+a rendered Markdown preview with syntax-highlighted code blocks, a full list of
+versions, and a private note field never copied or exported with the text.
 
 For a file/PDF/video tile that also carries its own stored preview picture, the
 image shown above the file row is only that tile's preview; the attached file
@@ -553,7 +553,7 @@ The magnifier icon in the toolbar, or Ctrl+K, opens an overlay that searches
 prompts, copy history, attachments, views, settings and help all at once,
 each in its own group with up to eight hits and a "show more". Arrow keys
 move the highlight across group boundaries; Enter runs the fitting action for
-whatever is highlighted: copies a prompt or history entry, opens an
+whatever is highlighted: copies a prompt or copy history entry, opens an
 attachment, switches to a view, opens and highlights a setting, or opens the
 matching help topic. The field remembers your recent searches (eight by
 default; the expert menu sets one number for every search list) and shows them when it
@@ -847,7 +847,7 @@ to arrive. What happens in either direction is fixed and never silent:
   id, so the renamed file arrives as a new tile and the original is written back
   out under its own name. Rename in the app instead.
 - **A tile and its file changed at the same time?** The file wins that round, and
-  the version it replaced is kept in that tile's version history. The other way
+  the version it replaced is kept in that tile's versions. The other way
   round the app wins the file, and what was in the file is kept next to it as
   `<id>.conflict-<number>.md`.
 - **Files this app did not write are never touched** in either direction, and a
@@ -1085,7 +1085,7 @@ eingesetzt, bevor er getippt oder übernommen wird.
 <svg viewBox="0 0 560 130" xmlns="http://www.w3.org/2000/svg" role="img"><text x="30" y="45" font-size="15" fill="currentColor" text-anchor="start">{#{Kunde=Meier|Meier,Schulz}#}</text><line x1="65" y1="55" x2="65" y2="80" stroke="currentColor" stroke-width="1"/><text x="65" y="95" font-size="11" fill="currentColor" text-anchor="middle">Name</text><line x1="118" y1="55" x2="150" y2="80" stroke="currentColor" stroke-width="1"/><text x="150" y="95" font-size="11" fill="currentColor" text-anchor="middle">Vorgabe</text><line x1="240" y1="55" x2="260" y2="80" stroke="currentColor" stroke-width="1"/><text x="260" y="95" font-size="11" fill="currentColor" text-anchor="middle">Auswahlliste</text></svg>
 </p>
 
-**Der Editor**: Markdown-Vorschau, Syntax-Hervorhebung, Versionsverlauf, private
+**Der Editor**: Markdown-Vorschau, Syntax-Hervorhebung, Versionen, private
 Notizen (Markdown-Vorschau und Notizen ab Werk an, im Expertenmenü abschaltbar). Bei einer Datei-Kachel
 mit eigenem Vorschaubild: das Bild über der Dateizeile ist nur die Kachel-Vorschau,
 der Anhang darunter ist eine eigene Sache, kopiert wird immer nur der Dateipfad.
@@ -1441,7 +1441,7 @@ eine Überlagerung, die Prompts, Kopierverlauf, Anhänge, Ansichten,
 Einstellungen und Hilfe zugleich durchsucht, jede Quelle in ihrer eigenen
 Gruppe mit bis zu acht Treffern und „weitere anzeigen". Pfeiltasten bewegen
 die Markierung über Gruppengrenzen hinweg; Eingabetaste löst die passende
-Aktion aus: kopiert einen Prompt oder Verlaufseintrag, öffnet einen Anhang,
+Aktion aus: kopiert einen Prompt oder Eintrag im Kopierverlauf, öffnet einen Anhang,
 wechselt die Ansicht, öffnet und markiert eine Einstellung, oder öffnet das
 passende Hilfethema. Das Feld merkt sich die letzten Suchen (acht ab Werk; das
 Expertenmenü stellt eine Zahl für alle Suchlisten ein) und zeigt sie, wenn es leer ist. Escape, ein Klick daneben oder das Symbol schließen

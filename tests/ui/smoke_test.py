@@ -6199,23 +6199,23 @@ PROBE = """
         for (const tb of tabs) { tb.click(); const hit = find(); if (hit) return hit; }
         return null;
       };
-      let historySw = rowByLabel5('Prompt version history')?.querySelector('input.switch');
+      let historySw = rowByLabel5('Prompt versions')?.querySelector('input.switch');
       if (!historySw) {
-        out.errors.push('could not find "Prompt version history" for the gated-hidden-row reset test');
+        out.errors.push('could not find "Prompt versions" for the gated-hidden-row reset test');
       } else {
         if (!historySw.checked) { historySw.click(); await sleep(120); } // reveal the gated child
-        const diffSw = rowByLabel5('Word-by-word comparison in history')?.querySelector('input.switch');
+        const diffSw = rowByLabel5('Word-by-word comparison of versions')?.querySelector('input.switch');
         if (!diffSw) {
-          out.errors.push('could not find the gated "Word-by-word comparison in history" row');
+          out.errors.push('could not find the gated "Word-by-word comparison of versions" row');
         } else {
           if (diffSw.checked) { diffSw.click(); await sleep(120); } // move it away from its default (on)
           // Hide it again by switching its own parent back off.
-          rowByLabel5('Prompt version history')?.querySelector('input.switch')?.click();
+          rowByLabel5('Prompt versions')?.querySelector('input.switch')?.click();
           await sleep(120);
-          if (rowByLabel5('Word-by-word comparison in history')) {
+          if (rowByLabel5('Word-by-word comparison of versions')) {
             out.errors.push('405 setup: the gated row is still visible, cannot test the hidden-row case');
           } else {
-            const groupSec = rowByLabel5('Prompt version history')?.closest('.expert-group');
+            const groupSec = rowByLabel5('Prompt versions')?.closest('.expert-group');
             const resetBtn = groupSec && groupSec.querySelector('.expert-group-reset');
             if (!resetBtn) {
               out.errors.push('405: the group reset button did not appear although a row hidden behind its own gate differs from its default');
@@ -6231,11 +6231,11 @@ PROBE = """
               await sleep(150);
               document.getElementById('confirm-ok').click();
               await sleep(300);
-              const historySwAfter = rowByLabel5('Prompt version history')?.querySelector('input.switch');
+              const historySwAfter = rowByLabel5('Prompt versions')?.querySelector('input.switch');
               if (!historySwAfter || !historySwAfter.checked) {
                 out.errors.push('405: group reset did not restore the parent flag to its own default');
               }
-              const diffSwAfter = rowByLabel5('Word-by-word comparison in history')?.querySelector('input.switch');
+              const diffSwAfter = rowByLabel5('Word-by-word comparison of versions')?.querySelector('input.switch');
               if (!diffSwAfter || !diffSwAfter.checked) {
                 out.errors.push('405: group reset left a row that was hidden behind its own gate still changed from its default');
               }

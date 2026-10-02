@@ -86,14 +86,14 @@ export const HELP_CONTENT = {
     {
       section: "basics",
       title: "The editor",
-      whatItIs: "The editor is a plain text box at heart; a few features (Markdown preview and private notes are on by default, switchable in the expert menu) add structure and history to it.",
+      whatItIs: "The editor is a plain text box at heart; a few features (Markdown preview and private notes are on by default, switchable in the expert menu) add structure and versions to it.",
       howTo: [
         "Open a tile's editor: double-click the tile, or Edit from its menu.",
-        "Adjust Markdown preview, syntax highlighting, version history, or private notes in the expert menu.",
+        "Adjust Markdown preview, syntax highlighting, versions, or private notes in the expert menu.",
       ],
       whatHappens:
-        "Version history keeps every saved change so an earlier version can be restored. Markdown preview renders next to, or instead of, the text box without altering what is actually stored. Private notes are never copied or exported with the text. The open text is saved as a draft every few seconds; if the window or the app closes before saving, the next start offers the draft back once. A confidential tile never gets a draft. Saving a new tile that closely matches an existing one shows a quiet hint instead of blocking the save. For a text with Markdown in it, \"Copy formatted\" in the editor and the tile menu puts the rendered version on the clipboard as well, so Word or a mail program shows the formatting. In the version history, a second button next to Restore keeps the chosen version as a new tile and leaves the current one untouched.",
-      settings: ["Markdown preview, syntax highlighting, version history, private notes: Expert menu → Features → Editor", "Monospace text box: Expert menu → Features → Editor", "Formatted copy, live length counter, word-level diff in history, confirm discarding changes, draft autosave and its interval: Expert menu → Features → Editor", "Similar-prompt hint on save: Expert menu → System & data → Data & maintenance"],
+        "Versions keep every saved change so an earlier version can be restored. Markdown preview renders next to, or instead of, the text box without altering what is actually stored. Private notes are never copied or exported with the text. The open text is saved as a draft every few seconds; if the window or the app closes before saving, the next start offers the draft back once. A confidential tile never gets a draft. Saving a new tile that closely matches an existing one shows a quiet hint instead of blocking the save. For a text with Markdown in it, \"Copy formatted\" in the editor and the tile menu puts the rendered version on the clipboard as well, so Word or a mail program shows the formatting. In the list of versions, a second button next to Restore keeps the chosen version as a new tile and leaves the current one untouched.",
+      settings: ["Markdown preview, syntax highlighting, versions, private notes: Expert menu → Features → Editor", "Monospace text box: Expert menu → Features → Editor", "Formatted copy, live length counter, word-by-word comparison of versions, confirm discarding changes, draft autosave and its interval: Expert menu → Features → Editor", "Similar-prompt hint on save: Expert menu → System & data → Data & maintenance"],
       tip: "Markdown preview and private notes both ship on.",
     },
     {
@@ -155,7 +155,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Nothing is watched until it is turned on. Copies shorter than the minimum length are ignored, and the oldest of these entries drop once they pass their cap. With \"Skip likely passwords\" on, a copy that looks like a password (one line, no spaces, mixed letters, digits and symbols) is never added; it is a best guess, so it skips rather than risks keeping one. Switching the watcher off asks whether to keep or delete what was collected; closing that question keeps it. Clearing the inbox offers an undo button on its message.",
-      settings: ["Skip likely passwords, minimum length, cap: Expert menu → Library & History → Copy history"],
+      settings: ["Skip likely passwords, minimum length, cap: Expert menu → Library & copy history → Copy history"],
       tip: "Off by default: nothing is watched until it is turned on.",
     },
     {
@@ -225,7 +225,7 @@ export const HELP_CONTENT = {
         "Pick two rows and click \"Compare\" in the selection bar to see both side by side with the differences marked.",
       ],
       whatHappens: "Search is typo-tolerant by default and, unless turned off, sorts by most-used or most-recently-used. In the comparison, either side's text can be taken over into the other. Tiles view behaves exactly like the list for clicks, menus and multi-select.",
-      settings: ["Fuzzy search, type and color filters, saved searches: Expert menu → Library & History → Search", "Focus the search field on opening: Expert menu → Library & History → Search", "Entries per search list (library, Search everything, quick launcher): Expert menu → Library & History → Search", "Smart sort, multi-select for batch actions, image and video previews in the rows, tiles view: Expert menu → Library & History → Display"],
+      settings: ["Fuzzy search, type and color filters, saved searches: Expert menu → Library & copy history → Search", "Focus the search field on opening: Expert menu → Library & copy history → Search", "Entries per search list (library, Search everything, quick launcher): Expert menu → Library & copy history → Search", "Smart sort, multi-select for batch actions, image and video previews in the rows, tiles view: Expert menu → Library & copy history → Display"],
     },
     {
       section: "organising",
@@ -237,8 +237,8 @@ export const HELP_CONTENT = {
         "Move with the arrow keys and press Enter, or click a hit.",
       ],
       whatHappens:
-        "Enter does what fits the hit: it copies a tile or history entry, opens an attachment, switches to a view, opens and highlights a setting, or opens the help article. Each group shows a few hits and a \"show more\". With the box empty, recent searches are offered. Escape, a click outside, or the magnifier again closes it.",
-      settings: ["Search everything: Expert menu → Library & History → Search"],
+        "Enter does what fits the hit: it copies a tile or copy history entry, opens an attachment, switches to a view, opens and highlights a setting, or opens the help article. Each group shows a few hits and a \"show more\". With the box empty, recent searches are offered. Escape, a click outside, or the magnifier again closes it.",
+      settings: ["Search everything: Expert menu → Library & copy history → Search"],
     },
     {
       section: "organising",
@@ -249,7 +249,7 @@ export const HELP_CONTENT = {
         "Use the tag filter row in the library to narrow the list.",
       ],
       whatHappens: "Renaming, recoloring, or deleting a tag from the tag manager applies everywhere it is used, in one step.",
-      settings: ["Tag filter mode (match any selected tag, or all of them): Expert menu → Library & History → Tags"],
+      settings: ["Tag filter mode (match any selected tag, or all of them): Expert menu → Library & copy history → Tags"],
     },
     {
       section: "organising",
@@ -262,7 +262,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "An archived tile leaves the grid and the library list, but search still finds it, and exports and backups keep it like any other tile. \"Unarchive\" in the same menu brings it back.",
-      settings: ["Archive: Expert menu → Library & History → Display"],
+      settings: ["Archive: Expert menu → Library & copy history → Display"],
       tip: "Off by default.",
     },
     {
@@ -272,10 +272,10 @@ export const HELP_CONTENT = {
       howTo: [
         "Open the Library and choose the Copy history tab.",
         "Search, filter by type or color, or star a favorite from the list.",
-        "Delete a single row, or clear the whole history.",
+        "Delete a single row, or clear the whole copy history.",
       ],
-      whatHappens: "Grouped view shows one row per tile (its most recent copy) instead of every event. History older than the retention setting is dropped automatically (30 days for a new install, adjustable, 0 keeps everything).",
-      settings: ["Grouped view, retention: Expert menu → Library & History → Copy history", "Skip an entry that repeats the copy before it: Expert menu → Library & History → Copy history"],
+      whatHappens: "Grouped view shows one row per tile (its most recent copy) instead of every event. Copy history older than the retention setting is dropped automatically (30 days for a new install, adjustable, 0 keeps everything).",
+      settings: ["Grouped view, retention: Expert menu → Library & copy history → Copy history", "Skip an entry that repeats the copy before it: Expert menu → Library & copy history → Copy history"],
     },
     {
       section: "organising",
@@ -306,7 +306,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Screen-capture exclusion makes the window invisible to screenshot and recording tools, including its own, so if a capture comes out empty, check this setting first. An optional, off-by-default setting reads text out of an attached picture so the library search can find it too; a hit found only there carries a \"found in image\" badge, so it never looks like a random match. That recognized text stays out of the app otherwise: it is never shown, never exported, never synchronized, and its length is capped. Removing or replacing the picture clears it right away, and switching the setting off removes it from every tile, the trash included. A single tile can also be marked confidential; see \"Confidential tiles\" below.",
-      settings: ["Exclude from screen capture, blur tiles or media, hide names: Expert menu → System & data → Privacy", "Index text inside attached pictures for search, image text length limit: Expert menu → Library & History → Search", "Mark a tile confidential, vault lock timeout: Expert menu → System & data → Privacy"],
+      settings: ["Exclude from screen capture, blur tiles or media, hide names: Expert menu → System & data → Privacy", "Index text inside attached pictures for search, image text length limit: Expert menu → Library & copy history → Search", "Mark a tile confidential, vault lock timeout: Expert menu → System & data → Privacy"],
       tip: "Screen-capture exclusion ships on: turn it off for normal screenshots or recordings of this window.",
     },
     {
@@ -491,7 +491,7 @@ export const HELP_CONTENT = {
         "Edit a tile normally, or edit its Markdown file directly; both directions stay in sync.",
       ],
       whatHappens:
-        "Unlike the database, the Markdown files are plain text: anyone with access to that folder can read the content, so a synced or shared folder should be avoided for anything sensitive. A tile with an attached file, image, or PDF syncs as a reference: the header carries the path and the PDF page, never the file itself, so another machine needs the same path for the button to work there. A screenshot pasted straight into a tile has no path at all and stays in the database only. A confidential tile is never written to the folder, and a file never changes a confidential tile. A file whose tile sits in the trash does not bring it back as a second tile. A view or folder named in an incoming file that does not exist yet on this machine is created automatically, matched by name. Deleting a file in the folder does not delete the tile (it is written again on the next round); deleting the tile in the app does take its file with it. The file name is the tile's permanent id, so renaming a file by hand produces a second tile instead of a renamed one. If a tile and its file changed at the same time, the file wins that round and the replaced version is kept in the tile's version history; the other way round the app wins the file and the file's text is kept beside it as a conflict copy. Files this app did not write, or has never seen before, are never changed or deleted, and a file past 8 MB is skipped whole rather than cut short. Picking a different folder asks whether the old one should be deleted, and that delete only ever removes the files this app wrote itself, never a sub-folder, stopping entirely if anything unknown is in there. An unreachable folder pauses the sync after a few failed rounds instead of retrying forever.",
+        "Unlike the database, the Markdown files are plain text: anyone with access to that folder can read the content, so a synced or shared folder should be avoided for anything sensitive. A tile with an attached file, image, or PDF syncs as a reference: the header carries the path and the PDF page, never the file itself, so another machine needs the same path for the button to work there. A screenshot pasted straight into a tile has no path at all and stays in the database only. A confidential tile is never written to the folder, and a file never changes a confidential tile. A file whose tile sits in the trash does not bring it back as a second tile. A view or folder named in an incoming file that does not exist yet on this machine is created automatically, matched by name. Deleting a file in the folder does not delete the tile (it is written again on the next round); deleting the tile in the app does take its file with it. The file name is the tile's permanent id, so renaming a file by hand produces a second tile instead of a renamed one. If a tile and its file changed at the same time, the file wins that round and the replaced version is kept as a version of the tile; the other way round the app wins the file and the file's text is kept beside it as a conflict copy. Files this app did not write, or has never seen before, are never changed or deleted, and a file past 8 MB is skipped whole rather than cut short. Picking a different folder asks whether the old one should be deleted, and that delete only ever removes the files this app wrote itself, never a sub-folder, stopping entirely if anything unknown is in there. An unreachable folder pauses the sync after a few failed rounds instead of retrying forever.",
       settings: ["Folder sync, sync folder, poll interval, pause after failed rounds: Expert menu → Features → Prompt sync"],
       tip: "This is a beta feature: keep the sync folder somewhere only trusted eyes can read.",
     },
@@ -834,14 +834,14 @@ export const HELP_CONTENT = {
     {
       section: "basics",
       title: "Der Editor",
-      whatItIs: "Der Editor ist im Kern ein einfaches Textfeld; einige Funktionen (Markdown-Vorschau und private Notizen sind ab Werk an, im Expertenmenü abschaltbar) verleihen ihm Struktur und einen Verlauf.",
+      whatItIs: "Der Editor ist im Kern ein einfaches Textfeld; einige Funktionen (Markdown-Vorschau und private Notizen sind ab Werk an, im Expertenmenü abschaltbar) verleihen ihm Struktur und Versionen.",
       howTo: [
         "Editor einer Kachel öffnen: Doppelklick auf die Kachel oder Bearbeiten in ihrem Menü.",
-        "Markdown-Vorschau, Syntax-Hervorhebung, Versionsverlauf oder private Notizen im Expertenmenü anpassen.",
+        "Markdown-Vorschau, Syntax-Hervorhebung, Versionen oder private Notizen im Expertenmenü anpassen.",
       ],
       whatHappens:
-        "Der Versionsverlauf speichert jede Änderung, sodass eine frühere Version wiederhergestellt werden kann. Die Markdown-Vorschau erscheint neben oder anstelle des Textfelds, ohne den gespeicherten Inhalt zu verändern. Private Notizen werden nie mit dem Text kopiert oder exportiert. Der offene Text wird alle paar Sekunden als Entwurf gesichert; schließt sich das Fenster oder die App vor dem Speichern, bietet der nächste Start den Entwurf einmal wieder an. Eine vertrauliche Kachel bekommt nie einen Entwurf. Wer eine neue Kachel speichert, die einer vorhandenen sehr ähnelt, sieht einen leisen Hinweis, das Speichern wird nicht aufgehalten. Bei einem Text mit Markdown legt \"Formatiert kopieren\" im Editor und im Kachel-Menü zusätzlich die gerenderte Fassung in die Zwischenablage, sodass Word oder ein Mailprogramm die Formatierung zeigt. Im Versionsverlauf behält ein zweiter Button neben Wiederherstellen die gewählte Fassung als neue Kachel und lässt die aktuelle unverändert.",
-      settings: ["Markdown-Vorschau, Syntax-Hervorhebung, Versionsverlauf, private Notizen: Expertenmenü → Funktionen → Editor", "Textfeld in dicktengleicher Schrift: Expertenmenü → Funktionen → Editor", "Formatiert kopieren, Live-Längenzähler, wortweiser Vergleich im Verlauf, Verwerfen bestätigen, Entwurf automatisch sichern und wie oft: Expertenmenü → Funktionen → Editor", "Hinweis auf ähnliche Prompts beim Speichern: Expertenmenü → System & Daten → Daten & Wartung"],
+        "Die Versionen speichern jede Änderung, sodass eine frühere wiederhergestellt werden kann. Die Markdown-Vorschau erscheint neben oder anstelle des Textfelds, ohne den gespeicherten Inhalt zu verändern. Private Notizen werden nie mit dem Text kopiert oder exportiert. Der offene Text wird alle paar Sekunden als Entwurf gesichert; schließt sich das Fenster oder die App vor dem Speichern, bietet der nächste Start den Entwurf einmal wieder an. Eine vertrauliche Kachel bekommt nie einen Entwurf. Wer eine neue Kachel speichert, die einer vorhandenen sehr ähnelt, sieht einen leisen Hinweis, das Speichern wird nicht aufgehalten. Bei einem Text mit Markdown legt \"Formatiert kopieren\" im Editor und im Kachel-Menü zusätzlich die gerenderte Fassung in die Zwischenablage, sodass Word oder ein Mailprogramm die Formatierung zeigt. In der Liste der Versionen behält ein zweiter Button neben Wiederherstellen die gewählte Fassung als neue Kachel und lässt die aktuelle unverändert.",
+      settings: ["Markdown-Vorschau, Syntax-Hervorhebung, Versionen, private Notizen: Expertenmenü → Funktionen → Editor", "Textfeld in dicktengleicher Schrift: Expertenmenü → Funktionen → Editor", "Formatiert kopieren, Live-Längenzähler, wortweiser Vergleich der Versionen, Verwerfen bestätigen, Entwurf automatisch sichern und wie oft: Expertenmenü → Funktionen → Editor", "Hinweis auf ähnliche Prompts beim Speichern: Expertenmenü → System & Daten → Daten & Wartung"],
       tip: "Markdown-Vorschau und private Notizen sind ab Werk aktiviert.",
     },
     {
@@ -904,7 +904,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Es wird nichts überwacht, bis die Funktion eingeschaltet ist. Kopien unter der Mindestlänge werden ignoriert, und die ältesten dieser Einträge fallen weg, sobald sie ihre Obergrenze überschreiten. Mit \"Vermutete Passwörter überspringen\" landet eine Kopie, die wie ein Passwort aussieht (eine Zeile, keine Leerzeichen, gemischte Buchstaben, Ziffern und Zeichen), nie im Eingang; das ist eine Schätzung, die im Zweifel lieber überspringt. Beim Ausschalten fragt die App, ob das Gesammelte behalten oder gelöscht werden soll; wer die Frage schließt, behält es. Nach dem Leeren des Eingangs bietet die Meldung einen Rückgängig-Button.",
-      settings: ["Vermutete Passwörter überspringen, Mindestlänge, Obergrenze: Expertenmenü → Bibliothek & Verlauf → Kopierverlauf"],
+      settings: ["Vermutete Passwörter überspringen, Mindestlänge, Obergrenze: Expertenmenü → Bibliothek & Kopierverlauf → Kopierverlauf"],
       tip: "Standardmäßig aus: es wird nichts überwacht, bis die Funktion eingeschaltet ist.",
     },
     {
@@ -974,7 +974,7 @@ export const HELP_CONTENT = {
         "Zwei Zeilen auswählen und in der Auswahlleiste \"Vergleichen\" klicken, um beide nebeneinander mit markierten Unterschieden zu sehen.",
       ],
       whatHappens: "Die Suche ist standardmäßig fehlertolerant und sortiert, falls nicht deaktiviert, nach am häufigsten oder zuletzt Verwendetem. Im Vergleich lässt sich der Text einer Seite in die andere übernehmen. Die Kachelansicht verhält sich bei Klicks, Menüs und Mehrfachauswahl genau wie die Liste.",
-      settings: ["Fuzzy-Suche, Typ- und Farb-Filter, gespeicherte Suchen: Expertenmenü → Bibliothek & Verlauf → Suche", "Suchfeld beim Öffnen fokussieren: Expertenmenü → Bibliothek & Verlauf → Suche", "Einträge je Suchliste (Bibliothek, Alles durchsuchen, Schnellstarter): Expertenmenü → Bibliothek & Verlauf → Suche", "Clevere Sortierung, Mehrfachauswahl für Stapelaktionen, Bild- und Video-Vorschau in den Zeilen, Kachelansicht: Expertenmenü → Bibliothek & Verlauf → Anzeige"],
+      settings: ["Fuzzy-Suche, Typ- und Farb-Filter, gespeicherte Suchen: Expertenmenü → Bibliothek & Kopierverlauf → Suche", "Suchfeld beim Öffnen fokussieren: Expertenmenü → Bibliothek & Kopierverlauf → Suche", "Einträge je Suchliste (Bibliothek, Alles durchsuchen, Schnellstarter): Expertenmenü → Bibliothek & Kopierverlauf → Suche", "Clevere Sortierung, Mehrfachauswahl für Stapelaktionen, Bild- und Video-Vorschau in den Zeilen, Kachelansicht: Expertenmenü → Bibliothek & Kopierverlauf → Anzeige"],
     },
     {
       section: "organising",
@@ -986,8 +986,8 @@ export const HELP_CONTENT = {
         "Mit den Pfeiltasten wählen und Enter drücken, oder einen Treffer anklicken.",
       ],
       whatHappens:
-        "Enter tut, was zum Treffer passt: Es kopiert eine Kachel oder einen Verlaufseintrag, öffnet einen Anhang, wechselt in eine Ansicht, öffnet und markiert eine Einstellung oder öffnet den Hilfeartikel. Jede Gruppe zeigt einige Treffer und ein \"Mehr anzeigen\". Ist das Feld leer, werden die letzten Suchen angeboten. Escape, ein Klick daneben oder die Lupe schließt es wieder.",
-      settings: ["Alles durchsuchen: Expertenmenü → Bibliothek & Verlauf → Suche"],
+        "Enter tut, was zum Treffer passt: Es kopiert eine Kachel oder einen Eintrag im Kopierverlauf, öffnet einen Anhang, wechselt in eine Ansicht, öffnet und markiert eine Einstellung oder öffnet den Hilfeartikel. Jede Gruppe zeigt einige Treffer und ein \"Mehr anzeigen\". Ist das Feld leer, werden die letzten Suchen angeboten. Escape, ein Klick daneben oder die Lupe schließt es wieder.",
+      settings: ["Alles durchsuchen: Expertenmenü → Bibliothek & Kopierverlauf → Suche"],
     },
     {
       section: "organising",
@@ -998,7 +998,7 @@ export const HELP_CONTENT = {
         "Die Tag-Filterleiste in der Bibliothek nutzen, um die Liste auf ein oder mehrere Tags einzugrenzen.",
       ],
       whatHappens: "Umbenennen, Umfärben oder Löschen eines Tags im Tag-Manager wirkt überall dort, wo er genutzt wird, in einem Schritt.",
-      settings: ["Tag-Filter-Modus (irgendeinen der ausgewählten Tags treffen oder alle): Expertenmenü → Bibliothek & Verlauf → Tags"],
+      settings: ["Tag-Filter-Modus (irgendeinen der ausgewählten Tags treffen oder alle): Expertenmenü → Bibliothek & Kopierverlauf → Tags"],
     },
     {
       section: "organising",
@@ -1011,7 +1011,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Eine archivierte Kachel verschwindet aus dem Raster und der Bibliotheksliste, die Suche findet sie aber weiterhin, und Exporte und Backups behalten sie wie jede andere Kachel. \"Aus dem Archiv\" im selben Menü holt sie zurück.",
-      settings: ["Archiv: Expertenmenü → Bibliothek & Verlauf → Anzeige"],
+      settings: ["Archiv: Expertenmenü → Bibliothek & Kopierverlauf → Anzeige"],
       tip: "Ab Werk aus.",
     },
     {
@@ -1021,10 +1021,10 @@ export const HELP_CONTENT = {
       howTo: [
         "Bibliothek öffnen und den Reiter Kopierverlauf wählen.",
         "Suchen, nach Typ oder Farbe filtern, oder einen Favoriten aus der Liste markieren.",
-        "Eine einzelne Zeile löschen oder den gesamten Verlauf leeren.",
+        "Eine einzelne Zeile löschen oder den gesamten Kopierverlauf leeren.",
       ],
-      whatHappens: "Die gruppierte Ansicht zeigt eine Zeile pro Kachel (ihre letzte Kopie) statt jedes einzelnen Ereignisses. Älterer Verlauf als die Aufbewahrungs-Einstellung wird automatisch gelöscht (bei einer neuen Installation 30 Tage, einstellbar, 0 behält alles).",
-      settings: ["Gruppierte Ansicht, Aufbewahrungsdauer: Expertenmenü → Bibliothek & Verlauf → Kopierverlauf", "Einen Eintrag überspringen, der die Kopie davor wiederholt: Expertenmenü → Bibliothek & Verlauf → Kopierverlauf"],
+      whatHappens: "Die gruppierte Ansicht zeigt eine Zeile pro Kachel (ihre letzte Kopie) statt jedes einzelnen Ereignisses. Älterer Kopierverlauf als die Aufbewahrungs-Einstellung wird automatisch gelöscht (bei einer neuen Installation 30 Tage, einstellbar, 0 behält alles).",
+      settings: ["Gruppierte Ansicht, Aufbewahrungsdauer: Expertenmenü → Bibliothek & Kopierverlauf → Kopierverlauf", "Einen Eintrag überspringen, der die Kopie davor wiederholt: Expertenmenü → Bibliothek & Kopierverlauf → Kopierverlauf"],
     },
     {
       section: "organising",
@@ -1055,7 +1055,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Der Ausschluss von Bildschirmaufnahmen macht das Fenster für Screenshot- und Aufnahmeprogramme unsichtbar, auch für die eigenen. Bleibt eine Aufnahme also leer, zuerst diese Einstellung prüfen. Eine optionale, standardmäßig ausgeschaltete Einstellung liest Text aus einem angehängten Bild, damit die Bibliothekssuche ihn auch findet; ein Treffer nur dort trägt die Kennzeichnung \"im Bild gefunden\", damit er nie wie ein zufälliger Treffer wirkt. Dieser erkannte Text bleibt sonst außerhalb der App: nirgends angezeigt, nie exportiert, nie synchronisiert, und in der Länge begrenzt. Wird das Bild entfernt oder ersetzt, ist der Text sofort weg, und das Ausschalten der Einstellung entfernt ihn aus jeder Kachel, auch im Papierkorb. Eine einzelne Kachel kann außerdem als vertraulich markiert werden; siehe \"Vertrauliche Kacheln\" weiter unten.",
-      settings: ["Von Bildschirmaufnahmen ausschließen, Kacheln oder Medien unscharf machen, Namen verbergen: Expertenmenü → System & Daten → Datenschutz", "Text in angehängten Bildern für die Suche erfassen, Bildtext-Grenze: Expertenmenü → Bibliothek & Verlauf → Suche", "Eine Kachel als vertraulich markieren, Sperr-Zeit des Tresors: Expertenmenü → System & Daten → Datenschutz"],
+      settings: ["Von Bildschirmaufnahmen ausschließen, Kacheln oder Medien unscharf machen, Namen verbergen: Expertenmenü → System & Daten → Datenschutz", "Text in angehängten Bildern für die Suche erfassen, Bildtext-Grenze: Expertenmenü → Bibliothek & Kopierverlauf → Suche", "Eine Kachel als vertraulich markieren, Sperr-Zeit des Tresors: Expertenmenü → System & Daten → Datenschutz"],
       tip: "Der Ausschluss von Bildschirmaufnahmen ist standardmäßig an: für normale Screenshots oder Aufnahmen dieses Fensters ausschalten.",
     },
     {
@@ -1240,7 +1240,7 @@ export const HELP_CONTENT = {
         "Eine Kachel normal bearbeiten, oder ihre Markdown-Datei direkt bearbeiten; beide Richtungen bleiben synchron.",
       ],
       whatHappens:
-        "Anders als die Datenbank sind die Markdown-Dateien Klartext: wer Zugriff auf diesen Ordner hat, kann den Inhalt lesen; ein synchronisierter oder geteilter Ordner sollte deshalb für Sensibles vermieden werden. Eine Kachel mit angehängter Datei, Bild oder PDF wird als Verweis synchronisiert: Der Kopf trägt Pfad und PDF-Seite, nie die Datei selbst; der andere Rechner braucht also denselben Pfad, damit der Button dort funktioniert. Ein direkt eingefügter Screenshot hat gar keinen Pfad und bleibt nur in der Datenbank. Eine vertrauliche Kachel wird nie in den Ordner geschrieben, und eine Datei ändert nie eine vertrauliche Kachel. Eine Datei, deren Kachel im Papierkorb liegt, holt sie nicht als zweite Kachel zurück. Eine in einer eingehenden Datei genannte Ansicht oder ein Ordner, den es hier noch nicht gibt, wird automatisch angelegt, per Namensabgleich. Eine im Ordner gelöschte Datei löscht die Kachel nicht (sie wird im nächsten Durchlauf neu geschrieben); wer die Kachel in der App löscht, löscht auch ihre Datei. Der Dateiname ist die feste Kennung der Kachel, von Hand umbenennen erzeugt deshalb eine zweite Kachel statt einer umbenannten. Wurden Kachel und Datei gleichzeitig geändert, gewinnt in diesem Durchlauf die Datei, und die ersetzte Fassung bleibt in der Versionsgeschichte der Kachel; umgekehrt gewinnt die App die Datei, und deren Text bleibt als Konfliktkopie daneben liegen. Dateien, die diese App nicht geschrieben oder noch nie gesehen hat, werden nie geändert oder gelöscht, und eine Datei über 8 MB wird ganz übersprungen statt abgeschnitten. Ein Ordnerwechsel fragt, ob der alte Ordner gelöscht werden soll; gelöscht wird dabei nur, was diese App selbst geschrieben hat, nie ein Unterordner, und gar nichts, wenn etwas Fremdes darin liegt. Ein nicht erreichbarer Ordner pausiert die Synchronisierung nach einigen Fehlversuchen, statt endlos weiterzuversuchen.",
+        "Anders als die Datenbank sind die Markdown-Dateien Klartext: wer Zugriff auf diesen Ordner hat, kann den Inhalt lesen; ein synchronisierter oder geteilter Ordner sollte deshalb für Sensibles vermieden werden. Eine Kachel mit angehängter Datei, Bild oder PDF wird als Verweis synchronisiert: Der Kopf trägt Pfad und PDF-Seite, nie die Datei selbst; der andere Rechner braucht also denselben Pfad, damit der Button dort funktioniert. Ein direkt eingefügter Screenshot hat gar keinen Pfad und bleibt nur in der Datenbank. Eine vertrauliche Kachel wird nie in den Ordner geschrieben, und eine Datei ändert nie eine vertrauliche Kachel. Eine Datei, deren Kachel im Papierkorb liegt, holt sie nicht als zweite Kachel zurück. Eine in einer eingehenden Datei genannte Ansicht oder ein Ordner, den es hier noch nicht gibt, wird automatisch angelegt, per Namensabgleich. Eine im Ordner gelöschte Datei löscht die Kachel nicht (sie wird im nächsten Durchlauf neu geschrieben); wer die Kachel in der App löscht, löscht auch ihre Datei. Der Dateiname ist die feste Kennung der Kachel, von Hand umbenennen erzeugt deshalb eine zweite Kachel statt einer umbenannten. Wurden Kachel und Datei gleichzeitig geändert, gewinnt in diesem Durchlauf die Datei, und die ersetzte Fassung bleibt als Version der Kachel erhalten; umgekehrt gewinnt die App die Datei, und deren Text bleibt als Konfliktkopie daneben liegen. Dateien, die diese App nicht geschrieben oder noch nie gesehen hat, werden nie geändert oder gelöscht, und eine Datei über 8 MB wird ganz übersprungen statt abgeschnitten. Ein Ordnerwechsel fragt, ob der alte Ordner gelöscht werden soll; gelöscht wird dabei nur, was diese App selbst geschrieben hat, nie ein Unterordner, und gar nichts, wenn etwas Fremdes darin liegt. Ein nicht erreichbarer Ordner pausiert die Synchronisierung nach einigen Fehlversuchen, statt endlos weiterzuversuchen.",
       settings: ["Ordner-Sync, Synchronisierungsordner, Abfragetakt, Pause nach Fehlversuchen: Expertenmenü → Funktionen → Prompt-Synchronisierung"],
       tip: "Dies ist eine Beta-Funktion: den Synchronisierungsordner nur dort ablegen, wo niemand Unbefugtes mitliest.",
     },
