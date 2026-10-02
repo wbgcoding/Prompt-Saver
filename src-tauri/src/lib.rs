@@ -2858,6 +2858,40 @@ impl Settings {
             }
             self.retention_defaults_v2 = true;
         }
+        // The expert drawing defaults of the screenshot editor became the sizes each
+        // tool remembers. Whoever had set one keeps it as that tool's starting size,
+        // unless sizes are already remembered. Values outside a field's range are not
+        // carried (the editor would ignore them anyway).
+        if !self.ui_texts.contains_key("snipToolSizes") {
+            let mut sizes = serde_json::Map::new();
+            let mut put = |old: &str, tool: &str, field: &str, scale: f64, lo: f64, hi: f64| {
+                if let Some(v) = self.ui_values.get(old).copied() {
+                    let v = v / scale;
+                    if v.is_finite() && v >= lo && v <= hi {
+                        let entry = sizes.entry(tool.to_string()).or_insert_with(|| serde_json::json!({}));
+                        entry[field] = serde_json::json!(v);
+                    }
+                }
+            };
+            for (old, tool) in [
+                ("snipPenPx", "pen"),
+                ("snipMarkerPx", "marker"),
+                ("snipLinePx", "line"),
+                ("snipArrowPx", "arrow"),
+                ("snipRectPx", "rect"),
+                ("snipEllipsePx", "ellipse"),
+                ("snipStepPx", "step"),
+            ] {
+                put(old, tool, "width", 1.0, 1.0, 80.0);
+            }
+            put("snipTextPx", "text", "fontPx", 1.0, 10.0, 96.0);
+            put("snipTextOutlinePx", "text", "outlinePx", 1.0, 1.0, 12.0);
+            put("snipPixelBlock", "pixelate", "blockPx", 1.0, 4.0, 64.0);
+            put("snipSpotlightDim", "spotlight", "dim", 100.0, 0.1, 0.9);
+            if !sizes.is_empty() {
+                self.ui_texts.insert("snipToolSizes".into(), serde_json::Value::Object(sizes).to_string());
+            }
+        }
         if let Some(h) = self.ui_values.get_mut("updateCheckH") {
             *h = clamp_update_hours(*h);
         }
@@ -51857,6 +51891,48 @@ mod tests {
         assert_eq!(run(&[("boldTileNames", false)], &[]), None);
         // A stored choice is never overwritten.
         assert_eq!(run(&[("boldTileNames", true)], &[("tileStyle", "mono")]).as_deref(), Some("mono"));
+    }
+
+    #[test]
+    fn old_snip_sizes_carry_into_the_remembered_sizes() {
+        let run = |values: &[(&str, f64)], texts: &[(&str, &str)]| {
+            let mut s = Settings::default();
+            for (k, v) in values {
+                s.ui_values.insert((*k).into(), *v);
+            }
+            for (k, v) in texts {
+                s.ui_texts.insert((*k).into(), (*v).into());
+            }
+            s.migrate();
+            for (k, _) in values {
+                assert!(!s.ui_values.contains_key(*k), "{k} survived migrate");
+            }
+            s.ui_texts
+                .get("snipToolSizes")
+                .map(|j| serde_json::from_str::<serde_json::Value>(j).unwrap())
+        };
+        let j = run(
+            &[("snipPenPx", 10.0), ("snipTextPx", 40.0), ("snipTextOutlinePx", 5.0), ("snipPixelBlock", 20.0), ("snipSpotlightDim", 70.0), ("snipStepPx", 9.0)],
+            &[],
+        )
+        .unwrap();
+        assert_eq!(j["pen"]["width"], 10.0);
+        assert_eq!(j["text"]["fontPx"], 40.0);
+        assert_eq!(j["text"]["outlinePx"], 5.0);
+        assert_eq!(j["pixelate"]["blockPx"], 20.0);
+        assert_eq!(j["spotlight"]["dim"], 0.7);
+        assert_eq!(j["step"]["width"], 9.0);
+        assert!(j.get("marker").is_none());
+        // An out-of-range old value is not carried.
+        let j = run(&[("snipPenPx", 500.0), ("snipRectPx", 7.0)], &[]).unwrap();
+        assert!(j.get("pen").is_none());
+        assert_eq!(j["rect"]["width"], 7.0);
+        // Nothing stored: nothing written. Remembered sizes already stored win.
+        assert!(run(&[], &[]).is_none());
+        let j = run(&[("snipPenPx", 10.0)], &[("snipToolSizes", "{\"pen\":{\"width\":3}}")]).unwrap();
+        assert_eq!(j["pen"]["width"], 3.0);
+        // Only the old arrow-head scale: no sizes to carry.
+        assert!(run(&[("snipArrowHeadScale", 4.0)], &[]).is_none());
     }
 
     #[test]
