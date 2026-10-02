@@ -66,6 +66,15 @@ PROBE = """
   try {
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   const click = async (id) => { const e = document.getElementById(id); if (e) { e.click(); await sleep(200); } };
+  // Placeholders are only ever asked in the standalone window: the stub keeps the
+  // payload of open_var_window, and the window answers with a vars-filled event.
+  const varReq = () => { try { return JSON.parse(window.__VAR_PAYLOAD__ || 'null'); } catch (e) { return null; } };
+  const varAnswer = async (values) => {
+    window.__FIRE__('vars-filled', JSON.stringify({ values, remember: values.map(() => false) }));
+    await sleep(250);
+    window.__VAR_PAYLOAD__ = undefined;
+  };
+  const varCancel = async () => { window.__FIRE__('vars-filled', null); await sleep(200); window.__VAR_PAYLOAD__ = undefined; };
   // The header padding stays at the former default of the removed setting (measured
   // before the setting went: 10px).
   { const hp = parseFloat(getComputedStyle(document.querySelector('.header')).paddingTop);
@@ -1930,6 +1939,9 @@ PROBE = """
         await sleep(200);
         inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
         await sleep(150);
+        // A prompt with placeholders leaves its window up: close it, or it would
+        // swallow the next copy of any prompt.
+        if (window.__VAR_PAYLOAD__) await varCancel();
       };
       await runTerm('Prompt 1');
       await runTerm('Prompt 2');
@@ -2301,41 +2313,48 @@ PROBE = """
     if (!document.getElementById('grid-empty').classList.contains('hidden')) {
       out.errors.push('the empty-grid hint shows although the grid has prompts');
     }
-    // Copying the prompt with placeholders must open and close the fill-in dialog —
-    // and a plain click must NOT paste into the previous app (that is what the
-    // double-click / Enter shortcut is for).
+    // Copying the prompt with placeholders must open the placeholder window and,
+    // once it answers, finish the copy -- and a plain click must NOT paste into the
+    // previous app (that is what the double-click / Enter shortcut is for).
     const tiles = [...document.querySelectorAll('#grid .tile')];
     const varTile = tiles.find(el => (el.dataset.id || '') === 'p1');
     if (varTile) {
+      window.__VAR_PAYLOAD__ = undefined;
       // The grid listens for pointer events (it tracks drags), so .click() alone
-      // never reaches the handler — dispatch the real sequence.
+      // never reaches the handler -- dispatch the real sequence.
       for (const type of ['pointerdown', 'pointerup', 'click']) {
         varTile.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, button: 0, isPrimary: true, pointerId: 1 }));
       }
       await sleep(400);
-      const varsOpen = !document.getElementById('vars-modal').classList.contains('hidden');
-      if (!varsOpen) out.errors.push('clicking a variable prompt did not open the fill-in dialog');
+      const varsReq1 = varReq();
+      if (!varsReq1) out.errors.push('clicking a variable prompt did not open the placeholder window');
       // 425: a text default in the prompt itself prefills the field on first
       // ask (Text=Hello); a variable with no default stays empty (Language).
-      if (varsOpen) {
-        const prefill = document.querySelectorAll('#vars-fields input[type=text]');
-        if (prefill[0]?.value !== 'Hello') out.errors.push('425: the text default did not prefill the field: ' + prefill[0]?.value);
-        if (prefill[1]?.value) out.errors.push('425: a variable with no default was prefilled anyway: ' + prefill[1].value);
+      if (varsReq1) {
+        if (varsReq1.rows[0]?.value !== 'Hello') out.errors.push('425: the text default did not prefill the field: ' + varsReq1.rows[0]?.value);
+        if (varsReq1.rows[1]?.value) out.errors.push('425: a variable with no default was prefilled anyway: ' + varsReq1.rows[1].value);
+        if (document.getElementById('vars-modal') || document.getElementById('vars-fields')) out.errors.push('the main window still carries an in-window placeholder dialog');
+        await varAnswer(['Hello', 'Dutch']);
       }
-      // 37: "Clear all" empties every text field in one click, without touching a
-      // choice dropdown (there is none here, but the handler must not throw either).
-      if (varsOpen) {
-        const varsTexts = document.querySelectorAll('#vars-fields input[type=text]');
-        for (const el of varsTexts) el.value = 'filled';
-        await click('vars-clear-all');
-        for (const el of varsTexts) {
-          if (el.value !== '') out.errors.push('"clear all" left a variable field non-empty: ' + el.value);
-        }
-      }
-      await click('vars-ok');
-      await sleep(250);
       if ((window.__SMOKE_CALLS__ || []).includes('paste_into_previous')) {
         out.errors.push('a single click on a variable prompt pasted into the previous app');
+      }
+      // A second press while the window is still up is the second half of a double
+      // click: it opens no second question and turns the pending copy into a paste.
+      await sleep(2400); // past the per-prompt copy cooldown (2000ms)
+      window.__VAR_PAYLOAD__ = undefined;
+      (window.__SMOKE_CALLS__ = window.__SMOKE_CALLS__ || []).length = 0;
+      for (let press = 0; press < 2; press++) {
+        for (const type of ['pointerdown', 'pointerup', 'click']) {
+          varTile.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, button: 0, isPrimary: true, pointerId: 1 }));
+        }
+        await sleep(200);
+      }
+      const dblOpens = window.__SMOKE_CALLS__.filter(c => c === 'open_var_window').length;
+      if (dblOpens !== 1) out.errors.push('a double click on a variable prompt opened the placeholder window ' + dblOpens + ' times');
+      await varAnswer(['Hello', 'Dutch']);
+      if (!window.__SMOKE_CALLS__.includes('paste_into_previous')) {
+        out.errors.push('a double click on a variable prompt did not paste after the window was filled');
       }
     }
     // The chain button latches (off -> on -> infinite), so the two clicks above left
@@ -2352,14 +2371,15 @@ PROBE = """
       await sleep(400);
       return true;
     };
-    const varsHidden = () => document.getElementById('vars-modal').classList.contains('hidden');
+    const varsHidden = () => !varReq();
     // F12: a prompt whose placeholders all resolve themselves must never ask, and
     // the copied text must carry no leftover {#{ }#} fence.
     window.__LAST_COPY__ = undefined;
+    window.__VAR_PAYLOAD__ = undefined;
     if (!await clickTile('p3')) {
       out.errors.push('the dynamic-placeholder prompt is missing from the grid');
     } else {
-      if (!varsHidden()) { out.errors.push('an automatic placeholder still opened the fill-in dialog'); await click('vars-close'); }
+      if (!varsHidden()) { out.errors.push('an automatic placeholder still opened the placeholder window'); await varCancel(); }
       const copied = window.__LAST_COPY__ || '';
       if (/\\{#\\{/.test(copied)) out.errors.push('an automatic placeholder was left unresolved: ' + copied);
       if (!copied.includes('CLIPTEXT')) out.errors.push('the clipboard placeholder did not pick up the clipboard text');
@@ -2414,14 +2434,13 @@ PROBE = """
         await sleep(150);
         // p3: dynamic placeholders only -- self-filling, no dialog, no ask badges.
         if (!await clickTile('p3')) out.errors.push('445: could not pick p3 into the chain');
-        // p1: two manual placeholders -- opens the fill-in dialog, nothing fills them yet.
+        // p1: two manual placeholders -- opens the placeholder window, nothing fills them yet.
+        window.__VAR_PAYLOAD__ = undefined;
         if (!await clickTile('p1')) {
           out.errors.push('445: could not pick p1 into the chain');
         } else {
-          const fields = document.querySelectorAll('#vars-fields input[type=text]');
-          fields.forEach((f) => { f.value = 'x'; });
-          await click('vars-ok');
-          await sleep(250);
+          const chainReq = varReq();
+          await varAnswer((chainReq ? chainReq.rows : []).map(() => 'x'));
         }
         const bar = document.getElementById('chain-overview');
         if (!bar || bar.classList.contains('hidden')) {
@@ -2630,39 +2649,36 @@ PROBE = """
     // F13: a mixed prompt asks only for the manual variable and offers the choice
     // as a themed dropdown; the pick lands in the copied text.
     window.__LAST_COPY__ = undefined;
+    window.__VAR_PAYLOAD__ = undefined;
     if (!await clickTile('p5')) {
       out.errors.push('the choice-variable prompt is missing from the grid');
     } else if (varsHidden()) {
-      out.errors.push('the mixed variable prompt did not open the fill-in dialog');
+      out.errors.push('the mixed variable prompt did not open the placeholder window');
     } else {
-      const sel = document.querySelector('#vars-fields select.vars-select');
-      const texts = document.querySelectorAll('#vars-fields input[type=text]');
+      const mixedRows = varReq().rows;
+      const sel = mixedRows.find(r => r.options.length);
+      const texts = mixedRows.filter(r => !r.options.length);
       if (!sel) {
-        out.errors.push('the choice variable is not rendered as a dropdown');
+        out.errors.push('the choice variable is not offered as a list of options');
       } else {
-        if ([...sel.options].map(o => o.value).join(',') !== 'formal,casual,witty') {
-          out.errors.push('the choice dropdown lists the wrong options');
+        if (sel.options.join(',') !== 'formal,casual,witty') {
+          out.errors.push('the choice lists the wrong options');
         }
         // 425: the token's own default (tone=casual) preselects that entry
         // instead of the list's first one.
-        if (sel.value !== 'casual') out.errors.push('425: the choice dropdown did not preselect the text default: ' + sel.value);
-        sel.value = 'witty';
+        if (sel.value !== 'casual') out.errors.push('425: the choice did not preselect the text default: ' + sel.value);
       }
-      if (texts.length !== 1) out.errors.push('the mixed dialog shows ' + texts.length + ' text fields instead of 1');
-      if (texts[0]) texts[0].value = 'Rust';
-      await click('vars-ok');
-      await sleep(250);
+      if (texts.length !== 1) out.errors.push('the mixed window shows ' + texts.length + ' text fields instead of 1');
+      await varAnswer(mixedRows.map(r => r.options.length ? 'witty' : 'Rust'));
       const copied = window.__LAST_COPY__ || '';
       if (copied !== 'Write a witty note about Rust.') out.errors.push('the filled text is wrong: ' + copied);
     }
     // The chosen option must come back preselected on the next copy.
+    window.__VAR_PAYLOAD__ = undefined;
     if (await clickTile('p5')) {
-      const sel2 = document.querySelector('#vars-fields select.vars-select');
+      const sel2 = (varReq() || { rows: [] }).rows.find(r => r.options.length);
       if (!sel2 || sel2.value !== 'witty') out.errors.push('the last choice was not remembered');
-      // P36: a remembered pick says so, since a choice variable has no checkbox.
-      if (sel2 && !sel2.title.trim()) out.errors.push('the remembered choice has no "from last time" hint');
-      await click('vars-close');
-      await sleep(200);
+      await varCancel();
     }
     // Copying a rotating prompt with Auto on has to hand its id to copy_text —
     // that id is the only thing that lets the backend open an auto-advance
@@ -2678,11 +2694,9 @@ PROBE = """
     // renders later entries from their raw text, so the next paste would deliver
     // the placeholder instead of the answer.
     window.__LAST_COPY_ID__ = undefined;
+    window.__VAR_PAYLOAD__ = undefined;
     if (await clickTile('p1')) {
-      const texts = document.querySelectorAll('#vars-fields input[type=text]');
-      for (const f of texts) f.value = 'x';
-      await click('vars-ok');
-      await sleep(250);
+      await varAnswer((varReq() || { rows: [] }).rows.map(() => 'x'));
       if (window.__LAST_COPY_ID__ !== undefined) {
         out.errors.push('a placeholder prompt armed an auto-advance session: ' + window.__LAST_COPY_ID__);
       }
@@ -3165,9 +3179,6 @@ PROBE = """
     }
     if (calls().includes('focus_main_window')) {
       out.errors.push('the hotkey fill-in pulled the main window forward');
-    }
-    if (!document.getElementById('vars-modal').classList.contains('hidden')) {
-      out.errors.push('the hotkey fill-in opened the in-window dialog as well');
     }
     {
       let req = null;
@@ -4576,13 +4587,14 @@ PROBE = """
       }
       if (document.querySelector('.drag-ghost')) out.errors.push('a drag-out left a reorder ghost behind');
       // Once the OS owns the gesture a stray pointerup must not ALSO copy the prompt
-      // (p1 asks for placeholders, so a copy would show up as the fill-in dialog).
+      // (p1 asks for placeholders, so a copy would show up as the placeholder window).
       calls().length = 0;
+      window.__VAR_PAYLOAD__ = undefined;
       window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: 20, clientY: 20 }));
       await sleep(200);
-      if (!document.getElementById('vars-modal').classList.contains('hidden')) {
+      if (varReq()) {
         out.errors.push('a drag-out also started a copy');
-        await click('vars-close');
+        await varCancel();
       }
       if (calls().includes('copy_prompt')) out.errors.push('a drag-out also copied the prompt');
       varTile2.dispatchEvent(new DragEvent('dragend', { bubbles: true }));
@@ -14883,21 +14895,20 @@ VAR_FIXED_PROBE = """
         tile.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, button: 0, isPrimary: true, pointerId: 1 }));
       }
       await sleep(400);
-      if (document.getElementById('vars-modal').classList.contains('hidden')) {
-        errs.push('444: copying a prompt with a placeholder did not open the fill-in dialog');
+      let fixedReq = null;
+      try { fixedReq = JSON.parse(window.__VAR_PAYLOAD__ || 'null'); } catch (e) { fixedReq = null; }
+      if (!fixedReq) {
+        errs.push('444: copying a prompt with a placeholder did not open the placeholder window');
       } else {
-        const field2 = document.querySelectorAll('#vars-fields .field')[0];
-        const control = field2 && field2.querySelector('input[type=text]');
-        if (!control) {
-          errs.push('444: the fill-in dialog has no text field for the placeholder');
+        const row = fixedReq.rows[0];
+        if (!row || row.options.length) {
+          errs.push('444: the placeholder window has no text row for the placeholder');
         } else {
-          if (control.value) errs.push('444: the fixed value was inserted instead of only suggested, got: ' + control.value);
-          if (control.placeholder !== 'coffee') errs.push('444: the field placeholder does not carry the fixed value, got: ' + control.placeholder);
+          if (row.value) errs.push('444: the fixed value was inserted instead of only suggested, got: ' + row.value);
+          if (row.placeholder !== 'coffee') errs.push('444: the row placeholder does not carry the fixed value, got: ' + row.placeholder);
+          if (!row.fixed) errs.push('444: the fixed-value marker flag is missing on the row');
         }
-        if (!field2 || !field2.querySelector('.var-fixed-marker')) {
-          errs.push('444: the fixed-value marker is missing next to the field');
-        }
-        document.getElementById('vars-close').click();
+        window.__FIRE__('vars-filled', null);
         await sleep(150);
       }
     }

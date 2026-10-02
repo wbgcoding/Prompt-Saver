@@ -56,8 +56,6 @@ before the finished text reaches the clipboard.
   under the editor's text box rather than typing them by hand
 - Choice placeholders: a dropdown of preset values instead of free text
 - Remember choices: the popup pre-fills the last answer for that tile
-- Popup in its own window: useful with the floating buttons, where the main
-  window may be hidden
 - Fixed values (off by default, expert menu): a maintained list of name and
   value pairs the popup suggests for a matching placeholder, one step below a
   remembered last input and above the text's own default. Shown only as the

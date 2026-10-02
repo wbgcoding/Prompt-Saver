@@ -80,7 +80,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Only the filled-in text reaches the clipboard; the raw {#{...}#} markup is never copied. A dynamic placeholder (date, time, clipboard, UUID) uses its own syntax, {#{/date\\}#}, and fills itself in with no popup at all. The popup can remember the value last typed for a placeholder and offer it again. A list of fixed values, kept in the expert menu, is suggested for a placeholder of the same name; it is only ever suggested, never filled in on its own.",
-      settings: ["Dynamic placeholders, choice placeholders, remember choices, remember typed values, fixed values list, date and time style, popup in its own window: Expert menu → Features → Placeholders"],
+      settings: ["Dynamic placeholders, choice placeholders, remember choices, remember typed values, fixed values list, date and time style: Expert menu → Features → Placeholders"],
       sketches: ["placeholderAnatomy"],
     },
     {
@@ -828,7 +828,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Nur der ausgefüllte Text erreicht die Zwischenablage; das rohe {#{...}#}-Markup wird nie kopiert. Ein dynamischer Platzhalter (Datum, Uhrzeit, Zwischenablage, UUID) nutzt eine eigene Schreibweise, {#{/date\\}#}, und füllt sich ganz ohne Popup selbst aus. Das Popup kann sich den zuletzt eingetippten Wert eines Platzhalters merken und ihn wieder anbieten. Eine Liste fester Werte im Expertenmenü wird für einen gleichnamigen Platzhalter vorgeschlagen; sie wird immer nur vorgeschlagen, nie von selbst eingesetzt.",
-      settings: ["Dynamische Platzhalter, Auswahl-Platzhalter, Auswahl merken, eingetippte Werte merken, Liste fester Werte, Datums- und Zeitformat, Popup im eigenen Fenster: Expertenmenü → Funktionen → Platzhalter"],
+      settings: ["Dynamische Platzhalter, Auswahl-Platzhalter, Auswahl merken, eingetippte Werte merken, Liste fester Werte, Datums- und Zeitformat: Expertenmenü → Funktionen → Platzhalter"],
       sketches: ["placeholderAnatomy"],
     },
     {

@@ -214,11 +214,6 @@ const ICON_EDIT =
   '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 20h4L18.5 9.5a2 2 0 0 0-2.8-2.8L5 17.2V20Zm9.5-12.5 3 3"/></svg>';
 const ICON_TRASH =
   '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M9 7V5h6v2m-8 0 1 13h8l1-13M10 11v6M14 11v6"/></svg>';
-// Marks a placeholder fill-in field whose empty state is only a SUGGESTED
-// fixed value (shown as the field's placeholder text, never inserted on its
-// own), distinct from the plain "remembered" state.
-const ICON_PIN =
-  '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5Z"/></svg>';
 // The original path (M8 7 3 12l5 5M3 12h11a5 5 0 0 1 0 10h-4) was not
 // centered in its 24x24 viewBox (its true bounds sit low and to the left),
 // which read as an off-center glyph in the toast's centered icon badge even
@@ -1278,7 +1273,6 @@ const FLAG_LABELS = {
   dynVars: "flagDynVars",               // self-filling placeholder names
   choiceVars: "flagChoiceVars",         // {#{name|a,b}#} dropdown variables
   choiceRemember: "flagChoiceRemember", // reopen a choice on its last pick
-  varPopupWindow: "flagVarPopupWindow", // ask for placeholders in a small window of their own
   codeHighlight: "flagCodeHighlight",   // syntax colours in the preview's code blocks
   codeAutoDetect: "flagCodeAutoDetect", // render an unfenced code prompt as code
   notesInTooltip: "flagNotesInTooltip", // show the private note in the tile tooltip
@@ -2179,7 +2173,7 @@ const EXPERT_TABS = [
     // SUGGESTED in the fill-in dialog) stays in this same group rather than
     // its own -- its gate parent promptVars lives here, and a gated flag has
     // to sit with its parent.
-    { title: "expGroupVars", flags: ["promptVars", { key: "varDefaults", gate: "promptVars" }, { key: "dynVars", gate: "promptVars" }, { key: "choiceVars", gate: "promptVars" }, { key: "choiceRemember", gate: "choiceVars" }, { key: "varPopupWindow", gate: "promptVars" }, { key: "varFixed", gate: "promptVars" }], dropdowns: ["dateStyle", "timeStyle"], varFixedList: true },
+    { title: "expGroupVars", flags: ["promptVars", { key: "varDefaults", gate: "promptVars" }, { key: "dynVars", gate: "promptVars" }, { key: "choiceVars", gate: "promptVars" }, { key: "choiceRemember", gate: "choiceVars" }, { key: "varFixed", gate: "promptVars" }], dropdowns: ["dateStyle", "timeStyle"], varFixedList: true },
     // The editor: what it shows beside the text box. Preview and highlighter belong together; the
     // highlighter only ever paints inside the preview.
     { title: "expGroupEditor", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }, { key: "copyFormatted", gate: "mdPreview" }, "lengthCounter", "promptHistory", { key: "historyDiff", gate: "promptHistory" }, "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace", "confirmDiscard"], values: ["hlFontPx", "historyPerPrompt", "notesTipLen", "historyPreviewLen", "editorDraftSecs", "nameMaxLen"], dropdowns: ["counterUnits"] },
@@ -2514,7 +2508,7 @@ function applyValues() {
 // convention tip<Key>. Self-explanatory settings are deliberately left out.
 const EXPERT_TIPS = [
   // General / creating
-  "storeFiles", "attachTextPreview", "attachPreviewKb", "varDefaults", "dynVars", "choiceVars", "choiceRemember", "varPopupWindow", "varFixed",
+  "storeFiles", "attachTextPreview", "attachPreviewKb", "varDefaults", "dynVars", "choiceVars", "choiceRemember", "varFixed",
   "lengthCounter", "promptHistory", "historyDiff", "historyPreviewLen", "editorMonospace",
   "promptNotes", "notesInTooltip", "notesTipLen",
   "mdPreview", "codeHighlight", "codeAutoDetect", "hlFontPx", "copyFormatted",
@@ -7701,11 +7695,9 @@ async function peekRotatedText(p) {
 
 // The one place every copy path goes through: reserved names resolve themselves,
 // the rest are asked for once. Returns the finished text, null when the user
-// cancelled: or false when `standalone` was asked for and the small window could
-// not be opened, so the caller can fall back to the in-window dialog.
-// `standalone` is set only by copies started from OUTSIDE the app (global hotkey,
-// tray): everything inside the window uses the in-window dialog.
-async function resolveVars(text, standalone = false) {
+// cancelled, or when the small window the placeholders are asked in could not be
+// opened (a toast says so; every caller treats null as a cancel).
+async function resolveVars(text) {
   const tokens = extractVars(text);
   if (!tokens.length) return text;
   const values = {};
@@ -7727,8 +7719,8 @@ async function resolveVars(text, standalone = false) {
     for (const tok of dyn) values[tok] = dynValue(dynName(parseVar(tok).name), now, ctx);
   }
   if (ask.length) {
-    const filled = standalone ? await promptVarsWindow(ask) : await promptVarsDialog(ask);
-    if (filled === false) return false;
+    const filled = await promptVarsWindow(ask);
+    if (filled === false) { toast(t("varsWindowFailed")); return null; }
     if (!filled) return null;
     Object.assign(values, filled);
   }
@@ -7916,169 +7908,6 @@ function varFixedListRow() {
   return wrap;
 }
 
-// Small marker next to a fill-in field whose starting state came from the
-// fixed-value list, so it reads as "on file for this name", not just an
-// ordinary placeholder or default.
-function fixedMarker() {
-  const el = document.createElement("span");
-  el.className = "var-fixed-marker";
-  el.title = t("fixedValueHint");
-  putIcon(el, ICON_PIN);
-  return el;
-}
-
-// Fill-in dialog shown when copying a prompt that holds {#{placeholders}#}.
-// `vars` are raw tokens; resolves a {token: value} map, or null when cancelled.
-let varsCleanup = null;
-function promptVarsDialog(vars) {
-  const root = $("vars-modal");
-  $("vars-title").textContent = t("varsTitle");
-  const fields = $("vars-fields");
-  fields.innerHTML = "";
-  // Remembered values are stored globally by variable NAME (expert: varDefaults);
-  // a choice variable keeps its last pick without a checkbox (expert: choiceRemember).
-  const useRemember = flag("varDefaults");
-  const keepChoice = flag("choiceRemember");
-  const remembered = readRememberedVars();
-  // Fixed values (expert: varFixed) are the tier between a remembered input
-  // and the text's own default -- a plain text field only ever SUGGESTS one,
-  // as its placeholder, never inserted into the value the user has to
-  // actively clear first.
-  const useFixed = flag("varFixed");
-  const fixedVars = useFixed ? readFixedVars() : {};
-  const rows = vars.map((token) => {
-    const { name, options, default: def } = parseVar(token);
-    const label = document.createElement("label");
-    label.className = "field";
-    const span = document.createElement("span");
-    span.textContent = name; // textContent: a variable name is never markup
-    let control;
-    let cb = null;
-    if (options.length) {
-      control = document.createElement("select");
-      control.className = "modal-input expert-select vars-select";
-      for (const o of options) {
-        const opt = document.createElement("option");
-        opt.value = o;
-        opt.textContent = o;
-        control.appendChild(opt);
-      }
-      const last = keepChoice ? remembered[name] : null;
-      const usedLast = options.includes(last);
-      const fixedPick = name in fixedVars ? fixedVars[name] : null;
-      const usedFixed = !usedLast && options.includes(fixedPick);
-      // Remembered pick wins over a fixed value, which wins over the text's
-      // own default -- each one the more recent/deliberate decision.
-      control.value = usedLast ? last : usedFixed ? fixedPick : (def && options.includes(def) ? def : options[0]);
-      // Says outright where this pick came from, not just the checkbox state
-      // (there is none for a choice variable: it remembers silently).
-      let markFixed = false;
-      if (usedLast) control.title = t("rememberedValueHint");
-      else if (usedFixed) { control.title = t("fixedValueHint"); markFixed = true; }
-      // A single option is a fixed value: still shown, but nothing to choose.
-      if (options.length === 1) control.disabled = true;
-      attachSelectPicker(control); // themed popup, 8 rows then scroll (a locked select never opens)
-      label.append(span, control);
-      if (markFixed) label.appendChild(fixedMarker());
-    } else {
-      control = document.createElement("input");
-      control.className = "modal-input";
-      control.type = "text";
-      let markFixed = false;
-      if (useRemember && name in remembered) {
-        control.value = remembered[name];
-        control.title = t("rememberedValueHint"); // Says so, not just a checked box
-      } else if (useFixed && name in fixedVars) {
-        // A suggestion, never inserted -- shown as the placeholder, so a
-        // field left untouched stays genuinely empty.
-        control.placeholder = fixedVars[name];
-        control.title = t("fixedValueHint");
-        markFixed = true;
-      } else if (def) {
-        control.value = def;
-      }
-      label.append(span, control);
-      if (markFixed) label.appendChild(fixedMarker());
-      if (useRemember) {
-        const rem = document.createElement("label");
-        rem.className = "vars-remember";
-        cb = document.createElement("input");
-        cb.type = "checkbox";
-        cb.className = "switch";
-        cb.checked = name in remembered;
-        const rlbl = document.createElement("span");
-        rlbl.textContent = t("rememberValue");
-        rem.append(cb, rlbl);
-        label.appendChild(rem);
-      }
-    }
-    fields.appendChild(label);
-    return { token, name, choice: options.length > 0, control, cb };
-  });
-  wireClearButtons(fields); // clear-X on the variable inputs
-  // Save/forget remembered values on confirm (never on cancel). Entries for
-  // variables outside this dialog are carried over untouched.
-  const persistRemembered = () => {
-    const obj = { ...remembered };
-    for (const r of rows) {
-      if (r.choice) {
-        if (keepChoice) obj[r.name] = r.control.value;
-      } else if (useRemember) {
-        if (r.cb?.checked) obj[r.name] = r.control.value;
-        else delete obj[r.name];
-      }
-    }
-    saveRememberedVars(obj, remembered);
-  };
-  $("vars-ok").textContent = t("varsCopy");
-  varsCleanup?.(null);
-  root.classList.remove("hidden");
-  rows[0]?.control.focus();
-  return new Promise((resolve) => {
-    const ok = $("vars-ok");
-    const cancel = $("vars-close");
-    const clearAll = $("vars-clear-all");
-    const collect = () => Object.fromEntries(rows.map((r) => [r.token, r.control.value]));
-    // Only plain text fields have an empty state worth clearing to: a choice
-    // dropdown always needs a value, so it is left on whatever it already shows.
-    const onClearAll = () => {
-      for (const r of rows) if (!r.choice) r.control.value = "";
-      rows.find((r) => !r.choice)?.control.focus();
-    };
-    // The click/keypress that OPENED this dialog is still in flight: arm the
-    // backdrop + Enter close handlers only on the next frame so that same event
-    // can't immediately dismiss the dialog (it was flashing shut instantly).
-    // A timer, not a frame callback: this dialog can open while the window is still
-    // hidden or tray-minimised, and a WebView2 window that paints no frames would
-    // leave Enter and the backdrop dead for as long as it stays that way.
-    let armed = false;
-    setTimeout(() => { armed = true; }, 0);
-    const done = (val) => {
-      root.classList.add("hidden");
-      ok.removeEventListener("click", onOk);
-      cancel.removeEventListener("click", onCancel);
-      clearAll.removeEventListener("click", onClearAll);
-      root.removeEventListener("pointerdown", onBg);
-      document.removeEventListener("keydown", onKey);
-      varsCleanup = null;
-      resolve(val);
-    };
-    const onOk = () => { persistRemembered(); done(collect()); };
-    const onCancel = () => done(null);
-    const onBg = (e) => { if (armed && e.target === root) done(null); };
-    const onKey = (e) => {
-      if (e.key === "Escape") done(null);
-      else if (e.key === "Enter" && armed) { persistRemembered(); done(collect()); }
-    };
-    varsCleanup = done;
-    ok.addEventListener("click", onOk);
-    cancel.addEventListener("click", onCancel);
-    clearAll.addEventListener("click", onClearAll);
-    root.addEventListener("pointerdown", onBg);
-    document.addEventListener("keydown", onKey);
-  });
-}
-
 // Record a copy for the history/usage journal (backend honours the privacy flag).
 // Every successful copy path ends here, which makes it the one place that may start
 // the cooldown: see below.
@@ -8147,28 +7976,21 @@ function prettyAccel(accel) {
 // activations that mean "paste" (Enter on a focused tile, a prompt hotkey with the
 // paste option on); a plain click copies and nothing else, exactly like a prompt
 // without variables.
+let varsPasteRequested = false;
 async function copyTextWithVars(p, el, paste = false) {
-  // A double-click can never reach the tile a second time: the dialog already
-  // covers it, and that second press used to land on the overlay and dismiss it.
-  // Swallow it instead and treat it as the double-click it was: fill in the
-  // variables, then paste.
-  let quickSecond = false;
-  const overlay = $("vars-modal");
-  const onSecond = (e) => {
-    if (e.target !== overlay) return; // a press inside the dialog is real input
-    e.stopPropagation();
-    quickSecond = true;
-  };
-  overlay.addEventListener("pointerdown", onSecond, true); // capture: before the dismiss
-  const stopArming = setTimeout(() => overlay.removeEventListener("pointerdown", onSecond, true), val("dblClickMs"));
+  // The placeholder window is already up for an earlier press: this one is the
+  // second half of a double click. It must not start another question, it only
+  // upgrades the pending copy to a paste.
+  if (varsWindowPending) { varsPasteRequested = true; return; }
+  varsPasteRequested = false;
   // Peek -> resolve -> copy -> commit, same order copyResolved uses -- this used
   // to always resolve p.text (entry 0) even once rotation had moved past it.
   const rotating = (p.variants || []).length > 0;
   const peek = rotating ? await invoke("rotation_peek", { id: p.id }).catch(() => null) : null;
   const rawText = peek ? peek.text : p.text;
   const text = await resolveVars(rawText);
-  clearTimeout(stopArming);
-  overlay.removeEventListener("pointerdown", onSecond, true);
+  const pasteAfter = paste || (varsPasteRequested && flag("autoPaste"));
+  varsPasteRequested = false;
   if (text === null) return;
   const ok = await invoke("copy_text", { text })
     .catch((e) => { errToast(e); return false; });
@@ -8178,7 +8000,7 @@ async function copyTextWithVars(p, el, paste = false) {
     // A failed peek already fell back to p.text above -- only a successful peek may
     // be followed by a commit (copyResolved's own rule).
     if (rotating && peek) { invoke("rotation_commit", { id: p.id }).catch(() => {}); recordToolUsage("rotation_advance"); }
-    if (paste || (quickSecond && flag("autoPaste"))) await autoPasteNow(el);
+    if (pasteAfter) await autoPasteNow(el);
     maybeCloseOnCopy();
   }
 }
@@ -8206,9 +8028,9 @@ async function copyFormattedPrompt(id) {
 }
 
 // ---- Standalone fill-in window (vars.html) ----
-// Used ONLY by copies started outside the app (global prompt hotkey, tray quick
-// copy): a small always-on-top window asks for the placeholders so the app the user
-// is working in keeps the foreground. Everything the variables MEAN still lives
+// Every copy that needs typed placeholders asks here, inside the app or not: a small
+// always-on-top window next to the pointer, so the app the user is working in keeps
+// the foreground. Everything the variables MEAN still lives
 // here: that window is a form, it renders rows and hands the answers back.
 let varsWindowPending = null;
 
@@ -8270,7 +8092,7 @@ async function promptVarsWindow(tokens) {
     invoke("open_var_window", { payload: JSON.stringify(payload), rows: rows.length })
       .catch(() => { varsWindowPending = null; resolve(false); });
   });
-  if (answer === false) return false; // no window: the caller falls back
+  if (answer === false) return false; // no window could be opened
   if (!answer) return null;
   let parsed;
   try { parsed = JSON.parse(answer); } catch (_) { return null; }
@@ -8371,28 +8193,23 @@ async function onPromptHotkey(id, paste) {
   if (!p) return;
   if (dialogTokens(p, await peekRotatedText(p)).length) {
     // Chain mode is an in-window gesture: a hotkey then still goes through the grid.
-    if (flag("varPopupWindow") && !chainMode) { await copyOutsideApp(p, paste); return; }
-    await invoke("focus_main_window").catch(() => {}); // fallback: the in-window dialog
+    if (!chainMode) { await copyOutsideApp(p, paste); return; }
+    await invoke("focus_main_window").catch(() => {});
   }
   await activateTile(id, paste);
 }
 
 // The hotkey/tray copy of a prompt with manual placeholders: ask in the standalone
-// window, then finish the copy exactly like every other path does. Falls back to the
-// in-window dialog if the small window cannot be opened at all.
+// window, then finish the copy exactly like every other path does.
 async function copyOutsideApp(p, paste) {
   if (copyOnCooldown(p.id)) return;
   // Same peek -> resolve -> copy -> commit order as copyTextWithVars/copyResolved.
   const rotating = (p.variants || []).length > 0;
   const peek = rotating ? await invoke("rotation_peek", { id: p.id }).catch(() => null) : null;
   const rawText = peek ? peek.text : p.text;
-  const text = await resolveVars(rawText, true);
-  if (text === null) return; // cancelled
-  if (text === false) { // no standalone window available
-    await invoke("focus_main_window").catch(() => {});
-    await activateTile(p.id, paste);
-    return;
-  }
+  const text = await resolveVars(rawText);
+  varsPasteRequested = false; // a second press only upgrades copies started in the window
+  if (text === null) return; // cancelled, or the window could not be opened
   if (await invoke("copy_text", { text }).catch((e) => { errToast(e); return false; })) {
     recordCopy(p.id);
     if (rotating && peek) { invoke("rotation_commit", { id: p.id }).catch(() => {}); recordToolUsage("rotation_advance"); }
@@ -20442,9 +20259,6 @@ function bind() {
     if (!openEditorPop.classList.contains("hidden")) { closeOpenEditorPop(); return; }
     if (!$("lightbox").classList.contains("hidden")) closeLightbox();
     else if (dismissConfirm()) { /* the dialog closed itself */ }
-    // The variable-fill dialog has its own keydown handler; consume Escape here so the
-    // chain doesn't ALSO close the library/journal underneath it.
-    else if (varsCleanup) { /* vars dialog closes itself */ }
     else if (!colorPop.classList.contains("hidden")) closeColorPop();
     else if (!tagPop.classList.contains("hidden")) closeTagPop();
     else if (!$("compare-modal").classList.contains("hidden")) closeCompareView();

@@ -1349,8 +1349,6 @@ body.library-front #modal.overlay { z-index: 67; }
 /* Opened from the library's own header while the library is raised at 66,
    the duplicate finder has to clear it too; compare at 69 stays above. */
 body.library-front #dupes-modal.overlay { z-index: 68; }
-/* Variable-fill dialog stacks above the library/journal it was opened from. */
-#vars-modal.overlay { z-index: 70; }
 /* The shortcut list is also opened from the screenshot editor (overlay at 90),
    so it has to stack above that editor; the editor's pop-ups stay above it. */
 #shortcuts-modal.overlay { z-index: 100; }
@@ -3777,12 +3775,9 @@ input[type="password"]::-ms-clear { display: none; }
   overflow-y: auto;
 }
 
-/* Prompt-variable fill dialog */
+/* Editor text bar with the placeholder helper */
 .modal-text-bar { display: flex; flex-direction: column; align-items: stretch; gap: 5px; }
 .modal-vars-hint { flex: 1; min-width: 0; margin: 0; }
-.vars-fields { display: flex; flex-direction: column; gap: 10px; margin-bottom: 4px; }
-/* A choice variable renders the same themed select as the expert dropdowns. */
-.vars-select { width: 100%; }
 
 /* Variable helper in the editor: reserved-name chips + the name/options insert row. */
 .vars-chips { display: flex; flex-wrap: wrap; gap: 5px; }
@@ -4558,8 +4553,6 @@ body.drag-over::after {
 .hotkeys-row .modal-input { flex: 0 0 150px; min-width: 0; cursor: pointer; }
 .hotkeys-row .ghost-btn { flex: 0 0 auto; }
 .hotkeys-empty { color: var(--muted); font-size: 13px; padding: 12px 4px; text-align: center; margin: 0; }
-.vars-remember { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 12px; color: var(--muted); cursor: pointer; }
-.vars-remember .switch { flex: 0 0 auto; }
 /* Paired dropdowns now stack full-width so each keeps the label-left layout. */
 /* Runs of narrow label+control rows share a line. auto-fit means the second column
    only appears when both fit at their minimum, so a narrow window or a long
@@ -4668,16 +4661,6 @@ body.drag-over::after {
 .var-fixed-add-value { flex: 1; min-width: 0; }
 .var-fixed-add-btn { flex: 0 0 auto; }
 .var-fixed-empty { color: var(--muted); font-size: 12px; }
-/* Marks a fill-in field whose starting state came from the fixed-value list --
-   only ever a suggestion (the placeholder), never inserted into the value. */
-.var-fixed-marker {
-  display: inline-flex;
-  flex: 0 0 auto;
-  margin-left: 4px;
-  opacity: 0.65;
-  color: var(--accent, var(--muted));
-  vertical-align: middle;
-}
 
 /* Confirm dialog (discard unsaved changes) */
 .confirm-msg { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }

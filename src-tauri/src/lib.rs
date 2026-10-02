@@ -979,9 +979,8 @@ async fn set_rec_pause_hotkey(app: AppHandle, state: State<'_, Db>, hotkey: Stri
     Ok(())
 }
 
-// A hotkey-triggered prompt with manual placeholders needs its fill-in dialog on
-// screen, so the UI asks for the window before opening it. Only used when the
-// standalone variable window is switched off (expert: varPopupWindow).
+// A hotkey-triggered prompt that has to go through the grid (chain mode) needs
+// the main window in front first, so the UI asks for it before activating the tile.
 #[tauri::command]
 fn focus_main_window(app: AppHandle) {
     show_main(&app);
