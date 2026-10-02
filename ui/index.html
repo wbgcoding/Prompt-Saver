@@ -130,8 +130,8 @@
       <button id="grid-batch-none" type="button" class="ghost-btn" data-i18n="selectNone">None</button>
       <span class="lib-batch-sep" aria-hidden="true"></span>
       <div id="grid-batch-colors" class="lib-colors lib-batch-colors" data-i18n-title="batchColor"></div>
-      <button id="grid-batch-fav" type="button" class="ghost-btn" data-i18n="batchFavorite">★</button>
-      <button id="grid-batch-unfav" type="button" class="ghost-btn" data-i18n="batchUnfavorite">☆</button>
+      <button id="grid-batch-fav" type="button" class="ghost-btn" data-i18n="batchFavorite">Favorite</button>
+      <button id="grid-batch-unfav" type="button" class="ghost-btn" data-i18n="batchUnfavorite">Unfavorite</button>
       <button id="grid-batch-tag-add" type="button" class="ghost-btn" data-i18n="batchTagAdd">Add tag</button>
       <button id="grid-batch-tag-remove" type="button" class="ghost-btn" data-i18n="batchTagRemove">Remove tag</button>
       <button id="grid-batch-archive" type="button" class="ghost-btn" data-i18n="archiveAction">Archive</button>
@@ -152,7 +152,7 @@
     <div id="banner-stack" class="banner-stack">
     <!-- Shown only while the three seeded onboarding examples are still around -->
     <div id="examples-banner" class="examples-banner hidden">
-      <span data-i18n="examplesBannerText">These are example prompts to get you started.</span>
+      <span data-i18n="examplesBannerText">These are example prompts to help you get started.</span>
       <button id="examples-dismiss" type="button" class="ghost-btn">Remove examples</button>
     </div>
     <!-- Shown for as long as another machine's lock on this data folder is fresh -->
@@ -321,7 +321,7 @@
                data-i18n-title="tipPdfPage" data-i18n-aria="tipPdfPage" />
         <button type="button" id="modal-replace-file" class="ghost-btn" data-i18n="replaceImage">Replace</button>
       </div>
-      <p id="modal-file-hint" class="modal-hint hidden" data-i18n="fileHint">Only the file path is saved.</p>
+      <p id="modal-file-hint" class="modal-hint hidden" data-i18n="fileHint">Only the path to the file is saved, so copying always uses the latest version.</p>
       <!-- Plain-text preview for a txt/md/json/csv attachment, next to the
            image/PDF preview above. Never rendered as markup, even for a .md
            file -- textContent only. -->
@@ -599,7 +599,7 @@
           <!-- Emergency wipe: something sensitive got copied and may still be sitting
                inside a rotating backup snapshot, DPAPI-sealed but not gone. -->
           <button id="clip-purge-backups" type="button" class="head-toggle danger-btn lib-history-only hidden" data-i18n="clipPurgeBackups" data-i18n-title="tipClipPurgeBackups">Purge from all backups</button>
-          <button id="journal-clear" type="button" class="head-toggle head-clear lib-history-only" data-i18n="clearHistory">Clear history</button>
+          <button id="journal-clear" type="button" class="head-toggle head-clear lib-history-only" data-i18n="clearHistory">Clear copy history</button>
           <button id="library-dupes" type="button" class="head-toggle lib-prompts-only" data-i18n="dupTitle">Find duplicates</button>
           <label class="head-sort lib-prompts-only">
             <span class="cols-label" data-i18n="sortBy">Sort</span>
@@ -649,8 +649,8 @@
           <button id="lib-batch-none" type="button" class="ghost-btn" data-i18n="selectNone">None</button>
           <span class="lib-batch-sep" aria-hidden="true"></span>
           <div id="lib-batch-colors" class="lib-colors lib-batch-colors" data-i18n-title="batchColor"></div>
-          <button id="lib-batch-fav" type="button" class="ghost-btn" data-i18n="batchFavorite">★</button>
-          <button id="lib-batch-unfav" type="button" class="ghost-btn" data-i18n="batchUnfavorite">☆</button>
+          <button id="lib-batch-fav" type="button" class="ghost-btn" data-i18n="batchFavorite">Favorite</button>
+          <button id="lib-batch-unfav" type="button" class="ghost-btn" data-i18n="batchUnfavorite">Unfavorite</button>
           <button id="lib-batch-tag-add" type="button" class="ghost-btn" data-i18n="batchTagAdd">Add tag</button>
           <button id="lib-batch-tag-remove" type="button" class="ghost-btn" data-i18n="batchTagRemove">Remove tag</button>
           <button id="lib-batch-archive" type="button" class="ghost-btn" data-i18n="archiveAction">Archive</button>
@@ -724,7 +724,7 @@
   <div id="import-folder-modal" class="overlay hidden" role="dialog" aria-modal="true">
     <div class="modal modal-narrow">
       <div class="modal-titlebar">
-        <h2 class="modal-title" data-i18n="importFolderTitle">Import from a folder</h2>
+        <h2 class="modal-title" data-i18n="importFolderTitle">Choose a folder to import</h2>
         <button id="import-folder-close" class="icon-btn modal-x" data-i18n-aria="close">
           <svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true">
             <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
@@ -1016,7 +1016,7 @@
           <select id="tile-font" class="modal-input"></select>
         </label>
         <label class="field">
-          <span data-i18n="valUiScale">UI size</span>
+          <span data-i18n="valUiScale">Interface size</span>
           <!-- Options filled by JS: scale presets -->
           <select id="ui-scale" class="modal-input"></select>
         </label>
@@ -1045,7 +1045,7 @@
           <input id="opt-autostart" type="checkbox" class="switch" />
         </label>
         <label class="field switch-field">
-          <span data-i18n="startMinimized">Start minimized on autostart</span>
+          <span data-i18n="startMinimized">Start in the background on autostart</span>
           <input id="opt-startmin" type="checkbox" class="switch" />
         </label>
         <label class="field switch-field" data-i18n-title="tipAutoPaste">
@@ -1073,7 +1073,7 @@
         <div class="hotkey-row">
           <input id="opt-hotkey" class="modal-input" type="text" readonly data-i18n-ph="hotkeyPh" data-i18n-aria="hotkeyLabel" />
           <button id="hotkey-clear" class="ghost-btn" data-i18n="hotkeyClear">Clear</button>
-          <button id="hotkey-list-btn" type="button" class="ghost-btn" data-i18n="hotkeysAllBtn">All hotkeys</button>
+          <button id="hotkey-list-btn" type="button" class="ghost-btn" data-i18n="hotkeysAllBtn">All shortcuts</button>
         </div>
       </div>
       <!-- Voice dictation's own global hotkey -- visible only with the
@@ -1162,7 +1162,7 @@
   <div id="view-modal" class="overlay hidden" role="dialog" aria-modal="true">
     <div class="modal modal-narrow">
       <div class="modal-titlebar">
-        <h2 id="view-modal-title" class="modal-title" data-i18n="addView">Add view</h2>
+        <h2 id="view-modal-title" class="modal-title" data-i18n="addView">+ Add view</h2>
         <button id="view-modal-close" class="icon-btn modal-x" data-i18n-aria="close">
           <svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true">
             <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
@@ -1200,7 +1200,7 @@
           </svg>
         </button>
       </div>
-      <p id="update-modal-warn" class="update-warn hidden" data-i18n="skippedWarning">You skipped this version.</p>
+      <p id="update-modal-warn" class="update-warn hidden" data-i18n="skippedWarning">You skipped this version. Install anyway?</p>
       <div id="update-modal-notes" class="update-notes"></div>
       <div class="modal-actions">
         <button id="update-modal-refresh" class="ghost-btn hidden" data-i18n="whatsNewRefresh">Update from GitHub</button>
@@ -1245,7 +1245,7 @@
              (src-tauri/build.rs), never hand maintained here. -->
         <div id="about-licenses-body" class="about-licenses-body hidden">
           <p class="licenses-intro" data-i18n="licensesIntro">
-            Prompt Saver is built with open-source components. The list below is generated from the
+            This app is built with open-source components. The list below is generated from the
             real dependency list every time the app is built.
           </p>
           <input id="licenses-search" class="modal-input hidden" type="text" data-i18n-ph="licensesSearchPh" />
@@ -1303,7 +1303,7 @@
         <button id="snip-modal-retry" class="ghost-btn" data-i18n="snipRetry">New screenshot</button>
         <!-- Folder toggle sits at the bottom, immediately left of "Save as…". -->
         <label class="snip-folder-inline" data-i18n-title="tipScreenshotFolder">
-          <span data-i18n="screenshotToFolder">Save screenshots to the Screenshots folder</span>
+          <span data-i18n="screenshotToFolder">Always save screenshots to the Screenshots folder</span>
           <input id="snip-save-folder" type="checkbox" class="switch" />
         </label>
         <!-- OCR -- runs on the capture already shown above; off by default
@@ -1358,7 +1358,7 @@
     </div>
     <!-- The rarer actions: editing, Save as, Copy and the save folder. -->
     <div id="rec-modal-more-pop" class="ctx hidden" role="menu">
-      <button id="rec-modal-edit" type="button" role="menuitem" data-i18n="recEdit">Edit</button>
+      <button id="rec-modal-edit" type="button" role="menuitem" data-i18n="recEdit">Video editor</button>
       <button id="rec-modal-saveas" type="button" role="menuitem" data-i18n="screenshotSaveAs">Save as…</button>
       <button id="rec-modal-copy" type="button" role="menuitem" data-i18n="recCopy">Copy</button>
       <button id="rec-modal-folder-change" type="button" role="menuitem" data-i18n="recChangeFolder">Change save folder…</button>

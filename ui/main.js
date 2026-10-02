@@ -21074,7 +21074,7 @@ const TOUR_FEATURES = [
   { flagKey: "colorPicker", labelKey: "flagColorPicker", textKey: "tourOptPicker", helpAnchor: "colorPicker" },
 ];
 
-// Step 5's second section: three things already decided on first launch, shown
+// Step 5's second section: the settings already decided on first launch, shown
 // read-only except a plain switch flip. Not feature flags -- real settings with
 // their own invoke commands, so each row carries its own live-write function.
 const TOUR_SETUP = [
@@ -21196,7 +21196,7 @@ function renderTourOptionsStep() {
   return wrap;
 }
 
-// The second section of step 5: three things already decided on first launch.
+// The second section of step 5: the settings already decided on first launch.
 // Autostart and the update check are plain switches sharing the feature rows'
 // buffering; the data folder is read-only here on purpose -- moving it is a
 // multi-step flow of its own, out of place inside the tour.
@@ -21485,7 +21485,7 @@ async function applySettingsCore() {
   applyTheme(await invoke("current_theme").catch(() => settings.theme));
 }
 
-// Three onboarding examples: variable, image, Markdown. Text comes from i18n.js
+// Three onboarding examples: placeholder, image, Markdown. Text comes from i18n.js
 // (LANG is already resolved by the time this runs, see applySettingsCore), so each
 // install sees them in its own language instead of freezing whatever the OS locale
 // was on first launch would have to.
