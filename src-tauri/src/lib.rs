@@ -4844,9 +4844,7 @@ fn load_store_from_json(dir: &Path) -> Store {
         SealedRead::Loaded(s) => s,
         SealedRead::Unreadable => {
             unreadable = true;
-            let mut s = Settings::default();
-            s.retention_defaults_v2 = false;
-            s
+            Settings { retention_defaults_v2: false, ..Settings::default() }
         }
         SealedRead::Missing => {
             settings_missing = true;
