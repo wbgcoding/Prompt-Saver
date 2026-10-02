@@ -552,15 +552,14 @@ back on its own next time.
 
 The magnifier icon in the toolbar, or Ctrl+K, opens an overlay that searches
 prompts, copy history, attachments, views, settings and help all at once,
-each in its own group with up to five hits and a "show more". Arrow keys
+each in its own group with up to eight hits and a "show more". Arrow keys
 move the highlight across group boundaries; Enter runs the fitting action for
 whatever is highlighted: copies a prompt or history entry, opens an
 attachment, switches to a view, opens and highlights a setting, or opens the
-matching help topic. The field remembers your recent searches (five by
-default; the expert menu changes that, and 0 keeps none) and shows them when it
+matching help topic. The field remembers your recent searches (eight by
+default; the expert menu sets one number for every search list) and shows them when it
 is empty. Escape, a click outside the card, or the icon again
-all close it. A flag in the expert menu turns it off, with a value setting
-for how many hits each group shows before "show more".
+all close it. A flag in the expert menu turns it off.
 
 ### Tags
 
@@ -638,8 +637,8 @@ prompt name may get before it is cut off with an ellipsis in that menu.
 A search field at the top of that menu filters as you type, across every
 prompt rather than just the favorites and recents already shown. Arrow keys
 pick a result, Enter copies it the same way a click does, and the field clears
-itself back to the normal selection once emptied. It ships on, and the expert
-menu caps how many matches it lists at once.
+itself back to the normal selection once emptied. It ships on, and the one
+entry limit for every search list (expert menu) caps how many matches it lists.
 
 ### Standalone: Quick launcher
 
@@ -1440,14 +1439,13 @@ sich seinen Stand je Filter.
 **Alles durchsuchen**: Lupensymbol in der Werkzeugleiste oder Strg+K öffnet
 eine Überlagerung, die Prompts, Kopierverlauf, Anhänge, Ansichten,
 Einstellungen und Hilfe zugleich durchsucht, jede Quelle in ihrer eigenen
-Gruppe mit bis zu fünf Treffern und „weitere anzeigen". Pfeiltasten bewegen
+Gruppe mit bis zu acht Treffern und „weitere anzeigen". Pfeiltasten bewegen
 die Markierung über Gruppengrenzen hinweg; Eingabetaste löst die passende
 Aktion aus: kopiert einen Prompt oder Verlaufseintrag, öffnet einen Anhang,
 wechselt die Ansicht, öffnet und markiert eine Einstellung, oder öffnet das
-passende Hilfethema. Das Feld merkt sich die letzten Suchen (ab Werk fünf,
-im Expertenmenü einstellbar, bei 0 keine) und zeigt sie, wenn es leer ist. Escape, ein Klick daneben oder das Symbol schließen
-die Überlagerung wieder. Ein Schalter im Expertenmenü stellt sie ab, dazu
-ein Wert für die Trefferzahl je Gruppe vor „weitere anzeigen".
+passende Hilfethema. Das Feld merkt sich die letzten Suchen (acht ab Werk; das
+Expertenmenü stellt eine Zahl für alle Suchlisten ein) und zeigt sie, wenn es leer ist. Escape, ein Klick daneben oder das Symbol schließen
+die Überlagerung wieder. Ein Schalter im Expertenmenü stellt sie ab.
 
 **Tags**: freie Schlagwörter, UND/ODER-Filter.
 

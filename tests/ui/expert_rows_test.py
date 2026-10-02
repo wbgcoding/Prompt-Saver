@@ -57,8 +57,7 @@ EXPECTED = [
     ("flag", "recOutline", "expTabCapture", "expGroupRecording", 1),
     ("color", "recOutlineColor", "expTabCapture", "expGroupRecording", 2),
     ("dropdown", "chainSeparator", "expTabFeatures", "expGroupChain", 1),
-    ("value", "gsRecentMax", "expTabLibrary", "expGroupLibrary", 1),
-    ("value", "launcherMaxResults", "expTabLibrary", "expGroupLibrary", 0),
+    ("value", "searchListMax", "expTabLibrary", "expGroupLibrary", 0),
     ("value", "veOvTextOutlinePx", "expTabCapture", "expGroupVideoEditor", 1),
     ("color", "veOvKeysActiveColor", "expTabCapture", "expGroupVideoEditor", 1),
     ("value", "veOvVideoVolume", "expTabCapture", "expGroupVideoEditor", 1),
@@ -66,7 +65,7 @@ EXPECTED = [
 
 # Rows that stay on screen with every gate off (they have no parent switch that
 # is in the GATES list below).
-STAYS = ["flag:chainPrompts", "value:gridMax", "value:launcherMaxResults"]
+STAYS = ["flag:chainPrompts", "value:gridMax", "value:searchListMax"]
 
 # The parent switches the rows above hang off.
 GATES = ["chainQuickStart", "multiView", "screenRecord", "recSweepBroken", "videoEditor",
@@ -220,7 +219,7 @@ CHAIN_PROBE = """
 </script>
 """
 
-# gsRecentMax: the recent-search list keeps as many terms as the setting says.
+# searchListMax: the recent-search list keeps as many terms as the setting says.
 GS_PROBE = """
 <script>
 (async () => {""" + FINISH + """
@@ -251,7 +250,7 @@ GS_PROBE = """
 </script>
 """
 
-# launcherMaxResults: the launcher lists as many rows as the setting says.
+# searchListMax: the launcher lists as many rows as the setting says.
 LAUNCHER_PROBE = """
 <script>
 (async () => {""" + FINISH + """
@@ -367,12 +366,12 @@ def consumer_problems(browser, tmp):
         label = "chainSeparator " + (texts.get("chainSeparator") or "default")
         check(label, "index.html", CHAIN_PROBE.replace("__SEP__", sep),
               {"ui_flags": {"chainQuickStart": True}, "ui_texts": texts})
-    for values, terms, want in (({}, 6, 5), ({"gsRecentMax": 2}, 3, 2), ({"gsRecentMax": 0}, 3, 0)):
-        label = "gsRecentMax " + str(values.get("gsRecentMax", "default"))
+    for values, terms, want in (({}, 9, 8), ({"searchListMax": 3}, 4, 3)):
+        label = "searchListMax recent " + str(values.get("searchListMax", "default"))
         check(label, "index.html", GS_PROBE.replace("__TERMS__", str(terms)).replace("__WANT__", str(want)),
               {"ui_flags": {"globalSearch": True}, "ui_values": values})
-    for values, want in (({}, 8), ({"launcherMaxResults": 3}, 3), ({"launcherMaxResults": 11}, 11)):
-        label = "launcherMaxResults " + str(values.get("launcherMaxResults", "default"))
+    for values, want in (({}, 8), ({"searchListMax": 3}, 3), ({"searchListMax": 11}, 11)):
+        label = "searchListMax launcher " + str(values.get("searchListMax", "default"))
         check(label, "launcher.html", LAUNCHER_PROBE.replace("__WANT__", str(want)), {"ui_values": values},
               size=(560, 420), budget=15000)
     seeded = {"ui_values": {"veOvTextOutlinePx": 7, "veOvVideoVolume": 40},

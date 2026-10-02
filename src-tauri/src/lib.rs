@@ -1213,11 +1213,11 @@ fn tray_search_on(settings: &Settings) -> bool {
     settings.ui_flags.get("traySearch") != Some(&false) // on by default
 }
 
-// How many matches the filter row may show at once. Same clamp pattern as
-// tray_label_max: an absent or out-of-range stored value falls back to the
+// How many matches the filter row may show at once (the one entry limit shared by
+// every search list). Same clamp pattern as tray_label_max: an absent or out-of-range stored value falls back to the
 // shipped default instead of reaching the search list unclamped.
 fn tray_search_max(settings: &Settings) -> usize {
-    settings.ui_values.get("trayMenuMax").copied().unwrap_or(8.0).clamp(3.0, 20.0) as usize
+    settings.ui_values.get("searchListMax").copied().unwrap_or(8.0).clamp(3.0, 20.0) as usize
 }
 
 // Menu text for a prompt. Control characters (a pasted newline lands in the name)
@@ -2682,6 +2682,11 @@ fn removed_ui_value_keys() -> &'static [&'static str] {
         "etaMinSecs",
         "journalLimit",
         "snipQuality",
+        "searchRecentMax",
+        "globalSearchLimit",
+        "gsRecentMax",
+        "launcherMaxResults",
+        "trayMenuMax",
     ]
 }
 
@@ -2699,6 +2704,27 @@ impl Settings {
     // Ensure at least one view exists; migrate legacy single-grid data.
     fn migrate(&mut self) {
         // Merges that read an old key run first, before the removal loops below.
+        //
+        // Five separate search-list caps became one, "searchListMax". The largest value
+        // a user set wins, so nobody loses rows they asked for. A stored 0 ("keep no
+        // recent searches") cannot be kept: the merged list has no off stop. A value
+        // already stored under the new key is never overwritten.
+        if !self.ui_values.contains_key("searchListMax") {
+            let largest = [
+                "searchRecentMax",
+                "globalSearchLimit",
+                "gsRecentMax",
+                "launcherMaxResults",
+                "trayMenuMax",
+            ]
+            .iter()
+            .filter_map(|k| self.ui_values.get(*k).copied())
+            .filter(|v| *v > 0.0)
+            .fold(None, |m: Option<f64>, v| Some(m.map_or(v, |m| m.max(v))));
+            if let Some(v) = largest {
+                self.ui_values.insert("searchListMax".into(), v.clamp(3.0, 20.0));
+            }
+        }
         //
         // The favorites view used to be two switches: "favView" (settings) and
         // "favViewButton" (header star, on unless stored false). It is one now,
@@ -51604,6 +51630,37 @@ mod tests {
     }
 
     #[test]
+    fn search_caps_merge_to_largest() {
+        let run = |old: &[(&str, f64)], new: Option<f64>| {
+            let mut s = Settings::default();
+            for (k, v) in old {
+                s.ui_values.insert((*k).into(), *v);
+            }
+            if let Some(v) = new {
+                s.ui_values.insert("searchListMax".into(), v);
+            }
+            let dirty = s.has_removed_ui_values();
+            s.migrate();
+            for (k, _) in old {
+                assert!(!s.ui_values.contains_key(*k), "{k} survived migrate");
+            }
+            assert_eq!(dirty, !old.is_empty());
+            s.ui_values.get("searchListMax").copied()
+        };
+        // The largest stored value wins; a stored 0 is ignored.
+        assert_eq!(run(&[("searchRecentMax", 12.0), ("gsRecentMax", 0.0)], None), Some(12.0));
+        assert_eq!(run(&[("globalSearchLimit", 5.0), ("trayMenuMax", 15.0), ("launcherMaxResults", 8.0)], None), Some(15.0));
+        // Only a zero stored: nothing to carry over.
+        assert_eq!(run(&[("gsRecentMax", 0.0)], None), None);
+        // Out-of-range old values land inside the new range.
+        assert_eq!(run(&[("searchRecentMax", 1.0)], None), Some(3.0));
+        assert_eq!(run(&[("launcherMaxResults", 99.0)], None), Some(20.0));
+        // Nothing stored: no key. A value already under the new key is kept.
+        assert_eq!(run(&[], None), None);
+        assert_eq!(run(&[("searchRecentMax", 12.0)], Some(6.0)), Some(6.0));
+    }
+
+    #[test]
     fn removed_key_lists_have_no_duplicates() {
         for list in [removed_ui_value_keys(), removed_ui_flag_keys()] {
             let mut seen = std::collections::HashSet::new();
@@ -53529,11 +53586,11 @@ mod tests {
         assert!(!tray_search_on(&off));
 
         let mut clamped_hi = Settings::default();
-        clamped_hi.ui_values.insert("trayMenuMax".into(), 999.0);
+        clamped_hi.ui_values.insert("searchListMax".into(), 999.0);
         assert_eq!(tray_search_max(&clamped_hi), 20);
 
         let mut clamped_lo = Settings::default();
-        clamped_lo.ui_values.insert("trayMenuMax".into(), 0.0);
+        clamped_lo.ui_values.insert("searchListMax".into(), 0.0);
         assert_eq!(tray_search_max(&clamped_lo), 3);
     }
 

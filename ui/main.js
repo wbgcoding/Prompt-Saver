@@ -1682,19 +1682,14 @@ const EXPERT_VALUES = {
   libPreviewLines: { label: "valLibPreviewLines", min: 1, max: 4, step: 1, def: 2, unit: "" },
   // Prompt-list (library) dialog width.
   libraryWidth: { label: "valLibraryWidth", min: 520, max: 1400, step: 20, def: 900, unit: "px" },
-  // How many recent search terms the suggestions dropdown keeps + shows.
-  searchRecentMax: { label: "valSearchRecentMax", min: 1, max: 20, step: 1, def: 8, unit: "", gate: "searchSuggest" },
+  // One entry limit for every search list: the library's suggestions and recent
+  // searches, Search everything (hits per group and recent searches), the quick
+  // launcher and the tray menu's filter row. It serves several features, so it has no gate.
+  searchListMax: { label: "valSearchListMax", min: 3, max: 20, step: 1, def: 8, unit: "" },
   savedSearchMax: { label: "valSavedSearchMax", min: 3, max: 10, step: 1, def: 5, unit: "", gate: "savedSearches" },
   libraryTileSize: { label: "valLibraryTileSize", min: 80, max: 240, step: 10, def: 140, unit: "px", gate: "libraryTiles" },
   // How long the library search waits after the last keystroke before it re-filters.
   searchDebounceMs: { label: "valSearchDebounceMs", min: 0, max: 600, step: 10, def: 120, unit: "ms", gate: "librarySearch" },
-  // Hits shown per source group before "show more" -- the overlay has six
-  // sources at once, so a low cap keeps the first screen scannable.
-  globalSearchLimit: { label: "valGlobalSearchLimit", min: 3, max: 20, step: 1, def: 5, unit: "", gate: "globalSearch" },
-  // How many recent searches the search window remembers; 0 keeps none.
-  gsRecentMax: { label: "valGsRecentMax", min: 0, max: 20, step: 1, def: 5, unit: "", gate: "globalSearch" },
-  // The quick launcher always opens from the app hotkey, so this has no gate.
-  launcherMaxResults: { label: "valLauncherMaxResults", min: 3, max: 20, step: 1, def: 8, unit: "" },
   // Caps the recognized text kept per picture, so a screenshot of a wall of
   // text cannot inflate the database.
   ocrIndexMaxChars: { label: "valOcrIndexMaxChars", min: 500, max: 100000, step: 500, def: 20000, unit: "", gate: "ocrIndex" },
@@ -1900,8 +1895,6 @@ const EXPERT_VALUES = {
   // no OR-gate exists, and gating a shared row on either lone sub-flag is an
   // approximation either way.
   trayLabelMax: { label: "valTrayLabelMax", min: 20, max: 80, step: 5, def: 40, unit: "", gate: "trayRecent" },
-  // How many matches the tray menu's filter row shows at once.
-  trayMenuMax: { label: "valTrayMenuMax", min: 3, max: 20, step: 1, def: 8, unit: "", gate: "traySearch" },
   // How often the Markdown-sync folder is re-scanned for outside edits.
   syncPollSecs: { label: "valSyncPollSecs", min: 2, max: 30, step: 1, def: 5, unit: "s", gate: "promptSync" },
   // Failed rounds in a row (an unreachable folder) before the sync pauses itself.
@@ -2239,7 +2232,7 @@ const EXPERT_TABS = [
     { title: "expGroupFolders", flags: ["floating", { key: "floatPark", gate: "floating" }, { key: "pillFolders", gate: "floating" }, "tileFolders"], values: ["floatOpacity", "pillFontSize", "pillTextMinW", "pillBorderW", "floatParkCleanupH", "pillMergeRadius", "pillFolderTileSize", "folderGridCols", "tileFolderHoverMs", "tileFolderCols"],
       actions: [{ id: "float-recall", label: "floatRecallAction", gate: "floating" }] },
     // The quick-copy sections of the tray menu, each with its own entry count.
-    { title: "expGroupTray", flags: ["trayCustomMenu", "trayRecent", "trayFavs", "traySearch"], values: ["trayRecentN", "trayFavN", "trayLabelMax", "trayMenuMax"] },
+    { title: "expGroupTray", flags: ["trayCustomMenu", "trayRecent", "trayFavs", "traySearch"], values: ["trayRecentN", "trayFavN", "trayLabelMax"] },
     // The watcher that collects what you copy elsewhere.
     { title: "expGroupClipboard", flags: ["clipWatcher", { key: "clipSkipSecrets", gate: "clipWatcher" }], values: ["clipMinChars", "clipInboxMax"] },
     // Prompt folders as Markdown (beta): mirrors text-only prompts as .md files.
@@ -2285,7 +2278,7 @@ const EXPERT_TABS = [
     { title: "expGroupLimits", values: ["previewLen", "nameMaxLen"] },
   ] },
   { title: "expTabLibrary", groups: [
-    { title: "expGroupLibrary", flags: ["librarySearch", "globalSearch", "searchSuggest", "savedSearches", "fuzzySearch", "smartSort", "batchOps", "libraryTypeFilter", "colorFilter", "searchAutofocus", "imagePreview", "libraryVideoPreview", "ocrIndex", "archiveTag", "libraryTiles"], values: ["searchRecentMax", "savedSearchMax", "libraryCols", "libraryWidth", "libPreviewLines", "searchDebounceMs", "globalSearchLimit", "gsRecentMax", "launcherMaxResults", "ocrIndexMaxChars", "libraryTileSize"], dropdowns: ["fuzzyMaxTypos"],
+    { title: "expGroupLibrary", flags: ["librarySearch", "globalSearch", "searchSuggest", "savedSearches", "fuzzySearch", "smartSort", "batchOps", "libraryTypeFilter", "colorFilter", "searchAutofocus", "imagePreview", "libraryVideoPreview", "ocrIndex", "archiveTag", "libraryTiles"], values: ["searchListMax", "savedSearchMax", "libraryCols", "libraryWidth", "libPreviewLines", "searchDebounceMs", "ocrIndexMaxChars", "libraryTileSize"], dropdowns: ["fuzzyMaxTypos"],
       actions: [{ id: "ocr-index-backfill", label: "ocrIndexBackfillAction", gate: "ocrIndex" }] },
     { title: "expGroupTags", flags: ["tags"], values: ["tagChipPx", "tagPopCols"], dropdowns: ["tagFilterMode", "tagSort"] },
     // Everything that records or shows copy history lives with the history view.
@@ -2556,7 +2549,7 @@ const EXPERT_TIPS = [
   "voice", "voiceInterim", "voicePunct", "voiceAutoCaps", "voiceAutoStop", "voiceAutoStopSec", "voiceMaxMin",
   "voiceLang", "voiceInsert", "voiceOnlineOk", "voiceAutoPickLang", "voiceLangAutoUpdate",
   "voiceHotkey", "voiceHotkeyTarget",
-  "trayCustomMenu", "trayRecent", "trayFavs", "trayRecentN", "trayFavN", "trayLabelMax", "traySearch", "trayMenuMax",
+  "trayCustomMenu", "trayRecent", "trayFavs", "trayRecentN", "trayFavN", "trayLabelMax", "traySearch",
   "checkUpdateOnStart", "showUpdates", "updateCheckH", "whatsNew", "importExport", "toolbarHoverDim", "keyboardNav", "allowMultipleInstances",
   "taskbarProgress", "etaShow", "dataDir", "dataDirLock", "demoMode",
   "headerSeparators", "floating", "floatPark", "floatParkCleanupH",
@@ -2579,7 +2572,7 @@ const EXPERT_TIPS = [
   // Library / privacy
   "mediaMeta", "mediaMetaBackfill", "ocrIndex", "ocrIndexMaxChars",
   "smartSort", "fuzzySearch", "batchOps", "searchSuggest", "searchAutofocus", "searchDebounceMs",
-  "globalSearch", "globalSearchLimit",
+  "globalSearch",
   "tags", "tagChipPx", "tagFilterMode", "tagPopCols", "tagSort",
   "allowScreenshot", "copyHistory", "historyTimestamps", "historyGrouped", "journalWidth",
   "dedupCopyLog", "cleanupFiles", "blurTilesUntilHover",
@@ -2594,11 +2587,11 @@ const EXPERT_TIPS = [
   // Values that need a unit/behaviour explanation
   "copyCooldownMs", "dblClickMs", "autoPasteDelayMs", "snipPreviewVh",
   "historyPerPrompt", "similarThreshold", "similarHint", "clipMinChars", "clipInboxMax", "historyMax",
-  "previewLen", "nameMaxLen", "searchRecentMax", "savedSearchMax", "maxViews", "gridMax",
+  "previewLen", "nameMaxLen", "searchListMax", "savedSearchMax", "maxViews", "gridMax",
   "viewBorder", "statsTopN", "viewGroups", "viewGroupMaxRows", "multiViewPrompt",
   "barToggles", "barToggleBoth", "quickGrid", "quickGridHoverOnly", "multiView", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "libraryCols", "copySize", "copyFont", "showLibrary", "showJournal", "composerScale", "primaryScale",
   "remoteApi", "remoteNetworkFilter", "remoteTlsShortLived", "urlScheme", "remotePort", "remoteRateLimit",
-  "recOutline", "recOutlineColor", "chainSeparator", "gsRecentMax", "launcherMaxResults",
+  "recOutline", "recOutlineColor", "chainSeparator",
   "veOvTextOutlinePx", "veOvKeysActiveColor", "veOvVideoVolume",
 ];
 const EXPERT_TIP_SET = new Set(EXPERT_TIPS);
@@ -6059,7 +6052,7 @@ function wireSearchSuggest(input, storeKey) {
     if (term.length < 2 || !flag("searchSuggest")) return;
     const list = load().filter((x) => x.toLowerCase() !== term.toLowerCase());
     list.unshift(term);
-    const value = JSON.stringify(list.slice(0, val("searchRecentMax")));
+    const value = JSON.stringify(list.slice(0, val("searchListMax")));
     settings.ui_texts = { ...(settings.ui_texts || {}), [storeKey]: value };
     invoke("set_ui_text", { key: storeKey, value }).catch(() => {});
   };
@@ -6072,7 +6065,7 @@ function wireSearchSuggest(input, storeKey) {
   const show = () => {
     if (!flag("searchSuggest")) { hide(); return; }
     const q = input.value.trim().toLowerCase();
-    const items = load().filter((x) => !q || x.toLowerCase().includes(q)).slice(0, val("searchRecentMax"));
+    const items = load().filter((x) => !q || x.toLowerCase().includes(q)).slice(0, val("searchListMax"));
     pop.innerHTML = "";
     if (!items.length) { hide(); return; }
     for (const term of items) {
@@ -16072,7 +16065,7 @@ function gsRecentRow(term) {
 function gsRecentList() {
   let list;
   try { list = JSON.parse(settings.ui_texts?.globalSearchRecent || "[]"); } catch { list = []; }
-  return Array.isArray(list) ? list.slice(0, val("gsRecentMax")) : [];
+  return Array.isArray(list) ? list.slice(0, val("searchListMax")) : [];
 }
 
 function gsSaveRecent(list) {
@@ -16100,13 +16093,13 @@ function gsClearRecent() {
 }
 
 // Remembers a query for the "recent searches" list shown at rest -- capped at
-// gsRecentMax (5 unless changed), newest first, deduped case-insensitively.
+// searchListMax (8 unless changed), newest first, deduped case-insensitively.
 function gsRemember(term) {
   term = term.trim();
   if (term.length < 2) return;
   let list = gsRecentList().filter((x) => x.toLowerCase() !== term.toLowerCase());
   list.unshift(term);
-  gsSaveRecent(list.slice(0, val("gsRecentMax")));
+  gsSaveRecent(list.slice(0, val("searchListMax")));
 }
 
 function gsSetActive(i) {
@@ -16149,7 +16142,7 @@ function gsRender() {
     gsSetActive(gsFlatRows.length ? 0 : -1);
     return;
   }
-  const limit = val("globalSearchLimit");
+  const limit = val("searchListMax");
   let any = false;
   for (const group of GS_GROUPS) {
     const hits = group.hits(q);

@@ -225,7 +225,7 @@ export const HELP_CONTENT = {
         "Pick two rows and click \"Compare\" in the selection bar to see both side by side with the differences marked.",
       ],
       whatHappens: "Search is typo-tolerant by default and, unless turned off, sorts by most-used or most-recently-used. In the comparison, either side's text can be taken over into the other. Tiles view behaves exactly like the list for clicks, menus and multi-select.",
-      settings: ["Fuzzy search, smart sort, type and color filters: Expert menu → Library & History → Library", "Focus the search field on opening, multi-select for batch actions, image and video previews in the rows: Expert menu → Library & History → Library", "Recent searches kept by the search window, results in the quick launcher: Expert menu → Library & History → Library", "Saved searches, tiles view: Expert menu → Library & History → Library"],
+      settings: ["Fuzzy search, smart sort, type and color filters: Expert menu → Library & History → Library", "Focus the search field on opening, multi-select for batch actions, image and video previews in the rows: Expert menu → Library & History → Library", "Entries per search list (library, Search everything, quick launcher): Expert menu → Library & History → Library", "Saved searches, tiles view: Expert menu → Library & History → Library"],
     },
     {
       section: "organising",
@@ -238,7 +238,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Enter does what fits the hit: it copies a tile or history entry, opens an attachment, switches to a view, opens and highlights a setting, or opens the help article. Each group shows a few hits and a \"show more\". With the box empty, recent searches are offered. Escape, a click outside, or the magnifier again closes it.",
-      settings: ["Search everything, hits per group, recent searches kept: Expert menu → Library & History → Library"],
+      settings: ["Search everything: Expert menu → Library & History → Library"],
     },
     {
       section: "organising",
@@ -975,7 +975,7 @@ export const HELP_CONTENT = {
         "Zwei Zeilen auswählen und in der Auswahlleiste \"Vergleichen\" klicken, um beide nebeneinander mit markierten Unterschieden zu sehen.",
       ],
       whatHappens: "Die Suche ist standardmäßig fehlertolerant und sortiert, falls nicht deaktiviert, nach am häufigsten oder zuletzt Verwendetem. Im Vergleich lässt sich der Text einer Seite in die andere übernehmen. Die Kachelansicht verhält sich bei Klicks, Menüs und Mehrfachauswahl genau wie die Liste.",
-      settings: ["Fuzzy-Suche, clevere Sortierung, Typ- und Farb-Filter: Expertenmenü → Bibliothek & Verlauf → Bibliothek", "Suchfeld beim Öffnen fokussieren, Mehrfachauswahl für Stapelaktionen, Bild- und Video-Vorschau in den Zeilen: Expertenmenü → Bibliothek & Verlauf → Bibliothek", "Gemerkte letzte Suchen des Suchfensters, Treffer im Schnellstarter: Expertenmenü → Bibliothek & Verlauf → Bibliothek", "Gespeicherte Suchen, Kachelansicht: Expertenmenü → Bibliothek & Verlauf → Bibliothek"],
+      settings: ["Fuzzy-Suche, clevere Sortierung, Typ- und Farb-Filter: Expertenmenü → Bibliothek & Verlauf → Bibliothek", "Suchfeld beim Öffnen fokussieren, Mehrfachauswahl für Stapelaktionen, Bild- und Video-Vorschau in den Zeilen: Expertenmenü → Bibliothek & Verlauf → Bibliothek", "Einträge je Suchliste (Bibliothek, Alles durchsuchen, Schnellstarter): Expertenmenü → Bibliothek & Verlauf → Bibliothek", "Gespeicherte Suchen, Kachelansicht: Expertenmenü → Bibliothek & Verlauf → Bibliothek"],
     },
     {
       section: "organising",
@@ -988,7 +988,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Enter tut, was zum Treffer passt: Es kopiert eine Kachel oder einen Verlaufseintrag, öffnet einen Anhang, wechselt in eine Ansicht, öffnet und markiert eine Einstellung oder öffnet den Hilfeartikel. Jede Gruppe zeigt einige Treffer und ein \"Mehr anzeigen\". Ist das Feld leer, werden die letzten Suchen angeboten. Escape, ein Klick daneben oder die Lupe schließt es wieder.",
-      settings: ["Alles durchsuchen, Treffer je Gruppe, gemerkte letzte Suchen: Expertenmenü → Bibliothek & Verlauf → Bibliothek"],
+      settings: ["Alles durchsuchen: Expertenmenü → Bibliothek & Verlauf → Bibliothek"],
     },
     {
       section: "organising",

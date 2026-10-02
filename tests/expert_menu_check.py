@@ -150,7 +150,6 @@ DEPENDENCIES = {
     "frostedBlur": "frostedModals",
     "customThemeMax": "customThemes",
     # Library, history, privacy
-    "searchRecentMax": "searchSuggest",
     "searchDebounceMs": "librarySearch",
     "fuzzyMaxTypos": "fuzzySearch",
     "libraryCols": "librarySearch",
@@ -186,7 +185,6 @@ DEPENDENCIES = {
     "recOutline": "screenRecord",
     "recOutlineColor": "recOutline",
     "chainSeparator": "chainPrompts",
-    "gsRecentMax": "globalSearch",
     "veOvTextOutlinePx": "videoEditor",
     "veOvVideoVolume": "videoEditor",
     "veOvKeysActiveColor": "videoEditor",

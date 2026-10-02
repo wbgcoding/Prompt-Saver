@@ -32,7 +32,7 @@ let lastUsed = {};
 let active = -1; // keyboard-highlighted row index into the CURRENT rendered list
 let closed = false;
 
-// Rows listed at once: the launcherMaxResults expert value, read in boot().
+// Rows listed at once: the searchListMax expert value, read in boot().
 const MAX_RESULTS_DEFAULT = 8;
 let maxResults = MAX_RESULTS_DEFAULT;
 const PREVIEW_LEN = 70;
@@ -154,7 +154,7 @@ async function boot() {
   // its hotkey fires, and it needs four small fields, not a whole prompt each.
   const state = await invoke("launcher_items").catch(() => ({ prompts: [], language: "", usage: {}, last_used: {} }));
   const cfg = await invoke("get_settings").catch(() => null);
-  const wanted = Number(cfg?.ui_values?.launcherMaxResults);
+  const wanted = Number(cfg?.ui_values?.searchListMax);
   maxResults = Number.isFinite(wanted) ? Math.min(20, Math.max(3, Math.round(wanted))) : MAX_RESULTS_DEFAULT;
   applyFloatTheme(await invoke("current_theme").catch(() => null), await invoke("theme_vars").catch(() => ({})));
   listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars));

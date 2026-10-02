@@ -1702,6 +1702,9 @@ the video editor and the introduction tour ship on).
   keeps; the separate row limit is gone.
 - **One screenshot quality.** The expert menu keeps only the quality that is
   saved, copied and exported; the preview quality is fixed.
+- **One number for every search list.** Library suggestions, Search
+  everything and the quick launcher share one entry limit (8 by default);
+  the five separate limits are gone.
 
 ## 2.6.3 (2026-07-26)
 
