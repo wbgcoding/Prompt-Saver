@@ -1269,7 +1269,6 @@ const FLAG_LABELS = {
   promptHistory: "flagPromptHistory",
   mdPreview: "flagMdPreview",           // rendered Markdown preview in the editor
   promptNotes: "flagPromptNotes",               // private notes row in the editor
-  usageStats: "statsEnable",            // only ever rendered in the backups dialog
   dupFinder: "flagDupFinder",
   // A background check after every save, naming the closest existing prompt
   // once it clears similarThreshold (the same value the duplicate finder
@@ -1414,6 +1413,12 @@ const OPT_FLAG_LABELS = {
   // Favorites view: the header star that opens a live grid of favorites. Ships OFF,
   // like the old settings switch it replaced.
   favViewButton: "flagFavViewButton",
+  // Statistics: counts tool use only once switched on (the backend has always
+  // read it that way). Only ever rendered in the backups dialog.
+  usageStats: "statsEnable",
+  // Save every screenshot into the Screenshots folder: the Settings switch and
+  // the snip dialog switch are the two places it is shown.
+  screenshotSave: "screenshotToFolder",
   viewGroups: "flagViewGroups",                 // folder tabs for views
   // The tile's own chain-start icon otherwise only appears on hover -- kept as an
   // opt-in for whoever prefers it dimly visible on every tile all the time (04.09.
@@ -2301,7 +2306,9 @@ const EXPERT_PRESET_FULL_EXCLUDE = [
   "remoteApi", "remoteNetworkFilter", "urlScheme", "promptSync",
   // Locks and background collecting: switching them on silently would lock the
   // data folder, block a second window or start watching the clipboard.
-  "dataDirLock", "allowMultipleInstances", "clipWatcher",
+  "dataDirLock", "allowMultipleInstances", "clipWatcher", "usageStats",
+  // A preset must not start writing files.
+  "screenshotSave",
 ];
 const ALL_EXPERT_FLAG_KEYS = [...ALL_FLAG_KEYS, ...OPT_FLAG_KEYS];
 
@@ -3886,6 +3893,7 @@ const SETTINGS_DIRECTORY = [
   { key: "backup-monthly", area: "backup", label: "valBackupMonthly" },
   { key: "backup-yearly", area: "backup", label: "valBackupYearly" },
   { key: "backup-password", area: "backup", label: "backupPasswordLabel" },
+  { key: "usage-stats", area: "backup", label: "statsEnable", tip: "tipUsageStats" },
 ];
 const SETTINGS_AREA_LABEL = { normal: "settingsAreaNormal", toolbar: "settingsAreaToolbar", library: "settingsAreaLibrary", backup: "settingsAreaBackup" };
 
@@ -3897,7 +3905,7 @@ function settingsDirectoryHit(entry, q) {
 // The DOM node to scroll to and flash for one directory entry. Only valid
 // once that entry's own area is already open (see openSettingsDirectoryEntry).
 function settingsDirectoryTarget(entry) {
-  if (entry.area === "backup") return document.querySelector(`#backup-panel [data-setting-row="${entry.key}"]`);
+  if (entry.area === "backup") return document.querySelector(`#backup-modal [data-setting-row="${entry.key}"]`);
   const el = $(entry.key);
   return el ? (el.closest(".field") || el) : null;
 }
@@ -3925,7 +3933,7 @@ async function openSettingsDirectoryEntry(entry) {
     hideSettings();
     $("backup-modal").classList.remove("hidden");
     await renderBackupPanel($("backup-panel"));
-    renderStatsPanel($("stats-panel"));
+    await renderStatsPanel($("stats-panel"));
   }
   flashSettingsRow(settingsDirectoryTarget(entry));
 }
@@ -9922,7 +9930,7 @@ function recordToolUsage(tool) {
 
 async function renderStatsPanel(body) {
   // Feature toggle + (when on) the top-N field share one row.
-  const on = flag("usageStats");
+  const on = optFlag("usageStats");
   // Fetch BEFORE clearing: otherwise the panel paints empty during the await,
   // which read as a flash on every re-render.
   let s = null;
@@ -9942,6 +9950,7 @@ async function renderStatsPanel(body) {
   body = panel;
   const headRow = document.createElement("div"); headRow.className = "stats-head-row";
   const sw = document.createElement("label"); sw.className = "field switch-field";
+  sw.dataset.settingRow = "usage-stats";
   const swl = document.createElement("span"); swl.textContent = t("statsEnable");
   const swi = document.createElement("input"); swi.type = "checkbox"; swi.className = "switch"; swi.checked = on;
   // Root, not body: body was reassigned to the INNER panel just above, and
@@ -16279,7 +16288,7 @@ async function runImport() {
     fillScaleSelect("ui-scale", "uiScale");
     fillScaleSelect("icon-scale", "iconScale");
     $("opt-minimize").checked = settings.minimize_to_tray === true;
-    $("opt-screenshot-folder").checked = settings.ui_flags?.screenshotSave === true;
+    $("opt-screenshot-folder").checked = optFlag("screenshotSave");
     $("opt-tooltips").checked = flag("tooltipsEnabled");
     $("opt-autopaste").checked = settings.ui_flags?.autoPaste !== false;
     $("opt-autoupdate").checked = settings.auto_update !== false;
@@ -19559,7 +19568,7 @@ function bind() {
     if (!flag("snipEditor")) {
       // Off -> the pre-117/118 flow, unedited shot straight into the result dialog.
       $("snip-preview").src = pendingSnip;
-      $("snip-save-folder").checked = settings.ui_flags?.screenshotSave === true;
+      $("snip-save-folder").checked = optFlag("screenshotSave");
       $("snip-modal-saveas-format").value = txt("screenshotFormat") || "png";
       snipModal.classList.remove("hidden");
       return;
@@ -19572,7 +19581,7 @@ function bind() {
         // optionally, on disk) -- redo both side effects on the edited result.
         invoke("copy_image_data", { dataUrl: editedDataUrl }).catch((err) => errToast(err));
         let saveFailed = false;
-        if (settings.ui_flags?.screenshotSave === true) {
+        if (optFlag("screenshotSave")) {
           // Save the edited copy first and only then remove the unedited file, so a
           // failed save (unwritable folder, full disk, too large) never leaves the
           // user with neither of the two on disk.
@@ -19595,7 +19604,7 @@ function bind() {
           }
         }
         $("snip-preview").src = pendingSnip;
-        $("snip-save-folder").checked = settings.ui_flags?.screenshotSave === true && !saveFailed;
+        $("snip-save-folder").checked = optFlag("screenshotSave") && !saveFailed;
         $("snip-modal-saveas-format").value = txt("screenshotFormat") || "png";
         $("snip-modal-retry").classList.remove("hidden");
         snipModal.classList.remove("hidden");
@@ -22127,7 +22136,7 @@ function syncSettingsControls() {
     fillThemeSelect();
     setLangSelect();
     $("opt-minimize").checked = settings.minimize_to_tray === true;
-    $("opt-screenshot-folder").checked = settings.ui_flags?.screenshotSave === true;
+    $("opt-screenshot-folder").checked = optFlag("screenshotSave");
     $("opt-tooltips").checked = flag("tooltipsEnabled");
     $("opt-autopaste").checked = settings.ui_flags?.autoPaste !== false;
     $("opt-autostart").checked = settings.autostart === true;

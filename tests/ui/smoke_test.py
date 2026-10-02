@@ -16950,6 +16950,27 @@ def main():
       if (sel.value !== '1') errs.push('646: a stored 0 hours should show the 1 hour the backend uses, got ' + sel.value);
     }
 """)
+        failed += ar_probe('bm654', 'usage statistics: a fresh install shows the switch off and no counts, switching it on stores true and shows them', 'index', '1000x780', r"""<script>window.__SEED_SETTINGS__ = { ui_flags: { usageStats: undefined } };</script>
+""", r"""
+    await bootReady();
+    document.getElementById('gear').click();
+    await sleep(200);
+    document.getElementById('settings-backup-btn').click();
+    await sleep(600);
+    const swi = () => document.querySelector('#stats-panel .stats-head-row .switch');
+    if (!swi()) errs.push('654: the statistics switch is missing');
+    else {
+      if (swi().checked) errs.push('654: a fresh install shows the statistics switch on');
+      if (document.querySelector('#stats-panel .stat-cards')) errs.push('654: statistics cards show while the switch is off');
+      window.__SMOKE_ARGS__ = [];
+      swi().click();
+      await sleep(600);
+      const calls = (window.__SMOKE_ARGS__ || []).filter(([cmd, a]) => cmd === 'set_ui_flag' && a && a.key === 'usageStats');
+      if (!calls.length || calls[calls.length - 1][1].enabled !== true) errs.push('654: switching statistics on did not store usageStats true');
+      if (!swi() || !swi().checked) errs.push('654: the switch is not on after switching it on');
+      if (!document.querySelector('#stats-panel .stat-cards')) errs.push('654: no statistics cards after switching on');
+    }
+""")
         # ---- main window findings: generated block end ----
         print("PASS" if not failed else f"{failed} problem(s)")
         return 1 if failed else 0

@@ -221,6 +221,9 @@ const SETTINGS = {
   // setting must convert to "none" on read without the user touching anything.
   ui_flags: {
     tags: true, customThemes: true, viewGroups: true, promptNotes: true, pillFolders: true,
+    // The statistics checks read a dashboard that is switched on; a fresh install starts
+    // with it off (the dedicated probe seeds that case).
+    usageStats: true,
     // 455/390: the dedicated first-run-tour probe boots with tourSeen unset so
     // maybeOpenFirstRunTour actually opens the draft-buffered path -- every other
     // boot keeps it true, same reasoning as secretPrompts/demoMode above.

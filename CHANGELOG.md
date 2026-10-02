@@ -1399,6 +1399,9 @@ the video editor and the introduction tour ship on).
 - **Key overlay and camera recording were shown as on.** Both are off until
   you switch them on, as intended; before, the expert menu showed them on
   while recording ignored them.
+- **Usage statistics switch shows its real state.** It showed on while tool use
+  was not being counted; it now starts off and counts as soon as you switch it
+  on.
 
 ### Security
 

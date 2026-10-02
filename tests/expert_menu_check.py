@@ -36,6 +36,8 @@ NOT_IN_EXPERT = {
     "backupDaily", "backupWeekly", "backupMonthly", "backupYearly",
     # Statistics, rendered by renderStatsPanel.
     "usageStats", "statsTopN",
+    # Screenshot folder save: Settings page and the screenshot dialog.
+    "screenshotSave",
     # Interface and icon size, set by the two selects on the normal settings page.
     "uiScale", "iconScale",
     # Remembered by the library's own Close-after-copy button.
