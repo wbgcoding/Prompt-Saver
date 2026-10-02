@@ -7105,7 +7105,7 @@ fn sweep_stale_recordings(
 // convert_recording/convert_recording_blocking above. Three independent
 // reasons to remove a file: it is old AND nobody has decided on it yet, it is
 // a broken (moov-less) mp4 past a much shorter grace period, or it is past
-// the retention window (off by default) -- either way every path in
+// the retention window (90 days unless changed) -- either way every path in
 // `protected` (the currently recording session's own output + mic sidecar,
 // plus the video editor's currently open source + its own sidecar, if any)
 // is excluded unconditionally, never by age or state, because deleting a
@@ -45866,7 +45866,7 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
-    // recordingRetentionDays, off by default (None), lets a kept but
+    // recordingRetentionDays at 0 (None, keep forever) lets a kept but
     // unreferenced recording age well past STALE_TEMP_FILE_AGE untouched --
     // once a caller passes a retention window, an unreferenced file past it is
     // swept even though it is nowhere near that fixed constant, and a
