@@ -1,3 +1,265 @@
+/* Camera recording window. This sheet is self-contained: the first part copies the
+   theme tokens, the base rules and the few shared controls the window uses from
+   main.css (tests/camera_css_check.js keeps the copies identical), the last part is
+   the window's own layout. */
+
+/* ---- Theme tokens ---- */
+:root {
+  --bg: #f7f7f8;
+  --surface: #ffffff;
+  --surface-2: #f0f0f2;
+  --fg: #1a1a1a;
+  --muted: #666d7a;
+  --border: #e3e3e7;
+  --control-border: #838386;
+  --accent: #2563eb;
+  --accent-fg: #ffffff;
+  --accent-strong: var(--accent);
+  --danger: #dc2626;
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --radius: 10px;
+  --transition: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666d7a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+}
+:root[data-theme="dark"] {
+  --bg: #1b1b1d;
+  --surface: #242427;
+  --surface-2: #2d2d31;
+  --fg: #f3f3f3;
+  --muted: #9ca3af;
+  --border: #38383d;
+  --control-border: #7d7d80;
+  --accent: #3b82f6;
+  --accent-fg: #ffffff;
+  --accent-strong: #3472d9;
+  --danger: #f15757;
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+}
+:root[data-theme="programmer"] {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --surface-2: #21262d;
+  --fg: #c9d1d9;
+  --muted: #8b949e;
+  --border: #30363d;
+  --control-border: #6f767d;
+  --accent: #3fb950;
+  --accent-fg: #06150b;
+  --danger: #f85149;
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b949e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+}
+:root[data-theme="neon"] {
+  --bg: #0c0817;
+  --surface: #171028;
+  --surface-2: #221739;
+  --fg: #ede9fe;
+  --muted: #a78bda;
+  --border: #3b2a63;
+  --control-border: #746895;
+  --accent: #a855f7;
+  --accent-fg: #ffffff;
+  --accent-strong: #9a4ee2;
+  --danger: #fb7185;
+  --shadow: 0 8px 28px rgba(168, 85, 247, 0.35);
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a78bda' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+}
+:root[data-theme="ocean"] {
+  --bg: #eef9fe;
+  --surface: #ffffff;
+  --surface-2: #e0f2fe;
+  --fg: #0c4a6e;
+  --muted: #5e6d82;
+  --border: #bae6fd;
+  --control-border: #5389a8;
+  --accent: #0284c7;
+  --accent-fg: #ffffff;
+  --accent-strong: #027bba;
+  --danger: #dc2626;
+  --shadow: 0 8px 24px rgba(2, 132, 199, 0.15);
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235e6d82' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+}
+:root[data-theme="cyberpunk"] {
+  --bg: #0a0a12;
+  --surface: #14141f;
+  --surface-2: #1d1d2e;
+  --fg: #e0e7ff;
+  --muted: #8383a4;
+  --border: #2e2e4a;
+  --control-border: #6b6e88;
+  --accent: #ff2d78;
+  --accent-fg: #ffffff;
+  --accent-strong: #dd2768;
+  --danger: #ff5d5d;
+  --shadow: 0 8px 28px rgba(255, 45, 120, 0.35);
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238383a4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+}
+:root[data-theme="mono"] {
+  --bg: #fafafa;
+  --surface: #ffffff;
+  --surface-2: #f0f0f0;
+  --fg: #111111;
+  --muted: #6c6c6c;
+  --border: #dddddd;
+  --control-border: #838383;
+  --accent: #111111;
+  --accent-fg: #ffffff;
+  --danger: #b91c1c;
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236c6c6c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+}
+
+/* ---- Base ---- */
+:root[data-theme="programmer"] body {
+  font-family: Consolas, "Cascadia Mono", monospace;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  height: 100%;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-size: 14px;
+  color: var(--fg);
+  overflow: hidden;
+  transition: background var(--transition), color var(--transition);
+}
+html { background: transparent; }
+body {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* ---- Shared controls ---- */
+.icon-btn {
+  display: inline-flex;
+  padding: 6px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition), transform var(--transition);
+}
+.icon-btn:hover { background: var(--surface-2); color: var(--fg); }
+.icon-btn:active { transform: scale(0.92); }
+.primary-btn {
+  padding: 10px 18px;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--accent-strong);
+  color: var(--accent-fg);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter var(--transition), transform var(--transition), opacity var(--transition);
+}
+.primary-btn:hover:not(:disabled) { filter: brightness(1.08); }
+.primary-btn:active:not(:disabled) { transform: scale(0.97); }
+.primary-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.ghost-btn {
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition);
+}
+.ghost-btn:hover { background: var(--surface-2); border-color: var(--accent); }
+::-webkit-scrollbar { width: var(--sb-width, 12px); height: var(--sb-width, 12px); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; border: 3px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); border: 3px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-corner { background: transparent; }
+.icon-btn { zoom: var(--icon-zoom, 1); }
+.primary-btn { zoom: var(--primary-zoom, 1); }
+.icon-btn:focus-visible, .ghost-btn:focus-visible, .primary-btn:focus-visible,
+.view-btn:focus-visible, .view-add-top:focus-visible, .fav-view-toggle:focus-visible,
+.lib-type:focus-visible, .head-toggle:focus-visible,
+.expert-tab:focus-visible, .tile:focus-visible, .switch:focus-visible,
+.win-btn:focus-visible, .swatch:focus-visible, .toolbar-item:focus-visible,
+.color-swatch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+select,
+.expert-select {
+  appearance: none; -webkit-appearance: none;
+  padding-right: 30px;
+  cursor: pointer;
+  background-image: var(--select-chevron);
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  background-size: 14px;
+  /* Complete on its own so a bare <select> with no extra class never renders
+     with the plain OS look, only the chevron -- a select created without a
+     themed class used to have no border, background or text colour at all. */
+  background-color: var(--surface-2);
+  color: var(--fg);
+  border: 1px solid var(--control-border);
+  border-radius: 8px;
+  font: inherit;
+}
+select:focus { border-color: var(--accent); outline: none; }
+option, optgroup { background-color: var(--surface); color: var(--fg); }
+option:checked { background-color: var(--accent); color: var(--accent-fg); }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.num-pop {
+  position: fixed;
+  z-index: 130;
+  display: flex;
+  flex-direction: column;
+  min-width: 56px;
+  max-height: 240px; /* up to 8 rows at the larger font, scrollbar only when needed */
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+.num-pop::-webkit-scrollbar { width: 6px; }
+.num-pop::-webkit-scrollbar-track { background: transparent; margin: 6px 0; }
+.num-pop::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 3px; }
+.num-pop button {
+  padding: 4px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit; /* same size as the select that opened the popup */
+  text-align: center;
+  cursor: pointer;
+}
+.num-pop button:hover { background: var(--surface-2); }
+.num-pop button.sel {
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-weight: 600;
+}
+.num-pop button.kb {
+  background: var(--surface-2);
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+.num-pop button.sel.kb { background: var(--accent); }
+.num-pop button.sep {
+  padding: 3px 10px;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: default;
+}
+.num-pop button.sep:hover { background: transparent; }
+.hidden { display: none !important; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* ---- Camera window ---- */
 /* Camera recording window: a getUserMedia preview plus the same
    transport shape the recording bar uses (pause/resume, stop), scaled up to
    a real window instead of a narrow strip since this one shows a picture. */
