@@ -856,8 +856,9 @@ the video editor and the introduction tour ship on).
 - Pill folders, grid folders and view-tab groups now read as the same idea
   everywhere: one wording and one folder icon for all three, instead of each
   kind describing itself a little differently.
-- The chain button's tooltip now explains how chaining differs from rotation,
-  so the two are easier to tell apart at a glance instead of only in the help.
+- The chain button's tooltip now says what chain mode does, and the rotation
+  switch has a tooltip of its own, so the two are easier to tell apart at a
+  glance instead of only in the help.
 - The dark shadow behind white text on a coloured tile, folder or floating
   button can now be switched off or dialed to a different strength in the
   expert menu, next to the black/white text switch.
