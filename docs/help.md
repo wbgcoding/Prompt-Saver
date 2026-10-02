@@ -99,7 +99,8 @@ Drag a tile to any empty cell, or drop it on an occupied one to swap the two; th
 grid never rearranges itself on its own. Drop a tile on a view tab above the grid
 to move it into that view instead, or hold Ctrl while dropping to copy it there
 so it stays in both. Hovering over a collapsed view group opens it after a
-moment, so the drop can target a view inside.
+moment, so the drop can target a view inside. Change the grid size by
+right-clicking a view tab or an empty spot of the grid and choosing Grid size.
 
 ### Screenshot tool
 
@@ -1110,7 +1111,9 @@ Expertenmenü bis 200×200 einstellbar), eigenes Layout je Ansicht. Eine Kachel
 auf einen Ansichtsreiter über dem Raster gezogen verschiebt sie in diese
 Ansicht, mit gedrückter Strg-Taste wird stattdessen kopiert und sie bleibt in
 beiden. Über einer eingeklappten Ansichtsgruppe verweilt klappt diese nach
-kurzer Zeit auf, damit sich in eine Ansicht darin ablegen lässt.
+kurzer Zeit auf, damit sich in eine Ansicht darin ablegen lässt. Die Rastergröße
+ändert man per Rechtsklick auf einen Ansichtsreiter oder eine freie Stelle im
+Raster unter Rastergröße.
 
 **Screenshot-Werkzeug**: Bereich oder ganzes Fenster (auch geschützte wie den
 Task-Manager) direkt zu einer neuen Kachel. Davor öffnet sich standardmäßig ein

@@ -1678,7 +1678,9 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
 /* Opt-in flag (default off): shown only once voiceHotkey is switched on, same
    convention as every other flag-<key> gated row. */
 body:not(.flag-voiceHotkey) #voice-hotkey-row { display: none; }
-.noflag-quickGrid #quick-grid { display: none; }
+/* Opt-in flag: the header fields appear only once quickGrid is switched on. */
+#quick-grid { display: none; }
+.flag-quickGrid #quick-grid { display: flex; }
 .flag-quickGridHoverOnly .header #quick-grid { opacity: 0; pointer-events: none; }
 .flag-quickGridHoverOnly .header:hover #quick-grid, .flag-quickGridHoverOnly .header:focus-within #quick-grid { opacity: 1; pointer-events: auto; }
 .noflag-tags #grid-tag-btn { display: none; }

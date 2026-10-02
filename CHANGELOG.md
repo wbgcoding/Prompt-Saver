@@ -1727,6 +1727,9 @@ the video editor and the introduction tour ship on).
   recording are separate groups, the library splits into Search and Display,
   colours and media moved into their neighbours, and the header's right-click
   list only shows or hides buttons.
+- **Quick grid fields are off by default.** The columns and rows fields in the
+  header are off by default; the grid size is set from the view tab's
+  right-click menu or a right-click on an empty spot of the grid.
 
 ## 2.6.3 (2026-07-26)
 

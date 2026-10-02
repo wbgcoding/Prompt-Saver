@@ -404,7 +404,7 @@ export const HELP_CONTENT = {
         "Drop a tile on a view tab above the grid to move it into that view instead.",
         "Hold Ctrl while dropping on a view tab to copy the tile there, so it stays in both places.",
         "Hover over a collapsed view group so it opens and the drop can target a view inside.",
-        "Adjust the grid size with the quick columns and rows fields above it.",
+        "Change the grid size by right-clicking a view tab or an empty spot of the grid and choosing Grid size.",
       ],
       whatHappens:
         "A tile keeps its cell until moved; the grid never rearranges itself. Shrinking the grid does not delete tiles that fall outside the new size; they stay assigned and reappear once it grows back. The 20x20 default is only a starting point; the expert menu's limit setting raises it up to 200x200.",
@@ -1155,7 +1155,7 @@ export const HELP_CONTENT = {
         "Eine Kachel auf einen Ansichts-Tab über dem Raster ziehen, um sie stattdessen in diese Ansicht zu verschieben.",
         "Beim Ziehen auf einen Ansichts-Tab Strg gedrückt halten, um die Kachel dorthin zu kopieren, statt zu verschieben, sodass sie an beiden Stellen bleibt.",
         "Über einer eingeklappten Ansichtsgruppe warten, bis sie sich öffnet, damit das Ablegen eine Ansicht darin treffen kann.",
-        "Die Rastergröße mit den Schnell-Feldern für Spalten und Zeilen darüber anpassen.",
+        "Die Rastergröße per Rechtsklick auf einen Ansichtsreiter oder eine freie Stelle im Raster unter Rastergröße ändern.",
       ],
       whatHappens:
         "Eine Kachel behält ihre Zelle, bis sie bewegt wird; das Raster ordnet sich nie selbst neu. Das Verkleinern löscht keine außerhalb liegenden Kacheln; sie bleiben zugewiesen und erscheinen beim Vergrößern wieder. Die Standardgröße von 20x20 ist nur ein Startwert; die Limit-Einstellung im Expertenmenü hebt sie auf bis zu 200x200 an.",

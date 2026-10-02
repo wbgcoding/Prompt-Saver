@@ -1174,7 +1174,6 @@ const FLAG_LABELS = {
   snipEditor: "flagSnipEditor",
   snipEditSnap: "flagSnipEditSnap",
   multiView: "flagMultiView",
-  quickGrid: "flagQuickGrid",
   floating: "flagFloating",
   // A saved position whose screen is gone gets parked on the main screen
   // instead of dropped into the void; off falls back to the old plain
@@ -1425,6 +1424,8 @@ const OPT_FLAG_LABELS = {
   // decision); the 05.09. decision reversed the shipped default back to hover-only.
   chainStartAlwaysVisible: "flagChainStartAlwaysVisible",
   gridViewBorder: "flagGridViewBorder",         // colored border around the grid in the view's color
+  // header columns x rows fields; the grid size otherwise lives in the view menu
+  quickGrid: "flagQuickGrid",
   quickGridHoverOnly: "flagQuickGridHoverOnly", // quick-grid control shows only while the header is hovered
   // Named from the user's side: the window is kept out of screenshots, and this is
   // the switch that lets them through. Ships off, so the protection is the default
@@ -3880,7 +3881,7 @@ const SETTINGS_DIRECTORY = [
   { key: "opt-voice-hotkey", area: "normal", label: "voiceHotkeyLabel", gate: "voiceHotkey" },
   { key: "opt-autoupdate", area: "normal", label: "autoUpdate", tip: "autoUpdateHint" },
   { key: "opt-update-interval", area: "normal", label: "valUpdateCheckH" },
-  { key: "quick-grid", area: "toolbar", label: "gridSize" },
+  { key: "quick-grid", area: "toolbar", label: "gridSize", gate: "quickGrid" },
   { key: "library-sort", area: "library", label: "sortBy" },
   { key: "library-close-toggle", area: "library", label: "flagCloseAfterCopy" },
   { key: "backup-auto", area: "backup", label: "flagAutoBackup" },
@@ -4815,6 +4816,7 @@ function viewTabEl(v) {
     e.preventDefault();
     e.stopPropagation();
     const items = [
+      { label: t("gridSizeMenu"), run: () => openGridSizeFor(v) },
       { label: t("editViewTitle"), run: () => openViewModal(v) },
       { label: t("duplicate"), run: () => duplicateView(v) },
       ...moveTabMenuItems(`v:${v.id}`),
@@ -5464,6 +5466,14 @@ function openViewModal(view) {
   viewModal.root.classList.remove("hidden");
   viewModal.name.focus();
   viewModal.name.select();
+}
+
+// Entry point for the grid size: the view dialog with the columns field ready.
+function openGridSizeFor(view) {
+  if (!view) return;
+  openViewModal(view);
+  viewModal.cols.focus();
+  viewModal.cols.select();
 }
 
 function closeViewModal() {
@@ -7071,6 +7081,14 @@ gridEl.addEventListener("dblclick", (e) => {
     title: t("nameModalTitle"),
     targetCell: [Number(cell.dataset.col), Number(cell.dataset.row)],
   });
+});
+
+// Right-click on an empty spot of the grid offers the grid size. Tiles and folder
+// tiles stop their own contextmenu event; the favorites grid sizes itself.
+gridEl.addEventListener("contextmenu", (e) => {
+  if (favView || e.target.closest(".tile")) return;
+  e.preventDefault();
+  openMiniMenu([{ label: t("gridSizeMenu"), run: () => openGridSizeFor(activeView()) }], e.clientX, e.clientY);
 });
 
 // ---- Grid folders: several prompts collapsed into one cell ----

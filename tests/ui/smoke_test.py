@@ -4672,6 +4672,34 @@ PROBE = """
     // CSS :hover, so a synthetic event can't prove the reveal itself; this only
     // proves the flag actually hides/unhides the control (the hover is checked by eye).
     const qgEl = document.getElementById('quick-grid');
+    // The header columns/rows fields are an opt-in: hidden on a fresh profile,
+    // while the grid size stays reachable from two right-click menus.
+    if (getComputedStyle(qgEl).display !== 'none') out.errors.push('the quick-grid fields show on a fresh profile');
+    {
+      const openMenuAt = (el) => {
+        const r = el.getBoundingClientRect();
+        el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 6, clientY: r.top + 6 }));
+      };
+      const gridMenuItem = () => [...document.querySelectorAll('.tab-menu:not(.hidden) button')].find(b => b.textContent.trim() === 'Grid size…');
+      const checkGridSizeEntry = async (what, el) => {
+        if (!el) { out.errors.push('grid size menu: no ' + what + ' to right-click'); return; }
+        openMenuAt(el);
+        await sleep(150);
+        const it = gridMenuItem();
+        if (!it) { out.errors.push('grid size menu: right-click on ' + what + ' offers no Grid size entry'); return; }
+        it.click();
+        await sleep(200);
+        const vm = document.getElementById('view-modal');
+        if (vm.classList.contains('hidden')) out.errors.push('grid size menu: ' + what + ' did not open the view dialog');
+        else if (document.activeElement !== document.getElementById('view-modal-cols')) out.errors.push('grid size menu: ' + what + ' did not focus the columns field');
+        await click('view-modal-close');
+        await sleep(150);
+      };
+      await checkGridSizeEntry('a view tab', document.querySelector('.view-btn[data-view-id]'));
+      await checkGridSizeEntry('an empty grid cell', [...document.querySelectorAll('#grid .cell')].find(c => !c.firstElementChild));
+    }
+    if (!await setExpertFlag('Quick grid size', true)) out.errors.push('the quick-grid switch is missing from the expert menu');
+    else if (getComputedStyle(qgEl).display === 'none') out.errors.push('the quick-grid fields stay hidden after switching them on');
     if (!await setExpertFlag('Quick grid: hover to reveal', true)) {
       out.errors.push('the quick-grid hover-only option is missing from the expert menu');
     } else {
@@ -5311,12 +5339,12 @@ PROBE = """
           const homeTab = viewTabs().find(b => b.dataset.viewId === loose[0].dataset.viewId);
           homeTab.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
           await sleep(200);
-          // Item order is fixed regardless of language: edit, duplicate, move
-          // left, move right, then (only with viewGroups on) "new group".
+          // Item order is fixed regardless of language: grid size, edit, duplicate,
+          // move left, move right, then (only with viewGroups on) "new group".
           const menuBtns = [...document.querySelectorAll('.tab-menu:not(.hidden) button')];
-          const leftBtn = menuBtns[2];
-          const rightBtn = menuBtns[3];
-          if (menuBtns.length < 4) {
+          const leftBtn = menuBtns[3];
+          const rightBtn = menuBtns[4];
+          if (menuBtns.length < 5) {
             out.errors.push('a loose tab menu has no move-left/move-right entries');
           } else {
             if (!leftBtn.disabled) out.errors.push('move-left is not disabled on the first tab');
@@ -5332,7 +5360,7 @@ PROBE = """
               const movedTab = viewTabs().find(b => b.dataset.viewId === loose[0].dataset.viewId);
               movedTab?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
               await sleep(200);
-              const backBtn = [...document.querySelectorAll('.tab-menu:not(.hidden) button')][2];
+              const backBtn = [...document.querySelectorAll('.tab-menu:not(.hidden) button')][3];
               backBtn?.click();
               await sleep(250);
             }
