@@ -2692,7 +2692,15 @@ fn removed_ui_value_keys() -> &'static [&'static str] {
 
 // Expert switches that no longer exist. A loaded store drops them once, like removed values.
 fn removed_ui_flag_keys() -> &'static [&'static str] {
-    &["pinButton", "favView", "libraryCloseToggle"]
+    &[
+        "pinButton",
+        "favView",
+        "libraryCloseToggle",
+        "copyBubble",
+        "undoToast",
+        "editorDraft",
+        "tooltipDelay",
+    ]
 }
 
 impl Settings {
@@ -2704,6 +2712,21 @@ impl Settings {
     // Ensure at least one view exists; migrate legacy single-grid data.
     fn migrate(&mut self) {
         // Merges that read an old key run first, before the removal loops below.
+        //
+        // Four on/off switches each had a duration beside them. The duration is the
+        // only control now and 0 means off: a switch that was stored off becomes a
+        // stored 0. A switch that was on (or never set) leaves the stored or default
+        // duration as it is.
+        for (flag, value) in [
+            ("copyBubble", "bubbleMs"),
+            ("undoToast", "undoToastMs"),
+            ("editorDraft", "editorDraftSecs"),
+            ("tooltipDelay", "tooltipDelayMs"),
+        ] {
+            if self.ui_flags.get(flag) == Some(&false) {
+                self.ui_values.insert(value.into(), 0.0);
+            }
+        }
         //
         // Five separate search-list caps became one, "searchListMax". The largest value
         // a user set wins, so nobody loses rows they asked for. A stored 0 ("keep no
@@ -51658,6 +51681,42 @@ mod tests {
         // Nothing stored: no key. A value already under the new key is kept.
         assert_eq!(run(&[], None), None);
         assert_eq!(run(&[("searchRecentMax", 12.0)], Some(6.0)), Some(6.0));
+    }
+
+    #[test]
+    fn toggle_pairs_merge_to_zero() {
+        let run = |flags: &[(&str, bool)], values: &[(&str, f64)]| {
+            let mut s = Settings::default();
+            for (k, v) in flags {
+                s.ui_flags.insert((*k).into(), *v);
+            }
+            for (k, v) in values {
+                s.ui_values.insert((*k).into(), *v);
+            }
+            let dirty = s.has_removed_ui_values();
+            s.migrate();
+            assert_eq!(dirty, !flags.is_empty());
+            for (k, _) in flags {
+                assert!(!s.ui_flags.contains_key(*k), "{k} survived migrate");
+            }
+            s
+        };
+        // A switch stored off becomes a stored 0, whatever duration sat beside it.
+        let s = run(&[("copyBubble", false)], &[]);
+        assert_eq!(s.ui_values.get("bubbleMs"), Some(&0.0));
+        let s = run(&[("undoToast", false)], &[("undoToastMs", 5000.0)]);
+        assert_eq!(s.ui_values.get("undoToastMs"), Some(&0.0));
+        let s = run(&[("tooltipDelay", false)], &[]);
+        assert_eq!(s.ui_values.get("tooltipDelayMs"), Some(&0.0));
+        // A switch stored on keeps the stored duration.
+        let s = run(&[("editorDraft", true)], &[("editorDraftSecs", 9.0)]);
+        assert_eq!(s.ui_values.get("editorDraftSecs"), Some(&9.0));
+        // A switch stored on with no duration leaves no key (the default applies).
+        let s = run(&[("copyBubble", true)], &[]);
+        assert!(!s.ui_values.contains_key("bubbleMs"));
+        // Nothing stored: nothing written.
+        let s = run(&[], &[]);
+        assert!(s.ui_values.is_empty());
     }
 
     #[test]

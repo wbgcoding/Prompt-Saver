@@ -14849,7 +14849,13 @@ EXPERT_PRESET_PROBE = """
     document.getElementById('expert-open').click();
     await sleep(200);
 
-    const setFlagCalls = () => (window.__SMOKE_CALLS__ || []).filter((c) => c === 'set_ui_flag').length;
+    const setFlagCalls = () => (window.__SMOKE_CALLS__ || []).filter((c) => c === 'set_ui_flag' || c === 'set_ui_value').length;
+    // The last value a preset wrote for a key (the main script is a module, its own
+    // state is out of reach, so the stubbed backend calls are the evidence).
+    const lastValue = (key) => {
+      const w = (window.__SMOKE_ARGS__ || []).filter((c) => c[0] === 'set_ui_value' && c[1].key === key);
+      return w.length ? w[w.length - 1][1].value : undefined;
+    };
     const before = setFlagCalls();
     const quietBtn = document.getElementById('expert-preset-quiet');
     if (!quietBtn) {
@@ -14867,6 +14873,9 @@ EXPERT_PRESET_PROBE = """
         document.getElementById('confirm-ok').click();
         await sleep(300);
         const actual = setFlagCalls() - before;
+        if (lastValue('bubbleMs') !== 0 || lastValue('undoToastMs') !== 0) {
+          errs.push('644: Quiet did not set the bubble and undo times to Off');
+        }
         if (actual !== claimed) {
           errs.push('447: the dialog said ' + claimed + ' settings would change, but ' + actual + ' actually did');
         }
@@ -14890,6 +14899,16 @@ EXPERT_PRESET_PROBE = """
             errs.push('447: re-applying an already-applied preset gave no feedback at all');
           }
         }
+      }
+    }
+    // Standard puts the off-at-zero values back to their defaults.
+    const stdBtn = document.getElementById('expert-preset-standard');
+    if (stdBtn) {
+      stdBtn.click();
+      await sleep(200);
+      if (!cm.classList.contains('hidden')) { document.getElementById('confirm-ok').click(); await sleep(300); }
+      if (lastValue('bubbleMs') !== 950 || lastValue('undoToastMs') !== 8000) {
+        errs.push('644: Standard did not restore the bubble and undo times');
       }
     }
   } catch (e) { errs.push('447 probe: ' + e.message); }

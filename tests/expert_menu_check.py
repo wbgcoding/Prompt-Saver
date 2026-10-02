@@ -134,8 +134,9 @@ DEPENDENCIES = {
     "dragOutInvert": "dragOut",
     "viewDropHoverMs": "dragToView",
     "tileHotkeyBadgeOpacity": "tileHotkeyBadge",
+    "copySize": "bubbleMs",
+    "copyFont": "bubbleMs",
     "tooltipWidth": "tilePreview",
-    "tooltipDelayMs": "tooltipDelay",
     "tooltipTimeoutMs": "tooltipTimeout",
     "tileHoverLift": "tileHover",
     "hoverLift": "tileHoverLift",
@@ -192,7 +193,6 @@ DEPENDENCIES = {
     "snipDefaultColor": "snipEditor",
     "dupImportCheck": "dupFinder",
     "similarThreshold": "similarHint",
-    "editorDraftSecs": "editorDraft",
     "clipMinChars": "clipWatcher",
     "clipInboxMax": "clipWatcher",
     # Backups + statistics (rendered outside the expert menu, gate still required)
@@ -279,6 +279,9 @@ opt_flags = set(top_keys(block("const OPT_FLAG_LABELS", "{", "}")))
 all_flags = flags | opt_flags
 values_src = block("const EXPERT_VALUES", "{", "}")
 values = set(top_keys(values_src))
+# A value whose 0 is its off stop gates its dependents like a flag (offAtZero: true).
+off_at_zero = {k for k in values
+               if re.search(r'\b' + re.escape(k) + r'\s*:\s*\{[^{}]*\boffAtZero:\s*true', values_src)}
 selects_src = block("const EXPERT_SELECTS", "{", "}")
 selects = set(top_keys(selects_src))
 dropdowns_src = block("const EXPERT_DROPDOWNS", "{", "}")
@@ -365,7 +368,7 @@ subsystem_toggles = {ks[0] for _, kinds, _, _ in groups for ks in [kinds.get("fl
 
 for key, gate in sorted(declared.items()):
     parent = gate.lstrip("!")
-    if parent not in all_flags:
+    if parent not in all_flags | off_at_zero:
         problems.append(f"gate: '{gate}' (on '{key}') points at an unknown flag")
     elif (key in group_of and parent in group_of and group_of[key] != group_of[parent]
           and parent not in subsystem_toggles):
@@ -380,7 +383,7 @@ for key, gate in sorted(DEPENDENCIES.items()):
                         f"but it declares gate {declared.get(key)!r}")
 
 for gate in re.findall(r'gate:\s*"([^"]+)"', tabs):
-    if gate.lstrip("!") not in all_flags:
+    if gate.lstrip("!") not in all_flags | off_at_zero:
         problems.append(f"gate: '{gate}' in a tab points at an unknown flag")
 
 # The "(default off)" suffix is appended at render time from the `defaultOff`
@@ -543,6 +546,16 @@ if quiet_m and full_exclude_m:
     for key in full_exclude_keys:
         if key not in all_flags:
             problems.append(f"presets: EXPERT_PRESET_FULL_EXCLUDE names '{key}', which is not a known flag")
+    # Quiet also zeroes a few off-at-zero values; each must really be one.
+    zero_m = re.search(r'const EXPERT_PRESET_QUIET_ZERO\s*=\s*\[([^\]]*)\]', SRC)
+    if not zero_m:
+        problems.append("presets: EXPERT_PRESET_QUIET_ZERO not found")
+    else:
+        for key in re.findall(r'"([^"]+)"', zero_m.group(1)):
+            if key not in off_at_zero:
+                problems.append(f"presets: EXPERT_PRESET_QUIET_ZERO names '{key}', which is not an offAtZero value")
+    if "OFF_AT_ZERO_KEYS" not in block("function expertPresetTarget", "{", "}"):
+        problems.append("presets: expertPresetTarget() no longer resets the offAtZero values")
     # Standard has to be built from the SAME two lists (ALL_FLAG_KEYS/OPT_FLAG_KEYS),
     # not a separately hand-kept list, or a new flag could land in FLAG_LABELS /
     # OPT_FLAG_LABELS without ever being reachable through the profile that is

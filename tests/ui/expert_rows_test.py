@@ -170,6 +170,29 @@ PROBE_OFF = """
 """
 
 
+# bubbleMs: a value whose 0 is its off stop gates the rows that depend on it, like a flag.
+VALUE_GATE_PROBE = """
+<script>
+(async () => {""" + FIND + """
+  const errs = [];
+  try {
+    await until(() => document.getElementById('gear') && document.getElementById('library-btn'));
+    await sleep(400);
+    document.getElementById('gear').click();
+    await sleep(200);
+    document.getElementById('expert-open').click();
+    await sleep(300);
+    const found = await scan([{ kind: 'dropdown', key: 'copySize' }, { kind: 'dropdown', key: 'copyFont' }]);
+    for (const id of ['dropdown:copySize', 'dropdown:copyFont']) {
+      if (!!found[id] !== __WANT__) errs.push(id + ' is ' + (found[id] ? 'shown' : 'hidden') + ' with the bubble time __BUBBLE__');
+    }
+  } catch (e) { errs.push('probe threw: ' + (e && e.stack || e)); }
+  finish(errs);
+})();
+</script>
+"""
+
+
 # ---- consumers: a non-default value reaches the code that uses it ----------------
 # Probe JS avoids apostrophes and backslashes (the strings are plain Python).
 
@@ -374,6 +397,10 @@ def consumer_problems(browser, tmp):
         label = "searchListMax launcher " + str(values.get("searchListMax", "default"))
         check(label, "launcher.html", LAUNCHER_PROBE.replace("__WANT__", str(want)), {"ui_values": values},
               size=(560, 420), budget=15000)
+    for values, want in (({}, "true"), ({"bubbleMs": 0}, "false")):
+        label = "bubbleMs gate " + str(values.get("bubbleMs", "default"))
+        check(label, "index.html", VALUE_GATE_PROBE.replace("__WANT__", want).replace("__BUBBLE__", str(values.get("bubbleMs", "default"))),
+              {"ui_values": values})
     seeded = {"ui_values": {"veOvTextOutlinePx": 7, "veOvVideoVolume": 40},
               "ui_texts": {"veOvKeysActiveColor": "#ff00aa"}}
     plain = {"ui_values": {}}

@@ -824,11 +824,11 @@ async function runPendingUndo() {
     errToast(err);
   }
 }
-// Shows `msg` with an Undo button wired to `restore`: unless the undoToast
-// feature is off, in which case it is a plain toast and nothing is armed (an
-// off switch must mean nothing is kept around to undo, not just a hidden button).
+// Shows `msg` with an Undo button wired to `restore`: unless the Undo time is Off,
+// in which case it is a plain toast and nothing is armed (an off setting must mean
+// nothing is kept around to undo, not just a hidden button).
 function undoToast(msg, restore) {
-  if (!flag("undoToast")) { toast(msg); return; }
+  if (val("undoToastMs") <= 0) { toast(msg); return; }
   pendingUndo = { restore };
   toast(msg, { label: t("undo"), onClick: runPendingUndo }, "", null, val("undoToastMs"));
 }
@@ -1186,12 +1186,10 @@ const FLAG_LABELS = {
   tileHover: "flagTileHover",
   tilePreview: "flagTilePreview",
   iconTooltips: "flagIconTooltips",
-  tooltipDelay: "flagTooltipDelay",
   tooltipTimeout: "flagTooltipTimeout",
   typeBadges: "flagTypeBadges",
   tileHotkeyBadge: "flagTileHotkeyBadge",
   captions: "flagCaptions",
-  copyBubble: "flagCopyBubble",
   videoControls: "flagVideoControls",
   videoMuted: "flagVideoMuted",
   // Duration badge + resolution/size tooltip line in the library and copy
@@ -1403,10 +1401,6 @@ const FLAG_LABELS = {
   // Only matters once clipWatcher (itself off by default) is on -- ships ON so a
   // guessed password never has to be manually turned away in the first place.
   clipSkipSecrets: "flagClipSkipSecrets",
-  // An Undo button on the toast after a destructive action outside the editors
-  // (delete a view, clear copy history, clear the clipboard inbox, delete a tag,
-  // batch delete, batch tag add/remove). Ships ON.
-  undoToast: "flagUndoToast",
   // Plain-text preview (txt/md/json/csv) for a file attachment, next to the
   // existing image/PDF preview. Ships ON.
   attachTextPreview: "flagAttachTextPreview",
@@ -1417,10 +1411,6 @@ const FLAG_LABELS = {
   // expert menu's "Recent messages" action. Off means the list stays empty and
   // nothing is collected. Ships ON.
   errorLog: "flagErrorLog",
-  // Autosaves the open editor's text every editorDraftSecs seconds so a crash
-  // or a closed window never loses unsaved work; offers to restore the draft
-  // once, at the next start. Ships ON.
-  editorDraft: "flagEditorDraft",
   // The thin frame around a region recording. It is never part of the video
   // (its window is excluded from capture). Ships ON.
   recOutline: "flagRecOutline",
@@ -1588,7 +1578,7 @@ const gateOpen = (gate, seen) => {
   if (!gate) return true;
   const inv = gate[0] === "!";
   const key = inv ? gate.slice(1) : gate;
-  let on = flagState(key);
+  let on = EXPERT_VALUES[key]?.offAtZero ? val(key) > 0 : flagState(key);
   const guard = seen || new Set();
   if (on && !guard.has(key)) {
     guard.add(key);
@@ -1620,7 +1610,7 @@ const EXPERT_VALUES = {
   gridPad: { label: "valGridPad", min: 0, max: 40, step: 1, def: 10, unit: "px" },
   modalRadius: { label: "valModalRadius", min: 0, max: 28, step: 1, def: 14, unit: "px" },
   overlayDim: { label: "valOverlayDim", min: 0, max: 80, step: 5, def: 40, unit: "%" },
-  bubbleMs: { label: "valBubbleMs", min: 300, max: 6000, step: 50, def: 950, unit: "ms", gate: "copyBubble" },
+  bubbleMs: { label: "valBubbleMs", min: 0, max: 6000, step: 50, def: 950, unit: "ms", zeroLabel: "valOff", offAtZero: true },
   toastMs: { label: "valToastMs", min: 800, max: 10000, step: 100, def: 1400, unit: "ms" },
   previewLen: { label: "valPreviewLen", min: 0, max: 4000, step: 20, def: 600, unit: "" },
   viewBorder: { label: "valViewBorder", min: 1, max: 12, step: 1, def: 3, unit: "px", gate: "multiView" },
@@ -1650,8 +1640,8 @@ const EXPERT_VALUES = {
   // Custom tile tooltip max width (it wraps + grows taller instead of widening).
   tooltipWidth: { label: "valTooltipWidth", min: 180, max: 640, step: 10, def: 340, unit: "px", gate: "tilePreview" },
   // How long the pointer must rest on an element before its tooltip appears, so a
-  // casual sweep across the window shows nothing (paired with tooltipDelay).
-  tooltipDelayMs: { label: "valTooltipDelay", min: 100, max: 2000, step: 50, def: 500, unit: "ms", gate: "tooltipDelay" },
+  // casual sweep across the window shows nothing. 0 shows it at once.
+  tooltipDelayMs: { label: "valTooltipDelay", min: 0, max: 2000, step: 50, def: 500, unit: "ms", zeroLabel: "valOff", offAtZero: true },
   // How long the hover tooltip stays before auto-hiding (paired with tooltipTimeout).
   tooltipTimeoutMs: { label: "valTooltipTimeout", min: 2000, max: 60000, step: 1000, def: 15000, unit: "ms", gate: "tooltipTimeout" },
   // Appearance scales (percent, 100 = unchanged). Applied as CSS zoom.
@@ -1848,7 +1838,7 @@ const EXPERT_VALUES = {
   importFolderDepth: { label: "valImportFolderDepth", min: 1, max: 5, step: 1, def: 3, unit: "", gate: "importExport" },
   importFolderMax: { label: "valImportFolderMax", min: 10, max: 2000, step: 10, def: 500, unit: "", gate: "importExport" },
   // How often the open editor writes its autosave draft.
-  editorDraftSecs: { label: "valEditorDraftSecs", min: 2, max: 30, step: 1, def: 5, unit: "s", gate: "editorDraft" },
+  editorDraftSecs: { label: "valEditorDraftSecs", min: 0, max: 30, step: 1, def: 5, unit: "s", zeroLabel: "valOff", offAtZero: true },
   // How long a confirm button (delete etc.) stays armed before it auto-resets.
   disarmMs: { label: "valDisarmMs", min: 1000, max: 10000, step: 500, def: 3000, unit: "ms" },
   // Matches append_crash_log's own pre-existing hardcoded rotation cap (256 KB).
@@ -1925,7 +1915,7 @@ const EXPERT_VALUES = {
   // far, and only if what's left is still worth naming a number for.
   bgDoneKeepMin: { label: "bgDoneKeepMin", min: 1, max: 120, step: 1, def: 10, unit: "min" },
   // How long the Undo button on a destructive-action toast stays clickable.
-  undoToastMs: { label: "valUndoToastMs", min: 2000, max: 20000, step: 500, def: 8000, unit: "ms", gate: "undoToast" },
+  undoToastMs: { label: "valUndoToastMs", min: 0, max: 20000, step: 500, def: 8000, unit: "ms", zeroLabel: "valOff", offAtZero: true },
   // How many recent error messages the ring buffer keeps.
   // The port shows on the persistent badge while the receiver
   // runs -- a companion program reads it from there, not from this slider.
@@ -2172,7 +2162,7 @@ const EXPERT_DROPDOWNS = {
   copySize: {
     label: "valCopySize",
     // Only styles the "Copied!" bubble text -- pointless while that bubble is off.
-    gate: "copyBubble",
+    gate: "bubbleMs",
     // get() always returns a String (see below): a numeric def here made
     // isRowChanged's strict !== comparison permanently true ("0" !== 0).
     def: "0",
@@ -2189,7 +2179,7 @@ const EXPERT_DROPDOWNS = {
   },
   copyFont: {
     label: "valCopyFont",
-    gate: "copyBubble",
+    gate: "bubbleMs",
     def: "",
     options: () => {
       const o = [["", t("styleDefault"), ""]];
@@ -2223,9 +2213,9 @@ const EXPERT_TABS = [
     { title: "expGroupVars", flags: ["promptVars", { key: "varDefaults", gate: "promptVars" }, { key: "dynVars", gate: "promptVars" }, { key: "choiceVars", gate: "promptVars" }, { key: "choiceRemember", gate: "choiceVars" }, { key: "varPopupWindow", gate: "promptVars" }, { key: "varFixed", gate: "promptVars" }], dropdowns: ["dateStyle", "timeStyle"], varFixedList: true },
     // The editor: what it shows beside the text box. Preview and highlighter belong together; the
     // highlighter only ever paints inside the preview.
-    { title: "expGroupEditor", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }, { key: "copyFormatted", gate: "mdPreview" }, "lengthCounter", "promptHistory", { key: "historyDiff", gate: "promptHistory" }, "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace", "confirmDiscard", "editorDraft"], values: ["hlFontPx", "historyPerPrompt", "notesTipLen", "historyPreviewLen", "editorDraftSecs"], dropdowns: ["counterUnits"] },
+    { title: "expGroupEditor", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }, { key: "copyFormatted", gate: "mdPreview" }, "lengthCounter", "promptHistory", { key: "historyDiff", gate: "promptHistory" }, "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace", "confirmDiscard"], values: ["hlFontPx", "historyPerPrompt", "notesTipLen", "historyPreviewLen", "editorDraftSecs"], dropdowns: ["counterUnits"] },
     // Everything that happens between a click and the clipboard.
-    { title: "expGroupCopy", flags: ["promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, { key: "autoPasteEnter", gate: "autoPaste" }, "hideWindowOnCopy", "copyBubble", "copyFlash", "copySound"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs", "bubbleMs", "copySoundVolume"], dropdowns: ["dragOutModifier", "copySize", "copyFont"] },
+    { title: "expGroupCopy", flags: ["promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, { key: "autoPasteEnter", gate: "autoPaste" }, "hideWindowOnCopy", "copyFlash", "copySound"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs", "bubbleMs", "copySoundVolume"], dropdowns: ["dragOutModifier", "copySize", "copyFont"] },
     // Copying several different prompts as one text.
     { title: "expGroupChain", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "chainQuickStart", gate: "chainPrompts" }, { key: "chainStartAlwaysVisible", gate: "chainQuickStart" }, { key: "chainVarCheck", gate: "chainPrompts" }], dropdowns: ["chainSeparator"] },
     // Floating buttons and the two kinds of folder they can form.
@@ -2267,7 +2257,7 @@ const EXPERT_TABS = [
     // Split by what a setting actually does: acting on a tile, the hover tooltip,
     // and pure looks. One 26-entry blob made everything hard to find.
     { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "dragToView", "tileHover", { key: "tileHoverLift", gate: "tileHover" }, "tilePressScale", "tileHotkeyBadge"], values: ["hoverLift", "dragThreshold", "viewDropHoverMs", "tileHotkeyBadgeOpacity"] },
-    { title: "expGroupTooltips", flags: ["tilePreview", "iconTooltips", "tooltipDelay", "tooltipTimeout", "tileTimeTip"], values: ["tooltipWidth", "tooltipDelayMs", "tooltipTimeoutMs"] },
+    { title: "expGroupTooltips", flags: ["tilePreview", "iconTooltips", "tooltipTimeout", "tileTimeTip"], values: ["tooltipWidth", "tooltipDelayMs", "tooltipTimeoutMs"] },
     { title: "expGroupTileLook", flags: ["tileShadow", "typeBadges", "captions", "compactTiles", "tileGradient", "gridLines", "uppercaseTiles", "boldTileNames", "monospaceTiles", "italicTiles", "tileTextShadow", "autoInk", "inkHalo"], values: ["tileRadius", "tileBorderWidth", "inkThreshold", "inkHaloStrength"] },
     { title: "expGroupFavorites", flags: ["favorites", { key: "favViewButton", gate: "favorites" }, { key: "favViewReorder", gate: "favViewButton" }], values: ["favStarSize", "favMaxCols"] },
   ] },
@@ -2295,7 +2285,7 @@ const EXPERT_TABS = [
       actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }] },
     { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "helpSketches", "firstRunTour"],
       actions: [{ id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
-    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "similarHint", "backupBeforeReset", "backupBeforeDelete", "importExport", "undoToast", "errorLog"], values: ["similarThreshold", "importFolderDepth", "importFolderMax", "disarmMs", "errorLogKeepKb", "undoToastMs"], selects: ["trashRetentionDays"],
+    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "similarHint", "backupBeforeReset", "backupBeforeDelete", "importExport", "errorLog"], values: ["similarThreshold", "importFolderDepth", "importFolderMax", "disarmMs", "errorLogKeepKb", "undoToastMs"], selects: ["trashRetentionDays"],
       actions: [{ id: "trash-open", label: "trashTitle" }, { id: "settings-export", label: "settingsExportAction" }, { id: "settings-import", label: "settingsImportAction" }, { id: "error-log-open", label: "errorLogAction", gate: "errorLog" }] },
     // The only new network surface in the app, off by default.
     // A link can only open or copy an entry; the receiver can do everything
@@ -2322,7 +2312,11 @@ const FLAG_GATES = Object.fromEntries(
 //
 // Alert-style flags only (a sound, a flash, a toast that appears on its own).
 // Recordings and dictation are left alone here on purpose -- no rec*/voice* key.
-const EXPERT_PRESET_QUIET = ["copyBubble", "copyFlash", "copySound", "undoToast", "whatsNew", "similarHint", "dupImportCheck", "taskbarProgress"];
+const EXPERT_PRESET_QUIET = ["copyFlash", "copySound", "whatsNew", "similarHint", "dupImportCheck", "taskbarProgress"];
+// Values whose 0 is their off stop: Quiet sets them to 0, Standard restores their
+// default, All on restores the default of any that sit at 0.
+const EXPERT_PRESET_QUIET_ZERO = ["bubbleMs", "undoToastMs"];
+const OFF_AT_ZERO_KEYS = Object.keys(EXPERT_VALUES).filter((k) => EXPERT_VALUES[k].offAtZero);
 // Left out of "All on" because they send something outward or cost time/money
 // rather than simply turning a feature on: image-text search reads a picture the
 // user may not expect read, and online dictation sends audio to Microsoft. The
@@ -2344,32 +2338,44 @@ const EXPERT_PRESET_FULL_EXCLUDE = [
 ];
 const ALL_EXPERT_FLAG_KEYS = [...ALL_FLAG_KEYS, ...OPT_FLAG_KEYS];
 
-// key -> target value for one profile. "standard" reaches every current and
-// future flag by construction (each one's own shipped default), so the tests
-// only need to watch the two curated lists above for a stale or missing key.
+// { flags, values } for one profile: key -> target value. "standard" reaches every
+// current and future flag by construction (each one's own shipped default), so the
+// tests only need to watch the two curated lists above for a stale or missing key.
+// The off-at-zero values ride along: Quiet zeroes the alert-style ones, Standard
+// puts every one back to its default, All on revives any that were switched off.
 function expertPresetTarget(name) {
-  let target;
-  if (name === "quiet") target = Object.fromEntries(EXPERT_PRESET_QUIET.map((k) => [k, false]));
-  else if (name === "full") {
-    target = Object.fromEntries(ALL_EXPERT_FLAG_KEYS.filter((k) => !EXPERT_PRESET_FULL_EXCLUDE.includes(k)).map((k) => [k, true]));
-  } else target = Object.fromEntries(ALL_EXPERT_FLAG_KEYS.map((k) => [k, shipsOn(k)]));
-  for (const k of EXPERT_BULK_NEVER) delete target[k];
-  return target;
+  let flags;
+  let values = {};
+  if (name === "quiet") {
+    flags = Object.fromEntries(EXPERT_PRESET_QUIET.map((k) => [k, false]));
+    values = Object.fromEntries(EXPERT_PRESET_QUIET_ZERO.map((k) => [k, 0]));
+  } else if (name === "full") {
+    flags = Object.fromEntries(ALL_EXPERT_FLAG_KEYS.filter((k) => !EXPERT_PRESET_FULL_EXCLUDE.includes(k)).map((k) => [k, true]));
+    values = Object.fromEntries(OFF_AT_ZERO_KEYS.filter((k) => val(k) === 0).map((k) => [k, EXPERT_VALUES[k].def]));
+  } else {
+    flags = Object.fromEntries(ALL_EXPERT_FLAG_KEYS.map((k) => [k, shipsOn(k)]));
+    values = Object.fromEntries(OFF_AT_ZERO_KEYS.map((k) => [k, EXPERT_VALUES[k].def]));
+  }
+  for (const k of EXPERT_BULK_NEVER) delete flags[k];
+  return { flags, values };
 }
 const EXPERT_PRESET_TITLES = { quiet: "expertPresetQuiet", standard: "expertPresetStandard", full: "expertPresetFull" };
 
-// Applies one of the three profiles above: shows how many flags actually differ
+// Applies one of the three profiles above: shows how many settings actually differ
 // from the profile before touching anything, names the first ten, and only
-// writes on confirmation -- each write goes through set_ui_flag, the same path
-// a manual toggle uses, so a feature's own activation work (backups, tray
-// rebuilds, hotkey registration) always runs exactly as it would by hand.
+// writes on confirmation -- each write goes through set_ui_flag / set_ui_value,
+// the same path a manual change uses, so a feature's own activation work (backups,
+// tray rebuilds, hotkey registration) always runs exactly as it would by hand.
 async function applyExpertPreset(name) {
-  const target = expertPresetTarget(name);
-  const changed = Object.entries(target).filter(([k, v]) => flag(k) !== v).map(([k]) => k);
-  if (!changed.length) { toast(t("expertPresetNoChange")); return; }
+  const { flags: flagTarget, values: valueTarget } = expertPresetTarget(name);
+  const changed = Object.entries(flagTarget).filter(([k, v]) => flag(k) !== v).map(([k]) => k);
+  const changedValues = Object.entries(valueTarget).filter(([k, v]) => val(k) !== v).map(([k]) => k);
+  const total = changed.length + changedValues.length;
+  if (!total) { toast(t("expertPresetNoChange")); return; }
   const label = (k) => t(FLAG_LABELS[k] || OPT_FLAG_LABELS[k] || k);
-  const named = changed.slice(0, 10).map(label);
-  const message = `${t("expertPresetChangeCount")}: ${changed.length}\n${named.join("\n")}${changed.length > named.length ? "\n…" : ""}`;
+  const labels = [...changed.map(label), ...changedValues.map((k) => t(EXPERT_VALUES[k].label))];
+  const named = labels.slice(0, 10);
+  const message = `${t("expertPresetChangeCount")}: ${total}\n${named.join("\n")}${labels.length > named.length ? "\n…" : ""}`;
   const ok = await confirmDialog({
     title: t(EXPERT_PRESET_TITLES[name]),
     message,
@@ -2378,14 +2384,20 @@ async function applyExpertPreset(name) {
   });
   if (!ok) return;
   for (const key of changed) {
-    const enabled = target[key];
+    const enabled = flagTarget[key];
     settings.ui_flags = { ...(settings.ui_flags || {}), [key]: enabled };
     try { await invoke("set_ui_flag", { key, enabled }); } catch (e) { errToast(e); }
+  }
+  for (const key of changedValues) {
+    const value = valueTarget[key];
+    settings.ui_values = { ...(settings.ui_values || {}), [key]: value };
+    try { await invoke("set_ui_value", { key, value }); } catch (e) { errToast(e); }
   }
   // Same refresh sequence as resetExpertGroup()/onResetExpert(): local state is
   // already current from the loop above, so this only has to repaint -- renderExpert()
   // last, so its own row list reflects the flags this just changed.
   applyFlags();
+  applyValues();
   renderViews();
   await renderGrid(true);
   fitAllTiles();
@@ -2539,7 +2551,7 @@ const EXPERT_TIPS = [
   "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "veOvColor", "veOvFont",
   "veDefaultPanel", "videoExportDir", "veExtraClipsMax",
   "numFieldWheel", "zoomStepPct", "zoomMaxPct", "errorLogKeepKb", "veOvDupOffsetPx", "editSnapTolerancePx",
-  "editStateKeep", "editStateKeepDays", "editorOpenMaxMb", "editorDraft", "editorDraftSecs",
+  "editStateKeep", "editStateKeepDays", "editorOpenMaxMb", "editorDraftSecs",
   "snipSaveQuality", "snipDelayMs",
   "snipPenPx", "snipMarkerPx", "snipLinePx", "snipArrowPx", "snipRectPx", "snipEllipsePx", "snipStepPx",
   "snipArrowHeadScale", "snipDefaultColor", "snipTextPx", "snipTextOutlinePx", "snipPixelBlock", "snipSpotlightDim",
@@ -2561,9 +2573,9 @@ const EXPERT_TIPS = [
   "rotateAuto", "rotateAutoTimeoutMin", "rotateAutoCooldownMs",
   "helpTips", "helpHighlight", "helpSketches", "firstRunTour",
   // Tiles / copying
-  "tilePreview", "tileMenu", "typeBadges", "tileHotkeyBadge", "copyBubble", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "chainQuickStart", "chainStartAlwaysVisible", "chainVarCheck", "autoPasteEnter", "hideWindowOnCopy",
+  "tilePreview", "tileMenu", "typeBadges", "tileHotkeyBadge", "bubbleMs", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "chainQuickStart", "chainStartAlwaysVisible", "chainVarCheck", "autoPasteEnter", "hideWindowOnCopy",
   "promptHotkeys", "promptHotkeyPaste", "dragOut", "dragOutInvert", "dragOutModifier",
-  "tooltipDelay", "tooltipTimeout", "iconTooltips",
+  "tooltipDelayMs", "tooltipTimeout", "iconTooltips",
   "dragToView", "viewDropHoverMs",
   // Appearance
   "hideScrollbars", "gridLines", "pausedIcons", "autoInk", "inkThreshold", "inkHalo", "inkHaloStrength",
@@ -2581,7 +2593,7 @@ const EXPERT_TIPS = [
   "recSweepBroken", "recDiscardKeepH", "videoClipTtlMin",
   "usageStats", "promptSync", "syncDir", "syncPollSecs", "clipSkipSecrets",
   "secretPrompts", "secretTimeoutMin",
-  "undoToast", "undoToastMs",
+  "undoToastMs",
   "errorLog",
   "archiveTag",
   // Values that need a unit/behaviour explanation
@@ -2813,7 +2825,11 @@ const refreshTiles = (key) => {
 // Live slider preview: reflect the value visually while dragging (CSS vars + at most
 // one refit per frame), then persist it on release.
 let liveRenderQueued = false;
+// offAtZero value -> was it above 0 when the current drag began. A drag writes the
+// value live, so commitValue() could not tell otherwise whether it crossed zero.
+const offAtZeroWas = {};
 function previewValue(key, value) {
+  if (EXPERT_VALUES[key]?.offAtZero && !(key in offAtZeroWas)) offAtZeroWas[key] = val(key) > 0;
   settings.ui_values = { ...(settings.ui_values || {}), [key]: value };
   applyValues();
   if (liveRenderQueued) return;
@@ -2822,6 +2838,8 @@ function previewValue(key, value) {
 }
 async function commitValue(key, value) {
   const before = (settings.ui_values || {})[key];
+  const wasOn = key in offAtZeroWas ? offAtZeroWas[key] : val(key) > 0;
+  delete offAtZeroWas[key];
   settings.ui_values = { ...(settings.ui_values || {}), [key]: value };
   try { await invoke("set_ui_value", { key, value }); } catch (err) {
     errToast(err);
@@ -2832,7 +2850,9 @@ async function commitValue(key, value) {
   await refreshTiles(key);
   // Fires once on release, not per drag frame: same "no flash mid-drag" reason
   // previewValue() never calls this, safe to rebuild the (possibly filtered) list here.
-  if (expertOnlyChanged) renderExpert();
+  // An off-at-zero value that crossed zero opens or closes the rows gated on it.
+  const crossedZero = EXPERT_VALUES[key]?.offAtZero && wasOn !== (val(key) > 0);
+  if (expertOnlyChanged || crossedZero) renderExpert();
   else syncRowReset("values", key); // reset icon must not wait for an unrelated rebuild
 }
 
@@ -5991,7 +6011,7 @@ function wireTooltips() {
     clearTipShow();
     if (tipCur && tipCur !== el) hideTileTip();
     tipPtrX = e.clientX; tipPtrY = e.clientY;
-    const delay = flag("tooltipDelay") ? val("tooltipDelayMs") : 0;
+    const delay = val("tooltipDelayMs");
     if (delay <= 0) { showNow(el); return; }
     tipPending = el;
     tipShowTimer = setTimeout(() => {
@@ -6973,7 +6993,7 @@ const TILE_COPIED_MS = 350;
 function showCopied(tile, label) {
   tile.classList.add("copied");
   setTimeout(() => tile.classList.remove("copied"), TILE_COPIED_MS);
-  if (!flag("copyBubble")) return; // border flash stays; bubble is optional
+  if (val("bubbleMs") <= 0) return; // border flash stays; bubble is optional
   const pop = document.createElement("div");
   pop.className = "copy-pop";
   // Match the fade animation to the (expert-tunable) bubble lifetime so it never
@@ -8740,8 +8760,8 @@ async function saveDraftNow() {
 function armDraftAutosave() {
   if (draftTimer) { clearInterval(draftTimer); draftTimer = null; }
   draftLastSaved = null;
-  if (!flag("editorDraft")) return;
-  const secs = Math.min(30, Math.max(2, val("editorDraftSecs") || 5));
+  if (val("editorDraftSecs") <= 0) return;
+  const secs = Math.min(30, Math.max(1, val("editorDraftSecs")));
   draftTimer = setInterval(saveDraftNow, secs * 1000);
 }
 
@@ -20232,7 +20252,7 @@ function bind() {
     if (!id) return;
     if (active) autoActiveIds.add(id); else autoActiveIds.delete(id);
     document.querySelectorAll(`.tile[data-id="${CSS.escape(id)}"]`).forEach((tile) => applyAutoBadge(tile, id));
-    if (active && flag("copyBubble")) toast(t("rotateAutoStarted"));
+    if (active && val("bubbleMs") > 0) toast(t("rotateAutoStarted"));
   });
   listen("rotation-auto-blocked", () => {
     toast(t("rotateAutoBlocked"));
@@ -21870,7 +21890,7 @@ async function maybeOpenFirstRunTour(sealWarned) {
 // start (never again on later editor opens this same session). "No" removes
 // it right away rather than leaving it to resurface on the next launch too.
 async function maybeOfferEditorDraftRecovery() {
-  if (!flag("editorDraft")) return;
+  if (val("editorDraftSecs") <= 0) return;
   let draft = null;
   try { draft = await invoke("load_editor_draft"); } catch (_) { return; }
   if (!draft) return;

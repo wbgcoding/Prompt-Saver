@@ -1705,6 +1705,9 @@ the video editor and the introduction tour ship on).
 - **One number for every search list.** Library suggestions, Search
   everything and the quick launcher share one entry limit (8 by default);
   the five separate limits are gone.
+- **Fewer switches in the expert menu.** The copy bubble, the undo button, the
+  editor's draft autosave and the tooltip delay are each one number now;
+  setting it to Off turns the feature off.
 
 ## 2.6.3 (2026-07-26)
 
