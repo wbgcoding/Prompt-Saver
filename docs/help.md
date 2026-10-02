@@ -405,7 +405,8 @@ Text recognition and voice dictation both use Windows' own language packs and
 share one install dialog. The recognition-language dropdown offers a download
 the first time a chosen language has no pack installed; installing needs
 administrator rights, and Windows asks for them once through its own
-confirmation prompt. The dropdown's "Manage languages…" entry reopens that
+confirmation prompt. The dropdown's "Manage text recognition languages…" entry ("Manage
+dictation languages…" for dictation) reopens that
 same dialog any time, listing what's installed and what's available; on most
 systems listing needs no special rights, but on some Windows builds it does
 too, and the dialog offers to run the listing itself with administrator
@@ -1314,7 +1315,8 @@ Windows-Sprachpaket (derselbe Dialog wie bei OCR).
 **Sprachpakete**: Texterkennung und Spracheingabe teilen sich Windows' eigene
 Sprachpakete und denselben Installationsdialog. Die App bietet den Download beim
 ersten Bedarf an; die Installation braucht Administratorrechte (übliche
-Windows-Bestätigung). „Sprachen verwalten…" im Sprachen-Dropdown listet
+Windows-Bestätigung). „Sprachen der Texterkennung verwalten…" (bei der Spracheingabe
+„Diktatsprachen verwalten…") im Sprachen-Dropdown listet
 Installiertes und Verfügbares und startet Installation/Update erneut; das
 Auflisten selbst braucht normalerweise keine Sonderrechte, auf manchen
 Windows-Systemen aber doch; der Dialog sagt das dann offen und bietet an, die

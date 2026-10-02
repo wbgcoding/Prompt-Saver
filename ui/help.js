@@ -617,7 +617,7 @@ export const HELP_CONTENT = {
       howTo: [
         "Pick a language from the recognition-language dropdown; a missing pack opens the install dialog automatically.",
         "Installing a pack needs administrator rights: Windows asks for them once, through its own confirmation prompt.",
-        "\"Manage languages…\" at the bottom of the language dropdown reopens the same dialog any time.",
+        "\"Manage text recognition languages…\" (or \"Manage dictation languages…\" for dictation) at the bottom of the language dropdown reopens the same dialog any time.",
       ],
       whatHappens:
         "On some Windows builds even listing what is installed needs administrator rights; if so, a button re-runs that check through the same elevation prompt. A background watcher notices when an installed pack's version changed or a Windows update silently removed it, and flags it without asking to reinstall right away; dismiss it for a while with \"remind me later\", or turn the watcher off entirely.",
@@ -1366,7 +1366,7 @@ export const HELP_CONTENT = {
       howTo: [
         "Eine Sprache im Dropdown für die Erkennungssprache auswählen; fehlt das Paket, öffnet sich der Installationsdialog automatisch.",
         "Zum Installieren eines Pakets sind Administratorrechte erforderlich: Windows fragt einmal über den eigenen Bestätigungsdialog danach.",
-        "„Sprachen verwalten…“ am unteren Rand des Sprach-Dropdowns öffnet denselben Dialog jederzeit erneut.",
+        "„Sprachen der Texterkennung verwalten…“ (bei der Spracheingabe „Diktatsprachen verwalten…“) am unteren Rand des Sprach-Dropdowns öffnet denselben Dialog jederzeit erneut.",
       ],
       whatHappens:
         "Bei manchen Windows-Versionen sind selbst zum Auflisten der installierten Pakete Administratorrechte erforderlich. In diesem Fall führt ein Button die Prüfung über dieselbe Administratorabfrage erneut aus. Eine Hintergrundüberwachung erkennt, wenn sich die Version eines installierten Pakets geändert hat oder ein Windows-Update es unbemerkt entfernt hat, und kennzeichnet es, ohne sofort zur Neuinstallation aufzufordern. Mit „Später erinnern“ lässt sich der Hinweis vorübergehend ausblenden; die Überwachung kann auch vollständig deaktiviert werden.",

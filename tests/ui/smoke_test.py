@@ -9466,14 +9466,10 @@ PROBE = """
       // fresh on every call instead.
       window.__OCR_CAPS_TEST__ = FAKE_CAPS;
 
-      // 372: ocrLangsManage and voiceLangsManage share the exact same text
-      // ("Manage languages…") -- harmless while both actions sat in one shared
-      // group, but rowByLabel's cross-tab search now finds Voice's copy first
-      // (its tab comes before the new Capture tab). toggleOcrFlag just left the
-      // OCR tab active, so search only the current tab instead of restarting
-      // the tab walk from the first one.
+      // toggleOcrFlag just left the OCR tab active, so search only the current
+      // tab instead of restarting the tab walk from the first one.
       const langsRow = [...document.querySelectorAll('#expert-flags .expert-action')]
-        .find((r) => (r.tagName === 'BUTTON' ? r : r.querySelector('span'))?.textContent === 'Sprachen verwalten…');
+        .find((r) => (r.tagName === 'BUTTON' ? r : r.querySelector('span'))?.textContent === 'Sprachen der Texterkennung verwalten…');
       if (!langsRow) {
         out.errors.push('OCR langs-modal action button not found in the expert menu');
       } else {
