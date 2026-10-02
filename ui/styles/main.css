@@ -329,17 +329,6 @@ body.noflag-showJournal #journal-btn { display: none; }
 .view-add-top > svg { width: 17px; height: 17px; }
 .view-add-top:hover { color: var(--accent); }
 
-/* ---- View groups: one folder tab per group + its member popover ---- */
-.view-group-btn { display: inline-flex; align-items: center; gap: 6px; }
-/* Name of the active view inside the group, so a collapsed folder still says
-   which page is on screen. */
-.view-group-current {
-  padding-left: 6px;
-  border-left: 1px solid currentColor;
-  font-weight: 500;
-  opacity: 0.85;
-}
-.view-group-chev { display: inline-flex; align-items: center; opacity: 0.7; }
 /* Drag feedback: the dragged tab fades, the tab under the cursor lights up.
    Everything the drop target paints stays INSIDE its own box: an outer ring or a
    lift is cut off at the edge of the tab strip, which scrolls (overflow-x), and that
@@ -387,15 +376,11 @@ body.noflag-showJournal #journal-btn { display: none; }
 @keyframes merge-in {
   from { opacity: 0; }
 }
-/* Dropped on the outer third of a tab (or a row of an open group's own list)
-   instead of its middle -- a plain reorder, not a merge, so it gets its own
-   mark: a bar between the two tabs, not the group's border+glyph. The tab
-   strip is horizontal (a vertical bar, left/right), a group's own popover is
-   a vertical list (a horizontal bar, top/bottom) -- same mark, other axis. */
-.view-btn.tab-drop-edge, .ctx .view-group-item.tab-drop-edge {
+/* Dropped on a tab: a reorder, marked by a bar between the two tabs. */
+.view-btn.tab-drop-edge {
   position: relative;
 }
-.view-btn.tab-drop-edge::after, .ctx .view-group-item.tab-drop-edge::after {
+.view-btn.tab-drop-edge::after {
   content: "";
   position: absolute;
   border-radius: 1px;
@@ -405,21 +390,11 @@ body.noflag-showJournal #journal-btn { display: none; }
 .view-btn.tab-drop-edge::after { top: 3px; bottom: 3px; width: 2px; }
 .view-btn.tab-drop-edge.tab-drop-before::after { left: -1px; }
 .view-btn.tab-drop-edge.tab-drop-after::after { right: -1px; }
-.ctx .view-group-item.tab-drop-edge::after { left: 4px; right: 4px; height: 2px; }
-.ctx .view-group-item.tab-drop-edge.tab-drop-before::after { top: -1px; }
-.ctx .view-group-item.tab-drop-edge.tab-drop-after::after { bottom: -1px; }
-.view-group-pop {
-  min-width: 210px;
-  z-index: 90;
-  /* Expert menu: how many rows fit before the list scrolls. */
-  max-height: calc(var(--view-group-rows, 8) * 34px + 12px);
-  overflow-y: auto;
-}
-.view-group-item { display: flex; align-items: center; gap: 8px; }
-/* Same list-of-views look as the group popover, same row cap. */
-.views-pop { min-width: 210px; z-index: 90; max-height: calc(var(--view-group-rows, 8) * 34px + 12px); overflow-y: auto; }
+.view-row { display: flex; align-items: center; gap: 8px; }
+/* The "Also show in" list of views, capped at eight rows before it scrolls. */
+.views-pop { min-width: 210px; z-index: 90; max-height: calc(8 * 34px + 12px); overflow-y: auto; }
 .move-to-folder-pop { min-width: 180px; z-index: 90; max-height: 280px; overflow-y: auto; }
-.view-group-item-name {
+.view-row-name {
   flex: 1 1 auto;
   display: flex;
   align-items: center;
@@ -429,30 +404,9 @@ body.noflag-showJournal #journal-btn { display: none; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.view-group-item:not(.on) .view-group-item-name { color: var(--muted); }
-.view-group-item.on .view-group-item-name { font-weight: 600; }
-/* A tile dragged onto a row of an opened group names the view it will land in, so
-   the row has to light up the way the tab itself does. Flat accent rather than the
-   tab's merge scrim: a list entry is not a folder that swallows what is dropped on
-   it, it is only the target of the move. Specificity has to clear the popover's own
-   `.ctx button:hover`, which is why these three carry the `.ctx` in front. */
-.ctx .view-group-item.tab-drop { background: var(--accent); }
-.ctx .view-group-item.tab-drop .view-group-item-name { color: var(--accent-fg); }
-.ctx .view-group-item.tab-drop .view-group-out { opacity: 0; }
-.view-group-dot { flex: 0 0 9px; width: 9px; height: 9px; border-radius: 50%; }
-.view-group-out {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  padding: 2px;
-  border-radius: 5px;
-  color: var(--muted);
-  opacity: 0;
-  transition: opacity var(--transition), color var(--transition);
-}
-.view-group-item:hover .view-group-out { opacity: 1; }
-.view-group-out:hover { color: var(--accent); }
-
+.view-row:not(.on) .view-row-name { color: var(--muted); }
+.view-row.on .view-row-name { font-weight: 600; }
+.view-row-dot { flex: 0 0 9px; width: 9px; height: 9px; border-radius: 50%; }
 /* Wraps within itself once the row no longer fits; the window controls must stay on
    screen at every window size the app allows. */
 .header-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; row-gap: 4px; gap: 4px; min-width: 0; flex: 0 1 auto; }

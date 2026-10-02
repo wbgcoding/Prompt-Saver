@@ -124,17 +124,16 @@ export const HELP_CONTENT = {
     {
       section: "alwaysOnTop",
       title: "Folders",
-      whatItIs: "The same gesture groups things in three places: drop one item onto another of its own kind to gather it into a folder.",
+      whatItIs: "The same gesture groups things in two places: drop one item onto another of its own kind to gather it into a folder.",
       howTo: [
-        "Drag one view tab onto another to make a group tab.",
         "Drag one floating button onto another to make a floating button folder.",
         "On the main grid, drag one tile onto another to make a grid folder.",
         "Drag a member back out to free it.",
       ],
       whatHappens:
-        "A floating button folder or grid folder shows up to four member previews and a count, dragging a member out frees it, and it dissolves once one member is left; a tile belongs to only one grid folder at a time. A group tab instead opens the list of its views when clicked.",
-      settings: ["Floating button folders, grid folders: Expert menu → Features → Floating buttons & folders", "View groups: Expert menu → Features → Views and quick grid"],
-      tip: "All three kinds are on out of the box; switch any of them off in the expert menu if items are never grouped that way.",
+        "A floating button folder or grid folder shows up to four member previews and a count, dragging a member out frees it, and it dissolves once one member is left; a tile belongs to only one grid folder at a time.",
+      settings: ["Floating button folders, grid folders: Expert menu → Features → Floating buttons & folders"],
+      tip: "Both kinds are on out of the box; switch any of them off in the expert menu if items are never grouped that way.",
       sketches: ["folderTypes"],
     },
     {
@@ -295,7 +294,7 @@ export const HELP_CONTENT = {
       whatItIs: "The toolbar setting controls which buttons the header and composer bar show.",
       howTo: ["Right-click the header to show or hide its buttons; features themselves are switched in the expert menu."],
       whatHappens: "Hiding a button only hides it; the feature behind it, if any, keeps working through its own hotkey or menu entry.",
-      settings: ["Library and history buttons, logo, title, separators, bar hide buttons: Expert menu → System & data → Toolbar", "Keep buttons of switched-off features visible: Expert menu → System & data → Toolbar", "Quick grid-size control and showing it on hover only, multiple views, view groups: Expert menu → Features → Views and quick grid"],
+      settings: ["Library and history buttons, logo, title, separators, bar hide buttons: Expert menu → System & data → Toolbar", "Keep buttons of switched-off features visible: Expert menu → System & data → Toolbar", "Quick grid-size control and showing it on hover only, multiple views: Expert menu → Features → Views and quick grid"],
     },
     {
       section: "system",
@@ -377,11 +376,10 @@ export const HELP_CONTENT = {
       howTo: [
         "Click plus next to the view tabs to add a view.",
         "Right-click a tab to rename, resize, recolor, or delete it.",
-        "Drag one view tab onto another to merge them into a group.",
-        "Move a tab with \"move further left\" or \"move further right\" in its menu, or drop it on the outer edge of another tab; dropping it in the middle groups them instead.",
+        "Move a tab with \"move further left\" or \"move further right\" in its menu, or drag it onto another tab.",
       ],
       whatHappens: "A tile normally sits in exactly one view (adding it elsewhere moves it there) unless \"Tile in several views\" is on, which ships off. Deleting a view does not delete the tiles placed on it; a tile also shown in another view keeps working there.",
-      settings: ["Multiple views, view groups, tile in several views, maximum views: Expert menu → Features → Views and quick grid"],
+      settings: ["Multiple views, tile in several views, maximum views: Expert menu → Features → Views and quick grid"],
     },
     {
       section: "look",
@@ -404,7 +402,6 @@ export const HELP_CONTENT = {
         "Drop a tile on an occupied cell to swap the two.",
         "Drop a tile on a view tab above the grid to move it into that view instead.",
         "Hold Ctrl while dropping on a view tab to copy the tile there, so it stays in both places.",
-        "Hover over a collapsed view group so it opens and the drop can target a view inside.",
         "Change the grid size by right-clicking a view tab or an empty spot of the grid and choosing Grid size.",
       ],
       whatHappens:
@@ -875,17 +872,16 @@ export const HELP_CONTENT = {
     {
       section: "alwaysOnTop",
       title: "Ordner",
-      whatItIs: "Dieselbe Geste gruppiert an drei Stellen: ein Element auf ein gleichartiges ziehen, um es in einen Ordner aufzunehmen.",
+      whatItIs: "Dieselbe Geste gruppiert an zwei Stellen: ein Element auf ein gleichartiges ziehen, um es in einen Ordner aufzunehmen.",
       howTo: [
-        "Einen Ansichts-Tab auf einen anderen ziehen, um einen Gruppen-Tab zu bilden.",
         "Einen schwebenden Button auf einen anderen ziehen, um einen Ordner für schwebende Buttons zu bilden.",
         "Im Hauptfenster eine Kachel auf eine andere ziehen, um einen Raster-Ordner zu bilden.",
         "Ein Mitglied wieder herausziehen, um es freizugeben.",
       ],
       whatHappens:
         "Ein Ordner für schwebende Buttons oder ein Raster-Ordner zeigt bis zu vier Vorschauen seiner Mitglieder und eine Anzahl; das Herausziehen eines Mitglieds gibt es frei, und der Ordner löst sich auf, sobald nur noch eines übrig ist. Eine Kachel gehört immer nur zu einem Raster-Ordner gleichzeitig. Ein Gruppen-Tab öffnet stattdessen beim Anklicken die Liste seiner Ansichten.",
-      settings: ["Ordner für schwebende Buttons, Raster-Ordner: Expertenmenü → Funktionen → Schwebende Buttons & Ordner", "Ansichtsgruppen: Expertenmenü → Funktionen → Ansichten und Schnellraster"],
-      tip: "Alle drei Arten sind ab Werk an; jede einzeln im Expertenmenü abschaltbar, wenn Elemente so nie gruppiert werden sollen.",
+      settings: ["Ordner für schwebende Buttons, Raster-Ordner: Expertenmenü → Funktionen → Schwebende Buttons & Ordner"],
+      tip: "Beide Arten sind ab Werk an; jede einzeln im Expertenmenü abschaltbar, wenn Elemente so nie gruppiert werden sollen.",
       sketches: ["folderTypes"],
     },
     {
@@ -1047,7 +1043,7 @@ export const HELP_CONTENT = {
       whatItIs: "Die Werkzeugleiste bestimmt, welche Buttons der Kopfbereich und die Composer-Leiste zeigen.",
       howTo: ["Rechtsklick auf den Kopfbereich blendet seine Knöpfe ein oder aus; die Funktionen selbst schaltet das Expertenmenü."],
       whatHappens: "Das Ausblenden eines Buttons blendet ihn nur aus; die dahinterliegende Funktion funktioniert weiterhin über ihren eigenen Hotkey oder Menüeintrag.",
-      settings: ["Bibliothek- und Verlauf-Buttons, Logo, Titel, Trennlinien, Buttons zum Einklappen der Leisten: Expertenmenü → System & Daten → Werkzeugleiste", "Buttons abgeschalteter Funktionen sichtbar lassen: Expertenmenü → System & Daten → Werkzeugleiste", "Schnelle Rastergrößen-Steuerung und sie erst beim Hovern zeigen, mehrere Ansichten, Ansichtsgruppen: Expertenmenü → Funktionen → Ansichten und Schnellraster"],
+      settings: ["Bibliothek- und Verlauf-Buttons, Logo, Titel, Trennlinien, Buttons zum Einklappen der Leisten: Expertenmenü → System & Daten → Werkzeugleiste", "Buttons abgeschalteter Funktionen sichtbar lassen: Expertenmenü → System & Daten → Werkzeugleiste", "Schnelle Rastergrößen-Steuerung und sie erst beim Hovern zeigen, mehrere Ansichten: Expertenmenü → Funktionen → Ansichten und Schnellraster"],
     },
     {
       section: "system",
@@ -1129,11 +1125,10 @@ export const HELP_CONTENT = {
       howTo: [
         "Klick auf Plus neben den Ansichts-Tabs fügt eine Ansicht hinzu.",
         "Rechtsklick auf einen Tab zum Umbenennen, Größenändern, Umfärben oder Löschen.",
-        "Einen Ansichts-Tab auf einen anderen ziehen, um sie zu einer Gruppe zusammenzufassen.",
-        "Einen Tab mit \"weiter nach links\" oder \"weiter nach rechts\" aus seinem Menü verschieben, oder ihn am äußeren Rand eines anderen Tabs ablegen; in der Mitte abgelegt, werden beide gruppiert.",
+        "Einen Tab mit \"weiter nach links\" oder \"weiter nach rechts\" aus seinem Menü verschieben, oder ihn auf einen anderen Tab ziehen.",
       ],
       whatHappens: "Eine Kachel sitzt normalerweise in genau einer Ansicht (wird sie woanders abgelegt, wandert sie dorthin), außer \"Kachel in mehreren Ansichten\" ist aktiv, was ab Werk aus ist. Das Löschen einer Ansicht löscht nicht die dort platzierten Kacheln; eine auch anderswo gezeigte Kachel funktioniert dort weiter.",
-      settings: ["Mehrere Ansichten, Ansichtsgruppen, Kachel in mehreren Ansichten, höchste Zahl an Ansichten: Expertenmenü → Funktionen → Ansichten und Schnellraster"],
+      settings: ["Mehrere Ansichten, Kachel in mehreren Ansichten, höchste Zahl an Ansichten: Expertenmenü → Funktionen → Ansichten und Schnellraster"],
     },
     {
       section: "look",
@@ -1156,7 +1151,6 @@ export const HELP_CONTENT = {
         "Eine Kachel auf einer besetzten Zelle loslassen, um beide zu tauschen.",
         "Eine Kachel auf einen Ansichts-Tab über dem Raster ziehen, um sie stattdessen in diese Ansicht zu verschieben.",
         "Beim Ziehen auf einen Ansichts-Tab Strg gedrückt halten, um die Kachel dorthin zu kopieren, statt zu verschieben, sodass sie an beiden Stellen bleibt.",
-        "Über einer eingeklappten Ansichtsgruppe warten, bis sie sich öffnet, damit das Ablegen eine Ansicht darin treffen kann.",
         "Die Rastergröße per Rechtsklick auf einen Ansichtsreiter oder eine freie Stelle im Raster unter Rastergröße ändern.",
       ],
       whatHappens:

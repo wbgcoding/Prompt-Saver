@@ -2077,21 +2077,6 @@ struct View {
     members: Vec<String>,
 }
 
-// A folder-style tab holding several views. A view belongs to at most one
-// group; every view left out of `view_ids` keeps its own top-level tab.
-#[derive(Serialize, Deserialize, Clone)]
-struct ViewGroup {
-    #[serde(default)]
-    id: String,
-    #[serde(default)]
-    name: String,
-    // Optional tab color (hex); empty = default.
-    #[serde(default)]
-    color: String,
-    #[serde(default)]
-    view_ids: Vec<String>,
-}
-
 // An Android-style folder inside the grid. It occupies ONE cell of one view and
 // holds prompts that are no longer tiles of their own: a member's layout entry is
 // dropped when it joins and it gets a free cell again when it leaves. A view can
@@ -2295,10 +2280,6 @@ struct Settings {
     active_view: String,
     #[serde(default)]
     views: Vec<View>,
-    // View groups. Kept even while the feature is switched off, so turning it
-    // back on restores the folders instead of losing them.
-    #[serde(default)]
-    view_groups: Vec<ViewGroup>,
     // Grid folders. Kept while the feature is off as well: the members simply
     // show as their own tiles again until it comes back on.
     #[serde(default)]
@@ -2393,7 +2374,6 @@ impl Default for Settings {
             tile_size: default_tile_size(),
             active_view: String::new(),
             views: Vec::new(),
-            view_groups: Vec::new(),
             tile_folders: Vec::new(),
             legacy_cols: default_cols(),
             legacy_rows: default_rows(),
@@ -2408,10 +2388,8 @@ const GRID_MIN: u32 = 1;
 // overrides can be pushed, so old data and extreme settings can't break things.
 const GRID_MAX: u32 = 200;
 const MAX_VIEWS: usize = 200;
-const MAX_VIEW_GROUPS: usize = 100;
 // Grid folders. One per cell at most, so a huge grid is the real ceiling.
 const MAX_TILE_FOLDERS: usize = 200;
-const MAX_GROUP_NAME: usize = 60;
 const FLOAT_W: f64 = 360.0;
 const FLOAT_H: f64 = 80.0; // flat pill shape, clearly wider than tall
 const FLOAT_IMG: f64 = 400.0; // square box for image pills: S 300 / M 400 / L 560
@@ -2976,7 +2954,6 @@ impl Settings {
                 self.active_view = first.id.clone();
             }
         }
-        normalize_view_groups(&mut self.view_groups, &self.views);
     }
 
     fn active_index(&self) -> usize {
@@ -9675,23 +9652,10 @@ fn remap_colors(app: AppHandle, state: State<Db>, pairs: Vec<(String, String)>) 
         .filter(|v| map.contains_key(&v.color))
         .map(|v| (v.id.clone(), v.color.clone()))
         .collect();
-    let original_group_colors: Vec<(String, String)> = store
-        .settings
-        .view_groups
-        .iter()
-        .filter(|g| map.contains_key(&g.color))
-        .map(|g| (g.id.clone(), g.color.clone()))
-        .collect();
     let mut views_changed = false;
     for v in &mut store.settings.views {
         if let Some(nc) = map.get(&v.color) {
             v.color = nc.clone();
-            views_changed = true;
-        }
-    }
-    for g in &mut store.settings.view_groups {
-        if let Some(nc) = map.get(&g.color) {
-            g.color = nc.clone();
             views_changed = true;
         }
     }
@@ -9704,11 +9668,6 @@ fn remap_colors(app: AppHandle, state: State<Db>, pairs: Vec<(String, String)>) 
         for (id, c) in original_view_colors {
             if let Some(v) = store.settings.views.iter_mut().find(|v| v.id == id) {
                 v.color = c;
-            }
-        }
-        for (id, c) in original_group_colors {
-            if let Some(g) = store.settings.view_groups.iter_mut().find(|g| g.id == id) {
-                g.color = c;
             }
         }
         // The prompts reached disk already: put their colours back there too.
@@ -9734,11 +9693,7 @@ fn remove_view_from_settings(settings: &mut Settings, id: &str, prompt_ids: &[St
         let first_id = settings.views[0].id.clone();
         settings.active_view.clone_from(&first_id);
     }
-    // The deleted view must not linger in a group, and a group that just lost its
-    // last member dissolves instead of becoming an empty folder tab.
-    let views = settings.views.clone();
-    normalize_view_groups(&mut settings.view_groups, &views);
-    let view_ids: Vec<String> = views.iter().map(|v| v.id.clone()).collect();
+    let view_ids: Vec<String> = settings.views.iter().map(|v| v.id.clone()).collect();
     normalize_tile_folders(&mut settings.tile_folders, prompt_ids, &view_ids);
     Ok(())
 }
@@ -9760,116 +9715,6 @@ fn set_active_view(app: AppHandle, state: State<Db>, id: String) -> Settings {
     }
     save_settings(&app, &store.settings);
     webview_settings(&store.settings)
-}
-
-// ---------- View group commands ----------
-
-fn valid_group_name(name: &str) -> Result<String, String> {
-    let name = name.trim();
-    if name.is_empty() {
-        return Err("group name is empty".to_string());
-    }
-    if name.chars().count() > MAX_GROUP_NAME {
-        return Err(format!("group name longer than {} characters", MAX_GROUP_NAME));
-    }
-    if name.chars().any(|c| c.is_control()) {
-        return Err("group name contains a control character".to_string());
-    }
-    Ok(name.to_string())
-}
-
-// Bring the group list back to its invariants: only real view ids, no view in two
-// groups (the first group listing it wins), and no empty group. Runs after every
-// mutation and on load, so a hand-edited or older blob can never render a broken
-// tab bar. Idempotent.
-fn normalize_view_groups(groups: &mut Vec<ViewGroup>, views: &[View]) {
-    let mut taken: Vec<String> = Vec::new();
-    for group in groups.iter_mut() {
-        group.view_ids.retain(|id| {
-            let ok = views.iter().any(|v| &v.id == id) && !taken.contains(id);
-            if ok {
-                taken.push(id.clone());
-            }
-            ok
-        });
-    }
-    groups.retain(|g| !g.view_ids.is_empty());
-}
-
-// Create (empty id) or update one group in a single pass: name, color and the full
-// member list. Views handed in are pulled out of whatever group held them before.
-#[tauri::command]
-fn save_view_group(
-    app: AppHandle,
-    state: State<Db>,
-    id: String,
-    name: String,
-    color: String,
-    view_ids: Vec<String>,
-) -> Result<Settings, String> {
-    let name = valid_group_name(&name)?;
-    let color = valid_tag_color(&color)?;
-    let mut store = lock(&state);
-    for view_id in &view_ids {
-        if !store.settings.views.iter().any(|v| &v.id == view_id) {
-            return Err("unknown view".to_string());
-        }
-    }
-    // A view may only live in one group, so claim the members away from the others
-    // before writing them into the target group.
-    for group in store.settings.view_groups.iter_mut() {
-        if group.id != id {
-            group.view_ids.retain(|v| !view_ids.contains(v));
-        }
-    }
-    match store.settings.view_groups.iter_mut().find(|g| g.id == id) {
-        Some(group) => {
-            group.name = name;
-            group.color = color;
-            group.view_ids = view_ids;
-        }
-        None => {
-            if view_ids.is_empty() {
-                return Err("a group needs at least one view".to_string());
-            }
-            if store.settings.view_groups.len() >= MAX_VIEW_GROUPS {
-                return Err(format!("max {} view groups", MAX_VIEW_GROUPS));
-            }
-            store.settings.view_groups.push(ViewGroup { id: gen_id(), name, color, view_ids });
-        }
-    }
-    let views = store.settings.views.clone();
-    normalize_view_groups(&mut store.settings.view_groups, &views);
-    save_settings(&app, &store.settings);
-    Ok(webview_settings(&store.settings))
-}
-
-// Move one view into `group_id`, or out of every group when it is empty. Both
-// directions in one command so the UI never needs a remove+add round trip.
-#[tauri::command]
-fn set_view_group_member(
-    app: AppHandle,
-    state: State<Db>,
-    group_id: String,
-    view_id: String,
-) -> Result<Settings, String> {
-    let mut store = lock(&state);
-    if !store.settings.views.iter().any(|v| v.id == view_id) {
-        return Err("unknown view".to_string());
-    }
-    if !group_id.is_empty() && !store.settings.view_groups.iter().any(|g| g.id == group_id) {
-        return Err("unknown view group".to_string());
-    }
-    for group in store.settings.view_groups.iter_mut() {
-        group.view_ids.retain(|v| v != &view_id);
-    }
-    if let Some(group) = store.settings.view_groups.iter_mut().find(|g| g.id == group_id) {
-        group.view_ids.push(view_id);
-    }
-    let views = store.settings.views.clone();
-    normalize_view_groups(&mut store.settings.view_groups, &views);
-    save_settings(&app, &store.settings);
-    Ok(webview_settings(&store.settings))
 }
 
 // ---------- Tile folder commands ----------
@@ -10106,15 +9951,6 @@ fn delete_tile_folder(app: AppHandle, state: State<Db>, id: String) -> Settings 
             }
         }
     }
-    save_settings(&app, &store.settings);
-    webview_settings(&store.settings)
-}
-
-// Dissolve a group: its views go back to the tab bar, nothing is deleted.
-#[tauri::command]
-fn delete_view_group(app: AppHandle, state: State<Db>, id: String) -> Settings {
-    let mut store = lock(&state);
-    store.settings.view_groups.retain(|g| g.id != id);
     save_settings(&app, &store.settings);
     webview_settings(&store.settings)
 }
@@ -36127,9 +35963,6 @@ pub fn run() {
             remap_colors,
             delete_view,
             set_active_view,
-            save_view_group,
-            set_view_group_member,
-            delete_view_group,
             copy_image_data,
             save_tile_folder,
             take_out_of_tile_folder,
@@ -53715,80 +53548,19 @@ mod tests {
         assert_eq!(s.tile_folders[0].color, "#112233");
     }
 
-    fn test_group(id: &str, view_ids: &[&str]) -> ViewGroup {
-        ViewGroup {
-            id: id.to_string(),
-            name: id.to_string(),
-            color: String::new(),
-            view_ids: view_ids.iter().map(|s| s.to_string()).collect(),
-        }
-    }
-
     #[test]
-    fn view_group_name_is_validated() {
-        assert!(valid_group_name("   ").is_err());
-        assert_eq!(valid_group_name("  Work  ").unwrap(), "Work");
-        assert!(valid_group_name(&"a".repeat(MAX_GROUP_NAME + 1)).is_err());
-        assert!(valid_group_name(&"a".repeat(MAX_GROUP_NAME)).is_ok());
-        assert!(valid_group_name("Work\nspace").is_err());
-    }
-
-    #[test]
-    fn view_groups_normalize_to_their_invariants() {
-        let views = vec![test_view("a"), test_view("b"), test_view("c")];
-        // Unknown ids drop out, a view claimed twice stays with the first group, and
-        // a group left without members dissolves.
-        let mut groups = vec![
-            test_group("g1", &["a", "gone", "b"]),
-            test_group("g2", &["b"]),
-            test_group("g3", &["c"]),
-        ];
-        normalize_view_groups(&mut groups, &views);
-        assert_eq!(groups.len(), 2);
-        assert_eq!(groups[0].view_ids, vec!["a", "b"]);
-        assert_eq!(groups[1].id, "g3");
-        // Running it again changes nothing.
-        let before = groups.iter().map(|g| g.view_ids.clone()).collect::<Vec<_>>();
-        normalize_view_groups(&mut groups, &views);
-        assert_eq!(before, groups.iter().map(|g| g.view_ids.clone()).collect::<Vec<_>>());
-    }
-
-    #[test]
-    fn deleting_a_view_purges_it_from_its_group() {
-        let mut settings = Settings {
-            views: vec![test_view("a"), test_view("b"), test_view("c")],
-            ..Default::default()
-        };
-        settings.active_view = "a".into();
-        settings.view_groups = vec![test_group("g1", &["a", "b"]), test_group("g2", &["c"])];
-        // delete_view needs an AppHandle, so exercise the same steps it performs.
-        settings.views.retain(|v| v.id != "b");
-        let views = settings.views.clone();
-        normalize_view_groups(&mut settings.view_groups, &views);
-        assert_eq!(settings.view_groups[0].view_ids, vec!["a"]);
-        // Removing the last member dissolves the group instead of leaving an empty one.
-        settings.views.retain(|v| v.id != "c");
-        let views = settings.views.clone();
-        normalize_view_groups(&mut settings.view_groups, &views);
-        assert_eq!(settings.view_groups.len(), 1);
-        assert_eq!(settings.view_groups[0].id, "g1");
-    }
-
-    #[test]
-    fn settings_without_view_groups_still_load() {
-        // An older settings blob has no `view_groups` key at all.
-        let s: Settings = serde_json::from_str(r#"{"theme":"dark"}"#).unwrap();
-        assert!(s.view_groups.is_empty());
-        // A group entry from a newer build keeps the fields this version knows, and
-        // migrate() drops the members that no view backs.
-        let mut s: Settings = serde_json::from_str(
-            r##"{"active_view":"a","views":[{"id":"a","name":"A"}],
-                 "view_groups":[{"id":"g","name":"G","color":"#112233","view_ids":["a","gone"],"future":1}]}"##,
+    fn legacy_view_groups_key_is_ignored() {
+        // A settings blob written while view groups existed still loads: the
+        // group list is dropped, every view stays, in its stored order.
+        let s: Settings = serde_json::from_str(
+            r##"{"active_view":"b","views":[{"id":"b","name":"B"},{"id":"a","name":"A"}],
+                 "view_groups":[{"id":"g","name":"G","color":"","view_ids":["a"]}]}"##,
         )
         .unwrap();
-        assert_eq!(s.view_groups[0].color, "#112233");
-        s.migrate();
-        assert_eq!(s.view_groups[0].view_ids, vec!["a"]);
+        let ids: Vec<&str> = s.views.iter().map(|v| v.id.as_str()).collect();
+        assert_eq!(ids, vec!["b", "a"]);
+        assert_eq!(s.active_view, "b");
+        assert!(!serde_json::to_string(&s).unwrap().contains("view_groups"));
     }
 
     #[test]

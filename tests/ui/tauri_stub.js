@@ -220,7 +220,7 @@ const SETTINGS = {
   // the text tool's background became a three-way choice -- its old boolean
   // setting must convert to "none" on read without the user touching anything.
   ui_flags: {
-    tags: true, customThemes: true, viewGroups: true, promptNotes: true, pillFolders: true,
+    tags: true, customThemes: true, promptNotes: true, pillFolders: true,
     // The statistics checks read a dashboard that is switched on; a fresh install starts
     // with it off (the dedicated probe seeds that case).
     usageStats: true,
@@ -265,8 +265,6 @@ const SETTINGS = {
     { id: "notes", name: "Notes", cols: 4, rows: 3, layouts: {}, color: "", members: [] },
     { id: "archive", name: "Archive", cols: 4, rows: 3, layouts: {}, color: "", members: [] },
   ],
-  // Two of the four views live in a folder tab, so the tab bar shows both shapes.
-  view_groups: [{ id: "g1", name: "Docs", color: "", view_ids: ["notes", "archive"] }],
   // F27: one grid folder on the home view, so the folder cell and its popover are
   // walked on every run. Its members are drawn by the folder, not as tiles. Five
   // members on purpose: the open popover is then taller than a small window leaves,
@@ -299,20 +297,6 @@ if (window.__DRAG_VIEW_TEST__) {
 }
 
 const clone = () => JSON.parse(JSON.stringify(SETTINGS));
-
-// Mirror of the backend's normalize_view_groups: no unknown ids, no view in two
-// groups, no empty group left behind.
-function normalizeGroups() {
-  const taken = new Set();
-  for (const g of SETTINGS.view_groups) {
-    g.view_ids = g.view_ids.filter((id) => {
-      if (taken.has(id) || !SETTINGS.views.some((v) => v.id === id)) return false;
-      taken.add(id);
-      return true;
-    });
-  }
-  SETTINGS.view_groups = SETTINGS.view_groups.filter((g) => g.view_ids.length);
-}
 
 // Mirrors the backend's first_free_cell_excluding: row-major scan of the view's own
 // layout, also skipping any cell in `extra` (another grid folder's own cell, which
@@ -1199,29 +1183,6 @@ const RESULTS = {
   delete_view: (a) => {
     if (SETTINGS.views.length > 1) SETTINGS.views = SETTINGS.views.filter((v) => v.id !== (a && a.id));
     if (!SETTINGS.views.some((v) => v.id === SETTINGS.active_view)) SETTINGS.active_view = SETTINGS.views[0]?.id || "";
-    return clone();
-  },
-  // The view-group commands answer with the settings blob, like the real backend.
-  save_view_group: (a) => {
-    const ids = (a && a.viewIds) || [];
-    for (const g of SETTINGS.view_groups) {
-      if (g.id !== (a && a.id)) g.view_ids = g.view_ids.filter((v) => !ids.includes(v));
-    }
-    const at = SETTINGS.view_groups.find((g) => g.id === (a && a.id));
-    if (at) { at.name = a.name; at.color = a.color; at.view_ids = ids; }
-    else SETTINGS.view_groups.push({ id: "g" + (SETTINGS.view_groups.length + 1), name: a.name, color: a.color, view_ids: ids });
-    normalizeGroups();
-    return clone();
-  },
-  set_view_group_member: (a) => {
-    for (const g of SETTINGS.view_groups) g.view_ids = g.view_ids.filter((v) => v !== (a && a.viewId));
-    const target = SETTINGS.view_groups.find((g) => g.id === (a && a.groupId));
-    if (target) target.view_ids.push(a.viewId);
-    normalizeGroups();
-    return clone();
-  },
-  delete_view_group: (a) => {
-    SETTINGS.view_groups = SETTINGS.view_groups.filter((g) => g.id !== (a && a.id));
     return clone();
   },
   // F27 grid folders: same answers as the backend: the settings blob, invariants

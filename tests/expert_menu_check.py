@@ -131,7 +131,6 @@ DEPENDENCIES = {
     "promptHotkeyPaste": "promptHotkeys",
     "dragOutModifier": "dragOut",
     "dragOutInvert": "dragOut",
-    "viewDropHoverMs": "dragToView",
     "tileHotkeyBadgeOpacity": "tileHotkeyBadge",
     "copySize": "bubbleMs",
     "copyFont": "bubbleMs",
@@ -165,9 +164,7 @@ DEPENDENCIES = {
     "videoVolume": "!videoMuted",
     "mediaRadius": "roundMedia",
     # Tools + data
-    "viewGroups": "multiView",
     "viewBorder": "multiView",
-    "viewGroupMaxRows": "viewGroups",
     "maxViews": "multiView",
     "gridViewBorder": "multiView",
     # Recording upkeep lives with the recording switch, the video editor's temp

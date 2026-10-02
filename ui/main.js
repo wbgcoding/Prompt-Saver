@@ -647,7 +647,6 @@ function inkShadow(hex) {
 const CHIP_COPIED_MS = 400;
 // Fixed layout and timing values that used to be expert settings.
 const HEADER_PAD_Y = 10; // px, vertical padding of the header bar
-const VIEW_TAB_EDGE_ZONE = 33; // % of a view tab that means "reorder" at each end
 const TILE_FOLDER_ZONE = 55; // % of a tile that means "drop into a folder"
 const KB_FOCUS_FADE_MS = 2000; // delay before the keyboard focus ring fades
 const ETA_MIN_PCT = 10; // remaining time stays hidden below this percent ...
@@ -1418,7 +1417,6 @@ const OPT_FLAG_LABELS = {
   // Save every screenshot into the Screenshots folder: the Settings switch and
   // the snip dialog switch are the two places it is shown.
   screenshotSave: "screenshotToFolder",
-  viewGroups: "flagViewGroups",                 // folder tabs for views
   // The tile's own chain-start icon otherwise only appears on hover -- kept as an
   // opt-in for whoever prefers it dimly visible on every tile all the time (04.09.
   // decision); the 05.09. decision reversed the shipped default back to hover-only.
@@ -1677,7 +1675,6 @@ const EXPERT_VALUES = {
   dragThreshold: { label: "valDragThreshold", min: 2, max: 20, step: 1, def: DRAG_THRESHOLD_DEFAULT, unit: "px" },
   // Dragging a tile onto a collapsed view group's tab: how long it has to rest
   // there before the group opens so the drop can target a view inside it.
-  viewDropHoverMs: { label: "valViewDropHoverMs", min: 100, max: 3000, step: 100, def: 600, unit: "ms", gate: "dragToView" },
   // Header vertical padding + screenshot-preview max height.
   snipPreviewVh: { label: "valSnipPreviewVh", min: 30, max: 92, step: 1, def: 74, unit: "%", gate: "screenshot" },
   // A delay before the capture (lets a menu stay open in the shot).
@@ -1840,7 +1837,6 @@ const EXPERT_VALUES = {
   // How many custom themes may be stored (keeps the settings blob bounded).
   customThemeMax: { label: "valCustomThemeMax", min: 1, max: 20, step: 1, def: 8, unit: "", gate: "customThemes" },
   // How many views a group popover lists before it starts scrolling.
-  viewGroupMaxRows: { label: "valViewGroupMaxRows", min: 4, max: 12, step: 1, def: 8, unit: "", gate: "viewGroups" },
   // Relative-luminance cutoff (/100) above which readableInk() picks black text.
   inkThreshold: { label: "valInkThreshold", min: 20, max: 90, step: 5, def: 60, unit: "%", gate: "autoInk" },
   // How dark the halo behind white text gets, in percent.
@@ -2178,7 +2174,7 @@ const EXPERT_TABS = [
   { title: "expTabFeatures", groups: [
     // Everything that puts new content into the app.
     { title: "expGroupInput", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, { key: "attachTextPreview", gate: "fileAttach" }, "pasteMedia", "dragDrop"], values: ["attachPreviewKb"] },
-    { title: "expGroupViews", flags: ["multiView", { key: "viewGroups", gate: "multiView" }, { key: "multiViewPrompt", gate: "multiView" }, { key: "gridViewBorder", gate: "multiView" }, "quickGrid", { key: "quickGridHoverOnly", gate: "quickGrid" }], values: ["viewBorder", "viewGroupMaxRows", "maxViews", "gridMax"] },
+    { title: "expGroupViews", flags: ["multiView", { key: "multiViewPrompt", gate: "multiView" }, { key: "gridViewBorder", gate: "multiView" }, "quickGrid", { key: "quickGridHoverOnly", gate: "quickGrid" }], values: ["viewBorder", "maxViews", "gridMax"] },
     // Placeholders, from the grammar to where the app asks for them. varFixed
     // (a hand-maintained name/value list, empty by default, only ever
     // SUGGESTED in the fill-in dialog) stays in this same group rather than
@@ -2232,7 +2228,7 @@ const EXPERT_TABS = [
   { title: "expTabTiles", groups: [
     // Split by what a setting actually does: acting on a tile, the hover tooltip,
     // and pure looks. One 26-entry blob made everything hard to find.
-    { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "dragToView", "tilePressScale", "tileHotkeyBadge"], values: ["hoverLift", "hoverDim", "dragThreshold", "viewDropHoverMs", "tileHotkeyBadgeOpacity"] },
+    { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "dragToView", "tilePressScale", "tileHotkeyBadge"], values: ["hoverLift", "hoverDim", "dragThreshold", "tileHotkeyBadgeOpacity"] },
     { title: "expGroupTooltips", values: ["tooltipWidth", "tooltipDelayMs"] },
     { title: "expGroupTileLook", flags: ["tileShadow", "typeBadges", "captions", "gridLines", "autoInk", "inkHalo"], values: ["tileRadius", "tileBorderWidth", "inkThreshold", "inkHaloStrength"], dropdowns: ["tileStyle"] },
     { title: "expGroupFavorites", flags: ["favorites", { key: "favViewButton", gate: "favorites" }, { key: "favViewReorder", gate: "favViewButton" }], values: ["favStarSize", "favMaxCols"] },
@@ -2494,7 +2490,6 @@ function applyValues() {
   root.setProperty("--media-radius", `${val("mediaRadius")}px`);
   root.setProperty("--tag-chip-px", `${val("tagChipPx")}px`);
   root.setProperty("--hl-font-px", `${val("hlFontPx")}px`);
-  root.setProperty("--view-group-rows", String(val("viewGroupMaxRows")));
   root.setProperty("--pick-swatch", `${val("pickSwatchPx")}px`);
   root.setProperty("--composer-max-h", `${val("composerMaxH")}px`);
   root.setProperty("--toast-width", `${val("toastWidth")}px`);
@@ -2563,7 +2558,7 @@ const EXPERT_TIPS = [
   "tileMenu", "typeBadges", "tileHotkeyBadge", "bubbleMs", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "chainQuickStart", "chainStartAlwaysVisible", "chainVarCheck", "autoPasteEnter", "hideWindowOnCopy",
   "promptHotkeys", "promptHotkeyPaste", "dragOut", "dragOutInvert", "dragOutModifier",
   "tooltipDelayMs",
-  "dragToView", "viewDropHoverMs",
+  "dragToView",
   // Appearance
   "hideScrollbars", "gridLines", "pausedIcons", "autoInk", "inkThreshold", "inkHalo", "inkHaloStrength",
   "customThemes", "customThemeMax",
@@ -2587,7 +2582,7 @@ const EXPERT_TIPS = [
   "copyCooldownMs", "dblClickMs", "autoPasteDelayMs", "snipPreviewVh",
   "historyPerPrompt", "similarThreshold", "similarHint", "clipMinChars", "clipInboxMax", "historyMax",
   "nameMaxLen", "searchListMax", "savedSearchMax", "maxViews", "gridMax",
-  "viewBorder", "statsTopN", "viewGroups", "viewGroupMaxRows", "multiViewPrompt",
+  "viewBorder", "statsTopN", "multiViewPrompt",
   "barToggles", "barToggleBoth", "quickGrid", "quickGridHoverOnly", "multiView", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "libraryCols", "copySize", "copyFont", "showLibrary", "showJournal", "composerScale", "primaryScale",
   "remoteApi", "remoteNetworkFilter", "remoteTlsShortLived", "urlScheme", "remotePort", "remoteRateLimit",
   "recOutline", "recOutlineColor", "chainSeparator",
@@ -4790,8 +4785,7 @@ async function renderGrid(skipFetch = false) {
 }
 
 // Header view switcher: one button per view (switch on click, manage on
-// right-click) plus a trailing "+" to add a view via the name popup. With view
-// groups on, a group takes the place of its members as one folder tab.
+// right-click) plus a trailing "+" to add a view via the name popup.
 function renderViews() {
   viewsEl.innerHTML = "";
   // Multi-view disabled (expert menu): no switcher, no add button.
@@ -4799,10 +4793,7 @@ function renderViews() {
     viewsEl.classList.add("hidden");
     return;
   }
-  closeViewGroupPop();
-  for (const entry of viewTabOrder()) {
-    viewsEl.appendChild(entry.group ? groupTabEl(entry.group, entry.views) : viewTabEl(entry.view));
-  }
+  for (const v of settings.views) viewsEl.appendChild(viewTabEl(v));
   if (settings.views.length < val("maxViews")) {
     const add = document.createElement("button");
     add.className = "view-btn view-add-top";
@@ -4853,54 +4844,23 @@ function viewTabEl(v) {
       { label: t("duplicate"), run: () => duplicateView(v) },
       ...moveTabMenuItems(`v:${v.id}`),
     ];
-    if (groupsOn()) items.push({ label: t("viewGroupNew"), icon: FOLDER_SVG, run: () => newViewGroup([v.id], v.name) });
     openMiniMenu(items, e.clientX, e.clientY);
   });
-  makeTabDraggable(btn, v.id, false);
+  makeTabDraggable(btn, v.id);
   return btn;
 }
 
-// ---- View groups: several views collapsed into one folder tab ----
-// The feature is opt-in and rides on multi-view; with either off the stored groups
-// stay untouched and every view renders as its own tab again.
-const groupsOn = () => optFlag("viewGroups") && flag("multiView");
-const viewGroupList = () => (groupsOn() ? settings.view_groups || [] : []);
-const groupOfView = (id) => viewGroupList().find((g) => (g.view_ids || []).includes(id));
 const viewById = (id) => settings.views.find((v) => v.id === id);
-const groupById = (id) => viewGroupList().find((g) => g.id === id);
-// Members in tab-bar order, not in the order they were added.
-const groupViews = (g) => settings.views.filter((v) => (g.view_ids || []).includes(v.id));
-
-// Tab bar in visual order: a group occupies the slot of its first member and
-// swallows the rest; every ungrouped view keeps its own tab.
-function viewTabOrder() {
-  const out = [];
-  const seen = new Set();
-  for (const v of settings.views) {
-    const g = groupOfView(v.id);
-    if (!g) { out.push({ view: v }); continue; }
-    if (seen.has(g.id)) continue;
-    seen.add(g.id);
-    out.push({ group: g, views: groupViews(g) });
-  }
-  return out;
-}
-// Every view in the order the tab bar shows it (group members inline): the order
-// keyboard switching walks.
-const viewOrder = () => viewTabOrder().flatMap((e) => (e.group ? e.views : [e.view]));
+// The order the tab bar shows the views in, and the order Ctrl+Tab walks.
+const viewOrder = () => settings.views;
 
 // ---- Tab-bar order -- the only place that decides it is settings.views
-// itself (a group's members are simply its own views, filtered out of the same
-// array in their existing relative order -- see groupViews above), so moving a
-// tab is nothing but reordering that one array. A slot is one draggable unit of
-// the top-level bar: a loose view's own id, or a whole group carrying its
-// member ids along with it.
+// itself, so moving a tab is nothing but reordering that one array. A slot is
+// one draggable unit of the bar: a view's own id.
 function topLevelSlots() {
-  return viewTabOrder().map((e) =>
-    e.group ? { groupId: e.group.id, ids: e.views.map((v) => v.id) } : { viewId: e.view.id, ids: [e.view.id] }
-  );
+  return settings.views.map((v) => ({ viewId: v.id, ids: [v.id] }));
 }
-const slotKey = (s) => (s.groupId ? `g:${s.groupId}` : `v:${s.viewId}`);
+const slotKey = (s) => `v:${s.viewId}`;
 
 async function applyViewOrder(order) {
   try {
@@ -4936,8 +4896,8 @@ async function stepTopLevelSlot(key, dir) {
   await moveTopLevelSlot(key, slotKey(slots[targetIdx]), dir < 0 ? "before" : "after");
 }
 
-// Shared by a loose tab's and a group tab's context menu -- greyed out (never
-// hidden) at whichever end already has nothing further to move past.
+// The tab context menu's move entries -- greyed out (never hidden) at whichever
+// end already has nothing further to move past.
 function moveTabMenuItems(key) {
   const slots = topLevelSlots();
   const idx = slots.findIndex((s) => slotKey(s) === key);
@@ -4947,128 +4907,26 @@ function moveTabMenuItems(key) {
   ];
 }
 
-// Reorders one group's own members (drag inside its open popover) without
-// touching any other slot's position.
-async function moveGroupMember(groupId, viewId, targetViewId, side) {
-  const g = groupById(groupId);
-  if (!g || viewId === targetViewId) return;
-  const members = groupViews(g).map((v) => v.id);
-  const fromIdx = members.indexOf(viewId);
-  if (fromIdx < 0) return;
-  members.splice(fromIdx, 1);
-  let toIdx = members.indexOf(targetViewId);
-  if (toIdx < 0) return;
-  if (side === "after") toIdx += 1;
-  members.splice(toIdx, 0, viewId);
-  const slots = topLevelSlots().map((s) => (s.groupId === groupId ? { ...s, ids: members } : s));
-  await applyViewOrder(slots.flatMap((s) => s.ids));
-}
-
-const CHEVRON_DOWN = '<svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" d="M6 9.5l6 6 6-6"/></svg>';
-const GROUP_OUT_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M14 5h5v14h-5M12 12H4m0 0 3-3m-3 3 3 3"/></svg>';
-
-function groupTabEl(g, views) {
-  const current = favView ? null : views.find((v) => v.id === settings.active_view);
-  const btn = document.createElement("button");
-  btn.className = "view-btn view-group-btn" + (current ? " active" : "");
-  btn.dataset.groupId = g.id;
-  if (g.color) {
-    btn.classList.add("colored");
-    btn.style.setProperty("--view-color", g.color);
-  }
-  const name = document.createElement("span");
-  name.textContent = g.name;
-  btn.appendChild(name);
-  // A collapsed folder still has to say which page is on screen.
-  if (current) {
-    const cur = document.createElement("span");
-    cur.className = "view-group-current";
-    cur.textContent = current.name;
-    btn.appendChild(cur);
-  }
-  const chev = document.createElement("span");
-  chev.className = "view-group-chev";
-  chev.innerHTML = CHEVRON_DOWN;
-  btn.appendChild(chev);
-  btn.addEventListener("click", () => {
-    if (tabDragBlockClick) return;
-    if (viewGroupPopId === g.id) closeViewGroupPop();
-    else openViewGroupPop(g, btn);
-  });
-  btn.addEventListener("contextmenu", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    openMiniMenu([
-      { label: t("viewGroupRename"), run: () => renameViewGroup(g) },
-      { label: t("viewGroupColor"), run: () => pickViewGroupColor(g, btn) },
-      ...moveTabMenuItems(`g:${g.id}`),
-      { label: t("viewGroupDissolve"), icon: FOLDER_SVG, danger: true, run: () => dissolveViewGroup(g) },
-    ], e.clientX, e.clientY);
-  });
-  // A folder tab is a drag source too: dropped on a loose tab it swallows that view,
-  // dropped on another folder the two become one.
-  makeTabDraggable(btn, null, false, g.id);
-  return btn;
-}
-
-// Group popover: the member list. Click switches, the arrow button (or dragging a
-// row out) takes a view back to the tab bar.
-const viewGroupPop = document.createElement("div");
-viewGroupPop.className = "ctx view-group-pop hidden";
-viewGroupPop.setAttribute("role", "menu");
-document.body.appendChild(viewGroupPop);
-let viewGroupPopId = null;
-
-function closeViewGroupPop() {
-  viewGroupPop.classList.add("hidden");
-  viewGroupPopId = null;
-}
-
-// Shared by openViewGroupPop() and renderViewsPop(): both build a checkbox + optional
-// colour dot + name row for a view: a new column here only needs adding once.
+// Builds the checkbox + optional colour dot + name row of a view in the "Also show
+// in" popover.
 function viewRowBase(v, on) {
   const row = document.createElement("button");
   row.type = "button";
-  row.className = "view-group-item" + (on ? " on" : "");
+  row.className = "view-row" + (on ? " on" : "");
   const check = document.createElement("span");
   check.className = "tb-check";
   check.innerHTML = on ? TB_CHECK : "";
   const label = document.createElement("span");
-  label.className = "view-group-item-name";
+  label.className = "view-row-name";
   label.textContent = v.name;
   if (v.color) {
     const dot = document.createElement("span");
-    dot.className = "view-group-dot";
+    dot.className = "view-row-dot";
     dot.style.background = v.color;
     label.prepend(dot);
   }
   row.append(check, label);
   return row;
-}
-
-function openViewGroupPop(g, anchor) {
-  viewGroupPop.innerHTML = "";
-  viewGroupPopId = g.id;
-  for (const v of groupViews(g)) {
-    const on = !favView && v.id === settings.active_view;
-    const row = viewRowBase(v, on);
-    row.dataset.viewId = v.id;
-    row.setAttribute("role", "menuitem");
-    const out = document.createElement("span");
-    out.className = "view-group-out";
-    out.innerHTML = GROUP_OUT_ICON;
-    out.title = t("viewGroupRemove");
-    row.appendChild(out);
-    row.addEventListener("click", (e) => {
-      if (tabDragBlockClick) return;
-      if (e.target.closest(".view-group-out")) { moveViewToGroup(v.id, ""); return; }
-      closeViewGroupPop();
-      switchToView(v.id);
-    });
-    makeTabDraggable(row, v.id, true);
-    viewGroupPop.appendChild(row);
-  }
-  placePopover(viewGroupPop, anchor.getBoundingClientRect());
 }
 
 // Small shared right-click menu for view tabs and group tabs.
@@ -5109,148 +4967,28 @@ function openMiniMenu(items, x, y) {
   placePopoverAt(miniMenu, x, y);
 }
 
-async function saveViewGroup(g, patch) {
-  try {
-    settings = await invoke("save_view_group", {
-      id: g.id,
-      name: patch.name ?? g.name,
-      color: patch.color ?? g.color ?? "",
-      viewIds: patch.viewIds ?? (g.view_ids || []),
-    });
-  } catch (e) {
-    errToast(e);
-    return false;
-  }
-  renderViews();
-  return true;
-}
-
-async function newViewGroup(viewIds, suggested) {
-  const name = await confirmDialog({
-    title: t("viewGroupNewTitle"),
-    message: t("viewGroupNewMsg"),
-    confirmLabel: t("save"),
-    input: { type: "text", value: suggested || t("viewGroupDefaultName"), placeholder: t("viewGroupNamePh") },
-    danger: false,
-  });
-  if (!name || !name.trim()) return;
-  try {
-    settings = await invoke("save_view_group", { id: "", name: name.trim(), color: "", viewIds });
-  } catch (e) {
-    errToast(e);
-    return;
-  }
-  renderViews();
-}
-
-async function renameViewGroup(g) {
-  const name = await confirmDialog({
-    title: t("viewGroupRename"),
-    message: t("viewGroupNewMsg"),
-    confirmLabel: t("save"),
-    input: { type: "text", value: g.name, placeholder: t("viewGroupNamePh") },
-    danger: false,
-  });
-  if (!name || !name.trim() || name.trim() === g.name) return;
-  await saveViewGroup(g, { name: name.trim() });
-}
-
-// The picker fires on every pointer move, so paint the tab live and write the
-// colour once the user has settled on one.
-let groupColorTimer = null;
-function pickViewGroupColor(g, anchor) {
-  openColorPop(anchor, g.color || "", (hex) => {
-    const live = (settings.view_groups || []).find((x) => x.id === g.id);
-    if (!live) return;
-    live.color = hex;
-    renderViews();
-    clearTimeout(groupColorTimer);
-    // Re-read the group on write: the settings object was replaced in between.
-    groupColorTimer = setTimeout(() => {
-      const now = (settings.view_groups || []).find((x) => x.id === g.id);
-      if (now) saveViewGroup(now, { color: hex });
-    }, 300);
-  });
-}
-
-async function dissolveViewGroup(g) {
-  const ok = await confirmDialog({
-    title: t("viewGroupDissolve"),
-    message: t("viewGroupDissolveMsg").replace("{name}", g.name),
-    confirmLabel: t("viewGroupDissolve"),
-  });
-  if (!ok) return;
-  try {
-    settings = await invoke("delete_view_group", { id: g.id });
-  } catch (e) {
-    errToast(e);
-    return;
-  }
-  renderViews();
-}
-
-// groupId "" takes the view out of whatever group holds it. One command either
-// way, so moving between groups never needs a remove+add round trip.
-async function moveViewToGroup(viewId, groupId) {
-  if (groupOfView(viewId)?.id === groupId || (!groupId && !groupOfView(viewId))) return;
-  try {
-    settings = await invoke("set_view_group_member", { groupId, viewId });
-  } catch (e) {
-    errToast(e);
-    return;
-  }
-  closeViewGroupPop();
-  renderViews();
-}
-
-// Dragging a tab: onto another loose tab makes a group of the two, onto a group
-// tab joins it, out of the popover leaves the group. Pointer events rather than
+// Dragging a tab onto another one reorders them. Pointer events rather than
 // HTML5 drag-and-drop: the webview reserves that for file drops.
 let tabDrag = null;
 let tabDragBlockClick = false;
 
-// `groupId` marks the source as a whole folder tab instead of a single view.
-// Reordering needs no group support at all, so this only ever gates on
-// multiView now -- groupsOn() still decides whether a CENTER drop merges.
-function makeTabDraggable(el, viewId, fromGroup, groupId) {
+function makeTabDraggable(el, viewId) {
   el.addEventListener("pointerdown", (e) => {
     if (e.button !== 0 || !flag("multiView")) return;
-    tabDrag = { viewId, fromGroup, groupId, el, startX: e.clientX, startY: e.clientY, moved: false, target: null, zone: null };
+    tabDrag = { viewId, el, startX: e.clientX, startY: e.clientY, moved: false, target: null, zone: null };
   });
 }
 
-// Pour one folder's views into another and let the emptied one dissolve: a single
-// write, so the tab bar never shows the half-moved state.
-async function mergeViewGroups(fromId, intoId) {
-  const from = viewGroupList().find((g) => g.id === fromId);
-  const into = viewGroupList().find((g) => g.id === intoId);
-  if (!from || !into) return;
-  await saveViewGroup(into, { viewIds: [...(into.view_ids || []), ...(from.view_ids || [])] });
-}
+// A tab-bar button: the same hit test a tab-to-tab drag (below) and a tile-to-tab
+// drag (further down) both call, so hovering either looks and behaves identically.
+const tabDropTarget = (x, y) => document.elementFromPoint(x, y)?.closest(".view-btn") || null;
 
-// A tab-bar button, OR a row of an already-open group popover: the same hit
-// test a tab-to-tab drag (below) and a tile-to-tab drag (420, further down)
-// both call, so hovering either kind of target looks and behaves identically.
-const tabDropTarget = (x, y) => document.elementFromPoint(x, y)?.closest(".view-btn, .view-group-item") || null;
-
-// Which third of `el` the pointer sits over: the outer zones (their size is
-// VIEW_TAB_EDGE_ZONE percent of the target) mean "reorder", the middle means
-// "group" where grouping is even possible. `allowGroup` is false for a row
-// inside an open group's own popover (nothing to group there) and whenever
-// viewGroups itself is off -- either way the middle just falls through to a
-// plain "after", so dragging still works with no group feature involved at all.
-// The tab bar is a horizontal strip (zoned left/right); a group's own popover
-// is a vertical list (zoned top/bottom) -- same three-way split, other axis.
-function tabDropZone(el, x, y, allowGroup) {
+// Which half of `el` the pointer sits over: the left half drops before the tab,
+// the right half after it.
+function tabDropZone(el, x) {
   const rect = el.getBoundingClientRect();
-  const vertical = el.classList.contains("view-group-item");
-  const size = vertical ? rect.height : rect.width;
-  if (!size) return "after";
-  const edge = size * (VIEW_TAB_EDGE_ZONE / 100);
-  const rel = vertical ? y - rect.top : x - rect.left;
-  if (rel < edge) return "before";
-  if (rel > size - edge) return "after";
-  return allowGroup ? "group" : "after";
+  if (!rect.width) return "after";
+  return x - rect.left < rect.width / 2 ? "before" : "after";
 }
 
 // Takes the element explicitly rather than reading it off `tabDrag` -- a
@@ -5266,11 +5004,7 @@ function markTabDrop(el, zone) {
   tabDrag.target = el;
   tabDrag.zone = el ? zone : null;
   if (!el) return;
-  if (zone === "group") {
-    el.classList.add("tab-drop");
-  } else {
-    el.classList.add("tab-drop-edge", zone === "before" ? "tab-drop-before" : "tab-drop-after");
-  }
+  el.classList.add("tab-drop-edge", zone === "before" ? "tab-drop-before" : "tab-drop-after");
 }
 
 // ---- Dragging a grid tile onto a view tab -----------------------------
@@ -5278,35 +5012,15 @@ function markTabDrop(el, zone) {
 // second target next to `tabDrag` above rather than sharing its state: the two
 // gestures start on different elements (a tile vs. a tab) and are never live
 // together, but a tab-to-tab drag must keep working exactly as before.
-let viewDropHoverTimer = null;
-let viewDropHoverEl = null;
-
 function clearViewDropHover() {
-  clearTimeout(viewDropHoverTimer);
-  viewDropHoverTimer = null;
-  viewDropHoverEl = null;
   if (!drag) return;
   drag.viewTarget?.classList.remove("tab-drop");
   if (drag.viewTarget) drag.viewTarget.title = drag.viewTargetTitle ?? drag.viewTarget.title;
   drag.viewTarget = null;
 }
 
-// Resolves a drop target element to the view it means: a loose tab or an open
-// group-popover row name their view directly; a still-collapsed group tab has
-// no single view yet, so it offers the one already on screen (or, failing
-// that, its first member): the hover-expand below is what lets the user aim
-// at a DIFFERENT view inside the group instead.
-function resolveViewDropTarget(el) {
-  if (!el) return null;
-  if (el.dataset.viewId) return viewById(el.dataset.viewId);
-  if (el.dataset.groupId) {
-    const g = groupById(el.dataset.groupId);
-    if (!g) return null;
-    const views = groupViews(g);
-    return views.find((v) => v.id === settings.active_view) || views[0] || null;
-  }
-  return null;
-}
+// Resolves a drop target element to the view it means.
+const resolveViewDropTarget = (el) => (el?.dataset.viewId ? viewById(el.dataset.viewId) : null);
 
 function updateViewDropHover(x, y, copy) {
   const hit = tabDropTarget(x, y);
@@ -5323,21 +5037,6 @@ function updateViewDropHover(x, y, copy) {
     }
   }
   drag.ghost?.classList.toggle("will-copy", !!copy && !!hit);
-  if (hit?.dataset.groupId) {
-    if (hit !== viewDropHoverEl) {
-      clearTimeout(viewDropHoverTimer);
-      viewDropHoverEl = hit;
-      viewDropHoverTimer = setTimeout(() => {
-        if (drag && drag.viewTarget === hit) {
-          const g = groupById(hit.dataset.groupId);
-          if (g) openViewGroupPop(g, hit);
-        }
-      }, val("viewDropHoverMs"));
-    }
-  } else if (viewDropHoverEl) {
-    clearTimeout(viewDropHoverTimer);
-    viewDropHoverEl = null;
-  }
 }
 
 // Serialises view-tab drops: two dragged onto a tab back to back used to both
@@ -5374,7 +5073,6 @@ async function runViewMutation(ids, targetViewId, fromViewId, copy, mySeq) {
   }
   if (mySeq !== viewMutationSeq) return; // a later drop already applied; this answer is stale
   settings = result;
-  closeViewGroupPop();
   clearGridSelection();
   await renderGrid(true);
 }
@@ -5405,8 +5103,7 @@ window.addEventListener("pointermove", (e) => {
   const hit = tabDropTarget(e.clientX, e.clientY);
   const valid = hit && hit !== tabDrag.el && !hit.classList.contains("view-add-top") ? hit : null;
   if (!valid) { markTabDrop(null); return; }
-  const allowGroup = !valid.classList.contains("view-group-item") && groupsOn();
-  markTabDrop(valid, tabDropZone(valid, e.clientX, e.clientY, allowGroup));
+  markTabDrop(valid, tabDropZone(valid, e.clientX));
 });
 
 window.addEventListener("pointerup", async (e) => {
@@ -5417,36 +5114,8 @@ window.addEventListener("pointerup", async (e) => {
   clearTabDropMark(d.target);
   if (!d.moved) return;
   const target = d.target;
-  // The outer-third drop -- always a reorder, at whichever level the drag
-  // started at, and it never falls through to the group/merge logic below.
-  if (target && d.zone && d.zone !== "group") {
-    if (d.fromGroup && target.classList.contains("view-group-item") && target.dataset.viewId) {
-      const g = groupOfView(d.viewId);
-      const otherG = groupOfView(target.dataset.viewId);
-      if (g && otherG && g.id === otherG.id) await moveGroupMember(g.id, d.viewId, target.dataset.viewId, d.zone);
-    } else if (!d.fromGroup && target.classList.contains("view-btn")) {
-      const key = d.groupId ? `g:${d.groupId}` : `v:${d.viewId}`;
-      const targetKey = target.dataset.groupId ? `g:${target.dataset.groupId}` : `v:${target.dataset.viewId}`;
-      if (key !== targetKey) await moveTopLevelSlot(key, targetKey, d.zone);
-    }
-    return;
-  }
-  if (d.groupId) {
-    if (target?.dataset.groupId) await mergeViewGroups(d.groupId, target.dataset.groupId);
-    else if (target?.dataset.viewId) await moveViewToGroup(target.dataset.viewId, d.groupId);
-    return;
-  }
-  if (target?.dataset.groupId) {
-    await moveViewToGroup(d.viewId, target.dataset.groupId);
-  } else if (target?.dataset.viewId && target.dataset.viewId !== d.viewId) {
-    const other = target.dataset.viewId;
-    // Two loose tabs dropped on each other become a new group; dropping onto a tab
-    // that already sits in a group would be ambiguous, so it joins that group.
-    const g = groupOfView(other);
-    if (g) await moveViewToGroup(d.viewId, g.id);
-    else await newViewGroup([other, d.viewId], viewById(other)?.name);
-  } else if (d.fromGroup && !viewGroupPop.contains(document.elementFromPoint(e.clientX, e.clientY))) {
-    await moveViewToGroup(d.viewId, "");
+  if (target && d.zone && target.classList.contains("view-btn") && target.dataset.viewId && target.dataset.viewId !== d.viewId) {
+    await moveTopLevelSlot(`v:${d.viewId}`, `v:${target.dataset.viewId}`, d.zone);
   }
 });
 
@@ -6889,10 +6558,7 @@ window.addEventListener("pointerup", async (e) => {
   resumeDragVideos(el);
   endDragVisuals();
   // A tile hovering a view tab never also reaches the grid below -- restore
-  // the tab's own title and drop the hover-expand timer either way.
-  clearTimeout(viewDropHoverTimer);
-  viewDropHoverTimer = null;
-  viewDropHoverEl = null;
+  // the tab's own title either way.
   if (viewTarget) {
     viewTarget.classList.remove("tab-drop");
     viewTarget.title = viewTargetTitle ?? viewTarget.title;
@@ -20725,9 +20391,6 @@ function bind() {
     if (!ctxEl.classList.contains("hidden") && !ctxEl.contains(e.target)) closeCtx();
     if (!toolbarMenu.classList.contains("hidden") && !toolbarMenu.contains(e.target)) closeToolbarMenu();
     if (!miniMenu.classList.contains("hidden") && !miniMenu.contains(e.target)) closeMiniMenu();
-    // The group tab itself toggles the popover, so let its own click through.
-    if (!viewGroupPop.classList.contains("hidden") && !viewGroupPop.contains(e.target) &&
-        !e.target.closest(".view-group-btn")) closeViewGroupPop();
     // The folder tile toggles its own popover, so let its press through.
     if (!tileFolderPop.classList.contains("hidden") && !tileFolderPop.contains(e.target) &&
         !e.target.closest(".folder-tile")) closeTileFolderPop();
@@ -20741,8 +20404,7 @@ function bind() {
     if (!openEditorPop.classList.contains("hidden") && !openEditorPop.contains(e.target) &&
         !e.target.closest("#snip-btn") && !e.target.closest("#record-btn")) closeOpenEditorPop();
   });
-  // Ctrl+Tab walks the views in the order the tab bar shows them, so a group's
-  // members are reached in place instead of being skipped.
+  // Ctrl+Tab walks the views in the order the tab bar shows them.
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Tab" || !e.ctrlKey || e.altKey) return;
     if (!flag("multiView") || settings.views.length < 2) return;
@@ -20778,7 +20440,6 @@ function bind() {
     if (!$("shortcuts-modal").classList.contains("hidden")) { trapTabWithin($("shortcuts-modal"), e); return; }
     if (!toolbarMenu.classList.contains("hidden")) { trapTabWithin(toolbarMenu, e); return; }
     if (!miniMenu.classList.contains("hidden")) { trapTabWithin(miniMenu, e); return; }
-    if (!viewGroupPop.classList.contains("hidden")) { trapTabWithin(viewGroupPop, e); return; }
     if (!tileFolderPop.classList.contains("hidden")) { trapTabWithin(tileFolderPop, e); return; }
     if (!viewsPop.classList.contains("hidden")) { trapTabWithin(viewsPop, e); return; }
     if (!moveToFolderPop.classList.contains("hidden")) { trapTabWithin(moveToFolderPop, e); return; }
@@ -20813,7 +20474,6 @@ function bind() {
     if (!$("shortcuts-modal").classList.contains("hidden")) { closeShortcutsModal(); return; }
     if (!toolbarMenu.classList.contains("hidden")) { closeToolbarMenu(); return; }
     if (!miniMenu.classList.contains("hidden")) { closeMiniMenu(); return; }
-    if (!viewGroupPop.classList.contains("hidden")) { closeViewGroupPop(); return; }
     if (!tileFolderPop.classList.contains("hidden")) { closeTileFolderPop(); return; }
     if (!viewsPop.classList.contains("hidden")) { closeViewsPop(); return; }
     if (!moveToFolderPop.classList.contains("hidden")) { closeMoveToFolderPop(); return; }

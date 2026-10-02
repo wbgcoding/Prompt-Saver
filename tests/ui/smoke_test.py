@@ -144,7 +144,7 @@ PROBE = """
     // editor / value picker defect, and it is invisible to the horizontal scan.
     for (const el of document.querySelectorAll(
         '.num-pop, .color-pop, .tag-suggest, .tag-pop, .mini-menu, .ctx-menu, ' +
-        '.tile-folder-pop, .view-group-pop, .toolbar-menu, .suggest-pop, .pick-history-pop')) {
+        '.tile-folder-pop, .toolbar-menu, .suggest-pop, .pick-history-pop')) {
       if (!onScreen(el)) continue;
       const r = el.getBoundingClientRect();
       if (!r.width || !r.height) continue;
@@ -4016,7 +4016,7 @@ PROBE = """
           } else {
             viewsBtn.click();
             await sleep(150);
-            const popRows = () => [...document.querySelectorAll('.views-pop .view-group-item')];
+            const popRows = () => [...document.querySelectorAll('.views-pop .view-row')];
             if (popRows().length !== 3) {
               out.errors.push('the "also show in" popover shows ' + popRows().length + ' rows instead of 3');
             } else {
@@ -5252,26 +5252,22 @@ PROBE = """
     };
     document.getElementById('settings').classList.remove('hidden');
     await click('expert-open');
-    if (!await expertRow('View groups')) {
-      out.errors.push('the view-group toggle is missing from the expert menu');
+    if (!await expertRow('Multiple views')) {
+      out.errors.push('the multiple-views toggle is missing from the expert menu');
     } else {
-      if (!rowFor('Rows in the group list')) {
-        out.errors.push('the group-list row count is missing although view groups are on');
+      // The parent of a branch takes its children with it and gives them back.
+      for (const kept of ['Prompt in multiple views', 'View tab border width']) {
+        if (!rowFor(kept)) out.errors.push('"' + kept + '" is missing although multiple views are on');
       }
-      await flip('View groups');
-      if (rowFor('Rows in the group list')) {
-        out.errors.push('the group-list row count survived switching view groups off');
-      }
-      if (!rowFor('View groups')) out.errors.push('switching view groups off also hid its own toggle');
-      await flip('View groups');
-      if (!rowFor('Rows in the group list')) out.errors.push('the group-list row count did not come back');
-      // Transitive: the parent of the parent takes the whole branch with it.
       await flip('Multiple views');
-      for (const gone of ['View groups', 'Rows in the group list', 'View tab border width']) {
+      for (const gone of ['Prompt in multiple views', 'View tab border width']) {
         if (rowFor(gone)) out.errors.push('"' + gone + '" survived switching multiple views off');
       }
+      if (!rowFor('Multiple views')) out.errors.push('switching multiple views off also hid its own toggle');
       await flip('Multiple views');
-      if (!rowFor('View groups')) out.errors.push('the view-group toggle did not come back');
+      for (const back of ['Prompt in multiple views', 'View tab border width']) {
+        if (!rowFor(back)) out.errors.push('"' + back + '" did not come back');
+      }
     }
     // The same for a sub-toggle: the preview owns the highlighter and its size.
     if (!await expertRow('Markdown preview')) {
@@ -5291,201 +5287,104 @@ PROBE = """
     if (firstTab2) { firstTab2.click(); await sleep(150); }
     await click('expert-back');
     document.getElementById('settings').classList.add('hidden');
-    // F9 view groups: a group is one folder tab, its popover lists the members,
-    // picking one marks the group active and names the view on the tab, and taking
-    // a view back out gives it its own tab again.
+    // The tab bar: one plain tab per view, a right-click menu with the move entries,
+    // and a drag that only ever reorders.
     const viewTabs = () => [...document.querySelectorAll('#views .view-btn:not(.view-add-top)')];
-    const groupTab = () => viewTabs().find(b => b.dataset.groupId);
-    if (!groupTab()) {
-      out.errors.push('the view group has no folder tab');
-    } else if (viewTabs().length !== 3) {
-      out.errors.push('the tab bar shows ' + viewTabs().length + ' tabs instead of 3');
+    const tabIds = () => viewTabs().map(b => b.dataset.viewId);
+    if (viewTabs().length !== 4) {
+      out.errors.push('the tab bar shows ' + viewTabs().length + ' tabs instead of 4');
     } else {
-      groupTab().click();
-      await sleep(250);
-      const rows = [...document.querySelectorAll('.view-group-pop .view-group-item')];
-      if (rows.length !== 2) {
-        out.errors.push('the group popover lists ' + rows.length + ' views instead of 2');
-      } else {
-        rows[1].click();
-        await sleep(450);
-        const gt = groupTab();
-        if (!gt || !gt.classList.contains('active')) {
-          out.errors.push('a view picked from the group did not mark the group tab active');
-        } else if (!gt.querySelector('.view-group-current')) {
-          out.errors.push('the group tab does not name the active view');
-        }
-        groupTab().click();
-        await sleep(250);
-        const outBtn = document.querySelector('.view-group-pop .view-group-item .view-group-out');
-        if (!outBtn) {
-          out.errors.push('a group row has no button to leave the group');
-        } else {
-          outBtn.click();
-          await sleep(450);
-          if (viewTabs().length !== 4) {
-            out.errors.push('leaving the group did not give the view its own tab back');
-          }
-        }
-      }
-      const gt2 = groupTab();
-      if (gt2) {
-        gt2.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
-        await sleep(200);
-        const menu = document.querySelector('.tab-menu:not(.hidden)');
-        const items = menu ? menu.querySelectorAll('button').length : 0;
-        // Rename, colour, move left, move right, dissolve.
-        if (items !== 5) out.errors.push('the group menu has ' + items + ' entries instead of 5');
-        document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
-        await sleep(150);
-      }
-      // The gesture the feature is built on: one tab dropped on another merges them,
-      // and a folder tab is a drag source in its own right (dropped on a folder the
-      // two become one). Dragging a tab must not paint a text selection either.
+      if (viewTabs().some(b => !b.dataset.viewId)) out.errors.push('a tab is not a plain view tab');
+      if (document.querySelector('#views .view-group-btn')) out.errors.push('a folder tab is still drawn for views');
+      const startOrder = tabIds();
       const tabCentre = (el) => { const r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
       const tabPtr = (type, x, y, el) => (el || window).dispatchEvent(new PointerEvent(type, {
         bubbles: true, cancelable: true, button: 0, isPrimary: true, pointerId: 3, clientX: x, clientY: y }));
-      const dragTab = async (from, to) => {
-        // .views scrolls horizontally when squeezed (single-line header mode still
-        // leaves it a variable share of the row) — a real user scrolls the strip
-        // into view before dragging across it too.
-        to.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-        await sleep(50);
-        const [ax, ay] = tabCentre(from), [bx, by] = tabCentre(to);
-        tabPtr('pointerdown', ax, ay, from);
-        tabPtr('pointermove', ax + 8, ay);
-        await sleep(80);
-        tabPtr('pointermove', bx, by);
-        await sleep(80);
-        const marked = !!document.querySelector('.tab-drop');
-        tabPtr('pointerup', bx, by);
-        await sleep(350);
-        return marked;
-      };
-      if (viewTabs().length && getComputedStyle(viewTabs()[0]).userSelect !== 'none') {
+      if (getComputedStyle(viewTabs()[0]).userSelect !== 'none') {
         out.errors.push('a view tab still selects its text while being dragged');
       }
       // The strip stays hit-testable at every window size the app allows, so the
-      // gesture is testable everywhere — no width may skip this.
-      const loose = viewTabs().filter(b => b.dataset.viewId);
-      if (loose.length < 2) {
-        out.errors.push('not enough loose view tabs for the merge check');
-      } else {
-        for (const tb of loose) {
-          const r = tb.getBoundingClientRect();
-          const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-          if (!hit || hit.closest('.view-btn') !== tb) {
-            out.errors.push('a view tab cannot be dropped on: nothing hit-tests to "' +
-              tb.textContent.trim().slice(0, 12) + '"');
-          }
-        }
-        // 440: reordering -- both context-menu entries, then an edge-zone drag,
-        // tested while the bar is still in its pristine shape (two loose tabs
-        // plus the "Docs" folder tab), before the merge probes below start
-        // consuming tabs into groups.
-        {
-          const groupRowNames = () => [...document.querySelectorAll('.view-group-pop .view-group-item .view-group-item-name')].map(n => n.textContent.trim());
-          const openPop = async () => { groupTab().click(); await sleep(250); };
-          const before = groupTab() ? (await openPop(), groupRowNames()) : [];
-          document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
-          await sleep(150);
-          const homeTab = viewTabs().find(b => b.dataset.viewId === loose[0].dataset.viewId);
-          homeTab.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
-          await sleep(200);
-          // Item order is fixed regardless of language: grid size, edit, duplicate,
-          // move left, move right, then (only with viewGroups on) "new group".
-          const menuBtns = [...document.querySelectorAll('.tab-menu:not(.hidden) button')];
-          const leftBtn = menuBtns[3];
-          const rightBtn = menuBtns[4];
-          if (menuBtns.length < 5) {
-            out.errors.push('a loose tab menu has no move-left/move-right entries');
-          } else {
-            if (!leftBtn.disabled) out.errors.push('move-left is not disabled on the first tab');
-            if (rightBtn.disabled) out.errors.push('move-right is disabled although another tab follows');
-            {
-              rightBtn.click();
-              await sleep(250);
-              if (viewTabs()[1]?.dataset.viewId !== loose[0].dataset.viewId) {
-                out.errors.push('move-right on the first tab did not move it one place over');
-              }
-              // Move it back so the tab bar's shape below matches what the rest of
-              // this probe (and the merge tests right after it) still expect.
-              const movedTab = viewTabs().find(b => b.dataset.viewId === loose[0].dataset.viewId);
-              movedTab?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
-              await sleep(200);
-              const backBtn = [...document.querySelectorAll('.tab-menu:not(.hidden) button')][3];
-              backBtn?.click();
-              await sleep(250);
-            }
-          }
-          // The drop on the outer edge of a tab: always a reorder, never a merge.
-          calls().length = 0;
-          const grp = groupTab();
-          const grpId = grp?.dataset.groupId;
-          const firstLoose = viewTabs().find(b => b.dataset.viewId);
-          if (grp && firstLoose) {
-            const r = firstLoose.getBoundingClientRect();
-            const gx = grp.getBoundingClientRect();
-            tabPtr('pointerdown', gx.left + gx.width / 2, gx.top + gx.height / 2, grp);
-            tabPtr('pointermove', gx.left + gx.width / 2 + 8, gx.top + gx.height / 2);
-            await sleep(80);
-            // The outer-left edge of the target loose tab, well inside the
-            // the view tab edge zone -- must read as "reorder", not "group".
-            tabPtr('pointermove', r.left + 3, r.top + r.height / 2);
-            await sleep(80);
-            const edgeMark = document.querySelector('.tab-drop-edge');
-            if (!edgeMark) out.errors.push('dragging onto a tab edge shows no reorder mark');
-            tabPtr('pointerup', r.left + 3, r.top + r.height / 2);
-            await sleep(300);
-            if (calls().includes('save_view_group')) {
-              out.errors.push('dropping on the edge of a tab merged instead of reordering');
-            }
-            if (!calls().includes('reorder_views')) {
-              out.errors.push('dropping on the edge of a tab did not reorder the tab bar');
-            } else if (viewTabs()[0]?.dataset.groupId !== grpId) {
-              out.errors.push('the folder tab dropped before the first loose tab is not first afterwards');
-            }
-          }
-          // Bestandsprüfung: the group dragged around above must still hold the
-          // same members it started with.
-          const gAfter = groupTab();
-          const after = gAfter ? (await openPop(), groupRowNames()) : [];
-          document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
-          await sleep(150);
-          if (before.length && (after.length !== before.length || before.some(n => !after.includes(n)))) {
-            out.errors.push('reordering tabs lost a view from its group (' + before.join(',') + ' vs ' + after.join(',') + ')');
-          }
-        }
-        // The reorder probe above re-rendered the tab bar at least once, which
-        // replaces every tab element -- `loose` still names the right views by
-        // id, but its two DOM nodes are stale, so this re-reads them fresh
-        // rather than feeding dragTab() a pair of detached (0,0) elements.
-        const looseNow = viewTabs().filter(b => b.dataset.viewId);
-        calls().length = 0;
-        if (looseNow.length < 2 || !await dragTab(looseNow[0], looseNow[1])) {
-          out.errors.push('a view tab dropped on another marked no target');
-        }
-        if (document.getElementById('confirm-modal').classList.contains('hidden')) {
-          out.errors.push('merging two view tabs did not ask for a group name');
-        } else {
-          await click('confirm-ok');
-          await sleep(250);
-          if (!calls().includes('save_view_group')) out.errors.push('merging two view tabs saved no group');
-          if (viewTabs().some(b => b.dataset.viewId === looseNow[0]?.dataset.viewId)) {
-            out.errors.push('a merged view still has its own tab');
-          }
-        }
-        const groups = viewTabs().filter(b => b.dataset.groupId);
-        if (groups.length !== 2) {
-          out.errors.push('expected two folder tabs before the folder merge, got ' + groups.length);
-        } else {
-          calls().length = 0;
-          if (!await dragTab(groups[0], groups[1])) out.errors.push('a folder tab cannot be dragged onto another tab');
-          if (!calls().includes('save_view_group')) out.errors.push('dropping a folder on a folder merged nothing');
-          const left = viewTabs().filter(b => b.dataset.groupId).length;
-          if (left !== 1) out.errors.push(left + ' folder tabs left after merging two into one');
+      // gesture is testable everywhere: no width may skip this.
+      for (const tb of viewTabs()) {
+        // The strip scrolls when squeezed, so a user brings a tab into view first.
+        tb.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        await sleep(40);
+        const [cx, cy] = tabCentre(tb);
+        const hit = document.elementFromPoint(cx, cy);
+        if (!hit || hit.closest('.view-btn') !== tb) {
+          out.errors.push('a view tab cannot be dropped on: nothing hit-tests to "' +
+            tb.textContent.trim().slice(0, 12) + '"');
         }
       }
+      // Context menu: grid size, edit, duplicate, move left, move right (no group entry).
+      viewTabs()[0].dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await sleep(200);
+      const menuBtns = [...document.querySelectorAll('.tab-menu:not(.hidden) button')];
+      if (menuBtns.length !== 5) {
+        out.errors.push('a tab menu has ' + menuBtns.length + ' entries instead of 5');
+      } else {
+        if (!menuBtns[3].disabled) out.errors.push('move-left is not disabled on the first tab');
+        if (menuBtns[4].disabled) out.errors.push('move-right is disabled although another tab follows');
+        menuBtns[4].click();
+        await sleep(250);
+        if (tabIds()[1] !== startOrder[0]) out.errors.push('move-right on the first tab did not move it one place over');
+        // Move it back so the order below matches what the rest of the run expects.
+        viewTabs()[1].dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+        await sleep(200);
+        [...document.querySelectorAll('.tab-menu:not(.hidden) button')][3]?.click();
+        await sleep(250);
+        if (tabIds().join() !== startOrder.join()) out.errors.push('move-left did not restore the tab order');
+      }
+      document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      await sleep(150);
+      // A drag onto the right half of another tab reorders, marks the edge and
+      // never opens a naming dialog or groups anything.
+      calls().length = 0;
+      const dragFrom = viewTabs()[0];
+      const dragTo = viewTabs()[2];
+      dragTo.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      await sleep(50);
+      const [ax, ay] = tabCentre(dragFrom);
+      const tr = dragTo.getBoundingClientRect();
+      tabPtr('pointerdown', ax, ay, dragFrom);
+      tabPtr('pointermove', ax + 8, ay);
+      await sleep(80);
+      tabPtr('pointermove', tr.right - 3, tr.top + tr.height / 2);
+      await sleep(80);
+      if (!document.querySelector('.tab-drop-edge.tab-drop-after')) out.errors.push('dragging onto a tab shows no reorder mark');
+      if (document.querySelector('.tab-drop:not(.tab-drop-edge)')) out.errors.push('dragging onto a tab shows a merge mark');
+      tabPtr('pointerup', tr.right - 3, tr.top + tr.height / 2);
+      await sleep(350);
+      if (!calls().includes('reorder_views')) out.errors.push('dropping on a tab did not reorder the tab bar');
+      if (viewTabs().length !== 4) out.errors.push('a tab drag changed the number of tabs');
+      const dropped = tabIds();
+      if (dropped[2] !== startOrder[0] || dropped.slice().sort().join() !== startOrder.slice().sort().join()) {
+        out.errors.push('the dragged tab did not land after its target (' + dropped.join(',') + ')');
+      }
+      if (!document.getElementById('confirm-modal').classList.contains('hidden')) {
+        out.errors.push('a tab drag opened a dialog');
+        await click('confirm-cancel');
+      }
+      // Put the order back for the probes that follow.
+      {
+        const back = viewTabs().find(b => b.dataset.viewId === startOrder[0]);
+        const first = viewTabs()[0];
+        first.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        await sleep(50);
+        const [bx, by] = tabCentre(back);
+        const fr = first.getBoundingClientRect();
+        tabPtr('pointerdown', bx, by, back);
+        tabPtr('pointermove', bx - 8, by);
+        await sleep(80);
+        tabPtr('pointermove', fr.left + 3, fr.top + fr.height / 2);
+        await sleep(80);
+        tabPtr('pointerup', fr.left + 3, fr.top + fr.height / 2);
+        await sleep(350);
+        if (tabIds().join() !== startOrder.join()) out.errors.push('dragging a tab back did not restore the tab order');
+      }
+      // The probes that follow want a view with free cells under them.
+      viewTabs().find(b => b.dataset.viewId === 'archive')?.click();
+      await sleep(300);
     }
     document.getElementById('settings').classList.remove('hidden');
     // Custom themes: the stored one is offered in the theme list, the editor opens
@@ -6652,6 +6551,9 @@ PROBE = """
     // with older data -- the tile must keep the pushed state, not fall back to
     // the late reply.
     {
+      // Home is full by now; the roomy Archive view hosts the new prompt.
+      document.querySelector('.view-btn[data-view-id="archive"]')?.click();
+      await sleep(250);
       const freeCellRace = [...document.querySelectorAll('#grid .cell')].find(c => !c.firstElementChild);
       if (!freeCellRace) {
         out.errors.push('230: no free grid cell to test the stale rotation-peek race with');
@@ -8742,6 +8644,8 @@ PROBE = """
       // own top-left corner (as far from its centre as a point gets) is the
       // known, trackable coordinate.
       {
+        document.querySelector('.view-btn[data-view-id="archive"]')?.click();
+        await sleep(250);
         const freeCell = [...document.querySelectorAll('#grid .cell')].find((c) => !c.firstElementChild);
         if (!freeCell) {
           out.errors.push('365: no empty grid cell available to open the media viewer through');
@@ -9856,19 +9760,12 @@ PROBE = """
     // row instead of losing tiles, and growing it back must restore everyone -
     // exactly the arrangement it had before, membership included.
     {
-      // The view-group merge test above (F9) leaves "home" folded into a group tab
-      // with no standalone .view-btn of its own, so fall back to picking it from
-      // that group's popover when the plain tab lookup comes up empty.
       const homeTab419 = document.querySelector('.view-btn[data-view-id="home"]');
       if (homeTab419) {
         homeTab419.click();
         await sleep(150);
       } else {
-        document.querySelector('#views .view-btn[data-group-id]')?.click();
-        await sleep(200);
-        const homeRow = document.querySelector('.view-group-pop .view-group-item[data-view-id="home"]');
-        if (homeRow) { homeRow.click(); await sleep(150); }
-        else out.errors.push('Overflow: could not find "home" anywhere to make it active');
+        out.errors.push('Overflow: could not find the "home" tab to make it active');
       }
       const before419 = await window.__TAURI__.core.invoke('get_state');
       const homeBefore419 = before419.settings.views.find(v => v.id === 'home');
@@ -13470,17 +13367,11 @@ DRAG_VIEW_PROBE = """
   const visible = (el) => !!el && !el.classList.contains('hidden');
   const callsFor = (cmd) => (window.__SMOKE_ARGS__ || []).filter(([c]) => c === cmd).map(([, a]) => a);
   const tabFor = (id) => document.querySelector('.view-btn[data-view-id="' + id + '"]');
-  const groupTab = () => document.querySelector('.view-btn[data-group-id]');
   const tileEl = (id) => document.querySelector('#grid .tile[data-id="' + id + '"]');
   const selectTile = (id) => { const btn = tileEl(id) && tileEl(id).querySelector('.tile-select'); if (btn) btn.click(); };
   const centre = (el) => { const r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
-  // "notes"/"archive" are grouped -- no standalone tab of their own to click,
-  // only reachable through the folder tab's own popover.
-  const switchToGroupedView = async (id) => {
-    groupTab().click();
-    await sleep(250);
-    const row = document.querySelector('.view-group-pop .view-group-item[data-view-id="' + id + '"]');
-    if (row) row.click();
+  const switchToTab = async (id) => {
+    tabFor(id).click();
     await sleep(250);
   };
   const ptr = (type, x, y, el, extra) => (el || window).dispatchEvent(new PointerEvent(type, Object.assign({
@@ -13508,8 +13399,8 @@ DRAG_VIEW_PROBE = """
     const viewsBar = document.getElementById('views');
     if (!visible(viewsBar)) {
       errs.push('the view switcher is not visible for the drag-to-view check');
-    } else if (!tabFor('home') || !tabFor('work') || !groupTab()) {
-      errs.push('the fixture does not show the expected home/work/group tabs');
+    } else if (!tabFor('home') || !tabFor('work') || !tabFor('notes') || !tabFor('archive')) {
+      errs.push('the fixture does not show the expected home/work/notes/archive tabs');
     } else {
       // ---- fill "work" (shrunk to 1x1) so it counts as a full target ---------
       tabFor('work').click();
@@ -13560,76 +13451,51 @@ DRAG_VIEW_PROBE = """
         }
       }
 
-      // ---- hovering a collapsed group opens it; copy leaves the source in place
+      // ---- Ctrl copies: the source keeps the tile ----------------------------
       const homeTileP1 = tileEl('p1');
-      const gt = groupTab();
-      if (!homeTileP1 || !gt) {
-        errs.push('missing fixture tile or the folder tab for the copy check');
+      if (!homeTileP1 || !tabFor('notes')) {
+        errs.push('missing fixture tile or the notes tab for the copy check');
       } else {
         window.__SMOKE_ARGS__.length = 0;
-        await dragTileTo(homeTileP1, ...centre(gt));
-        if (!gt.classList.contains('tab-drop')) {
-          errs.push('dragging a tile over a collapsed view group does not highlight it');
+        await dragTileTo(homeTileP1, ...centre(tabFor('notes')));
+        if (!tabFor('notes').classList.contains('tab-drop')) {
+          errs.push('dragging a tile over a view tab does not highlight it (copy check)');
         }
-        await sleep(750); // past the default 600 ms hover-open delay
-        const pop = document.querySelector('.view-group-pop');
-        if (!visible(pop)) {
-          errs.push('hovering a tile over a collapsed view group never opened it');
-        } else {
-          const notesRow = pop.querySelector('.view-group-item[data-view-id="notes"]');
-          if (!notesRow) {
-            errs.push('the opened group popover has no row for "notes"');
-          } else {
-            // The group only just opened under the drag -- one more move onto the
-            // now-visible row before releasing, exactly as a real drag would.
-            const [nx, ny] = centre(notesRow);
-            ptr('pointermove', nx, ny, window, { ctrlKey: true });
-            await sleep(80);
-            if (!notesRow.classList.contains('tab-drop')) {
-              errs.push('a view row inside an opened group does not highlight as a drop target');
-            }
-            await endDrag(nx, ny, true); // Ctrl held: copy, not move
-            const addCalls = callsFor('batch_prompts').filter(a => a && a.action === 'addView' && a.viewId === 'notes');
-            if (!addCalls.some(a => (a.ids || []).includes('p1'))) {
-              errs.push('Ctrl-dropping on a view revealed by the hover-expand did not copy the tile there');
-            }
-            if (!tileEl('p1')) errs.push('copying a tile removed it from the source view');
-            await switchToGroupedView('notes');
-            if (!tileEl('p1')) errs.push('the copied tile is missing from the view opened by the hover-expand');
-            tabFor('home').click();
-            await sleep(200);
-          }
+        const [nx, ny] = centre(tabFor('notes'));
+        ptr('pointermove', nx, ny, window, { ctrlKey: true });
+        await sleep(80);
+        await endDrag(nx, ny, true); // Ctrl held: copy, not move
+        const addCalls = callsFor('batch_prompts').filter(a => a && a.action === 'addView' && a.viewId === 'notes');
+        if (!addCalls.some(a => (a.ids || []).includes('p1'))) {
+          errs.push('Ctrl-dropping on a view tab did not copy the tile there');
         }
+        if (!tileEl('p1')) errs.push('copying a tile removed it from the source view');
+        await switchToTab('notes');
+        if (!tileEl('p1')) errs.push('the copied tile is missing from the target view');
+        tabFor('home').click();
+        await sleep(200);
       }
 
-      // ---- the same path without Ctrl moves instead of copying ---------------
+      // ---- the same without Ctrl moves instead of copying --------------------
       const homeTileP2 = tileEl('p2');
-      const gt2 = groupTab();
-      if (!homeTileP2 || !gt2) {
-        errs.push('missing fixture tile or the folder tab for the move check');
+      if (!homeTileP2 || !tabFor('archive')) {
+        errs.push('missing fixture tile or the archive tab for the move check');
       } else {
         window.__SMOKE_ARGS__.length = 0;
-        await dragTileTo(homeTileP2, ...centre(gt2));
-        await sleep(750);
-        const pop2 = document.querySelector('.view-group-pop');
-        const archiveRow = pop2 && pop2.querySelector('.view-group-item[data-view-id="archive"]');
-        if (!archiveRow) {
-          errs.push('the opened group popover has no row for "archive"');
-        } else {
-          const [ax, ay] = centre(archiveRow);
-          ptr('pointermove', ax, ay, window);
-          await sleep(80);
-          await endDrag(ax, ay);
-          const moveCalls = callsFor('batch_prompts').filter(a => a && a.action === 'moveView' && a.viewId === 'archive');
-          if (!moveCalls.some(a => a.fromViewId === 'home' && (a.ids || []).includes('p2'))) {
-            errs.push('dropping on a view revealed by the hover-expand did not move the tile there');
-          }
-          if (tileEl('p2')) errs.push('moving a tile left it behind in the source view');
-          await switchToGroupedView('archive');
-          if (!tileEl('p2')) errs.push('the moved tile is missing from the view opened by the hover-expand');
-          tabFor('home').click();
-          await sleep(200);
+        await dragTileTo(homeTileP2, ...centre(tabFor('archive')));
+        const [ax, ay] = centre(tabFor('archive'));
+        ptr('pointermove', ax, ay, window);
+        await sleep(80);
+        await endDrag(ax, ay);
+        const moveCalls = callsFor('batch_prompts').filter(a => a && a.action === 'moveView' && a.viewId === 'archive');
+        if (!moveCalls.some(a => a.fromViewId === 'home' && (a.ids || []).includes('p2'))) {
+          errs.push('dropping on a view tab did not move the tile there');
         }
+        if (tileEl('p2')) errs.push('moving a tile left it behind in the source view');
+        await switchToTab('archive');
+        if (!tileEl('p2')) errs.push('the moved tile is missing from the target view');
+        tabFor('home').click();
+        await sleep(200);
       }
 
       // ---- dropping on the view already on screen does nothing, no message ---
@@ -13655,33 +13521,26 @@ DRAG_VIEW_PROBE = """
         errs.push('fixture tiles "p5"/"p7" are missing from "home" for the multi-select move check');
       } else {
         window.__SMOKE_ARGS__.length = 0;
-        await dragTileTo(homeTileP5, ...centre(groupTab()));
-        await sleep(750); // past the default 600 ms hover-open delay
-        const popMulti1 = document.querySelector('.view-group-pop');
-        const notesRowMulti = popMulti1 && popMulti1.querySelector('.view-group-item[data-view-id="notes"]');
-        if (!notesRowMulti) {
-          errs.push('the opened group popover has no row for "notes" (multi-select move)');
-        } else {
-          const [nx2, ny2] = centre(notesRowMulti);
-          ptr('pointermove', nx2, ny2, window);
-          await sleep(80);
-          await endDrag(nx2, ny2);
-          const moveIds = callsFor('batch_prompts')
-            .filter(a => a && a.action === 'moveView' && a.viewId === 'notes')
-            .flatMap(a => a.ids || []);
-          if (!(moveIds.includes('p5') && moveIds.includes('p7'))) {
-            errs.push('dragging one of two selected tiles did not move both of them: ' + JSON.stringify(moveIds));
-          }
-          if (tileEl('p5') || tileEl('p7')) {
-            errs.push('a multi-select move left a selected tile behind in the source view');
-          }
-          await switchToGroupedView('notes');
-          if (!tileEl('p5') || !tileEl('p7')) {
-            errs.push('a multi-select move did not place both selected tiles in the target view');
-          }
-          tabFor('home').click();
-          await sleep(200);
+        await dragTileTo(homeTileP5, ...centre(tabFor('notes')));
+        const [nx2, ny2] = centre(tabFor('notes'));
+        ptr('pointermove', nx2, ny2, window);
+        await sleep(80);
+        await endDrag(nx2, ny2);
+        const moveIds = callsFor('batch_prompts')
+          .filter(a => a && a.action === 'moveView' && a.viewId === 'notes')
+          .flatMap(a => a.ids || []);
+        if (!(moveIds.includes('p5') && moveIds.includes('p7'))) {
+          errs.push('dragging one of two selected tiles did not move both of them: ' + JSON.stringify(moveIds));
         }
+        if (tileEl('p5') || tileEl('p7')) {
+          errs.push('a multi-select move left a selected tile behind in the source view');
+        }
+        await switchToTab('notes');
+        if (!tileEl('p5') || !tileEl('p7')) {
+          errs.push('a multi-select move did not place both selected tiles in the target view');
+        }
+        tabFor('home').click();
+        await sleep(200);
       }
       selectTile('p9');
       selectTile('p3');
@@ -13690,33 +13549,26 @@ DRAG_VIEW_PROBE = """
         errs.push('fixture tiles "p9"/"p3" are missing from "home" for the multi-select copy check');
       } else {
         window.__SMOKE_ARGS__.length = 0;
-        await dragTileTo(homeTileP9, ...centre(groupTab()));
-        await sleep(750);
-        const popMulti2 = document.querySelector('.view-group-pop');
-        const archiveRowMulti = popMulti2 && popMulti2.querySelector('.view-group-item[data-view-id="archive"]');
-        if (!archiveRowMulti) {
-          errs.push('the opened group popover has no row for "archive" (multi-select copy)');
-        } else {
-          const [ax2, ay2] = centre(archiveRowMulti);
-          ptr('pointermove', ax2, ay2, window, { ctrlKey: true });
-          await sleep(80);
-          await endDrag(ax2, ay2, true);
-          const copyIds = callsFor('batch_prompts')
-            .filter(a => a && a.action === 'addView' && a.viewId === 'archive')
-            .flatMap(a => a.ids || []);
-          if (!(copyIds.includes('p9') && copyIds.includes('p3'))) {
-            errs.push('Ctrl-dragging one of two selected tiles did not copy both of them: ' + JSON.stringify(copyIds));
-          }
-          if (!tileEl('p9') || !tileEl('p3')) {
-            errs.push('a multi-select copy removed a selected tile from the source view');
-          }
-          await switchToGroupedView('archive');
-          if (!tileEl('p9') || !tileEl('p3')) {
-            errs.push('a multi-select copy did not place both selected tiles in the target view');
-          }
-          tabFor('home').click();
-          await sleep(200);
+        await dragTileTo(homeTileP9, ...centre(tabFor('archive')));
+        const [ax2, ay2] = centre(tabFor('archive'));
+        ptr('pointermove', ax2, ay2, window, { ctrlKey: true });
+        await sleep(80);
+        await endDrag(ax2, ay2, true);
+        const copyIds = callsFor('batch_prompts')
+          .filter(a => a && a.action === 'addView' && a.viewId === 'archive')
+          .flatMap(a => a.ids || []);
+        if (!(copyIds.includes('p9') && copyIds.includes('p3'))) {
+          errs.push('Ctrl-dragging one of two selected tiles did not copy both of them: ' + JSON.stringify(copyIds));
         }
+        if (!tileEl('p9') || !tileEl('p3')) {
+          errs.push('a multi-select copy removed a selected tile from the source view');
+        }
+        await switchToTab('archive');
+        if (!tileEl('p9') || !tileEl('p3')) {
+          errs.push('a multi-select copy did not place both selected tiles in the target view');
+        }
+        tabFor('home').click();
+        await sleep(200);
       }
 
       // ---- 479: a second view-tab drop attempted while the first is still open
@@ -13726,49 +13578,36 @@ DRAG_VIEW_PROBE = """
       window.__BATCH_PROMPTS_GATE__ = [];
       const raceTileA = tileEl('p0');
       const raceTileB = tileEl('p3');
-      const gtRace = groupTab();
-      if (!raceTileA || !raceTileB || !gtRace) {
-        errs.push('missing fixture tile or the folder tab for the overlapping-drop check');
+      if (!raceTileA || !raceTileB || !tabFor('notes') || !tabFor('archive')) {
+        errs.push('missing fixture tile or view tab for the overlapping-drop check');
       } else {
-        await dragTileTo(raceTileA, ...centre(gtRace));
-        await sleep(750);
-        const popRace1 = document.querySelector('.view-group-pop');
-        const notesRowRace = popRace1 && popRace1.querySelector('.view-group-item[data-view-id="notes"]');
-        if (!notesRowRace) {
-          errs.push('the opened group popover has no row for "notes" (overlapping-drop check)');
-        } else {
-          const [rnx, rny] = centre(notesRowRace);
-          ptr('pointermove', rnx, rny, window);
-          await sleep(80);
-          await endDrag(rnx, rny);
-          if (window.__BATCH_PROMPTS_GATE__.length !== 1) {
-            errs.push('the first view-tab drop did not reach the backend as expected');
-          }
-          // The first call's own answer is still held open on purpose -- a
-          // second drop attempted right now is exactly the race 479 closes.
-          await dragTileTo(raceTileB, ...centre(gtRace));
-          await sleep(750);
-          const popRace2 = document.querySelector('.view-group-pop');
-          const archiveRowRace = popRace2 && popRace2.querySelector('.view-group-item[data-view-id="archive"]');
-          if (archiveRowRace) {
-            const [rax, ray] = centre(archiveRowRace);
-            ptr('pointermove', rax, ray, window);
-            await sleep(80);
-            await endDrag(rax, ray);
-          }
-          if (window.__BATCH_PROMPTS_GATE__.length !== 1) {
-            errs.push('a second view-tab drop reached the backend while the first was still open');
-          }
-          if (!tileEl('p3')) errs.push('a refused second drop moved the tile out of "home" anyway');
-          window.__BATCH_PROMPTS_GATE__[0](); // let the first (only) call's answer land
-          await sleep(300);
-          if (tileEl('p0')) errs.push('the accepted first drop never moved the tile out of "home"');
-          await switchToGroupedView('notes');
-          if (!tileEl('p0')) errs.push('the accepted first drop is missing from its target view');
-          tabFor('home').click();
-          await sleep(200);
-          if (tileEl('p0')) errs.push('the moved tile ended up in two views at once');
+        await dragTileTo(raceTileA, ...centre(tabFor('notes')));
+        const [rnx, rny] = centre(tabFor('notes'));
+        ptr('pointermove', rnx, rny, window);
+        await sleep(80);
+        await endDrag(rnx, rny);
+        if (window.__BATCH_PROMPTS_GATE__.length !== 1) {
+          errs.push('the first view-tab drop did not reach the backend as expected');
         }
+        // The first call's own answer is still held open on purpose -- a
+        // second drop attempted right now is exactly the race 479 closes.
+        await dragTileTo(raceTileB, ...centre(tabFor('archive')));
+        const [rax, ray] = centre(tabFor('archive'));
+        ptr('pointermove', rax, ray, window);
+        await sleep(80);
+        await endDrag(rax, ray);
+        if (window.__BATCH_PROMPTS_GATE__.length !== 1) {
+          errs.push('a second view-tab drop reached the backend while the first was still open');
+        }
+        if (!tileEl('p3')) errs.push('a refused second drop moved the tile out of "home" anyway');
+        window.__BATCH_PROMPTS_GATE__[0](); // let the first (only) call's answer land
+        await sleep(300);
+        if (tileEl('p0')) errs.push('the accepted first drop never moved the tile out of "home"');
+        await switchToTab('notes');
+        if (!tileEl('p0')) errs.push('the accepted first drop is missing from its target view');
+        tabFor('home').click();
+        await sleep(200);
+        if (tileEl('p0')) errs.push('the moved tile ended up in two views at once');
       }
 
       // ---- 479: a stale response (dispatched before a later one, but answered
@@ -13978,11 +13817,11 @@ DATA_DIR_READONLY_PROBE = """
 """
 
 
-# 375: pill folders, grid folders and view groups are three separate
-# mechanisms, but the "take it apart" menu entry must read and look the same
-# in all of them. Its own boot, same reasoning as SEAL_PROBE above: the
-# fixture already carries one grid folder and one view group by default, and
-# nothing later in the main sweep needs either left standing.
+# 375: pill folders and grid folders are two separate mechanisms, but the
+# "take it apart" menu entry must read and look the same in both. Its own
+# boot, same reasoning as SEAL_PROBE above: the fixture already carries one
+# grid folder by default, and nothing later in the main sweep needs it
+# left standing.
 FOLDER_WORDING_PROBE = """
 <script>
 (async () => {
@@ -14016,29 +13855,6 @@ FOLDER_WORDING_PROBE = """
       document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
       await sleep(120);
       if (!gridDissolve) errs.push('375: the grid folder context menu has no ungroup option');
-    }
-
-    let groupDissolve = null;
-    const groupTab = [...document.querySelectorAll('#views .view-btn')].find(b => b.dataset.groupId);
-    if (!groupTab) {
-      errs.push('375: no view group in the fixture to compare');
-    } else {
-      groupTab.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
-      await sleep(150);
-      groupDissolve = readDissolve(document.querySelector('.tab-menu:not(.hidden)'));
-      document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
-      await sleep(120);
-      if (!groupDissolve) errs.push('375: the view group context menu has no ungroup option');
-    }
-
-    if (gridDissolve && groupDissolve) {
-      if (gridDissolve.label !== groupDissolve.label) {
-        errs.push('375: the grid folder and view group ungroup entries read differently ("' +
-          gridDissolve.label + '" vs "' + groupDissolve.label + '")');
-      }
-      if (!gridDissolve.icon || gridDissolve.icon !== groupDissolve.icon) {
-        errs.push('375: the grid folder and view group ungroup entries do not share the same icon markup');
-      }
     }
   } catch (e) { errs.push('375 probe: ' + e.message); }
   clearInterval(beat);
@@ -15681,7 +15497,7 @@ def main():
             if not errs:
                 print("   ok")
 
-        # 375/483: the grid-folder, view-group AND pill-folder "ungroup" menu
+        # 375/483: the grid-folder and pill-folder "ungroup" menu
         # entries must all read and look the same -- two separate boots (the
         # pill is its own window, same reasoning as the FOLDER_PROBE run
         # above), then the pill's reading is checked against the grid
@@ -15735,7 +15551,7 @@ def main():
             if not pill_dissolve.get("icon") or pill_dissolve.get("icon") != grid_dissolve.get("icon"):
                 errs.append("483: the pill folder and grid folder ungroup entries do not share the same icon markup")
 
-        print("-- folder/group ungroup wording")
+        print("-- folder ungroup wording")
         for e in errs:
             print(f"   FAIL: {e}")
         failed += len(errs)

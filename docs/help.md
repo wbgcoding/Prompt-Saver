@@ -98,8 +98,7 @@ default (adjustable to 200×200 in the expert menu), with its own layout per vie
 Drag a tile to any empty cell, or drop it on an occupied one to swap the two; the
 grid never rearranges itself on its own. Drop a tile on a view tab above the grid
 to move it into that view instead, or hold Ctrl while dropping to copy it there
-so it stays in both. Hovering over a collapsed view group opens it after a
-moment, so the drop can target a view inside. Change the grid size by
+so it stays in both. Change the grid size by
 right-clicking a view tab or an empty spot of the grid and choosing Grid size.
 
 ### Screenshot tool
@@ -584,7 +583,7 @@ starred tiles.
 ### Standalone: Multiple views
 
 A view is one grid page with its own size and arrangement; a tile can live in
-several views. View groups turn views into tabs instead of a dropdown.
+several views.
 
 ### Tile behavior & appearance
 
@@ -618,13 +617,13 @@ in the expert menu brings every floating window to the main screen at once.
 
 ### Folders
 
-One gesture works in three places: drop one onto another to gather it into a
-folder. A view tab dropped onto another view tab makes a group tab. A floating
+One gesture works in two places: drop one onto another to gather it into a
+folder. A floating
 button dropped onto another makes a floating button folder. A tile dropped onto another
 tile makes a grid folder, and belongs to only one grid folder at a time.
 
 <p>
-<svg viewBox="0 0 560 120" xmlns="http://www.w3.org/2000/svg" role="img"><rect x="20" y="20" width="150" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="30" y="30" width="40" height="16" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="74" y="30" width="40" height="16" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="30" y="52" width="120" height="30" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="95" y="108" font-size="11" fill="currentColor" text-anchor="middle">View group</text><circle cx="255" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="295" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="335" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="295" y="108" font-size="11" fill="currentColor" text-anchor="middle">Pill folder</text><rect x="430" y="20" width="100" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="430" y1="55" x2="530" y2="55" stroke="currentColor" stroke-width="1"/><line x1="480" y1="20" x2="480" y2="90" stroke="currentColor" stroke-width="1"/><text x="480" y="108" font-size="11" fill="currentColor" text-anchor="middle">Grid folder</text></svg>
+<svg viewBox="200 0 360 120" xmlns="http://www.w3.org/2000/svg" role="img"><circle cx="255" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="295" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="335" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="295" y="108" font-size="11" fill="currentColor" text-anchor="middle">Pill folder</text><rect x="430" y="20" width="100" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="430" y1="55" x2="530" y2="55" stroke="currentColor" stroke-width="1"/><line x1="480" y1="20" x2="480" y2="90" stroke="currentColor" stroke-width="1"/><text x="480" y="108" font-size="11" fill="currentColor" text-anchor="middle">Grid folder</text></svg>
 </p>
 
 ### Tray
@@ -674,7 +673,7 @@ The delay and the width are adjustable.
 ### Toolbar
 
 Which buttons the header and composer bar show: quick grid-size control,
-library and history buttons, multiple views, and view groups.
+library and history buttons, and multiple views.
 
 ## System and data
 
@@ -1111,8 +1110,7 @@ einmal gefragt, ob er wiederhergestellt werden soll.
 Expertenmenü bis 200×200 einstellbar), eigenes Layout je Ansicht. Eine Kachel
 auf einen Ansichtsreiter über dem Raster gezogen verschiebt sie in diese
 Ansicht, mit gedrückter Strg-Taste wird stattdessen kopiert und sie bleibt in
-beiden. Über einer eingeklappten Ansichtsgruppe verweilt klappt diese nach
-kurzer Zeit auf, damit sich in eine Ansicht darin ablegen lässt. Die Rastergröße
+beiden. Die Rastergröße
 ändert man per Rechtsklick auf einen Ansichtsreiter oder eine freie Stelle im
 Raster unter Rastergröße.
 
@@ -1400,14 +1398,13 @@ auf dem Hauptbildschirm, als geparkt markiert, und springt von selbst zurück, s
 dieser Bildschirm wieder da ist. Eine Aktion im Expertenmenü holt alle schwebenden
 Fenster auf einmal auf den Hauptbildschirm.
 
-**Ordner:** eine Geste an drei Stellen, ein Ziehen auf ein anderes fasst es zu
-einem Ordner zusammen. Ein Ansichts-Tab auf einen anderen ergibt einen
-Gruppen-Tab. Ein schwebender Button auf einen anderen ergibt einen
+**Ordner:** eine Geste an zwei Stellen, ein Ziehen auf ein anderes fasst es zu
+einem Ordner zusammen. Ein schwebender Button auf einen anderen ergibt einen
 Ordner für schwebende Buttons. Eine Kachel auf eine andere ergibt einen Raster-Ordner, und
 gehört immer nur zu einem Raster-Ordner gleichzeitig.
 
 <p>
-<svg viewBox="0 0 560 120" xmlns="http://www.w3.org/2000/svg" role="img"><rect x="20" y="20" width="150" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="30" y="30" width="40" height="16" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="74" y="30" width="40" height="16" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="30" y="52" width="120" height="30" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="95" y="108" font-size="11" fill="currentColor" text-anchor="middle">Ansichtsgruppe</text><circle cx="255" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="295" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="335" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="295" y="108" font-size="11" fill="currentColor" text-anchor="middle">Pill-Ordner</text><rect x="430" y="20" width="100" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="430" y1="55" x2="530" y2="55" stroke="currentColor" stroke-width="1"/><line x1="480" y1="20" x2="480" y2="90" stroke="currentColor" stroke-width="1"/><text x="480" y="108" font-size="11" fill="currentColor" text-anchor="middle">Kachel-Ordner</text></svg>
+<svg viewBox="200 0 360 120" xmlns="http://www.w3.org/2000/svg" role="img"><circle cx="255" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="295" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="335" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="295" y="108" font-size="11" fill="currentColor" text-anchor="middle">Pill-Ordner</text><rect x="430" y="20" width="100" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="430" y1="55" x2="530" y2="55" stroke="currentColor" stroke-width="1"/><line x1="480" y1="20" x2="480" y2="90" stroke="currentColor" stroke-width="1"/><text x="480" y="108" font-size="11" fill="currentColor" text-anchor="middle">Kachel-Ordner</text></svg>
 </p>
 
 **Infobereich-Menü**: Zuletzt kopiert, Favoriten. Erscheint als abgerundetes,
@@ -1799,6 +1796,6 @@ ganzen Backup.
 
 **Eigenständig: Schnellstarter.** Strg+Alt+P, unscharfe Suche, sofortiges Kopieren. Wie viele Treffer er zeigt, stellt das Expertenmenü ein (ab Werk 8).
 
-**Eigenständig: Mehrfachansichten.** Mehrere Rasterseiten, Ansichtsgruppen als Tabs.
+**Eigenständig: Mehrfachansichten.** Mehrere Rasterseiten.
 
 **Eigenständig: Theme-Editor.** Eigene Farbvarianten bestehender Themes.

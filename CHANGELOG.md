@@ -6,7 +6,7 @@ All notable changes to **Prompt Saver**. Download the latest version from the
 
 ## 2.7.0 (unreleased)
 
-Twenty-five new features: tags, custom themes, folders for view tabs and for
+Twenty-four new features: tags, custom themes, folders for
 floating buttons, self-filling and choice variables, a markdown preview with
 syntax colors, private notes, per-prompt hotkeys, drag-out into other apps, a
 tray quick-copy menu, a screen color picker, a standalone quick launcher,
@@ -75,14 +75,8 @@ the video editor and the introduction tour ship on).
   input per themable value, grouped by background, surfaces, text and accent,
   with a live preview while you edit. Saved themes appear in the dropdown under
   a separator, and the floating buttons follow them too.
-- **View groups** — collect view tabs into a folder tab. Drag one tab onto
-  another to group them; the group tab opens a popover listing its views, and
-  its context menu renames, recolors or dissolves it. Ctrl+Tab cycles through
-  views in visual order.
 - **Drag a tile onto a view tab** — files it into that view; hold Ctrl while
-  dropping to copy it there instead, so it stays in both. Hovering a collapsed
-  view group opens it after a moment, so the drop can target a view inside.
-  A target with no room left refuses the whole drop and says how many cells
+  dropping to copy it there instead, so it stays in both. A target with no room left refuses the whole drop and says how many cells
   are missing.
 - **Self-filling variables** — `date`, `time`, `datetime`, `weekday`,
   `clipboard` and `uuid` fill themselves in on copy, with no dialog; a prompt
