@@ -2434,6 +2434,7 @@ function applyFlags() {
   if (prompts.length && !$("library")?.classList.contains("hidden")) renderLibrary();
   refreshClipInbox(); // Reflect the watcher toggle + badge count
   applyBarToggleTips();
+  syncBannerStack(); // demo mode is a flag-driven notice
 }
 
 // Apply every numeric tweak to its live target (CSS vars + JS constants).
@@ -3155,9 +3156,38 @@ async function refreshDataDirLock() {
 function renderDataDirReadOnlyBanner() {
   const banner = $("data-dir-readonly-banner");
   if (!banner) return;
-  if (!dataDirLockStatus.readOnly) { banner.classList.add("hidden"); return; }
+  if (!dataDirLockStatus.readOnly) { banner.classList.add("hidden"); syncBannerStack(); return; }
   $("data-dir-readonly-text").textContent = t("dataDirReadOnlyBanner").replace("{host}", dataDirLockStatus.otherHost || "?");
   banner.classList.remove("hidden");
+  syncBannerStack();
+}
+
+// One slot above the grid for every notice: only the most important active one
+// shows, a counter beside it steps through the rest. Highest priority first; the
+// remote access sign is the app's one network surface and must never be the
+// hidden one.
+const BANNER_PRIORITY = ["remote-api-banner", "data-dir-readonly-banner", "demo-mode-banner", "grid-overflow", "examples-banner"];
+let bannerFront = 0; // which of the active notices is showing (index, wraps)
+let bannerActiveKey = ""; // joined ids of the active set the index belongs to
+function bannerIsActive(id) {
+  if (id === "demo-mode-banner") return optFlag("demoMode");
+  const el = $(id);
+  return !!el && !el.classList.contains("hidden");
+}
+function syncBannerStack() {
+  const more = $("banner-more");
+  if (!more) return;
+  const active = BANNER_PRIORITY.filter(bannerIsActive);
+  const key = active.join(",");
+  if (key !== bannerActiveKey) { bannerActiveKey = key; bannerFront = 0; }
+  const n = active.length;
+  const front = n ? active[bannerFront % n] : "";
+  for (const id of BANNER_PRIORITY) $(id)?.classList.toggle("banner-stacked", id !== front);
+  more.classList.toggle("hidden", n < 2);
+  if (n > 1) {
+    more.textContent = t("bannerMore").replace("{n}", String(n - 1));
+    more.setAttribute("aria-label", t("bannerMoreAria"));
+  }
 }
 // Told once per session: the folder's sync risk does not change mid-session on
 // its own (only changing it does, which confirmSyncFolderChoice below warns
@@ -4748,6 +4778,7 @@ async function renderGrid(skipFetch = false) {
   if (overflowCount > 0) {
     $("grid-overflow-text").textContent = t("viewOverflowTitle").replace("{n}", String(overflowCount)) + " " + t("viewOverflowBody");
   }
+  syncBannerStack();
 
   pruneVideoCache();
   pruneThumbCache(libThumbCache);
@@ -20176,6 +20207,7 @@ function bind() {
     try { await invoke("dismiss_example_prompts"); } catch (err) { errToast(err); return; }
     await renderGrid();
   });
+  $("banner-more").addEventListener("click", () => { bannerFront += 1; syncBannerStack(); });
   $("library-close").addEventListener("click", hideLibrary);
   libraryEl.addEventListener("pointerdown", (e) => {
     if (e.target === libraryEl) hideLibrary();
@@ -21302,6 +21334,7 @@ function bind() {
     if (running) {
       $("remote-api-banner-text").textContent = t("remoteApiBadge").replace("{port}", String(status.port));
     }
+    syncBannerStack();
   }
   listen("remote-api-status", (e) => updateRemoteApiBanner(e.payload));
   // The receiver replaced an expired certificate by itself: say so, like a manual renewal.
@@ -22021,11 +22054,13 @@ async function updateExamplesBanner() {
   const stillHere = ids.length > 0 && ids.some((id) => prompts.some((p) => p.id === id));
   if (!stillHere) {
     banner.classList.add("hidden");
+    syncBannerStack();
     return;
   }
   const pending = await invoke("example_prompts_pending").catch(() => ids.length);
   banner.classList.toggle("hidden", pending === 0);
   $("examples-dismiss").textContent = t("examplesDismiss").replace("{n}", String(pending));
+  syncBannerStack();
 }
 
 // The rest of applying loaded settings: flags, toolbar, the grid itself and the

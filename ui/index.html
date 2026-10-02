@@ -145,6 +145,9 @@
       <button id="grid-batch-move" type="button" class="ghost-btn" data-i18n="batchMove">Move</button>
       <button id="grid-batch-delete" type="button" class="ghost-btn danger-btn" data-i18n="delete">Delete</button>
     </div>
+    <!-- One slot for every notice above the grid: only the most important active
+         one shows (see syncBannerStack), the counter button steps through the rest. -->
+    <div id="banner-stack" class="banner-stack">
     <!-- Shown only while the three seeded onboarding examples are still around -->
     <div id="examples-banner" class="examples-banner hidden">
       <span data-i18n="examplesBannerText">These are example prompts to get you started.</span>
@@ -164,12 +167,15 @@
       <span id="remote-api-banner-text"></span>
       <button id="remote-api-banner-off" type="button" class="ghost-btn" data-i18n="remoteApiBadgeOff"></button>
     </div>
-    <div id="grid" class="grid"></div>
-    <p id="grid-empty" class="grid-empty hidden" data-i18n="gridEmptyHint"></p>
+    <!-- Members of this view that have no cell at the current grid size -->
     <div id="grid-overflow" class="grid-overflow hidden">
       <span id="grid-overflow-text"></span>
       <button id="grid-overflow-grow" type="button" class="ghost-btn" data-i18n="viewOverflowGrow"></button>
     </div>
+    <button id="banner-more" type="button" class="ghost-btn banner-more hidden"></button>
+    </div>
+    <div id="grid" class="grid"></div>
+    <p id="grid-empty" class="grid-empty hidden" data-i18n="gridEmptyHint"></p>
   </section>
 
   <footer class="composer">

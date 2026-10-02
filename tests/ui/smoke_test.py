@@ -4680,13 +4680,13 @@ PROBE = """
         const r = el.getBoundingClientRect();
         el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 6, clientY: r.top + 6 }));
       };
-      const gridMenuItem = () => [...document.querySelectorAll('.tab-menu:not(.hidden) button')].find(b => b.textContent.trim() === 'Grid size…');
+      const gridMenuItem = () => [...document.querySelectorAll('.tab-menu:not(.hidden) button')].find(b => b.textContent.trim().endsWith('…'));
       const checkGridSizeEntry = async (what, el) => {
         if (!el) { out.errors.push('grid size menu: no ' + what + ' to right-click'); return; }
         openMenuAt(el);
         await sleep(150);
         const it = gridMenuItem();
-        if (!it) { out.errors.push('grid size menu: right-click on ' + what + ' offers no Grid size entry'); return; }
+        if (!it) { out.errors.push('grid size menu: right-click on ' + what + ' offers no Grid size entry'); document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); return; }
         it.click();
         await sleep(200);
         const vm = document.getElementById('view-modal');
@@ -9759,6 +9759,36 @@ PROBE = """
           out.errors.push('Overflow: shrinking "home" to 2x2 did not show the overhang row for members that no longer fit');
         } else if (!/[0-9]/.test(document.getElementById('grid-overflow-text').textContent)) {
           out.errors.push('Overflow: the overhang row has no visible count');
+        } else {
+          // One slot for every notice: the overhang row alone shows no counter; with
+          // the remote access sign active as well, only that one (higher priority)
+          // shows, the counter reads +1 more, and a click swaps the two. Measured
+          // live: the front notice and the counter share one row above the grid.
+          const stackEl = document.getElementById('banner-stack');
+          const moreEl = document.getElementById('banner-more');
+          const shown = () => [...stackEl.children].filter(c => c !== moreEl && getComputedStyle(c).display !== 'none');
+          if (shown().length !== 1 || shown()[0] !== overflowRow) out.errors.push('banner stack: the overhang row alone is not the one visible notice');
+          if (getComputedStyle(moreEl).display !== 'none') out.errors.push('banner stack: a counter shows with a single notice');
+          window.__FIRE__('remote-api-status', { running: true, port: 4711 });
+          await sleep(200);
+          const remoteEl = document.getElementById('remote-api-banner');
+          if (shown().length !== 1 || shown()[0] !== remoteEl) out.errors.push('banner stack: with two notices the remote access sign is not the one shown');
+          if (getComputedStyle(moreEl).display === 'none' || !moreEl.textContent.includes('1') || moreEl.textContent.includes('{n}')) out.errors.push('banner stack: the counter does not read +1 more: ' + moreEl.textContent);
+          if (!moreEl.getAttribute('aria-label')) out.errors.push('banner stack: the counter has no accessible name');
+          {
+            const rb = shown()[0].getBoundingClientRect(), mb = moreEl.getBoundingClientRect(), gb = document.getElementById('grid').getBoundingClientRect();
+            if (!(rb.height > 0 && mb.height > 0)) out.errors.push('banner stack: the front notice or the counter has no height');
+            if (mb.left < rb.right - 1) out.errors.push('banner stack: the counter does not sit beside the notice (' + Math.round(mb.left) + ' vs ' + Math.round(rb.right) + ')');
+            if (mb.top > rb.bottom || mb.bottom < rb.top) out.errors.push('banner stack: the counter is not on the notice row');
+            if (gb.top < rb.bottom - 1) out.errors.push('banner stack: the grid starts above the notice slot');
+            if (stackEl.getBoundingClientRect().height > rb.height + 12) out.errors.push('banner stack: the slot is taller than one notice: ' + stackEl.getBoundingClientRect().height + ' vs ' + rb.height);
+          }
+          moreEl.click();
+          await sleep(150);
+          if (shown().length !== 1 || shown()[0] !== overflowRow) out.errors.push('banner stack: clicking the counter did not show the next notice');
+          window.__FIRE__('remote-api-status', { running: false });
+          await sleep(200);
+          if (shown().length !== 1 || shown()[0] !== overflowRow || getComputedStyle(moreEl).display !== 'none') out.errors.push('banner stack: after the other notice ended the counter stays or the notice is gone');
         }
         const growBtn419 = document.getElementById('grid-overflow-grow');
         if (!growBtn419) {

@@ -1730,6 +1730,8 @@ the video editor and the introduction tour ship on).
 - **Quick grid fields are off by default.** The columns and rows fields in the
   header are off by default; the grid size is set from the view tab's
   right-click menu or a right-click on an empty spot of the grid.
+- **Notices above the grid share one line.** Only the most important one
+  shows, a counter beside it steps through the rest.
 
 ## 2.6.3 (2026-07-26)
 

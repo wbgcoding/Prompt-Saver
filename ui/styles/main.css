@@ -642,7 +642,6 @@ body.win-maximized .win-ico-restore { display: inline; }
   justify-content: center;
   gap: 12px;
   flex-wrap: wrap;
-  margin-top: 8px;
   padding: 8px 16px;
   border-radius: 10px;
   background: var(--panel-2, var(--panel));
@@ -4179,6 +4178,12 @@ body.drag-over::after {
 .lib-batch-sep { width: 1px; height: 18px; background: var(--border); margin: 0 2px; }
 .lib-batch-colors { display: inline-flex; gap: 4px; }
 .lib-batch-bar .ghost-btn:disabled, .lib-batch-bar select:disabled { opacity: 0.4; pointer-events: none; }
+/* The one slot for every notice above the grid: the front notice grows, the
+   counter button sits beside it, the others wait with display none. */
+.banner-stack { display: flex; align-items: flex-start; gap: 8px; flex: 0 0 auto; }
+.banner-stack > :not(.banner-more) { flex: 1 1 auto; margin: 0 0 8px; }
+.banner-stacked { display: none !important; }
+.banner-more { flex: 0 0 auto; }
 /* Onboarding-examples banner: same "sits above the grid" slot as the batch bar. */
 .examples-banner {
   display: flex;
