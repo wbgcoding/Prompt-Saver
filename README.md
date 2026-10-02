@@ -56,7 +56,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | **Prompt hotkeys** | Give a prompt its own global key combination that copies, and optionally pastes, from any app, with a small keyboard badge on its tile |
 | **Tray menu** | Copy a recent or favorite prompt straight from the tray, without opening the window; a filter field at the top searches every prompt as you type |
 | **Drag-out** | Ctrl-drag a tile, library row or floating button into any other app to drop its text |
-| **Button folders** | Drag one floating button onto another and they merge into a folder that opens in place |
+| **Button folders** | Drag one floating button onto another and they merge into a button folder that opens in place |
 | **Chaining** | Combine several prompts into one clipboard entry, with a strip that shows what each picked step needs and fills before you start it; the expert menu sets what goes between two steps |
 | **Copy formatted** | For a prompt with real Markdown syntax: a second copy that puts the rendered version on the clipboard too, so Word, Outlook or a browser shows the formatting while a plain text field still gets the Markdown source |
 | **Copy history** | A tab of the library listing recent and most-used prompts, with optional timestamps and adjustable retention; with the watcher on it also records copies from other apps, filterable by source |
@@ -89,7 +89,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | **8 themes** | Light, dark and system (live OS detection), plus Programmer, Neon Violet, Ocean, Cyberpunk and Black & White, or build your own in the theme editor |
 | **Custom themes** | Build your own on top of any built-in one: a color per value, grouped and previewed live |
 | **Colors & fonts** | Tint tiles and pills from a palette or a color picker; 20 fonts, per prompt if you like |
-| **Readable text on color** | Tile, folder, view-tab and message text picks black or white automatically from the color underneath; switch it off or move the brightness cutoff in the expert menu |
+| **Readable text on color** | Tile, tile folder, view-tab and message text picks black or white automatically from the color underneath; switch it off or move the brightness cutoff in the expert menu |
 | **Auto-fit text** | Tile text grows to fill the button, or pick a fixed size |
 | **Scaling** | Separate size control for UI, popups, icons and buttons, from 50 % up |
 | **Distraction-free** | Hide the top and bottom bars; the grid takes over the freed space |

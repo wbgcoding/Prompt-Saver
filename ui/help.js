@@ -119,20 +119,20 @@ export const HELP_CONTENT = {
         "Drag the floating button to move it; right-click it for size, edit, or remove.",
       ],
       whatHappens: "Positions survive app restarts. A button whose saved screen is no longer connected opens on the main screen, marked as parked, and jumps back on its own once that screen returns. An action in the expert menu brings every floating window to the main screen at once.",
-      settings: ["Floating buttons: Expert menu → Features → Floating buttons & folders", "Park buttons whose screen is gone, hide long-parked ones, bring all back: Expert menu → Features → Floating buttons & folders"],
+      settings: ["Floating buttons: Expert menu → Features → Floating buttons & button folders", "Park buttons whose screen is gone, hide long-parked ones, bring all back: Expert menu → Features → Floating buttons & button folders"],
     },
     {
       section: "alwaysOnTop",
       title: "Folders",
       whatItIs: "The same gesture groups things in two places: drop one item onto another of its own kind to gather it into a folder.",
       howTo: [
-        "Drag one floating button onto another to make a floating button folder.",
-        "On the main grid, drag one tile onto another to make a grid folder.",
+        "Drag one floating button onto another to make a button folder.",
+        "On the main grid, drag one tile onto another to make a tile folder.",
         "Drag a member back out to free it.",
       ],
       whatHappens:
-        "A floating button folder or grid folder shows up to four member previews and a count, dragging a member out frees it, and it dissolves once one member is left; a tile belongs to only one grid folder at a time.",
-      settings: ["Floating button folders, grid folders: Expert menu → Features → Floating buttons & folders"],
+        "A button folder or tile folder shows up to four member previews and a count, dragging a member out frees it, and it dissolves once one member is left; a tile belongs to only one tile folder at a time.",
+      settings: ["Button folders, tile folders: Expert menu → Features → Floating buttons & button folders"],
       tip: "Both kinds are on out of the box; switch any of them off in the expert menu if items are never grouped that way.",
       sketches: ["folderTypes"],
     },
@@ -651,7 +651,7 @@ export const HELP_CONTENT = {
         "Copy the tile as normal: it always serves the next rotation text, never asks which one.",
       ],
       whatHappens:
-        "A small badge counts up on a grid tile, a floating button, and a floating button folder member, like \"2/5\"; a grid-folder member shows only its file-type icon, not this badge. In order mode it is the absolute position; in shuffle mode it counts draws within the current cycle and restarts at 1 once every entry has been shown once, so it never jumps to an arbitrary position. The count survives restarts and full backups; a CSV/TXT import creates a new tile with a fresh pointer, so only the list of texts and its order or shuffle mode carry over, not the exact position. Turning rotation off on a tile with several entries keeps them all; only the first one is used until it is turned back on. The optional \"Rotate on paste\" moves a tile with rotation to its next text on every real paste, not only when it is copied.",
+        "A small badge counts up on a grid tile, a floating button, and a button folder member, like \"2/5\"; a tile-folder member shows only its file-type icon, not this badge. In order mode it is the absolute position; in shuffle mode it counts draws within the current cycle and restarts at 1 once every entry has been shown once, so it never jumps to an arbitrary position. The count survives restarts and full backups; a CSV/TXT import creates a new tile with a fresh pointer, so only the list of texts and its order or shuffle mode carry over, not the exact position. Turning rotation off on a tile with several entries keeps them all; only the first one is used until it is turned back on. The optional \"Rotate on paste\" moves a tile with rotation to its next text on every real paste, not only when it is copied.",
       settings: ["Rotation (on by default), default order or shuffle, badge, maximum rotation texts, rotate on paste: Expert menu → Features → Rotation. The per-tile switch itself sits above the entry area in the editor."],
     },
     {
@@ -867,20 +867,20 @@ export const HELP_CONTENT = {
         "Den schwebenden Button ziehen, um ihn zu bewegen; Rechtsklick für Größe, Bearbeiten oder Entfernen.",
       ],
       whatHappens: "Positionen bleiben nach Neustarts erhalten. Ein Button, dessen gespeicherter Bildschirm nicht mehr angeschlossen ist, öffnet sich auf dem Hauptbildschirm, als geparkt markiert, und springt von selbst zurück, sobald dieser Bildschirm wieder da ist. Eine Aktion im Expertenmenü holt alle schwebenden Fenster auf einmal auf den Hauptbildschirm.",
-      settings: ["Schwebende Buttons: Expertenmenü → Funktionen → Schwebende Buttons & Ordner", "Buttons parken, wenn ihr Bildschirm fehlt, lange geparkte ausblenden, alle zurückholen: Expertenmenü → Funktionen → Schwebende Buttons & Ordner"],
+      settings: ["Schwebende Buttons: Expertenmenü → Funktionen → Schwebende Buttons & Button-Ordner", "Buttons parken, wenn ihr Bildschirm fehlt, lange geparkte ausblenden, alle zurückholen: Expertenmenü → Funktionen → Schwebende Buttons & Button-Ordner"],
     },
     {
       section: "alwaysOnTop",
       title: "Ordner",
       whatItIs: "Dieselbe Geste gruppiert an zwei Stellen: ein Element auf ein gleichartiges ziehen, um es in einen Ordner aufzunehmen.",
       howTo: [
-        "Einen schwebenden Button auf einen anderen ziehen, um einen Ordner für schwebende Buttons zu bilden.",
-        "Im Hauptfenster eine Kachel auf eine andere ziehen, um einen Raster-Ordner zu bilden.",
+        "Einen schwebenden Button auf einen anderen ziehen, um einen Button-Ordner zu bilden.",
+        "Im Hauptfenster eine Kachel auf eine andere ziehen, um einen Kachelordner zu bilden.",
         "Ein Mitglied wieder herausziehen, um es freizugeben.",
       ],
       whatHappens:
-        "Ein Ordner für schwebende Buttons oder ein Raster-Ordner zeigt bis zu vier Vorschauen seiner Mitglieder und eine Anzahl; das Herausziehen eines Mitglieds gibt es frei, und der Ordner löst sich auf, sobald nur noch eines übrig ist. Eine Kachel gehört immer nur zu einem Raster-Ordner gleichzeitig. Ein Gruppen-Tab öffnet stattdessen beim Anklicken die Liste seiner Ansichten.",
-      settings: ["Ordner für schwebende Buttons, Raster-Ordner: Expertenmenü → Funktionen → Schwebende Buttons & Ordner"],
+        "Ein Button-Ordner oder ein Kachelordner zeigt bis zu vier Vorschauen seiner Mitglieder und eine Anzahl; das Herausziehen eines Mitglieds gibt es frei, und der Ordner löst sich auf, sobald nur noch eines übrig ist. Eine Kachel gehört immer nur zu einem Kachelordner gleichzeitig. Ein Gruppen-Tab öffnet stattdessen beim Anklicken die Liste seiner Ansichten.",
+      settings: ["Button-Ordner, Kachelordner: Expertenmenü → Funktionen → Schwebende Buttons & Button-Ordner"],
       tip: "Beide Arten sind ab Werk an; jede einzeln im Expertenmenü abschaltbar, wenn Elemente so nie gruppiert werden sollen.",
       sketches: ["folderTypes"],
     },
@@ -1400,7 +1400,7 @@ export const HELP_CONTENT = {
         "Die Kachel wie gewohnt kopieren: sie liefert immer den nächsten Eintrag, ohne zu fragen, welchen.",
       ],
       whatHappens:
-        "Ein kleines Badge zählt auf einer Raster-Kachel, einem schwebenden Button und einem Mitglied eines Ordners für schwebende Buttons hoch, wie \"2/5\"; ein Raster-Ordner-Mitglied zeigt nur sein Dateityp-Icon, nicht dieses Badge. Im Reihenfolge-Modus ist das die absolute Position; im Zufalls-Modus zählt es die Ziehungen im aktuellen Durchlauf und beginnt wieder bei 1, sobald jeder Eintrag einmal drankam, statt auf eine beliebige Position zu springen. Der Zählerstand übersteht Neustarts und vollständige Backups; ein CSV/TXT-Import erstellt eine neue Kachel mit frischem Zeiger, sodass nur die Textliste und ihr Reihenfolge- oder Misch-Modus übernommen werden, nicht die genaue Position. Wird die Rotation bei einer Kachel mit mehreren Einträgen ausgeschaltet, bleiben alle erhalten; nur der erste wird genutzt, bis sie wieder aktiviert wird. Das optionale \"Beim Einfügen rotieren\" bringt eine Kachel mit Rotation bei jedem echten Einfügen zum nächsten Text, nicht nur beim Kopieren.",
+        "Ein kleines Badge zählt auf einer Raster-Kachel, einem schwebenden Button und einem Mitglied eines Button-Ordners hoch, wie \"2/5\"; ein Kachelordner-Mitglied zeigt nur sein Dateityp-Icon, nicht dieses Badge. Im Reihenfolge-Modus ist das die absolute Position; im Zufalls-Modus zählt es die Ziehungen im aktuellen Durchlauf und beginnt wieder bei 1, sobald jeder Eintrag einmal drankam, statt auf eine beliebige Position zu springen. Der Zählerstand übersteht Neustarts und vollständige Backups; ein CSV/TXT-Import erstellt eine neue Kachel mit frischem Zeiger, sodass nur die Textliste und ihr Reihenfolge- oder Misch-Modus übernommen werden, nicht die genaue Position. Wird die Rotation bei einer Kachel mit mehreren Einträgen ausgeschaltet, bleiben alle erhalten; nur der erste wird genutzt, bis sie wieder aktiviert wird. Das optionale \"Beim Einfügen rotieren\" bringt eine Kachel mit Rotation bei jedem echten Einfügen zum nächsten Text, nicht nur beim Kopieren.",
       settings: ["Rotation (standardmäßig an), Standard Reihenfolge oder Mischen, Badge, maximale Rotationstexte, beim Einfügen rotieren: Expertenmenü → Funktionen → Rotation. Der Schalter pro Kachel sitzt im Editor über dem Eintragsbereich."],
     },
     {
