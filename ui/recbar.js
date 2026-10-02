@@ -337,6 +337,27 @@ cancelBtn.addEventListener("click", async () => {
   invoke("hide_rec_bar").catch(() => {});
 });
 
+// Keys act only once the user has clicked into the bar: the bar is shown
+// without focus on purpose, so the recorded app keeps it. Escape maps to Stop
+// (the take is kept), never to Cancel, so a stray Esc cannot throw a
+// recording away. Both keys go through the buttons, so pause/resume and stop
+// reach the backend through the same commands as a click.
+document.addEventListener("keydown", (e) => {
+  if (e.repeat) return;
+  if (e.key === "Escape") {
+    e.preventDefault();
+    if (!stopBtn.disabled) stopBtn.click();
+  } else if (e.code === "Space") {
+    e.preventDefault();
+    if (!pauseBtn.disabled) pauseBtn.click();
+  }
+});
+// A focused button would also fire its own click when Space is released,
+// which would undo the pause the key press just did.
+document.addEventListener("keyup", (e) => {
+  if (e.code === "Space") e.preventDefault();
+});
+
 // The bar used to sit locked to the recorded window's corner. Dragging
 // from its background (not a button) now moves it freely to any monitor;
 // rec_bar_mark_moved() tells the 200ms follow poll in lib.rs to stop

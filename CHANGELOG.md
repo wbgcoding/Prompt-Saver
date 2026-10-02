@@ -1609,6 +1609,7 @@ the video editor and the introduction tour ship on).
 - Typing in the tray menu's search field opens the quick launcher with what you typed.
 - The grid's selection bar offers the same core actions as the library's, in the same order: favorites, tags, archive and export.
 - Fewer dialogs: the licenses open inside About, what's new shows in the update dialog, and keyboard shortcuts and global hotkeys share one dialog.
+- The recording bar and the camera window react to keys: Space pauses or resumes, Esc stops (the camera window closes with Esc when nothing is recording).
 - **The small buttons on a tile no longer show a tooltip.** Select, start a
   chain and the actions menu stay quiet on hover; screen readers still get
   their names.

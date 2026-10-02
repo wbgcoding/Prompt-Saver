@@ -445,6 +445,30 @@ closeBtn.addEventListener("click", async () => {
   appWin.close();
 });
 
+// Keys act once the window has focus. Escape stops a running take (the file
+// is kept) and only closes the window when nothing is recording; Space
+// pauses or resumes a running take and otherwise keeps its native job on
+// the focused control. Both go through the buttons, like a click.
+const isRecording = () => !!recorder && recorder.state !== "inactive";
+document.addEventListener("keydown", (e) => {
+  if (e.repeat) return;
+  const tag = e.target && e.target.tagName;
+  if (tag === "SELECT" || tag === "INPUT") return;
+  if (e.key === "Escape") {
+    e.preventDefault();
+    if (isRecording()) stopBtn.click(); else closeBtn.click();
+  } else if (e.code === "Space" && isRecording()) {
+    e.preventDefault();
+    pauseBtn.click();
+  }
+});
+// A focused button would also fire its own click when Space is released,
+// which would undo the pause the key press just did.
+document.addEventListener("keyup", (e) => {
+  const tag = e.target && e.target.tagName;
+  if (e.code === "Space" && isRecording() && tag !== "SELECT" && tag !== "INPUT") e.preventDefault();
+});
+
 // The window has no OS titlebar; dragging the status strip moves it, same
 // startDragging() pattern the recording bar uses (WebView2 ignores the CSS
 // app-region property Electron apps rely on).

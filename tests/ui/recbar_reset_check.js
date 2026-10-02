@@ -25,6 +25,7 @@ function fakeEl() {
       contains: (c) => cls.has(c),
     },
     addEventListener(t, fn) { (this.h ||= {})[t] = fn; },
+    click() { return this.disabled ? undefined : this.h && this.h.click && this.h.click(); },
     setAttribute() {}, closest: () => null,
     getBoundingClientRect: () => ({ width: 300, height: 40 }),
   };
@@ -32,6 +33,7 @@ function fakeEl() {
 
 async function main() {
   globalThis.document = globalThis.document || { addEventListener() {}, removeEventListener() {} };
+  const docH = {};
   const shared = await import(pathToFileURL(path.join(uiDir, "floatShared.js")).href);
   const listeners = {};
   const els = {};
@@ -44,7 +46,10 @@ async function main() {
     console, navigator: { language: "en-US" },
     setTimeout, clearTimeout, setInterval, clearInterval,
     ResizeObserver: class { observe() {} },
-    document: { getElementById: (id) => (els[id] ||= fakeEl()), querySelectorAll: () => [] },
+    document: {
+      getElementById: (id) => (els[id] ||= fakeEl()), querySelectorAll: () => [],
+      addEventListener: (t, fn) => { docH[t] = fn; },
+    },
     __shared: shared,
     __imp: (f) => f === "floattheme.js" ? Promise.resolve({ applyFloatTheme() {} }) : import(pathToFileURL(path.join(uiDir, f)).href),
   };
@@ -124,6 +129,26 @@ async function main() {
   expect("stale poll: buttons enabled", btns().join(), "false,false,false");
   expect("stale poll: time follows the new recording", els.time.textContent, "00:03");
   if (calls.filter((c) => c === "recording_status").length < 1) problems.push("stale poll: poll stopped");
+
+  // Keys, once the user clicked into the bar: Space pauses then resumes, Escape
+  // stops (never cancels), and a held key repeating does nothing.
+  expect("key listener registered", typeof docH.keydown, "function");
+  calls.length = 0;
+  const key = (o) => { let prevented = false; docH.keydown({ repeat: false, preventDefault() { prevented = true; }, ...o }); return prevented; };
+  expect("Space is handled", key({ code: "Space", key: " " }), true);
+  await tick(20);
+  expect("Space pauses", calls.includes("pause_recording"), true);
+  key({ code: "Space", key: " " });
+  await tick(20);
+  expect("Space again resumes", calls.includes("resume_recording"), true);
+  key({ code: "Space", key: " ", repeat: true });
+  await tick(20);
+  expect("repeat ignored", calls.filter((c) => c === "pause_recording").length, 1);
+  calls.length = 0;
+  key({ code: "Escape", key: "Escape" });
+  await tick(20);
+  expect("Escape stops", calls.includes("stop_recording"), true);
+  expect("Escape never cancels", calls.includes("cancel_recording"), false);
   els["stop-btn"].disabled = true; // leave nothing running
   sandbox.clearInterval(0);
 
