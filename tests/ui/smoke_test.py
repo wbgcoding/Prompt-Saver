@@ -1500,8 +1500,8 @@ PROBE = """
             window.__SMOKE_ARGS__ = [];
             delUndoBtn.click();
             await sleep(300);
-            if (!window.__SMOKE_ARGS__.some(([cmd, args]) => cmd === 'restore_prompt' && args && args.id === 'p8')) {
-              out.errors.push('434: undoing a batch delete did not call restore_prompt for p8');
+            if (!window.__SMOKE_ARGS__.some(([cmd, args]) => cmd === 'restore_prompts_batch' && args && Array.isArray(args.placements) && args.placements.some((pl) => pl.id === 'p8'))) {
+              out.errors.push('434: undoing a batch delete did not restore p8 with its placement snapshot');
             }
             if (!document.querySelector('.lib-item[data-id="p8"]')) {
               out.errors.push('434: undoing a batch delete did not bring p8 back to the library list');
@@ -3920,9 +3920,30 @@ PROBE = """
           if (diff >= 1) out.errors.push('29: warning triangle is off the label centre by ' + diff.toFixed(2) + 'px');
         }
         if (!gridTile('p4')) out.errors.push('the first press already deleted the tile');
+        window.__SMOKE_ARGS__ = [];
         await click('grid-batch-delete');
         await sleep(200);
         if (gridTile('p4')) out.errors.push('the second press did not delete the tile');
+        // The placement snapshot is taken before the delete, and the undo hands it back.
+        {
+          const names = window.__SMOKE_ARGS__.map(([cmd]) => cmd);
+          const snapAt = names.indexOf('placement_snapshot');
+          const delAt = names.indexOf('batch_prompts');
+          if (snapAt < 0 || delAt < 0 || snapAt > delAt) {
+            out.errors.push('the grid batch delete did not snapshot the placements before deleting: ' + names.join(','));
+          }
+          const undoBtn = document.getElementById('toast').querySelector('.toast-btn');
+          if (!undoBtn) {
+            out.errors.push('the grid batch delete offered no undo toast');
+          } else {
+            window.__SMOKE_ARGS__ = [];
+            undoBtn.click();
+            await sleep(300);
+            if (!window.__SMOKE_ARGS__.some(([cmd, args]) => cmd === 'restore_prompts_batch' && args && args.placements && args.placements[0] && args.placements[0].id === 'p4')) {
+              out.errors.push('undoing the grid batch delete did not send the placement snapshot');
+            }
+          }
+        }
         if (delBtn.classList.contains('confirm')) out.errors.push('the delete button stayed armed after deleting');
       }
     }

@@ -978,6 +978,19 @@ const RESULTS = {
     }
     return { prompts: JSON.parse(JSON.stringify(PROMPTS)), settings: JSON.parse(JSON.stringify(SETTINGS)) };
   },
+  // Undo snapshot taken before a batch delete, and the one-call restore that uses it.
+  placement_snapshot: (a) => ((a && a.ids) || []).map((id) => ({ id, views: [], floating: null, float_scale: null, video_prefs: null, tile_folder: null, float_folder: null })),
+  restore_prompts_batch: (a) => {
+    for (const pl of (a && a.placements) || []) {
+      const idx = TRASH.findIndex((p) => p.id === pl.id);
+      if (idx >= 0) {
+        const [p] = TRASH.splice(idx, 1);
+        p.trashed_at = 0;
+        PROMPTS.push(p);
+      }
+    }
+    return { prompts: JSON.parse(JSON.stringify(PROMPTS)), settings: JSON.parse(JSON.stringify(SETTINGS)) };
+  },
   purge_prompt: (a) => {
     const idx = TRASH.findIndex((p) => p.id === (a && a.id));
     if (idx >= 0) TRASH.splice(idx, 1);

@@ -8204,6 +8204,45 @@ async fn delete_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Resu
     Ok(changed)
 }
 
+// The in-memory half of a batch delete: the prompts move to the trash (newest-deleted
+// first, keeping the batch's own order) and every app-level association is let go:
+// view membership and cells, pills, scale, video prefs, folders. Returns the untouched
+// originals so the caller can undo the move if the write fails.
+fn move_batch_to_trash(store: &mut Store, ids: &[String], now: u64) -> Vec<Prompt> {
+    let idset: std::collections::HashSet<&str> = ids.iter().map(|s| s.as_str()).collect();
+    let mut moved: Vec<Prompt> = Vec::new();
+    store.prompts.retain(|p| {
+        if idset.contains(p.id.as_str()) {
+            moved.push(p.clone());
+            false
+        } else {
+            true
+        }
+    });
+    if moved.is_empty() {
+        return moved;
+    }
+    // .cloned() (not .into_iter()) so `moved` still holds the untouched
+    // (trashed_at: 0) originals if the save fails.
+    for mut p in moved.iter().cloned().rev() {
+        p.trashed_at = now;
+        store.trash.insert(0, p);
+    }
+    for view in &mut store.settings.views {
+        for layout in view.layouts.values_mut() {
+            layout.retain(|k, _| !idset.contains(k.as_str()));
+        }
+        view.members.retain(|m| !idset.contains(m.as_str()));
+    }
+    for id in ids {
+        store.settings.floating.remove(id);
+        store.settings.float_scale.remove(id);
+        store.settings.video_prefs.remove(id);
+    }
+    store.normalize_folders();
+    moved
+}
+
 // Batch operations: apply one action to many prompts in a SINGLE store pass
 // (no per-item save loop, so 100+ selected prompts never stall the UI). Returns the
 // fresh state so the caller re-renders once. Actions: delete / favorite / color /
@@ -8236,35 +8275,8 @@ async fn batch_prompts(
             // Move to trash, same as the single-prompt delete_prompt command:
             // media files and version history stay untouched until a real purge.
             let original_settings = store.settings.clone();
-            let mut moved: Vec<Prompt> = Vec::new();
-            store.prompts.retain(|p| {
-                if idset.contains(p.id.as_str()) {
-                    moved.push(p.clone());
-                    false
-                } else {
-                    true
-                }
-            });
+            let moved = move_batch_to_trash(&mut store, &ids, now_secs());
             if !moved.is_empty() {
-                let now = now_secs();
-                // .cloned() (not .into_iter()) so `moved` still holds the untouched
-                // (trashed_at: 0) originals below if the save fails.
-                for mut p in moved.iter().cloned().rev() {
-                    p.trashed_at = now;
-                    store.trash.insert(0, p); // newest-deleted first, preserving the batch's own order
-                }
-                for view in &mut store.settings.views {
-                    for layout in view.layouts.values_mut() {
-                        layout.retain(|k, _| !idset.contains(k.as_str()));
-                    }
-                    view.members.retain(|m| !idset.contains(m.as_str()));
-                }
-                for id in &ids {
-                    store.settings.floating.remove(id);
-                    store.settings.float_scale.remove(id);
-                    store.settings.video_prefs.remove(id);
-                }
-                store.normalize_folders();
                 // Same atomic prompts+trash write as delete_prompt/restore_prompt,
                 // found while fixing those two: batch delete had the identical
                 // stranded-prompt risk. On failure, undo the batch move instead of
@@ -8499,6 +8511,243 @@ async fn restore_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Res
         rearm_hotkeys(&app); // The restored prompt's own hotkey, if any, is free again to re-claim
         rebuild_tray(&app);
     }
+    Ok(app_state)
+}
+
+// Where a prompt sat when it was deleted, captured BEFORE the delete so an undo can put
+// it back exactly: every view it belonged to with its position in the member list and
+// its cell per grid size, its pill (position, scale), video prefs, and the grid and pill
+// folder that held it. The trash row itself only keeps the prompt.
+#[derive(Serialize, Deserialize, Clone, Default)]
+struct ViewPlacement {
+    view_id: String,
+    index: usize,
+    cells: HashMap<String, [u32; 2]>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+struct PromptPlacement {
+    id: String,
+    #[serde(default)]
+    views: Vec<ViewPlacement>,
+    #[serde(default)]
+    floating: Option<Pos>,
+    #[serde(default)]
+    float_scale: Option<f64>,
+    #[serde(default)]
+    video_prefs: Option<VideoPrefs>,
+    #[serde(default)]
+    tile_folder: Option<TileFolder>,
+    #[serde(default)]
+    float_folder: Option<FloatFolder>,
+}
+
+fn capture_placements(settings: &Settings, ids: &[String]) -> Vec<PromptPlacement> {
+    ids.iter()
+        .map(|id| PromptPlacement {
+            id: id.clone(),
+            views: settings
+                .views
+                .iter()
+                .filter_map(|v| {
+                    let index = v.members.iter().position(|m| m == id)?;
+                    let cells = v
+                        .layouts
+                        .iter()
+                        .filter_map(|(k, layout)| layout.get(id).map(|c| (k.clone(), *c)))
+                        .collect();
+                    Some(ViewPlacement { view_id: v.id.clone(), index, cells })
+                })
+                .collect(),
+            floating: settings.floating.get(id).cloned(),
+            float_scale: settings.float_scale.get(id).copied(),
+            video_prefs: settings.video_prefs.get(id).copied(),
+            tile_folder: settings.tile_folders.iter().find(|f| f.members.contains(id)).cloned(),
+            float_folder: settings.float_folders.iter().find(|f| f.members.contains(id)).cloned(),
+        })
+        .collect()
+}
+
+// Puts `id` on `cell` of the view's `key` grid; a cell that is taken (another tile, a
+// grid folder) or lies outside the grid falls back to the first free cell of that grid.
+fn place_on_cell_or_first_free(view: &mut View, key: &str, id: &str, cell: [u32; 2], folder_cells: &[[u32; 2]]) {
+    let Some((cols, rows)) = key.split_once('x').and_then(|(c, r)| Some((c.parse::<u32>().ok()?, r.parse::<u32>().ok()?))) else {
+        return;
+    };
+    let layout = view.layouts.entry(key.to_string()).or_default();
+    let taken = |layout: &HashMap<String, [u32; 2]>, c: [u32; 2]| layout.values().any(|v| *v == c) || folder_cells.contains(&c);
+    if cell[0] < cols && cell[1] < rows && !taken(layout, cell) {
+        layout.insert(id.to_string(), cell);
+        return;
+    }
+    for row in 0..rows {
+        for col in 0..cols {
+            if !taken(layout, [col, row]) {
+                layout.insert(id.to_string(), [col, row]);
+                return;
+            }
+        }
+    }
+}
+
+// Undo for a delete: moves the trashed prompts back and re-applies what the snapshot
+// holds. A failed write puts the store back exactly as it was (same full-settings
+// rollback copy as restore_trashed_core). Ids that are no longer in the trash are
+// skipped; none found at all is an error.
+fn restore_placed_core(store: &mut Store, placements: &[PromptPlacement], save: impl FnOnce(&Store) -> bool) -> Result<usize, String> {
+    let original_settings = store.settings.clone();
+    let original_trash = store.trash.clone();
+    let original_prompts = store.prompts.len();
+    let mut restored: Vec<&PromptPlacement> = Vec::new();
+    for pl in placements {
+        if restored.iter().any(|r| r.id == pl.id) {
+            continue;
+        }
+        let Some(pos) = store.trash.iter().position(|p| p.id == pl.id) else { continue };
+        let mut p = store.trash.remove(pos);
+        p.trashed_at = 0;
+        store.prompts.push(p);
+        restored.push(pl);
+    }
+    if restored.is_empty() {
+        return Err("not-found".into());
+    }
+    let restored_ids: std::collections::HashSet<String> = restored.iter().map(|r| r.id.clone()).collect();
+    // Folders first: a rebuilt grid folder takes its old cell back before any tile is
+    // placed, so a tile never lands on the cell the folder is about to need.
+    let live_ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
+    for pl in &restored {
+        if let Some(snap) = &pl.tile_folder {
+            restore_tile_folder(&mut store.settings, snap, &restored_ids, &live_ids);
+        }
+        if let Some(snap) = &pl.float_folder {
+            restore_float_folder(&mut store.settings, snap, &restored_ids, &live_ids);
+        }
+    }
+    for pl in &restored {
+        for vp in &pl.views {
+            let folder_cells: Vec<[u32; 2]> =
+                store.settings.tile_folders.iter().filter(|f| f.view_id == vp.view_id).map(|f| f.cell).collect();
+            let in_folder = store.settings.tile_folders.iter().any(|f| f.view_id == vp.view_id && f.members.contains(&pl.id));
+            let Some(view) = store.settings.views.iter_mut().find(|v| v.id == vp.view_id) else { continue };
+            if !view.members.contains(&pl.id) {
+                let at = vp.index.min(view.members.len());
+                view.members.insert(at, pl.id.clone());
+            }
+            if in_folder {
+                continue; // a folder member owns no cell
+            }
+            for (key, cell) in &vp.cells {
+                place_on_cell_or_first_free(view, key, &pl.id, *cell, &folder_cells);
+            }
+        }
+        if let Some(pos) = &pl.floating {
+            store.settings.floating.insert(pl.id.clone(), pos.clone());
+        }
+        if let Some(scale) = pl.float_scale {
+            store.settings.float_scale.insert(pl.id.clone(), scale);
+        }
+        if let Some(prefs) = pl.video_prefs {
+            store.settings.video_prefs.insert(pl.id.clone(), prefs);
+        }
+    }
+    store.normalize_folders();
+    if !save(store) {
+        store.prompts.truncate(original_prompts);
+        store.trash = original_trash;
+        store.settings = original_settings;
+        return Err("save-failed".into());
+    }
+    Ok(restored.len())
+}
+
+// A grid folder the delete dissolved (fewer than two members left) is rebuilt from its
+// snapshot; one that survived just takes its members back at their old spots. A member
+// inside a folder owns no cell, so its layout entries in that view are dropped again.
+fn restore_tile_folder(settings: &mut Settings, snap: &TileFolder, restored: &std::collections::HashSet<String>, live_ids: &[String]) {
+    if let Some(folder) = settings.tile_folders.iter_mut().find(|f| f.id == snap.id) {
+        for (i, m) in snap.members.iter().enumerate() {
+            if restored.contains(m) && !folder.members.contains(m) {
+                let at = i.min(folder.members.len());
+                folder.members.insert(at, m.clone());
+            }
+        }
+    } else {
+        let members: Vec<String> = snap
+            .members
+            .iter()
+            .filter(|m| live_ids.contains(m) && !settings.tile_folders.iter().any(|f| f.members.contains(m)))
+            .cloned()
+            .collect();
+        if members.len() < 2 {
+            return;
+        }
+        let mut folder = snap.clone();
+        folder.members = members;
+        if let Some(view) = settings.views.iter().find(|v| v.id == folder.view_id) {
+            let key = grid_key(view.cols, view.rows);
+            let on_tile = view.layouts.get(&key).is_some_and(|l| l.iter().any(|(id, c)| *c == folder.cell && !folder.members.contains(id)));
+            let on_folder = settings.tile_folders.iter().any(|f| f.view_id == folder.view_id && f.cell == folder.cell);
+            if on_tile || on_folder {
+                let others: Vec<[u32; 2]> = settings.tile_folders.iter().filter(|f| f.view_id == folder.view_id).map(|f| f.cell).collect();
+                if let Some(c) = first_free_cell_excluding(view, &others) {
+                    folder.cell = c;
+                }
+            }
+        }
+        settings.tile_folders.push(folder);
+    }
+    let Some(folder) = settings.tile_folders.iter().find(|f| f.id == snap.id) else { return };
+    let (view_id, members) = (folder.view_id.clone(), folder.members.clone());
+    if let Some(view) = settings.views.iter_mut().find(|v| v.id == view_id) {
+        for layout in view.layouts.values_mut() {
+            layout.retain(|id, _| !members.contains(id));
+        }
+    }
+}
+
+fn restore_float_folder(settings: &mut Settings, snap: &FloatFolder, restored: &std::collections::HashSet<String>, live_ids: &[String]) {
+    if let Some(folder) = settings.float_folders.iter_mut().find(|f| f.id == snap.id) {
+        for (i, m) in snap.members.iter().enumerate() {
+            if restored.contains(m) && !folder.members.contains(m) {
+                let at = i.min(folder.members.len());
+                folder.members.insert(at, m.clone());
+            }
+        }
+        return;
+    }
+    let members: Vec<String> = snap
+        .members
+        .iter()
+        .filter(|m| live_ids.contains(m) && !settings.float_folders.iter().any(|f| f.members.contains(m)))
+        .cloned()
+        .collect();
+    if members.len() >= 2 {
+        let mut folder = snap.clone();
+        folder.members = members;
+        settings.float_folders.push(folder);
+    }
+}
+
+// Read-only: the placement snapshot an undo needs, taken just before a batch delete.
+#[tauri::command]
+async fn placement_snapshot(state: State<'_, Db>, ids: Vec<String>) -> Result<Vec<PromptPlacement>, String> {
+    Ok(capture_placements(&lock(&state).settings, &ids))
+}
+
+// Undo of a batch delete with the snapshot taken before it: one atomic write for all.
+#[tauri::command]
+async fn restore_prompts_batch(app: AppHandle, state: State<'_, Db>, placements: Vec<PromptPlacement>) -> Result<AppState, String> {
+    let app_state = {
+        let mut store = lock(&state);
+        restore_placed_core(&mut store, &placements, |st| save_prompts_and_trash(&app, st))?;
+        save_settings(&app, &store.settings);
+        let secret_key = secret_session_key(secret_timeout_min(&store.settings));
+        AppState { prompts: slim_prompts(&store.prompts, secret_key), settings: webview_settings(&store.settings) }
+    };
+    rearm_hotkeys(&app);
+    rebuild_tray(&app);
+    sync_float_windows(&app); // pills and folders that came back
     Ok(app_state)
 }
 
@@ -35862,6 +36111,8 @@ pub fn run() {
             batch_prompts,
             list_trash,
             restore_prompt,
+            placement_snapshot,
+            restore_prompts_batch,
             purge_prompt,
             empty_trash,
             log_error,
@@ -46474,6 +46725,90 @@ mod tests {
         assert_eq!(store.trash.len(), 1);
         assert_eq!(store.trash[0].trashed_at, 5);
         assert!(store.prompts.is_empty());
+    }
+
+    fn placement_fixture() -> Store {
+        let mut settings = Settings::default();
+        settings.migrate();
+        settings.views = serde_json::from_value(serde_json::json!([
+            {"id": "a", "name": "A", "cols": 4, "rows": 3,
+             "members": ["p1", "p2", "p3", "p4", "p5"],
+             "layouts": {"4x3": {"p3": [0, 0], "p4": [1, 0], "p5": [3, 0]}}},
+            {"id": "b", "name": "B", "cols": 4, "rows": 3,
+             "members": ["p3", "p6"],
+             "layouts": {"4x3": {"p3": [1, 1], "p6": [0, 0]}}}
+        ]))
+        .unwrap();
+        settings.active_view = "a".into();
+        settings.tile_folders = serde_json::from_value(serde_json::json!([
+            {"id": "tf", "name": "T", "view_id": "a", "cell": [2, 0], "members": ["p1", "p2"]}
+        ]))
+        .unwrap();
+        settings.float_folders = serde_json::from_value(serde_json::json!([
+            {"id": "ff", "name": "F", "members": ["p4", "p5"]}
+        ]))
+        .unwrap();
+        settings.floating.insert("p3".into(), Pos { x: 40, y: 50, screen: String::new() });
+        settings.float_scale.insert("p3".into(), 1.5);
+        let prompts = ["p1", "p2", "p3", "p4", "p5", "p6"].iter().map(|id| test_prompt(id)).collect();
+        Store { prompts, trash: Vec::new(), settings, prompts_locked: false, written: Default::default() }
+    }
+
+    fn view_of<'a>(store: &'a Store, id: &str) -> &'a View {
+        store.settings.views.iter().find(|v| v.id == id).unwrap()
+    }
+
+    #[test]
+    fn undoing_a_batch_delete_restores_every_placement() {
+        let mut store = placement_fixture();
+        let ids: Vec<String> = ["p1", "p3", "p4"].iter().map(|s| s.to_string()).collect();
+        let snapshot = capture_placements(&store.settings, &ids);
+        move_batch_to_trash(&mut store, &ids, 100);
+        assert!(store.settings.tile_folders.is_empty() && store.settings.float_folders.is_empty(), "both folders dissolved by the delete");
+        assert!(!view_of(&store, "a").members.contains(&"p3".to_string()));
+        // Another tile takes p3's old cell in view a before the undo.
+        store.prompts.push(test_prompt("p9"));
+        let a = store.settings.views.iter_mut().find(|v| v.id == "a").unwrap();
+        a.members.push("p9".into());
+        a.layouts.get_mut("4x3").unwrap().insert("p9".into(), [0, 0]);
+
+        assert_eq!(restore_placed_core(&mut store, &snapshot, |_| true), Ok(3));
+        assert!(store.trash.is_empty());
+        let a = view_of(&store, "a");
+        let b = view_of(&store, "b");
+        assert_eq!(a.members[0], "p1", "member order kept for the view");
+        assert!(a.members.contains(&"p3".to_string()) && a.members.contains(&"p4".to_string()));
+        assert_eq!(b.members, vec!["p3".to_string(), "p6".to_string()], "the second view membership is back");
+        assert_eq!(b.layouts["4x3"].get("p3"), Some(&[1, 1]), "its cell in the second view is back");
+        let la = &a.layouts["4x3"];
+        assert_eq!(la.get("p9"), Some(&[0, 0]), "the tile that took the cell stays");
+        let p3_cell = la.get("p3").copied().expect("p3 is on the grid again");
+        assert_ne!(p3_cell, [0, 0], "a taken cell falls back to a free one");
+        let mut cells: Vec<[u32; 2]> = la.values().copied().collect();
+        cells.sort();
+        cells.dedup();
+        assert_eq!(cells.len(), la.len(), "no two tiles share a cell");
+        assert!(!la.contains_key("p1"), "a folder member owns no cell");
+        let tf = &store.settings.tile_folders[0];
+        assert_eq!((tf.id.as_str(), tf.cell, tf.members.clone()), ("tf", [2, 0], vec!["p1".to_string(), "p2".to_string()]));
+        assert_eq!(store.settings.float_folders[0].members, vec!["p4".to_string(), "p5".to_string()]);
+        assert_eq!(store.settings.floating.get("p3").map(|p| (p.x, p.y)), Some((40, 50)));
+        assert_eq!(store.settings.float_scale.get("p3"), Some(&1.5));
+    }
+
+    #[test]
+    fn a_failed_batch_undo_leaves_the_trash_and_settings_untouched() {
+        let mut store = placement_fixture();
+        let ids: Vec<String> = vec!["p3".to_string(), "p4".to_string()];
+        let snapshot = capture_placements(&store.settings, &ids);
+        move_batch_to_trash(&mut store, &ids, 100);
+        let members_before = view_of(&store, "a").members.clone();
+        assert_eq!(restore_placed_core(&mut store, &snapshot, |_| false), Err("save-failed".to_string()));
+        assert_eq!(store.trash.len(), 2);
+        assert_eq!(store.prompts.len(), 4);
+        assert_eq!(view_of(&store, "a").members, members_before);
+        assert!(store.settings.floating.is_empty());
+        assert_eq!(restore_placed_core(&mut store, &[], |_| true), Err("not-found".to_string()));
     }
 
     #[test]

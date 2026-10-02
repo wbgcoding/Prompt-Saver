@@ -14754,11 +14754,23 @@ async function restoreBatchTag(inverseAction, ids, tag) {
   }
 }
 
-// Undo for a batch delete: every deleted prompt went to the trash, not gone for
-// good, so restoring is just restore_prompt per id: the same command and the
-// same "lands in the active view, nothing else app-level comes back" behaviour
-// a single trash restore already has.
-async function restoreBatchDelete(ids) {
+// Undo for a batch delete: every deleted prompt went to the trash, not gone for good.
+// The caller hands in the placement snapshot it took before deleting.
+async function restoreBatchDelete(ids, placements) {
+  // With the placement snapshot taken before the delete, one command puts every
+  // prompt back where it was (views, cells, pill, folders); without it (the snapshot
+  // call failed) each one falls back to a fresh cell in the active view.
+  if (placements && placements.length) {
+    try {
+      const st = await invoke("restore_prompts_batch", { placements });
+      prompts = st.prompts;
+      settings = st.settings;
+      gridDirty = true;
+      await renderGrid(true);
+      if (!libraryEl.classList.contains("hidden")) renderLibrary();
+      return;
+    } catch (err) { errToast(err); }
+  }
   for (const id of ids) {
     try {
       const st = await invoke("restore_prompt", { id });
@@ -19901,8 +19913,9 @@ function bind() {
     if (!n) return;
     const ids = [...libSelected];
     armDelete(e.currentTarget, t("batchDeleteConfirm").replace("{n}", String(n)), async () => {
+      const placements = await invoke("placement_snapshot", { ids }).catch(() => null);
       if (await doBatch("delete")) {
-        undoToast(t("batchDeleteDone").replace("{n}", String(n)), () => restoreBatchDelete(ids));
+        undoToast(t("batchDeleteDone").replace("{n}", String(n)), () => restoreBatchDelete(ids, placements));
       }
     });
   });
@@ -19937,8 +19950,9 @@ function bind() {
     if (!n) return;
     const ids = [...gridSelected];
     armDelete(e.currentTarget, t("batchDeleteConfirm").replace("{n}", String(n)), async () => {
+      const placements = await invoke("placement_snapshot", { ids }).catch(() => null);
       if (await doGridBatch("delete")) {
-        undoToast(t("batchDeleteDone").replace("{n}", String(n)), () => restoreBatchDelete(ids));
+        undoToast(t("batchDeleteDone").replace("{n}", String(n)), () => restoreBatchDelete(ids, placements));
       }
     });
   });
