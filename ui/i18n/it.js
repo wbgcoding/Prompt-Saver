@@ -1384,8 +1384,6 @@ export default {
     valDblClick: "Finestra di doppio clic",
     flagClipWatcher: "Registra le copie da altre app",
     flagClipSkipSecrets: "Salta le probabili password",
-    flagPausedIcons: "Mantieni i pulsanti delle funzioni in pausa",
-    tipPausedIcons: "Mantiene i pulsanti della casella appunti e della cronologia copie nella barra strumenti anche quando queste funzioni sono disattivate. La funzione resta in pausa e non registra nulla, ma il pulsante rimane al suo posto.",
     valClipMin: "Lunghezza minima",
     valClipMax: "Capacità casella",
     sortBy: "Ordina",

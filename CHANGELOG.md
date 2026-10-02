@@ -1606,6 +1606,8 @@ the video editor and the introduction tour ship on).
 
 - The clipboard inbox is part of the copy history now: one list with a filter
   for copies made in the app and elsewhere.
+- The expert switch that kept the buttons of disabled features in the toolbar
+  is gone: the two buttons it kept now live in the library.
 - The copy history is a tab of the library; its header button is gone.
 - Typing in the tray menu's search field opens the quick launcher with what you typed.
 - The grid's selection bar offers the same core actions as the library's, in the same order: favorites, tags, archive and export.

@@ -294,7 +294,7 @@ export const HELP_CONTENT = {
       whatItIs: "The toolbar setting controls which buttons the header and composer bar show.",
       howTo: ["Right-click the header to show or hide its buttons; features themselves are switched in the expert menu."],
       whatHappens: "Hiding a button only hides it; the feature behind it, if any, keeps working through its own hotkey or menu entry.",
-      settings: ["Library button, logo, title, separators, bar hide buttons: Expert menu → System & data → Toolbar", "Keep buttons of switched-off features visible: Expert menu → System & data → Toolbar", "Quick grid-size control and showing it on hover only, multiple views: Expert menu → Features → Views and quick grid"],
+      settings: ["Library button, logo, title, separators, bar hide buttons: Expert menu → System & data → Toolbar", "Quick grid-size control and showing it on hover only, multiple views: Expert menu → Features → Views and quick grid"],
     },
     {
       section: "system",
@@ -1043,7 +1043,7 @@ export const HELP_CONTENT = {
       whatItIs: "Die Werkzeugleiste bestimmt, welche Buttons der Kopfbereich und die Composer-Leiste zeigen.",
       howTo: ["Rechtsklick auf den Kopfbereich blendet seine Knöpfe ein oder aus; die Funktionen selbst schaltet das Expertenmenü."],
       whatHappens: "Das Ausblenden eines Buttons blendet ihn nur aus; die dahinterliegende Funktion funktioniert weiterhin über ihren eigenen Hotkey oder Menüeintrag.",
-      settings: ["Bibliothek-Button, Logo, Titel, Trennlinien, Buttons zum Einklappen der Leisten: Expertenmenü → System & Daten → Werkzeugleiste", "Buttons abgeschalteter Funktionen sichtbar lassen: Expertenmenü → System & Daten → Werkzeugleiste", "Schnelle Rastergrößen-Steuerung und sie erst beim Hovern zeigen, mehrere Ansichten: Expertenmenü → Funktionen → Ansichten und Schnellraster"],
+      settings: ["Bibliothek-Button, Logo, Titel, Trennlinien, Buttons zum Einklappen der Leisten: Expertenmenü → System & Daten → Werkzeugleiste", "Schnelle Rastergrößen-Steuerung und sie erst beim Hovern zeigen, mehrere Ansichten: Expertenmenü → Funktionen → Ansichten und Schnellraster"],
     },
     {
       section: "system",

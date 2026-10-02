@@ -2687,6 +2687,7 @@ fn removed_ui_flag_keys() -> &'static [&'static str] {
         "showJournal",
         "varPopupWindow",
         "viewGroups",
+        "pausedIcons",
     ]
 }
 
@@ -52174,7 +52175,7 @@ mod tests {
         // The history window, the inbox badge, the view groups and the placeholder
         // window switch are gone; their stored keys must not linger.
         let mut s = Settings::default();
-        for k in ["showJournal", "varPopupWindow", "viewGroups"] {
+        for k in ["showJournal", "varPopupWindow", "viewGroups", "pausedIcons"] {
             s.ui_flags.insert(k.into(), false);
         }
         for k in ["journalWidth", "viewDropHoverMs", "viewGroupMaxRows", "clipSeenId"] {

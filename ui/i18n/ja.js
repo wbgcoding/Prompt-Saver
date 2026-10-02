@@ -1384,8 +1384,6 @@ export default {
     valDblClick: "ダブルクリック判定時間",
     flagClipWatcher: "他のアプリでのコピーを記録する",
     flagClipSkipSecrets: "パスワードらしき文字列をスキップ",
-    flagPausedIcons: "無効にした機能のボタンを残す",
-    tipPausedIcons: "これらの機能がオフになっていても、クリップボードインボックスとコピー履歴のボタンをツールバーに残します。機能は一時停止したままで何も記録されませんが、ボタンはそのままの位置に残ります。",
     valClipMin: "最小の長さ",
     valClipMax: "インボックス容量",
     sortBy: "並べ替え",

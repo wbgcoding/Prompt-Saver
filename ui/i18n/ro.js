@@ -1384,8 +1384,6 @@ export default {
     valDblClick: "Fereastră dublu-clic",
     flagClipWatcher: "Înregistrează copierile din alte aplicații",
     flagClipSkipSecrets: "Omite parolele probabile",
-    flagPausedIcons: "Păstrează butoanele funcțiilor puse pe pauză",
-    tipPausedIcons: "Păstrează butoanele pentru caseta de primire clipboard și istoricul copierii în bara de instrumente chiar și atunci când aceste funcții sunt dezactivate. Funcția rămâne în pauză și nu înregistrează nimic, dar butonul rămâne la locul lui.",
     valClipMin: "Lungime minimă",
     valClipMax: "Capacitate casetă de primire",
     sortBy: "Sortare",

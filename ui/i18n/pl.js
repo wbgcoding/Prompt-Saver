@@ -1384,8 +1384,6 @@ export default {
     valDblClick: "Okno dwukrotnego kliknięcia",
     flagClipWatcher: "Zapisuj kopie z innych aplikacji",
     flagClipSkipSecrets: "Pomijaj prawdopodobne hasła",
-    flagPausedIcons: "Zachowaj przyciski wstrzymanych funkcji",
-    tipPausedIcons: "Zachowuje przyciski skrzynki schowka i historii kopiowania na pasku narzędzi, nawet gdy te funkcje są wyłączone. Funkcja pozostaje wstrzymana i niczego nie zapisuje, ale przycisk pozostaje na swoim miejscu.",
     valClipMin: "Minimalna długość",
     valClipMax: "Pojemność skrzynki",
     sortBy: "Sortuj",

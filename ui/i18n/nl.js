@@ -1384,8 +1384,6 @@ export default {
     valDblClick: "Dubbelklik-tijdsvenster",
     flagClipWatcher: "Kopieën uit andere apps vastleggen",
     flagClipSkipSecrets: "Waarschijnlijke wachtwoorden overslaan",
-    flagPausedIcons: "Knoppen van uitgeschakelde functies behouden",
-    tipPausedIcons: "Houdt de knoppen voor klembordpostvak en kopieergeschiedenis in de werkbalk, zelfs als die functies uit staan. De functie blijft uitgeschakeld en registreert niets, maar de knop blijft op zijn plek.",
     valClipMin: "Minimale lengte",
     valClipMax: "Inbox-capaciteit",
     sortBy: "Sorteren",

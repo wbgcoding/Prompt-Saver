@@ -1391,8 +1391,6 @@ export default {
     valDblClick: "Doppelklick-Zeitfenster",
     flagClipWatcher: "Kopien aus anderen Apps aufnehmen",
     flagClipSkipSecrets: "Vermutete Passwörter überspringen",
-    flagPausedIcons: "Buttons deaktivierter Funktionen behalten",
-    tipPausedIcons: "Behält die Buttons für Zwischenablage-Eingang und Kopierverlauf in der Werkzeugleiste, auch wenn diese Funktionen aus sind. Die Funktion bleibt deaktiviert und zeichnet nichts auf, der Button bleibt aber an seinem Platz.",
     valClipMin: "Mindestlänge",
     valClipMax: "Kapazität des Eingangs",
     sortBy: "Sortieren",

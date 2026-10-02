@@ -1447,9 +1447,6 @@ const OPT_FLAG_LABELS = {
   editorMonospace: "flagEditorMonospace",       // monospace editor textarea
   hideWindowOnCopy: "flagHideWindowOnCopy",     // hide window after copying a prompt
   dedupCopyLog: "flagDedupCopyLog",             // skip identical consecutive copies
-  // Keep the clipboard-inbox and copy-history buttons in the toolbar even while
-  // their feature is switched off, so the feature can be paused, not hidden.
-  pausedIcons: "flagPausedIcons",
   dragOut: "flagDragOut",                       // drag a prompt into another app
   // Swaps the two gestures: off (shipped) = hold the key to drag out, plain drag
   // moves the tile; on = plain drag leaves the app and the key moves the tile.
@@ -2234,7 +2231,7 @@ const EXPERT_TABS = [
   ] },
   { title: "expTabSystem", groups: [
     // Toolbar button visibility (mirrors the header right-click tool list).
-    { title: "expGroupToolbar", flags: ["barToggles", { key: "barToggleBoth", gate: "barToggles" }, "showLibrary", "showLogo", "showTitle", "pausedIcons", "headerSeparators"] },
+    { title: "expGroupToolbar", flags: ["barToggles", { key: "barToggleBoth", gate: "barToggles" }, "showLibrary", "showLogo", "showTitle", "headerSeparators"] },
     { title: "expGroupPrivacy", notices: ["storeUnsealed", "settingsLocked", "settingsWriteFailed"], flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "secretPrompts"], values: ["tileBlur", "mediaBlur", "secretTimeoutMin"] },
     { title: "expGroupSystem", notices: ["dataDirReadOnly"], flags: ["keyboardNav", "allowMultipleInstances", "dataDirLock", "demoMode", "taskbarProgress", "etaShow"], values: ["bgDoneKeepMin"], paths: ["dataDir"],
       actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }] },
@@ -2545,7 +2542,7 @@ const EXPERT_TIPS = [
   "tooltipDelayMs",
   "dragToView",
   // Appearance
-  "hideScrollbars", "gridLines", "pausedIcons", "autoInk", "inkThreshold", "inkHalo", "inkHaloStrength",
+  "hideScrollbars", "gridLines", "autoInk", "inkThreshold", "inkHalo", "inkHaloStrength",
   "customThemes", "customThemeMax",
   "dragThreshold", "composerMaxH", "toastWidth", "toastPos", "modalMaxVh", "tileStyle",
   // Library / privacy

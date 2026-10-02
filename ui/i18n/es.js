@@ -1384,8 +1384,6 @@ export default {
     valDblClick: "Intervalo de doble clic",
     flagClipWatcher: "Registrar copias de otras aplicaciones",
     flagClipSkipSecrets: "Omitir posibles contraseñas",
-    flagPausedIcons: "Mantener botones de funciones pausadas",
-    tipPausedIcons: "Mantiene los botones de la bandeja de entrada del portapapeles y del historial de copias en la barra de herramientas aunque esas funciones estén desactivadas. La función permanece en pausa y no registra nada, pero el botón se queda en su lugar.",
     valClipMin: "Longitud mínima",
     valClipMax: "Capacidad de la bandeja",
     sortBy: "Ordenar",

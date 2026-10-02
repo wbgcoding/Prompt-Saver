@@ -1391,8 +1391,6 @@ export default {
     valDblClick: "Double-click window",
     flagClipWatcher: "Record copies from other apps",
     flagClipSkipSecrets: "Skip likely passwords",
-    flagPausedIcons: "Keep buttons of disabled features",
-    tipPausedIcons: "Keeps the clipboard-inbox and copy-history buttons in the toolbar even when those features are off. The feature stays disabled and records nothing, but the button remains where it is.",
     valClipMin: "Minimum length",
     valClipMax: "Inbox capacity",
     sortBy: "Sort",

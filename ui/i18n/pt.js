@@ -1384,8 +1384,6 @@ export default {
     valDblClick: "Janela de clique duplo",
     flagClipWatcher: "Registrar cópias de outros aplicativos",
     flagClipSkipSecrets: "Ignorar prováveis senhas",
-    flagPausedIcons: "Manter botões de funcionalidades pausadas",
-    tipPausedIcons: "Mantém os botões da entrada da área de transferência e do histórico de cópias na barra de ferramentas mesmo quando esses recursos estão desativados. O recurso permanece desativado e não registra nada, mas o botão continua no lugar.",
     valClipMin: "Tamanho mínimo",
     valClipMax: "Capacidade da entrada",
     sortBy: "Ordenar",

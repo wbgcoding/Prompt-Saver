@@ -1384,8 +1384,6 @@ export default {
     valDblClick: "Çift tıklama penceresi",
     flagClipWatcher: "Diğer uygulamalardan kopyaları kaydet",
     flagClipSkipSecrets: "Olası şifreleri atla",
-    flagPausedIcons: "Duraklatılan özelliklerin düğmelerini koru",
-    tipPausedIcons: "Bu özellikler kapalı olsa bile pano gelen kutusu ve kopyalama geçmişi düğmelerini araç çubuğunda tutar. Özellik duraklatılmış kalır ve hiçbir şey kaydetmez, ancak düğme yerinde kalır.",
     valClipMin: "Minimum uzunluk",
     valClipMax: "Gelen kutusu kapasitesi",
     sortBy: "Sırala",

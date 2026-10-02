@@ -1384,8 +1384,6 @@ export default {
     valDblClick: "双击判定时间",
     flagClipWatcher: "记录来自其他应用的复制内容",
     flagClipSkipSecrets: "跳过疑似密码",
-    flagPausedIcons: "保留已暂停功能的按钮",
-    tipPausedIcons: "即使这些功能已关闭，也在工具栏中保留剪贴板收件箱和复制历史按钮。该功能保持禁用状态且不记录任何内容，但按钮仍保留在原位。",
     valClipMin: "最小长度",
     valClipMax: "收件箱容量",
     sortBy: "排序",
