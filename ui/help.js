@@ -331,7 +331,7 @@ export const HELP_CONTENT = {
       howTo: ["Open the expert menu's System group for updates, navigation, instances, and the data folder."],
       whatHappens:
         "Update checks are on by default and never install anything without asking first. Changing the data folder migrates the existing database there. Allowing multiple instances takes a restart to apply. Pointing the data folder at a cloud-synced folder shows a one-time warning. A small lock file then tracks which computer uses the database: a second computer that finds a fresh lock from another one opens everything read-only and says so in a banner, while a lock nobody refreshed for a while is taken over. Long jobs can fill the taskbar icon as a progress bar and show an estimate of the time left.",
-      settings: ["Update checks and interval, keyboard navigation, allow multiple instances, data folder, data folder lock, taskbar progress, remaining time, video tools download: Expert menu → System & data → System"],
+      settings: ["Keyboard navigation, allow multiple instances, data folder, data folder lock, taskbar progress, remaining time, video tools download: Expert menu → System & data → System"],
     },
     {
       section: "system",
@@ -741,12 +741,12 @@ export const HELP_CONTENT = {
       whatItIs: "An optional update check looks for a newer version and only talks to the update server.",
       howTo: [
         "Leave update checks on, the default, to be notified of a new version.",
-        "Turn them off in the expert menu if unwanted.",
+        "Pick Never beside Auto update in Settings to stop automatic checks.",
         "Accept an offered update to download and install it with one click.",
       ],
       whatHappens:
         "The update check, together with a first-run download of the Microsoft WebView2 installer if that runtime is missing, is one of the only two kinds of network traffic the app makes on its own. A downloaded update is verified against a published checksum before it runs: a missing or mismatching checksum blocks the install instead of running an unverified file. The third and last kind is ffmpeg, used for video export/conversion: an installed build ships it and never touches the network for it, while a portable build offers a one-time download only when a video feature actually needs it and only with your explicit consent, never automatically, never in the background. After an update, a small notice links to what changed. The About window, next to \"Check for updates\" in Settings, shows the version, the full history of changes and every bundled open-source component with its license.",
-      settings: ["Update checks: Expert menu → System & data → System", "Notice after an update: Expert menu → System & data → System"],
+      settings: ["Auto update and how often it checks: Settings"],
     },
     {
       section: "system",
@@ -1081,7 +1081,7 @@ export const HELP_CONTENT = {
       howTo: ["Die System-Gruppe des Expertenmenüs für Update-Checks, Tastaturnavigation, mehrere Instanzen und den Daten-Ordner öffnen."],
       whatHappens:
         "Update-Checks sind standardmäßig aktiv und installieren nie etwas, ohne vorher zu fragen. Ein Wechsel des Daten-Ordners migriert die bestehende Datenbank dorthin. Mehrere Instanzen zuzulassen erfordert einen Neustart. Zeigt der Daten-Ordner auf einen Cloud-synchronisierten Ordner, erscheint einmal eine Warnung. Eine kleine Sperrdatei hält dann fest, welcher Rechner die Datenbank nutzt: Ein zweiter Rechner, der eine frische Sperre eines anderen findet, öffnet alles nur lesend und sagt das mit einem Banner; eine Sperre, die länger niemand erneuert hat, wird übernommen. Lange Aufgaben können das Taskleistensymbol als Fortschrittsbalken füllen und die Restzeit schätzen.",
-      settings: ["Update-Checks und Intervall, Tastaturnavigation, mehrere Instanzen erlauben, Daten-Ordner, Sperre des Daten-Ordners, Fortschritt am Taskleistensymbol, Restzeit, Download der Video-Werkzeuge: Expertenmenü → System & Daten → System"],
+      settings: ["Tastaturnavigation, mehrere Instanzen erlauben, Daten-Ordner, Sperre des Daten-Ordners, Fortschritt am Taskleistensymbol, Restzeit, Download der Video-Werkzeuge: Expertenmenü → System & Daten → System"],
     },
     {
       section: "system",
@@ -1491,12 +1491,12 @@ export const HELP_CONTENT = {
       whatItIs: "Eine optionale Prüfung sucht nach einer neueren Version und kommuniziert nur mit dem Update-Server.",
       howTo: [
         "Update-Checks eingeschaltet lassen, der Standard, für eine Benachrichtigung bei neuer Version.",
-        "Sie im Expertenmenü ausschalten, falls unerwünscht.",
+        "Im Einstellungsfenster neben Auto-Update Nie wählen, um automatische Prüfungen zu beenden.",
         "Ein angebotenes Update annehmen, um es mit einem Klick herunterzuladen und zu installieren.",
       ],
       whatHappens:
         "Die Update-Prüfung ist zusammen mit einem Download des Microsoft-WebView2-Installers beim ersten Start, falls diese Laufzeit fehlt, eine von nur zwei Arten von Netzwerkverkehr, den die App von sich aus macht. Ein heruntergeladenes Update wird vor der Ausführung anhand einer veröffentlichten Prüfsumme verifiziert: eine fehlende oder falsche Prüfsumme blockiert die Installation, statt eine unbestätigte Datei auszuführen. Die dritte und letzte Art ist ffmpeg, für Videoexport/-konvertierung: Eine installierte Version bringt es mit und greift dafür nie auf das Netzwerk zu, eine portable Version bietet einen einmaligen Download nur an, wenn eine Videofunktion es tatsächlich braucht, und nur mit ausdrücklicher Zustimmung, nie automatisch, nie im Hintergrund. Nach einem Update verlinkt eine kleine Meldung auf die Änderungen. Das Fenster Über, neben \"Update suchen\" in den Einstellungen, zeigt die Version, die ganze Änderungsgeschichte und jeden mitgelieferten Open-Source-Bestandteil mit seiner Lizenz.",
-      settings: ["Update-Checks: Expertenmenü → System & Daten → System", "Meldung nach einem Update: Expertenmenü → System & Daten → System"],
+      settings: ["Auto-Update und wie oft es prüft: Einstellungen"],
     },
     {
       section: "system",

@@ -1855,7 +1855,6 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 /* Expert toggles that hide whole sections / controls. */
 .noflag-chainPrompts #chain-btn { display: none; }
 .noflag-chainVarCheck #chain-overview { display: none; }
-.noflag-showUpdates #updates-field { display: none; }
 .noflag-importExport #impexp-field { display: none; }
 /* Opt-in visual toggles (off by default; `flag-<key>` present only when on). */
 .flag-gridLines .cell { border-color: var(--border); }
@@ -4080,6 +4079,8 @@ body.drag-over::after {
    being ellipsised down to a couple of pixels beside the check button. */
 .update-actions { grid-column: span 3; display: flex; flex-wrap: wrap; row-gap: 6px; align-items: center; gap: 10px; min-width: 0; }
 .update-actions .ghost-btn { flex: 0 0 auto; }
+/* The interval sits under the Auto update switch, in the same last column. */
+.update-row > .update-interval { grid-column: 4; }
 /* One column of the grid above: the box is 3 columns + 2 gaps wide, so one column is
    (width - 2*gap) / 3: the exact width a button in .settings-btn-row gets. About and
    Check-for-updates each take one, the version label takes the third. */

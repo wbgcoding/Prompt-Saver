@@ -1710,6 +1710,9 @@ the video editor and the introduction tour ship on).
   setting it to Off turns the feature off.
 - **Tooltips have four settings.** On or off, delay, width, and notes in the
   tooltip; the rest is fixed at its old default.
+- **Updates have two settings.** Auto update and its interval sit together in
+  Settings, and Never turns the automatic check off; the three expert switches
+  for updates are gone.
 
 ## 2.6.3 (2026-07-26)
 

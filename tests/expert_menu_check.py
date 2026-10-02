@@ -42,6 +42,8 @@ NOT_IN_EXPERT = {
     "closeAfterCopy",
     # The tooltip switch on the normal settings page.
     "tooltipsEnabled",
+    # Update interval, beside the auto-update switch on the normal settings page.
+    "updateCheckH",
 }
 
 # Every setting that only makes sense while another feature is on, and the gate it
@@ -122,7 +124,6 @@ DEPENDENCIES = {
     "tileFolderCols": "tileFolders",
     "trayRecentN": "trayRecent",
     "trayFavN": "trayFavs",
-    "checkUpdateOnStart": "showUpdates",
     # Tiles + copying
     "chainLock": "chainPrompts",
     "chainQuickStart": "chainPrompts",
@@ -206,7 +207,6 @@ DEPENDENCIES = {
     "backupMonthly": "backupGfs",
     "backupYearly": "backupGfs",
     "statsTopN": "usageStats",
-    "updateCheckH": "showUpdates",
 }
 
 

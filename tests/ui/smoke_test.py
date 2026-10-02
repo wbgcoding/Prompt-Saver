@@ -14816,6 +14816,41 @@ EXPERT_PRESET_PROBE = """
 
     document.getElementById('gear').click();
     await sleep(150);
+
+    // 646: the Auto update switch and its interval are one setting. Never is the
+    // switch off, any other interval turns it on, and nothing here asks the
+    // backend to check for an update.
+    {
+      const sw = document.getElementById('opt-autoupdate');
+      const sel = document.getElementById('opt-update-interval');
+      const argsOf = (cmd) => (window.__SMOKE_ARGS__ || []).filter((c) => c[0] === cmd);
+      const checks = () => (window.__SMOKE_CALLS__ || []).filter((c) => c === 'check_update').length;
+      if (!sel) {
+        errs.push('646: the update interval select is missing from Settings');
+      } else {
+        const checksBefore = checks();
+        if (!sw.checked || sel.value !== '24') errs.push('646: default should be on and daily, got ' + sw.checked + ' ' + sel.value);
+        sel.value = '0';
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+        await sleep(150);
+        if (sw.checked) errs.push('646: choosing Never left the Auto update switch on');
+        if (!argsOf('set_auto_update').some((c) => c[1].enabled === false)) errs.push('646: choosing Never did not switch auto update off');
+        sel.value = '12';
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+        await sleep(150);
+        if (!sw.checked) errs.push('646: choosing an interval did not switch Auto update back on');
+        if (!argsOf('set_ui_value').some((c) => c[1].key === 'updateCheckH' && c[1].value === 12)) errs.push('646: the interval was not stored');
+        sw.checked = false;
+        sw.dispatchEvent(new Event('change', { bubbles: true }));
+        await sleep(100);
+        if (sel.value !== '0') errs.push('646: switching Auto update off should show Never, got ' + sel.value);
+        sw.checked = true;
+        sw.dispatchEvent(new Event('change', { bubbles: true }));
+        await sleep(100);
+        if (sel.value !== '12') errs.push('646: switching Auto update on should show the stored interval, got ' + sel.value);
+        if (checks() !== checksBefore) errs.push('646: changing the update setting made a check_update call');
+      }
+    }
     document.getElementById('expert-open').click();
     await sleep(200);
 

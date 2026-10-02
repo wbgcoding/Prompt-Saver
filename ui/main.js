@@ -1220,7 +1220,6 @@ const FLAG_LABELS = {
   showLibrary: "library",   // top-bar library button visibility (toolbar menu)
   showJournal: "journal",   // top-bar copy-history button visibility (toolbar menu)
   chainPrompts: "flagChainPrompts",
-  showUpdates: "flagShowUpdates",
   // Windows taskbar icon progress during export, conversion, backup, import
   // and the ffmpeg download; and the shared "about how long is left" estimate
   // shown on every progress bar in the app.
@@ -1309,11 +1308,6 @@ const FLAG_LABELS = {
   // Filter row at the top of the custom tray menu, searching every prompt
   // rather than only the shown favourites/recents.
   traySearch: "flagTraySearch",
-  // Checks at launch, but only while the normal auto-update setting is on.
-  checkUpdateOnStart: "flagCheckUpdateOnStart",
-  // The one-time toast after an update; the "what's new" window itself stays
-  // reachable from About either way.
-  whatsNew: "flagWhatsNew",
   // Split from the old single autoBackupBeforeWipe so either case can be
   // switched off on its own. Both ship default on.
   backupBeforeReset: "flagBackupBeforeReset",
@@ -1932,7 +1926,7 @@ const EXPERT_SELECTS = {
   // regardless of this value.
   recordingRetentionDays: { label: "valRecordingRetentionDays", options: [0, 7, 30, 90, 365], def: 90, unit: "d", zeroLabel: "retentionForever", gate: "screenRecord" },
   // How often the background thread checks for a new release.
-  updateCheckH: { label: "valUpdateCheckH", options: [6, 12, 24, 48, 168], def: 24, unit: "h", gate: "showUpdates" },
+  updateCheckH: { label: "valUpdateCheckH", options: [6, 12, 24, 48, 168], def: 24, unit: "h" },
 };
 
 // Date/time width, shared by both style dropdowns. "iso" is the only entry
@@ -2275,7 +2269,7 @@ const EXPERT_TABS = [
     // Toolbar button visibility (mirrors the header right-click tool list).
     { title: "expGroupToolbar", flags: ["barToggles", { key: "barToggleBoth", gate: "barToggles" }, "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons", "headerSeparators", "toolbarHoverDim"] },
     { title: "expGroupPrivacy", notices: ["storeUnsealed", "settingsLocked", "settingsWriteFailed"], flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "tilesHoverDim", "secretPrompts"], values: ["tileBlur", "mediaBlur", "tilesHoverOpacity", "secretTimeoutMin"] },
-    { title: "expGroupSystem", notices: ["dataDirReadOnly"], flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }, { key: "whatsNew", gate: "showUpdates" }, "keyboardNav", "allowMultipleInstances", "dataDirLock", "demoMode", "taskbarProgress", "etaShow"], values: ["bgDoneKeepMin"], selects: ["updateCheckH"], paths: ["dataDir"],
+    { title: "expGroupSystem", notices: ["dataDirReadOnly"], flags: ["keyboardNav", "allowMultipleInstances", "dataDirLock", "demoMode", "taskbarProgress", "etaShow"], values: ["bgDoneKeepMin"], paths: ["dataDir"],
       actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }] },
     { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "helpSketches", "firstRunTour"],
       actions: [{ id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
@@ -2306,7 +2300,7 @@ const FLAG_GATES = Object.fromEntries(
 //
 // Alert-style flags only (a sound, a flash, a toast that appears on its own).
 // Recordings and dictation are left alone here on purpose -- no rec*/voice* key.
-const EXPERT_PRESET_QUIET = ["copyFlash", "copySound", "whatsNew", "similarHint", "dupImportCheck", "taskbarProgress"];
+const EXPERT_PRESET_QUIET = ["copyFlash", "copySound", "similarHint", "dupImportCheck", "taskbarProgress"];
 // Values whose 0 is their off stop: Quiet sets them to 0, Standard restores their
 // default, All on restores the default of any that sit at 0.
 const EXPERT_PRESET_QUIET_ZERO = ["bubbleMs", "undoToastMs"];
@@ -2555,7 +2549,7 @@ const EXPERT_TIPS = [
   "voiceLang", "voiceInsert", "voiceOnlineOk", "voiceAutoPickLang", "voiceLangAutoUpdate",
   "voiceHotkey", "voiceHotkeyTarget",
   "trayCustomMenu", "trayRecent", "trayFavs", "trayRecentN", "trayFavN", "trayLabelMax", "traySearch",
-  "checkUpdateOnStart", "showUpdates", "updateCheckH", "whatsNew", "importExport", "toolbarHoverDim", "keyboardNav", "allowMultipleInstances",
+  "importExport", "toolbarHoverDim", "keyboardNav", "allowMultipleInstances",
   "taskbarProgress", "etaShow", "dataDir", "dataDirLock", "demoMode",
   "headerSeparators", "floating", "floatPark", "floatParkCleanupH",
   "pillFolders", "pillFontSize", "pillTextMinW", "pillBorderW",
@@ -3887,6 +3881,7 @@ const SETTINGS_DIRECTORY = [
   { key: "opt-hotkey", area: "normal", label: "hotkeyLabel" },
   { key: "opt-voice-hotkey", area: "normal", label: "voiceHotkeyLabel", gate: "voiceHotkey" },
   { key: "opt-autoupdate", area: "normal", label: "autoUpdate", tip: "autoUpdateHint" },
+  { key: "opt-update-interval", area: "normal", label: "valUpdateCheckH" },
   { key: "quick-grid", area: "toolbar", label: "gridSize" },
   { key: "library-sort", area: "library", label: "sortBy" },
   { key: "library-close-toggle", area: "library", label: "flagCloseAfterCopy" },
@@ -16304,6 +16299,7 @@ async function runImport() {
     $("opt-tooltips").checked = flag("tooltipsEnabled");
     $("opt-autopaste").checked = settings.ui_flags?.autoPaste !== false;
     $("opt-autoupdate").checked = settings.auto_update !== false;
+    fillUpdateIntervalSelect();
     applyTheme(await invoke("current_theme"));
     applyTileStyle();
     applyBars();
@@ -20508,6 +20504,7 @@ function bind() {
     applyI18n();
     // Re-fill the JS-built selects, then restore their current values.
     fillSizeSelects();
+    fillUpdateIntervalSelect();
     fillFontSelects();
     fillThemeSelect(); // the custom-theme separator is a translated label too
     $("tile-font").value = settings.tile_font || "system";
@@ -20896,11 +20893,9 @@ function bind() {
     }
     updateBtn.disabled = false;
   });
-  // Silently check for updates at launch and surface any in the status line. Only
-  // when update checking is enabled at all: the normal setting is the master switch.
-  if (flag("checkUpdateOnStart") && settings.auto_update !== false) {
-    invoke("check_update").then((info) => { if (info?.available) offerUpdate(info); }).catch(() => {});
-  }
+  // No launch check here: the backend schedules the automatic check itself (a couple
+  // of seconds after start, then at the chosen interval) and announces what it finds
+  // through "update-available". It does nothing while Auto update is off.
   updateModal.install.addEventListener("click", async () => {
     updateModal.install.disabled = true;
     try {
@@ -20926,8 +20921,29 @@ function bind() {
     if (e.target === updateModal.root) closeUpdateModal();
   });
 
+  // The Auto update switch and the interval beside it are one setting: Never is the
+  // switch's off state, and any other interval turns it on.
   $("opt-autoupdate").addEventListener("change", (e) => {
+    settings.auto_update = e.target.checked;
+    fillUpdateIntervalSelect();
     invoke("set_auto_update", { enabled: e.target.checked }).catch((err) => errToast(err));
+  });
+  attachSelectPicker($("opt-update-interval"));
+  $("opt-update-interval").addEventListener("change", async (e) => {
+    const hours = Number(e.target.value);
+    if (hours === 0) {
+      settings.auto_update = false;
+      $("opt-autoupdate").checked = false;
+      await invoke("set_auto_update", { enabled: false }).catch((err) => errToast(err));
+      return;
+    }
+    if (settings.auto_update === false) {
+      settings.auto_update = true;
+      $("opt-autoupdate").checked = true;
+      await invoke("set_auto_update", { enabled: true }).catch((err) => errToast(err));
+    }
+    settings.ui_values = { ...(settings.ui_values || {}), updateCheckH: hours };
+    await invoke("set_ui_value", { key: "updateCheckH", value: hours }).catch((err) => errToast(err));
   });
   listen("update-available", (e) => {
     offerUpdate(e.payload);
@@ -20995,12 +21011,11 @@ function bind() {
       errToast(err);
     }
   });
-  // Startup check runs unconditionally (it is what marks the version seen);
-  // only the toast itself is gated behind the flag, per spec.
+  // Startup check runs unconditionally (it is what marks the version seen) and
+  // the notice after an update always shows once.
   invoke("whats_new_check")
     .then((result) => {
       if (!result?.sections?.length) return;
-      if (!flag("whatsNew")) return;
       toast(t("whatsNewToast"), {
         label: t("whatsNewBtn"),
         onClick: () => openWhatsNewModal(result.sections, result.since ?? null),
@@ -21317,6 +21332,26 @@ function fillScaleSelect(id, key) {
     sel.appendChild(o);
   }
   sel.value = String(cur);
+}
+
+// Interval select beside the Auto update switch. "Never" is the same state as the
+// switch being off; a stored interval that is not on the list gets its own option.
+const UPDATE_INTERVALS = [[0, "updateNever"], [6, "updateEvery6h"], [12, "updateEvery12h"], [24, "updateDaily"], [48, "updateEvery2d"], [168, "updateWeekly"]];
+function fillUpdateIntervalSelect() {
+  const sel = $("opt-update-interval");
+  if (!sel) return;
+  const cur = val("updateCheckH");
+  const rows = UPDATE_INTERVALS.map(([h, key]) => [h, t(key)]);
+  if (!rows.some(([h]) => h === cur)) rows.push([cur, `${cur}h`]);
+  rows.sort((a, b) => a[0] - b[0]);
+  sel.innerHTML = "";
+  for (const [h, label] of rows) {
+    const o = document.createElement("option");
+    o.value = String(h);
+    o.textContent = label;
+    sel.appendChild(o);
+  }
+  sel.value = String(settings.auto_update !== false ? cur : 0);
 }
 
 // Fill both text-size selects: special options + 10..40 in steps of 2.
@@ -22091,6 +22126,7 @@ function syncSettingsControls() {
     $("pin-top").classList.toggle("active", settings.always_on_top === true);
     $("pin-top").setAttribute("aria-pressed", String(settings.always_on_top === true));
     $("opt-autoupdate").checked = settings.auto_update !== false;
+    fillUpdateIntervalSelect();
     $("tile-font").value = settings.tile_font || "system";
     $("tile-size").value = String(normSize(Number(settings.tile_size ?? 0)));
     applyTileStyle();

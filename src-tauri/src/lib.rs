@@ -2706,6 +2706,9 @@ fn removed_ui_flag_keys() -> &'static [&'static str] {
         "iconTooltips",
         "tooltipTimeout",
         "tileTimeTip",
+        "showUpdates",
+        "checkUpdateOnStart",
+        "whatsNew",
     ]
 }
 
@@ -27832,6 +27835,12 @@ fn set_ui_value(app: AppHandle, state: State<Db>, key: String, value: f64) -> Re
     // rotation cap lives in this static instead, kept current from here.
     if is_error_log_cap {
         ERROR_LOG_KEEP_BYTES.store((value.max(1.0) * 1024.0) as u64, Ordering::Relaxed);
+    }
+    // A new update interval counts from the last check, so the running job picks it
+    // up now instead of after its old wait. The job itself still does nothing while
+    // Auto update is off.
+    if key == "updateCheckH" {
+        scheduler::retime("update-check", update_check_interval(&app));
     }
     notify_float_settings(&app);
     Ok(())
