@@ -1208,22 +1208,6 @@
     </div>
   </div>
 
-  <!-- Every hotkey (global + per-prompt) in one place, each row live-rebindable -->
-  <div id="hotkeys-modal" class="overlay hidden" role="dialog" aria-modal="true">
-    <div class="modal">
-      <div class="modal-head">
-        <h2 class="modal-title" data-i18n="hotkeysAllTitle">All hotkeys</h2>
-        <button id="hotkeys-modal-close" class="icon-btn" type="button" data-i18n-aria="close">
-          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-            <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
-          </svg>
-        </button>
-      </div>
-      <input id="hotkeys-search" class="modal-input" type="text" data-i18n-ph="hotkeysSearchPh" data-i18n-aria="hotkeysSearchPh" />
-      <div id="hotkeys-list" class="hotkeys-list"></div>
-    </div>
-  </div>
-
   <!-- Update available: changelog + actions -->
   <div id="update-modal" class="overlay hidden" role="dialog" aria-modal="true">
     <div class="modal">
@@ -1238,28 +1222,10 @@
       <p id="update-modal-warn" class="update-warn hidden" data-i18n="skippedWarning">You skipped this version.</p>
       <div id="update-modal-notes" class="update-notes"></div>
       <div class="modal-actions">
+        <button id="update-modal-refresh" class="ghost-btn hidden" data-i18n="whatsNewRefresh">Update from GitHub</button>
         <button id="update-modal-cancel" class="ghost-btn" data-i18n="cancel">Cancel</button>
         <button id="update-modal-skip" class="ghost-btn" data-i18n="skipVersion">Skip this version</button>
         <button id="update-modal-install" class="primary-btn" data-i18n="installNow">Install now</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- What's new: shipped changelog sections since the last seen version -->
-  <div id="whats-new-modal" class="overlay hidden" role="dialog" aria-modal="true">
-    <div class="modal">
-      <div class="modal-head">
-        <h2 class="modal-title" data-i18n="whatsNewTitle">What's new</h2>
-        <button id="whats-new-close" class="icon-btn" data-i18n-aria="close">
-          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-            <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
-          </svg>
-        </button>
-      </div>
-      <div id="whats-new-notes" class="update-notes"></div>
-      <div class="modal-actions">
-        <button id="whats-new-refresh" class="ghost-btn" data-i18n="whatsNewRefresh">Update from GitHub</button>
-        <button id="whats-new-ok" class="primary-btn" data-i18n="close">Close</button>
       </div>
     </div>
   </div>
@@ -1288,12 +1254,23 @@
           </svg>
           <span data-i18n="whatsNewBtn">What's new</span>
         </button>
-        <button id="about-licenses" class="ghost-btn about-link-btn">
+        <button id="about-licenses" class="ghost-btn about-link-btn" aria-expanded="false" aria-controls="about-licenses-body">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
             <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Zm0 0v5h5M9 13h6M9 17h6"/>
           </svg>
           <span data-i18n="aboutLicenses">Third-party licenses</span>
         </button>
+        <!-- Generated at build time from the real dependency manifests
+             (src-tauri/build.rs), never hand maintained here. -->
+        <div id="about-licenses-body" class="about-licenses-body hidden">
+          <p class="licenses-intro" data-i18n="licensesIntro">
+            Prompt Saver is built with open-source components. The list below is generated from the
+            real dependency list every time the app is built.
+          </p>
+          <input id="licenses-search" class="modal-input hidden" type="text" data-i18n-ph="licensesSearchPh" />
+          <div id="licenses-list" class="licenses-list" role="list"></div>
+          <p id="licenses-empty" class="licenses-empty hidden" data-i18n="licensesEmpty">No entry matches this search.</p>
+        </div>
         <button id="about-repo" class="ghost-btn about-link-btn">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
             <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4M14 4h6v6M20 4l-9 9"/>
@@ -1304,28 +1281,6 @@
       <div class="modal-actions">
         <button id="about-ok" class="primary-btn" data-i18n="close">Close</button>
       </div>
-    </div>
-  </div>
-
-  <!-- Third-party licenses: generated at build time from the real dependency
-       manifests (src-tauri/build.rs), never hand maintained here. -->
-  <div id="licenses-modal" class="overlay hidden" role="dialog" aria-modal="true">
-    <div class="modal modal-narrow licenses-box">
-      <div class="modal-titlebar">
-        <h2 class="modal-title" data-i18n="licensesTitle">Third-party licenses</h2>
-        <button id="licenses-close" class="icon-btn modal-x" data-i18n-aria="close">
-          <svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true">
-            <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
-          </svg>
-        </button>
-      </div>
-      <p class="licenses-intro" data-i18n="licensesIntro">
-        Prompt Saver is built with open-source components. The list below is generated from the
-        real dependency list every time the app is built.
-      </p>
-      <input id="licenses-search" class="modal-input hidden" type="text" data-i18n-ph="licensesSearchPh" />
-      <div id="licenses-list" class="licenses-list" role="list"></div>
-      <p id="licenses-empty" class="licenses-empty hidden" data-i18n="licensesEmpty">No entry matches this search.</p>
     </div>
   </div>
 
@@ -1553,6 +1508,13 @@
           </svg>
         </button>
       </div>
+      <!-- Global and per-tile hotkeys, each row live-rebindable; only shown when the
+           dialog opens from the settings or the editor's hotkey field. -->
+      <section id="shortcuts-global" class="shortcuts-global hidden">
+        <h3 class="shortcuts-section-title" data-i18n="hotkeysAllTitle">Global hotkeys</h3>
+        <input id="hotkeys-search" class="modal-input" type="text" data-i18n-ph="hotkeysSearchPh" data-i18n-aria="hotkeysSearchPh" />
+        <div id="hotkeys-list" class="hotkeys-list"></div>
+      </section>
       <div id="shortcuts-modal-list" class="shortcuts-list"></div>
     </div>
   </div>

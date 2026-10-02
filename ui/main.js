@@ -8849,16 +8849,6 @@ async function toggleRotateAutoDirect(id) {
   }
 }
 
-function openHotkeysModal() {
-  $("hotkeys-search").value = "";
-  $("hotkeys-modal").classList.remove("hidden");
-  renderHotkeysList();
-  $("hotkeys-search").focus();
-}
-function closeHotkeysModal() {
-  $("hotkeys-modal").classList.add("hidden");
-}
-
 // One entry per row kind: how to read its current value and how to commit a
 // new one. "prompt" rows carry their own id (used both for the lookup and to
 // exclude themselves from hotkeyOwner's conflict check); the other three share
@@ -8874,7 +8864,7 @@ const HOTKEYS_LIST_KINDS = {
 };
 function renderHotkeysList() {
   const box = $("hotkeys-list");
-  if (!box || $("hotkeys-modal").classList.contains("hidden")) return;
+  if (!box || $("shortcuts-global").classList.contains("hidden")) return;
   const q = ($("hotkeys-search").value || "").trim().toLowerCase();
   const rows = [{ kind: "global", id: null, name: t("hotkeysGlobalRow"), accel: settings.hotkey }]
     .concat(promptHotkeysOn() ? prompts.filter((p) => p.hotkey).map((p) => ({ kind: "prompt", id: p.id, name: p.name, accel: p.hotkey })) : [])
@@ -12319,8 +12309,16 @@ let confirmCleanup = null;
 // The "?" overview both editors open -- same modal/modal-narrow/modal-titlebar
 // shell as every other list modal, filled straight from SHORTCUTS.
 let shortcutsModalOpener = null;
-function openShortcutsModal(scope) {
+// `withGlobal` adds the rebindable global/per-tile hotkey list on top (and gives the
+// dialog the width it needs); the editors' "?" buttons open the plain key list.
+function openShortcutsModal(scope, { withGlobal = false } = {}) {
   shortcutsModalOpener = document.activeElement;
+  $("shortcuts-global").classList.toggle("hidden", !withGlobal);
+  $("shortcuts-modal").querySelector(".modal").classList.toggle("modal-narrow", !withGlobal);
+  if (withGlobal) {
+    $("hotkeys-search").value = "";
+    renderHotkeysList();
+  }
   const list = $("shortcuts-modal-list");
   list.innerHTML = "";
   for (const row of shortcutRows(scope)) {
@@ -12336,6 +12334,11 @@ function openShortcutsModal(scope) {
     list.appendChild(r);
   }
   $("shortcuts-modal").classList.remove("hidden");
+}
+// Every shortcut in one dialog: global hotkeys on top, the keys of each window below.
+function openAllShortcuts() {
+  openShortcutsModal(["mainWindow", "library"], { withGlobal: true });
+  $("hotkeys-search").focus();
 }
 function closeShortcutsModal() {
   $("shortcuts-modal").classList.add("hidden");
@@ -16572,7 +16575,7 @@ function bind() {
     },
   });
   $("modal-hotkey-clear").addEventListener("click", () => setPromptHotkey(""));
-  $("modal-hotkey-showall").addEventListener("click", () => openHotkeysModal());
+  $("modal-hotkey-showall").addEventListener("click", () => openAllShortcuts());
   modal.hotkeyAction.addEventListener("change", () => {
     if (modalState) modalState.hotkeyPaste = modal.hotkeyAction.value;
   });
@@ -20070,7 +20073,7 @@ function bind() {
   const helpEl = $("help");
   $("help-open").addEventListener("click", openHelp);
   $("help-close").addEventListener("click", () => helpEl.classList.add("hidden"));
-  $("help-shortcuts").addEventListener("click", () => openShortcutsModal(["mainWindow", "library"]));
+  $("help-shortcuts").addEventListener("click", () => openShortcutsModal(["mainWindow", "library"], { withGlobal: true }));
   helpEl.addEventListener("pointerdown", (e) => {
     if (e.target === helpEl) helpEl.classList.add("hidden");
   });
@@ -20274,7 +20277,7 @@ function bind() {
     try { await commitGlobalHotkey(""); } catch (_) { /* Clear always leaves an empty field regardless */ }
     $("opt-hotkey").value = "";
   });
-  $("hotkey-list-btn").addEventListener("click", openHotkeysModal);
+  $("hotkey-list-btn").addEventListener("click", openAllShortcuts);
   bindHotkeyField($("opt-voice-hotkey"), {
     current: () => settings.voice_hotkey,
     onCommit: commitVoiceHotkey,
@@ -20292,10 +20295,6 @@ function bind() {
       $("opt-voice-hotkey").focus();
     });
   };
-  $("hotkeys-modal-close").addEventListener("click", closeHotkeysModal);
-  $("hotkeys-modal").addEventListener("pointerdown", (e) => {
-    if (e.target === $("hotkeys-modal")) closeHotkeysModal();
-  });
   $("hotkeys-search").addEventListener("input", renderHotkeysList);
 
   $("import-btn").addEventListener("click", runImport);
@@ -20564,7 +20563,7 @@ function bind() {
     else if (!$("compare-modal").classList.contains("hidden")) closeCompareView();
     else if (!$("tag-modal").classList.contains("hidden")) closeTagManager();
     else if (!ctxEl.classList.contains("hidden")) closeCtx();
-    else if (!$("update-modal").classList.contains("hidden")) $("update-modal").classList.add("hidden");
+    else if (!$("update-modal").classList.contains("hidden")) closeUpdateModal();
     else if (!$("about-modal").classList.contains("hidden")) $("about-modal").classList.add("hidden");
     else if (!$("snip-modal").classList.contains("hidden")) $("snip-modal").classList.add("hidden");
     else if (!$("rec-modal").classList.contains("hidden")) closeRecModal();
@@ -20613,6 +20612,7 @@ function bind() {
     cancel: $("update-modal-cancel"),
     skip: $("update-modal-skip"),
     install: $("update-modal-install"),
+    refresh: $("update-modal-refresh"),
     close: $("update-modal-close"),
   };
   // The release body arrives as Markdown. Render the part release notes actually use
@@ -20678,14 +20678,44 @@ function bind() {
     }
   };
 
+  // The same dialog also shows the shipped changelog ("what's new"): no install or
+  // skip then, a refresh from GitHub instead, and Close returns to About when About
+  // was where it came from.
+  let notesSince = null; // version boundary the open list was computed from (null: current version only)
+  let notesFromAbout = false;
+  const setUpdateButtons = (notes) => {
+    updateModal.skip.classList.toggle("hidden", notes);
+    updateModal.install.classList.toggle("hidden", notes);
+    updateModal.refresh.classList.toggle("hidden", !notes);
+    updateModal.cancel.dataset.i18n = notes ? "close" : "cancel";
+    updateModal.cancel.textContent = t(notes ? "close" : "cancel");
+  };
   const openUpdateModal = (info) => {
     offerUpdate(info);
+    notesFromAbout = false;
+    setUpdateButtons(false);
     updateModal.title.textContent = t("updateAvailable").replace("{v}", info.version);
     renderNotes(updateModal.notes, info.notes?.trim() || t("noChangelog"), info.version || "");
     updateModal.warn.classList.toggle("hidden", !info.skipped);
     updateModal.root.classList.remove("hidden");
   };
-  const closeUpdateModal = () => updateModal.root.classList.add("hidden");
+  const openNotesInUpdateModal = (sections, since, fromAbout) => {
+    notesSince = since ?? null;
+    notesFromAbout = !!fromAbout;
+    setUpdateButtons(true);
+    updateModal.title.textContent = t("whatsNewTitle");
+    updateModal.warn.classList.add("hidden");
+    const combined = (sections || []).map((s) => s.markdown).join("\n\n").trim();
+    // Every heading kept (no `version` passed to renderNotes): several
+    // sections need their own "## x.y.z" to stay tellable apart.
+    renderNotes(updateModal.notes, combined || t("noChangelog"), "");
+    updateModal.root.classList.remove("hidden");
+  };
+  const closeUpdateModal = () => {
+    updateModal.root.classList.add("hidden");
+    if (notesFromAbout) aboutEl.classList.remove("hidden");
+    notesFromAbout = false;
+  };
 
   updateBtn.addEventListener("click", async () => {
     updateBtn.disabled = true;
@@ -20772,55 +20802,22 @@ function bind() {
   });
 
   // ---------- what's new ----------
-  // The version boundary the currently open list was computed from, echoed
-  // back to whats_new_refresh so its GitHub fetch reproduces the same range.
-  // null means "current version only" (the About-triggered view).
-  let whatsNewSince = null;
-  // Set only when the About dialog opened this modal, so closing it can
-  // return there instead of just closing everything.
-  let whatsNewOpenedFromAbout = false;
-  const whatsNewModal = {
-    root: $("whats-new-modal"),
-    notes: $("whats-new-notes"),
-    refresh: $("whats-new-refresh"),
-    close: $("whats-new-close"),
-    ok: $("whats-new-ok"),
-  };
-  const openWhatsNewModal = (sections, since) => {
-    whatsNewSince = since ?? null;
-    const combined = (sections || []).map((s) => s.markdown).join("\n\n").trim();
-    // Every heading kept (no `version` passed to renderNotes): several
-    // sections need their own "## x.y.z" to stay tellable apart.
-    renderNotes(whatsNewModal.notes, combined || t("noChangelog"), "");
-    whatsNewModal.root.classList.remove("hidden");
-  };
-  const closeWhatsNewModal = () => {
-    whatsNewModal.root.classList.add("hidden");
-    if (whatsNewOpenedFromAbout) aboutEl.classList.remove("hidden");
-    whatsNewOpenedFromAbout = false;
-  };
-  whatsNewModal.close.addEventListener("click", closeWhatsNewModal);
-  whatsNewModal.ok.addEventListener("click", closeWhatsNewModal);
-  whatsNewModal.root.addEventListener("pointerdown", (e) => {
-    if (e.target === whatsNewModal.root) closeWhatsNewModal();
-  });
-  whatsNewModal.refresh.addEventListener("click", async () => {
-    whatsNewModal.refresh.disabled = true;
+  updateModal.refresh.addEventListener("click", async () => {
+    updateModal.refresh.disabled = true;
     try {
-      const sections = await invoke("whats_new_refresh", { since: whatsNewSince });
+      const sections = await invoke("whats_new_refresh", { since: notesSince });
       const combined = (sections || []).map((s) => s.markdown).join("\n\n").trim();
-      renderNotes(whatsNewModal.notes, combined || t("noChangelog"), "");
+      renderNotes(updateModal.notes, combined || t("noChangelog"), "");
     } catch (err) {
       toast(t("whatsNewRefreshFailed"));
     }
-    whatsNewModal.refresh.disabled = false;
+    updateModal.refresh.disabled = false;
   });
   $("about-whats-new").addEventListener("click", async () => {
     try {
       const sections = await invoke("whats_new_current");
       closeAbout();
-      whatsNewOpenedFromAbout = true;
-      openWhatsNewModal(sections, null);
+      openNotesInUpdateModal(sections, null, true);
     } catch (err) {
       errToast(err);
     }
@@ -20832,7 +20829,7 @@ function bind() {
       if (!result?.sections?.length) return;
       toast(t("whatsNewToast"), {
         label: t("whatsNewBtn"),
-        onClick: () => openWhatsNewModal(result.sections, result.since ?? null),
+        onClick: () => openNotesInUpdateModal(result.sections, result.since ?? null, false),
       });
     })
     .catch(() => {});
@@ -20842,22 +20839,15 @@ function bind() {
   // real dependency manifests); this only renders whatever it returns. Fetched once
   // and cached, since the list cannot change while the app is running.
   let thirdPartyCache = null;
-  const licensesModal = {
-    root: $("licenses-modal"),
-    close: $("licenses-close"),
+  const licensesView = {
     search: $("licenses-search"),
     list: $("licenses-list"),
     empty: $("licenses-empty"),
   };
-  const closeLicensesModal = () => licensesModal.root.classList.add("hidden");
-  licensesModal.close.addEventListener("click", closeLicensesModal);
-  licensesModal.root.addEventListener("pointerdown", (e) => {
-    if (e.target === licensesModal.root) closeLicensesModal();
-  });
   const renderLicenseEntries = (data) => {
-    licensesModal.list.textContent = "";
+    licensesView.list.textContent = "";
     const entries = data.entries || [];
-    licensesModal.search.classList.toggle("hidden", entries.length <= 20);
+    licensesView.search.classList.toggle("hidden", entries.length <= 20);
     for (const entry of entries) {
       const row = document.createElement("div");
       row.className = "license-row";
@@ -20905,28 +20895,34 @@ function bind() {
       });
 
       row.append(toggle, body);
-      licensesModal.list.appendChild(row);
+      licensesView.list.appendChild(row);
     }
     filterLicenseRows("");
   };
   const filterLicenseRows = (query) => {
     const q = query.trim().toLowerCase();
     let visible = 0;
-    licensesModal.list.querySelectorAll(".license-row").forEach((row) => {
+    licensesView.list.querySelectorAll(".license-row").forEach((row) => {
       const match = !q || row.dataset.searchKey.includes(q);
       row.classList.toggle("hidden", !match);
       if (match) visible++;
     });
-    licensesModal.empty.classList.toggle("hidden", visible !== 0);
+    licensesView.empty.classList.toggle("hidden", visible !== 0);
   };
-  licensesModal.search.addEventListener("input", () => filterLicenseRows(licensesModal.search.value));
+  licensesView.search.addEventListener("input", () => filterLicenseRows(licensesView.search.value));
+  // The list expands in place inside About; the dialog widens while it is open.
   $("about-licenses").addEventListener("click", async () => {
+    const body = $("about-licenses-body");
+    const open = body.classList.contains("hidden");
+    body.classList.toggle("hidden", !open);
+    $("about-licenses").setAttribute("aria-expanded", String(open));
+    aboutEl.querySelector(".about-box").classList.toggle("licenses-open", open);
+    if (!open) return;
     try {
       if (!thirdPartyCache) {
         thirdPartyCache = JSON.parse(await invoke("third_party_notices"));
       }
       renderLicenseEntries(thirdPartyCache);
-      licensesModal.root.classList.remove("hidden");
     } catch (err) {
       errToast(err);
     }

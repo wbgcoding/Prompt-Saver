@@ -417,14 +417,14 @@ export const HELP_CONTENT = {
         "Set the global hotkey in Settings (default Ctrl+Alt+P).",
         "Give a tile its own hotkey from its editor.",
         "Choose whether it should paste as well as copy.",
-        "\"All hotkeys\", next to the global hotkey field, opens every hotkey in one searchable list.",
+        "\"All shortcuts\", next to the global hotkey field, opens one list: global and per-tile hotkeys on top, searchable, then the keys of every window.",
         "Each row rebinds or clears on the spot.",
         "If a combination is already used, the field explains why instead of accepting it silently.",
       ],
       whatHappens:
         "A combination must include Ctrl or Alt; Shift alone, or a bare key, is refused so ordinary typing is never swallowed. The app hotkey always wins a conflict; among tiles, the first one in the list keeps a combination two tiles happen to share. Importing a backup that carries a colliding hotkey drops the losing one instead of failing the import, and the import summary says how many were dropped. A tile with its own hotkey shows a small keyboard symbol on it.",
       settings: [
-        "Global hotkey, all hotkeys: Settings",
+        "Global hotkey, all shortcuts: Settings",
         "Per-tile hotkeys, paste-after-copy: Expert menu → Features → Copying",
         "Hotkey badge, badge opacity: Expert menu → Tiles → Tiles",
       ],
@@ -1166,14 +1166,14 @@ export const HELP_CONTENT = {
         "Den globalen Hotkey in den Einstellungen festlegen (Standard: Strg+Alt+P).",
         "Einer Kachel im Editor einen eigenen Hotkey geben.",
         "Wählen, ob er nach dem Kopieren auch einfügen soll.",
-        "\"Alle Hotkeys\" neben dem globalen Feld öffnet jeden Hotkey in einer durchsuchbaren Liste.",
+        "\"Alle Tastenkürzel\" neben dem globalen Feld öffnet eine Liste: oben globale Hotkeys und Hotkeys der Kacheln, durchsuchbar, darunter die Tasten jedes Fensters.",
         "Jede Zeile wird dort direkt umbelegt oder gelöscht.",
         "Ist eine Kombination bereits vergeben, erklärt das Feld den Grund, statt sie stillschweigend zu akzeptieren.",
       ],
       whatHappens:
         "Eine Kombination muss Strg oder Alt enthalten; Shift allein oder eine bloße Taste wird abgelehnt, damit normales Tippen nie verschluckt wird. Der App-Hotkey gewinnt bei einem Konflikt immer; bei Kacheln behält die erste in der Liste eine geteilte Kombination. Der Import eines Backups mit kollidierendem Hotkey verwirft den verlierenden, statt den Import abzubrechen, und die Zusammenfassung nennt die Anzahl der verworfenen. Eine Kachel mit eigenem Hotkey zeigt ein kleines Tastatursymbol.",
       settings: [
-        "Globaler Hotkey, alle Hotkeys: Einstellungen",
+        "Globaler Hotkey, alle Tastenkürzel: Einstellungen",
         "Eigene Hotkeys pro Kachel, Einfügen nach Kopieren: Expertenmenü → Funktionen → Kopieren",
         "Hotkey-Abzeichen, Deckkraft des Abzeichens: Expertenmenü → Kacheln → Kacheln",
       ],

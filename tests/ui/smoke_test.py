@@ -2855,11 +2855,11 @@ PROBE = """
         } else {
           showAll.click();
           await sleep(200);
-          const allPopup = document.getElementById('hotkeys-modal');
-          if (allPopup.classList.contains('hidden')) {
+          const allPopup = document.getElementById('shortcuts-modal');
+          if (allPopup.classList.contains('hidden') || document.getElementById('shortcuts-global').classList.contains('hidden')) {
             out.errors.push('430: the show-all button did not open the hotkeys list');
           }
-          document.getElementById('hotkeys-modal-close').click();
+          document.getElementById('shortcuts-modal-close').click();
           await sleep(150);
         }
         // A combination another running app owns is refused the same way.
@@ -2916,9 +2916,9 @@ PROBE = """
       } else {
         listBtn.click();
         await sleep(150);
-        const popup = document.getElementById('hotkeys-modal');
-        if (popup.classList.contains('hidden')) {
-          out.errors.push('the "All hotkeys" popup did not open');
+        const popup = document.getElementById('shortcuts-modal');
+        if (popup.classList.contains('hidden') || document.getElementById('shortcuts-global').classList.contains('hidden')) {
+          out.errors.push('the "All shortcuts" dialog did not open with the global hotkeys on top');
         } else {
           const rowByName = (name) => [...document.querySelectorAll('.hotkeys-row-name')]
             .find((el) => el.textContent === name)?.closest('.hotkeys-row');
@@ -2986,7 +2986,7 @@ PROBE = """
           await pressRow(globalInput(), { key: 'P', ctrlKey: true, shiftKey: true });
           if (!/P$/.test(globalInput().value)) out.errors.push('restoring the global hotkey failed: ' + globalInput().value);
         }
-        document.getElementById('hotkeys-modal-close').click();
+        document.getElementById('shortcuts-modal-close').click();
         await sleep(120);
       }
       document.getElementById('settings-close')?.click();
@@ -14330,11 +14330,18 @@ window.__WHATS_NEW_FIXTURE__ = {
       if (!btn) errs.push('404: the whats-new toast has no action button');
       else btn.click();
       await sleep(150);
-      const modal = document.getElementById('whats-new-modal');
+      const modal = document.getElementById('update-modal');
       if (!modal || modal.classList.contains('hidden')) {
         errs.push('404: clicking the toast did not open the whats-new window');
       } else {
-        const notes = document.getElementById('whats-new-notes');
+        const notes = document.getElementById('update-modal-notes');
+        if (!document.getElementById('update-modal-install').classList.contains('hidden')
+            || !document.getElementById('update-modal-skip').classList.contains('hidden')) {
+          errs.push('404: the notes view of the update dialog still offers install or skip');
+        }
+        if (document.getElementById('update-modal-refresh').classList.contains('hidden')) {
+          errs.push('404: the notes view of the update dialog has no refresh button');
+        }
         const text = notes.textContent || '';
         if (!text.includes('First new thing')) errs.push('404: the window is missing the older of the two new sections');
         if (!text.includes('Second new thing')) errs.push('404: the window is missing the newer of the two new sections');
@@ -14342,7 +14349,7 @@ window.__WHATS_NEW_FIXTURE__ = {
           errs.push('404: an inserted script tag did not survive as literal text: ' + text);
         }
         if (window.__SMOKE_XSS__) errs.push('404: an inserted script tag in the list actually ran');
-        document.getElementById('whats-new-close').click();
+        document.getElementById('update-modal-cancel').click();
         await sleep(150);
         if (!modal.classList.contains('hidden')) errs.push('404: the whats-new window did not close');
       }
@@ -14359,8 +14366,8 @@ window.__WHATS_NEW_FIXTURE__ = {
       const aboutModal = document.getElementById('about-modal');
       aboutBtn.click();
       await sleep(150);
-      const modal = document.getElementById('whats-new-modal');
-      const notes = document.getElementById('whats-new-notes');
+      const modal = document.getElementById('update-modal');
+      const notes = document.getElementById('update-modal-notes');
       const text = (notes && notes.textContent) || '';
       if (!modal || modal.classList.contains('hidden')) {
         errs.push('404: the About dialog button did not open the whats-new window');
@@ -14379,18 +14386,25 @@ window.__WHATS_NEW_FIXTURE__ = {
         if (text.includes('First new thing')) {
           errs.push('404: the About-triggered window shows the startup range instead of the current version only');
         }
-        const refreshBtn = document.getElementById('whats-new-refresh');
+        const refreshBtn = document.getElementById('update-modal-refresh');
         refreshBtn.click();
         await sleep(150);
         const refreshed = (notes && notes.textContent) || '';
         if (!refreshed.includes('Refreshed from GitHub')) {
           errs.push('404: the Update-from-GitHub button did not replace the list with the fetched one');
         }
-        document.getElementById('whats-new-ok').click();
+        document.getElementById('update-modal-cancel').click();
         await sleep(150);
         if (aboutModal.classList.contains('hidden')) {
           errs.push('517: closing the whats-new window opened from About did not return to About');
         }
+        // Escape takes the same way back as the Close button.
+        aboutBtn.click();
+        await sleep(150);
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        await sleep(150);
+        if (!modal.classList.contains('hidden')) errs.push('404: Escape did not close the whats-new window');
+        if (aboutModal.classList.contains('hidden')) errs.push('517: Escape on the whats-new window did not return to About');
         document.getElementById('about-close').click();
         await sleep(150);
       }
@@ -14424,9 +14438,9 @@ LICENSES_PROBE = """
     } else {
       openBtn.click();
       await sleep(150);
-      const modal = document.getElementById('licenses-modal');
-      if (!modal || modal.classList.contains('hidden')) {
-        errs.push('451: clicking the button did not open the licenses window');
+      const modal = document.getElementById('about-licenses-body');
+      if (!modal || modal.classList.contains('hidden') || openBtn.getAttribute('aria-expanded') !== 'true') {
+        errs.push('451: clicking the button did not expand the license list inside About');
       } else {
         const rows = Array.from(modal.querySelectorAll('.license-row'));
         if (rows.length !== 3) errs.push('451: expected 3 rows from the fixture, found ' + rows.length);
@@ -14448,9 +14462,11 @@ LICENSES_PROBE = """
         if (!sqliteRow || !sqliteRow.querySelector('.license-row-body').textContent.includes('Public Domain')) {
           errs.push('451: the no-text public-domain entry does not fall back to showing its license label');
         }
-        document.getElementById('licenses-close').click();
+        openBtn.click();
         await sleep(150);
-        if (!modal.classList.contains('hidden')) errs.push('451: the licenses window did not close');
+        if (!modal.classList.contains('hidden') || openBtn.getAttribute('aria-expanded') !== 'false') {
+          errs.push('451: clicking the licenses head again did not collapse the list');
+        }
       }
     }
   } catch (e) { errs.push('451 probe: ' + e.message); }

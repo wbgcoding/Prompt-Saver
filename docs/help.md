@@ -510,7 +510,7 @@ app hotkey always wins a conflict, and among tiles the first one in the list
 keeps a combination two tiles happen to share. Importing a backup that carries
 a colliding hotkey drops the losing one instead of failing the import.
 
-"All hotkeys", next to the global hotkey field in Settings, lists every hotkey,
+"All shortcuts", next to the global hotkey field in Settings, opens the shortcuts dialog with every hotkey,
 global and per-tile, in one searchable, live-rebindable list, so rebinding or
 clearing one no longer means opening that tile's editor.
 
@@ -994,7 +994,7 @@ app's GitHub page from the logo or the version label hands the address to
 your default browser, and installing a text-recognition or dictation
 language pack (see below) has Windows itself fetch that pack online.
 
-A small "what's new" notice appears once after an update, listing what
+After an update, the update dialog shows once what
 changed since the version you last saw; its list ships with the app, so
 opening it needs no network, only its own "Update from GitHub" button does.
 Reopen the current version's list any time from the About dialog.
@@ -1385,7 +1385,7 @@ weiterhin genau den Markdown-Text bekommt wie bei einer normalen Kopie.
 **Hotkeys**: ein globaler Hotkey öffnet den Schnellstarter (Standard
 Strg+Alt+P), ein eigener Hotkey pro Kachel kopiert (und fügt optional ein). Bei
 einer Kollision gewinnt der App-Hotkey, sonst die erste Kachel in der Liste.
-"Alle Hotkeys" neben dem globalen Feld listet jeden Hotkey durchsuchbar auf und
+"Alle Tastenkürzel" neben dem globalen Feld öffnet die Tastenkürzel-Übersicht mit jedem Hotkey, durchsuchbar, und
 belegt jede Zeile direkt um, ohne den jeweiligen Editor zu öffnen. Eine Kachel
 mit eigenem Hotkey zeigt ein kleines Tastatursymbol.
 
@@ -1751,7 +1751,7 @@ Versionsanzeige öffnet die GitHub-Seite des Projekts im Standardbrowser, und
 die Installation eines Sprachpakets für Texterkennung oder Diktat (siehe
 unten) lässt Windows selbst dieses Paket herunterladen.
 
-**Was ist neu**, eine kleine Meldung nach einem Update zeigt, was sich seit
+**Was ist neu**: nach einem Update zeigt das Update-Fenster einmal, was sich seit
 der zuletzt gesehenen Version geändert hat; die Liste liegt bereits im
 Programm, nur ihr Button „Von GitHub aktualisieren" braucht Netz. Über den
 Über-Dialog jederzeit für die laufende Version erneut aufrufbar.
