@@ -1741,6 +1741,9 @@ the video editor and the introduction tour ship on).
 - **Start in the background only shows while autostart is on.** The switch is
   hidden with autostart off and the settings search does not offer it; your
   saved choice stays.
+- **Image, GIF and video rows in the library have the full right-click menu.**
+  The same entries as a tile, plus Edit image for pictures; Open a file in the
+  editor stays on the screenshot and record buttons.
 
 ## 2.6.3 (2026-07-26)
 

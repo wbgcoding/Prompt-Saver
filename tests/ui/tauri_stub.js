@@ -1109,6 +1109,7 @@ const RESULTS = {
     if (a.variants !== undefined) p.variants = a.variants;
     if (a.rotateMode !== undefined) p.rotate_mode = a.rotateMode;
     if (a.rotateAuto !== undefined) p.rotate_auto = a.rotateAuto;
+    if (a.filePath !== undefined) p.file_path = a.filePath;
     if (a.image !== undefined) p.image = a.image;
     if (a.showImage !== undefined) p.show_image = a.showImage;
     if (a.copyImage !== undefined) p.copy_image = a.copyImage;

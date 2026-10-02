@@ -1087,6 +1087,43 @@ PROBE = """
       q.dispatchEvent(new Event('input', { bubbles: true }));
       await sleep(250);
     }
+    // A library row with an image attachment opens the same actions menu as any
+    // other row: edit, edit image, duplicate ... delete, not just "open in editor".
+    {
+      // Give the fixture row p7 a picture as its attached file for the length of
+      // this check (the backend answers, a sync event makes the window refetch).
+      const imgPath = 'C:\\\\Pictures\\\\ps-smoke-row.png';
+      await window.__TAURI__.core.invoke('update_prompt', { id: 'p7', filePath: imgPath });
+      window.__FIRE__('store-synced', null);
+      await sleep(400);
+      const imgRow = document.querySelector('#library-list .lib-item[data-id="p7"]');
+      if (!imgRow) {
+        out.errors.push('library image row: the fixture row p7 is missing');
+      } else {
+        imgRow.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 40 }));
+        await sleep(150);
+        const ctxMenu = document.getElementById('ctx');
+        const shown = (act) => { const b = ctxMenu.querySelector('[data-act="' + act + '"]'); return !!b && !b.classList.contains('hidden'); };
+        if (ctxMenu.classList.contains('hidden')) out.errors.push('library image row: the right-click did not open the actions menu');
+        else {
+          for (const act of ['edit', 'editImage', 'duplicate', 'delete']) {
+            if (!shown(act)) out.errors.push('library image row: the menu has no ' + act + ' entry');
+          }
+          if (shown('editVideo')) out.errors.push('library image row: the menu offers Edit video for a picture');
+          if (document.querySelector('.open-editor-pop:not(.hidden)')) out.errors.push('library image row: the old open-in-editor popup opened instead of the menu');
+          window.__SMOKE_ARGS__ = [];
+          ctxMenu.querySelector('[data-act="editImage"]').click();
+          await sleep(250);
+          const openCall = (window.__SMOKE_ARGS__ || []).find((c) => c[0] === 'open_file_in_editor');
+          if (!openCall || openCall[1].path !== imgPath) out.errors.push('library image row: Edit image did not open the attached file in the editor: ' + JSON.stringify(openCall));
+        }
+        document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+        await sleep(100);
+      }
+      await window.__TAURI__.core.invoke('update_prompt', { id: 'p7', filePath: '' });
+      window.__FIRE__('store-synced', null);
+      await sleep(400);
+    }
     // 435: archiving a prompt hides it from the browsing library without
     // deleting it. The show-archive toggle brings it back, and an active
     // search query still finds it either way -- "Prompt 12" is unused by any

@@ -533,8 +533,8 @@ export const HELP_CONTENT = {
       title: "Open a file in the editor",
       whatItIs: "Opens an existing picture or video in whichever editor its content calls for, instead of only ever reaching an editor through a fresh capture or recording.",
       howTo: [
-        "Right-click the screenshot {icon:screenshot} or record {icon:record} button, or an image/video attachment in the library.",
-        "Choose \"Open a file in the editor\" and pick the file.",
+        "Right-click the screenshot {icon:screenshot} or record {icon:record} button, choose \"Open a file in the editor\" and pick the file.",
+        "Or right-click an image or video tile or library row and choose Edit image or Edit video.",
         "Edit as usual; saving asks where to put the result.",
       ],
       whatHappens:
@@ -1285,8 +1285,8 @@ export const HELP_CONTENT = {
       title: "Datei im Editor öffnen",
       whatItIs: "Öffnet ein vorhandenes Bild oder Video in dem Editor, den sein Inhalt verlangt, statt einen Editor nur über eine frische Aufnahme zu erreichen.",
       howTo: [
-        "Rechtsklick auf den Screenshot- {icon:screenshot} oder Aufnahme-Button {icon:record}, oder auf einen Bild-/Videoanhang in der Bibliothek.",
-        "\"Datei im Editor öffnen\" wählen und die Datei aussuchen.",
+        "Rechtsklick auf den Screenshot- {icon:screenshot} oder Aufnahme-Button {icon:record}, \"Datei im Editor öffnen\" wählen und die Datei aussuchen.",
+        "Oder per Rechtsklick auf eine Bild- oder Videokachel bzw. Bibliothekszeile Bild bearbeiten oder Video bearbeiten wählen.",
         "Wie gewohnt bearbeiten; beim Speichern wird nach dem Ziel gefragt.",
       ],
       whatHappens:

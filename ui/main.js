@@ -7564,6 +7564,7 @@ function openCtx(id, x, y) {
   const rmenuBtn = ctxEl.querySelector('[data-act="rotateAutoMenu"]');
   const rp = prompts.find((x) => x.id === id);
   ctxEl.querySelector('[data-act="editVideo"]').classList.toggle("hidden", !(flag("videoEditor") && rp?.file_path && mediaKind(rp.file_path) === "video"));
+  ctxEl.querySelector('[data-act="editImage"]').classList.toggle("hidden", !(flag("screenshot") && flag("snipEditor") && rp?.file_path && ["image", "gif"].includes(mediaKind(rp.file_path))));
   const rotateMenuEligible = !!rp && (rp.variants || []).length > 0 && flag("rotatingPrompts") && flag("rotateAuto");
   rmenuBtn.classList.toggle("hidden", !rotateMenuEligible);
   if (rotateMenuEligible) {
@@ -14814,26 +14815,13 @@ function renderLibrary() {
     row.appendChild(body);
     maybeBackfillMediaMeta(p, renderLibrary);
 
-    // The library's own way to reach an editor: right-click an image/video/gif
-    // attachment for "Open a file in the editor", working on a copy exactly
-    // like the composer buttons' own menu -- only shown for a prompt that
-    // actually attaches one, never for a text prompt or an icon-only one.
-    const rowKind = p.file_path ? mediaKind(p.file_path) : "";
-    if (rowKind === "image" || rowKind === "gif" || rowKind === "video") {
-      row.addEventListener("contextmenu", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        openOpenEditorPopAt(row, p.file_path);
-      });
-    } else {
-      // Every other row gets the same actions menu a grid tile has (archive
-      // and the rest) -- a library row never had its own right-click menu before.
-      row.addEventListener("contextmenu", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        openCtx(p.id, e.clientX, e.clientY);
-      });
-    }
+    // Every row, media rows included, gets the same actions menu a grid tile
+    // has; the image and video editors are entries of that menu.
+    row.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openCtx(p.id, e.clientX, e.clientY);
+    });
 
     // Place on the current layout: drag the row onto the grid, or one click.
     row.addEventListener("pointerdown", (e) => {
@@ -20693,6 +20681,9 @@ function bind() {
           .then(() => recordToolUsage("video_editor"))
           .catch((e) => errToast(e));
       }
+    } else if (act === "editImage") {
+      const p = prompts.find((x) => x.id === id);
+      if (p?.file_path) await openExternalFileInEditor(p.file_path);
     } else if (act === "duplicate") {
       await duplicatePrompt(id);
     } else if (act === "hide") {

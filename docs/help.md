@@ -122,9 +122,9 @@ its own undoable step, so scaling back and forth never loses quality beyond
 what the last resize itself introduced.
 
 Both editors can also open a file you already have, not just a fresh
-capture or recording: right-click the screenshot or record button (or an
-image/video attachment in the library) and choose "Open a file in the
-editor". The content of the file decides which editor opens, no matter what
+capture or recording: right-click the screenshot or record button and choose
+"Open a file in the editor", or right-click an image or video tile or library
+row and choose Edit image or Edit video. The content of the file decides which editor opens, no matter what
 its extension says. The editor always works on a copy, so the original file
 is never changed; saving asks where to put the result, starting in the
 original file's own folder.
