@@ -1712,6 +1712,8 @@ PROBE = """
         out.errors.push('198: the journal tag row overlaps the filter row instead of sitting below it');
       }
     }
+    // the library reopens on the tab used last, and what follows expects the prompt list
+    await click('library-tab-prompts');
     await click('library-close');
     // Search everything: the toolbar icon and Ctrl+K both open the overlay, all
     // six source groups can each turn up a hit, arrow keys move the highlight
@@ -3863,6 +3865,34 @@ PROBE = """
               }
             }
           }
+        }
+        // The grid's selection bar follows the library's action order, and the
+        // shared tag action runs through the stub for every selected tile.
+        {
+          gridTile('p4').querySelector('.tile-select').click();
+          gridTile('p5').querySelector('.tile-select').click();
+          await sleep(150);
+          const order = ['grid-batch-all', 'grid-batch-none', 'grid-batch-fav', 'grid-batch-unfav', 'grid-batch-tag-add',
+            'grid-batch-tag-remove', 'grid-batch-archive', 'grid-batch-move', 'grid-batch-export', 'grid-batch-delete'];
+          const seen = [...batchBar.querySelectorAll('button')]
+            .filter((b) => b.id && order.includes(b.id) && getComputedStyle(b).display !== 'none')
+            .map((b) => b.id);
+          const want = order.filter((id) => seen.includes(id));
+          if (seen.join() !== want.join()) out.errors.push('the grid batch bar is out of order: ' + seen.join(' '));
+          for (const id of ['grid-batch-all', 'grid-batch-none', 'grid-batch-move', 'grid-batch-export', 'grid-batch-delete']) {
+            if (!seen.includes(id)) out.errors.push('the grid batch bar lacks ' + id);
+          }
+          window.__SMOKE_ARGS__ = [];
+          await click('grid-batch-tag-add');
+          await sleep(150);
+          document.getElementById('confirm-input').value = 'Smoke666';
+          document.getElementById('confirm-ok').click();
+          await sleep(250);
+          const tagCall = window.__SMOKE_ARGS__.find(([cmd, args]) => cmd === 'batch_prompts' && args && args.action === 'tag-add');
+          if (!tagCall || tagCall[1].tag !== 'Smoke666' || !tagCall[1].ids.includes('p4') || !tagCall[1].ids.includes('p5')) {
+            out.errors.push('the grid Add tag did not send the tag for both selected tiles');
+          }
+          if (document.body.classList.contains('grid-selecting')) out.errors.push('the grid selection stayed after Add tag');
         }
         // Re-select for the delete-arm test below — the custom-color commit
         // above clears the selection same as every other batch action.

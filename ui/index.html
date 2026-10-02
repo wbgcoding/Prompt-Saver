@@ -126,11 +126,25 @@
     <!-- Bulk toolbar, visible only once at least one tile is checked -->
     <div id="grid-batch-bar" class="lib-batch-bar grid-batch-bar hidden">
       <span id="grid-batch-count" class="lib-batch-count"></span>
+      <button id="grid-batch-all" type="button" class="ghost-btn" data-i18n="selectAll">All</button>
       <button id="grid-batch-none" type="button" class="ghost-btn" data-i18n="selectNone">None</button>
       <span class="lib-batch-sep" aria-hidden="true"></span>
       <div id="grid-batch-colors" class="lib-colors lib-batch-colors" data-i18n-title="batchColor"></div>
+      <button id="grid-batch-fav" type="button" class="ghost-btn" data-i18n="batchFavorite">★</button>
+      <button id="grid-batch-unfav" type="button" class="ghost-btn" data-i18n="batchUnfavorite">☆</button>
+      <button id="grid-batch-tag-add" type="button" class="ghost-btn" data-i18n="batchTagAdd">Add tag</button>
+      <button id="grid-batch-tag-remove" type="button" class="ghost-btn" data-i18n="batchTagRemove">Remove tag</button>
+      <button id="grid-batch-archive" type="button" class="ghost-btn" data-i18n="archiveAction">Archive</button>
+      <span class="lib-batch-sep" aria-hidden="true"></span>
       <select id="grid-batch-view" class="batch-view-select" data-i18n-aria="batchMoveView"></select>
       <button id="grid-batch-move" type="button" class="ghost-btn" data-i18n="batchMove">Move</button>
+      <span class="lib-batch-sep" aria-hidden="true"></span>
+      <select id="grid-batch-format" class="batch-view-select" data-i18n-aria="exportFormatLabel">
+        <option value="csv" data-i18n="exportCsv">CSV</option>
+        <option value="txt" data-i18n="exportTxt">TXT</option>
+        <option value="json" data-i18n="exportJson">JSON</option>
+      </select>
+      <button id="grid-batch-export" type="button" class="ghost-btn" data-i18n="exportBtn">Export</button>
       <button id="grid-batch-delete" type="button" class="ghost-btn danger-btn" data-i18n="delete">Delete</button>
     </div>
     <!-- One slot for every notice above the grid: only the most important active
@@ -656,13 +670,14 @@
           <div id="lib-batch-colors" class="lib-colors lib-batch-colors" data-i18n-title="batchColor"></div>
           <button id="lib-batch-fav" type="button" class="ghost-btn" data-i18n="batchFavorite">★</button>
           <button id="lib-batch-unfav" type="button" class="ghost-btn" data-i18n="batchUnfavorite">☆</button>
-          <select id="lib-batch-view" class="batch-view-select" data-i18n-aria="batchView"></select>
-          <button id="lib-batch-addview" type="button" class="ghost-btn" data-i18n="batchAddView">Add</button>
-          <button id="lib-batch-removeview" type="button" class="ghost-btn" data-i18n="batchRemoveView">Remove</button>
           <button id="lib-batch-tag-add" type="button" class="ghost-btn" data-i18n="batchTagAdd">Add tag</button>
           <button id="lib-batch-tag-remove" type="button" class="ghost-btn" data-i18n="batchTagRemove">Remove tag</button>
           <button id="lib-batch-archive" type="button" class="ghost-btn" data-i18n="archiveAction">Archive</button>
           <button id="lib-batch-unarchive" type="button" class="ghost-btn" data-i18n="unarchiveAction">Unarchive</button>
+          <span class="lib-batch-sep" aria-hidden="true"></span>
+          <select id="lib-batch-view" class="batch-view-select" data-i18n-aria="batchView"></select>
+          <button id="lib-batch-addview" type="button" class="ghost-btn" data-i18n="batchAddView">Add</button>
+          <button id="lib-batch-removeview" type="button" class="ghost-btn" data-i18n="batchRemoveView">Remove</button>
           <span class="lib-batch-sep" aria-hidden="true"></span>
           <select id="lib-batch-format" class="batch-view-select" data-i18n-aria="exportFormatLabel">
             <option value="csv" data-i18n="exportCsv">CSV</option>

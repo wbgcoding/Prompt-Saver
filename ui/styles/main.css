@@ -1661,7 +1661,9 @@ body:not(.flag-voiceHotkey) #voice-hotkey-row { display: none; }
 .noflag-favorites .lib-item .lib-fav { display: none; }
 .noflag-favorites #journal-fav { display: none; }
 .noflag-favorites #lib-batch-fav,
-.noflag-favorites #lib-batch-unfav { display: none; }
+.noflag-favorites #lib-batch-unfav,
+.noflag-favorites #grid-batch-fav,
+.noflag-favorites #grid-batch-unfav { display: none; }
 .noflag-journalSearch #journal-q { display: none; }
 .noflag-journalTypeFilter #journal-types { display: none; }
 .noflag-journalColorFilter #journal-colors { display: none; }
@@ -5053,7 +5055,8 @@ body.noflag-promptNotes #modal-notes { display: none; }
    only exist once it is switched on. */
 body:not(.flag-archiveTag) #library-archive,
 body:not(.flag-archiveTag) #lib-batch-archive,
-body:not(.flag-archiveTag) #lib-batch-unarchive { display: none; }
+body:not(.flag-archiveTag) #lib-batch-unarchive,
+body:not(.flag-archiveTag) #grid-batch-archive { display: none; }
 /* A private note reads like a different kind of field, not a second
    prompt box: every .modal-input (including the prompt text) already uses
    --surface-2, so the note gets the page's own --surface instead: a quieter,

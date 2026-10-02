@@ -14607,6 +14607,11 @@ function updateGridBatchBar() {
   $("grid-batch-bar")?.classList.toggle("hidden", n === 0);
   const count = $("grid-batch-count");
   if (count) count.textContent = t("selectedCount").replace("{n}", n.toLocaleString(LANG));
+  // Favorites and archive hide through their flag classes in the stylesheet; the
+  // tag buttons follow the same gate as every other piece of tag UI.
+  const tagsEnabled = tagsOn();
+  $("grid-batch-tag-add").classList.toggle("hidden", !tagsEnabled);
+  $("grid-batch-tag-remove").classList.toggle("hidden", !tagsEnabled);
   // buildBatchColors() no-ops once already built; fillBatchViews() harmlessly
   // resets the dropdown to the active view each time, which is the right default
   // for a selection that just grew.
@@ -14625,9 +14630,11 @@ function clearGridSelection() {
 function batchErrorToast(e) {
   toast(String(e).includes("view-full") ? t("gridFull") : String(e));
 }
+// Returns whether the batch went through (same contract as doBatch), so the
+// shared tag/archive/delete helpers never report success over a failure.
 async function doGridBatch(action, extra = {}) {
   const ids = [...gridSelected];
-  if (!ids.length) return;
+  if (!ids.length) return false;
   const idset = new Set(ids);
   try {
     settings = await invoke("batch_prompts", {
@@ -14635,12 +14642,24 @@ async function doGridBatch(action, extra = {}) {
       color: extra.color ?? null,
       favorite: extra.favorite ?? null,
       viewId: extra.viewId ?? null,
+      tag: extra.tag ?? null,
     });
-  } catch (e) { batchErrorToast(e); return; }
+  } catch (e) { batchErrorToast(e); return false; }
   if (action === "delete") prompts = prompts.filter((p) => !idset.has(p.id));
   else if (action === "color") { for (const p of prompts) if (idset.has(p.id)) p.color = extra.color ?? ""; }
+  else if (action === "favorite") { for (const p of prompts) if (idset.has(p.id)) p.favorite = extra.favorite ?? true; }
+  else if (action === "tag-add") {
+    const key = tagKey(extra.tag);
+    for (const p of prompts) {
+      if (idset.has(p.id) && !(p.tags || []).some((t) => tagKey(t) === key)) p.tags = [...(p.tags || []), extra.tag];
+    }
+  } else if (action === "tag-remove") {
+    const key = tagKey(extra.tag);
+    for (const p of prompts) if (idset.has(p.id)) p.tags = (p.tags || []).filter((t) => tagKey(t) !== key);
+  }
   clearGridSelection();
   await renderGrid(true);
+  return true;
 }
 // A real move (not just "also in"): drop the current view's placement first, then
 // place into the target: matches the "a prompt lives in exactly one view"
@@ -14723,8 +14742,13 @@ async function restoreBatchTag(inverseAction, ids, tag) {
     if (inverseAction === "tag-add" && !(p.tags || []).some((x) => tagKey(x) === key)) p.tags = [...(p.tags || []), tag];
     else if (inverseAction === "tag-remove") p.tags = (p.tags || []).filter((x) => tagKey(x) !== key);
   }
-  gridDirty = true;
-  renderLibrary();
+  if (libraryEl.classList.contains("hidden")) {
+    gridDirty = false;
+    await renderGrid(true); // the undo came from the grid's own selection bar
+  } else {
+    gridDirty = true;
+    renderLibrary();
+  }
 }
 
 // Undo for a batch delete: every deleted prompt went to the trash, not gone for
@@ -14742,6 +14766,56 @@ async function restoreBatchDelete(ids) {
   gridDirty = true;
   await renderGrid(true);
   if (!libraryEl.classList.contains("hidden")) renderLibrary();
+}
+
+// The batch tag and archive actions, shared by the library bar and the grid bar:
+// `ids` is the selection of whichever window asked, `run(action, extra)` is its own
+// runner (doBatch or doGridBatch) and returns whether the batch went through.
+async function batchTagAdd(ids, run) {
+  if (!ids.length) return;
+  const raw = await confirmDialog({
+    title: t("batchTagAdd"),
+    message: t("batchTagAddMsg").replace("{n}", String(ids.length)),
+    confirmLabel: t("batchTagAdd"),
+    input: { type: "text", placeholder: t("tagsPh"), datalist: allTags() },
+    danger: false,
+  });
+  const tag = (raw || "").trim();
+  if (!tag) return;
+  const key = tagKey(tag);
+  const idset = new Set(ids);
+  const changedIds = prompts.filter((p) => idset.has(p.id) && !(p.tags || []).some((x) => tagKey(x) === key)).map((p) => p.id);
+  if (await run("tag-add", { tag })) {
+    undoToast(t("batchTagAddDone").replace("{n}", String(changedIds.length)), () => restoreBatchTag("tag-remove", changedIds, tag));
+  }
+}
+async function batchTagRemove(ids, run) {
+  if (!ids.length) return;
+  const raw = await confirmDialog({
+    title: t("batchTagRemove"),
+    message: t("batchTagRemoveMsg").replace("{n}", String(ids.length)),
+    confirmLabel: t("batchTagRemove"),
+    input: { type: "text", placeholder: t("tagsPh"), datalist: allTags() },
+    danger: false,
+  });
+  const tag = (raw || "").trim();
+  if (!tag) return;
+  const key = tagKey(tag);
+  const idset = new Set(ids);
+  const changedIds = prompts.filter((p) => idset.has(p.id) && (p.tags || []).some((x) => tagKey(x) === key)).map((p) => p.id);
+  if (await run("tag-remove", { tag })) {
+    undoToast(t("batchTagRemoveDone").replace("{n}", String(changedIds.length)), () => restoreBatchTag("tag-add", changedIds, tag));
+  }
+}
+async function batchArchive(ids, run) {
+  if (!ids.length) return;
+  const tag = await ensureArchiveTagName();
+  const key = tagKey(tag);
+  const idset = new Set(ids);
+  const changedIds = prompts.filter((p) => idset.has(p.id) && !(p.tags || []).some((x) => tagKey(x) === key)).map((p) => p.id);
+  if (await run("tag-add", { tag })) {
+    undoToast(t("batchArchiveDone").replace("{n}", String(changedIds.length)), () => restoreBatchTag("tag-remove", changedIds, tag));
+  }
 }
 
 // Asked only when the export set actually holds a confidential entry, so a
@@ -14762,8 +14836,7 @@ async function confirmSecretExport(idFilter) {
   return choice === "alt";
 }
 
-async function batchExport(format) {
-  const ids = [...libSelected];
+async function batchExport(format, ids) {
   if (!ids.length) return;
   const includeSecrets = await confirmSecretExport(new Set(ids));
   if (includeSecrets === null) return;
@@ -19801,51 +19874,9 @@ function bind() {
   $("lib-batch-unfav").addEventListener("click", () => doBatch("favorite", { favorite: false }));
   $("lib-batch-addview").addEventListener("click", () => doBatch("addView", { viewId: $("lib-batch-view").value }));
   $("lib-batch-removeview").addEventListener("click", () => doBatch("removeView", { viewId: $("lib-batch-view").value }));
-  $("lib-batch-tag-add").addEventListener("click", async () => {
-    const n = libSelected.size;
-    if (!n) return;
-    const raw = await confirmDialog({
-      title: t("batchTagAdd"),
-      message: t("batchTagAddMsg").replace("{n}", String(n)),
-      confirmLabel: t("batchTagAdd"),
-      input: { type: "text", placeholder: t("tagsPh"), datalist: allTags() },
-      danger: false,
-    });
-    const tag = (raw || "").trim();
-    if (!tag) return;
-    const key = tagKey(tag);
-    const changedIds = prompts.filter((p) => libSelected.has(p.id) && !(p.tags || []).some((x) => tagKey(x) === key)).map((p) => p.id);
-    if (await doBatch("tag-add", { tag })) {
-      undoToast(t("batchTagAddDone").replace("{n}", String(changedIds.length)), () => restoreBatchTag("tag-remove", changedIds, tag));
-    }
-  });
-  $("lib-batch-tag-remove").addEventListener("click", async () => {
-    const n = libSelected.size;
-    if (!n) return;
-    const raw = await confirmDialog({
-      title: t("batchTagRemove"),
-      message: t("batchTagRemoveMsg").replace("{n}", String(n)),
-      confirmLabel: t("batchTagRemove"),
-      input: { type: "text", placeholder: t("tagsPh"), datalist: allTags() },
-      danger: false,
-    });
-    const tag = (raw || "").trim();
-    if (!tag) return;
-    const key = tagKey(tag);
-    const changedIds = prompts.filter((p) => libSelected.has(p.id) && (p.tags || []).some((x) => tagKey(x) === key)).map((p) => p.id);
-    if (await doBatch("tag-remove", { tag })) {
-      undoToast(t("batchTagRemoveDone").replace("{n}", String(changedIds.length)), () => restoreBatchTag("tag-add", changedIds, tag));
-    }
-  });
-  $("lib-batch-archive").addEventListener("click", async () => {
-    if (!libSelected.size) return;
-    const tag = await ensureArchiveTagName();
-    const key = tagKey(tag);
-    const changedIds = prompts.filter((p) => libSelected.has(p.id) && !(p.tags || []).some((x) => tagKey(x) === key)).map((p) => p.id);
-    if (await doBatch("tag-add", { tag })) {
-      undoToast(t("batchArchiveDone").replace("{n}", String(changedIds.length)), () => restoreBatchTag("tag-remove", changedIds, tag));
-    }
-  });
+  $("lib-batch-tag-add").addEventListener("click", () => batchTagAdd([...libSelected], doBatch));
+  $("lib-batch-tag-remove").addEventListener("click", () => batchTagRemove([...libSelected], doBatch));
+  $("lib-batch-archive").addEventListener("click", () => batchArchive([...libSelected], doBatch));
   $("lib-batch-unarchive").addEventListener("click", async () => {
     if (!libSelected.size) return;
     const tag = archiveTagName();
@@ -19861,7 +19892,7 @@ function bind() {
     if (libSelected.size !== 2) return;
     openCompareView([...libSelected]);
   });
-  $("lib-batch-export").addEventListener("click", () => batchExport($("lib-batch-format").value));
+  $("lib-batch-export").addEventListener("click", () => batchExport($("lib-batch-format").value, [...libSelected]));
   $("lib-batch-delete").addEventListener("click", (e) => {
     const n = libSelected.size;
     if (!n) return;
@@ -19880,14 +19911,32 @@ function bind() {
     }
   }, true);
   // Grid batch toolbar wiring: same shape as the library's, its own state.
+  // "All" means every prompt tile of the view on screen; folder tiles carry no
+  // select button and stay out, exactly as a single click on them never selected.
+  $("grid-batch-all").addEventListener("click", () => {
+    for (const tile of gridEl.querySelectorAll(".tile")) {
+      if (tile.dataset.id && tile.querySelector(":scope > .tile-select")) gridSelected.add(tile.dataset.id);
+    }
+    document.body.classList.toggle("grid-selecting", gridSelected.size > 0);
+    applyGridSelectionDom();
+    updateGridBatchBar();
+  });
   $("grid-batch-none").addEventListener("click", clearGridSelection);
+  $("grid-batch-fav").addEventListener("click", () => doGridBatch("favorite", { favorite: true }));
+  $("grid-batch-unfav").addEventListener("click", () => doGridBatch("favorite", { favorite: false }));
+  $("grid-batch-tag-add").addEventListener("click", () => batchTagAdd([...gridSelected], doGridBatch));
+  $("grid-batch-tag-remove").addEventListener("click", () => batchTagRemove([...gridSelected], doGridBatch));
+  $("grid-batch-archive").addEventListener("click", () => batchArchive([...gridSelected], doGridBatch));
   $("grid-batch-move").addEventListener("click", () => doGridMove($("grid-batch-view").value));
+  $("grid-batch-export").addEventListener("click", () => batchExport($("grid-batch-format").value, [...gridSelected]));
   $("grid-batch-delete").addEventListener("click", (e) => {
     const n = gridSelected.size;
     if (!n) return;
+    const ids = [...gridSelected];
     armDelete(e.currentTarget, t("batchDeleteConfirm").replace("{n}", String(n)), async () => {
-      await doGridBatch("delete");
-      toast(t("batchDeleteDone").replace("{n}", String(n)));
+      if (await doGridBatch("delete")) {
+        undoToast(t("batchDeleteDone").replace("{n}", String(n)), () => restoreBatchDelete(ids));
+      }
     });
   });
   document.addEventListener("keydown", (e) => {
@@ -20312,6 +20361,7 @@ function bind() {
   attachSelectPicker($("grid-batch-view")); // themed popup, options refreshed by fillBatchViews()
   attachSelectPicker($("lib-batch-view"));
   attachSelectPicker($("lib-batch-format"));
+  attachSelectPicker($("grid-batch-format"));
   attachSelectPicker($("export-format"));
   attachSelectPicker($("library-sort"));
   attachSelectPicker($("batch-export-format"));
