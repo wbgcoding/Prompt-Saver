@@ -250,14 +250,19 @@ fn watchdog_deadline_reached(now: SystemTime, deadline: SystemTime) -> bool {
 // open, so a second hotkey press never leaves two fighting over the same focus.
 fn summon_launcher(app: &AppHandle) {
     LAUNCHER_PREFILL.lock().unwrap_or_else(|e| e.into_inner()).clear();
-    open_launcher_window(app);
+    open_launcher_window(app, false);
 }
 
 // The launcher window itself, shared by the hotkey and by the tray filter row.
-fn open_launcher_window(app: &AppHandle) {
+// `deferred` builds it hidden and leaves the focus where it is: the tray hand-off keeps
+// the typist in the tray's own field until the launcher page has loaded (it then calls
+// launcher_ready), because a keystroke sent to a launcher whose page is not there yet is
+// lost. A launcher that never reports in is revealed after LAUNCHER_REVEAL_FALLBACK anyway.
+fn open_launcher_window(app: &AppHandle, deferred: bool) {
     if let Some(win) = app.get_webview_window(LAUNCHER_WIN_LABEL) {
         let _ = win.close();
     }
+    let gen = LAUNCHER_GEN.fetch_add(1, Ordering::SeqCst) + 1;
     let excluded = {
         let state: State<Db> = app.state();
         let store = lock(&state);
@@ -283,8 +288,28 @@ fn open_launcher_window(app: &AppHandle) {
     let _ = win.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
     set_capture_exclusion(&win, excluded);
     set_bounds_phys(&win, rect);
-    let _ = win.show();
-    let _ = win.set_focus();
+    if !deferred {
+        let _ = win.show();
+        let _ = win.set_focus();
+        return;
+    }
+    let handle = app.clone();
+    let _ = std::thread::Builder::new().name("launcher-reveal".into()).spawn(move || {
+        std::thread::sleep(LAUNCHER_REVEAL_FALLBACK);
+        if LAUNCHER_GEN.load(Ordering::SeqCst) == gen {
+            reveal_launcher(&handle);
+        }
+    });
+}
+
+// Shows the launcher and gives it the focus, unless it already is on screen.
+fn reveal_launcher(app: &AppHandle) {
+    if let Some(win) = app.get_webview_window(LAUNCHER_WIN_LABEL) {
+        if !win.is_visible().unwrap_or(false) {
+            let _ = win.show();
+            let _ = win.set_focus();
+        }
+    }
 }
 
 // ---------- Global shortcuts: the app hotkey + one per prompt ----------
@@ -1025,6 +1050,10 @@ const LAUNCHER_WIN_LABEL: &str = "launcher";
 // Text the tray filter row hands over: launcher_items takes it once and clears it, and a
 // hotkey summon clears it first so that path never inherits a stale query.
 static LAUNCHER_PREFILL: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
+// Bumped for every launcher window that gets built, so a reveal timer of an earlier
+// window never shows a newer one before its page has loaded.
+static LAUNCHER_GEN: AtomicU64 = AtomicU64::new(0);
+const LAUNCHER_REVEAL_FALLBACK: Duration = Duration::from_millis(1500);
 const LAUNCHER_WIN_W: f64 = 560.0; // logical px; keep in sync with .launcher-card in floating.css
 const LAUNCHER_WIN_H: f64 = 420.0;
 
@@ -1840,19 +1869,28 @@ fn tray_window_close(app: AppHandle) {
 }
 
 // The tray filter row hands its first keystroke to the quick launcher: what was typed
-// becomes the launcher's starting query and the launcher opens. The tray window stays
-// until it has passed on whatever was typed meanwhile (tray_launcher_prefill) and
-// closes itself then.
+// becomes the launcher's starting query and the launcher is built, but it only appears
+// (launcher_ready) once its page is up. The tray window keeps the focus and every key
+// until then, passes on the complete text (tray_launcher_prefill) the moment the launcher
+// takes the focus away, and closes itself after that.
 // Must stay async: it builds the launcher window, and window creation from a sync
 // command deadlocks on Windows (sync commands run on the main thread).
 #[tauri::command]
 async fn tray_open_launcher(app: AppHandle, query: String) {
     *LAUNCHER_PREFILL.lock().unwrap_or_else(|e| e.into_inner()) = launcher_prefill_text(&query);
-    open_launcher_window(&app);
+    open_launcher_window(&app, true);
 }
 
-// Characters typed in the tray before the launcher had focus: the newer text replaces the
-// pending starting query and is pushed to the launcher in case it has already booted.
+// The launcher page has loaded and is listening: now the window may appear and take the
+// focus. The tray notices it lost the focus and passes on everything typed so far.
+#[tauri::command]
+fn launcher_ready(app: AppHandle) {
+    reveal_launcher(&app);
+}
+
+// Everything typed in the tray before the launcher took the focus: the newer text replaces
+// the pending starting query and is pushed to the launcher, which puts it in front of any
+// key it received on its own since.
 #[tauri::command]
 fn tray_launcher_prefill(app: AppHandle, query: String) {
     let text = launcher_prefill_text(&query);
@@ -36288,6 +36326,7 @@ pub fn run() {
             import_custom_theme,
             launcher_select,
             launcher_close,
+            launcher_ready,
             tray_window_plan,
             tray_window_activate,
             tray_window_close,

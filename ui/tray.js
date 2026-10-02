@@ -167,18 +167,28 @@ function render(plan) {
 }
 
 // The first keystroke in the filter field hands over to the quick launcher: the
-// backend opens it with what was typed already in its search box. Characters typed
-// while it is still coming up stay in this field and are passed on once, right before
-// this window closes. Arrow keys and Enter on the fixed rows work before typing.
+// backend builds it with what was typed already in its search box. This window keeps
+// the focus, and every further key lands in this field, until the launcher page is up
+// and the backend gives it the focus: that is the moment this window blurs, so the
+// field then holds exactly what was typed up to the switch. It is passed on once,
+// complete, and this window closes. Keys typed after the switch go to the launcher
+// itself, which puts the passed-on text in front of them. A launcher that never takes
+// the focus gets the text after HANDOFF_MAX_MS anyway. Arrow keys and Enter on the
+// fixed rows work before typing.
+const HANDOFF_MAX_MS = 3000;
 let handover = null; // set once the first keystroke started the hand-off
+let tailSent = false;
+let tailTimer = 0;
+function sendTail() {
+  if (tailSent) return;
+  tailSent = true;
+  clearTimeout(tailTimer);
+  invoke("tray_launcher_prefill", { query: searchEl.value }).catch(() => {}).then(close);
+}
 function onSearchInput() {
   if (handover) return;
-  const first = searchEl.value;
-  handover = invoke("tray_open_launcher", { query: first }).catch(() => {}).then(async () => {
-    const latest = searchEl.value;
-    if (latest !== first) await invoke("tray_launcher_prefill", { query: latest }).catch(() => {});
-    close();
-  });
+  handover = invoke("tray_open_launcher", { query: searchEl.value }).catch(() => {});
+  tailTimer = setTimeout(sendTail, HANDOFF_MAX_MS);
 }
 
 document.addEventListener("keydown", (e) => {
@@ -204,7 +214,7 @@ document.addEventListener("keydown", (e) => {
 const OPENED_AT = Date.now();
 const BLUR_GRACE_MS = 400;
 window.addEventListener("blur", () => {
-  if (handover) return; // the hand-off closes this window itself
+  if (handover) { sendTail(); return; } // the launcher took the focus: pass on the text, then close
   const left = BLUR_GRACE_MS - (Date.now() - OPENED_AT);
   if (left <= 0) close();
   // A blur landing inside the hand-off window itself (the backend showing the

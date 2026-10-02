@@ -148,12 +148,20 @@ document.body.addEventListener("mousedown", (e) => {
   if (!cardEl.contains(e.target)) close();
 });
 
-// Text the tray filter row sends after this window was opened (the characters typed
-// before it had focus): applied at once, or held until the first render has happened.
+// Text the tray filter row sends (the characters typed before this window had the
+// focus): applied at once, or held until the first render has happened. It always goes
+// in FRONT of whatever was typed into the field since, so a key that reached this window
+// before the text did is neither lost nor doubled.
 let bootDone = false;
 let lateFill = null;
+let seeded = ""; // the passed-on text currently at the start of the field
+function seedField(text) {
+  const typed = searchEl.value.startsWith(seeded) ? searchEl.value.slice(seeded.length) : "";
+  seeded = String(text || "").slice(0, 200);
+  searchEl.value = (seeded + typed).slice(0, 200);
+}
 function applyPrefill(text) {
-  searchEl.value = String(text || "").slice(0, 200);
+  seedField(text);
   render();
   searchEl.setSelectionRange(searchEl.value.length, searchEl.value.length);
 }
@@ -179,11 +187,13 @@ async function boot() {
   for (const p of prompts) { p.lname = (p.name || "").toLowerCase(); p.ltext = (p.text || "").toLowerCase(); }
   usage = state.usage || {};
   lastUsed = state.last_used || {};
-  if (state.prefill) searchEl.value = state.prefill;
-  if (lateFill !== null) searchEl.value = lateFill.slice(0, 200);
+  if (state.prefill) seedField(state.prefill);
+  if (lateFill !== null) seedField(lateFill);
   render();
   searchEl.focus();
   searchEl.setSelectionRange(searchEl.value.length, searchEl.value.length);
   bootDone = true;
+  // Everything is in place: the backend may show this window and give it the focus now.
+  invoke("launcher_ready").catch(() => {});
 }
 boot();
