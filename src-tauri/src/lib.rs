@@ -278,7 +278,7 @@ fn open_launcher_window(app: &AppHandle, deferred: bool) {
         .skip_taskbar(true)
         .resizable(false)
         .shadow(false)
-        .focused(true)
+        .focused(!deferred) // a hidden window built focused still takes the focus from the tray
         .visible(false) // sized in physical pixels first, so nothing flashes at the wrong size
         .build()
     {

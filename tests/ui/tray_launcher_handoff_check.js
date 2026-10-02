@@ -8,6 +8,13 @@
 // HANDOFF_MODEL=old models the earlier backend, which focused the launcher the moment
 // it was built; the default models the current one, which focuses it only when the
 // launcher page reports it is ready (launcher_ready).
+// A launcher window that is built with the focus flag takes the operating system focus
+// away from the tray even while it is still hidden (measured in a real window: the tray
+// blurred about 60 ms after the first key, before the launcher page existed, and the key
+// typed in that gap went nowhere). The model therefore reads lib.rs: when the hand-off
+// build in open_launcher_window still passes `.focused(true)`, the launcher takes the
+// focus at build time; the same goes for the 200 character limit of the launcher field
+// (maxlength in launcher.html), which only native typing is subject to.
 // Run:  node tests/ui/tray_launcher_handoff_check.js      Exit: 0 = clean, 1 = problems.
 const fs = require("fs");
 const path = require("path");
@@ -16,6 +23,12 @@ const { pathToFileURL } = require("url");
 
 const uiDir = path.join(__dirname, "..", "..", "ui");
 const MODEL = process.env.HANDOFF_MODEL === "old" ? "old" : "new";
+const rustSrc = fs.readFileSync(path.join(__dirname, "..", "..", "src-tauri", "src", "lib.rs"), "utf8");
+const openFn = rustSrc.slice(rustSrc.indexOf("fn open_launcher_window("), rustSrc.indexOf("fn reveal_launcher("));
+// true: the hidden launcher is built focused and grabs the focus from the tray at once
+const BUILD_STEALS_FOCUS = /\.focused\(true\)/.test(openFn);
+const maxLenMatch = /id="search"[^>]*\smaxlength="(\d+)"/.exec(fs.readFileSync(path.join(uiDir, "launcher.html"), "utf8"));
+const FIELD_MAX = maxLenMatch ? Number(maxLenMatch[1]) : Infinity;
 const read = (f) => fs.readFileSync(path.join(uiDir, f), "utf8").replace(/\r\n/g, "\n");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -105,7 +118,7 @@ async function run({ text, keyMs, loadMs, ipcMs }) {
             prefill = String(args.query || "").slice(0, 200);
             launcherListeners = {};
             setTimeout(bootLauncher, loadMs);
-            if (MODEL === "old") {
+            if (MODEL === "old" || BUILD_STEALS_FOCUS) {
               os.focus = "launcher";
               (trayWinH.blur || []).forEach((fn) => fn());
             }
@@ -141,7 +154,7 @@ async function run({ text, keyMs, loadMs, ipcMs }) {
       f.fire("input");
     } else if (os.focus === "launcher" && os.launcherLoaded) {
       const f = launcherEls.search;
-      f.value += ch;
+      if (f.value.length < FIELD_MAX) f.value += ch;
       f.fire("input");
     } else lost.push(ch);
     if (keyMs > 0) await sleep(keyMs); // 0 = one synchronous burst
@@ -169,10 +182,13 @@ async function main() {
     if (r.got !== text) problems.push(`${label}: launcher field ${JSON.stringify(r.got)}, want ${JSON.stringify(text)}${r.lost.length ? " (lost in flight: " + r.lost.join("") + ")" : ""}`);
     if (r.trayAlive) problems.push(`${label}: the tray window was never closed`);
   }
-  // Over the field cap the text is cut at 200 characters, never longer.
-  const long = "a".repeat(230);
-  const r = await run({ text: long, keyMs: 0, loadMs: 300, ipcMs: 8 });
-  if (r.got !== "a".repeat(200)) problems.push(`230 typed characters: launcher field holds ${r.got ? r.got.length : r.got} characters, want 200`);
+  // Over the field cap the text is cut at 200 characters, never longer: as one burst,
+  // and typed slowly enough that most of it arrives after the launcher took the focus.
+  const long = Array.from({ length: 230 }, (_, i) => String.fromCharCode(97 + (i % 26))).join("");
+  for (const keyMs of [0, 12]) {
+    const r = await run({ text: long, keyMs, loadMs: 300, ipcMs: 8 });
+    if (r.got !== long.slice(0, 200)) problems.push(`230 typed characters (keys every ${keyMs} ms): launcher field holds ${r.got ? r.got.length : r.got} characters${r.got && r.got.length === 200 ? " (wrong ones)" : ""}, want the first 200`);
+  }
 
   if (problems.length) {
     console.error(`tray_launcher_handoff_check (${MODEL} backend model): FAILED\n  ` + problems.join("\n  "));
