@@ -31,7 +31,7 @@ back to its default and keeps the tiles; Delete removes all data and asks first.
 A five-step walkthrough shown once on first launch, right after the sample tiles
 appear. The last step offers to switch on the screenshot editor, color picker,
 OCR or voice dictation right there. Nothing is written until the tour actually
-finishes. Escape or "Skip" asks to confirm first instead of closing right away.
+finishes. Escape or "Skip" closes it at once; after Escape an Undo notice reopens it.
 Reopen it anytime from the expert menu; reopened this way, a switch on that
 last step takes effect immediately instead of waiting for a Finish click.
 
@@ -769,7 +769,7 @@ alone can be saved to a file and loaded again from the same group.
 ### Trash & restoring tiles
 
 A deleted tile goes to the trash first, not straight to permanent deletion.
-Retention is in days (0 means keep forever). Restoring places the tile in the
+Deleting takes one click and shows an Undo notice that brings it back. Retention is in days (0 means keep forever). Restoring places the tile in the
 active view's first free cell, not necessarily its original view or cell, and
 does not bring back a floating button, folder membership, or hotkey it had before
 deletion; those need setting up again.
@@ -777,8 +777,7 @@ deletion; those need setting up again.
 ### Undo
 
 A few actions outside the tile trash carry their own one-step Undo button on the
-confirmation message: deleting a view, clearing the copy history, deleting a tag, and a batch delete or batch tag change in the
-library. There is only ever one undo waiting; a later destructive action
+confirmation message: deleting a prompt or a batch of them, deleting a view, clearing the copy history, deleting or merging tags, and a batch tag change. There is only ever one undo waiting; a later destructive action
 replaces it, and the button disappears once the message itself does. Turn it
 off in the expert menu if you would rather the message stayed a plain
 confirmation.
@@ -1068,8 +1067,8 @@ Löschen entfernt alle Daten und fragt vorher nach.
 **Einführungstour**: fünf Schritte beim ersten Start, direkt nach den
 Beispielkacheln; der letzte Schritt bietet an, Screenshot-Editor, Farbpipette,
 OCR oder Spracheingabe gleich einzuschalten; geschrieben wird erst, wenn die
-Tour tatsächlich beendet ist. Escape oder „Überspringen" fragt zuerst nach, statt
-sofort zu schließen. Jederzeit erneut aufrufbar über das Expertenmenü: dort
+Tour tatsächlich beendet ist. Escape oder „Überspringen" schließt sofort; nach
+Escape öffnet eine Meldung mit Rückgängig die Tour wieder. Jederzeit erneut aufrufbar über das Expertenmenü: dort
 wirkt ein Schalter auf dem letzten Schritt sofort statt erst bei „Fertig".
 
 **Kacheln anlegen**: Dateianhang, Screenshot-Werkzeug, Farbpipette (aus),
@@ -1555,14 +1554,15 @@ oder leeren. Die Einstellungen allein lassen sich in derselben Gruppe in eine Da
 speichern und wieder laden.
 
 **Papierkorb & Kacheln wiederherstellen**: gelöschte Kacheln landen zuerst im
-Papierkorb (Aufbewahrung in Tagen, 0 = für immer). Wiederherstellen legt in die
+Papierkorb (Aufbewahrung in Tagen, 0 = für immer). Löschen geht mit einem Klick,
+eine Meldung mit Rückgängig holt die Kachel zurück. Wiederherstellen legt in die
 erste freie Zelle der aktiven Ansicht, nicht zwingend an den Originalplatz, und
 ohne schwebenden Button, Ordner-Mitgliedschaft oder Hotkey von vorher.
 
 **Rückgängig**: einige Aktionen außerhalb des Kachel-Papierkorbs tragen einen
-eigenen Rückgängig-Button direkt auf der Meldung: eine Ansicht löschen, den
-Kopierverlauf leeren, einen Tag löschen, und
-eine Sammellöschung oder Sammeländerung von Tags in der Bibliothek. Es wartet
+eigenen Rückgängig-Button direkt auf der Meldung: einen Prompt oder mehrere löschen,
+eine Ansicht löschen, den Kopierverlauf leeren, Tags löschen oder zusammenführen
+und eine Sammeländerung von Tags. Es wartet
 immer nur eine einzige Rücknahme; eine spätere zerstörende Aktion ersetzt sie,
 und der Button verschwindet mit der Meldung selbst. Im Expertenmenü lässt sich
 das abschalten, dann bleibt die Meldung eine reine Bestätigung.

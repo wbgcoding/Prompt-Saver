@@ -40,7 +40,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | **Private notes** | A notes field per prompt for context you keep but never copy, searchable and shown in the tooltip |
 | **Favorites** | Star prompts for a live favorites view |
 | **Batch editing** | Multi-select in the library to recolor, favorite, move between views, export or delete in one go |
-| **Undo** | Deleting a view, clearing the copy history, deleting a tag, or a batch delete or tag change offers an Undo button right on the confirmation |
+| **Undo** | Deleting a prompt (single or batch), deleting a view, clearing the copy history, deleting or merging tags, or a batch tag change offers an Undo button right on the confirmation |
 | **Duplicate finder** | Finds near-identical prompts, shows them side by side, keeps the one you pick; the same threshold also drives a quiet "similar to..." hint right after saving a prompt |
 
 ### ⚡ Copy
@@ -144,7 +144,7 @@ Full version history: [CHANGELOG.md](CHANGELOG.md)
 | Save a prompt | Type it in the input line → **Save** → name + color (Ctrl+Enter works too) |
 | Copy a prompt | Click its tile |
 | Move a tile | Drag it to any grid cell; drop on an occupied cell to swap, or onto a view tab to file it there (Ctrl to copy) |
-| Edit / hide / pin / delete | Right-click a tile (or hover **⋮**); deleting asks twice |
+| Edit / hide / pin / delete | Right-click a tile (or hover **⋮**); deleting takes one click and shows an Undo notice |
 | All prompts | List icon in the header: search, edit and place every prompt |
 | Screenshot | Camera icon: drag a region or click a window to save it as a copy button |
 | Screen recording | Record icon next to the camera: pick a window, region or the whole screen, then Stop to save, copy, edit or discard |

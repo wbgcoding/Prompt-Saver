@@ -1115,26 +1115,6 @@ function disarmButton(btn, label) {
   btn.classList.remove("confirm");
   btn.textContent = label;
 }
-// A delete confirms on the button itself instead of in a dialog: first press
-// arms it (fully red, warning glyph, the count spelled out), a second press within
-// DISARM_MS deletes. One place to look instead of two, and the pointer never has to
-// travel to a dialog that just appeared under it.
-const ARM_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M12 9v4M12 17h.01M10.3 4 2.6 17.5A1.8 1.8 0 0 0 4.2 20h15.6a1.8 1.8 0 0 0 1.6-2.5L13.7 4a1.9 1.9 0 0 0-3.4 0Z"/></svg>';
-let armDeleteTimer = 0;
-function armDelete(btn, armedLabel, run) {
-  clearTimeout(armDeleteTimer);
-  if (btn.classList.contains("confirm")) {
-    disarmButton(btn, t("delete"));
-    run();
-    return;
-  }
-  btn.classList.add("confirm");
-  btn.textContent = "";
-  btn.insertAdjacentHTML("beforeend", ARM_ICON); // static, developer-controlled markup
-  btn.insertAdjacentText("beforeend", armedLabel);
-  armDeleteTimer = setTimeout(() => disarmButton(btn, t("delete")), DISARM_MS);
-}
-
 // ---- Collapsible bars (header / composer) ----
 function applyBars() {
   const header = settings.show_header !== false;
@@ -9796,8 +9776,7 @@ async function scanDupes(opts = {}) {
 async function keepOneDup(group, keepId) {
   const remove = group.members.filter((m) => m.id !== keepId).map((m) => m.id);
   if (!remove.length) return;
-  const ok = await confirmDialog({ title: t("dupKeep"), message: t("dupKeepConfirm").replace("{n}", String(remove.length)), confirmLabel: t("delete") });
-  if (!ok) return;
+  const placements = await invoke("placement_snapshot", { ids: remove }).catch(() => null);
   try {
     const gone = new Set(remove);
     settings = await invoke("batch_prompts", { ids: remove, action: "delete", color: null, favorite: null, viewId: null });
@@ -9807,6 +9786,10 @@ async function keepOneDup(group, keepId) {
   renderViews();
   await renderGrid(true);
   scanDupes();
+  undoToast(t("batchDeleteDone").replace("{n}", String(remove.length)), async () => {
+    await restoreBatchDelete(remove, placements);
+    scanDupes();
+  });
 }
 
 // ---- Compare view ----
@@ -14200,7 +14183,7 @@ function renderLibrary() {
     makeKeyboardActivatable(edit);
     row.appendChild(edit);
 
-    // Delete (far right): the only destructive action in the row, so it asks first.
+    // Delete (far right): goes to the trash and shows an Undo toast.
     const del = document.createElement("span");
     del.className = "icon-btn lib-delete";
     del.title = t("delete");
@@ -14208,18 +14191,7 @@ function renderLibrary() {
     del.addEventListener("pointerdown", (e) => e.stopPropagation());
     del.addEventListener("click", async (e) => {
       e.stopPropagation();
-      const ok = await confirmDialog({
-        title: t("delete"),
-        message: `${t("deleteConfirm")}\n\n${p.name}`,
-        confirmLabel: t("delete"),
-      });
-      if (!ok) return;
-      try {
-        await invoke("delete_prompt", { id: p.id });
-      } catch (err) {
-        toast(String(err) === "save-failed" ? t("persistFailed") : String(err));
-        return;
-      }
+      if (!(await trashPromptWithUndo(p.id, p.name))) return;
       prompts = prompts.filter((x) => x.id !== p.id);
       renderLibrary();
       await renderGrid(); // the tile (or its folder) is gone from the grid as well
@@ -14481,6 +14453,22 @@ async function restoreBatchTag(inverseAction, ids, tag) {
     gridDirty = true;
     renderLibrary();
   }
+}
+
+// Deletes one prompt (it goes to the trash) and offers Undo, which puts it back where
+// it was. Returns true on success; a failed save shows the message and returns false.
+async function trashPromptWithUndo(id, name) {
+  const found = prompts.find((x) => x.id === id);
+  const label = String(name || "").trim() || String(found?.text || "").trim().slice(0, 40);
+  const placements = await invoke("placement_snapshot", { ids: [id] }).catch(() => null);
+  try {
+    await invoke("delete_prompt", { id });
+  } catch (err) {
+    toast(String(err) === "save-failed" ? t("persistFailed") : String(err));
+    return false;
+  }
+  undoToast(t("promptTrashedToast").replace("{name}", label), () => restoreBatchDelete([id], placements));
+  return true;
 }
 
 // Undo for a batch delete: every deleted prompt went to the trash, not gone for good.
@@ -19434,17 +19422,12 @@ function bind() {
     if (e.target === ocrModal) closeOcrModal();
   });
 
-  // Delete from the edit dialog, with the same two-step confirmation.
+  // Delete from the edit dialog: goes to the trash at once, Undo brings it back.
   modal.delete.addEventListener("click", async () => {
     if (!modalState || modalState.mode !== "edit") return;
-    if (!armButton(modal.delete, t("deleteConfirm"))) return;
     const id = modalState.id;
-    try {
-      await invoke("delete_prompt", { id });
-    } catch (err) {
-      toast(String(err) === "save-failed" ? t("persistFailed") : String(err)); // keep the editor open so the user can retry
-      return;
-    }
+    const typedName = modal.name ? modal.name.value : "";
+    if (!(await trashPromptWithUndo(id, typedName))) return; // keep the editor open so the user can retry
     closeModal();
     await renderGrid();
     if (!libraryEl.classList.contains("hidden")) renderLibrary();
@@ -19648,16 +19631,14 @@ function bind() {
     openCompareView([...libSelected]);
   });
   $("lib-batch-export").addEventListener("click", () => batchExport($("lib-batch-format").value, [...libSelected]));
-  $("lib-batch-delete").addEventListener("click", (e) => {
+  $("lib-batch-delete").addEventListener("click", async () => {
     const n = libSelected.size;
     if (!n) return;
     const ids = [...libSelected];
-    armDelete(e.currentTarget, t("batchDeleteConfirm").replace("{n}", String(n)), async () => {
-      const placements = await invoke("placement_snapshot", { ids }).catch(() => null);
-      if (await doBatch("delete")) {
-        undoToast(t("batchDeleteDone").replace("{n}", String(n)), () => restoreBatchDelete(ids, placements));
-      }
-    });
+    const placements = await invoke("placement_snapshot", { ids }).catch(() => null);
+    if (await doBatch("delete")) {
+      undoToast(t("batchDeleteDone").replace("{n}", String(n)), () => restoreBatchDelete(ids, placements));
+    }
   });
   // Esc leaves selection mode before it closes the library (capture beats the overlay).
   document.addEventListener("keydown", (e) => {
@@ -19685,16 +19666,14 @@ function bind() {
   $("grid-batch-archive").addEventListener("click", () => batchArchive([...gridSelected], doGridBatch));
   $("grid-batch-move").addEventListener("click", () => doGridMove($("grid-batch-view").value));
   $("grid-batch-export").addEventListener("click", () => batchExport($("grid-batch-format").value, [...gridSelected]));
-  $("grid-batch-delete").addEventListener("click", (e) => {
+  $("grid-batch-delete").addEventListener("click", async () => {
     const n = gridSelected.size;
     if (!n) return;
     const ids = [...gridSelected];
-    armDelete(e.currentTarget, t("batchDeleteConfirm").replace("{n}", String(n)), async () => {
-      const placements = await invoke("placement_snapshot", { ids }).catch(() => null);
-      if (await doGridBatch("delete")) {
-        undoToast(t("batchDeleteDone").replace("{n}", String(n)), () => restoreBatchDelete(ids, placements));
-      }
-    });
+    const placements = await invoke("placement_snapshot", { ids }).catch(() => null);
+    if (await doGridBatch("delete")) {
+      undoToast(t("batchDeleteDone").replace("{n}", String(n)), () => restoreBatchDelete(ids, placements));
+    }
   });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && gridSelected.size && $("compare-modal").classList.contains("hidden")) {
@@ -19936,12 +19915,8 @@ function bind() {
   viewModal.root.addEventListener("pointerdown", (e) => {
     if (e.target === viewModal.root) closeViewModal();
   });
-  // Two-step delete: first click arms (red), second click removes.
+  // Deletes at once; the Undo toast brings the view back.
   viewModal.delete.addEventListener("click", async () => {
-    if (!armButton(viewModal.delete, `${t("delete")}?`)) {
-      setTimeout(() => disarmButton(viewModal.delete, t("delete")), DISARM_MS);
-      return;
-    }
     // Snapshot before the delete call: `settings` is only replaced once it
     // resolves, so the pre-delete view is still sitting in the current list.
     const deleted = settings.views.find((v) => v.id === viewModalId);
@@ -20145,14 +20120,9 @@ function bind() {
     if (!act || !ctxId) return;
     const id = ctxId;
     if (act === "delete") {
-      if (!armButton(btn, t("deleteConfirm"))) return;
       closeCtx();
-      try {
-        await invoke("delete_prompt", { id });
-      } catch (err) {
-        toast(String(err) === "save-failed" ? t("persistFailed") : String(err));
-        return;
-      }
+      const ctxPrompt = prompts.find((x) => x.id === id);
+      if (!(await trashPromptWithUndo(id, ctxPrompt?.name))) return;
       await renderGrid();
       return;
     }

@@ -717,7 +717,7 @@ PROBE = """
             if (!newTab) {
               out.errors.push('the duplicated view is not named "Home (copy)"');
             } else {
-              // Clean up: delete the duplicate (2-click arm+confirm) so later view-count
+              // Clean up: delete the duplicate (one click, undo toast) so later view-count
               // assertions see the same tab bar they expect.
               newTab.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
               await sleep(150);
@@ -726,7 +726,6 @@ PROBE = """
               await sleep(200);
               const delBtn = document.getElementById('view-modal-delete');
               if (delBtn && !delBtn.classList.contains('hidden')) {
-                delBtn.click(); await sleep(50);
                 delBtn.click(); await sleep(300);
               }
               // 434: the deleted view offers an Undo button — click it and prove the
@@ -758,7 +757,6 @@ PROBE = """
                   await sleep(200);
                   const delBtn2 = document.getElementById('view-modal-delete');
                   if (delBtn2 && !delBtn2.classList.contains('hidden')) {
-                    delBtn2.click(); await sleep(50);
                     delBtn2.click(); await sleep(300);
                   }
                 }
@@ -1513,8 +1511,10 @@ PROBE = """
           p8Row.click();
           await sleep(100);
           const delBatchBtn = document.getElementById('lib-batch-delete');
-          delBatchBtn.click(); await sleep(50);
           delBatchBtn.click(); await sleep(250);
+          if (!document.getElementById('confirm-modal').classList.contains('hidden')) {
+            out.errors.push('677: the library batch delete opened a dialog');
+          }
           if (document.querySelector('.lib-item[data-id="p8"]')) {
             out.errors.push('434: batch delete did not remove p8 from the library list');
           }
@@ -1531,6 +1531,35 @@ PROBE = """
             }
             if (!document.querySelector('.lib-item[data-id="p8"]')) {
               out.errors.push('434: undoing a batch delete did not bring p8 back to the library list');
+            }
+          }
+        }
+      }
+      // 677: the library row's trash button acts on the first click, shows Undo
+      // and no dialog; Undo sends the placement snapshot back.
+      {
+        const rowDel = document.querySelector('.lib-item[data-id="p8"] .lib-delete');
+        if (!rowDel) {
+          out.errors.push('677: the library row of p8 has no trash button');
+        } else {
+          window.__SMOKE_ARGS__ = [];
+          rowDel.click();
+          await sleep(300);
+          if (!document.getElementById('confirm-modal').classList.contains('hidden')) {
+            out.errors.push('677: the library row trash button opened a dialog');
+          }
+          if (!window.__SMOKE_ARGS__.some(([cmd, args]) => cmd === 'delete_prompt' && args && args.id === 'p8')) {
+            out.errors.push('677: the library row trash button did not delete on the first click');
+          }
+          const rowUndo = document.getElementById('toast').querySelector('.toast-btn');
+          if (!rowUndo) {
+            out.errors.push('677: the library row delete offered no undo toast');
+          } else {
+            window.__SMOKE_ARGS__ = [];
+            rowUndo.click();
+            await sleep(300);
+            if (!window.__SMOKE_ARGS__.some(([cmd, args]) => cmd === 'restore_prompts_batch' && args && args.placements && args.placements.some((pl) => pl.id === 'p8'))) {
+              out.errors.push('677: undoing the library row delete did not restore p8 with its placement');
             }
           }
         }
@@ -3839,8 +3868,8 @@ PROBE = """
             out.errors.push('the recolour did not reach the tile: ' + (t4After && t4After.style.background));
           }
         }
-        // 21: the delete confirms on the button — one press arms it (red, count
-        // named), the second really deletes. No dialog is involved any more.
+        // 21: the delete acts on the first press: no arming, no dialog, and the
+        // toast carries an Undo button.
         gridTile('p4').querySelector('.tile-select').click();
         await sleep(120);
         // 27: the "move to view" select opens the same themed popup as every other
@@ -3932,36 +3961,19 @@ PROBE = """
           }
           if (document.body.classList.contains('grid-selecting')) out.errors.push('the grid selection stayed after Add tag');
         }
-        // Re-select for the delete-arm test below — the custom-color commit
+        // Re-select for the delete test below — the custom-color commit
         // above clears the selection same as every other batch action.
         gridTile('p4').querySelector('.tile-select').click();
         await sleep(120);
         const delBtn = document.getElementById('grid-batch-delete');
-        await click('grid-batch-delete');
-        await sleep(150);
-        if (!document.getElementById('confirm-modal').classList.contains('hidden')) {
-          out.errors.push('the batch delete still opens a confirm dialog');
-        }
-        if (!delBtn.classList.contains('confirm') || !delBtn.textContent.includes('1')) {
-          out.errors.push('the first press did not arm the delete button: ' + delBtn.textContent);
-        }
-        // 29: the warning triangle must sit on the label's vertical centre, not
-        // its text baseline.
-        {
-          const svgEl = delBtn.querySelector('svg');
-          const svgRect = svgEl.getBoundingClientRect();
-          const textNode = Array.from(delBtn.childNodes).find((n) => n.nodeType === 3 && n.textContent.trim());
-          const range = document.createRange();
-          range.selectNodeContents(textNode);
-          const textRect = range.getBoundingClientRect();
-          const diff = Math.abs((svgRect.top + svgRect.height / 2) - (textRect.top + textRect.height / 2));
-          if (diff >= 1) out.errors.push('29: warning triangle is off the label centre by ' + diff.toFixed(2) + 'px');
-        }
-        if (!gridTile('p4')) out.errors.push('the first press already deleted the tile');
         window.__SMOKE_ARGS__ = [];
         await click('grid-batch-delete');
         await sleep(200);
-        if (gridTile('p4')) out.errors.push('the second press did not delete the tile');
+        if (!document.getElementById('confirm-modal').classList.contains('hidden')) {
+          out.errors.push('the batch delete still opens a confirm dialog');
+        }
+        if (delBtn.classList.contains('confirm')) out.errors.push('the batch delete button armed instead of deleting');
+        if (gridTile('p4')) out.errors.push('one press did not delete the tile');
         // The placement snapshot is taken before the delete, and the undo hands it back.
         {
           const names = window.__SMOKE_ARGS__.map(([cmd]) => cmd);
@@ -3982,7 +3994,69 @@ PROBE = """
             }
           }
         }
-        if (delBtn.classList.contains('confirm')) out.errors.push('the delete button stayed armed after deleting');
+      }
+    }
+    // 677: a tile's context menu and the editor's Delete button also act on the
+    // first click and offer Undo, with no dialog.
+    {
+      const delTile = [...document.querySelectorAll('#grid .tile')].find((e) => e.dataset.id && e.querySelector(':scope > .tile-select'));
+      const delId = delTile ? delTile.dataset.id : '';
+      const confirmBox = document.getElementById('confirm-modal');
+      const toastBtn = () => document.getElementById('toast').querySelector('.toast-btn');
+      if (!delTile) {
+        out.errors.push('677: no prompt tile is on the grid for the context menu delete check');
+      } else {
+        delTile.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 60, clientY: 60 }));
+        await sleep(150);
+        const ctxDel = document.querySelector('#ctx [data-act="delete"]');
+        if (!ctxDel) {
+          out.errors.push('677: the tile context menu has no Delete entry');
+        } else {
+          window.__SMOKE_ARGS__ = [];
+          ctxDel.click();
+          await sleep(300);
+          if (!confirmBox.classList.contains('hidden')) out.errors.push('677: the context menu delete opened a dialog');
+          if (!window.__SMOKE_ARGS__.some(([cmd, args]) => cmd === 'delete_prompt' && args && args.id === delId)) {
+            out.errors.push('677: the context menu delete did not delete on the first click');
+          }
+          const ctxUndo = toastBtn();
+          if (!ctxUndo) {
+            out.errors.push('677: the context menu delete offered no undo toast');
+          } else {
+            window.__SMOKE_ARGS__ = [];
+            ctxUndo.click();
+            await sleep(300);
+            if (!window.__SMOKE_ARGS__.some(([cmd]) => cmd === 'restore_prompts_batch')) {
+              out.errors.push('677: undoing the context menu delete sent no restore');
+            }
+          }
+        }
+        const delTile2 = [...document.querySelectorAll('#grid .tile')].find((e) => e.dataset.id === delId);
+        if (delTile2) {
+          delTile2.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 60, clientY: 60 }));
+          await sleep(150);
+          const ctxEdit = document.querySelector('#ctx [data-act="edit"]');
+          if (ctxEdit) ctxEdit.click();
+          await sleep(300);
+          const editorDel = document.getElementById('modal-delete');
+          if (!editorDel || editorDel.classList.contains('hidden')) {
+            out.errors.push('677: the editor has no Delete button for an existing prompt');
+          } else {
+            window.__SMOKE_ARGS__ = [];
+            editorDel.click();
+            await sleep(300);
+            if (!confirmBox.classList.contains('hidden')) out.errors.push('677: the editor delete opened a dialog');
+            if (!window.__SMOKE_ARGS__.some(([cmd, args]) => cmd === 'delete_prompt' && args && args.id === delId)) {
+              out.errors.push('677: the editor delete did not delete on the first click');
+            }
+            if (!document.getElementById('modal').classList.contains('hidden')) {
+              out.errors.push('677: the editor stayed open after deleting');
+            }
+            const edUndo = toastBtn();
+            if (!edUndo) out.errors.push('677: the editor delete offered no undo toast');
+            else { edUndo.click(); await sleep(300); }
+          }
+        }
       }
     }
     // 91: trash — the dialog opened from the expert menu's Data group. Restore,

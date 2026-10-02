@@ -47,7 +47,7 @@ export const HELP_CONTENT = {
       howTo: [
         "First launch: opens on its own, right after the example prompts are seeded.",
         "Later: reopen it from the settings dialog, or the expert menu's \"Reopen introduction\" action.",
-        "←/→ or the dots move between steps, Enter continues, Escape or \"Skip\" leaves any time; both ask to confirm first.",
+        "←/→ or the dots move between steps, Enter continues, Escape or \"Skip\" leaves any time; Escape shows an Undo notice that reopens the tour.",
       ],
       whatHappens:
         "The last step offers to switch on the screenshot editor, color picker, or text recognition right there, showing each one's shipped default; nothing is written until the tour is actually finished, and only the switches actually changed. A first-launch data-folder or WebView2 prompt always takes priority; the tour just waits for its turn.",
@@ -434,7 +434,7 @@ export const HELP_CONTENT = {
       title: "Trash & restoring tiles",
       whatItIs: "A deleted tile moves to the trash first, not straight to permanent deletion.",
       howTo: [
-        "Delete a tile as normal: a second click on the delete button confirms it.",
+        "Delete a tile as normal: it goes to the trash, and Undo brings it back.",
         "Open the trash from the expert menu's data group.",
         "Restore a tile from there, or let retention clear it automatically.",
       ],
@@ -795,7 +795,7 @@ export const HELP_CONTENT = {
       howTo: [
         "Beim ersten Start: öffnet sich direkt nach dem Anlegen der Beispiel-Prompts automatisch.",
         "Später: über den Einstellungsdialog oder die Aktion „Einführung erneut öffnen“ im Expertenmenü erneut öffnen.",
-        "←/→ oder die Punkte wechseln zwischen den Schritten, Enter fährt fort, Escape oder „Überspringen“ beendet die Einführung jederzeit; beides erst nach Bestätigung.",
+        "←/→ oder die Punkte wechseln zwischen den Schritten, Enter fährt fort, Escape oder „Überspringen“ beendet die Einführung jederzeit; Escape zeigt eine Meldung mit Rückgängig, die die Einführung wieder öffnet.",
       ],
       whatHappens:
         "Im letzten Schritt lassen sich der Screenshot-Editor, die Farbauswahl oder die Texterkennung direkt aktivieren; dabei wird jeweils die ausgelieferte Standardeinstellung angezeigt. Gespeichert wird erst, wenn die Einführung tatsächlich abgeschlossen ist, und nur für Schalter, die wirklich geändert wurden. Ein beim ersten Start erscheinender Hinweis zum Datenordner oder zu WebView2 hat immer Vorrang; die Einführung wartet einfach, bis sie an der Reihe ist.",
@@ -1183,7 +1183,7 @@ export const HELP_CONTENT = {
       title: "Papierkorb & Kacheln wiederherstellen",
       whatItIs: "Eine gelöschte Kachel wandert zuerst in den Papierkorb, nicht direkt in die endgültige Löschung.",
       howTo: [
-        "Eine Kachel wie gewohnt löschen: ein zweiter Klick auf den Löschen-Button bestätigt es.",
+        "Eine Kachel wie gewohnt löschen: sie landet im Papierkorb, Rückgängig holt sie zurück.",
         "Den Papierkorb aus der Daten-Gruppe des Expertenmenüs öffnen.",
         "Eine Kachel dort wiederherstellen oder sie durch die Aufbewahrungsdauer automatisch löschen lassen.",
       ],
