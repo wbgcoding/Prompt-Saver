@@ -249,6 +249,12 @@ fn watchdog_deadline_reached(now: SystemTime, deadline: SystemTime) -> bool {
 // instant copy) instead of raising the main window. Replaces any launcher already
 // open, so a second hotkey press never leaves two fighting over the same focus.
 fn summon_launcher(app: &AppHandle) {
+    LAUNCHER_PREFILL.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    open_launcher_window(app);
+}
+
+// The launcher window itself, shared by the hotkey and by the tray filter row.
+fn open_launcher_window(app: &AppHandle) {
     if let Some(win) = app.get_webview_window(LAUNCHER_WIN_LABEL) {
         let _ = win.close();
     }
@@ -1017,6 +1023,9 @@ impl VarPrompt {
 
 // Quick-launcher window (fuzzy search, instant copy).
 const LAUNCHER_WIN_LABEL: &str = "launcher";
+// Text the tray filter row hands over: launcher_items takes it once and clears it, and a
+// hotkey summon clears it first so that path never inherits a stale query.
+static LAUNCHER_PREFILL: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
 const LAUNCHER_WIN_W: f64 = 560.0; // logical px; keep in sync with .launcher-card in floating.css
 const LAUNCHER_WIN_H: f64 = 420.0;
 
@@ -1213,13 +1222,6 @@ fn tray_search_on(settings: &Settings) -> bool {
     settings.ui_flags.get("traySearch") != Some(&false) // on by default
 }
 
-// How many matches the filter row may show at once (the one entry limit shared by
-// every search list). Same clamp pattern as tray_label_max: an absent or out-of-range stored value falls back to the
-// shipped default instead of reaching the search list unclamped.
-fn tray_search_max(settings: &Settings) -> usize {
-    settings.ui_values.get("searchListMax").copied().unwrap_or(8.0).clamp(3.0, 20.0) as usize
-}
-
 // Menu text for a prompt. Control characters (a pasted newline lands in the name)
 // collapse to spaces, `&` is doubled because a Win32 menu reads a single one as a
 // mnemonic, and the cut counts CHARACTERS: a byte cut would split a multi-byte
@@ -1343,44 +1345,6 @@ fn tray_plan(
         }
     }
     out
-}
-
-// The filter row's own list: unlike tray_plan (favourites then recents, capped
-// per section) this searches EVERY prompt regardless of favourite/recent status,
-// scored the way the library ranks a plain-text search -- a name hit outranks a
-// body hit, ties broken by name. Blank query = no results (the fixed favourites/
-// recents selection stays on screen instead).
-fn tray_search_entries(prompts: &[Prompt], query: &str, cap: usize, label_max: usize) -> Vec<TrayEntry> {
-    let q = query.trim().to_lowercase();
-    if q.is_empty() {
-        return Vec::new();
-    }
-    let mut hits: Vec<(u8, &Prompt)> = prompts
-        .iter()
-        .filter_map(|p| {
-            // A confidential entry's `text` field holds ciphertext here, never the
-            // plain text and never the session key to open it -- so a body match
-            // would only ever compare the query against gibberish. The name stays
-            // plain and searchable either way.
-            let score = if p.name.to_lowercase().contains(&q) {
-                2u8
-            } else if !p.secret && p.text.to_lowercase().contains(&q) {
-                1u8
-            } else {
-                0u8
-            };
-            if score > 0 {
-                Some((score, p))
-            } else {
-                None
-            }
-        })
-        .collect();
-    hits.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.name.to_lowercase().cmp(&b.1.name.to_lowercase())));
-    hits.truncate(cap);
-    hits.into_iter()
-        .map(|(_, p)| TrayEntry { id: tray_item_id(&p.id), label: tray_label(&p.name, label_max), kind: tray_kind(p), color: p.color.clone() })
-        .collect()
 }
 
 // ---------- menu icons ----------
@@ -1876,26 +1840,18 @@ fn tray_window_close(app: AppHandle) {
     }
 }
 
-// The filter row's live results, replacing the fixed favourites/recents sections
-// while something is typed (ui/tray.js swaps them back once the field is empty).
-// An empty query or the flag being off both return nothing on purpose -- the
-// caller treats "no rows" as "show the fixed selection instead".
+// The tray filter row hands its first keystroke to the quick launcher: what was typed
+// becomes the launcher's starting query, the tray window closes, the launcher opens.
 #[tauri::command]
-fn tray_window_search(app: AppHandle, query: String) -> Vec<TrayWinEntry> {
-    let state: State<Db> = match app.try_state::<Db>() {
-        Some(s) => s,
-        None => return Vec::new(),
-    };
-    let store = lock(&state);
-    if !tray_search_on(&store.settings) {
-        return Vec::new();
-    }
-    let cap = tray_search_max(&store.settings);
-    let label_max = tray_label_max(&store.settings);
-    let hits = tray_search_entries(&store.prompts, &query, cap, label_max);
-    hits.into_iter()
-        .map(|e| TrayWinEntry { id: e.id, label: e.label, kind: tray_kind_str(e.kind).to_string(), color: e.color })
-        .collect()
+fn tray_open_launcher(app: AppHandle, query: String) {
+    *LAUNCHER_PREFILL.lock().unwrap_or_else(|e| e.into_inner()) = launcher_prefill_text(&query);
+    tray_window_close(app.clone());
+    open_launcher_window(&app);
+}
+
+// The starting query is user input crossing a window boundary: capped like the launcher's own field.
+fn launcher_prefill_text(q: &str) -> String {
+    q.chars().take(200).collect()
 }
 
 // A result picked in the quick-launcher runs the very same activation the tray
@@ -10153,6 +10109,7 @@ struct LauncherState {
     language: String,
     usage: HashMap<String, u32>,
     last_used: HashMap<String, u64>,
+    prefill: String,
 }
 #[tauri::command]
 async fn launcher_items(state: State<'_, Db>) -> Result<LauncherState, String> {
@@ -10173,6 +10130,7 @@ async fn launcher_items(state: State<'_, Db>) -> Result<LauncherState, String> {
         language: store.settings.language.clone(),
         usage: store.settings.usage.clone(),
         last_used: store.settings.last_used.clone(),
+        prefill: std::mem::take(&mut *LAUNCHER_PREFILL.lock().unwrap_or_else(|e| e.into_inner())),
     })
 }
 
@@ -35988,7 +35946,7 @@ pub fn run() {
             tray_window_plan,
             tray_window_activate,
             tray_window_close,
-            tray_window_search,
+            tray_open_launcher,
             copy_prompt,
             rotation_peek,
             rotation_commit,
@@ -46471,30 +46429,6 @@ mod tests {
     }
 
     #[test]
-    fn tray_search_never_matches_a_confidential_prompt_s_ciphertext_body() {
-        let key = secret_derive_key("pw", b"0123456789abcdef").expect("derive");
-        let mut hidden = test_prompt("hidden");
-        hidden.name = "Unrelated name".into();
-        hidden.secret = true;
-        hidden.text = secret_encrypt("super secret meeting notes", &key);
-        let mut visible = test_prompt("visible");
-        visible.name = "Other prompt".into();
-        visible.text = "super secret meeting notes but not confidential".into();
-        let prompts = vec![hidden.clone(), visible.clone()];
-
-        // Body query matches the plain prompt only -- never the confidential one,
-        // whose stored text is ciphertext and must never be searched.
-        let hits = tray_search_entries(&prompts, "meeting notes", 10, 40);
-        assert_eq!(hits.len(), 1);
-        assert_eq!(hits[0].id, tray_item_id(&visible.id));
-
-        // The confidential prompt's own NAME still matches -- only its body is excluded.
-        let name_hits = tray_search_entries(&prompts, "unrelated", 10, 40);
-        assert_eq!(name_hits.len(), 1);
-        assert_eq!(name_hits[0].id, tray_item_id(&hidden.id));
-    }
-
-    #[test]
     fn markdown_sync_never_picks_up_a_confidential_prompt() {
         let mut p = test_prompt("a");
         assert!(sync_eligible(&p), "a plain prompt with a safe id is eligible");
@@ -53698,44 +53632,21 @@ mod tests {
     }
 
     #[test]
-    fn tray_search_defaults_on_with_a_clamped_menu_max() {
+    fn tray_search_defaults_on() {
         let s = Settings::default();
         assert!(tray_search_on(&s), "the filter row ships on");
-        assert_eq!(tray_search_max(&s), 8);
 
         let mut off = Settings::default();
         off.ui_flags.insert("traySearch".into(), false);
         assert!(!tray_search_on(&off));
-
-        let mut clamped_hi = Settings::default();
-        clamped_hi.ui_values.insert("searchListMax".into(), 999.0);
-        assert_eq!(tray_search_max(&clamped_hi), 20);
-
-        let mut clamped_lo = Settings::default();
-        clamped_lo.ui_values.insert("searchListMax".into(), 0.0);
-        assert_eq!(tray_search_max(&clamped_lo), 3);
     }
 
     #[test]
-    fn tray_search_ranks_a_name_hit_above_a_body_hit_and_respects_the_cap() {
-        let name_hit = tray_prompt("1", "Alpha project", false);
-        let mut body_hit = tray_prompt("2", "Zzz", false);
-        body_hit.text = "notes mentioning alpha inside the body".into();
-        let mut no_hit = tray_prompt("3", "Beta", false);
-        no_hit.text = "nothing relevant here".into();
-        let prompts = vec![name_hit.clone(), body_hit.clone(), no_hit.clone()];
-
-        let hits = tray_search_entries(&prompts, "alpha", 10, TRAY_LABEL_MAX);
-        assert_eq!(tray_names(&hits), vec!["Alpha project", "Zzz"], "a name match must outrank a body-only match");
-
-        let capped = tray_search_entries(&prompts, "a", 1, TRAY_LABEL_MAX); // "a" is in every name/body above
-        assert_eq!(capped.len(), 1, "the cap must be respected even when more prompts match");
-    }
-
-    #[test]
-    fn tray_search_is_empty_for_a_blank_query() {
-        let prompts = vec![tray_prompt("1", "Alpha", false)];
-        assert!(tray_search_entries(&prompts, "   ", 10, TRAY_LABEL_MAX).is_empty());
+    fn launcher_prefill_is_capped_at_200_characters() {
+        let long: String = "x".repeat(250);
+        assert_eq!(launcher_prefill_text(&long).chars().count(), 200);
+        assert_eq!(launcher_prefill_text(""), "");
+        assert_eq!(launcher_prefill_text("ab"), "ab");
     }
 
     #[test]

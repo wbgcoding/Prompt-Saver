@@ -10817,6 +10817,31 @@ LAUNCHER_PROBE = """
 """
 
 
+# The tray filter row opens the launcher with its text: the stub's launcher_items
+# carries a prefill, which must land in the search field with the caret at the end.
+LAUNCHER_PREFILL_PROBE = """
+<script>
+window.__LAUNCHER_PREFILL__ = 'Translate';
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  try {
+    await sleep(500);
+    const search = document.getElementById('search');
+    if (search.value !== 'Translate') errs.push('the prefill did not reach the search field: ' + search.value);
+    const rows = [...document.querySelectorAll('#results .launcher-row')];
+    if (rows.length !== 1 || rows[0].dataset.id !== 'p1') errs.push('the prefilled query did not filter the list: ' + rows.length + ' rows');
+    if (search.selectionStart !== 9 || search.selectionEnd !== 9) errs.push('the caret is not at the end of the prefill');
+  } catch (e) { errs.push('probe: ' + e.message); }
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
 # The custom Windows-11-style tray menu (point 236): rendering, keyboard nav and
 # activation. The Rust-side content (favorites/recent selection, ordering, caps)
 # has its own unit tests -- this only proves the window draws what it is given
@@ -10848,36 +10873,22 @@ TRAY_PROBE = """
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
     await sleep(30);
     if (!rows()[0].classList.contains('active')) errs.push('ArrowUp did not move the highlight back to row 0');
-    // Point 441: the filter row at the very top. Reaches a prompt the fixed
-    // favorites/recents selection above never showed, replaces that fixed
-    // selection while something is typed (no headers), leaves the window
-    // itself unresized, and restores the fixed selection once cleared again.
+    // The filter row at the very top hands the first keystroke to the quick
+    // launcher: what was typed travels along, the tray list itself stays as it was.
     const field = document.getElementById('tray-search');
     if (!field || field.hidden) errs.push('the search field is missing or hidden while traySearch is on');
-    const startW = window.innerWidth, startH = window.innerHeight;
     field.value = 'alpha';
     field.dispatchEvent(new Event('input', { bubbles: true }));
-    await sleep(150);
-    const searchHit = rows().find((r) => r.dataset.id === 'tray-copy-p4');
-    if (!searchHit) errs.push('typing did not surface a prompt outside the fixed favorites/recents selection');
-    if (document.querySelectorAll('#card .tray-menu-head').length) errs.push('a search result list must not draw the fixed section headers');
-    if (window.innerWidth !== startW || window.innerHeight !== startH) errs.push('the window resized while searching');
-    if (!rows()[0].classList.contains('active')) errs.push('the first search result is not highlighted');
-    field.value = '';
-    field.dispatchEvent(new Event('input', { bubbles: true }));
-    await sleep(30);
-    if (rows().length !== 5) errs.push('clearing the field did not restore the fixed selection, found ' + rows().length + ' rows');
-    if (document.querySelectorAll('#card .tray-menu-head').length !== 2) errs.push('clearing the field did not restore the section headers');
-    // Search again, then Enter -- proves the filter row's own hit runs through
-    // the exact same activation as a plain click (tray_window_activate), same
-    // as the fixed selection already used above.
-    field.value = 'alpha';
-    field.dispatchEvent(new Event('input', { bubbles: true }));
-    await sleep(150);
+    await sleep(60);
+    if (window.__TRAY_LAUNCHER_QUERY__ !== 'alpha') {
+      errs.push('typing in the tray filter did not hand the text to the launcher: ' + window.__TRAY_LAUNCHER_QUERY__);
+    }
+    if (rows().length !== 5) errs.push('typing changed the tray rows, found ' + rows().length);
+    // Enter on a fixed row still goes through the plain activation.
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     await sleep(30);
-    if (window.__TRAY_ACTIVATED__ !== 'tray-copy-p4') {
-      errs.push('Enter on a search result did not go through tray_window_activate: ' + window.__TRAY_ACTIVATED__);
+    if (window.__TRAY_ACTIVATED__ !== 'tray-copy-p1') {
+      errs.push('Enter on a fixed row did not go through tray_window_activate: ' + window.__TRAY_ACTIVATED__);
     }
     // Same "one action ever" guard the launcher and vars windows use: a stray
     // Escape after a real activation must never ALSO fire tray_window_close.
@@ -15193,12 +15204,15 @@ def main():
                 ("folder.html", (520, 420), FOLDER_PROBE, 15000),
                 ("vars.html", (340, 250), VARS_PROBE, 15000),
                 ("launcher.html", (560, 420), LAUNCHER_PROBE, 15000),
+                ("launcher_prefill.html", (560, 420), LAUNCHER_PREFILL_PROBE, 15000),
                 ("tray.html", (240, 360), TRAY_PROBE, 15000),
                 ("recbar.html", (320, 56), RECBAR_PROBE, 15000),
                 ("camera.html", (420, 620), CAMERA_STUB + CAMERA_PROBE, 15000),
                 ("camera_rec.html", (420, 620), CAMERA_REC_STUB + CAMERA_REC_PROBE, 30000)):
             if name == "camera_rec.html":
                 shutil.copyfile(REPO / "ui" / "camera.html", tmp / "ui" / name)
+            if name == "launcher_prefill.html":
+                shutil.copyfile(REPO / "ui" / "launcher.html", tmp / "ui" / name)
             side = tmp / "ui" / name
             side.write_text(
                 side.read_text(encoding="utf-8")

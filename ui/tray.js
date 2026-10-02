@@ -21,8 +21,6 @@ const searchEl = document.getElementById("tray-search");
 let rows = []; // flattened, in visual order: { id, el }
 let active = -1;
 let closed = false;
-let basePlan = null; // the fixed favourites/recents plan, restored once the field empties
-let searchSeq = 0; // guards against an older tray_window_search reply landing last
 
 function close() {
   if (closed) return;
@@ -168,21 +166,11 @@ function render(plan) {
   renderRows(plan.recEntries, plan.sections, plan.showLabel, plan.quitLabel);
 }
 
-// Runs on every keystroke in the search field. A blank query restores the fixed
-// favourites/recents selection; anything else asks the backend for matches over
-// EVERY prompt (not just what the fixed selection shows) and replaces the
-// sections with that flat, title-less list -- the window itself never resizes,
-// so a short result list just leaves the card less full, never taller.
-async function onSearchInput() {
-  const q = searchEl.value;
-  const seq = ++searchSeq;
-  if (!q.trim()) {
-    renderRows(basePlan.recEntries, basePlan.sections, basePlan.showLabel, basePlan.quitLabel);
-    return;
-  }
-  const hits = await invoke("tray_window_search", { query: q }).catch(() => []);
-  if (seq !== searchSeq) return; // a newer keystroke already answered this
-  renderRows(basePlan.recEntries, [{ title: "", entries: hits }], basePlan.showLabel, basePlan.quitLabel);
+// The first keystroke in the filter field hands over to the quick launcher: the
+// backend closes this window and opens the launcher with what was typed already in
+// its search box. Arrow keys and Enter on the fixed rows keep working before typing.
+function onSearchInput() {
+  invoke("tray_open_launcher", { query: searchEl.value }).catch(() => {});
 }
 
 document.addEventListener("keydown", (e) => {
@@ -226,7 +214,6 @@ async function boot() {
   const plan = await invoke("tray_window_plan").catch(() => ({ recEntries: [], sections: [], showLabel: "", quitLabel: "", searchOn: false, searchPh: "" }));
   applyFloatTheme(await invoke("current_theme").catch(() => null), await invoke("theme_vars").catch(() => ({})));
   listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars));
-  basePlan = plan;
   render(plan);
   if (plan.searchOn) {
     searchEl.placeholder = plan.searchPh || "";

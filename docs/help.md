@@ -636,11 +636,9 @@ Windows popup; the expert menu can switch back to the plain system menu if the
 custom one ever misbehaves on your setup. The expert menu also caps how long a
 prompt name may get before it is cut off with an ellipsis in that menu.
 
-A search field at the top of that menu filters as you type, across every
-prompt rather than just the favorites and recents already shown. Arrow keys
-pick a result, Enter copies it the same way a click does, and the field clears
-itself back to the normal selection once emptied. It ships on, and the one
-entry limit for every search list (expert menu) caps how many matches it lists.
+Typing in the tray menu's search field opens the quick launcher with what you
+typed. Arrow keys and Enter on the menu's own entries work as before. The field
+ships on.
 
 ### Standalone: Quick launcher
 
@@ -1410,7 +1408,8 @@ gehört immer nur zu einem Raster-Ordner gleichzeitig.
 **Infobereich-Menü**: Zuletzt kopiert, Favoriten. Erscheint als abgerundetes,
 zum Thema passendes Fenster statt des einfachen Windows-Menüs; im Expertenmenü
 lässt sich bei Bedarf auf das einfache Systemmenü zurückschalten. Dort auch
-einstellbar: die maximale Länge eines Eintragsnamens.
+einstellbar: die maximale Länge eines Eintragsnamens. Tippen ins Suchfeld des
+Infobereich-Menüs öffnet den Schnellstarter mit dem Getippten.
 
 **Kopien aus anderen Apps**: aus; eingeschaltet nimmt der Kopierverlauf auch Text
 auf, der in anderen Apps kopiert wurde, filterbar nach Herkunft.

@@ -152,7 +152,7 @@ document.body.addEventListener("mousedown", (e) => {
 async function boot() {
   // A lean command instead of get_state: this window has to be ready the instant
   // its hotkey fires, and it needs four small fields, not a whole prompt each.
-  const state = await invoke("launcher_items").catch(() => ({ prompts: [], language: "", usage: {}, last_used: {} }));
+  const state = await invoke("launcher_items").catch(() => ({ prompts: [], language: "", usage: {}, last_used: {}, prefill: "" }));
   const cfg = await invoke("get_settings").catch(() => null);
   const wanted = Number(cfg?.ui_values?.searchListMax);
   maxResults = Number.isFinite(wanted) ? Math.min(20, Math.max(3, Math.round(wanted))) : MAX_RESULTS_DEFAULT;
@@ -167,7 +167,9 @@ async function boot() {
   for (const p of prompts) { p.lname = (p.name || "").toLowerCase(); p.ltext = (p.text || "").toLowerCase(); }
   usage = state.usage || {};
   lastUsed = state.last_used || {};
+  if (state.prefill) searchEl.value = state.prefill;
   render();
   searchEl.focus();
+  searchEl.setSelectionRange(searchEl.value.length, searchEl.value.length);
 }
 boot();

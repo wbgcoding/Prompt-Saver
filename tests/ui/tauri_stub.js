@@ -380,6 +380,7 @@ const RESULTS = {
     language: SETTINGS.language || "",
     usage: JSON.parse(JSON.stringify(SETTINGS.usage || {})),
     last_used: JSON.parse(JSON.stringify(SETTINGS.last_used || {})),
+    prefill: window.__LAUNCHER_PREFILL__ || "",
   }),
   current_theme: () => "dark",
   theme_vars: () => ({ accent: "#ff00aa" }),
@@ -612,20 +613,8 @@ const RESULTS = {
   }),
   tray_window_activate: (a) => { window.__TRAY_ACTIVATED__ = a && a.id; return null; },
   tray_window_close: () => { window.__TRAY_CLOSED__ = true; return null; },
-  // A fourth prompt that is NOT in tray_window_plan's own fixed selection above --
-  // a hit here is what proves the filter row searches every prompt, not only the
-  // favorites/recents the fixed view already shows.
-  tray_window_search: (a) => {
-    const q = ((a && a.query) || "").trim().toLowerCase();
-    if (!q) return [];
-    const all = [
-      { id: "tray-copy-p1", label: "First prompt", kind: "text", color: "" },
-      { id: "tray-copy-p2", label: "Image prompt", kind: "image", color: "#ff00aa" },
-      { id: "tray-copy-p3", label: "File prompt", kind: "file", color: "" },
-      { id: "tray-copy-p4", label: "Alpha extra", kind: "text", color: "" },
-    ];
-    return all.filter((e) => e.label.toLowerCase().includes(q));
-  },
+  // The filter row hands what was typed to the launcher; the probe reads it back.
+  tray_open_launcher: (a) => { window.__TRAY_LAUNCHER_QUERY__ = a && a.query; return null; },
   set_theme: () => "dark",
   // Saving hands back the settings blob with the edited theme in place.
   save_custom_theme: (a) => {

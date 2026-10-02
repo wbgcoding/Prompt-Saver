@@ -141,7 +141,7 @@ export const HELP_CONTENT = {
       title: "Tray",
       whatItIs: "The tray icon's right-click menu offers quick access without opening the main window.",
       howTo: ["Right-click the tray icon.", "Pick an item from \"Recently copied\" or \"Favorites\" to copy it immediately."],
-      whatHappens: "The menu copies straight from the tray; the main window never has to open for this. The menu is drawn as a rounded window in the app's own theme; switch that off for the plain Windows menu. An optional search row at the top filters every tile while typing, not just the ones listed.",
+      whatHappens: "The menu copies straight from the tray; the main window never has to open for this. The menu is drawn as a rounded window in the app's own theme; switch that off for the plain Windows menu. Typing in the tray menu's search field opens the quick launcher with what you typed.",
       settings: ["Windows 11-style menu, search field, recently copied section, favorites section, entry counts, label length: Expert menu → Features → Tray menu"],
     },
     {
@@ -889,7 +889,7 @@ export const HELP_CONTENT = {
       title: "Infobereich-Menü",
       whatItIs: "Das Rechtsklick-Menü des Infobereich-Symbols bietet schnellen Zugriff, ohne das Hauptfenster zu öffnen.",
       howTo: ["Rechtsklick auf das Infobereich-Symbol.", "Einen Eintrag aus \"Zuletzt kopiert\" oder \"Favoriten\" wählen, um ihn sofort zu kopieren."],
-      whatHappens: "Das Menü kopiert direkt aus dem Infobereich; das Hauptfenster muss dafür nicht geöffnet werden. Das Menü erscheint als abgerundetes Fenster im Theme der App; ausgeschaltet kommt das schlichte Windows-Menü. Eine optionale Suchzeile oben filtert beim Tippen alle Kacheln, nicht nur die aufgelisteten.",
+      whatHappens: "Das Menü kopiert direkt aus dem Infobereich; das Hauptfenster muss dafür nicht geöffnet werden. Das Menü erscheint als abgerundetes Fenster im Theme der App; ausgeschaltet kommt das schlichte Windows-Menü. Tippen ins Suchfeld des Infobereich-Menüs öffnet den Schnellstarter mit dem Getippten.",
       settings: ["Infobereich-Menü im Windows-11-Stil, Suchfeld, Bereich für zuletzt Kopiertes, Bereich für Favoriten, Anzahl der Einträge, Länge der Beschriftung: Expertenmenü → Funktionen → Infobereich-Menü"],
     },
     {
