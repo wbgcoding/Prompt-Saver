@@ -134,6 +134,21 @@ function render(data) {
     return { ...control, remember: () => !!box?.checked };
   });
   rows[0]?.focus();
+  fitWindow();
+}
+
+// The backend sized this window from a per-row guess. Measure what the form really
+// needs (everything outside the field list plus the list's full content) and ask for
+// exactly that, so a short form shows no scrollbar and a long one only scrolls once
+// the screen is full.
+function fitWindow() {
+  const first = fieldsEl.firstElementChild;
+  const last = fieldsEl.lastElementChild;
+  const content = first && last
+    ? last.getBoundingClientRect().bottom - first.getBoundingClientRect().top
+    : 0;
+  const needed = Math.ceil(window.innerHeight - fieldsEl.clientHeight + content) + 2;
+  invoke("var_window_fit", { height: needed }).catch(() => {});
 }
 
 document.addEventListener("keydown", (e) => {

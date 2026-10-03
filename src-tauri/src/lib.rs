@@ -1022,7 +1022,7 @@ const VAR_WIN_LABEL: &str = "vars-0";
 const VAR_WIN_W: f64 = 340.0; // logical px; keep in sync with .vars-card in floating.css
 const VAR_ROW_H: f64 = 70.0;
 const VAR_WIN_CHROME: f64 = 104.0; // title + buttons + padding
-const VAR_WIN_MAX_H: f64 = 560.0;
+const VAR_WIN_MAX_H: f64 = 720.0; // the work area caps it further on small screens
 const VAR_ROWS_MAX: u32 = 24;
 // The payload is one prompt's placeholder list, never its body.
 const VAR_PAYLOAD_MAX: usize = 64 * 1024;
@@ -1183,6 +1183,30 @@ fn var_window_result(app: AppHandle, pending: State<VarPrompt>, values: Option<S
     if let Some(win) = app.get_webview_window(VAR_WIN_LABEL) {
         let _ = win.close();
     }
+    Ok(())
+}
+
+// The rows estimate in var_window_rect is a guess (a remember switch, a long name or a
+// larger system font all add height). Once the form has rendered it reports the
+// height it really needs, in logical px, and the window grows or shrinks to that,
+// staying centred where it was and inside its monitor's work area.
+#[tauri::command]
+fn var_window_fit(app: AppHandle, height: f64) -> Result<(), String> {
+    let Some(win) = app.get_webview_window(VAR_WIN_LABEL) else { return Ok(()) };
+    if !height.is_finite() || height <= 0.0 {
+        return Err("bad height".to_string());
+    }
+    let dpi = win.scale_factor().unwrap_or(1.0);
+    let (Ok(pos), Ok(size)) = (win.outer_position(), win.outer_size()) else { return Ok(()) };
+    let (x, w, old_h) = (pos.x as f64, size.width as f64, size.height as f64);
+    let mid_y = pos.y as f64 + old_h / 2.0;
+    let work = work_rect_at(&app, x + w / 2.0, mid_y);
+    let h = (height.min(VAR_WIN_MAX_H) * dpi).min(work.h).max(1.0);
+    if (h - old_h).abs() < 1.0 {
+        return Ok(());
+    }
+    let (x, y) = clamp_to_work(work, w, h, x, mid_y - h / 2.0);
+    set_bounds_phys(&win, Rect { x, y, w, h });
     Ok(())
 }
 
@@ -36387,6 +36411,7 @@ pub fn run() {
             open_var_window,
             var_window_payload,
             var_window_result,
+            var_window_fit,
             os_user_name,
             set_bars,
             set_minimize_on_close,

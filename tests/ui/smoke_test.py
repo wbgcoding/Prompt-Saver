@@ -10956,6 +10956,21 @@ VARS_PROBE = """
     if (!rows[0] || !rows[0].querySelector('input[type=checkbox]')) {
       errs.push('the free-text row has no remember switch');
     }
+    // The window asks to be exactly as tall as its form: a request smaller than the
+    // content leaves a scrollbar on a form that would fit on screen.
+    const fits = (window.__SMOKE_ARGS__ || []).filter(([c]) => c === 'var_window_fit');
+    const fields = document.getElementById('fields');
+    // Measured independently of vars.js: the list at its natural height, unclipped.
+    const boxH = fields.clientHeight;
+    fields.style.flex = 'none';
+    fields.style.overflow = 'visible';
+    const needed = window.innerHeight - boxH + fields.offsetHeight;
+    fields.style.flex = '';
+    fields.style.overflow = '';
+    if (!fits.length) errs.push('the window never asked to fit its content');
+    else if (!(fits[fits.length - 1][1].height >= needed)) {
+      errs.push('the fit request ' + fits[fits.length - 1][1].height + ' is shorter than the form (' + needed + ')');
+    }
     // The choice row must NOT be a native <select> — its OS popup would blur (and
     // therefore cancel) this window.
     if (rows[1] && rows[1].querySelector('select')) errs.push('a choice row uses a native select');

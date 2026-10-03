@@ -615,6 +615,17 @@ body.vars-body {
   gap: 8px;
   min-height: 0;
   overflow-y: auto; /* more placeholders than the window is tall */
+  /* The scrollbar sits in the card's own padding instead of on top of the inputs. */
+  margin-right: -8px;
+  padding-right: 8px;
+}
+.vars-fields::-webkit-scrollbar { width: 8px; }
+.vars-fields::-webkit-scrollbar-track { background: transparent; }
+.vars-fields::-webkit-scrollbar-thumb {
+  background: var(--menu-line);
+  border: 2px solid transparent;
+  border-radius: 4px;
+  background-clip: padding-box;
 }
 .vars-row {
   display: flex;

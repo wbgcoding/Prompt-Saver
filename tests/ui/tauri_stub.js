@@ -1381,6 +1381,7 @@ const RESULTS = {
   open_var_window: (a) => { window.__VAR_PAYLOAD__ = a && a.payload; return null; },
   var_window_payload: () => JSON.stringify(VAR_REQUEST),
   var_window_result: (a) => { window.__VAR_RESULT__ = (a && a.values) ?? null; return null; },
+  var_window_fit: () => null,
   // F25 pill folders: one folder with five members, so the closed icon has more
   // previews than the 2x2 grid shows and the badge has a real count.
   float_folder_state: () => ({ id: "f1", name: "Drafts", scale: 1, cols: 3, members: PROMPTS.slice(0, 5) }),
