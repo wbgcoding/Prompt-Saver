@@ -12,9 +12,10 @@ import { FONT_LABELS, FONTS } from "./fonts.js";
 import { fitAllTiles, fitCache } from "./tiles.js";
 import { prettyAccel } from "./hotkeys.js";
 import { applyFlags, applyValues, refreshSettingsLocked, showExpertPage } from "./expertMenu.js";
+import { maybeDupImportToast } from "./management.js";
 
-let maybeDupImportToast, openBackups, withDialog; // linked from main.js
-export function linkSettingsPanel(fns) { ({ maybeDupImportToast, openBackups, withDialog } = fns); }
+let openBackups, withDialog; // linked from main.js
+export function linkSettingsPanel(fns) { ({ openBackups, withDialog } = fns); }
 
 export let deleteAllTimer = null;
 export let resetSettingsTimer = null;

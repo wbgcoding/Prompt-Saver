@@ -8,9 +8,7 @@ import { activeView, favLayoutMap, layoutOf } from "./views.js";
 import { chainLock, chainMode, chainSel, onChainClick, setChainLock, setChainMode, toggleChainPick } from "./chain.js";
 import { autoPasteNow, showCopied } from "./tiles.js";
 import { copyResolved } from "./library.js";
-
-let recordToolUsage; // linked from main.js
-export function linkCopyFlow(fns) { ({ recordToolUsage } = fns); }
+import { recordToolUsage } from "./management.js";
 
 // Record a copy for the history/usage journal (backend honours the privacy flag).
 // Every successful copy path ends here, which makes it the one place that may start

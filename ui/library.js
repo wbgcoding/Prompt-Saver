@@ -11,9 +11,10 @@ import { copyOnCooldown, recordCopy } from "./copyFlow.js";
 import { attachSelectPicker } from "./selectpop.js";
 import { allTags, renderTagFilter, tagChipEl, tagKey, tagsOn } from "./tags.js";
 import { refreshClipInbox, setLibraryTab, tileTimeLines } from "./journal.js";
+import { openCompareView, recordToolUsage, renderStatsPanel } from "./management.js";
 
-let buildSwatches, closeBackups, editPrompt, ensureSecretVaultUnlocked, foldersOfView, openCompareView, openCtx, recordToolUsage, renderStatsPanel; // linked from main.js
-export function linkLibrary(fns) { ({ buildSwatches, closeBackups, editPrompt, ensureSecretVaultUnlocked, foldersOfView, openCompareView, openCtx, recordToolUsage, renderStatsPanel } = fns); }
+let buildSwatches, closeBackups, editPrompt, ensureSecretVaultUnlocked, foldersOfView, openCtx; // linked from main.js
+export function linkLibrary(fns) { ({ buildSwatches, closeBackups, editPrompt, ensureSecretVaultUnlocked, foldersOfView, openCtx } = fns); }
 
 export let libQuery = ""; // prompt library search text
 export function assignLibQuery(v) { libQuery = v; }

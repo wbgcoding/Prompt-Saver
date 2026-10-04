@@ -1,9 +1,7 @@
 // Chain mode: queue several prompts and copy them as one block.
 import { $, DRAG_THRESHOLD, errToast, flag, gridEl, invoke, prompts, settings, t } from "./core.js";
 import { resolveVars, varTokens } from "./promptVars.js";
-
-let recordToolUsage; // linked from main.js
-export function linkChain(fns) { ({ recordToolUsage } = fns); }
+import { recordToolUsage } from "./management.js";
 
 // ---- Prompt chaining ----
 // The chain button turns several TEXT buttons into one clipboard copy: click it,

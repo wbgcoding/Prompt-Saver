@@ -16,9 +16,10 @@ import { a11yProgressText, ffmpegDownloadPct, fmtBytes, formatEta, makeEtaEstima
 import { hideSettings, syncSettingsControls } from "./settingsPanel.js";
 import { bindHotkeyField, commitRecPauseHotkey, commitRecStopHotkey, prettyAccel } from "./hotkeys.js";
 import EN from "./i18n/en.js";
+import { renderStatsPanel, toggleShortLivedCert } from "./management.js";
 
-let closeBackups, openOcrLangsModal, openVoiceLangsModal, renderBackupPanel, renderStatsPanel, toggleShortLivedCert, varFixedListRow; // linked from main.js
-export function linkExpertMenu(fns) { ({ closeBackups, openOcrLangsModal, openVoiceLangsModal, renderBackupPanel, renderStatsPanel, toggleShortLivedCert, varFixedListRow } = fns); }
+let closeBackups, openOcrLangsModal, openVoiceLangsModal, renderBackupPanel, varFixedListRow; // linked from main.js
+export function linkExpertMenu(fns) { ({ closeBackups, openOcrLangsModal, openVoiceLangsModal, renderBackupPanel, varFixedListRow } = fns); }
 
 export let expertResetTimer = null;
 
