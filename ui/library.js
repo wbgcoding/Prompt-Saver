@@ -885,15 +885,7 @@ export function renderLibrary() {
       fav.addEventListener("pointerdown", (e) => e.stopPropagation());
       fav.addEventListener("click", async (e) => {
         e.stopPropagation();
-        p.favorite = !p.favorite;
-        try {
-          await invoke("set_favorite", { id: p.id, favorite: p.favorite });
-        } catch (err) {
-          p.favorite = !p.favorite; // backend rolled back on a failed save: mirror it locally
-          toast(String(err) === "save-failed" ? t("persistFailed") : String(err));
-        }
-        renderLibrary();
-        if (favView) renderGrid(true); // favorites grid updates live underneath
+        await toggleFavoritePrompt(p);
       });
       makeKeyboardActivatable(fav);
       row.appendChild(fav);
@@ -1011,6 +1003,19 @@ export function fillBatchViews(selId = "lib-batch-view") {
     sel.appendChild(o);
   }
   if (settings.active_view) sel.value = settings.active_view;
+}
+
+// The one favorite toggle: the library star and the tile menu entry both land here.
+export async function toggleFavoritePrompt(p) {
+  p.favorite = !p.favorite;
+  try {
+    await invoke("set_favorite", { id: p.id, favorite: p.favorite });
+  } catch (err) {
+    p.favorite = !p.favorite; // backend rolled back on a failed save: mirror it locally
+    toast(String(err) === "save-failed" ? t("persistFailed") : String(err));
+  }
+  if (!libraryEl.classList.contains("hidden")) renderLibrary();
+  if (favView) renderGrid(true); // favorites grid updates live underneath
 }
 
 // ---- Grid bulk selection: reuses the same batch_prompts backend, its own

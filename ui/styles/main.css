@@ -4773,14 +4773,15 @@ body.drag-over::after {
    would otherwise jump around as a tab nears either end. */
 .ctx button:disabled { color: var(--muted); cursor: default; opacity: 0.5; }
 .ctx button:disabled:hover { background: transparent; }
-/* Unchecked, this row has no leading icon and reads flush with every other
-   entry; the checkmark's 16px slot (and the gap in front of it) only opens up
-   once it is actually set, instead of being reserved all the time. */
-.ctx button[data-act="rotateAutoMenu"] { display: flex; align-items: center; gap: 0; }
-.ctx button[data-act="rotateAutoMenu"] .tb-check { flex: 0 0 0; width: 0; }
-.ctx button[data-act="rotateAutoMenu"].checked { gap: 8px; }
-.ctx button[data-act="rotateAutoMenu"].checked .tb-check { flex: 0 0 16px; width: 16px; }
+/* The rotate row has no icon: its 16px check slot stands where the other
+   entries carry theirs, so every label lines up. */
+.ctx button[data-act="rotateAutoMenu"] { display: flex; align-items: center; gap: 8px; }
+.ctx button[data-act="rotateAutoMenu"] .tb-check { flex: 0 0 16px; width: 16px; }
+/* Delete is red at rest, set apart by the last separator; the undo toast is the guard. */
+#ctx button.danger { color: var(--danger); }
 .ctx button.danger:hover { color: var(--danger); }
+.ctx-sep { height: 1px; margin: 4px 6px; background: var(--border); flex: 0 0 auto; }
+.ctx-kbd { margin-left: auto; padding-left: 16px; color: var(--muted); font: inherit; font-size: 11px; }
 .ctx button.confirm,
 .ctx button.confirm:hover { background: var(--danger); color: #fff; }
 /* The shared folder glyph on a "group into a folder" / ungroup entry -- same

@@ -474,6 +474,82 @@ SECTION = """\
         }
       }
     }
+    // 698: the tile menu offers Copy, Favorite, Select and Start chain, groups its
+    // entries behind separators, gives each an icon and ends on a red Delete.
+    {
+      const ctxTile = [...document.querySelectorAll('#grid .tile')].find((e) => e.dataset.id === 'p0');
+      const ctxVisible = (b) => !!b && !b.classList.contains('hidden') && getComputedStyle(b).display !== 'none';
+      const openTileMenu = async () => {
+        ctxTile.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 60, clientY: 60 }));
+        await sleep(150);
+      };
+      if (!ctxTile) {
+        out.errors.push('698: no tile p0 on the grid for the tile menu check');
+      } else {
+        await openTileMenu();
+        for (const act of ['copy', 'favorite', 'select', 'chain']) {
+          if (!ctxVisible(document.querySelector('#ctx [data-act="' + act + '"]'))) {
+            out.errors.push('698: the tile menu shows no ' + act + ' entry');
+          }
+        }
+        // p0 carries a hotkey and is a favorite: the hotkey shows beside Copy, the star entry offers to remove it.
+        const kbdText = (document.querySelector('#ctx [data-act="copy"] .ctx-kbd') || {}).textContent || '';
+        if (!kbdText.includes('Shift') || !kbdText.includes('9')) out.errors.push('698: Copy shows no hotkey, got: ' + kbdText);
+        const favText = (document.querySelector('#ctx [data-act="favorite"] .ctx-label') || {}).textContent || '';
+        if (favText !== 'Remove from favorites') out.errors.push('698: the favorite entry reads: ' + favText);
+        const seps = [...document.querySelectorAll('#ctx .ctx-sep')].filter((s) => getComputedStyle(s).display !== 'none');
+        if (seps.length < 3) out.errors.push('698: the tile menu has ' + seps.length + ' visible separators, expected at least 3');
+        const shown = [...document.querySelectorAll('#ctx > button')].filter(ctxVisible);
+        const lastBtn = shown[shown.length - 1];
+        if (!lastBtn || lastBtn.dataset.act !== 'delete') {
+          out.errors.push('698: the last tile menu entry is ' + (lastBtn ? lastBtn.dataset.act : 'none') + ', expected delete');
+        } else {
+          const ref = document.createElement('span');
+          ref.style.color = 'var(--danger)';
+          document.body.appendChild(ref);
+          const want = getComputedStyle(ref).color;
+          ref.remove();
+          if (getComputedStyle(lastBtn).color !== want) out.errors.push('698: Delete is not red at rest: ' + getComputedStyle(lastBtn).color + ' vs ' + want);
+        }
+        for (const b of shown) {
+          if (b.dataset.act === 'rotateAutoMenu') continue;
+          if (!b.querySelector('.menu-icon svg')) out.errors.push('698: the tile menu entry ' + b.dataset.act + ' has no icon');
+          if (!b.querySelector('.ctx-label')) out.errors.push('698: the tile menu entry ' + b.dataset.act + ' has no label span');
+        }
+        window.__SMOKE_ARGS__ = [];
+        document.querySelector('#ctx [data-act="copy"]').click();
+        await sleep(300);
+        const copies = window.__SMOKE_ARGS__.filter(([cmd]) => cmd === 'copy_prompt').length;
+        if (copies !== 1) out.errors.push('698: the Copy entry called copy_prompt ' + copies + ' times, expected 1');
+        if (!document.getElementById('ctx').classList.contains('hidden')) out.errors.push('698: the menu stayed open after Copy');
+        for (const want of [false, true]) {
+          await openTileMenu();
+          window.__SMOKE_ARGS__ = [];
+          document.querySelector('#ctx [data-act="favorite"]').click();
+          await sleep(250);
+          const favCalls = window.__SMOKE_ARGS__.filter(([cmd, args]) => cmd === 'set_favorite' && args && args.id === 'p0' && args.favorite === want);
+          if (favCalls.length !== 1) out.errors.push('698: the favorite entry did not send set_favorite ' + want);
+        }
+        await openTileMenu();
+        document.querySelector('#ctx [data-act="select"]').click();
+        await sleep(200);
+        if (!document.body.classList.contains('grid-selecting')) out.errors.push('698: the Select entry did not start selecting');
+        await openTileMenu();
+        document.querySelector('#ctx [data-act="select"]').click();
+        await sleep(200);
+        if (document.body.classList.contains('grid-selecting')) out.errors.push('698: the Select entry did not unselect the selected tile');
+        // Start chain begins a chain with this tile; leave it again right away.
+        await openTileMenu();
+        document.querySelector('#ctx [data-act="chain"]').click();
+        await sleep(300);
+        if (!document.body.classList.contains('chain-mode')) out.errors.push('698: the Start chain entry did not start a chain');
+        for (let k = 0; k < 3 && document.body.classList.contains('chain-mode'); k++) {
+          document.getElementById('chain-btn').click();
+          await sleep(200);
+        }
+        if (document.body.classList.contains('chain-mode')) out.errors.push('698: the chain did not end through the chain button');
+      }
+    }
     // 91: trash - the dialog opened from the expert menu's Data group. Restore,
     // single purge and "Clear all" (empty_trash) each get their own target so all
     // three new commands are exercised, not just the happy path of one.

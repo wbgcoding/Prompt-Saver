@@ -1530,39 +1530,51 @@
 
   <!-- Context menu for a tile -->
   <div id="ctx" class="ctx hidden" role="menu">
-    <button data-act="edit" role="menuitem" data-i18n="edit">Edit</button>
+    <!-- Copy only, never pastes. The right-aligned kbd shows the prompt's own hotkey (openCtx fills
+         it, or empties it when there is none). -->
+    <button data-act="copy" role="menuitem" class="has-icon"><span class="menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></span><span class="ctx-label" data-i18n="copy">Copy</span><kbd class="ctx-kbd"></kbd></button>
+    <!-- Only shown while favorites are on; the label names the action (openCtx sets it). -->
+    <button data-act="favorite" role="menuitem" class="has-icon hidden"><span class="menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l2.5 5.2 5.7.8-4.1 4 1 5.7L12 16.9l-5.1 2.6 1-5.7-4.1-4 5.7-.8z"/></svg></span><span class="ctx-label">Add to favorites</span></button>
+    <button data-act="select" role="menuitem" class="has-icon"><span class="menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/></svg></span><span class="ctx-label" data-i18n="selectPrompt">Select</span></button>
+    <!-- Only shown for a text prompt while chaining and its tile-menu start are on and no
+         chain is running (openCtx toggles .hidden). -->
+    <button data-act="chain" role="menuitem" class="has-icon hidden"><span class="menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path transform="rotate(-45 12 12)" d="M9 17H7A5 5 0 0 1 7 7h2M15 7h2a5 5 0 0 1 0 10h-2M8 12h1.6M14.4 12H16"/></svg></span><span class="ctx-label" data-i18n="startChainHere">Start chain here</span></button>
+    <div class="ctx-sep" role="separator"></div>
+    <button data-act="edit" role="menuitem" class="has-icon"><span class="menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L18.5 9.5a2 2 0 0 0-2.8-2.8L5 17.2V20Zm9.5-12.5 3 3"/></svg></span><span class="ctx-label" data-i18n="edit">Edit</span></button>
+    <!-- Only shown for a video prompt (openCtx toggles .hidden) -- opens the
+         video editor instead of the normal text editor. -->
+    <button data-act="editVideo" role="menuitem" class="has-icon hidden"><span class="menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 5v14M17 5v14M3 9h4M3 15h4M17 9h4M17 15h4"/></svg></span><span class="ctx-label" data-i18n="editVideo">Edit video</span></button>
+    <!-- Only shown for an image or GIF prompt (openCtx toggles .hidden) -- opens
+         the screenshot editor on a copy of the attached file. -->
+    <button data-act="editImage" role="menuitem" class="has-icon hidden"><span class="menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M4 18l5-5 4 4 3-3 4 4"/></svg></span><span class="ctx-label" data-i18n="editImage">Edit image</span></button>
     <!-- Only shown for a text prompt whose body actually contains Markdown
          syntax, and only while copyFormatted itself is on (openCtx toggles
          .hidden). Puts both the Markdown text and its rendered form on the
          clipboard in one copy. -->
-    <button data-act="copyFormatted" role="menuitem" class="hidden" data-i18n="copyFormattedAction">Copy formatted</button>
-    <!-- Only shown for a video prompt (openCtx toggles .hidden) -- opens the
-         video editor instead of the normal text editor. -->
-    <button data-act="editVideo" role="menuitem" class="hidden" data-i18n="editVideo">Edit video</button>
-    <!-- Only shown for an image or GIF prompt (openCtx toggles .hidden) -- opens
-         the screenshot editor on a copy of the attached file. -->
-    <button data-act="editImage" role="menuitem" class="hidden" data-i18n="editImage">Edit image</button>
-    <button data-act="duplicate" role="menuitem" data-i18n="duplicate">Duplicate</button>
-    <button data-act="hide" role="menuitem" data-i18n="hideInView">Hide in this view</button>
+    <button data-act="copyFormatted" role="menuitem" class="has-icon hidden"><span class="menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h11M9.5 5v9M4 18h16M4 21h10"/></svg></span><span class="ctx-label" data-i18n="copyFormattedAction">Copy formatted</span></button>
+    <button data-act="duplicate" role="menuitem" class="has-icon"><span class="menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="9" width="11" height="11" rx="2"/><path d="M9 5.5V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-.5M9.5 12.5v4M7.5 14.5h4"/></svg></span><span class="ctx-label" data-i18n="duplicate">Duplicate</span></button>
+    <div class="ctx-sep" role="separator"></div>
+    <button data-act="hide" role="menuitem" class="has-icon"><span class="menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path d="M4 4l16 16"/></svg></span><span class="ctx-label" data-i18n="hideInView">Hide in this view</span></button>
     <!-- Hidden unless multiViewPrompt is on and there is another view to place this into. -->
-    <button data-act="views" role="menuitem" data-i18n="alsoShowIn">Also show in…</button>
+    <button data-act="views" role="menuitem" class="has-icon"><span class="menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg></span><span class="ctx-label" data-i18n="alsoShowIn">Also show in…</span></button>
     <!-- Only shown when tile folders are on (openCtx toggles .hidden) -- opens a
          popover to join an existing folder in this view or start a new one, the
          keyboard equivalent of dragging this tile onto another. -->
-    <button data-act="moveToFolder" role="menuitem" class="hidden" data-i18n="moveToFolderMenu">Move to tile folder…</button>
+    <button data-act="moveToFolder" role="menuitem" class="has-icon hidden"><span class="menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.2l2.4 2.4h8.4A1.5 1.5 0 0 1 21 8.9v9.6a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5Z"/></svg></span><span class="ctx-label" data-i18n="moveToFolderMenu">Move to tile folder…</span></button>
     <!-- Label set in openCtx() -- it names the action ("Show"/"Remove"), not a state-less "Toggle". -->
-    <button data-act="pin" role="menuitem"></button>
+    <button data-act="pin" role="menuitem" class="has-icon"><span class="menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3.2 20.8 8l-1.7 1.7-.9-.2-3.2 3.2.5 4.1-1.4 1L9.6 14l-5.4 5.4-1.2-1.2L8.4 13 4 8.6l1-1.4 4.1.5 3.2-3.2-.2-.9L16 3.2Z"/></svg></span><span class="ctx-label" data-i18n="showFloating">Show floating button</span></button>
     <!-- Only shown when the archive feature is on (openCtx toggles .hidden); label
          set there too ("Archive"/"Unarchive", it names the action, not a state). -->
-    <button data-act="archive" role="menuitem" class="hidden"></button>
+    <button data-act="archive" role="menuitem" class="has-icon hidden"><span class="menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8M10 12h4"/></svg></span><span class="ctx-label" data-i18n="archiveAction">Archive</span></button>
     <!-- Only shown when this prompt actually rotates AND both auto gates are
          on (openCtx toggles .hidden); never a greyed-out entry for a case where it
-         cannot do anything. -->
-    <button data-act="rotateAutoMenu" role="menuitemcheckbox" class="hidden">
+         cannot do anything. The tick slot stands where the other entries carry an icon. -->
+    <button data-act="rotateAutoMenu" role="menuitemcheckbox" class="has-icon hidden">
       <span class="tb-check"></span>
-      <span data-i18n="rotateAutoMenu">Rotate on paste</span>
+      <span class="ctx-label" data-i18n="rotateAutoMenu">Rotate on paste</span>
     </button>
-    <button data-act="delete" role="menuitem" class="danger" data-i18n="delete">Delete</button>
+    <div class="ctx-sep" role="separator"></div>
+    <button data-act="delete" role="menuitem" class="has-icon danger"><span class="menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2m-8 0 1 13h8l1-13M10 11v6M14 11v6"/></svg></span><span class="ctx-label" data-i18n="delete">Delete</span></button>
   </div>
 
   <!-- Fullscreen media viewer (in-window): click any preview to zoom + pan -->

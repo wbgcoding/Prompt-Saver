@@ -1,8 +1,8 @@
 // Tile context menu, views popup, move-to-folder popup, grid tag popup and the toolbar menu.
-import { $, assignSettings, ctxEl, disarmButton, errToast, favView, flag, gridTags, invoke, libraryEl, optFlag, prompts, settings, t, TB_CHECK, toast } from "./core.js";
-import { isTextPrompt } from "./chain.js";
+import { $, assignSettings, ctxEl, errToast, favView, flag, gridTags, invoke, libraryEl, optFlag, prompts, settings, t, TB_CHECK, toast } from "./core.js";
+import { chainMode, isTextPrompt, startChainWith } from "./chain.js";
 import { hasMarkdownSyntax } from "./markdown.js";
-import { batchErrorToast, ensureArchiveTagName, isArchived, renderLibrary, trashPromptWithUndo } from "./library.js";
+import { batchErrorToast, ensureArchiveTagName, isArchived, renderLibrary, toggleFavoritePrompt, toggleGridSelect, trashPromptWithUndo } from "./library.js";
 import { cacheFloatingState, foldersOfView, folderTitle, newTileFolder, saveFolder, tileFoldersOn } from "./gridFolders.js";
 import { mediaKind } from "./media.js";
 import { placePopover, placePopoverAt } from "./popover.js";
@@ -11,17 +11,27 @@ import { allTags, tagChipEl, tagKey } from "./tags.js";
 import { FLAG_LABELS, OPT_FLAG_KEYS, OPT_FLAG_LABELS } from "./expertConfig.js";
 import { applyFlags } from "./expertMenu.js";
 import { duplicatePrompt, editPrompt } from "./editor.js";
-import { copyFormattedPrompt } from "./copyFlow.js";
+import { activateTile, copyFormattedPrompt } from "./copyFlow.js";
 import { recordToolUsage } from "./management.js";
-import { toggleRotateAutoDirect } from "./hotkeys.js";
+import { prettyAccel, promptHotkeysOn, toggleRotateAutoDirect } from "./hotkeys.js";
 
 export let ctxId = null;
 
 // ---- Context menu ----
 export function openCtx(id, x, y) {
   ctxId = id;
-  // Reset an armed delete confirmation from a previous open.
-  disarmButton(ctxEl.querySelector('[data-act="delete"]'), t("delete"));
+  const cp = prompts.find((x) => x.id === id);
+  // Copy only, like a plain tile click. The prompt's own hotkey, when it has one and
+  // prompt hotkeys are on, sits right-aligned beside it.
+  const kbd = ctxEl.querySelector('[data-act="copy"] .ctx-kbd');
+  const hotkeyText = cp?.hotkey && promptHotkeysOn() ? prettyAccel(cp.hotkey) : "";
+  kbd.textContent = hotkeyText;
+  kbd.classList.toggle("hidden", !hotkeyText);
+  const favBtn = ctxEl.querySelector('[data-act="favorite"]');
+  favBtn.classList.toggle("hidden", !flag("favorites"));
+  favBtn.querySelector(".ctx-label").textContent = t(cp?.favorite ? "favoriteRemove" : "favoriteAdd");
+  // Starting a chain here only makes sense for a text prompt while no chain runs.
+  ctxEl.querySelector('[data-act="chain"]').classList.toggle("hidden", !(isTextPrompt(cp) && flag("chainPrompts") && flag("chainQuickStart") && !chainMode));
   // Only a text prompt whose body actually contains Markdown syntax, same
   // check the formatted-copy entry in the editor uses.
   const cfPrompt = prompts.find((x) => x.id === id);
@@ -32,12 +42,12 @@ export function openCtx(id, x, y) {
   const pinBtn = ctxEl.querySelector('[data-act="pin"]');
   pinBtn.classList.toggle("hidden", !flag("floating"));
   const pinned = !!settings.floating?.[id];
-  pinBtn.textContent = t(pinned ? "removeFloating" : "showFloating");
+  pinBtn.querySelector(".ctx-label").textContent = t(pinned ? "removeFloating" : "showFloating");
   // Archive: hidden unless the feature is on; the label names the action, not a state.
   const archiveBtn = ctxEl.querySelector('[data-act="archive"]');
   archiveBtn.classList.toggle("hidden", !flag("archiveTag"));
   const archivedNow = isArchived(prompts.find((x) => x.id === id) || {});
-  archiveBtn.textContent = t(archivedNow ? "unarchiveAction" : "archiveAction");
+  archiveBtn.querySelector(".ctx-label").textContent = t(archivedNow ? "unarchiveAction" : "archiveAction");
   // In the favorites view a prompt can't be hidden/removed: unstar it instead.
   ctxEl.querySelector('[data-act="hide"]').classList.toggle("hidden", favView);
   // Nothing to place this prompt into besides the view it is already on.
@@ -60,6 +70,13 @@ export function openCtx(id, x, y) {
     rmenuBtn.setAttribute("aria-checked", String(on));
     rmenuBtn.classList.toggle("checked", on);
     rmenuBtn.querySelector(".tb-check").innerHTML = on ? TB_CHECK : "";
+  }
+  // A separator only stays while at least one entry between it and the previous
+  // separator is shown.
+  let groupShown = false;
+  for (const el of ctxEl.children) {
+    if (el.classList.contains("ctx-sep")) { el.classList.toggle("hidden", !groupShown); groupShown = false; }
+    else if (!el.classList.contains("hidden")) groupShown = true;
   }
   placePopoverAt(ctxEl, x, y);
 }
@@ -278,7 +295,17 @@ export function bindGridMenus({ openExternalFileInEditor }) {
       return;
     }
     closeCtx();
-    if (act === "edit") {
+    if (act === "copy") {
+      await activateTile(id, false); // copy only, even with auto-paste on
+    } else if (act === "favorite") {
+      const p = prompts.find((x) => x.id === id);
+      if (p) await toggleFavoritePrompt(p);
+    } else if (act === "select") {
+      toggleGridSelect(id);
+    } else if (act === "chain") {
+      const p = prompts.find((x) => x.id === id);
+      if (p) await startChainWith(p);
+    } else if (act === "edit") {
       await editPrompt(id);
     } else if (act === "copyFormatted") {
       await copyFormattedPrompt(id);
