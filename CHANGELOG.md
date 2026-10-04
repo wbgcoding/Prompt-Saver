@@ -1784,6 +1784,7 @@ the video editor and the introduction tour ship on).
 - **The expert menu tabs stay on one line.** On a narrow window the tab bar scrolls sideways instead of wrapping onto a second row.
 - **A legend for the dot in the expert menu.** The row above the tabs now says what the small dot beside a setting means: it ships switched off.
 - **Seconds, words and megabytes in the expert menu.** Times that used to read in milliseconds now read in seconds (for example 0.08 s), the attachment preview size reads as roughly that many words, and the error log size reads in megabytes. The stored values are unchanged.
+- **Zero hours reads Never.** The delay after which parked buttons are hidden shows "Never" at 0 instead of "0h".
 
 ## 2.6.3 (2026-07-26)
 

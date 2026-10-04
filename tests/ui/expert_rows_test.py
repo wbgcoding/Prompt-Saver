@@ -262,6 +262,7 @@ VALUE_TEXT_PROBE = """
       autoPasteDelayMs: '0,08 s',
       attachPreviewKb: '≈ 1.360 Wörter',
       errorLogKeepKb: '0,25 MB',
+      floatParkCleanupH: 'Nie',
     };
     const got = {};
     for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {

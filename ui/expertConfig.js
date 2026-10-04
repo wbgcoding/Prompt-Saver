@@ -419,7 +419,7 @@ export const EXPERT_VALUES = {
   // 0 = off (never clears the parked view, only the position keeps living in
   // settings either way). Above 0, a button parked this many hours loses only
   // its view -- the same "hide for now" mechanism -- never the saved entry.
-  floatParkCleanupH: { label: "valFloatParkCleanupH", min: 0, max: 168, step: 1, def: 0, unit: "h", gate: "floating" },
+  floatParkCleanupH: { label: "valFloatParkCleanupH", min: 0, max: 168, step: 1, def: 0, unit: "h", zeroLabel: "updateNever", gate: "floating" },
   // Pill folders: how much a pill grows for the merge-target hint, and the open
   // folder popover's own tile size / gap / padding.
   pillFolderTileSize: { label: "valPillFolderTileSize", min: 48, max: 120, step: 4, def: 72, unit: "px", gate: "pillFolders" },
