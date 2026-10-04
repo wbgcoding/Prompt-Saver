@@ -90,6 +90,33 @@ SECTION = """\
         }
       }
     }
+    // 711: the colour filter offers only the colours the prompts really use, and
+    // hides itself below two of them.
+    {
+      const invoke711 = window.__TAURI__.core.invoke;
+      const state711 = await invoke711('get_state');
+      const saved711 = state711.prompts.map((p) => [p.id, p.color]);
+      const paint711 = async (colors) => {
+        for (const [i, [id]] of saved711.entries()) await invoke711('update_prompt', { id, color: colors[i % colors.length] });
+        window.__FIRE__('store-synced', null);
+        await sleep(450);
+      };
+      const wrap711 = () => document.getElementById('library-colors');
+      await paint711(['#ef4444', '#3b82f6']);
+      const twoColours = wrap711().querySelectorAll('.lib-color').length;
+      if (twoColours !== 3 || wrap711().classList.contains('hidden')) {
+        out.errors.push('711: two used colours should give 3 filter chips (all + 2), got ' + twoColours);
+      }
+      await paint711(['#ef4444']);
+      if (!wrap711().classList.contains('hidden')) out.errors.push('711: the colour filter stays visible with a single used colour');
+      for (const [id, color] of saved711) await invoke711('update_prompt', { id, color });
+      window.__FIRE__('store-synced', null);
+      await sleep(450);
+      const allColours = wrap711().querySelectorAll('.lib-color').length;
+      if (allColours < 4 || wrap711().classList.contains('hidden')) {
+        out.errors.push('711: the colour filter did not come back after the colours were restored: ' + allColours);
+      }
+    }
     // A library row with an image attachment opens the same actions menu as any
     // other row: edit, edit image, duplicate ... delete, not just "open in editor".
     {

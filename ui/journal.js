@@ -1,7 +1,7 @@
 // The copy history and the clipboard inbox.
 import { $, assignLibraryTab, assignSettings, debounced, errToast, flag, ICON_EDIT, ICON_TRASH, invoke, journalThumbCache, LANG, libraryEl, libraryTab, listen, makeKeyboardActivatable, optFlag, prompts, putIcon, settings, t, toast, undoToast, val } from "./core.js";
 import { confirmDialog } from "./dialog.js";
-import { _journalObs, assignActiveVidObs, assignJournalObs, buildColorFilter, copyResolved, hideLibrary, lastEdited, libLabel, libSelectMode, makeVideoObserver, maybeBackfillMediaMeta, mediaThumb, mediaTipLine, paintTypeChips, promptType, renderLibrary, setActiveFilter, setLibSelectMode, tagMatches, thumbEl, toastCopied, toggleTypeFilter, typeAllowed, typeFilterOf } from "./library.js";
+import { _journalObs, assignActiveVidObs, assignJournalObs, buildColorFilter, copyResolved, hideLibrary, lastEdited, libLabel, libSelectMode, makeVideoObserver, maybeBackfillMediaMeta, mediaThumb, mediaTipLine, paintTypeChips, promptType, renderLibrary, setActiveFilter, setLibSelectMode, tagMatches, thumbEl, toastCopied, toggleTypeFilter, typeAllowed, typeFilterOf, usedColors } from "./library.js";
 import { allTags, renderTagBar, tagChipEl, tagKey, tagsOn } from "./tags.js";
 import { JOURNAL_ROWS_MAX } from "./expertConfig.js";
 import { copyOnCooldown, recordCopy } from "./copyFlow.js";
@@ -283,6 +283,9 @@ export function renderJournal() {
   assignJournalObs(makeVideoObserver());
   assignActiveVidObs(_journalObs);
   const byId = new Map(prompts.map((p) => [p.id, p]));
+  const colorsUsed = usedColors(journalLog.map((e) => byId.get(e.id)).filter(Boolean));
+  if (journalColor !== "all" && !colorsUsed.includes(journalColor)) setJournalColor("all");
+  buildColorFilter($("journal-colors"), journalColor, colorsUsed);
   const grouped = flag("historyGrouped");
   const showTime = flag("historyTimestamps");
   // Copies from other apps share the list when the recorder is on or entries are still
@@ -517,7 +520,6 @@ export function bindJournal() {
   listen("clip-inbox-changed", () => refreshClipInbox());
 
   // Copy history & usage journal.
-  buildColorFilter($("journal-colors"), journalColor);
   const renderJournalDebounced = debounced(renderJournal);
   $("journal-q").addEventListener("input", (e) => { journalQuery = e.target.value; renderJournalDebounced(); });
   wireSearchSuggest($("journal-q"), "recentSearchJournal");

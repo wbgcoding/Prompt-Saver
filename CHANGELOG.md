@@ -1768,6 +1768,7 @@ the video editor and the introduction tour ship on).
 - **Clearer danger buttons in the settings.** The two buttons at the bottom of the settings now say "Reset settings" and "Delete all data", and their tooltips say what is kept.
 - **Placeholders read as [name] in previews.** Library and history rows, search results, the trash, the quick launcher and the tile tooltip show `[name]` instead of the raw `{#{name}#}` text.
 - **Close after copy is a checkbox.** In the library header the option is a plain checkbox with its label instead of a button that looks like a tab.
+- **The colour filter lists only colours in use.** The library and the copy history show a dot for each colour a prompt really has, and hide the row when fewer than two colours are used.
 
 ## 2.6.3 (2026-07-26)
 

@@ -564,10 +564,24 @@ export function tagMatches(p, tagSet = libTags) {
     : wanted.every((k) => own.has(k));
 }
 
-// Color-filter dots (once per wrap). "All" + every palette color. Shared by the
-// library and the copy-history journal.
-export function buildColorFilter(wrap, current) {
-  if (!wrap || wrap.childElementCount) return; // built once; refreshColorUI clears first
+// The palette colours some prompt really carries, in palette order.
+export function usedColors(list) {
+  const seen = new Set(list.map((p) => p.color || "").filter(Boolean));
+  return COLORS.filter((c) => c && seen.has(c));
+}
+
+// Color-filter dots: "All" + the used colours (every palette colour when `used` is
+// left out). Rebuilt only when that set changes (its signature rides on the wrap) and
+// hidden below two colours, where a filter has nothing to choose. Shared by the
+// library and the copy-history journal; refreshColorUI clears the signature.
+export function buildColorFilter(wrap, current, used) {
+  if (!wrap) return;
+  const shown = used || COLORS.filter(Boolean);
+  wrap.classList.toggle("hidden", shown.length < 2);
+  const sig = shown.join(",");
+  if (wrap.childElementCount && wrap.dataset.sig === sig) return;
+  wrap.dataset.sig = sig;
+  wrap.innerHTML = "";
   const mk = (color, cls) => {
     const b = document.createElement("button");
     b.type = "button";
@@ -582,7 +596,7 @@ export function buildColorFilter(wrap, current) {
     return b;
   };
   wrap.appendChild(mk("all", "lib-color-all"));
-  for (const c of COLORS) if (c) wrap.appendChild(mk(c, ""));
+  for (const c of shown) wrap.appendChild(mk(c, ""));
 }
 export function setActiveFilter(wrap, selector, attr, value) {
   for (const b of wrap.querySelectorAll(selector)) {
@@ -733,6 +747,9 @@ export function renderLibrary() {
   if (viewToggle) viewToggle.classList.toggle("active", tilesMode);
   renderTagFilter();
   renderSavedSearches();
+  const colorsUsed = usedColors(prompts);
+  if (libColor !== "all" && !colorsUsed.includes(libColor)) setLibColor("all");
+  buildColorFilter($("library-colors"), libColor, colorsUsed);
   const anyLibFilter = flag("librarySearch") || flag("libraryTypeFilter") || flag("colorFilter") || flag("favorites") || tagsOn();
   $("library-search").classList.toggle("hidden", !prompts.length || !anyLibFilter);
   if (!prompts.length) {
@@ -1387,7 +1404,6 @@ export function syncLibraryCols() {
 }
 
 export function bindLibrary() {
-  buildColorFilter($("library-colors"), libColor);
   $("library-btn").addEventListener("click", async () => {
     await refreshLastEdited();
     await refreshClipInbox(); // decides whether the history tab is offered

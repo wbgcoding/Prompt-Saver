@@ -1,8 +1,8 @@
 // Themes and the custom theme editor.
 import { $, assignCOLORS, assignSettings, CLEAR_SVG, closeColorPop, DEFAULT_COLORS, emit, errToast, flag, HEX_RE, invoke, libraryEl, openColorPop, PALETTE_LEN, settings, t, toast } from "./core.js";
 import { themeColorScheme } from "./floatShared.js";
-import { buildColorFilter, libColor, renderLibrary } from "./library.js";
-import { isHistoryTabOpen, journalColor, renderJournal } from "./journal.js";
+import { renderLibrary } from "./library.js";
+import { isHistoryTabOpen, renderJournal } from "./journal.js";
 import { FONTS } from "./fonts.js";
 import { fitCache } from "./tiles.js";
 import { confirmDialog } from "./dialog.js";
@@ -101,10 +101,11 @@ export function loadPalette() {
   assignCOLORS(custom ? ["", ...custom] : [...DEFAULT_COLORS]);
 }
 
-// Rebuild the filter dots (cached) after a palette change, and refresh any open list.
+// Drop the filter dots (built again by the next render) after a palette change, and
+// refresh any open list.
 export function refreshColorUI() {
-  for (const [wrap, cur] of [[$("library-colors"), libColor], [$("journal-colors"), journalColor]]) {
-    if (wrap) { wrap.innerHTML = ""; buildColorFilter(wrap, cur); }
+  for (const wrap of [$("library-colors"), $("journal-colors")]) {
+    if (wrap) { wrap.innerHTML = ""; delete wrap.dataset.sig; }
   }
   if (!libraryEl.classList.contains("hidden")) renderLibrary();
   if (isHistoryTabOpen()) renderJournal();
