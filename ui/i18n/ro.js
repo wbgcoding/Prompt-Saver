@@ -520,8 +520,6 @@ export default {
     bgKindDownload: "Descărcare ffmpeg",
     bgKindOcrIndex: "Citire imagini",
     recSweepNothing: "Nimic de curățat",
-    flagChainStartAlwaysVisible: "Afișează întotdeauna pictograma de început al lanțului",
-    tipChainStartAlwaysVisible: "Menține pictograma de început al lanțului de pe dală estompată și vizibilă permanent, nu doar la trecerea cursorului; aceasta se luminează în continuare la trecerea cursorului sau la focalizarea cu tastatura.",
     recEdit: "Editor video",
     editVideo: "Editează videoclipul",
     editImage: "Editează imaginea",

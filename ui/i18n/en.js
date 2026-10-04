@@ -494,8 +494,6 @@ export default {
     bgKindDownload: "ffmpeg download",
     bgKindOcrIndex: "Image reading",
     recSweepNothing: "Nothing to clean up",
-    flagChainStartAlwaysVisible: "Always show the chain-start icon",
-    tipChainStartAlwaysVisible: "Keeps the tile's chain-start icon dimly visible all the time instead of only on hover; it still brightens on hover or keyboard focus.",
     recEdit: "Video editor",
     editVideo: "Edit video",
     editImage: "Edit image",

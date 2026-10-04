@@ -520,8 +520,6 @@ export default {
     bgKindDownload: "Download do ffmpeg",
     bgKindOcrIndex: "Leitura de imagens",
     recSweepNothing: "Nada para limpar",
-    flagChainStartAlwaysVisible: "Sempre mostrar o ícone de início da cadeia",
-    tipChainStartAlwaysVisible: "Mantém o ícone de início da cadeia do bloco sempre visível e esmaecido, em vez de mostrá-lo apenas ao passar o ponteiro; ele ainda fica mais claro ao passar o ponteiro ou receber foco pelo teclado.",
     recEdit: "Editor de vídeo",
     editVideo: "Editar vídeo",
     editImage: "Editar imagem",

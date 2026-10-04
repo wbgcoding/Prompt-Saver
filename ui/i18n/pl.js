@@ -520,8 +520,6 @@ export default {
     bgKindDownload: "Pobieranie ffmpeg",
     bgKindOcrIndex: "Odczyt obrazów",
     recSweepNothing: "Brak elementów do wyczyszczenia",
-    flagChainStartAlwaysVisible: "Zawsze pokazuj ikonę początku łańcucha",
-    tipChainStartAlwaysVisible: "Ikona początku łańcucha kafelka jest stale widoczna w przyciemnionej postaci, a nie tylko po wskazaniu. Nadal rozjaśnia się po wskazaniu lub ustawieniu fokusu klawiatury.",
     recEdit: "Edytor wideo",
     editVideo: "Edytuj wideo",
     editImage: "Edytuj obraz",

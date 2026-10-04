@@ -124,7 +124,6 @@ DEPENDENCIES = {
     # Tiles + copying
     "chainLock": "chainPrompts",
     "chainQuickStart": "chainPrompts",
-    "chainStartAlwaysVisible": "chainQuickStart",
     "chainVarCheck": "chainPrompts",
     "autoPasteEnter": "autoPaste",
     "autoPasteDelayMs": "autoPaste",

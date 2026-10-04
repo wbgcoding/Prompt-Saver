@@ -37,7 +37,6 @@ EXPECTED = [
     ("flag", "chainPrompts", "expTabFeatures", "expGroupChain", 0),
     ("flag", "chainLock", "expTabFeatures", "expGroupChain", 1),
     ("flag", "chainQuickStart", "expTabFeatures", "expGroupChain", 1),
-    ("flag", "chainStartAlwaysVisible", "expTabFeatures", "expGroupChain", 2),
     ("flag", "chainVarCheck", "expTabFeatures", "expGroupChain", 1),
     ("flag", "gridViewBorder", "expTabFeatures", "expGroupViews", 1),
     ("value", "maxViews", "expTabFeatures", "expGroupViews", 1),
@@ -272,8 +271,13 @@ CHAIN_PROBE = """
       }
       await sleep(400);
     };
-    const start = tile('p0') && tile('p0').querySelector('.tile-chain-start');
-    if (!start) { errs.push('p0 has no chain-start button; tiles with one: ' + [...document.querySelectorAll('#grid .tile')].filter((x) => x.querySelector('.tile-chain-start')).map((x) => x.dataset.id).join(',') + ' of ' + [...document.querySelectorAll('#grid .tile')].map((x) => x.dataset.id).join(',')); }
+    let start = null;
+    if (tile('p0')) {
+      tile('p0').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 60, clientY: 60 }));
+      const entry = document.querySelector('#ctx [data-act="chain"]');
+      if (entry && !entry.classList.contains('hidden')) start = entry;
+    }
+    if (!start) { errs.push('the menu of p0 offers no Start chain'); }
     else {
       start.click();
       await sleep(300);

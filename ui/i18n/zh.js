@@ -520,8 +520,6 @@ export default {
     bgKindDownload: "ffmpeg 下载",
     bgKindOcrIndex: "图片读取",
     recSweepNothing: "没有可清理的内容",
-    flagChainStartAlwaysVisible: "始终显示链起始图标",
-    tipChainStartAlwaysVisible: "让磁贴的链起始图标始终以暗淡状态显示，而不是仅在悬停时显示；悬停或通过键盘聚焦时仍会变亮。",
     recEdit: "视频编辑器",
     editVideo: "编辑视频",
     editImage: "编辑图片",

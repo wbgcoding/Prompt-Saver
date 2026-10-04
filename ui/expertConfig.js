@@ -251,10 +251,6 @@ export const OPT_FLAG_LABELS = {
   // Save every screenshot into the Screenshots folder: the Settings switch and
   // the snip dialog switch are the two places it is shown.
   screenshotSave: "screenshotToFolder",
-  // The tile's own chain-start icon otherwise only appears on hover -- kept as an
-  // opt-in for whoever prefers it dimly visible on every tile all the time (04.09.
-  // decision); the 05.09. decision reversed the shipped default back to hover-only.
-  chainStartAlwaysVisible: "flagChainStartAlwaysVisible",
   gridViewBorder: "flagGridViewBorder",         // colored border around the grid in the view's color
   // header columns x rows fields; the grid size otherwise lives in the view menu
   quickGrid: "flagQuickGrid",
@@ -743,7 +739,7 @@ export const EXPERT_TABS = [
     // Everything that happens between a click and the clipboard.
     { title: "expGroupCopy", flags: ["promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, { key: "autoPasteEnter", gate: "autoPaste" }, "hideWindowOnCopy", "copyFlash", "copySound"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs", "bubbleMs", "copySoundVolume"], dropdowns: ["dragOutModifier", "copySize", "copyFont"] },
     // Copying several different prompts as one text.
-    { title: "expGroupChain", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "chainQuickStart", gate: "chainPrompts" }, { key: "chainStartAlwaysVisible", gate: "chainQuickStart" }, { key: "chainVarCheck", gate: "chainPrompts" }], dropdowns: ["chainSeparator"] },
+    { title: "expGroupChain", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "chainQuickStart", gate: "chainPrompts" }, { key: "chainVarCheck", gate: "chainPrompts" }], dropdowns: ["chainSeparator"] },
     // Floating buttons and the two kinds of folder they can form.
     { title: "expGroupFolders", flags: ["floating", { key: "floatPark", gate: "floating" }, { key: "pillFolders", gate: "floating" }, "tileFolders"], values: ["floatOpacity", "pillFontSize", "pillTextMinW", "pillBorderW", "floatParkCleanupH", "pillMergeRadius", "pillFolderTileSize", "folderGridCols", "tileFolderHoverMs", "tileFolderCols"],
       actions: [{ id: "float-recall", label: "floatRecallAction", gate: "floating" }] },
@@ -909,7 +905,7 @@ export const EXPERT_TIPS = [
   "rotateAuto", "rotateAutoTimeoutMin", "rotateAutoCooldownMs",
   "helpTips", "helpSketches", "firstRunTour",
   // Tiles / copying
-  "tileMenu", "typeBadges", "tileHotkeyBadge", "bubbleMs", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "chainQuickStart", "chainStartAlwaysVisible", "chainVarCheck", "autoPasteEnter",
+  "tileMenu", "typeBadges", "tileHotkeyBadge", "bubbleMs", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "chainQuickStart", "chainVarCheck", "autoPasteEnter",
   "promptHotkeys", "promptHotkeyPaste", "dragOut", "dragOutInvert", "dragOutModifier",
   "tooltipDelayMs",
   "dragToView",

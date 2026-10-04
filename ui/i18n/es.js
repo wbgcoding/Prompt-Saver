@@ -520,8 +520,6 @@ export default {
     bgKindDownload: "Descarga de ffmpeg",
     bgKindOcrIndex: "Lectura de imágenes",
     recSweepNothing: "No hay nada que limpiar",
-    flagChainStartAlwaysVisible: "Mostrar siempre el icono de inicio de cadena",
-    tipChainStartAlwaysVisible: "Mantiene el icono de inicio de cadena del mosaico siempre visible y atenuado, en vez de mostrarlo solo al pasar el puntero; sigue resaltándose al pasar el puntero o recibir el foco del teclado.",
     recEdit: "Editor de vídeo",
     editVideo: "Editar vídeo",
     editImage: "Editar imagen",

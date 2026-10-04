@@ -1605,6 +1605,7 @@ the video editor and the introduction tour ship on).
 
 ### Changed
 
+- **Calmer tiles.** Hovering a tile shows only its menu button; select through the menu or Ctrl+click.
 - **Tile menu.** Right-click now offers Copy, Favorite, Select and Start chain, every entry has an icon, entries are grouped, and Delete sits apart at the bottom in red.
 - The clipboard inbox is part of the copy history now: one list with a filter
   for copies made in the app and elsewhere.

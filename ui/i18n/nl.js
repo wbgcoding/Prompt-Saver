@@ -520,8 +520,6 @@ export default {
     bgKindDownload: "ffmpeg-download",
     bgKindOcrIndex: "Afbeeldingen lezen",
     recSweepNothing: "Niets om op te ruimen",
-    flagChainStartAlwaysVisible: "Pictogram voor ketenstart altijd tonen",
-    tipChainStartAlwaysVisible: "Houdt het pictogram voor ketenstart van de tegel altijd gedimd zichtbaar in plaats van alleen bij aanwijzen; het licht nog steeds op bij aanwijzen of toetsenbordfocus.",
     recEdit: "Video-editor",
     editVideo: "Video bewerken",
     editImage: "Afbeelding bewerken",

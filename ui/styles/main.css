@@ -878,7 +878,9 @@ body.drag-active .cell.drag-over {
 }
 
 /* Bulk-selection checkbox: same corner as the type badge, so the two never
-   compete: hovering (or once ANY tile is checked) swaps the badge out for it. */
+   compete: once ANY tile is checked the badge gives way to it. It is reached
+   through the tile menu or Ctrl+click, so it stays out of the way (no hover
+   reveal, no clicks caught in the tile corner) until a selection is running. */
 .tile-select {
   position: absolute;
   top: 6px;
@@ -900,12 +902,11 @@ body.drag-active .cell.drag-over {
   cursor: pointer;
   transition: opacity var(--transition);
 }
-.tile:hover .tile-select,
 body.grid-selecting .tile-select { opacity: 1; }
+body:not(.grid-selecting) .tile-select { pointer-events: none; }
 /* The chain order badge (1, 2, 3 …) sits in the same corner: a picked tile shows
    the number, not the checkbox, so the two never overlap. */
 .tile.chain-picked .tile-select { opacity: 0; pointer-events: none; }
-.tile:hover .tile-type,
 body.grid-selecting .tile-type { opacity: 0; }
 .tile.grid-selected .tile-select {
   background: var(--accent);
@@ -913,54 +914,10 @@ body.grid-selecting .tile-type { opacity: 0; }
 }
 .tile.grid-selected { outline: 2px solid var(--accent); outline-offset: -2px; }
 
-/* A second small button right of the selection checkbox starts a chain
-   with this tile as entry 1 -- same corner, same box, one gap over. Its own
-   slot (left: 28px) never overlaps the type badge / checkbox / chain-order
-   badge sharing the left: 6px corner above, at any tile size. Hidden until
-   hover or keyboard focus by default; chainStartAlwaysVisible keeps it dimly
-   visible as an opt-in expert setting, at a base opacity high enough to
-   notice. Border and padding stay minimal so the glyph fills the box. */
-.tile-chain-start {
-  position: absolute;
-  top: 6px;
-  left: 28px;
-  z-index: 4;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border: none;
-  padding: 0;
-  background: none;
-  color: var(--fg);
-  opacity: 0;
-  cursor: pointer;
-  transition: opacity var(--transition);
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
-}
-.tile-chain-start > svg { display: block; width: 100%; height: 100%; }
-body.flag-chainStartAlwaysVisible .tile-chain-start { opacity: 0.65; }
-.tile:hover .tile-chain-start,
-.tile-chain-start:focus-visible { opacity: 1; }
-/* Any chain already running takes over the corner with its order badge --
-   the start button never competes with it, on ANY tile, not just the picked one. */
-body.chain-mode .tile-chain-start { opacity: 0; pointer-events: none; }
 /* While a chain runs, the corner belongs to the order badge: the menu button
    and the select box stay hidden on hover too, unless multi-select is on. */
 body.chain-mode:not(.grid-selecting) .tile .tile-menu,
 body.chain-mode:not(.grid-selecting) .tile .tile-select { opacity: 0; pointer-events: none; }
-/* Gate first: a switched-off chain feature must make the button gone
-   entirely, not merely inert -- main.js also skips building the element. */
-body.noflag-chainPrompts .tile-chain-start,
-body.noflag-chainQuickStart .tile-chain-start { display: none; }
-/* Legibility over a photo/screenshot tile: the icon carries no box of its own
-   (dropped in favour of the drop-shadow above), so on a light photo it can
-   still wash out without its own white fill and a stronger shadow to match. */
-.tile.has-image .tile-chain-start {
-  color: #fff;
-  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.65));
-}
 
 /* ---- Grid folders ----
    A folder is a cell like any other: the four newest members as a 2x2 face, the name

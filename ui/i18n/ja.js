@@ -520,8 +520,6 @@ export default {
     bgKindDownload: "ffmpeg ダウンロード",
     bgKindOcrIndex: "画像読み取り",
     recSweepNothing: "クリーンアップする項目はありません",
-    flagChainStartAlwaysVisible: "チェーン開始アイコンを常に表示",
-    tipChainStartAlwaysVisible: "タイルのチェーン開始アイコンを、ポインターを合わせたときだけでなく常に薄く表示します。ポインターを合わせるかキーボードフォーカスを移すと明るくなります。",
     recEdit: "動画エディター",
     editVideo: "動画を編集",
     editImage: "画像を編集",

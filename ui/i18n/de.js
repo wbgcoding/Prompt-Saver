@@ -494,8 +494,6 @@ export default {
     bgKindDownload: "ffmpeg-Download",
     bgKindOcrIndex: "Bildtexterkennung",
     recSweepNothing: "Nichts zum Aufräumen",
-    flagChainStartAlwaysVisible: "Ketten-Start-Symbol immer anzeigen",
-    tipChainStartAlwaysVisible: "Zeigt das Ketten-Start-Symbol der Kachel dauerhaft schwach an statt nur beim Überfahren mit der Maus; beim Überfahren oder bei Tastaturfokus wird es weiterhin heller.",
     recEdit: "Video-Editor",
     editVideo: "Video bearbeiten",
     editImage: "Bild bearbeiten",

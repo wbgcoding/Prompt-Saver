@@ -550,6 +550,42 @@ SECTION = """\
         if (document.body.classList.contains('chain-mode')) out.errors.push('698: the chain did not end through the chain button');
       }
     }
+    // 699: a hovered tile shows only its menu button; the checkbox and the chain button are
+    // gone from the hover. Ctrl+click without moving selects, it never copies.
+    {
+      const hoverRules = [];
+      const walkRules = (rules) => {
+        for (const r of rules) {
+          const sel = r.selectorText || '';
+          if (sel.includes('tile-chain-start') || sel.includes('.tile:hover .tile-select') || sel.includes('.tile:hover .tile-type')) hoverRules.push(sel);
+          if (r.cssRules) walkRules(r.cssRules);
+        }
+      };
+      for (const sh of document.styleSheets) { try { walkRules(sh.cssRules); } catch (e) {} }
+      if (hoverRules.length) out.errors.push('699: stylesheet still has hover or chain-start rules: ' + hoverRules.join(' | '));
+      const selTile = gridTile('p0');
+      const selBox = selTile && selTile.querySelector(':scope > .tile-select');
+      if (!selBox) {
+        out.errors.push('699: tile p0 has no select box');
+      } else {
+        selBox.style.transition = 'none'; // read the settled value, not a fade in progress
+        const cs = getComputedStyle(selBox);
+        if (cs.opacity !== '0' || cs.pointerEvents !== 'none') out.errors.push('699: the idle select box is visible or catches clicks: ' + cs.opacity + ' ' + cs.pointerEvents);
+        window.__SMOKE_ARGS__ = [];
+        press(selTile, { ctrlKey: true });
+        window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1, ctrlKey: true, clientX: 20, clientY: 20 }));
+        await sleep(300);
+        if (!document.body.classList.contains('grid-selecting')) out.errors.push('699: Ctrl+click did not select the tile');
+        if (!selTile.classList.contains('grid-selected')) out.errors.push('699: Ctrl+click did not mark the tile selected');
+        if (window.__SMOKE_ARGS__.some(([cmd]) => cmd === 'copy_prompt')) out.errors.push('699: Ctrl+click copied the prompt');
+        const cs2 = getComputedStyle(selBox);
+        if (cs2.opacity !== '1' || cs2.pointerEvents === 'none') out.errors.push('699: the select box is not shown while selecting: ' + cs2.opacity + ' ' + cs2.pointerEvents);
+        press(selTile, { ctrlKey: true });
+        window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1, ctrlKey: true, clientX: 20, clientY: 20 }));
+        await sleep(300);
+        if (document.body.classList.contains('grid-selecting')) out.errors.push('699: a second Ctrl+click did not unselect the tile');
+      }
+    }
     // 91: trash - the dialog opened from the expert menu's Data group. Restore,
     // single purge and "Clear all" (empty_trash) each get their own target so all
     // three new commands are exercised, not just the happy path of one.

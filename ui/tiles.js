@@ -1,6 +1,6 @@
 // Grid tiles: building, auto-fit, images, video thumbs, drag-out and auto-paste.
 import { assignDrag, assignMemberDrag, BUBBLE_MS, convertFileSrc, DOTS, drag, DRAG_THRESHOLD, errToast, favView, flag, folderArm, gateOpen, gridEl, gridSelected, gridTags, ICON_FILE, ICON_IMAGE, ICON_KEYBOARD, ICON_PDF, ICON_UNDO, ICON_VIDEO, IMG_WAIT, inkShadow, invoke, journalThumbCache, LANG, libraryEl, libThumbCache, mediaBarLabels, memberDrag, optFlag, PDF_EXT, prompts, readableInk, ROTATE_SHORT_MAX, settings, t, toast, TOOLTIP_PREVIEW_CHARS, txt, val, videoCache } from "./core.js";
-import { applyChainToTile, chainMode, isTextPrompt, startChainWith, toggleChainPick } from "./chain.js";
+import { applyChainToTile, chainMode, toggleChainPick } from "./chain.js";
 import { applyVideoPrefs, buildMediaBar, mediaKind } from "./media.js";
 import { fitText, FONTS } from "./fonts.js";
 import { FLAG_GATES } from "./expertConfig.js";
@@ -325,22 +325,6 @@ export function buildTile(p) {
   selBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
   selBtn.addEventListener("click", (e) => { e.stopPropagation(); toggleGridSelect(p.id); });
   tile.appendChild(selBtn);
-  // A second small button right of the checkbox starts a chain with THIS
-  // tile as entry 1: only text prompts can ever be a chain link, so image/
-  // file/video tiles never show it (a symbol there would be a false promise).
-  // Also skipped outright with chaining off, not just left inert --
-  // .noflag-chainPrompts/.noflag-chainQuickStart below back this up in CSS.
-  if (isTextPrompt(p) && flag("chainPrompts") && flag("chainQuickStart")) {
-    const chainBtn = document.createElement("button");
-    chainBtn.type = "button";
-    chainBtn.className = "tile-chain-start";
-    chainBtn.setAttribute("aria-label", t("startChainHere"));
-    chainBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">'
-      + '<path transform="rotate(-45 12 12)" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" d="M9 17H7A5 5 0 0 1 7 7h2M15 7h2a5 5 0 0 1 0 10h-2M8 12h1.6M14.4 12H16"/></svg>';
-    chainBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
-    chainBtn.addEventListener("click", (e) => { e.stopPropagation(); startChainWith(p); });
-    tile.appendChild(chainBtn);
-  }
   const raw = p.file_path || p.text || "";
   const preview = raw.length > TOOLTIP_PREVIEW_CHARS ? `${raw.slice(0, TOOLTIP_PREVIEW_CHARS)}…` : raw;
   // Themed hover tooltip (rendered by wireTooltips' shared popup, not the native
@@ -451,10 +435,9 @@ export function buildTile(p) {
   }
 
   // A prompt's own hotkey (set in the editor's Advanced options) is otherwise
-  // invisible until it is used: pure information, so unlike the chain-start
-  // button above it stays visible all the time, not just on hover. Sits right
-  // of the type badge/checkbox slot rather than inside it, so it never swaps
-  // out with either on hover or selection.
+  // invisible until it is used: pure information, so it stays visible all the
+  // time. Sits right of the type badge/checkbox slot rather than inside it, so
+  // it never swaps out with either on selection.
   if (p.hotkey && promptHotkeysOn() && flag("tileHotkeyBadge")) {
     const hkBadge = document.createElement("span");
     hkBadge.className = "tile-hotkey-badge";
@@ -502,7 +485,8 @@ export function buildTile(p) {
   tile.addEventListener("pointerdown", (e) => {
     if (e.button !== 0 || e.target.closest(".tile-menu") || e.target.closest(".tile-select")) return;
     // With the modifier held the press becomes a drag-out; `out` keeps the
-    // reorder machine out of it while a modifier-click still copies as before.
+    // reorder machine out of it. Ctrl+click without moving selects the tile; a
+    // modifier drag still drags out.
     const out = armDragOut(tile, e, () => prompts.find((x) => x.id === p.id));
     assignDrag({ id: p.id, startX: e.clientX, startY: e.clientY, moved: false, el: tile, out });
   });
@@ -903,6 +887,7 @@ export function wireTiles() {
     if (!moved) {
       if (el.classList.contains("tile")) {
         const p = prompts.find((x) => x.id === id);
+        if (e.ctrlKey) { toggleGridSelect(id); return; } // Ctrl+click without moving selects
         if (chainMode) { if (p) await toggleChainPick(p); return; } // pick (asks vars), don't copy
         // A prompt that still needs input ALWAYS routes through the dialog: the
         // double-click paste shortcut would otherwise fire on the 2nd click and paste

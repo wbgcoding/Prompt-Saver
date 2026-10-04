@@ -1,43 +1,46 @@
 SECTION = """\
-    // 199: a per-tile chain-start button next to the selection checkbox.
+    // Chain start lives in the tile menu: open it on the tile and hand back the entry when it is
+    // offered (null otherwise, menu closed again), so a probe presses it like the user does.
+    const menuChainStart = (tile) => {
+      if (!tile) return null;
+      tile.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 60, clientY: 60 }));
+      const b = document.querySelector('#ctx [data-act="chain"]');
+      if (b && !b.classList.contains('hidden')) return b;
+      document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      return null;
+    };
+    // 199: a text tile starts a chain from its menu; a file tile never offers it, and the tile
+    // itself carries no chain-start button any more.
     {
-      const textTile = [...document.querySelectorAll('#grid .tile')].find(
-        (el) => el.querySelector('.tile-chain-start')
-      );
+      const textTile = document.querySelector('#grid .tile[data-id="p0"]');
       const imgTile = document.querySelector('#grid .tile[data-id="p9"]'); // fixture: file_path set, not a text prompt
+      if (document.querySelector('.tile-chain-start')) {
+        out.errors.push('199: a tile still carries a chain-start button');
+      }
       if (!textTile) {
-        out.errors.push('199: no tile shows the chain-start button');
-      } else if (imgTile && imgTile.querySelector('.tile-chain-start')) {
-        out.errors.push('199: an image tile shows a chain-start button');
+        out.errors.push('199: fixture tile p0 missing from the grid');
+      } else if (imgTile && menuChainStart(imgTile)) {
+        out.errors.push('199: the menu of an image tile offers Start chain');
       } else {
-        const csBtn = textTile.querySelector('.tile-chain-start');
-        const csSvg = csBtn.querySelector('svg');
-        const btnRect = csBtn.getBoundingClientRect();
-        const svgRect = csSvg.getBoundingClientRect();
-        const btnCx = btnRect.left + btnRect.width / 2, btnCy = btnRect.top + btnRect.height / 2;
-        const svgCx = svgRect.left + svgRect.width / 2, svgCy = svgRect.top + svgRect.height / 2;
-        if (svgRect.width < 15 || svgRect.height < 15) {
-          out.errors.push('199: the chain-start glyph does not fill its tile button');
-        }
-        if (Math.abs(svgCx - btnCx) > 0.5 || Math.abs(svgCy - btnCy) > 0.5) {
-          out.errors.push('199: the chain-start glyph is not centred in its tile button');
-        }
-        csBtn.click();
-        await sleep(150);
-        if (!document.body.classList.contains('chain-mode')) {
-          out.errors.push('199: clicking a tile chain-start button did not enter chain mode');
-        }
-        if (!textTile.classList.contains('chain-picked')) {
-          out.errors.push('199: the starting tile was not marked picked');
-        }
-        const badge = textTile.querySelector('.tile-chain-badge');
-        if (!badge || badge.textContent.trim() !== '1') {
-          out.errors.push('199: the starting tile has no "1" chain badge');
-        }
-        const otherStart = [...document.querySelectorAll('.tile-chain-start')]
-          .find((el) => getComputedStyle(el).pointerEvents !== 'none');
-        if (otherStart) {
-          out.errors.push('199: a chain-start button stayed clickable while a chain is running');
+        const csBtn = menuChainStart(textTile);
+        if (!csBtn) {
+          out.errors.push('199: the menu of a text tile offers no Start chain');
+        } else {
+          csBtn.click();
+          await sleep(150);
+          if (!document.body.classList.contains('chain-mode')) {
+            out.errors.push('199: Start chain in the tile menu did not enter chain mode');
+          }
+          if (!textTile.classList.contains('chain-picked')) {
+            out.errors.push('199: the starting tile was not marked picked');
+          }
+          const badge = textTile.querySelector('.tile-chain-badge');
+          if (!badge || badge.textContent.trim() !== '1') {
+            out.errors.push('199: the starting tile has no "1" chain badge');
+          }
+          if (menuChainStart(textTile)) {
+            out.errors.push('199: the tile menu offered Start chain while a chain is running');
+          }
         }
         // chainLock ships on, so a single click latches rather than exits (off ->
         // on -> latched -> off) -- cycle until it is actually gone, not just once.
@@ -46,10 +49,10 @@ SECTION = """\
       }
     }
     // 275: every badge a tile can show AT ONCE must not visually overlap --
-    // select checkbox, chain-start (or chain-badge once picked), rotate badge
+    // select checkbox, chain-badge once picked, rotate badge
     // and the actions menu. Not favorite/hotkey -- neither renders as a tile
     // badge in this app (only in the library row and the editor), so there
-    // is nothing there that could ever overlap. Select/chain-start/the menu
+    // is nothing there that could ever overlap. Select/the menu
     // button only reveal on :hover, which page script cannot trigger in a
     // real browser (CSS :hover tracks actual pointer state, not synthetic
     // events) -- forcing their opacity measures the exact geometry a real
@@ -80,8 +83,8 @@ SECTION = """\
       if (!rotTile) {
         out.errors.push('275: fixture tile p10 (rotating, chain-capable) missing from the grid');
       } else {
-        checkOverlap('idle', ['.tile-select', '.tile-chain-start', '.tile-rotate-badge', '.tile-menu']);
-        const startBtn = rotTile.querySelector('.tile-chain-start');
+        checkOverlap('idle', ['.tile-select', '.tile-rotate-badge', '.tile-menu']);
+        const startBtn = menuChainStart(rotTile);
         if (startBtn) {
           startBtn.click();
           await sleep(150);
@@ -355,9 +358,9 @@ SECTION = """\
       // once the chain overview strip has come and gone below.
       const gridTopOff = document.getElementById('grid').getBoundingClientRect().top;
       const p0Tile = findGridTile('p0');
-      const startBtn = p0Tile && p0Tile.querySelector('.tile-chain-start');
+      const startBtn = menuChainStart(p0Tile);
       if (!startBtn) {
-        out.errors.push('445: fixture tile p0 has no chain-start button to begin the chain with');
+        out.errors.push('445: the menu of fixture tile p0 offers no Start chain to begin the chain with');
       } else {
         startBtn.click();
         await sleep(150);
@@ -470,7 +473,7 @@ SECTION = """\
     // right-click; the clipboard text follows both.
     {
       const findGridTile = (id) => [...document.querySelectorAll('#grid .tile')].find(e => (e.dataset.id || '') === id);
-      const startBtn = findGridTile('p0')?.querySelector('.tile-chain-start');
+      const startBtn = menuChainStart(findGridTile('p0'));
       const ovRows = () => [...document.querySelectorAll('#chain-overview .chain-ov-row')];
       const ovNames = () => ovRows().map((r) => r.querySelector('.chain-ov-name').textContent);
       const clipParts = () => String(window.__LAST_COPY__ || '').split('\\n\\n');
@@ -479,7 +482,7 @@ SECTION = """\
         buttons: type === 'pointerup' ? 0 : 1, clientX: x, clientY: y,
       }));
       if (!startBtn) {
-        out.errors.push('555: fixture tile p0 has no chain-start button');
+        out.errors.push('555: the menu of fixture tile p0 offers no Start chain');
       } else {
         startBtn.click();
         await sleep(150);
@@ -536,7 +539,7 @@ SECTION = """\
     {
       const findGridTile = (id) => [...document.querySelectorAll('#grid .tile')].find(e => (e.dataset.id || '') === id);
       const p0Tile = findGridTile('p0');
-      const startBtn = p0Tile && p0Tile.querySelector('.tile-chain-start');
+      const startBtn = menuChainStart(p0Tile);
       const pickedIds = () => ['p0', 'p3'].filter((id) => findGridTile(id)?.classList.contains('chain-picked'));
       const awayAndBack = async () => {
         window.dispatchEvent(new Event('blur'));
@@ -545,7 +548,7 @@ SECTION = """\
         await sleep(60);
       };
       if (!startBtn) {
-        out.errors.push('fixture tile p0 has no chain-start button to begin a chain with');
+        out.errors.push('the menu of fixture tile p0 offers no Start chain to begin a chain with');
       } else {
         startBtn.click();
         await sleep(150);

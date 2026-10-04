@@ -520,8 +520,6 @@ export default {
     bgKindDownload: "ffmpeg indirme",
     bgKindOcrIndex: "Görsel okuma",
     recSweepNothing: "Temizlenecek bir şey yok",
-    flagChainStartAlwaysVisible: "Zincir başlangıcı simgesini her zaman göster",
-    tipChainStartAlwaysVisible: "Kutucuğun zincir başlangıcı simgesini yalnızca üzerine gelindiğinde değil, her zaman soluk biçimde görünür tutar; üzerine gelindiğinde veya klavye odağı aldığında yine parlar.",
     recEdit: "Video Düzenleyici",
     editVideo: "Videoyu düzenle",
     editImage: "Resmi düzenle",

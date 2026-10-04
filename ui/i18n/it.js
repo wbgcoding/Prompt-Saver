@@ -520,8 +520,6 @@ export default {
     bgKindDownload: "Download di ffmpeg",
     bgKindOcrIndex: "Lettura immagini",
     recSweepNothing: "Niente da pulire",
-    flagChainStartAlwaysVisible: "Mostra sempre l'icona di inizio catena",
-    tipChainStartAlwaysVisible: "Mantiene sempre visibile in modo attenuato l'icona di inizio catena del riquadro, anziché mostrarla solo al passaggio del puntatore; si illumina comunque al passaggio del puntatore o quando riceve lo stato attivo da tastiera.",
     recEdit: "Editor video",
     editVideo: "Modifica video",
     editImage: "Modifica immagine",
