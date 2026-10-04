@@ -1806,6 +1806,7 @@ the video editor and the introduction tour ship on).
 - **"Do not ask again" starts unticked.** In the portable take-over dialog the box is no longer ticked beforehand, so leaving it alone asks again next time.
 - **Settings in titled sections.** The settings page is split into Appearance, Behavior, Data and About and updates, each with its own heading and a thin line between them.
 - **Reset and delete buttons stand out.** Reset settings and Delete all data now sit in their own section at the bottom of the settings page and are red even when the pointer is elsewhere. Clicking them still needs a second click to confirm.
+- **Export format next to Export.** In the settings, the format choice now sits to the right of the Export button instead of in front of it.
 
 ## 2.6.3 (2026-07-26)
 

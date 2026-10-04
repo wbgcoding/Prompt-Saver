@@ -92,12 +92,11 @@ SECTION = """\
         if (!['csv', 'txt', 'json'].every(v => optValues.includes(v))) {
           out.errors.push('the export format select is missing csv/txt/json, has: ' + optValues.join(','));
         }
-        // 371: the format select must precede the Export button (library's
-        // batch row has it in this order already) -- neither element sets its
-        // own tabindex, so document order is also tab order here.
-        const posFmtExp = fmtSel.compareDocumentPosition(expBtn);
+        // 371, 726: the format select follows the Export button in the pair --
+        // neither element sets its own tabindex, so document order is also tab order here.
+        const posFmtExp = expBtn.compareDocumentPosition(fmtSel);
         if (!(posFmtExp & Node.DOCUMENT_POSITION_FOLLOWING)) {
-          out.errors.push('the export format select does not precede the Export button');
+          out.errors.push('the export format select does not follow the Export button');
         }
         if (fmtSel.hasAttribute('tabindex') || expBtn.hasAttribute('tabindex')) {
           out.errors.push('an explicit tabindex on the format select or Export button would override document-order tabbing');

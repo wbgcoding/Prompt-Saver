@@ -4034,6 +4034,8 @@ body.drag-over::after {
 .export-row { display: flex; flex-wrap: wrap; row-gap: 6px; gap: 8px; }
 .export-row + .export-row { margin-top: 6px; }
 .export-row .ghost-btn { flex: 1 1 88px; }
+/* Export and its format choice stay together, format on the right. */
+.export-pair { display: inline-flex; gap: 6px; margin-left: 12px; }
 /* Its own label never wraps to a second line -- at the narrowest supported
    width the row above still has room to wrap this button onto its own line
    instead, unlike letting the text itself break. */
