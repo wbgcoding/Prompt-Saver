@@ -2483,6 +2483,9 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
   cursor: pointer;
 }
 .expert-tab:hover { border-color: var(--accent); }
+/* The expert dialog's tabs stay on one line; a window too narrow for all six scrolls the bar sideways. */
+#expert-tabs-bar .expert-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+#expert-tabs-bar .expert-tab { flex: 0 0 auto; white-space: nowrap; }
 .expert-tab.active { background: var(--accent-strong); color: var(--accent-fg); border-color: var(--accent-strong); }
 
 /* Appearance scales: CSS zoom on their own elements (1 = unchanged, the default).

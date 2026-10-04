@@ -206,8 +206,19 @@ LAYOUT_PROBE = """
     await sleep(400);
     document.getElementById('gear').click();
     await sleep(200);
+    const langSel = document.getElementById('lang-select');
+    langSel.value = 'de';
+    langSel.dispatchEvent(new Event('change'));
+    await sleep(300);
     document.getElementById('expert-open').click();
     await sleep(400);
+    const tabEls = [...document.querySelectorAll('#expert-tabs-bar .expert-tab')];
+    if (tabEls.length !== 6) errs.push('expected six expert tabs, found ' + tabEls.length);
+    if (new Set(tabEls.map((b) => Math.round(b.getBoundingClientRect().top))).size !== 1) {
+      errs.push('the six expert tabs are not on one line');
+    }
+    const tabBarEl = document.querySelector('#expert-tabs-bar .expert-tabs');
+    if (__WIDE__ && tabBarEl.scrollWidth > tabBarEl.clientWidth) errs.push('wide window: a tab is clipped');
     const modal = document.querySelector('#settings .modal');
     const groups = [...document.querySelectorAll('#expert-flags > .expert-group')];
     if (groups.length < 2) errs.push('fewer than two groups in the first tab');
@@ -577,7 +588,7 @@ def main():
             probe = probe.replace("__EXPECTED__", expected).replace("__STAYS__", json.dumps(STAYS))
             errs = run(browser, tmp, "index.html", probe, seed)
             problems += [f"[{label}] {e}" for e in errs]
-        for label, wide, size in (("wide window", "true", (1600, 900)), ("narrow window", "false", (680, 460))):
+        for label, wide, size in (("wide window", "true", (1600, 900)), ("narrow window", "false", (680, 460)), ("very narrow window", "false", (520, 460))):
             errs = run(browser, tmp, "index.html", LAYOUT_PROBE.replace("__WIDE__", wide), {}, size=size)
             problems += [f"[{label}] {e}" for e in errs]
         problems += consumer_problems(browser, tmp)

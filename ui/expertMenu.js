@@ -2100,6 +2100,8 @@ export function renderExpert() {
       bar.appendChild(b);
     });
     tabBar.appendChild(bar);
+    // The bar is rebuilt on every render, so the chosen tab is brought into view here.
+    bar.querySelector(".expert-tab.active")?.scrollIntoView({ inline: "nearest", block: "nearest" });
   }
   const tabs = globalView ? EXPERT_TABS : [EXPERT_TABS[expertTab]];
   const collapsed = expertCollapsedSet();
