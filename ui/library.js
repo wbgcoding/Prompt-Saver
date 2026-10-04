@@ -14,9 +14,10 @@ import { refreshClipInbox, setLibraryTab, tileTimeLines } from "./journal.js";
 import { openCompareView, recordToolUsage, renderStatsPanel } from "./management.js";
 import { closeBackups } from "./backups.js";
 import { buildSwatches, editPrompt, ensureSecretVaultUnlocked } from "./editor.js";
+import { foldersOfView } from "./gridFolders.js";
 
-let foldersOfView, openCtx; // linked from main.js
-export function linkLibrary(fns) { ({ foldersOfView, openCtx } = fns); }
+let openCtx; // linked from main.js
+export function linkLibrary(fns) { ({ openCtx } = fns); }
 
 export let libQuery = ""; // prompt library search text
 export function assignLibQuery(v) { libQuery = v; }
