@@ -27,6 +27,7 @@ import sys
 SCOPE_GLOBS = [
     "src-tauri/src/*.rs",
     "ui/*.js",
+    "ui/i18n/*.js",
     "ui/*.html",
     "ui/styles/*.css",
     "tests/*.py",
@@ -329,8 +330,13 @@ def main():
         capture_output=True, text=True, check=True,
     ).stdout.strip()
 
+    files = list(scope_files())
+    if not any(p.startswith("ui/i18n/") for p in files):
+        print("no_emdash: scope lost ui/i18n/*.js")
+        return 1
+
     total = 0
-    for rel_path in scope_files():
+    for rel_path in files:
         try:
             with open(f"{ROOT}/{rel_path}", "r", encoding="utf-8") as f:
                 text = f.read()

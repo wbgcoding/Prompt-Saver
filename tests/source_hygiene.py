@@ -15,6 +15,7 @@ import sys
 TRACKED_GLOBS = [
     "src-tauri/src/*.rs",
     "ui/*.js",
+    "ui/i18n/*.js",
     "ui/*.html",
     "ui/styles/*.css",
     "tools/*.js",
@@ -96,11 +97,6 @@ EXCEPTIONS = [
         "file": "src-tauri/src/*.rs",
         "when": lambda line: "Alt+F4" in line or "Ctrl+F4" in line,
         "reason": "A keyboard key, not a work-item code.",
-    },
-    {
-        "file": "ui/main.js",
-        "when": lambda line: "P3" in line and "cubic" in line.lower(),
-        "reason": "An easing control point, not a work-item code.",
     },
     {
         "file": "src-tauri/src/*.rs",
@@ -227,8 +223,13 @@ def main():
         capture_output=True, text=True, check=True,
     ).stdout.strip()
 
+    files = list(tracked_files())
+    if not any(p.startswith("ui/i18n/") for p in files):
+        print("source_hygiene: scope lost ui/i18n/*.js")
+        return 1
+
     total = 0
-    for rel_path in tracked_files():
+    for rel_path in files:
         try:
             with open(f"{ROOT}/{rel_path}", "r", encoding="utf-8") as f:
                 text = f.read()
