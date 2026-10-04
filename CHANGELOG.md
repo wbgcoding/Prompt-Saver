@@ -1770,6 +1770,7 @@ the video editor and the introduction tour ship on).
 - **Close after copy is a checkbox.** In the library header the option is a plain checkbox with its label instead of a button that looks like a tab.
 - **The colour filter lists only colours in use.** The library and the copy history show a dot for each colour a prompt really has, and hide the row when fewer than two colours are used.
 - **The archive chip says Archive.** The filter chip that shows archived prompts in the library carries its name instead of a small picture.
+- **Aligned titles in the library and the copy history.** Rows with a colour dot now start their title at the same place as rows with a picture or video thumbnail.
 
 ## 2.6.3 (2026-07-26)
 

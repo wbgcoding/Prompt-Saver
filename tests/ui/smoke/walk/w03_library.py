@@ -138,6 +138,18 @@ SECTION = """\
       if (!imgRow) {
         out.errors.push('library image row: the fixture row p7 is missing');
       } else {
+        // 713: a text row (colour dot) and a picture row start their title at the same x.
+        const dot713 = document.querySelector('#library-list .lib-item > .dot');
+        const textRow713 = dot713 && dot713.parentElement;
+        const nameOf713 = (row) => row && row.querySelector('.lib-name');
+        if (!nameOf713(textRow713) || !nameOf713(imgRow)) {
+          out.errors.push('713: the rows to compare are missing');
+        } else if (!imgRow.querySelector(':scope > .lib-thumb') || !textRow713.querySelector(':scope > .dot')) {
+          out.errors.push('713: the picture row has no thumbnail or the text row no dot, so the alignment proves nothing');
+        } else {
+          const dx713 = Math.abs(nameOf713(textRow713).getBoundingClientRect().left - nameOf713(imgRow).getBoundingClientRect().left);
+          if (dx713 > 1) out.errors.push('713: the title of a text row is ' + dx713.toFixed(1) + ' px off the title of a picture row');
+        }
         imgRow.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 40 }));
         await sleep(150);
         const ctxMenu = document.getElementById('ctx');

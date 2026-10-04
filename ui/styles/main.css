@@ -4190,6 +4190,24 @@ body.drag-over::after {
   background: var(--border);
   flex: 0 0 auto;
 }
+/* A text row's colour dot sits in a 30px box like a picture row's thumbnail, so the
+   titles of both kinds of row start at the same x. */
+.lib-item > .dot:not(.lib-tile-placeholder) {
+  width: 30px;
+  height: 30px;
+  margin-top: 0;
+  flex: 0 0 30px;
+  background: none;
+  display: grid;
+  place-items: center;
+}
+.lib-item > .dot:not(.lib-tile-placeholder)::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--dot-color, var(--border));
+}
 .lib-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .lib-thumb {
   width: 30px;

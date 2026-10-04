@@ -102,7 +102,7 @@ export function makeVideoObserver() {
 export function thumbDot(p) {
   const dot = document.createElement("span");
   dot.className = "dot";
-  if (p.color) dot.style.background = p.color;
+  if (p.color) dot.style.setProperty("--dot-color", p.color);
   return dot;
 }
 
