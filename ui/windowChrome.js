@@ -6,9 +6,7 @@ import { fitAllTiles } from "./tiles.js";
 import { fillVarHighlighted } from "./promptVars.js";
 import { placePopover } from "./popover.js";
 import { SCOPE_TITLE_KEYS } from "./shortcuts.js";
-
-let renderHotkeysList; // linked from main.js
-export function linkWindowChrome(fns) { ({ renderHotkeysList } = fns); }
+import { renderHotkeysList } from "./hotkeys.js";
 
 export function applyI18n() {
   document.documentElement.lang = LANG;

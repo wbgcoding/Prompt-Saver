@@ -10,9 +10,10 @@ import { isHistoryTabOpen, renderJournal } from "./journal.js";
 import { attachSelectPicker } from "./selectpop.js";
 import { FONT_LABELS, FONTS } from "./fonts.js";
 import { fitAllTiles, fitCache } from "./tiles.js";
+import { prettyAccel } from "./hotkeys.js";
 
-let applyFlags, applyValues, maybeDupImportToast, openBackups, prettyAccel, refreshSettingsLocked, showExpertPage, withDialog; // linked from main.js
-export function linkSettingsPanel(fns) { ({ applyFlags, applyValues, maybeDupImportToast, openBackups, prettyAccel, refreshSettingsLocked, showExpertPage, withDialog } = fns); }
+let applyFlags, applyValues, maybeDupImportToast, openBackups, refreshSettingsLocked, showExpertPage, withDialog; // linked from main.js
+export function linkSettingsPanel(fns) { ({ applyFlags, applyValues, maybeDupImportToast, openBackups, refreshSettingsLocked, showExpertPage, withDialog } = fns); }
 
 export let deleteAllTimer = null;
 export let resetSettingsTimer = null;

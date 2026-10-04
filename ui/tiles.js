@@ -10,9 +10,10 @@ import { dialogTokens, peekRotatedText } from "./promptVars.js";
 import { copyOnCooldown, copyTextWithVars, maybeCloseOnCopy, recordCopy } from "./copyFlow.js";
 import { copyResolved, dropLibraryFront, tagMatches, thumbEl, toggleGridSelect } from "./library.js";
 import { tileTimeLines } from "./journal.js";
+import { prettyAccel, promptHotkeysOn } from "./hotkeys.js";
 
-let armFolderDrop, disarmFolder, dropIntoFolder, folderById, openCtx, openModal, openTileFolderPop, prettyAccel, promptHotkeysOn, recordToolUsage, saveFolder; // linked from main.js
-export function linkTiles(fns) { ({ armFolderDrop, disarmFolder, dropIntoFolder, folderById, openCtx, openModal, openTileFolderPop, prettyAccel, promptHotkeysOn, recordToolUsage, saveFolder } = fns); }
+let armFolderDrop, disarmFolder, dropIntoFolder, folderById, openCtx, openModal, openTileFolderPop, recordToolUsage, saveFolder; // linked from main.js
+export function linkTiles(fns) { ({ armFolderDrop, disarmFolder, dropIntoFolder, folderById, openCtx, openModal, openTileFolderPop, recordToolUsage, saveFolder } = fns); }
 
 // Auto-fit cache per (text, cell size); cleared on font changes.
 export const fitCache = new Map();
