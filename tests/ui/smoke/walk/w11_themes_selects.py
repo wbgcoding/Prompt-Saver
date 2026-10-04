@@ -191,7 +191,7 @@ SECTION = """\
       }
     }
     layoutScan('settings');
-    mustReach('settings', '#settings .modal-x, #settings-main > .field > button');
+    mustReach('settings', '#settings .modal-x, #settings-main button');
     await click('expert-open');
     for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
       tb.click();

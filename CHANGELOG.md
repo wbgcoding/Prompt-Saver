@@ -1804,6 +1804,7 @@ the video editor and the introduction tour ship on).
 - **A one-line colour row in the editor.** The editor shows no colour, the free picker, the colours your prompts already use and a "More colors" button that opens the whole palette.
 - **The take-over question names the real button.** The portable take-over dialog now says which button leaves the portable version empty (for example "Start empty") instead of a Yes/No answer that did not match the buttons.
 - **"Do not ask again" starts unticked.** In the portable take-over dialog the box is no longer ticked beforehand, so leaving it alone asks again next time.
+- **Settings in titled sections.** The settings page is split into Appearance, Behavior, Data and About and updates, each with its own heading and a thin line between them.
 
 ## 2.6.3 (2026-07-26)
 

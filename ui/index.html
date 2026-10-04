@@ -947,160 +947,177 @@
         </button>
       </div>
       <div id="settings-main">
-      <div class="three-col">
-        <div class="field theme-field">
-          <span data-i18n="theme">Theme</span>
-          <div class="theme-row">
-          <select id="theme-select" class="modal-input">
-            <option value="system" data-i18n="themeSystem">System</option>
-            <option value="light" data-i18n="themeLight">Light</option>
-            <option value="dark" data-i18n="themeDark">Dark</option>
-            <option value="programmer" data-i18n="themeProgrammer">Programmer</option>
-            <option value="neon" data-i18n="themeNeon">Neon Violet</option>
-            <option value="ocean" data-i18n="themeOcean">Ocean</option>
-            <option value="cyberpunk" data-i18n="themeCyberpunk">Cyberpunk</option>
-            <option value="mono" data-i18n="themeMono">Black &amp; White</option>
-          </select>
-          <button id="theme-edit-open" class="icon-btn theme-edit-btn" type="button" data-i18n-title="themeEditor" data-i18n-aria="themeEditor">
-            <!-- The palette artwork spans y 3.2-18.8 in a 24 box, so it sits 1px above
-                 the centre. The shifted viewBox puts it back, without redrawing it. -->
-            <svg viewBox="0 -1 24 24" width="17" height="17" aria-hidden="true">
-              <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M12 3.2c-4.9 0-8.8 3.6-8.8 8.1 0 4.4 3.5 7.5 7.4 7.5 1.4 0 2.2-.8 2.2-1.8 0-.5-.2-.9-.5-1.2-.3-.3-.4-.6-.4-1 0-.8.7-1.4 1.6-1.4h1.6c3 0 5.1-2 5.1-4.9 0-3-3.5-5.3-8.2-5.3Z"/>
-              <circle cx="7.6" cy="11.4" r="1.25" fill="currentColor"/>
-              <circle cx="11.1" cy="7.9" r="1.25" fill="currentColor"/>
-              <circle cx="15.6" cy="8.6" r="1.25" fill="currentColor"/>
-            </svg>
-          </button>
+      <section class="settings-sec">
+        <h3 class="settings-sec-title" data-i18n="settingsSecAppearance">Appearance</h3>
+        <div class="three-col">
+          <div class="field theme-field">
+            <span data-i18n="theme">Theme</span>
+            <div class="theme-row">
+            <select id="theme-select" class="modal-input">
+              <option value="system" data-i18n="themeSystem">System</option>
+              <option value="light" data-i18n="themeLight">Light</option>
+              <option value="dark" data-i18n="themeDark">Dark</option>
+              <option value="programmer" data-i18n="themeProgrammer">Programmer</option>
+              <option value="neon" data-i18n="themeNeon">Neon Violet</option>
+              <option value="ocean" data-i18n="themeOcean">Ocean</option>
+              <option value="cyberpunk" data-i18n="themeCyberpunk">Cyberpunk</option>
+              <option value="mono" data-i18n="themeMono">Black &amp; White</option>
+            </select>
+            <button id="theme-edit-open" class="icon-btn theme-edit-btn" type="button" data-i18n-title="themeEditor" data-i18n-aria="themeEditor">
+              <!-- The palette artwork spans y 3.2-18.8 in a 24 box, so it sits 1px above
+                   the centre. The shifted viewBox puts it back, without redrawing it. -->
+              <svg viewBox="0 -1 24 24" width="17" height="17" aria-hidden="true">
+                <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M12 3.2c-4.9 0-8.8 3.6-8.8 8.1 0 4.4 3.5 7.5 7.4 7.5 1.4 0 2.2-.8 2.2-1.8 0-.5-.2-.9-.5-1.2-.3-.3-.4-.6-.4-1 0-.8.7-1.4 1.6-1.4h1.6c3 0 5.1-2 5.1-4.9 0-3-3.5-5.3-8.2-5.3Z"/>
+                <circle cx="7.6" cy="11.4" r="1.25" fill="currentColor"/>
+                <circle cx="11.1" cy="7.9" r="1.25" fill="currentColor"/>
+                <circle cx="15.6" cy="8.6" r="1.25" fill="currentColor"/>
+              </svg>
+            </button>
+            </div>
           </div>
-        </div>
-        <label class="field">
-          <span data-i18n="language">Language</span>
-          <select id="lang-select" class="modal-input">
-            <option value="auto" data-i18n="langAuto">Automatic</option>
-            <option value="en">English</option>
-            <option value="de">Deutsch</option>
-            <option value="es">Español</option>
-            <option value="it">Italiano</option>
-            <option value="pt">Português</option>
-            <option value="pl">Polski</option>
-            <option value="zh">中文</option>
-            <option value="ja">日本語</option>
-            <option value="nl">Nederlands</option>
-            <option value="tr">Türkçe</option>
-            <option value="ro">Română</option>
-          </select>
-        </label>
-        <label class="field">
-          <span data-i18n="tileFont">Font</span>
-          <!-- Options filled by JS from the shared font catalog -->
-          <select id="tile-font" class="modal-input"></select>
-        </label>
-        <label class="field">
-          <span data-i18n="valUiScale">Interface size</span>
-          <!-- Options filled by JS: scale presets -->
-          <select id="ui-scale" class="modal-input"></select>
-        </label>
-        <label class="field">
-          <span data-i18n="valIconScale">Icon size</span>
-          <select id="icon-scale" class="modal-input"></select>
-        </label>
-        <!-- Text size sits in the third column, directly under Font. -->
-        <label class="field">
-          <span data-i18n="tileSize">Tile text size</span>
-          <!-- Options filled by JS: Automatic + 10..40 in steps of 2 -->
-          <select id="tile-size" class="modal-input"></select>
-        </label>
-      </div>
-      <div class="switch-grid">
-        <label class="field switch-field">
-          <span data-i18n="alwaysOnTop">Always on top</span>
-          <input id="opt-ontop" type="checkbox" class="switch" />
-        </label>
-        <label class="field switch-field">
-          <span data-i18n="minimizeOnClose">Minimize to background on close</span>
-          <input id="opt-minimize" type="checkbox" class="switch" />
-        </label>
-        <label class="field switch-field">
-          <span data-i18n="autostart">Start automatically at login</span>
-          <input id="opt-autostart" type="checkbox" class="switch" />
-        </label>
-        <label class="field switch-field">
-          <span data-i18n="startMinimized">Start in the background on autostart</span>
-          <input id="opt-startmin" type="checkbox" class="switch" />
-        </label>
-        <label class="field switch-field" data-i18n-title="tipAutoPaste">
-          <span data-i18n="autoPasteSetting">Auto-paste on double-click</span>
-          <input id="opt-autopaste" type="checkbox" class="switch" />
-        </label>
-        <label class="field switch-field" data-i18n-title="tipTooltips">
-          <span data-i18n="showTooltips">Show tooltips on hover</span>
-          <input id="opt-tooltips" type="checkbox" class="switch" />
-        </label>
-        <label class="field switch-field" data-i18n-title="tipScreenshotFolder">
-          <span data-i18n="screenshotToFolder">Always save screenshots to the Screenshots folder</span>
-          <input id="opt-screenshot-folder" type="checkbox" class="switch" />
-        </label>
-        <!-- Favorites view on or off. -->
-        <label class="field switch-field" data-i18n-title="favViewOption">
-          <span data-i18n="favViewTitle">Favorites view</span>
-          <input id="opt-favview" type="checkbox" class="switch" />
-        </label>
-      </div>
-      <!-- Global hotkey: its own full-width row directly under the toggle grid. -->
-      <div class="field field-inline" data-i18n-title="tipHotkeyLabel">
-        <span data-i18n="hotkeyLabel">Global hotkey</span>
-        <div class="hotkey-row">
-          <input id="opt-hotkey" class="modal-input" type="text" readonly data-i18n-ph="hotkeyPh" data-i18n-aria="hotkeyLabel" />
-          <button id="hotkey-clear" class="ghost-btn" data-i18n="hotkeyClear">Clear</button>
-          <button id="hotkey-list-btn" type="button" class="ghost-btn" data-i18n="hotkeysAllBtn">All shortcuts</button>
-        </div>
-      </div>
-      <!-- Voice dictation's own global hotkey -- visible only with the
-           voiceHotkey expert flag on, same shape as the app hotkey row above. -->
-      <div id="voice-hotkey-row" class="field field-inline">
-        <span data-i18n="voiceHotkeyLabel">Dictation hotkey</span>
-        <div class="hotkey-row">
-          <input id="opt-voice-hotkey" class="modal-input" type="text" readonly data-i18n-ph="hotkeyPh" data-i18n-aria="voiceHotkeyLabel" />
-          <button id="voice-hotkey-clear" class="ghost-btn" data-i18n="hotkeyClear">Clear</button>
-        </div>
-      </div>
-      <div id="impexp-field" class="field">
-        <div class="export-row">
-          <button id="import-btn" class="ghost-btn" data-i18n="import">Import prompts</button>
-          <button id="import-folder-btn" class="ghost-btn" data-i18n="importFolderBtn" data-i18n-title="tipImportFolder">Import folder</button>
-          <select id="export-format" class="batch-view-select" data-i18n-aria="exportFormatLabel">
-            <option value="csv" data-i18n="exportCsv">CSV</option>
-            <option value="txt" data-i18n="exportTxt">TXT</option>
-            <option value="json" data-i18n="exportJson">JSON</option>
-          </select>
-          <button id="export-btn" class="ghost-btn" data-i18n="exportBtn">Export</button>
-          <button id="settings-backup-btn" class="ghost-btn" data-i18n="settingsBackupBtn" data-i18n-title="tipSettingsBackup">Backup manager</button>
-        </div>
-      </div>
-      <!-- Two columns like the toggle grid above: check + version left, switch right. -->
-      <div id="updates-field" class="field">
-        <div class="update-row">
-          <div class="update-actions">
-            <button id="about-btn" class="ghost-btn" data-i18n="aboutTitle">About</button>
-            <button id="update-btn" class="ghost-btn" data-i18n="checkUpdate">Check for updates</button>
-            <button id="update-version" type="button" class="update-version" data-i18n-title="openReleases"></button>
-          </div>
-          <label class="field switch-field" data-i18n-title="autoUpdateHint">
-            <span data-i18n="autoUpdate">Auto update</span>
-            <input id="opt-autoupdate" type="checkbox" class="switch" />
+          <label class="field">
+            <span data-i18n="language">Language</span>
+            <select id="lang-select" class="modal-input">
+              <option value="auto" data-i18n="langAuto">Automatic</option>
+              <option value="en">English</option>
+              <option value="de">Deutsch</option>
+              <option value="es">Español</option>
+              <option value="it">Italiano</option>
+              <option value="pt">Português</option>
+              <option value="pl">Polski</option>
+              <option value="zh">中文</option>
+              <option value="ja">日本語</option>
+              <option value="nl">Nederlands</option>
+              <option value="tr">Türkçe</option>
+              <option value="ro">Română</option>
+            </select>
           </label>
-          <label class="field update-interval">
-            <span data-i18n="valUpdateCheckH">Update check interval</span>
-            <select id="opt-update-interval" class="modal-input"></select>
+          <label class="field">
+            <span data-i18n="tileFont">Font</span>
+            <!-- Options filled by JS from the shared font catalog -->
+            <select id="tile-font" class="modal-input"></select>
+          </label>
+          <label class="field">
+            <span data-i18n="valUiScale">Interface size</span>
+            <!-- Options filled by JS: scale presets -->
+            <select id="ui-scale" class="modal-input"></select>
+          </label>
+          <label class="field">
+            <span data-i18n="valIconScale">Icon size</span>
+            <select id="icon-scale" class="modal-input"></select>
+          </label>
+          <!-- Text size sits in the third column, directly under Font. -->
+          <label class="field">
+            <span data-i18n="tileSize">Tile text size</span>
+            <!-- Options filled by JS: Automatic + 10..40 in steps of 2 -->
+            <select id="tile-size" class="modal-input"></select>
           </label>
         </div>
-      </div>
+        <div class="switch-grid">
+          <label class="field switch-field" data-i18n-title="tipTooltips">
+            <span data-i18n="showTooltips">Show tooltips on hover</span>
+            <input id="opt-tooltips" type="checkbox" class="switch" />
+          </label>
+          <!-- Favorites view on or off. -->
+          <label class="field switch-field" data-i18n-title="favViewOption">
+            <span data-i18n="favViewTitle">Favorites view</span>
+            <input id="opt-favview" type="checkbox" class="switch" />
+          </label>
+        </div>
+      </section>
+      <section class="settings-sec">
+        <h3 class="settings-sec-title" data-i18n="settingsSecBehavior">Behavior</h3>
+        <div class="switch-grid">
+          <label class="field switch-field">
+            <span data-i18n="alwaysOnTop">Always on top</span>
+            <input id="opt-ontop" type="checkbox" class="switch" />
+          </label>
+          <label class="field switch-field">
+            <span data-i18n="minimizeOnClose">Minimize to background on close</span>
+            <input id="opt-minimize" type="checkbox" class="switch" />
+          </label>
+          <label class="field switch-field">
+            <span data-i18n="autostart">Start automatically at login</span>
+            <input id="opt-autostart" type="checkbox" class="switch" />
+          </label>
+          <label class="field switch-field">
+            <span data-i18n="startMinimized">Start in the background on autostart</span>
+            <input id="opt-startmin" type="checkbox" class="switch" />
+          </label>
+          <label class="field switch-field" data-i18n-title="tipAutoPaste">
+            <span data-i18n="autoPasteSetting">Auto-paste on double-click</span>
+            <input id="opt-autopaste" type="checkbox" class="switch" />
+          </label>
+          <label class="field switch-field" data-i18n-title="tipScreenshotFolder">
+            <span data-i18n="screenshotToFolder">Always save screenshots to the Screenshots folder</span>
+            <input id="opt-screenshot-folder" type="checkbox" class="switch" />
+          </label>
+        </div>
+        <!-- Global hotkey: its own full-width row directly under the toggle grid. -->
+        <div class="field field-inline" data-i18n-title="tipHotkeyLabel">
+          <span data-i18n="hotkeyLabel">Global hotkey</span>
+          <div class="hotkey-row">
+            <input id="opt-hotkey" class="modal-input" type="text" readonly data-i18n-ph="hotkeyPh" data-i18n-aria="hotkeyLabel" />
+            <button id="hotkey-clear" class="ghost-btn" data-i18n="hotkeyClear">Clear</button>
+            <button id="hotkey-list-btn" type="button" class="ghost-btn" data-i18n="hotkeysAllBtn">All shortcuts</button>
+          </div>
+        </div>
+        <!-- Voice dictation's own global hotkey -- visible only with the
+             voiceHotkey expert flag on, same shape as the app hotkey row above. -->
+        <div id="voice-hotkey-row" class="field field-inline">
+          <span data-i18n="voiceHotkeyLabel">Dictation hotkey</span>
+          <div class="hotkey-row">
+            <input id="opt-voice-hotkey" class="modal-input" type="text" readonly data-i18n-ph="hotkeyPh" data-i18n-aria="voiceHotkeyLabel" />
+            <button id="voice-hotkey-clear" class="ghost-btn" data-i18n="hotkeyClear">Clear</button>
+          </div>
+        </div>
+      </section>
+      <section id="settings-sec-data" class="settings-sec">
+        <h3 class="settings-sec-title" data-i18n="settingsSecData">Data</h3>
+        <div id="impexp-field" class="field">
+          <div class="export-row">
+            <button id="import-btn" class="ghost-btn" data-i18n="import">Import prompts</button>
+            <button id="import-folder-btn" class="ghost-btn" data-i18n="importFolderBtn" data-i18n-title="tipImportFolder">Import folder</button>
+            <select id="export-format" class="batch-view-select" data-i18n-aria="exportFormatLabel">
+              <option value="csv" data-i18n="exportCsv">CSV</option>
+              <option value="txt" data-i18n="exportTxt">TXT</option>
+              <option value="json" data-i18n="exportJson">JSON</option>
+            </select>
+            <button id="export-btn" class="ghost-btn" data-i18n="exportBtn">Export</button>
+            <button id="settings-backup-btn" class="ghost-btn" data-i18n="settingsBackupBtn" data-i18n-title="tipSettingsBackup">Backup manager</button>
+          </div>
+        </div>
+      </section>
+      <section class="settings-sec">
+        <h3 class="settings-sec-title" data-i18n="settingsSecUpdates">About and updates</h3>
+        <!-- Two columns like the toggle grid above: check + version left, switch right. -->
+        <div id="updates-field" class="field">
+          <div class="update-row">
+            <div class="update-actions">
+              <button id="about-btn" class="ghost-btn" data-i18n="aboutTitle">About</button>
+              <button id="update-btn" class="ghost-btn" data-i18n="checkUpdate">Check for updates</button>
+              <button id="update-version" type="button" class="update-version" data-i18n-title="openReleases"></button>
+            </div>
+            <label class="field switch-field" data-i18n-title="autoUpdateHint">
+              <span data-i18n="autoUpdate">Auto update</span>
+              <input id="opt-autoupdate" type="checkbox" class="switch" />
+            </label>
+            <label class="field update-interval">
+              <span data-i18n="valUpdateCheckH">Update check interval</span>
+              <select id="opt-update-interval" class="modal-input"></select>
+            </label>
+          </div>
+        </div>
+      </section>
       <div class="field settings-btn-row">
         <button id="help-open" class="ghost-btn" data-i18n="helpMenu">Help</button>
         <button id="expert-open" class="ghost-btn" data-i18n="expertMenu">Expert menu</button>
         <button id="reset-settings" class="ghost-btn danger-btn" data-i18n="resetSettings" data-i18n-title="resetSettingsTip">Reset settings</button>
         <button id="delete-data" class="ghost-btn danger-btn" data-i18n="deleteData" data-i18n-title="deleteDataTip">Delete all data</button>
       </div>
+      <section class="settings-sec settings-sec-danger">
+        <h3 class="settings-sec-title" data-i18n="settingsSecDanger">Reset and delete</h3>
+      </section>
       </div><!-- /settings-main -->
       <div id="settings-expert" class="hidden">
         <!-- Search + the "only changed" filter share one row: the filter used to be a

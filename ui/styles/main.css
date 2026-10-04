@@ -1771,7 +1771,7 @@ body.chain-mode #chain-btn,
 body.noflag-chainQuickStart #chain-btn { display: inline-flex; }
 body.noflag-chainPrompts #chain-btn { display: none; }
 .noflag-chainVarCheck #chain-overview { display: none; }
-.noflag-importExport #impexp-field { display: none; }
+.noflag-importExport #settings-sec-data { display: none; }
 /* Opt-in visual toggles (off by default; `flag-<key>` present only when on). */
 .flag-gridLines .cell { border-color: var(--border); }
 .tile-style-uppercase .tile-name { text-transform: uppercase; letter-spacing: 0.03em; }
@@ -2829,6 +2829,19 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
    `.field.` specificity guard so the column default can't stack them. */
 .field.settings-btn-row { flex-direction: row; gap: 10px; }
 .field.settings-btn-row > button { flex: 1; }
+/* Settings sections: one titled block each, hairline between them. A section without
+   a single button (the danger section until its buttons live there) stays hidden. */
+.settings-sec { display: flex; flex-direction: column; gap: 10px; }
+.settings-sec + .settings-sec { border-top: 1px solid var(--border); padding-top: 12px; }
+.settings-sec:not(:has(button)) { display: none; }
+.settings-sec-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
 /* Settings body: rows stack with comfortable, even spacing (close, not touching). */
 /* Settings/expert: the head (and, for expert, the search + tabs) stays fixed; only
    the body scrolls, so nothing bleeds past the header. */

@@ -1,4 +1,19 @@
 SECTION = """\
+    // 724: the settings page is split into titled sections, in this order, with the
+    // English titles; the danger section stays hidden until it holds buttons.
+    {
+      if (document.getElementById('settings').classList.contains('hidden')) await click('gear');
+      if (document.getElementById('settings-main').classList.contains('hidden')) {
+        await click('expert-back');
+        await sleep(50);
+      }
+      const titles724 = [...document.querySelectorAll('#settings-main .settings-sec-title')]
+        .filter((el) => el.getBoundingClientRect().height > 0).map((el) => el.textContent.trim());
+      const want724 = ['Appearance', 'Behavior', 'Data', 'About and updates'];
+      if (titles724.join('|') !== want724.join('|')) {
+        out.errors.push('724: the visible settings section titles are "' + titles724.join('|') + '", expected "' + want724.join('|') + '"');
+      }
+    }
     // 96: the short "Latest X.Y.Z" status keeps update-actions no taller than
     // before, with the longest of the 11 translations (Romanian) -- and exactly
     // as tall as the button row below it once the window has real room (740px+;
