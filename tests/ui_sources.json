@@ -1,3 +1,3 @@
 {
-  "main_window_modules": ["main.js", "expertConfig.js", "markdown.js", "promptVars.js", "tourContent.js", "snipEditor.js", "core.js", "chain.js", "views.js", "copyFlow.js", "tiles.js", "windowChrome.js", "helpView.js", "library.js", "tags.js", "journal.js", "theme.js", "settingsPanel.js", "hotkeys.js", "about.js", "expertMenu.js", "management.js", "backups.js", "dictation.js", "editor.js", "bgOps.js", "gridFolders.js"]
+  "main_window_modules": ["main.js", "expertConfig.js", "markdown.js", "promptVars.js", "tourContent.js", "snipEditor.js", "core.js", "chain.js", "views.js", "copyFlow.js", "tiles.js", "windowChrome.js", "helpView.js", "library.js", "tags.js", "journal.js", "theme.js", "settingsPanel.js", "hotkeys.js", "about.js", "expertMenu.js", "management.js", "backups.js", "dictation.js", "editor.js", "bgOps.js", "gridFolders.js", "tour.js", "globalSearch.js"]
 }
