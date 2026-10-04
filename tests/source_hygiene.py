@@ -105,7 +105,7 @@ EXCEPTIONS = [
                   "parenthesised numbers are field widths, not work-item refs.",
     },
     {
-        "file": "ui/main.js",
+        "file": "ui/expertConfig.js",
         "when": lambda line: "Word-diff cap" in line,
         "reason": "'(500: minimum where …)' documents a threshold value, not "
                   "a work-item reference.",
