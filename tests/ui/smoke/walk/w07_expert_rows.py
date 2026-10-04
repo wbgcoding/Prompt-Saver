@@ -1,41 +1,13 @@
 SECTION = """\
-    // 511/551: the caution hint is the first child of the expert page, red and
-    // centered in every mode; the quick-profiles row follows it.
+    // 511: the expert menu top row (presets plus reset) is the first child of
+    // the expert page.
     {
       document.getElementById('settings').classList.remove('hidden');
       await click('expert-open');
       const expertBox = document.getElementById('settings-expert');
-      const hint = document.getElementById('expert-hint');
-      const expertPage = document.getElementById('settings-expert');
-      const hintOk = (label) => {
-        if (!hint || expertPage.firstElementChild !== hint) {
-          out.errors.push('551: the caution hint is not the first child of the expert page (' + label + ')');
-          return;
-        }
-        const dangerProbe = document.createElement('span');
-        dangerProbe.style.color = 'var(--danger)';
-        document.body.appendChild(dangerProbe);
-        const dangerColor = getComputedStyle(dangerProbe).color;
-        dangerProbe.remove();
-        if (getComputedStyle(hint).color !== dangerColor) {
-          out.errors.push('551: the caution hint is not in the danger colour (' + label + '): ' + getComputedStyle(hint).color + ' vs ' + dangerColor);
-        }
-        const hr = hint.getBoundingClientRect();
-        const pr = expertPage.getBoundingClientRect();
-        const content = [...hint.children].map((c) => c.getBoundingClientRect());
-        const cx = (Math.min(...content.map((r) => r.left)) + Math.max(...content.map((r) => r.right))) / 2;
-        const px = pr.left + pr.width / 2;
-        if (hr.width < 1 || Math.abs(cx - px) > 2) {
-          out.errors.push('551: the caution hint is not centered (' + label + '): content x ' + cx + ' vs page x ' + px);
-        }
-        if (hint.matches('button, a, input, select, [tabindex]') || hint.hasAttribute('tabindex')) {
-          out.errors.push('551: the caution hint is focusable, it should be plain text');
-        }
-      };
-      hintOk('browse');
       const topRow551 = expertBox.querySelector('.expert-top-row');
-      if (!topRow551 || hint.nextElementSibling !== topRow551) {
-        out.errors.push('511: the expert menu top row (presets plus reset) does not follow the hint');
+      if (!topRow551 || expertBox.firstElementChild !== topRow551) {
+        out.errors.push('511: the expert menu top row (presets plus reset) is not the first child of the expert page');
       } else if (!topRow551.querySelector('.expert-presets') || topRow551.querySelector('.expert-presets') !== topRow551.firstElementChild) {
         out.errors.push('511: the quick-profiles group is not the first thing in the top row');
       }
@@ -43,7 +15,6 @@ SECTION = """\
       expertSearch551.value = 'shadow';
       expertSearch551.dispatchEvent(new Event('input'));
       await sleep(250);
-      hintOk('while searching');
       expertSearch551.value = '';
       expertSearch551.dispatchEvent(new Event('input'));
       await sleep(250);

@@ -820,7 +820,6 @@ export default {
     versionSkipped: "Versão {v} ignorada",
     expertMenu: "Menu avançado",
     back: "Voltar",
-    expertHint: "As alterações aqui podem levar a um comportamento inesperado.",
     chainStepHint: "Arraste para reordenar, clique com o botão direito para remover.",
     expGroupTiles: "Blocos",
     expGroupTooltips: "Dicas",

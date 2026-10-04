@@ -820,7 +820,6 @@ export default {
     versionSkipped: "Versiunea {v} omisă",
     expertMenu: "Meniu expert",
     back: "Înapoi",
-    expertHint: "Modificările de aici pot duce la un comportament neașteptat.",
     chainStepHint: "Trage pentru a reordona, clic dreapta pentru a elimina.",
     expGroupTiles: "Dale",
     expGroupTooltips: "Indicii",

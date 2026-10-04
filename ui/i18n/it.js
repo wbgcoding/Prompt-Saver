@@ -820,7 +820,6 @@ export default {
     versionSkipped: "Versione {v} saltata",
     expertMenu: "Menu esperto",
     back: "Indietro",
-    expertHint: "Le modifiche qui possono causare un comportamento imprevisto.",
     chainStepHint: "Trascina per riordinare, clic destro per rimuovere.",
     expGroupTiles: "Riquadri",
     expGroupTooltips: "Suggerimenti",

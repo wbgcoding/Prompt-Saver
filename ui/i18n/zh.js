@@ -820,7 +820,6 @@ export default {
     versionSkipped: "已跳过版本 {v}",
     expertMenu: "专家菜单",
     back: "返回",
-    expertHint: "此处的更改可能导致意外行为。",
     chainStepHint: "拖动可重新排序，右键单击可移除。",
     expGroupTiles: "磁贴",
     expGroupTooltips: "提示",

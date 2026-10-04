@@ -1555,21 +1555,6 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
    profile writes its changed flags and is gone, never a state of its own. */
 .expert-presets { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .expert-presets-label { font-size: 12px; font-weight: 600; color: var(--muted); }
-/* The caution notice: static markup, first line of the expert page, centered
-   and red in every mode (also while searching). A plain line, never focusable. */
-.expert-hint {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  gap: 6px;
-  margin: 0;
-  color: var(--danger);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.4;
-}
-.expert-hint svg { flex: 0 0 auto; }
 /* A state a group is currently in, sitting above that group's settings. It exists
    only while the state holds, so it never leaves a gap behind when it is gone. */
 .expert-notice {
@@ -2860,7 +2845,6 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
   display: flex; flex-direction: column; gap: 10px;
   flex: 1 1 auto; min-height: 0;
 }
-#settings-expert > .expert-hint,
 #settings-expert > .expert-top-row,
 #settings-expert > .expert-filter-row,
 #settings-expert > #expert-tabs-bar { flex: 0 0 auto; }

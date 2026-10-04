@@ -820,7 +820,6 @@ export default {
     versionSkipped: "バージョン {v} をスキップしました",
     expertMenu: "エキスパートメニュー",
     back: "戻る",
-    expertHint: "ここでの変更は予期しない動作を引き起こす可能性があります。",
     chainStepHint: "ドラッグで並べ替え、右クリックで削除します。",
     expGroupTiles: "タイル",
     expGroupTooltips: "ツールチップ",

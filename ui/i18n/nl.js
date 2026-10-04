@@ -820,7 +820,6 @@ export default {
     versionSkipped: "Versie {v} overgeslagen",
     expertMenu: "Expertmenu",
     back: "Terug",
-    expertHint: "Wijzigingen hier kunnen tot onverwacht gedrag leiden.",
     chainStepHint: "Sleep om te herordenen, klik met de rechtermuisknop om te verwijderen.",
     expGroupTiles: "Tegels",
     expGroupTooltips: "Tooltips",

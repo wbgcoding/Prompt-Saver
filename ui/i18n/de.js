@@ -795,7 +795,6 @@ export default {
     versionSkipped: "Version {v} übersprungen",
     expertMenu: "Expertenmenü",
     back: "Zurück",
-    expertHint: "Änderungen hier können zu unerwartetem Verhalten führen.",
     chainStepHint: "Ziehen zum Umsortieren, Rechtsklick zum Entfernen.",
     expGroupTiles: "Kacheln",
     expGroupTooltips: "Tooltips",

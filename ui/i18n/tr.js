@@ -820,7 +820,6 @@ export default {
     versionSkipped: "{v} sürümü atlandı",
     expertMenu: "Uzman menüsü",
     back: "Geri",
-    expertHint: "Buradaki değişiklikler beklenmedik davranışlara yol açabilir.",
     chainStepHint: "Yeniden sıralamak için sürükleyin, kaldırmak için sağ tıklayın.",
     expGroupTiles: "Kutucuklar",
     expGroupTooltips: "Araç ipuçları",

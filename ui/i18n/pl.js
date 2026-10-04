@@ -820,7 +820,6 @@ export default {
     versionSkipped: "Pominięto wersję {v}",
     expertMenu: "Menu eksperta",
     back: "Wstecz",
-    expertHint: "Zmiany tutaj mogą prowadzić do nieoczekiwanego zachowania.",
     chainStepHint: "Przeciągnij, aby zmienić kolejność, kliknij prawym przyciskiem, aby usunąć.",
     expGroupTiles: "Kafelki",
     expGroupTooltips: "Podpowiedzi",

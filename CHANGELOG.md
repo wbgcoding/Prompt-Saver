@@ -1602,6 +1602,7 @@ the video editor and the introduction tour ship on).
   previous defaults.
 - **The switch that hid the pin button.** The always-on-top pin in the
   header is always there; Settings keeps its own switch.
+- **The red caution line.** The warning text at the top of the expert menu is gone.
 
 ### Changed
 
