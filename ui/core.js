@@ -502,8 +502,8 @@ export function errToast(err) {
 // read from what is on screen right now rather than tagging each of errToast's
 // many call sites individually.
 export function currentErrorOrigin() {
-  const openModal = document.querySelector(".overlay:not(.hidden)[id]");
-  if (openModal) return openModal.id;
+  const openOverlay = document.querySelector(".overlay:not(.hidden)[id]");
+  if (openOverlay) return openOverlay.id;
   if (!$("settings-expert").classList.contains("hidden")) return "settings-expert";
   return "main";
 }

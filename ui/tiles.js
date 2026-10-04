@@ -12,9 +12,10 @@ import { copyResolved, dropLibraryFront, tagMatches, thumbEl, toggleGridSelect }
 import { tileTimeLines } from "./journal.js";
 import { prettyAccel, promptHotkeysOn } from "./hotkeys.js";
 import { recordToolUsage } from "./management.js";
+import { openModal } from "./editor.js";
 
-let armFolderDrop, disarmFolder, dropIntoFolder, folderById, openCtx, openModal, openTileFolderPop, saveFolder; // linked from main.js
-export function linkTiles(fns) { ({ armFolderDrop, disarmFolder, dropIntoFolder, folderById, openCtx, openModal, openTileFolderPop, saveFolder } = fns); }
+let armFolderDrop, disarmFolder, dropIntoFolder, folderById, openCtx, openTileFolderPop, saveFolder; // linked from main.js
+export function linkTiles(fns) { ({ armFolderDrop, disarmFolder, dropIntoFolder, folderById, openCtx, openTileFolderPop, saveFolder } = fns); }
 
 // Auto-fit cache per (text, cell size); cleared on font changes.
 export const fitCache = new Map();

@@ -7,9 +7,7 @@ import { JOURNAL_ROWS_MAX } from "./expertConfig.js";
 import { copyOnCooldown, recordCopy } from "./copyFlow.js";
 import { wireSearchSuggest } from "./windowChrome.js";
 import { applyFlags } from "./expertMenu.js";
-
-let editPrompt, openModal; // linked from main.js
-export function linkJournal(fns) { ({ editPrompt, openModal } = fns); }
+import { editPrompt, openModal } from "./editor.js";
 
 export let journalQuery = ""; // copy-history search text
 export const journalTypes = new Set(); // additive, like the library's

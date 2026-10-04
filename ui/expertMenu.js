@@ -19,9 +19,7 @@ import EN from "./i18n/en.js";
 import { renderStatsPanel, toggleShortLivedCert } from "./management.js";
 import { closeBackups, renderBackupPanel } from "./backups.js";
 import { openOcrLangsModal, openVoiceLangsModal } from "./dictation.js";
-
-let varFixedListRow; // linked from main.js
-export function linkExpertMenu(fns) { ({ varFixedListRow } = fns); }
+import { varFixedListRow } from "./editor.js";
 
 export let expertResetTimer = null;
 

@@ -6,6 +6,7 @@ import { colorPop, drag, errToast, flag, NUM_FIELD_BIG_STEP, openColorPop, t, to
 import { closeShortcutsModal, openShortcutsModal } from "./windowChrome.js";
 import { EXPERT_DROPDOWNS } from "./expertMenu.js";
 import { recordToolUsage } from "./management.js";
+import { buildSwatches } from "./editor.js";
 
 const { invoke } = window.__TAURI__.core;
 const { getCurrentWindow, ResizeDirection } = window.__TAURI__.window;

@@ -13,9 +13,10 @@ import { allTags, renderTagFilter, tagChipEl, tagKey, tagsOn } from "./tags.js";
 import { refreshClipInbox, setLibraryTab, tileTimeLines } from "./journal.js";
 import { openCompareView, recordToolUsage, renderStatsPanel } from "./management.js";
 import { closeBackups } from "./backups.js";
+import { buildSwatches, editPrompt, ensureSecretVaultUnlocked } from "./editor.js";
 
-let buildSwatches, editPrompt, ensureSecretVaultUnlocked, foldersOfView, openCtx; // linked from main.js
-export function linkLibrary(fns) { ({ buildSwatches, editPrompt, ensureSecretVaultUnlocked, foldersOfView, openCtx } = fns); }
+let foldersOfView, openCtx; // linked from main.js
+export function linkLibrary(fns) { ({ foldersOfView, openCtx } = fns); }
 
 export let libQuery = ""; // prompt library search text
 export function assignLibQuery(v) { libQuery = v; }

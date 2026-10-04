@@ -12,9 +12,7 @@ import { renderGrid, renderViews } from "./views.js";
 import { confirmDialog } from "./dialog.js";
 import { fmtBytes } from "./floatShared.js";
 import { saveBackupSetting, saveUiState } from "./backups.js";
-
-let editPrompt, renderDiffInto, splitDiffSides; // linked from main.js
-export function linkManagement(fns) { ({ editPrompt, renderDiffInto, splitDiffSides } = fns); }
+import { editPrompt, renderDiffInto, splitDiffSides } from "./editor.js";
 
 // ---- Usage statistics dashboard (opened from the expert menu) ----
 export function statSection(text) {

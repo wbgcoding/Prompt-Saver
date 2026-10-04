@@ -5,9 +5,7 @@ import { placePopover } from "./popover.js";
 import { libTags, renderLibrary } from "./library.js";
 import { renderGrid } from "./views.js";
 import { confirmDialog } from "./dialog.js";
-
-let buildSwatches; // linked from main.js
-export function linkTags(fns) { ({ buildSwatches } = fns); }
+import { buildSwatches } from "./editor.js";
 
 // ---- Tags: chips in the editor, filter row + manager in the library ----
 // Names are compared case-insensitively; the backend keeps one canonical casing
