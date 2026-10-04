@@ -1797,6 +1797,7 @@ the video editor and the introduction tour ship on).
 - **The microphone sits next to the counter.** In the editor the dictation button is no longer a row of its own above the text: it sits at the right of the length counter, directly under the prompt text.
 - **A label over the prompt text.** The editor names the prompt text field with a visible "Prompt text" label; it is hidden for image and file prompts and while rotation is on.
 - **The prompt text comes first in the editor.** The text field now sits directly under the name; placeholders, rotation, the private note and the colours follow below it, and the note starts as a single line.
+- **The note field explains itself in its placeholder.** The editor's note field says "Private note, never copied" as its placeholder; the extra tooltip that popped up over it when the editor opened is gone.
 
 ## 2.6.3 (2026-07-26)
 
