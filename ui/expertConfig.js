@@ -400,7 +400,7 @@ export const EXPERT_VALUES = {
   bubbleMs: { label: "valBubbleMs", min: 0, max: 6000, step: 50, def: 950, unit: "ms", zeroLabel: "valOff", offAtZero: true },
   toastMs: { label: "valToastMs", min: 800, max: 10000, step: 100, def: 1400, unit: "ms" },
   viewBorder: { label: "valViewBorder", min: 1, max: 12, step: 1, def: 3, unit: "px", gate: "multiView" },
-  attachPreviewKb: { label: "valAttachPreviewKb", min: 1, max: 64, step: 1, def: 8, unit: "KB", gate: "attachTextPreview" },
+  attachPreviewKb: { label: "valAttachPreviewKb", min: 1, max: 64, step: 1, def: 8, unit: "KB", display: "words", gate: "attachTextPreview" },
   // Floating-button opacity (%). Floored at 20% so the pill never vanishes.
   floatOpacity: { label: "valFloatOpacity", min: 20, max: 100, step: 5, def: 100, unit: "%", gate: "floating" },
   // How close two floating buttons must be on drop to merge, and how wide the
@@ -612,7 +612,7 @@ export const EXPERT_VALUES = {
   // How long a confirm button (delete etc.) stays armed before it auto-resets.
   disarmMs: { label: "valDisarmMs", min: 1000, max: 10000, step: 500, def: 3000, unit: "ms" },
   // Matches append_crash_log's own pre-existing hardcoded rotation cap (256 KB).
-  errorLogKeepKb: { label: "valErrorLogKeepKb", min: 64, max: 4096, step: 64, def: 256, unit: "KB", gate: "errorLog" },
+  errorLogKeepKb: { label: "valErrorLogKeepKb", min: 64, max: 4096, step: 64, def: 256, unit: "KB", display: "mb", gate: "errorLog" },
   // Automatic backups: how many rotating snapshots to keep.
   backupKeep: { label: "valBackupKeep", min: 1, max: 50, step: 1, def: 10, unit: "", gate: "autoBackup" },
   // How long the auto-backup job waits after launch before its first check --

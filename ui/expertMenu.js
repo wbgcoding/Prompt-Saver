@@ -619,10 +619,22 @@ export async function commitValue(key, value) {
   else syncRowReset("values", key); // reset icon must not wait for an unrelated rebuild
 }
 
+// How a number reads on its row. The stored value never changes, only the text:
+// milliseconds show as seconds, the attachment preview size as roughly that many
+// words (about 170 per kilobyte) and the error log size in megabytes.
+// A 0-stop can carry a special label (e.g. auto-advance "unlimited") instead of "0min".
+export function formatValue(cfg, v) {
+  if (v === 0 && cfg.zeroLabel) return t(cfg.zeroLabel);
+  const nf = (opts) => new Intl.NumberFormat(LANG, opts);
+  if (cfg.display === "words") return t("valWordsApprox").replace("{n}", nf({}).format(Math.round(v * 170 / 10) * 10));
+  if (cfg.display === "mb") return `${nf({ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v / 1024)} MB`;
+  if (cfg.unit === "ms") return `${nf({ minimumFractionDigits: 0, maximumFractionDigits: (cfg.step ?? 100) < 100 ? 2 : 1 }).format(v / 1000)} s`;
+  return `${v}${cfg.unit}`;
+}
+
 export function valueRow(key) {
   const cfg = EXPERT_VALUES[key];
-  // A 0-stop can carry a special label (e.g. auto-advance "unlimited") instead of "0min".
-  const fmt = (v) => v === 0 && cfg.zeroLabel ? t(cfg.zeroLabel) : `${v}${cfg.unit}`;
+  const fmt = (v) => formatValue(cfg, v);
   const row = document.createElement("div");
   row.className = "field value-field";
   // A stable hook a caller elsewhere (the retention overview's jump-to-setting
@@ -738,7 +750,7 @@ export function selectRow(key) {
     const opt = document.createElement("option");
     opt.value = String(o);
     // A 0-stop can carry a special label (e.g. retention "∞ forever") instead of "0d".
-    opt.textContent = o === 0 && cfg.zeroLabel ? t(cfg.zeroLabel) : `${o}${cfg.unit}`;
+    opt.textContent = formatValue(cfg, o);
     sel.appendChild(opt);
   }
   const customOpt = document.createElement("option");

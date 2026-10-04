@@ -241,6 +241,47 @@ LAYOUT_PROBE = """
 """
 
 
+# Number rows read in seconds, words and megabytes, and a zero hour reads Never (German decimals).
+VALUE_TEXT_PROBE = """
+<script>
+(async () => {""" + FIND + """
+  const errs = [];
+  try {
+    await until(() => document.getElementById('gear') && document.getElementById('library-btn'));
+    await sleep(400);
+    document.getElementById('gear').click();
+    await sleep(200);
+    const langSel = document.getElementById('lang-select');
+    langSel.value = 'de';
+    langSel.dispatchEvent(new Event('change'));
+    await sleep(300);
+    document.getElementById('expert-open').click();
+    await sleep(400);
+    const want = {
+      copyCooldownMs: '2 s',
+      autoPasteDelayMs: '0,08 s',
+      attachPreviewKb: '≈ 1.360 Wörter',
+      errorLogKeepKb: '0,25 MB',
+    };
+    const got = {};
+    for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+      tb.click();
+      await sleep(80);
+      for (const key of Object.keys(want)) {
+        const out = document.querySelector('#expert-flags [data-setting-row="' + key + '"] .value-out');
+        if (out) got[key] = out.textContent.trim();
+      }
+    }
+    for (const key of Object.keys(want)) {
+      if (got[key] !== want[key]) errs.push(key + ' reads ' + JSON.stringify(got[key]) + ', expected ' + JSON.stringify(want[key]));
+    }
+  } catch (e) { errs.push('probe threw: ' + (e && e.stack || e)); }
+  finish(errs);
+})();
+</script>
+"""
+
+
 # ---- consumers: a non-default value reaches the code that uses it ----------------
 # Probe JS avoids apostrophes and backslashes (the strings are plain Python).
 
@@ -591,6 +632,11 @@ def main():
         for label, wide, size in (("wide window", "true", (1600, 900)), ("narrow window", "false", (680, 460)), ("very narrow window", "false", (520, 460))):
             errs = run(browser, tmp, "index.html", LAYOUT_PROBE.replace("__WIDE__", wide), {}, size=size)
             problems += [f"[{label}] {e}" for e in errs]
+        texts = {"ui_flags": {g: True for g in ("autoPaste", "fileAttach", "attachTextPreview", "errorLog", "floating")},
+                 "ui_values": {"copyCooldownMs": 2000, "autoPasteDelayMs": 80, "attachPreviewKb": 8,
+                               "errorLogKeepKb": 256, "floatParkCleanupH": 0}}
+        errs = run(browser, tmp, "index.html", VALUE_TEXT_PROBE, texts)
+        problems += [f"[value texts] {e}" for e in errs]
         problems += consumer_problems(browser, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
