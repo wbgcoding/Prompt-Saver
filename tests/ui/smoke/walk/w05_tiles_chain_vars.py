@@ -647,6 +647,26 @@ SECTION = """\
       layoutScan('prompt editor');
       collapseRows('editor');
       mustReach('prompt editor', '#modal .modal-x, #modal .modal-actions button');
+      // 748: the prompt text is the first thing under the name row (the label of the
+      // field may sit between), and at the app minimum size Save stays inside the
+      // dialog without scrolling for a text prompt with a note and placeholders.
+      {
+        let el748 = document.querySelector('#modal .modal-name-row').nextElementSibling;
+        let first748 = '';
+        while (el748 && !first748) {
+          if (el748.id === 'modal-text-wrap') first748 = 'ok';
+          else if (el748.id !== 'modal-text-label' && el748.getClientRects().length > 0) first748 = el748.id || el748.className;
+          el748 = el748.nextElementSibling;
+        }
+        if (first748 !== 'ok') out.errors.push('748: the prompt text does not follow the name row, ' + first748 + ' comes first');
+        if (innerWidth <= 700 && innerHeight <= 470) {
+          const mr748 = document.querySelector('#modal .modal').getBoundingClientRect();
+          const cr748 = document.getElementById('modal-confirm').getBoundingClientRect();
+          if (cr748.bottom > mr748.bottom + 1 || cr748.top < mr748.top - 1) {
+            out.errors.push('748: Save is outside the dialog at the minimum size: ' + Math.round(cr748.top) + '..' + Math.round(cr748.bottom) + ' of ' + Math.round(mr748.top) + '..' + Math.round(mr748.bottom));
+          }
+        }
+      }
       // The variable helper is a reference, so it opens collapsed and costs no height.
       const varsBody = document.getElementById('modal-vars-body');
       const varsHead = document.getElementById('modal-vars-head');
@@ -721,15 +741,15 @@ SECTION = """\
       if (!ta.value.includes('{#{tone|formal,casual}#}')) {
         out.errors.push('the helper did not insert a choice variable: ' + ta.value);
       }
-      // 456: the notes field sits directly under the name row, full width, no
+      // 456: the notes field sits directly above the colour row, full width, no
       // heading, always visible (no more collapse) and holds the stored note.
       const nRow = document.getElementById('modal-notes');
       const nText = document.getElementById('modal-notes-text');
       const nameRow = document.querySelector('.modal-name-row');
       if (!nRow || getComputedStyle(nRow).display === 'none') {
         out.errors.push('the editor has no notes row');
-      } else if (nameRow.nextElementSibling !== nRow) {
-        out.errors.push('the notes field is not right under the name row');
+      } else if (nRow.nextElementSibling !== document.getElementById('color-row')) {
+        out.errors.push('the notes field is not right above the colour row');
       } else if (document.getElementById('modal-notes-head')) {
         out.errors.push('the notes field still has a collapse header');
       } else if (!nText.value.includes('Moonshot')) {

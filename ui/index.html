@@ -240,12 +240,6 @@
           </svg>
         </button>
       </div>
-      <!-- Private note, full width, no heading: never copied, gated on promptNotes.
-           The gate's display:none sits on this wrapper, not the textarea, so an
-           empty gap never appears when the flag is off. -->
-      <div id="modal-notes">
-        <textarea id="modal-notes-text" class="modal-input modal-notes-text" rows="2" data-i18n-ph="notesPh" data-i18n-title="notesHint"></textarea>
-      </div>
       <!-- Image preview + display toggle (visible only when prompt has an image) -->
       <div id="modal-img-wrap" class="modal-img-wrap hidden">
         <div class="modal-media-stage">
@@ -289,61 +283,11 @@
         <p id="modal-text-attach-truncated" class="modal-hint hidden" data-i18n="attachPreviewTruncated">Shortened, the file continues past this point.</p>
         <p id="modal-text-attach-unreadable" class="modal-hint hidden" data-i18n="attachPreviewUnreadable">Not readable as text.</p>
       </div>
-      <!-- Variable helper. Collapsed by default: it is a reference, not part
-           of writing a prompt, and open it would push the textarea down every time.
-           Each hint sits directly under the control it explains. -->
-      <div id="modal-text-bar" class="modal-collapse modal-text-bar hidden">
-        <button type="button" id="modal-vars-head" class="modal-collapse-head" aria-expanded="false">
-          <span data-i18n="varsSection">Placeholders</span>
-          <svg class="collapse-chevron" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/>
-          </svg>
-        </button>
-        <div id="modal-vars-body" class="modal-collapse-body hidden">
-          <p id="modal-vars-hint" class="modal-hint modal-vars-hint hidden" data-i18n="varsHint">Tip: {#{Name}#} is asked when copying.</p>
-          <div id="modal-vars-new" class="vars-new">
-            <input id="modal-var-name" class="modal-input vars-new-name" type="text" maxlength="60"
-                   autocomplete="off" data-i18n-ph="varNamePh" data-i18n-aria="varNamePh" />
-            <input id="modal-var-opts" class="modal-input vars-new-opts hidden" type="text" maxlength="140"
-                   autocomplete="off" data-i18n-ph="varOptsPh" data-i18n-aria="varOptsPh" />
-            <button type="button" id="modal-var-add" class="ghost-btn" data-i18n="varsInsert">Insert</button>
-          </div>
-          <p id="modal-vars-choice-hint" class="modal-hint hidden" data-i18n="varsChoiceHint"></p>
-          <div id="modal-vars-chips" class="vars-chips hidden"></div>
-          <p id="modal-vars-dyn-hint" class="modal-hint hidden" data-i18n="varsDynHint"></p>
-        </div>
-      </div>
+      <label id="modal-text-label" for="modal-text" class="modal-field-label" data-i18n="promptTextLabel">Prompt text</label>
       <!-- Markdown preview: with the feature on the prompt is ALWAYS shown
            rendered, either in place of the textarea (click the pane to type) or
            beside it. Their wrapper is display:contents until the split layout is
            picked, so the editor's existing flex rules keep applying unchanged. -->
-      <!-- Only for a text prompt while the expert flag is on; converts the plain
-           textarea above into a list of variants one copy at a time serves through.
-           The on/off switch sits right above the entry list, which is the editing
-           surface while rotation is active. -->
-      <label id="modal-rotate-toggle-row" class="field switch-field modal-rotate-toggle hidden" data-i18n-title="rotateToggleTip">
-        <span data-i18n="rotateToggle">Rotation</span>
-        <input type="checkbox" id="modal-rotate-switch" class="switch" />
-      </label>
-      <div id="modal-rotate-list" class="modal-rotate-list hidden">
-        <div id="modal-rotate-entries" class="modal-rotate-entries"></div>
-        <div class="modal-rotate-controls-row">
-          <button type="button" id="modal-rotate-add" class="ghost-btn modal-rotate-add" data-i18n="rotateAddEntry">+ Rotation text</button>
-          <div class="modal-rotate-mode-group">
-            <span id="modal-rotate-next" class="modal-rotate-next hidden"></span>
-            <button type="button" id="modal-rotate-reset" class="ghost-btn hidden" data-i18n="rotateFromStart">From the start</button>
-            <select id="modal-rotate-mode" class="modal-input expert-select modal-rotate-mode">
-              <option value="order" data-i18n="optRotateOrder">In order</option>
-              <option value="random" data-i18n="optRotateRandom">Random</option>
-            </select>
-            <!-- Auto-advance on every real paste, not just on copy. Disabled
-                 (with a reason in the tooltip) for image/file prompts and single-entry
-                 prompts, never a silent no-op button. -->
-            <button type="button" id="modal-rotate-auto" class="ghost-btn modal-rotate-auto" aria-pressed="false" data-i18n="rotateAuto" data-i18n-title="rotateAutoTip">Rotate on paste</button>
-          </div>
-        </div>
-      </div>
-      <label id="modal-text-label" for="modal-text" class="modal-field-label" data-i18n="promptTextLabel">Prompt text</label>
       <div id="modal-text-wrap" class="modal-text-wrap">
         <textarea id="modal-text" class="modal-input modal-text hidden" rows="6" data-i18n-ph="promptPh"></textarea>
         <div id="modal-md-wrap" class="md-wrap hidden">
@@ -371,6 +315,62 @@
             </svg>
           </button>
         </div>
+      </div>
+      <!-- Variable helper. Collapsed by default: it is a reference, not part
+           of writing a prompt, and open it would push the textarea down every time.
+           Each hint sits directly under the control it explains. -->
+      <div id="modal-text-bar" class="modal-collapse modal-text-bar hidden">
+        <button type="button" id="modal-vars-head" class="modal-collapse-head" aria-expanded="false">
+          <span data-i18n="varsSection">Placeholders</span>
+          <svg class="collapse-chevron" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/>
+          </svg>
+        </button>
+        <div id="modal-vars-body" class="modal-collapse-body hidden">
+          <p id="modal-vars-hint" class="modal-hint modal-vars-hint hidden" data-i18n="varsHint">Tip: {#{Name}#} is asked when copying.</p>
+          <div id="modal-vars-new" class="vars-new">
+            <input id="modal-var-name" class="modal-input vars-new-name" type="text" maxlength="60"
+                   autocomplete="off" data-i18n-ph="varNamePh" data-i18n-aria="varNamePh" />
+            <input id="modal-var-opts" class="modal-input vars-new-opts hidden" type="text" maxlength="140"
+                   autocomplete="off" data-i18n-ph="varOptsPh" data-i18n-aria="varOptsPh" />
+            <button type="button" id="modal-var-add" class="ghost-btn" data-i18n="varsInsert">Insert</button>
+          </div>
+          <p id="modal-vars-choice-hint" class="modal-hint hidden" data-i18n="varsChoiceHint"></p>
+          <div id="modal-vars-chips" class="vars-chips hidden"></div>
+          <p id="modal-vars-dyn-hint" class="modal-hint hidden" data-i18n="varsDynHint"></p>
+        </div>
+      </div>
+      <!-- Only for a text prompt while the expert flag is on; converts the plain
+           textarea above into a list of variants one copy at a time serves through.
+           The on/off switch sits right above the entry list, which is the editing
+           surface while rotation is active. -->
+      <label id="modal-rotate-toggle-row" class="field switch-field modal-rotate-toggle hidden" data-i18n-title="rotateToggleTip">
+        <span data-i18n="rotateToggle">Rotation</span>
+        <input type="checkbox" id="modal-rotate-switch" class="switch" />
+      </label>
+      <div id="modal-rotate-list" class="modal-rotate-list hidden">
+        <div id="modal-rotate-entries" class="modal-rotate-entries"></div>
+        <div class="modal-rotate-controls-row">
+          <button type="button" id="modal-rotate-add" class="ghost-btn modal-rotate-add" data-i18n="rotateAddEntry">+ Rotation text</button>
+          <div class="modal-rotate-mode-group">
+            <span id="modal-rotate-next" class="modal-rotate-next hidden"></span>
+            <button type="button" id="modal-rotate-reset" class="ghost-btn hidden" data-i18n="rotateFromStart">From the start</button>
+            <select id="modal-rotate-mode" class="modal-input expert-select modal-rotate-mode">
+              <option value="order" data-i18n="optRotateOrder">In order</option>
+              <option value="random" data-i18n="optRotateRandom">Random</option>
+            </select>
+            <!-- Auto-advance on every real paste, not just on copy. Disabled
+                 (with a reason in the tooltip) for image/file prompts and single-entry
+                 prompts, never a silent no-op button. -->
+            <button type="button" id="modal-rotate-auto" class="ghost-btn modal-rotate-auto" aria-pressed="false" data-i18n="rotateAuto" data-i18n-title="rotateAutoTip">Rotate on paste</button>
+          </div>
+        </div>
+      </div>
+      <!-- Private note, full width, no heading: never copied, gated on promptNotes.
+           The gate's display:none sits on this wrapper, not the textarea, so an
+           empty gap never appears when the flag is off. -->
+      <div id="modal-notes">
+        <textarea id="modal-notes-text" class="modal-input modal-notes-text" rows="1" data-i18n-ph="notesPh" data-i18n-title="notesHint"></textarea>
       </div>
       <div id="color-row" class="swatches"></div>
       <!-- Tags, hotkey and version history, combined under one

@@ -131,8 +131,11 @@ SECTION = """\
           const ctrlRow = document.querySelector('.modal-rotate-controls-row');
           const colorRow = document.getElementById('color-row');
           if (ctrlRow && colorRow) {
-            const gap = colorRow.getBoundingClientRect().top - ctrlRow.getBoundingClientRect().bottom;
-            if (gap > 40) out.errors.push('gap between the entry controls and the colours is ' + Math.round(gap) + 'px');
+            // The note field sits between the entry list and the colours now.
+            const notesRow = document.getElementById('modal-notes');
+            const below = notesRow && notesRow.getBoundingClientRect().height > 0 ? notesRow : colorRow;
+            const gap = below.getBoundingClientRect().top - ctrlRow.getBoundingClientRect().bottom;
+            if (gap > 40) out.errors.push('gap between the entry controls and the next row is ' + Math.round(gap) + 'px');
           }
           // 33: the length readout belongs to the plain text box and must be gone
           // while the variants list stands in for it.

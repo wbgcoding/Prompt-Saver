@@ -5044,7 +5044,7 @@ body:not(.flag-archiveTag) #grid-batch-archive { display: none; }
    prompt box: every .modal-input (including the prompt text) already uses
    --surface-2, so the note gets the page's own --surface instead: a quieter,
    recessed fill that still keeps the same border and shape. */
-.modal-notes-text { resize: vertical; min-height: 64px; font-size: 13px; background: var(--surface); }
+.modal-notes-text { resize: vertical; min-height: 38px; font-size: 13px; background: var(--surface); }
 
 .modal-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .modal-tags-label { flex: 0 0 auto; color: var(--muted); font-size: 12px; }

@@ -200,8 +200,9 @@ def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html", vars_op
 
     # The .clear-wrap / .clear-wrap-ta spans mirror what wireClear() injects at
     # runtime -- the textarea wrapper is the actual flex item, so the harness is
-    # only faithful with it in place. 456: the notes field is no longer
-    # collapsible -- it sits right under the name row and always takes its space.
+    # only faithful with it in place. The notes field is not collapsible: it sits
+    # right above the colour row and always takes its space; font and size live in
+    # the collapsed advanced options and take no room here.
     html = f"""<!doctype html><html lang="{lang}"><head><meta charset="utf-8">
 <link rel="stylesheet" href="styles/main.css"><style>body{{margin:0}}</style></head><body class="flag-tags">
 <div id="modal" class="overlay tall{' history-open' if history_open else ''}" role="dialog" aria-modal="true"><div class="modal">
@@ -211,7 +212,6 @@ def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html", vars_op
     <input id="modal-name" class="modal-input" type="text" value="Code Review">
     <button type="button" class="clear-btn show">x</button></span>
     <button type="button" id="modal-fav" class="modal-fav-star">&#9733;</button></div>
-  <div id="modal-notes"><textarea id="modal-notes-text" class="modal-input modal-notes-text" rows="2"></textarea></div>
   <div id="modal-img-wrap" class="modal-img-wrap">
     <div class="modal-media-stage">
       <img id="modal-img" class="modal-preview-img" alt="" src="{preview_src}">
@@ -245,9 +245,7 @@ def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html", vars_op
       <button type="button" class="clear-btn show">x</button></span>
     <div id="modal-md-preview" class="md-preview hidden"></div></div>
   <div id="modal-length" class="modal-length">26 {L('lenChars')}</div>
-  <div id="modal-style-row" class="two-col">
-    <label class="field"><span>{L('tileFont')}</span><select class="modal-input"><option>{L('styleDefault')}</option></select></label>
-    <label class="field"><span>{L('tileSize')}</span><select class="modal-input"><option>{L('langAuto')}</option></select></label></div>
+  <div id="modal-notes"><textarea id="modal-notes-text" class="modal-input modal-notes-text" rows="1"></textarea></div>
   <div id="color-row" class="swatches">{swatches}</div>
   <div id="modal-tags" class="modal-tags"><span class="modal-tags-label">{L('tagsLabel')}</span>
     <div id="modal-tag-chips" class="tag-chips">{tag_chips}</div>
