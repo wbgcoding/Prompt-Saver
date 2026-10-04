@@ -174,6 +174,30 @@ SECTION = """\
       }
       for (const f of flags749) await setExpertFlag(f, true);
     }
+    // 750: the mic sits on the counter row of a text prompt, to the right of the counter.
+    {
+      await setExpertFlag('Live length counter', true);
+      if (!await openEditor('p6')) {
+        out.errors.push('750: the text prompt did not open in the editor');
+      } else {
+        const len750 = document.getElementById('modal-length').getBoundingClientRect();
+        const mic750 = document.getElementById('modal-voice-btn').getBoundingClientRect();
+        if (!(len750.height > 0) || !(mic750.height > 0)) {
+          out.errors.push('750: the counter or the mic is not shown in the editor');
+        } else {
+          // Centred in one flex row: the box tops differ by half the height gap, so the
+          // vertical centres are what must agree.
+          const dy750 = Math.abs((mic750.top + mic750.bottom) / 2 - (len750.top + len750.bottom) / 2);
+          if (dy750 > 6) out.errors.push('750: the mic is not on the counter row: centres ' + Math.round(dy750) + 'px apart');
+          if (mic750.left < len750.right) out.errors.push('750: the mic is not right of the counter');
+        }
+        await click('modal-close-x');
+        await sleep(200);
+        const cm750 = document.getElementById('confirm-modal');
+        if (!cm750.classList.contains('hidden')) { await click('confirm-ok'); await sleep(200); }
+      }
+      await setExpertFlag('Live length counter', false);
+    }
     // 429: a prompt with both a stored preview and a real attachment gets a line
     // explaining the difference, spelled out and not a raw i18n key.
     if (!await openEditor('p11')) {

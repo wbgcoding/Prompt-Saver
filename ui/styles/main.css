@@ -1433,7 +1433,11 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
 /* "+ Entry" left, mode dropdown pinned to the right edge with "From the
    start" immediately left of it (and the "Next: n/total" readout left of that). */
 .modal-rotate-controls-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-.modal-voice-row { display: flex; justify-content: flex-end; margin-bottom: 2px; }
+/* Counter left, mic right, one row right under the text field. The row is never
+   hidden by script: it takes no room when both children are hidden. */
+.modal-text-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 0; }
+.modal-text-foot:not(:has(> :not(.hidden))) { display: none; }
+.modal-voice-row { display: flex; justify-content: flex-end; margin-left: auto; }
 .modal-rotate-mode-group { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
 .modal-rotate-mode { flex: 0 0 auto; width: auto; }
 .modal-rotate-next { font-size: 12px; color: var(--muted); }
@@ -3135,10 +3139,10 @@ select.modal-input { padding-right: 30px; }
   white-space: pre-wrap;
   word-break: break-word;
 }
-/* Live length readout: dimmed line right under the editor textarea. */
+/* Live length readout: dimmed text at the left of the row under the editor textarea. */
 .modal-length {
-  margin: -4px 2px 0;
-  text-align: right;
+  margin: 0 2px;
+  text-align: left;
   color: var(--muted);
   font-size: 11px;
   font-variant-numeric: tabular-nums;

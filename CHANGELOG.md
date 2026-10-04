@@ -1794,6 +1794,7 @@ the video editor and the introduction tour ship on).
 - **Plain times in the copy history.** Entries copied today read "5 minutes ago" or "2 hours ago"; older ones keep the short date and time, and hovering shows the full stamp. Copies from other apps use the same wording.
 - **Copies from other apps use icons.** In the copy history such an entry copies when you click it, and carries two icons, save as a prompt and dismiss, in place of the three text buttons.
 - **Font and tile text size under Advanced options.** The two selects for a prompt's font and tile text size moved from under the name into the editor's Advanced options, which is now always there.
+- **The microphone sits next to the counter.** In the editor the dictation button is no longer a row of its own above the text: it sits at the right of the length counter, directly under the prompt text.
 
 ## 2.6.3 (2026-07-26)
 

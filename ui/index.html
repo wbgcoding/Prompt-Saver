@@ -343,17 +343,6 @@
           </div>
         </div>
       </div>
-      <!-- Same mic button/behaviour as the composer's, targeting this
-           textarea instead of the composer's -- one shared wireVoiceButton()
-           helper, not two implementations. -->
-      <div id="modal-voice-row" class="modal-voice-row">
-        <button type="button" id="modal-voice-btn" class="icon-btn" aria-pressed="false" data-i18n-title="voiceBtnTitle" data-i18n-aria="voiceBtnTitle">
-          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 2.5a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0v-6a3 3 0 0 0-3-3Z"/>
-            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6.5 11v.5a5.5 5.5 0 0 0 11 0V11M12 17v3.5M9 20.5h6"/>
-          </svg>
-        </button>
-      </div>
       <div id="modal-text-wrap" class="modal-text-wrap">
         <textarea id="modal-text" class="modal-input modal-text hidden" rows="6" data-i18n-ph="promptPh"></textarea>
         <div id="modal-md-wrap" class="md-wrap hidden">
@@ -365,8 +354,23 @@
              copyFormatted itself is on (updateCopyFormattedBtn toggles it). -->
         <button type="button" id="modal-copy-formatted" class="ghost-btn modal-copy-formatted hidden" data-i18n="copyFormattedAction">Copy formatted</button>
       </div>
-      <!-- Live length readout (chars / words / ~tokens), expert-tunable -->
-      <div id="modal-length" class="modal-length hidden" aria-hidden="true"></div>
+      <!-- Counter left, mic right, directly under the text field. The wrapper is
+           never hidden by script; it collapses by CSS when both children are hidden. -->
+      <div class="modal-text-foot">
+        <!-- Live length readout (chars / words / ~tokens), expert-tunable -->
+        <div id="modal-length" class="modal-length hidden" aria-hidden="true"></div>
+        <!-- Same mic button/behaviour as the composer's, targeting this
+             textarea instead of the composer's -- one shared wireVoiceButton()
+             helper, not two implementations. -->
+        <div id="modal-voice-row" class="modal-voice-row">
+          <button type="button" id="modal-voice-btn" class="icon-btn" aria-pressed="false" data-i18n-title="voiceBtnTitle" data-i18n-aria="voiceBtnTitle">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 2.5a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0v-6a3 3 0 0 0-3-3Z"/>
+              <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6.5 11v.5a5.5 5.5 0 0 0 11 0V11M12 17v3.5M9 20.5h6"/>
+            </svg>
+          </button>
+        </div>
+      </div>
       <div id="color-row" class="swatches"></div>
       <!-- Tags, hotkey and version history, combined under one
            "Advanced options" toggle (collapsed by default) instead of three. -->
