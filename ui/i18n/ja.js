@@ -1162,6 +1162,7 @@ export default {
     rememberedValueHint: "これは前回の値です。",
     expertSearchPh: "設定を検索…",
     expertOnlyChanged: "変更のみ",
+    expertLegendOff: "既定でオフ",
     expertNothingChanged: "まだ既定値から変更されたものはありません",
     expertResetGroupBtn: "このカテゴリをリセット",
     expertResetOne: "この値をリセット",

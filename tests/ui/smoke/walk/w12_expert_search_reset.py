@@ -1,4 +1,15 @@
 SECTION = """\
+    // The filter row explains the dot: a visible legend that carries a badge.
+    {
+      const legend = document.querySelector('#settings-expert .expert-legend');
+      const lr = legend && legend.getBoundingClientRect();
+      if (!legend || !lr || lr.width < 1 || lr.height < 1) {
+        out.errors.push('735: the default-off legend is not visible on the expert page');
+      } else {
+        if (!legend.querySelector('.default-off-badge')) out.errors.push('735: the legend has no dot badge');
+        if (!legend.textContent.trim()) out.errors.push('735: the legend has no text');
+      }
+    }
     // P69: a default-off feature gets a small dot badge instead of a "(Default
     // off)" text suffix crowding the label - find the rows across all tabs.
     {

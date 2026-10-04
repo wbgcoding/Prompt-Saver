@@ -1162,6 +1162,7 @@ export default {
     rememberedValueHint: "To jest wartość z ostatniego razu.",
     expertSearchPh: "Szukaj ustawień…",
     expertOnlyChanged: "Tylko zmienione",
+    expertLegendOff: "domyślnie wyłączone",
     expertNothingChanged: "Nic nie zostało jeszcze zmienione względem wartości domyślnych",
     expertResetGroupBtn: "Zresetuj tę kategorię",
     expertResetOne: "Zresetuj tę wartość",

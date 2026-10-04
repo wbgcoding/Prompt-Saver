@@ -1162,6 +1162,7 @@ export default {
     rememberedValueHint: "Este é o valor da última vez.",
     expertSearchPh: "Pesquisar ajustes…",
     expertOnlyChanged: "Só alterados",
+    expertLegendOff: "desativado por padrão",
     expertNothingChanged: "Nada foi alterado em relação aos padrões ainda",
     expertResetGroupBtn: "Redefinir esta categoria",
     expertResetOne: "Redefinir este valor",

@@ -1548,6 +1548,8 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
 /* Toggled from JS; :has() is avoided everywhere in this file (see main.css:733). */
 .expert-chip.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
 
+/* Explains the small dot that marks a feature shipping switched off. */
+.expert-legend { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; white-space: nowrap; }
 /* The reset button sits at the right end of the filter row. */
 .expert-filter-row #expert-reset { flex: 0 0 auto; white-space: nowrap; }
 /* A state a group is currently in, sitting above that group's settings. It exists

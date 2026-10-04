@@ -1162,6 +1162,7 @@ export default {
     rememberedValueHint: "Bu, geçen seferki değer.",
     expertSearchPh: "Ayarlarda ara…",
     expertOnlyChanged: "Yalnızca değişenler",
+    expertLegendOff: "varsayılan kapalı",
     expertNothingChanged: "Henüz varsayılanlardan hiçbir şey değiştirilmedi",
     expertResetGroupBtn: "Bu kategoriyi sıfırla",
     expertResetOne: "Bu değeri sıfırla",

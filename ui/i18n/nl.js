@@ -1162,6 +1162,7 @@ export default {
     rememberedValueHint: "Dit is de waarde van de vorige keer.",
     expertSearchPh: "Instellingen zoeken…",
     expertOnlyChanged: "Alleen gewijzigde",
+    expertLegendOff: "standaard uit",
     expertNothingChanged: "Er is nog niets gewijzigd ten opzichte van de standaardwaarden",
     expertResetGroupBtn: "Deze categorie terugzetten",
     expertResetOne: "Deze waarde terugzetten",

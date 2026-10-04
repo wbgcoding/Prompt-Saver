@@ -1127,6 +1127,7 @@ export default {
     rememberedValueHint: "This is the value from last time.",
     expertSearchPh: "Search settings…",
     expertOnlyChanged: "Only changed",
+    expertLegendOff: "off by default",
     expertNothingChanged: "Nothing has been changed from its defaults yet",
     // --- expert search also covers normal settings, the toolbar, the library, backups ---
     expertForeignHits: "Also in the normal settings",

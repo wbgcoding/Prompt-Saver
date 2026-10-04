@@ -1162,6 +1162,7 @@ export default {
     rememberedValueHint: "这是上次使用的值。",
     expertSearchPh: "搜索设置…",
     expertOnlyChanged: "仅已更改",
+    expertLegendOff: "默认关闭",
     expertNothingChanged: "目前还没有更改任何默认设置",
     expertResetGroupBtn: "重置此分类",
     expertResetOne: "重置此值",

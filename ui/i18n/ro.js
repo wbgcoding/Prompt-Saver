@@ -1162,6 +1162,7 @@ export default {
     rememberedValueHint: "Aceasta este valoarea de data trecută.",
     expertSearchPh: "Caută setări…",
     expertOnlyChanged: "Doar modificate",
+    expertLegendOff: "dezactivat implicit",
     expertNothingChanged: "Nimic nu a fost încă modificat față de valorile implicite",
     expertResetGroupBtn: "Resetează această categorie",
     expertResetOne: "Resetează această valoare",
