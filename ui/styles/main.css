@@ -1911,6 +1911,8 @@ body.noflag-chainPrompts #chain-btn { display: none; }
 .tile-tip.plain .tile-tip-name { font-weight: 500; font-size: 12px; }
 /* Expert visual toggles. */
 .noflag-headerSeparators .header-sep { display: none; }
+/* Without the grid size fields the first divider would open the row. */
+body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display: none; }
 .noflag-tileShadow .tile,
 .noflag-tileShadow .tile:hover { box-shadow: none !important; }
 .noflag-tilePressScale .tile:active:not(.media-hover) { --tile-press: 1; }

@@ -152,6 +152,20 @@ SECTION = """\
       document.body.classList.add('chain-mode');
       if (!shown(chainBtn)) out.errors.push('700: the chain button is hidden while a chain runs');
       document.body.classList.remove('chain-mode');
+      // 701: one divider between content and window buttons without the grid size fields.
+      const sepInfo = () => [...document.querySelectorAll('.header-actions > .header-sep')].filter(shown).map((s) => Math.round(s.getBoundingClientRect().left));
+      const xOf = (id) => document.getElementById(id).getBoundingClientRect().left;
+      const hadQuick = document.body.classList.contains('flag-quickGrid');
+      document.body.classList.remove('flag-quickGrid');
+      const one = sepInfo();
+      if (one.length !== 1) {
+        out.errors.push('701: expected exactly one header divider without the grid size fields, got ' + one.length);
+      } else if (!(one[0] > xOf(shown(document.getElementById('global-search-btn')) ? 'global-search-btn' : 'library-btn') && one[0] < xOf('pin-top'))) {
+        out.errors.push('701: the header divider is not between search and pin: ' + one[0]);
+      }
+      document.body.classList.add('flag-quickGrid');
+      if (sepInfo().length !== 2) out.errors.push('701: expected two header dividers with the grid size fields, got ' + sepInfo().length);
+      if (!hadQuick) document.body.classList.remove('flag-quickGrid');
       // Hide top bar: right-click on the gear, then the menu row.
       const tbMenu = document.querySelector('.toolbar-menu');
       document.getElementById('gear').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 300, clientY: 40 }));
