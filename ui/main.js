@@ -14242,8 +14242,7 @@ async function resetSettings() {
   await reloadEverything(); // in place: a page reload repaints the whole window
 }
 
-// ---- Wire events ----
-function bind() {
+function bindEditor() {
   inputEl.addEventListener("input", () => {
     autoGrow(inputEl);
     saveBtn.disabled = !inputEl.value.trim();
@@ -14554,6 +14553,96 @@ function bind() {
     if (data) { modalState.image = data; modal.img.src = data; }
   });
 
+  // Delete from the edit dialog: goes to the trash at once, Undo brings it back.
+  modal.delete.addEventListener("click", async () => {
+    if (!modalState || modalState.mode !== "edit") return;
+    const id = modalState.id;
+    const typedName = modal.name ? modal.name.value : "";
+    if (!(await trashPromptWithUndo(id, typedName))) return; // keep the editor open so the user can retry
+    closeModal();
+    await renderGrid();
+    if (!libraryEl.classList.contains("hidden")) renderLibrary();
+  });
+  modal.root.addEventListener("pointerdown", async (e) => {
+    if (e.target !== modal.root) return;
+    if (await confirmDiscardIfDirty()) closeModal();
+  });
+
+  // Any window's copy of a rotating prompt lands here: refresh every tile of
+  // that id (usually one, but "prompt in multiple views" can place several).
+  listen("rotation-changed", (e) => {
+    const { id, index, pos, total, text } = e.payload || {};
+    if (!id) return;
+    // Invalidates any in-flight primeRotateState peek for this id, so its reply
+    // can no longer overwrite the fresher position this push just delivered.
+    rotateReqs.set(id, (rotateReqs.get(id) || 0) + 1);
+    rotateState.set(id, { index, pos, total, text });
+    document.querySelectorAll(`.tile[data-id="${CSS.escape(id)}"]`).forEach((tile) => applyRotateState(tile, id));
+  });
+  // Auto-advance session start/end: drives the badge's is-auto accent and,
+  // on start only, a toast (no toast on end: that would just be noise).
+  listen("rotation-auto", (e) => {
+    const { id, active } = e.payload || {};
+    if (!id) return;
+    if (active) autoActiveIds.add(id); else autoActiveIds.delete(id);
+    document.querySelectorAll(`.tile[data-id="${CSS.escape(id)}"]`).forEach((tile) => applyAutoBadge(tile, id));
+    if (active && val("bubbleMs") > 0) toast(t("rotateAutoStarted"));
+  });
+  listen("rotation-auto-blocked", () => {
+    toast(t("rotateAutoBlocked"));
+  });
+
+  attachSelectPicker(modal.sizeSel);
+  attachSelectPicker(modal.captionSize);
+  attachSelectPicker(modal.hotkeyAction);
+  attachSelectPicker(modal.rotateMode);
+  modal.caption.addEventListener("input", updateCaptionPreview);
+  modal.captionSize.addEventListener("change", updateCaptionPreview);
+
+  attachSelectPicker(modal.fontSel);
+}
+
+function bindCopyFlow() {
+  // Chain mode: combine several text buttons into one clipboard copy. Single
+  // click toggles it; a quick double-click latches it "always on".
+  $("chain-btn").addEventListener("click", onChainClick);
+  // A paste inside this window ends chain mode (unless latched); the clipboard
+  // already holds the chain. A paste in another program is not seen here, so the
+  // chain simply stays until the chain button ends it.
+  document.addEventListener("keydown", (e) => {
+    if (chainMode && !chainLock && (e.ctrlKey || e.metaKey) && (e.key === "v" || e.key === "V")) setChainMode(false);
+  });
+  // Arrow keys move a focus ring across grid tiles; Enter/Space copies.
+  const NAV = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+  document.addEventListener("keydown", (e) => {
+    if (!flag("keyboardNav")) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.target?.closest?.("input, textarea, [contenteditable]")) return;
+    if (document.querySelector(".overlay:not(.hidden)")) return; // a dialog is open
+    if (NAV[e.key]) { e.preventDefault(); moveKbFocus(...NAV[e.key]); }
+    else if ((e.key === "Enter" || e.key === " ") && kbFocus) { e.preventDefault(); activateTile(kbFocus); }
+  });
+  // Hold Shift during keyboard navigation to arm chaining on the fly: it switches
+  // on while Shift is down and off again when released: unless a prompt was picked
+  // into the chain during the hold, in which case it latches "always on" so the
+  // user can keep building the chain from there.
+  let shiftChain = false;
+  const kbBlocked = (e) => e.target.closest("input, textarea, [contenteditable]") || document.querySelector(".overlay:not(.hidden)");
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Shift" || e.repeat || shiftChain || chainMode) return;
+    if (!flag("keyboardNav") || !flag("chainPrompts") || kbBlocked(e)) return;
+    shiftChain = true;
+    setChainMode(true);
+  });
+  document.addEventListener("keyup", (e) => {
+    if (e.key !== "Shift" || !shiftChain) return;
+    shiftChain = false;
+    if (!chainSel.length) { setChainMode(false); return; }
+    if (flag("chainLock")) setChainLock(); // picked something → keep the chain alive
+  });
+}
+
+function bindCapture() {
   // Paperclip button in the composer bar (files, images, gifs, videos).
   $("file-btn").addEventListener("click", startFileCreate);
   $("file-btn").addEventListener("contextmenu", (e) => {
@@ -15196,43 +15285,6 @@ function bind() {
     }
   });
 
-  // Chain mode: combine several text buttons into one clipboard copy. Single
-  // click toggles it; a quick double-click latches it "always on".
-  $("chain-btn").addEventListener("click", onChainClick);
-  // A paste inside this window ends chain mode (unless latched); the clipboard
-  // already holds the chain. A paste in another program is not seen here, so the
-  // chain simply stays until the chain button ends it.
-  document.addEventListener("keydown", (e) => {
-    if (chainMode && !chainLock && (e.ctrlKey || e.metaKey) && (e.key === "v" || e.key === "V")) setChainMode(false);
-  });
-  // Arrow keys move a focus ring across grid tiles; Enter/Space copies.
-  const NAV = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
-  document.addEventListener("keydown", (e) => {
-    if (!flag("keyboardNav")) return;
-    if (e.ctrlKey || e.metaKey || e.altKey) return;
-    if (e.target?.closest?.("input, textarea, [contenteditable]")) return;
-    if (document.querySelector(".overlay:not(.hidden)")) return; // a dialog is open
-    if (NAV[e.key]) { e.preventDefault(); moveKbFocus(...NAV[e.key]); }
-    else if ((e.key === "Enter" || e.key === " ") && kbFocus) { e.preventDefault(); activateTile(kbFocus); }
-  });
-  // Hold Shift during keyboard navigation to arm chaining on the fly: it switches
-  // on while Shift is down and off again when released: unless a prompt was picked
-  // into the chain during the hold, in which case it latches "always on" so the
-  // user can keep building the chain from there.
-  let shiftChain = false;
-  const kbBlocked = (e) => e.target.closest("input, textarea, [contenteditable]") || document.querySelector(".overlay:not(.hidden)");
-  document.addEventListener("keydown", (e) => {
-    if (e.key !== "Shift" || e.repeat || shiftChain || chainMode) return;
-    if (!flag("keyboardNav") || !flag("chainPrompts") || kbBlocked(e)) return;
-    shiftChain = true;
-    setChainMode(true);
-  });
-  document.addEventListener("keyup", (e) => {
-    if (e.key !== "Shift" || !shiftChain) return;
-    shiftChain = false;
-    if (!chainSel.length) { setChainMode(false); return; }
-    if (flag("chainLock")) setChainLock(); // picked something → keep the chain alive
-  });
   // Switching to another program never touches a chain, locked or not: it ends
   // only through the chain button or Ctrl+V pressed inside this window.
   const { snipEditOpen, snipEdit } = initSnipEditor({ get settings() { return settings; }, get COLORS() { return COLORS; }, EXPERT_DROPDOWNS, NUM_FIELD_BIG_STEP, buildSwatches, closeShortcutsModal, colorPop, errToast, flag, openColorPop, openShortcutsModal, recordToolUsage, t, toast, txt, val, withShortcut });
@@ -15504,6 +15556,27 @@ function bind() {
       VOICE_LANG_NOTICE_MS,
     );
   });
+
+  $("ocr-modal-copy").addEventListener("click", () => {
+    const text = $("ocr-result-text").value;
+    invoke("copy_text", { text }).then(() => toast(t("copied"))).catch((err) => errToast(err));
+  });
+  $("ocr-modal-create").addEventListener("click", () => {
+    const text = $("ocr-result-text").value;
+    closeOcrModal();
+    openModal({ mode: "create", text, title: t("nameModalTitle") });
+  });
+  $("ocr-modal-close").addEventListener("click", closeOcrModal);
+  $("ocr-modal-close-x").addEventListener("click", closeOcrModal);
+  ocrModal.addEventListener("pointerdown", (e) => {
+    if (e.target === ocrModal) closeOcrModal();
+  });
+
+  attachSelectPicker($("snip-modal-saveas-format"));
+  return { openEditorPop, closeOpenEditorPop, openExternalFileInEditor, closeRecMorePop, closeRecModal, snipEdit };
+}
+
+function bindDictation() {
   // Voice dictation: the two buttons (composer, edit dialog) share one wiring
   // helper and one event pipeline -- see the section above for all of it.
   wireVoiceButton($("voice-btn"), () => inputEl);
@@ -15548,41 +15621,133 @@ function bind() {
   $("ocr-langs-close-x").addEventListener("click", closeLangsModal);
   $("ocr-langs-modal").addEventListener("pointerdown", (e) => { if (e.target === $("ocr-langs-modal")) closeLangsModal(); });
   $("ocr-langs-recheck").addEventListener("click", () => loadLangCaps(langDialogKind, true));
-  $("ocr-modal-copy").addEventListener("click", () => {
-    const text = $("ocr-result-text").value;
-    invoke("copy_text", { text }).then(() => toast(t("copied"))).catch((err) => errToast(err));
-  });
-  $("ocr-modal-create").addEventListener("click", () => {
-    const text = $("ocr-result-text").value;
-    closeOcrModal();
-    openModal({ mode: "create", text, title: t("nameModalTitle") });
-  });
-  $("ocr-modal-close").addEventListener("click", closeOcrModal);
-  $("ocr-modal-close-x").addEventListener("click", closeOcrModal);
-  ocrModal.addEventListener("pointerdown", (e) => {
-    if (e.target === ocrModal) closeOcrModal();
-  });
+}
 
-  // Delete from the edit dialog: goes to the trash at once, Undo brings it back.
-  modal.delete.addEventListener("click", async () => {
-    if (!modalState || modalState.mode !== "edit") return;
-    const id = modalState.id;
-    const typedName = modal.name ? modal.name.value : "";
-    if (!(await trashPromptWithUndo(id, typedName))) return; // keep the editor open so the user can retry
-    closeModal();
-    await renderGrid();
-    if (!libraryEl.classList.contains("hidden")) renderLibrary();
-  });
-  modal.root.addEventListener("pointerdown", async (e) => {
-    if (e.target !== modal.root) return;
-    if (await confirmDiscardIfDirty()) closeModal();
-  });
-
+function bindSettingsPanel() {
   $("gear").addEventListener("click", () => {
     settingsOpener = document.activeElement;
     showExpertPage(false); // always open on the main page
     settingsEl.classList.remove("hidden");
   });
+
+  $("settings-close").addEventListener("click", hideSettings);
+  // pointerdown (not click): selecting text that ends outside an input must not close.
+  settingsEl.addEventListener("pointerdown", (e) => { if (e.target === settingsEl) hideSettings(); });
+
+  $("opt-minimize").addEventListener("change", (e) => {
+    invoke("set_minimize_on_close", { enabled: e.target.checked }).catch((err) => errToast(err));
+  });
+  $("opt-screenshot-folder").addEventListener("change", (e) => {
+    settings.ui_flags = { ...(settings.ui_flags || {}), screenshotSave: e.target.checked };
+    invoke("set_ui_flag", { key: "screenshotSave", enabled: e.target.checked }).catch((err) => errToast(err));
+  });
+  // Master tooltip switch (default on): off = no hover tooltips anywhere.
+  $("opt-tooltips").addEventListener("change", (e) => {
+    settings.ui_flags = { ...(settings.ui_flags || {}), tooltipsEnabled: e.target.checked };
+    invoke("set_ui_flag", { key: "tooltipsEnabled", enabled: e.target.checked }).catch((err) => errToast(err));
+  });
+  // Auto-paste (default on): normal setting; enter-after stays in the expert menu.
+  $("opt-autopaste").addEventListener("change", (e) => {
+    settings.ui_flags = { ...(settings.ui_flags || {}), autoPaste: e.target.checked };
+    invoke("set_ui_flag", { key: "autoPaste", enabled: e.target.checked }).catch((err) => errToast(err));
+  });
+  // Recording copies from other apps is switched in the expert menu and in the copy history tab.
+  $("opt-autostart").addEventListener("change", async (e) => {
+    try {
+      await invoke("set_autostart", { enabled: e.target.checked });
+    } catch (err) {
+      e.target.checked = !e.target.checked;
+      errToast(err);
+    }
+    syncStartMinRow(); // a failed call flips the box back and re-hides the row
+  });
+  $("opt-startmin").addEventListener("change", async (e) => {
+    try {
+      await invoke("set_start_minimized", { enabled: e.target.checked });
+    } catch (err) {
+      e.target.checked = !e.target.checked;
+      errToast(err);
+    }
+  });
+  // Always-on-top: the header pin and the settings switch stay in sync; the
+  // pin tints itself (accent) while active.
+  const setOnTop = (on) => {
+    settings.always_on_top = on;
+    $("opt-ontop").checked = on;
+    $("pin-top").classList.toggle("active", on);
+    $("pin-top").setAttribute("aria-pressed", String(on));
+    invoke("set_always_on_top", { enabled: on }).catch((err) => errToast(err));
+  };
+  $("opt-ontop").addEventListener("change", (e) => setOnTop(e.target.checked));
+  $("pin-top").addEventListener("click", () => setOnTop(!settings.always_on_top));
+
+  $("import-btn").addEventListener("click", runImport);
+  $("import-folder-btn").addEventListener("click", runImportFolder);
+  $("export-btn").addEventListener("click", () => runExport($("export-format").value));
+  $("reset-settings").addEventListener("click", resetSettings);
+  $("delete-data").addEventListener("click", deleteData);
+  $("settings-backup-btn").addEventListener("click", openBackups);
+
+  const themeSelect = $("theme-select");
+  themeSelect.addEventListener("change", async () => {
+    settings.theme = themeSelect.value; // applyTheme reads the custom overrides from it
+    applyTheme(await invoke("set_theme", { theme: themeSelect.value }));
+  });
+
+  // Language: persist, then re-render every translated string in place;
+  // no restart, no reload.
+  $("lang-select").addEventListener("change", async (e) => {
+    await invoke("set_language", { lang: e.target.value });
+    await setLang(e.target.value);
+    applyI18n();
+    // Re-fill the JS-built selects, then restore their current values.
+    fillSizeSelects();
+    fillUpdateIntervalSelect();
+    fillFontSelects();
+    fillThemeSelect(); // the custom-theme separator is a translated label too
+    $("tile-font").value = settings.tile_font || "system";
+    $("tile-size").value = String(normSize(Number(settings.tile_size ?? 0)));
+    await renderGrid(); // fresh state: tooltips + a renamed default view
+    if (!libraryEl.classList.contains("hidden")) renderLibrary();
+    if (isHistoryTabOpen()) renderJournal();
+  });
+
+  // Prompt-tile font + size.
+  const tileStyleChanged = async () => {
+    settings.tile_font = $("tile-font").value;
+    settings.tile_size = Number($("tile-size").value); // 0 = auto-fit
+    applyTileStyle();
+    invoke("set_tile_style", { font: settings.tile_font, size: settings.tile_size }).catch(() => {});
+    await renderGrid(true); // re-render so auto-fit (or fixed size) applies cleanly
+  };
+  $("tile-font").addEventListener("change", tileStyleChanged);
+  $("tile-size").addEventListener("change", tileStyleChanged);
+  // Every dropdown uses the same popup style (scrollbar only when needed).
+  attachSelectPicker($("tile-size"));
+
+  attachSelectPicker($("tile-font"));
+
+  attachSelectPicker($("theme-select"));
+  attachSelectPicker($("lang-select"));
+
+  attachSelectPicker($("export-format"));
+
+  // UI size + icon size: percentage-preset selects mirroring the expert scales.
+  fillScaleSelect("ui-scale", "uiScale");
+  fillScaleSelect("icon-scale", "iconScale");
+  const scaleChanged = (key) => async (e) => {
+    const v = Number(e.target.value);
+    settings.ui_values = { ...(settings.ui_values || {}), [key]: v };
+    await invoke("set_ui_value", { key, value: v }).catch((err) => errToast(err));
+    applyValues();
+  };
+  $("ui-scale").addEventListener("change", scaleChanged("uiScale"));
+  $("icon-scale").addEventListener("change", scaleChanged("iconScale"));
+  attachSelectPicker($("ui-scale"));
+  attachSelectPicker($("icon-scale"));
+}
+
+function bindExpertMenu() {
   $("expert-open").addEventListener("click", () => {
     expertQuery = "";
     $("expert-search").value = "";
@@ -15615,6 +15780,78 @@ function bind() {
   $("expert-preset-standard").addEventListener("click", () => applyExpertPreset("standard"));
   $("expert-preset-full").addEventListener("click", () => applyExpertPreset("full"));
 
+  $("banner-more").addEventListener("click", () => { bannerFront += 1; syncBannerStack(); });
+
+  attachSelectPicker($("video-cleanup-age"));
+
+  // ---------- ffmpeg ----------
+  // Fetched on demand only: never on app start, never in the background.
+  // Discovery (next to the exe → data folder → PATH) runs entirely on the Rust
+  // side and touches no network; this only ever runs when the user explicitly
+  // clicks the expert menu's action. Any future video feature that shells out
+  // to ffmpeg should call the same three commands (ffmpeg_status /
+  // download_ffmpeg / cancel_ffmpeg_download) from wherever it first needs
+  // ffmpeg and finds it missing.
+  let ffmpegBusy = false;
+  EXPERT_ACTIONS["ffmpeg-download"] = async (btn) => {
+    if (ffmpegBusy) {
+      invoke("cancel_ffmpeg_download").catch(() => {});
+      return;
+    }
+    const found = await invoke("ffmpeg_status").catch(() => null);
+    ffmpegAvailable = !!found;
+    if (found) {
+      toast(t("ffmpegFoundMsg").replace("{path}", found));
+      renderExpert();
+      return;
+    }
+    const ok = await confirmDialog({
+      title: t("ffmpegOfferTitle"),
+      message: t("ffmpegOfferMsg"),
+      confirmLabel: t("ffmpegOfferConfirm"),
+      cancelLabel: t("cancel"),
+      danger: false,
+    });
+    if (!ok) return;
+    ffmpegBusy = true;
+    const label = btn.textContent;
+    const origTitle = btn.title;
+    btn.title = t("ffmpegCancelHint");
+    btn.setAttribute("role", "progressbar");
+    btn.setAttribute("aria-valuemin", "0");
+    btn.setAttribute("aria-valuemax", "100");
+    const dlEta = makeEtaEstimator();
+    const unlisten = await listen("ffmpeg-download-progress", (e) => {
+      const pct = ffmpegDownloadPct(e.payload);
+      dlEta.feed(pct);
+      const estimate = dlEta.estimate(ETA_MIN_PCT, ETA_MIN_SECS);
+      const eta = flag("etaShow") ? formatEta(estimate, t) : "";
+      btn.textContent = t("ffmpegDownloading").replace("{pct}", String(pct)) + (eta ? ` (${eta})` : "");
+      btn.setAttribute("aria-valuenow", String(pct));
+      btn.setAttribute("aria-valuetext", a11yProgressText(t, pct, estimate));
+    });
+    try {
+      await invoke("download_ffmpeg");
+      ffmpegAvailable = true;
+      toast(t("ffmpegDownloadDone"));
+      renderExpert();
+    } catch (err) {
+      if (String(err) !== "cancelled") errToast(err);
+    } finally {
+      unlisten();
+      ffmpegBusy = false;
+      btn.textContent = label;
+      btn.title = origTitle || "";
+      btn.removeAttribute("role");
+      btn.removeAttribute("aria-valuemin");
+      btn.removeAttribute("aria-valuemax");
+      btn.removeAttribute("aria-valuenow");
+      btn.removeAttribute("aria-valuetext");
+    }
+  };
+}
+
+function bindViews() {
   // Quick grid-size control (top-right of the layout, active view).
   const applyQuickGrid = async () => {
     if (favView) return; // favorites grid sizes itself; the control is read-only there
@@ -15647,6 +15884,62 @@ function bind() {
     await renderGrid(true);
   });
 
+  // View add / rename / delete popup.
+  viewModal.confirm.addEventListener("click", confirmViewModal);
+  // Grid size uses the same dropdown number picker as the main layout; values are
+  // applied on Save, so the pick callback is a no-op here.
+  attachGridPicker(viewModal.cols, () => {});
+  attachGridPicker(viewModal.rows, () => {});
+  viewModal.name.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") confirmViewModal();
+  });
+  viewModal.close.addEventListener("click", closeViewModal);
+  viewModal.root.addEventListener("pointerdown", (e) => {
+    if (e.target === viewModal.root) closeViewModal();
+  });
+  // Deletes at once; the Undo toast brings the view back.
+  viewModal.delete.addEventListener("click", async () => {
+    // Snapshot before the delete call: `settings` is only replaced once it
+    // resolves, so the pre-delete view is still sitting in the current list.
+    const deleted = settings.views.find((v) => v.id === viewModalId);
+    const wasActive = settings.active_view === viewModalId;
+    const prevActive = settings.active_view;
+    if (deleted) {
+      const sure = await confirmIfNoUndo({
+        title: t("viewDeleteTitle"),
+        message: t("viewDeleteMsg").replace("{name}", deleted.name),
+        confirmLabel: t("delete"),
+      });
+      if (!sure) return;
+    }
+    try {
+      assignSettings(await invoke("delete_view", { id: viewModalId }));
+    } catch (err) {
+      errToast(err);
+      return;
+    }
+    closeViewModal();
+    renderViews();
+    await renderGrid(true);
+    if (deleted) {
+      undoToast(t("viewDeletedToast").replace("{name}", deleted.name), () => restoreDeletedView(deleted, wasActive ? null : prevActive));
+    }
+  });
+
+  // Favorites view: setting enables the header star; the star toggles the grid.
+  $("opt-favview").addEventListener("change", (e) => {
+    const on = e.target.checked;
+    settings.ui_flags = { ...(settings.ui_flags || {}), favViewButton: on };
+    invoke("set_ui_flag", { key: "favViewButton", enabled: on }).catch((err) => errToast(err));
+    if (!on && favView) assignFavView(false);
+    applyFlags();
+    refreshFavViewUi();
+    renderGrid(true);
+  });
+  $("fav-view-btn").addEventListener("click", () => setFavView(!favView));
+}
+
+function bindWindowChrome() {
   // Show/hide the top and bottom bars.
   $("hide-top").addEventListener("click", () => setBars(false, settings.show_composer !== false));
   $("show-top").addEventListener("click", () => setBars(true, settings.show_composer !== false));
@@ -15663,7 +15956,9 @@ function bind() {
   bindBarToggleDbl("show-top", true);
   bindBarToggleDbl("hide-bottom", false);
   bindBarToggleDbl("show-bottom", true);
+}
 
+function bindLibrary() {
   buildColorFilter($("library-colors"), libColor);
   $("library-btn").addEventListener("click", async () => {
     await refreshLastEdited();
@@ -15822,17 +16117,23 @@ function bind() {
       clearGridSelection();
     }
   }, true);
-  // "gone with one click" per spec: no confirm dialog, unlike a real delete
-  // (these are throwaway onboarding content, not the user's own data).
-  $("examples-dismiss").addEventListener("click", async () => {
-    try { await invoke("dismiss_example_prompts"); } catch (err) { errToast(err); return; }
-    await renderGrid();
-  });
-  $("banner-more").addEventListener("click", () => { bannerFront += 1; syncBannerStack(); });
+
   $("library-close").addEventListener("click", hideLibrary);
   libraryEl.addEventListener("pointerdown", (e) => {
     if (e.target === libraryEl) hideLibrary();
   });
+
+  attachSelectPicker($("grid-batch-view")); // themed popup, options refreshed by fillBatchViews()
+  attachSelectPicker($("lib-batch-view"));
+  attachSelectPicker($("lib-batch-format"));
+  attachSelectPicker($("grid-batch-format"));
+
+  attachSelectPicker($("library-sort"));
+  attachSelectPicker($("batch-export-format"));
+  attachSelectPicker($("batch-export-quality"));
+}
+
+function bindManagement() {
   // Duplicate finder modal (backups + statistics are now inline expert panels).
   $("dupes-close").addEventListener("click", () => $("dupes-modal").classList.add("hidden"));
   $("dupes-modal").addEventListener("pointerdown", (e) => { if (e.target === $("dupes-modal")) $("dupes-modal").classList.add("hidden"); });
@@ -15848,6 +16149,11 @@ function bind() {
   $("error-log-modal").addEventListener("pointerdown", (e) => { if (e.target === $("error-log-modal")) $("error-log-modal").classList.add("hidden"); });
   $("error-log-copy").addEventListener("click", () => copyErrorLogAll());
   $("error-log-clear").addEventListener("click", () => clearErrorLogAll());
+
+  $("library-dupes").addEventListener("click", openDupes);
+}
+
+function bindJournal() {
   // Pause/resume recording copies from other apps straight from the copy history: same
   // switch as the expert one.
   $("clip-toggle").addEventListener("click", async () => {
@@ -15900,81 +16206,6 @@ function bind() {
     }
   });
   listen("clip-inbox-changed", () => refreshClipInbox());
-  // Any window's copy of a rotating prompt lands here: refresh every tile of
-  // that id (usually one, but "prompt in multiple views" can place several).
-  listen("rotation-changed", (e) => {
-    const { id, index, pos, total, text } = e.payload || {};
-    if (!id) return;
-    // Invalidates any in-flight primeRotateState peek for this id, so its reply
-    // can no longer overwrite the fresher position this push just delivered.
-    rotateReqs.set(id, (rotateReqs.get(id) || 0) + 1);
-    rotateState.set(id, { index, pos, total, text });
-    document.querySelectorAll(`.tile[data-id="${CSS.escape(id)}"]`).forEach((tile) => applyRotateState(tile, id));
-  });
-  // Auto-advance session start/end: drives the badge's is-auto accent and,
-  // on start only, a toast (no toast on end: that would just be noise).
-  listen("rotation-auto", (e) => {
-    const { id, active } = e.payload || {};
-    if (!id) return;
-    if (active) autoActiveIds.add(id); else autoActiveIds.delete(id);
-    document.querySelectorAll(`.tile[data-id="${CSS.escape(id)}"]`).forEach((tile) => applyAutoBadge(tile, id));
-    if (active && val("bubbleMs") > 0) toast(t("rotateAutoStarted"));
-  });
-  listen("rotation-auto-blocked", () => {
-    toast(t("rotateAutoBlocked"));
-  });
-  // Clicking the app logo opens the project's GitHub page (drag still moves the window).
-  $("app-logo")?.addEventListener("click", () => invoke("open_repo").catch((e) => errToast(e)));
-
-  // About dialog: version + project page link.
-  const aboutEl = $("about-modal");
-  const closeAbout = () => aboutEl.classList.add("hidden");
-  $("about-btn").addEventListener("click", () => aboutEl.classList.remove("hidden"));
-  $("about-close").addEventListener("click", closeAbout);
-  $("about-ok").addEventListener("click", closeAbout);
-  $("about-repo").addEventListener("click", () => invoke("open_repo").catch((e) => errToast(e)));
-  aboutEl.addEventListener("pointerdown", (e) => {
-    if (e.target === aboutEl) closeAbout();
-  });
-
-  $("tour-skip").addEventListener("click", tourSkip);
-  $("tour-back").addEventListener("click", () => tourGoto(tourStep - 1));
-  $("tour-next").addEventListener("click", () => (tourStep === TOUR_LAST_STEP ? tourFinish() : tourGoto(tourStep + 1)));
-
-  // In-app documentation.
-  const helpEl = $("help");
-  $("help-open").addEventListener("click", openHelp);
-  $("help-close").addEventListener("click", () => helpEl.classList.add("hidden"));
-  $("help-shortcuts").addEventListener("click", () => openShortcutsModal(ALL_SHORTCUT_SCOPES, { withGlobal: true, allWindows: true }));
-  helpEl.addEventListener("pointerdown", (e) => {
-    if (e.target === helpEl) helpEl.classList.add("hidden");
-  });
-  const renderHelpDebounced = debounced(renderHelp);
-  $("help-search").addEventListener("input", (e) => { helpQuery = e.target.value; renderHelpDebounced(); });
-
-  // Search everything: toolbar icon, Ctrl+K, Escape/click-outside/icon to close.
-  const gsEl = $("global-search");
-  $("global-search-btn").addEventListener("click", toggleGlobalSearch);
-  $("gs-close").addEventListener("click", closeGlobalSearch);
-  gsEl.addEventListener("pointerdown", (e) => { if (e.target === gsEl) closeGlobalSearch(); });
-  $("gs-input").addEventListener("input", (e) => { gsQuery = e.target.value; gsRenderDebounced(); });
-  $("gs-input").addEventListener("keydown", (e) => {
-    if (e.key === "Escape") { e.preventDefault(); closeGlobalSearch(); }
-    else if (e.key === "ArrowDown") { e.preventDefault(); if (gsFlatRows.length) gsSetActive(Math.min(gsActive + 1, gsFlatRows.length - 1)); }
-    else if (e.key === "ArrowUp") { e.preventDefault(); if (gsFlatRows.length) gsSetActive(Math.max(gsActive - 1, 0)); }
-    else if (e.key === "Enter") {
-      e.preventDefault();
-      const row = gsFlatRows[gsActive];
-      if (row) row.run();
-    }
-  });
-  document.addEventListener("keydown", (e) => {
-    if (!flag("globalSearch")) return;
-    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "k") {
-      e.preventDefault();
-      toggleGlobalSearch();
-    }
-  });
 
   // Copy history & usage journal.
   buildColorFilter($("journal-colors"), journalColor);
@@ -16039,421 +16270,21 @@ function bind() {
       await restoreClipInbox(items);
     });
   });
-  $("settings-close").addEventListener("click", hideSettings);
-  // pointerdown (not click): selecting text that ends outside an input must not close.
-  settingsEl.addEventListener("pointerdown", (e) => { if (e.target === settingsEl) hideSettings(); });
+}
 
-  // View add / rename / delete popup.
-  viewModal.confirm.addEventListener("click", confirmViewModal);
-  // Grid size uses the same dropdown number picker as the main layout; values are
-  // applied on Save, so the pick callback is a no-op here.
-  attachGridPicker(viewModal.cols, () => {});
-  attachGridPicker(viewModal.rows, () => {});
-  viewModal.name.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") confirmViewModal();
-  });
-  viewModal.close.addEventListener("click", closeViewModal);
-  viewModal.root.addEventListener("pointerdown", (e) => {
-    if (e.target === viewModal.root) closeViewModal();
-  });
-  // Deletes at once; the Undo toast brings the view back.
-  viewModal.delete.addEventListener("click", async () => {
-    // Snapshot before the delete call: `settings` is only replaced once it
-    // resolves, so the pre-delete view is still sitting in the current list.
-    const deleted = settings.views.find((v) => v.id === viewModalId);
-    const wasActive = settings.active_view === viewModalId;
-    const prevActive = settings.active_view;
-    if (deleted) {
-      const sure = await confirmIfNoUndo({
-        title: t("viewDeleteTitle"),
-        message: t("viewDeleteMsg").replace("{name}", deleted.name),
-        confirmLabel: t("delete"),
-      });
-      if (!sure) return;
-    }
-    try {
-      assignSettings(await invoke("delete_view", { id: viewModalId }));
-    } catch (err) {
-      errToast(err);
-      return;
-    }
-    closeViewModal();
-    renderViews();
-    await renderGrid(true);
-    if (deleted) {
-      undoToast(t("viewDeletedToast").replace("{name}", deleted.name), () => restoreDeletedView(deleted, wasActive ? null : prevActive));
-    }
-  });
+function bindAbout() {
+  // Clicking the app logo opens the project's GitHub page (drag still moves the window).
+  $("app-logo")?.addEventListener("click", () => invoke("open_repo").catch((e) => errToast(e)));
 
-  $("opt-minimize").addEventListener("change", (e) => {
-    invoke("set_minimize_on_close", { enabled: e.target.checked }).catch((err) => errToast(err));
-  });
-  $("opt-screenshot-folder").addEventListener("change", (e) => {
-    settings.ui_flags = { ...(settings.ui_flags || {}), screenshotSave: e.target.checked };
-    invoke("set_ui_flag", { key: "screenshotSave", enabled: e.target.checked }).catch((err) => errToast(err));
-  });
-  // Master tooltip switch (default on): off = no hover tooltips anywhere.
-  $("opt-tooltips").addEventListener("change", (e) => {
-    settings.ui_flags = { ...(settings.ui_flags || {}), tooltipsEnabled: e.target.checked };
-    invoke("set_ui_flag", { key: "tooltipsEnabled", enabled: e.target.checked }).catch((err) => errToast(err));
-  });
-  // Auto-paste (default on): normal setting; enter-after stays in the expert menu.
-  $("opt-autopaste").addEventListener("change", (e) => {
-    settings.ui_flags = { ...(settings.ui_flags || {}), autoPaste: e.target.checked };
-    invoke("set_ui_flag", { key: "autoPaste", enabled: e.target.checked }).catch((err) => errToast(err));
-  });
-  // Recording copies from other apps is switched in the expert menu and in the copy history tab.
-  $("opt-autostart").addEventListener("change", async (e) => {
-    try {
-      await invoke("set_autostart", { enabled: e.target.checked });
-    } catch (err) {
-      e.target.checked = !e.target.checked;
-      errToast(err);
-    }
-    syncStartMinRow(); // a failed call flips the box back and re-hides the row
-  });
-  $("opt-startmin").addEventListener("change", async (e) => {
-    try {
-      await invoke("set_start_minimized", { enabled: e.target.checked });
-    } catch (err) {
-      e.target.checked = !e.target.checked;
-      errToast(err);
-    }
-  });
-  // Always-on-top: the header pin and the settings switch stay in sync; the
-  // pin tints itself (accent) while active.
-  const setOnTop = (on) => {
-    settings.always_on_top = on;
-    $("opt-ontop").checked = on;
-    $("pin-top").classList.toggle("active", on);
-    $("pin-top").setAttribute("aria-pressed", String(on));
-    invoke("set_always_on_top", { enabled: on }).catch((err) => errToast(err));
-  };
-  $("opt-ontop").addEventListener("change", (e) => setOnTop(e.target.checked));
-  $("pin-top").addEventListener("click", () => setOnTop(!settings.always_on_top));
-  // Grid tag filter toolbar button.
-  $("grid-tag-btn").addEventListener("click", () => {
-    if (!gridTagPop.classList.contains("hidden")) { closeGridTagPop(); return; }
-    openGridTagPop();
-  });
-
-  // Favorites view: setting enables the header star; the star toggles the grid.
-  $("opt-favview").addEventListener("change", (e) => {
-    const on = e.target.checked;
-    settings.ui_flags = { ...(settings.ui_flags || {}), favViewButton: on };
-    invoke("set_ui_flag", { key: "favViewButton", enabled: on }).catch((err) => errToast(err));
-    if (!on && favView) assignFavView(false);
-    applyFlags();
-    refreshFavViewUi();
-    renderGrid(true);
-  });
-  $("fav-view-btn").addEventListener("click", () => setFavView(!favView));
-
-  // Global hotkey: click the field and press a key combo to capture it.
-  bindHotkeyField($("opt-hotkey"), {
-    current: () => settings.hotkey,
-    onCommit: commitGlobalHotkey,
-  });
-  $("hotkey-clear").addEventListener("click", async () => {
-    try { await commitGlobalHotkey(""); } catch (_) { /* Clear always leaves an empty field regardless */ }
-    $("opt-hotkey").value = "";
-  });
-  $("hotkey-list-btn").addEventListener("click", openAllShortcuts);
-  bindHotkeyField($("opt-voice-hotkey"), {
-    current: () => settings.voice_hotkey,
-    onCommit: commitVoiceHotkey,
-  });
-  $("voice-hotkey-clear").addEventListener("click", async () => {
-    try { await commitVoiceHotkey(""); } catch (_) { /* Clear always leaves an empty field regardless */ }
-    $("opt-voice-hotkey").value = "";
-  });
-  EXPERT_ACTIONS["voice-hotkey-set"] = () => {
-    settingsOpener = document.activeElement;
-    showExpertPage(false);
-    settingsEl.classList.remove("hidden");
-    requestAnimationFrame(() => {
-      $("opt-voice-hotkey").scrollIntoView({ block: "center" });
-      $("opt-voice-hotkey").focus();
-    });
-  };
-  $("hotkeys-search").addEventListener("input", renderHotkeysList);
-
-  $("import-btn").addEventListener("click", runImport);
-  $("import-folder-btn").addEventListener("click", runImportFolder);
-  $("export-btn").addEventListener("click", () => runExport($("export-format").value));
-  $("reset-settings").addEventListener("click", resetSettings);
-  $("delete-data").addEventListener("click", deleteData);
-  $("settings-backup-btn").addEventListener("click", openBackups);
-  $("library-dupes").addEventListener("click", openDupes);
-  $("backup-close").addEventListener("click", closeBackups);
-  $("backup-modal").addEventListener("pointerdown", (e) => {
-    if (e.target === $("backup-modal")) closeBackups();
-  });
-
-  const themeSelect = $("theme-select");
-  themeSelect.addEventListener("change", async () => {
-    settings.theme = themeSelect.value; // applyTheme reads the custom overrides from it
-    applyTheme(await invoke("set_theme", { theme: themeSelect.value }));
-  });
-
-  // Language: persist, then re-render every translated string in place;
-  // no restart, no reload.
-  $("lang-select").addEventListener("change", async (e) => {
-    await invoke("set_language", { lang: e.target.value });
-    await setLang(e.target.value);
-    applyI18n();
-    // Re-fill the JS-built selects, then restore their current values.
-    fillSizeSelects();
-    fillUpdateIntervalSelect();
-    fillFontSelects();
-    fillThemeSelect(); // the custom-theme separator is a translated label too
-    $("tile-font").value = settings.tile_font || "system";
-    $("tile-size").value = String(normSize(Number(settings.tile_size ?? 0)));
-    await renderGrid(); // fresh state: tooltips + a renamed default view
-    if (!libraryEl.classList.contains("hidden")) renderLibrary();
-    if (isHistoryTabOpen()) renderJournal();
-  });
-
-  // Prompt-tile font + size.
-  const tileStyleChanged = async () => {
-    settings.tile_font = $("tile-font").value;
-    settings.tile_size = Number($("tile-size").value); // 0 = auto-fit
-    applyTileStyle();
-    invoke("set_tile_style", { font: settings.tile_font, size: settings.tile_size }).catch(() => {});
-    await renderGrid(true); // re-render so auto-fit (or fixed size) applies cleanly
-  };
-  $("tile-font").addEventListener("change", tileStyleChanged);
-  $("tile-size").addEventListener("change", tileStyleChanged);
-  // Every dropdown uses the same popup style (scrollbar only when needed).
-  attachSelectPicker($("tile-size"));
-  attachSelectPicker(modal.sizeSel);
-  attachSelectPicker(modal.captionSize);
-  attachSelectPicker(modal.hotkeyAction);
-  attachSelectPicker(modal.rotateMode);
-  modal.caption.addEventListener("input", updateCaptionPreview);
-  modal.captionSize.addEventListener("change", updateCaptionPreview);
-  attachSelectPicker($("tile-font"));
-  attachSelectPicker(modal.fontSel);
-  attachSelectPicker($("theme-select"));
-  attachSelectPicker($("lang-select"));
-  attachSelectPicker($("theme-edit-target"));
-  attachSelectPicker($("theme-edit-base"));
-  attachSelectPicker($("grid-batch-view")); // themed popup, options refreshed by fillBatchViews()
-  attachSelectPicker($("lib-batch-view"));
-  attachSelectPicker($("lib-batch-format"));
-  attachSelectPicker($("grid-batch-format"));
-  attachSelectPicker($("export-format"));
-  attachSelectPicker($("library-sort"));
-  attachSelectPicker($("batch-export-format"));
-  attachSelectPicker($("batch-export-quality"));
-  attachSelectPicker($("snip-modal-saveas-format"));
-  attachSelectPicker($("video-cleanup-age"));
-
-  // UI size + icon size: percentage-preset selects mirroring the expert scales.
-  fillScaleSelect("ui-scale", "uiScale");
-  fillScaleSelect("icon-scale", "iconScale");
-  const scaleChanged = (key) => async (e) => {
-    const v = Number(e.target.value);
-    settings.ui_values = { ...(settings.ui_values || {}), [key]: v };
-    await invoke("set_ui_value", { key, value: v }).catch((err) => errToast(err));
-    applyValues();
-  };
-  $("ui-scale").addEventListener("change", scaleChanged("uiScale"));
-  $("icon-scale").addEventListener("change", scaleChanged("iconScale"));
-  attachSelectPicker($("ui-scale"));
-  attachSelectPicker($("icon-scale"));
-
-  ctxEl.addEventListener("click", async (e) => {
-    const btn = e.target.closest("button");
-    const act = btn?.dataset.act;
-    if (!act || !ctxId) return;
-    const id = ctxId;
-    if (act === "delete") {
-      closeCtx();
-      const ctxPrompt = prompts.find((x) => x.id === id);
-      if (!(await trashPromptWithUndo(id, ctxPrompt?.name))) return;
-      await renderGrid();
-      return;
-    }
-    if (act === "views") {
-      const rect = ctxEl.getBoundingClientRect();
-      closeCtx();
-      openViewsPop(id, rect);
-      return;
-    }
-    if (act === "moveToFolder") {
-      const rect = ctxEl.getBoundingClientRect();
-      closeCtx();
-      openMoveToFolderPop(id, rect);
-      return;
-    }
-    closeCtx();
-    if (act === "edit") {
-      await editPrompt(id);
-    } else if (act === "copyFormatted") {
-      await copyFormattedPrompt(id);
-    } else if (act === "editVideo") {
-      const p = prompts.find((x) => x.id === id);
-      if (p?.file_path) {
-        await invoke("open_video_editor", { srcPath: p.file_path })
-          .then(() => recordToolUsage("video_editor"))
-          .catch((e) => errToast(e));
-      }
-    } else if (act === "editImage") {
-      const p = prompts.find((x) => x.id === id);
-      if (p?.file_path) await openExternalFileInEditor(p.file_path);
-    } else if (act === "duplicate") {
-      await duplicatePrompt(id);
-    } else if (act === "hide") {
-      // Remove from the active view's grid; stays available in the library.
-      const view = activeView();
-      const layout = { ...layoutOf(view) };
-      delete layout[id];
-      view.layouts[gridKeyOf(view)] = layout;
-      invoke("set_layout", { layout }).catch((e) => errToast(e));
-      await renderGrid(true);
-    } else if (act === "pin") {
-      // The command answers with the state it actually left the prompt in: take that
-      // instead of assuming the click flipped the label that was just on screen.
-      await invoke("toggle_floating", { id })
-        .then((pinned) => cacheFloatingState(id, pinned))
-        .catch((e) => errToast(e));
-    } else if (act === "rotateAutoMenu") {
-      await toggleRotateAutoDirect(id);
-    } else if (act === "archive") {
-      const p = prompts.find((x) => x.id === id);
-      if (!p) return;
-      const tag = await ensureArchiveTagName();
-      const key = tagKey(tag);
-      const already = (p.tags || []).some((x) => tagKey(x) === key);
-      try {
-        assignSettings(await invoke("batch_prompts", {
-          ids: [id], action: already ? "tag-remove" : "tag-add",
-          color: null, favorite: null, viewId: null, tag,
-        }));
-      } catch (e) { errToast(e); return; }
-      p.tags = already ? (p.tags || []).filter((x) => tagKey(x) !== key) : [...(p.tags || []), tag];
-      await renderGrid(true);
-      if (!libraryEl.classList.contains("hidden")) renderLibrary();
-    }
-  });
-
-  document.addEventListener("pointerdown", (e) => {
-    tabDragBlockClick = false; // a fresh press ends the suppression a drop armed
-    if (!ctxEl.classList.contains("hidden") && !ctxEl.contains(e.target)) closeCtx();
-    if (!toolbarMenu.classList.contains("hidden") && !toolbarMenu.contains(e.target)) closeToolbarMenu();
-    if (!miniMenu.classList.contains("hidden") && !miniMenu.contains(e.target)) closeMiniMenu();
-    // The folder tile toggles its own popover, so let its press through.
-    if (!tileFolderPop.classList.contains("hidden") && !tileFolderPop.contains(e.target) &&
-        !e.target.closest(".folder-tile")) closeTileFolderPop();
-    // Opened from the (already-closed) tile context menu, so nothing else needs excluding.
-    if (!viewsPop.classList.contains("hidden") && !viewsPop.contains(e.target)) closeViewsPop();
-    if (!moveToFolderPop.classList.contains("hidden") && !moveToFolderPop.contains(e.target)) closeMoveToFolderPop();
-    // The toolbar button toggles its own popover, so let its own press through.
-    if (!gridTagPop.classList.contains("hidden") && !gridTagPop.contains(e.target) &&
-        !e.target.closest("#grid-tag-btn")) closeGridTagPop();
-    // The two composer buttons toggle it themselves (their own contextmenu handler).
-    if (!openEditorPop.classList.contains("hidden") && !openEditorPop.contains(e.target) &&
-        !e.target.closest("#snip-btn") && !e.target.closest("#record-btn")) closeOpenEditorPop();
-  });
-  // Ctrl+Tab walks the views in the order the tab bar shows them.
-  document.addEventListener("keydown", (e) => {
-    if (e.key !== "Tab" || !e.ctrlKey || e.altKey) return;
-    if (!flag("multiView") || settings.views.length < 2) return;
-    if (document.querySelector(".overlay:not(.hidden)")) return; // a dialog is open
-    e.preventDefault();
-    const order = viewOrder();
-    const at = order.findIndex((v) => v.id === settings.active_view);
-    const next = order[((at < 0 ? 0 : at) + (e.shiftKey ? -1 : 1) + order.length) % order.length];
-    if (next && next.id !== settings.active_view) switchToView(next.id);
-  });
-  // Right-click anywhere in the header actions → toggle which top-bar tools show.
-  document.querySelector(".header-actions")?.addEventListener("contextmenu", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    openToolbarMenu(e.clientX, e.clientY);
-  });
-  // Keeps Tab from leaking past whichever overlay is currently topmost,
-  // into the (visually dimmed) page behind it. Mirrors the Escape dispatcher's
-  // own "what's on top wins" cascade below one for one, reusing the same
-  // container references, so a new overlay only needs adding in one place to
-  // stay consistent between the two. snipEdit and the first-run tour own their
-  // own Tab handling already (trapTabWithin call sites in snipEditKeydown/
-  // tourKeydown) and are skipped here to avoid trapping twice.
-  document.addEventListener("keydown", (e) => {
-    if (e.key !== "Tab" || e.ctrlKey) return; // Ctrl+Tab is the view-switcher above
-    if (!snipEdit.classList.contains("hidden")) return;
-    // tourKeydown owns Tab while the tour is the topmost thing on screen, but it
-    // bows out the moment a confirm dialog opens on top of it -- and
-    // that dialog's own trap below is never reached if this bails unconditionally
-    // just because the tour is still open underneath. Only defer to the tour when
-    // nothing is layered above it.
-    if (!$("tour-modal").classList.contains("hidden") && $("confirm-modal").classList.contains("hidden")) return;
-    if (!$("shortcuts-modal").classList.contains("hidden")) { trapTabWithin($("shortcuts-modal"), e); return; }
-    if (!toolbarMenu.classList.contains("hidden")) { trapTabWithin(toolbarMenu, e); return; }
-    if (!miniMenu.classList.contains("hidden")) { trapTabWithin(miniMenu, e); return; }
-    if (!tileFolderPop.classList.contains("hidden")) { trapTabWithin(tileFolderPop, e); return; }
-    if (!viewsPop.classList.contains("hidden")) { trapTabWithin(viewsPop, e); return; }
-    if (!moveToFolderPop.classList.contains("hidden")) { trapTabWithin(moveToFolderPop, e); return; }
-    if (!gridTagPop.classList.contains("hidden")) { trapTabWithin(gridTagPop, e); return; }
-    if (!openEditorPop.classList.contains("hidden")) { trapTabWithin(openEditorPop, e); return; }
-    if (!$("rec-modal-more-pop").classList.contains("hidden")) { trapTabWithin($("rec-modal-more-pop"), e); return; }
-    if (!$("lightbox").classList.contains("hidden")) { trapTabWithin($("lightbox"), e); return; }
-    if (!$("confirm-modal").classList.contains("hidden")) { trapTabWithin($("confirm-modal"), e); return; }
-    if (!colorPop.classList.contains("hidden")) { trapTabWithin(colorPop, e); return; }
-    if (!tagPop.classList.contains("hidden")) { trapTabWithin(tagPop, e); return; }
-    if (!$("compare-modal").classList.contains("hidden")) { trapTabWithin($("compare-modal"), e); return; }
-    if (!$("tag-modal").classList.contains("hidden")) { trapTabWithin($("tag-modal"), e); return; }
-    if (!ctxEl.classList.contains("hidden")) { trapTabWithin(ctxEl, e); return; }
-    if (!$("update-modal").classList.contains("hidden")) { trapTabWithin($("update-modal"), e); return; }
-    if (!$("about-modal").classList.contains("hidden")) { trapTabWithin($("about-modal"), e); return; }
-    if (!$("snip-modal").classList.contains("hidden")) { trapTabWithin($("snip-modal"), e); return; }
-    if (!$("rec-modal").classList.contains("hidden")) { trapTabWithin($("rec-modal"), e); return; }
-    if (!viewModal.root.classList.contains("hidden")) { trapTabWithin(viewModal.root, e); return; }
-    if (!modal.root.classList.contains("hidden")) { trapTabWithin(modal.root, e); return; }
-    if (!$("dupes-modal").classList.contains("hidden")) { trapTabWithin($("dupes-modal"), e); return; }
-    if (!$("trash-modal").classList.contains("hidden")) { trapTabWithin($("trash-modal"), e); return; }
-    if (document.body.classList.contains("library-front") && !libraryEl.classList.contains("hidden")) { trapTabWithin(libraryEl, e); return; }
-    if (!$("backup-modal").classList.contains("hidden")) { trapTabWithin($("backup-modal"), e); return; }
-    if (!libraryEl.classList.contains("hidden")) { trapTabWithin(libraryEl, e); return; }
-    if (!helpEl.classList.contains("hidden")) { trapTabWithin(helpEl, e); return; }
-    if (!settingsEl.classList.contains("hidden")) { trapTabWithin(settingsEl, e); return; }
-  });
-  document.addEventListener("keydown", (e) => {
-    if (e.key !== "Escape") return;
-    if (!snipEdit.classList.contains("hidden")) return; // the editor owns Escape while open
-    if (!$("shortcuts-modal").classList.contains("hidden")) { closeShortcutsModal(); return; }
-    if (!toolbarMenu.classList.contains("hidden")) { closeToolbarMenu(); return; }
-    if (!miniMenu.classList.contains("hidden")) { closeMiniMenu(); return; }
-    if (!tileFolderPop.classList.contains("hidden")) { closeTileFolderPop(); return; }
-    if (!viewsPop.classList.contains("hidden")) { closeViewsPop(); return; }
-    if (!moveToFolderPop.classList.contains("hidden")) { closeMoveToFolderPop(); return; }
-    if (!gridTagPop.classList.contains("hidden")) { closeGridTagPop(); return; }
-    if (!openEditorPop.classList.contains("hidden")) { closeOpenEditorPop(); return; }
-    if (!$("rec-modal-more-pop").classList.contains("hidden")) { closeRecMorePop(); return; }
-    if (!$("lightbox").classList.contains("hidden")) closeLightbox();
-    else if (dismissConfirm()) { /* the dialog closed itself */ }
-    else if (!colorPop.classList.contains("hidden")) closeColorPop();
-    else if (!tagPop.classList.contains("hidden")) closeTagPop();
-    else if (!$("compare-modal").classList.contains("hidden")) closeCompareView();
-    else if (!$("tag-modal").classList.contains("hidden")) closeTagManager();
-    else if (!ctxEl.classList.contains("hidden")) closeCtx();
-    else if (!$("update-modal").classList.contains("hidden")) closeUpdateModal();
-    else if (!$("about-modal").classList.contains("hidden")) $("about-modal").classList.add("hidden");
-    else if (!$("snip-modal").classList.contains("hidden")) $("snip-modal").classList.add("hidden");
-    else if (!$("rec-modal").classList.contains("hidden")) closeRecModal();
-    else if (!viewModal.root.classList.contains("hidden")) closeViewModal();
-    else if (!modal.root.classList.contains("hidden")) confirmDiscardIfDirty().then((ok) => { if (ok) closeModal(); });
-    else if (!$("dupes-modal").classList.contains("hidden")) $("dupes-modal").classList.add("hidden");
-    else if (!$("trash-modal").classList.contains("hidden")) $("trash-modal").classList.add("hidden");
-    // A library raised over the backups dialog is the topmost thing: it closes first.
-    else if (document.body.classList.contains("library-front") && !libraryEl.classList.contains("hidden")) hideLibrary();
-    else if (!$("backup-modal").classList.contains("hidden")) closeBackups();
-    else if (!libraryEl.classList.contains("hidden")) hideLibrary();
-    // Help opens over the settings panel (from expGroupHelp): close it before the
-    // settings underneath, same pattern as library-front/journal above.
-    else if (!helpEl.classList.contains("hidden")) helpEl.classList.add("hidden");
-    else if (!settingsEl.classList.contains("hidden")) hideSettings();
+  // About dialog: version + project page link.
+  const aboutEl = $("about-modal");
+  const closeAbout = () => aboutEl.classList.add("hidden");
+  $("about-btn").addEventListener("click", () => aboutEl.classList.remove("hidden"));
+  $("about-close").addEventListener("click", closeAbout);
+  $("about-ok").addEventListener("click", closeAbout);
+  $("about-repo").addEventListener("click", () => invoke("open_repo").catch((e) => errToast(e)));
+  aboutEl.addEventListener("pointerdown", (e) => {
+    if (e.target === aboutEl) closeAbout();
   });
 
   // Updates: manual check in the settings + daily background notification.
@@ -16802,72 +16633,330 @@ function bind() {
       errToast(err);
     }
   });
+  return { closeUpdateModal };
+}
 
-  // ---------- ffmpeg ----------
-  // Fetched on demand only: never on app start, never in the background.
-  // Discovery (next to the exe → data folder → PATH) runs entirely on the Rust
-  // side and touches no network; this only ever runs when the user explicitly
-  // clicks the expert menu's action. Any future video feature that shells out
-  // to ffmpeg should call the same three commands (ffmpeg_status /
-  // download_ffmpeg / cancel_ffmpeg_download) from wherever it first needs
-  // ffmpeg and finds it missing.
-  let ffmpegBusy = false;
-  EXPERT_ACTIONS["ffmpeg-download"] = async (btn) => {
-    if (ffmpegBusy) {
-      invoke("cancel_ffmpeg_download").catch(() => {});
+function bindTour() {
+  $("tour-skip").addEventListener("click", tourSkip);
+  $("tour-back").addEventListener("click", () => tourGoto(tourStep - 1));
+  $("tour-next").addEventListener("click", () => (tourStep === TOUR_LAST_STEP ? tourFinish() : tourGoto(tourStep + 1)));
+}
+
+function bindHelpView() {
+  // In-app documentation.
+  const helpEl = $("help");
+  $("help-open").addEventListener("click", openHelp);
+  $("help-close").addEventListener("click", () => helpEl.classList.add("hidden"));
+  $("help-shortcuts").addEventListener("click", () => openShortcutsModal(ALL_SHORTCUT_SCOPES, { withGlobal: true, allWindows: true }));
+  helpEl.addEventListener("pointerdown", (e) => {
+    if (e.target === helpEl) helpEl.classList.add("hidden");
+  });
+  const renderHelpDebounced = debounced(renderHelp);
+  $("help-search").addEventListener("input", (e) => { helpQuery = e.target.value; renderHelpDebounced(); });
+  return { helpEl };
+}
+
+function bindGlobalSearch() {
+  // Search everything: toolbar icon, Ctrl+K, Escape/click-outside/icon to close.
+  const gsEl = $("global-search");
+  $("global-search-btn").addEventListener("click", toggleGlobalSearch);
+  $("gs-close").addEventListener("click", closeGlobalSearch);
+  gsEl.addEventListener("pointerdown", (e) => { if (e.target === gsEl) closeGlobalSearch(); });
+  $("gs-input").addEventListener("input", (e) => { gsQuery = e.target.value; gsRenderDebounced(); });
+  $("gs-input").addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { e.preventDefault(); closeGlobalSearch(); }
+    else if (e.key === "ArrowDown") { e.preventDefault(); if (gsFlatRows.length) gsSetActive(Math.min(gsActive + 1, gsFlatRows.length - 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); if (gsFlatRows.length) gsSetActive(Math.max(gsActive - 1, 0)); }
+    else if (e.key === "Enter") {
+      e.preventDefault();
+      const row = gsFlatRows[gsActive];
+      if (row) row.run();
+    }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (!flag("globalSearch")) return;
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      toggleGlobalSearch();
+    }
+  });
+}
+
+function bindGridMenus({ openExternalFileInEditor }) {
+  // Grid tag filter toolbar button.
+  $("grid-tag-btn").addEventListener("click", () => {
+    if (!gridTagPop.classList.contains("hidden")) { closeGridTagPop(); return; }
+    openGridTagPop();
+  });
+
+  ctxEl.addEventListener("click", async (e) => {
+    const btn = e.target.closest("button");
+    const act = btn?.dataset.act;
+    if (!act || !ctxId) return;
+    const id = ctxId;
+    if (act === "delete") {
+      closeCtx();
+      const ctxPrompt = prompts.find((x) => x.id === id);
+      if (!(await trashPromptWithUndo(id, ctxPrompt?.name))) return;
+      await renderGrid();
       return;
     }
-    const found = await invoke("ffmpeg_status").catch(() => null);
-    ffmpegAvailable = !!found;
-    if (found) {
-      toast(t("ffmpegFoundMsg").replace("{path}", found));
-      renderExpert();
+    if (act === "views") {
+      const rect = ctxEl.getBoundingClientRect();
+      closeCtx();
+      openViewsPop(id, rect);
       return;
     }
-    const ok = await confirmDialog({
-      title: t("ffmpegOfferTitle"),
-      message: t("ffmpegOfferMsg"),
-      confirmLabel: t("ffmpegOfferConfirm"),
-      cancelLabel: t("cancel"),
-      danger: false,
-    });
-    if (!ok) return;
-    ffmpegBusy = true;
-    const label = btn.textContent;
-    const origTitle = btn.title;
-    btn.title = t("ffmpegCancelHint");
-    btn.setAttribute("role", "progressbar");
-    btn.setAttribute("aria-valuemin", "0");
-    btn.setAttribute("aria-valuemax", "100");
-    const dlEta = makeEtaEstimator();
-    const unlisten = await listen("ffmpeg-download-progress", (e) => {
-      const pct = ffmpegDownloadPct(e.payload);
-      dlEta.feed(pct);
-      const estimate = dlEta.estimate(ETA_MIN_PCT, ETA_MIN_SECS);
-      const eta = flag("etaShow") ? formatEta(estimate, t) : "";
-      btn.textContent = t("ffmpegDownloading").replace("{pct}", String(pct)) + (eta ? ` (${eta})` : "");
-      btn.setAttribute("aria-valuenow", String(pct));
-      btn.setAttribute("aria-valuetext", a11yProgressText(t, pct, estimate));
-    });
-    try {
-      await invoke("download_ffmpeg");
-      ffmpegAvailable = true;
-      toast(t("ffmpegDownloadDone"));
-      renderExpert();
-    } catch (err) {
-      if (String(err) !== "cancelled") errToast(err);
-    } finally {
-      unlisten();
-      ffmpegBusy = false;
-      btn.textContent = label;
-      btn.title = origTitle || "";
-      btn.removeAttribute("role");
-      btn.removeAttribute("aria-valuemin");
-      btn.removeAttribute("aria-valuemax");
-      btn.removeAttribute("aria-valuenow");
-      btn.removeAttribute("aria-valuetext");
+    if (act === "moveToFolder") {
+      const rect = ctxEl.getBoundingClientRect();
+      closeCtx();
+      openMoveToFolderPop(id, rect);
+      return;
     }
+    closeCtx();
+    if (act === "edit") {
+      await editPrompt(id);
+    } else if (act === "copyFormatted") {
+      await copyFormattedPrompt(id);
+    } else if (act === "editVideo") {
+      const p = prompts.find((x) => x.id === id);
+      if (p?.file_path) {
+        await invoke("open_video_editor", { srcPath: p.file_path })
+          .then(() => recordToolUsage("video_editor"))
+          .catch((e) => errToast(e));
+      }
+    } else if (act === "editImage") {
+      const p = prompts.find((x) => x.id === id);
+      if (p?.file_path) await openExternalFileInEditor(p.file_path);
+    } else if (act === "duplicate") {
+      await duplicatePrompt(id);
+    } else if (act === "hide") {
+      // Remove from the active view's grid; stays available in the library.
+      const view = activeView();
+      const layout = { ...layoutOf(view) };
+      delete layout[id];
+      view.layouts[gridKeyOf(view)] = layout;
+      invoke("set_layout", { layout }).catch((e) => errToast(e));
+      await renderGrid(true);
+    } else if (act === "pin") {
+      // The command answers with the state it actually left the prompt in: take that
+      // instead of assuming the click flipped the label that was just on screen.
+      await invoke("toggle_floating", { id })
+        .then((pinned) => cacheFloatingState(id, pinned))
+        .catch((e) => errToast(e));
+    } else if (act === "rotateAutoMenu") {
+      await toggleRotateAutoDirect(id);
+    } else if (act === "archive") {
+      const p = prompts.find((x) => x.id === id);
+      if (!p) return;
+      const tag = await ensureArchiveTagName();
+      const key = tagKey(tag);
+      const already = (p.tags || []).some((x) => tagKey(x) === key);
+      try {
+        assignSettings(await invoke("batch_prompts", {
+          ids: [id], action: already ? "tag-remove" : "tag-add",
+          color: null, favorite: null, viewId: null, tag,
+        }));
+      } catch (e) { errToast(e); return; }
+      p.tags = already ? (p.tags || []).filter((x) => tagKey(x) !== key) : [...(p.tags || []), tag];
+      await renderGrid(true);
+      if (!libraryEl.classList.contains("hidden")) renderLibrary();
+    }
+  });
+
+  // Right-click anywhere in the header actions → toggle which top-bar tools show.
+  document.querySelector(".header-actions")?.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openToolbarMenu(e.clientX, e.clientY);
+  });
+}
+
+function bindHotkeys() {
+  // Global hotkey: click the field and press a key combo to capture it.
+  bindHotkeyField($("opt-hotkey"), {
+    current: () => settings.hotkey,
+    onCommit: commitGlobalHotkey,
+  });
+  $("hotkey-clear").addEventListener("click", async () => {
+    try { await commitGlobalHotkey(""); } catch (_) { /* Clear always leaves an empty field regardless */ }
+    $("opt-hotkey").value = "";
+  });
+  $("hotkey-list-btn").addEventListener("click", openAllShortcuts);
+  bindHotkeyField($("opt-voice-hotkey"), {
+    current: () => settings.voice_hotkey,
+    onCommit: commitVoiceHotkey,
+  });
+  $("voice-hotkey-clear").addEventListener("click", async () => {
+    try { await commitVoiceHotkey(""); } catch (_) { /* Clear always leaves an empty field regardless */ }
+    $("opt-voice-hotkey").value = "";
+  });
+  EXPERT_ACTIONS["voice-hotkey-set"] = () => {
+    settingsOpener = document.activeElement;
+    showExpertPage(false);
+    settingsEl.classList.remove("hidden");
+    requestAnimationFrame(() => {
+      $("opt-voice-hotkey").scrollIntoView({ block: "center" });
+      $("opt-voice-hotkey").focus();
+    });
   };
+  $("hotkeys-search").addEventListener("input", renderHotkeysList);
+}
+
+function bindBackups() {
+  $("backup-close").addEventListener("click", closeBackups);
+  $("backup-modal").addEventListener("pointerdown", (e) => {
+    if (e.target === $("backup-modal")) closeBackups();
+  });
+}
+
+function bindTheme() {
+  attachSelectPicker($("theme-edit-target"));
+  attachSelectPicker($("theme-edit-base"));
+}
+
+// ---- Wire events ----
+function bind() {
+  bindEditor();
+  bindCopyFlow();
+  const { openEditorPop, closeOpenEditorPop, openExternalFileInEditor, closeRecMorePop, closeRecModal, snipEdit } = bindCapture();
+  bindDictation();
+  bindSettingsPanel();
+  bindExpertMenu();
+  bindViews();
+  bindWindowChrome();
+  bindLibrary();
+
+  // "gone with one click" per spec: no confirm dialog, unlike a real delete
+  // (these are throwaway onboarding content, not the user's own data).
+  $("examples-dismiss").addEventListener("click", async () => {
+    try { await invoke("dismiss_example_prompts"); } catch (err) { errToast(err); return; }
+    await renderGrid();
+  });
+
+  bindManagement();
+  bindJournal();
+  const { closeUpdateModal } = bindAbout();
+  bindTour();
+  const { helpEl } = bindHelpView();
+  bindGlobalSearch();
+  bindGridMenus({ openExternalFileInEditor });
+  bindHotkeys();
+  bindBackups();
+  bindTheme();
+
+  document.addEventListener("pointerdown", (e) => {
+    tabDragBlockClick = false; // a fresh press ends the suppression a drop armed
+    if (!ctxEl.classList.contains("hidden") && !ctxEl.contains(e.target)) closeCtx();
+    if (!toolbarMenu.classList.contains("hidden") && !toolbarMenu.contains(e.target)) closeToolbarMenu();
+    if (!miniMenu.classList.contains("hidden") && !miniMenu.contains(e.target)) closeMiniMenu();
+    // The folder tile toggles its own popover, so let its press through.
+    if (!tileFolderPop.classList.contains("hidden") && !tileFolderPop.contains(e.target) &&
+        !e.target.closest(".folder-tile")) closeTileFolderPop();
+    // Opened from the (already-closed) tile context menu, so nothing else needs excluding.
+    if (!viewsPop.classList.contains("hidden") && !viewsPop.contains(e.target)) closeViewsPop();
+    if (!moveToFolderPop.classList.contains("hidden") && !moveToFolderPop.contains(e.target)) closeMoveToFolderPop();
+    // The toolbar button toggles its own popover, so let its own press through.
+    if (!gridTagPop.classList.contains("hidden") && !gridTagPop.contains(e.target) &&
+        !e.target.closest("#grid-tag-btn")) closeGridTagPop();
+    // The two composer buttons toggle it themselves (their own contextmenu handler).
+    if (!openEditorPop.classList.contains("hidden") && !openEditorPop.contains(e.target) &&
+        !e.target.closest("#snip-btn") && !e.target.closest("#record-btn")) closeOpenEditorPop();
+  });
+  // Ctrl+Tab walks the views in the order the tab bar shows them.
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Tab" || !e.ctrlKey || e.altKey) return;
+    if (!flag("multiView") || settings.views.length < 2) return;
+    if (document.querySelector(".overlay:not(.hidden)")) return; // a dialog is open
+    e.preventDefault();
+    const order = viewOrder();
+    const at = order.findIndex((v) => v.id === settings.active_view);
+    const next = order[((at < 0 ? 0 : at) + (e.shiftKey ? -1 : 1) + order.length) % order.length];
+    if (next && next.id !== settings.active_view) switchToView(next.id);
+  });
+
+  // Keeps Tab from leaking past whichever overlay is currently topmost,
+  // into the (visually dimmed) page behind it. Mirrors the Escape dispatcher's
+  // own "what's on top wins" cascade below one for one, reusing the same
+  // container references, so a new overlay only needs adding in one place to
+  // stay consistent between the two. snipEdit and the first-run tour own their
+  // own Tab handling already (trapTabWithin call sites in snipEditKeydown/
+  // tourKeydown) and are skipped here to avoid trapping twice.
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Tab" || e.ctrlKey) return; // Ctrl+Tab is the view-switcher above
+    if (!snipEdit.classList.contains("hidden")) return;
+    // tourKeydown owns Tab while the tour is the topmost thing on screen, but it
+    // bows out the moment a confirm dialog opens on top of it -- and
+    // that dialog's own trap below is never reached if this bails unconditionally
+    // just because the tour is still open underneath. Only defer to the tour when
+    // nothing is layered above it.
+    if (!$("tour-modal").classList.contains("hidden") && $("confirm-modal").classList.contains("hidden")) return;
+    if (!$("shortcuts-modal").classList.contains("hidden")) { trapTabWithin($("shortcuts-modal"), e); return; }
+    if (!toolbarMenu.classList.contains("hidden")) { trapTabWithin(toolbarMenu, e); return; }
+    if (!miniMenu.classList.contains("hidden")) { trapTabWithin(miniMenu, e); return; }
+    if (!tileFolderPop.classList.contains("hidden")) { trapTabWithin(tileFolderPop, e); return; }
+    if (!viewsPop.classList.contains("hidden")) { trapTabWithin(viewsPop, e); return; }
+    if (!moveToFolderPop.classList.contains("hidden")) { trapTabWithin(moveToFolderPop, e); return; }
+    if (!gridTagPop.classList.contains("hidden")) { trapTabWithin(gridTagPop, e); return; }
+    if (!openEditorPop.classList.contains("hidden")) { trapTabWithin(openEditorPop, e); return; }
+    if (!$("rec-modal-more-pop").classList.contains("hidden")) { trapTabWithin($("rec-modal-more-pop"), e); return; }
+    if (!$("lightbox").classList.contains("hidden")) { trapTabWithin($("lightbox"), e); return; }
+    if (!$("confirm-modal").classList.contains("hidden")) { trapTabWithin($("confirm-modal"), e); return; }
+    if (!colorPop.classList.contains("hidden")) { trapTabWithin(colorPop, e); return; }
+    if (!tagPop.classList.contains("hidden")) { trapTabWithin(tagPop, e); return; }
+    if (!$("compare-modal").classList.contains("hidden")) { trapTabWithin($("compare-modal"), e); return; }
+    if (!$("tag-modal").classList.contains("hidden")) { trapTabWithin($("tag-modal"), e); return; }
+    if (!ctxEl.classList.contains("hidden")) { trapTabWithin(ctxEl, e); return; }
+    if (!$("update-modal").classList.contains("hidden")) { trapTabWithin($("update-modal"), e); return; }
+    if (!$("about-modal").classList.contains("hidden")) { trapTabWithin($("about-modal"), e); return; }
+    if (!$("snip-modal").classList.contains("hidden")) { trapTabWithin($("snip-modal"), e); return; }
+    if (!$("rec-modal").classList.contains("hidden")) { trapTabWithin($("rec-modal"), e); return; }
+    if (!viewModal.root.classList.contains("hidden")) { trapTabWithin(viewModal.root, e); return; }
+    if (!modal.root.classList.contains("hidden")) { trapTabWithin(modal.root, e); return; }
+    if (!$("dupes-modal").classList.contains("hidden")) { trapTabWithin($("dupes-modal"), e); return; }
+    if (!$("trash-modal").classList.contains("hidden")) { trapTabWithin($("trash-modal"), e); return; }
+    if (document.body.classList.contains("library-front") && !libraryEl.classList.contains("hidden")) { trapTabWithin(libraryEl, e); return; }
+    if (!$("backup-modal").classList.contains("hidden")) { trapTabWithin($("backup-modal"), e); return; }
+    if (!libraryEl.classList.contains("hidden")) { trapTabWithin(libraryEl, e); return; }
+    if (!helpEl.classList.contains("hidden")) { trapTabWithin(helpEl, e); return; }
+    if (!settingsEl.classList.contains("hidden")) { trapTabWithin(settingsEl, e); return; }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (!snipEdit.classList.contains("hidden")) return; // the editor owns Escape while open
+    if (!$("shortcuts-modal").classList.contains("hidden")) { closeShortcutsModal(); return; }
+    if (!toolbarMenu.classList.contains("hidden")) { closeToolbarMenu(); return; }
+    if (!miniMenu.classList.contains("hidden")) { closeMiniMenu(); return; }
+    if (!tileFolderPop.classList.contains("hidden")) { closeTileFolderPop(); return; }
+    if (!viewsPop.classList.contains("hidden")) { closeViewsPop(); return; }
+    if (!moveToFolderPop.classList.contains("hidden")) { closeMoveToFolderPop(); return; }
+    if (!gridTagPop.classList.contains("hidden")) { closeGridTagPop(); return; }
+    if (!openEditorPop.classList.contains("hidden")) { closeOpenEditorPop(); return; }
+    if (!$("rec-modal-more-pop").classList.contains("hidden")) { closeRecMorePop(); return; }
+    if (!$("lightbox").classList.contains("hidden")) closeLightbox();
+    else if (dismissConfirm()) { /* the dialog closed itself */ }
+    else if (!colorPop.classList.contains("hidden")) closeColorPop();
+    else if (!tagPop.classList.contains("hidden")) closeTagPop();
+    else if (!$("compare-modal").classList.contains("hidden")) closeCompareView();
+    else if (!$("tag-modal").classList.contains("hidden")) closeTagManager();
+    else if (!ctxEl.classList.contains("hidden")) closeCtx();
+    else if (!$("update-modal").classList.contains("hidden")) closeUpdateModal();
+    else if (!$("about-modal").classList.contains("hidden")) $("about-modal").classList.add("hidden");
+    else if (!$("snip-modal").classList.contains("hidden")) $("snip-modal").classList.add("hidden");
+    else if (!$("rec-modal").classList.contains("hidden")) closeRecModal();
+    else if (!viewModal.root.classList.contains("hidden")) closeViewModal();
+    else if (!modal.root.classList.contains("hidden")) confirmDiscardIfDirty().then((ok) => { if (ok) closeModal(); });
+    else if (!$("dupes-modal").classList.contains("hidden")) $("dupes-modal").classList.add("hidden");
+    else if (!$("trash-modal").classList.contains("hidden")) $("trash-modal").classList.add("hidden");
+    // A library raised over the backups dialog is the topmost thing: it closes first.
+    else if (document.body.classList.contains("library-front") && !libraryEl.classList.contains("hidden")) hideLibrary();
+    else if (!$("backup-modal").classList.contains("hidden")) closeBackups();
+    else if (!libraryEl.classList.contains("hidden")) hideLibrary();
+    // Help opens over the settings panel (from expGroupHelp): close it before the
+    // settings underneath, same pattern as library-front/journal above.
+    else if (!helpEl.classList.contains("hidden")) helpEl.classList.add("hidden");
+    else if (!settingsEl.classList.contains("hidden")) hideSettings();
+  });
 
   listen("theme-changed", (e) => applyTheme(e.payload?.theme, e.payload?.vars));
   // "Edit prompt" chosen in a floating pill's right-click menu.
