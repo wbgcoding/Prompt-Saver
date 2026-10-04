@@ -45,6 +45,7 @@ use tauri::{
     AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State, WebviewUrl,
     WebviewWindowBuilder, WindowEvent,
 };
+use tauri_plugin_global_shortcut::{Code, Modifiers};
 
 // Bring the main window back from the tray: always at the saved size/position.
 // Routed through resolve_geometry() (the same validation the startup path
@@ -315,7 +316,6 @@ fn reveal_launcher(app: &AppHandle) {
 // ---------- Global shortcuts: the app hotkey + one per prompt ----------
 
 type Accel = tauri_plugin_global_shortcut::Shortcut;
-use tauri_plugin_global_shortcut::{Code, Modifiers};
 
 // An accelerator is user input on its way to the OS shortcut API, so its length is
 // capped before anything else looks at it.
