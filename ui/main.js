@@ -18,6 +18,7 @@ import { confirmDialog, infoDialog, dismissConfirm, initDialogs, EYE_SVG } from 
 import { withShortcut as withShortcutRaw, rowsForScope as rowsForScopeRaw, sectionsForScopes as sectionsForScopesRaw, SCOPE_TITLE_KEYS } from "./shortcuts.js";
 import { FLAG_LABELS, ALL_FLAG_KEYS, OPT_FLAG_LABELS, OPT_FLAG_KEYS, isOptFlag, flagLabelKey, groupFlags, JOURNAL_ROWS_MAX, EXPERT_VALUES, EXPERT_SELECTS, STYLE_OPTS, REC_QUALITY_BITRATE, EXPERT_TABS, FLAG_GATES, EXPERT_PRESET_QUIET, EXPERT_PRESET_QUIET_ZERO, OFF_AT_ZERO_KEYS, EXPERT_BULK_NEVER, EXPERT_RESET_KEEP, EXPERT_PRESET_FULL_EXCLUDE, ALL_EXPERT_FLAG_KEYS, EXPERT_PRESET_TITLES, TILE_STYLES, EXPERT_TIP_SET, TILE_DOM_FLAGS, GRID_DOM_VALUES, SETTINGS_AREA_LABEL } from "./expertConfig.js";
 import { MD_MAX_CHARS, HL_MAX_CHARS, mdEsc, HL_ALIAS, hlCode, MD_FENCE, MD_HEAD, MD_HR, MD_QUOTE, MD_UL, MD_OL, mdInline, detectCodeLang, hasMarkdownSyntax } from "./markdown.js";
+import { extractVars, fillVars, hasEmptyVarToken, fillVarHighlighted, DYN_VARS, DYN_SET, dynToken, dynName, DYN_LOCALES, pad2, dayShift, isoWeek, isoStamp, shortId, VAR_COUNTER_MAX, uuidV4, CLIP_VAR_MAX } from "./promptVars.js";
 primeLang("en", EN);
 
 const { invoke, convertFileSrc } = window.__TAURI__.core;
@@ -6566,43 +6567,6 @@ function modalSnapshot() {
   ]);
 }
 
-// ---- Prompt variables ({#{placeholder}#}) ----
-// The {#{ ... }#} fence is deliberately uncommon so a literal "{{" pasted from a
-// code block is never mistaken for a variable. The 200-char body leaves room for
-// a choice variable's option list, not just a name.
-const VAR_RE = /\{#\{\s*([^}\n]{1,200}?)\s*\}#\}/g;
-function extractVars(text) {
-  const seen = [];
-  for (const m of (text || "").matchAll(VAR_RE)) {
-    const k = m[1].trim();
-    if (k && !seen.includes(k)) seen.push(k);
-  }
-  return seen;
-}
-const fillVars = (text, values) => text.replace(VAR_RE, (_, k) => values[k.trim()] ?? "");
-// A fence whose body is only whitespace ({#{ }#}) never becomes a real variable:
-// extractVars() silently drops it: so it would sit in the copied text unfilled and
-// unexplained. Caught before save instead of left a silent trap.
-const hasEmptyVarToken = (text) =>
-  [...String(text || "").matchAll(VAR_RE)].some((m) => !m[1].trim());
-
-// A placeholder gets a visible accent wherever raw prompt text is previewed, so
-// "does this prompt ask for anything" no longer surprises you only at copy time. DOM
-// text nodes + a plain span, never innerHTML: a token is user-typed text.
-function fillVarHighlighted(el, text) {
-  el.textContent = "";
-  let last = 0;
-  for (const m of text.matchAll(VAR_RE)) {
-    if (m.index > last) el.appendChild(document.createTextNode(text.slice(last, m.index)));
-    const span = document.createElement("span");
-    span.className = "var-token";
-    span.textContent = m[0];
-    el.appendChild(span);
-    last = m.index + m[0].length;
-  }
-  if (last < text.length) el.appendChild(document.createTextNode(text.slice(last)));
-}
-
 // A token is `name`, `name=default`, `name|opt,opt,…` or `name=default|opt,opt,…`.
 // Options are trimmed and empty ones dropped; a comma always starts the next
 // option, so an option can never contain one. A default selects the matching
@@ -6626,29 +6590,8 @@ function parseVar(token) {
     : { name: raw, options: [], default: "" };
 }
 
-// Reserved names that fill themselves in at copy time, no dialog. They win
-// over a manual variable of the same name (documented in the editor's helper).
-const DYN_VARS = [
-  "date", "time", "datetime", "weekday", "yesterday", "tomorrow",
-  "week", "month", "year", "timestamp", "epoch",
-  "clipboard", "username", "uuid", "random", "counter",
-];
-const DYN_SET = new Set(DYN_VARS);
-// A reserved name is WRITTEN with a slash fence: {#{/date\}#}. That keeps every plain
-// word free for a variable of the user's own: "date" only fills itself in when it is
-// spelled /date\. Old prompts are rewritten once by the store migration.
-const DYN_OPEN = "/";
-const DYN_CLOSE = "\\";
-const dynToken = (name) => `${DYN_OPEN}${name}${DYN_CLOSE}`;
-const dynName = (raw) =>
-  raw.length > 2 && raw.startsWith(DYN_OPEN) && raw.endsWith(DYN_CLOSE) ? raw.slice(1, -1) : "";
 const isDynVar = (name) => flag("dynVars") && DYN_SET.has(dynName(name));
-// The app language is a bare ISO code, which is already a valid BCP-47 tag; only
-// where the default region would be the wrong one is it spelled out. The app's
-// Portuguese is European, so "pt" must not fall back to the Brazilian default.
-const DYN_LOCALES = { pt: "pt-PT" };
 const dynLocale = () => DYN_LOCALES[LANG] || LANG;
-const pad2 = (n) => String(n).padStart(2, "0");
 const intlFmt = (opts) => {
   try { return new Intl.DateTimeFormat(dynLocale(), opts); } catch (_) { return new Intl.DateTimeFormat("en", opts); }
 };
@@ -6660,35 +6603,6 @@ function fmtDynTime(d, style) {
   if (style === "iso") return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
   return intlFmt({ timeStyle: style }).format(d);
 }
-// Same calendar day ± n days, keeping the local time of day (so a DST change never
-// shifts the date by one).
-function dayShift(d, days) {
-  const out = new Date(d.getTime());
-  out.setDate(out.getDate() + days);
-  return out;
-}
-// ISO-8601 week number: the week holding the Thursday of the current week.
-function isoWeek(d) {
-  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-  t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
-  const jan1 = Date.UTC(t.getUTCFullYear(), 0, 1);
-  return Math.ceil(((t - jan1) / 86400000 + 1) / 7);
-}
-// ISO-8601 local timestamp with the UTC offset ("2026-07-27T14:03:22+02:00").
-function isoStamp(d) {
-  const off = -d.getTimezoneOffset();
-  const sign = off < 0 ? "-" : "+";
-  const abs = Math.abs(off);
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}` +
-    `T${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}` +
-    `${sign}${pad2(Math.floor(abs / 60))}:${pad2(abs % 60)}`;
-}
-// Short throwaway id: the same platform RNG as the UUID, just eight characters.
-const shortId = () =>
-  [...crypto.getRandomValues(new Uint8Array(6))].map((b) => b.toString(36).padStart(2, "0")).join("").slice(0, 8);
-// {#{counter}#} counts copies, so its value has to survive a restart. Kept in the
-// same ui_texts store the remembered variable values use.
-const VAR_COUNTER_MAX = 1e9;
 function nextVarCounter() {
   const now = Math.floor(Number(settings.ui_texts?.varCounter) || 0);
   const next = now >= 0 && now < VAR_COUNTER_MAX ? now + 1 : 1;
@@ -6696,17 +6610,6 @@ function nextVarCounter() {
   invoke("set_ui_text", { key: "varCounter", value: String(next) }).catch(() => {});
   return next;
 }
-// RFC 4122 v4, lowercase: built from the platform RNG, no dependency.
-function uuidV4() {
-  const b = crypto.getRandomValues(new Uint8Array(16));
-  b[6] = (b[6] & 0x0f) | 0x40;
-  b[8] = (b[8] & 0x3f) | 0x80;
-  const h = [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
-  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
-}
-// Clipboard text is foreign input pasted into the prompt: cap it so one runaway
-// copy can never blow up the clipboard payload.
-const CLIP_VAR_MAX = 100000;
 
 // Resolve one reserved name. `ctx` carries the values that cost a round trip or a
 // write, fetched once per copy: the clipboard, the account name, the counter.
