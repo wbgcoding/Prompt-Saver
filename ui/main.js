@@ -5,7 +5,7 @@ import { FONTS, FONT_LABELS, fitText } from "./fonts.js";
 import { IMAGE_EXT, mediaKind, buildMediaBar, applyVideoPrefs, setMediaDefaults } from "./media.js";
 import { HELP_CONTENT } from "./help.js";
 import { HELP_SKETCHES } from "./helpSketches.js";
-import { DRAG_OUT_MODS, FOLDER_SVG, fileUri, ffmpegDownloadPct, themeColorScheme, playCopySound, makeEtaEstimator, formatEta, a11yProgressText, parseFfmpegError, fmtBytes, trapTabWithin } from "./floatShared.js";
+import { DRAG_OUT_MODS, FOLDER_SVG, fileUri, ffmpegDownloadPct, themeColorScheme, makeEtaEstimator, formatEta, a11yProgressText, parseFfmpegError, fmtBytes, trapTabWithin } from "./floatShared.js";
 import { placePopover, placePopoverAt } from "./popover.js";
 import { attachSelectPicker } from "./selectpop.js";
 import { confirmDialog, infoDialog, dismissConfirm, initDialogs, EYE_SVG } from "./dialog.js";
@@ -15,12 +15,14 @@ import { hasMarkdownSyntax, renderMarkdown } from "./markdown.js";
 import { anyEntryHasVars, assignVarsWindowPending, dialogTokens, DYN_VARS, dynToken, extractVars, fillVarHighlighted, hasEmptyVarToken, linkPromptVars, parseVar, peekRotatedText, readFixedVars, resolveVars, saveFixedVars, varsWindowPending, varTokens } from "./promptVars.js";
 import { TOUR_STEPS, TOUR_STEP_COUNT, TOUR_LAST_STEP, TOUR_FEATURES } from "./tourContent.js";
 import { initSnipEditor } from "./snipEditor.js";
-import { $, ALL_SHORTCUT_SCOPES, applyBrand, appVersion, armButton, assignAppVersion, assignBUBBLE_MS, assignCOLORS, assignDISARM_MS, assignDrag, assignDRAG_THRESHOLD, assignFolderArm, assignHISTORY_PREVIEW_LEN, assignINPUT_MAX, assignLibraryTab, assignMemberDrag, assignModalState, assignPrompts, assignROTATE_SHORT_MAX, assignSettings, assignTOAST_MS, autoGrow, BUBBLE_MS, cellKey, CLEAR_SVG, closeColorPop, colorPop, COLORS, confirmIfNoUndo, convertFileSrc, ctxEl, debounced, DEFAULT_COLORS, DICT, DISARM_MS, disarmButton, DOTS, drag, DRAG_THRESHOLD, emit, errToast, ETA_MIN_PCT, ETA_MIN_SECS, EXPERT_ACTIONS, favView, flag, flagState, folderArm, gateOpen, GRID_PLUS, gridEl, gridSelected, gridTags, HEADER_PAD_Y, HEX_RE, hideToast, HISTORY_PREVIEW_LEN, ICON_DOWN, ICON_EDIT, ICON_FILE, ICON_IMAGE, ICON_KEYBOARD, ICON_PDF, ICON_TRASH, ICON_UNDO, ICON_UP, ICON_VIDEO, ICON_WARN, IMG_WAIT, inkShadow, inputEl, invoke, journalThumbCache, KB_FOCUS_FADE_MS, LANG, libraryEl, libraryTab, libThumbCache, listen, LOCK_SVG, makeKeyboardActivatable, mediaBarLabels, memberDrag, modal, modalState, NUM_FIELD_BIG_STEP, OCR_LANG_NOTICE_MS, openColorPop, optFlag, PALETTE_LEN, PDF_EXT, prompts, putIcon, readableInk, ROTATE_SHORT_MAX, saveBtn, setLang, setLangSelect, setStatusText, settings, settingsEl, shipsOn, shortcutRows, shortcutSections, SIZE_MAX, SIZE_MIN, SIZE_STEP, t, TAKEOVER_SVG, TB_CHECK, TILE_FOLDER_ZONE, toast, TOOLTIP_PREVIEW_CHARS, txt, undoToast, val, videoCache, VOICE_LANG_NOTICE_MS, wireColorPop, withShortcut, withTaskbarBusy } from "./core.js";
-import { applyChainToTile, assignChainLock, chainLock, chainMode, chainSel, isTextPrompt, linkChain, onChainClick, setChainLock, setChainMode, startChainWith, toggleChainPick } from "./chain.js";
-import { activeView, assignTabDragBlockClick, bindViews, clearViewDropHover, closeMiniMenu, closeViewModal, dropTilesOnView, favLayoutMap, favViewEnabled, firstFree, gridKeyOf, layoutOf, linkViews, miniMenu, openGridSizeFor, openMiniMenu, placeFav, refreshFavViewUi, renderGrid, renderViews, resolveViewDropTarget, seedExamplesIfNeeded, switchToView, uiZoom, updateExamplesBanner, updateViewDropHover, viewModal, viewOrder, viewRowBase, viewsContaining, wireNumPop, wireViews } from "./views.js";
+import { $, ALL_SHORTCUT_SCOPES, applyBrand, appVersion, armButton, assignAppVersion, assignBUBBLE_MS, assignCOLORS, assignDISARM_MS, assignDrag, assignDRAG_THRESHOLD, assignFolderArm, assignHISTORY_PREVIEW_LEN, assignINPUT_MAX, assignLibraryTab, assignMemberDrag, assignModalState, assignPrompts, assignROTATE_SHORT_MAX, assignSettings, assignTOAST_MS, autoGrow, BUBBLE_MS, cellKey, CLEAR_SVG, closeColorPop, colorPop, COLORS, confirmIfNoUndo, convertFileSrc, ctxEl, debounced, DEFAULT_COLORS, DICT, DISARM_MS, disarmButton, DOTS, drag, DRAG_THRESHOLD, emit, errToast, ETA_MIN_PCT, ETA_MIN_SECS, EXPERT_ACTIONS, favView, flag, flagState, folderArm, gateOpen, GRID_PLUS, gridEl, gridSelected, gridTags, HEADER_PAD_Y, HEX_RE, hideToast, HISTORY_PREVIEW_LEN, ICON_DOWN, ICON_EDIT, ICON_FILE, ICON_IMAGE, ICON_KEYBOARD, ICON_PDF, ICON_TRASH, ICON_UNDO, ICON_UP, ICON_VIDEO, ICON_WARN, IMG_WAIT, inkShadow, inputEl, invoke, journalThumbCache, LANG, libraryEl, libraryTab, libThumbCache, listen, LOCK_SVG, makeKeyboardActivatable, mediaBarLabels, memberDrag, modal, modalState, NUM_FIELD_BIG_STEP, OCR_LANG_NOTICE_MS, openColorPop, optFlag, PALETTE_LEN, PDF_EXT, prompts, putIcon, readableInk, ROTATE_SHORT_MAX, saveBtn, setLang, setLangSelect, setStatusText, settings, settingsEl, shipsOn, shortcutRows, shortcutSections, SIZE_MAX, SIZE_MIN, SIZE_STEP, t, TAKEOVER_SVG, TB_CHECK, TILE_FOLDER_ZONE, toast, TOOLTIP_PREVIEW_CHARS, txt, undoToast, val, videoCache, VOICE_LANG_NOTICE_MS, wireColorPop, withShortcut, withTaskbarBusy } from "./core.js";
+import { applyChainToTile, assignChainLock, chainLock, chainMode, isTextPrompt, linkChain, setChainMode, startChainWith, toggleChainPick } from "./chain.js";
+import { activeView, assignTabDragBlockClick, bindViews, clearViewDropHover, closeMiniMenu, closeViewModal, dropTilesOnView, favViewEnabled, firstFree, gridKeyOf, layoutOf, linkViews, miniMenu, openGridSizeFor, openMiniMenu, placeFav, refreshFavViewUi, renderGrid, renderViews, resolveViewDropTarget, seedExamplesIfNeeded, switchToView, uiZoom, updateExamplesBanner, updateViewDropHover, viewModal, viewOrder, viewRowBase, viewsContaining, wireNumPop, wireViews } from "./views.js";
+import { bindCopyFlow, copyFormattedPrompt, copyOnCooldown, copyTextWithVars, focusTile, linkCopyFlow, maybeCloseOnCopy, onPromptHotkey, recordCopy, wireCopyFlow } from "./copyFlow.js";
 linkPromptVars({ activeThemeVars });
 linkChain({ recordToolUsage });
 linkViews({ applyFlags, buildFolderTile, buildSwatches, buildTile, clearGridSelection, fitAllTiles, foldersOfView: (...x) => foldersOfView(...x), hideTileTip, isArchived, pruneVideoCache, renderLibrary, saveFolder, syncBannerStack });
+linkCopyFlow({ autoPasteNow, copyResolved, recordToolUsage, showCopied });
 primeLang("en", EN);
 
 // Bumped by openModal/closeModal. An async pick/preview started for one editor
@@ -4980,39 +4982,6 @@ function varFixedListRow() {
   return wrap;
 }
 
-// Record a copy for the history/usage journal (backend honours the privacy flag).
-// Every successful copy path ends here, which makes it the one place that may start
-// the cooldown: see below.
-const recordCopy = (id) => {
-  markCopied(id);
-  if (optFlag("copySound")) playCopySound(val("copySoundVolume"));
-  return invoke("record_copy", { id }).catch(() => {});
-};
-
-// Per-prompt copy throttle: block re-copying the SAME prompt within the cooldown
-// (expert value, 0 = off). Other prompts are never blocked, so a wrong pick can
-// be corrected instantly. Returns true if this copy should be skipped.
-// The check is pure: a copy that never happened; the placeholder dialog was
-// cancelled: must not lock the prompt out for the whole cooldown.
-const copyTimes = new Map();
-const COPY_TIMES_CAP = 256; // sweep entries past the cooldown once the map grows
-function copyOnCooldown(id) {
-  const ms = val("copyCooldownMs");
-  if (!ms) return false;
-  const last = copyTimes.get(id);
-  return !!last && Date.now() - last < ms;
-}
-// Start the cooldown for a prompt that really was copied.
-function markCopied(id) {
-  const ms = val("copyCooldownMs");
-  if (!ms) return;
-  const now = Date.now();
-  if (copyTimes.size >= COPY_TIMES_CAP) {
-    for (const [k, t0] of copyTimes) if (now - t0 >= ms) copyTimes.delete(k);
-  }
-  copyTimes.set(id, now);
-}
-
 // Build a Tauri accelerator ("CommandOrControl+Shift+P") from a keydown event.
 // Returns null unless at least one modifier plus a real key was pressed.
 function accelFromEvent(e) {
@@ -5044,169 +5013,7 @@ function prettyAccel(accel) {
   return accel.split("+").map((p) => (MOD_LABELS[p] ? MOD_LABELS[p]() : p)).join(" + ");
 }
 
-// Copy a text prompt after filling its placeholders. `paste` is only set by
-// activations that mean "paste" (Enter on a focused tile, a prompt hotkey with the
-// paste option on); a plain click copies and nothing else, exactly like a prompt
-// without variables.
-let varsPasteRequested = false;
-async function copyTextWithVars(p, el, paste = false) {
-  // The placeholder window is already up for an earlier press: this one is the
-  // second half of a double click. It must not start another question, it only
-  // upgrades the pending copy to a paste.
-  if (varsWindowPending) { varsPasteRequested = true; return; }
-  varsPasteRequested = false;
-  // Peek -> resolve -> copy -> commit, same order copyResolved uses -- this used
-  // to always resolve p.text (entry 0) even once rotation had moved past it.
-  const rotating = (p.variants || []).length > 0;
-  const peek = rotating ? await invoke("rotation_peek", { id: p.id }).catch(() => null) : null;
-  const rawText = peek ? peek.text : p.text;
-  const text = await resolveVars(rawText);
-  const pasteAfter = paste || (varsPasteRequested && flag("autoPaste"));
-  varsPasteRequested = false;
-  if (text === null) return;
-  const ok = await invoke("copy_text", { text })
-    .catch((e) => { errToast(e); return false; });
-  if (ok) {
-    showCopied(el);
-    recordCopy(p.id);
-    // A failed peek already fell back to p.text above -- only a successful peek may
-    // be followed by a commit (copyResolved's own rule).
-    if (rotating && peek) { invoke("rotation_commit", { id: p.id }).catch(() => {}); recordToolUsage("rotation_advance"); }
-    if (pasteAfter) await autoPasteNow(el);
-    maybeCloseOnCopy();
-  }
-}
-
-// "Copy formatted" (context menu + editor): puts the Markdown text AND its
-// rendered HTML on the clipboard in one go. Placeholders go through the same
-// resolveVars() every other copy path uses, and the HTML is built with the
-// exact same renderer the Markdown preview itself uses, so there is only ever
-// one Markdown interpretation in the app.
-async function copyFormattedPrompt(id) {
-  const p = prompts.find((x) => x.id === id);
-  if (!p) return;
-  const rotating = (p.variants || []).length > 0;
-  const peek = rotating ? await invoke("rotation_peek", { id }).catch(() => null) : null;
-  const rawText = peek ? peek.text : p.text;
-  const text = await resolveVars(rawText);
-  if (text === null) return; // the placeholder dialog was cancelled
-  const html = renderMarkdown(text);
-  const ok = await invoke("copy_formatted", { text, html }).catch((e) => { errToast(e); return false; });
-  if (ok) {
-    toast(t("copied"));
-    recordCopy(id);
-    if (rotating && peek) { invoke("rotation_commit", { id }).catch(() => {}); recordToolUsage("rotation_advance"); }
-  }
-}
-
-// ---- Keyboard navigation: arrow keys move a focus ring across the grid,
-// Enter/Space copies the focused tile (feature-gated by keyboardNav).
-let kbFocus = null;
-let kbFadeTimer = null;
-function focusTile(id) {
-  clearTimeout(kbFadeTimer);
-  kbFocus = id;
-  for (const el of gridEl.querySelectorAll(".tile")) el.classList.toggle("kb-focus", el.dataset.id === id);
-  for (const el of gridEl.querySelectorAll(".tile.kb-leaving")) el.classList.remove("kb-leaving");
-  gridEl.querySelector(`.tile[data-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: "nearest" });
-}
-// Clears the focus ring. `fade` smoothly transitions it out (used on window blur).
-function clearKbFocus(fade) {
-  const el = kbFocus ? gridEl.querySelector(`.tile[data-id="${CSS.escape(kbFocus)}"]`) : null;
-  kbFocus = null;
-  for (const t of gridEl.querySelectorAll(".tile.kb-focus")) t.classList.remove("kb-focus");
-  if (fade && el) {
-    el.classList.add("kb-leaving");
-    setTimeout(() => el.classList.remove("kb-leaving"), 520);
-  }
-}
-// The keyboard focus ring fades a short while after the window loses focus, so a
-// left-behind highlight doesn't linger over other apps (the delay is
-// KB_FOCUS_FADE_MS; the fade-out itself is a smooth 480ms CSS transition).
-window.addEventListener("blur", () => {
-  if (!kbFocus || !flag("keyboardNav")) return;
-  clearTimeout(kbFadeTimer);
-  kbFadeTimer = setTimeout(() => clearKbFocus(true), KB_FOCUS_FADE_MS);
-});
-window.addEventListener("focus", () => { clearTimeout(kbFadeTimer); });
-function moveKbFocus(dc, dr) {
-  // Use whichever layout the grid is currently showing: the favorites view lays out
-  // from favLayoutMap(), not the active view, so arrow keys must follow that.
-  const layout = favView ? favLayoutMap() : layoutOf(activeView());
-  const cells = Object.entries(layout);
-  if (!cells.length) return;
-  if (!kbFocus || !layout[kbFocus]) { focusTile(cells[0][0]); return; }
-  const [cc, cr] = layout[kbFocus];
-  let best = null;
-  let bestD = Infinity;
-  for (const [id, [col, row]] of cells) {
-    if (id === kbFocus) continue;
-    const inDir = (dc > 0 && col > cc) || (dc < 0 && col < cc) || (dr > 0 && row > cr) || (dr < 0 && row < cr);
-    if (!inDir) continue;
-    // Prefer the same row/column: penalise the off-axis distance heavily.
-    const d = dc ? Math.abs(col - cc) + Math.abs(row - cr) * 4 : Math.abs(row - cr) + Math.abs(col - cc) * 4;
-    if (d < bestD) { bestD = d; best = id; }
-  }
-  if (best) focusTile(best);
-}
-// One activation path for "copy this prompt now": Enter on a focused tile and a
-// prompt hotkey both land here, so usage recording, chain semantics and
-// placeholder filling behave identically. `paste` decides whether the copy is also
-// pushed into the last app: Enter follows the auto-paste setting, a hotkey follows
-// its own option.
-async function activateTile(id, paste = flag("autoPaste")) {
-  const p = prompts.find((x) => x.id === id);
-  if (!p) return;
-  const el = gridEl.querySelector(`.tile[data-id="${CSS.escape(id)}"]`);
-  if (chainMode) { await toggleChainPick(p); return; }
-  if (copyOnCooldown(id)) return;
-  if (dialogTokens(p, await peekRotatedText(p)).length) {
-    await copyTextWithVars(p, el, paste);
-  } else if (await copyResolved(p)) {
-    if (el) showCopied(el);
-    recordCopy(id);
-    if (paste) await autoPasteNow(el);
-    maybeCloseOnCopy();
-  }
-}
-
-// A prompt was triggered from outside the grid: its global hotkey or a tray
-// quick-copy entry. Placeholders that still need typing are asked for in a
-// small window of their own, so the app the user is working in stays in front;
-// everything else copies (and optionally pastes) without ever showing up.
-async function onPromptHotkey(id, paste) {
-  const p = prompts.find((x) => x.id === id);
-  if (!p) return;
-  if (dialogTokens(p, await peekRotatedText(p)).length) {
-    // Chain mode is an in-window gesture: a hotkey then still goes through the grid.
-    if (!chainMode) { await copyOutsideApp(p, paste); return; }
-    await invoke("focus_main_window").catch(() => {});
-  }
-  await activateTile(id, paste);
-}
-
-// The hotkey/tray copy of a prompt with manual placeholders: ask in the standalone
-// window, then finish the copy exactly like every other path does.
-async function copyOutsideApp(p, paste) {
-  if (copyOnCooldown(p.id)) return;
-  // Same peek -> resolve -> copy -> commit order as copyTextWithVars/copyResolved.
-  const rotating = (p.variants || []).length > 0;
-  const peek = rotating ? await invoke("rotation_peek", { id: p.id }).catch(() => null) : null;
-  const rawText = peek ? peek.text : p.text;
-  const text = await resolveVars(rawText);
-  varsPasteRequested = false; // a second press only upgrades copies started in the window
-  if (text === null) return; // cancelled, or the window could not be opened
-  if (await invoke("copy_text", { text }).catch((e) => { errToast(e); return false; })) {
-    recordCopy(p.id);
-    if (rotating && peek) { invoke("rotation_commit", { id: p.id }).catch(() => {}); recordToolUsage("rotation_advance"); }
-    if (paste) await autoPasteNow(null);
-  }
-}
-// Expert opt: hide the window to the tray right after a prompt copy.
-function maybeCloseOnCopy() {
-  if (!optFlag("hideWindowOnCopy")) return;
-  try { window.__TAURI__?.window?.getCurrentWindow?.()?.hide?.().catch?.(() => {}); } catch { /* no-op */ }
-}
+wireCopyFlow();
 
 // ---- Editor draft autosave ----
 // Only the text side (name/text/variants) ever gets drafted -- an attached
@@ -13193,46 +13000,6 @@ function bindEditor() {
   modal.captionSize.addEventListener("change", updateCaptionPreview);
 
   attachSelectPicker(modal.fontSel);
-}
-
-function bindCopyFlow() {
-  // Chain mode: combine several text buttons into one clipboard copy. Single
-  // click toggles it; a quick double-click latches it "always on".
-  $("chain-btn").addEventListener("click", onChainClick);
-  // A paste inside this window ends chain mode (unless latched); the clipboard
-  // already holds the chain. A paste in another program is not seen here, so the
-  // chain simply stays until the chain button ends it.
-  document.addEventListener("keydown", (e) => {
-    if (chainMode && !chainLock && (e.ctrlKey || e.metaKey) && (e.key === "v" || e.key === "V")) setChainMode(false);
-  });
-  // Arrow keys move a focus ring across grid tiles; Enter/Space copies.
-  const NAV = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
-  document.addEventListener("keydown", (e) => {
-    if (!flag("keyboardNav")) return;
-    if (e.ctrlKey || e.metaKey || e.altKey) return;
-    if (e.target?.closest?.("input, textarea, [contenteditable]")) return;
-    if (document.querySelector(".overlay:not(.hidden)")) return; // a dialog is open
-    if (NAV[e.key]) { e.preventDefault(); moveKbFocus(...NAV[e.key]); }
-    else if ((e.key === "Enter" || e.key === " ") && kbFocus) { e.preventDefault(); activateTile(kbFocus); }
-  });
-  // Hold Shift during keyboard navigation to arm chaining on the fly: it switches
-  // on while Shift is down and off again when released: unless a prompt was picked
-  // into the chain during the hold, in which case it latches "always on" so the
-  // user can keep building the chain from there.
-  let shiftChain = false;
-  const kbBlocked = (e) => e.target.closest("input, textarea, [contenteditable]") || document.querySelector(".overlay:not(.hidden)");
-  document.addEventListener("keydown", (e) => {
-    if (e.key !== "Shift" || e.repeat || shiftChain || chainMode) return;
-    if (!flag("keyboardNav") || !flag("chainPrompts") || kbBlocked(e)) return;
-    shiftChain = true;
-    setChainMode(true);
-  });
-  document.addEventListener("keyup", (e) => {
-    if (e.key !== "Shift" || !shiftChain) return;
-    shiftChain = false;
-    if (!chainSel.length) { setChainMode(false); return; }
-    if (flag("chainLock")) setChainLock(); // picked something → keep the chain alive
-  });
 }
 
 function bindCapture() {
