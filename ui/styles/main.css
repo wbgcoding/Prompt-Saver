@@ -1242,7 +1242,15 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 }
 .primary-btn:hover:not(:disabled) { filter: brightness(1.08); }
 .primary-btn:active:not(:disabled) { transform: scale(0.97); }
-.primary-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+/* A disabled primary button reads as plainly grey, not as a faded accent. */
+.primary-btn:disabled {
+  background: var(--surface-2);
+  color: var(--muted);
+  opacity: 1;
+  box-shadow: inset 0 0 0 1px var(--border);
+  cursor: not-allowed;
+  filter: none;
+}
 
 .ghost-btn {
   padding: 8px 14px;

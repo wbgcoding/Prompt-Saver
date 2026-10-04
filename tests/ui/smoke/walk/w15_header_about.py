@@ -117,6 +117,25 @@ SECTION = """\
         if (el704.getAttribute('aria-label') !== want704) out.errors.push('704: ' + id704 + ' has the accessible name "' + el704.getAttribute('aria-label') + '"');
         if (!(el704.title || '').startsWith(want704)) out.errors.push('704: ' + id704 + ' has the tooltip "' + el704.title + '"');
       }
+      // 705: with an empty composer the disabled Save button is plain grey (the
+      // surface colour), not a faded accent.
+      if (saveBtn) {
+        const colorOf705 = (v) => {
+          const d = document.createElement('div');
+          d.style.background = 'var(' + v + ')';
+          document.body.appendChild(d);
+          const c = getComputedStyle(d).backgroundColor;
+          d.remove();
+          return c;
+        };
+        if (!saveBtn.disabled) out.errors.push('705: the save button is enabled with an empty composer');
+        else {
+          const bg705 = getComputedStyle(saveBtn).backgroundColor;
+          if (bg705 !== colorOf705('--surface-2')) out.errors.push('705: the disabled save button is ' + bg705 + ', not the surface colour');
+          if (bg705 === colorOf705('--accent-strong')) out.errors.push('705: the disabled save button still wears the accent colour');
+          if (getComputedStyle(saveBtn).opacity !== '1') out.errors.push('705: the disabled save button is faded instead of grey');
+        }
+      }
       if (!hb || !winControls || !saveBtn) {
         out.errors.push('hide-bottom, win-controls or save missing');
       } else if (window.innerWidth >= 700) {
