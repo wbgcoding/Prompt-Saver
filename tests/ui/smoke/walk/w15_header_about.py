@@ -93,10 +93,9 @@ SECTION = """\
         }
       }
     }
-    // 109: hide-top (left of Minimize) and hide-bottom (left of Save) share the
-    // same left/right edges -- both bars right-align on the same window edge and
-    // win-controls/Save share --winctl-w. Also: hiding both toggles (barToggles
-    // off) must not leave a gap where they used to sit. Only checked >= 700px:
+    // 109: hide-bottom sits left of Save, and win-controls/Save share --winctl-w.
+    // Also: hiding the bar toggle (barToggles off) must not leave a gap where it
+    // used to sit. Only checked >= 700px:
     // below the header's own ~690px wrap breakpoint, header-actions becomes the
     // SOLE item on its wrapped line and `.header`'s justify-content:space-between
     // has no second item left to space against, so it falls back to packing left
@@ -107,23 +106,14 @@ SECTION = """\
         await click('settings-close');
         await sleep(50);
       }
-      const ht = document.getElementById('hide-top');
       const hb = document.getElementById('hide-bottom');
-      const winMin = document.getElementById('win-min');
       const winControls = document.querySelector('.win-controls');
       const saveBtn = document.getElementById('save');
-      if (!ht || !hb || !winMin || !winControls || !saveBtn) {
-        out.errors.push('hide-top, hide-bottom, win-min, win-controls or save missing');
+      if (document.getElementById('hide-top')) out.errors.push('700: the top bar still has a hide button');
+      if (!hb || !winControls || !saveBtn) {
+        out.errors.push('hide-bottom, win-controls or save missing');
       } else if (window.innerWidth >= 700) {
-        const htR = ht.getBoundingClientRect();
         const hbR = hb.getBoundingClientRect();
-        if (Math.abs(htR.right - hbR.right) > 1 || Math.abs(htR.left - hbR.left) > 1) {
-          out.errors.push('hide-top/hide-bottom are not aligned at ' + window.innerWidth + 'px: left ' +
-            Math.round(htR.left) + '/' + Math.round(hbR.left) + ', right ' + Math.round(htR.right) + '/' + Math.round(hbR.right));
-        }
-        if (htR.right > winMin.getBoundingClientRect().left + 1) {
-          out.errors.push('hide-top is not left of win-min at ' + window.innerWidth + 'px');
-        }
         if (hbR.right > saveBtn.getBoundingClientRect().left + 1) {
           out.errors.push('hide-bottom is not left of save at ' + window.innerWidth + 'px');
         }
@@ -138,7 +128,53 @@ SECTION = """\
         }
       }
     }
-    // 426: a double-click on any of the four bar buttons folds/unfolds both
+    // 700 / 701: the top bar keeps four buttons, the tag filter sits after the view tabs, the
+    // chain button shows only while a chain runs, hiding the bar lives in the right-click menu,
+    // and the header dividers group content from window controls.
+    {
+      if (!document.getElementById('settings').classList.contains('hidden')) {
+        await click('settings-close');
+        await sleep(50);
+      }
+      const shown = (el) => getComputedStyle(el).display !== 'none';
+      const ids = () => [...document.querySelectorAll('.header-actions > button')].filter(shown).map((b) => b.id);
+      const got = ids().join(',');
+      // Search is hidden below 760px by design.
+      const want = window.innerWidth <= 760 ? 'library-btn,pin-top,gear' : 'library-btn,global-search-btn,pin-top,gear';
+      if (got !== want) out.errors.push('700: the visible top bar buttons are ' + got);
+      const tagBtn = document.getElementById('grid-tag-btn');
+      const viewsNav = document.getElementById('views');
+      if (!tagBtn || !tagBtn.parentElement.classList.contains('brand') || tagBtn.previousElementSibling !== viewsNav) {
+        out.errors.push('700: the tag filter button is not right after the view tabs inside the brand area');
+      }
+      const chainBtn = document.getElementById('chain-btn');
+      if (shown(chainBtn)) out.errors.push('700: the chain button is visible while no chain runs');
+      document.body.classList.add('chain-mode');
+      if (!shown(chainBtn)) out.errors.push('700: the chain button is hidden while a chain runs');
+      document.body.classList.remove('chain-mode');
+      // Hide top bar: right-click on the gear, then the menu row.
+      const tbMenu = document.querySelector('.toolbar-menu');
+      document.getElementById('gear').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 300, clientY: 40 }));
+      await sleep(150);
+      const hideRow = tbMenu && [...tbMenu.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Hide top bar');
+      if (!tbMenu || tbMenu.classList.contains('hidden')) {
+        out.errors.push('700: right-clicking the gear did not open the toolbar menu');
+      } else if (!hideRow) {
+        out.errors.push('700: the toolbar menu has no Hide top bar row');
+      } else {
+        hideRow.click();
+        await sleep(150);
+        if (!document.body.classList.contains('no-header')) out.errors.push('700: Hide top bar did not hide the top bar');
+        if (!tbMenu.classList.contains('hidden')) out.errors.push('700: the toolbar menu stayed open after Hide top bar');
+        await click('show-top');
+      }
+      document.querySelector('.brand').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 120, clientY: 40 }));
+      await sleep(150);
+      if (!tbMenu || tbMenu.classList.contains('hidden')) out.errors.push('700: right-clicking the top bar did not open the toolbar menu');
+      document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      await sleep(100);
+    }
+    // 426: a double-click on any of the three bar buttons folds/unfolds both
     // bars together while barToggleBoth stays on; a single click is untouched
     // either way. A real double-click fires click, click, dblclick -- click()
     // exercises the existing single-bar toggle, the synthetic dblclick layers
@@ -155,8 +191,8 @@ SECTION = """\
       };
       const bothHidden = () => document.body.classList.contains('no-header') && document.body.classList.contains('no-composer');
       const bothShown = () => !document.body.classList.contains('no-header') && !document.body.classList.contains('no-composer');
-      await dbl('hide-top');
-      if (!bothHidden()) out.errors.push('426: double-clicking hide-top did not fold both bars');
+      await dbl('hide-bottom');
+      if (!bothHidden()) out.errors.push('426: double-clicking hide-bottom did not fold both bars');
       await dbl('show-bottom');
       if (!bothShown()) out.errors.push('426: double-clicking show-bottom did not unfold both bars');
       // Switch barToggleBoth off through its real expert switch, same idiom as
@@ -182,15 +218,15 @@ SECTION = """\
         await sleep(200);
         await click('expert-back');
         document.getElementById('settings').classList.add('hidden');
-        await dbl('hide-top');
-        if (document.body.classList.contains('no-composer')) {
+        await dbl('hide-bottom');
+        if (document.body.classList.contains('no-header')) {
           out.errors.push('426: double-click still folded the other bar with the option off');
         }
-        if (!document.body.classList.contains('no-header')) {
+        if (!document.body.classList.contains('no-composer')) {
           out.errors.push('426: the plain single click stopped working with the option off');
         }
         // Undo the single click, then put the option back for the rest of the run.
-        await click('show-top');
+        await click('show-bottom');
         document.getElementById('settings').classList.remove('hidden');
         await click('expert-open');
         const backRow = await expertRow426('folds both bars');

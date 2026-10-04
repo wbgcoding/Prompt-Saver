@@ -469,8 +469,8 @@ fast too often pauses the session with a toast instead of looping.
   tile as the first entry directly, switchable off on its own in the expert
   menu under Chain, alongside the rest of the chain settings, including what goes between two
   chained tiles (a blank line unless changed). A chain stays when you
-  switch to another program; it ends when you click the chain button again or
-  paste with Ctrl+V in the app window.
+  switch to another program. A running chain shows the chain button in the top
+  bar; click it to end the chain. Pasting with Ctrl+V in the app window ends it too.
 - Chain overview: while chaining, a strip above the grid lists the picked
   steps in order, with small marks for the placeholders each step needs and
   the reserved names it fills by itself. A step turns red when nothing
@@ -672,7 +672,8 @@ The delay and the width are adjustable.
 ### Toolbar
 
 Which buttons the header and composer bar show: quick grid-size control,
-the library button, and multiple views.
+the library button, and multiple views. Hide the top bar: right-click the gear
+or the top bar.
 
 ## System and data
 
@@ -1361,8 +1362,8 @@ Kachel nur ihren Menüknopf.
 **Kopieren**: Verketten (mehrere verschiedene Kacheln als ein Text, anders als
 Rotation oben; auch direkt über Kette hier starten: Rechtsklick auf eine Textkachel, einzeln
 abschaltbar unter Kette im Expertenmenü). Eine Kette bleibt beim Wechsel in ein
-anderes Programm bestehen und endet erst durch erneutes Klicken auf den
-Ketten-Button oder Strg+V im App-Fenster. Was zwischen zwei verketteten
+anderes Programm bestehen. Solange eine Kette läuft, steht der Kettenknopf
+oben; ein Klick beendet sie. Auch Strg+V im App-Fenster beendet sie. Was zwischen zwei verketteten
 Kacheln steht, legt das Expertenmenü fest (ab Werk eine Leerzeile). Beim Verketten zeigt
 eine Leiste über dem Raster die gewählten
 Schritte der Reihe nach, mit Marken für die Platzhalter, die jeder Schritt
@@ -1472,7 +1473,8 @@ zeigen außerdem die Länge eines Videos auf seinem Vorschaubild sowie Auflösun
 und Dateigröße in der Kurzhilfe; ältere Anhänge holen das im Hintergrund nach,
 sobald sie zum ersten Mal angezeigt werden. Das Hauptraster bleibt unverändert.
 
-**Werkzeugleiste**: welche Buttons Kopf- und Composer-Leiste zeigen.
+**Werkzeugleiste**: welche Buttons Kopf- und Composer-Leiste zeigen. Obere Leiste
+ausblenden: Rechtsklick auf Zahnrad oder Kopfzeile.
 
 **Datenschutz**: Bildschirmaufnahme-Ausschluss (an; "Screenshots von Prompt
 Saver erlauben" gilt für jedes Aufnahmeprogramm, auch das eigene, nur die

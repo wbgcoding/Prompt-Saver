@@ -139,9 +139,10 @@ def run(browser, tmp):
     failed += ar_probe('f11', 'folder popover member: a click in chain mode picks the prompt for the chain', 'index', '1000x780', '', r"""
     await bootReady();
     const click = async (el) => { const [x, y] = centre(el); ptr('pointerdown', x, y, el); ptr('pointerup', x, y, window); await sleep(300); };
-    document.getElementById('chain-btn').click();
-    await sleep(200);
-    await click(tileEl('p0'));
+    // The chain starts from the tile menu of p0, which also picks p0 as the first step.
+    tileEl('p0').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 60, clientY: 60 }));
+    document.querySelector('#ctx [data-act="chain"]').click();
+    await sleep(300);
     const copies = () => callsFor('copy_text').map((a) => a && a.text);
     if (!copies().some((x) => /number 1[.]/.test(x || ''))) errs.push('563-11: fixture: the chain pick of p0 did not copy its text, got ' + JSON.stringify(copies()));
     await click(document.querySelector('#grid .folder-tile'));

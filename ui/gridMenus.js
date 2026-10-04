@@ -14,6 +14,7 @@ import { duplicatePrompt, editPrompt } from "./editor.js";
 import { activateTile, copyFormattedPrompt } from "./copyFlow.js";
 import { recordToolUsage } from "./management.js";
 import { prettyAccel, promptHotkeysOn, toggleRotateAutoDirect } from "./hotkeys.js";
+import { setBars } from "./windowChrome.js";
 
 export let ctxId = null;
 
@@ -256,6 +257,27 @@ export function buildToolbarMenu() {
     });
     toolbarMenu.appendChild(b);
   }
+  // Hiding the top bar is not a header button any more: it lives here, and the
+  // bar comes back through the small restore button.
+  if (flag("barToggles")) {
+    const sep = document.createElement("div");
+    sep.className = "ctx-sep";
+    sep.setAttribute("role", "separator");
+    const hideRow = document.createElement("button");
+    hideRow.type = "button";
+    hideRow.className = "toolbar-item";
+    hideRow.setAttribute("role", "menuitem");
+    const slot = document.createElement("span");
+    slot.className = "tb-check";
+    const label = document.createElement("span");
+    label.textContent = t("hideTopBar");
+    hideRow.append(slot, label);
+    hideRow.addEventListener("click", () => {
+      closeToolbarMenu();
+      setBars(false, settings.show_composer !== false);
+    });
+    toolbarMenu.append(sep, hideRow);
+  }
 }
 export function openToolbarMenu(x, y) {
   buildToolbarMenu();
@@ -355,12 +377,15 @@ export function bindGridMenus({ openExternalFileInEditor }) {
     }
   });
 
-  // Right-click anywhere in the header actions → toggle which top-bar tools show.
-  document.querySelector(".header-actions")?.addEventListener("contextmenu", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    openToolbarMenu(e.clientX, e.clientY);
-  });
+  // Right-click anywhere in the header actions, on the gear or on the brand area →
+  // toggle which top-bar tools show, or hide the top bar.
+  for (const el of [document.querySelector(".header-actions"), $("gear"), document.querySelector(".brand")]) {
+    el?.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openToolbarMenu(e.clientX, e.clientY);
+    });
+  }
 }
 
 export function wireGridMenus() {

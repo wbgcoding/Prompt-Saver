@@ -56,12 +56,12 @@ export function setBars(header, composer) {
   applyBars();
 }
 
-// Mentions the double-click shortcut in the four bar buttons' own tooltip
+// Mentions the double-click shortcut in the three bar buttons' own tooltip
 // while barToggleBoth is on, reusing the expert-menu row's own explanation
 // text instead of a second translated sentence.
 export function applyBarToggleTips() {
   const hint = flag("barToggleBoth") ? ` ${t("tipBarToggleBoth")}` : "";
-  for (const id of ["hide-top", "hide-bottom"]) $(id).title = t("hideBar") + hint;
+  $("hide-bottom").title = t("hideBar") + hint;
   for (const id of ["show-top", "show-bottom"]) $(id).title = t("showBar") + hint;
 }
 
@@ -490,18 +490,16 @@ export function closeShortcutsModal() {
 
 export function bindWindowChrome() {
   // Show/hide the top and bottom bars.
-  $("hide-top").addEventListener("click", () => setBars(false, settings.show_composer !== false));
   $("show-top").addEventListener("click", () => setBars(true, settings.show_composer !== false));
   $("hide-bottom").addEventListener("click", () => setBars(settings.show_header !== false, false));
   $("show-bottom").addEventListener("click", () => setBars(settings.show_header !== false, true));
 
-  // A double-click on any one of the four buttons folds or unfolds both bars
+  // A double-click on any one of the three buttons folds or unfolds both bars
   // together, target state taken from the clicked button; the single click
   // that already fired on the way to the double-click is left as it landed.
   const bindBarToggleDbl = (id, target) => $(id).addEventListener("dblclick", () => {
     if (flag("barToggleBoth")) setBars(target, target);
   });
-  bindBarToggleDbl("hide-top", false);
   bindBarToggleDbl("show-top", true);
   bindBarToggleDbl("hide-bottom", false);
   bindBarToggleDbl("show-bottom", true);
