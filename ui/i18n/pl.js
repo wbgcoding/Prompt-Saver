@@ -1504,7 +1504,6 @@ export default {
     sourceElsewhere: "Gdzie indziej",
     filterSourceLabel: "Źródło",
     clipSave: "Zapisz jako prompt",
-    clipCopy: "Kopiuj",
     clipDismiss: "Odrzuć",
     statAvg: "Ø kopii / prompt",
     statChars: "Liczba znaków",

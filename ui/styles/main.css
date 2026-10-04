@@ -3695,6 +3695,15 @@ input[type="password"]::-ms-clear { display: none; }
 }
 .clip-actions { display: flex; gap: 6px; justify-content: flex-end; }
 .clip-actions .ghost-btn { padding: 3px 10px; font-size: 12px; }
+/* An entry copied in another app, inside the copy history: the row copies, two icons sit
+   beside the text and look like the edit icon of the app's own history rows. */
+.clip-row.journal-clip { flex-direction: row; align-items: center; gap: 10px; cursor: pointer; }
+.clip-row.journal-clip:hover { border-color: var(--accent); }
+.clip-row.journal-clip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.clip-row.journal-clip .clip-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.clip-row.journal-clip .clip-actions { flex: 0 0 auto; align-items: center; }
+.clip-row.journal-clip .clip-actions .icon-btn { border: 1px solid var(--border); border-radius: 8px; }
+.clip-row.journal-clip .clip-actions .icon-btn:hover { color: var(--accent); border-color: var(--accent); }
 
 /* OCR language pack management dialog (#ocr-langs-modal) -- rows reuse the
    .clip-row/.clip-list list chrome above, laid out as a horizontal strip: the

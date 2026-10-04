@@ -1,5 +1,5 @@
 // The copy history and the clipboard inbox.
-import { $, assignLibraryTab, assignSettings, debounced, errToast, flag, ICON_EDIT, ICON_TRASH, invoke, journalThumbCache, LANG, libraryEl, libraryTab, listen, makeKeyboardActivatable, optFlag, prompts, putIcon, settings, t, toast, undoToast, val } from "./core.js";
+import { $, assignLibraryTab, assignSettings, debounced, errToast, flag, ICON_ADD_SQUARE, ICON_EDIT, ICON_TRASH, invoke, journalThumbCache, LANG, libraryEl, libraryTab, listen, makeKeyboardActivatable, optFlag, prompts, putIcon, settings, t, toast, undoToast, val } from "./core.js";
 import { confirmDialog } from "./dialog.js";
 import { attachSelectPicker } from "./selectpop.js";
 import { _journalObs, assignActiveVidObs, assignJournalObs, buildColorFilter, copyResolved, hideLibrary, lastEdited, libLabel, libSelectMode, makeVideoObserver, maybeBackfillMediaMeta, mediaThumb, mediaTipLine, paintTypeChips, promptType, renderLibrary, setActiveFilter, setLibSelectMode, tagMatches, thumbEl, toastCopied, toggleTypeFilter, typeAllowed, typeFilterOf, usedColors } from "./library.js";
@@ -245,11 +245,15 @@ export function renderJournalTagFilter() {
   renderTagBar(bar, journalTags, renderJournal);
 }
 
-// One entry copied in another app: time, a two-line text preview and the three
-// actions (save as a prompt, copy again, dismiss). Shown inside the copy history.
+// One entry copied in another app: time, a two-line text preview and two icons (save as a
+// prompt, dismiss). The row itself copies the text again, like a row of the app's copies.
+// Shown inside the copy history.
 export function journalClipRow(it) {
   const row = document.createElement("div");
-  row.className = "clip-row";
+  row.className = "clip-row journal-clip";
+  row.title = t("copy");
+  const main = document.createElement("div");
+  main.className = "clip-main";
   const time = document.createElement("span");
   time.className = "clip-time";
   time.textContent = fmtWhen(it.ts);
@@ -257,22 +261,33 @@ export function journalClipRow(it) {
   const prev = document.createElement("div");
   prev.className = "clip-preview";
   prev.textContent = it.text;
+  main.append(time, prev);
+  row.addEventListener("click", () => { invoke("copy_text", { text: it.text }).then(() => toast(t("copied"))).catch((e) => errToast(e)); });
+  makeKeyboardActivatable(row);
   const actions = document.createElement("div");
   actions.className = "clip-actions";
-  const save = document.createElement("button");
-  save.type = "button"; save.className = "ghost-btn"; save.textContent = t("clipSave");
-  save.addEventListener("click", () => {
-    hideLibrary();
-    openModal({ mode: "create", text: it.text, title: t("nameModalTitle") });
-  });
-  const copy = document.createElement("button");
-  copy.type = "button"; copy.className = "ghost-btn"; copy.textContent = t("clipCopy");
-  copy.addEventListener("click", () => { invoke("copy_text", { text: it.text }).then(() => toast(t("copied"))).catch((e) => errToast(e)); });
-  const dismiss = document.createElement("button");
-  dismiss.type = "button"; dismiss.className = "ghost-btn"; dismiss.textContent = t("clipDismiss");
-  dismiss.addEventListener("click", async () => { await invoke("clip_inbox_dismiss", { id: it.id }).catch((e) => errToast(e)); refreshClipInbox(); });
-  actions.append(save, copy, dismiss);
-  row.append(time, prev, actions);
+  const icon = (svg, label, onClick) => {
+    const b = document.createElement("span");
+    b.className = "icon-btn";
+    b.title = label;
+    b.setAttribute("aria-label", label);
+    putIcon(b, svg);
+    b.addEventListener("pointerdown", (e) => e.stopPropagation());
+    b.addEventListener("click", (e) => { e.stopPropagation(); onClick(); });
+    makeKeyboardActivatable(b);
+    return b;
+  };
+  actions.append(
+    icon(ICON_ADD_SQUARE, t("clipSave"), () => {
+      hideLibrary();
+      openModal({ mode: "create", text: it.text, title: t("nameModalTitle") });
+    }),
+    icon(ICON_TRASH, t("clipDismiss"), async () => {
+      await invoke("clip_inbox_dismiss", { id: it.id }).catch((e) => errToast(e));
+      refreshClipInbox();
+    }),
+  );
+  row.append(main, actions);
   return row;
 }
 

@@ -1511,7 +1511,6 @@ export default {
     sourceElsewhere: "Anderswo",
     filterSourceLabel: "Quelle",
     clipSave: "Als Prompt speichern",
-    clipCopy: "Kopieren",
     clipDismiss: "Verwerfen",
     statAvg: "Ø Kopien / Prompt",
     statChars: "Zeichen gesamt",

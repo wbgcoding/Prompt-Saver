@@ -1504,7 +1504,6 @@ export default {
     sourceElsewhere: "Elders",
     filterSourceLabel: "Bron",
     clipSave: "Opslaan als prompt",
-    clipCopy: "Kopiëren",
     clipDismiss: "Negeren",
     statAvg: "Ø kopieën / prompt",
     statChars: "Totaal aantal tekens",

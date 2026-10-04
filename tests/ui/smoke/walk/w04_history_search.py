@@ -101,9 +101,28 @@ SECTION = """\
         await sleep(150);
         if (clipRows().length !== 2) out.errors.push('434: the Elsewhere filter lists ' + clipRows().length + ' rows instead of 2');
         if (document.querySelector('#journal-body .journal-item')) out.errors.push('434: the Elsewhere filter still lists copies made in the app');
+        // 723: an entry copied elsewhere has two icons and no text buttons; the row copies.
+        {
+          const r0 = clipRows()[0];
+          if (!r0) {
+            out.errors.push('723: no elsewhere row to inspect');
+          } else {
+            if (r0.querySelectorAll('.ghost-btn').length !== 0 || r0.querySelectorAll('.icon-btn').length !== 2) {
+              out.errors.push('723: an elsewhere row has ' + r0.querySelectorAll('.ghost-btn').length + ' text buttons and ' + r0.querySelectorAll('.icon-btn').length + ' icons instead of 0 and 2');
+            }
+            if (r0.tabIndex !== 0) out.errors.push('723: an elsewhere row cannot be reached with the keyboard');
+            for (const ic of r0.querySelectorAll('.icon-btn')) {
+              if (!ic.title || !ic.getAttribute('aria-label')) out.errors.push('723: an elsewhere icon has no title or accessible name');
+            }
+            window.__SMOKE_ARGS__ = [];
+            r0.click();
+            await sleep(150);
+            if (!window.__SMOKE_ARGS__.some(([cmd]) => cmd === 'copy_text')) out.errors.push('723: clicking an elsewhere row did not copy it');
+          }
+        }
         // Dismiss removes one entry.
         window.__SMOKE_ARGS__ = [];
-        const dismissBtn = clipRows()[0]?.querySelector('.clip-actions button:last-child');
+        const dismissBtn = clipRows()[0]?.querySelector('.clip-actions .icon-btn:last-child');
         if (!dismissBtn) {
           out.errors.push('434: an entry copied elsewhere has no dismiss button');
         } else {

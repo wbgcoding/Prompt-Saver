@@ -1504,7 +1504,6 @@ export default {
     sourceElsewhere: "În altă parte",
     filterSourceLabel: "Sursă",
     clipSave: "Salvează ca prompt",
-    clipCopy: "Copiază",
     clipDismiss: "Respinge",
     statAvg: "Ø copii / prompt",
     statChars: "Total caractere",

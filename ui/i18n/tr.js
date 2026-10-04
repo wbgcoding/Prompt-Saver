@@ -1504,7 +1504,6 @@ export default {
     sourceElsewhere: "Başka yerde",
     filterSourceLabel: "Kaynak",
     clipSave: "İstem olarak kaydet",
-    clipCopy: "Kopyala",
     clipDismiss: "Yoksay",
     statAvg: "Ø kopya / istem",
     statChars: "Toplam karakter",

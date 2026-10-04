@@ -177,6 +177,8 @@ export const ICON_PICKER =
   '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="17.6" cy="6.4" r="3.9" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M16.4 9.9 8.2 18.1 3.6 19.6 5.1 15 13.3 6.8Z"/></svg>';
 export const ICON_OCR =
   '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M8 9h8M8 12h8M8 15h5"/></svg>';
+export const ICON_ADD_SQUARE =
+  '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 8.5v7M8.5 12h7"/></svg>';
 export const ICON_TRASH =
   '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M9 7V5h6v2m-8 0 1 13h8l1-13M10 11v6M14 11v6"/></svg>';
 // The original path (M8 7 3 12l5 5M3 12h11a5 5 0 0 1 0 10h-4) was not

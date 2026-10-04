@@ -1504,7 +1504,6 @@ export default {
     sourceElsewhere: "その他",
     filterSourceLabel: "コピー元",
     clipSave: "プロンプトとして保存",
-    clipCopy: "コピー",
     clipDismiss: "非表示",
     statAvg: "平均コピー数/プロンプト",
     statChars: "総文字数",

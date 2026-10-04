@@ -1504,7 +1504,6 @@ export default {
     sourceElsewhere: "其他位置",
     filterSourceLabel: "来源",
     clipSave: "另存为提示词",
-    clipCopy: "复制",
     clipDismiss: "忽略",
     statAvg: "Ø 复制/提示词",
     statChars: "总字符数",

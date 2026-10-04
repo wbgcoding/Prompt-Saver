@@ -1792,6 +1792,7 @@ the video editor and the introduction tour ship on).
 - **Deleting copies from other apps out of the backups moved into the clear dialog.** The extra button is gone. Clearing the copy history while copies from other apps are listed now offers a box in the confirmation to remove them from every backup too; it starts unticked and, if ticked, cannot be undone. With the confirmation switched off, backups are never touched.
 - **The other-apps switch says its state.** The power button in the copy history now reads "Other apps: on" or "Other apps: off" next to the icon.
 - **Plain times in the copy history.** Entries copied today read "5 minutes ago" or "2 hours ago"; older ones keep the short date and time, and hovering shows the full stamp. Copies from other apps use the same wording.
+- **Copies from other apps use icons.** In the copy history such an entry copies when you click it, and carries two icons, save as a prompt and dismiss, in place of the three text buttons.
 
 ## 2.6.3 (2026-07-26)
 
