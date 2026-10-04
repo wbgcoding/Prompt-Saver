@@ -1,7 +1,5 @@
 import { flag, invoke, LANG, settings, t, toast, txt } from "./core.js";
-
-let activeThemeVars; // linked from main.js
-export function linkPromptVars(fns) { ({ activeThemeVars } = fns); }
+import { activeThemeVars } from "./theme.js";
 
 // ---- Prompt variables ({#{placeholder}#}) ----
 // The {#{ ... }#} fence is deliberately uncommon so a literal "{{" pasted from a

@@ -30,7 +30,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 UI = REPO / "ui"
 
-IDENT = re.compile(r"(?<![\w$.])([A-Za-z_$][\w$]*)(?![\w$])")
+IDENT = re.compile(r"(?:(?<=\.\.\.)|(?<![\w$.]))([A-Za-z_$][\w$]*)(?![\w$])")
 IMPORT_RE = re.compile(r'^import\s+(?P<what>[^;]*?)\s+from\s+"(?P<src>[^"]+)";?\s*$', re.M)
 DECL_FN = re.compile(r"(?:export\s+)?(?:async\s+)?(?:function\s*\*?|class)\s+([A-Za-z_$][\w$]*)")
 DECL_VAR = re.compile(r"(?:export\s+)?(const|let|var)\s+")
