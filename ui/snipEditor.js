@@ -2,18 +2,13 @@ import { attachSelectPicker } from "./selectpop.js";
 import { makeHoldOrTapToggle, numberField, trapTabWithin } from "./floatShared.js";
 import { placePopover, placePopoverAt } from "./popover.js";
 import { snapMove } from "./snap.js";
-import { colorPop, drag, errToast, flag, NUM_FIELD_BIG_STEP, openColorPop, t, toast, txt, val, withShortcut } from "./core.js";
+import { $, colorPop, COLORS, drag, errToast, flag, getCurrentWindow, invoke, NUM_FIELD_BIG_STEP, openColorPop, ResizeDirection, settings, t, toast, txt, val, withShortcut } from "./core.js";
 import { closeShortcutsModal, openShortcutsModal } from "./windowChrome.js";
 import { EXPERT_DROPDOWNS } from "./expertMenu.js";
 import { recordToolUsage } from "./management.js";
 import { buildSwatches } from "./editor.js";
 
-const { invoke } = window.__TAURI__.core;
-const { getCurrentWindow, ResizeDirection } = window.__TAURI__.window;
-const $ = (id) => document.getElementById(id);
-
-export function initSnipEditor(host) {
-  const { EXPERT_DROPDOWNS, NUM_FIELD_BIG_STEP, buildSwatches, closeShortcutsModal, colorPop, errToast, flag, openColorPop, openShortcutsModal, recordToolUsage, t, toast, txt, val, withShortcut } = host;
+export function initSnipEditor() {
   // ==== 117/118: screenshot editor ====
   // Opens right after a capture, before #snip-modal. Pure frontend: it receives a
   // data URL and hands back an edited one; everything downstream of #snip-modal is
@@ -39,14 +34,14 @@ export function initSnipEditor(host) {
     entry[field] = Math.round(Math.min(lim[1], Math.max(lim[0], n)) * 100) / 100;
     all[tool] = entry;
     const json = JSON.stringify(all);
-    host.settings.ui_texts = { ...(host.settings.ui_texts || {}), snipToolSizes: json };
+    settings.ui_texts = { ...(settings.ui_texts || {}), snipToolSizes: json };
     clearTimeout(snipSizesTimer);
     snipSizesTimer = setTimeout(() => {
       invoke("set_ui_text", { key: "snipToolSizes", value: json }).catch(() => {});
     }, 400);
   }
   const SNIP_EDIT_UNDO_MAX = () => val("snipEditUndoMax");
-  const SNIP_SCALE_FILTER = () => host.settings.ui_texts?.snipScaleFilter || "high";
+  const SNIP_SCALE_FILTER = () => settings.ui_texts?.snipScaleFilter || "high";
   // Refuse a target this large outright rather than risk an out-of-memory
   // canvas allocation -- comfortably above any real screen resolution.
   const SNIP_SCALE_MAX_AREA = 80_000_000;
@@ -254,7 +249,7 @@ export function initSnipEditor(host) {
         return Number.isFinite(v) && v >= lim[0] && v <= lim[1] ? v : def;
       };
       SE.perTool[tool] = {
-        color: txt("snipDefaultColor") || host.COLORS[1] || "#ef4444",
+        color: txt("snipDefaultColor") || COLORS[1] || "#ef4444",
         width: pick("width", widths[1]),
         filled: false,
         fontPx: pick("fontPx", SNIP_DEFAULT_SIZES.textPx),
