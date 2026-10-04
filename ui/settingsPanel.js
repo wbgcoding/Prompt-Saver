@@ -13,9 +13,10 @@ import { fitAllTiles, fitCache } from "./tiles.js";
 import { prettyAccel } from "./hotkeys.js";
 import { applyFlags, applyValues, refreshSettingsLocked, showExpertPage } from "./expertMenu.js";
 import { maybeDupImportToast } from "./management.js";
+import { openBackups } from "./backups.js";
 
-let openBackups, withDialog; // linked from main.js
-export function linkSettingsPanel(fns) { ({ openBackups, withDialog } = fns); }
+let withDialog; // linked from main.js
+export function linkSettingsPanel(fns) { ({ withDialog } = fns); }
 
 export let deleteAllTimer = null;
 export let resetSettingsTimer = null;

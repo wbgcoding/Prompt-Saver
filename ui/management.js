@@ -11,9 +11,10 @@ import { assignLibQuery, lastEdited, libLabel, libQuery, refreshImageHits, rende
 import { renderGrid, renderViews } from "./views.js";
 import { confirmDialog } from "./dialog.js";
 import { fmtBytes } from "./floatShared.js";
+import { saveBackupSetting, saveUiState } from "./backups.js";
 
-let editPrompt, renderDiffInto, saveBackupSetting, saveUiState, splitDiffSides; // linked from main.js
-export function linkManagement(fns) { ({ editPrompt, renderDiffInto, saveBackupSetting, saveUiState, splitDiffSides } = fns); }
+let editPrompt, renderDiffInto, splitDiffSides; // linked from main.js
+export function linkManagement(fns) { ({ editPrompt, renderDiffInto, splitDiffSides } = fns); }
 
 // ---- Usage statistics dashboard (opened from the expert menu) ----
 export function statSection(text) {
