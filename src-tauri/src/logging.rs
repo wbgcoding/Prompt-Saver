@@ -419,7 +419,7 @@ pub(crate) fn scrub_error_log_text(s: &str) -> String {
 }
 
 // Every value `origin` is actually allowed to carry: every overlay/modal id
-// `currentErrorOrigin()` (main.js) can read off the open dialog, plus the two
+// `currentErrorOrigin()` (core.js) can read off the open dialog, plus the two
 // non-modal screens it falls back to and the two backend-only origins
 // (`remoteApi`, the remote-access receiver; `test`, used only by this file's
 // own tests). `log_error` is a real IPC command, so its `origin` argument is

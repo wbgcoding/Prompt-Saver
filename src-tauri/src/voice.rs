@@ -81,7 +81,7 @@ pub(super) fn should_stop(idle: Duration, elapsed: Duration, auto_stop_sec: u32,
     None
 }
 
-// The frontend's own slider caps (voiceMaxMin/voiceAutoStopSec, ui/main.js
+// The frontend's own slider caps (voiceMaxMin/voiceAutoStopSec, ui/expertConfig.js
 // EXPERT_VALUES) are UI convenience only -- these are the real limits, so a
 // stale/tampered/future caller cannot bypass them. Extracted as a pure
 // function so the bounds themselves are unit-tested, not just trusted.

@@ -1,6 +1,6 @@
 // Filename rule for the video export panel's "File name" field, applied to
 // the stem only -- the format's own extension is appended separately by
-// video.js. The Rust side (export_file_name_is_valid in lib.rs) re-checks the
+// video.js. The Rust side (export_file_name_is_valid in video_editor.rs) re-checks the
 // exact same rule against whatever dest_path actually arrives, since the
 // frontend check only ever guards the live field, not the IPC call itself.
 // Kept in its own tiny module so the two can be read side by side without

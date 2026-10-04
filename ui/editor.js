@@ -1038,7 +1038,7 @@ export async function loadFilePreview(path, page = 0) {
 }
 
 // The four text attachment kinds a plain-text preview is offered for,
-// alongside the image/PDF preview above. Matches TEXT_PREVIEW_EXT in lib.rs
+// alongside the image/PDF preview above. Matches TEXT_PREVIEW_EXT in images.rs
 // -- one list of kinds, kept in agreement on both sides by hand since the two
 // cannot share a source at build time.
 export const TEXT_PREVIEW_EXT = /\.(txt|md|json|csv)$/i;

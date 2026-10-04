@@ -13,7 +13,7 @@ import { buildSwatches } from "./editor.js";
 export const tagsOn = () => flag("tags");
 export const tagKey = (name) => String(name ?? "").trim().toLowerCase();
 export const tagColor = (name) => settings.tag_colors?.[tagKey(name)] || "";
-export const TAG_MAX_LEN = 60; // keep in sync with MAX_TAG_LEN in lib.rs
+export const TAG_MAX_LEN = 60; // keep in sync with MAX_TAG_LEN in views.rs
 
 // Every tag in the library, first-seen casing, sorted for a stable filter row.
 // tagSort switches alphabetical (default) for usage-count order, ties broken

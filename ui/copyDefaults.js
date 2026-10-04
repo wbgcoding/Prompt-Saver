@@ -1,4 +1,4 @@
-// Single source of truth for the copy-behaviour defaults main.js's expert menu,
+// Single source of truth for the copy-behaviour defaults the expert menu,
 // the floating pill window and the folder window all need before settings load.
 export const COOLDOWN_MS_DEFAULT = 2000;
 export const AUTO_PASTE_DELAY_MS_DEFAULT = 80;

@@ -140,7 +140,7 @@ export function fmtSizeCompact(bytes) {
 
 // Turns an estimate() result into the localized display string, or "" once
 // there is nothing worth showing. `t` is the caller's own translation lookup
-// (main.js and video.js each have their own, same one-argument shape).
+// (the main window and video.js each have their own, same one-argument shape).
 export function formatEta(result, t) {
   if (!result) return "";
   if (result.key === "etaOverHour") return t("etaOverHour");
@@ -162,7 +162,7 @@ export function a11yProgressText(t, pct, estimate) {
 // Turns a rejected export_video/convert_recording call into what a person
 // should actually see. The backend wraps a classified ffmpeg (or ffmpeg-
 // adjacent Windows IO) failure as `{"key":..., "code":..., "raw":...}` JSON
-// (ffmpeg_error_json in lib.rs) -- exactly one place builds that shape, so
+// (ffmpeg_error_json in ffmpeg.rs) -- exactly one place builds that shape, so
 // this is the one place that reads it back, rather than each caller
 // reimplementing the same JSON.parse/fallback dance. Anything that is not
 // that JSON shape (the plain "cancelled" and "ffmpeg-missing" sentinels, or

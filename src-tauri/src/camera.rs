@@ -63,7 +63,7 @@ pub fn sidecar_path(output_path: &Path) -> PathBuf {
     output_path.with_extension("cam.json")
 }
 
-// The mirror of lib.rs's own mic_sidecar_video_path, for the same reason: a
+// The mirror of rec_engine.rs's own mic_sidecar_video_path, for the same reason: a
 // `.cam.json` sitting in the recordings folder next to a video the library
 // still references must count as referenced too, or the background sweep
 // treats it as an ownerless orphan and removes it after an hour -- even

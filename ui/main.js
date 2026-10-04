@@ -269,7 +269,7 @@ function bind() {
       toast(t("persistFailed"));
     }
   });
-  // Every write path lib.rs gates on the data-folder lock (save_prompts,
+  // Every write path the backend gates on the data-folder lock (save_prompts,
   // save_prompts_and_trash, save_trash, write_settings_now) emits this same
   // event on refusal -- one toast, the same wording every time, instead of
   // each action failing quietly in its own different way.
@@ -395,7 +395,7 @@ async function warnSettingsWriteFailed() {
 // retry next launch since tourSeen is only ever written by the tour itself. A
 // missing-WebView2 message cannot race this at all: that one is native and shown,
 // if ever, before the WebView2 runtime (and therefore this whole JS module)
-// exists (see ensure_webview2 in lib.rs, the one allowed exception to routing every
+// exists (see ensure_webview2 in webview2.rs, the one allowed exception to routing every
 // user-facing dialog through the themed confirmDialog()), so there is nothing left
 // to check for it here by the time init() runs.
 async function maybeOpenFirstRunTour(sealWarned) {

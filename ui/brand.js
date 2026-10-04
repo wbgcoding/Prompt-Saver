@@ -6,7 +6,7 @@
 export const APP_NAME = "Prompt Saver";
 
 // Features this brand ships differently from the app's own default. shipsOn() in
-// main.js reads it; a value the user has stored always wins over it.
+// core.js reads it; a value the user has stored always wins over it.
 export const FLAG_DEFAULTS = {};
 
 // Fork vocabulary: per language, what to swap in every translated string before it

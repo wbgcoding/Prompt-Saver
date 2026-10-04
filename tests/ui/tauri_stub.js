@@ -555,7 +555,7 @@ const RESULTS = {
   // other export_video call in the suite.
   // 399: a destination path containing "FAILCLASSIFY" simulates a real
   // classified ffmpeg failure -- the exact JSON shape ffmpeg_error_json()
-  // produces in lib.rs, so the probe can check the frontend never shows this
+  // produces in ffmpeg.rs, so the probe can check the frontend never shows this
   // raw text as the headline. Rejecting with a plain string (not an Error
   // object) matches what a real Tauri Result<_, String> command actually
   // hands back to JS.
@@ -594,7 +594,7 @@ const RESULTS = {
   // A number back (the retention hours), not a bare true/false, since
   // discard now moves the file into "verworfen" instead of deleting it.
   discard_recording_file: (a) => { window.__REC_DISCARDED__ = a.path; return 24; },
-  // P100: the probe reads this back instead of a real backend hand-off to main.js.
+  // P100: the probe reads this back instead of a real backend hand-off to the main window.
   launcher_select: (a) => { window.__LAUNCHER_SELECTED__ = a && a.id; return null; },
   launcher_close: () => { window.__LAUNCHER_CLOSED__ = true; return null; },
   // The custom tray window's own content -- a small fixed fixture covering all
@@ -672,9 +672,9 @@ const RESULTS = {
   current_data_dir_sync_hint: () => window.__DATA_DIR_SYNC_HINT__ || null,
   path_sync_folder_hint: () => window.__DATA_DIR_SYNC_HINT__ || null,
   // 122: a probe sets window.__OCR_CAPS_TEST__ before opening #ocr-langs-modal.
-  // Read fresh on every call (unlike main.js's own `const { invoke } = ...`
+  // Read fresh on every call (unlike core.js's own `const { invoke } = ...`
   // capture at module load), so a probe can set it any time before triggering
-  // the actual invoke call, no matter how long main.js has already been running.
+  // the actual invoke call, no matter how long the main window has already been running.
   ocr_capabilities: () => {
     // A probe sets window.__OCR_CAPS_ELEV__ to play the Windows builds that
     // refuse even the read-only listing to a normal user. 177: the real
@@ -921,7 +921,7 @@ const RESULTS = {
   // 451: a small stand-in for the real, build-time generated list (src-tauri/build.rs) --
   // one crate resolved to a bundled license text, one manual entry with a note and a
   // text, and one with a note but no text (a public-domain style entry) so the "never a
-  // blank panel" fallback in main.js has something to cover.
+  // blank panel" fallback in the main window has something to cover.
   third_party_notices: () => JSON.stringify({
     generatedFromCrateCount: 1,
     entries: [
@@ -1474,7 +1474,7 @@ const RESULTS = {
   sweep_discarded_recordings_now: () => [0, 0],
 };
 
-// What main.js sends to vars.html: one free-text row with the remember switch and
+// What the main window sends to vars.html: one free-text row with the remember switch and
 // one choice row, so the small window renders both shapes.
 const VAR_REQUEST = {
   theme: "dark",

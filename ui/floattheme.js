@@ -25,8 +25,8 @@ let lastVars = null;
 let applied = false; // true once applyFloatTheme has run at least once
 
 // Relative luminance -> the ink that stays readable on `hex`. Duplicated from
-// main.js's own readableInk rather than shared: this module ships to every
-// satellite window, none of which load main.js.
+// core.js's own readableInk rather than shared: this module ships to every
+// satellite window, none of which load core.js.
 function hexLuminance(hex) {
   const n = parseInt(hex.slice(1), 16);
   const lin = (c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);

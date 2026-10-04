@@ -312,7 +312,7 @@ pub(crate) fn zoom_min_size(factor: f64, cap: (u32, u32)) -> (u32, u32) {
 // Native zoom keeps event coordinates and getBoundingClientRect in one coordinate
 // space, so (unlike a CSS `zoom` on <body>) it never desyncs popup positioning
 // or grid hit-testing. Clamped to the slider's 75: 300% range (the slider,
-// ui/main.js EXPERT_TABS uiScale, has always had a 75% floor).
+// ui/expertConfig.js EXPERT_VALUES uiScale, has always had a 75% floor).
 #[tauri::command]
 pub(crate) fn set_ui_zoom(app: AppHandle, factor: f64) -> Result<(), String> {
     let f = factor.clamp(0.75, 3.0);

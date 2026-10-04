@@ -1,5 +1,5 @@
 // Every user-visible string of the bundled sample library, one row per UI
-// language. Ids, structure and attachments live in lib.rs and never change
+// language. Ids, structure and attachments live in demo.rs and never change
 // with the language; only the words here do.
 
 pub struct DemoText {

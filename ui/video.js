@@ -203,7 +203,7 @@ function t(key) {
   return TX ? TX(key) : key;
 }
 
-// Same binding trick main.js uses: shortcuts.js has no i18n state of its own,
+// Same binding trick core.js uses: shortcuts.js has no i18n state of its own,
 // so every call here is closed over this window's own t()/LANG.
 const withShortcut = (el, action) => withShortcutRaw(el, action, t, LANG);
 const shortcutRows = (scope) => rowsForScopeRaw(scope, t, LANG);
@@ -2354,7 +2354,7 @@ function colorRow(current, onPick) {
     wrap.appendChild(btn);
   }
   // The shared custom-colour popup: shows the current colour when it is not
-  // one of the fixed presets above, same swatch pattern main.js's own
+  // one of the fixed presets above, same swatch pattern editor.js's own
   // buildSwatches() uses for tag/tile colours.
   const isCustom = !!current && !OVERLAY_COLORS.some((c) => c.toLowerCase() === String(current).toLowerCase());
   const custom = document.createElement("button");
@@ -4176,7 +4176,7 @@ function resetForNewSource() {
 // the source file's own (size, mtime) as of the load that produced these ops --
 // a changed file never matches, so this can never restore ops drawn against
 // content that is no longer there. The video editor is the only place this
-// applies today: the screenshot editor (see main.js) always opens a fresh
+// applies today: the screenshot editor (see snipEditor.js) always opens a fresh
 // in-memory capture with no file path of its own to key on -- opening an
 // EXISTING file in either editor is a separate, not-yet-built feature that
 // would first give it one, and the Rust side already accepts kind="snip" for

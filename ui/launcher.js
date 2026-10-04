@@ -2,7 +2,7 @@
 // every prompt, Enter/click copies. Picking a result only ever tells the backend
 // which id was chosen (launcher_select); the backend runs the exact same
 // "copy from outside the grid" path the tray menu already uses (fire_tray_copy),
-// so placeholder dialogs, cooldown, chains and recording stay in main.js, not
+// so placeholder dialogs, cooldown, chains and recording stay in the main window, not
 // duplicated here.
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";

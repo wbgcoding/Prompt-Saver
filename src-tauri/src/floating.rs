@@ -965,7 +965,7 @@ pub(crate) async fn toggle_floating(app: AppHandle, state: State<'_, Db>, id: St
         close_floating_window(&app, &id);
         sync_float_windows(&app); // a folder left with one member dissolves
         // The main window keeps its own settings.floating mirror for the tile
-        // context menu's pin/unpin label (see cacheFloatingState in main.js) --
+        // context menu's pin/unpin label (see cacheFloatingState in gridFolders.js) --
         // notify_float_settings deliberately excludes it, so a pill unpinning
         // ITSELF here would otherwise leave that mirror stale until the next
         // full get_state, showing "Remove" on a tile that has no pill anymore.

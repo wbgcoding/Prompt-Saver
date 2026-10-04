@@ -2,7 +2,7 @@
 // OUTSIDE the app (a prompt's global hotkey, a tray quick copy) so nothing but this
 // small window comes forward. It renders the rows the main window asked for and
 // hands the answers straight back; every rule about what a variable MEANS stays in
-// main.js. Esc, the Cancel button and losing focus all mean "cancelled".
+// promptVars.js. Esc, the Cancel button and losing focus all mean "cancelled".
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
 import { compactTexts } from "./i18n.js";

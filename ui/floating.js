@@ -35,8 +35,8 @@ let copySize = 0; // expert copy-text size (0 = auto-fit to the pill)
 let copyFont = ""; // expert copy-text font key ("" = pill font)
 let pFont = ""; // per-prompt overrides ("" / 0 = follow settings)
 let cooldownMs = COOLDOWN_MS_DEFAULT; // re-copy throttle for this pill (expert value)
-let videoControlsOn = true; // gates the hover media bar, mirrors flag("videoControls") in main.js
-let videoAutoplayOn = false; // gates the initial auto-start, mirrors optFlag("videoAutoplay") in main.js
+let videoControlsOn = true; // gates the hover media bar, mirrors flag("videoControls") in core.js
+let videoAutoplayOn = false; // gates the initial auto-start, mirrors optFlag("videoAutoplay") in core.js
 let lastCopyTs = 0;
 // Auto-paste on this pill (autoPaste itself defaults on; the rest default off;
 // a fast second click pastes).
@@ -219,7 +219,7 @@ function applyPrefs(s) {
   applyVideoPrefs(videoEl, s.video_prefs && s.video_prefs[promptId]);
   // Pills used media.js's hardcoded {volume:100, muted:true, looped:true} --
   // the expert videoVolume/videoMuted/videoLoop settings never reached them. Same
-  // defaults main.js's applyValues() pushes for the grid tiles.
+  // defaults applyValues() in expertMenu.js pushes for the grid tiles.
   setMediaDefaults({ volume: Number(s.ui_values?.videoVolume) || 100, muted: s.ui_flags?.videoMuted !== false, looped: s.ui_flags?.videoLoop === true });
   videoAutoplayOn = s.ui_flags?.videoAutoplay === true; // default off, matches optFlag("videoAutoplay")
   videoControlsOn = s.ui_flags?.videoControls !== false; // default on, matches flag("videoControls")
@@ -248,7 +248,7 @@ function applyPrefs(s) {
   apDblMs = Number.isFinite(adb) ? adb : DBL_CLICK_MS_DEFAULT;
   dragOutOn = s.ui_flags?.dragOut === true;
   dragOutMod = DRAG_OUT_MODS[s.ui_texts?.dragOutModifier] || "ctrlKey";
-  foldersOn = s.ui_flags?.pillFolders !== false; // default ON, mirrors folders_on() in lib.rs
+  foldersOn = s.ui_flags?.pillFolders !== false; // default ON, mirrors folders_on() in floating.rs
   // rotateBadge is a sub-toggle of rotatingPrompts: the parent off must freeze
   // the whole feature, not just the badge (gating rule: nothing dependent stays
   // visible/active with its parent off).
@@ -336,7 +336,7 @@ const videoEl = document.getElementById("video");
 const imgEl = document.getElementById("img");
 // floating.html hardcodes the autoplay attribute -- strip it here, before any
 // source is ever assigned, so flag("videoAutoplay")=off
-// is honoured the same way main.js's grid tiles honour it (explicit play() call
+// is honoured the same way the main window's grid tiles honour it (explicit play() call
 // instead of the unreliable attribute).
 videoEl.removeAttribute("autoplay");
 

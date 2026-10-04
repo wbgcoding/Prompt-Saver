@@ -432,7 +432,7 @@ function applyPrefs(s) {
   dragOutMod = DRAG_OUT_MODS[s.ui_texts?.dragOutModifier] || "ctrlKey";
   // rotateBadge is a sub-toggle of rotatingPrompts: the parent off must freeze
   // the whole feature (gating rule: nothing dependent stays visible with its parent
-  // off), same fix as floating.js/main.js.
+  // off), same fix as floating.js and the main window.
   rotateBadgeOn = s.ui_flags?.rotateBadge !== false && s.ui_flags?.rotatingPrompts !== false;
   // The folder animation reuses the global animation setting.
   const speed = Number(s.ui_values?.animSpeed);

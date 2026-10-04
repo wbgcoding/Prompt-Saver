@@ -207,7 +207,7 @@ export const EXPERT_DROPDOWNS = {
   // Applies to every screenshot: the snip tool's own save/save-as/save-to-folder
   // paths AND the video editor's "export still frame" (same setting, one format
   // for anything this app calls a screenshot). webp and bmp/tiff are always
-  // lossless (see encode_screenshot in lib.rs); only jpeg has a quality of its
+  // lossless (see encode_screenshot in capture.rs); only jpeg has a quality of its
   // own, which is why snipSaveQuality only shows for jpeg.
   screenshotFormat: enumDropdown("screenshotFormat", "valScreenshotFormat",
     [["png", "optScreenshotFormatPng"], ["jpeg", "optScreenshotFormatJpeg"], ["webp", "optScreenshotFormatWebp"],
@@ -769,7 +769,7 @@ export function valueRow(key) {
   head.append(span, right);
   row.append(head, slider);
   // The quality slider is a JPEG-only concept -- every other screenshot
-  // format is always lossless (see encode_screenshot in lib.rs), so a
+  // format is always lossless (see encode_screenshot in capture.rs), so a
   // quality percentage would apply to nothing. renderExpert() rebuilds this
   // row whenever screenshotFormat itself changes (dropdownRow's own change
   // handler), so this stays in sync without a dedicated listener of its own.

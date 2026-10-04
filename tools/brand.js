@@ -207,7 +207,7 @@ function brandRs(b) {
 //
 // These strings decide where an installation keeps its data and how Windows knows
 // the app. Changing one strands every existing install — brand_values_are_pinned in
-// lib.rs asserts them for exactly that reason.
+// tests.rs asserts them for exactly that reason.
 
 pub const DISPLAY_NAME: &str = ${rs(b.displayName)};
 pub const SLUG: &str = ${rs(b.slug)};
@@ -256,7 +256,7 @@ function brandJs(b) {
 export const APP_NAME = ${JSON.stringify(b.displayName)};
 
 // Features this brand ships differently from the app's own default. shipsOn() in
-// main.js reads it; a value the user has stored always wins over it.
+// core.js reads it; a value the user has stored always wins over it.
 export const FLAG_DEFAULTS = ${flagDefaultsJs(b.flagDefaults)};
 
 // Fork vocabulary: per language, what to swap in every translated string before it

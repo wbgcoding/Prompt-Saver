@@ -2,7 +2,7 @@
 // popup when trayCustomMenu is on. Every entry runs the exact same activation
 // the plain tray menu already used (tray_window_activate -> handle_tray_menu_id
 // -> fire_tray_copy), so placeholder dialogs, cooldown and chains stay in
-// main.js, never duplicated here. All text (labels, section titles, show/quit)
+// the main window, never duplicated here. All text (labels, section titles, show/quit)
 // comes pre-translated from the backend -- this file draws rows, nothing else.
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
@@ -49,7 +49,7 @@ function luma([r, g, b]) {
 }
 
 // Same four glyphs as the native menu's hand-drawn 16x16 icon chips (tray_icon_pixels
-// in lib.rs), redrawn as vectors: a colored chip -- the prompt's own tile color, or
+// in tray.rs), redrawn as vectors: a colored chip -- the prompt's own tile color, or
 // the kind's tint -- with a glyph on top, ink flipped light/dark by the chip's own
 // brightness exactly like the native icon does. Each glyph is a plain list of SVG
 // shape descriptors (never markup) built with createElementNS, so a prompt's own

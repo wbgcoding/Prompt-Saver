@@ -1,4 +1,4 @@
-// Library search query parsing (ui/main.js's computeLibSearchScore).
+// Library search query parsing (computeLibSearchScore in library.js).
 // Pulls "tag:word" / "var:word" terms (and their "-" negated forms) out of a
 // raw query before the rest of it runs through the existing scoring, so they
 // can be checked as hard conditions instead of scored hints.

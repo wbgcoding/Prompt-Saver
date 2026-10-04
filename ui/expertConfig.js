@@ -178,7 +178,7 @@ export const FLAG_LABELS = {
   // Sub-toggle of screenRecord, microphone audio into its own track --
   // moved here from OPT_FLAG_LABELS, its shipped default flipping from off to
   // on (into a sidecar track only, muxed in audibly later from the video
-  // editor -- see lib.rs's AudioConfig.mic comment). A stored user value from
+  // editor -- see AudioConfig.mic in recording.rs). A stored user value from
   // before this change, or an explicit opt-out, still wins.
   recAudioMic: "flagRecAudioMic",
   // A running recording would otherwise have only the bar itself as a way
@@ -305,11 +305,11 @@ export const OPT_FLAG_LABELS = {
   // whatever it holds. On (shipped) = a lock file next to the database refuses
   // writes for as long as another machine's lock on the same (typically synced)
   // folder is still fresh -- see acquire_data_dir_lock/DATA_DIR_READONLY in
-  // lib.rs.
+  // store.rs.
   dataDirLock: "flagDataDirLock",
   // Swaps the whole window over to a bundled sample library -- for showing the
   // app or taking a screenshot without exposing real data. The real store is
-  // never touched; see enable_demo_mode/disable_demo_mode in lib.rs. This flag
+  // never touched; see enable_demo_mode/disable_demo_mode in demo.rs. This flag
   // is never toggled through the normal set_ui_flag path (see flagRow's own
   // demoMode branch below) -- it only ever reads true from the sample
   // settings a demo session itself ships with.
@@ -318,7 +318,7 @@ export const OPT_FLAG_LABELS = {
   // it there); on lets a prompt sit in several views at once, sharing the same data.
   multiViewPrompt: "flagMultiViewPrompt",
   // Prompt-folders-as-Markdown (beta: see the module note above sync_enabled() in
-  // lib.rs): mirrors every text-only prompt as a .md file in a folder, editable by
+  // md_sync.rs): mirrors every text-only prompt as a .md file in a folder, editable by
   // hand or another tool.
   promptSync: "flagPromptSync",
   // Voice dictation's two default-off options: sending audio to Microsoft's
@@ -487,7 +487,7 @@ export const EXPERT_VALUES = {
   // A delay before the capture (lets a menu stay open in the shot).
   snipDelayMs: { label: "valSnipDelayMs", min: 0, max: 5000, step: 100, def: 0, unit: "ms", gate: "screenshot" },
   // The actual saved/copied/exported JPEG quality -- every save/copy path, edited
-  // or not, shares this one value (see SNIP_SAVE_Q in lib.rs).
+  // or not, shares this one value (see SNIP_SAVE_Q in snip.rs).
   snipSaveQuality: { label: "valSnipSaveQuality", min: 50, max: 100, step: 5, def: 90, unit: "%", gate: "screenshot" },
   // Screenshot-editor undo depth. Tool sizes are remembered per tool, not set here.
   snipEditUndoMax: { label: "valSnipEditUndoMax", min: 10, max: 200, step: 10, def: 50, unit: "", gate: "snipEditor" },

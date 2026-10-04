@@ -1387,7 +1387,7 @@ pub(crate) fn settings_flush_tick(app: &AppHandle) {
 }
 
 // Pre-1.9 builds saved image prompts without copy_image but copied on click.
-// The self-filling placeholder names, kept in step with DYN_VARS in ui/main.js.
+// The self-filling placeholder names, kept in step with DYN_VARS in ui/promptVars.js.
 pub(crate) const DYN_NAMES: [&str; 16] = [
     "date", "time", "datetime", "weekday", "yesterday", "tomorrow", "week", "month",
     "year", "timestamp", "epoch", "clipboard", "username", "uuid", "random", "counter",

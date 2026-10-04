@@ -301,7 +301,7 @@ pub(crate) fn sanitize_canvas_mode(raw: &str) -> &'static str {
 }
 
 // Clamped to the same range the expert menu itself offers (`recCanvasMaxPx`
-// in main.js) so a value written outside the menu, such as an imported
+// in ui/expertConfig.js) so a value written outside the menu, such as an imported
 // settings file, cannot push the recording canvas ceiling past what the UI
 // ever lets a user pick.
 pub(crate) fn clamp_canvas_max_px(raw: f64) -> u32 {

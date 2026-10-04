@@ -24,7 +24,7 @@ use windows::Win32::UI::WindowsAndMessaging::SW_HIDE;
 // can only ever be too big (downscaled to MaxImageDimension) or too small
 // (upscaled here), never both. The threshold is the ocrUpscaleUnderPx expert
 // setting, threaded down as a parameter (100-800, default 300 -- see
-// EXPERT_VALUES in main.js).
+// EXPERT_VALUES in ui/expertConfig.js).
 
 // COM must be initialized once per thread that calls into WinRT, and never on
 // the UI thread. Every OCR call runs inside spawn_blocking; those pool threads
@@ -546,7 +546,7 @@ fn run_elevated_script(script: &str) -> Result<(), String> {
         // particular account happens to be an administrator (Windows still
         // lets the credential prompt take a DIFFERENT admin's password).
         // The wire strings keep their original names for the frontend's own
-        // dispatch on them (ui/main.js), even though "no-rights" now means
+        // dispatch on them (ui/dictation.js), even though "no-rights" now means
         // "Group Policy denies the prompt outright" rather than "this
         // account has none".
         if code == 5 || code == 1223 {

@@ -424,7 +424,7 @@ pub(crate) async fn attachment_text_preview(path: String, max_kb: u32) -> Result
 
 // IDs of prompts whose attached file OR media icon is gone. Still directly
 // invokable for a one-off "I just fixed/replaced a file, recheck now" refresh
-// (main.js after an edit, floating.js whenever a pill's prompt data reloads) -
+// (the main window after an edit, floating.js whenever a pill's prompt data reloads) -
 // the AMBIENT every-few-seconds refresh is start_missing_files_poll below.
 // async + spawn_blocking: the lock was already released before stat'ing
 // (below) so it never blocked other DB ops, but Path::exists() on a slow or
@@ -455,7 +455,7 @@ pub(crate) async fn missing_files(state: State<'_, Db>) -> Result<Vec<String>, S
     .map_err(|e| e.to_string())
 }
 
-// main.js and every open floating.js pill window used to each run their own
+// the main window and every open floating.js pill window used to each run their own
 // 5-second missing_files poll - N pills meant N+1 redundant full-library stat
 // scans every cycle, all of which could block on the same slow or unreachable
 // network path. One backend-side timer runs the check once and pushes the

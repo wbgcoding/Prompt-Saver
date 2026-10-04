@@ -1,10 +1,10 @@
-// Chain step variable-need check (the chain overview strip in main.js).
+// Chain step variable-need check (the chain overview strip in chain.js).
 //
 // Loaded as a plain script (like search.js and voice.js), so everything here is
 // a bare function/const in module scope. The guarded export at the bottom makes
 // it directly testable from Node without affecting the window build.
 //
-// Mirrors the token syntax and reserved-name notation main.js itself uses for
+// Mirrors the token syntax and reserved-name notation promptVars.js itself uses for
 // prompt variables (VAR_RE, DYN_VARS, DYN_SET), but stays free of flag() and
 // every other piece of app state, so it can be handed a plain list of step
 // texts and always give the same answer back.
@@ -16,7 +16,7 @@ const CHAIN_DYN_VARS = [
 ];
 const CHAIN_DYN_SET = new Set(CHAIN_DYN_VARS);
 
-// Same split as parseVar() in main.js: the text up to the first "|" is the
+// Same split as parseVar() in promptVars.js: the text up to the first "|" is the
 // name/default part, and an "=" inside that splits a default off the name.
 function chainVarName(token) {
   const raw = String(token).trim();

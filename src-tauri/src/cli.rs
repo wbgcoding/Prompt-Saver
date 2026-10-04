@@ -427,8 +427,8 @@ fn should_take_over_hung_instance(answered_in_time: bool, same_user: bool, same_
 
 // GetNamedPipeServerProcessId (Win32_System_Pipes) is not part of this
 // project's enabled `windows` crate feature set, so this one call stays a
-// direct kernel32 binding, the same pattern lib.rs already uses for a few
-// user32/kernel32 calls it needs without pulling in a whole extra feature.
+// direct kernel32 binding, the same pattern other modules already use for a few
+// user32/kernel32 calls they need without pulling in a whole extra feature.
 fn named_pipe_server_pid(client: &tokio::net::windows::named_pipe::NamedPipeClient) -> Option<u32> {
     use std::os::windows::io::AsRawHandle;
     #[link(name = "kernel32")]

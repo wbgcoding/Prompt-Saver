@@ -64,7 +64,7 @@ jpeg-encoder = "0.6"
 rusqlite = { version = "0.32", features = ["bundled"] }
 # Render the first page of an attached PDF as a preview image. Binds the
 # pdfium library dynamically at runtime (the DLL is embedded in the exe and
-# unpacked on first use — see pdfium_lib_path in lib.rs).
+# unpacked on first use - see pdfium_lib_path in images.rs).
 pdfium-render = "0.8"
 # Extract ffmpeg.exe from its downloaded release zip (point 246). Deflate only --
 # gyan.dev's archive needs no other compression method.

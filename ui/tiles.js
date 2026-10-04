@@ -186,7 +186,7 @@ export function applyRotateState(tile, id) {
 }
 
 // Ids with a live auto-advance session, kept by the backend's rotation-auto
-// event (fired on arm/end from clipwatch: see mod clipwatch in lib.rs, 91).
+// event (fired on arm/end from clipwatch: see mod clipwatch, 91).
 export const autoActiveIds = new Set();
 
 export function applyAutoBadge(tile, id) {
@@ -563,7 +563,7 @@ export function pruneVideoCache() {
 // ---- Missing-file watcher ----
 // The ambient every-few-seconds refresh is a backend-pushed "missing-files"
 // event now (listened for below), not this window's own timer - see
-// start_missing_files_poll in lib.rs. pollMissingFiles stays for the one-off
+// start_missing_files_poll in images.rs. pollMissingFiles stays for the one-off
 // "recheck right now" calls (initial load, right after an edit).
 export let missingFiles = new Set();
 

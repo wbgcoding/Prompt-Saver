@@ -154,12 +154,12 @@ if defined INSTALLER copy /y "%INSTALLER%" "%DIST%\" >nul
 rem SHA-256 sidecar for the installer (the auto-updater verifies "<installer>.sha256"
 rem before running the download). Upload it alongside the installer on the GitHub release.
 if defined INSTALLER for %%I in ("%INSTALLER%") do powershell -NoProfile -Command "$h=(Get-FileHash -Algorithm SHA256 '%%~fI').Hash.ToLower(); [IO.File]::WriteAllText('%DIST%\%%~nxI.sha256', $h)"
-rem pdfium.dll is compiled INTO the exe (see pdfium_lib_path in lib.rs) and unpacked
+rem pdfium.dll is compiled INTO the exe (see pdfium_lib_path in images.rs) and unpacked
 rem on first use, so nothing has to travel next to the portable exe any more.
 rem ffmpeg.exe is the opposite: it is NOT embedded (100+ MB). If src-tauri\ffmpeg.exe
 rem is present, tauri.conf.json's bundle.resources ships it inside the installer
 rem automatically; the portable exe here in dist\ never gets a copy and instead
-rem offers to download ffmpeg itself on first need (see ffmpeg_search_path in lib.rs).
+rem offers to download ffmpeg itself on first need (see ffmpeg_search_path in ffmpeg.rs).
 
 echo.
 echo ============================================

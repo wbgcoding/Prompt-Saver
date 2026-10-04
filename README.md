@@ -206,7 +206,7 @@ window to a fixed size, then take the screenshot the normal way.
 
 ```sh
 cargo test --lib                        # in src-tauri/
-node --check ui/main.js
+node --check ui/main.js              # and every other ui/*.js
 node tests/i18n_check.js
 node tests/terms_check.js
 node tests/voice_check.js

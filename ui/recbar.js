@@ -43,7 +43,7 @@ function applySize(bytes, etaSecs) {
 // never got a placement canvas) rather than popping in and out, with a
 // tooltip naming why. The actual "same screen" check for a canvas-mode
 // "monitor" recording only happens once something is actually picked (see
-// the recording-target-switch-failed listener in main.js) -- this only
+// the recording-target-switch-failed listener in the main window) -- this only
 // covers the up-front, always-knowable half of the gate.
 let switchEnabled = false;
 function applyTargetSwitch(enabled) {
@@ -285,7 +285,7 @@ listen("recorder-target-picked", async (e) => {
   try {
     await invoke("switch_recording_target", { targetKind: p.kind, targetId: p.id });
   } catch {
-    // Surfaced to the user via the main window's own toast (main.js listens
+    // Surfaced to the user via the main window's own toast (the main window listens
     // for recording-target-switch-failed) -- this bar has no toast of its own
     // and the previous source is already still recording regardless.
   }
@@ -310,7 +310,7 @@ continueBtn.addEventListener("click", async () => {
   } catch (err) {
     // The switch failed AFTER the old file was already closed for good --
     // the backend already emitted "recording-captured" with every part
-    // folded in (main.js's own listener shows the result), this bar just
+    // folded in (the main window's own listener shows the result), this bar just
     // closes like a normal stop instead of surfacing a second, redundant
     // error on top of that.
     if (typeof err === "string" && err.startsWith("recording-continue-failed-stopped:")) {
@@ -363,7 +363,7 @@ document.addEventListener("keyup", (e) => {
 
 // The bar used to sit locked to the recorded window's corner. Dragging
 // from its background (not a button) now moves it freely to any monitor;
-// rec_bar_mark_moved() tells the 200ms follow poll in lib.rs to stop
+// rec_bar_mark_moved() tells the 200ms follow poll in rec_bar.rs to stop
 // re-snapping it back for the rest of this recording -- its new position IS
 // the remembered one, simply by no longer being overwritten.
 const DRAG_THRESHOLD = 4;

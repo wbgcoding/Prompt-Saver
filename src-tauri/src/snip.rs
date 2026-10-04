@@ -1328,8 +1328,7 @@ pub(crate) const PICK_Q: u8 = 92;
 // Saved-button JPEG quality: higher (crisp text) but still a fraction of a PNG's
 // size + encode time: a full-res PNG data URL used to stall the whole app on save.
 // Default for the expert-tunable snipSaveQuality (read in finalize_capture) --
-// also mirrored by SNIP_EDIT_EXPORT_Q in main.js for the post-edit re-export,
-// so both sides of the same screenshot's lifetime share one visible quality.
+// so a screenshot and its post-edit re-export share one visible quality.
 pub(crate) const SNIP_SAVE_Q: u8 = 90;
 
 // Encode RGBA bytes to a JPEG for the overlay preview. jpeg-encoder = SIMD baseline JPEG,
