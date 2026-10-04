@@ -88,16 +88,16 @@ SECTION = """\
     // clear that follows the filter (only the stored entries, with its own Undo).
     {
       const srcBar = document.getElementById('journal-source');
-      const srcBtn = (k) => srcBar && srcBar.querySelector('[data-source="' + k + '"]');
+      const srcPick = (k) => { srcBar.value = k; srcBar.dispatchEvent(new Event('change')); };
       const clipRows = () => [...document.querySelectorAll('#journal-body .clip-row')];
       if (!srcBar || srcBar.classList.contains('hidden')) {
-        out.errors.push('434: the source chips are hidden although copies from other apps are stored');
+        out.errors.push('434: the source select is hidden although copies from other apps are stored');
       } else {
         if (document.querySelectorAll('#journal-body .journal-item').length === 0 || clipRows().length !== 2) {
           out.errors.push('434: the unfiltered history does not mix app copies and the two stored entries (' +
             document.querySelectorAll('#journal-body .journal-item').length + ' app rows, ' + clipRows().length + ' elsewhere rows)');
         }
-        srcBtn('elsewhere').click();
+        srcPick('elsewhere');
         await sleep(150);
         if (clipRows().length !== 2) out.errors.push('434: the Elsewhere filter lists ' + clipRows().length + ' rows instead of 2');
         if (document.querySelector('#journal-body .journal-item')) out.errors.push('434: the Elsewhere filter still lists copies made in the app');
@@ -137,10 +137,10 @@ SECTION = """\
           }
         }
         // The app filter hides the stored entries again; All brings them back.
-        srcBtn('app').click();
+        srcPick('app');
         await sleep(150);
         if (clipRows().length) out.errors.push('434: the app filter still lists entries copied elsewhere');
-        srcBtn('all').click();
+        srcPick('all');
         await sleep(150);
       }
       window.__resetClipInbox();

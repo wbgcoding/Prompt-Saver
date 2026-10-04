@@ -3825,6 +3825,9 @@ input[type="password"]::-ms-clear { display: none; }
 /* One filter row for BOTH windows: type chips left, colours right of them. */
 .journal-filters { display: flex; gap: 12px; align-items: center; flex-wrap: nowrap; }
 .journal-filters > .lib-colors { flex: 1 1 auto; min-width: 0; }
+/* Row one of the history filters: the search field with the source select beside it. */
+.journal-search-row { display: flex; gap: 8px; align-items: center; }
+.journal-search-row > .lib-sort { flex: 0 0 auto; }
 .journal-col { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .journal-body::-webkit-scrollbar { width: var(--sb-width, 12px); }
 .journal-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; border: 3px solid var(--surface); }

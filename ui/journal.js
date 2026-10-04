@@ -259,7 +259,7 @@ export function journalClipRow(it) {
   return row;
 }
 
-// The source chips and the two buttons that only concern copies from other apps
+// The source field and the two buttons that only concern copies from other apps
 // (pause/resume recording, purge from backups) show together, and only while the
 // recorder is on or entries are still stored.
 export function syncJournalSourceBar(on) {
@@ -267,9 +267,7 @@ export function syncJournalSourceBar(on) {
   $("clip-toggle").classList.toggle("hidden", !on);
   $("clip-purge-backups").classList.toggle("hidden", !on);
   $("clip-toggle").classList.toggle("active", optFlag("clipWatcher"));
-  for (const b of $("journal-source").querySelectorAll(".lib-type")) {
-    b.classList.toggle("active", b.dataset.source === journalSource);
-  }
+  $("journal-source").value = journalSource;
 }
 
 // Render from the cached log. Filters run client-side, so typing in the search
@@ -287,7 +285,7 @@ export function renderJournal() {
   const grouped = flag("historyGrouped");
   const showTime = flag("historyTimestamps");
   // Copies from other apps share the list when the recorder is on or entries are still
-  // stored; the source chips (and the buttons that only concern those entries) follow.
+  // stored; the source field (and the buttons that only concern those entries) follow.
   const sourcesOn = optFlag("clipWatcher") || journalInbox.length > 0;
   if (!sourcesOn) journalSource = "all";
   syncJournalSourceBar(sourcesOn);
@@ -467,7 +465,7 @@ export async function resetAndLoadJournal() {
   $("journal-fav").classList.remove("active");
   setJournalColor("all");
   journalSource = "all";
-  // renderJournal decides what the filter bar shows, so it also follows the source chips.
+  // renderJournal decides what the filter bar shows, so it also follows the source field.
   await loadJournal();
   if (flag("searchAutofocus")) $("journal-q").focus();
 }
@@ -485,10 +483,9 @@ export function bindJournal() {
     if (!on && accepted) await offerClipInboxCleanup();
     await refreshClipInbox();
   });
-  $("journal-source").addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-source]");
-    if (!btn) return;
-    journalSource = btn.dataset.source;
+  attachSelectPicker($("journal-source"));
+  $("journal-source").addEventListener("change", (e) => {
+    journalSource = e.target.value;
     renderJournal();
   });
   // Emergency wipe: clears the live inbox AND scrubs clip_inbox rows out of every

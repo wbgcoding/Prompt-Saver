@@ -1505,6 +1505,7 @@ export default {
     clipEmpty: "Nog niets gekopieerd in andere apps",
     sourceApp: "In {app}",
     sourceElsewhere: "Elders",
+    filterSourceLabel: "Bron",
     clipSave: "Opslaan als prompt",
     clipCopy: "Kopiëren",
     clipDismiss: "Negeren",

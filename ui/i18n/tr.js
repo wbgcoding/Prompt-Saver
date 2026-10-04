@@ -1505,6 +1505,7 @@ export default {
     clipEmpty: "Diğer uygulamalarda henüz bir şey kopyalanmadı",
     sourceApp: "{app} içinde",
     sourceElsewhere: "Başka yerde",
+    filterSourceLabel: "Kaynak",
     clipSave: "İstem olarak kaydet",
     clipCopy: "Kopyala",
     clipDismiss: "Yoksay",

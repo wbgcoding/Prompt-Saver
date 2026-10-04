@@ -1505,6 +1505,7 @@ export default {
     clipEmpty: "Nimic copiat încă în alte aplicații",
     sourceApp: "În {app}",
     sourceElsewhere: "În altă parte",
+    filterSourceLabel: "Sursă",
     clipSave: "Salvează ca prompt",
     clipCopy: "Copiază",
     clipDismiss: "Respinge",

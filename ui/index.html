@@ -647,13 +647,15 @@
       </div>
       <div id="library-panel-history" class="lib-panel hidden" role="tabpanel">
         <div id="journal-search" class="library-search">
-          <input id="journal-q" class="modal-input" type="text" data-i18n-ph="searchPh" data-i18n-aria="searchPh" />
+          <div class="journal-search-row">
+            <input id="journal-q" class="modal-input" type="text" data-i18n-ph="searchPh" data-i18n-aria="searchPh" />
+            <select id="journal-source" class="lib-sort hidden" data-i18n-aria="filterSourceLabel">
+              <option value="all" data-i18n="filterAll">All</option>
+              <option value="app" data-i18n="sourceApp">In the app</option>
+              <option value="elsewhere" data-i18n="sourceElsewhere">Elsewhere</option>
+            </select>
+          </div>
           <div class="journal-filters">
-            <div id="journal-source" class="lib-types hidden">
-              <button type="button" class="lib-type active" data-source="all" data-i18n="filterAll">All</button>
-              <button type="button" class="lib-type" data-source="app" data-i18n="sourceApp">In the app</button>
-              <button type="button" class="lib-type" data-source="elsewhere" data-i18n="sourceElsewhere">Elsewhere</button>
-            </div>
             <div id="journal-types" class="lib-types">
               <button type="button" class="lib-type active" data-type="all" data-i18n="filterAll">All</button>
               <button type="button" class="lib-type" data-type="image" data-i18n="filterImage">Image</button>

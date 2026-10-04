@@ -1505,6 +1505,7 @@ export default {
     clipEmpty: "Aún no se ha copiado nada en otras aplicaciones",
     sourceApp: "En {app}",
     sourceElsewhere: "En otro sitio",
+    filterSourceLabel: "Origen",
     clipSave: "Guardar como prompt",
     clipCopy: "Copiar",
     clipDismiss: "Descartar",

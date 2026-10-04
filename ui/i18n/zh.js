@@ -1505,6 +1505,7 @@ export default {
     clipEmpty: "尚未在其他应用中复制任何内容",
     sourceApp: "在 {app} 中",
     sourceElsewhere: "其他位置",
+    filterSourceLabel: "来源",
     clipSave: "另存为提示词",
     clipCopy: "复制",
     clipDismiss: "忽略",

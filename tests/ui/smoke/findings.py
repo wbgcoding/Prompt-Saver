@@ -429,10 +429,10 @@ def run(browser, tmp):
     document.getElementById('toast').classList.remove('show');
     document.getElementById('library-btn').click(); await sleep(400);
     document.getElementById('library-tab-history').click(); await sleep(400);
-    const srcEl = document.querySelector('#journal-source [data-source="elsewhere"]');
-    if (!srcEl || document.getElementById('journal-source').classList.contains('hidden')) { errs.push('564-c3: the source chips are not shown in the fixture'); }
+    const srcEl = document.getElementById('journal-source');
+    if (!srcEl || srcEl.classList.contains('hidden')) { errs.push('564-c3: the source select is not shown in the fixture'); }
     else {
-      srcEl.click(); await sleep(200);
+      srcEl.value = 'elsewhere'; srcEl.dispatchEvent(new Event('change')); await sleep(200);
       window.__SMOKE_ARGS__.length = 0;
       document.getElementById('journal-clear').click(); await sleep(300);
       const cmC3 = document.getElementById('confirm-modal');
@@ -469,7 +469,7 @@ def run(browser, tmp):
     // An empty target does nothing: no dialog, no toast, no undo.
     RESULTS.clip_inbox_list = () => [];
     document.getElementById('toast').classList.remove('show', 'actionable');
-    document.querySelector('#journal-source [data-source="elsewhere"]').click(); await sleep(300);
+    { const srcSel = document.getElementById('journal-source'); srcSel.value = 'elsewhere'; srcSel.dispatchEvent(new Event('change')); } await sleep(300);
     window.__SMOKE_ARGS__.length = 0;
     document.getElementById('journal-clear').click(); await sleep(300);
     if (confirmOpen()) errs.push('564-m2: clearing an empty store opened a dialog');
@@ -972,6 +972,29 @@ def run(browser, tmp):
       if (!swi() || !swi().checked) errs.push('654: the switch is not on after switching it on');
       if (!document.querySelector('#stats-panel .stat-cards')) errs.push('654: no statistics cards after switching on');
     }
+""")
+    failed += ar_probe('bx717', 'copy history filters: at 680 px they take two rows, the source is a select and only one All chip remains', 'index', '680x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { clipWatcher: true } };</script>\n', r"""
+    await bootReady();
+    document.getElementById('library-btn').click(); await sleep(400);
+    document.getElementById('library-tab-history').click(); await sleep(500);
+    const first = document.querySelector('#journal-body .journal-item');
+    const src = document.getElementById('journal-source');
+    if (!first) errs.push('717: fixture: the history lists no entry');
+    if (!src || src.tagName !== 'SELECT' || src.classList.contains('hidden')) errs.push('717: the source is not a visible select');
+    else {
+      const tops = ['journal-q', 'journal-source', 'journal-types'].map((id) => document.getElementById(id).getBoundingClientRect().top).sort((a, b) => a - b);
+      let rows = 1;
+      for (let i = 1; i < tops.length; i++) if (tops[i] - tops[i - 1] > 8) rows++;
+      if (rows > 2) errs.push('717: the history filters take ' + rows + ' rows');
+      if (first && document.getElementById('journal-types').getBoundingClientRect().top >= first.getBoundingClientRect().top) errs.push('717: the type chips are not above the first entry');
+      if (src.options.length !== 3) errs.push('717: the source select has ' + src.options.length + ' options');
+      window.__SMOKE_ARGS__ = [];
+      src.value = 'elsewhere'; src.dispatchEvent(new Event('change')); await sleep(200);
+      if (document.querySelector('#journal-body .journal-item') || !document.querySelector('#journal-body .clip-row')) errs.push('717: picking Elsewhere did not narrow the list to the stored entries');
+    }
+    // 718: only the type row keeps an All chip; the source All is a select option.
+    const allChips = document.querySelectorAll('#library-panel-history button[data-i18n="filterAll"]').length;
+    if (allChips !== 1) errs.push('718: the history shows ' + allChips + ' All chips instead of one');
 """)
     # ---- main window findings: generated block end ----
     return failed
