@@ -20,6 +20,7 @@ Exit: 0 = clean, 1 = problems found.
 """
 import argparse
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -38,6 +39,32 @@ SUITES = (
     ("findings", findings.run),
 )
 
+# Ids reused before probes had to be unique. New probes take a fresh id.
+LEGACY_DUP_IDS = {
+    "17": 2, "21": 2, "28": 2, "32": 2, "33": 3, "43": 2, "58": 2, "67": 2, "70": 4, "76": 2,
+    "79": 2, "81": 2, "108": 2, "125": 2, "171": 2, "181": 2, "188": 2, "230": 8, "275": 2,
+    "277": 2, "339": 2, "343": 2, "363": 2, "365": 2, "389": 2, "405": 2, "414": 3, "425": 3,
+    "427": 3, "429": 2, "434": 7, "456": 3, "500": 2, "508": 4, "510": 3, "516": 4, "521": 2,
+    "677": 2,
+}
+
+PROBE_ID_RE = re.compile(r"^\s*// ([0-9]+[A-Za-z]?(?:-[A-Za-z0-9]+)*):", re.M)
+
+
+def check_probe_ids():
+    """A probe block starts with "// <id>:" and an id belongs to one block only.
+    Returns the number of ids used more often than allowed."""
+    counts = {}
+    for f in sorted((HERE / "smoke").rglob("*.py")):
+        for m in PROBE_ID_RE.finditer(f.read_text(encoding="utf-8")):
+            counts[m.group(1)] = counts.get(m.group(1), 0) + 1
+    bad = 0
+    for pid, n in sorted(counts.items()):
+        if n > LEGACY_DUP_IDS.get(pid, 1):
+            print(f"FAIL probe id {pid} used {n} times")
+            bad += 1
+    return bad
+
 
 def main():
     ap = argparse.ArgumentParser(description="Headless smoke test of the real UI.")
@@ -45,6 +72,7 @@ def main():
                     help="run only this suite (repeatable); default is every suite")
     only = ap.parse_args().only
 
+    id_problems = check_probe_ids()
     browser = next((p for p in CHROME_CANDIDATES if Path(p).exists()), None)
     if not browser:
         # CI's runner image always ships Chrome (see ci.yml); a missing browser there
@@ -54,11 +82,11 @@ def main():
             print("FAIL: no Chromium browser found on a CI runner")
             return 1
         print("SKIP: no Chromium browser found")
-        return 0
+        return 1 if id_problems else 0
 
     tmp = Path(tempfile.mkdtemp(prefix="ps-smoke-"))
     install_manifest_recorder(tmp)
-    failed = 0
+    failed = id_problems
     try:
         shutil.copytree(REPO / "ui", tmp / "ui")
         shutil.copy(HERE / "tauri_stub.js", tmp / "ui" / "tauri_stub.js")

@@ -89,6 +89,19 @@ store-sealing warning both ways: shown once with its permanent settings row when
 store is unencrypted, and completely absent - with no empty gap left behind - when it is
 not.
 
+Layout: `tests/ui/smoke_test.py` is the entry (browser lookup, temp dir, suite order, the probe id
+check); the suites live in `tests/ui/smoke/`: `harness.py` (paths, window sizes, the one Chrome
+call helper `run_chrome`, the manifest recorder), `main_walk.py` (size walk and Italian pass; its
+probe is assembled from `walk/w01..w18`, one fragment per surface), `side_windows.py`, `video.py`
+(also the seeded expert boot), `boots.py` (single boots) and `findings.py` (the generated findings
+block). `python tests/ui/smoke_test.py --only <suite>` runs one suite (repeatable; `main_walk`,
+`side_windows`, `video`, `boots`, `video_expert`, `findings`); without it everything runs.
+
+Probe rule: a probe block starts with `// <id>:` and every failure it pushes starts with `<id>:`;
+an id is used by one block only (`<item>` or `<item>-<suffix>`). The entry fails a run that reuses an
+id beyond `LEGACY_DUP_IDS`, the frozen list of ids reused before this rule. Cite a probe as
+`probe <id> (smoke/<file>)`, never by line.
+
 Refactor proof: `SMOKE_MANIFEST=<file>` writes one line per Chrome call (masked args, timeout,
 hash of the staged temp tree); with `SMOKE_MANIFEST_DRY=1` no browser starts and the run
 finishes in seconds. Two manifests from the same code are byte-equal.

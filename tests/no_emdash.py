@@ -34,6 +34,8 @@ SCOPE_GLOBS = [
     "tests/*.js",
     "tests/layout/*.py",
     "tests/ui/*.py",
+    "tests/ui/smoke/*.py",
+    "tests/ui/smoke/walk/*.py",
     "tests/ui/*.js",
     "tools/*.js",
     "src-tauri/*.nsi",
