@@ -1372,8 +1372,9 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
 /* Settings sizes to its content (no dead space on a tall window) but never taller than
    the window; the inner body scrolls when it would overflow. Centred by the overlay. */
 #settings .modal { width: min(760px, 94vw); height: auto; max-height: calc(100vh - 24px); }
-/* Expert page: single-line rows only need ~2 columns of width, not the full 3-across. */
-#settings.expert-active .modal { width: min(600px, 94vw); }
+/* Expert page: the dialog grows with the window, the groups flow into as many columns as fit
+   (see #expert-flags); a narrow window keeps the single column. */
+#settings.expert-active .modal { width: min(1280px, 96vw); }
 /* Labels/headings in settings aren't selectable (accidental selection looked odd);
    the actual editable fields stay selectable. */
 #settings { user-select: none; }
@@ -2863,6 +2864,17 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
 /* A floor, not 0: on a short window the tab bar + search alone filled the dialog and
    left the option list as a 20px sliver. The modal (overflow-y:auto) scrolls instead. */
 #expert-flags { flex: 1 1 auto; min-height: 140px; }
+/* Groups sit side by side as soon as two 440px columns fit. */
+#expert-flags {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(440px, 1fr));
+  gap: 14px 22px;
+  align-content: start;
+  align-items: start;
+}
+#expert-flags > .expert-group { margin-top: 0; }
+#expert-flags > .expert-foreign-group,
+#expert-flags > .hint { grid-column: 1 / -1; }
 /* The scroll areas reach the modal's right + bottom edges (negative margin, inset
    re-added as padding) so the scrollbar hugs the far-right edge with no surface
    band left beside or below it. */
@@ -4549,7 +4561,7 @@ body.drag-over::after {
 /* Runs of narrow label+control rows share a line. auto-fit means the second column
    only appears when both fit at their minimum, so a narrow window or a long
    translation drops back to one per line instead of squeezing the labels. */
-.expert-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px 14px; align-items: stretch; }
+.expert-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px 14px; align-items: stretch; }
 .expert-cols > .field { min-width: 0; margin: 0; }
 
 /* First-run tour: one shared frame, only the body content changes per step. */

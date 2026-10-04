@@ -195,6 +195,41 @@ VALUE_GATE_PROBE = """
 """
 
 
+# The expert dialog follows the window: wide window = wide dialog with groups side by side,
+# narrow window = one column.
+LAYOUT_PROBE = """
+<script>
+(async () => {""" + FIND + """
+  const errs = [];
+  try {
+    await until(() => document.getElementById('gear') && document.getElementById('library-btn'));
+    await sleep(400);
+    document.getElementById('gear').click();
+    await sleep(200);
+    document.getElementById('expert-open').click();
+    await sleep(400);
+    const modal = document.querySelector('#settings .modal');
+    const groups = [...document.querySelectorAll('#expert-flags > .expert-group')];
+    if (groups.length < 2) errs.push('fewer than two groups in the first tab');
+    else {
+      const lefts = new Set(groups.map((g) => Math.round(g.getBoundingClientRect().left)));
+      const w = Math.round(modal.getBoundingClientRect().width);
+      if (__WIDE__) {
+        if (w < 1200) errs.push('wide window: dialog is ' + w + 'px, expected at least 1200');
+        const l0 = Math.round(groups[0].getBoundingClientRect().left);
+        const l1 = Math.round(groups[1].getBoundingClientRect().left);
+        if (l0 === l1) errs.push('wide window: the first two groups share the left edge ' + l0);
+      } else if (lefts.size !== 1) {
+        errs.push('narrow window: groups have ' + lefts.size + ' different left edges');
+      }
+    }
+  } catch (e) { errs.push('probe threw: ' + (e && e.stack || e)); }
+  finish(errs);
+})();
+</script>
+"""
+
+
 # ---- consumers: a non-default value reaches the code that uses it ----------------
 # Probe JS avoids apostrophes and backslashes (the strings are plain Python).
 
@@ -541,6 +576,9 @@ def main():
         for label, probe, seed in (("switches on", PROBE_ON, on), ("switches off", PROBE_OFF, off)):
             probe = probe.replace("__EXPECTED__", expected).replace("__STAYS__", json.dumps(STAYS))
             errs = run(browser, tmp, "index.html", probe, seed)
+            problems += [f"[{label}] {e}" for e in errs]
+        for label, wide, size in (("wide window", "true", (1600, 900)), ("narrow window", "false", (680, 460))):
+            errs = run(browser, tmp, "index.html", LAYOUT_PROBE.replace("__WIDE__", wide), {}, size=size)
             problems += [f"[{label}] {e}" for e in errs]
         problems += consumer_problems(browser, tmp)
     finally:
