@@ -2834,6 +2834,12 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
 .settings-sec { display: flex; flex-direction: column; gap: 10px; }
 .settings-sec + .settings-sec { border-top: 1px solid var(--border); padding-top: 12px; }
 .settings-sec:not(:has(button)) { display: none; }
+/* Red at rest, not only on hover: the two buttons here cannot be undone. The two-click
+   confirm stays. */
+.settings-sec-danger .danger-btn {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 60%, var(--border));
+}
 .settings-sec-title {
   margin: 0;
   font-size: 12px;

@@ -1805,6 +1805,7 @@ the video editor and the introduction tour ship on).
 - **The take-over question names the real button.** The portable take-over dialog now says which button leaves the portable version empty (for example "Start empty") instead of a Yes/No answer that did not match the buttons.
 - **"Do not ask again" starts unticked.** In the portable take-over dialog the box is no longer ticked beforehand, so leaving it alone asks again next time.
 - **Settings in titled sections.** The settings page is split into Appearance, Behavior, Data and About and updates, each with its own heading and a thin line between them.
+- **Reset and delete buttons stand out.** Reset settings and Delete all data now sit in their own section at the bottom of the settings page and are red even when the pointer is elsewhere. Clicking them still needs a second click to confirm.
 
 ## 2.6.3 (2026-07-26)
 

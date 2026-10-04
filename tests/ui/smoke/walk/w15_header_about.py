@@ -1,6 +1,6 @@
 SECTION = """\
     // 724: the settings page is split into titled sections, in this order, with the
-    // English titles; the danger section stays hidden until it holds buttons.
+    // English titles (the last one holds the two danger buttons).
     {
       if (document.getElementById('settings').classList.contains('hidden')) await click('gear');
       if (document.getElementById('settings-main').classList.contains('hidden')) {
@@ -9,7 +9,7 @@ SECTION = """\
       }
       const titles724 = [...document.querySelectorAll('#settings-main .settings-sec-title')]
         .filter((el) => el.getBoundingClientRect().height > 0).map((el) => el.textContent.trim());
-      const want724 = ['Appearance', 'Behavior', 'Data', 'About and updates'];
+      const want724 = ['Appearance', 'Behavior', 'Data', 'About and updates', 'Reset and delete'];
       if (titles724.join('|') !== want724.join('|')) {
         out.errors.push('724: the visible settings section titles are "' + titles724.join('|') + '", expected "' + want724.join('|') + '"');
       }
@@ -62,7 +62,7 @@ SECTION = """\
     // zurücksetzen", Dutch "Alle gegevens verwijderen") may wrap to two lines.
     // The flex-row default stretch means a single wrapped button grows the WHOLE
     // row, so compare against the row's own single-line reference height rather
-    // than siblings.
+    // than siblings. 725: both sit in the danger section, red at rest.
     {
       if (document.getElementById('settings-main').classList.contains('hidden')) {
         document.getElementById('expert-open').click();
@@ -70,15 +70,17 @@ SECTION = """\
       }
       const reset = document.getElementById('reset-settings');
       const del = document.getElementById('delete-data');
-      const help = document.getElementById('help-open');
-      if (!reset || !del || !help) {
-        out.errors.push('reset-settings, delete-data or help-open missing from settings-btn-row');
-      } else if (help.getBoundingClientRect().height < 10) {
-        out.errors.push('settings-btn-row is not visible at ' + window.innerWidth + 'px');
+      const dangerSec = document.querySelector('.settings-sec-danger');
+      if (!reset || !del || !dangerSec) {
+        out.errors.push('reset-settings, delete-data or the danger section missing from the settings panel');
+      } else if (!dangerSec.contains(reset) || !dangerSec.contains(del)) {
+        out.errors.push('725: reset-settings and delete-data are not inside the danger section');
+      } else if (reset.getBoundingClientRect().height < 10) {
+        out.errors.push('the danger section is not visible at ' + window.innerWidth + 'px');
       } else {
         const prevReset = reset.textContent;
         const prevDel = del.textContent;
-        const rowH = () => Math.round(help.getBoundingClientRect().height);
+        const rowH = () => Math.round(reset.getBoundingClientRect().height);
         reset.textContent = 'Reset';
         del.textContent = 'Delete';
         const baseH = rowH();
@@ -86,25 +88,44 @@ SECTION = """\
         reset.textContent = 'Reset settings';
         del.textContent = 'Delete all data';
         if (rowH() > baseH + 1) {
-          out.errors.push('settings-btn-row wraps with the English labels at ' + window.innerWidth + 'px: ' + baseH + ' -> ' + rowH());
+          out.errors.push('the danger buttons wrap with the English labels at ' + window.innerWidth + 'px: ' + baseH + ' -> ' + rowH());
         }
-        // Long translations may wrap to two lines, but all three buttons grow
+        // Long translations may wrap to two lines, but both buttons grow
         // together, never beyond two lines, and no label spills sideways.
         reset.textContent = 'Einstellungen zurücksetzen';
         del.textContent = 'Alle gegevens verwijderen';
         const longH = rowH();
-        const hs = [reset, del, help].map((b) => Math.round(b.getBoundingClientRect().height));
+        const hs = [reset, del].map((b) => Math.round(b.getBoundingClientRect().height));
         const spill = [reset, del].some((b) => b.scrollWidth > b.clientWidth + 1);
         reset.textContent = prevReset;
         del.textContent = prevDel;
         if (longH > baseH * 2) {
-          out.errors.push('settings-btn-row grows past two lines with long labels at ' + window.innerWidth + 'px: ' + baseH + ' -> ' + longH);
+          out.errors.push('the danger buttons grow past two lines with long labels at ' + window.innerWidth + 'px: ' + baseH + ' -> ' + longH);
         }
         if (new Set(hs).size > 1) {
-          out.errors.push('settings-btn-row buttons differ in height with long labels at ' + window.innerWidth + 'px: ' + hs.join('/'));
+          out.errors.push('the danger buttons differ in height with long labels at ' + window.innerWidth + 'px: ' + hs.join('/'));
         }
         if (spill) {
-          out.errors.push('a settings-btn-row label overflows its button at ' + window.innerWidth + 'px');
+          out.errors.push('a danger button label overflows its button at ' + window.innerWidth + 'px');
+        }
+        // 725: red at rest, and the last button of the page.
+        const probe725 = document.createElement('span');
+        probe725.style.color = 'var(--danger)';
+        document.body.appendChild(probe725);
+        const danger725 = getComputedStyle(probe725).color;
+        probe725.remove();
+        if (getComputedStyle(del).color !== danger725) {
+          out.errors.push('725: delete-data is not red at rest: ' + getComputedStyle(del).color + ' vs ' + danger725);
+        }
+        if (getComputedStyle(reset).color !== danger725) {
+          out.errors.push('725: reset-settings is not red at rest: ' + getComputedStyle(reset).color + ' vs ' + danger725);
+        }
+        const btns725 = document.querySelectorAll('#settings-main button');
+        if (btns725[btns725.length - 1] !== del) out.errors.push('725: delete-data is not the last button of the settings page');
+        const titles725 = [...document.querySelectorAll('#settings-main .settings-sec-title')]
+          .filter((el) => el.getBoundingClientRect().height > 0).map((el) => el.textContent.trim());
+        if (titles725.length !== 5 || titles725[4] !== 'Reset and delete') {
+          out.errors.push('725: the visible section titles are "' + titles725.join('|') + '", expected five ending in Reset and delete');
         }
       }
     }
