@@ -1504,6 +1504,7 @@ export default {
     clipPurgeBackupsDone: "Aus {n} Backup(s) entfernt",
     clipPurgeBackupsFailed: "{n} Backup(s) konnten nicht bereinigt werden",
     clipPurgeBackupsCheck: "Kopien aus anderen Apps auch aus allen Backups löschen (nicht rückgängig zu machen)",
+    clipPurgeOnlyConfirm: "Der Verlauf ist schon leer. Einträge aus anderen Programmen auch aus allen Backups entfernen? Das lässt sich nicht rückgängig machen.",
     clipWatchOn: "Andere Apps: an",
     clipWatchOff: "Andere Apps: aus",
     clipEmpty: "Noch nichts aus anderen Apps kopiert",

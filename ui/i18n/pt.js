@@ -1497,6 +1497,7 @@ export default {
     clipPurgeBackupsDone: "Removido de {n} backup(s)",
     clipPurgeBackupsFailed: "Não foi possível limpar {n} backup(s)",
     clipPurgeBackupsCheck: "Eliminar também as cópias de outros aplicativos de todos os backups (não pode ser desfeito)",
+    clipPurgeOnlyConfirm: "O histórico já está vazio. Remover também as entradas de outros aplicativos de todos os backups? Isso não pode ser desfeito.",
     clipWatchOn: "Outros apps: ativado",
     clipWatchOff: "Outros apps: desativado",
     clipEmpty: "Nada copiado em outros aplicativos ainda",

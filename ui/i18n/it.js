@@ -1497,6 +1497,7 @@ export default {
     clipPurgeBackupsDone: "Rimosso da {n} backup",
     clipPurgeBackupsFailed: "Impossibile ripulire {n} backup",
     clipPurgeBackupsCheck: "Elimina anche le copie da altre app da ogni backup (non annullabile)",
+    clipPurgeOnlyConfirm: "La cronologia è già vuota. Rimuovere anche le voci di altre app da tutti i backup? Operazione irreversibile.",
     clipWatchOn: "Altre app: attivo",
     clipWatchOff: "Altre app: disattivo",
     clipEmpty: "Ancora nulla copiato in altre app",

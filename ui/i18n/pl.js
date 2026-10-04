@@ -1497,6 +1497,7 @@ export default {
     clipPurgeBackupsDone: "Usunięto z {n} kopii zapasowych",
     clipPurgeBackupsFailed: "Nie udało się wyczyścić {n} kopii zapasowych",
     clipPurgeBackupsCheck: "Usuń też kopie z innych aplikacji ze wszystkich kopii zapasowych (nie można cofnąć)",
+    clipPurgeOnlyConfirm: "Historia jest już pusta. Usunąć też wpisy z innych aplikacji ze wszystkich kopii zapasowych? Tej operacji nie można cofnąć.",
     clipWatchOn: "Inne aplikacje: włączone",
     clipWatchOff: "Inne aplikacje: wyłączone",
     clipEmpty: "Nic jeszcze nie skopiowano w innych aplikacjach",

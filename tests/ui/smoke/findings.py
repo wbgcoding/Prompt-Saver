@@ -472,7 +472,13 @@ def run(browser, tmp):
     { const srcSel = document.getElementById('journal-source'); srcSel.value = 'elsewhere'; srcSel.dispatchEvent(new Event('change')); } await sleep(300);
     window.__SMOKE_ARGS__.length = 0;
     document.getElementById('journal-clear').click(); await sleep(300);
-    if (confirmOpen()) errs.push('564-m2: clearing an empty store opened a dialog');
+    // Only the purge question is asked (the backups may still hold earlier entries); cancelling does nothing.
+    if (!confirmOpen()) errs.push('564-m2: clearing an empty store under Elsewhere did not ask the purge question');
+    else {
+      if (document.getElementById('confirm-cb-purgeBackups')) errs.push('564-m2: the purge-only dialog carries a box');
+      document.getElementById('confirm-cancel').click(); await sleep(200);
+    }
+    if (callsFor('purge_clip_inbox_from_backups').length) errs.push('564-m2: cancelling the purge question still purged');
     if (callsFor('clip_inbox_clear').length) errs.push('564-m2: clearing an empty store still called clip_inbox_clear');
     if (undoBtn() || document.getElementById('toast').classList.contains('show')) errs.push('564-m2: clearing an empty store showed a toast');
 """)
@@ -1064,6 +1070,117 @@ def run(browser, tmp):
     if (!document.getElementById('confirm-modal').classList.contains('hidden')) errs.push('17003: a dialog opened although the confirmation is off');
     if (!callsFor('clip_inbox_clear').length) errs.push('17003: the clear did not run without the dialog');
     if (callsFor('purge_clip_inbox_from_backups').length) errs.push('17003: the backups were purged without the dialog');
+""")
+    failed += ar_probe('bx720empty', '17003: with the history already empty the purge question alone is offered (confirm on)', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { clipWatcher: true } };</script>\n', r"""
+    await bootReady();
+    RESULTS.purge_clip_inbox_from_backups = () => [2, 0];
+    RESULTS.clip_inbox_list = () => [];
+    const dlgOpen = () => !document.getElementById('confirm-modal').classList.contains('hidden');
+    const purgeCalls = () => callsFor('purge_clip_inbox_from_backups').length;
+    document.getElementById('library-btn').click(); await sleep(400);
+    document.getElementById('library-tab-history').click(); await sleep(500);
+    { const s = document.getElementById('journal-source'); s.value = 'elsewhere'; s.dispatchEvent(new Event('change')); } await sleep(300);
+    window.__SMOKE_ARGS__ = [];
+    document.getElementById('journal-clear').click(); await sleep(300);
+    if (!dlgOpen()) errs.push('17003: an empty Elsewhere clear offered no purge question');
+    else {
+      if (!/already empty/.test(document.getElementById('confirm-msg').textContent)) errs.push('17003: the purge-only dialog reads ' + document.getElementById('confirm-msg').textContent);
+      document.getElementById('confirm-cancel').click(); await sleep(300);
+      if (purgeCalls() !== 0) errs.push('17003: cancelling the purge question purged');
+      document.getElementById('journal-clear').click(); await sleep(300);
+      document.getElementById('confirm-ok').click(); await sleep(400);
+      if (purgeCalls() !== 1) errs.push('17003: confirming the purge question called the purge ' + purgeCalls() + ' times');
+      if (callsFor('clip_inbox_clear').length || callsFor('clear_copy_history').length) errs.push('17003: the purge-only question cleared a store');
+      if (!/2/.test(document.getElementById('toast').textContent)) errs.push('17003: the purge result is not reported');
+    }
+""")
+    failed += ar_probe('bx720emptyoff', '17003: an empty history with the confirmation off does nothing at all', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { clipWatcher: true, confirmClearHistory: false } };</script>\n', r"""
+    await bootReady();
+    RESULTS.purge_clip_inbox_from_backups = () => [2, 0];
+    RESULTS.clip_inbox_list = () => [];
+    document.getElementById('library-btn').click(); await sleep(400);
+    document.getElementById('library-tab-history').click(); await sleep(500);
+    { const s = document.getElementById('journal-source'); s.value = 'elsewhere'; s.dispatchEvent(new Event('change')); } await sleep(300);
+    window.__SMOKE_ARGS__ = [];
+    document.getElementById('journal-clear').click(); await sleep(400);
+    if (!document.getElementById('confirm-modal').classList.contains('hidden')) errs.push('17003: a dialog opened although the confirmation is off');
+    if (callsFor('purge_clip_inbox_from_backups').length) errs.push('17003: the backups were purged without a dialog');
+""")
+    failed += ar_probe('bx720tickoff', '17003: ticking the box, then switching the confirmation off, then clearing purges nothing', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { clipWatcher: true } };</script>\n', r"""
+    await bootReady();
+    RESULTS.purge_clip_inbox_from_backups = () => [2, 0];
+    document.getElementById('library-btn').click(); await sleep(400);
+    document.getElementById('library-tab-history').click(); await sleep(500);
+    document.getElementById('journal-clear').click(); await sleep(300);
+    const box = document.getElementById('confirm-cb-purgeBackups');
+    if (!box) errs.push('17003: fixture: the clear dialog has no purge box');
+    else { box.checked = true; box.dispatchEvent(new Event('change')); }
+    document.getElementById('confirm-cancel').click(); await sleep(300);
+    document.getElementById('library-close').click(); await sleep(200);
+    // Switch the confirmation off the way a user does, in the expert menu.
+    document.getElementById('gear').click(); await sleep(200);
+    document.getElementById('expert-open').click(); await sleep(300);
+    let row = null;
+    for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+      tb.click(); await sleep(80);
+      row = document.querySelector('#expert-flags [data-setting-row="confirmClearHistory"]');
+      if (row) break;
+    }
+    if (!row) errs.push('17003: fixture: the confirmation switch was not found');
+    else { const cb = row.querySelector('input[type=checkbox]'); cb.checked = false; cb.dispatchEvent(new Event('change', { bubbles: true })); await sleep(300); }
+    document.getElementById('settings-close').click(); await sleep(300);
+    document.getElementById('library-btn').click(); await sleep(400);
+    window.__SMOKE_ARGS__ = [];
+    document.getElementById('journal-clear').click(); await sleep(400);
+    if (!document.getElementById('confirm-modal').classList.contains('hidden')) errs.push('17003: a dialog opened although the confirmation is off');
+    if (!callsFor('clip_inbox_clear').length) errs.push('17003: fixture: the clear did not run');
+    if (callsFor('purge_clip_inbox_from_backups').length) errs.push('17003: the earlier tick purged the backups with the confirmation off');
+""")
+    failed += ar_probe('bx720fails', '17003: a failed stored-entries clear skips the purge, a failed purge stays the last thing shown', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { clipWatcher: true } };</script>\n', r"""
+    await bootReady();
+    const dlgOpen = () => !document.getElementById('confirm-modal').classList.contains('hidden');
+    const purgeCalls = () => callsFor('purge_clip_inbox_from_backups').length;
+    const toastText = () => document.getElementById('toast').textContent;
+    const undoBtn = () => document.querySelector('#toast .toast-btn');
+    const tickAndConfirm = async () => {
+      document.getElementById('journal-clear').click(); await sleep(300);
+      const box = document.getElementById('confirm-cb-purgeBackups');
+      if (!dlgOpen() || !box) { errs.push('17003: fixture: no dialog or box'); if (dlgOpen()) document.getElementById('confirm-cancel').click(); return; }
+      box.checked = true; box.dispatchEvent(new Event('change'));
+      document.getElementById('confirm-ok').click(); await sleep(600);
+    };
+    const reopen = async () => {
+      window.__resetClipInbox(); await window.__TAURI__.core.invoke('clip_inbox_list');
+      document.getElementById('library-close').click(); await sleep(200);
+      document.getElementById('library-btn').click(); await sleep(400);
+    };
+    const pickSource = async (v) => { const s = document.getElementById('journal-source'); s.value = v; s.dispatchEvent(new Event('change')); await sleep(200); };
+    document.getElementById('library-btn').click(); await sleep(400);
+    document.getElementById('library-tab-history').click(); await sleep(500);
+    // The stored-entries clear fails: no purge, the error stays.
+    RESULTS.purge_clip_inbox_from_backups = () => [2, 0];
+    RESULTS.clip_inbox_clear = () => { throw 'clearboom'; };
+    window.__SMOKE_ARGS__ = [];
+    await tickAndConfirm();
+    if (!callsFor('clip_inbox_clear').length) errs.push('17003: fixture: the stored-entries clear was not attempted');
+    if (purgeCalls()) errs.push('17003: the backups were purged although the stored-entries clear failed');
+    if (!/clearboom/.test(toastText())) errs.push('17003: the failed clear is not what the toast shows: ' + toastText());
+    if (undoBtn()) errs.push('17003: an undo was offered after the failed clear');
+    delete RESULTS.clip_inbox_clear;
+    // The purge fails, filter Elsewhere and filter All: the error stays the last toast.
+    await reopen();
+    RESULTS.purge_clip_inbox_from_backups = () => { throw 'purgeboom'; };
+    await pickSource('elsewhere');
+    window.__SMOKE_ARGS__ = [];
+    await tickAndConfirm();
+    if (!purgeCalls()) errs.push('17003: fixture: the purge was not attempted');
+    if (!/purgeboom/.test(toastText())) errs.push('17003: Elsewhere: the failed purge is not what the toast shows: ' + toastText());
+    await reopen();
+    await pickSource('all');
+    window.__SMOKE_ARGS__ = [];
+    await tickAndConfirm();
+    if (!/purgeboom/.test(toastText())) errs.push('17003: All: the failed purge is not what the toast shows: ' + toastText());
+    if (undoBtn()) errs.push('17003: All: an undo toast replaced the purge error');
 """)
     failed += ar_probe('bx721', 'copy history: the other-apps switch carries a word that follows its state', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { clipWatcher: true } };</script>\n', r"""
     await bootReady();

@@ -564,16 +564,37 @@ export function bindJournal() {
     } catch (e) { errToast(e); return; }
     const appAffected = clearApp && (rows.length > 0 || Object.keys(usage).length > 0 || Object.keys(lastUsed).length > 0);
     const clipAffected = clearElsewhere && items.length > 0;
-    if (!appAffected && !clipAffected) return;
+    // The scrub of every backup snapshot cannot be undone, so the entries stay gone.
+    // Returns the result text, or null after the failure was shown to the user.
+    const purgeFromBackups = async () => {
+      let result;
+      try { result = await invoke("purge_clip_inbox_from_backups"); } catch (e) { errToast(e); return null; }
+      const [purged, failed] = result;
+      let msg = t("clipPurgeBackupsDone").replace("{n}", String(purged));
+      // A snapshot that could not be opened or whose scrub could not be confirmed
+      // written back must not read as a silent success.
+      if (failed > 0) msg += `. ${t("clipPurgeBackupsFailed").replace("{n}", String(failed))}`;
+      return msg;
+    };
     // Offered only inside the confirmation, and only when the clear covers the copies from
     // other apps. With the confirmation switched off there is no dialog and no way to purge:
     // the backups stay untouched.
+    const offerPurge = sourcesOn && clearElsewhere;
+    if (!appAffected && !clipAffected) {
+      // Nothing to clear, but the backups may still hold entries cleared earlier without
+      // the box ticked: ask the purge question alone.
+      if (!(flag("confirmClearHistory") && offerPurge)) return;
+      const okPurge = await confirmDialog({ title: t("clearHistory"), message: t("clipPurgeOnlyConfirm"), confirmLabel: t("delete") });
+      if (!okPurge) return;
+      const msg = await purgeFromBackups();
+      if (msg !== null) toast(msg);
+      return;
+    }
     let purgeBackups = false;
     if (flag("confirmClearHistory")) {
       const message = appAffected && clipAffected
         ? t("clearHistoryConfirmBoth").replace("{n}", String(rows.length)).replace("{m}", String(items.length))
         : appAffected ? t("clearHistoryConfirm") : t("clearClipConfirm").replace("{m}", String(items.length));
-      const offerPurge = sourcesOn && clearElsewhere;
       const ok = await confirmDialog({
         title: t("clearHistory"),
         message,
@@ -590,21 +611,22 @@ export function bindJournal() {
       settings.last_used = {};
     }
     if (clipAffected) {
-      try { await invoke("clip_inbox_clear"); } catch (e) { errToast(e); items = []; if (!appAffected) return; }
-    }
-    // The scrub of every backup snapshot cannot be undone, so the entries stay gone.
-    let purgeMsg = "";
-    if (purgeBackups) {
-      const result = await invoke("purge_clip_inbox_from_backups").catch((e) => { errToast(e); return null; });
-      if (result !== null) {
-        const [purged, failed] = result;
-        purgeMsg = t("clipPurgeBackupsDone").replace("{n}", String(purged));
-        // A snapshot that could not be opened or whose scrub could not be confirmed
-        // written back must not read as a silent success.
-        if (failed > 0) purgeMsg += `. ${t("clipPurgeBackupsFailed").replace("{n}", String(failed))}`;
+      // A failed clear stops right here: no purge, and nothing may paint over the error.
+      try { await invoke("clip_inbox_clear"); } catch (e) {
+        if (appAffected) await loadJournal();
+        errToast(e);
+        return;
       }
     }
+    let purgeMsg = "";
+    let purgeFailed = false;
+    if (purgeBackups) {
+      const msg = await purgeFromBackups();
+      if (msg === null) purgeFailed = true; else purgeMsg = msg;
+    }
     await loadJournal();
+    // The failed purge was already shown; no success or undo toast may replace it.
+    if (purgeFailed) return;
     const clearedMsg = t(appAffected ? "historyClearedToast" : "clipInboxClearedToast");
     if (!appAffected && purgeBackups) {
       toast(purgeMsg || clearedMsg);
