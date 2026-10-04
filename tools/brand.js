@@ -198,15 +198,28 @@ function readCurrentBrand(root) {
 
 // ---------- generated files ----------
 
+// assetProtocol deny list of src-tauri/tauri.conf.json: store files and secrets the
+// webview must never read. No brand value in it, so every brand stamps the same list.
+const ASSET_DENY = [
+  "**/data.db*",
+  "**/settings.json",
+  "**/settings.tmp",
+  "**/prompts.json",
+  "**/prompts.tmp",
+  "**/*.psb",
+  "**/backups/**",
+  "**/error.log",
+];
+
 const rs = (v) => JSON.stringify(String(v)); // values are pre-validated; this only quotes
 
 function brandRs(b) {
-  return `// Product identity. GENERATED — run \`node tools/brand.js <brand>\` to change it;
+  return `// Product identity. GENERATED: run \`node tools/brand.js <brand>\` to change it;
 // the values live in brands/<brand>.json. Nothing else in the Rust code may spell
 // the product name.
 //
 // These strings decide where an installation keeps its data and how Windows knows
-// the app. Changing one strands every existing install — brand_values_are_pinned in
+// the app. Changing one strands every existing install; brand_values_are_pinned in
 // tests.rs asserts them for exactly that reason.
 
 pub const DISPLAY_NAME: &str = ${rs(b.displayName)};
@@ -248,7 +261,7 @@ pub const ITEM_PLURAL: &str = ${rs((b.terms && b.terms.itemPlural) || "prompts")
 }
 
 function brandJs(b) {
-  return `// Product name for the webview windows. GENERATED — run \`node tools/brand.js <brand>\`
+  return `// Product name for the webview windows. GENERATED: run \`node tools/brand.js <brand>\`
 // to change it; the values live in brands/<brand>.json.
 //
 // t() substitutes {app} in every translated string with this, and applyI18n fills
@@ -328,8 +341,8 @@ function stampManifests(root, b, current) {
   conf = sub(conf, /^(        "title": ")[^"]*(")/m, `$1${b.displayName}$2`, "tauri.conf window title");
   conf = sub(
     conf,
-    /"deny": \["\*\*\/data\.db", "\*\*\/data\.db-wal", "\*\*\/data\.db-shm", "[^"]*", "[^"]*"\]/,
-    `"deny": ["**/data.db", "**/data.db-wal", "**/data.db-shm", "**/${b.dataFolder}/settings.json", "**/${b.dataFolder}/prompts.json"]`,
+    /"deny": \[[^\]]*\]/,
+    `"deny": [${ASSET_DENY.map((e) => JSON.stringify(e)).join(", ")}]`,
     "tauri.conf assetProtocol deny"
   );
   write(confPath, conf);
@@ -472,7 +485,7 @@ function stampDocs(root, oldB, b, withChangelog, enabled) {
     return;
   }
   if (!oldB) {
-    console.warn("brand: no current brand found — leaving the prose files untouched");
+    console.warn("brand: no current brand found; leaving the prose files untouched");
     return;
   }
   const map = tokenMap(oldB, b);
@@ -512,7 +525,7 @@ function stampDocs(root, oldB, b, withChangelog, enabled) {
     const text = read(helpPath);
     const at = text.indexOf("\n## Hilfe (Deutsch)");
     if (at < 0) {
-      console.warn("brand: docs/help.md has no German heading — mapped as English only");
+      console.warn("brand: docs/help.md has no German heading; mapped as English only");
       write(helpPath, apply(text, english));
     } else {
       write(helpPath, apply(text.slice(0, at), english) + apply(text.slice(at), german));
@@ -595,7 +608,7 @@ function stampIcons(root, b, regenerate) {
   // is involved, so nothing from the config can be read as a command, and there is
   // no `--` for npm to swallow the path argument with.
   const cli = path.join(ROOT, "node_modules", "@tauri-apps", "cli", "tauri.js");
-  if (!fs.existsSync(cli)) fail("--icons needs the Tauri CLI — run `npm install` first");
+  if (!fs.existsSync(cli)) fail("--icons needs the Tauri CLI: run `npm install` first");
   const icons = path.join(root, "src-tauri", "icons");
   const run = (svg, outDir) =>
     execFileSync(process.execPath, [cli, "icon", path.join(ROOT, svg), "-o", outDir], {
@@ -638,7 +651,7 @@ function main(argv) {
   const b = loadBrand(slug);
   const root = out ? prepareOut(out) : ROOT;
   const current = readCurrentBrand(root);
-  if (current && current.slug === b.slug && !out) console.log(`brand: ${b.displayName} is already applied — re-stamping`);
+  if (current && current.slug === b.slug && !out) console.log(`brand: ${b.displayName} is already applied; re-stamping`);
 
   write(path.join(root, "src-tauri", "src", "brand.rs"), brandRs(b));
   write(path.join(root, "ui", "brand.js"), brandJs(b));

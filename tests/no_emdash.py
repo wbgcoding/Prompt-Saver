@@ -57,25 +57,7 @@ COMMENT_SYNTAX = {
 STRING_SPAN = re.compile(r"""(?<!\\)(?:"[^"\n]*"|'[^'\n]*')""")
 
 # A line range excepted wholesale, keyed by file and inclusive (start, end).
-RANGE_EXCEPTIONS = [
-    {
-        "file": "tools/brand.js",
-        "start": 204,
-        "end": 247,
-        "reason": "brandRs()'s backtick template literal: JS string-literal "
-                  "content in this file (it becomes real // comments only in "
-                  "the GENERATED src-tauri/src/brand.rs output), so it is "
-                  "code, not a comment, here.",
-    },
-    {
-        "file": "tools/brand.js",
-        "start": 251,
-        "end": 265,
-        "reason": "brandJs()'s backtick template literal: same as brandRs() "
-                  "above, generates ui/brand.js's comments rather than being "
-                  "one itself.",
-    },
-]
+RANGE_EXCEPTIONS = []
 
 # Explicit exceptions, each with its own reason. Content-matched rather than
 # line-pinned so they survive edits that shift line numbers.
