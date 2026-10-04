@@ -10,7 +10,7 @@ const root = path.join(__dirname, "..");
 const read = (rel) => fs.readFileSync(path.join(root, rel), "utf8");
 
 // Tab and group keys in menu order, straight from the EXPERT_TABS registry.
-const main = read("ui/main.js");
+const main = require("./ui_sources.js").mainWindowSource();
 const start = main.indexOf("const EXPERT_TABS = [");
 const end = main.indexOf("\n];", start);
 if (start < 0 || end < 0) { console.error("EXPERT_TABS not found in ui/main.js"); process.exit(1); }

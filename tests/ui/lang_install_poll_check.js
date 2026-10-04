@@ -11,7 +11,7 @@ const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
 
-const src = fs.readFileSync(path.join(__dirname, "..", "..", "ui", "main.js"), "utf8").replace(/\r\n/g, "\n");
+const src = require(path.join(__dirname, "..", "ui_sources.js")).mainWindowSource().replace(/\r\n/g, "\n");
 function extractBlock(marker) {
   const start = src.indexOf(marker);
   if (start === -1) throw new Error(`could not find in main.js (source text changed?): ${marker}`);

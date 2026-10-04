@@ -22,12 +22,13 @@ import sys
 from pathlib import Path
 
 from i18n_files import combined_source
+from ui_sources import main_window_source
 
 ROOT = Path(__file__).resolve().parents[1]
 MAIN = ROOT / "ui" / "main.js"
 INDEX = ROOT / "ui" / "index.html"
 
-MAIN_SRC = MAIN.read_text(encoding="utf-8")
+MAIN_SRC = main_window_source()
 INDEX_SRC = INDEX.read_text(encoding="utf-8")
 I18N_SRC = combined_source()
 

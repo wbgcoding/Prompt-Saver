@@ -10,7 +10,7 @@ const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
 
-const src = fs.readFileSync(path.join(__dirname, "..", "ui", "main.js"), "utf8").replace(/\r\n/g, "\n");
+const src = require("./ui_sources.js").mainWindowSource().replace(/\r\n/g, "\n");
 
 // "<marker> ... <matching closing brace>", counting braces from the marker's own
 // opening one so a nested if/for does not end the extraction early.

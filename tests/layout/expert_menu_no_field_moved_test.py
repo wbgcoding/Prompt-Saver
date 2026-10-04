@@ -17,7 +17,8 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-MAIN = REPO / "ui" / "main.js"
+sys.path.insert(0, str(REPO / "tests"))
+from ui_sources import main_window_source  # noqa: E402
 INDEX = REPO / "ui" / "index.html"
 
 KINDS = ("flags", "values", "selects", "dropdowns", "paths")
@@ -77,8 +78,8 @@ def git_show(rel_path):
 def main():
     problems = []
 
-    current_main = MAIN.read_text(encoding="utf-8")
-    baseline_main = git_show("ui/main.js")
+    current_main = main_window_source()
+    baseline_main = main_window_source("HEAD")
     if baseline_main is None:
         print("SKIP: no git HEAD version of ui/main.js to compare against")
         return 0

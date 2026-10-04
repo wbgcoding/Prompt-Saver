@@ -21,6 +21,8 @@ import re
 import sys
 from pathlib import Path
 
+from ui_sources import main_window_source
+
 ROOT = Path(__file__).resolve().parent.parent
 UI = ROOT / "ui"
 
@@ -74,7 +76,7 @@ def used_classes(paths):
 
 
 def main():
-    source = (UI / "main.js").read_text(encoding="utf-8")
+    source = main_window_source()
     registries = {name: registry_keys(source, name) for name in set(GATES.values())}
 
     files = sorted((UI / "styles").glob("*.css")) + sorted(UI.glob("*.html"))

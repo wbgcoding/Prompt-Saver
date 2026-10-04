@@ -4874,11 +4874,30 @@ fn sync_default_folder_is_named_after_the_brand_not_a_fixed_word() {
     assert_ne!(sync_dir_leaf(brand::SLUG), SYNC_LEGACY_DIR_NAME);
 }
 
+// The main window's JavaScript as one text: the module list in tests/ui_sources.json
+// (concatenation order), read at run time so a module added there is picked up.
+fn main_window_js() -> String {
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
+    let list = std::fs::read_to_string(root.join("tests").join("ui_sources.json")).expect("tests/ui_sources.json");
+    let list: serde_json::Value = serde_json::from_str(&list).expect("ui_sources.json parses");
+    list["main_window_modules"]
+        .as_array()
+        .expect("main_window_modules is a list")
+        .iter()
+        .map(|name| {
+            let name = name.as_str().expect("module name");
+            std::fs::read_to_string(root.join("ui").join(name)).unwrap_or_else(|e| panic!("ui/{name}: {e}"))
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 // The timer lives in Rust, the number shown in the expert menu lives in JS. If
 // they drift apart the menu claims one interval while the app runs another.
 #[test]
 fn sync_poll_and_fail_defaults_match_the_expert_menus_own_defaults() {
-    let js = include_str!("../../ui/main.js");
+    let js = main_window_js();
+    let js = js.as_str();
     let js_def = |key: &str| -> f64 {
         let at = js.find(&format!("{key}: {{ label:")).unwrap_or_else(|| panic!("{key} row missing from the expert menu"));
         let row = &js[at..js[at..].find('\n').map(|e| at + e).unwrap_or(js.len())];
@@ -14328,7 +14347,7 @@ fn every_tool_key_has_a_matching_frontend_call_site() {
     // helper, but a few live in windows or shared modules of their own (the video
     // editor, the shared colour popup) and call record_tool_usage directly.
     let src = [
-        include_str!("../../ui/main.js"),
+        main_window_js().as_str(),
         include_str!("../../ui/video.js"),
         include_str!("../../ui/colorpop.js"),
     ]

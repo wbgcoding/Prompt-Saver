@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const ui = path.join(__dirname, "..", "ui");
 const css = fs.readFileSync(path.join(ui, "styles", "main.css"), "utf8");
-const js = fs.readFileSync(path.join(ui, "main.js"), "utf8");
+const js = require("./ui_sources.js").mainWindowSource();
 const problems = [];
 const zOf = (re) => {
   const m = css.match(re);

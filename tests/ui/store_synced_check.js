@@ -9,7 +9,7 @@ const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
 
-const src = fs.readFileSync(path.join(__dirname, "..", "..", "ui", "main.js"), "utf8").replace(/\r\n/g, "\n");
+const src = require(path.join(__dirname, "..", "ui_sources.js")).mainWindowSource().replace(/\r\n/g, "\n");
 const marker = 'listen("store-synced", ';
 const start = src.indexOf(marker);
 if (start === -1) {

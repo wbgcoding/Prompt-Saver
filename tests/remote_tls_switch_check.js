@@ -2,7 +2,7 @@
 // Run:  node tests/remote_tls_switch_check.js      Exit: 0 = clean, 1 = problems.
 const fs = require("fs");
 const path = require("path");
-const src = fs.readFileSync(path.join(__dirname, "..", "ui", "main.js"), "utf8").replace(/\r\n/g, "\n");
+const src = require("./ui_sources.js").mainWindowSource().replace(/\r\n/g, "\n");
 const i18n = require("./i18n_load.js").combinedSource();
 const problems = [];
 const need = (ok, msg) => { if (!ok) problems.push(msg); };

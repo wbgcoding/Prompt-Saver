@@ -120,6 +120,22 @@ regression at 10000 must never hide behind 1000 and 5000 passing. All four measu
 1080p30 recording once (unrelated to prompt count, so not repeated per stage). Needs a
 Chromium-family browser (Chrome or Edge); skips cleanly if neither is found.
 
+## Main-window sources
+The main window is several modules under `ui/`. Tests that scan its source text never open
+`ui/main.js` directly: they read the list `main_window_modules` in `tests/ui_sources.json`
+as one text, the files joined with a newline in list order. Helpers: `tests/ui_sources.py`
+(`main_window_files()`, `main_window_source(rev=None)`, a git revision reads the files as
+they were there) and `tests/ui_sources.js` (`mainWindowModules`, `mainWindowFiles()`,
+`mainWindowSource()`). The Rust tests read the same json at run time. A new module of the
+main window is appended to the json in the commit that creates it.
+
+## Moving code
+`python tools/move_check.py [--base REV] [--max N]` proves that a staged change under `ui/`
+only moved code: every removed line must reappear as an added line (whitespace, a leading
+`export ` and import lines ignored). Stage the change first (`git add`), run it, and pass
+`--max` the number of lines the item deliberately rewrites; every unmatched removed line is
+printed with its old line number.
+
 ## Harness constraints (all three browser suites)
 - `smoke_test.py` and `modal_scroll_test.py` load the page in an IFRAME of the exact
   viewport size, because headless Chrome refuses windows narrower than ~500 px, and they

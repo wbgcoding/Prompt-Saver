@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 from i18n_files import combined_source
+from ui_sources import main_window_source
 
 ROOT = Path(__file__).resolve().parent.parent
 MAIN = ROOT / "ui" / "main.js"
@@ -54,7 +55,7 @@ def tour_features(source):
 
 
 def main():
-    src = MAIN.read_text(encoding="utf-8")
+    src = main_window_source()
     src_nc = re.sub(r"/\*.*?\*/", "", src, flags=re.S)
     src_nc = "\n".join(l for l in src_nc.splitlines() if not l.lstrip().startswith("//"))
 

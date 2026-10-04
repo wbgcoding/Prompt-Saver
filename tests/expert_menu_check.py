@@ -20,9 +20,9 @@ import sys
 from pathlib import Path
 
 from i18n_files import combined_source
+from ui_sources import main_window_source
 
-MAIN = Path(__file__).resolve().parents[1] / "ui" / "main.js"
-SRC = MAIN.read_text(encoding="utf-8")
+SRC = main_window_source()
 # Comments carry words like "// Duplicate finder: threshold" that the key scanner
 # would otherwise read as setting names.
 SRC = re.sub(r"/\*.*?\*/", "", SRC, flags=re.S)
