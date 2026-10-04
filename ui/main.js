@@ -70,13 +70,6 @@ wireTags();
 
 wireTheme();
 
-// ---- Copy history & usage journal ----
-
-// ---- Settings: views editor ----
-// Views are managed straight from the top view tabs: the "+" adds one, a
-// right-click opens the view popup (rename, grid size, color, delete). The old
-// settings-page views editor was removed.
-
 // ---- Wire events ----
 function bind() {
   bindEditor();
