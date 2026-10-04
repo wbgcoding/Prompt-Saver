@@ -483,7 +483,6 @@ def run(browser, tmp):
     if (tabsHidden()) errs.push('564-l3: the history tab is gone although entries from other apps are stored');
     else {
       document.getElementById('library-tab-history').click(); await sleep(400);
-      if (document.getElementById('clip-purge-backups').classList.contains('hidden')) errs.push('564-l3: the purge button is not reachable');
       if (document.querySelectorAll('#journal-body .clip-row').length !== 2) errs.push('564-l3: the stored entries are not listed');
     }
     // With nothing stored and nothing recording, the tab is gone again.
@@ -995,6 +994,76 @@ def run(browser, tmp):
     // 718: only the type row keeps an All chip; the source All is a select option.
     const allChips = document.querySelectorAll('#library-panel-history button[data-i18n="filterAll"]').length;
     if (allChips !== 1) errs.push('718: the history shows ' + allChips + ' All chips instead of one');
+""")
+    failed += ar_probe('bx720', '17003: clearing the copy history offers the backup purge as an unticked box inside the dialog', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { clipWatcher: true } };</script>\n', r"""
+    await bootReady();
+    RESULTS.purge_clip_inbox_from_backups = () => [2, 0];
+    const dlgOpen = () => !document.getElementById('confirm-modal').classList.contains('hidden');
+    const purgeCalls = () => callsFor('purge_clip_inbox_from_backups').length;
+    document.getElementById('library-btn').click(); await sleep(400);
+    document.getElementById('library-tab-history').click(); await sleep(500);
+    if (document.getElementById('clip-purge-backups')) errs.push('17003: the header purge button is still there');
+    const pickSource = async (v) => { const s = document.getElementById('journal-source'); s.value = v; s.dispatchEvent(new Event('change')); await sleep(200); };
+    // Unticked: the clear runs, the backups are not touched.
+    window.__SMOKE_ARGS__ = [];
+    document.getElementById('journal-clear').click(); await sleep(300);
+    let box = document.getElementById('confirm-cb-purgeBackups');
+    if (!dlgOpen() || !box) errs.push('17003: the clear dialog has no purge box');
+    else {
+      if (box.checked) errs.push('17003: the purge box starts ticked');
+      document.getElementById('confirm-ok').click(); await sleep(300);
+      if (purgeCalls() !== 0) errs.push('17003: confirming with the box unticked purged the backups');
+      if (!callsFor('clip_inbox_clear').length) errs.push('17003: the clear did not run');
+    }
+    // Ticked: the purge runs once.
+    window.__resetClipInbox(); await window.__TAURI__.core.invoke('clip_inbox_list');
+    document.getElementById('library-close').click(); await sleep(200);
+    document.getElementById('library-btn').click(); await sleep(400);
+    window.__SMOKE_ARGS__ = [];
+    document.getElementById('journal-clear').click(); await sleep(300);
+    box = document.getElementById('confirm-cb-purgeBackups');
+    if (!dlgOpen() || !box) errs.push('17003: the second clear dialog has no purge box');
+    else {
+      box.checked = true; box.dispatchEvent(new Event('change'));
+      document.getElementById('confirm-ok').click(); await sleep(400);
+      if (purgeCalls() !== 1) errs.push('17003: ticking the box called the purge ' + purgeCalls() + ' times instead of once');
+      if (!/2/.test(document.getElementById('toast').textContent)) errs.push('17003: the purge result is not reported');
+    }
+    // Only the copies from other apps, purged: nothing to undo.
+    window.__resetClipInbox(); await window.__TAURI__.core.invoke('clip_inbox_list');
+    document.getElementById('library-close').click(); await sleep(200);
+    document.getElementById('library-btn').click(); await sleep(400);
+    await pickSource('elsewhere');
+    window.__SMOKE_ARGS__ = [];
+    document.getElementById('toast').classList.remove('show', 'actionable');
+    document.getElementById('journal-clear').click(); await sleep(300);
+    box = document.getElementById('confirm-cb-purgeBackups');
+    if (!box) errs.push('17003: the Elsewhere clear dialog has no purge box');
+    else {
+      box.checked = true; box.dispatchEvent(new Event('change'));
+      document.getElementById('confirm-ok').click(); await sleep(400);
+      if (purgeCalls() !== 1) errs.push('17003: the Elsewhere purge did not run once');
+      if (document.querySelector('#toast .toast-btn')) errs.push('17003: an undo was offered for entries purged from the backups');
+    }
+    // The app filter does not cover the copies from other apps: no box.
+    window.__resetClipInbox(); await window.__TAURI__.core.invoke('clip_inbox_list');
+    document.getElementById('library-close').click(); await sleep(200);
+    document.getElementById('library-btn').click(); await sleep(400);
+    await pickSource('app');
+    document.getElementById('journal-clear').click(); await sleep(300);
+    if (document.getElementById('confirm-cb-purgeBackups')) errs.push('17003: the app-only clear dialog offers the purge box');
+    document.getElementById('confirm-cancel').click(); await sleep(200);
+""")
+    failed += ar_probe('bx720off', '17003: with the clear confirmation off there is no dialog and no purge', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { clipWatcher: true, confirmClearHistory: false } };</script>\n', r"""
+    await bootReady();
+    RESULTS.purge_clip_inbox_from_backups = () => [2, 0];
+    document.getElementById('library-btn').click(); await sleep(400);
+    document.getElementById('library-tab-history').click(); await sleep(500);
+    window.__SMOKE_ARGS__ = [];
+    document.getElementById('journal-clear').click(); await sleep(400);
+    if (!document.getElementById('confirm-modal').classList.contains('hidden')) errs.push('17003: a dialog opened although the confirmation is off');
+    if (!callsFor('clip_inbox_clear').length) errs.push('17003: the clear did not run without the dialog');
+    if (callsFor('purge_clip_inbox_from_backups').length) errs.push('17003: the backups were purged without the dialog');
 """)
     # ---- main window findings: generated block end ----
     return failed

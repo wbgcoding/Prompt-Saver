@@ -1789,6 +1789,7 @@ the video editor and the introduction tour ship on).
 - **One list in the copy history.** A sort field switches between Recently copied and Most used (top 20) instead of showing two columns side by side.
 - **Copy history filters in two rows.** The source (All, In the app, Elsewhere) is a select beside the search field; the type chips and colors share the second row, with a single All chip.
 - **The history search says what it searches.** The field reads "Search copy history…" instead of the library wording.
+- **Deleting copies from other apps out of the backups moved into the clear dialog.** The extra button is gone. Clearing the copy history while copies from other apps are listed now offers a box in the confirmation to remove them from every backup too; it starts unticked and, if ticked, cannot be undone. With the confirmation switched off, backups are never touched.
 
 ## 2.6.3 (2026-07-26)
 
