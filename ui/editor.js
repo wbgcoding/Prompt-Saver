@@ -810,6 +810,7 @@ export function syncModalImageUi(mode) {
   const rotating = textVisible && rotationUiOn();
   modal.text.classList.toggle("hidden", !textVisible || rotating);
   modal.voiceRow.classList.toggle("hidden", !textVisible || rotating);
+  $("modal-text-label").classList.toggle("hidden", !textVisible || rotating);
   const varsUi = textVisible && !rotating && flag("promptVars");
   modal.textBar.classList.toggle("hidden", !varsUi);
   modal.varsHint.classList.toggle("hidden", !varsUi);
@@ -1469,6 +1470,7 @@ export function bindEditor() {
     const rotating = rotationActive();
     modal.text.classList.toggle("hidden", rotating);
     modal.voiceRow.classList.toggle("hidden", rotating);
+    $("modal-text-label").classList.toggle("hidden", rotating);
     const varsUi = !rotating && flag("promptVars");
     modal.textBar.classList.toggle("hidden", !varsUi);
     modal.varsHint.classList.toggle("hidden", !varsUi);

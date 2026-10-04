@@ -398,6 +398,7 @@ export default {
     editModalTitle: "プロンプトを編集",
     namePh: "プロンプト名",
     promptPh: "プロンプトを入力…",
+    promptTextLabel: "プロンプトのテキスト",
     promptPhComposer: "プロンプトを入力…（{keys} で保存）",
     addToLayout: "グリッドに追加",
     gridFull: "グリッドが満杯なので、タイルにドラッグして入替",

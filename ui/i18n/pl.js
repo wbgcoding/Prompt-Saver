@@ -398,6 +398,7 @@ export default {
     editModalTitle: "Edytuj prompt",
     namePh: "Nazwa promptu",
     promptPh: "Wpisz prompt…",
+    promptTextLabel: "Treść promptu",
     promptPhComposer: "Wpisz prompt… ({keys} zapisuje)",
     addToLayout: "Dodaj do siatki",
     gridFull: "Siatka pełna, przeciągnij na kafelek, aby zamienić",

@@ -343,11 +343,12 @@
           </div>
         </div>
       </div>
+      <label id="modal-text-label" for="modal-text" class="modal-field-label" data-i18n="promptTextLabel">Prompt text</label>
       <div id="modal-text-wrap" class="modal-text-wrap">
         <textarea id="modal-text" class="modal-input modal-text hidden" rows="6" data-i18n-ph="promptPh"></textarea>
         <div id="modal-md-wrap" class="md-wrap hidden">
           <div id="modal-md-preview" class="md-preview" tabindex="0" aria-live="off"
-               data-i18n-title="mdClickToEdit"></div>
+               data-i18n-title="mdClickToEdit" data-i18n-aria="promptTextLabel"></div>
         </div>
         <!-- Only shown while the rendered preview is on screen for a prompt
              that actually contains Markdown syntax, and only while

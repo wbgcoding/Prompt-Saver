@@ -398,6 +398,7 @@ export default {
     editModalTitle: "Prompt bewerken",
     namePh: "Promptnaam",
     promptPh: "Typ een prompt…",
+    promptTextLabel: "Prompttekst",
     promptPhComposer: "Typ een prompt… ({keys} slaat het op)",
     addToLayout: "Aan lay-out toevoegen",
     gridFull: "Raster is vol, sleep op een tegel om te wisselen",

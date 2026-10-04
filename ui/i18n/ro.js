@@ -398,6 +398,7 @@ export default {
     editModalTitle: "Editează promptul",
     namePh: "Numele promptului",
     promptPh: "Scrie un prompt…",
+    promptTextLabel: "Textul promptului",
     promptPhComposer: "Scrie un prompt… ({keys} îl salvează)",
     addToLayout: "Adaugă în aranjament",
     gridFull: "Grila este plină. Trage peste o dală pentru a le schimba între ele.",

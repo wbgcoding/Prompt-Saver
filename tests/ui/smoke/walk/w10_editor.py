@@ -167,6 +167,10 @@ SECTION = """\
         if (document.getElementById('modal-advanced').classList.contains('hidden')) {
           out.errors.push('749: the advanced options head is hidden with tags, hotkeys and history off');
         }
+        // 751: a file prompt has no text field, so no label over it either.
+        if (document.getElementById('modal-text-label').getBoundingClientRect().height > 0) {
+          out.errors.push('751: the prompt text label is shown for a file prompt');
+        }
         await click('modal-close-x');
         await sleep(200);
         const cm749 = document.getElementById('confirm-modal');
@@ -180,6 +184,13 @@ SECTION = """\
       if (!await openEditor('p6')) {
         out.errors.push('750: the text prompt did not open in the editor');
       } else {
+        // 751-text: a text prompt shows the visible label over the prompt text; the
+        // Markdown pane carries the same accessible name.
+        const lab751 = document.getElementById('modal-text-label');
+        if (!(lab751.getBoundingClientRect().height > 0) || !lab751.textContent.trim() || lab751.textContent.trim() === 'promptTextLabel') {
+          out.errors.push('751-text: a text prompt has no prompt text label');
+        }
+        if (!document.getElementById('modal-md-preview').getAttribute('aria-label')) out.errors.push('751-text: the Markdown pane has no accessible name');
         const len750 = document.getElementById('modal-length').getBoundingClientRect();
         const mic750 = document.getElementById('modal-voice-btn').getBoundingClientRect();
         if (!(len750.height > 0) || !(mic750.height > 0)) {

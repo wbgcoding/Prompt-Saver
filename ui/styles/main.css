@@ -1433,6 +1433,10 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
 /* "+ Entry" left, mode dropdown pinned to the right edge with "From the
    start" immediately left of it (and the "Next: n/total" readout left of that). */
 .modal-rotate-controls-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+/* Visible heading over the prompt text only: the name and the note keep a placeholder,
+   so the editor does not grow taller. The negative margin pulls it against the field
+   past the dialog's row gap. */
+.modal-field-label { color: var(--muted); font-size: 12px; margin-bottom: -6px; }
 /* Counter left, mic right, one row right under the text field. The row is never
    hidden by script: it takes no room when both children are hidden. */
 .modal-text-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 0; }

@@ -398,6 +398,7 @@ export default {
     editModalTitle: "İstemi düzenle",
     namePh: "İstem adı",
     promptPh: "Bir istem yaz…",
+    promptTextLabel: "İstem metni",
     promptPhComposer: "Bir istem yaz… ({keys} kaydeder)",
     addToLayout: "Düzene ekle",
     gridFull: "Izgara dolu, değiştirmek için bir kutucuğa sürükle",

@@ -398,6 +398,7 @@ export default {
     editModalTitle: "编辑提示词",
     namePh: "提示词名称",
     promptPh: "输入提示词…",
+    promptTextLabel: "提示词文本",
     promptPhComposer: "输入提示词…（{keys} 保存）",
     addToLayout: "添加到网格",
     gridFull: "网格已满，拖到磁贴上交换",
