@@ -8,6 +8,7 @@ import { JOURNAL_ROWS_MAX } from "./expertConfig.js";
 import { copyOnCooldown, recordCopy } from "./copyFlow.js";
 import { wireSearchSuggest } from "./windowChrome.js";
 import { varPreview } from "./floatShared.js";
+import { dynLocale } from "./promptVars.js";
 import { applyFlags } from "./expertMenu.js";
 import { editPrompt, openModal } from "./editor.js";
 
@@ -93,6 +94,7 @@ export function journalRow(p, meta, onClick) {
   if (meta && (meta.left || meta.right)) {
     const sub = document.createElement("span");
     sub.className = "lib-sub lib-subrow journal-meta";
+    if (meta.title) sub.title = meta.title;
     const l = document.createElement("span");
     l.textContent = meta.left || "";
     const r = document.createElement("span");
@@ -144,6 +146,20 @@ export const fmtCopyTime = (ts) => {
   if (!ts) return "";
   return new Date(ts * 1000).toLocaleString(LANG, { dateStyle: "short", timeStyle: "short" });
 };
+
+// The history's time wording: today reads relative ("5 minutes ago", "2 hours ago"), any
+// other day the usual short date and time. The full stamp rides along as a tooltip.
+export const fmtWhen = (ts) => {
+  if (!ts) return "";
+  const then = new Date(ts * 1000);
+  const now = new Date();
+  if (then.toDateString() !== now.toDateString()) return fmtCopyTime(ts);
+  const mins = Math.max(0, Math.round((now - then) / 60000));
+  let rtf;
+  try { rtf = new Intl.RelativeTimeFormat(dynLocale(), { numeric: "auto" }); } catch (_) { rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" }); }
+  return mins < 60 ? rtf.format(-mins, "minute") : rtf.format(-Math.floor(mins / 60), "hour");
+};
+const fmtFull = (ts) => (ts ? new Date(ts * 1000).toLocaleString(LANG) : "");
 
 // The "last copied" / "last edited" lines a tile or library row's tooltip
 // shows, each hanging off the function that actually owns that data -- the copy
@@ -236,7 +252,8 @@ export function journalClipRow(it) {
   row.className = "clip-row";
   const time = document.createElement("span");
   time.className = "clip-time";
-  time.textContent = new Date(it.ts * 1000).toLocaleString(LANG);
+  time.textContent = fmtWhen(it.ts);
+  time.title = fmtFull(it.ts);
   const prev = document.createElement("div");
   prev.className = "clip-preview";
   prev.textContent = it.text;
@@ -409,10 +426,11 @@ export function renderJournal() {
   const rowEls = mode === "recent"
     ? recent.map((e) => (e.clip
       ? journalClipRow(e.clip)
-      : journalRow(e.p, { left: showTime ? fmtCopyTime(e.ts) : "", rowid: e.rowid }, copyAgain(e.p))))
+      : journalRow(e.p, { left: showTime ? fmtWhen(e.ts) : "", title: showTime ? fmtFull(e.ts) : "", rowid: e.rowid }, copyAgain(e.p))))
     // One meta line: last-used time on the left, copy count on the right.
     : used.map(([p, n, ts]) => journalRow(p, {
-      left: showTime && ts ? fmtCopyTime(ts) : "",
+      left: showTime && ts ? fmtWhen(ts) : "",
+      title: showTime && ts ? fmtFull(ts) : "",
       right: t("usedTimes").replace("{n}", n),
     }, copyAgain(p)));
   if (!rowEls.length) {

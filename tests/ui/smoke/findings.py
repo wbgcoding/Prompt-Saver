@@ -1080,5 +1080,27 @@ def run(browser, tmp):
     if (word() !== 'Other apps: off') errs.push('721: after a click the switch reads ' + JSON.stringify(word()));
     if (tog.classList.contains('active')) errs.push('721: the switch is still active after switching off');
 """)
+    failed += ar_probe('bx722', 'copy history: today reads relative, other days keep the short date, the full stamp sits in the tooltip', 'index', '1000x780', '', r"""
+    await bootReady();
+    const core = await import('./core.js');
+    const jr = await import('./journal.js');
+    await core.setLang('de');
+    const nowS = Math.floor(Date.now() / 1000);
+    const fiveAgo = nowS - 300;
+    if (new Date(fiveAgo * 1000).toDateString() !== new Date().toDateString()) { errs.push('722: skipped, the run straddles midnight'); }
+    else {
+      const rtf = new Intl.RelativeTimeFormat('de', { numeric: 'auto' });
+      const want = rtf.format(-5, 'minute');
+      if (jr.fmtWhen(fiveAgo) !== want) errs.push('722: five minutes ago reads ' + JSON.stringify(jr.fmtWhen(fiveAgo)) + ' instead of ' + JSON.stringify(want));
+      if (!/5 Minuten/.test(jr.fmtWhen(fiveAgo))) errs.push('722: the German wording is not "vor 5 Minuten": ' + jr.fmtWhen(fiveAgo));
+      const row = jr.journalClipRow({ id: 9, ts: fiveAgo, text: 'abc' });
+      const timeEl = row.querySelector('.clip-time');
+      if (timeEl.textContent !== want) errs.push('722: the elsewhere row shows ' + JSON.stringify(timeEl.textContent));
+      if (timeEl.title !== new Date(fiveAgo * 1000).toLocaleString('de')) errs.push('722: the elsewhere row has no full-stamp tooltip: ' + JSON.stringify(timeEl.title));
+    }
+    const yesterday = nowS - 86400 - 3600;
+    if (jr.fmtWhen(yesterday) !== jr.fmtCopyTime(yesterday)) errs.push('722: yesterday does not read like the short date and time');
+    await core.setLang('en');
+""")
     # ---- main window findings: generated block end ----
     return failed
