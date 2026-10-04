@@ -278,7 +278,10 @@ def check(files):
     for m in mods.values():
         if m.name == "main.js":
             continue  # main.js cannot be imported; its names reach modules by hand-over
-        for nm in m.top:
+        handed_over = set()
+        for lm in re.finditer(r"^let ([^;]*); // linked from main\.js", m.raw, re.M):
+            handed_over |= {x.strip() for x in lm.group(1).split(",")}
+        for nm in m.top - handed_over:
             defined.setdefault(nm, set()).add(m.name)
     for m in mods.values():
         # (c)
