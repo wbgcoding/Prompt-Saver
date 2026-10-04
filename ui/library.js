@@ -9,9 +9,10 @@ import { confirmDialog } from "./dialog.js";
 import { activeView, firstFree, layoutOf, renderGrid, renderViews } from "./views.js";
 import { copyOnCooldown, recordCopy } from "./copyFlow.js";
 import { attachSelectPicker } from "./selectpop.js";
+import { allTags, renderTagFilter, tagChipEl, tagKey, tagsOn } from "./tags.js";
 
-let allTags, buildSwatches, closeBackups, editPrompt, ensureSecretVaultUnlocked, foldersOfView, openCompareView, openCtx, recordToolUsage, refreshClipInbox, renderStatsPanel, renderTagFilter, setLibraryTab, tagChipEl, tagKey, tagsOn, tileTimeLines; // linked from main.js
-export function linkLibrary(fns) { ({ allTags, buildSwatches, closeBackups, editPrompt, ensureSecretVaultUnlocked, foldersOfView, openCompareView, openCtx, recordToolUsage, refreshClipInbox, renderStatsPanel, renderTagFilter, setLibraryTab, tagChipEl, tagKey, tagsOn, tileTimeLines } = fns); }
+let buildSwatches, closeBackups, editPrompt, ensureSecretVaultUnlocked, foldersOfView, openCompareView, openCtx, recordToolUsage, refreshClipInbox, renderStatsPanel, setLibraryTab, tileTimeLines; // linked from main.js
+export function linkLibrary(fns) { ({ buildSwatches, closeBackups, editPrompt, ensureSecretVaultUnlocked, foldersOfView, openCompareView, openCtx, recordToolUsage, refreshClipInbox, renderStatsPanel, setLibraryTab, tileTimeLines } = fns); }
 
 export let libQuery = ""; // prompt library search text
 export function assignLibQuery(v) { libQuery = v; }
