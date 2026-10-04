@@ -9,3 +9,7 @@ ui/brand.js text eol=lf
 # from the real dependency manifests on every build, always as LF.
 THIRD-PARTY-NOTICES.md text eol=lf
 graphify-out/graph.json merge=graphify
+
+# lib.rs has always been stored byte for byte (CRLF) because it once held raw NUL
+# bytes; keep it that way so its history keeps lining up line for line.
+src-tauri/src/lib.rs -text

@@ -38785,7 +38785,7 @@ mod tests {
         image::DynamicImage::new_rgb8(2, 1)
             .write_to(&mut std::io::Cursor::new(&mut plain), image::ImageFormat::Jpeg)
             .unwrap();
-        let mut exif: Vec<u8> = b"Exif  MM *   ".to_vec();
+        let mut exif: Vec<u8> = b"Exif\0\0MM\0*\0\0\0\x08".to_vec();
         exif.extend_from_slice(&[0, 1, 0x01, 0x12, 0, 3, 0, 0, 0, 1, 0, orientation, 0, 0, 0, 0, 0, 0]);
         let mut out = vec![0xFF, 0xD8, 0xFF, 0xE1];
         out.extend_from_slice(&((exif.len() + 2) as u16).to_be_bytes());
