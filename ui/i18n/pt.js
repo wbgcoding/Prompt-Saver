@@ -2015,6 +2015,7 @@ export default {
     flagArchiveTag: "Tag de arquivo",
     tipArchiveTag: "Marca um prompt como arquivado em vez de excluí-lo. Um prompt arquivado desaparece da lista da biblioteca e da grade; a pesquisa ainda o encontra, e a chave seletora acima da lista o traz de volta à vista.",
     showArchiveToggle: "Mostrar arquivados",
+    libArchiveChip: "Arquivo",
     archiveAction: "Arquivar",
     unarchiveAction: "Desarquivar",
     batchArchiveDone: "{n} prompts arquivados",

@@ -2015,6 +2015,7 @@ export default {
     flagArchiveTag: "Etichetă arhivă",
     tipArchiveTag: "Marchează un prompt ca arhivat în loc să îl șteargă. Un prompt arhivat dispare din lista bibliotecii și din grilă; căutarea îl găsește în continuare, iar comutatorul de deasupra listei îl readuce la vedere.",
     showArchiveToggle: "Afișează arhivate",
+    libArchiveChip: "Arhivă",
     archiveAction: "Arhivează",
     unarchiveAction: "Dezarhivează",
     batchArchiveDone: "Au fost arhivate {n} prompturi",

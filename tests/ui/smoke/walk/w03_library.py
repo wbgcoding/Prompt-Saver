@@ -117,6 +117,14 @@ SECTION = """\
         out.errors.push('711: the colour filter did not come back after the colours were restored: ' + allColours);
       }
     }
+    // 712: the archive chip carries a word, not the file-cabinet emoji.
+    {
+      const archiveChip = document.getElementById('library-archive');
+      const chipText = archiveChip ? archiveChip.textContent.trim() : '';
+      if (chipText.length < 2 || chipText.charCodeAt(0) >= 0xD800) { // a word, not the emoji (a surrogate pair)
+        out.errors.push('712: the archive chip does not show a word: "' + chipText + '"');
+      }
+    }
     // A library row with an image attachment opens the same actions menu as any
     // other row: edit, edit image, duplicate ... delete, not just "open in editor".
     {

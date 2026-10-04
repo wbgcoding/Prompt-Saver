@@ -2015,6 +2015,7 @@ export default {
     flagArchiveTag: "Etiqueta de archivo",
     tipArchiveTag: "Etiqueta un prompt como archivado en lugar de eliminarlo. Un prompt archivado desaparece de la lista de la biblioteca y de la cuadrícula; la búsqueda aún lo encuentra, y el interruptor sobre la lista lo vuelve a mostrar.",
     showArchiveToggle: "Mostrar archivados",
+    libArchiveChip: "Archivo",
     archiveAction: "Archivar",
     unarchiveAction: "Desarchivar",
     batchArchiveDone: "Se archivaron {n} prompts",

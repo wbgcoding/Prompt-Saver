@@ -2015,6 +2015,7 @@ export default {
     flagArchiveTag: "Archiv-Tag",
     tipArchiveTag: "Markiert einen Prompt als archiviert, statt ihn zu löschen. Ein archivierter Prompt verschwindet aus der Bibliotheksliste und dem Raster; die Suche findet ihn weiterhin, und der Schalter über der Liste holt ihn wieder sichtbar zurück.",
     showArchiveToggle: "Archiv anzeigen",
+    libArchiveChip: "Archiv",
     archiveAction: "Archivieren",
     unarchiveAction: "Aus dem Archiv holen",
     batchArchiveDone: "{n} Prompts archiviert",

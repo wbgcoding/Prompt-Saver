@@ -2015,6 +2015,7 @@ export default {
     flagArchiveTag: "Archieftag",
     tipArchiveTag: "Markeert een prompt als gearchiveerd in plaats van deze te verwijderen. Een gearchiveerde prompt verdwijnt uit de bibliotheeklijst en het raster; de zoekfunctie kan hem nog steeds vinden, en de schakelaar boven de lijst brengt hem weer in beeld.",
     showArchiveToggle: "Toon gearchiveerde",
+    libArchiveChip: "Archief",
     archiveAction: "Archiveren",
     unarchiveAction: "Uit archief halen",
     batchArchiveDone: "{n} prompts gearchiveerd",

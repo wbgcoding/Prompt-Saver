@@ -2015,6 +2015,7 @@ export default {
     flagArchiveTag: "归档标签",
     tipArchiveTag: "将提示词标记为已归档而不是删除它。已归档的提示词会从库列表和网格中消失；搜索仍然可以找到它，列表上方的切换按钮可以使其重新显示。",
     showArchiveToggle: "显示已归档",
+    libArchiveChip: "归档",
     archiveAction: "归档",
     unarchiveAction: "取消归档",
     batchArchiveDone: "已归档 {n} 个提示词",

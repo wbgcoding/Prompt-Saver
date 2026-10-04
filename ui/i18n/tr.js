@@ -2015,6 +2015,7 @@ export default {
     flagArchiveTag: "Arşiv etiketi",
     tipArchiveTag: "Bir istemi silmek yerine arşivlenmiş olarak etiketler. Arşivlenmiş bir istem, kütüphane listesinden ve ızgaradan kaybolur; arama onu hâlâ bulabilir ve listenin üzerindeki anahtar onu tekrar görünüme getirir.",
     showArchiveToggle: "Arşivlenenleri göster",
+    libArchiveChip: "Arşiv",
     archiveAction: "Arşivle",
     unarchiveAction: "Arşivden çıkar",
     batchArchiveDone: "{n} istem arşivlendi",

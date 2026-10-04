@@ -2015,6 +2015,7 @@ export default {
     flagArchiveTag: "アーカイブタグ",
     tipArchiveTag: "プロンプトを削除する代わりにアーカイブ済みとしてタグ付けします。アーカイブされたプロンプトはライブラリのリストとグリッドから消えますが、検索では引き続き見つけることができ、リストの上にあるトグルで再び表示できます。",
     showArchiveToggle: "アーカイブ済みを表示",
+    libArchiveChip: "アーカイブ",
     archiveAction: "アーカイブ",
     unarchiveAction: "アーカイブを解除",
     batchArchiveDone: "{n} 件のプロンプトをアーカイブしました",
