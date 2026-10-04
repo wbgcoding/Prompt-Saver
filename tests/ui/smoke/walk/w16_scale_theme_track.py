@@ -56,6 +56,18 @@ SECTION = """\
         }
         window.__PREV_VER__ = avEl.textContent;
       }
+      // 706: the composer placeholder names the save shortcut, the editor field keeps the plain one.
+      {
+        const ph706 = document.getElementById('input').placeholder;
+        const edPh706 = document.getElementById('modal-text').placeholder;
+        if (ph706.includes('{keys}') || !/(Ctrl|Strg)\\+Enter/.test(ph706)) out.errors.push('706: the composer placeholder in ' + lang + ' reads "' + ph706 + '"');
+        if (edPh706.includes('Enter')) out.errors.push('706: the editor text field placeholder in ' + lang + ' names a shortcut: ' + edPh706);
+        if (document.getElementById('input').getAttribute('aria-label') !== ph706) out.errors.push('706: the composer accessible name differs from its placeholder in ' + lang);
+        if (lang === 'de') {
+          if (ph706 !== 'Prompt eingeben… (Strg+Enter speichert ihn)') out.errors.push('706: the German composer placeholder reads "' + ph706 + '"');
+          if (edPh706 !== 'Prompt eingeben…') out.errors.push('706: the German editor placeholder reads "' + edPh706 + '"');
+        }
+      }
       await click('library-close');
       layoutScan('settings in ' + lang);
       mustReach('settings in ' + lang, '#settings-main button, #settings-main select');

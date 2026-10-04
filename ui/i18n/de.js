@@ -372,6 +372,7 @@ export default {
     editModalTitle: "Prompt bearbeiten",
     namePh: "Prompt-Name",
     promptPh: "Prompt eingeben…",
+    promptPhComposer: "Prompt eingeben… ({keys} speichert ihn)",
     addToLayout: "Zum Layout hinzufügen",
     gridFull: "Raster ist voll. Zum Tauschen auf eine Kachel ziehen",
     gridEmptyHint: "Schreib unten etwas und drücke Speichern.",

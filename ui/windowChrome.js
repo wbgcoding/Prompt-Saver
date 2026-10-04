@@ -1,11 +1,11 @@
 // Window chrome: language apply, bar toggles, the tile tooltip engine, clear buttons,
 // the lightbox and the shortcuts modal.
-import { $, ALL_SHORTCUT_SCOPES, applyBrand, CLEAR_SVG, drag, flag, invoke, LANG, mediaBarLabels, settings, shortcutRows, shortcutSections, t, val, videoCache, withShortcut } from "./core.js";
+import { $, ALL_SHORTCUT_SCOPES, applyBrand, CLEAR_SVG, drag, flag, inputEl, invoke, LANG, mediaBarLabels, settings, shortcutRows, shortcutSections, t, val, videoCache, withShortcut } from "./core.js";
 import { uiZoom, updateExamplesBanner } from "./views.js";
 import { fitAllTiles } from "./tiles.js";
 import { fillVarHighlighted } from "./promptVars.js";
 import { placePopover } from "./popover.js";
-import { SCOPE_TITLE_KEYS } from "./shortcuts.js";
+import { keysLabel, SCOPE_TITLE_KEYS } from "./shortcuts.js";
 import { renderHotkeysList } from "./hotkeys.js";
 
 export function applyI18n() {
@@ -13,6 +13,11 @@ export function applyI18n() {
   applyBrand();
   document.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = t(el.dataset.i18n); });
   document.querySelectorAll("[data-i18n-ph]").forEach((el) => { el.placeholder = t(el.dataset.i18nPh); });
+  // The composer placeholder names the save shortcut, so it is built from the
+  // shortcut table instead of a plain translation.
+  const composerPh = t("promptPhComposer").replace("{keys}", keysLabel("mainCreate", LANG));
+  inputEl.placeholder = composerPh;
+  inputEl.setAttribute("aria-label", composerPh);
   // A shortcut-bearing element gets its tooltip built from SHORTCUTS (base
   // description + key combo) instead of the plain translation.
   document.querySelectorAll("[data-i18n-title]").forEach((el) => {

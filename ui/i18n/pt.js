@@ -398,6 +398,7 @@ export default {
     editModalTitle: "Editar prompt",
     namePh: "Nome do prompt",
     promptPh: "Digite um prompt…",
+    promptPhComposer: "Digite um prompt… ({keys} salva)",
     addToLayout: "Adicionar à grade",
     gridFull: "Grade cheia. Arraste sobre um bloco para trocar.",
     gridEmptyHint: "Escreva algo abaixo e clique em Salvar para começar.",

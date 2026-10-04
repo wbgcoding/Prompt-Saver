@@ -372,6 +372,7 @@ export default {
     editModalTitle: "Edit prompt",
     namePh: "Prompt name",
     promptPh: "Type a prompt…",
+    promptPhComposer: "Type a prompt… ({keys} saves it)",
     addToLayout: "Add to layout",
     gridFull: "Grid is full. Drag onto a tile to swap",
     gridEmptyHint: "Type something below and hit Save to get started.",

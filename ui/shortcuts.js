@@ -124,6 +124,13 @@ function findEntry(action) {
   return SHORTCUTS.find((s) => s.action === action);
 }
 
+// The key combo of one action as text ("Ctrl+Enter", "Strg+Enter"), for a
+// sentence that names the shortcut instead of a tooltip.
+export function keysLabel(action, lang) {
+  const entry = findEntry(action);
+  return entry ? formatKeys(entry, lang) : "";
+}
+
 // A tooltip already ending in "(<something>)" (with an optional trailing "."
 // or full-width "。") is a shortcut hint an earlier translation baked in by
 // hand -- strip it before appending the one this table computes, so the two

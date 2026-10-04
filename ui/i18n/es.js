@@ -398,6 +398,7 @@ export default {
     editModalTitle: "Editar prompt",
     namePh: "Nombre del prompt",
     promptPh: "Escribe un prompt…",
+    promptPhComposer: "Escribe un prompt… ({keys} lo guarda)",
     addToLayout: "Añadir al diseño",
     gridFull: "Cuadrícula llena: arrastra sobre un mosaico para intercambiar",
     gridEmptyHint: "Escribe algo abajo y pulsa Guardar para empezar.",

@@ -398,6 +398,7 @@ export default {
     editModalTitle: "Modifica prompt",
     namePh: "Nome del prompt",
     promptPh: "Scrivi un prompt…",
+    promptPhComposer: "Scrivi un prompt… ({keys} lo salva)",
     addToLayout: "Aggiungi alla griglia",
     gridFull: "Griglia piena: trascina su un riquadro per scambiare",
     gridEmptyHint: "Scrivi qualcosa qui sotto e premi Salva per iniziare.",
