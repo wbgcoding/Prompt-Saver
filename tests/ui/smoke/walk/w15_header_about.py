@@ -14,47 +14,47 @@ SECTION = """\
         out.errors.push('724: the visible settings section titles are "' + titles724.join('|') + '", expected "' + want724.join('|') + '"');
       }
     }
-    // 96: the short "Latest X.Y.Z" status keeps update-actions no taller than
-    // before, with the longest of the 11 translations (Romanian) -- and exactly
-    // as tall as the button row below it once the window has real room (740px+;
-    // below that the About/Check-for-updates button labels themselves already
-    // do not fit beside a third item, independent of what that item says).
+    // 96: the short "Latest X.Y.Z" status keeps the first update line no taller than
+    // before, with the longest of the 11 translations (Romanian).
+    // 727: the version status and About share the first line; the check button, the
+    // auto-update switch and the interval share the second.
     {
       if (document.getElementById('settings').classList.contains('hidden')) await click('gear');
-      const ua = document.querySelector('.update-actions');
-      const btnRow = document.querySelector('.settings-btn-row');
+      if (document.getElementById('settings-main').classList.contains('hidden')) {
+        await click('expert-back');
+        await sleep(50);
+      }
       const uv = document.getElementById('update-version');
-      if (ua && btnRow && uv) {
+      const aboutBtn = document.getElementById('about-btn');
+      const ub = document.getElementById('update-btn');
+      const ui727 = document.getElementById('opt-update-interval');
+      const line1 = uv && uv.closest('.update-line');
+      if (line1 && aboutBtn && ub && ui727) {
         const prevText = uv.textContent;
         uv.textContent = 'Cea mai recenta 2.7.0';
-        const uaH = ua.getBoundingClientRect().height;
+        const lineH = line1.getBoundingClientRect().height;
         uv.textContent = 'Neueste Version bereits installiert';
-        const uaHOld = ua.getBoundingClientRect().height;
-        const rowH = btnRow.getBoundingClientRect().height;
-        if (uaH > uaHOld + 1) {
-          out.errors.push('the short status is taller than the old long sentence was: ' + Math.round(uaH) + ' vs ' + Math.round(uaHOld));
+        const lineHOld = line1.getBoundingClientRect().height;
+        if (lineH > lineHOld + 1) {
+          out.errors.push('the short status is taller than the old long sentence was: ' + Math.round(lineH) + ' vs ' + Math.round(lineHOld));
         }
-        if (window.innerWidth >= 740 && uaH > rowH + 1) {
-          out.errors.push('update-actions is taller than settings-btn-row at ' + window.innerWidth + 'px: ' + Math.round(uaH) + ' vs ' + Math.round(rowH));
+        uv.textContent = 'Version 2.7.0';
+        const rect = (el) => el.getBoundingClientRect();
+        if (Math.abs(rect(uv).top + rect(uv).height / 2 - (rect(aboutBtn).top + rect(aboutBtn).height / 2)) > 4) {
+          out.errors.push('727: update-version and about-btn do not share a row at ' + window.innerWidth + 'px');
         }
-        // 174: the version label sits centred in its own column, same width as
-        // the About/Check-for-updates buttons beside it (only meaningful
-        // unwrapped -- at 740px+ the three sit on one row per the check above).
-        const aboutBtn = document.getElementById('about-btn');
-        if (window.innerWidth >= 740 && aboutBtn) {
-          const uvRect = uv.getBoundingClientRect();
-          const abRect = aboutBtn.getBoundingClientRect();
-          if (Math.abs(uvRect.width - abRect.width) > 2) {
-            out.errors.push('update-version column width does not match about-btn: ' + Math.round(uvRect.width) + ' vs ' + Math.round(abRect.width));
-          }
-          const cs = getComputedStyle(uv);
-          if (cs.textAlign !== 'center') {
-            out.errors.push('update-version is not centre-aligned: ' + cs.textAlign);
-          }
+        if (Math.abs(rect(ui727).top - rect(ub).top) > 4) {
+          out.errors.push('727: opt-update-interval and update-btn do not share a row at ' + window.innerWidth + 'px: ' + Math.round(rect(ui727).top) + ' vs ' + Math.round(rect(ub).top));
         }
+        if (!(rect(ub).top > rect(aboutBtn).bottom - 1)) {
+          out.errors.push('727: the check button row is not below the version row at ' + window.innerWidth + 'px');
+        }
+        if (!(rect(aboutBtn).left > rect(uv).left)) out.errors.push('727: about-btn is not right of update-version');
+        if (!ui727.getAttribute('aria-label')) out.errors.push('727: the interval select has no accessible name');
+        if (document.querySelector('.update-row, .update-actions')) out.errors.push('727: the old update grid markup is still there');
         uv.textContent = prevText;
       } else {
-        out.errors.push('update-actions, settings-btn-row or update-version missing from the settings panel');
+        out.errors.push('update-line, about-btn, update-btn or opt-update-interval missing from the settings panel');
       }
     }
     // 108: reset-settings and delete-data carry their full labels. In English
@@ -477,9 +477,9 @@ SECTION = """\
         saveBtn.textContent = prev;
       }
     }
-    // 275: about-btn/update-btn/update-version share a fixed one-third-width
-    // column each -- the longest translation in each of the 11 languages must
-    // not overflow its own box, at the two smallest viewports the suite runs.
+    // 275: the longest translation of About, Check for updates and the version
+    // status in each of the 11 languages must not overflow its own box, at the
+    // two smallest viewports the suite runs.
     if (window.innerWidth <= 740) {
       const aboutBtn = document.getElementById('about-btn');
       const updateBtn = document.getElementById('update-btn');

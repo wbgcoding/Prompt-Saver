@@ -4040,27 +4040,20 @@ body.drag-over::after {
    width the row above still has room to wrap this button onto its own line
    instead, unlike letting the text itself break. */
 #import-folder-btn { white-space: nowrap; }
-/* The SAME four columns and gap as .settings-btn-row right below it, so the check
-   button comes out exactly as wide as Help and the auto-update switch lines up with
-   the last button in that row; the bottom of the dialog reads as one block. */
-.update-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; align-items: center; }
-/* Wraps so the version label keeps a readable width on a narrow dialog instead of
-   being ellipsised down to a couple of pixels beside the check button. */
-.update-actions { grid-column: span 3; display: flex; flex-wrap: wrap; row-gap: 6px; align-items: center; gap: 10px; min-width: 0; }
-.update-actions .ghost-btn { flex: 0 0 auto; }
-/* The interval sits under the Auto update switch, in the same last column. */
-.update-row > .update-interval { grid-column: 4; }
-/* One column of the grid above: the box is 3 columns + 2 gaps wide, so one column is
-   (width - 2*gap) / 3: the exact width a button in .settings-btn-row gets. About and
-   Check-for-updates each take one, the version label takes the third. */
-.update-actions > #about-btn, .update-actions > #update-btn { flex: 0 0 calc((100% - 20px) / 3); min-width: 0; }
-/* Clickable version/status label (left of the check button) → releases page, or the
-   update dialog once an update is pending. */
+/* About and updates: two lines. Line one holds the version status (left) and About
+   (right); line two the check button, the auto-update switch and the interval. */
+.update-line { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.update-line > .ghost-btn { flex: 0 0 auto; }
+.update-line > .switch-field { flex: 0 1 auto; min-width: 0; }
+.update-line > .switch-field > span:first-child { flex: 0 1 auto; }
+.update-interval { flex: 0 1 150px; min-width: 0; margin-left: auto; }
+/* Clickable version/status label, plain text look → releases page, or the update
+   dialog once an update is pending. */
 .update-version {
-  flex: 0 0 calc((100% - 20px) / 3); /* same column width as #about-btn/#update-btn beside it */
+  flex: 1 1 0; min-width: 0;
   background: none; border: none; padding: 0;
   color: var(--fg); font: inherit; font-size: 13px; font-weight: 600;
-  cursor: pointer; text-align: center; white-space: nowrap;
+  cursor: pointer; text-align: left; white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis;
 }
 .update-version:hover { text-decoration: underline; }

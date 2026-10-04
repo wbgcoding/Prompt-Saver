@@ -1092,22 +1092,22 @@
       </section>
       <section class="settings-sec">
         <h3 class="settings-sec-title" data-i18n="settingsSecUpdates">About and updates</h3>
-        <!-- Two columns like the toggle grid above: check + version left, switch right. -->
+        <!-- Two lines: version status and About, then the check button, the auto-update
+             switch and its interval. -->
         <div id="updates-field" class="field">
-          <div class="update-row">
-            <div class="update-actions">
-              <button id="about-btn" class="ghost-btn" data-i18n="aboutTitle">About</button>
-              <button id="update-btn" class="ghost-btn" data-i18n="checkUpdate">Check for updates</button>
-              <button id="update-version" type="button" class="update-version" data-i18n-title="openReleases"></button>
-            </div>
+          <div class="update-line">
+            <button id="update-version" type="button" class="update-version" data-i18n-title="openReleases"></button>
+            <button id="about-btn" class="ghost-btn" data-i18n="aboutTitle">About</button>
+          </div>
+          <div class="update-line">
+            <button id="update-btn" class="ghost-btn" data-i18n="checkUpdate">Check for updates</button>
             <label class="field switch-field" data-i18n-title="autoUpdateHint">
               <span data-i18n="autoUpdate">Auto update</span>
               <input id="opt-autoupdate" type="checkbox" class="switch" />
             </label>
-            <label class="field update-interval">
-              <span data-i18n="valUpdateCheckH">Update check interval</span>
-              <select id="opt-update-interval" class="modal-input"></select>
-            </label>
+            <div class="update-interval">
+              <select id="opt-update-interval" class="modal-input" data-i18n-aria="valUpdateCheckH"></select>
+            </div>
           </div>
         </div>
       </section>
