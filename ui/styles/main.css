@@ -1602,14 +1602,6 @@ body:not(.flag-voiceHotkey) #voice-hotkey-row { display: none; }
 .noflag-favorites #lib-batch-unfav,
 .noflag-favorites #grid-batch-fav,
 .noflag-favorites #grid-batch-unfav { display: none; }
-.noflag-journalSearch #journal-q { display: none; }
-.noflag-journalTypeFilter #journal-types { display: none; }
-.noflag-journalColorFilter #journal-colors { display: none; }
-.noflag-journalClear #journal-clear { display: none; }
-.noflag-journalMostUsed .journal-col-used { display: none; }
-.noflag-journalMostUsed .journal-body { grid-template-columns: 1fr; }
-.noflag-journalRecent .journal-col-recent { display: none; }
-.noflag-journalRecent .journal-body { grid-template-columns: 1fr; }
 
 /* Always-on-top pin: tints to the accent (filled look) while active. */
 .pin-toggle.active {

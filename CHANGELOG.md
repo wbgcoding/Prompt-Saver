@@ -1604,6 +1604,7 @@ the video editor and the introduction tour ship on).
   header is always there; Settings keeps its own switch.
 - **The red caution line.** The warning text at the top of the expert menu is gone.
 - **Quick profiles.** The Quiet / Standard / All on buttons above the expert menu are gone; Reset stays.
+- **Ten copy history switches.** The expert switches for the search field, the type, color and tag filters, the two columns, the group button, both sort arrows and the clear button are gone; those controls are always there.
 
 ### Changed
 

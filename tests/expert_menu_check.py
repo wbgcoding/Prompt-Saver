@@ -156,7 +156,6 @@ DEPENDENCIES = {
     "tagSort": "tags",
     "historyMax": "copyHistory",
     "historyDays": "copyHistory",
-    "journalTagFilter": "tags",
     "tileBlur": "blurTilesUntilHover",
     "mediaBlur": "blurMediaUntilHover",
     # Media
@@ -351,7 +350,7 @@ for kind, known in (("flags", all_flags), ("values", values),
 # 105: a group whose ONLY flag is itself (everything else it owns is gated on it,
 # same group -- e.g. expGroupTags: flags=["tags"]) is a whole-subsystem switch, not
 # a narrow feature toggle. A row in another group may legitimately depend on it
-# (journalTagFilter needs both its own toggle AND the global tags flag) without
+# (a tag row needs both its own toggle AND the global tags flag) without
 # moving in beside it -- unlike a local flag (chainPrompts, promptHotkeys, ...)
 # whose only sensible dependents are its own immediate parameters.
 subsystem_toggles = {ks[0] for _, kinds, _, _ in groups for ks in [kinds.get("flags", [])] if len(ks) == 1}

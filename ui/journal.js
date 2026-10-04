@@ -162,7 +162,7 @@ export function journalMatches(p) {
   if (!typeAllowed(journalTypes, p)) return false;
   if (journalFav && flag("favorites") && !p.favorite) return false;
   if (journalColor !== "all" && (p.color || "") !== journalColor) return false;
-  if (flag("journalTagFilter") && !tagMatches(p, journalTags)) return false;
+  if (tagsOn() && !tagMatches(p, journalTags)) return false;
   const q = journalQuery.trim().toLowerCase();
   if (!q) return true;
   return [p.name, p.text, p.file_path].some((s) => (s || "").toLowerCase().includes(q));
@@ -204,13 +204,12 @@ export async function restoreCopyHistory(rows, usage, lastUsed) {
   await loadJournal();
 }
 
-// Same bar as the library's (renderTagBar) -- only the extra
-// journalTagFilter toggle and the hidden-until-enabled state are journal-only.
+// Same bar as the library's (renderTagBar), with the journal's own selection.
 export let _lastJournalTagFilterSig = null;
 export function renderJournalTagFilter() {
   const bar = $("journal-tags");
   if (!bar) return;
-  if (!tagsOn() || !flag("journalTagFilter")) {
+  if (!tagsOn()) {
     bar.innerHTML = "";
     bar.classList.add("hidden");
     _lastJournalTagFilterSig = null;
@@ -270,8 +269,6 @@ export function syncJournalSourceBar(on) {
   for (const b of $("journal-source").querySelectorAll(".lib-type")) {
     b.classList.toggle("active", b.dataset.source === journalSource);
   }
-  const anyFilter = flag("journalSearch") || flag("journalTypeFilter") || flag("journalColorFilter") || (flag("journalTagFilter") && tagsOn()) || flag("favorites");
-  $("journal-search").classList.toggle("hidden", !anyFilter && !on);
 }
 
 // Render from the cached log. Filters run client-side, so typing in the search
@@ -303,8 +300,7 @@ export function renderJournal() {
     : [];
   // An entry copied elsewhere has no type, colour, tag or favourite, so any of
   // those filters being narrowed leaves it out; the search matches its text.
-  const narrowed = journalTypes.size > 0 || journalColor !== "all" || journalFav ||
-    (flag("journalTagFilter") && journalTags.size > 0);
+  const narrowed = journalTypes.size > 0 || journalColor !== "all" || journalFav || journalTags.size > 0;
   const clipQuery = journalQuery.trim().toLowerCase();
   if (showElsewhere && !narrowed) {
     for (const it of journalInbox) {
@@ -384,27 +380,20 @@ export function renderJournal() {
     return s;
   };
   // Toggle beside the "recently copied" title: group repeats vs show every copy.
-  let groupBtn = null;
-  if (flag("journalGroupBtn")) {
-    groupBtn = document.createElement("button");
-    groupBtn.type = "button";
-    groupBtn.className = "journal-toggle" + (grouped ? " active" : "");
-    groupBtn.textContent = t("journalGrouped");
-    groupBtn.title = t("journalGrouped");
-    groupBtn.setAttribute("aria-pressed", String(grouped));
-    groupBtn.addEventListener("click", async () => {
-      const next = !grouped;
-      settings.ui_flags = { ...(settings.ui_flags || {}), historyGrouped: next };
-      try { await invoke("set_ui_flag", { key: "historyGrouped", enabled: next }); } catch (err) { errToast(err); }
-      await loadJournal(); // grouping changes the query → refetch
-    });
-  }
-  const recentSort = flag("journalRecentSort")
-    ? sortBtn(journalRecentRev, () => { journalRecentRev = !journalRecentRev; renderJournal(); })
-    : null;
-  const usedSort = flag("journalUsedSort")
-    ? sortBtn(journalUsedRev, () => { journalUsedRev = !journalUsedRev; renderJournal(); })
-    : null;
+  const groupBtn = document.createElement("button");
+  groupBtn.type = "button";
+  groupBtn.className = "journal-toggle" + (grouped ? " active" : "");
+  groupBtn.textContent = t("journalGrouped");
+  groupBtn.title = t("journalGrouped");
+  groupBtn.setAttribute("aria-pressed", String(grouped));
+  groupBtn.addEventListener("click", async () => {
+    const next = !grouped;
+    settings.ui_flags = { ...(settings.ui_flags || {}), historyGrouped: next };
+    try { await invoke("set_ui_flag", { key: "historyGrouped", enabled: next }); } catch (err) { errToast(err); }
+    await loadJournal(); // grouping changes the query → refetch
+  });
+  const recentSort = sortBtn(journalRecentRev, () => { journalRecentRev = !journalRecentRev; renderJournal(); });
+  const usedSort = sortBtn(journalUsedRev, () => { journalUsedRev = !journalUsedRev; renderJournal(); });
   // "Most used" only knows prompts of the app, so it steps aside for the elsewhere filter.
   body.classList.toggle("journal-single", journalSource === "elsewhere");
   body.append(
@@ -461,10 +450,9 @@ export async function resetAndLoadJournal() {
   $("journal-fav").classList.remove("active");
   setJournalColor("all");
   journalSource = "all";
-  // The filter bar hides itself when every filter is switched off (expert menu);
-  // renderJournal decides, so it also follows the source chips.
+  // renderJournal decides what the filter bar shows, so it also follows the source chips.
   await loadJournal();
-  if (flag("journalSearch") && flag("searchAutofocus")) $("journal-q").focus();
+  if (flag("searchAutofocus")) $("journal-q").focus();
 }
 
 export function bindJournal() {
