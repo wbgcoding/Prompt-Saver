@@ -96,6 +96,39 @@ SECTION = """\
       // No member-count badge on a folder tile: the preview identifies it, a number
       // on top of it was noise.
       if (fTile.querySelector('.folder-count')) out.errors.push('the folder tile still carries a count badge');
+      // 708: a folder is a normal card: the size of a neighbouring prompt tile, the
+      // surface colour, a preview without a plate of its own and the title at the bottom.
+      {
+        const prompt708 = document.querySelector('.tile:not(.folder-tile)[data-id]');
+        const fr708 = fTile.getBoundingClientRect();
+        if (prompt708) {
+          const pr708 = prompt708.getBoundingClientRect();
+          if (Math.abs(fr708.width - pr708.width) > 1 || Math.abs(fr708.height - pr708.height) > 1) {
+            out.errors.push('708: the folder tile is ' + Math.round(fr708.width) + 'x' + Math.round(fr708.height) + ', a prompt tile ' + Math.round(pr708.width) + 'x' + Math.round(pr708.height));
+          }
+        } else out.errors.push('708: no prompt tile next to the folder to compare with');
+        const probe708 = document.createElement('div');
+        probe708.style.background = 'var(--surface)';
+        document.body.appendChild(probe708);
+        const surface708 = getComputedStyle(probe708).backgroundColor;
+        probe708.remove();
+        if (!fTile.classList.contains('tinted') && getComputedStyle(fTile).backgroundColor !== surface708) {
+          out.errors.push('708: the folder tile is ' + getComputedStyle(fTile).backgroundColor + ', not the surface colour ' + surface708);
+        }
+        const mini708 = fTile.querySelector('.folder-mini');
+        const title708 = fTile.querySelector('.folder-title');
+        if (mini708 && getComputedStyle(mini708).backgroundColor !== 'rgba(0, 0, 0, 0)') out.errors.push('708: the folder preview still has a plate of its own');
+        if (mini708) {
+          const mr708 = mini708.getBoundingClientRect();
+          if (Math.abs(mr708.width - mr708.height) > 1) out.errors.push('708: the folder preview is not square');
+          if (mr708.right > fr708.right + 1 || mr708.bottom > fr708.bottom + 1 || mr708.left < fr708.left - 1 || mr708.top < fr708.top - 1) out.errors.push('708: the folder preview leaves its tile');
+        }
+        if (mini708 && title708) {
+          const tr708 = title708.getBoundingClientRect();
+          if (tr708.top < mini708.getBoundingClientRect().bottom - 1) out.errors.push('708: the folder title does not sit below the preview');
+          if (tr708.bottom > fr708.bottom + 1) out.errors.push('708: the folder title leaves its tile');
+        }
+      }
       const anchor = fTile.getBoundingClientRect();
       fTile.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: 5, clientY: 5 }));
       window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, clientX: 5, clientY: 5 }));

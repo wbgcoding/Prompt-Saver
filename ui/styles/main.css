@@ -929,39 +929,33 @@ body.chain-mode:not(.grid-selecting) .tile .tile-select { opacity: 0; pointer-ev
    caption at a fixed size and never grows; it used to carry .tile-name, which the
    tile auto-fitter scales to prompt size, and a two-word folder name then filled the
    whole cell. */
-/* The tile itself is not a card: a folder is just its preview + label floating on
-   the grid, same as the pill/grid-folder windows. Only .folder-mini reads as
-   "the folder"; the cell it sits in stays visually part of the grid background. */
+/* The tile is a normal card (surface, border, radius, hover accent from .tile); only
+   its content differs: a flat 2x2 preview and the name as a caption at the bottom. */
 .folder-tile {
   flex-direction: column;
   justify-content: center;
   gap: 4%;
   padding: 4%;
-  background: transparent;
-  border-color: transparent;
-  box-shadow: none;
 }
-.folder-tile:hover { border-color: transparent; box-shadow: none; }
 .folder-tile:hover .folder-mini { filter: brightness(1.08); }
 .folder-mini {
   position: relative;
   display: grid;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr 1fr;
-  gap: 6%;
-  /* Square, and as large as the cell allows once the caption has its line: the
-     preview is what identifies the folder, so it gets the room. */
-  /* 0 0 auto, or the column flex shrinks it back to nothing and the whole point of
-     giving the preview the room is lost. */
+  gap: 4px;
+  /* Square and 70% of the card, never taller than the room above the caption.
+     0 0 auto, or the column flex shrinks it back to nothing. The auto margins
+     centre it in that room and leave the caption at the bottom. */
   flex: 0 0 auto;
-  height: min(84cqh, 85cqi);
-  width: auto;
+  margin-block: auto;
+  width: min(70%, 70cqh);
   aspect-ratio: 1;
   min-height: 0;
-  padding: 6%;
-  border-radius: 18%;
-  background: color-mix(in srgb, var(--fg) 10%, transparent);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18), inset 0 0 0 1px color-mix(in srgb, var(--fg) 8%, transparent);
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
   transition: filter var(--transition);
 }
 .folder-mini-cell {
@@ -984,7 +978,7 @@ body.chain-mode:not(.grid-selecting) .tile .tile-select { opacity: 0; pointer-ev
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--fg);
+  color: inherit;
   font-size: clamp(11px, 4.6cqi, 15px);
   font-weight: 600;
   line-height: 1.2;
