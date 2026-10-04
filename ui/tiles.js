@@ -8,9 +8,10 @@ import { DRAG_OUT_MODS, fileUri } from "./floatShared.js";
 import { activeView, clearViewDropHover, dropTilesOnView, gridKeyOf, layoutOf, openGridSizeFor, openMiniMenu, placeFav, renderGrid, resolveViewDropTarget, updateViewDropHover, viewsContaining } from "./views.js";
 import { dialogTokens, peekRotatedText } from "./promptVars.js";
 import { copyOnCooldown, copyTextWithVars, maybeCloseOnCopy, recordCopy } from "./copyFlow.js";
+import { copyResolved, dropLibraryFront, tagMatches, thumbEl, toggleGridSelect } from "./library.js";
 
-let armFolderDrop, copyResolved, disarmFolder, dropIntoFolder, dropLibraryFront, folderById, openCtx, openModal, openTileFolderPop, prettyAccel, promptHotkeysOn, recordToolUsage, saveFolder, tagMatches, thumbEl, tileTimeLines, toggleGridSelect; // linked from main.js
-export function linkTiles(fns) { ({ armFolderDrop, copyResolved, disarmFolder, dropIntoFolder, dropLibraryFront, folderById, openCtx, openModal, openTileFolderPop, prettyAccel, promptHotkeysOn, recordToolUsage, saveFolder, tagMatches, thumbEl, tileTimeLines, toggleGridSelect } = fns); }
+let armFolderDrop, disarmFolder, dropIntoFolder, folderById, openCtx, openModal, openTileFolderPop, prettyAccel, promptHotkeysOn, recordToolUsage, saveFolder, tileTimeLines; // linked from main.js
+export function linkTiles(fns) { ({ armFolderDrop, disarmFolder, dropIntoFolder, folderById, openCtx, openModal, openTileFolderPop, prettyAccel, promptHotkeysOn, recordToolUsage, saveFolder, tileTimeLines } = fns); }
 
 // Auto-fit cache per (text, cell size); cleared on font changes.
 export const fitCache = new Map();

@@ -5,9 +5,10 @@ import { placePopover, placePopoverAt } from "./popover.js";
 import { EXAMPLE_IMAGE_DATA_URL } from "./exampleAssets.js";
 import { buildTile, fitAllTiles, pruneVideoCache } from "./tiles.js";
 import { hideTileTip } from "./windowChrome.js";
+import { clearGridSelection, isArchived, renderLibrary } from "./library.js";
 
-let applyFlags, buildFolderTile, buildSwatches, clearGridSelection, foldersOfView, isArchived, renderLibrary, saveFolder, syncBannerStack; // linked from main.js
-export function linkViews(fns) { ({ applyFlags, buildFolderTile, buildSwatches, clearGridSelection, foldersOfView, isArchived, renderLibrary, saveFolder, syncBannerStack } = fns); }
+let applyFlags, buildFolderTile, buildSwatches, foldersOfView, saveFolder, syncBannerStack; // linked from main.js
+export function linkViews(fns) { ({ applyFlags, buildFolderTile, buildSwatches, foldersOfView, saveFolder, syncBannerStack } = fns); }
 
 // ---- Grid-size value picker ----
 // Scrollable popup under a grid-size input: lists every value with a
