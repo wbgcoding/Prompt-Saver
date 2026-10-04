@@ -1,15 +1,18 @@
 SECTION = """\
-    // 511: the expert menu top row (presets plus reset) is the first child of
+    // 511: the filter row (search, only changed, reset) is the first child of
     // the expert page.
     {
       document.getElementById('settings').classList.remove('hidden');
       await click('expert-open');
       const expertBox = document.getElementById('settings-expert');
-      const topRow551 = expertBox.querySelector('.expert-top-row');
-      if (!topRow551 || expertBox.firstElementChild !== topRow551) {
-        out.errors.push('511: the expert menu top row (presets plus reset) is not the first child of the expert page');
-      } else if (!topRow551.querySelector('.expert-presets') || topRow551.querySelector('.expert-presets') !== topRow551.firstElementChild) {
-        out.errors.push('511: the quick-profiles group is not the first thing in the top row');
+      const filterRow551 = expertBox.querySelector('.expert-filter-row');
+      if (!filterRow551 || expertBox.firstElementChild !== filterRow551) {
+        out.errors.push('511: the filter row is not the first child of the expert page');
+      } else if (!filterRow551.querySelector('#expert-reset') || filterRow551.lastElementChild !== filterRow551.querySelector('#expert-reset')) {
+        out.errors.push('511: the reset button is not the last thing in the filter row');
+      }
+      if (expertBox.querySelector('.expert-top-row, .expert-presets')) {
+        out.errors.push('511: the removed top row or quick profiles are still in the expert page');
       }
       const expertSearch551 = document.getElementById('expert-search');
       expertSearch551.value = 'shadow';

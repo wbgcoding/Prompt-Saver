@@ -217,21 +217,11 @@ def run(browser, tmp):
     failed += ar_probe('g2', 'expert menu bulk actions never flip demo mode, remote access, network, sync or the URL scheme', 'index', '1000x780', '<script>window.__DEMO_TEST__ = true;</script>\n', r"""
     await bootReady();
     const flagCalls = () => callsFor('set_ui_flag');
-    const DANGEROUS = ['demoMode', 'remoteApi', 'remoteNetworkFilter', 'urlScheme', 'promptSync'];
     document.getElementById('gear').click();
     await sleep(200);
     document.getElementById('expert-open').click();
     await sleep(300);
     const cm = document.getElementById('confirm-modal');
-    const preset = async (id) => {
-      window.__SMOKE_ARGS__.length = 0;
-      document.getElementById(id).click();
-      await sleep(250);
-      if (!visible(cm)) { return false; }
-      document.getElementById('confirm-ok').click();
-      await sleep(400);
-      return true;
-    };
     // per-category reset: the System category holds the demo switch
     const tabs = [...document.querySelectorAll('#expert-tabs-bar .expert-tab')];
     let reset = null;
@@ -250,14 +240,6 @@ def run(browser, tmp):
     const rowBtn = [...document.querySelectorAll('#expert-flags .switch-field')].find((r) => (r.querySelector('span') || {}).textContent === 'Demo mode');
     const rowReset = rowBtn && rowBtn.querySelector('.expert-row-reset');
     if (rowReset && !rowReset.classList.contains('hidden')) errs.push('564-2: the demo switch offers a per-row reset');
-    if (!(await preset('expert-preset-full'))) errs.push('564-2: All on showed no confirmation in the fixture');
-    const afterFull = flagCalls().filter((a) => DANGEROUS.includes(a.key));
-    if (afterFull.length) errs.push('564-2: All on wrote ' + JSON.stringify(afterFull));
-    const multi = flagCalls().filter((a) => a.key === 'allowMultipleInstances');
-    await preset('expert-preset-standard');
-    const afterStd = flagCalls().filter((a) => DANGEROUS.includes(a.key) && a.enabled !== false);
-    if (flagCalls().some((a) => a.key === 'demoMode')) errs.push('564-2: the Standard profile wrote demoMode during a demo session');
-    if (afterStd.length) errs.push('564-2: the Standard profile switched something on: ' + JSON.stringify(afterStd));
     // reset all: the backend wipes the flag, so the marker is written back
     window.__SMOKE_ARGS__.length = 0;
     const rb = document.getElementById('expert-reset');

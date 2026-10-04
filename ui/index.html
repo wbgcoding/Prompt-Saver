@@ -1096,15 +1096,6 @@
       </div>
       </div><!-- /settings-main -->
       <div id="settings-expert" class="hidden">
-        <div class="expert-top-row">
-          <div class="expert-presets" role="group" aria-label="Quick profile" data-i18n-aria="expertPresetsHeading">
-            <span class="expert-presets-label" data-i18n="expertPresetsHeading">Quick profile</span>
-            <button id="expert-preset-quiet" type="button" class="ghost-btn" data-i18n="expertPresetQuiet">Quiet</button>
-            <button id="expert-preset-standard" type="button" class="ghost-btn" data-i18n="expertPresetStandard">Standard</button>
-            <button id="expert-preset-full" type="button" class="ghost-btn" data-i18n="expertPresetFull">All on</button>
-          </div>
-          <button id="expert-reset" class="ghost-btn danger-btn" data-i18n="expertReset">Reset expert menu</button>
-        </div>
         <!-- Search + the "only changed" filter share one row: the filter used to be a
              full-width checkbox line of its own, a whole row of height for one word. -->
         <div class="expert-filter-row">
@@ -1116,6 +1107,7 @@
             </svg>
             <span data-i18n="expertOnlyChanged">Only changed</span>
           </label>
+          <button id="expert-reset" class="ghost-btn danger-btn" data-i18n="expertReset">Reset expert menu</button>
         </div>
         <!-- Tab bar stays fixed; only the rows below scroll. Both built by JS. -->
         <div id="expert-tabs-bar"></div>

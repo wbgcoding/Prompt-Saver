@@ -1,6 +1,6 @@
 // Expert menu: the renderer, its rows and the live-state parts of the setting registry.
 import { $, armButton, assignBUBBLE_MS, assignDISARM_MS, assignDRAG_THRESHOLD, assignHISTORY_PREVIEW_LEN, assignINPUT_MAX, assignLibraryTab, assignPrompts, assignROTATE_SHORT_MAX, assignSettings, assignTOAST_MS, COLORS, debounced, DEFAULT_COLORS, DICT, DISARM_MS, disarmButton, errToast, ETA_MIN_PCT, ETA_MIN_SECS, EXPERT_ACTIONS, flag, flagState, gateOpen, HEADER_PAD_Y, HEX_RE, ICON_UNDO, ICON_WARN, invoke, LANG, listen, modal, openColorPop, optFlag, PALETTE_LEN, prompts, putIcon, setStatusText, settings, settingsEl, shipsOn, SIZE_MAX, SIZE_MIN, SIZE_STEP, t, toast, txt, val } from "./core.js";
-import { ALL_EXPERT_FLAG_KEYS, ALL_FLAG_KEYS, EXPERT_BULK_NEVER, EXPERT_PRESET_FULL_EXCLUDE, EXPERT_PRESET_QUIET, EXPERT_PRESET_QUIET_ZERO, EXPERT_PRESET_TITLES, EXPERT_RESET_KEEP, EXPERT_SELECTS, EXPERT_TABS, EXPERT_TIP_SET, EXPERT_VALUES, FLAG_GATES, FLAG_LABELS, flagLabelKey, GRID_DOM_VALUES, groupFlags, OFF_AT_ZERO_KEYS, OPT_FLAG_KEYS, OPT_FLAG_LABELS, REC_QUALITY_BITRATE, SETTINGS_AREA_LABEL, STYLE_OPTS, TILE_DOM_FLAGS, TILE_STYLES } from "./expertConfig.js";
+import { ALL_FLAG_KEYS, EXPERT_BULK_NEVER, EXPERT_RESET_KEEP, EXPERT_SELECTS, EXPERT_TABS, EXPERT_TIP_SET, EXPERT_VALUES, FLAG_GATES, flagLabelKey, GRID_DOM_VALUES, groupFlags, OPT_FLAG_KEYS, REC_QUALITY_BITRATE, SETTINGS_AREA_LABEL, STYLE_OPTS, TILE_DOM_FLAGS, TILE_STYLES } from "./expertConfig.js";
 import { FONT_LABELS, FONTS } from "./fonts.js";
 import { confirmDialog, infoDialog } from "./dialog.js";
 import { refreshFavViewUi, renderGrid, renderViews } from "./views.js";
@@ -273,71 +273,6 @@ export const EXPERT_DROPDOWNS = {
     },
   },
 };
-
-// { flags, values } for one profile: key -> target value. "standard" reaches every
-// current and future flag by construction (each one's own shipped default), so the
-// tests only need to watch the two curated lists above for a stale or missing key.
-// The off-at-zero values ride along: Quiet zeroes the alert-style ones, Standard
-// puts every one back to its default, All on revives any that were switched off.
-export function expertPresetTarget(name) {
-  let flags;
-  let values = {};
-  if (name === "quiet") {
-    flags = Object.fromEntries(EXPERT_PRESET_QUIET.map((k) => [k, false]));
-    values = Object.fromEntries(EXPERT_PRESET_QUIET_ZERO.map((k) => [k, 0]));
-  } else if (name === "full") {
-    flags = Object.fromEntries(ALL_EXPERT_FLAG_KEYS.filter((k) => !EXPERT_PRESET_FULL_EXCLUDE.includes(k)).map((k) => [k, true]));
-    values = Object.fromEntries(OFF_AT_ZERO_KEYS.filter((k) => val(k) === 0).map((k) => [k, EXPERT_VALUES[k].def]));
-  } else {
-    flags = Object.fromEntries(ALL_EXPERT_FLAG_KEYS.map((k) => [k, shipsOn(k)]));
-    values = Object.fromEntries(OFF_AT_ZERO_KEYS.map((k) => [k, EXPERT_VALUES[k].def]));
-  }
-  for (const k of EXPERT_BULK_NEVER) delete flags[k];
-  return { flags, values };
-}
-
-// Applies one of the three profiles above: shows how many settings actually differ
-// from the profile before touching anything, names the first ten, and only
-// writes on confirmation -- each write goes through set_ui_flag / set_ui_value,
-// the same path a manual change uses, so a feature's own activation work (backups,
-// tray rebuilds, hotkey registration) always runs exactly as it would by hand.
-export async function applyExpertPreset(name) {
-  const { flags: flagTarget, values: valueTarget } = expertPresetTarget(name);
-  const changed = Object.entries(flagTarget).filter(([k, v]) => flag(k) !== v).map(([k]) => k);
-  const changedValues = Object.entries(valueTarget).filter(([k, v]) => val(k) !== v).map(([k]) => k);
-  const total = changed.length + changedValues.length;
-  if (!total) { toast(t("expertPresetNoChange")); return; }
-  const label = (k) => t(FLAG_LABELS[k] || OPT_FLAG_LABELS[k] || k);
-  const labels = [...changed.map(label), ...changedValues.map((k) => t(EXPERT_VALUES[k].label))];
-  const named = labels.slice(0, 10);
-  const message = `${t("expertPresetChangeCount")}: ${total}\n${named.join("\n")}${labels.length > named.length ? "\n…" : ""}`;
-  const ok = await confirmDialog({
-    title: t(EXPERT_PRESET_TITLES[name]),
-    message,
-    confirmLabel: t(EXPERT_PRESET_TITLES[name]),
-    danger: false,
-  });
-  if (!ok) return;
-  for (const key of changed) {
-    const enabled = flagTarget[key];
-    settings.ui_flags = { ...(settings.ui_flags || {}), [key]: enabled };
-    try { await invoke("set_ui_flag", { key, enabled }); } catch (e) { errToast(e); }
-  }
-  for (const key of changedValues) {
-    const value = valueTarget[key];
-    settings.ui_values = { ...(settings.ui_values || {}), [key]: value };
-    try { await invoke("set_ui_value", { key, value }); } catch (e) { errToast(e); }
-  }
-  // Same refresh sequence as resetExpertGroup()/onResetExpert(): local state is
-  // already current from the loop above, so this only has to repaint -- renderExpert()
-  // last, so its own row list reflects the flags this just changed.
-  applyFlags();
-  applyValues();
-  renderViews();
-  await renderGrid(true);
-  fitAllTiles();
-  renderExpert();
-}
 
 // Mirror each disabled flag onto a body class so CSS can hide the matching UI.
 export function applyFlags() {
@@ -2402,9 +2337,6 @@ export function bindExpertMenu() {
     disarmButton(btn, t("expertReset"));
     onResetExpert();
   });
-  $("expert-preset-quiet").addEventListener("click", () => applyExpertPreset("quiet"));
-  $("expert-preset-standard").addEventListener("click", () => applyExpertPreset("standard"));
-  $("expert-preset-full").addEventListener("click", () => applyExpertPreset("full"));
 
   $("banner-more").addEventListener("click", () => { bannerFront += 1; syncBannerStack(); });
 

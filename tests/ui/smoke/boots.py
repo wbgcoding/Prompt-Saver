@@ -1915,7 +1915,7 @@ VAR_FIXED_PROBE = """
 """
 
 
-EXPERT_PRESET_PROBE = """
+UPDATE_INTERVAL_PROBE = """
 <script>
 (async () => {
   const errs = [];
@@ -1962,72 +1962,7 @@ EXPERT_PRESET_PROBE = """
         if (checks() !== checksBefore) errs.push('646: changing the update setting made a check_update call');
       }
     }
-    document.getElementById('expert-open').click();
-    await sleep(200);
-
-    const setFlagCalls = () => (window.__SMOKE_CALLS__ || []).filter((c) => c === 'set_ui_flag' || c === 'set_ui_value').length;
-    // The last value a preset wrote for a key (the main script is a module, its own
-    // state is out of reach, so the stubbed backend calls are the evidence).
-    const lastValue = (key) => {
-      const w = (window.__SMOKE_ARGS__ || []).filter((c) => c[0] === 'set_ui_value' && c[1].key === key);
-      return w.length ? w[w.length - 1][1].value : undefined;
-    };
-    const before = setFlagCalls();
-    const quietBtn = document.getElementById('expert-preset-quiet');
-    if (!quietBtn) {
-      errs.push('447: the Quiet preset button is missing from the expert menu');
-    } else {
-      quietBtn.click();
-      await sleep(200);
-      if (cm.classList.contains('hidden')) {
-        errs.push('447: applying a preset did not open the confirmation dialog');
-      } else {
-        const msg = document.getElementById('confirm-msg').textContent;
-        const m = msg.match(/:\\s*(\\d+)/);
-        const claimed = m ? parseInt(m[1], 10) : -1;
-        if (claimed <= 0) errs.push('447: the confirmation dialog names no changed-setting count, got: ' + msg);
-        document.getElementById('confirm-ok').click();
-        await sleep(300);
-        const actual = setFlagCalls() - before;
-        if (lastValue('bubbleMs') !== 0 || lastValue('undoToastMs') !== 0) {
-          errs.push('644: Quiet did not set the bubble and undo times to Off');
-        }
-        if (actual !== claimed) {
-          errs.push('447: the dialog said ' + claimed + ' settings would change, but ' + actual + ' actually did');
-        }
-        for (const id of ['expert-preset-quiet', 'expert-preset-standard', 'expert-preset-full']) {
-          const btn = document.getElementById(id);
-          if (btn && (btn.classList.contains('active') || btn.getAttribute('aria-pressed') === 'true')) {
-            errs.push('447: ' + id + ' stayed marked as the active profile after applying');
-          }
-        }
-        // Nothing left to change: re-applying the same profile must report that
-        // instead of reopening an empty confirmation dialog.
-        quietBtn.click();
-        await sleep(200);
-        if (!cm.classList.contains('hidden')) {
-          errs.push('447: re-applying an already-applied preset opened a confirmation dialog again');
-          document.getElementById('confirm-cancel').click();
-          await sleep(150);
-        } else {
-          const toastMsg = document.querySelector('#toast .toast-msg');
-          if (!toastMsg || !toastMsg.textContent) {
-            errs.push('447: re-applying an already-applied preset gave no feedback at all');
-          }
-        }
-      }
-    }
-    // Standard puts the off-at-zero values back to their defaults.
-    const stdBtn = document.getElementById('expert-preset-standard');
-    if (stdBtn) {
-      stdBtn.click();
-      await sleep(200);
-      if (!cm.classList.contains('hidden')) { document.getElementById('confirm-ok').click(); await sleep(300); }
-      if (lastValue('bubbleMs') !== 950 || lastValue('undoToastMs') !== 8000) {
-        errs.push('644: Standard did not restore the bubble and undo times');
-      }
-    }
-  } catch (e) { errs.push('447 probe: ' + e.message); }
+  } catch (e) { errs.push('646 probe: ' + e.message); }
   errs.push(...(window.__SMOKE_ERRORS__ || []));
   const pre = document.createElement('pre');
   pre.id = 'SMOKE';
@@ -2539,19 +2474,18 @@ def run(browser, tmp):
     if not errs:
         print("   ok")
 
-    # 447: expert-menu quick profiles -- applying one asks first, the count
-    # in that dialog matches the number of settings actually written, and
-    # no profile stays marked as active once it is done.
-    side = tmp / "ui" / "expert-preset.html"
+    # 646: the Auto update switch and its interval are one setting; Never is
+    # the switch off and nothing here asks the backend to check for an update.
+    side = tmp / "ui" / "update-interval.html"
     side.write_text(
         (REPO / "ui" / "index.html").read_text(encoding="utf-8")
         .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
-        .replace("</body>", EXPERT_PRESET_PROBE + "</body>"),
+        .replace("</body>", UPDATE_INTERVAL_PROBE + "</body>"),
         encoding="utf-8")
-    proc = run_chrome(browser, tmp / 'profile-expert-preset', "1000,780", 45000, side.as_uri(), 180)
+    proc = run_chrome(browser, tmp / 'profile-update-interval', "1000,780", 45000, side.as_uri(), 180)
     m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
     errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
-    print("-- expert menu quick profiles: change count and no lasting marker")
+    print("-- auto update switch and interval")
     for e in errs:
         print(f"   FAIL: {e}")
     failed += len(errs)

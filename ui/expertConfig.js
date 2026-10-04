@@ -823,44 +823,12 @@ export const FLAG_GATES = Object.fromEntries(
     .map((f) => [f.key, f.gate])
 );
 
-// Three ready-made profiles at the top of the expert menu, above the tabs and
-// not one of their own. Applying one writes each changed flag through the
-// normal set_ui_flag path and is done -- no profile stays remembered as a mode,
-// so Standard stays the one lasting default and nothing here ever explains why
-// a flag is the way it is.
-//
-// Alert-style flags only (a sound, a flash, a toast that appears on its own).
-// Recordings and dictation are left alone here on purpose -- no rec*/voice* key.
-export const EXPERT_PRESET_QUIET = ["copyFlash", "copySound", "similarHint", "dupImportCheck", "taskbarProgress"];
-// Values whose 0 is their off stop: Quiet sets them to 0, Standard restores their
-// default, All on restores the default of any that sit at 0.
-export const EXPERT_PRESET_QUIET_ZERO = ["bubbleMs", "undoToastMs"];
-export const OFF_AT_ZERO_KEYS = Object.keys(EXPERT_VALUES).filter((k) => EXPERT_VALUES[k].offAtZero);
-// Left out of "All on" because they send something outward or cost time/money
-// rather than simply turning a feature on: image-text search reads a picture the
-// user may not expect read, and online dictation sends audio to Microsoft. The
-// last four each have their own confirmation step on the switch itself (a
-// password dialog for the receiver, a plaintext-on-disk warning for sync), which
-// a bulk write through set_ui_flag would skip.
 // Demo mode is a session with its own enable and disable commands and a restart,
-// so no bulk action (profile, category reset, reset all) may ever write it.
+// so no bulk action (category reset, reset all) may ever write it.
 export const EXPERT_BULK_NEVER = ["demoMode", "remoteTlsShortLived"];
 // What an expert reset writes back: the backend clears the certificate lifetime flag
 // itself (the certificate stays), so only the demo session marker survives it.
 export const EXPERT_RESET_KEEP = ["demoMode"];
-export const EXPERT_PRESET_FULL_EXCLUDE = [
-  "ocrIndex", "voiceOnlineOk", ...EXPERT_BULK_NEVER,
-  "remoteApi", "remoteNetworkFilter", "urlScheme", "promptSync",
-  // Locks and background collecting: switching them on silently would lock the
-  // data folder, block a second window or start watching the clipboard.
-  "dataDirLock", "allowMultipleInstances", "clipWatcher", "usageStats",
-  // A preset must not start writing files.
-  "screenshotSave",
-];
-export const ALL_EXPERT_FLAG_KEYS = [...ALL_FLAG_KEYS, ...OPT_FLAG_KEYS];
-
-export const EXPERT_PRESET_TITLES = { quiet: "expertPresetQuiet", standard: "expertPresetStandard", full: "expertPresetFull" };
-
 export const TILE_STYLES = ["bold", "uppercase", "mono", "italic", "shadow", "compact", "gradient"];
 
 // Expert settings whose name alone doesn't explain what they do get a themed

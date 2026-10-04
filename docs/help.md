@@ -873,15 +873,6 @@ right underneath once it's on. The search box scans every tab at once; a feature
 that ships switched off carries a small dot badge. Reset works at three levels:
 one value's own undo icon, a whole group's reset, or everything at once.
 
-Three quick profiles sit above the tabs: **Quiet** turns off everything that
-sounds, flashes or pops up a notice (recordings and dictation are untouched),
-**Standard** puts every setting back to its shipped default, and **All on**
-switches on every feature without touching anything destructive or anything
-that sends data out or costs money (image-text search, online dictation).
-Before anything changes, a dialog shows how many settings would change and
-names the ten most important. A profile only writes those settings once; it
-is never remembered as a mode you are "in".
-
 ### Keyboard-only use
 
 Arrow keys move a focus ring across the grid; Enter or Space copies whichever
@@ -1651,15 +1642,6 @@ geschieht nie stillschweigend:
 direkt darunter. Die Suche durchsucht alle Tabs auf einmal; ausgeschaltete
 Funktionen tragen ein kleines Punkt-Abzeichen. Zurücksetzen auf drei Ebenen:
 ein Wert, eine ganze Gruppe, oder alles auf einmal.
-
-Drei Schnellprofile stehen über den Tabs: **Ruhig** schaltet alles ab, was
-tönt, blinkt oder eine Meldung zeigt (Aufnahmen und Diktat bleiben unberührt),
-**Standard** stellt jede Einstellung auf ihre Vorgabe zurück, und **Alles an**
-schaltet jede Funktion ein, ohne etwas Zerstörerisches zu verändern und ohne
-etwas einzuschalten, das Daten nach außen gibt oder Kosten verursacht
-(Bildtext-Suche, Online-Spracherkennung). Vor jeder Änderung zeigt ein Dialog,
-wie viele Einstellungen sich ändern, und nennt die zehn wichtigsten davon. Ein
-Profil schreibt einmal und bleibt danach kein eigener Zustand.
 
 **Tastaturbedienung**: Pfeiltasten bewegen einen Fokusring über das Raster
 (an), Enter oder Leertaste kopiert die fokussierte Kachel.

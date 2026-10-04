@@ -660,7 +660,6 @@ export const HELP_CONTENT = {
       title: "The expert menu",
       whatItIs: "The expert menu holds every optional feature behind its own switch and parameters.",
       howTo: [
-        "Three quick profiles sit above the tabs: Quiet turns off sounds, flashes and pop-up notices, Standard puts everything back to its default, All on switches every feature on.",
         "Open Settings, then the expert menu.",
         "Pick a tab, or type in the search box to scan every tab at once.",
         "Turn on \"Only changed\" to see just what has been adjusted from the defaults.",
@@ -1410,7 +1409,6 @@ export const HELP_CONTENT = {
       title: "Das Expertenmenü",
       whatItIs: "Das Expertenmenü hält jede optionale Funktion hinter einem eigenen Schalter mit ihren Parametern.",
       howTo: [
-        "Drei Schnellprofile stehen über den Tabs: Ruhig schaltet Töne, Blinken und Hinweise ab, Standard setzt alles auf die Vorgabe zurück, Alles an schaltet jede Funktion ein.",
         "Einstellungen, dann das Expertenmenü öffnen.",
         "Einen Tab wählen, oder im Suchfeld tippen, um alle Tabs auf einmal zu durchsuchen.",
         "\"Nur geänderte\" einschalten, um nur das zu sehen, was an den Standardwerten angepasst wurde.",
