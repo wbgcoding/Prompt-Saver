@@ -1,3 +1,5 @@
+import { t } from "./core.js";
+
 // ---- Prompt variables ({#{placeholder}#}) ----
 // The {#{ ... }#} fence is deliberately uncommon so a literal "{{" pasted from a
 // code block is never mistaken for a variable. The 200-char body leaves room for

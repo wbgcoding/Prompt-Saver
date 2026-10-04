@@ -1,3 +1,3 @@
 {
-  "main_window_modules": ["main.js", "expertConfig.js", "markdown.js", "promptVars.js", "tourContent.js", "snipEditor.js"]
+  "main_window_modules": ["main.js", "expertConfig.js", "markdown.js", "promptVars.js", "tourContent.js", "snipEditor.js", "core.js"]
 }

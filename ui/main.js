@@ -1,125 +1,24 @@
 // Main-window controller. Uses Tauri's global API (withGlobalTauri).
-import { APP_NAME, FLAG_DEFAULTS } from "./brand.js";
-import { applyTerms } from "./terms.js";
-import { LANGS, loadLang, primeLang } from "./i18n.js";
+import { primeLang } from "./i18n.js";
 import EN from "./i18n/en.js";
 import { FONTS, FONT_LABELS, fitText } from "./fonts.js";
 import { IMAGE_EXT, mediaKind, buildMediaBar, applyVideoPrefs, setMediaDefaults } from "./media.js";
-import { DRAG_THRESHOLD_DEFAULT } from "./copyDefaults.js";
 import { EXAMPLE_IMAGE_DATA_URL } from "./exampleAssets.js";
 import { HELP_CONTENT } from "./help.js";
 import { HELP_SKETCHES } from "./helpSketches.js";
-import { DRAG_OUT_MODS, FOLDER_SVG, fileUri, resolveLang, ffmpegDownloadPct, themeColorScheme, playCopySound, makeEtaEstimator, formatEta, a11yProgressText, parseFfmpegError, fmtBytes, trapTabWithin } from "./floatShared.js";
+import { DRAG_OUT_MODS, FOLDER_SVG, fileUri, ffmpegDownloadPct, themeColorScheme, playCopySound, makeEtaEstimator, formatEta, a11yProgressText, parseFfmpegError, fmtBytes, trapTabWithin } from "./floatShared.js";
 import { placePopover, placePopoverAt } from "./popover.js";
-import { createColorPop } from "./colorpop.js";
 import { attachSelectPicker } from "./selectpop.js";
 import { confirmDialog, infoDialog, dismissConfirm, initDialogs, EYE_SVG } from "./dialog.js";
-import { withShortcut as withShortcutRaw, rowsForScope as rowsForScopeRaw, sectionsForScopes as sectionsForScopesRaw, SCOPE_TITLE_KEYS } from "./shortcuts.js";
-import { FLAG_LABELS, ALL_FLAG_KEYS, OPT_FLAG_LABELS, OPT_FLAG_KEYS, isOptFlag, flagLabelKey, groupFlags, JOURNAL_ROWS_MAX, EXPERT_VALUES, EXPERT_SELECTS, STYLE_OPTS, REC_QUALITY_BITRATE, EXPERT_TABS, FLAG_GATES, EXPERT_PRESET_QUIET, EXPERT_PRESET_QUIET_ZERO, OFF_AT_ZERO_KEYS, EXPERT_BULK_NEVER, EXPERT_RESET_KEEP, EXPERT_PRESET_FULL_EXCLUDE, ALL_EXPERT_FLAG_KEYS, EXPERT_PRESET_TITLES, TILE_STYLES, EXPERT_TIP_SET, TILE_DOM_FLAGS, GRID_DOM_VALUES, SETTINGS_AREA_LABEL } from "./expertConfig.js";
+import { SCOPE_TITLE_KEYS } from "./shortcuts.js";
+import { FLAG_LABELS, ALL_FLAG_KEYS, OPT_FLAG_LABELS, OPT_FLAG_KEYS, flagLabelKey, groupFlags, JOURNAL_ROWS_MAX, EXPERT_VALUES, EXPERT_SELECTS, STYLE_OPTS, REC_QUALITY_BITRATE, EXPERT_TABS, FLAG_GATES, EXPERT_PRESET_QUIET, EXPERT_PRESET_QUIET_ZERO, OFF_AT_ZERO_KEYS, EXPERT_BULK_NEVER, EXPERT_RESET_KEEP, EXPERT_PRESET_FULL_EXCLUDE, ALL_EXPERT_FLAG_KEYS, EXPERT_PRESET_TITLES, TILE_STYLES, EXPERT_TIP_SET, TILE_DOM_FLAGS, GRID_DOM_VALUES, SETTINGS_AREA_LABEL } from "./expertConfig.js";
 import { MD_MAX_CHARS, HL_MAX_CHARS, mdEsc, HL_ALIAS, hlCode, MD_FENCE, MD_HEAD, MD_HR, MD_QUOTE, MD_UL, MD_OL, mdInline, detectCodeLang, hasMarkdownSyntax } from "./markdown.js";
 import { extractVars, fillVars, hasEmptyVarToken, fillVarHighlighted, DYN_VARS, DYN_SET, dynToken, dynName, DYN_LOCALES, pad2, dayShift, isoWeek, isoStamp, shortId, VAR_COUNTER_MAX, uuidV4, CLIP_VAR_MAX } from "./promptVars.js";
 import { TOUR_STEPS, TOUR_STEP_COUNT, TOUR_LAST_STEP, TOUR_FEATURES } from "./tourContent.js";
 import { initSnipEditor } from "./snipEditor.js";
+import { $, ALL_SHORTCUT_SCOPES, applyBrand, appVersion, armButton, assignAppVersion, assignBUBBLE_MS, assignCOLORS, assignDISARM_MS, assignDrag, assignDRAG_THRESHOLD, assignFavView, assignFolderArm, assignHISTORY_PREVIEW_LEN, assignINPUT_MAX, assignLibraryTab, assignMemberDrag, assignModalState, assignPrompts, assignROTATE_SHORT_MAX, assignSettings, assignTOAST_MS, autoGrow, BUBBLE_MS, cellKey, clampGrid, CLEAR_SVG, closeColorPop, colorPop, COLORS, confirmIfNoUndo, convertFileSrc, ctxEl, debounced, DEFAULT_COLORS, DICT, DISARM_MS, disarmButton, DOTS, drag, DRAG_THRESHOLD, emit, errToast, ETA_MIN_PCT, ETA_MIN_SECS, EXPERT_ACTIONS, favView, flag, flagState, folderArm, gateOpen, GRID_PLUS, gridEl, gridSelected, gridTags, HEADER_PAD_Y, HEX_RE, hideToast, HISTORY_PREVIEW_LEN, ICON_DOWN, ICON_EDIT, ICON_FILE, ICON_IMAGE, ICON_KEYBOARD, ICON_PDF, ICON_TRASH, ICON_UNDO, ICON_UP, ICON_VIDEO, ICON_WARN, IMG_WAIT, inkShadow, inputEl, invoke, journalThumbCache, KB_FOCUS_FADE_MS, LANG, libraryEl, libraryTab, libThumbCache, listen, LOCK_SVG, makeKeyboardActivatable, mediaBarLabels, memberDrag, modal, modalState, NUM_FIELD_BIG_STEP, OCR_LANG_NOTICE_MS, openColorPop, optFlag, PALETTE_LEN, PDF_EXT, PLUS_ICON, prompts, pruneThumbCache, putIcon, readableInk, ROTATE_SHORT_MAX, saveBtn, setLang, setLangSelect, setStatusText, settings, settingsEl, shipsOn, shortcutRows, shortcutSections, SIZE_MAX, SIZE_MIN, SIZE_STEP, t, TAKEOVER_SVG, TB_CHECK, TILE_FOLDER_ZONE, toast, TOOLTIP_PREVIEW_CHARS, txt, undoToast, val, videoCache, viewsEl, VOICE_LANG_NOTICE_MS, wireColorPop, withShortcut, withTaskbarBusy } from "./core.js";
 primeLang("en", EN);
 
-const { invoke, convertFileSrc } = window.__TAURI__.core;
-const { listen, emit } = window.__TAURI__.event;
-// The screenshot editor's resize grip needs the main window's own resize-drag,
-// the same documented v2 API floating.js/folder.js already use for startDragging().
-const { getCurrentWindow, ResizeDirection } = window.__TAURI__.window;
-
-const $ = (id) => document.getElementById(id);
-const gridEl = $("grid");
-const inputEl = $("input");
-const saveBtn = $("save");
-const toastEl = $("toast");
-const ctxEl = $("ctx");
-const settingsEl = $("settings");
-const libraryEl = $("library");
-const viewsEl = $("views");
-const modal = {
-  root: $("modal"),
-  title: $("modal-title"),
-  name: $("modal-name"),
-  text: $("modal-text"),
-  voiceRow: $("modal-voice-row"),
-  voiceBtn: $("modal-voice-btn"),
-  closeX: $("modal-close-x"),
-  confirm: $("modal-confirm"),
-  delete: $("modal-delete"),
-  fav: $("modal-fav"),
-  secret: $("modal-secret"),
-  imgWrap: $("modal-img-wrap"),
-  img: $("modal-img"),
-  video: $("modal-video"),
-  caption: $("modal-caption"),
-  captionSize: $("modal-caption-size"),
-  captionPreview: $("modal-caption-preview"),
-  showImage: $("modal-show-image"),
-  showText: $("modal-show-text"),
-  copyFormattedBtn: $("modal-copy-formatted"),
-  replaceImg: $("modal-replace-img"),
-  removeImg: $("modal-remove-img"),
-  addIcon: $("modal-add-icon"),
-  fileWrap: $("modal-file-wrap"),
-  fileName: $("modal-file-name"),
-  pdfPage: $("modal-pdf-page"),
-  replaceFile: $("modal-replace-file"),
-  textAttachPreview: $("modal-text-attach-preview"),
-  textAttachContent: $("modal-text-attach-content"),
-  textAttachTruncated: $("modal-text-attach-truncated"),
-  textAttachUnreadable: $("modal-text-attach-unreadable"),
-  fontSel: $("modal-font"),
-  sizeSel: $("modal-size"),
-  textBar: $("modal-text-bar"),
-  varsHead: $("modal-vars-head"),
-  varsBody: $("modal-vars-body"),
-  varsHint: $("modal-vars-hint"),
-  mdPreview: $("modal-md-preview"),
-  mdWrap: $("modal-md-wrap"),
-  notesText: $("modal-notes-text"),
-  // Tags/hotkey/history share one collapsible now.
-  advanced: $("modal-advanced"),
-  advancedHead: $("modal-advanced-head"),
-  advancedBody: $("modal-advanced-body"),
-  hotkey: $("modal-hotkey"),
-  hotkeyInput: $("modal-hotkey-input"),
-  hotkeyBadge: $("modal-hotkey-badge"),
-  hotkeyErr: $("modal-hotkey-err"),
-  hotkeyAction: $("modal-hotkey-action"),
-  hotkeyActionRow: $("modal-hotkey-action-row"),
-  // Rotating prompts.
-  rotateToggleRow: $("modal-rotate-toggle-row"),
-  rotateSwitch: $("modal-rotate-switch"),
-  rotateList: $("modal-rotate-list"),
-  rotateEntries: $("modal-rotate-entries"),
-  rotateAdd: $("modal-rotate-add"),
-  rotateMode: $("modal-rotate-mode"),
-  rotateNext: $("modal-rotate-next"),
-  rotateReset: $("modal-rotate-reset"),
-  rotateAuto: $("modal-rotate-auto"),
-};
-
-let DRAG_THRESHOLD = DRAG_THRESHOLD_DEFAULT; // expert-tunable
-let INPUT_MAX = 160; // keep in sync with .input max-height, expert-tunable via composerMaxH
-// Grid-dimension and view-count limits are expert values: val("gridMax") /
-// val("maxViews"). The backend keeps a hard ceiling of 100 for both.
-const TOOLTIP_PREVIEW_CHARS = 600; // how much of a prompt a tile tooltip shows
-let BUBBLE_MS = 950; // "Copied!" bubble lifetime (expert-tunable)
-let TOAST_MS = 1400; // toast lifetime for plain messages (expert-tunable)
-const SIZE_MIN = 10; // text size range, steps of 2 (keep in sync with backend)
-const SIZE_MAX = 40;
-const SIZE_STEP = 2;
-let DISARM_MS = 3000; // confirm-button auto-disarm delay, expert-tunable
-
-const clampGrid = (n, fallback) =>
-  Math.min(val("gridMax"), Math.max(1, Math.round(Number(n) || fallback)));
-
-// Cached state (refreshed by renderGrid).
-let prompts = [];
-let settings = { theme: "system", views: [], active_view: "" };
-
-let modalState = null;
 // Bumped by openModal/closeModal. An async pick/preview started for one editor
 // session (pickReplacementMedia, replaceFile) captures this before its awaits and
 // checks it again after -- `modalState` alone is not enough, since closing and
@@ -135,7 +34,6 @@ let modalSaving = false; // re-entry guard, a double-click/double-Enter must not
 let draftTimer = null; // editor-draft autosave tick, armed by openModal, disarmed by closeModal
 let draftLastSaved = null; // fingerprint of the last written draft, so an unchanged tick skips the write
 let ctxId = null;
-let drag = null;
 let libQuery = ""; // prompt library search text
 // Ids whose recognized image text matched the last query sent to
 // search_image_text, and the (trimmed, lowercased) query they were fetched
@@ -151,42 +49,20 @@ let libFav = false; // prompt library "favorites only" filter
 let libShowArchive = false; // show archived prompts even while browsing (not persisted)
 let libViewMode = "list"; // "list" or "tiles" -- kept in sync with the type filter by syncLibViewMode()
 const libTags = new Set(); // Selected tag filters, as lowercase tag keys
-const gridTags = new Set(); // same idea, independent selection for the grid
 // Batch operations state.
 let libSelectMode = false;
 let libSelected = new Set();
 let libLastId = null;          // anchor for shift-click range select
 let libDisplayOrder = [];      // ids in current display order (for range select)
 let gridDirty = false;         // batch ops changed prompts; rebuild grid on library close
-// Single-slot undo for a destructive action outside the editors (which have their
-// own undo stack already). A new destructive action always replaces whatever was
-// pending: there is no history, just the one most recent thing.
-let pendingUndo = null; // { restore }
-// Grid bulk selection: its own Set, independent of the library's libSelected.
-// Folder tiles are excluded: a folder stands for several prompts, and "select,
-// then recolor/move/delete" has no single obvious meaning for the group itself.
-let gridSelected = new Set();
 let journalQuery = ""; // copy-history search text
 const journalTypes = new Set(); // additive, like the library's
 let journalColor = "all"; // copy-history color filter
 let journalFav = false; // copy-history "favorites only" filter
 const journalTags = new Set(); // same idea as libTags/gridTags, own selection
-let toastTimer = null;
 let deleteAllTimer = null;
 let resetSettingsTimer = null;
 let expertResetTimer = null;
-let appVersion = ""; // raw "1.6.0", for the About dialog
-
-// A status line that carries a live value ("Version 1.6.0", a port, a host) is
-// remembered as key + token + value, so applyI18n can draw it again after a
-// language switch instead of leaving the old language standing.
-function setStatusText(el, key, token, value) {
-  if (!el) return;
-  el.dataset.statusKey = key;
-  el.dataset.statusToken = token;
-  el.dataset.statusValue = String(value);
-  el.textContent = t(key).replace("{" + token + "}", String(value));
-}
 
 // Whatever had focus right before the settings/expert panel opened, so
 // closing it returns focus there (same reasoning as modalOpener above).
@@ -210,130 +86,7 @@ window.addEventListener("unhandledrejection", (e) => toast(String(e.reason)));
 // Right-click is disabled everywhere inside the app (tiles re-enable it).
 window.addEventListener("contextmenu", (e) => e.preventDefault());
 
-const DOTS =
-  '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M6 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4ZM12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4ZM18 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/></svg>';
-const GRID_PLUS =
-  '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm12 0h2v3h3v2h-3v3h-2v-3h-3v-2h3v-3Z"/></svg>';
-const PLUS_ICON =
-  '<svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>';
-// Corner badges marking what a tile copies (attached file / image).
-const ICON_FILE =
-  '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21.2 11.2l-8.4 8.4a5.5 5.5 0 0 1-7.8-7.8l8.4-8.4a3.7 3.7 0 0 1 5.2 5.2l-8.4 8.4a1.9 1.9 0 0 1-2.6-2.6l7.7-7.7"/></svg>';
-const ICON_IMAGE =
-  '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M21 3H3a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm0 16H3V5h18v14Zm-5.5-9a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0ZM8.5 14l2-2.5 2 2.5 2.5-3 3.5 5H5l3.5-4.5Z"/></svg>';
-const ICON_VIDEO =
-  '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M15 8.5V6a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-2.5l5 4v-15l-5 4ZM6.5 9.8 12 13l-5.5 3.2V9.8Z"/></svg>';
-// Plain grey document marker for PDF attachments (replaces the paperclip).
-const ICON_PDF =
-  '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Zm0 2 4 4h-4V4ZM8 12h8v1.6H8V12Zm0 3.2h8v1.6H8v-1.6Z"/></svg>';
-const ICON_EDIT =
-  '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 20h4L18.5 9.5a2 2 0 0 0-2.8-2.8L5 17.2V20Zm9.5-12.5 3 3"/></svg>';
-const ICON_TRASH =
-  '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M9 7V5h6v2m-8 0 1 13h8l1-13M10 11v6M14 11v6"/></svg>';
-// The original path (M8 7 3 12l5 5M3 12h11a5 5 0 0 1 0 10h-4) was not
-// centered in its 24x24 viewBox (its true bounds sit low and to the left),
-// which read as an off-center glyph in the toast's centered icon badge even
-// though the badge itself centers correctly. Shifted to bound [4,20]x[4.5,19.5].
-const ICON_UNDO =
-  '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M9 4.5 4 9.5l5 5M4 9.5h11a5 5 0 0 1 0 10h-4"/></svg>';
-// Same triangle the expert menu's own caution line uses, so a warning looks like a
-// warning wherever it appears.
-const ICON_WARN =
-  '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M12 3 1 21h22L12 3Zm0 5.5 6.6 11H5.4L12 8.5ZM11 11h2v5h-2v-5Zm0 6.5h2v2h-2v-2Z"/></svg>';
-// Reorder a rotating prompt's entries (no drag & drop: YAGNI, and testable).
-const ICON_UP =
-  '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 15l6-6 6 6"/></svg>';
-const ICON_DOWN =
-  '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/></svg>';
-// A prompt's own hotkey, shown as a small always-visible tile badge.
-const ICON_KEYBOARD =
-  '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="currentColor" d="M5.5 9h1.6v1.6H5.5V9Zm3.2 0h1.6v1.6H8.7V9Zm3.2 0h1.6v1.6h-1.6V9Zm3.2 0h1.6v1.6h-1.6V9Zm3.2 0h1.6v1.6h-1.6V9ZM5.5 12.2h1.6v1.6H5.5v-1.6Zm3.2 0h1.6v1.6H8.7v-1.6Zm3.2 0h1.6v1.6h-1.6v-1.6Zm3.2 0h1.6v1.6h-1.6v-1.6Zm3.2 0h1.6v1.6h-1.6v-1.6ZM5.5 15.4h11.6V17H5.5v-1.6Z"/></svg>';
-
-// Icon markup handed out as ready-made nodes. Assigning the same SVG string to
-// innerHTML re-parses it every time, which a list of hundreds of rows pays for
-// once per icon per row; parsing each icon once and copying the result is the
-// same markup for a fraction of the work. Only worth it inside a long loop:
-// a one-off button is clearer with a plain innerHTML.
-const iconNodes = new Map();
-function putIcon(el, svg) {
-  let node = iconNodes.get(svg);
-  if (node === undefined) {
-    const box = document.createElement("span");
-    box.innerHTML = svg;
-    node = box.firstElementChild;
-    iconNodes.set(svg, node);
-  }
-  if (node) el.appendChild(node.cloneNode(true));
-  else el.innerHTML = svg; // not a single element: fall back to the plain path
-  return el;
-}
-
-// A per-row action icon has to be a <span>, not a real <button>: it sits
-// nested inside the row's own <button> (library/journal rows), and HTML
-// forbids nesting one button in another. This is the keyboard half a real
-// button would give for free: joins the tab order and turns Enter/Space into
-// the same click the element already handles. Call once, right after wiring
-// the element's own "click" listener.
-function makeKeyboardActivatable(el) {
-  el.tabIndex = 0;
-  el.setAttribute("role", "button");
-  el.addEventListener("keydown", (e) => {
-    if (e.key !== "Enter" && e.key !== " ") return;
-    e.preventDefault();
-    e.stopPropagation();
-    el.click();
-  });
-  return el;
-}
-
-let LANG = "en";
-let DICT = EN;
-// A language that was stored before it was retired has no option left, which would
-// leave the select blank; show what the app actually falls back to instead.
-function setLangSelect() {
-  const sel = document.getElementById("lang-select");
-  if (!sel) return;
-  sel.value = settings.language || "auto";
-  if (!sel.value) sel.value = "auto";
-}
-const pickLang = (pref) => resolveLang(pref, LANGS);
-// Loads the dictionary of the chosen language before LANG flips, so a caller that awaits
-// this never renders a half-switched state. English is primed, so it never waits.
-let langSeq = 0;
-async function setLang(pref) {
-  const code = pickLang(pref), seq = ++langSeq;
-  const dict = await loadLang(code);
-  if (seq !== langSeq) return;
-  LANG = code; DICT = dict;
-}
-// {app} stands for the product name in every translation, so no string spells it.
-// Filling it here means callers never have to pass it.
-const t = (key) =>
-  applyTerms(String(DICT[key] ?? EN[key] ?? key).replaceAll("{app}", APP_NAME), LANG);
-
-// buildMediaBar (media.js) is shared with the floating pill, which has no
-// synchronous access to t(): so it takes plain resolved strings, not keys.
-const mediaBarLabels = () => ({
-  play: t("mediaPlay"), pause: t("mediaPause"),
-  loopOn: t("mediaLoopOn"), loopOff: t("mediaLoopOff"),
-  mute: t("mediaMute"), unmute: t("mediaUnmute"),
-});
-
-// The product name never appears in the markup: every [data-brand] element (the
-// <title> and the header label) is filled from ui/brand.js. Runs at load, before
-// the first backend round trip, so the header is never briefly blank.
-const applyBrand = () => {
-  document.querySelectorAll("[data-brand]").forEach((el) => { el.textContent = APP_NAME; });
-};
 applyBrand();
-
-// shortcuts.js has no i18n state of its own -- every call here binds it to
-// this window's own t()/LANG, so every call site just names the action.
-const withShortcut = (el, action) => withShortcutRaw(el, action, t, LANG);
-const shortcutRows = (scope) => rowsForScopeRaw(scope, t, LANG);
-const shortcutSections = (scopes) => sectionsForScopesRaw(scopes, t, LANG);
-// Every window that has keys of its own, in the order the overview lists them.
-const ALL_SHORTCUT_SCOPES = ["mainWindow", "library", "launcher", "tray", "vars", "floating", "snipOverlay", "recBar", "camera"];
 
 function applyI18n() {
   document.documentElement.lang = LANG;
@@ -433,20 +186,6 @@ function themeBase(pref) {
   return raw && BUILTIN_THEMES.includes(raw.base) ? raw.base : "system";
 }
 
-// Tile color palette ("" = default surface), full spectrum, one modal row.
-// Empty = no color; the rest are hue-sorted and fill two rows of ten with the
-// "none" and custom swatches. The user can recolor the palette (expert menu);
-// COLORS holds the live set, DEFAULT_COLORS the shipped fallback.
-const DEFAULT_COLORS = [
-  "",
-  "#ef4444", "#f97316", "#f59e0b", "#eab308", "#84cc16",
-  "#22c55e", "#10b981", "#14b8a6", "#06b6d4", "#0ea5e9",
-  "#3b82f6", "#6366f1", "#8b5cf6", "#a855f7", "#d946ef",
-  "#ec4899", "#f43f5e", "#64748b",
-];
-let COLORS = [...DEFAULT_COLORS];
-const PALETTE_LEN = DEFAULT_COLORS.length - 1; // editable hues (index 0 is "none")
-const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 // Same data-URI SVG every built-in theme bakes its own copy of in main.css
 // (each with that theme's --muted colour already substituted for the stroke,
 // since a data URI cannot hold a var()) -- this is the one JS-side copy, used
@@ -468,7 +207,7 @@ function loadPalette() {
       }
     }
   } catch (_) { /* malformed -> defaults */ }
-  COLORS = custom ? ["", ...custom] : [...DEFAULT_COLORS];
+  assignCOLORS(custom ? ["", ...custom] : [...DEFAULT_COLORS]);
 }
 
 // Rebuild the filter dots (cached) after a palette change, and refresh any open list.
@@ -617,269 +356,6 @@ function watchDpr() {
   );
 }
 watchDpr();
-
-function hideToast() {
-  toastEl.classList.remove("show");
-  setTimeout(() => toastEl.classList.add("hidden"), 200);
-}
-
-// Default toast icon (checkmark badge). Static, developer-controlled SVG.
-const TOAST_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
-
-// Relative luminance -> the ink that stays readable on `hex`. Switched off
-// (autoInk), the text is always white; switched on, black only above the
-// expert-tunable inkThreshold (a plain WCAG 0.179 split flipped black text
-// onto medium colors that read as too dark for black text).
-function hexLuminance(hex) {
-  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || ""));
-  if (!m) return null;
-  const n = parseInt(m[1], 16);
-  const lin = (c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
-  return 0.2126 * lin(((n >> 16) & 255) / 255) + 0.7152 * lin(((n >> 8) & 255) / 255) + 0.0722 * lin((n & 255) / 255);
-}
-
-function readableInk(hex) {
-  const l = hexLuminance(hex);
-  if (l === null) return "#fff";
-  if (!flag("autoInk")) return "#fff";
-  return l > val("inkThreshold") / 100 ? "#000" : "#fff";
-}
-
-// White ink stays white up to the user's threshold (a deliberate look), but
-// on a colour past the contrast crossover it gets a dark halo so it reads.
-// The halo can be switched off (inkHalo) or dialed in strength
-// (inkHaloStrength, percent). The second alpha keeps the same ratio to the
-// first at any strength (0.7 to 0.85 was the original fixed look).
-const INK_HALO_RATIO = 0.7 / 0.85;
-function inkShadow(hex) {
-  if (!flag("inkHalo")) return "none";
-  const l = hexLuminance(hex);
-  if (l === null || l <= 0.179 || readableInk(hex) !== "#fff") return "none";
-  const a1 = val("inkHaloStrength") / 100;
-  const a2 = Number((a1 * INK_HALO_RATIO).toFixed(2));
-  return `0 0 2px rgba(0, 0, 0, ${Number(a1.toFixed(2))}), 0 1px 3px rgba(0, 0, 0, ${a2})`;
-}
-
-// Optional action: { label, onClick } adds a button and keeps the toast longer.
-// `tint` (a #rrggbb) paints the icon badge in that colour: the colour picker uses it so the
-// picked colour is visible next to its value.
-// Every toast is now the same themed card (icon badge + message), matching the
-// update notification, so nothing looks like the old flat pill.
-// `chips` is a second, independent action slot: a row of small pill buttons
-// (e.g. the three colour notations) instead of the single `.toast-btn`. Kept
-// separate from `action` rather than folding it in, so every existing single-action
-// caller (undo, update-available, …) is untouched.
-// `duration` overrides the computed auto-hide delay (ms) for this one call --
-// the background language-update notices use their own fixed duration
-// (OCR_LANG_NOTICE_MS) instead of the generic TOAST_MS/action-bonus math below. Every existing
-// caller omits it and keeps the old behaviour.
-// Named (not the pill/folder windows' shared COPIED_MS=900 -- this toast
-// chip flash has always run shorter; unifying the value would be a behaviour change).
-const CHIP_COPIED_MS = 400;
-// Fixed layout and timing values that used to be expert settings.
-const HEADER_PAD_Y = 10; // px, vertical padding of the header bar
-const TILE_FOLDER_ZONE = 55; // % of a tile that means "drop into a folder"
-const KB_FOCUS_FADE_MS = 2000; // delay before the keyboard focus ring fades
-const ETA_MIN_PCT = 10; // remaining time stays hidden below this percent ...
-const ETA_MIN_SECS = 20; // ... and for this many seconds
-// How long the background language-pack update notices stay up (ms).
-const OCR_LANG_NOTICE_MS = 8000;
-const VOICE_LANG_NOTICE_MS = 8000;
-// Arrow-key nudge step in the screenshot editor while Shift is held.
-const NUM_FIELD_BIG_STEP = 10;
-function toast(msg, action = null, tint = "", chips = null, duration = null) {
-  toastEl.textContent = "";
-  const hasChips = !!(chips && chips.length);
-  // Only actionable toasts capture clicks; plain ones stay click-through so they
-  // never block the UI underneath. The card layout lives on the base .toast now.
-  toastEl.classList.toggle("actionable", !!action || hasChips);
-  toastEl.classList.toggle("update", !!(action && action.variant === "update"));
-  toastEl.classList.toggle("tinted", !!tint);
-  toastEl.classList.toggle("has-chips", hasChips); // wider card, chips inline with the message
-  if (tint) {
-    toastEl.style.setProperty("--toast-tint", tint);
-    toastEl.style.setProperty("--toast-ink", readableInk(tint));
-  }
-  const ico = document.createElement("span");
-  ico.className = "toast-ico";
-  ico.innerHTML = (action && action.icon) ? action.icon : TOAST_ICON;
-  toastEl.appendChild(ico);
-  const label = document.createElement("span");
-  label.className = "toast-msg";
-  label.textContent = msg;
-  toastEl.appendChild(label);
-  if (action) {
-    const btn = document.createElement("button");
-    btn.className = "toast-btn";
-    btn.textContent = action.label;
-    btn.addEventListener("click", () => {
-      hideToast();
-      action.onClick();
-    });
-    toastEl.appendChild(btn);
-  }
-  if (hasChips) {
-    const row = document.createElement("span");
-    row.className = "toast-chip-row";
-    for (const c of chips) {
-      const chip = document.createElement("button");
-      chip.type = "button";
-      chip.className = "toast-chip";
-      chip.textContent = c.label;
-      chip.classList.toggle("is-current", !!c.current); // the one on the clipboard
-      chip.setAttribute("aria-pressed", String(!!c.current));
-      // Copies again without closing the toast: comparing/re-picking a different
-      // notation is the whole point, unlike the single-action button above. The
-      // clicked chip becomes "current" too: it is now what sits on the clipboard,
-      // and the row must show exactly one such chip at a time.
-      chip.addEventListener("click", () => {
-        c.onClick();
-        for (const other of row.children) {
-          other.classList.toggle("is-current", other === chip);
-          other.setAttribute("aria-pressed", String(other === chip));
-        }
-        chip.classList.add("copied");
-        setTimeout(() => chip.classList.remove("copied"), CHIP_COPIED_MS);
-      });
-      row.appendChild(chip);
-    }
-    toastEl.appendChild(row);
-  }
-  toastEl.classList.remove("hidden");
-  void toastEl.offsetWidth;
-  toastEl.classList.add("show");
-  clearTimeout(toastTimer);
-  // A toast carrying an action button or chips needs longer to read/click than a
-  // plain message, but was a flat 12000ms regardless of the toastMs expert
-  // setting -- longer than that setting's own 10000ms max. Scale it off the same
-  // knob instead (same 12000ms result at the 1400ms default).
-  toastTimer = setTimeout(hideToast, duration ?? ((action || hasChips) ? TOAST_MS + 10600 : TOAST_MS));
-}
-
-// The backend returns Err(String) with a plain English sentence; most call sites
-// just did errToast(err), which shows raw English no matter the app language.
-// Known error strings get mapped to a translated key here; anything not in the map
-// (an unexpected error, or a plain error code like "canceled"/"save-failed" a
-// caller already checks for itself) still falls back to the raw string so nothing
-// is silently swallowed.
-const ERROR_MSG_KEYS = {
-  "cannot delete the last view": "errLastView",
-  "theme name is empty": "errThemeNameEmpty",
-  "theme name contains a control character": "errThemeNameControlChar",
-  "group name is empty": "errGroupNameEmpty",
-  "a group needs at least one view": "errGroupNeedsView",
-  "tag name is empty": "errTagNameEmpty",
-  "tag name contains a comma or a control character": "errTagNameInvalid",
-  "installer too large / truncated": "errUpdaterTooLarge",
-  "downloaded file is not a valid installer": "errUpdaterInvalidInstaller",
-  "update hash mismatch: download rejected": "errUpdaterHashMismatch",
-  "backup expands to more than 512 MB": "errBackupTooLarge",
-  "store-too-large-for-backup": "errStoreTooLargeForBackup",
-  "backup-schema-mismatch": "errBackupSchemaMismatch",
-  "not in a folder": "errNotInFolder",
-  "not a member of this folder": "errNotFolderMember",
-  "color picker is off": "errColorPickerOff",
-  "autostart is only supported on Windows": "errAutostartWindowsOnly",
-  "delete-incomplete": "errDeleteIncomplete",
-  "unsupported-export-format": "exportUnsupportedFormat",
-  "recording-target-switch-not-supported": "recTargetSwitchUnsupported",
-  "recording-target-switch-different-monitor": "recTargetSwitchDifferentMonitor",
-  "recording-target-switch-invalid-window": "recTargetSwitchInvalidWindow",
-  "recording-target-switch-timeout": "recTargetSwitchTimeout",
-  "file-missing": "openFileMissing",
-  "ffmpeg-missing": "recFfmpegMissingHint",
-  "demo-mode-multiple-instances": "demoModeMultipleInstances",
-  "dir-not-picked": "syncDirNotApplied",
-  "recording-busy": "recBusy",
-  "save-failed": "persistFailed",
-  "remote-off-not-saved": "remoteOffNotSaved",
-  "remote-tls-short-lived-has-own-command": "remoteTlsShortLivedOwnCommand",
-  "remote-network-off-not-saved": "remoteNetworkOffNotSaved",
-  "port-unavailable": "remotePortUnavailable",
-  "the certificate key could not be protected": "remoteTlsKeyNotProtected",
-  "corrupt backup": "errCorruptBackup",
-  "unknown backup format": "errUnknownBackupFormat",
-  "this folder holds the app's own data": "errFolderIsAppData",
-  "the folder is no longer there": "errFolderGone",
-  "the prompts could not be saved to the folder being left": "errSyncLeavePrompts",
-  "the settings could not be saved to the folder being left": "errSyncLeaveSettings",
-  "not a text attachment": "errNotTextAttachment",
-  "this release is not newer than the installed version": "errUpdateNotNewer",
-  "update check failed": "errUpdateCheckFailed",
-  "download too large / truncated": "errDownloadTooLarge",
-  "downloaded file is not a valid archive": "errDownloadInvalidArchive",
-  "ffmpeg download hash mismatch, rejected": "errFfmpegHashMismatch",
-  "extracted file is not a valid executable": "errFfmpegInvalidExe",
-  "release notes too large / truncated": "errReleaseNotesTooLarge",
-  "password too long": "errPasswordTooLong",
-  "backup-name-taken": "errBackupNameTaken",
-  "folder not found": "errFolderNotFound",
-  "recording file not found": "errRecordingFileNotFound",
-};
-function errToast(err) {
-  const s = String(err);
-  const known = ERROR_MSG_KEYS[s];
-  const msg = known ? t(known) : s;
-  // The raw, untranslated string is only worth keeping when it differs from
-  // what the user actually saw -- an unmapped error is already its own raw text.
-  logErrorLogEntry(msg, known ? s : null);
-  toast(msg);
-}
-
-// Best-effort label for which part of the app an error most likely belongs to,
-// read from what is on screen right now rather than tagging each of errToast's
-// many call sites individually.
-function currentErrorOrigin() {
-  const openModal = document.querySelector(".overlay:not(.hidden)[id]");
-  if (openModal) return openModal.id;
-  if (!$("settings-expert").classList.contains("hidden")) return "settings-expert";
-  return "main";
-}
-
-// Fire-and-forget: a failure to log the log itself must never show another
-// error (recursing back into errToast) or block the toast the user is waiting on.
-function logErrorLogEntry(text, raw) {
-  invoke("log_error", { text, origin: currentErrorOrigin(), raw }).catch(() => {});
-}
-
-// Runs the pending undo, if any, and clears the slot first so a restore that
-// itself triggers another destructive action cannot re-arm on top of itself.
-async function runPendingUndo() {
-  const slot = pendingUndo;
-  if (!slot) return;
-  pendingUndo = null;
-  try {
-    await slot.restore();
-  } catch (err) {
-    errToast(err);
-  }
-}
-// Shows `msg` with an Undo button wired to `restore`: unless the Undo time is Off,
-// in which case it is a plain toast and nothing is armed (an off setting must mean
-// nothing is kept around to undo, not just a hidden button).
-function undoToast(msg, restore) {
-  if (val("undoToastMs") <= 0) { toast(msg); return; }
-  pendingUndo = { restore };
-  toast(msg, { label: t("undo"), onClick: runPendingUndo }, "", null, val("undoToastMs"));
-}
-
-// For the actions that cannot go to the trash and have nothing to bring them back
-// but the Undo toast (a deleted view, a merged tag): with the Undo time Off nothing
-// would be kept, so ask first. With Undo on, the toast is the safety net and this
-// resolves true at once.
-async function confirmIfNoUndo(opts) {
-  if (val("undoToastMs") > 0) return true;
-  return !!(await confirmDialog(opts));
-}
-
-function autoGrow(el) {
-  el.style.height = "auto";
-  const target = el.scrollHeight + 2;
-  el.style.height = `${Math.min(target, INPUT_MAX)}px`;
-  el.style.overflowY = target > INPUT_MAX ? "auto" : "hidden";
-}
-
-const cellKey = (c, r) => `${c},${r}`;
 
 // ---- Grid-size value picker ----
 // Scrollable popup under a grid-size input: lists every value with a
@@ -1142,20 +618,8 @@ function attachGridPicker(input, apply) {
 // ---- Custom color picker (theme-styled popup with SV field + hue bar) ----
 // Shared with the video editor through colorpop.js, the one implementation
 // both windows load.
-const { el: colorPop, open: openColorPop, close: closeColorPop } = createColorPop();
+wireColorPop();
 
-// Two-step confirmation: first call arms the button and returns false,
-// the second call (while armed) returns true.
-function armButton(btn, confirmLabel) {
-  if (btn.classList.contains("confirm")) return true;
-  btn.classList.add("confirm");
-  btn.textContent = confirmLabel;
-  return false;
-}
-function disarmButton(btn, label) {
-  btn.classList.remove("confirm");
-  btn.textContent = label;
-}
 // ---- Collapsible bars (header / composer) ----
 function applyBars() {
   const header = settings.show_header !== false;
@@ -1183,31 +647,6 @@ function applyBarToggleTips() {
   for (const id of ["hide-top", "hide-bottom"]) $(id).title = t("hideBar") + hint;
   for (const id of ["show-top", "show-bottom"]) $(id).title = t("showBar") + hint;
 }
-
-// A brand may ship a feature the other way round than this app does (see
-// brands/<slug>.json "flagDefaults"). A stored value always wins, so the default
-// only decides what an untouched install starts with.
-const shipsOn = (key) => {
-  const v = FLAG_DEFAULTS[key];
-  return typeof v === "boolean" ? v : !isOptFlag(key);
-};
-const optFlag = (key) => (settings.ui_flags?.[key] ?? shipsOn(key)) === true;
-// Current state + label key, whichever kind of flag this is.
-const flagState = (key) => (isOptFlag(key) ? optFlag(key) : flag(key));
-// A sub-toggle counts as off while its own parent is off, so everything hanging off
-// it disappears with the whole branch instead of surviving as an orphan row.
-const gateOpen = (gate, seen) => {
-  if (!gate) return true;
-  const inv = gate[0] === "!";
-  const key = inv ? gate.slice(1) : gate;
-  let on = EXPERT_VALUES[key]?.offAtZero ? val(key) > 0 : flagState(key);
-  const guard = seen || new Set();
-  if (on && !guard.has(key)) {
-    guard.add(key);
-    on = gateOpen(FLAG_GATES[key], guard);
-  }
-  return inv ? !on : on;
-};
 
 // Build a simple string-enum dropdown backed by ui_texts (default when unset).
 // `opts` is [[value, i18nLabelKey], …]. Used by expert enum params.
@@ -1525,37 +964,6 @@ async function applyExpertPreset(name) {
   renderExpert();
 }
 
-const flag = (key) => (settings.ui_flags?.[key] ?? shipsOn(key)) !== false;
-const val = (key) => {
-  const cfg = EXPERT_VALUES[key] || EXPERT_SELECTS[key]; // selects live in ui_values too
-  const raw = settings.ui_values?.[key];
-  const v = Number.isFinite(raw) ? raw : cfg.def;
-  // 0 is this setting's "unlimited" stop, below its slider minimum on purpose.
-  if (cfg.topUnlimited && v === 0) return 0;
-  // Clamp to the setting's own range so no stored/imported value can push a
-  // slider-bounded setting out of bounds (grid geometry etc. stays always valid).
-  if (cfg.stops) {
-    return Math.min(cfg.stops[cfg.stops.length - 1], Math.max(cfg.stops[0], v));
-  }
-  if (Number.isFinite(cfg.min) && Number.isFinite(cfg.max)) {
-    return Math.min(cfg.max, Math.max(cfg.min, v));
-  }
-  return v;
-};
-const txt = (key) => settings.ui_texts?.[key] || "";
-
-// Wraps a command that reports no real progress of its own (backup, import)
-// with an indeterminate taskbar entry -- "something is happening" is all that
-// can honestly be shown without a percentage to work from.
-async function withTaskbarBusy(op, fn) {
-  invoke("set_taskbar_progress", { op, state: "indeterminate" }).catch(() => {});
-  try {
-    return await fn();
-  } finally {
-    invoke("set_taskbar_progress", { op, state: "done" }).catch(() => {});
-  }
-}
-
 // Mirror each disabled flag onto a body class so CSS can hide the matching UI.
 function applyFlags() {
   for (const key of ALL_FLAG_KEYS) {
@@ -1645,14 +1053,14 @@ function applyValues() {
   root.setProperty("--modal-max-vh", `${val("modalMaxVh")}vh`);
   root.setProperty("--tag-pop-cols", String(Math.round(val("tagPopCols"))));
   // Caps/lengths that were fixed constants, now expert-tunable.
-  ROTATE_SHORT_MAX = Math.round(val("rotateTipLen"));
-  HISTORY_PREVIEW_LEN = Math.round(val("historyPreviewLen"));
-  DRAG_THRESHOLD = val("dragThreshold");
-  INPUT_MAX = Math.round(val("composerMaxH"));
-  DISARM_MS = Math.round(val("disarmMs"));
+  assignROTATE_SHORT_MAX(Math.round(val("rotateTipLen")));
+  assignHISTORY_PREVIEW_LEN(Math.round(val("historyPreviewLen")));
+  assignDRAG_THRESHOLD(val("dragThreshold"));
+  assignINPUT_MAX(Math.round(val("composerMaxH")));
+  assignDISARM_MS(Math.round(val("disarmMs")));
   document.body.classList.toggle("toast-top", settings.ui_texts?.toastPos === "top");
-  BUBBLE_MS = val("bubbleMs");
-  TOAST_MS = val("toastMs");
+  assignBUBBLE_MS(val("bubbleMs"));
+  assignTOAST_MS(val("toastMs"));
   const nameMax = val("nameMaxLen");
   for (const id of ["modal-name", "modal-caption", "view-modal-name"]) {
     const el = $(id);
@@ -2840,8 +2248,8 @@ async function savePalette(colors) {
     // Reload the caches so the grid/views reflect the remap without a restart.
     try {
       const s = await invoke("get_state");
-      prompts = s.prompts;
-      settings = s.settings;
+      assignPrompts(s.prompts);
+      assignSettings(s.settings);
       loadPalette();
     } catch (_) { /* keep going with the in-memory state */ }
   }
@@ -2923,8 +2331,6 @@ const GATING_FLAGS = new Set(
     ...EXPERT_TABS.flatMap((tab) => tab.groups.flatMap((g) => (g.actions || []).map((a) => a.gate))),
   ].filter(Boolean).map((g) => g.replace(/^!/, ""))
 );
-// Expert-menu action buttons (id -> handler); populated by the features that own them.
-const EXPERT_ACTIONS = {};
 // A search matches if the term is in the active language OR in English: English
 // is the lingua franca, so a non-native speaker's query still finds the setting.
 function i18nHit(key, q) {
@@ -3016,7 +2422,7 @@ async function openSettingsDirectoryEntry(entry) {
     hideSettings();
   } else if (entry.area === "library") {
     hideSettings();
-    libraryTab = "prompts";
+    assignLibraryTab("prompts");
     $("library-btn").click();
   } else if (entry.area === "backup") {
     hideSettings();
@@ -3587,9 +2993,6 @@ const layoutOf = (v) => v.layouts?.[gridKeyOf(v)] || {};
 const viewsContaining = (id, exceptViewId) =>
   settings.views.filter((v) => v.id !== exceptViewId && Object.prototype.hasOwnProperty.call(layoutOf(v), id));
 
-// ---- Favorites view: a live, auto-sized grid of every starred prompt.
-// Enabled by favViewButton (off by default); the header star toggles it.
-let favView = false; // currently showing the favorites grid
 const favViewEnabled = () => flag("favorites") && optFlag("favViewButton");
 
 // Favorites layout: prompt id -> [col,row]. Free placement (gaps allowed), saved
@@ -3620,7 +3023,7 @@ function refreshFavViewUi() {
 
 function setFavView(on) {
   if (gridSelected.size) clearGridSelection(); // a selection belongs to what's on screen
-  favView = on && favViewEnabled();
+  assignFavView(on && favViewEnabled());
   renderGrid(true);
 }
 
@@ -3750,8 +3153,8 @@ async function renderGrid(skipFetch = false) {
   if (!skipFetch) {
     try {
       const s = await invoke("get_state");
-      prompts = s.prompts;
-      settings = s.settings;
+      assignPrompts(s.prompts);
+      assignSettings(s.settings);
       await updateExamplesBanner(); // re-evaluate on every real fetch, not just at startup
     } catch (e) {
       // IPC hiccup: keep the last good state instead of throwing into the
@@ -3760,7 +3163,7 @@ async function renderGrid(skipFetch = false) {
       if (!settings || !prompts) return;
     }
   }
-  if (favView && !favViewEnabled()) favView = false; // setting switched off underneath us
+  if (favView && !favViewEnabled()) assignFavView(false); // setting switched off underneath us
   if (favView) { renderFavGrid(); return; }
   const view = activeView();
   // A colored border around the grid itself (expert opt, default off):
@@ -3868,10 +3271,10 @@ function renderViews() {
 }
 
 async function switchToView(id) {
-  favView = false; // picking a normal view leaves the favorites grid
+  assignFavView(false); // picking a normal view leaves the favorites grid
   if (gridSelected.size) clearGridSelection(); // a selection belongs to what's on screen
   try {
-    settings = await invoke("set_active_view", { id });
+    assignSettings(await invoke("set_active_view", { id }));
   } catch (err) {
     errToast(err);
     return; // a rejection must not leave the click doing nothing silently
@@ -3926,7 +3329,7 @@ const slotKey = (s) => `v:${s.viewId}`;
 
 async function applyViewOrder(order) {
   try {
-    settings = await invoke("reorder_views", { order });
+    assignSettings(await invoke("reorder_views", { order }));
   } catch (e) {
     errToast(e);
     return;
@@ -4134,7 +3537,7 @@ async function runViewMutation(ids, targetViewId, fromViewId, copy, mySeq) {
     return;
   }
   if (mySeq !== viewMutationSeq) return; // a later drop already applied; this answer is stale
-  settings = result;
+  assignSettings(result);
   clearGridSelection();
   await renderGrid(true);
 }
@@ -4250,14 +3653,14 @@ function closeViewModal() {
 // The per-size layout arrangement itself is not restored, only membership and the
 // current grid size: the members reflow into free cells, same as a resize would.
 async function restoreDeletedView(deleted, reactivateId) {
-  settings = await invoke("add_view", { name: deleted.name, color: deleted.color || "" });
+  assignSettings(await invoke("add_view", { name: deleted.name, color: deleted.color || "" }));
   const newId = settings.active_view;
-  settings = await invoke("set_view_grid", { id: newId, cols: deleted.cols, rows: deleted.rows });
+  assignSettings(await invoke("set_view_grid", { id: newId, cols: deleted.cols, rows: deleted.rows }));
   if (deleted.members && deleted.members.length) {
-    settings = await invoke("batch_prompts", { ids: deleted.members, action: "addView", color: null, favorite: null, viewId: newId });
+    assignSettings(await invoke("batch_prompts", { ids: deleted.members, action: "addView", color: null, favorite: null, viewId: newId }));
   }
   if (reactivateId && settings.views.some((v) => v.id === reactivateId)) {
-    settings = await invoke("set_active_view", { id: reactivateId });
+    assignSettings(await invoke("set_active_view", { id: reactivateId }));
   }
   renderViews();
   await renderGrid(true);
@@ -4275,9 +3678,9 @@ async function confirmViewModal() {
       const view = settings.views.find((v) => v.id === viewModalId);
       const cols = clampGrid(viewModal.cols.value, view?.cols ?? 1);
       const rows = clampGrid(viewModal.rows.value, view?.rows ?? 1);
-      settings = await invoke("set_view_grid", { id: viewModalId, cols, rows });
+      assignSettings(await invoke("set_view_grid", { id: viewModalId, cols, rows }));
     } else {
-      settings = await invoke("add_view", { name, color: viewModalColor });
+      assignSettings(await invoke("add_view", { name, color: viewModalColor }));
     }
   } catch (err) {
     errToast(err);
@@ -4293,9 +3696,9 @@ async function confirmViewModal() {
 // once.
 async function duplicateView(v) {
   try {
-    settings = await invoke("add_view", { name: `${v.name} (${t("duplicateSuffix")})`, color: v.color || "" });
+    assignSettings(await invoke("add_view", { name: `${v.name} (${t("duplicateSuffix")})`, color: v.color || "" }));
     const newId = settings.active_view; // add_view switches to the view it just created
-    settings = await invoke("set_view_grid", { id: newId, cols: v.cols, rows: v.rows });
+    assignSettings(await invoke("set_view_grid", { id: newId, cols: v.cols, rows: v.rows }));
   } catch (err) {
     errToast(err);
     return;
@@ -4626,13 +4029,6 @@ function hideTileTip() {
   if (tipTimer) { clearTimeout(tipTimer); tipTimer = null; }
   tipEl?.classList.remove("show");
 }
-// A greyed clear-X inside a text field: brightens on hover, empties the field on
-// click. Wraps the input so the button can sit at its right edge.
-const CLEAR_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" d="M7 7l10 10M17 7 7 17"/></svg>';
-// Dialog icons: a stack of records for the data take-over, a padlock for the
-// password prompt.
-const TAKEOVER_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5.5" rx="7.5" ry="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M4.5 5.5v13c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3v-13M4.5 12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3"/></svg>';
-const LOCK_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M8 10V7a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15.5" r="1.6" fill="currentColor"/></svg>';
 // Reveal toggle for password fields (backup settings + the restore prompt).
 function wireClear(el) {
   if (!el || el.dataset.clearWired || el.readOnly) return;
@@ -4985,7 +4381,6 @@ const rotateState = new Map(); // id -> { index, pos, total, text }
 // position with stale data (same shape as floating.js's rotateReq / folder.js's
 // rotateReqs).
 const rotateReqs = new Map(); // id -> latest request number
-let ROTATE_SHORT_MAX = 60; // tooltip preview length, independent of the notes cap, expert-tunable
 
 // `pos` (not `index + 1`): in random mode `index` is the absolute entry that
 // will be drawn next (jumps around), while `pos` is the 1-based draw number within
@@ -5090,12 +4485,6 @@ function imageOf(p) {
   }
   return "";
 }
-
-// Anything drawn while its picture was still loading tags itself with the id it is
-// waiting for, and only those elements are rebuilt when the bytes land. Re-rendering
-// the whole grid instead would tear down whatever else is going on at that moment:
-// a live colour preview, a half-finished drag: for a background arrival.
-const IMG_WAIT = "imgWait"; // dataset key: the prompt id this element is waiting for
 
 // One repaint for a whole batch of arrivals instead of one per image.
 let imagePaintQueued = false;
@@ -5334,7 +4723,7 @@ function buildTile(p) {
     // With the modifier held the press becomes a drag-out; `out` keeps the
     // reorder machine out of it while a modifier-click still copies as before.
     const out = armDragOut(tile, e, () => prompts.find((x) => x.id === p.id));
-    drag = { id: p.id, startX: e.clientX, startY: e.clientY, moved: false, el: tile, out };
+    assignDrag({ id: p.id, startX: e.clientX, startY: e.clientY, moved: false, el: tile, out });
   });
 
   // Prompts with an attached file or media icon get a persistent error
@@ -5356,11 +4745,6 @@ function buildTile(p) {
   if (chainMode) applyChainToTile(tile, p); // keep badges/skip across re-renders
   return tile;
 }
-
-// ---- Video tiles: YouTube-style hover bar ----
-// Video tiles keep their DOM element across grid re-renders: rebuilding
-// would restart playback. Reparenting the cached wrapper does not.
-const videoCache = new Map(); // prompt id -> { src, wrap }
 
 function getVideoWrap(p, src) {
   const cached = videoCache.get(p.id);
@@ -5392,20 +4776,6 @@ function getVideoWrap(p, src) {
 function pruneVideoCache() {
   for (const id of videoCache.keys()) {
     if (!prompts.some((p) => p.id === id)) videoCache.delete(id);
-  }
-}
-
-// Library/journal thumbnails used to get a fresh <img> with a reassigned
-// base64 src on EVERY render (search re-renders the whole row list on every
-// keystroke), forcing the browser to re-decode the same blob each time. One cache
-// per panel: library and journal can both stay mounted at once (see the video
-// IntersectionObserver comment above), so a single shared cache would rip a thumb
-// out of whichever panel isn't rendering right now.
-const libThumbCache = new Map(); // prompt id -> { key, el }
-const journalThumbCache = new Map();
-function pruneThumbCache(cache) {
-  for (const id of cache.keys()) {
-    if (!prompts.some((p) => p.id === id)) cache.delete(id);
   }
 }
 
@@ -5541,7 +4911,7 @@ function startDragOut(e, p) {
   if (p.file_path) e.dataTransfer.setData("text/uri-list", fileUri(p.file_path));
   // The OS owns the gesture from here: drop the pointer-drag bookkeeping so the
   // ghost/hover cell of a reorder can never be left behind.
-  drag = null;
+  assignDrag(null);
   endDragVisuals();
 }
 
@@ -5613,7 +4983,7 @@ function resumeDragVideos(el) {
 window.addEventListener("pointerup", async (e) => {
   if (!drag) return;
   const { id, moved, el, ghost, folderId, viewTarget, viewTargetTitle } = drag;
-  drag = null;
+  assignDrag(null);
   ghost?.remove();
   el.classList.remove("dragging");
   resumeDragVideos(el);
@@ -5716,13 +5086,13 @@ window.addEventListener("pointercancel", () => {
     resumeDragVideos(drag.el);
     clearViewDropHover();
   }
-  drag = null;
+  assignDrag(null);
   disarmFolder();
   if (memberDrag) {
     memberDrag.el.classList.remove("dragging");
     memberDrag.ghost?.remove();
   }
-  memberDrag = null;
+  assignMemberDrag(null);
   endDragVisuals();
 });
 
@@ -5866,14 +5236,14 @@ const folderTitle = (f) => f.name || t("tileFolderDefaultName");
 // the grid never shows a half-moved folder.
 async function saveFolder(f, patch) {
   try {
-    settings = await invoke("save_tile_folder", {
+    assignSettings(await invoke("save_tile_folder", {
       id: f.id || "",
       name: patch.name ?? f.name ?? "",
       color: patch.color ?? f.color ?? "",
       viewId: f.view_id,
       cell: patch.cell ?? f.cell ?? [0, 0],
       members: patch.members ?? f.members ?? [],
-    });
+    }));
   } catch (e) {
     errToast(e);
     return false;
@@ -5949,7 +5319,7 @@ async function dissolveTileFolder(f) {
   });
   if (!ok) return;
   try {
-    settings = await invoke("delete_tile_folder", { id: f.id });
+    assignSettings(await invoke("delete_tile_folder", { id: f.id }));
   } catch (e) {
     errToast(e);
     return;
@@ -5962,7 +5332,7 @@ async function dissolveTileFolder(f) {
 // the folder: the backend's invariant, so there is no special case here.
 async function takeOutOfFolder(id, cell) {
   try {
-    settings = await invoke("take_out_of_tile_folder", { id, cell });
+    assignSettings(await invoke("take_out_of_tile_folder", { id, cell }));
   } catch (e) {
     errToast(e);
     return;
@@ -6026,7 +5396,7 @@ function buildFolderTile(f) {
   // Same drag machine as a tile: only what a press means differs (open, not copy).
   tile.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
-    drag = { folderId: f.id, startX: e.clientX, startY: e.clientY, moved: false, el: tile };
+    assignDrag({ folderId: f.id, startX: e.clientX, startY: e.clientY, moved: false, el: tile });
   });
   return tile;
 }
@@ -6123,7 +5493,7 @@ function openTileFolderPop(f, anchor) {
     // Press and pull onto a cell to take the prompt out of the folder again.
     btn.addEventListener("pointerdown", (ev) => {
       if (ev.button !== 0) return;
-      memberDrag = { id: p.id, startX: ev.clientX, startY: ev.clientY, moved: false, el: btn };
+      assignMemberDrag({ id: p.id, startX: ev.clientX, startY: ev.clientY, moved: false, el: btn });
     });
     grid.appendChild(btn);
   }
@@ -6140,8 +5510,6 @@ function openTileFolderPop(f, anchor) {
   }
 }
 
-// Dragging a member out of the open popover.
-let memberDrag = null;
 window.addEventListener("pointermove", (e) => {
   if (!memberDrag) return;
   if (!memberDrag.moved) {
@@ -6170,7 +5538,7 @@ window.addEventListener("pointermove", (e) => {
 window.addEventListener("pointerup", async (e) => {
   if (!memberDrag) return;
   const d = memberDrag;
-  memberDrag = null;
+  assignMemberDrag(null);
   d.ghost?.remove();
   d.el.classList.remove("dragging");
   endDragVisuals();
@@ -6194,16 +5562,12 @@ window.addEventListener("pointerup", async (e) => {
   await takeOutOfFolder(d.id, [Number(cell.dataset.col), Number(cell.dataset.row)]);
 });
 
-// ---- Arming a folder while a tile is dragged ----
-// The OUTER band of a tile keeps the plain swap; the middle makes a folder, but only
-// after a short dwell, so a quick swap can never turn into one by accident.
-let folderArm = null;
 function disarmFolder() {
   if (!folderArm) return;
   clearTimeout(folderArm.timer);
   folderArm.el.classList.remove("folder-arm", "folder-arming");
   folderArm.el.style.removeProperty("--arm-ms");
-  folderArm = null;
+  assignFolderArm(null);
 }
 function armFolderDrop(e) {
   if (!tileFoldersOn() || favView || !drag || drag.folderId) return disarmFolder();
@@ -6229,7 +5593,7 @@ function armFolderDrop(e) {
     host.classList.add("folder-arm");
     arm.armed = true;
   }, wait);
-  folderArm = arm;
+  assignFolderArm(arm);
 }
 
 // A drop in an armed centre: join that folder, or make one out of the two tiles.
@@ -6325,7 +5689,7 @@ function renderViewsPop(id) {
     row.setAttribute("aria-checked", String(on));
     row.addEventListener("click", async () => {
       try {
-        settings = await invoke("batch_prompts", { ids: [id], action: on ? "removeView" : "addView", color: null, favorite: null, viewId: v.id });
+        assignSettings(await invoke("batch_prompts", { ids: [id], action: on ? "removeView" : "addView", color: null, favorite: null, viewId: v.id }));
       } catch (e) { batchErrorToast(e); return; }
       renderViewsPop(id);
     });
@@ -6437,7 +5801,6 @@ function openGridTagPop() {
 
 // ---- Right-click toolbar menu: show or hide header buttons. Whole features (views, quick grid, clipboard watcher, chaining) are switched in the expert menu, never here. ----
 const TOOLBAR_TOOLS = ["favViewButton", "showLibrary", "barToggles", "showLogo", "showTitle"];
-const TB_CHECK = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7"/></svg>';
 // Little glyph shown beside each tool name so the menu reads at a glance.
 const tbIcon = (d, fill) => `<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path ${fill ? 'fill="currentColor"' : 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'} d="${d}"/></svg>`;
 // Tool-menu icons mirror the real toolbar buttons so the menu reads the same as
@@ -7242,7 +6605,7 @@ function disarmDraftAutosave() {
 function openModal({ mode, id, name = "", text = "", color = "", image = "", showImage = false, copyImage = false, filePath = "", pdfPage = 0, iconPath = "", caption = "", captionSize = 0, font = "", fontSize = 0, favorite = false, tags = [], notes = "", hotkey = "", hotkeyPaste = "", variants = [], rotateMode = "", rotateAuto = false, secret = false, locked = false, title, targetCell }) {
   modalSession++;
   modalOpener = document.activeElement;
-  modalState = {
+  assignModalState({
     mode, id, color, image, showImage, copyImage, filePath, pdfPage, iconPath, tags: [...tags], hotkey, hotkeyPaste, targetCell,
     // What the editor opened with. Save compares against it and only sends an
     // image field when the user really changed the picture: a save must never be
@@ -7258,7 +6621,7 @@ function openModal({ mode, id, name = "", text = "", color = "", image = "", sho
     // onModalSecretToggle, which is the only place that changes this in memory.
     secret: !!secret,
     locked: !!locked,
-  };
+  });
   modal.title.textContent = title;
   modal.fav.classList.toggle("active", !!favorite);
   modal.fav.setAttribute("aria-pressed", String(!!favorite));
@@ -7725,24 +7088,6 @@ function scheduleLenCounter() {
   lenRaf = requestAnimationFrame(() => { lenRaf = 0; updateLenCounter(); });
 }
 
-// Search re-renders the whole result list, which for a large library means rebuilding
-// every row (and re-decoding every image thumbnail): far too much to do on each
-// keystroke. The field itself stays live; only the list waits for a short pause in
-// typing. Short enough to feel immediate, long enough that a fast typist renders once.
-const SEARCH_DEBOUNCE_MS = 120;
-// ms may be a getter, so a caller can stay live-tunable (library search reads
-// the searchDebounceMs expert value on every keystroke instead of a value baked
-// in when the debounced wrapper was created).
-function debounced(fn, ms = SEARCH_DEBOUNCE_MS) {
-  let timer = 0;
-  const run = () => {
-    clearTimeout(timer);
-    timer = setTimeout(fn, typeof ms === "function" ? ms() : ms);
-  };
-  run.cancel = () => clearTimeout(timer);
-  return run;
-}
-
 function renderMarkdown(text) {
   // An unfenced code prompt is one block, not Markdown: see detectCodeLang.
   if (flag("codeAutoDetect")) {
@@ -7941,8 +7286,6 @@ function renderDiffInto(el, tokens) {
   }
 }
 
-// ---- Version history: render the collapsible list in the editor ----
-let HISTORY_PREVIEW_LEN = 80; // expert-tunable
 // A snapshot's full entry list: index 0 is the base text, 1..n are rotation variants.
 const versionEntries = (v) => (v.variants?.length ? [v.text || "", ...v.variants] : [v.text || ""]);
 // The editor's current, unsaved state: the "newer" side of the newest row's diff.
@@ -8460,7 +7803,7 @@ function jumpToPrompt(name) {
   // The settings and the backups dialog stay open underneath: the library is only
   // raised above them, so closing it lands back on the statistics it was opened from.
   document.body.classList.add("library-front");
-  libraryTab = "prompts";
+  assignLibraryTab("prompts");
   $("library-btn").click(); // resets + opens the library
   libQuery = name || "";
   $("library-q").value = libQuery;
@@ -8566,8 +7909,8 @@ async function keepOneDup(group, keepId) {
   const placements = await invoke("placement_snapshot", { ids: remove }).catch(() => null);
   try {
     const gone = new Set(remove);
-    settings = await invoke("batch_prompts", { ids: remove, action: "delete", color: null, favorite: null, viewId: null });
-    prompts = prompts.filter((p) => !gone.has(p.id));
+    assignSettings(await invoke("batch_prompts", { ids: remove, action: "delete", color: null, favorite: null, viewId: null }));
+    assignPrompts(prompts.filter((p) => !gone.has(p.id)));
   } catch (e) { toast(String(e) === "save-failed" ? t("persistFailed") : String(e)); return; }
   closeCompareView();
   renderViews();
@@ -8811,8 +8154,8 @@ function renderTrashList() {
 async function restoreTrashItem(id) {
   let st;
   try { st = await invoke("restore_prompt", { id }); } catch (e) { toast(String(e) === "save-failed" ? t("persistFailed") : String(e)); return; }
-  prompts = st.prompts;
-  settings = st.settings;
+  assignPrompts(st.prompts);
+  assignSettings(st.settings);
   trashList = trashList.filter((p) => p.id !== id);
   renderTrashList();
   renderViews();
@@ -9069,8 +8412,8 @@ EXPERT_ACTIONS["settings-import"] = async () => {
   try {
     await invoke("apply_settings_import", { path });
     const s = await invoke("get_state");
-    prompts = s.prompts;
-    settings = s.settings;
+    assignPrompts(s.prompts);
+    assignSettings(s.settings);
     applyValues();
     renderExpert();
     renderGrid(true);
@@ -10774,7 +10117,6 @@ async function withDialog(fn) {
   }
 }
 
-const PDF_EXT = /\.pdf$/i;
 // Page defaults to the first (0). The backend clamps against the real page
 // count, so a stale number from a previously longer PDF at the same path still
 // renders something instead of nothing.
@@ -10872,7 +10214,7 @@ function closeModal() {
   // for the boot-time recovery check to find and offer back for nothing.
   disarmDraftAutosave();
   if (modalState) invoke("discard_editor_draft").catch(() => {});
-  modalState = null;
+  assignModalState(null);
   modalInitial = "";
   // A tile the editor was opened from can be gone by the time it closes (the
   // prompt got deleted mid-edit, or a re-render replaced the DOM node) --
@@ -11290,7 +10632,7 @@ function openTagColorPop(anchor, name, after) {
   const box = tagPop.querySelector(".swatches");
   const apply = async (hex) => {
     try {
-      settings = await invoke("set_tag_color", { name, color: hex });
+      assignSettings(await invoke("set_tag_color", { name, color: hex }));
     } catch (err) { errToast(err); return; }
     after?.();
   };
@@ -11544,7 +10886,7 @@ async function mergeTagWithUndo(from, into, refresh) {
   const intoIds = prompts.filter((p) => hasTag(p, intoKey)).map((p) => p.id);
   const fromColor = tagColor(from);
   const intoColor = tagColor(into);
-  try { settings = await invoke("rename_tag", { old: from, new: into }); }
+  try { assignSettings(await invoke("rename_tag", { old: from, new: into })); }
   catch (err) { errToast(err); return; }
   await refresh();
   undoToast(
@@ -11559,15 +10901,15 @@ async function mergeTagWithUndo(from, into, refresh) {
 async function undoTagMerge(from, into, fromIds, intoIds, fromColor, intoColor, refresh) {
   try {
     if (fromIds.length) {
-      settings = await invoke("batch_prompts", { ids: fromIds, action: "tag-add", tag: from, color: null, favorite: null, viewId: null });
+      assignSettings(await invoke("batch_prompts", { ids: fromIds, action: "tag-add", tag: from, color: null, favorite: null, viewId: null }));
       const intoSet = new Set(intoIds);
       const onlyMerged = fromIds.filter((id) => !intoSet.has(id));
       if (onlyMerged.length) {
-        settings = await invoke("batch_prompts", { ids: onlyMerged, action: "tag-remove", tag: into, color: null, favorite: null, viewId: null });
+        assignSettings(await invoke("batch_prompts", { ids: onlyMerged, action: "tag-remove", tag: into, color: null, favorite: null, viewId: null }));
       }
     }
-    if (fromColor) settings = await invoke("set_tag_color", { name: from, color: fromColor });
-    if (tagColor(into) !== intoColor) settings = await invoke("set_tag_color", { name: into, color: intoColor });
+    if (fromColor) assignSettings(await invoke("set_tag_color", { name: from, color: fromColor }));
+    if (tagColor(into) !== intoColor) assignSettings(await invoke("set_tag_color", { name: into, color: intoColor }));
   } catch (err) { errToast(err); }
   await refresh();
 }
@@ -11589,7 +10931,7 @@ async function restoreDeletedTag(name, ids, color) {
   const idset = new Set(ids);
   if (ids.length) {
     try {
-      settings = await invoke("batch_prompts", { ids, action: "tag-add", tag: name, color: null, favorite: null, viewId: null });
+      assignSettings(await invoke("batch_prompts", { ids, action: "tag-add", tag: name, color: null, favorite: null, viewId: null }));
     } catch (err) { errToast(err); return; }
     const key = tagKey(name);
     for (const p of prompts) {
@@ -11597,7 +10939,7 @@ async function restoreDeletedTag(name, ids, color) {
     }
   }
   if (color) {
-    try { settings = await invoke("set_tag_color", { name, color }); } catch (err) { errToast(err); }
+    try { assignSettings(await invoke("set_tag_color", { name, color })); } catch (err) { errToast(err); }
   }
   await renderGrid();
   renderTagManager();
@@ -11664,7 +11006,7 @@ function renderTagManager() {
       // purpose, so it runs at once and the undo toast covers a slip.
       const existing = allTags().find((n2) => tagKey(n2) === tagKey(nextTrimmed));
       if (existing) { await mergeTagWithUndo(name, existing, refresh); return; }
-      try { settings = await invoke("rename_tag", { old: name, new: nextTrimmed }); }
+      try { assignSettings(await invoke("rename_tag", { old: name, new: nextTrimmed })); }
       catch (err) { errToast(err); return; }
       await refresh();
     });
@@ -11700,7 +11042,7 @@ function renderTagManager() {
       const key = tagKey(name);
       const hadIds = prompts.filter((p) => (p.tags || []).some((x) => tagKey(x) === key)).map((p) => p.id);
       const color = tagColor(name);
-      try { settings = await invoke("delete_tag", { name }); }
+      try { assignSettings(await invoke("delete_tag", { name })); }
       catch (err) { errToast(err); return; }
       libTags.delete(key);
       for (const p of prompts) p.tags = (p.tags || []).filter((x) => tagKey(x) !== key);
@@ -11721,7 +11063,7 @@ $("tag-colorize")?.addEventListener("click", async () => {
   const uncolored = allTags().filter((n) => !tagColor(n));
   if (!uncolored.length) return;
   const entries = uncolored.map((name, i) => ({ name, color: palette[i % palette.length] }));
-  try { settings = await invoke("set_tag_colors", { entries }); }
+  try { assignSettings(await invoke("set_tag_colors", { entries })); }
   catch (err) { errToast(err); return; }
   renderTagManager();
   renderLibrary();
@@ -11976,12 +11318,12 @@ async function saveThemeDraft() {
   }
   themeDraft.name = name;
   try {
-    settings = await invoke("save_custom_theme", {
+    assignSettings(await invoke("save_custom_theme", {
       id: themeDraft.id,
       name,
       base: themeDraft.base,
       vars: themeDraft.vars,
-    });
+    }));
   } catch (err) {
     errToast(err);
     return;
@@ -12008,7 +11350,7 @@ async function deleteThemeDraft() {
   });
   if (!ok) return;
   try {
-    settings = await invoke("delete_custom_theme", { id: themeDraft.id });
+    assignSettings(await invoke("delete_custom_theme", { id: themeDraft.id }));
   } catch (err) {
     errToast(err);
     return;
@@ -12078,7 +11420,7 @@ $("theme-edit-export")?.addEventListener("click", async () => {
 // or just confirmed with Cancel/Save.
 $("theme-edit-import")?.addEventListener("click", async () => {
   try {
-    settings = await invoke("import_custom_theme");
+    assignSettings(await invoke("import_custom_theme"));
   } catch (err) {
     if (err !== "canceled") errToast(err);
     return;
@@ -12922,7 +12264,7 @@ function renderLibrary() {
       if (libSelectMode) return; // no drag while multi-selecting
       if (e.button !== 0 || e.target.closest(".lib-add, .lib-edit, .lib-fav, .lib-delete")) return;
       const out = armDragOut(row, e, () => prompts.find((x) => x.id === p.id));
-      drag = { id: p.id, startX: e.clientX, startY: e.clientY, moved: false, el: row, fromLibrary: true, out };
+      assignDrag({ id: p.id, startX: e.clientX, startY: e.clientY, moved: false, el: row, fromLibrary: true, out });
     });
     // Add-to-view icon (leftmost of the action group): place on the current layout.
     if (!placed.has(p.id)) {
@@ -12986,7 +12328,7 @@ function renderLibrary() {
     del.addEventListener("click", async (e) => {
       e.stopPropagation();
       if (!(await trashPromptWithUndo(p.id, p.name))) return;
-      prompts = prompts.filter((x) => x.id !== p.id);
+      assignPrompts(prompts.filter((x) => x.id !== p.id));
       renderLibrary();
       await renderGrid(); // the tile (or its folder) is gone from the grid as well
     });
@@ -13135,15 +12477,15 @@ async function doGridBatch(action, extra = {}) {
   if (!ids.length) return false;
   const idset = new Set(ids);
   try {
-    settings = await invoke("batch_prompts", {
+    assignSettings(await invoke("batch_prompts", {
       ids, action,
       color: extra.color ?? null,
       favorite: extra.favorite ?? null,
       viewId: extra.viewId ?? null,
       tag: extra.tag ?? null,
-    });
+    }));
   } catch (e) { batchErrorToast(e); return false; }
-  if (action === "delete") prompts = prompts.filter((p) => !idset.has(p.id));
+  if (action === "delete") assignPrompts(prompts.filter((p) => !idset.has(p.id)));
   else if (action === "color") { for (const p of prompts) if (idset.has(p.id)) p.color = extra.color ?? ""; }
   else if (action === "favorite") { for (const p of prompts) if (idset.has(p.id)) p.favorite = extra.favorite ?? true; }
   else if (action === "tag-add") {
@@ -13169,7 +12511,7 @@ async function doGridMove(targetViewId) {
     // One moveView call - both layouts change in the same backend settings
     // write, so a crash mid-call can no longer leave a tile placed in both views
     // (the old addView-then-removeView pair was two separate IPC round-trips).
-    settings = await invoke("batch_prompts", { ids, action: "moveView", color: null, favorite: null, viewId: targetViewId, fromViewId: settings.active_view });
+    assignSettings(await invoke("batch_prompts", { ids, action: "moveView", color: null, favorite: null, viewId: targetViewId, fromViewId: settings.active_view }));
   } catch (e) { batchErrorToast(e); return; }
   clearGridSelection();
   await renderGrid(true);
@@ -13185,16 +12527,16 @@ async function doBatch(action, extra = {}) {
   try {
     // Backend now returns ONLY settings (no prompt echo): so a batch over
     // image-heavy prompts no longer re-serialises every base64 blob over IPC.
-    settings = await invoke("batch_prompts", {
+    assignSettings(await invoke("batch_prompts", {
       ids, action,
       color: extra.color ?? null,
       favorite: extra.favorite ?? null,
       viewId: extra.viewId ?? null,
       tag: extra.tag ?? null,
-    });
+    }));
   } catch (e) { batchErrorToast(e); return false; }
   // Mirror the change onto the local prompt list ourselves.
-  if (action === "delete") prompts = prompts.filter((p) => !idset.has(p.id));
+  if (action === "delete") assignPrompts(prompts.filter((p) => !idset.has(p.id)));
   else if (action === "favorite") { for (const p of prompts) if (idset.has(p.id)) p.favorite = extra.favorite ?? true; }
   else if (action === "color") { for (const p of prompts) if (idset.has(p.id)) p.color = extra.color ?? ""; }
   else if (action === "tag-add") {
@@ -13231,7 +12573,7 @@ async function doBatch(action, extra = {}) {
 async function restoreBatchTag(inverseAction, ids, tag) {
   if (!ids.length) return;
   try {
-    settings = await invoke("batch_prompts", { ids, action: inverseAction, color: null, favorite: null, viewId: null, tag });
+    assignSettings(await invoke("batch_prompts", { ids, action: inverseAction, color: null, favorite: null, viewId: null, tag }));
   } catch (err) { errToast(err); return; }
   const key = tagKey(tag);
   const idset = new Set(ids);
@@ -13274,8 +12616,8 @@ async function restoreBatchDelete(ids, placements) {
   if (placements && placements.length) {
     try {
       const st = await invoke("restore_prompts_batch", { placements });
-      prompts = st.prompts;
-      settings = st.settings;
+      assignPrompts(st.prompts);
+      assignSettings(st.settings);
       gridDirty = true;
       await renderGrid(true);
       if (!libraryEl.classList.contains("hidden")) renderLibrary();
@@ -13285,8 +12627,8 @@ async function restoreBatchDelete(ids, placements) {
   for (const id of ids) {
     try {
       const st = await invoke("restore_prompt", { id });
-      prompts = st.prompts;
-      settings = st.settings;
+      assignPrompts(st.prompts);
+      assignSettings(st.settings);
     } catch (err) { errToast(err); }
   }
   gridDirty = true;
@@ -13741,7 +13083,7 @@ function renderJournal() {
     if (await copyResolved(p)) { // handles {{variables}} like the library does
       await recordCopy(p.id); // await: the log must refetch AFTER the copy is recorded
       toastCopied(p);
-      settings = await invoke("get_settings");
+      assignSettings(await invoke("get_settings"));
       await loadJournal();
     }
   };
@@ -14115,8 +13457,6 @@ function openHelpAt(id) {
   $("help").classList.remove("hidden");
 }
 
-// Which tab of the library is showing; the library reopens on the one used last.
-let libraryTab = "prompts"; // "prompts" | "history"
 const isHistoryTabOpen = () => !libraryEl.classList.contains("hidden") && libraryTab === "history";
 // The copy history tab exists while it records something (app copies or copies from other
 // apps) and while stored entries from other apps remain, so they can still be seen,
@@ -14128,7 +13468,7 @@ function setLibraryTab(tab) {
   if (tab === "history" && !avail) tab = "prompts";
   // The batch bar belongs to the prompts tab.
   if (tab === "history" && libSelectMode) setLibSelectMode(false);
-  libraryTab = tab;
+  assignLibraryTab(tab);
   libraryEl.dataset.tab = tab;
   $("library-tabs").classList.toggle("hidden", !avail);
   $("library-panel-prompts").classList.toggle("hidden", tab !== "prompts");
@@ -14142,7 +13482,7 @@ function setLibraryTab(tab) {
 }
 
 async function resetAndLoadJournal() {
-  settings = await invoke("get_settings");
+  assignSettings(await invoke("get_settings"));
   journalQuery = "";
   if ($("journal-q")) $("journal-q").value = "";
   journalTypes.clear();
@@ -16282,7 +15622,7 @@ function bind() {
     const cols = clampGrid($("qg-cols").value, view.cols);
     const rows = clampGrid($("qg-rows").value, view.rows);
     if (cols === view.cols && rows === view.rows) return;
-    settings = await invoke("set_view_grid", { id: view.id, cols, rows });
+    assignSettings(await invoke("set_view_grid", { id: view.id, cols, rows }));
     await renderGrid(true);
   };
   attachGridPicker($("qg-cols"), applyQuickGrid);
@@ -16303,7 +15643,7 @@ function bind() {
       else break;
     }
     if (cols === view.cols && rows === view.rows) return;
-    settings = await invoke("set_view_grid", { id: view.id, cols, rows });
+    assignSettings(await invoke("set_view_grid", { id: view.id, cols, rows }));
     await renderGrid(true);
   });
 
@@ -16732,7 +16072,7 @@ function bind() {
       if (!sure) return;
     }
     try {
-      settings = await invoke("delete_view", { id: viewModalId });
+      assignSettings(await invoke("delete_view", { id: viewModalId }));
     } catch (err) {
       errToast(err);
       return;
@@ -16802,7 +16142,7 @@ function bind() {
     const on = e.target.checked;
     settings.ui_flags = { ...(settings.ui_flags || {}), favViewButton: on };
     invoke("set_ui_flag", { key: "favViewButton", enabled: on }).catch((err) => errToast(err));
-    if (!on && favView) favView = false;
+    if (!on && favView) assignFavView(false);
     applyFlags();
     refreshFavViewUi();
     renderGrid(true);
@@ -16987,10 +16327,10 @@ function bind() {
       const key = tagKey(tag);
       const already = (p.tags || []).some((x) => tagKey(x) === key);
       try {
-        settings = await invoke("batch_prompts", {
+        assignSettings(await invoke("batch_prompts", {
           ids: [id], action: already ? "tag-remove" : "tag-add",
           color: null, favorite: null, viewId: null, tag,
-        });
+        }));
       } catch (e) { errToast(e); return; }
       p.tags = already ? (p.tags || []).filter((x) => tagKey(x) !== key) : [...(p.tags || []), tag];
       await renderGrid(true);
@@ -18201,7 +17541,7 @@ async function maybeOfferEditorDraftRecovery() {
 // (palette, language, sizing, theme). Shared by init() and reloadEverything() so a
 // new global settings value only needs adding here, not in both places.
 async function applySettingsCore() {
-  settings = await invoke("get_settings");
+  assignSettings(await invoke("get_settings"));
   loadPalette();
   await setLang(settings.language);
   applyI18n();
@@ -18268,7 +17608,7 @@ async function init() {
     setupDragDrop();
     await applySettingsUi();
     invoke("app_version").then((v) => {
-      appVersion = v;
+      assignAppVersion(v);
       setStatusText($("update-version"), "versionInstalled", "v", v);
       setStatusText($("about-version"), "versionInstalled", "v", appVersion);
     }).catch(() => {});
