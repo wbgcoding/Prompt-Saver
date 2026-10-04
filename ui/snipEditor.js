@@ -3,6 +3,7 @@ import { makeHoldOrTapToggle, numberField, trapTabWithin } from "./floatShared.j
 import { placePopover, placePopoverAt } from "./popover.js";
 import { snapMove } from "./snap.js";
 import { colorPop, drag, errToast, flag, NUM_FIELD_BIG_STEP, openColorPop, t, toast, txt, val, withShortcut } from "./core.js";
+import { closeShortcutsModal, openShortcutsModal } from "./windowChrome.js";
 
 const { invoke } = window.__TAURI__.core;
 const { getCurrentWindow, ResizeDirection } = window.__TAURI__.window;
