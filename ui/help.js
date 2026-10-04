@@ -275,7 +275,7 @@ export const HELP_CONTENT = {
         "Search, filter by type or color, or star a favorite from the list.",
         "Delete a single row, or clear the whole copy history.",
       ],
-      whatHappens: "Grouped view shows one row per tile (its most recent copy) instead of every event. Copy history older than the retention setting is dropped automatically (30 days for a new install, adjustable, 0 keeps everything).",
+      whatHappens: "Grouped view shows one row per tile (its most recent copy) instead of every event. Copy history older than the retention setting is dropped automatically (30 days for a new install, adjustable, 0 keeps everything). The copy history is one list; the sort field switches between Recently copied and Most used (top 20).",
       settings: ["Grouped view, retention: Expert menu → Library & copy history → Copy history", "Skip an entry that repeats the copy before it: Expert menu → Library & copy history → Copy history"],
     },
     {
@@ -1024,7 +1024,7 @@ export const HELP_CONTENT = {
         "Suchen, nach Typ oder Farbe filtern, oder einen Favoriten aus der Liste markieren.",
         "Eine einzelne Zeile löschen oder den gesamten Kopierverlauf leeren.",
       ],
-      whatHappens: "Die gruppierte Ansicht zeigt eine Zeile pro Kachel (ihre letzte Kopie) statt jedes einzelnen Ereignisses. Älterer Kopierverlauf als die Aufbewahrungs-Einstellung wird automatisch gelöscht (bei einer neuen Installation 30 Tage, einstellbar, 0 behält alles).",
+      whatHappens: "Die gruppierte Ansicht zeigt eine Zeile pro Kachel (ihre letzte Kopie) statt jedes einzelnen Ereignisses. Älterer Kopierverlauf als die Aufbewahrungs-Einstellung wird automatisch gelöscht (bei einer neuen Installation 30 Tage, einstellbar, 0 behält alles). Der Kopierverlauf ist eine Liste; das Sortierfeld wechselt zwischen Zuletzt kopiert und Meistgenutzt (die 20 häufigsten).",
       settings: ["Gruppierte Ansicht, Aufbewahrungsdauer: Expertenmenü → Bibliothek & Kopierverlauf → Kopierverlauf", "Einen Eintrag überspringen, der die Kopie davor wiederholt: Expertenmenü → Bibliothek & Kopierverlauf → Kopierverlauf"],
     },
     {

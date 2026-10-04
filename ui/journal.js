@@ -1,6 +1,7 @@
 // The copy history and the clipboard inbox.
 import { $, assignLibraryTab, assignSettings, debounced, errToast, flag, ICON_EDIT, ICON_TRASH, invoke, journalThumbCache, LANG, libraryEl, libraryTab, listen, makeKeyboardActivatable, optFlag, prompts, putIcon, settings, t, toast, undoToast, val } from "./core.js";
 import { confirmDialog } from "./dialog.js";
+import { attachSelectPicker } from "./selectpop.js";
 import { _journalObs, assignActiveVidObs, assignJournalObs, buildColorFilter, copyResolved, hideLibrary, lastEdited, libLabel, libSelectMode, makeVideoObserver, maybeBackfillMediaMeta, mediaThumb, mediaTipLine, paintTypeChips, promptType, renderLibrary, setActiveFilter, setLibSelectMode, tagMatches, thumbEl, toastCopied, toggleTypeFilter, typeAllowed, typeFilterOf, usedColors } from "./library.js";
 import { allTags, renderTagBar, tagChipEl, tagKey, tagsOn } from "./tags.js";
 import { JOURNAL_ROWS_MAX } from "./expertConfig.js";
@@ -340,29 +341,7 @@ export function renderJournal() {
       await loadJournal();
     }
   };
-  // `rows` items are [prompt, meta]. `extra` is an optional control rendered to the
-  // right of the column title.
-  const column = (titleKey, rows, extra, cls, emptyKey, rowEl) => {
-    const col = document.createElement("div");
-    col.className = "journal-col" + (cls ? " " + cls : "");
-    const head = document.createElement("div");
-    head.className = "lib-section journal-head";
-    const title = document.createElement("span");
-    title.textContent = t(titleKey);
-    head.append(title);
-    if (extra) head.append(extra);
-    col.appendChild(head);
-    if (!rows.length) {
-      const e = document.createElement("div");
-      e.className = "hint";
-      e.textContent = t(emptyKey || "journalEmpty");
-      col.appendChild(e);
-    } else {
-      for (const row of rows) col.appendChild(rowEl ? rowEl(row) : journalRow(row[0], row[1], copyAgain(row[0])));
-    }
-    return col;
-  };
-  // Reverse-sort arrow for a column title (▼ newest/most first, ▲ reversed).
+  // Reverse-sort arrow beside the sort field (▼ newest/most first, ▲ reversed).
   const sortBtn = (rev, onClick) => {
     const b = document.createElement("button");
     b.type = "button";
@@ -373,46 +352,84 @@ export function renderJournal() {
     b.addEventListener("click", onClick);
     return b;
   };
-  const headExtras = (...nodes) => {
-    const s = document.createElement("span");
-    s.className = "journal-head-extras";
-    for (const n of nodes) if (n) s.append(n);
-    return s;
-  };
-  // Toggle beside the "recently copied" title: group repeats vs show every copy.
-  const groupBtn = document.createElement("button");
-  groupBtn.type = "button";
-  groupBtn.className = "journal-toggle" + (grouped ? " active" : "");
-  groupBtn.textContent = t("journalGrouped");
-  groupBtn.title = t("journalGrouped");
-  groupBtn.setAttribute("aria-pressed", String(grouped));
-  groupBtn.addEventListener("click", async () => {
-    const next = !grouped;
-    settings.ui_flags = { ...(settings.ui_flags || {}), historyGrouped: next };
-    try { await invoke("set_ui_flag", { key: "historyGrouped", enabled: next }); } catch (err) { errToast(err); }
-    await loadJournal(); // grouping changes the query → refetch
-  });
-  const recentSort = sortBtn(journalRecentRev, () => { journalRecentRev = !journalRecentRev; renderJournal(); });
-  const usedSort = sortBtn(journalUsedRev, () => { journalUsedRev = !journalUsedRev; renderJournal(); });
   // "Most used" only knows prompts of the app, so it steps aside for the elsewhere filter.
-  body.classList.toggle("journal-single", journalSource === "elsewhere");
-  body.append(
-    column("recentlyCopied",
-      // Rowid rides along so journalRow() can offer a per-entry delete:
-      // "most used" (below) has no single copy_log row to point at, so it stays
-      // without one.
-      recent,
-      headExtras(groupBtn, recentSort), "journal-col-recent",
-      journalSource === "elsewhere" ? "clipEmpty" : "journalEmpty",
-      (e) => (e.clip
-        ? journalClipRow(e.clip)
-        : journalRow(e.p, { left: showTime ? fmtCopyTime(e.ts) : "", rowid: e.rowid }, copyAgain(e.p)))),
+  const elsewhereOnly = journalSource === "elsewhere";
+  const mode = elsewhereOnly ? "recent" : journalSortMode();
+  const head = document.createElement("div");
+  head.className = "lib-section journal-head";
+  if (elsewhereOnly) {
+    const title = document.createElement("span");
+    title.textContent = t("recentlyCopied");
+    head.append(title);
+  } else {
+    const sel = document.createElement("select");
+    sel.id = "journal-sort";
+    sel.className = "lib-sort";
+    sel.setAttribute("aria-label", t("sortBy"));
+    for (const [v, k] of [["recent", "recentlyCopied"], ["used", "mostUsed"]]) {
+      const o = document.createElement("option");
+      o.value = v; o.textContent = t(k);
+      sel.appendChild(o);
+    }
+    sel.value = mode;
+    sel.addEventListener("change", () => {
+      settings.ui_texts = { ...(settings.ui_texts || {}), journalSort: sel.value };
+      invoke("set_ui_text", { key: "journalSort", value: sel.value }).catch((err) => errToast(err));
+      renderJournal();
+      $("journal-sort")?.focus();
+    });
+    attachSelectPicker(sel);
+    head.append(sel);
+  }
+  const extras = document.createElement("span");
+  extras.className = "journal-head-extras";
+  if (mode === "recent") {
+    // Toggle beside the sort field: group repeats vs show every copy.
+    const groupBtn = document.createElement("button");
+    groupBtn.type = "button";
+    groupBtn.className = "journal-toggle" + (grouped ? " active" : "");
+    groupBtn.textContent = t("journalGrouped");
+    groupBtn.title = t("journalGrouped");
+    groupBtn.setAttribute("aria-pressed", String(grouped));
+    groupBtn.addEventListener("click", async () => {
+      const next = !grouped;
+      settings.ui_flags = { ...(settings.ui_flags || {}), historyGrouped: next };
+      try { await invoke("set_ui_flag", { key: "historyGrouped", enabled: next }); } catch (err) { errToast(err); }
+      await loadJournal(); // grouping changes the query → refetch
+    });
+    extras.append(groupBtn, sortBtn(journalRecentRev, () => { journalRecentRev = !journalRecentRev; renderJournal(); }));
+  } else {
+    extras.append(sortBtn(journalUsedRev, () => { journalUsedRev = !journalUsedRev; renderJournal(); }));
+  }
+  head.append(extras);
+  const col = document.createElement("div");
+  col.className = "journal-col" + (mode === "recent" ? " journal-col-recent" : "");
+  col.appendChild(head);
+  // Recent rows carry a rowid so journalRow() can offer a per-entry delete: "most used"
+  // is a usage-count aggregate with no single copy_log row to point at.
+  const rowEls = mode === "recent"
+    ? recent.map((e) => (e.clip
+      ? journalClipRow(e.clip)
+      : journalRow(e.p, { left: showTime ? fmtCopyTime(e.ts) : "", rowid: e.rowid }, copyAgain(e.p))))
     // One meta line: last-used time on the left, copy count on the right.
-    ...(journalSource === "elsewhere" ? [] : [column("mostUsed", used.map(([p, n, ts]) => [
-      p,
-      { left: showTime && ts ? fmtCopyTime(ts) : "", right: t("usedTimes").replace("{n}", n) },
-    ]), headExtras(usedSort), "journal-col-used")]),
-  );
+    : used.map(([p, n, ts]) => journalRow(p, {
+      left: showTime && ts ? fmtCopyTime(ts) : "",
+      right: t("usedTimes").replace("{n}", n),
+    }, copyAgain(p)));
+  if (!rowEls.length) {
+    const e = document.createElement("div");
+    e.className = "hint";
+    e.textContent = t(mode === "recent" && elsewhereOnly ? "clipEmpty" : "journalEmpty");
+    col.appendChild(e);
+  } else {
+    for (const r of rowEls) col.appendChild(r);
+  }
+  body.append(col);
+}
+
+// The saved pick of the history sort field; anything unknown falls back to "recent".
+function journalSortMode() {
+  return settings.ui_texts?.journalSort === "used" ? "used" : "recent";
 }
 
 export const isHistoryTabOpen = () => !libraryEl.classList.contains("hidden") && libraryTab === "history";

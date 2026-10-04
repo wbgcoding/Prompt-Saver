@@ -194,6 +194,40 @@ SECTION = """\
         out.errors.push('198: the journal tag row overlaps the filter row instead of sitting below it');
       }
     }
+    // 716: the copy history is one column; the sort field switches to "most used", the
+    // pick is stored and survives closing and reopening the library.
+    {
+      const body = document.getElementById('journal-body');
+      const sortSel = document.getElementById('journal-sort');
+      if (!sortSel) {
+        out.errors.push('716: the history has no sort field');
+      } else {
+        if (getComputedStyle(body).gridTemplateColumns.trim().split(' ').length !== 1) out.errors.push('716: the history body is not one column');
+        if (body.querySelectorAll('.journal-col').length !== 1) out.errors.push('716: the history shows more than one list');
+        window.__SMOKE_ARGS__ = [];
+        sortSel.value = 'used';
+        sortSel.dispatchEvent(new Event('change'));
+        await sleep(200);
+        if (!window.__SMOKE_ARGS__.some(([cmd, a]) => cmd === 'set_ui_text' && a.key === 'journalSort' && a.value === 'used')) out.errors.push('716: the sort pick was not stored');
+        const usedCounts = () => [...document.querySelectorAll('#journal-body .journal-item')]
+          .map((r) => parseInt((r.querySelector('.lib-sub-right')?.textContent || '').replace(/[^0-9]/g, ''), 10));
+        let counts = usedCounts();
+        if (!counts.length || counts.some((n) => Number.isNaN(n))) out.errors.push('716: most used lists no rows with a count');
+        for (let i = 1; i < counts.length; i++) if (counts[i] > counts[i - 1]) out.errors.push('716: most used is not ordered by count');
+        if (document.querySelector('#journal-body .journal-col-recent')) out.errors.push('716: most used still carries the recent column class');
+        await click('library-close');
+        document.getElementById('library-btn').click();
+        await sleep(300);
+        if (document.getElementById('library-panel-history').classList.contains('hidden')) await click('library-tab-history');
+        await sleep(200);
+        if (document.getElementById('journal-sort')?.value !== 'used') out.errors.push('716: the sort pick did not survive reopening the library');
+        counts = usedCounts();
+        if (!counts.length) out.errors.push('716: most used is empty after reopening');
+        const back = document.getElementById('journal-sort');
+        if (back) { back.value = 'recent'; back.dispatchEvent(new Event('change')); await sleep(200); }
+        if (!document.querySelector('#journal-body .journal-col-recent')) out.errors.push('716: switching back to recent lost the recent column');
+      }
+    }
     // the library reopens on the tab used last, and what follows expects the prompt list
     await click('library-tab-prompts');
     await click('library-close');

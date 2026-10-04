@@ -530,6 +530,7 @@ A tab of the library (Library → Copy history): a log of what was copied and wh
 other apps" is on, elsewhere. Grouped view, automatic retention
 (30 days for a new install, adjustable, 0 keeps everything),
 per-entry delete, and usage statistics including a 14-day activity chart.
+The copy history is one list; the sort field switches between Recently copied and Most used (top 20).
 
 ## Organising
 
@@ -1458,6 +1459,7 @@ der Sammelleiste der Bibliothek.
 **Kopierverlauf** (Bibliothek → Reiter Kopierverlauf): Protokoll, Gruppierung, Aufbewahrung (bei einer neuen
 Installation 30 Tage, einstellbar, 0 behält alles), Einzeleintrag löschen,
 Statistik mit 14-Tage-Diagramm.
+Der Kopierverlauf ist eine Liste; das Sortierfeld wechselt zwischen Zuletzt kopiert und Meistgenutzt (die 20 häufigsten).
 
 **Medien**: Video-Steuerung, Autoplay und Schleife (beide ab Werk aus), Graustufen/Abdunkeln. Bibliothek und Kopierverlauf
 zeigen außerdem die Länge eines Videos auf seinem Vorschaubild sowie Auflösung

@@ -3798,20 +3798,20 @@ input[type="password"]::-ms-clear { display: none; }
   transform: translateX(-50%) rotate(45deg);
 }
 
-/* Copy-history journal: two columns (recent | most used), uniform rows.
-   Fills the available height; the lists scroll together when too many entries. */
+/* Copy-history journal: one list, a sort field switches recent | most used, uniform rows.
+   Fills the available height; the list scrolls when there are many entries. */
 .journal-body {
   flex: 1 1 auto;
-  /* Same floor the library list keeps: without it a short window squeezed the two
-     columns down to a 31px sliver. */
+  /* Same floor the library list keeps: without it a short window squeezed the list
+     down to a 31px sliver. */
   min-height: 120px;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 16px;
   align-content: start;
   /* hidden auto (not just overflow-y): with only overflow-y set, the spec promotes
      overflow-x to auto, so sub-pixel grid rounding spawns a phantom horizontal
-     scrollbar even though the two columns fit. Clip X explicitly to kill it. */
+     scrollbar even though the list fits. Clip X explicitly to kill it. */
   overflow: hidden auto;
   /* Cancel the modal's right padding so the scrollbar sits at the edge like the
      library, with the same 20px content inset. */
@@ -3826,7 +3826,6 @@ input[type="password"]::-ms-clear { display: none; }
 .journal-filters { display: flex; gap: 12px; align-items: center; flex-wrap: nowrap; }
 .journal-filters > .lib-colors { flex: 1 1 auto; min-width: 0; }
 .journal-col { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-.journal-body.journal-single { grid-template-columns: 1fr; }
 .journal-body::-webkit-scrollbar { width: var(--sb-width, 12px); }
 .journal-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; border: 3px solid var(--surface); }
 .journal-body::-webkit-scrollbar-thumb:hover { background: var(--muted); }
@@ -3864,8 +3863,6 @@ input[type="password"]::-ms-clear { display: none; }
 .journal-sort { font-size: 14px; line-height: 1; padding: 4px 9px; border: 1px solid var(--border); border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
 .journal-sort:hover { border-color: var(--accent); color: var(--fg); }
 .journal-sort.rev { color: var(--accent); border-color: var(--accent); }
-/* Narrow windows: stack the two columns so rows never get cramped. */
-@media (max-width: 560px) { .journal-body { grid-template-columns: 1fr; } }
 
 /* Expert preset dropdown + free-entry number */
 .expert-select { width: auto; min-width: 120px; align-self: flex-start; }
