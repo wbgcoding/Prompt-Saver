@@ -1,4 +1,7 @@
-import { t } from "./core.js";
+import { flag, invoke, LANG, settings, t, toast, txt } from "./core.js";
+
+let activeThemeVars; // linked from main.js
+export function linkPromptVars(fns) { ({ activeThemeVars } = fns); }
 
 // ---- Prompt variables ({#{placeholder}#}) ----
 // The {#{ ... }#} fence is deliberately uncommon so a literal "{{" pasted from a
@@ -102,3 +105,246 @@ export function uuidV4() {
 // Clipboard text is foreign input pasted into the prompt: cap it so one runaway
 // copy can never blow up the clipboard payload.
 export const CLIP_VAR_MAX = 100000;
+
+// A token is `name`, `name=default`, `name|opt,opt,…` or `name=default|opt,opt,…`.
+// Options are trimmed and empty ones dropped; a comma always starts the next
+// option, so an option can never contain one. A default selects the matching
+// entry in a choice list, or prefills a plain text variable when there is no
+// list. A bar or an equals sign without a usable name before it stays an
+// ordinary text variable: the whole token is then its name, exactly as
+// before, and no default is extracted from it.
+export function parseVar(token) {
+  const raw = String(token).trim();
+  const bar = raw.indexOf("|");
+  const namePart = bar < 0 ? raw : raw.slice(0, bar);
+  const eq = namePart.indexOf("=");
+  const rawName = eq < 0 ? namePart.trim() : namePart.slice(0, eq).trim();
+  const rawDefault = eq < 0 ? "" : namePart.slice(eq + 1).trim();
+  if (bar < 0 || !flag("choiceVars")) {
+    return rawName ? { name: rawName, options: [], default: rawDefault } : { name: raw, options: [], default: "" };
+  }
+  const options = raw.slice(bar + 1).split(",").map((o) => o.trim()).filter(Boolean);
+  return rawName && options.length
+    ? { name: rawName, options, default: rawDefault }
+    : { name: raw, options: [], default: "" };
+}
+
+export const isDynVar = (name) => flag("dynVars") && DYN_SET.has(dynName(name));
+export const dynLocale = () => DYN_LOCALES[LANG] || LANG;
+export const intlFmt = (opts) => {
+  try { return new Intl.DateTimeFormat(dynLocale(), opts); } catch (_) { return new Intl.DateTimeFormat("en", opts); }
+};
+export function fmtDynDate(d, style) {
+  if (style === "iso") return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  return intlFmt({ dateStyle: style }).format(d);
+}
+export function fmtDynTime(d, style) {
+  if (style === "iso") return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+  return intlFmt({ timeStyle: style }).format(d);
+}
+export function nextVarCounter() {
+  const now = Math.floor(Number(settings.ui_texts?.varCounter) || 0);
+  const next = now >= 0 && now < VAR_COUNTER_MAX ? now + 1 : 1;
+  settings.ui_texts = { ...(settings.ui_texts || {}), varCounter: String(next) };
+  invoke("set_ui_text", { key: "varCounter", value: String(next) }).catch(() => {});
+  return next;
+}
+
+// Resolve one reserved name. `ctx` carries the values that cost a round trip or a
+// write, fetched once per copy: the clipboard, the account name, the counter.
+export function dynValue(name, now, ctx) {
+  const ds = txt("dateStyle") || "short";
+  const ts = txt("timeStyle") || "short";
+  switch (name) {
+    case "date": return fmtDynDate(now, ds);
+    case "time": return fmtDynTime(now, ts);
+    case "datetime": return `${fmtDynDate(now, ds)} ${fmtDynTime(now, ts)}`;
+    case "weekday": return intlFmt({ weekday: "long" }).format(now);
+    case "yesterday": return fmtDynDate(dayShift(now, -1), ds);
+    case "tomorrow": return fmtDynDate(dayShift(now, 1), ds);
+    case "week": return String(isoWeek(now));
+    case "month": return intlFmt({ month: "long" }).format(now);
+    case "year": return String(now.getFullYear());
+    case "timestamp": return isoStamp(now);
+    case "epoch": return String(Math.floor(now.getTime() / 1000));
+    case "clipboard": return ctx.clip;
+    case "username": return ctx.user;
+    case "uuid": return uuidV4();
+    case "random": return shortId();
+    case "counter": return String(ctx.counter);
+    default: return "";
+  }
+}
+
+// The variable tokens of a prompt that are worth resolving at all (text prompts
+// only: an image/file prompt copies its media, not its text).
+// `text` overrides which string is scanned (the rotated entry actually about
+// to be copied): every existing caller keeps checking p.text unchanged.
+export const varTokens = (p, text) =>
+  (flag("promptVars") && p && !p.copy_image && !p.file_path ? extractVars(text ?? p.text) : []);
+// The subset the user still has to fill in by hand: the only reason to open a dialog.
+// An override text (the peeked rotating entry) must flow through the same as
+// varTokens takes one, or a placeholder living only in a later entry never gets
+// noticed at all -- checking p.text (entry 0) unconditionally.
+export const dialogTokens = (p, text) => varTokens(p, text).filter((tok) => !isDynVar(parseVar(tok).name));
+// True while any entry of a rotating prompt still carries a placeholder. An
+// auto-advance session renders the following entries itself, from their raw text:
+// so a prompt in this state must not open one, or the second paste would deliver
+// the placeholder rather than what it stands for.
+export const anyEntryHasVars = (p) =>
+  [p.text, ...(p.variants || [])].some((entry) => varTokens(p, entry).length > 0);
+
+// The text a copy of `p` is actually about to use: the pointer's CURRENT entry
+// for a rotating prompt, p.text otherwise. Read-only (never advances the pointer),
+// so it is safe to call ahead of a decision (dialogTokens) as well as the copy
+// itself. Every path that resolves p.text directly instead of this one silently
+// mis-detects (and mis-copies) once rotation has moved past entry 0.
+export async function peekRotatedText(p) {
+  if (!(p.variants || []).length) return p.text;
+  const peek = await invoke("rotation_peek", { id: p.id }).catch(() => null);
+  return peek ? peek.text : p.text;
+}
+
+// The one place every copy path goes through: reserved names resolve themselves,
+// the rest are asked for once. Returns the finished text, null when the user
+// cancelled, or when the small window the placeholders are asked in could not be
+// opened (a toast says so; every caller treats null as a cancel).
+export async function resolveVars(text) {
+  const tokens = extractVars(text);
+  if (!tokens.length) return text;
+  const values = {};
+  const ask = [];
+  const dyn = [];
+  for (const tok of tokens) {
+    (isDynVar(parseVar(tok).name) ? dyn : ask).push(tok);
+  }
+  if (dyn.length) {
+    const names = new Set(dyn.map((tok) => dynName(parseVar(tok).name)));
+    const ctx = { clip: "", user: "", counter: 0 };
+    if (names.has("clipboard")) {
+      ctx.clip = String(await invoke("clipboard_text").catch(() => "") || "").slice(0, CLIP_VAR_MAX);
+      if (!ctx.clip) toast(t("clipVarEmpty")); // image/file payload, or an empty clipboard
+    }
+    if (names.has("username")) ctx.user = String(await invoke("os_user_name").catch(() => "") || "");
+    if (names.has("counter")) ctx.counter = nextVarCounter();
+    const now = new Date();
+    for (const tok of dyn) values[tok] = dynValue(dynName(parseVar(tok).name), now, ctx);
+  }
+  if (ask.length) {
+    const filled = await promptVarsWindow(ask);
+    if (filled === false) { toast(t("varsWindowFailed")); return null; }
+    if (!filled) return null;
+    Object.assign(values, filled);
+  }
+  return fillVars(text, values);
+}
+
+// Values the user asked to remember, keyed by variable NAME (expert: varDefaults).
+// Both fill-in surfaces read and write them through these two helpers.
+export function readRememberedVars() {
+  try { return JSON.parse(settings.ui_texts?.varDefaults || "{}"); } catch (_) { return {}; }
+}
+export function saveRememberedVars(next, prev) {
+  const json = JSON.stringify(next);
+  if (json === JSON.stringify(prev)) return;
+  settings.ui_texts = { ...(settings.ui_texts || {}), varDefaults: json };
+  invoke("set_ui_text", { key: "varDefaults", value: json }).catch(() => {});
+}
+
+// Fixed placeholder values, kept by variable NAME (expert: varFixed) --
+// maintained BY HAND in the expert menu (add/change/delete), never written by
+// a fill-in dialog itself. Kept apart from varDefaults on purpose: a
+// deliberately maintained value must never be confused with whatever the
+// user happened to type in last time.
+export function readFixedVars() {
+  try { return JSON.parse(settings.ui_texts?.varFixed || "{}"); } catch (_) { return {}; }
+}
+export function saveFixedVars(next) {
+  const json = JSON.stringify(next);
+  if (json === (settings.ui_texts?.varFixed || "{}")) return;
+  settings.ui_texts = { ...(settings.ui_texts || {}), varFixed: json };
+  invoke("set_ui_text", { key: "varFixed", value: json }).catch(() => {});
+}
+
+// ---- Standalone fill-in window (vars.html) ----
+// Every copy that needs typed placeholders asks here, inside the app or not: a small
+// always-on-top window next to the pointer, so the app the user is working in keeps
+// the foreground. Everything the variables MEAN still lives
+// here: that window is a form, it renders rows and hands the answers back.
+export let varsWindowPending = null;
+export function assignVarsWindowPending(v) { varsWindowPending = v; }
+
+export async function promptVarsWindow(tokens) {
+  const useRemember = flag("varDefaults");
+  const keepChoice = flag("choiceRemember");
+  const remembered = readRememberedVars();
+  // Fixed values (expert: varFixed) sit between a remembered pick and the
+  // text's own default. A plain text field only ever SUGGESTS one, as its
+  // placeholder -- vars.js never inserts it into the value on its own.
+  const useFixed = flag("varFixed");
+  const fixedVars = useFixed ? readFixedVars() : {};
+  const rows = tokens.map((token) => {
+    const { name, options, default: def } = parseVar(token);
+    const last = remembered[name];
+    if (options.length) {
+      const usedLast = keepChoice && options.includes(last);
+      const usedFixed = !usedLast && options.includes(fixedVars[name]);
+      return {
+        token,
+        name,
+        options,
+        value: usedLast ? last : usedFixed ? fixedVars[name] : (def && options.includes(def) ? def : options[0]),
+        remember: false,
+        fixed: usedFixed,
+        placeholder: "",
+      };
+    }
+    const usedRemember = useRemember && name in remembered;
+    const usedFixed = !usedRemember && useFixed && name in fixedVars;
+    return {
+      token,
+      name,
+      options,
+      value: usedRemember ? String(last) : usedFixed ? "" : (def || ""),
+      remember: usedRemember,
+      fixed: usedFixed,
+      placeholder: usedFixed ? fixedVars[name] : "",
+    };
+  });
+  const payload = {
+    theme: document.documentElement.getAttribute("data-theme") || "",
+    vars: activeThemeVars(),
+    lang: LANG,
+    askRemember: useRemember,
+    rows: rows.map(({ name, options, value, remember, fixed, placeholder }) => ({ name, options, value, remember, fixed, placeholder })),
+  };
+  // A second hotkey while a window is still open cancels the older copy: one
+  // pending question at a time, or two answers would race for one clipboard.
+  const stale = varsWindowPending;
+  varsWindowPending = null;
+  stale?.(null);
+  const answer = await new Promise((resolve) => {
+    varsWindowPending = resolve;
+    invoke("open_var_window", { payload: JSON.stringify(payload), rows: rows.length })
+      .catch(() => { varsWindowPending = null; resolve(false); });
+  });
+  if (answer === false) return false; // no window could be opened
+  if (!answer) return null;
+  let parsed;
+  try { parsed = JSON.parse(answer); } catch (_) { return null; }
+  if (!Array.isArray(parsed.values) || parsed.values.length !== rows.length) return null;
+  const next = { ...remembered };
+  const filled = {};
+  rows.forEach((r, i) => {
+    const value = String(parsed.values[i] ?? "");
+    filled[r.token] = value;
+    if (r.options.length) {
+      if (keepChoice) next[r.name] = value;
+    } else if (useRemember) {
+      if (parsed.remember?.[i]) next[r.name] = value;
+      else delete next[r.name];
+    }
+  });
+  saveRememberedVars(next, remembered);
+  return filled;
+}

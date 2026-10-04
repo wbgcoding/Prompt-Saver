@@ -12,11 +12,12 @@ import { attachSelectPicker } from "./selectpop.js";
 import { confirmDialog, infoDialog, dismissConfirm, initDialogs, EYE_SVG } from "./dialog.js";
 import { SCOPE_TITLE_KEYS } from "./shortcuts.js";
 import { FLAG_LABELS, ALL_FLAG_KEYS, OPT_FLAG_LABELS, OPT_FLAG_KEYS, flagLabelKey, groupFlags, JOURNAL_ROWS_MAX, EXPERT_VALUES, EXPERT_SELECTS, STYLE_OPTS, REC_QUALITY_BITRATE, EXPERT_TABS, FLAG_GATES, EXPERT_PRESET_QUIET, EXPERT_PRESET_QUIET_ZERO, OFF_AT_ZERO_KEYS, EXPERT_BULK_NEVER, EXPERT_RESET_KEEP, EXPERT_PRESET_FULL_EXCLUDE, ALL_EXPERT_FLAG_KEYS, EXPERT_PRESET_TITLES, TILE_STYLES, EXPERT_TIP_SET, TILE_DOM_FLAGS, GRID_DOM_VALUES, SETTINGS_AREA_LABEL } from "./expertConfig.js";
-import { MD_MAX_CHARS, HL_MAX_CHARS, mdEsc, HL_ALIAS, hlCode, MD_FENCE, MD_HEAD, MD_HR, MD_QUOTE, MD_UL, MD_OL, mdInline, detectCodeLang, hasMarkdownSyntax } from "./markdown.js";
-import { extractVars, fillVars, hasEmptyVarToken, fillVarHighlighted, DYN_VARS, DYN_SET, dynToken, dynName, DYN_LOCALES, pad2, dayShift, isoWeek, isoStamp, shortId, VAR_COUNTER_MAX, uuidV4, CLIP_VAR_MAX } from "./promptVars.js";
+import { hasMarkdownSyntax, renderMarkdown } from "./markdown.js";
+import { anyEntryHasVars, assignVarsWindowPending, dialogTokens, DYN_VARS, dynToken, extractVars, fillVarHighlighted, hasEmptyVarToken, linkPromptVars, parseVar, peekRotatedText, readFixedVars, resolveVars, saveFixedVars, varsWindowPending, varTokens } from "./promptVars.js";
 import { TOUR_STEPS, TOUR_STEP_COUNT, TOUR_LAST_STEP, TOUR_FEATURES } from "./tourContent.js";
 import { initSnipEditor } from "./snipEditor.js";
 import { $, ALL_SHORTCUT_SCOPES, applyBrand, appVersion, armButton, assignAppVersion, assignBUBBLE_MS, assignCOLORS, assignDISARM_MS, assignDrag, assignDRAG_THRESHOLD, assignFavView, assignFolderArm, assignHISTORY_PREVIEW_LEN, assignINPUT_MAX, assignLibraryTab, assignMemberDrag, assignModalState, assignPrompts, assignROTATE_SHORT_MAX, assignSettings, assignTOAST_MS, autoGrow, BUBBLE_MS, cellKey, clampGrid, CLEAR_SVG, closeColorPop, colorPop, COLORS, confirmIfNoUndo, convertFileSrc, ctxEl, debounced, DEFAULT_COLORS, DICT, DISARM_MS, disarmButton, DOTS, drag, DRAG_THRESHOLD, emit, errToast, ETA_MIN_PCT, ETA_MIN_SECS, EXPERT_ACTIONS, favView, flag, flagState, folderArm, gateOpen, GRID_PLUS, gridEl, gridSelected, gridTags, HEADER_PAD_Y, HEX_RE, hideToast, HISTORY_PREVIEW_LEN, ICON_DOWN, ICON_EDIT, ICON_FILE, ICON_IMAGE, ICON_KEYBOARD, ICON_PDF, ICON_TRASH, ICON_UNDO, ICON_UP, ICON_VIDEO, ICON_WARN, IMG_WAIT, inkShadow, inputEl, invoke, journalThumbCache, KB_FOCUS_FADE_MS, LANG, libraryEl, libraryTab, libThumbCache, listen, LOCK_SVG, makeKeyboardActivatable, mediaBarLabels, memberDrag, modal, modalState, NUM_FIELD_BIG_STEP, OCR_LANG_NOTICE_MS, openColorPop, optFlag, PALETTE_LEN, PDF_EXT, PLUS_ICON, prompts, pruneThumbCache, putIcon, readableInk, ROTATE_SHORT_MAX, saveBtn, setLang, setLangSelect, setStatusText, settings, settingsEl, shipsOn, shortcutRows, shortcutSections, SIZE_MAX, SIZE_MIN, SIZE_STEP, t, TAKEOVER_SVG, TB_CHECK, TILE_FOLDER_ZONE, toast, TOOLTIP_PREVIEW_CHARS, txt, undoToast, val, videoCache, viewsEl, VOICE_LANG_NOTICE_MS, wireColorPop, withShortcut, withTaskbarBusy } from "./core.js";
+linkPromptVars({ activeThemeVars });
 primeLang("en", EN);
 
 // Bumped by openModal/closeModal. An async pick/preview started for one editor
@@ -5931,139 +5932,6 @@ function modalSnapshot() {
   ]);
 }
 
-// A token is `name`, `name=default`, `name|opt,opt,…` or `name=default|opt,opt,…`.
-// Options are trimmed and empty ones dropped; a comma always starts the next
-// option, so an option can never contain one. A default selects the matching
-// entry in a choice list, or prefills a plain text variable when there is no
-// list. A bar or an equals sign without a usable name before it stays an
-// ordinary text variable: the whole token is then its name, exactly as
-// before, and no default is extracted from it.
-function parseVar(token) {
-  const raw = String(token).trim();
-  const bar = raw.indexOf("|");
-  const namePart = bar < 0 ? raw : raw.slice(0, bar);
-  const eq = namePart.indexOf("=");
-  const rawName = eq < 0 ? namePart.trim() : namePart.slice(0, eq).trim();
-  const rawDefault = eq < 0 ? "" : namePart.slice(eq + 1).trim();
-  if (bar < 0 || !flag("choiceVars")) {
-    return rawName ? { name: rawName, options: [], default: rawDefault } : { name: raw, options: [], default: "" };
-  }
-  const options = raw.slice(bar + 1).split(",").map((o) => o.trim()).filter(Boolean);
-  return rawName && options.length
-    ? { name: rawName, options, default: rawDefault }
-    : { name: raw, options: [], default: "" };
-}
-
-const isDynVar = (name) => flag("dynVars") && DYN_SET.has(dynName(name));
-const dynLocale = () => DYN_LOCALES[LANG] || LANG;
-const intlFmt = (opts) => {
-  try { return new Intl.DateTimeFormat(dynLocale(), opts); } catch (_) { return new Intl.DateTimeFormat("en", opts); }
-};
-function fmtDynDate(d, style) {
-  if (style === "iso") return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-  return intlFmt({ dateStyle: style }).format(d);
-}
-function fmtDynTime(d, style) {
-  if (style === "iso") return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
-  return intlFmt({ timeStyle: style }).format(d);
-}
-function nextVarCounter() {
-  const now = Math.floor(Number(settings.ui_texts?.varCounter) || 0);
-  const next = now >= 0 && now < VAR_COUNTER_MAX ? now + 1 : 1;
-  settings.ui_texts = { ...(settings.ui_texts || {}), varCounter: String(next) };
-  invoke("set_ui_text", { key: "varCounter", value: String(next) }).catch(() => {});
-  return next;
-}
-
-// Resolve one reserved name. `ctx` carries the values that cost a round trip or a
-// write, fetched once per copy: the clipboard, the account name, the counter.
-function dynValue(name, now, ctx) {
-  const ds = txt("dateStyle") || "short";
-  const ts = txt("timeStyle") || "short";
-  switch (name) {
-    case "date": return fmtDynDate(now, ds);
-    case "time": return fmtDynTime(now, ts);
-    case "datetime": return `${fmtDynDate(now, ds)} ${fmtDynTime(now, ts)}`;
-    case "weekday": return intlFmt({ weekday: "long" }).format(now);
-    case "yesterday": return fmtDynDate(dayShift(now, -1), ds);
-    case "tomorrow": return fmtDynDate(dayShift(now, 1), ds);
-    case "week": return String(isoWeek(now));
-    case "month": return intlFmt({ month: "long" }).format(now);
-    case "year": return String(now.getFullYear());
-    case "timestamp": return isoStamp(now);
-    case "epoch": return String(Math.floor(now.getTime() / 1000));
-    case "clipboard": return ctx.clip;
-    case "username": return ctx.user;
-    case "uuid": return uuidV4();
-    case "random": return shortId();
-    case "counter": return String(ctx.counter);
-    default: return "";
-  }
-}
-
-// The variable tokens of a prompt that are worth resolving at all (text prompts
-// only: an image/file prompt copies its media, not its text).
-// `text` overrides which string is scanned (the rotated entry actually about
-// to be copied): every existing caller keeps checking p.text unchanged.
-const varTokens = (p, text) =>
-  (flag("promptVars") && p && !p.copy_image && !p.file_path ? extractVars(text ?? p.text) : []);
-// The subset the user still has to fill in by hand: the only reason to open a dialog.
-// An override text (the peeked rotating entry) must flow through the same as
-// varTokens takes one, or a placeholder living only in a later entry never gets
-// noticed at all -- checking p.text (entry 0) unconditionally.
-const dialogTokens = (p, text) => varTokens(p, text).filter((tok) => !isDynVar(parseVar(tok).name));
-// True while any entry of a rotating prompt still carries a placeholder. An
-// auto-advance session renders the following entries itself, from their raw text:
-// so a prompt in this state must not open one, or the second paste would deliver
-// the placeholder rather than what it stands for.
-const anyEntryHasVars = (p) =>
-  [p.text, ...(p.variants || [])].some((entry) => varTokens(p, entry).length > 0);
-
-// The text a copy of `p` is actually about to use: the pointer's CURRENT entry
-// for a rotating prompt, p.text otherwise. Read-only (never advances the pointer),
-// so it is safe to call ahead of a decision (dialogTokens) as well as the copy
-// itself. Every path that resolves p.text directly instead of this one silently
-// mis-detects (and mis-copies) once rotation has moved past entry 0.
-async function peekRotatedText(p) {
-  if (!(p.variants || []).length) return p.text;
-  const peek = await invoke("rotation_peek", { id: p.id }).catch(() => null);
-  return peek ? peek.text : p.text;
-}
-
-// The one place every copy path goes through: reserved names resolve themselves,
-// the rest are asked for once. Returns the finished text, null when the user
-// cancelled, or when the small window the placeholders are asked in could not be
-// opened (a toast says so; every caller treats null as a cancel).
-async function resolveVars(text) {
-  const tokens = extractVars(text);
-  if (!tokens.length) return text;
-  const values = {};
-  const ask = [];
-  const dyn = [];
-  for (const tok of tokens) {
-    (isDynVar(parseVar(tok).name) ? dyn : ask).push(tok);
-  }
-  if (dyn.length) {
-    const names = new Set(dyn.map((tok) => dynName(parseVar(tok).name)));
-    const ctx = { clip: "", user: "", counter: 0 };
-    if (names.has("clipboard")) {
-      ctx.clip = String(await invoke("clipboard_text").catch(() => "") || "").slice(0, CLIP_VAR_MAX);
-      if (!ctx.clip) toast(t("clipVarEmpty")); // image/file payload, or an empty clipboard
-    }
-    if (names.has("username")) ctx.user = String(await invoke("os_user_name").catch(() => "") || "");
-    if (names.has("counter")) ctx.counter = nextVarCounter();
-    const now = new Date();
-    for (const tok of dyn) values[tok] = dynValue(dynName(parseVar(tok).name), now, ctx);
-  }
-  if (ask.length) {
-    const filled = await promptVarsWindow(ask);
-    if (filled === false) { toast(t("varsWindowFailed")); return null; }
-    if (!filled) return null;
-    Object.assign(values, filled);
-  }
-  return fillVars(text, values);
-}
-
 // ---- Editor variable helper ----
 // One-line explanation per reserved name, shown as the chip's tooltip.
 const DYN_TIPS = {
@@ -6132,33 +6000,6 @@ for (const id of ["modal-var-name", "modal-var-opts"]) {
     e.preventDefault(); // Enter here inserts, it must not submit the editor
     insertHelperVar();
   });
-}
-
-// Values the user asked to remember, keyed by variable NAME (expert: varDefaults).
-// Both fill-in surfaces read and write them through these two helpers.
-function readRememberedVars() {
-  try { return JSON.parse(settings.ui_texts?.varDefaults || "{}"); } catch (_) { return {}; }
-}
-function saveRememberedVars(next, prev) {
-  const json = JSON.stringify(next);
-  if (json === JSON.stringify(prev)) return;
-  settings.ui_texts = { ...(settings.ui_texts || {}), varDefaults: json };
-  invoke("set_ui_text", { key: "varDefaults", value: json }).catch(() => {});
-}
-
-// Fixed placeholder values, kept by variable NAME (expert: varFixed) --
-// maintained BY HAND in the expert menu (add/change/delete), never written by
-// a fill-in dialog itself. Kept apart from varDefaults on purpose: a
-// deliberately maintained value must never be confused with whatever the
-// user happened to type in last time.
-function readFixedVars() {
-  try { return JSON.parse(settings.ui_texts?.varFixed || "{}"); } catch (_) { return {}; }
-}
-function saveFixedVars(next) {
-  const json = JSON.stringify(next);
-  if (json === (settings.ui_texts?.varFixed || "{}")) return;
-  settings.ui_texts = { ...(settings.ui_texts || {}), varFixed: json };
-  invoke("set_ui_text", { key: "varFixed", value: json }).catch(() => {});
 }
 
 // The expert menu's own list editor for varFixed: one row per fixed value
@@ -6362,88 +6203,6 @@ async function copyFormattedPrompt(id) {
     recordCopy(id);
     if (rotating && peek) { invoke("rotation_commit", { id }).catch(() => {}); recordToolUsage("rotation_advance"); }
   }
-}
-
-// ---- Standalone fill-in window (vars.html) ----
-// Every copy that needs typed placeholders asks here, inside the app or not: a small
-// always-on-top window next to the pointer, so the app the user is working in keeps
-// the foreground. Everything the variables MEAN still lives
-// here: that window is a form, it renders rows and hands the answers back.
-let varsWindowPending = null;
-
-async function promptVarsWindow(tokens) {
-  const useRemember = flag("varDefaults");
-  const keepChoice = flag("choiceRemember");
-  const remembered = readRememberedVars();
-  // Fixed values (expert: varFixed) sit between a remembered pick and the
-  // text's own default. A plain text field only ever SUGGESTS one, as its
-  // placeholder -- vars.js never inserts it into the value on its own.
-  const useFixed = flag("varFixed");
-  const fixedVars = useFixed ? readFixedVars() : {};
-  const rows = tokens.map((token) => {
-    const { name, options, default: def } = parseVar(token);
-    const last = remembered[name];
-    if (options.length) {
-      const usedLast = keepChoice && options.includes(last);
-      const usedFixed = !usedLast && options.includes(fixedVars[name]);
-      return {
-        token,
-        name,
-        options,
-        value: usedLast ? last : usedFixed ? fixedVars[name] : (def && options.includes(def) ? def : options[0]),
-        remember: false,
-        fixed: usedFixed,
-        placeholder: "",
-      };
-    }
-    const usedRemember = useRemember && name in remembered;
-    const usedFixed = !usedRemember && useFixed && name in fixedVars;
-    return {
-      token,
-      name,
-      options,
-      value: usedRemember ? String(last) : usedFixed ? "" : (def || ""),
-      remember: usedRemember,
-      fixed: usedFixed,
-      placeholder: usedFixed ? fixedVars[name] : "",
-    };
-  });
-  const payload = {
-    theme: document.documentElement.getAttribute("data-theme") || "",
-    vars: activeThemeVars(),
-    lang: LANG,
-    askRemember: useRemember,
-    rows: rows.map(({ name, options, value, remember, fixed, placeholder }) => ({ name, options, value, remember, fixed, placeholder })),
-  };
-  // A second hotkey while a window is still open cancels the older copy: one
-  // pending question at a time, or two answers would race for one clipboard.
-  const stale = varsWindowPending;
-  varsWindowPending = null;
-  stale?.(null);
-  const answer = await new Promise((resolve) => {
-    varsWindowPending = resolve;
-    invoke("open_var_window", { payload: JSON.stringify(payload), rows: rows.length })
-      .catch(() => { varsWindowPending = null; resolve(false); });
-  });
-  if (answer === false) return false; // no window could be opened
-  if (!answer) return null;
-  let parsed;
-  try { parsed = JSON.parse(answer); } catch (_) { return null; }
-  if (!Array.isArray(parsed.values) || parsed.values.length !== rows.length) return null;
-  const next = { ...remembered };
-  const filled = {};
-  rows.forEach((r, i) => {
-    const value = String(parsed.values[i] ?? "");
-    filled[r.token] = value;
-    if (r.options.length) {
-      if (keepChoice) next[r.name] = value;
-    } else if (useRemember) {
-      if (parsed.remember?.[i]) next[r.name] = value;
-      else delete next[r.name];
-    }
-  });
-  saveRememberedVars(next, remembered);
-  return filled;
 }
 
 // ---- Keyboard navigation: arrow keys move a focus ring across the grid,
@@ -7086,66 +6845,6 @@ function updateLenCounter() {
 function scheduleLenCounter() {
   if (lenRaf) return;
   lenRaf = requestAnimationFrame(() => { lenRaf = 0; updateLenCounter(); });
-}
-
-function renderMarkdown(text) {
-  // An unfenced code prompt is one block, not Markdown: see detectCodeLang.
-  if (flag("codeAutoDetect")) {
-    const lang = detectCodeLang(text);
-    if (lang) {
-      const esc = mdEsc(text.replace(/\r\n?/g, "\n"));
-      return `<pre class="md-code"><code>${flag("codeHighlight") ? hlCode(esc, lang) : esc}</code></pre>`;
-    }
-  }
-  const cut = text.length > MD_MAX_CHARS;
-  const src = mdEsc((cut ? text.slice(0, MD_MAX_CHARS) : text).replace(/\r\n?/g, "\n"));
-  const lines = src.split("\n");
-  const out = [];
-  let para = [], quote = [], list = "";
-  // Prompt text lives on its line breaks, so a wrapped paragraph keeps them as <br>
-  // instead of being reflowed into one run the way a prose renderer would.
-  const flushPara = () => { if (para.length) { out.push(`<p>${para.map(mdInline).join("<br>")}</p>`); para = []; } };
-  const flushQuote = () => { if (quote.length) { out.push(`<blockquote>${quote.map(mdInline).join("<br>")}</blockquote>`); quote = []; } };
-  const flushList = () => { if (list) { out.push(`</${list}>`); list = ""; } };
-  const flushAll = () => { flushPara(); flushQuote(); flushList(); };
-  const highlight = flag("codeHighlight");
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const fence = MD_FENCE.exec(line);
-    if (fence) {
-      flushAll();
-      const mark = fence[1][0];
-      const lang = HL_ALIAS[fence[2].toLowerCase()] || "";
-      const closes = (l) => { const s = l.trim(); return s.length >= 3 && !s.split("").some((c) => c !== mark); };
-      const body = [];
-      i++;
-      while (i < lines.length && !closes(lines[i])) body.push(lines[i++]);
-      const code = body.join("\n");
-      const colour = lang && highlight && code.length <= HL_MAX_CHARS;
-      out.push(`<pre class="md-code"><code>${colour ? hlCode(code, lang) : code}</code></pre>`);
-      continue; // the loop's own i++ steps over the closing fence
-    }
-    if (!line.trim()) { flushAll(); continue; }
-    const head = MD_HEAD.exec(line);
-    if (head) { flushAll(); const n = head[1].length; out.push(`<h${n}>${mdInline(head[2])}</h${n}>`); continue; }
-    if (MD_HR.test(line)) { flushAll(); out.push("<hr>"); continue; }
-    const q = MD_QUOTE.exec(line);
-    if (q) { flushPara(); flushList(); quote.push(q[1]); continue; }
-    const ul = MD_UL.exec(line);
-    const ol = ul ? null : MD_OL.exec(line);
-    if (ul || ol) {
-      flushPara(); flushQuote();
-      const want = ul ? "ul" : "ol";
-      if (list !== want) { flushList(); out.push(`<${want}>`); list = want; }
-      out.push(`<li>${mdInline((ul || ol)[1])}</li>`);
-      continue;
-    }
-    flushQuote(); flushList();
-    para.push(line.trim());
-  }
-  flushAll();
-  if (cut) out.push(`<p class="md-trunc">${mdEsc(t("mdTruncated"))}</p>`);
-  return out.join("");
 }
 
 // Replace layout: the rendered pane stands in for the textarea until the user clicks
@@ -17071,7 +16770,7 @@ function bind() {
   // The standalone fill-in window answered (null = cancelled or closed).
   listen("vars-filled", (e) => {
     const resolve = varsWindowPending;
-    varsWindowPending = null;
+    assignVarsWindowPending(null);
     resolve?.(e.payload ?? null);
   });
   // "Rename" in a pill folder's menu. The folder window hosts no themed dialog,

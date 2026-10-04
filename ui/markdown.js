@@ -1,3 +1,5 @@
+import { flag, t } from "./core.js";
+
 // ---- Markdown preview + code highlighting (editor) ----
 // The prompt body is untrusted text. It is HTML-escaped ONCE, up front, and every
 // transform below only ever slices that escaped string, so nothing a user types can
@@ -196,4 +198,64 @@ export function hasMarkdownSyntax(text) {
   const found = MD_INLINE.test(esc);
   MD_INLINE.lastIndex = 0; // MD_INLINE is a shared /g regex -- mdInline()'s own exec loop assumes it starts at 0
   return found;
+}
+
+export function renderMarkdown(text) {
+  // An unfenced code prompt is one block, not Markdown: see detectCodeLang.
+  if (flag("codeAutoDetect")) {
+    const lang = detectCodeLang(text);
+    if (lang) {
+      const esc = mdEsc(text.replace(/\r\n?/g, "\n"));
+      return `<pre class="md-code"><code>${flag("codeHighlight") ? hlCode(esc, lang) : esc}</code></pre>`;
+    }
+  }
+  const cut = text.length > MD_MAX_CHARS;
+  const src = mdEsc((cut ? text.slice(0, MD_MAX_CHARS) : text).replace(/\r\n?/g, "\n"));
+  const lines = src.split("\n");
+  const out = [];
+  let para = [], quote = [], list = "";
+  // Prompt text lives on its line breaks, so a wrapped paragraph keeps them as <br>
+  // instead of being reflowed into one run the way a prose renderer would.
+  const flushPara = () => { if (para.length) { out.push(`<p>${para.map(mdInline).join("<br>")}</p>`); para = []; } };
+  const flushQuote = () => { if (quote.length) { out.push(`<blockquote>${quote.map(mdInline).join("<br>")}</blockquote>`); quote = []; } };
+  const flushList = () => { if (list) { out.push(`</${list}>`); list = ""; } };
+  const flushAll = () => { flushPara(); flushQuote(); flushList(); };
+  const highlight = flag("codeHighlight");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const fence = MD_FENCE.exec(line);
+    if (fence) {
+      flushAll();
+      const mark = fence[1][0];
+      const lang = HL_ALIAS[fence[2].toLowerCase()] || "";
+      const closes = (l) => { const s = l.trim(); return s.length >= 3 && !s.split("").some((c) => c !== mark); };
+      const body = [];
+      i++;
+      while (i < lines.length && !closes(lines[i])) body.push(lines[i++]);
+      const code = body.join("\n");
+      const colour = lang && highlight && code.length <= HL_MAX_CHARS;
+      out.push(`<pre class="md-code"><code>${colour ? hlCode(code, lang) : code}</code></pre>`);
+      continue; // the loop's own i++ steps over the closing fence
+    }
+    if (!line.trim()) { flushAll(); continue; }
+    const head = MD_HEAD.exec(line);
+    if (head) { flushAll(); const n = head[1].length; out.push(`<h${n}>${mdInline(head[2])}</h${n}>`); continue; }
+    if (MD_HR.test(line)) { flushAll(); out.push("<hr>"); continue; }
+    const q = MD_QUOTE.exec(line);
+    if (q) { flushPara(); flushList(); quote.push(q[1]); continue; }
+    const ul = MD_UL.exec(line);
+    const ol = ul ? null : MD_OL.exec(line);
+    if (ul || ol) {
+      flushPara(); flushQuote();
+      const want = ul ? "ul" : "ol";
+      if (list !== want) { flushList(); out.push(`<${want}>`); list = want; }
+      out.push(`<li>${mdInline((ul || ol)[1])}</li>`);
+      continue;
+    }
+    flushQuote(); flushList();
+    para.push(line.trim());
+  }
+  flushAll();
+  if (cut) out.push(`<p class="md-trunc">${mdEsc(t("mdTruncated"))}</p>`);
+  return out.join("");
 }
