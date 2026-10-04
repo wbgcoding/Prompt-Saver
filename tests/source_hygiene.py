@@ -111,7 +111,7 @@ EXCEPTIONS = [
                   "a work-item reference.",
     },
     {
-        "file": "ui/main.js",
+        "file": "ui/settingsPanel.js",
         "when": lambda line: "Snap legacy sizes" in line,
         "reason": "'(13/15/18/22)' lists legacy pixel sizes, not work items.",
     },
