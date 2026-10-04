@@ -89,6 +89,10 @@ store-sealing warning both ways: shown once with its permanent settings row when
 store is unencrypted, and completely absent - with no empty gap left behind - when it is
 not.
 
+Refactor proof: `SMOKE_MANIFEST=<file>` writes one line per Chrome call (masked args, timeout,
+hash of the staged temp tree); with `SMOKE_MANIFEST_DRY=1` no browser starts and the run
+finishes in seconds. Two manifests from the same code are byte-equal.
+
 ### `perf_hot_paths.py` in detail
 Boots `index.html` against `tauri_stub.js` with the fixture overridden to N synthetic
 prompts (10% with an image) across two views, and times four hot paths from the real

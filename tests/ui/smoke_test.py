@@ -15,6 +15,7 @@ Chromium browser is installed.
 Run:  python tests/ui/smoke_test.py
 Exit: 0 = clean, 1 = problems found.
 """
+import hashlib
 import json
 import os
 import re
@@ -15358,6 +15359,47 @@ EXPERT_PRESET_PROBE = """
 """
 
 
+def install_manifest_recorder(tmp):
+    """Refactor proof, off unless SMOKE_MANIFEST names a file: one line per Chrome call
+    (masked args, timeout, hash of the staged temp tree). SMOKE_MANIFEST_DRY=1 skips
+    the browser, so a run finishes in seconds."""
+    target = os.environ.get("SMOKE_MANIFEST")
+    if not target:
+        return
+    target = Path(target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("", encoding="utf-8")
+    dry = os.environ.get("SMOKE_MANIFEST_DRY") == "1"
+    original = subprocess.run
+    count = [0]
+
+    def tree_hash():
+        digest = hashlib.sha256()
+        for f in sorted(p for p in tmp.rglob("*") if p.is_file()):
+            rel = f.relative_to(tmp)
+            if any(part.startswith("profile-") for part in rel.parts):
+                continue
+            digest.update(rel.as_posix().encode("utf-8") + b"\0" + f.read_bytes())
+        return digest.hexdigest()
+
+    def mask(arg):
+        arg = str(arg)
+        return arg.replace(tmp.as_uri(), "<TMP-URI>").replace(str(tmp), "<TMP>").replace(tmp.as_posix(), "<TMP>")
+
+    def recorded(*args, **kwargs):
+        argv = args[0] if args else kwargs.get("args")
+        line = json.dumps({"i": count[0], "args": [mask(a) for a in argv],
+                           "timeout": kwargs.get("timeout"), "tree": tree_hash()}, sort_keys=True)
+        count[0] += 1
+        with open(target, "a", encoding="utf-8", newline="\n") as fh:
+            fh.write(line + "\n")
+        if dry:
+            return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+        return original(*args, **kwargs)
+
+    subprocess.run = recorded
+
+
 def unescape(s):
     for a, b in (("&quot;", '"'), ("&lt;", "<"), ("&gt;", ">"), ("&amp;", "&")):
         s = s.replace(a, b)
@@ -15466,6 +15508,7 @@ def main():
         return 0
 
     tmp = Path(tempfile.mkdtemp(prefix="ps-smoke-"))
+    install_manifest_recorder(tmp)
     failed = 0
     try:
         shutil.copytree(REPO / "ui", tmp / "ui")
