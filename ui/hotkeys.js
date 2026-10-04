@@ -2,9 +2,7 @@
 import { $, EXPERT_ACTIONS, flag, invoke, modal, modalState, prompts, settings, settingsEl, t, toast } from "./core.js";
 import { openAllShortcuts } from "./windowChrome.js";
 import { assignSettingsOpener } from "./settingsPanel.js";
-
-let showExpertPage; // linked from main.js
-export function linkHotkeys(fns) { ({ showExpertPage } = fns); }
+import { showExpertPage } from "./expertMenu.js";
 
 // Build a Tauri accelerator ("CommandOrControl+Shift+P") from a keydown event.
 // Returns null unless at least one modifier plus a real key was pressed.

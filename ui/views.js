@@ -6,9 +6,10 @@ import { EXAMPLE_IMAGE_DATA_URL } from "./exampleAssets.js";
 import { buildTile, fitAllTiles, pruneVideoCache } from "./tiles.js";
 import { hideTileTip } from "./windowChrome.js";
 import { clearGridSelection, isArchived, renderLibrary } from "./library.js";
+import { applyFlags, syncBannerStack } from "./expertMenu.js";
 
-let applyFlags, buildFolderTile, buildSwatches, foldersOfView, saveFolder, syncBannerStack; // linked from main.js
-export function linkViews(fns) { ({ applyFlags, buildFolderTile, buildSwatches, foldersOfView, saveFolder, syncBannerStack } = fns); }
+let buildFolderTile, buildSwatches, foldersOfView, saveFolder; // linked from main.js
+export function linkViews(fns) { ({ buildFolderTile, buildSwatches, foldersOfView, saveFolder } = fns); }
 
 // ---- Grid-size value picker ----
 // Scrollable popup under a grid-size input: lists every value with a

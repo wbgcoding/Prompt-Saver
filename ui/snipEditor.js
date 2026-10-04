@@ -4,6 +4,7 @@ import { placePopover, placePopoverAt } from "./popover.js";
 import { snapMove } from "./snap.js";
 import { colorPop, drag, errToast, flag, NUM_FIELD_BIG_STEP, openColorPop, t, toast, txt, val, withShortcut } from "./core.js";
 import { closeShortcutsModal, openShortcutsModal } from "./windowChrome.js";
+import { EXPERT_DROPDOWNS } from "./expertMenu.js";
 
 const { invoke } = window.__TAURI__.core;
 const { getCurrentWindow, ResizeDirection } = window.__TAURI__.window;

@@ -6,9 +6,10 @@ import { allTags, renderTagBar, tagChipEl, tagKey, tagsOn } from "./tags.js";
 import { JOURNAL_ROWS_MAX } from "./expertConfig.js";
 import { copyOnCooldown, recordCopy } from "./copyFlow.js";
 import { wireSearchSuggest } from "./windowChrome.js";
+import { applyFlags } from "./expertMenu.js";
 
-let applyFlags, editPrompt, openModal; // linked from main.js
-export function linkJournal(fns) { ({ applyFlags, editPrompt, openModal } = fns); }
+let editPrompt, openModal; // linked from main.js
+export function linkJournal(fns) { ({ editPrompt, openModal } = fns); }
 
 export let journalQuery = ""; // copy-history search text
 export const journalTypes = new Set(); // additive, like the library's

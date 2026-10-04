@@ -11,9 +11,10 @@ import { attachSelectPicker } from "./selectpop.js";
 import { FONT_LABELS, FONTS } from "./fonts.js";
 import { fitAllTiles, fitCache } from "./tiles.js";
 import { prettyAccel } from "./hotkeys.js";
+import { applyFlags, applyValues, refreshSettingsLocked, showExpertPage } from "./expertMenu.js";
 
-let applyFlags, applyValues, maybeDupImportToast, openBackups, refreshSettingsLocked, showExpertPage, withDialog; // linked from main.js
-export function linkSettingsPanel(fns) { ({ applyFlags, applyValues, maybeDupImportToast, openBackups, refreshSettingsLocked, showExpertPage, withDialog } = fns); }
+let maybeDupImportToast, openBackups, withDialog; // linked from main.js
+export function linkSettingsPanel(fns) { ({ maybeDupImportToast, openBackups, withDialog } = fns); }
 
 export let deleteAllTimer = null;
 export let resetSettingsTimer = null;
