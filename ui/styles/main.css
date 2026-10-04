@@ -2907,6 +2907,17 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
   border-radius: 50%;
   background: linear-gradient(135deg, transparent 45%, var(--danger) 45%, var(--danger) 55%, transparent 55%);
 }
+/* The editor's short colour row: one line (none, custom, colours in use, More). */
+.swatches.swatches-compact { display: flex; flex-wrap: wrap; max-width: none; }
+.swatch.more {
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 /* Free color picker: rainbow wheel until a custom color is chosen. */
 .swatch.custom:not([style*="background"]) {
   background: conic-gradient(#ef4444, #f59e0b, #eab308, #22c55e, #06b6d4, #3b82f6, #8b5cf6, #ec4899, #ef4444);

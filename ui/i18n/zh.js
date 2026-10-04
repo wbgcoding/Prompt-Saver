@@ -1397,6 +1397,7 @@ export default {
     selectedCount: "已选择 {n} 项",
     batchColor: "设置颜色",
     colorNone: "无颜色",
+    colorMore: "更多颜色",
     colorCustom: "自定义颜色",
     batchFavorite: "收藏",
     batchUnfavorite: "取消收藏",

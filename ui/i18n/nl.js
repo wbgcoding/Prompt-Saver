@@ -1397,6 +1397,7 @@ export default {
     selectedCount: "{n} geselecteerd",
     batchColor: "Kleur instellen",
     colorNone: "Geen kleur",
+    colorMore: "Meer kleuren",
     colorCustom: "Aangepaste kleur",
     batchFavorite: "Favoriet",
     batchUnfavorite: "Favoriet verwijderen",

@@ -1397,6 +1397,7 @@ export default {
     selectedCount: "{n} seleccionados",
     batchColor: "Establecer color",
     colorNone: "Sin color",
+    colorMore: "Más colores",
     colorCustom: "Color personalizado",
     batchFavorite: "Favorito",
     batchUnfavorite: "Quitar favorito",

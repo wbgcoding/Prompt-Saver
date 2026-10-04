@@ -1397,6 +1397,7 @@ export default {
     selectedCount: "{n} selectate",
     batchColor: "Setează culoarea",
     colorNone: "Fără culoare",
+    colorMore: "Mai multe culori",
     colorCustom: "Culoare personalizată",
     batchFavorite: "Favorit",
     batchUnfavorite: "Elimină favorit",

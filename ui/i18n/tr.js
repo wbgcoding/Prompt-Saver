@@ -1397,6 +1397,7 @@ export default {
     selectedCount: "{n} seçildi",
     batchColor: "Renk ayarla",
     colorNone: "Renk yok",
+    colorMore: "Daha fazla renk",
     colorCustom: "Özel renk",
     batchFavorite: "Favori",
     batchUnfavorite: "Favorilerden çıkar",

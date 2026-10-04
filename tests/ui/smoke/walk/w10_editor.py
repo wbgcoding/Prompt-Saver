@@ -566,6 +566,24 @@ SECTION = """\
         document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
         await sleep(150);
       }
+      // 753: the colour row is one line before More, and More shows all 20 swatches.
+      {
+        const sw753 = [...document.querySelectorAll('#color-row .swatch')];
+        const more753 = document.querySelector('#color-row .swatch.more');
+        if (!more753) {
+          out.errors.push('753: the colour row has no More colors button');
+        } else {
+          // offsetTop ignores the grow-on-select transform of the chosen swatch.
+          const tops753 = new Set(sw753.map(e => e.offsetTop));
+          if (tops753.size !== 1) out.errors.push('753: the short colour row wraps onto ' + tops753.size + ' lines');
+          if (sw753.length > 12) out.errors.push('753: the short colour row has ' + sw753.length + ' swatches');
+          more753.click();
+          await sleep(150);
+          const all753 = document.querySelectorAll('#color-row .swatch').length;
+          if (all753 !== 20) out.errors.push('753: More colors shows ' + all753 + ' swatches instead of 20');
+          if (document.querySelector('#color-row .swatch.more')) out.errors.push('753: the More button stays after expanding');
+        }
+      }
       await click('modal-close-x');
       await sleep(250);
       const cm5 = document.getElementById('confirm-modal');

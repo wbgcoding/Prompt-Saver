@@ -1404,6 +1404,7 @@ export default {
     selectedCount: "{n} selected",
     batchColor: "Set color",
     colorNone: "No color",
+    colorMore: "More colors",
     colorCustom: "Custom color",
     batchFavorite: "Favorite",
     batchUnfavorite: "Unfavorite",

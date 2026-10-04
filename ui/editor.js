@@ -35,8 +35,12 @@ export let draftLastSaved = null; // fingerprint of the last written draft, so a
 // ---- Modal ----
 // Reusable palette: "no color" + free picker + presets, into any container.
 // onPick(hex) for none/preset; onCustom(anchor, current) opens the free picker.
-export function buildSwatches(container, selected, onPick, onCustom) {
+// opts.compact (editor only) shortens the row to none, custom, the colours in use
+// (opts.used, already ordered) and a "More colors" button that shows the full set.
+export function buildSwatches(container, selected, onPick, onCustom, opts = {}) {
+  const compact = !!opts.compact;
   container.innerHTML = "";
+  container.classList.toggle("swatches-compact", compact);
   const isCustom = !!selected && !COLORS.includes(selected);
 
   const mkSwatch = (cls, bg) => {
@@ -58,12 +62,40 @@ export function buildSwatches(container, selected, onPick, onCustom) {
   custom.setAttribute("aria-label", t("colorCustom"));
   custom.addEventListener("click", () => onCustom(custom, isCustom ? selected : ""));
 
-  for (const c of COLORS.slice(1)) {
+  let hues = COLORS.slice(1);
+  if (compact) {
+    hues = (opts.used || []).filter((c) => hues.includes(c));
+    // The current choice stays visible even when no other prompt uses it.
+    if (selected && COLORS.includes(selected) && !hues.includes(selected)) hues.push(selected);
+  }
+  for (const c of hues) {
     const sw = mkSwatch(c === selected ? "sel" : "", c);
     sw.title = c;
     sw.setAttribute("aria-label", c);
     sw.addEventListener("click", () => onPick(c));
   }
+  if (compact) {
+    const more = mkSwatch("more");
+    more.textContent = "…";
+    more.title = t("colorMore");
+    more.setAttribute("aria-label", t("colorMore"));
+    more.addEventListener("click", () => {
+      if (opts.onMore) opts.onMore();
+      else buildSwatches(container, selected, onPick, onCustom);
+    });
+  }
+}
+
+// The editor shows a short colour row first. Reset by openModal, set by "More colors".
+let colorsExpanded = false;
+// Up to eight palette colours in use, most used first, ties in palette order; with
+// none in use the first eight of the palette.
+function usedColors() {
+  const hues = COLORS.slice(1);
+  const count = new Map();
+  for (const p of prompts) if (hues.includes(p.color)) count.set(p.color, (count.get(p.color) || 0) + 1);
+  const ranked = hues.filter((c) => count.has(c)).sort((a, b) => count.get(b) - count.get(a) || hues.indexOf(a) - hues.indexOf(b));
+  return (ranked.length ? ranked : hues).slice(0, 8);
 }
 
 export function renderSwatches(selected) {
@@ -75,7 +107,12 @@ export function renderSwatches(selected) {
       if (!modalState) return;
       modalState.color = hex;
       renderSwatches(hex);
-    })
+    }),
+    {
+      compact: !colorsExpanded,
+      used: usedColors(),
+      onMore: () => { colorsExpanded = true; renderSwatches(selected); },
+    }
   );
 }
 
@@ -336,6 +373,7 @@ export function openModal({ mode, id, name = "", text = "", color = "", image = 
   modal.sizeSel.value = String(normSize(fontSize));
   modal.delete.classList.toggle("hidden", mode !== "edit");
   disarmButton(modal.delete, t("delete"));
+  colorsExpanded = false;
   renderSwatches(color);
   const tagInput = $("modal-tag-input");
   if (tagInput) tagInput.value = "";

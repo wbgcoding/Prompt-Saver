@@ -1397,6 +1397,7 @@ export default {
     selectedCount: "{n} 件選択",
     batchColor: "色を設定",
     colorNone: "色なし",
+    colorMore: "その他の色",
     colorCustom: "カスタムカラー",
     batchFavorite: "お気に入り",
     batchUnfavorite: "お気に入り解除",
