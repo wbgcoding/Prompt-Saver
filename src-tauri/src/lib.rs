@@ -55,7 +55,7 @@ use tauri_plugin_global_shortcut::{Code, Modifiers};
 // kept running with zero top-level windows, the never-comes-back state a
 // crashed-out webview or a bug can leave behind) is rebuilt first instead of
 // leaving the call a silent no-op.
-fn show_main(app: &AppHandle) {
+pub(crate) fn show_main(app: &AppHandle) {
     let win = show_main_seam(app.get_webview_window("main"), || build_main_window(app));
     let Some(win) = win else { return };
     if let Some(state) = app.try_state::<Db>() {
@@ -77,7 +77,7 @@ fn show_main(app: &AppHandle) {
 // for a fresh one. Pulled apart from `show_main` itself so a test can hand it
 // a counter instead of a real window and prove the missing case actually
 // triggers a build rather than doing nothing (the bug this whole point fixes).
-fn show_main_seam<W>(existing: Option<W>, build: impl FnOnce() -> tauri::Result<W>) -> Option<W> {
+pub(crate) fn show_main_seam<W>(existing: Option<W>, build: impl FnOnce() -> tauri::Result<W>) -> Option<W> {
     match existing {
         Some(w) => Some(w),
         None => match build() {
@@ -96,7 +96,7 @@ fn show_main_seam<W>(existing: Option<W>, build: impl FnOnce() -> tauri::Result<
 // that kept running. Same label, same starting geometry, same decorations and
 // the same event handlers either way, so a rebuilt window behaves exactly like
 // the one the app started with.
-fn build_main_window(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow> {
+pub(crate) fn build_main_window(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow> {
     let win = match app.get_webview_window("main") {
         Some(w) => w,
         None => WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
@@ -233,23 +233,23 @@ fn build_main_window(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow> {
 
 // How long the Destroyed-event watchdog gives handle.exit(0) to actually end
 // the process before forcing it.
-const WATCHDOG_GRACE: Duration = Duration::from_secs(5);
+pub(crate) const WATCHDOG_GRACE: Duration = Duration::from_secs(5);
 
 // The longer ceiling used while a background job is still finishing, so the
 // forced exit never truncates an export, conversion or backup mid-write.
-const WATCHDOG_JOB_GRACE: Duration = Duration::from_secs(120);
+pub(crate) const WATCHDOG_JOB_GRACE: Duration = Duration::from_secs(120);
 
 // Pure decision for the watchdog thread above -- kept apart from the sleep
 // loop so a test can drive it with fixed instants instead of a real 5-second
 // wait.
-fn watchdog_deadline_reached(now: SystemTime, deadline: SystemTime) -> bool {
+pub(crate) fn watchdog_deadline_reached(now: SystemTime, deadline: SystemTime) -> bool {
     now >= deadline
 }
 
 // Global-hotkey action: open the standalone quick-launcher (fuzzy search,
 // instant copy) instead of raising the main window. Replaces any launcher already
 // open, so a second hotkey press never leaves two fighting over the same focus.
-fn summon_launcher(app: &AppHandle) {
+pub(crate) fn summon_launcher(app: &AppHandle) {
     LAUNCHER_PREFILL.lock().unwrap_or_else(|e| e.into_inner()).clear();
     open_launcher_window(app, false);
 }
@@ -259,7 +259,7 @@ fn summon_launcher(app: &AppHandle) {
 // the typist in the tray's own field until the launcher page has loaded (it then calls
 // launcher_ready), because a keystroke sent to a launcher whose page is not there yet is
 // lost. A launcher that never reports in is revealed after LAUNCHER_REVEAL_FALLBACK anyway.
-fn open_launcher_window(app: &AppHandle, deferred: bool) {
+pub(crate) fn open_launcher_window(app: &AppHandle, deferred: bool) {
     if let Some(win) = app.get_webview_window(LAUNCHER_WIN_LABEL) {
         let _ = win.close();
     }
@@ -304,7 +304,7 @@ fn open_launcher_window(app: &AppHandle, deferred: bool) {
 }
 
 // Shows the launcher and gives it the focus, unless it already is on screen.
-fn reveal_launcher(app: &AppHandle) {
+pub(crate) fn reveal_launcher(app: &AppHandle) {
     if let Some(win) = app.get_webview_window(LAUNCHER_WIN_LABEL) {
         if !win.is_visible().unwrap_or(false) {
             let _ = win.show();
@@ -315,18 +315,18 @@ fn reveal_launcher(app: &AppHandle) {
 
 // ---------- Global shortcuts: the app hotkey + one per prompt ----------
 
-type Accel = tauri_plugin_global_shortcut::Shortcut;
+pub(crate) type Accel = tauri_plugin_global_shortcut::Shortcut;
 
 // An accelerator is user input on its way to the OS shortcut API, so its length is
 // capped before anything else looks at it.
-const MAX_ACCEL_LEN: usize = 64;
+pub(crate) const MAX_ACCEL_LEN: usize = 64;
 
 // Rejection codes. The UI turns them into a localized message; they are the whole
 // vocabulary the hotkey path speaks.
-const HK_INVALID: &str = "hotkey-invalid"; // unusable shape (no Ctrl/Alt, Win key, garbage)
-const HK_SYSTEM: &str = "hotkey-system"; // Windows or every app owns it
-const HK_TAKEN: &str = "hotkey-taken"; // already bound inside this app
-const HK_CONFLICT: &str = "hotkey-conflict"; // another running app holds the registration
+pub(crate) const HK_INVALID: &str = "hotkey-invalid"; // unusable shape (no Ctrl/Alt, Win key, garbage)
+pub(crate) const HK_SYSTEM: &str = "hotkey-system"; // Windows or every app owns it
+pub(crate) const HK_TAKEN: &str = "hotkey-taken"; // already bound inside this app
+pub(crate) const HK_CONFLICT: &str = "hotkey-conflict"; // another running app holds the registration
 
 // Keys a global hotkey may never take, whatever the modifiers are. A registered
 // accelerator SWALLOWS the keystroke system-wide, so these would break the machine:
@@ -336,7 +336,7 @@ const HK_CONFLICT: &str = "hotkey-conflict"; // another running app holds the re
 // on CJK systems and the window menu with Alt, PrintScreen is screen capture, and
 // the lock keys are hardware state. This one list also covers Ctrl+Alt+Del,
 // Ctrl+Shift+Esc, Ctrl+Esc, Alt+Tab and Alt+Space without naming them.
-const RESERVED_KEYS: &[Code] = &[
+pub(crate) const RESERVED_KEYS: &[Code] = &[
     Code::Tab,
     Code::Escape,
     Code::Enter,
@@ -357,7 +357,7 @@ const RESERVED_KEYS: &[Code] = &[
 // plain Ctrl form is blocked: adding Shift or Alt makes a distinct combination that
 // no longer belongs to anyone in particular, and that is the namespace users pick
 // their own shortcuts from.
-const UNIVERSAL_CTRL: &[Code] = &[
+pub(crate) const UNIVERSAL_CTRL: &[Code] = &[
     Code::KeyA, // select all
     Code::KeyC, // copy
     Code::KeyV, // paste
@@ -376,7 +376,7 @@ const UNIVERSAL_CTRL: &[Code] = &[
 
 // The pure decision: may this accelerator become a global hotkey? Some(code) = no.
 // Kept free of any app state so the rule set is unit-testable on its own.
-fn hotkey_block_reason(sc: &Accel) -> Option<&'static str> {
+pub(crate) fn hotkey_block_reason(sc: &Accel) -> Option<&'static str> {
     // Windows owns the whole Win-key namespace; RegisterHotKey either fails there or
     // shadows a system shortcut the user cannot get back.
     if sc.mods.intersects(Modifiers::SUPER | Modifiers::META) {
@@ -405,7 +405,7 @@ fn hotkey_block_reason(sc: &Accel) -> Option<&'static str> {
 // empty, over-long, unparseable, without a modifier (a bare key would swallow that
 // key in every other app), or on the blocklist above. Pure, so validation and
 // conflict handling stay testable.
-fn accel_error(raw: &str) -> Result<Accel, &'static str> {
+pub(crate) fn accel_error(raw: &str) -> Result<Accel, &'static str> {
     let s = raw.trim();
     if s.is_empty() || s.len() > MAX_ACCEL_LEN || s.chars().any(|c| c.is_control()) {
         return Err(HK_INVALID);
@@ -421,7 +421,7 @@ fn accel_error(raw: &str) -> Result<Accel, &'static str> {
 }
 
 // None = unusable, for the paths that only need to know whether to register it.
-fn parse_accel(raw: &str) -> Option<Accel> {
+pub(crate) fn parse_accel(raw: &str) -> Option<Accel> {
     accel_error(raw).ok()
 }
 
@@ -431,7 +431,7 @@ fn parse_accel(raw: &str) -> Option<Accel> {
 // a prompt -- a sentinel prompt id would silently pass as a real Prompt(id) in
 // rearm_hotkeys and the handler below, so a real enum replaces it everywhere.
 #[derive(Clone, PartialEq, Eq, Debug)]
-enum HotkeyOwner {
+pub(crate) enum HotkeyOwner {
     App,
     Prompt(String),
     Voice,
@@ -452,7 +452,7 @@ enum HotkeyOwner {
 // is actually running AND their own toggle is on -- both already-resolved
 // choices, not re-checked here.
 #[allow(clippy::too_many_arguments)]
-fn hotkey_plan(
+pub(crate) fn hotkey_plan(
     app_hotkey: &str,
     voice_hotkey: Option<&str>,
     rec_stop_hotkey: Option<&str>,
@@ -497,7 +497,7 @@ fn hotkey_plan(
 // A restored backup can carry an accelerator the app hotkey or an earlier prompt
 // already owns. The import must not fail over that, so the losing binding is
 // dropped and counted for the summary.
-fn drop_colliding_hotkeys(app_hotkey: &str, prompts: &mut [Prompt]) -> usize {
+pub(crate) fn drop_colliding_hotkeys(app_hotkey: &str, prompts: &mut [Prompt]) -> usize {
     let mut taken: std::collections::HashSet<Accel> = std::collections::HashSet::new();
     if let Some(sc) = parse_accel(app_hotkey) {
         taken.insert(sc);
@@ -526,7 +526,7 @@ fn drop_colliding_hotkeys(app_hotkey: &str, prompts: &mut [Prompt]) -> usize {
 // go through fine, then silently stop firing for the whole duration of every
 // future recording, because hotkey_plan gives the recording controls priority.
 // Checking here closes that loophole before it can be created.
-fn sanitize_hotkey(
+pub(crate) fn sanitize_hotkey(
     raw: &str,
     app_hotkey: &str,
     rec_stop_hotkey: &str,
@@ -552,7 +552,7 @@ fn sanitize_hotkey(
 // when that control's own feature/hotkey toggle is off and the combination is
 // therefore free to reuse. Mirrors rearm_hotkeys' own gating minus
 // recording_active() -- a prompt hotkey is set long before any recording runs.
-fn active_rec_hotkey<'a>(hk: &'a str, flag_key: &str, flags: &HashMap<String, bool>) -> &'a str {
+pub(crate) fn active_rec_hotkey<'a>(hk: &'a str, flag_key: &str, flags: &HashMap<String, bool>) -> &'a str {
     if flags.get("screenRecord") != Some(&false) && flags.get(flag_key) != Some(&false) {
         hk
     } else {
@@ -562,7 +562,7 @@ fn active_rec_hotkey<'a>(hk: &'a str, flag_key: &str, flags: &HashMap<String, bo
 
 // What a prompt hotkey does after copying. Empty = follow the global setting, so a
 // stored value is only ever one of three states.
-fn sanitize_hotkey_mode(raw: &str) -> String {
+pub(crate) fn sanitize_hotkey_mode(raw: &str) -> String {
     match raw.trim() {
         "copy" => "copy".to_string(),
         "paste" => "paste".to_string(),
@@ -572,7 +572,7 @@ fn sanitize_hotkey_mode(raw: &str) -> String {
 
 // Which feature each registered accelerator belongs to. Rebuilt by
 // rearm_hotkeys, read by the global shortcut handler.
-struct HotkeyTargets(Mutex<Vec<(Accel, HotkeyOwner)>>);
+pub(crate) struct HotkeyTargets(pub(crate) Mutex<Vec<(Accel, HotkeyOwner)>>);
 
 // The single owner of the registered shortcut set: drop everything, then register
 // the app hotkey plus one accelerator per prompt. A combination the OS refuses is
@@ -583,7 +583,7 @@ struct HotkeyTargets(Mutex<Vec<(Accel, HotkeyOwner)>>);
 // Whether a recording is currently in flight (Recording or Paused) --
 // both configs of RecordingState just wrap an Option, so this needs no
 // windows-only gating of its own.
-fn recording_active(app: &AppHandle) -> bool {
+pub(crate) fn recording_active(app: &AppHandle) -> bool {
     app.try_state::<RecordingState>()
         .map(|s| s.0.lock().unwrap_or_else(|e| e.into_inner()).is_some())
         .unwrap_or(false)
@@ -594,11 +594,11 @@ fn recording_active(app: &AppHandle) -> bool {
 // active-or-not. Windows-only build carries a real RecSession with a phase; the
 // non-Windows stub's Option<()> has none, so it always reports "not recording".
 #[cfg(windows)]
-fn recording_phase(app: &AppHandle) -> Option<RecPhase> {
+pub(crate) fn recording_phase(app: &AppHandle) -> Option<RecPhase> {
     app.try_state::<RecordingState>()?.0.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|s| s.phase)
 }
 #[cfg(not(windows))]
-fn recording_phase(_app: &AppHandle) -> Option<RecPhase> {
+pub(crate) fn recording_phase(_app: &AppHandle) -> Option<RecPhase> {
     None
 }
 
@@ -608,10 +608,10 @@ fn recording_phase(_app: &AppHandle) -> Option<RecPhase> {
 // hotkey, a conflict here never clears the stored default: the default ships
 // pre-picked, and a transient collision (another app briefly holding the same
 // combination) should not permanently blank it out from under the user.
-static REC_STOP_HOTKEY_OK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
-static REC_PAUSE_HOTKEY_OK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+pub(crate) static REC_STOP_HOTKEY_OK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+pub(crate) static REC_PAUSE_HOTKEY_OK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 
-fn rearm_hotkeys(app: &AppHandle) -> bool {
+pub(crate) fn rearm_hotkeys(app: &AppHandle) -> bool {
     use tauri_plugin_global_shortcut::GlobalShortcutExt;
     let rec_active = recording_active(app);
     // A binding stored by an older version can be one the blocklist now refuses.
@@ -712,7 +712,7 @@ fn rearm_hotkeys(app: &AppHandle) -> bool {
 // A prompt hotkey runs the very same activation a tile click does. The UI owns
 // copying, usage recording, chain handling and placeholder filling, so the backend
 // only names the prompt that was triggered.
-fn fire_prompt_hotkey(app: &AppHandle, id: &str) {
+pub(crate) fn fire_prompt_hotkey(app: &AppHandle, id: &str) {
     let _ = app.emit_to("main", "prompt-hotkey", id.to_string());
 }
 
@@ -723,7 +723,7 @@ fn fire_prompt_hotkey(app: &AppHandle, id: &str) {
 // owns every setting lookup, the command-word post-processing and where
 // the finished text goes -- the window stays fully capable of all of that while
 // hidden, the same way a prompt hotkey already copies without ever showing it.
-fn toggle_voice_from_hotkey(app: &AppHandle) {
+pub(crate) fn toggle_voice_from_hotkey(app: &AppHandle) {
     if let Some(vstate) = app.try_state::<VoiceState>() {
         let guard = vstate.0.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(h) = guard.as_ref() {
@@ -742,7 +742,7 @@ fn toggle_voice_from_hotkey(app: &AppHandle) {
 // main thread, and stopping finalizes the encoder (disk I/O), which must not
 // stall the message loop the way the show_rec_bar/open_tray_window bugs did.
 #[cfg(windows)]
-fn trigger_rec_stop_hotkey(app: &AppHandle) {
+pub(crate) fn trigger_rec_stop_hotkey(app: &AppHandle) {
     let app = app.clone();
     let _ = std::thread::Builder::new().name("rec-hotkey-stop".into()).spawn(move || {
         let _ = stop_recording_now(&app);
@@ -752,14 +752,14 @@ fn trigger_rec_stop_hotkey(app: &AppHandle) {
     });
 }
 #[cfg(not(windows))]
-fn trigger_rec_stop_hotkey(_app: &AppHandle) {}
+pub(crate) fn trigger_rec_stop_hotkey(_app: &AppHandle) {}
 
 // The one place that actually pauses/resumes a session -- the recbar
 // buttons, the global hotkey and the tray menu item all end up here, so
 // there is exactly one spot that can forget to also pause/resume the key
 // overlay capture (see keylog::pause/resume) instead of three.
 #[cfg(windows)]
-fn do_pause_recording(session: &mut recording::RecSession) {
+pub(crate) fn do_pause_recording(session: &mut recording::RecSession) {
     recording::pause(session);
     session.phase = RecPhase::Paused;
     // The key-overlay capture used to keep running straight through a pause
@@ -770,14 +770,14 @@ fn do_pause_recording(session: &mut recording::RecSession) {
 }
 
 #[cfg(windows)]
-fn do_resume_recording(session: &mut recording::RecSession) {
+pub(crate) fn do_resume_recording(session: &mut recording::RecSession) {
     recording::resume(session);
     session.phase = RecPhase::Recording;
     keylog::resume();
 }
 
 #[cfg(windows)]
-fn trigger_rec_pause_hotkey(app: &AppHandle) {
+pub(crate) fn trigger_rec_pause_hotkey(app: &AppHandle) {
     let toggled = if let Some(rstate) = app.try_state::<RecordingState>() {
         let mut guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
         match guard.as_mut() {
@@ -799,7 +799,7 @@ fn trigger_rec_pause_hotkey(app: &AppHandle) {
     }
 }
 #[cfg(not(windows))]
-fn trigger_rec_pause_hotkey(_app: &AppHandle) {}
+pub(crate) fn trigger_rec_pause_hotkey(_app: &AppHandle) {}
 
 // While a hotkey field is capturing, every global hotkey has to be off. Windows
 // delivers a registered combination to the owning process instead of the focused
@@ -823,7 +823,7 @@ async fn set_hotkey_capture(app: AppHandle, active: bool) -> Result<(), String> 
 // back. Windows only refuses a combination another PROCESS holds, which is exactly
 // the conflict the user needs to hear about before the binding is stored. A
 // combination we already hold is ours, not a conflict.
-fn accel_is_free(app: &AppHandle, sc: Accel) -> bool {
+pub(crate) fn accel_is_free(app: &AppHandle, sc: Accel) -> bool {
     use tauri_plugin_global_shortcut::GlobalShortcutExt;
     let gs = app.global_shortcut();
     if gs.is_registered(sc) {
@@ -1018,49 +1018,49 @@ fn focus_main_window(app: AppHandle) {
 // The main window still owns every variable rule (which tokens need asking, what the
 // reserved names resolve to, what happens after the copy): this window is a form:
 // it pulls the pending payload, hands back the typed values, and closes.
-const VAR_WIN_LABEL: &str = "vars-0";
-const VAR_WIN_W: f64 = 340.0; // logical px; keep in sync with .vars-card in floating.css
-const VAR_ROW_H: f64 = 70.0;
-const VAR_WIN_CHROME: f64 = 104.0; // title + buttons + padding
-const VAR_WIN_MAX_H: f64 = 720.0; // the work area caps it further on small screens
-const VAR_ROWS_MAX: u32 = 24;
+pub(crate) const VAR_WIN_LABEL: &str = "vars-0";
+pub(crate) const VAR_WIN_W: f64 = 340.0; // logical px; keep in sync with .vars-card in floating.css
+pub(crate) const VAR_ROW_H: f64 = 70.0;
+pub(crate) const VAR_WIN_CHROME: f64 = 104.0; // title + buttons + padding
+pub(crate) const VAR_WIN_MAX_H: f64 = 720.0; // the work area caps it further on small screens
+pub(crate) const VAR_ROWS_MAX: u32 = 24;
 // The payload is one prompt's placeholder list, never its body.
-const VAR_PAYLOAD_MAX: usize = 64 * 1024;
+pub(crate) const VAR_PAYLOAD_MAX: usize = 64 * 1024;
 
 // The pending request. Some(..) = a window is waiting for an answer; taking it is
 // what makes an answer (or a closed window) fire exactly once. The generation is
 // what keeps a *replaced* window honest: its Destroyed event arrives after the next
 // request is already installed, and without the number it would cancel that one.
-struct VarPrompt {
-    pending: Mutex<Option<(u64, String)>>,
-    next_gen: AtomicU64,
+pub(crate) struct VarPrompt {
+    pub(crate) pending: Mutex<Option<(u64, String)>>,
+    pub(crate) next_gen: AtomicU64,
 }
 
 impl VarPrompt {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self { pending: Mutex::new(None), next_gen: AtomicU64::new(1) }
     }
-    fn lock(&self) -> std::sync::MutexGuard<'_, Option<(u64, String)>> {
+    pub(crate) fn lock(&self) -> std::sync::MutexGuard<'_, Option<(u64, String)>> {
         self.pending.lock().unwrap_or_else(|e| e.into_inner())
     }
 }
 
 // Quick-launcher window (fuzzy search, instant copy).
-const LAUNCHER_WIN_LABEL: &str = "launcher";
+pub(crate) const LAUNCHER_WIN_LABEL: &str = "launcher";
 // Text the tray filter row hands over: launcher_items takes it once and clears it, and a
 // hotkey summon clears it first so that path never inherits a stale query.
-static LAUNCHER_PREFILL: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
+pub(crate) static LAUNCHER_PREFILL: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
 // Bumped for every launcher window that gets built, so a reveal timer of an earlier
 // window never shows a newer one before its page has loaded.
-static LAUNCHER_GEN: AtomicU64 = AtomicU64::new(0);
-const LAUNCHER_REVEAL_FALLBACK: Duration = Duration::from_millis(1500);
-const LAUNCHER_WIN_W: f64 = 560.0; // logical px; keep in sync with .launcher-card in floating.css
-const LAUNCHER_WIN_H: f64 = 420.0;
+pub(crate) static LAUNCHER_GEN: AtomicU64 = AtomicU64::new(0);
+pub(crate) const LAUNCHER_REVEAL_FALLBACK: Duration = Duration::from_millis(1500);
+pub(crate) const LAUNCHER_WIN_W: f64 = 560.0; // logical px; keep in sync with .launcher-card in floating.css
+pub(crate) const LAUNCHER_WIN_H: f64 = 420.0;
 
 // Shared by every cursor-anchored popup window (launcher, var prompt): the monitor's
 // work area under the cursor plus that monitor's own scale factor, so a second
 // monitor at another DPI still gets correctly sized physical pixels.
-fn work_and_dpi_at_cursor(app: &AppHandle) -> (Rect, f64, PhysicalPosition<f64>) {
+pub(crate) fn work_and_dpi_at_cursor(app: &AppHandle) -> (Rect, f64, PhysicalPosition<f64>) {
     let cursor = app.cursor_position().unwrap_or(PhysicalPosition::new(0.0, 0.0));
     let work = work_rect_at(app, cursor.x, cursor.y);
     let dpi = app
@@ -1074,7 +1074,7 @@ fn work_and_dpi_at_cursor(app: &AppHandle) -> (Rect, f64, PhysicalPosition<f64>)
 // Centred horizontally on the cursor's monitor, sitting in the upper third the way
 // every other quick-launcher (Spotlight, PowerToys Run, Alfred) does: a search box
 // that pops up at screen centre reads as a dialog, not a launcher.
-fn launcher_rect(app: &AppHandle) -> Rect {
+pub(crate) fn launcher_rect(app: &AppHandle) -> Rect {
     let (work, dpi, _cursor) = work_and_dpi_at_cursor(app);
     let w = LAUNCHER_WIN_W * dpi;
     let h = LAUNCHER_WIN_H * dpi;
@@ -1086,7 +1086,7 @@ fn launcher_rect(app: &AppHandle) -> Rect {
 
 // Window box for `rows` fields, centred on the cursor and kept inside that monitor's
 // work area. Physical pixels, so a second monitor at another DPI lands correctly.
-fn var_window_rect(app: &AppHandle, rows: u32) -> Rect {
+pub(crate) fn var_window_rect(app: &AppHandle, rows: u32) -> Rect {
     let (work, dpi, cursor) = work_and_dpi_at_cursor(app);
     let w = VAR_WIN_W * dpi;
     let h = (VAR_WIN_CHROME + VAR_ROW_H * rows as f64).min(VAR_WIN_MAX_H) * dpi;
@@ -1226,30 +1226,30 @@ fn os_user_name() -> String {
 // ---------- tray quick-copy sections ----------
 
 // A prompt name ends up in an OS menu, so it is stripped and capped first.
-const TRAY_LABEL_MAX: usize = 40;
+pub(crate) const TRAY_LABEL_MAX: usize = 40;
 // How far back from the cap tray_label may look for a word break.
-const TRAY_LABEL_WORD_BACK: usize = 12;
+pub(crate) const TRAY_LABEL_WORD_BACK: usize = 12;
 // Namespace for the dynamic entries. Every other menu id is a fixed keyword, so a
 // click can be routed back to a prompt without ever guessing.
-const TRAY_COPY_PREFIX: &str = "psc:";
+pub(crate) const TRAY_COPY_PREFIX: &str = "psc:";
 // How long a burst of store changes is collected before the menu is rebuilt.
-const TRAY_DEBOUNCE_MS: u64 = 400;
+pub(crate) const TRAY_DEBOUNCE_MS: u64 = 400;
 
 // Whether the installed menu currently carries quick-copy entries, and whether a
 // rebuild is already scheduled. Both flags off + nothing installed = no work at all.
-static TRAY_EXTRAS: AtomicBool = AtomicBool::new(false);
-static TRAY_PENDING: AtomicBool = AtomicBool::new(false);
+pub(crate) static TRAY_EXTRAS: AtomicBool = AtomicBool::new(false);
+pub(crate) static TRAY_PENDING: AtomicBool = AtomicBool::new(false);
 
 // What the two sections should contain, read from the expert settings.
-struct TrayCfg {
-    recent: bool,
-    recent_n: usize,
-    favs: bool,
-    fav_n: usize,
-    label_max: usize,
+pub(crate) struct TrayCfg {
+    pub(crate) recent: bool,
+    pub(crate) recent_n: usize,
+    pub(crate) favs: bool,
+    pub(crate) fav_n: usize,
+    pub(crate) label_max: usize,
 }
 
-fn tray_cfg(settings: &Settings) -> TrayCfg {
+pub(crate) fn tray_cfg(settings: &Settings) -> TrayCfg {
     let count = |key: &str, def: f64| {
         settings.ui_values.get(key).copied().unwrap_or(def).clamp(1.0, 10.0) as usize
     };
@@ -1265,12 +1265,12 @@ fn tray_cfg(settings: &Settings) -> TrayCfg {
 // Expert-tunable cap for tray_label, clamped the same way every other
 // ui_values-backed expert row is: an absent/out-of-range stored value falls
 // back to the shipped default rather than reaching tray_label unclamped.
-fn tray_label_max(settings: &Settings) -> usize {
+pub(crate) fn tray_label_max(settings: &Settings) -> usize {
     settings.ui_values.get("trayLabelMax").copied().unwrap_or(TRAY_LABEL_MAX as f64).clamp(20.0, 80.0) as usize
 }
 
 // Whether the tray menu's filter row is drawn at all.
-fn tray_search_on(settings: &Settings) -> bool {
+pub(crate) fn tray_search_on(settings: &Settings) -> bool {
     settings.ui_flags.get("traySearch") != Some(&false) // on by default
 }
 
@@ -1279,7 +1279,7 @@ fn tray_search_on(settings: &Settings) -> bool {
 // mnemonic, and the cut counts CHARACTERS: a byte cut would split a multi-byte
 // name in the middle of a character. An over-long name is cut back to the last word
 // break in the tail rather than mid-word, so the entry still reads as words.
-fn tray_label(name: &str, max: usize) -> String {
+pub(crate) fn tray_label(name: &str, max: usize) -> String {
     let flat: String = name.chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
     let mut text = flat.split_whitespace().collect::<Vec<_>>().join(" ");
     if text.chars().count() > max {
@@ -1300,13 +1300,13 @@ fn tray_label(name: &str, max: usize) -> String {
     text.replace('&', "&&")
 }
 
-fn tray_item_id(prompt_id: &str) -> String {
+pub(crate) fn tray_item_id(prompt_id: &str) -> String {
     format!("{TRAY_COPY_PREFIX}{prompt_id}")
 }
 
 // Route a clicked menu id back to a prompt. Anything that is not one of our own
 // quick-copy ids is ignored instead of being looked up.
-fn tray_copy_target(menu_id: &str) -> Option<&str> {
+pub(crate) fn tray_copy_target(menu_id: &str) -> Option<&str> {
     match menu_id.strip_prefix(TRAY_COPY_PREFIX) {
         Some(id) if !id.is_empty() => Some(id),
         _ => None,
@@ -1316,7 +1316,7 @@ fn tray_copy_target(menu_id: &str) -> Option<&str> {
 // What a quick-copy entry actually delivers. It decides the entry's menu icon, so
 // the media kind of a prompt is readable straight from the tray.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum TrayKind {
+pub(crate) enum TrayKind {
     Text,
     Image,
     Media,
@@ -1326,7 +1326,7 @@ enum TrayKind {
 // The image fields are not exclusive: a picture can be the payload (copy_image), the
 // tile's face (show_image) or just a decoration next to the text. Only the first two
 // make the entry a picture: a decorated text prompt still copies text.
-fn tray_kind(p: &Prompt) -> TrayKind {
+pub(crate) fn tray_kind(p: &Prompt) -> TrayKind {
     if !p.file_path.trim().is_empty() {
         TrayKind::File
     } else if !p.icon_path.trim().is_empty() {
@@ -1340,16 +1340,16 @@ fn tray_kind(p: &Prompt) -> TrayKind {
 
 // One quick-copy entry, ready to become a menu item.
 #[derive(Clone, PartialEq, Eq, Debug)]
-struct TrayEntry {
-    id: String,
-    label: String,
-    kind: TrayKind,
+pub(crate) struct TrayEntry {
+    pub(crate) id: String,
+    pub(crate) label: String,
+    pub(crate) kind: TrayKind,
     // The prompt's own tile colour ("" = tint the icon by kind instead).
-    color: String,
+    pub(crate) color: String,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum TraySection {
+pub(crate) enum TraySection {
     Favorites,
     Recent,
 }
@@ -1359,7 +1359,7 @@ enum TraySection {
 // the user while the recents below it churn. A favourite is not repeated in the
 // recents; those backfill with the next unlisted prompt instead of leaving a gap.
 // Pure, so ordering, caps, dedupe and truncation stay testable: the menu API cannot.
-fn tray_plan(
+pub(crate) fn tray_plan(
     prompts: &[Prompt],
     last_used: &HashMap<String, u64>,
     cfg: &TrayCfg,
@@ -1405,25 +1405,25 @@ fn tray_plan(
 // turns an icon into a bitmap through a monochrome AND mask that is only built
 // correctly when every pixel is opaque, so a glyph with transparent padding comes
 // out striped instead of clean.
-const TRAY_ICON_PX: u32 = 16;
+pub(crate) const TRAY_ICON_PX: u32 = 16;
 
-fn hex_rgb(hex: &str) -> Option<[u8; 3]> {
+pub(crate) fn hex_rgb(hex: &str) -> Option<[u8; 3]> {
     let c = hex_to_color(hex.trim())?;
     Some([c.0, c.1, c.2])
 }
 
 // Perceived brightness, 0..255: decides whether the glyph is drawn light or dark.
-fn tray_luma(c: [u8; 3]) -> u32 {
+pub(crate) fn tray_luma(c: [u8; 3]) -> u32 {
     (c[0] as u32 * 299 + c[1] as u32 * 587 + c[2] as u32 * 114) / 1000
 }
 
 // Blend `c` toward `to` by `amount` percent.
-fn tray_mix(c: [u8; 3], to: [u8; 3], amount: u32) -> [u8; 3] {
+pub(crate) fn tray_mix(c: [u8; 3], to: [u8; 3], amount: u32) -> [u8; 3] {
     let f = |a: u8, b: u8| ((a as u32 * (100 - amount) + b as u32 * amount) / 100) as u8;
     [f(c[0], to[0]), f(c[1], to[1]), f(c[2], to[2])]
 }
 
-fn tray_kind_tint(kind: TrayKind) -> [u8; 3] {
+pub(crate) fn tray_kind_tint(kind: TrayKind) -> [u8; 3] {
     match kind {
         TrayKind::Text => [90, 100, 114],
         TrayKind::Image => [47, 111, 237],
@@ -1434,12 +1434,12 @@ fn tray_kind_tint(kind: TrayKind) -> [u8; 3] {
 
 // A 16x16 chip under construction. Every write is bounds-checked, so a glyph that
 // runs over an edge is clipped instead of wrapping onto the next row.
-struct TrayChip {
-    px: Vec<u8>,
+pub(crate) struct TrayChip {
+    pub(crate) px: Vec<u8>,
 }
 
 impl TrayChip {
-    fn new(fill: [u8; 3]) -> Self {
+    pub(crate) fn new(fill: [u8; 3]) -> Self {
         let n = (TRAY_ICON_PX * TRAY_ICON_PX) as usize;
         let mut px = Vec::with_capacity(n * 4);
         for _ in 0..n {
@@ -1447,7 +1447,7 @@ impl TrayChip {
         }
         Self { px }
     }
-    fn dot(&mut self, x: i32, y: i32, c: [u8; 3]) {
+    pub(crate) fn dot(&mut self, x: i32, y: i32, c: [u8; 3]) {
         let n = TRAY_ICON_PX as i32;
         if x < 0 || y < 0 || x >= n || y >= n {
             return;
@@ -1457,17 +1457,17 @@ impl TrayChip {
         self.px[i + 1] = c[1];
         self.px[i + 2] = c[2];
     }
-    fn row(&mut self, x0: i32, x1: i32, y: i32, c: [u8; 3]) {
+    pub(crate) fn row(&mut self, x0: i32, x1: i32, y: i32, c: [u8; 3]) {
         for x in x0..=x1 {
             self.dot(x, y, c);
         }
     }
-    fn bar(&mut self, x0: i32, x1: i32, y0: i32, y1: i32, c: [u8; 3]) {
+    pub(crate) fn bar(&mut self, x0: i32, x1: i32, y0: i32, y1: i32, c: [u8; 3]) {
         for y in y0..=y1 {
             self.row(x0, x1, y, c);
         }
     }
-    fn frame(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, c: [u8; 3]) {
+    pub(crate) fn frame(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, c: [u8; 3]) {
         self.row(x0, x1, y0, c);
         self.row(x0, x1, y1, c);
         for y in y0..=y1 {
@@ -1479,7 +1479,7 @@ impl TrayChip {
 
 // The 16x16 RGBA chip for one entry. `color` is the prompt's tile colour; anything
 // unparseable falls back to the kind's own tint.
-fn tray_icon_pixels(kind: TrayKind, color: &str) -> Vec<u8> {
+pub(crate) fn tray_icon_pixels(kind: TrayKind, color: &str) -> Vec<u8> {
     let fill = hex_rgb(color).unwrap_or_else(|| tray_kind_tint(kind));
     let dark = tray_luma(fill) < 150;
     let ink = if dark { [255, 255, 255] } else { [24, 26, 31] };
@@ -1522,12 +1522,12 @@ fn tray_icon_pixels(kind: TrayKind, color: &str) -> Vec<u8> {
     chip.px
 }
 
-fn tray_icon(kind: TrayKind, color: &str) -> tauri::image::Image<'static> {
+pub(crate) fn tray_icon(kind: TrayKind, color: &str) -> tauri::image::Image<'static> {
     tauri::image::Image::new_owned(tray_icon_pixels(kind, color), TRAY_ICON_PX, TRAY_ICON_PX)
 }
 
 // One labelled section: a greyed header, the entries with their icons, a separator.
-fn push_tray_section(
+pub(crate) fn push_tray_section(
     app: &AppHandle,
     items: &mut Vec<Box<dyn IsMenuItem<tauri::Wry>>>,
     head_id: &str,
@@ -1561,16 +1561,16 @@ fn push_tray_section(
 // popup. Ships on (a rounder, themed look was the whole point of building it);
 // switching it off is the escape hatch back to the plain OS menu if the
 // custom window ever misbehaves.
-const TRAY_CUSTOM_MENU_KEY: &str = "trayCustomMenu";
+pub(crate) const TRAY_CUSTOM_MENU_KEY: &str = "trayCustomMenu";
 
-fn tray_custom_menu_on(settings: &Settings) -> bool {
+pub(crate) fn tray_custom_menu_on(settings: &Settings) -> bool {
     settings.ui_flags.get(TRAY_CUSTOM_MENU_KEY) != Some(&false)
 }
 
 // Build the tray menu from the current store and install it. The store lock is
 // dropped before the first menu call: building a menu while holding it is the
 // classic deadlock shape here.
-fn apply_tray_menu(app: &AppHandle) {
+pub(crate) fn apply_tray_menu(app: &AppHandle) {
     let (lang, plan, custom, rec_entries_on) = match app.try_state::<Db>() {
         Some(state) => {
             let store = lock(&state);
@@ -1639,7 +1639,7 @@ fn apply_tray_menu(app: &AppHandle) {
 // rebuild it. Bursts (a batch action, an import, a run of copies) are collected
 // into a single rebuild off the UI thread; with both features off and no entries
 // installed there is nothing to do at all.
-fn rebuild_tray(app: &AppHandle) {
+pub(crate) fn rebuild_tray(app: &AppHandle) {
     let wanted = match app.try_state::<Db>() {
         Some(state) => {
             let cfg = tray_cfg(&lock(&state).settings);
@@ -1664,14 +1664,14 @@ fn rebuild_tray(app: &AppHandle) {
 // A tray entry runs the very same activation a tile click does (copy, usage,
 // chains, placeholder dialog): but never the hotkey auto-paste: the click leaves
 // the tray in the foreground, so there is no text field to paste into.
-fn fire_tray_copy(app: &AppHandle, id: &str) {
+pub(crate) fn fire_tray_copy(app: &AppHandle, id: &str) {
     let _ = app.emit_to("main", "prompt-tray-copy", id.to_string());
 }
 
 // One place for what a tray menu id DOES, shared by the native popup's
 // on_menu_event and the custom tray window's tray_window_activate command --
 // the two menus must never drift into behaving differently for the same id.
-fn handle_tray_menu_id(app: &AppHandle, id: &str) {
+pub(crate) fn handle_tray_menu_id(app: &AppHandle, id: &str) {
     match id {
         "show" => show_main(app),
         "quit" => request_app_quit(app),
@@ -1691,46 +1691,46 @@ fn handle_tray_menu_id(app: &AppHandle, id: &str) {
 // menu entirely while trayCustomMenu is on (see there), and this window takes
 // over the right-click instead, drawing its OWN content from the plan below.
 
-const TRAY_WIN_LABEL: &str = "tray-menu";
-const TRAY_WIN_W: f64 = 240.0; // logical px; keep in sync with .tray-menu-card in floating.css
-const TRAY_WIN_ROW_H: f64 = 30.0;
-const TRAY_WIN_HEAD_H: f64 = 22.0;
-const TRAY_WIN_SEP_H: f64 = 9.0; // 1px line + 4px margin top/bottom, one per section
-const TRAY_WIN_CHROME: f64 = 20.0; // card padding, independent of row count
+pub(crate) const TRAY_WIN_LABEL: &str = "tray-menu";
+pub(crate) const TRAY_WIN_W: f64 = 240.0; // logical px; keep in sync with .tray-menu-card in floating.css
+pub(crate) const TRAY_WIN_ROW_H: f64 = 30.0;
+pub(crate) const TRAY_WIN_HEAD_H: f64 = 22.0;
+pub(crate) const TRAY_WIN_SEP_H: f64 = 9.0; // 1px line + 4px margin top/bottom, one per section
+pub(crate) const TRAY_WIN_CHROME: f64 = 20.0; // card padding, independent of row count
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
-struct TrayWinEntry {
-    id: String,
-    label: String,
-    kind: String,
-    color: String,
+pub(crate) struct TrayWinEntry {
+    pub(crate) id: String,
+    pub(crate) label: String,
+    pub(crate) kind: String,
+    pub(crate) color: String,
 }
 
 #[derive(Serialize, Clone)]
-struct TrayWinSection {
-    title: String,
-    entries: Vec<TrayWinEntry>,
+pub(crate) struct TrayWinSection {
+    pub(crate) title: String,
+    pub(crate) entries: Vec<TrayWinEntry>,
 }
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
-struct TrayWinPlan {
+pub(crate) struct TrayWinPlan {
     // 0 or 2 entries (Stop, Pause/Resume) -- no header, own separator,
     // rendered before every other row. ui/tray.js draws them with no icon,
     // exactly like show/quit below.
-    rec_entries: Vec<TrayWinEntry>,
-    sections: Vec<TrayWinSection>,
-    show_label: String,
-    quit_label: String,
+    pub(crate) rec_entries: Vec<TrayWinEntry>,
+    pub(crate) sections: Vec<TrayWinSection>,
+    pub(crate) show_label: String,
+    pub(crate) quit_label: String,
     // Whether the search row at the top of the menu is drawn at all (traySearch,
     // default on) -- tray_window_logical_height only reserves a row for it when
     // this is true, so an unrelated off switch never grows the window for nothing.
-    search_on: bool,
-    search_ph: String,
+    pub(crate) search_on: bool,
+    pub(crate) search_ph: String,
 }
 
-fn tray_kind_str(kind: TrayKind) -> &'static str {
+pub(crate) fn tray_kind_str(kind: TrayKind) -> &'static str {
     match kind {
         TrayKind::Text => "text",
         TrayKind::Image => "image",
@@ -1743,7 +1743,7 @@ fn tray_kind_str(kind: TrayKind) -> &'static str {
 // a restyle, not a second menu with its own rules. Built fresh on every open, so
 // (unlike the native HMENU) there is no separate rebuild-on-change path to keep
 // in sync.
-fn build_tray_win_plan(app: &AppHandle) -> TrayWinPlan {
+pub(crate) fn build_tray_win_plan(app: &AppHandle) -> TrayWinPlan {
     let state: State<Db> = match app.try_state::<Db>() {
         Some(s) => s,
         None => {
@@ -1800,7 +1800,7 @@ fn build_tray_win_plan(app: &AppHandle) -> TrayWinPlan {
 
 // Pure, so the row/header/separator arithmetic stays testable without an app
 // handle -- mirrors tray_plan's own reasoning for why it takes plain data.
-fn tray_window_logical_height(plan: &TrayWinPlan) -> f64 {
+pub(crate) fn tray_window_logical_height(plan: &TrayWinPlan) -> f64 {
     let mut logical_h = TRAY_WIN_CHROME + 2.0 * TRAY_WIN_ROW_H; // show + quit always present
     if plan.search_on {
         logical_h += TRAY_WIN_ROW_H; // the filter row at the very top
@@ -1823,11 +1823,11 @@ fn tray_window_logical_height(plan: &TrayWinPlan) -> f64 {
 // sits flush against the taskbar/screen edge; floating.css makes the card
 // scroll internally once its content no longer fits the capped height. Split
 // out from tray_window_rect so the cap math is testable without an AppHandle.
-fn tray_window_capped_height(plan: &TrayWinPlan, work_h: f64, dpi: f64) -> f64 {
+pub(crate) fn tray_window_capped_height(plan: &TrayWinPlan, work_h: f64, dpi: f64) -> f64 {
     (tray_window_logical_height(plan) * dpi).min((work_h - 8.0 * dpi).max(TRAY_WIN_ROW_H * dpi))
 }
 
-fn tray_window_rect(app: &AppHandle, plan: &TrayWinPlan) -> Rect {
+pub(crate) fn tray_window_rect(app: &AppHandle, plan: &TrayWinPlan) -> Rect {
     let (work, dpi, cursor) = work_and_dpi_at_cursor(app);
     let w = TRAY_WIN_W * dpi;
     let h = tray_window_capped_height(plan, work.h, dpi);
@@ -1838,7 +1838,7 @@ fn tray_window_rect(app: &AppHandle, plan: &TrayWinPlan) -> Rect {
 // Opens at the cursor, clamped into that monitor's work area -- same helper every
 // other cursor-anchored popup (launcher, var prompt) already uses. Replaces an
 // already-open one instead of stacking a second, matching those windows too.
-fn open_tray_window(app: &AppHandle) {
+pub(crate) fn open_tray_window(app: &AppHandle) {
     if let Some(win) = app.get_webview_window(TRAY_WIN_LABEL) {
         let _ = win.close();
     }
@@ -1923,7 +1923,7 @@ fn tray_launcher_prefill(app: AppHandle, query: String) {
 }
 
 // The starting query is user input crossing a window boundary: capped like the launcher's own field.
-fn launcher_prefill_text(q: &str) -> String {
+pub(crate) fn launcher_prefill_text(q: &str) -> String {
     q.chars().take(200).collect()
 }
 
@@ -1950,109 +1950,109 @@ fn launcher_close(app: AppHandle) -> Result<(), String> {
 // ---------- Data model ----------
 
 #[derive(Serialize, Deserialize, Clone)]
-struct Prompt {
-    id: String,
-    name: String,
-    text: String,
+pub(crate) struct Prompt {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) text: String,
     // Optional tile color (hex); empty = default surface color.
     #[serde(default)]
-    color: String,
+    pub(crate) color: String,
     // Optional PNG data URL (scaled to ≤1024px); empty = no image.
     #[serde(default)]
-    image: String,
+    pub(crate) image: String,
     // When true the tile shows the image instead of the name text.
     #[serde(default)]
-    show_image: bool,
+    pub(crate) show_image: bool,
     // True = clicking copies the image itself; false = the image is only an
     // icon and clicking copies the text.
     #[serde(default)]
-    copy_image: bool,
+    pub(crate) copy_image: bool,
     // Attached file: clicking puts the file itself on the clipboard.
     #[serde(default)]
-    file_path: String,
+    pub(crate) file_path: String,
     // Which page of an attached PDF the preview shows (0-based). Ignored for
     // any other attachment type. Clamped against the actual page count at render
     // time (pdf_preview), never here: the file can change independently of this
     // number (a replaced attachment, or a shorter PDF at the same path).
     #[serde(default)]
-    pdf_page: u32,
+    pub(crate) pdf_page: u32,
     // Gif/video used as the tile icon only: shown, never copied.
     #[serde(default)]
-    icon_path: String,
+    pub(crate) icon_path: String,
     // Optional caption shown over media tiles (size 0 = default).
     #[serde(default)]
-    caption: String,
+    pub(crate) caption: String,
     #[serde(default)]
-    caption_size: u32,
+    pub(crate) caption_size: u32,
     // Per-tile style overrides; empty / 0 = follow the global settings.
     #[serde(default)]
-    font: String,
+    pub(crate) font: String,
     #[serde(default)]
-    font_size: u32,
+    pub(crate) font_size: u32,
     // Marked as a favorite (starred) in the library.
     #[serde(default)]
-    favorite: bool,
+    pub(crate) favorite: bool,
     // Free-form tag names. Compared case-insensitively; the casing stored here
     // is the one first used in the library (see sanitize_tags).
     #[serde(default)]
-    tags: Vec<String>,
+    pub(crate) tags: Vec<String>,
     // Private context for the user. Shown in the editor and (optionally) in the
     // tile tooltip: never part of anything that reaches the clipboard.
     #[serde(default)]
-    notes: String,
+    pub(crate) notes: String,
     // Global accelerator that copies this prompt from anywhere ("" = none).
     #[serde(default)]
-    hotkey: String,
+    pub(crate) hotkey: String,
     // What THIS hotkey does: "copy", "paste" (copy and paste into the app the
     // user was in), or "" = follow the global promptHotkeyPaste setting.
     #[serde(default)]
-    hotkey_paste: String,
+    pub(crate) hotkey_paste: String,
     // Unix seconds set the moment a prompt moves into the trash table; unused
     // (0) for every prompt still in store.prompts. Drives both the trash list's
     // "deleted N days ago" and the retention sweep: never touched for anything
     // else, so it never appears in an export or a fresh add_prompt/update_prompt.
     #[serde(default)]
-    trashed_at: u64,
+    pub(crate) trashed_at: u64,
     // "Rotating prompts": `text` is entry 1, `variants` holds entries 2..n, so
     // every existing consumer (tile preview, search, export, dup-finder, tooltip,
     // Markdown sync) stays correct without a single change, and "rotation is on" is
     // exactly `!variants.is_empty()`: no separate bool that could drift from the data.
     #[serde(default)]
-    variants: Vec<String>,
+    pub(crate) variants: Vec<String>,
     // "" = in order, "random" = shuffled bag (see rotation_next).
     #[serde(default)]
-    rotate_mode: String,
+    pub(crate) rotate_mode: String,
     // Auto-Wechsel: nach jedem Einfügen rückt die Zwischenablage auf den
     // nächsten Eintrag vor. Ohne variants bedeutungslos (wie rotate_mode).
     #[serde(default)]
-    rotate_auto: bool,
+    pub(crate) rotate_auto: bool,
     // Duration of an attached video, measured once when the attachment is set
     // (probe_media_meta) and never on every render. 0 = never measured, or the
     // file has no video stream. Read by the library/history thumbnail badge
     // only -- the main grid tile never reads this field.
     #[serde(default)]
-    media_duration_ms: u64,
+    pub(crate) media_duration_ms: u64,
     // Pixel width/height of an attached video or still image, 0 = unknown.
     #[serde(default)]
-    media_width: u32,
+    pub(crate) media_width: u32,
     #[serde(default)]
-    media_height: u32,
+    pub(crate) media_height: u32,
     // Size in bytes of the attached file (file_path/icon_path), 0 = unknown.
     #[serde(default)]
-    media_size_bytes: u64,
+    pub(crate) media_size_bytes: u64,
     // Text recognized in the attached picture, a search index and nothing
     // else: never shown, exported or synchronized. Empty unless ocrIndex was
     // on when the picture was attached. Cleared the moment the picture is
     // removed or replaced.
     #[serde(default)]
-    image_text: String,
+    pub(crate) image_text: String,
     // Marked confidential: `text` and every entry of `variants` above hold
     // AES-GCM ciphertext (see secret_encrypt) instead of plain text, gated by
     // the session vault password (secret_vault_unlock). Name, tags and image
     // stay plain either way, or the library grid could not draw the tile at
     // all while locked.
     #[serde(default)]
-    secret: bool,
+    pub(crate) secret: bool,
 }
 
 // A saved floating window position, plus the identity of the screen it was
@@ -2064,38 +2064,38 @@ struct Prompt {
 // "unknown" rather than "no screen", so an ordinary upgrade never parks a
 // button nothing has actually moved (see resolve_float_spot).
 #[derive(Serialize, Deserialize, Clone, Default)]
-struct Pos {
-    x: i32,
-    y: i32,
+pub(crate) struct Pos {
+    pub(crate) x: i32,
+    pub(crate) y: i32,
     #[serde(default)]
-    screen: String,
+    pub(crate) screen: String,
 }
 
 // Saved main-window geometry (physical pixels). Validated against monitors on load.
 #[derive(Serialize, Deserialize, Clone, Copy)]
-struct WindowGeom {
-    x: i32,
-    y: i32,
-    width: u32,
-    height: u32,
+pub(crate) struct WindowGeom {
+    pub(crate) x: i32,
+    pub(crate) y: i32,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
 }
 
 // A named page with its own grid size and one placement map per grid size,
 // so switching grid dimensions restores the arrangement saved for that size.
 #[derive(Serialize, Deserialize, Clone)]
-struct View {
-    id: String,
-    name: String,
+pub(crate) struct View {
+    pub(crate) id: String,
+    pub(crate) name: String,
     #[serde(default = "default_cols")]
-    cols: u32,
+    pub(crate) cols: u32,
     #[serde(default = "default_rows")]
-    rows: u32,
+    pub(crate) rows: u32,
     // "6x5" -> promptId -> [col,row]
     #[serde(default)]
-    layouts: HashMap<String, HashMap<String, [u32; 2]>>,
+    pub(crate) layouts: HashMap<String, HashMap<String, [u32; 2]>>,
     // Optional tab color (hex); empty = default.
     #[serde(default)]
-    color: String,
+    pub(crate) color: String,
     // Ordered membership: who belongs to this view, independent of where a
     // grid size happens to have room to show them. `layouts` says WHERE a
     // member sits, never WHETHER it belongs -- that split exists so a
@@ -2103,7 +2103,7 @@ struct View {
     // member with no cell in the current size's layout is an overflow
     // entry, not a lost one.
     #[serde(default)]
-    members: Vec<String>,
+    pub(crate) members: Vec<String>,
 }
 
 // An Android-style folder inside the grid. It occupies ONE cell of one view and
@@ -2112,20 +2112,20 @@ struct View {
 // change its grid size, so a folder whose cell no longer exists is moved to the first
 // free one instead of disappearing.
 #[derive(Serialize, Deserialize, Clone)]
-struct TileFolder {
+pub(crate) struct TileFolder {
     #[serde(default)]
-    id: String,
+    pub(crate) id: String,
     #[serde(default)]
-    name: String,
+    pub(crate) name: String,
     // Optional folder colour (hex); empty = default.
     #[serde(default)]
-    color: String,
+    pub(crate) color: String,
     #[serde(default)]
-    view_id: String,
+    pub(crate) view_id: String,
     #[serde(default)]
-    cell: [u32; 2],
+    pub(crate) cell: [u32; 2],
     #[serde(default)]
-    members: Vec<String>,
+    pub(crate) members: Vec<String>,
 }
 
 // An Android-style folder holding several floating pills. It owns ONE window
@@ -2134,123 +2134,123 @@ struct TileFolder {
 // its own `floating` entry so switching the feature off puts every pill back where
 // it was.
 #[derive(Serialize, Deserialize, Clone)]
-struct FloatFolder {
+pub(crate) struct FloatFolder {
     #[serde(default)]
-    id: String,
+    pub(crate) id: String,
     #[serde(default)]
-    name: String,
+    pub(crate) name: String,
     #[serde(default)]
-    pos: Pos,
+    pub(crate) pos: Pos,
     #[serde(default = "default_folder_scale")]
-    scale: f64,
+    pub(crate) scale: f64,
     #[serde(default)]
-    members: Vec<String>,
+    pub(crate) members: Vec<String>,
 }
 
-fn default_folder_scale() -> f64 {
+pub(crate) fn default_folder_scale() -> f64 {
     1.0
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
-struct VideoPrefs {
-    volume: u32, // 0..=100
-    muted: bool,
+pub(crate) struct VideoPrefs {
+    pub(crate) volume: u32, // 0..=100
+    pub(crate) muted: bool,
     #[serde(rename = "loop")]
-    looped: bool,
+    pub(crate) looped: bool,
 }
 
 // A user-defined theme. It inherits every rule of `base` (one of the built-in
 // themes) and overrides only the colour variables listed in `vars`.
 #[derive(Serialize, Deserialize, Clone)]
-struct CustomTheme {
+pub(crate) struct CustomTheme {
     #[serde(default)]
-    id: String,
+    pub(crate) id: String,
     #[serde(default)]
-    name: String,
+    pub(crate) name: String,
     #[serde(default = "default_custom_base")]
-    base: String,
+    pub(crate) base: String,
     #[serde(default)]
-    vars: HashMap<String, String>,
+    pub(crate) vars: HashMap<String, String>,
 }
 
-fn default_custom_base() -> String {
+pub(crate) fn default_custom_base() -> String {
     "light".to_string()
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-struct Settings {
+pub(crate) struct Settings {
     #[serde(default = "default_theme")]
-    theme: String,
+    pub(crate) theme: String,
     #[serde(default)]
-    floating: HashMap<String, Pos>,
+    pub(crate) floating: HashMap<String, Pos>,
     // Per-floating-button size factor (1.0 = default).
     #[serde(default)]
-    float_scale: HashMap<String, f64>,
+    pub(crate) float_scale: HashMap<String, f64>,
     // Pill folders. Kept even while the feature is switched off, so turning it
     // back on restores the folders instead of losing them.
     #[serde(default)]
-    float_folders: Vec<FloatFolder>,
+    pub(crate) float_folders: Vec<FloatFolder>,
     // Per-prompt video player state (volume, mute, loop), grid and pill.
     #[serde(default)]
-    video_prefs: HashMap<String, VideoPrefs>,
+    pub(crate) video_prefs: HashMap<String, VideoPrefs>,
     #[serde(default)]
-    window: Option<WindowGeom>,
+    pub(crate) window: Option<WindowGeom>,
     #[serde(default = "default_on")]
-    minimize_to_tray: bool,
+    pub(crate) minimize_to_tray: bool,
     // False for a store written before the 30/90-day retention defaults; migrate()
     // pins such a store to keep-forever once.
     #[serde(default)]
-    retention_defaults_v2: bool,
+    pub(crate) retention_defaults_v2: bool,
     #[serde(default)]
-    autostart: bool,
+    pub(crate) autostart: bool,
     #[serde(default)]
-    start_minimized: bool,
+    pub(crate) start_minimized: bool,
     // Keep the main window above all other windows (except while minimized).
     #[serde(default)]
-    always_on_top: bool,
+    pub(crate) always_on_top: bool,
     // Global hotkey accelerator (e.g. "CommandOrControl+Shift+P"); empty = off.
     #[serde(default)]
-    hotkey: String,
+    pub(crate) hotkey: String,
     // Global voice-dictation hotkey; empty = off. Checked/cleaned through the
     // exact same functions as `hotkey` above -- see HotkeyOwner.
     #[serde(default)]
-    voice_hotkey: String,
+    pub(crate) voice_hotkey: String,
     // Global stop/pause hotkeys for a running recording -- the bar is otherwise
     // the ONLY way to stop or pause it. Registered only while a recording is
     // active (see rearm_hotkeys) -- unlike `hotkey`/`voice_hotkey` these ship
     // with a real default, since a long-running, disk-filling capture needs a
     // way out from day one.
     #[serde(default = "default_rec_stop_hotkey")]
-    rec_stop_hotkey: String,
+    pub(crate) rec_stop_hotkey: String,
     #[serde(default = "default_rec_pause_hotkey")]
-    rec_pause_hotkey: String,
+    pub(crate) rec_pause_hotkey: String,
     #[serde(default = "default_on")]
-    auto_update: bool,
+    pub(crate) auto_update: bool,
     // Update versions the user chose to skip: never offered again.
     #[serde(default)]
-    skipped_versions: Vec<String>,
+    pub(crate) skipped_versions: Vec<String>,
     // Highest app version the "what's new" list has already shown. Empty means
     // never shown (fresh install), see whats_new_check.
     #[serde(default)]
-    last_seen_version: String,
+    pub(crate) last_seen_version: String,
     // Expert toggles: feature key -> enabled. A missing key means enabled, so
     // every feature is on by default and only explicit `false` disables it.
     #[serde(default)]
-    ui_flags: HashMap<String, bool>,
+    pub(crate) ui_flags: HashMap<String, bool>,
     // Expert numeric tweaks: key -> value. A missing key uses the frontend default.
     #[serde(default)]
-    ui_values: HashMap<String, f64>,
+    pub(crate) ui_values: HashMap<String, f64>,
     // Expert string options (e.g. copy-feedback font). Missing key = default.
     #[serde(default)]
-    ui_texts: HashMap<String, String>,
+    pub(crate) ui_texts: HashMap<String, String>,
     // Seeded once on a genuinely fresh install (empty library, never seeded
     // before): never re-seeded just because the user later deletes everything.
     #[serde(default)]
-    examples_seeded: bool,
+    pub(crate) examples_seeded: bool,
     // Ids of the seeded example prompts, so "remove examples" can find exactly
     // those three (and only those) without guessing by name/content.
     #[serde(default)]
-    example_prompt_ids: Vec<String>,
+    pub(crate) example_prompt_ids: Vec<String>,
     // Content fingerprint of each seeded example at the moment it was created
     // (example_seed_fingerprint). "Remove examples" only deletes an id whose
     // current fingerprint still matches: one the user has since edited is now
@@ -2258,7 +2258,7 @@ struct Settings {
     // before this field existed) is treated as unchanged, matching the
     // previous unconditional-delete behaviour.
     #[serde(default)]
-    example_prompt_seeds: HashMap<String, u64>,
+    pub(crate) example_prompt_seeds: HashMap<String, u64>,
     // Each entry is one group of prompt ids the user dismissed together as
     // "not a duplicate" - never re-suggested as a group. Was Vec<[String; 2]> (one
     // entry per PAIR): ignoring an N-member group wrote N*(N-1)/2 entries, 79800 for
@@ -2266,88 +2266,88 @@ struct Settings {
     // same whether it has 2 elements or more, so every already-stored pair loads
     // here unchanged as a 2-member group - no migration needed.
     #[serde(default)]
-    dup_ignored: Vec<Vec<String>>,
+    pub(crate) dup_ignored: Vec<Vec<String>>,
     // Tag key (the lowercased name) -> chip color (#rrggbb). Keyed lowercase so a
     // recased tag keeps its color. A tag without an entry renders neutral.
     #[serde(default)]
-    tag_colors: HashMap<String, String>,
+    pub(crate) tag_colors: HashMap<String, String>,
     // User-defined themes. `theme` points at one of them with "custom:<id>";
     // each carries only the variables that differ from its built-in base.
     #[serde(default)]
-    custom_themes: Vec<CustomTheme>,
+    pub(crate) custom_themes: Vec<CustomTheme>,
     // Legacy in-blob copy history. Read once on upgrade to migrate into the
     // dedicated `copy_log` table, then never written back (the table owns it so
     // a million-entry history never bloats this encrypted settings blob).
     #[serde(default, skip_serializing)]
-    copy_log: Vec<CopyEntry>,
+    pub(crate) copy_log: Vec<CopyEntry>,
     // Per-prompt copy count + last-used time (unix seconds). Both bounded by the
     // number of prompts, so they stay small in the blob.
     #[serde(default)]
-    usage: HashMap<String, u32>,
+    pub(crate) usage: HashMap<String, u32>,
     #[serde(default)]
-    last_used: HashMap<String, u64>,
+    pub(crate) last_used: HashMap<String, u64>,
     // Rotation pointer for "variants" prompts: kept out of Prompt itself (see
     // rotation_next) so every copy doesn't rewrite prompts.json / bump the version
     // history / touch the Markdown sync file. Index of the NEXT entry to serve.
     #[serde(default)]
-    rotate_pos: HashMap<String, u32>,
+    pub(crate) rotate_pos: HashMap<String, u32>,
     // Shuffled remaining indices for "random" mode (the "bag": drawn without
     // repetition, reshuffled once empty). Absent/empty means "reshuffle on next use".
     #[serde(default)]
-    rotate_bag: HashMap<String, Vec<u32>>,
+    pub(crate) rotate_bag: HashMap<String, Vec<u32>>,
     #[serde(default = "default_on")]
-    show_header: bool,
+    pub(crate) show_header: bool,
     #[serde(default = "default_on")]
-    show_composer: bool,
+    pub(crate) show_composer: bool,
     #[serde(default = "default_language")]
-    language: String,
+    pub(crate) language: String,
     #[serde(default = "default_tile_font")]
-    tile_font: String,
+    pub(crate) tile_font: String,
     #[serde(default = "default_tile_size")]
-    tile_size: u32,
+    pub(crate) tile_size: u32,
     #[serde(default)]
-    active_view: String,
+    pub(crate) active_view: String,
     #[serde(default)]
-    views: Vec<View>,
+    pub(crate) views: Vec<View>,
     // Grid folders. Kept while the feature is off as well: the members simply
     // show as their own tiles again until it comes back on.
     #[serde(default)]
-    tile_folders: Vec<TileFolder>,
+    pub(crate) tile_folders: Vec<TileFolder>,
     // Legacy single-grid fields (pre-views). Read for migration, never written back.
     #[serde(default = "default_cols", rename = "cols", skip_serializing)]
-    legacy_cols: u32,
+    pub(crate) legacy_cols: u32,
     #[serde(default = "default_rows", rename = "rows", skip_serializing)]
-    legacy_rows: u32,
+    pub(crate) legacy_rows: u32,
     #[serde(default, rename = "layout", skip_serializing)]
-    legacy_layout: HashMap<String, [u32; 2]>,
+    pub(crate) legacy_layout: HashMap<String, [u32; 2]>,
 }
 
-fn default_theme() -> String {
+pub(crate) fn default_theme() -> String {
     "system".to_string()
 }
-fn default_cols() -> u32 {
+pub(crate) fn default_cols() -> u32 {
     5
 }
-fn default_rows() -> u32 {
+pub(crate) fn default_rows() -> u32 {
     4
 }
-fn default_on() -> bool {
+pub(crate) fn default_on() -> bool {
     true
 }
-fn default_language() -> String {
+pub(crate) fn default_language() -> String {
     "auto".to_string()
 }
-fn default_tile_font() -> String {
+pub(crate) fn default_tile_font() -> String {
     "system".to_string()
 }
 // 0 = auto-fit (default): each tile text grows to the largest size that fits.
-fn default_tile_size() -> u32 {
+pub(crate) fn default_tile_size() -> u32 {
     0
 }
-fn default_rec_stop_hotkey() -> String {
+pub(crate) fn default_rec_stop_hotkey() -> String {
     "Ctrl+Alt+S".to_string()
 }
-fn default_rec_pause_hotkey() -> String {
+pub(crate) fn default_rec_pause_hotkey() -> String {
     // Was "Ctrl+Alt+P", identical to the quick-launcher's own default
     // (`hotkey` above) -- on every fresh install the two collided from the
     // start and the pause hotkey silently never registered until the user
@@ -2411,36 +2411,36 @@ impl Default for Settings {
     }
 }
 
-const GRID_MIN: u32 = 1;
+pub(crate) const GRID_MIN: u32 = 1;
 // Hard safety ceilings. The default-facing limits are 20 (enforced in the UI via
 // the expert values gridMax / maxViews); these only cap how far those expert
 // overrides can be pushed, so old data and extreme settings can't break things.
-const GRID_MAX: u32 = 200;
-const MAX_VIEWS: usize = 200;
+pub(crate) const GRID_MAX: u32 = 200;
+pub(crate) const MAX_VIEWS: usize = 200;
 // Grid folders. One per cell at most, so a huge grid is the real ceiling.
-const MAX_TILE_FOLDERS: usize = 200;
-const FLOAT_W: f64 = 360.0;
-const FLOAT_H: f64 = 80.0; // flat pill shape, clearly wider than tall
-const FLOAT_IMG: f64 = 400.0; // square box for image pills: S 300 / M 400 / L 560
+pub(crate) const MAX_TILE_FOLDERS: usize = 200;
+pub(crate) const FLOAT_W: f64 = 360.0;
+pub(crate) const FLOAT_H: f64 = 80.0; // flat pill shape, clearly wider than tall
+pub(crate) const FLOAT_IMG: f64 = 400.0; // square box for image pills: S 300 / M 400 / L 560
 // Pill folders.
-const MAX_FLOAT_FOLDERS: usize = 100;
-const MAX_FOLDER_NAME: usize = 40;
-const FOLDER_BOX: f64 = 96.0; // collapsed folder icon (square, logical px at scale 1)
+pub(crate) const MAX_FLOAT_FOLDERS: usize = 100;
+pub(crate) const MAX_FOLDER_NAME: usize = 40;
+pub(crate) const FOLDER_BOX: f64 = 96.0; // collapsed folder icon (square, logical px at scale 1)
 // Brand-owned identifiers. Every product name in the Rust code comes from
 // src/brand.rs, which tools/brand.js writes from brands/<brand>.json.
-const AUTOSTART_KEY: &str = brand::AUTOSTART_KEY;
+pub(crate) const AUTOSTART_KEY: &str = brand::AUTOSTART_KEY;
 // Local data folder under %APPDATA%\Roaming. Used by the pre-app panic hook
 // (no AppHandle) and the store path; deliberately NOT the bundle identifier.
-const DATA_FOLDER: &str = brand::DATA_FOLDER;
+pub(crate) const DATA_FOLDER: &str = brand::DATA_FOLDER;
 
-fn grid_key(cols: u32, rows: u32) -> String {
+pub(crate) fn grid_key(cols: u32, rows: u32) -> String {
     format!("{}x{}", cols, rows)
 }
 
 // WebView2-missing dialog texts; shown before settings exist, so the OS
 // locale decides (same language set as the UI). `{app}` is filled with the
 // product name once, in webview2_dialog: the translations never spell it.
-fn webview2_texts(lang: &str) -> (&'static str, &'static str) {
+pub(crate) fn webview2_texts(lang: &str) -> (&'static str, &'static str) {
     match lang {
         "de" => ("WebView2 Runtime fehlt", "{app} benötigt die Microsoft WebView2 Runtime.\n\nJetzt herunterladen und installieren? Danach {app} einfach erneut starten."),
         "es" => ("Falta WebView2 Runtime", "{app} necesita Microsoft WebView2 Runtime.\n\n¿Descargarlo e instalarlo ahora? Después, simplemente inicia {app} de nuevo."),
@@ -2457,7 +2457,7 @@ fn webview2_texts(lang: &str) -> (&'static str, &'static str) {
 }
 
 // The same texts with the product name filled in.
-fn webview2_dialog(lang: &str) -> (String, String) {
+pub(crate) fn webview2_dialog(lang: &str) -> (String, String) {
     let (title, msg) = webview2_texts(lang);
     (
         title.replace("{app}", brand::DISPLAY_NAME),
@@ -2467,11 +2467,11 @@ fn webview2_dialog(lang: &str) -> (String, String) {
 
 // Resolve the effective UI language code ("auto" -> OS locale), EN fallback.
 // Supported UI languages besides English (keep in sync with ui/i18n.js).
-const LANG_CODES: [&str; 10] = [
+pub(crate) const LANG_CODES: [&str; 10] = [
     "de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro",
 ];
 
-fn resolve_lang(pref: &str) -> &'static str {
+pub(crate) fn resolve_lang(pref: &str) -> &'static str {
     let raw = if pref != "auto" {
         pref.to_string()
     } else {
@@ -2486,7 +2486,7 @@ fn resolve_lang(pref: &str) -> &'static str {
 }
 
 // Tray menu labels per language.
-fn tray_labels(lang: &str) -> (&'static str, &'static str) {
+pub(crate) fn tray_labels(lang: &str) -> (&'static str, &'static str) {
     match lang {
         "de" => ("Öffnen", "Beenden"),
         "es" => ("Abrir", "Salir"),
@@ -2506,7 +2506,7 @@ fn tray_labels(lang: &str) -> (&'static str, &'static str) {
 // switches to a recording state for the length of a dictation session, then
 // back to the app name. Runs for every session regardless of what started it
 // (button or hotkey) -- harmless to set even while the window is visible.
-fn set_tray_recording(app: &AppHandle, recording: bool) {
+pub(crate) fn set_tray_recording(app: &AppHandle, recording: bool) {
     let Some(tray) = app.tray_by_id("tray") else { return };
     let text = if recording {
         let lang = app
@@ -2521,7 +2521,7 @@ fn set_tray_recording(app: &AppHandle, recording: bool) {
 }
 
 // Tray tooltip text while a voice-dictation session is running.
-fn tray_recording_label(lang: &str) -> &'static str {
+pub(crate) fn tray_recording_label(lang: &str) -> &'static str {
     match lang {
         "de" => "Aufnahme läuft…",
         "es" => "Grabando…",
@@ -2540,7 +2540,7 @@ fn tray_recording_label(lang: &str) -> &'static str {
 // The tray's own Stop/Pause/Resume labels for a running recording -- the
 // tray is drawn by the OS, not the webview, so (like every other tray label
 // above) these live here rather than in ui/i18n.js.
-fn tray_rec_stop_label(lang: &str) -> &'static str {
+pub(crate) fn tray_rec_stop_label(lang: &str) -> &'static str {
     match lang {
         "de" => "Aufnahme beenden",
         "es" => "Detener grabación",
@@ -2555,7 +2555,7 @@ fn tray_rec_stop_label(lang: &str) -> &'static str {
         _ => "Stop recording",
     }
 }
-fn tray_rec_pause_label(lang: &str, paused: bool) -> &'static str {
+pub(crate) fn tray_rec_pause_label(lang: &str, paused: bool) -> &'static str {
     if paused {
         match lang {
             "de" => "Aufnahme fortsetzen",
@@ -2590,7 +2590,7 @@ fn tray_rec_pause_label(lang: &str, paused: bool) -> &'static str {
 // Headers of the two tray quick-copy sections. The tray is drawn by the OS,
 // not by the webview, so these live next to the other tray labels instead of in
 // the frontend table.
-fn tray_section_labels(lang: &str) -> (&'static str, &'static str) {
+pub(crate) fn tray_section_labels(lang: &str) -> (&'static str, &'static str) {
     match lang {
         "de" => ("Zuletzt benutzt", "Favoriten"),
         "es" => ("Usados recientemente", "Favoritos"),
@@ -2609,7 +2609,7 @@ fn tray_section_labels(lang: &str) -> (&'static str, &'static str) {
 // Placeholder text of the tray menu's own filter row -- same reasoning as
 // tray_labels above: the tray window is a webview, but its text still lives
 // here so every tray string is translated in one place.
-fn tray_search_placeholder(lang: &str) -> &'static str {
+pub(crate) fn tray_search_placeholder(lang: &str) -> &'static str {
     match lang {
         "de" => "Suchen…",
         "es" => "Buscar…",
@@ -2627,7 +2627,7 @@ fn tray_search_placeholder(lang: &str) -> &'static str {
 
 // Localized default name of the auto-created start page. As long as the user
 // never renamed it, it follows the UI language (see set_language).
-fn home_name(lang: &str) -> &'static str {
+pub(crate) fn home_name(lang: &str) -> &'static str {
     match lang {
         "de" => "Startseite",
         "es" => "Inicio",
@@ -2642,7 +2642,7 @@ fn home_name(lang: &str) -> &'static str {
 }
 
 // Every possible default name -> a view still carrying one was never renamed.
-const HOME_NAMES: [&str; 18] = [
+pub(crate) const HOME_NAMES: [&str; 18] = [
     "Home", "Startseite", "Inicio", "Accueil", "Início",
     "Strona główna", "Главная", "主页", "ホーム",
     "Ana sayfa", "홈", "होम", "Beranda", "Trang chủ",
@@ -2651,7 +2651,7 @@ const HOME_NAMES: [&str; 18] = [
 
 // Expert-menu values that no longer exist. A loaded store drops them once, so a
 // key that is added back later never inherits a stale stored value.
-fn removed_ui_value_keys() -> &'static [&'static str] {
+pub(crate) fn removed_ui_value_keys() -> &'static [&'static str] {
     &[
         "snipPenPx",
         "snipMarkerPx",
@@ -2718,7 +2718,7 @@ fn removed_ui_value_keys() -> &'static [&'static str] {
 }
 
 // Expert switches that no longer exist. A loaded store drops them once, like removed values.
-fn removed_ui_flag_keys() -> &'static [&'static str] {
+pub(crate) fn removed_ui_flag_keys() -> &'static [&'static str] {
     &[
         "pinButton",
         "favView",
@@ -2754,13 +2754,13 @@ fn removed_ui_flag_keys() -> &'static [&'static str] {
 }
 
 impl Settings {
-    fn has_removed_ui_values(&self) -> bool {
+    pub(crate) fn has_removed_ui_values(&self) -> bool {
         removed_ui_value_keys().iter().any(|k| self.ui_values.contains_key(*k))
             || removed_ui_flag_keys().iter().any(|k| self.ui_flags.contains_key(*k))
     }
 
     // Ensure at least one view exists; migrate legacy single-grid data.
-    fn migrate(&mut self) {
+    pub(crate) fn migrate(&mut self) {
         // Merges that read an old key run first, before the removal loops below.
         //
         // Four on/off switches each had a duration beside them. The duration is the
@@ -3000,14 +3000,14 @@ impl Settings {
         }
     }
 
-    fn active_index(&self) -> usize {
+    pub(crate) fn active_index(&self) -> usize {
         self.views
             .iter()
             .position(|v| v.id == self.active_view)
             .unwrap_or(0)
     }
 
-    fn active_view_mut(&mut self) -> &mut View {
+    pub(crate) fn active_view_mut(&mut self) -> &mut View {
         let i = self.active_index();
         &mut self.views[i]
     }
@@ -3020,31 +3020,31 @@ impl Settings {
 // examples were later dismissed/deleted). A pure function, not a Settings method,
 // so it is testable without a whole Store around it (called from load_store, once
 // prompts are known, right after the Store itself is built).
-fn tour_should_be_marked_seen(has_prompts: bool, examples_seeded: bool) -> bool {
+pub(crate) fn tour_should_be_marked_seen(has_prompts: bool, examples_seeded: bool) -> bool {
     has_prompts || examples_seeded
 }
 
 // In-memory store, flushed to disk on mutations.
-struct Store {
-    prompts: Vec<Prompt>,
+pub(crate) struct Store {
+    pub(crate) prompts: Vec<Prompt>,
     // Prompts the user deleted, kept whole (media + version history untouched)
     // until a real purge. Newest-deleted first, matching how every other list in
     // the app (recent copies, history) already orders "most recent on top".
-    trash: Vec<Prompt>,
-    settings: Settings,
+    pub(crate) trash: Vec<Prompt>,
+    pub(crate) settings: Settings,
     // Set when db_load found encrypted prompt rows it could NOT decrypt (e.g. DPAPI
     // failed after a profile move / password reset). While true, save_prompts refuses
     // to rewrite the prompts table so a rewrite can never destroy the rows that are
     // present-but-unreadable (they are missing from the in-memory list, so a write
     // would delete them as "gone"). The raw data.db is snapshotted aside on detect.
-    prompts_locked: bool,
+    pub(crate) prompts_locked: bool,
     // What the prompts/trash tables already hold, so a save only re-seals the rows
     // that really changed (see WrittenRows). It belongs to the prompt list and sits
     // under the same lock rather than beside it: a second lock could be taken apart
     // from this one, letting one window update the map for a list another window is
     // still writing. A RefCell, not a Mutex: it is a detail of the write path, and
     // every save_* takes a shared &Store.
-    written: std::cell::RefCell<WrittenRows>,
+    pub(crate) written: std::cell::RefCell<WrittenRows>,
 }
 
 impl Store {
@@ -3053,13 +3053,13 @@ impl Store {
     // wholesale replacement of the prompt set, a swapped or restored data.db, a raw
     // DELETE, a move to another data folder. Missing it anywhere leaves the process
     // trusting hashes for content the disk no longer holds.
-    fn forget_written_rows(&self) {
+    pub(crate) fn forget_written_rows(&self) {
         self.written.borrow_mut().clear();
     }
 
     // Keep both folder lists valid against the CURRENT prompt list: one call
     // after every mutation that can remove a prompt. Idempotent.
-    fn normalize_folders(&mut self) {
+    pub(crate) fn normalize_folders(&mut self) {
         let ids: Vec<String> = self.prompts.iter().map(|p| p.id.clone()).collect();
         normalize_float_folders(&mut self.settings.float_folders, &ids);
         let view_ids: Vec<String> = self.settings.views.iter().map(|v| v.id.clone()).collect();
@@ -3067,11 +3067,11 @@ impl Store {
     }
 }
 
-type Db = Mutex<Store>;
+pub(crate) type Db = Mutex<Store>;
 
 // ---------- Paths + persistence ----------
 
-fn default_data_dir(app: &AppHandle) -> PathBuf {
+pub(crate) fn default_data_dir(app: &AppHandle) -> PathBuf {
     // Portable build keeps its data beside the exe so it travels with the folder;
     // installed builds use %APPDATA%\<DATA_FOLDER>. If the exe folder is not
     // writable (e.g. run from a read-only location), fall back to AppData.
@@ -3094,18 +3094,18 @@ fn default_data_dir(app: &AppHandle) -> PathBuf {
 
 // Portable data lives directly beside the exe (no sub-folder) so a single
 // portable download stays self-contained and the store travels with it.
-fn portable_data_dir() -> Option<PathBuf> {
+pub(crate) fn portable_data_dir() -> Option<PathBuf> {
     std::env::current_exe().ok()?.parent().map(|d| d.to_path_buf())
 }
 
 // Files that make up a store, in copy order.
-const STORE_FILES: [&str; 3] = ["data.db", "prompts.json", "settings.json"];
+pub(crate) const STORE_FILES: [&str; 3] = ["data.db", "prompts.json", "settings.json"];
 
 // The installed copy's store, if this is a portable run and one exists elsewhere.
 // Nothing is copied here: the app asks first (see `takeover_offer`), in its own
 // window, so the question inherits the theme and language instead of being a bare
 // system box before anything is loaded.
-fn appdata_store_dir(app: &AppHandle, portable: &std::path::Path) -> Option<PathBuf> {
+pub(crate) fn appdata_store_dir(app: &AppHandle, portable: &std::path::Path) -> Option<PathBuf> {
     let src = std::env::var_os("APPDATA")
         .map(PathBuf::from)
         .map(|p| p.join(DATA_FOLDER))
@@ -3120,7 +3120,7 @@ fn appdata_store_dir(app: &AppHandle, portable: &std::path::Path) -> Option<Path
 // (brand::LEGACY_DATA_FOLDER) into DATA_FOLDER, so the rename never loses data.
 // Both the identifier folder Tauri resolves and the frozen legacy name are tried:
 // the second one survives even if Tauri ever changes how app_data_dir is built.
-fn migrate_legacy_data(app: &AppHandle, new: &std::path::Path) {
+pub(crate) fn migrate_legacy_data(app: &AppHandle, new: &std::path::Path) {
     if new.join("data.db").exists() {
         return;
     }
@@ -3149,7 +3149,7 @@ fn migrate_legacy_data(app: &AppHandle, new: &std::path::Path) {
 // Portable build = run without the installer's uninstall.exe beside the exe
 // (standard installs write one; portable mode and dev runs do not). Portable
 // always fully closes on window-close; installed honours the tray setting.
-fn is_portable() -> bool {
+pub(crate) fn is_portable() -> bool {
     std::env::current_exe()
         .ok()
         .and_then(|e| e.parent().map(|d| !d.join("uninstall.exe").exists()))
@@ -3160,7 +3160,7 @@ fn is_portable() -> bool {
 // "datapath" pointer file in the canonical dir can redirect the store to a
 // user-chosen folder (expert menu); anything missing or invalid falls back to
 // the canonical dir, so data is never lost.
-fn resolve_datapath_redirect(base: PathBuf) -> PathBuf {
+pub(crate) fn resolve_datapath_redirect(base: PathBuf) -> PathBuf {
     if let Ok(s) = fs::read_to_string(base.join("datapath")) {
         let p = PathBuf::from(s.trim());
         if !s.trim().is_empty() && p.is_dir() {
@@ -3173,7 +3173,7 @@ fn resolve_datapath_redirect(base: PathBuf) -> PathBuf {
 // Effective store location. A "datapath" pointer file in the canonical dir can
 // redirect the store to a user-chosen folder (expert menu); on anything missing
 // or invalid it falls back to the canonical dir, so data is never lost.
-fn data_dir(app: &AppHandle) -> PathBuf {
+pub(crate) fn data_dir(app: &AppHandle) -> PathBuf {
     let resolved = resolve_datapath_redirect(default_data_dir(app));
     // Recorded for `append_crash_log`'s scrubbing, see `LAST_KNOWN_DATA_DIR`.
     *LAST_KNOWN_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()) = Some(resolved.clone());
@@ -3187,7 +3187,7 @@ fn data_dir(app: &AppHandle) -> PathBuf {
 // does for every install a command-line launch would ever find). A launch with
 // no AppHandle in reach at all -- there is no window to build one for -- can
 // still resolve the exact folder an ordinary launch would use.
-fn default_data_dir_headless() -> PathBuf {
+pub(crate) fn default_data_dir_headless() -> PathBuf {
     if is_portable() {
         if let Some(dir) = portable_data_dir() {
             if fs::create_dir_all(&dir).is_ok() {
@@ -3203,7 +3203,7 @@ fn default_data_dir_headless() -> PathBuf {
     dir
 }
 
-fn data_dir_headless() -> PathBuf {
+pub(crate) fn data_dir_headless() -> PathBuf {
     resolve_datapath_redirect(default_data_dir_headless())
 }
 
@@ -3216,13 +3216,13 @@ fn data_dir_headless() -> PathBuf {
 // there but DPAPI/JSON decoding failed: wrong Windows account, corruption) are
 // different situations: a caller that folds both into a bare default silently
 // replaces real, still-present data with an empty one.
-enum SealedRead<T> {
+pub(crate) enum SealedRead<T> {
     Missing,
     Unreadable,
     Loaded(T),
 }
 
-fn read_sealed_json<T: for<'de> Deserialize<'de>>(path: &PathBuf) -> SealedRead<T> {
+pub(crate) fn read_sealed_json<T: for<'de> Deserialize<'de>>(path: &PathBuf) -> SealedRead<T> {
     match fs::read_to_string(path) {
         Ok(raw) if !raw.trim().is_empty() => match serde_json::from_str(&dec_str(&raw)) {
             Ok(v) => SealedRead::Loaded(v),
@@ -3237,17 +3237,17 @@ fn read_sealed_json<T: for<'de> Deserialize<'de>>(path: &PathBuf) -> SealedRead<
 // fully into memory before parsing, so a wrong pick (a disk image, a video) has to fail
 // with a clear message instead of exhausting memory. Mirrors the cap the decompression
 // path already applies via `inflate_capped`.
-const MAX_IMPORT_BYTES: u64 = 512 * 1024 * 1024;
-const MAX_THEME_BYTES: u64 = 4 * 1024 * 1024; // a theme is a handful of colour values
+pub(crate) const MAX_IMPORT_BYTES: u64 = 512 * 1024 * 1024;
+pub(crate) const MAX_THEME_BYTES: u64 = 4 * 1024 * 1024; // a theme is a handful of colour values
 
-fn size_error(max: u64) -> String {
+pub(crate) fn size_error(max: u64) -> String {
     format!("file is too large; the limit is {} MB", max / (1024 * 1024))
 }
 
 // For the one case that cannot read the bytes itself: the image handed to Windows'
 // text recognizer is opened by Windows, so measuring it up front is the only check
 // available: and a plausible reject message is worth more there than none.
-fn check_import_size(path: &std::path::Path, max: u64) -> Result<(), String> {
+pub(crate) fn check_import_size(path: &std::path::Path, max: u64) -> Result<(), String> {
     let len = fs::metadata(path).map_err(|e| e.to_string())?.len();
     if len > max {
         return Err(format!(
@@ -3264,7 +3264,7 @@ fn check_import_size(path: &std::path::Path, max: u64) -> Result<(), String> {
 // in between, and the limit then describes a file that is no longer the one being
 // read. Reading one byte past the limit is what makes "too large" provable from
 // the bytes actually in hand.
-fn read_file_capped(path: &std::path::Path, max: u64) -> Result<Vec<u8>, String> {
+pub(crate) fn read_file_capped(path: &std::path::Path, max: u64) -> Result<Vec<u8>, String> {
     use std::io::Read;
     let file = fs::File::open(path).map_err(|e| e.to_string())?;
     let mut buf = Vec::new();
@@ -3279,7 +3279,7 @@ fn read_file_capped(path: &std::path::Path, max: u64) -> Result<Vec<u8>, String>
 // user and nothing stops one of them from being enormous, while the folder is
 // rescanned on a timer. Anything past the limit is skipped rather than read into
 // memory on every single cycle.
-fn read_text_capped(path: &std::path::Path, max: u64) -> Option<String> {
+pub(crate) fn read_text_capped(path: &std::path::Path, max: u64) -> Option<String> {
     String::from_utf8(read_file_capped(path, max).ok()?).ok()
 }
 
@@ -3289,14 +3289,14 @@ fn read_text_capped(path: &std::path::Path, max: u64) -> Option<String> {
 // database has accepted the same rows, a file left over from an earlier failed
 // write is stale and would be read back as the truth on the next launch (see
 // load_store), overwriting what was just saved.
-fn drop_stale_fallback(dir: &Path, file: &str) {
+pub(crate) fn drop_stale_fallback(dir: &Path, file: &str) {
     let path = dir.join(file);
     if path.exists() {
         let _ = fs::remove_file(path);
     }
 }
 
-fn write_sealed_json<T: Serialize>(path: &PathBuf, data: &T) -> bool {
+pub(crate) fn write_sealed_json<T: Serialize>(path: &PathBuf, data: &T) -> bool {
     if let Ok(json) = serde_json::to_string(data).map(|j| enc_str(&j)) {
         let tmp = path.with_extension("tmp");
         if fs::write(&tmp, json).is_ok() {
@@ -3313,19 +3313,19 @@ fn write_sealed_json<T: Serialize>(path: &PathBuf, data: &T) -> bool {
 // does not carry the caller's own extension (path.md -> path.tmp), so a filter that
 // only touches one specific extension (sync_sweep_orphans' ".md" check) leaves a
 // leftover temp file alone if the rename is ever interrupted.
-fn write_file_atomic(path: &Path, content: &str) -> bool {
+pub(crate) fn write_file_atomic(path: &Path, content: &str) -> bool {
     write_bytes_atomic(path, content.as_bytes())
 }
 
 // The same, for bytes that are not necessarily text (a conflict copy keeps a file
 // exactly as it was, whatever encoding an editor saved it in).
-fn write_bytes_atomic(path: &Path, content: &[u8]) -> bool {
+pub(crate) fn write_bytes_atomic(path: &Path, content: &[u8]) -> bool {
     let tmp = path.with_extension("tmp");
     fs::write(&tmp, content).is_ok() && fs::rename(&tmp, path).is_ok()
 }
 
 // Capitalise a brand word for a dialog title ("prompts" -> "Prompts").
-fn title_case(w: &str) -> String {
+pub(crate) fn title_case(w: &str) -> String {
     let mut c = w.chars();
     match c.next() {
         Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
@@ -3342,14 +3342,14 @@ fn title_case(w: &str) -> String {
 // same Windows account always decrypts; copied elsewhere it can't be read. Falls back to
 // plaintext if DPAPI is unavailable so data is never lost; legacy plaintext rows are
 // re-encrypted on the next save (see load_store).
-const ENC_PREFIX: &str = "enc:v1:";
+pub(crate) const ENC_PREFIX: &str = "enc:v1:";
 // A NUL byte can never occur in text a user actually typed or pasted, so it is
 // safe as an escape marker: the plaintext-fallback path below prepends it only
 // when the plaintext itself happens to start with ENC_PREFIX (or, recursively,
 // with this marker), so dec_str can tell "real ciphertext" from "plaintext that
 // coincidentally looks like the marker" instead of misreading the latter as
 // corrupt ciphertext and erasing it to "".
-const PLAINTEXT_ESCAPE: &str = "\u{0}";
+pub(crate) const PLAINTEXT_ESCAPE: &str = "\u{0}";
 
 #[cfg(windows)]
 mod store_crypt;
@@ -3367,7 +3367,7 @@ mod store_crypt;
 // from that point on. Clearing the flag on the first later success would tell the
 // user the problem is fully gone while old plaintext rows could still be sitting on
 // disk untouched; leaving it sticky for the rest of the session is the honest answer.
-static STORE_SEALED: AtomicBool = AtomicBool::new(true);
+pub(crate) static STORE_SEALED: AtomicBool = AtomicBool::new(true);
 // Set once the app handle exists; None while the store is still being loaded, which
 // is fine: no window exists yet to receive an event, and the flag above already
 // carries the state for the startup question.
@@ -3378,8 +3378,8 @@ static STORE_SEALED: AtomicBool = AtomicBool::new(true);
 // that has no webview beside it, which then fails to LOAD at all (every test
 // "fails" before one of them runs). Behind this indirection the emit lives in the
 // closure built in `run()`, which no test links.
-type SealNotifier = Arc<dyn Fn() + Send + Sync>;
-static SEAL_NOTIFY: Mutex<Option<SealNotifier>> = Mutex::new(None);
+pub(crate) type SealNotifier = Arc<dyn Fn() + Send + Sync>;
+pub(crate) static SEAL_NOTIFY: Mutex<Option<SealNotifier>> = Mutex::new(None);
 
 // Encrypt a JSON string for storage (prefix + base64 ciphertext).
 //
@@ -3399,10 +3399,10 @@ static SEAL_NOTIFY: Mutex<Option<SealNotifier>> = Mutex::new(None);
 // existed.
 #[cfg(test)]
 thread_local! {
-    static FORCE_PLAINTEXT_FALLBACK: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    pub(crate) static FORCE_PLAINTEXT_FALLBACK: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
-fn enc_str(plain: &str) -> String {
+pub(crate) fn enc_str(plain: &str) -> String {
     #[cfg(windows)]
     {
         #[cfg(test)]
@@ -3449,7 +3449,7 @@ fn store_sealed() -> bool {
 // Store.prompts_locked, but process-global rather than a Store field because
 // save_settings/write_settings_now are the one choke point every settings mutation
 // already funnels through, without a &Store to read a field from.
-static SETTINGS_LOCKED: AtomicBool = AtomicBool::new(false);
+pub(crate) static SETTINGS_LOCKED: AtomicBool = AtomicBool::new(false);
 
 #[tauri::command]
 fn settings_locked() -> bool {
@@ -3465,7 +3465,7 @@ fn settings_locked() -> bool {
 // event, which write_settings_now already emits with the "settings" payload --
 // no separate notifier plumbing needed here, unlike enc_str's SEAL_NOTIFY: this
 // function already takes an AppHandle directly, so it can just emit.
-static SETTINGS_WRITE_FAILED: AtomicBool = AtomicBool::new(false);
+pub(crate) static SETTINGS_WRITE_FAILED: AtomicBool = AtomicBool::new(false);
 
 #[tauri::command]
 fn settings_write_failed() -> bool {
@@ -3493,40 +3493,40 @@ fn settings_write_failed() -> bool {
 // functions below are the one choke point every prompt/settings write already
 // funnels through, the same way the prompts_locked valve already gates every
 // diff write path.
-const DATA_DIR_LOCK_FILE: &str = "datadir.lock.json";
-const DATA_DIR_LOCK_REFRESH_SECS: u64 = 30;
+pub(crate) const DATA_DIR_LOCK_FILE: &str = "datadir.lock.json";
+pub(crate) const DATA_DIR_LOCK_REFRESH_SECS: u64 = 30;
 // Three missed refreshes: long enough that one slow tick under load is never
 // mistaken for a crash, short enough that a real crash does not lock the other
 // machine out of its own data for long.
-const DATA_DIR_LOCK_STALE_SECS: u64 = DATA_DIR_LOCK_REFRESH_SECS * 3;
+pub(crate) const DATA_DIR_LOCK_STALE_SECS: u64 = DATA_DIR_LOCK_REFRESH_SECS * 3;
 
 #[derive(Serialize, Deserialize, Clone)]
-struct DataDirLockInfo {
-    host: String,
-    pid: u32,
-    seen: u64,
+pub(crate) struct DataDirLockInfo {
+    pub(crate) host: String,
+    pub(crate) pid: u32,
+    pub(crate) seen: u64,
 }
 
-fn unix_now() -> u64 {
+pub(crate) fn unix_now() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
 }
 
 // Windows always sets COMPUTERNAME for the logged-in session; a missing value
 // (never observed in practice) falls back to a label that still reads sensibly
 // in the read-only banner rather than an empty string.
-fn local_host_name() -> String {
+pub(crate) fn local_host_name() -> String {
     std::env::var("COMPUTERNAME").ok().filter(|s| !s.trim().is_empty()).unwrap_or_else(|| "this computer".to_string())
 }
 
-fn data_dir_lock_path(dir: &Path) -> PathBuf {
+pub(crate) fn data_dir_lock_path(dir: &Path) -> PathBuf {
     dir.join(DATA_DIR_LOCK_FILE)
 }
 
-fn read_data_dir_lock(path: &Path) -> Option<DataDirLockInfo> {
+pub(crate) fn read_data_dir_lock(path: &Path) -> Option<DataDirLockInfo> {
     serde_json::from_str(&fs::read_to_string(path).ok()?).ok()
 }
 
-fn write_data_dir_lock(path: &Path, info: &DataDirLockInfo) -> bool {
+pub(crate) fn write_data_dir_lock(path: &Path, info: &DataDirLockInfo) -> bool {
     serde_json::to_string(info).is_ok_and(|json| fs::write(path, json).is_ok())
 }
 
@@ -3534,16 +3534,16 @@ fn write_data_dir_lock(path: &Path, info: &DataDirLockInfo) -> bool {
 // crash-and-restart on the same computer is not the two-machine case this
 // guards against, and the single-instance plugin already rules out a genuine
 // second process here.
-fn lock_is_ours(existing: &DataDirLockInfo) -> bool {
+pub(crate) fn lock_is_ours(existing: &DataDirLockInfo) -> bool {
     existing.host == local_host_name()
 }
 
-fn lock_is_stale(existing: &DataDirLockInfo) -> bool {
+pub(crate) fn lock_is_stale(existing: &DataDirLockInfo) -> bool {
     unix_now().saturating_sub(existing.seen) >= DATA_DIR_LOCK_STALE_SECS
 }
 
-static DATA_DIR_READONLY: AtomicBool = AtomicBool::new(false);
-static DATA_DIR_LOCK_HOST: Mutex<Option<String>> = Mutex::new(None);
+pub(crate) static DATA_DIR_READONLY: AtomicBool = AtomicBool::new(false);
+pub(crate) static DATA_DIR_LOCK_HOST: Mutex<Option<String>> = Mutex::new(None);
 
 // Set by enable_demo_mode()/disable_demo_mode() once each has flushed
 // whatever it needs to flush and is about to flip the "datapath" redirect
@@ -3559,13 +3559,13 @@ static DATA_DIR_LOCK_HOST: Mutex<Option<String>> = Mutex::new(None);
 // the switch never actually completed. On success it is never cleared
 // explicitly: the process it belongs to is about to be replaced by
 // app.restart(), and the fresh process starts with the default `false` again.
-static DEMO_TRANSITION_LOCKED: AtomicBool = AtomicBool::new(false);
+pub(crate) static DEMO_TRANSITION_LOCKED: AtomicBool = AtomicBool::new(false);
 
 // Decides read-only vs. owned for `dir` and, if owned, claims it. Called once at
 // load_store() and again after set_data_dir() points the app at a different
 // folder. The `dataDirLock` toggle (default on) skips all of this when off,
 // restoring today's behaviour with no lock file and no read-only state.
-fn acquire_data_dir_lock(dir: &Path, enabled: bool) {
+pub(crate) fn acquire_data_dir_lock(dir: &Path, enabled: bool) {
     if !enabled {
         DATA_DIR_READONLY.store(false, Ordering::Relaxed);
         *DATA_DIR_LOCK_HOST.lock().unwrap_or_else(|e| e.into_inner()) = None;
@@ -3587,7 +3587,7 @@ fn acquire_data_dir_lock(dir: &Path, enabled: bool) {
 // The scheduler tick (see "data-dir-lock" in run()). A read-only process must
 // never touch this file -- it belongs to the other machine's session, and
 // overwriting it would erase the very lock this process is refusing to ignore.
-fn refresh_data_dir_lock(dir: &Path) {
+pub(crate) fn refresh_data_dir_lock(dir: &Path) {
     if DATA_DIR_READONLY.load(Ordering::Relaxed) {
         return;
     }
@@ -3596,9 +3596,9 @@ fn refresh_data_dir_lock(dir: &Path) {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct DataDirLockStatus {
-    read_only: bool,
-    other_host: Option<String>,
+pub(crate) struct DataDirLockStatus {
+    pub(crate) read_only: bool,
+    pub(crate) other_host: Option<String>,
 }
 
 // Polled once at startup (init(), the same shape as store_sealed/settings_locked)
@@ -3615,7 +3615,7 @@ fn data_dir_lock_status() -> DataDirLockStatus {
 // write_settings_now all call first: real refusal, not a silent no-op -- every
 // blocked write emits the same event with the same host name, so the window
 // can show the same clear message no matter which action triggered it.
-fn data_dir_write_blocked(app: &AppHandle) -> bool {
+pub(crate) fn data_dir_write_blocked(app: &AppHandle) -> bool {
     // No event emitted here (unlike the readonly case below): the window is
     // already on its way down for app.restart(), and this is not a condition
     // the user needs a banner about.
@@ -3635,7 +3635,7 @@ fn data_dir_write_blocked(app: &AppHandle) -> bool {
 // can rename in Explorer without moving the actual sync root), then the folder
 // name itself. Returns the provider's display name, or None for an ordinary
 // local folder.
-fn sync_folder_hint(path: &Path) -> Option<&'static str> {
+pub(crate) fn sync_folder_hint(path: &Path) -> Option<&'static str> {
     let lower = path.to_string_lossy().to_lowercase();
     for var in ["OneDriveCommercial", "OneDriveConsumer", "OneDrive"] {
         if let Some(root) = std::env::var_os(var) {
@@ -3673,7 +3673,7 @@ fn current_data_dir_sync_hint(app: AppHandle) -> Option<String> {
 // Decrypt a stored value. Legacy (un-prefixed) values pass through for migration; an
 // undecryptable prefixed value (e.g. another Windows account) yields "" so the row is
 // skipped rather than fed garbage to the JSON parser.
-fn dec_str(stored: &str) -> String {
+pub(crate) fn dec_str(stored: &str) -> String {
     if let Some(rest) = stored.strip_prefix(PLAINTEXT_ESCAPE) {
         return rest.to_string();
     }
@@ -3695,7 +3695,7 @@ fn dec_str(stored: &str) -> String {
 // Schema + migration probe for a data.db connection, run once per data folder and
 // process (see db_conn_at below). Returns false on any failure; db_conn_at then
 // fails closed for that call and tries again on the next one.
-fn db_conn_init_schema(conn: &Connection) -> bool {
+pub(crate) fn db_conn_init_schema(conn: &Connection) -> bool {
     if conn
         .execute_batch(
             "PRAGMA journal_mode=WAL;
@@ -3741,7 +3741,7 @@ fn db_conn_init_schema(conn: &Connection) -> bool {
     true
 }
 
-fn db_conn(app: &AppHandle) -> Option<Connection> {
+pub(crate) fn db_conn(app: &AppHandle) -> Option<Connection> {
     // The single choke point EVERY writer goes through, not just the four that
     // also call data_dir_write_blocked() (save_prompts/save_trash/
     // save_prompts_and_trash/write_settings_now): db_conn(app) is also called
@@ -3762,7 +3762,7 @@ fn db_conn(app: &AppHandle) -> Option<Connection> {
 // Split out of db_conn() so the command line's headless path (no AppHandle to
 // resolve a folder from) can open the exact same connection, with the exact
 // same pragma and one-time schema init, as every other caller.
-fn db_conn_at(dir: &Path) -> Option<Connection> {
+pub(crate) fn db_conn_at(dir: &Path) -> Option<Connection> {
     let conn = Connection::open(dir.join("data.db")).ok()?;
     // busy_timeout is connection-scoped (NOT persisted in the DB file, unlike
     // journal_mode below) so it must be set on every connection, but the schema
@@ -3804,14 +3804,14 @@ fn db_conn_at(dir: &Path) -> Option<Connection> {
 // swapped data.db, a raw DELETE, a move to a different data folder: must clear
 // the map (Store::forget_written_rows), or the next save trusts an entry that no
 // longer describes the disk and skips a row that really did need writing.
-type WrittenRows = HashMap<String, u64>;
+pub(crate) type WrittenRows = HashMap<String, u64>;
 
-fn row_key(table: &str, id: &str) -> String {
+pub(crate) fn row_key(table: &str, id: &str) -> String {
     // \u{1} cannot occur in a table name, so the two halves can never run together.
     format!("{table}\u{1}{id}")
 }
 
-fn row_hash(json: &str) -> u64 {
+pub(crate) fn row_hash(json: &str) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
     json.hash(&mut h);
@@ -3821,7 +3821,7 @@ fn row_hash(json: &str) -> u64 {
 // Two prompts sharing one id can only ever be a bug in the caller's list: writing
 // it would silently collapse them into a single row (and, with the old replace-all
 // write, hit the PRIMARY KEY instead). Reject the whole write, exactly as before.
-fn duplicate_row_id_error(table: &str) -> rusqlite::Error {
+pub(crate) fn duplicate_row_id_error(table: &str) -> rusqlite::Error {
     rusqlite::Error::SqliteFailure(
         rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_CONSTRAINT_PRIMARYKEY),
         Some(format!("duplicate id in {table}")),
@@ -3838,7 +3838,7 @@ fn duplicate_row_id_error(table: &str) -> rusqlite::Error {
 // Returns the map entries describing the rows as they now stand. The caller adopts
 // them only after its COMMIT actually succeeded, so a rolled-back or failed write
 // never leaves the process believing a row reached the disk.
-fn write_rows(
+pub(crate) fn write_rows(
     tx: &Transaction,
     table: &str,
     rows: &[Prompt],
@@ -3907,13 +3907,13 @@ fn write_rows(
 }
 
 // Swap in one table's half of the map, after that table's write committed.
-fn adopt_written_rows(written: &mut WrittenRows, table: &str, fresh: WrittenRows) {
+pub(crate) fn adopt_written_rows(written: &mut WrittenRows, table: &str, fresh: WrittenRows) {
     let prefix = row_key(table, "");
     written.retain(|k, _| !k.starts_with(&prefix));
     written.extend(fresh);
 }
 
-fn db_write_prompts(conn: &mut Connection, prompts: &[Prompt], written: &mut WrittenRows) -> rusqlite::Result<()> {
+pub(crate) fn db_write_prompts(conn: &mut Connection, prompts: &[Prompt], written: &mut WrittenRows) -> rusqlite::Result<()> {
     let tx = conn.transaction()?;
     let fresh = write_rows(&tx, "prompts", prompts, written)?;
     tx.commit()?;
@@ -3927,7 +3927,7 @@ fn db_write_prompts(conn: &mut Connection, prompts: &[Prompt], written: &mut Wri
 // duplicate finder...) stays correct with zero changes: the alternative, a
 // deleted_at flag on Prompt filtered everywhere, would have needed every one of
 // those call sites found and fixed, with real risk of missing one.
-fn db_write_trash(conn: &mut Connection, trash: &[Prompt], written: &mut WrittenRows) -> rusqlite::Result<()> {
+pub(crate) fn db_write_trash(conn: &mut Connection, trash: &[Prompt], written: &mut WrittenRows) -> rusqlite::Result<()> {
     let tx = conn.transaction()?;
     let fresh = write_rows(&tx, "trash", trash, written)?;
     tx.commit()?;
@@ -3940,7 +3940,7 @@ fn db_write_trash(conn: &mut Connection, trash: &[Prompt], written: &mut Written
 // pair) left a window where the first commit could durably land while the second
 // failed, stranding the prompt in neither table. One transaction for both DELETE+
 // INSERT pairs means either the whole move lands or neither half does.
-fn db_write_prompts_and_trash(
+pub(crate) fn db_write_prompts_and_trash(
     conn: &mut Connection,
     prompts: &[Prompt],
     trash: &[Prompt],
@@ -3959,7 +3959,7 @@ fn db_write_prompts_and_trash(
 // land in one transaction, so either both are on disk or neither is. Two
 // separate commits could leave one half imported while the command reported a
 // failure.
-fn db_write_prompts_and_settings(
+pub(crate) fn db_write_prompts_and_settings(
     conn: &mut Connection,
     prompts: &[Prompt],
     settings: &Settings,
@@ -3983,7 +3983,7 @@ fn db_write_prompts_and_settings(
 // parse, is present-but-unaccounted-for, not simply absent: the caller must
 // fold it into the same write-lock decision as db_load's own failures, or a
 // trash mutation could permanently erase whatever this omitted.
-fn db_load_trash(conn: &Connection, written: &mut WrittenRows) -> (Vec<Prompt>, usize) {
+pub(crate) fn db_load_trash(conn: &Connection, written: &mut WrittenRows) -> (Vec<Prompt>, usize) {
     let mut trash = Vec::new();
     let mut failures = 0usize;
     match conn.prepare("SELECT data FROM trash ORDER BY ord") {
@@ -4021,7 +4021,7 @@ fn db_load_trash(conn: &Connection, written: &mut WrittenRows) -> (Vec<Prompt>, 
     (trash, failures)
 }
 
-fn db_write_settings(conn: &Connection, settings: &Settings) -> rusqlite::Result<()> {
+pub(crate) fn db_write_settings(conn: &Connection, settings: &Settings) -> rusqlite::Result<()> {
     let json = enc_str(&serde_json::to_string(settings).unwrap_or_default());
     conn.execute(
         "INSERT INTO meta(key, value) VALUES('settings', ?1)
@@ -4038,7 +4038,7 @@ fn db_write_settings(conn: &Connection, settings: &Settings) -> rusqlite::Result
 // every one of them means the true prompt count is NOT known to be what this
 // function returned, so the caller must avoid any destructive rewrite of the
 // prompts table rather than treat a partial result as the whole truth.
-fn db_load(conn: &Connection, written: &mut WrittenRows) -> (Vec<Prompt>, Option<Settings>, bool, usize, bool) {
+pub(crate) fn db_load(conn: &Connection, written: &mut WrittenRows) -> (Vec<Prompt>, Option<Settings>, bool, usize, bool) {
     let mut prompts = Vec::new();
     let mut plaintext = false; // any legacy unencrypted row → re-save once to encrypt
     let mut failures = 0usize;
@@ -4112,7 +4112,7 @@ fn db_load(conn: &Connection, written: &mut WrittenRows) -> (Vec<Prompt>, Option
 // default_data_dir()'s portable/APPDATA resolution and opens the DB directly. Any
 // failure (first run, missing DB, undecryptable row) yields false: single instance,
 // the safe default that matches every install before this option existed.
-fn early_allow_multiple_instances() -> bool {
+pub(crate) fn early_allow_multiple_instances() -> bool {
     let dir = if is_portable() {
         portable_data_dir()
     } else {
@@ -4136,7 +4136,7 @@ fn early_allow_multiple_instances() -> bool {
 
 // Whether any copy-history row exists; an unreadable table counts as yes, so an
 // unsure case is treated as an existing install.
-fn copy_log_has_rows(conn: &Connection) -> bool {
+pub(crate) fn copy_log_has_rows(conn: &Connection) -> bool {
     conn.query_row("SELECT EXISTS(SELECT 1 FROM copy_log)", [], |r| r.get::<_, i64>(0))
         .map(|v| v != 0)
         .unwrap_or(true)
@@ -4151,7 +4151,7 @@ fn copy_log_has_rows(conn: &Connection) -> bool {
 // kept are exactly those with rowid in (MAX-cap, MAX], i.e. at most `cap`, and
 // age-prune only ever deletes from the old (low-rowid) end, so the kept block
 // stays a contiguous newest-N: the cap can never be exceeded.
-fn db_trim_copy(conn: &Connection, cap: usize, cutoff: Option<u64>) -> rusqlite::Result<()> {
+pub(crate) fn db_trim_copy(conn: &Connection, cap: usize, cutoff: Option<u64>) -> rusqlite::Result<()> {
     if cap == 0 {
         conn.execute("DELETE FROM copy_log", [])?;
         return Ok(());
@@ -4166,7 +4166,7 @@ fn db_trim_copy(conn: &Connection, cap: usize, cutoff: Option<u64>) -> rusqlite:
     Ok(())
 }
 
-fn db_append_copy(conn: &Connection, entry: &CopyEntry, cap: usize, cutoff: Option<u64>) -> rusqlite::Result<()> {
+pub(crate) fn db_append_copy(conn: &Connection, entry: &CopyEntry, cap: usize, cutoff: Option<u64>) -> rusqlite::Result<()> {
     conn.execute("INSERT INTO copy_log(ts, id) VALUES(?1, ?2)", params![entry.ts as i64, entry.id])?;
     db_trim_copy(conn, cap, cutoff)
 }
@@ -4175,16 +4175,16 @@ fn db_append_copy(conn: &Connection, entry: &CopyEntry, cap: usize, cutoff: Opti
 // legacy-migration only), this carries the rowid a delete needs to target the exact
 // row, even in grouped mode where several rows share the same prompt id.
 #[derive(Serialize)]
-struct JournalEntry {
-    rowid: i64,
-    id: String,
-    ts: u64,
+pub(crate) struct JournalEntry {
+    pub(crate) rowid: i64,
+    pub(crate) id: String,
+    pub(crate) ts: u64,
 }
 
 // Copy counts for the last `days` UTC days, oldest first, zero-filled: a
 // single GROUP BY query bucketed by day-since-epoch, merged against a dense day
 // range in Rust (cheaper than one query per day, and never skips an empty day).
-fn db_daily_copies(conn: &Connection, days: u32) -> Vec<DayCount> {
+pub(crate) fn db_daily_copies(conn: &Connection, days: u32) -> Vec<DayCount> {
     const DAY: u64 = 86400;
     let today_bucket = now_secs() / DAY;
     let start_bucket = today_bucket.saturating_sub(days as u64 - 1);
@@ -4206,7 +4206,7 @@ fn db_daily_copies(conn: &Connection, days: u32) -> Vec<DayCount> {
 
 // Newest copy events for the journal. grouped = one row per prompt (its most
 // recent copy); otherwise every event. Capped so the UI never renders millions.
-fn db_recent_copies(conn: &Connection, limit: usize, grouped: bool) -> Vec<JournalEntry> {
+pub(crate) fn db_recent_copies(conn: &Connection, limit: usize, grouped: bool) -> Vec<JournalEntry> {
     let sql = if grouped {
         // The whole newest row per prompt, not MAX(rowid) beside an independently
         // computed MAX(ts): two aggregates are evaluated separately, so the row id
@@ -4233,32 +4233,32 @@ fn db_recent_copies(conn: &Connection, limit: usize, grouped: bool) -> Vec<Journ
 // Snapshots of a prompt's previous name/text, encrypted like the prompt rows. The
 // table lives in data.db (not the settings blob) so history never bloats settings.
 #[derive(Serialize)]
-struct PromptVersion {
-    id: i64,
-    ts: u64,
-    name: String,
-    text: String,
+pub(crate) struct PromptVersion {
+    pub(crate) id: i64,
+    pub(crate) ts: u64,
+    pub(crate) name: String,
+    pub(crate) text: String,
     // Entries ARE content: a version snapshot without them would let a
     // restore silently drop entries 2..n. JSON-encoded in its own DB column
     // (unlike the export formats, nothing here needs to stay human-editable).
-    variants: Vec<String>,
+    pub(crate) variants: Vec<String>,
 }
 
-fn encode_variants(variants: &[String]) -> String {
+pub(crate) fn encode_variants(variants: &[String]) -> String {
     serde_json::to_string(variants).unwrap_or_default()
 }
-fn decode_variants(raw: &str) -> Vec<String> {
+pub(crate) fn decode_variants(raw: &str) -> Vec<String> {
     serde_json::from_str(raw).unwrap_or_default()
 }
 
-fn history_enabled(settings: &Settings) -> bool {
+pub(crate) fn history_enabled(settings: &Settings) -> bool {
     settings.ui_flags.get("promptHistory") != Some(&false) // on by default
 }
-fn history_cap(settings: &Settings) -> usize {
+pub(crate) fn history_cap(settings: &Settings) -> usize {
     settings.ui_values.get("historyPerPrompt").copied().unwrap_or(20.0).clamp(5.0, 100.0) as usize
 }
 
-fn db_add_version(conn: &Connection, prompt_id: &str, ts: u64, name: &str, text: &str, variants: &[String], cap: usize) -> rusqlite::Result<()> {
+pub(crate) fn db_add_version(conn: &Connection, prompt_id: &str, ts: u64, name: &str, text: &str, variants: &[String], cap: usize) -> rusqlite::Result<()> {
     conn.execute(
         "INSERT INTO prompt_versions(prompt_id, ts, name, text, variants) VALUES(?1, ?2, ?3, ?4, ?5)",
         params![prompt_id, ts as i64, enc_str(name), enc_str(text), enc_str(&encode_variants(variants))],
@@ -4271,7 +4271,7 @@ fn db_add_version(conn: &Connection, prompt_id: &str, ts: u64, name: &str, text:
     )?;
     Ok(())
 }
-fn db_list_versions(conn: &Connection, prompt_id: &str) -> Vec<PromptVersion> {
+pub(crate) fn db_list_versions(conn: &Connection, prompt_id: &str) -> Vec<PromptVersion> {
     let mut out = Vec::new();
     if let Ok(mut stmt) = conn.prepare("SELECT id, ts, name, text, variants FROM prompt_versions WHERE prompt_id = ?1 ORDER BY id DESC") {
         if let Ok(rows) = stmt.query_map(params![prompt_id], |r| {
@@ -4293,7 +4293,7 @@ fn db_list_versions(conn: &Connection, prompt_id: &str) -> Vec<PromptVersion> {
 // prompt_versions. Bundled for every prompt at once (one GROUP BY, not an N+1
 // query per prompt): a prompt absent from the result has never had a version
 // row: history was off for all its edits, or it was never edited since creation.
-fn db_last_edited(conn: &Connection) -> std::collections::HashMap<String, u64> {
+pub(crate) fn db_last_edited(conn: &Connection) -> std::collections::HashMap<String, u64> {
     let mut out = std::collections::HashMap::new();
     if let Ok(mut stmt) = conn.prepare("SELECT prompt_id, MAX(ts) FROM prompt_versions GROUP BY prompt_id") {
         if let Ok(rows) = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)? as u64))) {
@@ -4302,7 +4302,7 @@ fn db_last_edited(conn: &Connection) -> std::collections::HashMap<String, u64> {
     }
     out
 }
-fn db_get_version(conn: &Connection, id: i64) -> Option<(String, String, String, Vec<String>)> {
+pub(crate) fn db_get_version(conn: &Connection, id: i64) -> Option<(String, String, String, Vec<String>)> {
     conn.query_row(
         "SELECT prompt_id, name, text, variants FROM prompt_versions WHERE id = ?1",
         params![id],
@@ -4320,11 +4320,11 @@ fn db_get_version(conn: &Connection, id: i64) -> Option<(String, String, String,
 // themselves could not be decrypted. Returns the number of rows removed.
 // The orphan sweep deletes rows: never in a read-only instance (the store belongs
 // to another machine) and never while a JSON fallback still holds prompts.
-fn version_sweep_allowed(dir: &Path, read_only: bool) -> bool {
+pub(crate) fn version_sweep_allowed(dir: &Path, read_only: bool) -> bool {
     !read_only && !dir.join("prompts.json").exists()
 }
 
-fn db_sweep_orphan_versions(conn: &Connection) -> usize {
+pub(crate) fn db_sweep_orphan_versions(conn: &Connection) -> usize {
     match conn.execute(
         "DELETE FROM prompt_versions WHERE prompt_id NOT IN (SELECT id FROM prompts UNION SELECT id FROM trash)",
         [],
@@ -4336,7 +4336,7 @@ fn db_sweep_orphan_versions(conn: &Connection) -> usize {
         }
     }
 }
-fn db_delete_versions(conn: &Connection, prompt_id: &str) {
+pub(crate) fn db_delete_versions(conn: &Connection, prompt_id: &str) {
     // Called from a PERMANENT purge -- the prompt is meant to be entirely gone,
     // so a failure here silently leaving its text behind in prompt_versions is
     // a privacy gap, not just clutter.
@@ -4347,12 +4347,12 @@ fn db_delete_versions(conn: &Connection, prompt_id: &str) {
 
 // ---- Clipboard watcher ----
 #[derive(Serialize)]
-struct ClipItem {
-    id: i64,
-    ts: u64,
-    text: String,
+pub(crate) struct ClipItem {
+    pub(crate) id: i64,
+    pub(crate) ts: u64,
+    pub(crate) text: String,
 }
-fn text_hash(s: &str) -> u64 {
+pub(crate) fn text_hash(s: &str) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
     s.hash(&mut h);
@@ -4363,11 +4363,11 @@ fn text_hash(s: &str) -> u64 {
 // can tell whether the user has since made one their own. Mirrors SlimPrompt's own
 // image_rev (0 for no image, otherwise a hash of the image bytes) rather than a
 // separate stored field.
-fn example_seed_fingerprint(name: &str, text: &str, image: &str) -> u64 {
+pub(crate) fn example_seed_fingerprint(name: &str, text: &str, image: &str) -> u64 {
     let image_rev = if image.is_empty() { 0 } else { text_hash(image) };
     text_hash(&format!("{name}\u{0}{text}\u{0}{image_rev}"))
 }
-fn db_add_clip(conn: &Connection, ts: u64, text: &str, cap: usize) -> rusqlite::Result<()> {
+pub(crate) fn db_add_clip(conn: &Connection, ts: u64, text: &str, cap: usize) -> rusqlite::Result<()> {
     conn.execute("INSERT INTO clip_inbox(ts, text) VALUES(?1, ?2)", params![ts as i64, enc_str(text)])?;
     conn.execute(
         "DELETE FROM clip_inbox WHERE id <= (SELECT MAX(id) FROM clip_inbox) - ?1",
@@ -4375,7 +4375,7 @@ fn db_add_clip(conn: &Connection, ts: u64, text: &str, cap: usize) -> rusqlite::
     )?;
     Ok(())
 }
-fn db_list_clips(conn: &Connection) -> Vec<ClipItem> {
+pub(crate) fn db_list_clips(conn: &Connection) -> Vec<ClipItem> {
     let mut out = Vec::new();
     if let Ok(mut stmt) = conn.prepare("SELECT id, ts, text FROM clip_inbox ORDER BY id DESC") {
         if let Ok(rows) = stmt.query_map([], |r| {
@@ -4394,7 +4394,7 @@ fn db_list_clips(conn: &Connection) -> Vec<ClipItem> {
 // attachment that got deleted during the session restored from trash with a
 // bare, unresolvable filename), so it can be unit tested directly without an
 // AppHandle, the same way strip_data_dir_prefix already is.
-fn resolve_relative_file_paths(dir: &Path, rows: &mut [Prompt]) {
+pub(crate) fn resolve_relative_file_paths(dir: &Path, rows: &mut [Prompt]) {
     for p in rows.iter_mut() {
         if !p.file_path.is_empty() && Path::new(&p.file_path).is_relative() {
             p.file_path = dir.join(&p.file_path).to_string_lossy().to_string();
@@ -4429,11 +4429,11 @@ fn resolve_relative_file_paths(dir: &Path, rows: &mut [Prompt]) {
 // The exact-path check strip_data_dir_prefix's own comment explains: never a
 // folder-name guess, always the live data dir compared against exactly where
 // demo mode's own redirect would have pointed it.
-fn data_dir_is_demo(app: &AppHandle, dir: &Path) -> bool {
+pub(crate) fn data_dir_is_demo(app: &AppHandle, dir: &Path) -> bool {
     dir == default_data_dir(app).join(DEMO_SUBFOLDER)
 }
 
-fn strip_data_dir_prefix<'a>(dir: &Path, is_demo: bool, prompts: &'a [Prompt]) -> std::borrow::Cow<'a, [Prompt]> {
+pub(crate) fn strip_data_dir_prefix<'a>(dir: &Path, is_demo: bool, prompts: &'a [Prompt]) -> std::borrow::Cow<'a, [Prompt]> {
     if !is_demo {
         return std::borrow::Cow::Borrowed(prompts);
     }
@@ -4455,7 +4455,7 @@ fn strip_data_dir_prefix<'a>(dir: &Path, is_demo: bool, prompts: &'a [Prompt]) -
 // callers that follow a save with a destructive step (deleting an orphaned
 // attachment file) must skip that step when this is false, or the deletion can
 // outlive the very change that made the file orphaned.
-fn save_prompts(app: &AppHandle, store: &Store) -> bool {
+pub(crate) fn save_prompts(app: &AppHandle, store: &Store) -> bool {
     if data_dir_write_blocked(app) {
         return false;
     }
@@ -4495,7 +4495,7 @@ fn save_prompts(app: &AppHandle, store: &Store) -> bool {
     true
 }
 
-fn save_trash(app: &AppHandle, store: &Store) -> bool {
+pub(crate) fn save_trash(app: &AppHandle, store: &Store) -> bool {
     if data_dir_write_blocked(app) {
         return false;
     }
@@ -4520,7 +4520,7 @@ fn save_trash(app: &AppHandle, store: &Store) -> bool {
 // The atomic counterpart to save_prompts+save_trash for delete_prompt/
 // restore_prompt - see db_write_prompts_and_trash for why the two tables can no
 // longer be saved as two separate commits for a single move.
-fn save_prompts_and_trash(app: &AppHandle, store: &Store) -> bool {
+pub(crate) fn save_prompts_and_trash(app: &AppHandle, store: &Store) -> bool {
     if data_dir_write_blocked(app) {
         return false;
     }
@@ -4552,7 +4552,7 @@ fn save_prompts_and_trash(app: &AppHandle, store: &Store) -> bool {
 // (instead of nothing) plus the same persist-failed event lets the existing
 // frontend listener cover all of this function's callers for free instead of
 // the setting silently reverting, unexplained, on the next restart.
-fn save_settings(app: &AppHandle, settings: &Settings) -> bool {
+pub(crate) fn save_settings(app: &AppHandle, settings: &Settings) -> bool {
     let _writing = settings_write_lock();
     // A full write covers whatever was collected: the counters live in this same
     // block, so once it is on disk nothing is owed any more.
@@ -4562,7 +4562,7 @@ fn save_settings(app: &AppHandle, settings: &Settings) -> bool {
 
 // The write itself, without the "cancel a collected write" step: the collecting
 // path below calls this one so it does not clear its own mark twice.
-fn write_settings_now(app: &AppHandle, settings: &Settings) -> bool {
+pub(crate) fn write_settings_now(app: &AppHandle, settings: &Settings) -> bool {
     if data_dir_write_blocked(app) {
         return false;
     }
@@ -4617,41 +4617,41 @@ fn write_settings_now(app: &AppHandle, settings: &Settings) -> bool {
 // setting the user just changed. Everything the user edits still writes through
 // immediately, and every orderly exit, Windows session end, backup, export,
 // import, reset and data-folder move flushes what is owed before it goes on.
-const SETTINGS_QUIET_MS: u64 = 1000;
+pub(crate) const SETTINGS_QUIET_MS: u64 = 1000;
 // How often the timer thread looks at the mark. Finer than the quiet window so
 // the write lands just behind it rather than a whole window late; a round with
 // nothing owed is one uncontended mutex and no disk access at all.
-const SETTINGS_FLUSH_TICK_MS: u64 = 250;
+pub(crate) const SETTINGS_FLUSH_TICK_MS: u64 = 250;
 
 // Marked = a settings write is owed, at the instant the mark was set. Every
 // later mark within the quiet window pushes the write further out, so a burst of
 // copies collapses into one write rather than one per copy.
-struct SettingsDelay {
-    marked: Mutex<Option<std::time::Instant>>,
-    quiet: Mutex<Duration>,
+pub(crate) struct SettingsDelay {
+    pub(crate) marked: Mutex<Option<std::time::Instant>>,
+    pub(crate) quiet: Mutex<Duration>,
 }
 
 impl SettingsDelay {
-    const fn new(quiet_ms: u64) -> Self {
+    pub(crate) const fn new(quiet_ms: u64) -> Self {
         SettingsDelay {
             marked: Mutex::new(None),
             quiet: Mutex::new(Duration::from_millis(quiet_ms)),
         }
     }
 
-    fn mark(&self) {
+    pub(crate) fn mark(&self) {
         *self.marked.lock().unwrap_or_else(|e| e.into_inner()) = Some(std::time::Instant::now());
     }
 
     // Is anything owed at all? Cheap enough for the idle tick to ask every round.
-    fn owed(&self) -> bool {
+    pub(crate) fn owed(&self) -> bool {
         self.marked.lock().unwrap_or_else(|e| e.into_inner()).is_some()
     }
 
     // The ONE place that decides whether a collected write happens, so the number
     // of `true` answers is exactly the number of disk writes on this path.
     // `force` skips the quiet window: an exit or a backup cannot wait it out.
-    fn take(&self, force: bool) -> bool {
+    pub(crate) fn take(&self, force: bool) -> bool {
         let quiet = *self.quiet.lock().unwrap_or_else(|e| e.into_inner());
         let mut marked = self.marked.lock().unwrap_or_else(|e| e.into_inner());
         match *marked {
@@ -4664,32 +4664,32 @@ impl SettingsDelay {
     }
 
     // An immediate write of the same block has just happened: nothing left owed.
-    fn discard(&self) {
+    pub(crate) fn discard(&self) {
         *self.marked.lock().unwrap_or_else(|e| e.into_inner()) = None;
     }
 }
 
-static SETTINGS_DELAY: SettingsDelay = SettingsDelay::new(SETTINGS_QUIET_MS);
+pub(crate) static SETTINGS_DELAY: SettingsDelay = SettingsDelay::new(SETTINGS_QUIET_MS);
 
 // Serializes the writes themselves, so a collected write started on the timer
 // thread can never land on top of a newer immediate one. Lock order is always
 // the store lock first, this one second: nothing under this lock ever takes it.
-static SETTINGS_WRITE: Mutex<()> = Mutex::new(());
+pub(crate) static SETTINGS_WRITE: Mutex<()> = Mutex::new(());
 
-fn settings_write_lock() -> std::sync::MutexGuard<'static, ()> {
+pub(crate) fn settings_write_lock() -> std::sync::MutexGuard<'static, ()> {
     SETTINGS_WRITE.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 // A counter/pointer change: already correct in memory, worth one disk write per
 // quiet second instead of one per copy. The caller must have updated
 // store.settings before calling this.
-fn save_settings_soon() {
+pub(crate) fn save_settings_soon() {
     SETTINGS_DELAY.mark();
 }
 
 // Write a collected change out now. `settings` is the live block, which the
 // caller already holds under the store lock.
-fn flush_settings(app: &AppHandle, settings: &Settings) {
+pub(crate) fn flush_settings(app: &AppHandle, settings: &Settings) {
     let _writing = settings_write_lock();
     if SETTINGS_DELAY.take(true) {
         write_settings_now(app, settings);
@@ -4697,7 +4697,7 @@ fn flush_settings(app: &AppHandle, settings: &Settings) {
 }
 
 // Same, for a caller that does not hold the store lock itself.
-fn flush_settings_now(app: &AppHandle) {
+pub(crate) fn flush_settings_now(app: &AppHandle) {
     if !SETTINGS_DELAY.owed() {
         return;
     }
@@ -4708,7 +4708,7 @@ fn flush_settings_now(app: &AppHandle) {
 }
 
 // One round of the timer thread's flush job.
-fn settings_flush_tick(app: &AppHandle) {
+pub(crate) fn settings_flush_tick(app: &AppHandle) {
     if !SETTINGS_DELAY.owed() {
         return;
     }
@@ -4724,7 +4724,7 @@ fn settings_flush_tick(app: &AppHandle) {
 
 // Pre-1.9 builds saved image prompts without copy_image but copied on click.
 // The self-filling placeholder names, kept in step with DYN_VARS in ui/main.js.
-const DYN_NAMES: [&str; 16] = [
+pub(crate) const DYN_NAMES: [&str; 16] = [
     "date", "time", "datetime", "weekday", "yesterday", "tomorrow", "week", "month",
     "year", "timestamp", "epoch", "clipboard", "username", "uuid", "random", "counter",
 ];
@@ -4732,7 +4732,7 @@ const DYN_NAMES: [&str; 16] = [
 // Reserved names are now written {#{/date\}#} instead of {#{date}#}, which frees the
 // plain word for a variable of the user's own. Rewrite the old spelling so an existing
 // prompt keeps filling itself in. Idempotent: the new form no longer matches.
-fn fence_dyn_vars(text: &str) -> String {
+pub(crate) fn fence_dyn_vars(text: &str) -> String {
     if !text.contains("{#{") {
         return text.to_string();
     }
@@ -4746,7 +4746,7 @@ fn fence_dyn_vars(text: &str) -> String {
     out
 }
 
-fn migrate_prompts(prompts: &mut [Prompt]) {
+pub(crate) fn migrate_prompts(prompts: &mut [Prompt]) {
     // `id` is the prompts table's PRIMARY KEY, so a duplicate makes the whole
     // DELETE+INSERT rewrite fail: and save_prompts then quietly writes the JSON
     // fallback that the database path ignores, so the import looks like it worked and
@@ -4770,7 +4770,7 @@ fn migrate_prompts(prompts: &mut [Prompt]) {
     }
 }
 
-fn load_store(app: &AppHandle) -> Store {
+pub(crate) fn load_store(app: &AppHandle) -> Store {
     let dir = data_dir(app);
     if let Some(mut conn) = db_conn(app) {
         // Filled from the rows as they are read, so the first save of the session
@@ -5013,7 +5013,7 @@ fn load_store(app: &AppHandle) -> Store {
 
 // The `dataDirLock` toggle (default on) -- same "absent/true = on, explicit
 // false = off" convention as colorPicker and the other default-on flags.
-fn data_dir_lock_enabled(settings: &Settings) -> bool {
+pub(crate) fn data_dir_lock_enabled(settings: &Settings) -> bool {
     settings.ui_flags.get("dataDirLock") != Some(&false)
 }
 
@@ -5023,7 +5023,7 @@ fn data_dir_lock_enabled(settings: &Settings) -> bool {
 // There is no second source to fall back to on this path, so an unreadable file
 // must lock writes (like load_store's decrypt_fails case) rather than silently
 // present (and then save) an empty store.
-fn load_store_from_json(dir: &Path) -> Store {
+pub(crate) fn load_store_from_json(dir: &Path) -> Store {
     let mut unreadable = false;
     let mut settings_missing = false;
     let mut settings = match read_sealed_json::<Settings>(&dir.join("settings.json")) {
@@ -5089,7 +5089,7 @@ fn load_store_from_json(dir: &Path) -> Store {
     }
 }
 
-fn gen_id() -> String {
+pub(crate) fn gen_id() -> String {
     // nanos give cross-restart uniqueness; the per-process counter prevents
     // collisions when many ids are minted in the same tick (e.g. bulk import).
     static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -5101,7 +5101,7 @@ fn gen_id() -> String {
     format!("p{}_{}", nanos, seq)
 }
 
-fn lock<'a>(state: &'a State<'a, Db>) -> std::sync::MutexGuard<'a, Store> {
+pub(crate) fn lock<'a>(state: &'a State<'a, Db>) -> std::sync::MutexGuard<'a, Store> {
     state.lock().unwrap_or_else(|e| e.into_inner())
 }
 
@@ -5109,19 +5109,19 @@ fn lock<'a>(state: &'a State<'a, Db>) -> std::sync::MutexGuard<'a, Store> {
 
 // Every theme that has its own rules in main.css. "system" is not in here: it
 // resolves to light/dark at runtime, and it is not a valid custom-theme base.
-const BUILTIN_THEMES: [&str; 7] =
+pub(crate) const BUILTIN_THEMES: [&str; 7] =
     ["light", "dark", "programmer", "neon", "ocean", "cyberpunk", "mono"];
 // The colour variables a custom theme may override: the `:root` colour tokens of
 // main.css. Everything else (shadow, radius, timings) stays with the base theme.
-const THEME_VAR_KEYS: [&str; 9] = [
+pub(crate) const THEME_VAR_KEYS: [&str; 9] = [
     "bg", "surface", "surface-2", "fg", "muted", "border", "accent", "accent-fg", "danger",
 ];
-const MAX_THEME_NAME: usize = 40;
+pub(crate) const MAX_THEME_NAME: usize = 40;
 // Hard ceiling for the user-configurable limit (expert value `customThemeMax`).
-const MAX_CUSTOM_THEMES: usize = 20;
-const DEFAULT_CUSTOM_THEMES: usize = 8;
+pub(crate) const MAX_CUSTOM_THEMES: usize = 20;
+pub(crate) const DEFAULT_CUSTOM_THEMES: usize = 8;
 
-fn custom_theme_cap(settings: &Settings) -> usize {
+pub(crate) fn custom_theme_cap(settings: &Settings) -> usize {
     let raw = settings
         .ui_values
         .get("customThemeMax")
@@ -5131,7 +5131,7 @@ fn custom_theme_cap(settings: &Settings) -> usize {
     (raw.round() as i64).clamp(1, MAX_CUSTOM_THEMES as i64) as usize
 }
 
-fn valid_theme_name(name: &str) -> Result<String, String> {
+pub(crate) fn valid_theme_name(name: &str) -> Result<String, String> {
     let name = name.trim();
     if name.is_empty() {
         return Err("theme name is empty".to_string());
@@ -5147,7 +5147,7 @@ fn valid_theme_name(name: &str) -> Result<String, String> {
 
 // A custom theme may only inherit from a built-in one: never from another custom
 // theme, so inheritance can never chain or form a cycle.
-fn valid_theme_base(base: &str) -> Result<String, String> {
+pub(crate) fn valid_theme_base(base: &str) -> Result<String, String> {
     let base = base.trim();
     if BUILTIN_THEMES.contains(&base) {
         Ok(base.to_string())
@@ -5158,7 +5158,7 @@ fn valid_theme_base(base: &str) -> Result<String, String> {
 
 // Keep the known colour tokens with a valid #rrggbb value; an empty value means
 // "not overridden" and is dropped rather than stored.
-fn valid_theme_vars(vars: &HashMap<String, String>) -> Result<HashMap<String, String>, String> {
+pub(crate) fn valid_theme_vars(vars: &HashMap<String, String>) -> Result<HashMap<String, String>, String> {
     let mut out = HashMap::new();
     for (key, value) in vars {
         if !THEME_VAR_KEYS.contains(&key.as_str()) {
@@ -5174,7 +5174,7 @@ fn valid_theme_vars(vars: &HashMap<String, String>) -> Result<HashMap<String, St
 
 // Resolve a stored preference to a theme with real CSS rules: a custom theme
 // renders as its base plus the overridden variables.
-fn theme_base_of(settings: &Settings, pref: &str) -> String {
+pub(crate) fn theme_base_of(settings: &Settings, pref: &str) -> String {
     match pref.strip_prefix("custom:") {
         Some(id) => settings
             .custom_themes
@@ -5189,7 +5189,7 @@ fn theme_base_of(settings: &Settings, pref: &str) -> String {
 // A theme that was dropped from the product (or a hand-edited settings file) must
 // not leave the app with no colour tokens at all: an unknown name resolves to the
 // default, exactly like a missing one.
-fn known_theme(name: &str) -> String {
+pub(crate) fn known_theme(name: &str) -> String {
     if name == "system" || BUILTIN_THEMES.contains(&name) {
         name.to_string()
     } else {
@@ -5199,7 +5199,7 @@ fn known_theme(name: &str) -> String {
 
 // Variable overrides of the active theme, or nothing at all: switching the feature
 // off in the expert menu parks the custom themes without deleting them.
-fn theme_vars_of(settings: &Settings) -> HashMap<String, String> {
+pub(crate) fn theme_vars_of(settings: &Settings) -> HashMap<String, String> {
     if settings.ui_flags.get("customThemes") != Some(&true) {
         return HashMap::new();
     }
@@ -5212,18 +5212,18 @@ fn theme_vars_of(settings: &Settings) -> HashMap<String, String> {
 }
 
 #[derive(Serialize, Clone)]
-struct InkPrefs {
-    auto: bool,
-    threshold: f64,
-    halo: bool,
+pub(crate) struct InkPrefs {
+    pub(crate) auto: bool,
+    pub(crate) threshold: f64,
+    pub(crate) halo: bool,
     #[serde(rename = "haloStrength")]
-    halo_strength: f64,
+    pub(crate) halo_strength: f64,
 }
 
 // Expert-tunable ink rule for text on coloured areas (tiles, folders, view tabs,
 // toasts, floating pills): same clamp pattern as tray_label_max, an absent or
 // out-of-range stored value falls back to the shipped default.
-fn ink_prefs_of(settings: &Settings) -> InkPrefs {
+pub(crate) fn ink_prefs_of(settings: &Settings) -> InkPrefs {
     InkPrefs {
         auto: settings.ui_flags.get("autoInk") != Some(&false), // on by default
         threshold: settings.ui_values.get("inkThreshold").copied().unwrap_or(60.0).clamp(20.0, 90.0),
@@ -5233,15 +5233,15 @@ fn ink_prefs_of(settings: &Settings) -> InkPrefs {
 }
 
 #[derive(Serialize, Clone)]
-struct ThemeState {
-    theme: String,
-    vars: HashMap<String, String>,
-    ink: InkPrefs,
+pub(crate) struct ThemeState {
+    pub(crate) theme: String,
+    pub(crate) vars: HashMap<String, String>,
+    pub(crate) ink: InkPrefs,
 }
 
 // Apply the active theme everywhere: native window background, main window and
 // every floating pill (they listen for the event).
-fn push_theme(app: &AppHandle, settings: &Settings) -> String {
+pub(crate) fn push_theme(app: &AppHandle, settings: &Settings) -> String {
     let base = theme_base_of(settings, &settings.theme);
     let effective = effective_theme(app, &base);
     let vars = theme_vars_of(settings);
@@ -5253,7 +5253,7 @@ fn push_theme(app: &AppHandle, settings: &Settings) -> String {
 
 // Native window background = theme background, so the area exposed while
 // resizing never flashes white. `custom_bg` is the active custom theme's override.
-fn apply_window_bg(app: &AppHandle, theme: &str, custom_bg: Option<&str>) {
+pub(crate) fn apply_window_bg(app: &AppHandle, theme: &str, custom_bg: Option<&str>) {
     if let Some(win) = app.get_webview_window("main") {
         if let Some(color) = custom_bg.and_then(hex_to_color) {
             let _ = win.set_background_color(Some(color));
@@ -5273,7 +5273,7 @@ fn apply_window_bg(app: &AppHandle, theme: &str, custom_bg: Option<&str>) {
     }
 }
 
-fn hex_to_color(hex: &str) -> Option<tauri::webview::Color> {
+pub(crate) fn hex_to_color(hex: &str) -> Option<tauri::webview::Color> {
     let d = hex.strip_prefix('#')?;
     if d.len() != 6 {
         return None;
@@ -5287,7 +5287,7 @@ fn hex_to_color(hex: &str) -> Option<tauri::webview::Color> {
     ))
 }
 
-fn effective_theme(app: &AppHandle, pref: &str) -> String {
+pub(crate) fn effective_theme(app: &AppHandle, pref: &str) -> String {
     if BUILTIN_THEMES.contains(&pref) {
         return pref.to_string();
     }
@@ -5303,13 +5303,13 @@ fn effective_theme(app: &AppHandle, pref: &str) -> String {
 
 // ---------- Floating windows ----------
 
-fn flabel(id: &str) -> String {
+pub(crate) fn flabel(id: &str) -> String {
     format!("float-{}", id)
 }
 
 // New pills spawn at the top-left of the primary monitor, cascaded slightly
 // so several pills never fully overlap.
-fn default_pos(app: &AppHandle, index: usize) -> Pos {
+pub(crate) fn default_pos(app: &AppHandle, index: usize) -> Pos {
     let off = 28 * (index as i32 % 8);
     let base = app
         .get_webview_window("main")
@@ -5325,10 +5325,10 @@ fn default_pos(app: &AppHandle, index: usize) -> Pos {
 }
 
 // One range for floating-button size, shared by the writer, the reader and the UI.
-const FLOAT_SCALE_MIN: f64 = 0.3;
-const FLOAT_SCALE_MAX: f64 = 8.0;
+pub(crate) const FLOAT_SCALE_MIN: f64 = 0.3;
+pub(crate) const FLOAT_SCALE_MAX: f64 = 8.0;
 
-fn float_scale_of(settings: &Settings, id: &str) -> f64 {
+pub(crate) fn float_scale_of(settings: &Settings, id: &str) -> f64 {
     let s = settings.float_scale.get(id).copied().unwrap_or(1.0);
     // Same range set_float_scale accepts. A narrower one here silently shrank the
     // "L" preset and every freely resized pill back down on the next start.
@@ -5336,7 +5336,7 @@ fn float_scale_of(settings: &Settings, id: &str) -> f64 {
 }
 
 // Pill window size: square box for image pills, classic pill for text.
-fn pill_dims(is_image: bool, scale: f64) -> (f64, f64) {
+pub(crate) fn pill_dims(is_image: bool, scale: f64) -> (f64, f64) {
     if is_image {
         (FLOAT_IMG * scale, FLOAT_IMG * scale)
     } else {
@@ -5346,14 +5346,14 @@ fn pill_dims(is_image: bool, scale: f64) -> (f64, f64) {
 
 // Gif/video attachments render straight from their path (no stored preview).
 // Keep in sync with GIF_EXT / VIDEO_EXT in ui/media.js.
-fn media_path(path: &str) -> bool {
+pub(crate) fn media_path(path: &str) -> bool {
     let lower = path.to_lowercase();
     [".gif", ".mp4", ".m4v", ".mov", ".webm", ".ogv", ".ogg", ".ogm"]
         .iter()
         .any(|e| lower.ends_with(e))
 }
 
-fn is_image_prompt(p: &Prompt) -> bool {
+pub(crate) fn is_image_prompt(p: &Prompt) -> bool {
     p.show_image && (!p.image.is_empty() || media_path(&p.file_path) || media_path(&p.icon_path))
 }
 
@@ -5361,7 +5361,7 @@ fn is_image_prompt(p: &Prompt) -> bool {
 // blocked (and only that window) until the dialog closes, so a second dialog
 // can never stack on top of it, and a satellite window (e.g. the video
 // editor) never loses focus to "main" behind the dialog's back.
-fn file_dialog_for(app: &AppHandle, label: &str) -> rfd::FileDialog {
+pub(crate) fn file_dialog_for(app: &AppHandle, label: &str) -> rfd::FileDialog {
     let dlg = rfd::FileDialog::new();
     let chosen = resolve_dialog_parent_label(|l| app.get_webview_window(l).is_some(), label);
     match chosen.and_then(|l| app.get_webview_window(l)) {
@@ -5373,7 +5373,7 @@ fn file_dialog_for(app: &AppHandle, label: &str) -> rfd::FileDialog {
 // Pure label choice: the requested window if it is open, else "main" as a
 // fallback, else nobody. Kept apart from the AppHandle lookup so the choice
 // itself is unit-testable without a live Tauri app.
-fn resolve_dialog_parent_label(exists: impl Fn(&str) -> bool, label: &str) -> Option<&str> {
+pub(crate) fn resolve_dialog_parent_label(exists: impl Fn(&str) -> bool, label: &str) -> Option<&str> {
     if exists(label) {
         Some(label)
     } else if exists("main") {
@@ -5383,14 +5383,14 @@ fn resolve_dialog_parent_label(exists: impl Fn(&str) -> bool, label: &str) -> Op
     }
 }
 
-fn file_dialog(app: &AppHandle) -> rfd::FileDialog {
+pub(crate) fn file_dialog(app: &AppHandle) -> rfd::FileDialog {
     file_dialog_for(app, "main")
 }
 
 // `taken` collects the box this pill actually lands in (real or parked) so
 // the next call in the same sync_float_windows pass fans its own park spot
 // out from this one instead of landing on top of it.
-fn open_floating(app: &AppHandle, prompt: &Prompt, taken: &mut Vec<Rect>) {
+pub(crate) fn open_floating(app: &AppHandle, prompt: &Prompt, taken: &mut Vec<Rect>) {
     let label = flabel(&prompt.id);
     if app.get_webview_window(&label).is_some() {
         return;
@@ -5477,7 +5477,7 @@ fn open_floating(app: &AppHandle, prompt: &Prompt, taken: &mut Vec<Rect>) {
     }
 }
 
-fn close_floating_window(app: &AppHandle, id: &str) {
+pub(crate) fn close_floating_window(app: &AppHandle, id: &str) {
     if let Some(win) = app.get_webview_window(&flabel(id)) {
         let _ = win.close();
     }
@@ -5485,13 +5485,13 @@ fn close_floating_window(app: &AppHandle, id: &str) {
 
 // ---------- floating pill folders ----------
 
-fn folder_label(id: &str) -> String {
+pub(crate) fn folder_label(id: &str) -> String {
     format!("folder-{}", id)
 }
 
 // Expert settings the backend needs. The feature ships ON; the two parameters use
 // the same defaults and ranges as their sliders in the expert menu.
-fn folders_on(settings: &Settings) -> bool {
+pub(crate) fn folders_on(settings: &Settings) -> bool {
     settings.ui_flags.get("pillFolders") != Some(&false)
 }
 
@@ -5499,14 +5499,14 @@ fn folders_on(settings: &Settings) -> bool {
 // expert change (pill folders, drag-out, opacity, cooldown …) would only reach the
 // windows opened afterwards: i.e. a feature switched on while pills are on screen
 // looked dead until a restart.
-fn notify_float_settings(app: &AppHandle) {
+pub(crate) fn notify_float_settings(app: &AppHandle) {
     for label in app.webview_windows().keys() {
         if label.starts_with("float-") || label.starts_with("folder-") {
             let _ = app.emit_to(label.as_str(), "settings-changed", ());
         }
     }
 }
-fn merge_radius(settings: &Settings) -> f64 {
+pub(crate) fn merge_radius(settings: &Settings) -> f64 {
     settings
         .ui_values
         .get("pillMergeRadius")
@@ -5515,7 +5515,7 @@ fn merge_radius(settings: &Settings) -> f64 {
         .unwrap_or(40.0)
         .clamp(20.0, 80.0)
 }
-fn folder_cols(settings: &Settings) -> u32 {
+pub(crate) fn folder_cols(settings: &Settings) -> u32 {
     settings
         .ui_values
         .get("folderGridCols")
@@ -5529,24 +5529,24 @@ fn folder_cols(settings: &Settings) -> u32 {
 // whatever its DPI. Sizes are converted per window with its own scale factor, so a
 // mixed-DPI setup stays correct.
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct Rect {
-    x: f64,
-    y: f64,
-    w: f64,
-    h: f64,
+pub(crate) struct Rect {
+    pub(crate) x: f64,
+    pub(crate) y: f64,
+    pub(crate) w: f64,
+    pub(crate) h: f64,
 }
 
 impl Rect {
-    fn right(&self) -> f64 {
+    pub(crate) fn right(&self) -> f64 {
         self.x + self.w
     }
-    fn bottom(&self) -> f64 {
+    pub(crate) fn bottom(&self) -> f64 {
         self.y + self.h
     }
-    fn center(&self) -> (f64, f64) {
+    pub(crate) fn center(&self) -> (f64, f64) {
         (self.x + self.w / 2.0, self.y + self.h / 2.0)
     }
-    fn overlaps(&self, o: &Rect) -> bool {
+    pub(crate) fn overlaps(&self, o: &Rect) -> bool {
         self.x < o.right() && o.x < self.right() && self.y < o.bottom() && o.y < self.bottom()
     }
 }
@@ -5557,7 +5557,7 @@ impl Rect {
 // happens to touch. A short drag ends up far from every other pill and matches
 // nothing, which is what keeps a normal nudge from creating a folder. A centre
 // distance exactly equal to the radius still counts as a hit.
-fn merge_target(dragged: Rect, others: &[(String, Rect)], radius: f64) -> Option<&str> {
+pub(crate) fn merge_target(dragged: Rect, others: &[(String, Rect)], radius: f64) -> Option<&str> {
     let (cx, cy) = dragged.center();
     let mut best: Option<(f64, &str)> = None;
     for (id, rect) in others {
@@ -5577,7 +5577,7 @@ fn merge_target(dragged: Rect, others: &[(String, Rect)], radius: f64) -> Option
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum FolderSide {
+pub(crate) enum FolderSide {
     Below,
     Above,
     Right,
@@ -5585,7 +5585,7 @@ enum FolderSide {
 }
 
 impl FolderSide {
-    fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             FolderSide::Below => "below",
             FolderSide::Above => "above",
@@ -5598,11 +5598,11 @@ impl FolderSide {
 // Where an expanded folder ends up: the window that has to cover both the icon and
 // the popover, plus where each of them sits inside it.
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct FolderLayout {
-    side: FolderSide,
-    win: Rect,
-    icon: (f64, f64), // icon offset inside the window
-    pop: (f64, f64),  // popover offset inside the window
+pub(crate) struct FolderLayout {
+    pub(crate) side: FolderSide,
+    pub(crate) win: Rect,
+    pub(crate) icon: (f64, f64), // icon offset inside the window
+    pub(crate) pop: (f64, f64),  // popover offset inside the window
 }
 
 // Grow the folder window around its icon. The icon NEVER moves: it is what the user
@@ -5611,7 +5611,7 @@ struct FolderLayout {
 // Everything is physical pixels of ONE monitor: pass that monitor's work rect and the
 // sizes already scaled by its factor, and edge flipping works the same on a second
 // screen at another DPI.
-fn folder_layout(icon: Rect, pop_w: f64, pop_h: f64, gap: f64, work: Rect) -> FolderLayout {
+pub(crate) fn folder_layout(icon: Rect, pop_w: f64, pop_h: f64, gap: f64, work: Rect) -> FolderLayout {
     let side = if icon.bottom() + gap + pop_h <= work.bottom() {
         FolderSide::Below
     } else if icon.y - gap - pop_h >= work.y {
@@ -5673,7 +5673,7 @@ fn folder_layout(icon: Rect, pop_w: f64, pop_h: f64, gap: f64, work: Rect) -> Fo
 
 // Keep a dropped pill fully inside the work area it was dropped on. A window larger
 // than the screen is pinned to the top-left corner instead of being pushed off it.
-fn clamp_to_work(work: Rect, w: f64, h: f64, x: f64, y: f64) -> (f64, f64) {
+pub(crate) fn clamp_to_work(work: Rect, w: f64, h: f64, x: f64, y: f64) -> (f64, f64) {
     let fit = |v: f64, lo: f64, hi: f64| if hi < lo { lo } else { v.max(lo).min(hi) };
     (
         fit(x, work.x, work.right() - w),
@@ -5688,7 +5688,7 @@ fn clamp_to_work(work: Rect, w: f64, h: f64, x: f64, y: f64) -> (f64, f64) {
 // growing ring (step: a bit more than half the pill, so a few rings clear even a large
 // media pill) until it lands free, and the result is clamped onto the work area.
 // Pure and deterministic: same input, same layout.
-fn spread_free_positions(wishes: &[Rect], taken: &[Rect], work: Rect) -> Vec<(f64, f64)> {
+pub(crate) fn spread_free_positions(wishes: &[Rect], taken: &[Rect], work: Rect) -> Vec<(f64, f64)> {
     const RINGS: i32 = 10;
     let mut placed: Vec<Rect> = taken.to_vec();
     let mut out = Vec::with_capacity(wishes.len());
@@ -5732,7 +5732,7 @@ fn spread_free_positions(wishes: &[Rect], taken: &[Rect], work: Rect) -> Vec<(f6
 // (a different physical monitor happening to land where an old one used to
 // be) must never compare equal, which is exactly why the name is part of
 // the hash and the position/size alone are not.
-fn screen_identity(name: &str, x: i32, y: i32, w: i32, h: i32) -> String {
+pub(crate) fn screen_identity(name: &str, x: i32, y: i32, w: i32, h: i32) -> String {
     use std::hash::{Hash, Hasher};
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     name.hash(&mut hasher);
@@ -5745,9 +5745,9 @@ fn screen_identity(name: &str, x: i32, y: i32, w: i32, h: i32) -> String {
 // so every live caller reduces its real monitor list to this shape first --
 // which is also what lets resolve_float_spot below be unit-tested with a
 // mocked screen list instead of a real one.
-type ScreenRect = (String, i32, i32, i32, i32); // (identity, x, y, width, height)
+pub(crate) type ScreenRect = (String, i32, i32, i32, i32); // (identity, x, y, width, height)
 
-fn screen_snapshot(app: &AppHandle) -> Vec<ScreenRect> {
+pub(crate) fn screen_snapshot(app: &AppHandle) -> Vec<ScreenRect> {
     app.get_webview_window("main")
         .and_then(|w| w.available_monitors().ok())
         .unwrap_or_default()
@@ -5764,7 +5764,7 @@ fn screen_snapshot(app: &AppHandle) -> Vec<ScreenRect> {
 // The identity of whichever current screen contains (x, y), or empty if
 // none does (point off every monitor, which a live cursor/window position
 // should not normally be, but a probe failure must never panic).
-fn screen_id_at(app: &AppHandle, x: i32, y: i32) -> String {
+pub(crate) fn screen_id_at(app: &AppHandle, x: i32, y: i32) -> String {
     screen_snapshot(app)
         .into_iter()
         .find(|(_, sx, sy, sw, sh)| x >= *sx && x < sx + sw && y >= *sy && y < sy + sh)
@@ -5787,7 +5787,7 @@ fn screen_id_at(app: &AppHandle, x: i32, y: i32) -> String {
 // is recorded, only that exact screen coming back counts as "still home";
 // a different monitor that happens to cover the same point does not (a
 // different identity with the same dimensions parks, per spec).
-fn resolve_float_spot(pos: &Pos, w: f64, h: f64, screens: &[ScreenRect], taken: &[Rect]) -> (f64, f64, bool) {
+pub(crate) fn resolve_float_spot(pos: &Pos, w: f64, h: f64, screens: &[ScreenRect], taken: &[Rect]) -> (f64, f64, bool) {
     if screens.is_empty() {
         // A failed monitor probe must never look like "every screen is gone".
         return (pos.x as f64, pos.y as f64, false);
@@ -5813,7 +5813,7 @@ fn resolve_float_spot(pos: &Pos, w: f64, h: f64, screens: &[ScreenRect], taken: 
 // the cleanup rule is testable without a real clock. `cleanup_h <= 0` is the
 // switch's off position (the default): nothing ever ages out, matching
 // floatParkCleanupH's own "0 = off" convention.
-fn ids_past_park_cleanup(parked: &HashMap<String, std::time::Duration>, cleanup_h: f64) -> Vec<String> {
+pub(crate) fn ids_past_park_cleanup(parked: &HashMap<String, std::time::Duration>, cleanup_h: f64) -> Vec<String> {
     if cleanup_h <= 0.0 {
         return Vec::new();
     }
@@ -5825,7 +5825,7 @@ fn ids_past_park_cleanup(parked: &HashMap<String, std::time::Duration>, cleanup_
 // folders (the first folder listing it wins), a sane scale, and no folder left with
 // fewer than two members: that one dissolves, and its pill simply reappears at the
 // free position it kept all along. Runs on load and after every mutation. Idempotent.
-fn normalize_float_folders(folders: &mut Vec<FloatFolder>, prompt_ids: &[String]) {
+pub(crate) fn normalize_float_folders(folders: &mut Vec<FloatFolder>, prompt_ids: &[String]) {
     let mut taken: Vec<String> = Vec::new();
     for folder in folders.iter_mut() {
         folder.scale = if folder.scale.is_finite() {
@@ -5848,7 +5848,7 @@ fn normalize_float_folders(folders: &mut Vec<FloatFolder>, prompt_ids: &[String]
 // Which pill windows and which folder windows should be open right now. While the
 // feature is off no folder exists on screen and every member is a plain pill again,
 // which is exactly how switching it off restores the free positions.
-fn float_window_plan(settings: &Settings, prompt_ids: &[String]) -> (Vec<String>, Vec<String>) {
+pub(crate) fn float_window_plan(settings: &Settings, prompt_ids: &[String]) -> (Vec<String>, Vec<String>) {
     let on = folders_on(settings);
     let mut inside: Vec<&str> = Vec::new();
     if on {
@@ -5871,7 +5871,7 @@ fn float_window_plan(settings: &Settings, prompt_ids: &[String]) -> (Vec<String>
     (pills, folders)
 }
 
-fn folder_name_of(name: &str) -> Result<String, String> {
+pub(crate) fn folder_name_of(name: &str) -> Result<String, String> {
     let name: String = name
         .trim()
         .chars()
@@ -5888,12 +5888,12 @@ fn folder_name_of(name: &str) -> Result<String, String> {
 // Where the icon sits inside an EXPANDED folder window (offset + size, physical px).
 // No entry = collapsed, i.e. the window IS the icon. In memory only: an open folder
 // never survives a restart.
-struct FolderExpand(Mutex<HashMap<String, Rect>>);
+pub(crate) struct FolderExpand(pub(crate) Mutex<HashMap<String, Rect>>);
 
 // Pill/folder windows dismissed "for now" (their own context menu, not the
 // permanent Remove/Dissolve). In memory only, like FolderExpand above: cleared
 // on restart, never written to settings.
-struct HiddenFloats(Mutex<std::collections::HashSet<String>>);
+pub(crate) struct HiddenFloats(pub(crate) Mutex<std::collections::HashSet<String>>);
 
 // A pill/folder currently parked (its saved screen is not among today's
 // monitors), and when this run of the app first noticed. In memory only --
@@ -5902,13 +5902,13 @@ struct HiddenFloats(Mutex<std::collections::HashSet<String>>);
 // touches. Presence in the map is what floating.js/folder.js ask for to
 // show the "off a screen that is not here right now" marker; the age is
 // what the floatParkCleanupH sweep compares against its own setting.
-struct ParkedFloats(Mutex<HashMap<String, std::time::Instant>>);
+pub(crate) struct ParkedFloats(pub(crate) Mutex<HashMap<String, std::time::Instant>>);
 
 // Records or clears one id's parked state. A fresh park keeps its own
 // first-seen instant if it was already parked, so re-syncing a still-parked
 // window (any other settings change re-runs sync_float_windows) never resets
 // its own cleanup clock.
-fn mark_parked(app: &AppHandle, id: &str, parked: bool) {
+pub(crate) fn mark_parked(app: &AppHandle, id: &str, parked: bool) {
     if let Some(state) = app.try_state::<ParkedFloats>() {
         let mut map = state.0.lock().unwrap_or_else(|e| e.into_inner());
         if parked {
@@ -5928,13 +5928,13 @@ fn is_float_parked(app: AppHandle, id: String) -> bool {
         .unwrap_or(false)
 }
 
-fn folder_expansion(app: &AppHandle, id: &str) -> Option<Rect> {
+pub(crate) fn folder_expansion(app: &AppHandle, id: &str) -> Option<Rect> {
     let state = app.try_state::<FolderExpand>()?;
     let map = state.0.lock().unwrap_or_else(|e| e.into_inner());
     map.get(id).copied()
 }
 
-fn set_folder_expansion(app: &AppHandle, id: &str, icon: Option<Rect>) {
+pub(crate) fn set_folder_expansion(app: &AppHandle, id: &str, icon: Option<Rect>) {
     if let Some(state) = app.try_state::<FolderExpand>() {
         let mut map = state.0.lock().unwrap_or_else(|e| e.into_inner());
         match icon {
@@ -5950,7 +5950,7 @@ fn set_folder_expansion(app: &AppHandle, id: &str, icon: Option<Rect>) {
 
 // The folder icon's box on screen, whether the window is collapsed (window = icon) or
 // expanded (icon sits at a stored offset inside the grown window).
-fn folder_icon_rect(app: &AppHandle, id: &str, window: Rect) -> Rect {
+pub(crate) fn folder_icon_rect(app: &AppHandle, id: &str, window: Rect) -> Rect {
     match folder_expansion(app, id) {
         Some(off) => Rect {
             x: window.x + off.x,
@@ -5967,7 +5967,7 @@ fn folder_icon_rect(app: &AppHandle, id: &str, window: Rect) -> Rect {
 // live merge hint polls it while the OS move loop owns the pointer, and a plain Win32
 // read needs nothing from the stalled event loop.
 #[cfg(windows)]
-fn window_rect_native(win: &tauri::WebviewWindow) -> Option<Rect> {
+pub(crate) fn window_rect_native(win: &tauri::WebviewWindow) -> Option<Rect> {
     #[repr(C)]
     struct RectW { left: i32, top: i32, right: i32, bottom: i32 }
     #[link(name = "user32")]
@@ -5987,7 +5987,7 @@ fn window_rect_native(win: &tauri::WebviewWindow) -> Option<Rect> {
     })
 }
 
-fn window_rect(win: &tauri::WebviewWindow) -> Option<Rect> {
+pub(crate) fn window_rect(win: &tauri::WebviewWindow) -> Option<Rect> {
     #[cfg(windows)]
     if let Some(r) = window_rect_native(win) {
         return Some(r);
@@ -6004,7 +6004,7 @@ fn window_rect(win: &tauri::WebviewWindow) -> Option<Rect> {
 
 // Work area (screen minus taskbar) of the monitor under a physical point. Falls back
 // to the primary monitor when the point lies in dead space between screens.
-fn work_rect_at(app: &AppHandle, x: f64, y: f64) -> Rect {
+pub(crate) fn work_rect_at(app: &AppHandle, x: f64, y: f64) -> Rect {
     let win = app
         .get_webview_window("main")
         .or_else(|| app.webview_windows().into_values().next());
@@ -6030,7 +6030,7 @@ fn work_rect_at(app: &AppHandle, x: f64, y: f64) -> Rect {
 
 // Move AND resize in one OS call, in physical pixels (same reason as
 // set_float_bounds_native: two calls leave a visibly wrong intermediate frame).
-fn set_bounds_phys(win: &tauri::WebviewWindow, r: Rect) {
+pub(crate) fn set_bounds_phys(win: &tauri::WebviewWindow, r: Rect) {
     let (x, y) = (r.x.round() as i32, r.y.round() as i32);
     let (w, h) = (r.w.round().max(1.0) as i32, r.h.round().max(1.0) as i32);
     #[cfg(windows)]
@@ -6041,13 +6041,13 @@ fn set_bounds_phys(win: &tauri::WebviewWindow, r: Rect) {
     let _ = win.set_size(PhysicalSize::new(w.max(1) as u32, h.max(1) as u32));
 }
 
-fn folder_box(scale: f64) -> f64 {
+pub(crate) fn folder_box(scale: f64) -> f64 {
     FOLDER_BOX * if scale.is_finite() { scale.clamp(0.5, 3.0) } else { 1.0 }
 }
 
 // One folder window, built exactly like a pill: frameless, transparent, always on top,
 // out of the taskbar and out of other apps' screen captures.
-fn open_folder_window(app: &AppHandle, folder: &FloatFolder, taken: &mut Vec<Rect>) {
+pub(crate) fn open_folder_window(app: &AppHandle, folder: &FloatFolder, taken: &mut Vec<Rect>) {
     let label = folder_label(&folder.id);
     if app.get_webview_window(&label).is_some() {
         return;
@@ -6123,7 +6123,7 @@ fn open_folder_window(app: &AppHandle, folder: &FloatFolder, taken: &mut Vec<Rec
 // Open/close pill and folder windows until the desktop matches the stored plan. The
 // single place that turns settings into windows, so every mutation just calls it.
 // MUST NOT run while the store mutex is held: it creates and closes windows.
-fn sync_float_windows(app: &AppHandle) {
+pub(crate) fn sync_float_windows(app: &AppHandle) {
     let (want_pills, want_folders, pills, folders) = {
         let state: State<Db> = app.state();
         let store = lock(&state);
@@ -6181,12 +6181,12 @@ fn sync_float_windows(app: &AppHandle) {
 
 // ---------- Image helpers ----------
 
-const B64_ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+pub(crate) const B64_ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 // Reverse lookup built once at compile time: base64_decode runs over whole images and
 // every sealed settings/prompt line at startup, so an O(64) scan per byte (the linear
 // alphabet search this replaced) was real, measurable work: this makes it O(1).
-const fn build_b64_decode_table() -> [u8; 256] {
+pub(crate) const fn build_b64_decode_table() -> [u8; 256] {
     let mut table = [0xFFu8; 256];
     let mut i = 0;
     while i < 64 {
@@ -6195,9 +6195,9 @@ const fn build_b64_decode_table() -> [u8; 256] {
     }
     table
 }
-const B64_DECODE_TABLE: [u8; 256] = build_b64_decode_table();
+pub(crate) const B64_DECODE_TABLE: [u8; 256] = build_b64_decode_table();
 
-fn base64_encode(data: &[u8]) -> String {
+pub(crate) fn base64_encode(data: &[u8]) -> String {
     let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
     for c in data.chunks(3) {
         let n = ((c[0] as u32) << 16)
@@ -6211,7 +6211,7 @@ fn base64_encode(data: &[u8]) -> String {
     out
 }
 
-fn base64_decode(s: &str) -> Vec<u8> {
+pub(crate) fn base64_decode(s: &str) -> Vec<u8> {
     let bytes: Vec<u8> = s.bytes().filter(|&b| b != b'=' && !b.is_ascii_whitespace()).collect();
     let mut out = Vec::with_capacity(bytes.len() * 3 / 4);
     for c in bytes.chunks(4) {
@@ -6233,9 +6233,9 @@ fn base64_decode(s: &str) -> Vec<u8> {
 // Cap decode dimensions so a malformed or decompression-bomb image fails
 // gracefully (None) instead of OOM-crashing the app. Generous enough for any
 // real photo or screenshot; image's default 512 MiB alloc cap still applies.
-const MAX_DECODE_DIM: u32 = 30_000;
+pub(crate) const MAX_DECODE_DIM: u32 = 30_000;
 
-fn decode_image<R: std::io::BufRead + std::io::Seek>(reader: image::ImageReader<R>) -> Option<image::DynamicImage> {
+pub(crate) fn decode_image<R: std::io::BufRead + std::io::Seek>(reader: image::ImageReader<R>) -> Option<image::DynamicImage> {
     let mut reader = reader.with_guessed_format().ok()?;
     let mut limits = image::Limits::default();
     limits.max_image_width = Some(MAX_DECODE_DIM);
@@ -6247,13 +6247,13 @@ fn decode_image<R: std::io::BufRead + std::io::Seek>(reader: image::ImageReader<
 // Decode for text recognition: the picture as a viewer shows it, upright. Phone
 // photos are stored sideways with an EXIF orientation flag that the decoder only
 // reports, it does not apply it.
-fn decode_image_oriented<R: std::io::BufRead + std::io::Seek>(reader: image::ImageReader<R>) -> Option<image::DynamicImage> {
+pub(crate) fn decode_image_oriented<R: std::io::BufRead + std::io::Seek>(reader: image::ImageReader<R>) -> Option<image::DynamicImage> {
     decode_image_with_orientation(reader).map(|(img, _)| img)
 }
 
 // The upright image plus the transform that was applied (NoTransforms when the file
 // carries none), so a caller can tell whether the original pixels differ.
-fn decode_image_with_orientation<R: std::io::BufRead + std::io::Seek>(
+pub(crate) fn decode_image_with_orientation<R: std::io::BufRead + std::io::Seek>(
     reader: image::ImageReader<R>,
 ) -> Option<(image::DynamicImage, image::metadata::Orientation)> {
     let mut limits = image::Limits::default();
@@ -6262,7 +6262,7 @@ fn decode_image_with_orientation<R: std::io::BufRead + std::io::Seek>(
     decode_image_with_orientation_limits(reader, limits)
 }
 
-fn decode_image_with_orientation_limits<R: std::io::BufRead + std::io::Seek>(
+pub(crate) fn decode_image_with_orientation_limits<R: std::io::BufRead + std::io::Seek>(
     reader: image::ImageReader<R>,
     limits: image::Limits,
 ) -> Option<(image::DynamicImage, image::metadata::Orientation)> {
@@ -6279,19 +6279,19 @@ fn decode_image_with_orientation_limits<R: std::io::BufRead + std::io::Seek>(
     Some((img, orientation))
 }
 
-fn decode_image_mem_oriented(bytes: &[u8]) -> Option<image::DynamicImage> {
+pub(crate) fn decode_image_mem_oriented(bytes: &[u8]) -> Option<image::DynamicImage> {
     decode_image_oriented(image::ImageReader::new(std::io::Cursor::new(bytes)))
 }
 
-fn decode_image_mem(bytes: &[u8]) -> Option<image::DynamicImage> {
+pub(crate) fn decode_image_mem(bytes: &[u8]) -> Option<image::DynamicImage> {
     decode_image(image::ImageReader::new(std::io::Cursor::new(bytes)))
 }
 
-fn decode_image_file(path: &str) -> Option<image::DynamicImage> {
+pub(crate) fn decode_image_file(path: &str) -> Option<image::DynamicImage> {
     decode_image(image::ImageReader::open(path).ok()?)
 }
 
-fn copy_image_to_clipboard(data_url: &str) -> bool {
+pub(crate) fn copy_image_to_clipboard(data_url: &str) -> bool {
     let bytes = data_url_bytes(data_url);
     if bytes.is_empty() { return false; }
     let img = match decode_image_mem(&bytes) {
@@ -6307,7 +6307,7 @@ fn copy_image_to_clipboard(data_url: &str) -> bool {
     arboard::Clipboard::new().and_then(|mut c| c.set_image(img_data)).is_ok()
 }
 
-fn scale_and_encode(img: image::DynamicImage) -> String {
+pub(crate) fn scale_and_encode(img: image::DynamicImage) -> String {
     // High quality: generous max size + Lanczos filtering keeps tiles sharp.
     const MAX: u32 = 1024;
     let img = if img.width() > MAX || img.height() > MAX {
@@ -6346,7 +6346,7 @@ async fn get_clipboard_image() -> Option<String> {
 
 // Put a file on the clipboard, exactly like Ctrl+C in Explorer.
 #[cfg(windows)]
-fn set_clipboard_file(path: &str) -> bool {
+pub(crate) fn set_clipboard_file(path: &str) -> bool {
     if !std::path::Path::new(path).exists() {
         return false;
     }
@@ -6368,7 +6368,7 @@ fn set_clipboard_file(path: &str) -> bool {
 }
 
 #[cfg(not(windows))]
-fn set_clipboard_file(_path: &str) -> bool {
+pub(crate) fn set_clipboard_file(_path: &str) -> bool {
     false
 }
 
@@ -6424,11 +6424,11 @@ async fn load_image_file(path: String) -> Option<String> {
 // pdfium is only needed for PDF previews, and it is a plain DLL: so it travels
 // inside the exe and is unpacked on first use. That keeps the portable build a
 // single self-contained file instead of "exe plus a DLL you must not lose".
-static PDFIUM_DLL: &[u8] = include_bytes!("../pdfium.dll");
+pub(crate) static PDFIUM_DLL: &[u8] = include_bytes!("../pdfium.dll");
 
 // Where the embedded copy is unpacked. Versioned, so a newer build never binds
 // against a stale DLL left behind by an older one.
-fn pdfium_cache_path() -> PathBuf {
+pub(crate) fn pdfium_cache_path() -> PathBuf {
     std::env::temp_dir()
         .join(brand::TEMP_DIR)
         .join(format!("pdfium-{APP_VERSION}.dll"))
@@ -6439,7 +6439,7 @@ fn pdfium_cache_path() -> PathBuf {
 // removed the PREVIOUS version's copy -- it just accumulated forever across
 // updates. Best-effort, called whenever the current version's cache path is about
 // to be used; never lets a sweep failure block the actual pdfium lookup.
-fn sweep_stale_pdfium_dlls(current: &std::path::Path) {
+pub(crate) fn sweep_stale_pdfium_dlls(current: &std::path::Path) {
     let Some(dir) = current.parent() else { return };
     let Some(keep) = current.file_name() else { return };
     let Ok(entries) = fs::read_dir(dir) else { return };
@@ -6454,7 +6454,7 @@ fn sweep_stale_pdfium_dlls(current: &std::path::Path) {
 
 // A DLL next to the exe wins (lets a user drop in a newer pdfium); otherwise the
 // embedded copy is written to the cache path once and reused.
-fn pdfium_lib_path(app: &AppHandle) -> Option<PathBuf> {
+pub(crate) fn pdfium_lib_path(app: &AppHandle) -> Option<PathBuf> {
     let name = "pdfium.dll";
     let mut candidates: Vec<PathBuf> = Vec::new();
     if let Ok(exe) = std::env::current_exe() {
@@ -6527,9 +6527,9 @@ async fn pdf_preview(app: AppHandle, path: String, page: Option<u32>) -> Option<
 // The four text attachment kinds a text preview is offered for. One list, one
 // place, so the frontend extension check and the backend command never drift
 // apart.
-const TEXT_PREVIEW_EXT: [&str; 4] = ["txt", "md", "json", "csv"];
+pub(crate) const TEXT_PREVIEW_EXT: [&str; 4] = ["txt", "md", "json", "csv"];
 
-fn is_text_preview_ext(path: &str) -> bool {
+pub(crate) fn is_text_preview_ext(path: &str) -> bool {
     std::path::Path::new(path)
         .extension()
         .and_then(|e| e.to_str())
@@ -6542,7 +6542,7 @@ fn is_text_preview_ext(path: &str) -> bool {
 // slice and reports separately whether the file continues past it -- exactly
 // what a preview needs: something to show plus a truncation notice, never a
 // hard error just because the attachment is long.
-fn read_bytes_preview(path: &std::path::Path, max: u64) -> Result<(Vec<u8>, bool), String> {
+pub(crate) fn read_bytes_preview(path: &std::path::Path, max: u64) -> Result<(Vec<u8>, bool), String> {
     use std::io::Read;
     let file = fs::File::open(path).map_err(|e| e.to_string())?;
     let mut buf = Vec::new();
@@ -6561,7 +6561,7 @@ fn read_bytes_preview(path: &std::path::Path, max: u64) -> Result<(Vec<u8>, bool
 // instead of being reported as unreadable. Any other UTF-8 error means the
 // file itself is not text, and is never guessed at -- a wrong guess would
 // show the wrong thing with total confidence.
-fn decode_text_preview(mut buf: Vec<u8>) -> Option<String> {
+pub(crate) fn decode_text_preview(mut buf: Vec<u8>) -> Option<String> {
     match std::str::from_utf8(&buf) {
         Ok(s) => Some(s.to_string()),
         Err(e) if e.error_len().is_none() => {
@@ -6573,10 +6573,10 @@ fn decode_text_preview(mut buf: Vec<u8>) -> Option<String> {
 }
 
 #[derive(Serialize)]
-struct AttachTextPreview {
-    text: String,
-    truncated: bool,
-    readable: bool,
+pub(crate) struct AttachTextPreview {
+    pub(crate) text: String,
+    pub(crate) truncated: bool,
+    pub(crate) readable: bool,
 }
 
 // Plain-text preview for a .txt/.md/.json/.csv attachment. Reads
@@ -6639,8 +6639,8 @@ async fn missing_files(state: State<'_, Db>) -> Result<Vec<String>, String> {
 // scans every cycle, all of which could block on the same slow or unreachable
 // network path. One backend-side timer runs the check once and pushes the
 // result to every window instead.
-const MISSING_FILES_POLL_SECS: u64 = 5;
-fn start_missing_files_poll(app: AppHandle) {
+pub(crate) const MISSING_FILES_POLL_SECS: u64 = 5;
+pub(crate) fn start_missing_files_poll(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         loop {
             if let Some(state) = app.try_state::<Db>() {
@@ -6678,14 +6678,14 @@ async fn get_prompt(state: State<'_, Db>, id: String) -> Result<Option<Prompt>, 
 }
 
 // First free [col,row] in row-major order; None if the grid is full.
-fn first_free_cell(view: &View) -> Option<[u32; 2]> {
+pub(crate) fn first_free_cell(view: &View) -> Option<[u32; 2]> {
     first_free_cell_excluding(view, &[])
 }
 
 // The active view's grid-folder cells. Every caller that hands out a free cell in
 // the active view needs these: they live outside view.layouts, so first_free_cell()
 // alone cannot see them.
-fn active_view_folder_cells(settings: &Settings) -> Vec<[u32; 2]> {
+pub(crate) fn active_view_folder_cells(settings: &Settings) -> Vec<[u32; 2]> {
     let Some(vid) = settings.views.get(settings.active_index()).map(|v| v.id.clone()) else {
         return Vec::new();
     };
@@ -6701,7 +6701,7 @@ fn active_view_folder_cells(settings: &Settings) -> Vec<[u32; 2]> {
 // lives outside view.layouts) as taken. Without this, a cell handed out here could
 // coincide with a folder's cell: the tile would save fine but never draw, since
 // the renderer gives a folder priority over whatever else sits on its cell.
-fn first_free_cell_excluding(view: &View, extra: &[[u32; 2]]) -> Option<[u32; 2]> {
+pub(crate) fn first_free_cell_excluding(view: &View, extra: &[[u32; 2]]) -> Option<[u32; 2]> {
     let key = grid_key(view.cols, view.rows);
     let empty = HashMap::new();
     let layout = view.layouts.get(&key).unwrap_or(&empty);
@@ -6729,7 +6729,7 @@ fn first_free_cell_excluding(view: &View, extra: &[[u32; 2]]) -> Option<[u32; 2]
 // (e.g. from before it joined the folder) is dropped once there is room to
 // process the batch, so an old, inconsistent save heals itself here instead of
 // quietly wasting a cell the grid never shows as occupied.
-fn place_ids_in_view(
+pub(crate) fn place_ids_in_view(
     layout: &mut std::collections::HashMap<String, [u32; 2]>,
     ids: &[String],
     cols: u32,
@@ -6771,7 +6771,7 @@ fn place_ids_in_view(
 
 // Same accounting `place_ids_in_view` does internally, so a caller that just got
 // `false` back can tell the user how many cells are still missing.
-fn view_capacity_deficit(
+pub(crate) fn view_capacity_deficit(
     layout: &std::collections::HashMap<String, [u32; 2]>,
     ids: &[String],
     cols: u32,
@@ -6794,7 +6794,7 @@ fn view_capacity_deficit(
 // its authoritative `members` list -- what a cross-view move's source side does
 // once the target has durably accepted the same ids (batch_prompts "moveView"),
 // so a prompt dragged onto another view's tab never lingers behind in this one.
-fn strip_ids_from_view(view: &mut View, ids: &[String]) {
+pub(crate) fn strip_ids_from_view(view: &mut View, ids: &[String]) {
     for layout in view.layouts.values_mut() {
         for id in ids {
             layout.remove(id);
@@ -6811,7 +6811,7 @@ fn strip_ids_from_view(view: &mut View, ids: &[String]) {
 // "save-failed", the same contract batch_prompts already gives its other
 // actions for a failed write. A missing view is a silent no-op, matching what
 // the inline arms did before this was pulled out.
-fn apply_view_batch_action(
+pub(crate) fn apply_view_batch_action(
     settings: &mut Settings,
     action: &str,
     ids: &[String],
@@ -6908,19 +6908,19 @@ fn apply_view_batch_action(
 }
 
 // "Store files" opt-in flag (off by default).
-fn store_files_enabled(store: &Store) -> bool {
+pub(crate) fn store_files_enabled(store: &Store) -> bool {
     store.settings.ui_flags.get("storeFiles").copied().unwrap_or(false)
 }
 
 // Staged copies that are on disk (or about to be) but not yet referenced by any
 // prompt in the store. sweep_orphan_files treats them as referenced.
-static PENDING_ATTACHMENTS: Mutex<Option<std::collections::HashSet<String>>> = Mutex::new(None);
+pub(crate) static PENDING_ATTACHMENTS: Mutex<Option<std::collections::HashSet<String>>> = Mutex::new(None);
 
-fn pending_key(path: &str) -> String {
+pub(crate) fn pending_key(path: &str) -> String {
     path.replace('/', "\\").to_lowercase()
 }
 
-fn pending_attachments_contain(path: &str) -> bool {
+pub(crate) fn pending_attachments_contain(path: &str) -> bool {
     let guard = PENDING_ATTACHMENTS.lock().unwrap_or_else(|e| e.into_inner());
     guard.as_ref().is_some_and(|s| s.contains(&pending_key(path)))
 }
@@ -6928,19 +6928,19 @@ fn pending_attachments_contain(path: &str) -> bool {
 // Owns the copies one add/update made before the store lock. While alive they are
 // "pending" (never swept). Dropped: pending entries are released, and unless
 // `commit` ran, the copies are removed again (validation failure, vanished id).
-struct StagedCopies {
-    paths: Vec<String>,
-    committed: bool,
+pub(crate) struct StagedCopies {
+    pub(crate) paths: Vec<String>,
+    pub(crate) committed: bool,
 }
 
 impl StagedCopies {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         StagedCopies { paths: Vec::new(), committed: false }
     }
-    fn commit(&mut self) {
+    pub(crate) fn commit(&mut self) {
         self.committed = true;
     }
-    fn stage(&mut self, files_dir: &std::path::Path, path: &str) -> String {
+    pub(crate) fn stage(&mut self, files_dir: &std::path::Path, path: &str) -> String {
         store_attached_file_in(files_dir, path, Some(self))
     }
 }
@@ -6966,7 +6966,7 @@ impl Drop for StagedCopies {
 // Copy an attached file into <data>/files so the prompt keeps working even if the
 // original is moved or deleted. Returns the stored path, or the original unchanged
 // on any problem or if it is already inside the store (never loses the reference).
-fn store_attached_file_in(files_dir: &std::path::Path, path: &str, staged: Option<&mut StagedCopies>) -> String {
+pub(crate) fn store_attached_file_in(files_dir: &std::path::Path, path: &str, staged: Option<&mut StagedCopies>) -> String {
     if path.is_empty() {
         return String::new();
     }
@@ -7012,7 +7012,7 @@ fn store_attached_file_in(files_dir: &std::path::Path, path: &str, staged: Optio
 // window's command on a large attachments folder. Callers: build the set with
 // `orphan_cleanup_enabled` + `orphan_referenced_set` inside their locked block,
 // then call this once the lock is dropped.
-fn sweep_orphan_files(app: &AppHandle, referenced: &std::collections::HashSet<String>) {
+pub(crate) fn sweep_orphan_files(app: &AppHandle, referenced: &std::collections::HashSet<String>) {
     sweep_orphan_files_in(&data_dir(app).join("files"), referenced, || {
         app.try_state::<Db>().map(|state| {
             let store = lock(&state);
@@ -7021,7 +7021,7 @@ fn sweep_orphan_files(app: &AppHandle, referenced: &std::collections::HashSet<St
     });
 }
 
-fn sweep_orphan_files_in(
+pub(crate) fn sweep_orphan_files_in(
     files_dir: &std::path::Path,
     referenced: &std::collections::HashSet<String>,
     live_now: impl FnOnce() -> Option<std::collections::HashSet<String>>,
@@ -7057,7 +7057,7 @@ fn sweep_orphan_files_in(
     }
 }
 
-fn orphan_cleanup_enabled(store: &Store) -> bool {
+pub(crate) fn orphan_cleanup_enabled(store: &Store) -> bool {
     store.settings.ui_flags.get("cleanupFiles").copied().unwrap_or(true)
 }
 
@@ -7077,7 +7077,7 @@ fn orphan_cleanup_enabled(store: &Store) -> bool {
 // a crash/abnormal-exit leftover, not just "maybe still in use". Walks only the
 // box headers (size + fourcc), never the payload; no ffmpeg needed. size==1
 // means a 64-bit "largesize" follows; size==0 means the box runs to EOF.
-fn mp4_has_moov(path: &std::path::Path) -> bool {
+pub(crate) fn mp4_has_moov(path: &std::path::Path) -> bool {
     use std::io::{Read, Seek, SeekFrom};
     let Ok(mut f) = fs::File::open(path) else { return false };
     let Ok(len) = f.metadata().map(|m| m.len()) else { return false };
@@ -7119,11 +7119,11 @@ fn mp4_has_moov(path: &std::path::Path) -> bool {
 // Only mp4 gets the moov check -- the only format the recorder ever writes
 // before an optional post-stop conversion. A non-mp4 file here is either
 // mid-conversion output or something else, neither of which this sweep judges.
-fn recording_is_broken(path: &std::path::Path) -> bool {
+pub(crate) fn recording_is_broken(path: &std::path::Path) -> bool {
     path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("mp4")) && !mp4_has_moov(path)
 }
 
-fn sweep_stale_recordings(
+pub(crate) fn sweep_stale_recordings(
     app: &AppHandle,
     referenced: &std::collections::HashSet<String>,
     broken_sweep_on: bool,
@@ -7146,7 +7146,7 @@ fn sweep_stale_recordings(
 // than the one this sweep exists to fix. The retention window only ever
 // touches an UNREFERENCED file, same as the other two reasons -- a recording
 // still attached to a saved prompt is never a candidate, no matter its age.
-fn sweep_stale_recordings_in(
+pub(crate) fn sweep_stale_recordings_in(
     dir: &Path,
     referenced: &std::collections::HashSet<String>,
     protected: &[PathBuf],
@@ -7193,7 +7193,7 @@ fn sweep_stale_recordings_in(
 // Startup's own one-shot result (Db is not managed yet at that point in
 // setup(), and no window exists to toast into) -- the frontend collects it
 // once, early in its own init, via take_recording_sweep_notice().
-static PENDING_SWEEP_NOTICE: Mutex<Option<(u32, u64)>> = Mutex::new(None);
+pub(crate) static PENDING_SWEEP_NOTICE: Mutex<Option<(u32, u64)>> = Mutex::new(None);
 
 #[tauri::command]
 fn take_recording_sweep_notice() -> Option<(u32, u64)> {
@@ -7202,10 +7202,10 @@ fn take_recording_sweep_notice() -> Option<(u32, u64)> {
 
 // How long a recording may sit unfinished before the sweep treats it as broken
 // (minutes), and how often the periodic sweep runs (minutes).
-const REC_BROKEN_GRACE_MIN: f64 = 5.0;
-const REC_SWEEP_EVERY_MIN: f64 = 60.0;
+pub(crate) const REC_BROKEN_GRACE_MIN: f64 = 5.0;
+pub(crate) const REC_SWEEP_EVERY_MIN: f64 = 60.0;
 
-fn recording_sweep_grace(app: &AppHandle) -> (bool, Duration) {
+pub(crate) fn recording_sweep_grace(app: &AppHandle) -> (bool, Duration) {
     app.try_state::<Db>()
         .map(|s| {
             let store = s.lock().unwrap_or_else(|e| e.into_inner());
@@ -7218,7 +7218,7 @@ fn recording_sweep_grace(app: &AppHandle) -> (bool, Duration) {
 // How long a KEPT recording (referenced or not) is allowed to age before
 // an unreferenced one becomes fair game for the sweep above -- 0 disables this
 // leg; a new install ships 90 days.
-fn recording_retention_age(app: &AppHandle) -> Option<Duration> {
+pub(crate) fn recording_retention_age(app: &AppHandle) -> Option<Duration> {
     let days = app
         .try_state::<Db>()
         .map(|s| s.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("recordingRetentionDays").copied().unwrap_or(RECORDING_RETENTION_DAYS_DEFAULT))
@@ -7231,14 +7231,14 @@ fn recording_retention_age(app: &AppHandle) -> Option<Duration> {
 }
 
 // Runs every REC_SWEEP_EVERY_MIN minutes.
-fn recording_sweep_interval() -> Duration {
+pub(crate) fn recording_sweep_interval() -> Duration {
     Duration::from_secs((REC_SWEEP_EVERY_MIN * 60.0) as u64)
 }
 
 // Shared by the periodic job and "once a recording ends": both run after
 // Db/RecordingState are managed and a window exists, so both can just
 // emit -- unlike the startup path above, which cannot.
-fn sweep_recordings_and_notify(app: &AppHandle) {
+pub(crate) fn sweep_recordings_and_notify(app: &AppHandle) {
     let (count, bytes) = sweep_recordings_now_result(app);
     if count > 0 {
         append_crash_log(&format!("recording sweep: removed {count} file(s), {bytes} bytes"));
@@ -7246,7 +7246,7 @@ fn sweep_recordings_and_notify(app: &AppHandle) {
     }
 }
 
-fn sweep_recordings_now_result(app: &AppHandle) -> (u32, u64) {
+pub(crate) fn sweep_recordings_now_result(app: &AppHandle) -> (u32, u64) {
     let Some(state) = app.try_state::<Db>() else { return (0, 0) };
     let referenced = orphan_referenced_set(&lock(&state));
     let (broken_on, grace) = recording_sweep_grace(app);
@@ -7272,7 +7272,7 @@ fn sweep_recordings_now_result(app: &AppHandle) -> (u32, u64) {
 // recording can live (data_dir's own recordings folder, and the current
 // recordingDir, default or custom) -- discard_recording_file itself accepts
 // either, so the trash this sweeps must cover both too.
-fn sweep_discarded_recordings(app: &AppHandle) -> (u32, u64) {
+pub(crate) fn sweep_discarded_recordings(app: &AppHandle) -> (u32, u64) {
     let Some(state) = app.try_state::<Db>() else { return (0, 0) };
     let (keep_h, custom) = {
         let g = lock(&state);
@@ -7303,7 +7303,7 @@ fn sweep_discarded_recordings_now(app: AppHandle) -> (u32, u64) {
     sweep_discarded_recordings(&app)
 }
 
-fn discarded_stale_in(dir: &Path, age: Duration) -> (u32, u64) {
+pub(crate) fn discarded_stale_in(dir: &Path, age: Duration) -> (u32, u64) {
     let Ok(entries) = fs::read_dir(dir) else { return (0, 0) };
     let mut count = 0u32;
     let mut bytes = 0u64;
@@ -7343,7 +7343,7 @@ fn sweep_recordings_now(app: AppHandle) -> (u32, u64) {
 // excluded, so a recording left open in the editor (or its sidecar, on any
 // recording) for longer than the stale/broken grace period was fair game for
 // the very next sweep.
-fn protected_recording_paths(app: &AppHandle) -> Vec<PathBuf> {
+pub(crate) fn protected_recording_paths(app: &AppHandle) -> Vec<PathBuf> {
     let mut out = Vec::new();
     if let Some(p) = active_recording_path(app) {
         out.push(p.with_extension("mic.wav"));
@@ -7370,11 +7370,11 @@ fn protected_recording_paths(app: &AppHandle) -> Vec<PathBuf> {
 }
 
 #[cfg(windows)]
-fn active_recording_path(app: &AppHandle) -> Option<PathBuf> {
+pub(crate) fn active_recording_path(app: &AppHandle) -> Option<PathBuf> {
     app.try_state::<RecordingState>()?.0.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|s| s.output_path.clone())
 }
 #[cfg(not(windows))]
-fn active_recording_path(_app: &AppHandle) -> Option<PathBuf> {
+pub(crate) fn active_recording_path(_app: &AppHandle) -> Option<PathBuf> {
     None
 }
 
@@ -7382,7 +7382,7 @@ fn active_recording_path(_app: &AppHandle) -> Option<PathBuf> {
 // leaving trash out of this scan would let an UNRELATED cleanup pass
 // (triggered by some other prompt's add/delete) sweep away a file a trashed
 // prompt still needs to be restorable.
-fn orphan_referenced_set(store: &Store) -> std::collections::HashSet<String> {
+pub(crate) fn orphan_referenced_set(store: &Store) -> std::collections::HashSet<String> {
     let norm = |s: &str| s.replace('/', "\\").to_lowercase();
     store
         .prompts
@@ -7549,11 +7549,11 @@ async fn add_prompt(
 // (resolved to whatever language the UI is actually showing), the image is the
 // one small embedded asset shared by all languages.
 #[derive(Deserialize)]
-struct NewExample {
-    name: String,
-    text: String,
+pub(crate) struct NewExample {
+    pub(crate) name: String,
+    pub(crate) text: String,
     #[serde(default)]
-    image: String,
+    pub(crate) image: String,
 }
 
 // Seeds the three onboarding examples exactly once, on a genuinely fresh install:
@@ -7656,7 +7656,7 @@ async fn seed_example_prompts(app: AppHandle, state: State<'_, Db>, examples: Ve
 // entry in `seeds` (old install, seeded before this field existed) counts as
 // unchanged, same as an id whose prompt is already gone some other way. Shared by
 // dismiss_example_prompts and example_prompts_pending so the two can never disagree.
-fn examples_still_pristine<'a>(
+pub(crate) fn examples_still_pristine<'a>(
     ids: impl IntoIterator<Item = &'a String>,
     seeds: &HashMap<String, u64>,
     prompts: &[Prompt],
@@ -7707,7 +7707,7 @@ fn example_prompts_pending(state: State<Db>) -> usize {
 // editor's remove button, which sends an explicit empty string. Images no longer
 // ride along with every read of the prompt list, so a save must never be able to
 // mistake "not loaded here" for "the user deleted it".
-fn merge_image(stored: &str, incoming: Option<String>) -> String {
+pub(crate) fn merge_image(stored: &str, incoming: Option<String>) -> String {
     match incoming {
         Some(img) => img,
         None => stored.to_string(),
@@ -8075,7 +8075,7 @@ async fn restore_version(app: AppHandle, state: State<'_, Db>, version_id: i64) 
 // nothing "older" to restore for any of the three. Everything else starts fresh, the
 // same as any other new entry, so this stays a small addition next to add_prompt
 // rather than a second copy of its whole field list.
-fn build_restored_prompt(source: &Prompt, version_name: &str, version_text: String, version_variants: Vec<String>, suffix: &str) -> Prompt {
+pub(crate) fn build_restored_prompt(source: &Prompt, version_name: &str, version_text: String, version_variants: Vec<String>, suffix: &str) -> Prompt {
     let variants = sanitize_variants(version_variants);
     let rotate_mode = sanitize_rotate_mode(String::new(), &variants);
     let name = if suffix.is_empty() { version_name.to_string() } else { format!("{version_name} {suffix}") };
@@ -8257,7 +8257,7 @@ async fn delete_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Resu
 // first, keeping the batch's own order) and every app-level association is let go:
 // view membership and cells, pills, scale, video prefs, folders. Returns the untouched
 // originals so the caller can undo the move if the write fails.
-fn move_batch_to_trash(store: &mut Store, ids: &[String], now: u64) -> Vec<Prompt> {
+pub(crate) fn move_batch_to_trash(store: &mut Store, ids: &[String], now: u64) -> Vec<Prompt> {
     let idset: std::collections::HashSet<&str> = ids.iter().map(|s| s.as_str()).collect();
     let mut moved: Vec<Prompt> = Vec::new();
     store.prompts.retain(|p| {
@@ -8472,20 +8472,20 @@ async fn batch_prompts(
 // is a short preview; a confidential entry's preview stays empty, since its stored
 // text is ciphertext.
 #[derive(Serialize)]
-struct TrashRow {
-    id: String,
-    name: String,
-    text: String,
-    file_path: String,
-    icon_path: String,
-    copy_image: bool,
-    has_image: bool,
-    trashed_at: u64,
+pub(crate) struct TrashRow {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) text: String,
+    pub(crate) file_path: String,
+    pub(crate) icon_path: String,
+    pub(crate) copy_image: bool,
+    pub(crate) has_image: bool,
+    pub(crate) trashed_at: u64,
 }
 
-const TRASH_PREVIEW_CHARS: usize = 400;
+pub(crate) const TRASH_PREVIEW_CHARS: usize = 400;
 
-fn trash_rows(trash: &[Prompt]) -> Vec<TrashRow> {
+pub(crate) fn trash_rows(trash: &[Prompt]) -> Vec<TrashRow> {
     trash
         .iter()
         .map(|p| TrashRow {
@@ -8510,7 +8510,7 @@ async fn list_trash(state: State<'_, Db>) -> Result<Vec<TrashRow>, String> {
 // write the store is put back exactly as it was: the rollback copy is the FULL
 // settings (never the window copy, which lacks the receiver's password hash and
 // TLS key), so a failed restore cannot strip them from the live store.
-fn restore_trashed_core(store: &mut Store, id: &str, save: impl FnOnce(&Store) -> bool) -> Result<(), String> {
+pub(crate) fn restore_trashed_core(store: &mut Store, id: &str, save: impl FnOnce(&Store) -> bool) -> Result<(), String> {
     let Some(pos) = store.trash.iter().position(|p| p.id == id) else {
         return Err("not-found".into());
     };
@@ -8568,30 +8568,30 @@ async fn restore_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Res
 // its cell per grid size, its pill (position, scale), video prefs, and the grid and pill
 // folder that held it. The trash row itself only keeps the prompt.
 #[derive(Serialize, Deserialize, Clone, Default)]
-struct ViewPlacement {
-    view_id: String,
-    index: usize,
-    cells: HashMap<String, [u32; 2]>,
+pub(crate) struct ViewPlacement {
+    pub(crate) view_id: String,
+    pub(crate) index: usize,
+    pub(crate) cells: HashMap<String, [u32; 2]>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Default)]
-struct PromptPlacement {
-    id: String,
+pub(crate) struct PromptPlacement {
+    pub(crate) id: String,
     #[serde(default)]
-    views: Vec<ViewPlacement>,
+    pub(crate) views: Vec<ViewPlacement>,
     #[serde(default)]
-    floating: Option<Pos>,
+    pub(crate) floating: Option<Pos>,
     #[serde(default)]
-    float_scale: Option<f64>,
+    pub(crate) float_scale: Option<f64>,
     #[serde(default)]
-    video_prefs: Option<VideoPrefs>,
+    pub(crate) video_prefs: Option<VideoPrefs>,
     #[serde(default)]
-    tile_folder: Option<TileFolder>,
+    pub(crate) tile_folder: Option<TileFolder>,
     #[serde(default)]
-    float_folder: Option<FloatFolder>,
+    pub(crate) float_folder: Option<FloatFolder>,
 }
 
-fn capture_placements(settings: &Settings, ids: &[String]) -> Vec<PromptPlacement> {
+pub(crate) fn capture_placements(settings: &Settings, ids: &[String]) -> Vec<PromptPlacement> {
     ids.iter()
         .map(|id| PromptPlacement {
             id: id.clone(),
@@ -8619,7 +8619,7 @@ fn capture_placements(settings: &Settings, ids: &[String]) -> Vec<PromptPlacemen
 
 // Puts `id` on `cell` of the view's `key` grid; a cell that is taken (another tile, a
 // grid folder) or lies outside the grid falls back to the first free cell of that grid.
-fn place_on_cell_or_first_free(view: &mut View, key: &str, id: &str, cell: [u32; 2], folder_cells: &[[u32; 2]]) {
+pub(crate) fn place_on_cell_or_first_free(view: &mut View, key: &str, id: &str, cell: [u32; 2], folder_cells: &[[u32; 2]]) {
     let Some((cols, rows)) = key.split_once('x').and_then(|(c, r)| Some((c.parse::<u32>().ok()?, r.parse::<u32>().ok()?))) else {
         return;
     };
@@ -8643,7 +8643,7 @@ fn place_on_cell_or_first_free(view: &mut View, key: &str, id: &str, cell: [u32;
 // holds. A failed write puts the store back exactly as it was (same full-settings
 // rollback copy as restore_trashed_core). Ids that are no longer in the trash are
 // skipped; none found at all is an error.
-fn restore_placed_core(store: &mut Store, placements: &[PromptPlacement], save: impl FnOnce(&Store) -> bool) -> Result<usize, String> {
+pub(crate) fn restore_placed_core(store: &mut Store, placements: &[PromptPlacement], save: impl FnOnce(&Store) -> bool) -> Result<usize, String> {
     let original_settings = store.settings.clone();
     let original_trash = store.trash.clone();
     let original_prompts = store.prompts.len();
@@ -8713,7 +8713,7 @@ fn restore_placed_core(store: &mut Store, placements: &[PromptPlacement], save: 
 // A grid folder the delete dissolved (fewer than two members left) is rebuilt from its
 // snapshot; one that survived just takes its members back at their old spots. A member
 // inside a folder owns no cell, so its layout entries in that view are dropped again.
-fn restore_tile_folder(settings: &mut Settings, snap: &TileFolder, restored: &std::collections::HashSet<String>, live_ids: &[String]) {
+pub(crate) fn restore_tile_folder(settings: &mut Settings, snap: &TileFolder, restored: &std::collections::HashSet<String>, live_ids: &[String]) {
     if let Some(folder) = settings.tile_folders.iter_mut().find(|f| f.id == snap.id) {
         for (i, m) in snap.members.iter().enumerate() {
             if restored.contains(m) && !folder.members.contains(m) {
@@ -8755,7 +8755,7 @@ fn restore_tile_folder(settings: &mut Settings, snap: &TileFolder, restored: &st
     }
 }
 
-fn restore_float_folder(settings: &mut Settings, snap: &FloatFolder, restored: &std::collections::HashSet<String>, live_ids: &[String]) {
+pub(crate) fn restore_float_folder(settings: &mut Settings, snap: &FloatFolder, restored: &std::collections::HashSet<String>, live_ids: &[String]) {
     if let Some(folder) = settings.float_folders.iter_mut().find(|f| f.id == snap.id) {
         for (i, m) in snap.members.iter().enumerate() {
             if restored.contains(m) && !folder.members.contains(m) {
@@ -8788,7 +8788,7 @@ async fn placement_snapshot(state: State<'_, Db>, ids: Vec<String>) -> Result<Ve
 // nothing is written; when the second fails the first is taken back, so the disk
 // never holds placements for prompts that are still in the trash while the call
 // reports an error.
-fn save_pair_or_undo_first(first: impl FnOnce() -> bool, second: impl FnOnce() -> bool, undo_first: impl FnOnce()) -> bool {
+pub(crate) fn save_pair_or_undo_first(first: impl FnOnce() -> bool, second: impl FnOnce() -> bool, undo_first: impl FnOnce()) -> bool {
     if !first() {
         return false;
     }
@@ -8831,7 +8831,7 @@ async fn restore_prompts_batch(app: AppHandle, state: State<'_, Db>, placements:
 // Returns the orphan-file set to sweep instead of sweeping itself, so the
 // caller can drop the store lock first: a big attachments folder used to stay
 // locked out from every other window for the whole fs scan.
-fn purge_ids(app: &AppHandle, store: &mut Store, ids: &[String]) -> Result<Option<std::collections::HashSet<String>>, String> {
+pub(crate) fn purge_ids(app: &AppHandle, store: &mut Store, ids: &[String]) -> Result<Option<std::collections::HashSet<String>>, String> {
     let idset: std::collections::HashSet<&str> = ids.iter().map(|s| s.as_str()).collect();
     let before = store.trash.clone();
     store.trash.retain(|p| !idset.contains(p.id.as_str()));
@@ -8901,7 +8901,7 @@ async fn empty_trash(app: AppHandle, state: State<'_, Db>) -> Result<Vec<TrashRo
 // "0 = forever" convention as historyDays). Runs once at startup, mirroring
 // prune_history's own startup sweep: never on a timer, so a long-idle app does
 // not surprise-purge something the user only just noticed in the trash.
-fn trash_retention_secs(settings: &Settings) -> Option<u64> {
+pub(crate) fn trash_retention_secs(settings: &Settings) -> Option<u64> {
     let days = settings.ui_values.get("trashRetentionDays").copied().unwrap_or(30.0);
     if days <= 0.0 {
         None
@@ -8913,7 +8913,7 @@ fn trash_retention_secs(settings: &Settings) -> Option<u64> {
 // Pure decision, kept apart from sweep_trash's side effects (save/file-cleanup need
 // an AppHandle, which cannot be constructed in a unit test) so the actual "what
 // counts as stale" rule is directly testable.
-fn stale_trash_ids(trash: &[Prompt], max_age: u64, now: u64) -> Vec<String> {
+pub(crate) fn stale_trash_ids(trash: &[Prompt], max_age: u64, now: u64) -> Vec<String> {
     trash
         .iter()
         .filter(|p| p.trashed_at > 0 && now.saturating_sub(p.trashed_at) > max_age)
@@ -8921,7 +8921,7 @@ fn stale_trash_ids(trash: &[Prompt], max_age: u64, now: u64) -> Vec<String> {
         .collect()
 }
 
-fn sweep_trash(app: &AppHandle, store: &mut Store) {
+pub(crate) fn sweep_trash(app: &AppHandle, store: &mut Store) {
     let Some(max_age) = trash_retention_secs(&store.settings) else {
         return;
     };
@@ -9044,7 +9044,7 @@ async fn delete_all_data(app: AppHandle, state: State<'_, Db>) -> Result<(), Str
 // backup unreadable if dropped, the receiver's certificate belongs to this
 // machine, and the vault's salt and verifier are what the confidential prompts
 // the reset keeps are sealed with.
-fn settings_after_reset(old: &Settings) -> Settings {
+pub(crate) fn settings_after_reset(old: &Settings) -> Settings {
     let mut fresh = Settings::default();
     fresh.migrate();
     // A reset must never start deleting what the old settings kept: each retention
@@ -9114,16 +9114,16 @@ async fn reset_settings(app: AppHandle, state: State<'_, Db>) -> Result<(), Stri
 // genuinely different old location is offered again even after an earlier one
 // was settled. Stored in the same free-form map the expert menu's own text
 // settings use, under a key namespace of its own.
-const TAKEOVER_DECISION_PREFIX: &str = "takeoverDecision:";
+pub(crate) const TAKEOVER_DECISION_PREFIX: &str = "takeoverDecision:";
 
-fn takeover_decision_key(src: &std::path::Path) -> String {
+pub(crate) fn takeover_decision_key(src: &std::path::Path) -> String {
     format!("{TAKEOVER_DECISION_PREFIX}{}", src.display())
 }
 
 // Whether this exact old location was already settled, whichever way. Pulled
 // out of takeover_offer() (which needs an AppHandle) so the three answer paths
 // (adopt, keep separate, never answered) are testable without one.
-fn takeover_already_decided(ui_texts: &HashMap<String, String>, src: &std::path::Path) -> bool {
+pub(crate) fn takeover_already_decided(ui_texts: &HashMap<String, String>, src: &std::path::Path) -> bool {
     ui_texts.contains_key(&takeover_decision_key(src))
 }
 
@@ -9131,7 +9131,7 @@ fn takeover_already_decided(ui_texts: &HashMap<String, String>, src: &std::path:
 // `remember == false` is deliberate: closing the dialog without ticking that
 // box must leave nothing behind, so the same folder is offered again next
 // launch rather than being silently treated as settled.
-fn takeover_record_decision(ui_texts: &mut HashMap<String, String>, src: &std::path::Path, adopt: bool, remember: bool) {
+pub(crate) fn takeover_record_decision(ui_texts: &mut HashMap<String, String>, src: &std::path::Path, adopt: bool, remember: bool) {
     if remember {
         ui_texts.insert(takeover_decision_key(src), if adopt { "adopt" } else { "skip" }.to_string());
     }
@@ -9140,19 +9140,19 @@ fn takeover_record_decision(ui_texts: &mut HashMap<String, String>, src: &std::p
 // The three things the offer dialog needs to say before anything is copied:
 // where the old data is, how big it is, and roughly how much is in it.
 #[derive(Serialize)]
-struct TakeoverOffer {
-    path: String,
-    size: u64,
+pub(crate) struct TakeoverOffer {
+    pub(crate) path: String,
+    pub(crate) size: u64,
     // None when the database could not be opened (e.g. the other copy of the
     // app still has it open) -- the dialog falls back to naming it unknown
     // rather than blocking the offer on a count that is not essential to it.
-    prompts: Option<usize>,
+    pub(crate) prompts: Option<usize>,
 }
 
 // Size and prompt count of a store folder, read without staging or copying it
 // -- unlike a backup, a live store is a plain uncompressed data.db, so a
 // direct read-only COUNT(*) is enough and never touches restore's read rail.
-fn takeover_offer_info(src: &std::path::Path) -> TakeoverOffer {
+pub(crate) fn takeover_offer_info(src: &std::path::Path) -> TakeoverOffer {
     let size = STORE_FILES.iter().filter_map(|f| fs::metadata(src.join(f)).ok()).map(|m| m.len()).sum();
     let prompts = Connection::open(src.join("data.db"))
         .ok()
@@ -9164,7 +9164,7 @@ fn takeover_offer_info(src: &std::path::Path) -> TakeoverOffer {
 // Whether the store has nothing an adoption offer would overwrite: no prompts at
 // all, or only the ones seed_example_prompts put there itself. Kept separate from
 // takeover_offer() (which needs an AppHandle) so the condition itself is testable.
-fn store_has_no_real_prompts(prompts: &[Prompt], example_prompt_ids: &[String]) -> bool {
+pub(crate) fn store_has_no_real_prompts(prompts: &[Prompt], example_prompt_ids: &[String]) -> bool {
     prompts.iter().all(|p| example_prompt_ids.contains(&p.id))
 }
 
@@ -9295,7 +9295,7 @@ async fn set_layout(app: AppHandle, state: State<'_, Db>, layout: HashMap<String
 // themselves and, along three separate paths, could drop or resurrect an
 // entry) with one unconditional recompute that cannot take a wrong branch
 // because it no longer has one.
-fn rebuild_view_layout(
+pub(crate) fn rebuild_view_layout(
     view: &mut View,
     folder_cells: &std::collections::HashSet<(u32, u32)>,
     folder_members: &std::collections::HashSet<String>,
@@ -9419,10 +9419,10 @@ fn set_view_grid(app: AppHandle, state: State<Db>, id: String, cols: u32, rows: 
 
 // ---------- Tag commands ----------
 
-const MAX_TAG_LEN: usize = 60;
-const MAX_TAGS_PER_PROMPT: usize = 50;
+pub(crate) const MAX_TAG_LEN: usize = 60;
+pub(crate) const MAX_TAGS_PER_PROMPT: usize = 50;
 
-fn tag_key(name: &str) -> String {
+pub(crate) fn tag_key(name: &str) -> String {
     name.trim().to_lowercase()
 }
 
@@ -9430,7 +9430,7 @@ fn tag_key(name: &str) -> String {
 // never a separate state field, so every other tag-aware code path (search,
 // export, backup, sync) already treats an archived prompt like any other one
 // without having to know this concept exists at all.
-fn is_archived(prompt: &Prompt, archive_tag_key: Option<&str>) -> bool {
+pub(crate) fn is_archived(prompt: &Prompt, archive_tag_key: Option<&str>) -> bool {
     match archive_tag_key {
         Some(key) => prompt.tags.iter().any(|t| tag_key(t) == key),
         None => false,
@@ -9439,13 +9439,13 @@ fn is_archived(prompt: &Prompt, archive_tag_key: Option<&str>) -> bool {
 
 // Commas separate tags in the TXT/CSV exports and control characters would break the
 // line-based TXT format, so neither may appear inside a name.
-fn tag_chars_ok(name: &str) -> bool {
+pub(crate) fn tag_chars_ok(name: &str) -> bool {
     !name.contains(',') && !name.chars().any(|c| c.is_control())
 }
 
 // The casing each known tag is already stored with, so a tag typed as "work" joins
 // an existing "Work" instead of splitting into a second chip.
-fn canonical_tags(prompts: &[Prompt]) -> HashMap<String, String> {
+pub(crate) fn canonical_tags(prompts: &[Prompt]) -> HashMap<String, String> {
     let mut map = HashMap::new();
     for p in prompts {
         for t in &p.tags {
@@ -9457,7 +9457,7 @@ fn canonical_tags(prompts: &[Prompt]) -> HashMap<String, String> {
 
 // Trim, drop blank entries, fold case-insensitive duplicates onto the casing the
 // library already uses. Over-long / over-many names are rejected, never truncated.
-fn sanitize_tags(input: Vec<String>, known: &HashMap<String, String>) -> Result<Vec<String>, String> {
+pub(crate) fn sanitize_tags(input: Vec<String>, known: &HashMap<String, String>) -> Result<Vec<String>, String> {
     let mut out: Vec<String> = Vec::new();
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
     for raw in input {
@@ -9487,11 +9487,11 @@ fn sanitize_tags(input: Vec<String>, known: &HashMap<String, String>) -> Result<
 
 // Generous ceiling: notes are a scratchpad, not a second prompt body. Rejecting
 // instead of truncating keeps the user's text from being silently cut in half.
-const MAX_NOTES_LEN: usize = 10_000;
+pub(crate) const MAX_NOTES_LEN: usize = 10_000;
 
 // Normalize line endings and enforce the ceiling. Notes may contain newlines:
 // the TXT exporter escapes them (see notes_escape).
-fn sanitize_notes(raw: &str) -> Result<String, String> {
+pub(crate) fn sanitize_notes(raw: &str) -> Result<String, String> {
     let text = raw.replace("\r\n", "\n").replace('\r', "\n");
     let text = text.trim().to_string();
     if text.chars().count() > MAX_NOTES_LEN {
@@ -9503,11 +9503,11 @@ fn sanitize_notes(raw: &str) -> Result<String, String> {
 // The TXT export is line-based, so a multi-line note is written on one line with
 // its newlines escaped. Backslashes are escaped too, or a note ending in "\" plus
 // a literal "n" would come back as a line break.
-fn notes_escape(s: &str) -> String {
+pub(crate) fn notes_escape(s: &str) -> String {
     s.replace('\\', "\\\\").replace('\n', "\\n")
 }
 
-fn notes_unescape(s: &str) -> String {
+pub(crate) fn notes_unescape(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut chars = s.chars();
     while let Some(c) = chars.next() {
@@ -9529,7 +9529,7 @@ fn notes_unescape(s: &str) -> String {
 }
 
 // A single tag name argument: blank is an error here because the name IS the input.
-fn valid_tag_name(name: &str) -> Result<String, String> {
+pub(crate) fn valid_tag_name(name: &str) -> Result<String, String> {
     let name = name.trim();
     if name.is_empty() {
         return Err("tag name is empty".to_string());
@@ -9544,7 +9544,7 @@ fn valid_tag_name(name: &str) -> Result<String, String> {
 }
 
 // "" clears the chip color back to neutral; anything else must be #rrggbb.
-fn valid_tag_color(color: &str) -> Result<String, String> {
+pub(crate) fn valid_tag_color(color: &str) -> Result<String, String> {
     let c = color.trim();
     if c.is_empty() {
         return Ok(String::new());
@@ -9560,7 +9560,7 @@ fn valid_tag_color(color: &str) -> Result<String, String> {
 // Swap one tag key for a new name across every prompt. Renaming onto a tag a prompt
 // already carries merges the two instead of duplicating it. Returns whether anything
 // changed, so an unused name costs no write.
-fn rename_tag_in(prompts: &mut [Prompt], old_key: &str, new: &str) -> bool {
+pub(crate) fn rename_tag_in(prompts: &mut [Prompt], old_key: &str, new: &str) -> bool {
     let mut changed = false;
     for p in prompts {
         if !p.tags.iter().any(|t| tag_key(t) == old_key) {
@@ -9584,14 +9584,14 @@ fn rename_tag_in(prompts: &mut [Prompt], old_key: &str, new: &str) -> bool {
 // renaming onto an existing tag a real merge rather than a plain rename: the
 // same rename_tag command handles both, this rule is the only thing distinguishing
 // "merge" from "rename" at the color layer.
-fn transfer_tag_color(colors: &mut HashMap<String, String>, old_key: &str, new_key: &str) {
+pub(crate) fn transfer_tag_color(colors: &mut HashMap<String, String>, old_key: &str, new_key: &str) {
     if let Some(color) = colors.remove(old_key) {
         colors.entry(new_key.to_string()).or_insert(color);
     }
 }
 
 // Drop one tag key from every prompt. Returns whether anything changed.
-fn remove_tag_from(prompts: &mut [Prompt], key: &str) -> bool {
+pub(crate) fn remove_tag_from(prompts: &mut [Prompt], key: &str) -> bool {
     let mut changed = false;
     for p in prompts {
         let before = p.tags.len();
@@ -9605,7 +9605,7 @@ fn remove_tag_from(prompts: &mut [Prompt], key: &str) -> bool {
 // carry it (case-insensitive) -- already having it is not an error, just a no-op
 // for that one prompt. `known` supplies the casing an existing tag is stored with,
 // same as the single-prompt editor's own sanitize_tags call.
-fn add_tag_to_ids(
+pub(crate) fn add_tag_to_ids(
     prompts: &mut [Prompt],
     ids: &std::collections::HashSet<&str>,
     name: &str,
@@ -9625,7 +9625,7 @@ fn add_tag_to_ids(
 
 // Batch "remove tag": only touches the listed ids. Not carrying the tag is not an
 // error, just a no-op for that one prompt.
-fn remove_tag_from_ids(prompts: &mut [Prompt], ids: &std::collections::HashSet<&str>, key: &str) {
+pub(crate) fn remove_tag_from_ids(prompts: &mut [Prompt], ids: &std::collections::HashSet<&str>, key: &str) {
     for p in prompts.iter_mut() {
         if ids.contains(p.id.as_str()) {
             p.tags.retain(|t| tag_key(t) != key);
@@ -9662,7 +9662,7 @@ async fn rename_tag(
 // testable. The prompts are saved first; when the settings save then fails, the
 // prompts are put back AND written again, because the rename is already on disk
 // and the caller is told the whole call failed.
-fn rename_tag_in_store(
+pub(crate) fn rename_tag_in_store(
     store: &mut Store,
     old_key: &str,
     new: &str,
@@ -9752,14 +9752,14 @@ async fn delete_tag(app: AppHandle, state: State<'_, Db>, name: String) -> Resul
 }
 
 #[derive(Deserialize)]
-struct TagColor {
-    name: String,
-    color: String,
+pub(crate) struct TagColor {
+    pub(crate) name: String,
+    pub(crate) color: String,
 }
 
 // Every name and colour is validated before anything is stored, so one bad entry
 // rejects the whole call instead of leaving half the tags coloured.
-fn apply_tag_colors(settings: &mut Settings, entries: Vec<TagColor>) -> Result<(), String> {
+pub(crate) fn apply_tag_colors(settings: &mut Settings, entries: Vec<TagColor>) -> Result<(), String> {
     let checked: Vec<(String, String)> = entries
         .into_iter()
         .map(|e| Ok((tag_key(&valid_tag_name(&e.name)?), valid_tag_color(&e.color)?)))
@@ -9862,7 +9862,7 @@ fn set_view_color(app: AppHandle, state: State<Db>, id: String, color: String) -
 // one added by another window mid-drag) keeps its old relative order,
 // appended after everything the caller did name -- a mismatch can reorder
 // less than intended but can never drop a view.
-fn reorder_views_by_id(mut views: Vec<View>, order: &[String]) -> Vec<View> {
+pub(crate) fn reorder_views_by_id(mut views: Vec<View>, order: &[String]) -> Vec<View> {
     let mut reordered: Vec<View> = Vec::with_capacity(views.len());
     for id in order {
         if let Some(pos) = views.iter().position(|v| &v.id == id) {
@@ -9883,7 +9883,7 @@ fn reorder_views(app: AppHandle, state: State<Db>, order: Vec<String>) -> Settin
 
 // Moves every tag colour equal to an old palette hex to its new one. Returns
 // whether anything changed.
-fn remap_tag_colors(colors: &mut HashMap<String, String>, map: &HashMap<String, String>) -> bool {
+pub(crate) fn remap_tag_colors(colors: &mut HashMap<String, String>, map: &HashMap<String, String>) -> bool {
     let mut changed = false;
     for c in colors.values_mut() {
         if let Some(nc) = map.get(c.as_str()) {
@@ -9972,7 +9972,7 @@ fn remap_colors(app: AppHandle, state: State<Db>, pairs: Vec<(String, String)>) 
 // testable. A grid folder of the deleted view goes with it, and it must go now:
 // left behind until the next start it would still claim its members in
 // normalize_tile_folders' one-folder-per-prompt rule and starve a new folder.
-fn remove_view_from_settings(settings: &mut Settings, id: &str, prompt_ids: &[String]) -> Result<(), String> {
+pub(crate) fn remove_view_from_settings(settings: &mut Settings, id: &str, prompt_ids: &[String]) -> Result<(), String> {
     if settings.views.len() <= 1 {
         return Err("cannot delete the last view".to_string());
     }
@@ -10016,7 +10016,7 @@ fn set_active_view(app: AppHandle, state: State<Db>, id: String) -> Settings {
 // `view_ids` rather than `&[View]`: every caller only ever needs to check
 // membership, so passing ids instead of whole views spares a clone of every view's
 // layout maps at each call site.
-fn normalize_tile_folders(folders: &mut Vec<TileFolder>, prompt_ids: &[String], view_ids: &[String]) {
+pub(crate) fn normalize_tile_folders(folders: &mut Vec<TileFolder>, prompt_ids: &[String], view_ids: &[String]) {
     let mut taken: Vec<String> = Vec::new();
     for folder in folders.iter_mut() {
         // A hand-edited/imported cell far outside any real grid (up to u32::MAX)
@@ -10132,7 +10132,7 @@ fn save_tile_folder(
 // already sits on that cell moves to the first free cell (folder cells count as
 // taken); with no free cell left the drop is refused and nothing changes. A cell
 // outside the grid places nothing, so the prompt stays library-only.
-fn place_taken_out_member(
+pub(crate) fn place_taken_out_member(
     view: &mut View,
     folder_cells: &[[u32; 2]],
     id: &str,
@@ -10247,7 +10247,7 @@ fn delete_tile_folder(app: AppHandle, state: State<Db>, id: String) -> Settings 
 
 // The copy of the settings a window may hold: the receiver's private key stays
 // in the backend.
-fn webview_settings(settings: &Settings) -> Settings {
+pub(crate) fn webview_settings(settings: &Settings) -> Settings {
     let mut copy = settings.clone();
     remote_tls::strip_private_key(&mut copy);
     // The password hash is checked inside the backend only; its dialog has its own command.
@@ -10267,42 +10267,42 @@ fn get_settings(state: State<Db>) -> Settings {
 // the stored image does: so a copy already cached in the window knows when it went
 // stale. The bytes themselves come from `prompt_image`, one prompt at a time.
 #[derive(Serialize)]
-struct SlimPrompt {
-    id: String,
-    name: String,
-    text: String,
-    color: String,
-    has_image: bool,
-    image_rev: u64,
-    show_image: bool,
-    copy_image: bool,
-    file_path: String,
-    pdf_page: u32,
-    icon_path: String,
-    caption: String,
-    caption_size: u32,
-    font: String,
-    font_size: u32,
-    favorite: bool,
-    tags: Vec<String>,
-    notes: String,
-    hotkey: String,
-    hotkey_paste: String,
-    trashed_at: u64,
-    variants: Vec<String>,
-    rotate_mode: String,
-    rotate_auto: bool,
-    media_duration_ms: u64,
-    media_width: u32,
-    media_height: u32,
-    media_size_bytes: u64,
+pub(crate) struct SlimPrompt {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) text: String,
+    pub(crate) color: String,
+    pub(crate) has_image: bool,
+    pub(crate) image_rev: u64,
+    pub(crate) show_image: bool,
+    pub(crate) copy_image: bool,
+    pub(crate) file_path: String,
+    pub(crate) pdf_page: u32,
+    pub(crate) icon_path: String,
+    pub(crate) caption: String,
+    pub(crate) caption_size: u32,
+    pub(crate) font: String,
+    pub(crate) font_size: u32,
+    pub(crate) favorite: bool,
+    pub(crate) tags: Vec<String>,
+    pub(crate) notes: String,
+    pub(crate) hotkey: String,
+    pub(crate) hotkey_paste: String,
+    pub(crate) trashed_at: u64,
+    pub(crate) variants: Vec<String>,
+    pub(crate) rotate_mode: String,
+    pub(crate) rotate_auto: bool,
+    pub(crate) media_duration_ms: u64,
+    pub(crate) media_width: u32,
+    pub(crate) media_height: u32,
+    pub(crate) media_size_bytes: u64,
     // Mirrors Prompt.secret. `text`/`variants` above already carry the ciphertext
     // (locked) or the session-decrypted plain text (unlocked): see slim_prompts.
-    secret: bool,
+    pub(crate) secret: bool,
     // True while `secret` is true and the session vault is not unlocked. The
     // window shows the locked bar and refuses to copy exactly when this is true;
     // never persisted, computed fresh on every slim_prompts() call.
-    locked: bool,
+    pub(crate) locked: bool,
 }
 
 impl From<&Prompt> for SlimPrompt {
@@ -10364,7 +10364,7 @@ impl From<&Prompt> for SlimPrompt {
 // real text is decrypted here and flows exactly like any other prompt from that
 // point on (search finds it, the tile copies it): nothing else needs to know
 // the entry was ever confidential.
-fn slim_prompts(prompts: &[Prompt], secret_key: Option<[u8; 32]>) -> Vec<SlimPrompt> {
+pub(crate) fn slim_prompts(prompts: &[Prompt], secret_key: Option<[u8; 32]>) -> Vec<SlimPrompt> {
     prompts
         .iter()
         .map(|p| {
@@ -10394,9 +10394,9 @@ fn slim_prompts(prompts: &[Prompt], secret_key: Option<[u8; 32]>) -> Vec<SlimPro
 
 // Prompts + settings in one IPC roundtrip (renderGrid hot path).
 #[derive(Serialize)]
-struct AppState {
-    prompts: Vec<SlimPrompt>,
-    settings: Settings,
+pub(crate) struct AppState {
+    pub(crate) prompts: Vec<SlimPrompt>,
+    pub(crate) settings: Settings,
 }
 
 // Async: cloning every prompt must not run on the UI thread; a big library would
@@ -10429,19 +10429,19 @@ async fn prompt_image(state: State<'_, Db>, id: String) -> Result<String, String
 // entries and all) was exactly the wrong cost to pay there. The four fields are
 // small strings, so cloning just those is the actual saving.
 #[derive(Serialize)]
-struct LauncherItem {
-    id: String,
-    name: String,
-    text: String,
-    color: String,
+pub(crate) struct LauncherItem {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) text: String,
+    pub(crate) color: String,
 }
 #[derive(Serialize)]
-struct LauncherState {
-    prompts: Vec<LauncherItem>,
-    language: String,
-    usage: HashMap<String, u32>,
-    last_used: HashMap<String, u64>,
-    prefill: String,
+pub(crate) struct LauncherState {
+    pub(crate) prompts: Vec<LauncherItem>,
+    pub(crate) language: String,
+    pub(crate) usage: HashMap<String, u32>,
+    pub(crate) last_used: HashMap<String, u64>,
+    pub(crate) prefill: String,
 }
 #[tauri::command]
 async fn launcher_items(state: State<'_, Db>) -> Result<LauncherState, String> {
@@ -10468,52 +10468,52 @@ async fn launcher_items(state: State<'_, Db>) -> Result<LauncherState, String> {
 
 // ---- Usage statistics ----
 #[derive(Serialize)]
-struct StatBar {
-    id: String,
-    name: String,
-    count: u32,
+pub(crate) struct StatBar {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) count: u32,
 }
 #[derive(Serialize)]
-struct ViewCount {
-    name: String,
-    count: usize,
+pub(crate) struct ViewCount {
+    pub(crate) name: String,
+    pub(crate) count: usize,
 }
 // One day's copy count. `ts` is that day's UTC midnight (unix seconds): the
 // frontend already has locale-aware date formatting via Intl, no reason to
 // duplicate it (or pull in a date crate) on the Rust side for a label string.
 #[derive(Serialize)]
-struct DayCount {
-    ts: u64,
-    count: usize,
+pub(crate) struct DayCount {
+    pub(crate) ts: u64,
+    pub(crate) count: usize,
 }
 #[derive(Serialize)]
-struct UsageStats {
-    total_prompts: usize,
-    total_copies: u64,
-    copies7: u64,
-    copies30: u64,
-    used_count: usize,
-    avg_copies: f64,
-    total_chars: u64,
-    recent_name: String,
-    recent_ts: u64,
-    longest_name: String,
-    longest_chars: usize,
-    types: Vec<ViewCount>,
-    top: Vec<StatBar>,
-    never_used: Vec<StatBar>,
-    per_view: Vec<ViewCount>,
-    daily: Vec<DayCount>, // last 14 UTC days, oldest first, zero-filled
-    history_on: bool,
-    tools: Vec<ToolBar>,       // most-used tools, name = the bare tool key (frontend translates it)
-    tools_never_used: Vec<String>, // tool keys with a zero counter
+pub(crate) struct UsageStats {
+    pub(crate) total_prompts: usize,
+    pub(crate) total_copies: u64,
+    pub(crate) copies7: u64,
+    pub(crate) copies30: u64,
+    pub(crate) used_count: usize,
+    pub(crate) avg_copies: f64,
+    pub(crate) total_chars: u64,
+    pub(crate) recent_name: String,
+    pub(crate) recent_ts: u64,
+    pub(crate) longest_name: String,
+    pub(crate) longest_chars: usize,
+    pub(crate) types: Vec<ViewCount>,
+    pub(crate) top: Vec<StatBar>,
+    pub(crate) never_used: Vec<StatBar>,
+    pub(crate) per_view: Vec<ViewCount>,
+    pub(crate) daily: Vec<DayCount>, // last 14 UTC days, oldest first, zero-filled
+    pub(crate) history_on: bool,
+    pub(crate) tools: Vec<ToolBar>,       // most-used tools, name = the bare tool key (frontend translates it)
+    pub(crate) tools_never_used: Vec<String>, // tool keys with a zero counter
 }
 
 #[derive(Serialize)]
-struct ToolBar {
-    name: String,
-    count: u32,
-    last_used: u64,
+pub(crate) struct ToolBar {
+    pub(crate) name: String,
+    pub(crate) count: u32,
+    pub(crate) last_used: u64,
 }
 
 // ---- Most-used tools ----
@@ -10523,7 +10523,7 @@ struct ToolBar {
 // come from gen_id(), never the fixed "tool:" prefix. This array is also the
 // single source of truth a test checks the counted keys against, so a new
 // tool call site can never silently go uncounted without a test noticing.
-const TOOL_KEYS: [&str; 13] = [
+pub(crate) const TOOL_KEYS: [&str; 13] = [
     "screenshot",
     "screenshot_editor",
     "ocr",
@@ -10539,20 +10539,20 @@ const TOOL_KEYS: [&str; 13] = [
     "backup_create",
 ];
 
-fn tool_usage_key(tool: &str) -> String {
+pub(crate) fn tool_usage_key(tool: &str) -> String {
     format!("tool:{tool}")
 }
 
 // Same "must be explicitly turned on" reading as the frontend's own shipsOn:
 // an opt-in flag defaults to off, so only an explicit `true` counts as on.
-fn tool_usage_enabled(settings: &Settings) -> bool {
+pub(crate) fn tool_usage_enabled(settings: &Settings) -> bool {
     settings.ui_flags.get("usageStats") == Some(&true)
 }
 
 // The actual increment, split out from the command below so it is directly
 // testable without a mock Tauri runtime (State<'_, Db>' cannot be constructed
 // in a unit test, same reasoning as export_prompts elsewhere in this file).
-fn apply_tool_usage(settings: &mut Settings, tool: &str) {
+pub(crate) fn apply_tool_usage(settings: &mut Settings, tool: &str) {
     let key = tool_usage_key(tool);
     let slot = settings.usage.entry(key.clone()).or_insert(0);
     *slot += 1;
@@ -10582,7 +10582,7 @@ async fn record_tool_usage(state: State<'_, Db>, tool: String) -> Result<(), Str
 // usage_stats already reads for prompts -- top_n mirrors the dashboard's own
 // "how many rows" field, the never-used list is always complete (it is short
 // by definition: at most 13 entries).
-fn tool_usage_stats(usage: &HashMap<String, u32>, last_used: &HashMap<String, u64>, top_n: usize) -> (Vec<ToolBar>, Vec<String>) {
+pub(crate) fn tool_usage_stats(usage: &HashMap<String, u32>, last_used: &HashMap<String, u64>, top_n: usize) -> (Vec<ToolBar>, Vec<String>) {
     let mut used: Vec<(&str, u32, u64)> = TOOL_KEYS
         .iter()
         .filter_map(|k| {
@@ -10610,7 +10610,7 @@ fn tool_usage_stats(usage: &HashMap<String, u32>, last_used: &HashMap<String, u6
 }
 
 // Coarse type of a prompt for the statistics breakdown.
-fn prompt_stat_type(p: &Prompt) -> &'static str {
+pub(crate) fn prompt_stat_type(p: &Prompt) -> &'static str {
     if !p.file_path.is_empty() {
         let lc = p.file_path.to_lowercase();
         if [".mp4", ".webm", ".mkv", ".mov", ".avi", ".m4v"].iter().any(|e| lc.ends_with(e)) {
@@ -10759,15 +10759,15 @@ async fn usage_stats(app: AppHandle, state: State<'_, Db>, top_n: usize) -> Resu
 // side, and duplicating a calendar calculation here for a plain text export
 // would be a second place to get the leap-year math wrong.
 #[derive(Serialize)]
-struct StatsExportEntry {
-    name: String,
-    copies: u32,
-    last_used: u64,
+pub(crate) struct StatsExportEntry {
+    pub(crate) name: String,
+    pub(crate) copies: u32,
+    pub(crate) last_used: u64,
 }
 
 // Tool-usage rows join this export once per-tool usage counters exist; an
 // empty slice until then keeps the JSON shape stable across both features.
-fn stats_export_entries(store: &Store) -> Vec<StatsExportEntry> {
+pub(crate) fn stats_export_entries(store: &Store) -> Vec<StatsExportEntry> {
     let usage = &store.settings.usage;
     let last_used = &store.settings.last_used;
     let name_of = |p: &Prompt| -> String {
@@ -10792,7 +10792,7 @@ fn stats_export_entries(store: &Store) -> Vec<StatsExportEntry> {
     entries
 }
 
-fn stats_to_csv(entries: &[StatsExportEntry], daily: &[DayCount], tools: &[StatsExportEntry]) -> String {
+pub(crate) fn stats_to_csv(entries: &[StatsExportEntry], daily: &[DayCount], tools: &[StatsExportEntry]) -> String {
     let mut rows = vec![csv_row(&["name", "copies", "last_used"])];
     for e in entries {
         rows.push(csv_row(&[&e.name, &e.copies.to_string(), &e.last_used.to_string()]));
@@ -10812,7 +10812,7 @@ fn stats_to_csv(entries: &[StatsExportEntry], daily: &[DayCount], tools: &[Stats
     rows.join("\r\n")
 }
 
-fn stats_to_txt(entries: &[StatsExportEntry], daily: &[DayCount], tools: &[StatsExportEntry]) -> String {
+pub(crate) fn stats_to_txt(entries: &[StatsExportEntry], daily: &[DayCount], tools: &[StatsExportEntry]) -> String {
     use std::fmt::Write;
     let mut out = String::from("Prompts\n=======\n");
     for e in entries {
@@ -10831,7 +10831,7 @@ fn stats_to_txt(entries: &[StatsExportEntry], daily: &[DayCount], tools: &[Stats
     out
 }
 
-fn stats_to_json(entries: &[StatsExportEntry], daily: &[DayCount], tools: &[StatsExportEntry]) -> String {
+pub(crate) fn stats_to_json(entries: &[StatsExportEntry], daily: &[DayCount], tools: &[StatsExportEntry]) -> String {
     #[derive(Serialize)]
     struct StatsExport<'a> {
         version: u32,
@@ -10891,29 +10891,29 @@ async fn export_stats(app: AppHandle, state: State<'_, Db>, format: String) -> R
 // the frontend switches on; `path` is what an "open folder" button reveals,
 // left empty for a row with no single folder to point at.
 #[derive(Serialize, Clone)]
-struct StorageItem {
-    key: String,
-    path: String,
-    bytes: u64,
-    count: u64,
+pub(crate) struct StorageItem {
+    pub(crate) key: String,
+    pub(crate) path: String,
+    pub(crate) bytes: u64,
+    pub(crate) count: u64,
     // The scan stopped at the entry cap -- the numbers above are a lower
     // bound, not the true total. Kept apart from `denied` so the frontend can
     // word the two situations differently.
-    capped: bool,
+    pub(crate) capped: bool,
     // The folder exists but could not be listed (a permissions problem) --
     // reported as such rather than silently shown as an empty, empty-looking
     // 0 B row.
-    denied: bool,
+    pub(crate) denied: bool,
 }
 
 #[derive(Serialize, Clone)]
-struct StorageBreakdown {
-    items: Vec<StorageItem>,
-    total_bytes: u64,
-    measured_at: u64,
+pub(crate) struct StorageBreakdown {
+    pub(crate) items: Vec<StorageItem>,
+    pub(crate) total_bytes: u64,
+    pub(crate) measured_at: u64,
 }
 
-fn file_size_or_zero(path: &std::path::Path) -> u64 {
+pub(crate) fn file_size_or_zero(path: &std::path::Path) -> u64 {
     fs::metadata(path).map(|m| m.len()).unwrap_or(0)
 }
 
@@ -10921,7 +10921,7 @@ fn file_size_or_zero(path: &std::path::Path) -> u64 {
 // prompts sharing the same file (a rotating entry's variants, say) must count
 // that file once, not twice, and a path that no longer resolves contributes
 // nothing rather than erroring the whole readout.
-fn attachments_bytes(file_paths: &[String]) -> (u64, u64) {
+pub(crate) fn attachments_bytes(file_paths: &[String]) -> (u64, u64) {
     let mut seen = std::collections::HashSet::new();
     let mut bytes = 0u64;
     let mut count = 0u64;
@@ -10942,7 +10942,7 @@ fn attachments_bytes(file_paths: &[String]) -> (u64, u64) {
 // scan stops once `cap` files have been counted, so a folder with millions of
 // small files cannot hang the window open. `read_dir` is injected so a
 // permissions failure can be exercised in a test without changing real ACLs.
-fn scan_dir_stats_with(
+pub(crate) fn scan_dir_stats_with(
     dir: &std::path::Path,
     cap: usize,
     read_dir: impl Fn(&std::path::Path) -> std::io::Result<std::fs::ReadDir>,
@@ -10972,13 +10972,13 @@ fn scan_dir_stats_with(
     (count, bytes, capped, false)
 }
 
-fn scan_dir_stats(dir: &std::path::Path, cap: usize) -> (u64, u64, bool, bool) {
+pub(crate) fn scan_dir_stats(dir: &std::path::Path, cap: usize) -> (u64, u64, bool, bool) {
     scan_dir_stats_with(dir, cap, |p| std::fs::read_dir(p))
 }
 
 // A runaway folder (a sync target pointed at something huge, say) stops
 // counting here rather than freezing the window open while it walks on.
-const STORAGE_SCAN_CAP: usize = 20_000;
+pub(crate) const STORAGE_SCAN_CAP: usize = 20_000;
 
 #[tauri::command]
 async fn storage_breakdown(app: AppHandle, state: State<'_, Db>, force: bool) -> Result<StorageBreakdown, String> {
@@ -11094,7 +11094,7 @@ async fn storage_breakdown(app: AppHandle, state: State<'_, Db>, force: bool) ->
 
 // Cached across calls -- reopening the statistics/backups window should not
 // re-walk every folder every time; the "measure again" button passes force=true.
-static STORAGE_CACHE: Mutex<Option<StorageBreakdown>> = Mutex::new(None);
+pub(crate) static STORAGE_CACHE: Mutex<Option<StorageBreakdown>> = Mutex::new(None);
 
 // Opens a storage-breakdown row's own folder -- the path travels from
 // storage_breakdown's own computation, never from anything the user typed.
@@ -11113,19 +11113,19 @@ fn open_storage_folder(path: String) -> Result<(), String> {
 // copy_log/clip_inbox/edit_state) rather than inventing a second way to
 // measure the same folder or table.
 #[derive(Serialize, Clone)]
-struct RetentionItem {
-    key: String,
-    count: u64,
-    bytes: u64,
+pub(crate) struct RetentionItem {
+    pub(crate) key: String,
+    pub(crate) count: u64,
+    pub(crate) bytes: u64,
 }
 
 #[derive(Serialize, Clone)]
-struct RetentionOverview {
-    items: Vec<RetentionItem>,
-    measured_at: u64,
+pub(crate) struct RetentionOverview {
+    pub(crate) items: Vec<RetentionItem>,
+    pub(crate) measured_at: u64,
 }
 
-static RETENTION_CACHE: Mutex<Option<RetentionOverview>> = Mutex::new(None);
+pub(crate) static RETENTION_CACHE: Mutex<Option<RetentionOverview>> = Mutex::new(None);
 
 #[tauri::command]
 async fn retention_overview(app: AppHandle, state: State<'_, Db>, force: bool) -> Result<RetentionOverview, String> {
@@ -11185,23 +11185,23 @@ async fn retention_overview(app: AppHandle, state: State<'_, Db>, force: bool) -
 
 // ---- Duplicate finder ----
 #[derive(Serialize)]
-struct DupMember {
-    id: String,
-    name: String,
-    text: String,
-    usage: u32,
-    views: Vec<String>,
+pub(crate) struct DupMember {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) text: String,
+    pub(crate) usage: u32,
+    pub(crate) views: Vec<String>,
 }
 #[derive(Serialize)]
-struct DupGroup {
-    score: f64,
-    members: Vec<DupMember>,
+pub(crate) struct DupGroup {
+    pub(crate) score: f64,
+    pub(crate) members: Vec<DupMember>,
 }
 
-fn normalize_dup(s: &str) -> String {
+pub(crate) fn normalize_dup(s: &str) -> String {
     s.to_lowercase().split_whitespace().collect::<Vec<_>>().join(" ")
 }
-fn dup_trigrams(s: &str) -> std::collections::HashSet<[char; 3]> {
+pub(crate) fn dup_trigrams(s: &str) -> std::collections::HashSet<[char; 3]> {
     let chars: Vec<char> = s.chars().collect();
     let mut set = std::collections::HashSet::new();
     for w in chars.windows(3) {
@@ -11209,14 +11209,14 @@ fn dup_trigrams(s: &str) -> std::collections::HashSet<[char; 3]> {
     }
     set
 }
-fn dup_dice(a: &std::collections::HashSet<[char; 3]>, b: &std::collections::HashSet<[char; 3]>) -> f64 {
+pub(crate) fn dup_dice(a: &std::collections::HashSet<[char; 3]>, b: &std::collections::HashSet<[char; 3]>) -> f64 {
     if a.is_empty() || b.is_empty() {
         return 0.0;
     }
     let inter = a.iter().filter(|t| b.contains(*t)).count();
     2.0 * inter as f64 / (a.len() + b.len()) as f64
 }
-fn uf_find(parent: &mut [usize], mut x: usize) -> usize {
+pub(crate) fn uf_find(parent: &mut [usize], mut x: usize) -> usize {
     while parent[x] != x {
         parent[x] = parent[parent[x]];
         x = parent[x];
@@ -11228,20 +11228,20 @@ fn uf_find(parent: &mut [usize], mut x: usize) -> usize {
 // counts as ignored when some single ignore_dups call covered them together,
 // not just because each independently belongs to some (possibly different)
 // ignored group.
-fn dup_pair_is_ignored(groups: &[Vec<String>], a: &str, b: &str) -> bool {
+pub(crate) fn dup_pair_is_ignored(groups: &[Vec<String>], a: &str, b: &str) -> bool {
     groups.iter().any(|g| g.iter().any(|id| id == a) && g.iter().any(|id| id == b))
 }
 
 // The few fields the duplicate scan reads. Cloning whole prompts under the store
 // lock would copy every stored image (hundreds of kilobytes each) for nothing.
 // A confidential entry is left out here: its stored text is ciphertext.
-struct DupSource {
-    id: String,
-    name: String,
-    text: String,
+pub(crate) struct DupSource {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) text: String,
 }
 
-fn dup_sources(prompts: &[Prompt]) -> Vec<DupSource> {
+pub(crate) fn dup_sources(prompts: &[Prompt]) -> Vec<DupSource> {
     prompts
         .iter()
         .filter(|p| !p.secret)
@@ -11372,13 +11372,13 @@ async fn find_duplicates(state: State<'_, Db>, threshold: f64) -> Result<Vec<Dup
 // own O(n^2) scan above does not need a budget like this one -- that one is
 // an explicit "scan now" action the user already chose to wait for, while
 // this one runs after every ordinary save, unasked.
-const SIMILAR_HINT_BUDGET: std::time::Duration = std::time::Duration::from_millis(40);
+pub(crate) const SIMILAR_HINT_BUDGET: std::time::Duration = std::time::Duration::from_millis(40);
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
-struct SimilarHit {
-    id: String,
-    name: String,
+pub(crate) struct SimilarHit {
+    pub(crate) id: String,
+    pub(crate) name: String,
 }
 
 // Whether two normalized lengths could possibly clear `thr` under trigram
@@ -11387,7 +11387,7 @@ struct SimilarHit {
 // enough is provably impossible and can be skipped before ever paying for
 // dup_trigrams on it -- the "only against entries of similar length" half of
 // the time budget.
-fn dup_length_could_match(a: usize, b: usize, thr: f64) -> bool {
+pub(crate) fn dup_length_could_match(a: usize, b: usize, thr: f64) -> bool {
     if a == 0 || b == 0 {
         return false;
     }
@@ -11403,7 +11403,7 @@ fn dup_length_could_match(a: usize, b: usize, thr: f64) -> bool {
 // store does not turn an ordinary save into a stall -- callers run it AFTER
 // the save already returned, so even reaching the budget only delays the
 // hint, never the save itself.
-fn find_similar_prompt(target: &Prompt, others: &[&Prompt], threshold: f64) -> Option<SimilarHit> {
+pub(crate) fn find_similar_prompt(target: &Prompt, others: &[&Prompt], threshold: f64) -> Option<SimilarHit> {
     let start = std::time::Instant::now();
     let thr = (threshold / 100.0).clamp(0.5, 1.0);
     let base = if !target.text.is_empty() { target.text.as_str() } else { target.name.as_str() };
@@ -11487,14 +11487,14 @@ async fn ignore_dups(app: AppHandle, state: State<'_, Db>, ids: Vec<String>) -> 
 // row instead of one long comma string. `kind` reuses prompt_stat_type()'s
 // categories (text/image/video/pdf/file) -- one shared classifier, not a second.
 #[derive(Serialize, Deserialize)]
-struct BackupPrompt {
-    name: String,
+pub(crate) struct BackupPrompt {
+    pub(crate) name: String,
     #[serde(default)]
-    chars: usize,
+    pub(crate) chars: usize,
     #[serde(default = "default_backup_kind")]
-    kind: String,
+    pub(crate) kind: String,
 }
-fn default_backup_kind() -> String {
+pub(crate) fn default_backup_kind() -> String {
     "text".into()
 }
 
@@ -11502,65 +11502,65 @@ fn default_backup_kind() -> String {
 // BackupPrompt above, read on demand through the same staged/validated file a
 // restore uses rather than the small always-cached preview.
 #[derive(Serialize)]
-struct BackupContentItem {
-    id: String,
-    name: String,
+pub(crate) struct BackupContentItem {
+    pub(crate) id: String,
+    pub(crate) name: String,
     // Its most recent edit, from prompt_versions -- None for a prompt that was
     // only ever created, never edited (no version row is written for that).
-    date: Option<i64>,
-    chars: usize,
-    kind: String,
+    pub(crate) date: Option<i64>,
+    pub(crate) chars: usize,
+    pub(crate) kind: String,
 }
 
 // The full picture of one snapshot, read on open rather than kept around --
 // unlike BackupInfo's cached header numbers, this is only ever fetched while the
 // content viewer for that one row is actually showing.
 #[derive(Serialize)]
-struct BackupContents {
-    entries: usize,
-    views: usize,
-    tags: usize,
+pub(crate) struct BackupContents {
+    pub(crate) entries: usize,
+    pub(crate) views: usize,
+    pub(crate) tags: usize,
     // The newest prompt_versions timestamp anywhere in the snapshot -- None
     // when nothing in it was ever edited (promptHistory off the whole time, or a
     // library of untouched prompts).
-    last_change: Option<i64>,
+    pub(crate) last_change: Option<i64>,
     // None for a snapshot made before this note existed.
-    program_version: Option<String>,
+    pub(crate) program_version: Option<String>,
     // Whether every row decrypted through the normal DPAPI seal -- false only on
     // the rare machine where Windows itself refused to encrypt while this
     // snapshot was made (see enc_str's plaintext fallback), never about a
     // password: a local snapshot never has one.
-    encrypted: bool,
-    items: Vec<BackupContentItem>,
+    pub(crate) encrypted: bool,
+    pub(crate) items: Vec<BackupContentItem>,
 }
 
 #[derive(Serialize)]
-struct BackupInfo {
-    name: String,
-    size: u64,
+pub(crate) struct BackupInfo {
+    pub(crate) name: String,
+    pub(crate) size: u64,
     // How many prompts the snapshot holds. Written next to the snapshot when it is
     // made (exact, and free to read back); a backup from an older build has no note
     // yet, so its count is read out of the snapshot itself once.
-    prompts: Option<usize>,
+    pub(crate) prompts: Option<usize>,
     // The prompt names themselves, same "written once, cheap to read back
     // after" treatment as `prompts` above. The snapshot beside it has every row
     // DPAPI-sealed, so this cache is sealed the same way: plaintext here would hand
     // anyone copying the data folder to another Windows account the full list of
     // prompt names while the snapshot itself stayed unreadable, which is exactly the
     // protection the seal exists for.
-    items: Vec<BackupPrompt>,
+    pub(crate) items: Vec<BackupPrompt>,
 }
 
-const BACKUP_COUNT_FILE: &str = "prompts.count";
-const BACKUP_NAMES_FILE: &str = "prompts.names.json";
+pub(crate) const BACKUP_COUNT_FILE: &str = "prompts.count";
+pub(crate) const BACKUP_NAMES_FILE: &str = "prompts.names.json";
 // The app version that made a snapshot -- missing for one made before this note
 // existed, read back as "unknown" rather than guessed from the running build.
-const BACKUP_VERSION_FILE: &str = "version.txt";
+pub(crate) const BACKUP_VERSION_FILE: &str = "version.txt";
 
 // Count the prompts in a snapshot folder: the note if there is one, otherwise the
 // snapshot is unpacked to a temp file and counted (and the note written for next
 // time). None only when the folder holds no readable snapshot at all.
-fn backup_prompt_count(folder: &std::path::Path) -> Option<usize> {
+pub(crate) fn backup_prompt_count(folder: &std::path::Path) -> Option<usize> {
     if let Ok(text) = fs::read_to_string(folder.join(BACKUP_COUNT_FILE)) {
         if let Ok(n) = text.trim().parse::<usize>() {
             return Some(n);
@@ -11589,14 +11589,14 @@ fn backup_prompt_count(folder: &std::path::Path) -> Option<usize> {
 // Total characters across a rotating prompt's entry 1 (`text`) and every variant:
 // what the version history diff and 90-94's auto-advance already treat as "the
 // whole prompt", so the backup list counts the same thing.
-fn prompt_char_count(p: &Prompt) -> usize {
+pub(crate) fn prompt_char_count(p: &Prompt) -> usize {
     p.text.chars().count() + p.variants.iter().map(|v| v.chars().count()).sum::<usize>()
 }
 
 // Decrypt each row (same DPAPI seal `db_load` uses on the live store) and pull out
 // name/size/kind: best-effort, a row that fails to decrypt/parse is skipped rather
 // than failing the whole list.
-fn read_prompt_names(path: &std::path::Path) -> Vec<BackupPrompt> {
+pub(crate) fn read_prompt_names(path: &std::path::Path) -> Vec<BackupPrompt> {
     let Ok(conn) = Connection::open(path) else { return Vec::new() };
     let Ok(mut stmt) = conn.prepare("SELECT data FROM prompts ORDER BY ord") else { return Vec::new() };
     let Ok(rows) = stmt.query_map([], |r| r.get::<_, String>(0)) else { return Vec::new() };
@@ -11610,7 +11610,7 @@ fn read_prompt_names(path: &std::path::Path) -> Vec<BackupPrompt> {
 // the snapshot it sits beside. `dec_str` passes an un-prefixed value straight through,
 // so a plaintext cache written by an earlier build still reads and is re-sealed on the
 // next write: no migration step needed.
-fn write_prompt_names(cache: &std::path::Path, items: &[BackupPrompt]) {
+pub(crate) fn write_prompt_names(cache: &std::path::Path, items: &[BackupPrompt]) {
     if let Ok(json) = serde_json::to_string(items) {
         let _ = fs::write(cache, enc_str(&json));
     }
@@ -11618,7 +11618,7 @@ fn write_prompt_names(cache: &std::path::Path, items: &[BackupPrompt]) {
 // An older build's cache is a plain Vec<String>: try the current shape first,
 // fall back to strings-with-zero-chars. The bool says whether the fallback fired, so
 // the caller can upgrade the cache file once instead of re-writing it on every read.
-fn read_prompt_names_cache(cache: &std::path::Path) -> (Vec<BackupPrompt>, bool) {
+pub(crate) fn read_prompt_names_cache(cache: &std::path::Path) -> (Vec<BackupPrompt>, bool) {
     let Some(text) = fs::read_to_string(cache).ok().map(|raw| dec_str(&raw)) else { return (Vec::new(), false) };
     if let Ok(items) = serde_json::from_str::<Vec<BackupPrompt>>(&text) {
         return (items, false);
@@ -11633,7 +11633,7 @@ fn read_prompt_names_cache(cache: &std::path::Path) -> (Vec<BackupPrompt>, bool)
 
 // Same cached-note treatment as `backup_prompt_count`: computed once (here, or
 // at creation time in `do_backup`) and read straight back after.
-fn backup_prompt_names(folder: &std::path::Path) -> Vec<BackupPrompt> {
+pub(crate) fn backup_prompt_names(folder: &std::path::Path) -> Vec<BackupPrompt> {
     let cache = folder.join(BACKUP_NAMES_FILE);
     if cache.exists() {
         let (items, legacy) = read_prompt_names_cache(&cache);
@@ -11660,25 +11660,25 @@ fn backup_prompt_names(folder: &std::path::Path) -> Vec<BackupPrompt> {
     }
     items
 }
-fn backups_dir(app: &AppHandle) -> std::path::PathBuf {
+pub(crate) fn backups_dir(app: &AppHandle) -> std::path::PathBuf {
     data_dir(app).join("backups")
 }
 // A backup folder name is a local_stamp() (digits, '-', '_'): reject anything with
 // path separators or traversal so a crafted name can never escape the backups dir.
-fn valid_backup_name(name: &str) -> bool {
+pub(crate) fn valid_backup_name(name: &str) -> bool {
     !name.is_empty()
         && !name.contains('/')
         && !name.contains('\\')
         && !name.contains("..")
         && name.chars().all(|c| c.is_ascii_digit() || c == '-' || c == '_')
 }
-fn list_backups_impl(app: &AppHandle) -> Vec<BackupInfo> {
+pub(crate) fn list_backups_impl(app: &AppHandle) -> Vec<BackupInfo> {
     list_backups_impl_at(&backups_dir(app))
 }
 
 // Split out of list_backups_impl() for the command line's headless path,
 // which has a folder to list but no AppHandle to resolve one from.
-fn list_backups_impl_at(dir: &std::path::Path) -> Vec<BackupInfo> {
+pub(crate) fn list_backups_impl_at(dir: &std::path::Path) -> Vec<BackupInfo> {
     let mut out: Vec<BackupInfo> = fs::read_dir(dir)
         .into_iter()
         .flatten()
@@ -11699,13 +11699,13 @@ fn list_backups_impl_at(dir: &std::path::Path) -> Vec<BackupInfo> {
     out
 }
 // Grandfather-father-son retention: keep the newest N backups per time tier.
-struct GfsConfig {
-    daily: usize,
-    weekly: usize,
-    monthly: usize,
-    yearly: usize,
+pub(crate) struct GfsConfig {
+    pub(crate) daily: usize,
+    pub(crate) weekly: usize,
+    pub(crate) monthly: usize,
+    pub(crate) yearly: usize,
 }
-fn gfs_from_settings(s: &Settings) -> Option<GfsConfig> {
+pub(crate) fn gfs_from_settings(s: &Settings) -> Option<GfsConfig> {
     if s.ui_flags.get("backupGfs") != Some(&true) {
         return None;
     }
@@ -11718,7 +11718,7 @@ fn gfs_from_settings(s: &Settings) -> Option<GfsConfig> {
     })
 }
 // Days since 1970-01-01 for a proleptic Gregorian date (Hinnant's algorithm).
-fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
+pub(crate) fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
     let y = if m <= 2 { y - 1 } else { y };
     let era = (if y >= 0 { y } else { y - 399 }) / 400;
     let yoe = y - era * 400;
@@ -11727,7 +11727,7 @@ fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
     era * 146097 + doe - 719468
 }
 // (day, week, month, year) tier keys from a backup folder name "YYYY-MM-DD_HH-MM-SS".
-fn backup_date_keys(name: &str) -> Option<(i64, i64, i64, i64)> {
+pub(crate) fn backup_date_keys(name: &str) -> Option<(i64, i64, i64, i64)> {
     let date = name.split('_').next()?;
     let mut it = date.split('-');
     let y: i64 = it.next()?.parse().ok()?;
@@ -11738,7 +11738,7 @@ fn backup_date_keys(name: &str) -> Option<(i64, i64, i64, i64)> {
 }
 // Which of `names` (sorted oldest first) rotation throws away. Pure, so the
 // retention rules can be tested without a disk full of folders.
-fn backups_to_drop(names: &[String], keep: usize, gfs: Option<&GfsConfig>) -> Vec<String> {
+pub(crate) fn backups_to_drop(names: &[String], keep: usize, gfs: Option<&GfsConfig>) -> Vec<String> {
     use std::collections::HashSet;
     let keep = keep.max(1); // a caller passing 0 must never mean "delete everything"
     let Some(g) = gfs else {
@@ -11787,7 +11787,7 @@ fn backups_to_drop(names: &[String], keep: usize, gfs: Option<&GfsConfig>) -> Ve
 // Split out of do_backup() so the command line's headless path can drop old
 // snapshots the same way, working from an already-resolved folder instead of
 // an AppHandle.
-fn rotate_backups_at(dir: &std::path::Path, keep: usize, gfs: Option<GfsConfig>) {
+pub(crate) fn rotate_backups_at(dir: &std::path::Path, keep: usize, gfs: Option<GfsConfig>) {
     // Only folders holding a snapshot count: one still being packed (or left
     // half-made by a quit) must neither use up a slot nor push a good one out.
     let mut names: Vec<String> = fs::read_dir(dir)
@@ -11807,10 +11807,10 @@ fn rotate_backups_at(dir: &std::path::Path, keep: usize, gfs: Option<GfsConfig>)
 // A snapshot is stored gzipped: a vacuumed store is mostly JSON text, so this
 // takes a few MB down to a fraction of that: and ten of them are kept by default.
 // `data.db` (uncompressed) is still accepted so older backups keep working.
-const BACKUP_DB_GZ: &str = "data.db.gz";
+pub(crate) const BACKUP_DB_GZ: &str = "data.db.gz";
 // How often the auto-backup job looks at the clock. The shortest interval the UI
 // offers is 6 h, so a quarter of an hour is precise enough and costs nothing.
-const BACKUP_CHECK_SECS: u64 = 900;
+pub(crate) const BACKUP_CHECK_SECS: u64 = 900;
 
 // No backup on disk at all is always due; otherwise due once the newest one is
 // at least a full interval old. Pulled out of auto_backup_tick so the two
@@ -11818,14 +11818,14 @@ const BACKUP_CHECK_SECS: u64 = 900;
 // AppHandle -- the second case is also what keeps two app starts shortly after
 // each other from both taking a backup: the later one sees the first one's
 // backup as fresh and skips.
-fn backup_is_due(newest_age_secs: Option<u64>, interval_h: u64) -> bool {
+pub(crate) fn backup_is_due(newest_age_secs: Option<u64>, interval_h: u64) -> bool {
     newest_age_secs.map_or(true, |age| age >= interval_h.saturating_mul(3600))
 }
 
 // One round of the auto-backup job. Due-ness comes from the age of the newest
 // backup on disk, never from a counter this process keeps, so a restart neither
 // skips a due backup nor takes an extra one.
-fn auto_backup_tick(app: &AppHandle) {
+pub(crate) fn auto_backup_tick(app: &AppHandle) {
     // The lock is held across the point-in-time copy, exactly like the manual
     // "backup now" command, so no write races with the VACUUM read.
     let state = app.state::<Db>();
@@ -11867,7 +11867,7 @@ fn auto_backup_tick(app: &AppHandle) {
 // the half-written archive, and folders that never got a snapshot. Anything newer
 // than `min_age` may belong to a backup running right now and is left alone, and
 // a folder that holds a snapshot is never removed (only its stray temp files).
-fn cleanup_incomplete_backups(root: &std::path::Path, min_age: Duration) {
+pub(crate) fn cleanup_incomplete_backups(root: &std::path::Path, min_age: Duration) {
     let old_enough = |p: &std::path::Path| {
         fs::metadata(p)
             .and_then(|m| m.modified())
@@ -11896,7 +11896,7 @@ fn cleanup_incomplete_backups(root: &std::path::Path, min_age: Duration) {
     }
 }
 
-fn backup_db_file(folder: &std::path::Path) -> Option<PathBuf> {
+pub(crate) fn backup_db_file(folder: &std::path::Path) -> Option<PathBuf> {
     let gz = folder.join(BACKUP_DB_GZ);
     if gz.exists() {
         return Some(gz);
@@ -11905,7 +11905,7 @@ fn backup_db_file(folder: &std::path::Path) -> Option<PathBuf> {
     plain.exists().then_some(plain)
 }
 
-fn gzip_to(src: &std::path::Path, dest: &std::path::Path) -> Result<(), String> {
+pub(crate) fn gzip_to(src: &std::path::Path, dest: &std::path::Path) -> Result<(), String> {
     use flate2::{write::GzEncoder, Compression};
     // Temp + rename: a snapshot half-written when the machine goes down would still
     // be picked up by backup_db_file and only fail at restore time, when it matters.
@@ -11937,7 +11937,7 @@ fn gzip_to(src: &std::path::Path, dest: &std::path::Path) -> Result<(), String> 
 // alone, as do_backup's early exit still does for a cheap fast path, under-
 // reports whenever a meaningful amount of committed data sits in an
 // uncheckpointed WAL file.
-fn vacuum_and_check_size(src: &std::path::Path, tmp: &std::path::Path) -> Result<(), String> {
+pub(crate) fn vacuum_and_check_size(src: &std::path::Path, tmp: &std::path::Path) -> Result<(), String> {
     let conn = Connection::open(src).map_err(|e| e.to_string())?;
     conn.execute("VACUUM INTO ?1", params![tmp.to_string_lossy()]).map_err(|e| e.to_string())?;
     if let Ok(meta) = fs::metadata(tmp) {
@@ -11949,7 +11949,7 @@ fn vacuum_and_check_size(src: &std::path::Path, tmp: &std::path::Path) -> Result
     Ok(())
 }
 
-fn gunzip_to(src: &std::path::Path, dest: &std::path::Path) -> Result<(), String> {
+pub(crate) fn gunzip_to(src: &std::path::Path, dest: &std::path::Path) -> Result<(), String> {
     gunzip_to_capped(src, dest, MAX_INFLATED)
 }
 
@@ -11958,7 +11958,7 @@ fn gunzip_to(src: &std::path::Path, dest: &std::path::Path) -> Result<(), String
 // where anything could have replaced it, and an unbounded inflate is a free crash.
 // Any failure (truncated or corrupt stream, cap exceeded, full disk) removes the
 // partial output, so a half-inflated file is never mistaken for a database.
-fn gunzip_to_capped(src: &std::path::Path, dest: &std::path::Path, cap: u64) -> Result<(), String> {
+pub(crate) fn gunzip_to_capped(src: &std::path::Path, dest: &std::path::Path, cap: u64) -> Result<(), String> {
     use flate2::read::GzDecoder;
     use std::io::Read;
     let input = fs::File::open(src).map_err(|e| e.to_string())?;
@@ -11979,30 +11979,30 @@ fn gunzip_to_capped(src: &std::path::Path, dest: &std::path::Path, cap: u64) -> 
     result
 }
 
-fn do_backup(app: &AppHandle, keep: usize, gfs: Option<GfsConfig>) -> Result<String, String> {
+pub(crate) fn do_backup(app: &AppHandle, keep: usize, gfs: Option<GfsConfig>) -> Result<String, String> {
     do_backup_at(&data_dir(app), &backups_dir(app), keep, gfs)
 }
 
 // Split out of do_backup() for the command line's headless path: identical
 // snapshot, naming and rotation logic, working from two already-resolved
 // folders instead of an AppHandle.
-fn do_backup_at(dir: &std::path::Path, root: &std::path::Path, keep: usize, gfs: Option<GfsConfig>) -> Result<String, String> {
+pub(crate) fn do_backup_at(dir: &std::path::Path, root: &std::path::Path, keep: usize, gfs: Option<GfsConfig>) -> Result<String, String> {
     let pending = backup_snapshot(dir, root)?;
     backup_pack(pending, root, keep, gfs)
 }
 
 // A claimed snapshot folder holding the vacuumed, still unpacked copy.
-struct PendingBackup {
-    name: String,
-    folder: PathBuf,
-    tmp: PathBuf,
+pub(crate) struct PendingBackup {
+    pub(crate) name: String,
+    pub(crate) folder: PathBuf,
+    pub(crate) tmp: PathBuf,
 }
 
 // Phase one: claim the folder and take the point-in-time copy (VACUUM INTO reads
 // one consistent state). Callers hold the store lock across this so no write lands
 // mid-copy; everything after it (compression, names, rotation) only touches the
 // copy and runs without the lock.
-fn backup_snapshot(dir: &std::path::Path, root: &std::path::Path) -> Result<PendingBackup, String> {
+pub(crate) fn backup_snapshot(dir: &std::path::Path, root: &std::path::Path) -> Result<PendingBackup, String> {
     let src = dir.join("data.db");
     if !src.exists() {
         return Err("no-store".into());
@@ -12060,7 +12060,7 @@ fn backup_snapshot(dir: &std::path::Path, root: &std::path::Path) -> Result<Pend
 
 // Phase two: compress the copy, record count and names, rotate. Works on files
 // only, so it needs no store lock. On any failure the claimed folder is removed.
-fn backup_pack(pending: PendingBackup, root: &std::path::Path, keep: usize, gfs: Option<GfsConfig>) -> Result<String, String> {
+pub(crate) fn backup_pack(pending: PendingBackup, root: &std::path::Path, keep: usize, gfs: Option<GfsConfig>) -> Result<String, String> {
     let PendingBackup { name, folder, tmp } = pending;
     let dest = folder.join(BACKUP_DB_GZ);
     // Compress the vacuumed copy, then drop the raw one: never leave both behind.
@@ -12093,7 +12093,7 @@ fn backup_pack(pending: PendingBackup, root: &std::path::Path, keep: usize, gfs:
 
 // Snapshot under the caller's store lock, then release it before the slow part.
 // `between` runs right after the release (tests use it to prove the lock is free).
-fn backup_released<G>(
+pub(crate) fn backup_released<G>(
     guard: G,
     dir: &std::path::Path,
     root: &std::path::Path,
@@ -12110,7 +12110,7 @@ fn backup_released<G>(
 // A folder name "YYYY-MM-DD_HH-MM-SS" as seconds on a local civil timeline. Two of
 // these subtract cleanly (the zone offset cancels), which is all the schedule needs
 // and avoids trusting a modification time that any sync or antivirus tool may reset.
-fn stamp_secs(name: &str) -> Option<i64> {
+pub(crate) fn stamp_secs(name: &str) -> Option<i64> {
     let (date, time) = name.split_once('_')?;
     let mut d = date.split('-');
     let y: i64 = d.next()?.parse().ok()?;
@@ -12124,7 +12124,7 @@ fn stamp_secs(name: &str) -> Option<i64> {
 }
 
 // Seconds since the newest snapshot, or None when there is none yet.
-fn newest_backup_age(app: &AppHandle) -> Option<u64> {
+pub(crate) fn newest_backup_age(app: &AppHandle) -> Option<u64> {
     let now = stamp_secs(&local_stamp())?;
     let newest = fs::read_dir(backups_dir(app))
         .into_iter()
@@ -12179,12 +12179,12 @@ async fn delete_backup(app: AppHandle, name: String) -> Result<(), String> {
     fs::remove_dir_all(backups_dir(&app).join(&name)).map_err(|e| e.to_string())
 }
 
-const STAGED_RESTORE_PREFIX: &str = "data.db.restoring";
+pub(crate) const STAGED_RESTORE_PREFIX: &str = "data.db.restoring";
 
 // Start-up sweep of staged backup copies a quit or crash left beside the live store
 // (the copy, its -wal/-shm and the older fixed name). Anything younger than
 // `min_age` is left alone.
-fn remove_stale_staged_restores(dir: &std::path::Path, min_age: Duration) {
+pub(crate) fn remove_stale_staged_restores(dir: &std::path::Path, min_age: Duration) {
     for entry in fs::read_dir(dir).into_iter().flatten().flatten() {
         if !entry.file_name().to_string_lossy().starts_with(STAGED_RESTORE_PREFIX) {
             continue;
@@ -12204,7 +12204,7 @@ fn remove_stale_staged_restores(dir: &std::path::Path, min_age: Duration) {
 // Unpack (gunzip if needed) a backup file BESIDE the live store, then prove it is
 // an openable SQLite file. Shared by every restore scope: a snapshot that fails
 // either step must never touch the live database.
-fn stage_and_validate_backup(backup_db: &std::path::Path, dir: &std::path::Path) -> Result<PathBuf, String> {
+pub(crate) fn stage_and_validate_backup(backup_db: &std::path::Path, dir: &std::path::Path) -> Result<PathBuf, String> {
     // A name of its own per call: two "view contents" clicks, or a view still
     // unpacking while a restore runs, must never share (and overwrite) one file.
     let staged = dir.join(format!("{STAGED_RESTORE_PREFIX}-{}", gen_id()));
@@ -12258,7 +12258,7 @@ fn stage_and_validate_backup(backup_db: &std::path::Path, dir: &std::path::Path)
 
 // The column names of one table, in the live database ("main") or in the attached
 // backup. Empty means the table is not there at all.
-fn table_columns(tx: &Transaction, schema: &str, table: &str) -> rusqlite::Result<Vec<String>> {
+pub(crate) fn table_columns(tx: &Transaction, schema: &str, table: &str) -> rusqlite::Result<Vec<String>> {
     let mut stmt = tx.prepare("SELECT name FROM pragma_table_info(?1, ?2)")?;
     let names = stmt.query_map(params![table, schema], |r| r.get::<_, String>(0))?;
     names.collect()
@@ -12274,7 +12274,7 @@ fn table_columns(tx: &Transaction, schema: &str, table: &str) -> rusqlite::Resul
 // The three scopes a restore or an import may run in. Both commands parse the
 // string through here so an unrecognised value can never mean "everything" to one
 // of them and "nothing, but report success" to the other.
-fn valid_scope(scope: &str) -> Result<&str, String> {
+pub(crate) fn valid_scope(scope: &str) -> Result<&str, String> {
     match scope {
         "all" | "data" | "settings" => Ok(scope),
         _ => Err(format!("unknown scope {scope:?}, expected all, data or settings")),
@@ -12283,7 +12283,7 @@ fn valid_scope(scope: &str) -> Result<&str, String> {
 
 // The live settings row, or None when it is absent or cannot be read (a row
 // that cannot be read has no vault keys to carry).
-fn read_settings_row(conn: &Connection, schema: &str) -> Option<Settings> {
+pub(crate) fn read_settings_row(conn: &Connection, schema: &str) -> Option<Settings> {
     let schema = if schema == "backup" { "backup" } else { "main" };
     let raw: String = conn.query_row(&format!("SELECT value FROM {schema}.meta WHERE key = 'settings'"), [], |r| r.get(0)).ok()?;
     serde_json::from_str(&dec_str(&raw)).ok()
@@ -12293,7 +12293,7 @@ fn read_settings_row(conn: &Connection, schema: &str) -> Option<Settings> {
 // staged copy gets this machine's own network, credential and registration
 // values back, so an old snapshot cannot bring back an old receiver password or
 // switch. The vault keys stay with the snapshot's prompts.
-fn keep_machine_in_staged(target: &std::path::Path, staged: &std::path::Path) -> Result<(), String> {
+pub(crate) fn keep_machine_in_staged(target: &std::path::Path, staged: &std::path::Path) -> Result<(), String> {
     let local = match Connection::open(target) {
         Ok(conn) => read_settings_row(&conn, "main"),
         Err(_) => None,
@@ -12310,7 +12310,7 @@ fn keep_machine_in_staged(target: &std::path::Path, staged: &std::path::Path) ->
     Ok(())
 }
 
-fn restore_selective(target: &std::path::Path, staged: &std::path::Path, scope: &str) -> Result<(), String> {
+pub(crate) fn restore_selective(target: &std::path::Path, staged: &std::path::Path, scope: &str) -> Result<(), String> {
     let mut conn = Connection::open(target).map_err(|e| e.to_string())?;
     conn.execute("ATTACH DATABASE ?1 AS backup", [staged.to_string_lossy().to_string()])
         .map_err(|e| e.to_string())?;
@@ -12391,7 +12391,7 @@ fn restore_selective(target: &std::path::Path, staged: &std::path::Path, scope: 
 // without an AppHandle or a real .gz on disk (mirrors apply_import's own split
 // from import_all, and vacuum_and_check_size's from do_backup, for the same
 // reason).
-fn backup_contents_from(conn: &Connection, folder: &std::path::Path) -> BackupContents {
+pub(crate) fn backup_contents_from(conn: &Connection, folder: &std::path::Path) -> BackupContents {
     let mut written = WrittenRows::new();
     let (prompts, settings, plaintext, _failures, _settings_unreadable) = db_load(conn, &mut written);
     // One prompt's most recent edit each, from the same table the library's
@@ -12473,7 +12473,7 @@ async fn restore_backup(app: AppHandle, state: State<'_, Db>, name: String, keep
 // receiver call this, answer their caller, and only then restart: a restart
 // inside the call drops the connection before any answer is written, and a
 // script would read a restore that worked as a failure.
-fn restore_backup_core(app: AppHandle, state: State<'_, Db>, name: String, keep: usize, scope: String) -> Result<(), String> {
+pub(crate) fn restore_backup_core(app: AppHandle, state: State<'_, Db>, name: String, keep: usize, scope: String) -> Result<(), String> {
     if !valid_backup_name(&name) {
         return Err("bad-name".into());
     }
@@ -12624,13 +12624,13 @@ fn delete_custom_theme(app: AppHandle, state: State<Db>, id: String) -> Result<S
 // install always creates a fresh one instead of colliding with (or silently
 // overwriting) whatever already has that id there.
 #[derive(Serialize, Deserialize)]
-struct ThemeExport {
+pub(crate) struct ThemeExport {
     #[serde(default)]
-    name: String,
+    pub(crate) name: String,
     #[serde(default = "default_custom_base")]
-    base: String,
+    pub(crate) base: String,
     #[serde(default)]
-    vars: HashMap<String, String>,
+    pub(crate) vars: HashMap<String, String>,
 }
 
 // async like every other file-picker command (pick_file_path, pick_folder,
@@ -12681,18 +12681,18 @@ async fn import_custom_theme(app: AppHandle, state: State<'_, Db>) -> Result<Set
 // private notes are deliberately not part of it: every copy path goes through
 // here (or through copy_text with an already-resolved body), so a note can never
 // leak into the clipboard.
-fn copy_payload(p: &Prompt) -> &str {
+pub(crate) fn copy_payload(p: &Prompt) -> &str {
     &p.text
 }
 
 // Absolute ceiling regardless of the expert value rotateMaxEntries (a UI-level
 // soft cap on how many the editor lets you ADD): this is the hard backend floor
 // against a corrupted or hand-edited settings/import file.
-const MAX_ROTATE_VARIANTS: usize = 49; // + entry 0 (text) = 50 total, matching rotateMaxEntries' own max
+pub(crate) const MAX_ROTATE_VARIANTS: usize = 49; // + entry 0 (text) = 50 total, matching rotateMaxEntries' own max
 
 // Trims, drops empty entries and enforces the hard ceiling: "leere Einträge
 // werden beim Speichern verworfen" applies to add_prompt/update_prompt alike.
-fn sanitize_variants(list: Vec<String>) -> Vec<String> {
+pub(crate) fn sanitize_variants(list: Vec<String>) -> Vec<String> {
     list.into_iter()
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
@@ -12703,7 +12703,7 @@ fn sanitize_variants(list: Vec<String>) -> Vec<String> {
 // Only "random" is ever stored as anything other than "" (order); a prompt
 // with no variants has nothing to rotate, so its mode is meaningless: keeping it
 // empty avoids a stale mode surviving in storage past the point it can affect anything.
-fn sanitize_rotate_mode(mode: String, variants: &[String]) -> String {
+pub(crate) fn sanitize_rotate_mode(mode: String, variants: &[String]) -> String {
     if variants.is_empty() {
         String::new()
     } else if mode == "random" {
@@ -12715,17 +12715,17 @@ fn sanitize_rotate_mode(mode: String, variants: &[String]) -> String {
 
 // Same reasoning as sanitize_rotate_mode: without variants, auto-advance
 // has nothing to advance through, so it can never survive as a stored true.
-fn sanitize_rotate_auto(auto: bool, variants: &[String]) -> bool {
+pub(crate) fn sanitize_rotate_auto(auto: bool, variants: &[String]) -> bool {
     auto && !variants.is_empty()
 }
 
 // "text" is entry 0 (every non-rotating consumer stays correct unchanged),
 // `variants` hold entries 1..n.
-fn rotation_total(p: &Prompt) -> usize {
+pub(crate) fn rotation_total(p: &Prompt) -> usize {
     1 + p.variants.len()
 }
 
-fn rotation_entry_text(p: &Prompt, idx: usize) -> String {
+pub(crate) fn rotation_entry_text(p: &Prompt, idx: usize) -> String {
     if idx == 0 {
         copy_payload(p).to_string() // Keep the one place that defines "entry 0"
     } else {
@@ -12751,7 +12751,7 @@ fn rotation_entry_text(p: &Prompt, idx: usize) -> String {
 // remain undrawn in the current shuffle bag (`total - bag.len() + 1`): a
 // freshly reshuffled, still-untouched bag always holds exactly `total`
 // entries, so the very first upcoming draw of a cycle is always `1`.
-fn rotation_next(p: &Prompt, settings: &Settings) -> (usize, usize, String) {
+pub(crate) fn rotation_next(p: &Prompt, settings: &Settings) -> (usize, usize, String) {
     let total = rotation_total(p);
     let (idx, pos) = if p.variants.is_empty() || settings.ui_flags.get("rotatingPrompts") == Some(&false) {
         (0, 1)
@@ -12776,7 +12776,7 @@ fn rotation_next(p: &Prompt, settings: &Settings) -> (usize, usize, String) {
 // a fresh permutation of every OTHER index with the just-shown one placed last: a
 // full cycle (every entry exactly once) always separates two showings of the same
 // entry, including across the reshuffle boundary.
-fn rotation_advance(p: &Prompt, settings: &mut Settings) {
+pub(crate) fn rotation_advance(p: &Prompt, settings: &mut Settings) {
     // Same gate as rotation_next(): while the feature is globally off the pointer
     // must stay frozen, not silently drift, so turning it back on resumes exactly
     // where the user left off instead of landing on an arbitrary position.
@@ -12810,7 +12810,7 @@ fn rotation_advance(p: &Prompt, settings: &mut Settings) {
 // Drops both rotation entries once a prompt is gone for good: called from the
 // same places that already purge per-prompt state (`purge_ids`), not from the
 // soft "move to trash" step (a trashed-then-restored prompt keeps its position).
-fn rotation_forget(settings: &mut Settings, ids: &[String]) {
+pub(crate) fn rotation_forget(settings: &mut Settings, ids: &[String]) {
     for id in ids {
         settings.rotate_pos.remove(id);
         settings.rotate_bag.remove(id);
@@ -12822,7 +12822,7 @@ fn rotation_forget(settings: &mut Settings, ids: &[String]) {
 // Win32 mechanism, see mod clipwatch). `id` is None for a text copy that never
 // carries rotation state (e.g. a resolved placeholder fill copied ad hoc).
 #[cfg(windows)]
-fn put_text(state: &State<Db>, id: Option<&str>, text: &str) -> bool {
+pub(crate) fn put_text(state: &State<Db>, id: Option<&str>, text: &str) -> bool {
     if let Some(id) = id {
         let auto = {
             let store = lock(state);
@@ -12839,7 +12839,7 @@ fn put_text(state: &State<Db>, id: Option<&str>, text: &str) -> bool {
     arboard::Clipboard::new().and_then(|mut c| c.set_text(text.to_string())).is_ok()
 }
 #[cfg(not(windows))]
-fn put_text(_state: &State<Db>, _id: Option<&str>, text: &str) -> bool {
+pub(crate) fn put_text(_state: &State<Db>, _id: Option<&str>, text: &str) -> bool {
     note_own_copy(text);
     arboard::Clipboard::new().and_then(|mut c| c.set_text(text.to_string())).is_ok()
 }
@@ -12848,7 +12848,7 @@ fn put_text(_state: &State<Db>, _id: Option<&str>, text: &str) -> bool {
 // so it clones only the ONE field the chosen branch actually needs: not the whole
 // Prompt, which on an image prompt meant cloning that base64 blob on every
 // text-branch check too.
-enum CopyPayload {
+pub(crate) enum CopyPayload {
     Image(String),
     File(String),
     Text(String),
@@ -12910,12 +12910,12 @@ async fn copy_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Result
 // BEFORE it goes through variable resolution: those all peek, resolve, copy_text,
 // then commit, so a cancelled variable dialog never burns an entry.
 #[derive(Serialize)]
-struct RotationPeek {
-    index: usize,
+pub(crate) struct RotationPeek {
+    pub(crate) index: usize,
     // 1-based "draw number within the current cycle": see rotation_next.
-    pos: usize,
-    total: usize,
-    text: String,
+    pub(crate) pos: usize,
+    pub(crate) total: usize,
+    pub(crate) text: String,
 }
 
 #[tauri::command]
@@ -12937,16 +12937,16 @@ fn rotation_peek(state: State<Db>, id: String) -> Option<RotationPeek> {
 // wherever the pointer actually moves (copy_prompt's own success path, this command)
 //: the same "backend decides, frontend just reflects" split as prompt-updated.
 #[derive(Serialize, Clone)]
-struct RotationChanged {
-    id: String,
-    index: usize,
+pub(crate) struct RotationChanged {
+    pub(crate) id: String,
+    pub(crate) index: usize,
     // 1-based "draw number within the current cycle": see rotation_next.
-    pos: usize,
-    total: usize,
-    text: String,
+    pub(crate) pos: usize,
+    pub(crate) total: usize,
+    pub(crate) text: String,
 }
 
-fn emit_rotation_changed(app: &AppHandle, p: &Prompt, settings: &Settings) {
+pub(crate) fn emit_rotation_changed(app: &AppHandle, p: &Prompt, settings: &Settings) {
     if p.variants.is_empty() {
         return;
     }
@@ -12982,7 +12982,7 @@ fn rotation_commit(app: AppHandle, state: State<Db>, id: String) {
 // May this prompt start an auto-session (advance on every paste, not just
 // on copy)? Image/file prompts have no rotation_next text path at all, so they
 // are excluded here rather than relying on callers to check separately.
-fn auto_eligible(p: &Prompt, s: &Settings) -> bool {
+pub(crate) fn auto_eligible(p: &Prompt, s: &Settings) -> bool {
     s.ui_flags.get("rotatingPrompts") != Some(&false)
         && !p.variants.is_empty()
         && p.rotate_auto
@@ -13060,16 +13060,16 @@ async fn copy_text(state: State<'_, Db>, text: String, id: Option<String>) -> Re
 // Every offset is a BYTE position into this string's UTF-8 encoding (never a
 // char or UTF-16 count, which is what the format itself requires and what
 // makes a multi-byte character in the fragment worth its own test).
-const CF_HTML_BODY_HEAD: &str = "<html>\r\n<body>\r\n<!--StartFragment-->";
-const CF_HTML_BODY_FOOT: &str = "<!--EndFragment-->\r\n</body>\r\n</html>";
+pub(crate) const CF_HTML_BODY_HEAD: &str = "<html>\r\n<body>\r\n<!--StartFragment-->";
+pub(crate) const CF_HTML_BODY_FOOT: &str = "<!--EndFragment-->\r\n</body>\r\n</html>";
 
-fn cf_html_header(start_html: usize, end_html: usize, start_fragment: usize, end_fragment: usize) -> String {
+pub(crate) fn cf_html_header(start_html: usize, end_html: usize, start_fragment: usize, end_fragment: usize) -> String {
     format!(
         "Version:0.9\r\nStartHTML:{start_html:0>10}\r\nEndHTML:{end_html:0>10}\r\nStartFragment:{start_fragment:0>10}\r\nEndFragment:{end_fragment:0>10}\r\n"
     )
 }
 
-fn build_cf_html(fragment: &str) -> String {
+pub(crate) fn build_cf_html(fragment: &str) -> String {
     // The header's own placeholders are fixed-width (10 digits each), so its
     // byte length is already known before any real offset is computed.
     let header_len = cf_html_header(0, 0, 0, 0).len();
@@ -13091,7 +13091,7 @@ fn build_cf_html(fragment: &str) -> String {
 // then added under its own registered format WITHOUT clearing what was just
 // set; the two calls together are what makes one clipboard entry carry both.
 #[cfg(windows)]
-fn put_formatted(text: &str, html: &str) -> bool {
+pub(crate) fn put_formatted(text: &str, html: &str) -> bool {
     let Ok(_clip) = clipboard_win::Clipboard::new_attempts(10) else {
         return false;
     };
@@ -13105,7 +13105,7 @@ fn put_formatted(text: &str, html: &str) -> bool {
     clipboard_win::raw::set_without_clear(html_fmt.code(), payload.as_bytes()).is_ok()
 }
 #[cfg(not(windows))]
-fn put_formatted(_text: &str, _html: &str) -> bool {
+pub(crate) fn put_formatted(_text: &str, _html: &str) -> bool {
     false
 }
 
@@ -13130,16 +13130,16 @@ async fn clipboard_text() -> String {
 // Safety ceiling for the copy-history length; the live limit is the expert value
 // historyMax (default 100, up to this ceiling). The history lives in its own
 // table with O(log n) append/trim, so even the ceiling stays fast on every copy.
-const COPY_HISTORY_MAX: usize = 1_000_000;
+pub(crate) const COPY_HISTORY_MAX: usize = 1_000_000;
 
 // One copy-history entry: which prompt + when (unix seconds).
 #[derive(Serialize, Deserialize, Clone)]
-struct CopyEntry {
-    id: String,
-    ts: u64,
+pub(crate) struct CopyEntry {
+    pub(crate) id: String,
+    pub(crate) ts: u64,
 }
 
-fn now_secs() -> u64 {
+pub(crate) fn now_secs() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -13149,9 +13149,9 @@ fn now_secs() -> u64 {
 // Retention window in seconds from the expert "history retention" setting
 // (days). Default 30 days for a new install; 0 or negative = forever. Stores
 // older than this default are pinned to 0 in migrate().
-const HISTORY_DAYS_DEFAULT: f64 = 30.0;
-const RECORDING_RETENTION_DAYS_DEFAULT: f64 = 90.0;
-fn history_max_age(settings: &Settings) -> Option<u64> {
+pub(crate) const HISTORY_DAYS_DEFAULT: f64 = 30.0;
+pub(crate) const RECORDING_RETENTION_DAYS_DEFAULT: f64 = 90.0;
+pub(crate) fn history_max_age(settings: &Settings) -> Option<u64> {
     let days = settings.ui_values.get("historyDays").copied().unwrap_or(HISTORY_DAYS_DEFAULT);
     if days <= 0.0 {
         None
@@ -13163,7 +13163,7 @@ fn history_max_age(settings: &Settings) -> Option<u64> {
 // History length is an expert value (default 100, ceiling COPY_HISTORY_MAX), paired
 // with the retention-window cutoff: the two limits `db_trim_copy` always applies
 // together. One place for both, so startup trimming and live recording can't drift.
-fn history_cap_and_cutoff(settings: &Settings) -> (usize, Option<u64>) {
+pub(crate) fn history_cap_and_cutoff(settings: &Settings) -> (usize, Option<u64>) {
     let cap = settings
         .ui_values
         .get("historyMax")
@@ -13175,7 +13175,7 @@ fn history_cap_and_cutoff(settings: &Settings) -> (usize, Option<u64>) {
 }
 
 // Drop copy-history entries older than the retention window (auto-delete).
-fn prune_history(settings: &mut Settings) {
+pub(crate) fn prune_history(settings: &mut Settings) {
     if let Some(max_age) = history_max_age(settings) {
         let now = now_secs();
         settings.copy_log.retain(|e| now.saturating_sub(e.ts) <= max_age);
@@ -13272,7 +13272,7 @@ async fn record_copy(app: AppHandle, state: State<'_, Db>, id: String) -> Result
 
 // The counters go only once the log rows are gone: a delete that failed leaves
 // both the rows and the counters as they were, so the two never disagree.
-fn clear_history_core(delete_log: impl FnOnce() -> bool, settings: &mut Settings) -> bool {
+pub(crate) fn clear_history_core(delete_log: impl FnOnce() -> bool, settings: &mut Settings) -> bool {
     if !delete_log() {
         return false;
     }
@@ -13311,15 +13311,15 @@ async fn clear_copy_history(app: AppHandle, state: State<'_, Db>) -> Result<(), 
 // One row as sent back by the frontend's own pre-clear snapshot (recent_copies
 // already returns the same shape, just with an extra rowid the frontend drops).
 #[derive(Deserialize)]
-struct CopyLogRow {
-    ts: u64,
-    id: String,
+pub(crate) struct CopyLogRow {
+    pub(crate) ts: u64,
+    pub(crate) id: String,
 }
 
 // The insert loop behind restore_copy_history, kept apart from the command so it
 // can be exercised with a bare in-memory connection. One transaction: a row that
 // fails leaves the table exactly as it was, never a half-restored history.
-fn db_restore_copy_log(conn: &Connection, rows: &[CopyLogRow]) -> rusqlite::Result<()> {
+pub(crate) fn db_restore_copy_log(conn: &Connection, rows: &[CopyLogRow]) -> rusqlite::Result<()> {
     let tx = conn.unchecked_transaction()?;
     for row in rows {
         tx.execute("INSERT INTO copy_log(ts, id) VALUES(?1, ?2)", params![row.ts as i64, row.id])?;
@@ -13382,7 +13382,7 @@ async fn delete_copy_entry(app: AppHandle, rowid: i64) -> bool {
 // The boxes float_recall spreads out, in physical pixels: every pill (in a stable
 // id order) and then every folder, each sized by its own scale and the screen's
 // scale factor. Returns the pill ids in the same order as their boxes.
-fn recall_wishes(settings: &Settings, prompts: &[Prompt], work: Rect, dpi: f64) -> (Vec<String>, Vec<Rect>) {
+pub(crate) fn recall_wishes(settings: &Settings, prompts: &[Prompt], work: Rect, dpi: f64) -> (Vec<String>, Vec<Rect>) {
     let mut wishes: Vec<Rect> = Vec::new();
     let mut pill_ids: Vec<String> = settings.floating.keys().cloned().collect();
     pill_ids.sort(); // stable fan-out order across runs
@@ -13583,7 +13583,7 @@ async fn resize_float_media(app: AppHandle, id: String, width: f64, height: f64)
 // Tauri's separate set_position + set_size leave a one-frame intermediate state
 // (new position, old size) that flickers the edges while dragging a grip.
 #[cfg(windows)]
-fn set_window_pos_phys(win: &tauri::WebviewWindow, x: i32, y: i32, w: i32, h: i32) -> bool {
+pub(crate) fn set_window_pos_phys(win: &tauri::WebviewWindow, x: i32, y: i32, w: i32, h: i32) -> bool {
     #[link(name = "user32")]
     extern "system" {
         fn SetWindowPos(hwnd: isize, after: isize, x: i32, y: i32, cx: i32, cy: i32, flags: u32) -> i32;
@@ -13598,7 +13598,7 @@ fn set_window_pos_phys(win: &tauri::WebviewWindow, x: i32, y: i32, w: i32, h: i3
 }
 
 #[cfg(windows)]
-fn set_float_bounds_native(win: &tauri::WebviewWindow, x: f64, y: f64, w: f64, h: f64) -> bool {
+pub(crate) fn set_float_bounds_native(win: &tauri::WebviewWindow, x: f64, y: f64, w: f64, h: f64) -> bool {
     let s = win.scale_factor().unwrap_or(1.0);
     set_window_pos_phys(
         win,
@@ -13612,9 +13612,9 @@ fn set_float_bounds_native(win: &tauri::WebviewWindow, x: f64, y: f64, w: f64, h
 // Expert privacy flag (Datenschutz tab), phrased from the user's side: "allow
 // screenshots of this app". It ships OFF, so the window stays out of screen captures
 // until someone deliberately lets them through.
-const ALLOW_SCREENSHOT_KEY: &str = "allowScreenshot";
+pub(crate) const ALLOW_SCREENSHOT_KEY: &str = "allowScreenshot";
 
-fn capture_excluded(settings: &Settings) -> bool {
+pub(crate) fn capture_excluded(settings: &Settings) -> bool {
     settings.ui_flags.get(ALLOW_SCREENSHOT_KEY) != Some(&true)
 }
 
@@ -13627,7 +13627,7 @@ fn capture_excluded(settings: &Settings) -> bool {
 // rectangle in screenshots is worse than the window simply showing, and 2004+
 // covers every supported system.
 #[cfg(windows)]
-fn set_capture_exclusion(win: &tauri::WebviewWindow, excluded: bool) {
+pub(crate) fn set_capture_exclusion(win: &tauri::WebviewWindow, excluded: bool) {
     #[link(name = "user32")]
     extern "system" {
         fn SetWindowDisplayAffinity(hwnd: isize, affinity: u32) -> i32;
@@ -13643,12 +13643,12 @@ fn set_capture_exclusion(win: &tauri::WebviewWindow, excluded: bool) {
 }
 
 #[cfg(not(windows))]
-fn set_capture_exclusion(_win: &tauri::WebviewWindow, _excluded: bool) {}
+pub(crate) fn set_capture_exclusion(_win: &tauri::WebviewWindow, _excluded: bool) {}
 
 // The window's current display affinity as the system reports it (0 = none,
 // 0x11 = excluded from capture), or None when it cannot be read.
 #[cfg(windows)]
-fn display_affinity(win: &tauri::WebviewWindow) -> Option<u32> {
+pub(crate) fn display_affinity(win: &tauri::WebviewWindow) -> Option<u32> {
     #[link(name = "user32")]
     extern "system" {
         fn GetWindowDisplayAffinity(hwnd: isize, affinity: *mut u32) -> i32;
@@ -13660,26 +13660,26 @@ fn display_affinity(win: &tauri::WebviewWindow) -> Option<u32> {
 }
 
 #[cfg(not(windows))]
-fn display_affinity(_win: &tauri::WebviewWindow) -> Option<u32> {
+pub(crate) fn display_affinity(_win: &tauri::WebviewWindow) -> Option<u32> {
     None
 }
 
 // The recording bar and the region outline stay out of every capture whatever
 // the privacy setting says: a recording must never contain its own controls.
-fn always_excluded(label: &str) -> bool {
+pub(crate) fn always_excluded(label: &str) -> bool {
     label == "rec-bar" || label == "rec-outline"
 }
 
 // Whether a window has to be capture-excluded, given the state the privacy
 // setting alone asks for. Every loop that applies the affinity to all windows
 // goes through this, so the setting can never clear a permanent exclusion.
-fn wants_capture_exclusion(label: &str, setting_excluded: bool) -> bool {
+pub(crate) fn wants_capture_exclusion(label: &str, setting_excluded: bool) -> bool {
     always_excluded(label) || setting_excluded
 }
 
 // Pure: does a readback agree with what was asked for? An unreadable affinity
 // counts as agreeing, since there is nothing to compare.
-fn affinity_matches(want_excluded: bool, readback: Option<u32>) -> bool {
+pub(crate) fn affinity_matches(want_excluded: bool, readback: Option<u32>) -> bool {
     match readback {
         Some(a) => (a != 0) == want_excluded,
         None => true,
@@ -13689,7 +13689,7 @@ fn affinity_matches(want_excluded: bool, readback: Option<u32>) -> bool {
 // Pure: whether the app's own screenshot, colour picker and recording picker
 // hide the app windows before freezing the desktop. With the privacy setting
 // allowing screenshots the app stays visible in its own tools.
-fn capture_hides_app_windows(setting_excluded: bool) -> bool {
+pub(crate) fn capture_hides_app_windows(setting_excluded: bool) -> bool {
     setting_excluded
 }
 
@@ -13697,7 +13697,7 @@ fn capture_hides_app_windows(setting_excluded: bool) -> bool {
 // A window that still reports the wrong state gets the call once more. Returns
 // true when a window that must be capturable still reports exclusion after
 // that (some Windows builds keep it), so the caller can tell the user.
-fn apply_capture_exclusion_all(app: &AppHandle, setting_excluded: bool) -> bool {
+pub(crate) fn apply_capture_exclusion_all(app: &AppHandle, setting_excluded: bool) -> bool {
     let mut stuck = false;
     for (label, win) in app.webview_windows() {
         let want = wants_capture_exclusion(&label, setting_excluded);
@@ -13722,7 +13722,7 @@ fn apply_capture_exclusion_all(app: &AppHandle, setting_excluded: bool) -> bool 
 // recorded window, following it while it moves. ----
 
 #[cfg(windows)]
-fn monitor_bounds(hmonitor: isize) -> Option<(i32, i32, i32, i32)> {
+pub(crate) fn monitor_bounds(hmonitor: isize) -> Option<(i32, i32, i32, i32)> {
     #[repr(C)]
     struct RectI { left: i32, top: i32, right: i32, bottom: i32 }
     #[repr(C)]
@@ -13744,7 +13744,7 @@ fn monitor_bounds(hmonitor: isize) -> Option<(i32, i32, i32, i32)> {
 }
 
 #[cfg(windows)]
-fn primary_hmonitor() -> isize {
+pub(crate) fn primary_hmonitor() -> isize {
     #[link(name = "user32")]
     extern "system" {
         fn MonitorFromWindow(hwnd: isize, flags: u32) -> isize;
@@ -13754,7 +13754,7 @@ fn primary_hmonitor() -> isize {
 }
 
 #[cfg(windows)]
-fn external_window_rect(hwnd: isize) -> Option<(i32, i32, i32, i32)> {
+pub(crate) fn external_window_rect(hwnd: isize) -> Option<(i32, i32, i32, i32)> {
     #[repr(C)]
     struct RectW { left: i32, top: i32, right: i32, bottom: i32 }
     #[link(name = "user32")]
@@ -13773,7 +13773,7 @@ fn external_window_rect(hwnd: isize) -> Option<(i32, i32, i32, i32)> {
 }
 
 #[cfg(windows)]
-fn position_rec_bar(win: &tauri::WebviewWindow, target_kind: &str, hwnd_or_monitor: isize) {
+pub(crate) fn position_rec_bar(win: &tauri::WebviewWindow, target_kind: &str, hwnd_or_monitor: isize) {
     let size = win.outer_size().unwrap_or(PhysicalSize::new(320, 56));
     if target_kind == "window" {
         if let Some((left, top, right, _bottom)) = external_window_rect(hwnd_or_monitor) {
@@ -13801,21 +13801,21 @@ fn position_rec_bar(win: &tauri::WebviewWindow, target_kind: &str, hwnd_or_monit
 // new thread for a new hwnd before the old one has seen the bar hidden) and
 // exits immediately instead of fighting the new thread over positioning or
 // auto-stopping the wrong (new) session when its own stale hwnd closes.
-static REC_BAR_FOLLOW_GEN: AtomicU64 = AtomicU64::new(0);
+pub(crate) static REC_BAR_FOLLOW_GEN: AtomicU64 = AtomicU64::new(0);
 
 // Once the user has dragged the bar themselves, the 200ms poll must stop
 // re-snapping it back to the tracked window's corner -- reset true at the
 // start of every follow thread (a fresh recording gets the auto-follow back),
 // flipped false by rec_bar_mark_moved() the moment a drag begins. The window
 // closing/stopping the recording is unaffected: that check runs regardless.
-static REC_BAR_FOLLOWING: AtomicBool = AtomicBool::new(true);
+pub(crate) static REC_BAR_FOLLOWING: AtomicBool = AtomicBool::new(true);
 
 #[tauri::command]
 fn rec_bar_mark_moved() {
     REC_BAR_FOLLOWING.store(false, Ordering::SeqCst);
 }
 
-fn spawn_rec_bar_follow(app: AppHandle, hwnd: isize) {
+pub(crate) fn spawn_rec_bar_follow(app: AppHandle, hwnd: isize) {
     let my_gen = REC_BAR_FOLLOW_GEN.fetch_add(1, Ordering::SeqCst) + 1;
     REC_BAR_FOLLOWING.store(true, Ordering::SeqCst);
     let _ = std::thread::Builder::new().name("rec-bar-follow".into()).spawn(move || loop {
@@ -13847,7 +13847,7 @@ fn spawn_rec_bar_follow(app: AppHandle, hwnd: isize) {
 // way to stop it again. Registered unconditionally at startup; the
 // recording_active() check makes every tick a no-op outside an actual
 // recording, so the always-on cost is one cheap state read every few seconds.
-fn rec_bar_heal_tick(app: &AppHandle) {
+pub(crate) fn rec_bar_heal_tick(app: &AppHandle) {
     if !recording_active(app) {
         return;
     }
@@ -13862,7 +13862,7 @@ fn rec_bar_heal_tick(app: &AppHandle) {
 // Remembers the target the bar is currently anchored to, so fit_rec_bar can
 // re-run the same placement show_rec_bar used after a resize without the
 // frontend having to resend a target it never itself tracked.
-static REC_BAR_TARGET: Mutex<(String, isize)> = Mutex::new((String::new(), 0));
+pub(crate) static REC_BAR_TARGET: Mutex<(String, isize)> = Mutex::new((String::new(), 0));
 
 // Async on purpose: a synchronous command runs on the main thread, and building
 // a webview window from there never returns -- the window gets created, but
@@ -13952,24 +13952,24 @@ fn hide_rec_bar(app: AppHandle) {
 // not steal keyboard focus away from whatever app is being recorded.
 // Bumped for every outline window that is shown or torn down, so a re-apply
 // queued for an earlier outline can never touch the next recording's one.
-static REC_OUTLINE_GEN: AtomicU64 = AtomicU64::new(0);
+pub(crate) static REC_OUTLINE_GEN: AtomicU64 = AtomicU64::new(0);
 
-fn outline_closure_is_current(gen: u64, current: u64) -> bool {
+pub(crate) fn outline_closure_is_current(gen: u64, current: u64) -> bool {
     gen == current
 }
 
 // The outline's shipped frame colour, the one recoutline.html falls back to.
-const REC_OUTLINE_DEFAULT_COLOR: &str = "#2563eb";
+pub(crate) const REC_OUTLINE_DEFAULT_COLOR: &str = "#2563eb";
 
 // The `recOutline` switch ships on: only an explicit false hides the frame.
-fn rec_outline_wanted(settings: &Settings) -> bool {
+pub(crate) fn rec_outline_wanted(settings: &Settings) -> bool {
     settings.ui_flags.get("recOutline").copied().unwrap_or(true)
 }
 
 // The stored colour, or the default when it is missing or not a plain
 // `#rrggbb`. The value ends up inside a script string handed to the outline
 // window, so nothing but six hex digits may ever pass.
-fn rec_outline_color(settings: &Settings) -> String {
+pub(crate) fn rec_outline_color(settings: &Settings) -> String {
     match settings.ui_texts.get("recOutlineColor") {
         Some(c) if c.len() == 7 && c.starts_with('#') && c[1..].bytes().all(|b| b.is_ascii_hexdigit()) => c.to_ascii_lowercase(),
         _ => REC_OUTLINE_DEFAULT_COLOR.to_string(),
@@ -13979,7 +13979,7 @@ fn rec_outline_color(settings: &Settings) -> String {
 // What a recording start asks the outline for: the region and the colour, or
 // nothing when the target has no outline (monitor and window recordings) or
 // the user switched it off.
-fn rec_outline_request(settings: &Settings, rect: Option<(i32, i32, u32, u32)>) -> Option<((i32, i32, u32, u32), String)> {
+pub(crate) fn rec_outline_request(settings: &Settings, rect: Option<(i32, i32, u32, u32)>) -> Option<((i32, i32, u32, u32), String)> {
     if !rec_outline_wanted(settings) {
         return None;
     }
@@ -13988,14 +13988,14 @@ fn rec_outline_request(settings: &Settings, rect: Option<(i32, i32, u32, u32)>) 
 
 // Runs in the outline window before its page, so the frame has its colour from
 // the first paint. The page reads it from the `--outline-color` variable.
-fn rec_outline_init_script(color: &str) -> String {
+pub(crate) fn rec_outline_init_script(color: &str) -> String {
     format!(
         "(function(){{var c='{color}';var a=function(){{document.documentElement.style.setProperty('--outline-color',c);}};if(document.readyState==='loading'){{document.addEventListener('DOMContentLoaded',a);}}else{{a();}}}})();"
     )
 }
 
 #[cfg(windows)]
-fn show_rec_outline(app: &AppHandle, rect: (i32, i32, u32, u32), color: &str) {
+pub(crate) fn show_rec_outline(app: &AppHandle, rect: (i32, i32, u32, u32), color: &str) {
     let label = "rec-outline";
     if app.get_webview_window(label).is_some() {
         return;
@@ -14066,7 +14066,7 @@ fn show_rec_outline(app: &AppHandle, rect: (i32, i32, u32, u32), color: &str) {
 // window is more than a couple of pixels off afterwards (a DPI boundary crossed
 // by the first move), apply the rect once more, which no longer crosses one.
 #[cfg(windows)]
-fn place_rec_outline(win: &tauri::WebviewWindow, rect: (i32, i32, u32, u32)) {
+pub(crate) fn place_rec_outline(win: &tauri::WebviewWindow, rect: (i32, i32, u32, u32)) {
     let (x, y, w, h) = rect;
     let r = Rect { x: x as f64, y: y as f64, w: w as f64, h: h as f64 };
     for _ in 0..2 {
@@ -14086,8 +14086,8 @@ fn place_rec_outline(win: &tauri::WebviewWindow, rect: (i32, i32, u32, u32)) {
 // Pure: whether a window sitting at `actual` has to be moved or resized to
 // reach `want`. Anything within OUTLINE_TOLERANCE_PX on every edge counts as
 // placed, so a rounding difference never starts a move/resize loop.
-const OUTLINE_TOLERANCE_PX: i64 = 2;
-fn outline_rect_needs_reapply(actual: (i32, i32, u32, u32), want: (i32, i32, u32, u32)) -> bool {
+pub(crate) const OUTLINE_TOLERANCE_PX: i64 = 2;
+pub(crate) fn outline_rect_needs_reapply(actual: (i32, i32, u32, u32), want: (i32, i32, u32, u32)) -> bool {
     let d = |a: i64, b: i64| (a - b).abs() > OUTLINE_TOLERANCE_PX;
     d(actual.0 as i64, want.0 as i64)
         || d(actual.1 as i64, want.1 as i64)
@@ -14098,7 +14098,7 @@ fn outline_rect_needs_reapply(actual: (i32, i32, u32, u32), want: (i32, i32, u32
 // Torn down (not just hidden) on stop, cancel and auto-stop -- see
 // stop_recording_now and cancel_recording.
 #[cfg(windows)]
-fn hide_rec_outline(app: &AppHandle) {
+pub(crate) fn hide_rec_outline(app: &AppHandle) {
     REC_OUTLINE_GEN.fetch_add(1, Ordering::SeqCst);
     if let Some(w) = app.get_webview_window("rec-outline") {
         let _ = w.close();
@@ -14106,40 +14106,40 @@ fn hide_rec_outline(app: &AppHandle) {
 }
 
 #[derive(serde::Serialize)]
-struct RecordingStatus {
-    paused: bool,
-    elapsed_ms: i64,
-    bytes: u64,
-    audio_system: bool,
-    audio_mic: bool,
+pub(crate) struct RecordingStatus {
+    pub(crate) paused: bool,
+    pub(crate) elapsed_ms: i64,
+    pub(crate) bytes: u64,
+    pub(crate) audio_system: bool,
+    pub(crate) audio_mic: bool,
     // true once the mic capture thread hit AUDCLNT_E_DEVICE_INVALIDATED
     // (unplugged mid-recording) -- the recording itself keeps running with
     // silence in place of the mic track; the control bar surfaces this once
     // as a warning state on the mic indicator the first time it flips true.
-    mic_lost: bool,
+    pub(crate) mic_lost: bool,
     // Whether the rec bar's own mute buttons currently have each source
     // silenced. Always false for a source that was never active this session.
-    audio_system_muted: bool,
-    audio_mic_muted: bool,
+    pub(crate) audio_system_muted: bool,
+    pub(crate) audio_mic_muted: bool,
     // Set once an unrecoverable encoder write failure happened (e.g. disk
     // full) -- the feeder has already stopped itself at this point, so the
     // control bar's own poll uses this to stop the session properly instead
     // of leaving it looking like it is still recording.
-    encode_error: Option<String>,
+    pub(crate) encode_error: Option<String>,
     // False when the last rearm_hotkeys() could not actually claim the
     // stop/pause combination (another app already holds it) -- surfaced here
     // rather than silently, so the bar can warn instead of the user believing
     // in a binding that never fires.
-    stop_hotkey_ok: bool,
-    pause_hotkey_ok: bool,
+    pub(crate) stop_hotkey_ok: bool,
+    pub(crate) pause_hotkey_ok: bool,
     // recBarSize (Vorgabe an): whether the bar should show the size at all
     // right now -- false below recBarSizeFromMb, or with the switch off.
-    show_size: bool,
+    pub(crate) show_size: bool,
     // Seconds left at the observed average rate (bytes so far / elapsed so
     // far -- never estimated from the configured bitrate, see rec_bar_size_state)
     // before recMaxMb is reached. Only Some(..) past three quarters of that
     // ceiling; None both below it and with show_size false.
-    size_eta_secs: Option<u64>,
+    pub(crate) size_eta_secs: Option<u64>,
     // recTargetSwitch (Vorgabe an): whether the bar's target-switch button is
     // enabled at all right now -- a window recording using the "every
     // display" or "current display" canvas, with the master flag on. A
@@ -14147,11 +14147,11 @@ struct RecordingStatus {
     // the same screen, only checkable once something has actually been
     // picked, so a false here already means the button itself is disabled;
     // a true here does not yet guarantee any given pick will succeed.
-    target_switch_enabled: bool,
+    pub(crate) target_switch_enabled: bool,
     // recDiskWarnMb's mid-recording half (the before-start check is
     // check_recording_disk_space) -- Some at most once per recording, the
     // instant free space first drops below the threshold. Never causes a stop.
-    disk_low: Option<(u64, u64)>,
+    pub(crate) disk_low: Option<(u64, u64)>,
 }
 
 // recBarSize's own threshold logic: whether to show the size at all, and
@@ -14160,7 +14160,7 @@ struct RecordingStatus {
 // this has a real unit test, not just its recording_status wiring (same
 // reasoning as estimate_export_bytes/recording_disk_warning above).
 // recMaxMb <= 0 disables the ETA half only, size still shows past show_from_mb.
-fn rec_bar_size_state(bytes: u64, elapsed_ms: i64, show_from_mb: f64, max_mb: f64) -> (bool, Option<u64>) {
+pub(crate) fn rec_bar_size_state(bytes: u64, elapsed_ms: i64, show_from_mb: f64, max_mb: f64) -> (bool, Option<u64>) {
     let mb = bytes as f64 / (1024.0 * 1024.0);
     if mb < show_from_mb {
         return (false, None);
@@ -14183,7 +14183,7 @@ fn rec_bar_size_state(bytes: u64, elapsed_ms: i64, show_from_mb: f64, max_mb: f6
 // The four recording-bar settings recording_status needs, read out of an
 // already-held store guard so the try_lock fallback below can share the code
 // with the normal path instead of duplicating the field list.
-fn rec_bar_settings(store: &Store) -> (bool, f64, f64, bool) {
+pub(crate) fn rec_bar_settings(store: &Store) -> (bool, f64, f64, bool) {
     (
         store.settings.ui_flags.get("recBarSize") != Some(&false),
         store.settings.ui_values.get("recBarSizeFromMb").copied().unwrap_or(500.0),
@@ -14249,9 +14249,9 @@ async fn recording_status(
 }
 
 #[derive(serde::Serialize)]
-struct MicDeviceInfo {
-    id: String,
-    name: String,
+pub(crate) struct MicDeviceInfo {
+    pub(crate) id: String,
+    pub(crate) name: String,
 }
 
 // Backs the recMicDevice expert dropdown. Best-effort (see
@@ -14297,26 +14297,26 @@ async fn paste_into_previous(delay_ms: u64, enter: bool) -> Result<(), String> {
 // expert menu; defaults here are what ships until a user overrides them there).
 #[cfg(windows)]
 #[derive(Clone, Copy)]
-struct AutoCfg {
-    settle_ms: u32,
-    cooldown_ms: u32,
-    input_ms: u32,
-    rearm_max: u32,
-    timeout_min: u32,
+pub(crate) struct AutoCfg {
+    pub(crate) settle_ms: u32,
+    pub(crate) cooldown_ms: u32,
+    pub(crate) input_ms: u32,
+    pub(crate) rearm_max: u32,
+    pub(crate) timeout_min: u32,
 }
 
 // Fixed timings of the automatic cycling: how long the clipboard must be quiet
 // before a paste counts, the window for typed input, and how often a session
 // may re-arm itself.
 #[cfg(windows)]
-const ROTATE_AUTO_SETTLE_MS: u32 = 350;
+pub(crate) const ROTATE_AUTO_SETTLE_MS: u32 = 350;
 #[cfg(windows)]
-const ROTATE_AUTO_INPUT_MS: u32 = 3000;
+pub(crate) const ROTATE_AUTO_INPUT_MS: u32 = 3000;
 #[cfg(windows)]
-const ROTATE_AUTO_REARM_MAX: u32 = 12;
+pub(crate) const ROTATE_AUTO_REARM_MAX: u32 = 12;
 
 #[cfg(windows)]
-fn auto_cfg(settings: &Settings) -> AutoCfg {
+pub(crate) fn auto_cfg(settings: &Settings) -> AutoCfg {
     let v = |key: &str, def: f64| settings.ui_values.get(key).copied().unwrap_or(def).max(0.0);
     AutoCfg {
         settle_ms: ROTATE_AUTO_SETTLE_MS,
@@ -14331,7 +14331,7 @@ fn auto_cfg(settings: &Settings) -> AutoCfg {
 // clipboard-history spy / our own read?" Pure and table-tested (cargo test --lib):
 // the Win32 plumbing around it is only provable on a real VM run.
 #[cfg(windows)]
-fn counts_as_paste(now: u32, armed_at: u32, last_paste: u32, last_input: u32, self_read: bool, cfg: &AutoCfg) -> bool {
+pub(crate) fn counts_as_paste(now: u32, armed_at: u32, last_paste: u32, last_input: u32, self_read: bool, cfg: &AutoCfg) -> bool {
     if self_read {
         return false;
     }
@@ -14355,19 +14355,19 @@ fn counts_as_paste(now: u32, armed_at: u32, last_paste: u32, last_input: u32, se
 // choice as the secret heuristic below: a copy skipped by mistake costs nothing, a
 // secret kept by mistake costs a lot. Pure so the value-reading rule has its own
 // test without touching a real clipboard.
-fn dword_format_excludes(available: bool, value: Option<u32>) -> bool {
+pub(crate) fn dword_format_excludes(available: bool, value: Option<u32>) -> bool {
     available && value.unwrap_or(0) == 0
 }
 
 // Nothing else this app's own UI ever copies is a single unspaced 8-64 character
 // string mixing three of the four character classes below, so the "not a word from
 // our own dictionary" carve-out only has to rule out the product name itself.
-fn is_own_ui_word(candidate: &str) -> bool {
+pub(crate) fn is_own_ui_word(candidate: &str) -> bool {
     candidate.trim().eq_ignore_ascii_case(brand::DISPLAY_NAME)
 }
 
 // Shortest copied text the clipboard collector may take for a password.
-const CLIP_SECRET_MIN_LEN: usize = 8;
+pub(crate) const CLIP_SECRET_MIN_LEN: usize = 8;
 
 // A best-effort guess that freshly copied text is a password rather than a prompt, a
 // sentence or an address: exactly one line, `min_len` to 64 characters, no
@@ -14375,7 +14375,7 @@ const CLIP_SECRET_MIN_LEN: usize = 8;
 // app's own UI could otherwise trip this on. Getting this wrong toward "skip it" only
 // costs one entry that never reaches the inbox; getting it wrong the other way puts a
 // password into a history file, so every ambiguous case below returns true.
-fn looks_like_password(text: &str, min_len: usize) -> bool {
+pub(crate) fn looks_like_password(text: &str, min_len: usize) -> bool {
     if text.lines().count() != 1 {
         return false;
     }
@@ -14425,11 +14425,11 @@ mod sessionend;
 
 // No-op own-copy note on non-Windows.
 #[cfg(windows)]
-fn note_own_copy(text: &str) {
+pub(crate) fn note_own_copy(text: &str) {
     clipwatch::note_own(text);
 }
 #[cfg(not(windows))]
-fn note_own_copy(_text: &str) {}
+pub(crate) fn note_own_copy(_text: &str) {}
 
 // List / dismiss / clear the clipboard inbox.
 #[tauri::command]
@@ -14458,9 +14458,9 @@ async fn clip_inbox_clear(app: AppHandle) -> Result<(), String> {
 }
 
 #[derive(Deserialize)]
-struct ClipRestoreItem {
-    ts: u64,
-    text: String,
+pub(crate) struct ClipRestoreItem {
+    pub(crate) ts: u64,
+    pub(crate) text: String,
 }
 
 // Undo for "clear clipboard inbox": re-inserts the rows the frontend snapshotted
@@ -14483,7 +14483,7 @@ async fn restore_clip_inbox(app: AppHandle, state: State<'_, Db>, items: Vec<Cli
 
 // The insert loop behind restore_clip_inbox in one transaction: an item that
 // fails leaves the inbox as it was instead of a partial restore.
-fn db_restore_clips(conn: &Connection, items: &[ClipRestoreItem], cap: usize) -> rusqlite::Result<()> {
+pub(crate) fn db_restore_clips(conn: &Connection, items: &[ClipRestoreItem], cap: usize) -> rusqlite::Result<()> {
     let tx = conn.unchecked_transaction()?;
     for item in items {
         db_add_clip(&tx, item.ts, &item.text, cap)?;
@@ -14518,16 +14518,16 @@ async fn stat_file(path: String) -> Result<(i64, i64), String> {
 // sealed, so the table no longer lists recording paths or text overlay
 // contents in clear. A row an earlier version wrote (plain "kind:path" id,
 // plain columns) is still found through its legacy id and read as is.
-fn edit_state_id(kind: &str, target: &str) -> String {
+pub(crate) fn edit_state_id(kind: &str, target: &str) -> String {
     use sha2::{Digest, Sha256};
     format!("{kind}:{:x}", Sha256::digest(target.as_bytes()))
 }
 
-fn edit_state_legacy_id(kind: &str, target: &str) -> String {
+pub(crate) fn edit_state_legacy_id(kind: &str, target: &str) -> String {
     format!("{kind}:{target}")
 }
 
-fn edit_state_write(conn: &Connection, kind: &str, target: &str, size: i64, mtime: i64, ops: &str, updated_at: i64) -> Result<(), String> {
+pub(crate) fn edit_state_write(conn: &Connection, kind: &str, target: &str, size: i64, mtime: i64, ops: &str, updated_at: i64) -> Result<(), String> {
     conn.execute(
         "INSERT INTO edit_state(id, kind, target, size, mtime, ops, updated_at) VALUES(?1,?2,?3,?4,?5,?6,?7)
          ON CONFLICT(id) DO UPDATE SET target=excluded.target, size=excluded.size, mtime=excluded.mtime, ops=excluded.ops, updated_at=excluded.updated_at",
@@ -14542,7 +14542,7 @@ fn edit_state_write(conn: &Connection, kind: &str, target: &str, size: i64, mtim
 // Rewrites every row whose target or ops are still in clear through the sealing
 // writer, keeping each row's own timestamp. Returns how many rows it rewrote; a
 // second run finds nothing left to do.
-fn edit_state_seal_all(conn: &Connection) -> usize {
+pub(crate) fn edit_state_seal_all(conn: &Connection) -> usize {
     type Row = (String, String, i64, i64, String, String, i64);
     let rows: Vec<Row> = {
         let Ok(mut st) = conn.prepare("SELECT kind, target, size, mtime, ops, id, updated_at FROM edit_state WHERE target NOT LIKE 'enc:v1:%' OR ops NOT LIKE 'enc:v1:%'") else {
@@ -14569,7 +14569,7 @@ fn edit_state_seal_all(conn: &Connection) -> usize {
 }
 
 // (row id, ops as stored, decrypted) for the exact (size, mtime) triple, hashed id first.
-fn edit_state_read(conn: &Connection, kind: &str, target: &str, size: i64, mtime: i64) -> Option<(String, String)> {
+pub(crate) fn edit_state_read(conn: &Connection, kind: &str, target: &str, size: i64, mtime: i64) -> Option<(String, String)> {
     for id in [edit_state_id(kind, target), edit_state_legacy_id(kind, target)] {
         let row = conn
             .query_row(
@@ -14594,7 +14594,7 @@ fn edit_state_read(conn: &Connection, kind: &str, target: &str, size: i64, mtime
     None
 }
 
-fn edit_state_discard(conn: &Connection, kind: &str, target: &str) -> Result<(), String> {
+pub(crate) fn edit_state_discard(conn: &Connection, kind: &str, target: &str) -> Result<(), String> {
     for id in [edit_state_id(kind, target), edit_state_legacy_id(kind, target)] {
         conn.execute("DELETE FROM edit_state WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
     }
@@ -14630,7 +14630,7 @@ async fn load_edit_state(app: AppHandle, kind: String, target: String, size: i64
 // A minimal sniff, not a full parse of every op inside -- this table's whole point
 // is staying opaque to the individual op shapes JS invents, it only ever needs to
 // know "can any of this be understood at all".
-fn edit_state_ops_version(ops: &str) -> Option<i64> {
+pub(crate) fn edit_state_ops_version(ops: &str) -> Option<i64> {
     serde_json::from_str::<serde_json::Value>(ops)
         .ok()?
         .get("v")?
@@ -14651,18 +14651,18 @@ async fn discard_edit_state(app: AppHandle, kind: String, target: String) -> Res
 // crash draft, it stays with the prompt itself.
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
-struct EditorDraft {
-    prompt_id: String,
-    name: String,
-    text: String,
-    variants: String,
-    updated_at: i64,
+pub(crate) struct EditorDraft {
+    pub(crate) prompt_id: String,
+    pub(crate) name: String,
+    pub(crate) text: String,
+    pub(crate) variants: String,
+    pub(crate) updated_at: i64,
 }
 
 // The text side is sealed like a prompt is: a draft holds whatever the user
 // was typing, and a plain row would leak it into data.db and every backup.
 // Old unsealed rows still read back (dec_str passes plaintext through).
-fn editor_draft_write(conn: &Connection, prompt_id: &str, name: &str, text: &str, variants: &str, updated_at: i64) -> Result<(), String> {
+pub(crate) fn editor_draft_write(conn: &Connection, prompt_id: &str, name: &str, text: &str, variants: &str, updated_at: i64) -> Result<(), String> {
     conn.execute(
         "INSERT INTO editor_drafts(id, prompt_id, name, text, variants, updated_at) VALUES('current',?1,?2,?3,?4,?5)
          ON CONFLICT(id) DO UPDATE SET prompt_id=excluded.prompt_id, name=excluded.name, text=excluded.text, variants=excluded.variants, updated_at=excluded.updated_at",
@@ -14672,7 +14672,7 @@ fn editor_draft_write(conn: &Connection, prompt_id: &str, name: &str, text: &str
     .map_err(|e| e.to_string())
 }
 
-fn editor_draft_read(conn: &Connection) -> Option<EditorDraft> {
+pub(crate) fn editor_draft_read(conn: &Connection) -> Option<EditorDraft> {
     let (prompt_id, raw_name, raw_text, raw_variants, updated_at) = conn
         .query_row(
             "SELECT prompt_id, name, text, variants, updated_at FROM editor_drafts WHERE id = 'current'",
@@ -14719,7 +14719,7 @@ async fn discard_editor_draft(app: AppHandle) -> Result<(), String> {
 // the modal that wrote it, so it must not outlive the entry it belongs to
 // either. `matches` decides on the draft's own prompt_id, so a single-delete and
 // a batch-delete can both reuse this without building a one-off HashSet lookup.
-fn discard_editor_draft_if(conn: &Connection, matches: impl Fn(&str) -> bool) {
+pub(crate) fn discard_editor_draft_if(conn: &Connection, matches: impl Fn(&str) -> bool) {
     let target: Option<String> = conn
         .query_row("SELECT prompt_id FROM editor_drafts WHERE id = 'current'", [], |r| r.get(0))
         .ok();
@@ -14739,7 +14739,7 @@ fn discard_editor_draft_if(conn: &Connection, matches: impl Fn(&str) -> bool) {
 // trashRetentionDays), a missing file is removed on the next tick regardless.
 // `exists` is a parameter so a test can run this against paths that were never
 // meant to be real files on the runner's own disk.
-fn sweep_edit_state_conn(conn: &Connection, exists: impl Fn(&str) -> bool, keep_days: f64) -> usize {
+pub(crate) fn sweep_edit_state_conn(conn: &Connection, exists: impl Fn(&str) -> bool, keep_days: f64) -> usize {
     let cutoff = (now_ms() / 1000) as i64 - (keep_days.max(0.0) * 86400.0) as i64;
     let mut stmt = match conn.prepare("SELECT id, target, updated_at FROM edit_state") {
         Ok(s) => s,
@@ -14764,14 +14764,14 @@ fn sweep_edit_state_conn(conn: &Connection, exists: impl Fn(&str) -> bool, keep_
 
 // Re-read every round, same as recording_sweep_interval, so a changed value takes
 // effect without a restart.
-fn edit_state_keep_days(app: &AppHandle) -> f64 {
+pub(crate) fn edit_state_keep_days(app: &AppHandle) -> f64 {
     app.try_state::<Db>()
         .map(|s| s.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("editStateKeepDays").copied().unwrap_or(30.0))
         .unwrap_or(30.0)
         .max(0.0)
 }
 
-fn sweep_edit_state_tick(app: &AppHandle) {
+pub(crate) fn sweep_edit_state_tick(app: &AppHandle) {
     let Some(conn) = db_conn(app) else { return };
     sweep_edit_state_conn(&conn, |p| std::path::Path::new(p).exists(), edit_state_keep_days(app));
 }
@@ -14806,7 +14806,7 @@ async fn purge_clip_inbox_from_backups(app: AppHandle) -> Result<(usize, usize),
 // Empties clip_inbox in one snapshot and repacks it so the freed pages are
 // overwritten. Some(rows removed) only when both steps worked: a delete whose
 // repack failed leaves the old bytes in the free pages, so it is no scrub.
-fn scrub_clip_inbox(conn: &Connection) -> Option<i64> {
+pub(crate) fn scrub_clip_inbox(conn: &Connection) -> Option<i64> {
     let removed = conn.execute("DELETE FROM clip_inbox", []).ok()? as i64;
     if removed > 0 && conn.execute("VACUUM", []).is_err() {
         return None;
@@ -14814,7 +14814,7 @@ fn scrub_clip_inbox(conn: &Connection) -> Option<i64> {
     Some(removed)
 }
 
-fn purge_clip_inbox_from_backups_impl(dir: &std::path::Path) -> (usize, usize) {
+pub(crate) fn purge_clip_inbox_from_backups_impl(dir: &std::path::Path) -> (usize, usize) {
     let mut purged = 0usize;
     let mut failed = 0usize;
     for entry in fs::read_dir(dir).into_iter().flatten().flatten() {
@@ -14950,12 +14950,12 @@ async fn set_folder_position(app: AppHandle, id: String, x: f64, y: f64, clamp: 
 
 // What the dragged pill covers: the id it would merge into, every other pill/folder
 // box (for the live highlight), and the dragged pill's own rect.
-type DragHit = (String, Vec<(String, Rect)>, Rect);
+pub(crate) type DragHit = (String, Vec<(String, Rect)>, Rect);
 
 // What the dragged pill currently covers: every other pill/folder box plus the one
 // `merge_target` picks. ONE hit function for both the live highlight and the drop, so
 // what lights up while dragging is exactly what letting go would merge.
-fn drag_hit(app: &AppHandle, id: &str, radius: f64) -> Option<DragHit> {
+pub(crate) fn drag_hit(app: &AppHandle, id: &str, radius: f64) -> Option<DragHit> {
     let win = app.get_webview_window(&flabel(id))?;
     let dragged = window_rect(&win)?;
     let dpi = win.scale_factor().unwrap_or(1.0);
@@ -14981,7 +14981,7 @@ fn drag_hit(app: &AppHandle, id: &str, radius: f64) -> Option<DragHit> {
 }
 
 // Which window a hit key belongs to ("p<prompt>" = pill, "f<folder>" = folder).
-fn hit_label(hit: &str) -> String {
+pub(crate) fn hit_label(hit: &str) -> String {
     let (kind, key) = hit.split_at(1);
     if kind == "f" {
         folder_label(key)
@@ -14993,13 +14993,13 @@ fn hit_label(hit: &str) -> String {
 // Live merge feedback while a pill is dragged. The OS move loop owns the pointer, so
 // no webview sees the motion: the backend polls the dragged window instead and lights
 // up the window that would swallow it. (generation, currently lit window label)
-struct DragHint(Mutex<(u64, Option<String>)>);
+pub(crate) struct DragHint(pub(crate) Mutex<(u64, Option<String>)>);
 
-const HINT_TICK_MS: u64 = 70;
-const HINT_MAX_TICKS: u32 = 700; // ~50 s guard: no drag runs longer
+pub(crate) const HINT_TICK_MS: u64 = 70;
+pub(crate) const HINT_MAX_TICKS: u32 = 700; // ~50 s guard: no drag runs longer
 
 // Move the highlight, telling the old target to drop it. Emits only on a change.
-fn light_hint(app: &AppHandle, label: Option<String>) {
+pub(crate) fn light_hint(app: &AppHandle, label: Option<String>) {
     let Some(state) = app.try_state::<DragHint>() else { return };
     let mut cur = state.0.lock().unwrap_or_else(|e| e.into_inner());
     if cur.1 == label {
@@ -15144,12 +15144,12 @@ async fn float_folder_drop(app: AppHandle, state: State<'_, Db>, id: String) -> 
 
 // Everything the folder window needs to draw itself.
 #[derive(Serialize)]
-struct FolderView {
-    id: String,
-    name: String,
-    scale: f64,
-    cols: u32,
-    members: Vec<Prompt>,
+pub(crate) struct FolderView {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) scale: f64,
+    pub(crate) cols: u32,
+    pub(crate) members: Vec<Prompt>,
 }
 
 #[tauri::command]
@@ -15172,14 +15172,14 @@ fn float_folder_state(state: State<Db>, id: String) -> Option<FolderView> {
 
 // The layout an expanded folder ended up with, in LOGICAL pixels for the webview.
 #[derive(Serialize)]
-struct FolderGeom {
-    side: String,
-    icon_x: f64,
-    icon_y: f64,
-    pop_x: f64,
-    pop_y: f64,
-    width: f64,
-    height: f64,
+pub(crate) struct FolderGeom {
+    pub(crate) side: String,
+    pub(crate) icon_x: f64,
+    pub(crate) icon_y: f64,
+    pub(crate) pop_x: f64,
+    pub(crate) pop_y: f64,
+    pub(crate) width: f64,
+    pub(crate) height: f64,
 }
 
 // Open the folder by growing its OWN window around the icon: no second window is
@@ -15481,37 +15481,37 @@ async fn set_video_prefs(app: AppHandle, state: State<'_, Db>, id: String, volum
 // image is Arc'd so the background JPEG encode and the stored capture share one
 // buffer instead of each owning an ~80 MB copy of the frozen desktop: every
 // reader (crop_rgb/crop_rgba/sample_frozen) only ever borrows it.
-struct MonitorCap {
-    image: Arc<image::RgbaImage>,
-    x: i32,
-    y: i32,
-    width: u32,
-    height: u32,
+pub(crate) struct MonitorCap {
+    pub(crate) image: Arc<image::RgbaImage>,
+    pub(crate) x: i32,
+    pub(crate) y: i32,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
 }
-struct SnipState(Mutex<Vec<MonitorCap>>);
+pub(crate) struct SnipState(pub(crate) Mutex<Vec<MonitorCap>>);
 
 // Arms the NEXT capture_region call to run OCR instead of a normal screenshot
 // save/copy. Single-shot by construction -- close_all_snip resets it the moment
 // any snip session actually ends (a successful capture, a cancel, or a window
 // click), so it can never leak into a later, unrelated screenshot.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum SnipMode {
+pub(crate) enum SnipMode {
     Capture,
     Ocr,
 }
-struct SnipModeState(Mutex<SnipMode>);
+pub(crate) struct SnipModeState(pub(crate) Mutex<SnipMode>);
 
 // Overlay preview prepared in the background the instant the desktop is frozen,
 // so the (heavy) JPEG encode overlaps WebView creation instead of running after
 // it. None = still encoding, Some(None) = encode failed, Some(Some) = ready.
 // Each ready entry carries the session generation its encode belonged to.
-type SnipPreviewSlot = Option<(u64, Option<SnipBg>)>;
+pub(crate) type SnipPreviewSlot = Option<(u64, Option<SnipBg>)>;
 #[derive(Clone)]
-struct SnipPreview(Arc<Mutex<SnipPreviewSlot>>);
+pub(crate) struct SnipPreview(pub(crate) Arc<Mutex<SnipPreviewSlot>>);
 
 // Store a finished preview encode, unless a newer session has started since: a slow
 // encode of a cancelled snip must never become the next snip's background.
-fn preview_slot_store<T>(slot: &mut Option<(u64, T)>, gen_now: u64, gen_of_encode: u64, value: T) -> bool {
+pub(crate) fn preview_slot_store<T>(slot: &mut Option<(u64, T)>, gen_now: u64, gen_of_encode: u64, value: T) -> bool {
     if gen_of_encode != gen_now {
         return false;
     }
@@ -15522,41 +15522,41 @@ fn preview_slot_store<T>(slot: &mut Option<(u64, T)>, gen_now: u64, gen_of_encod
 // True while a snip session is on screen (between open_snip and capture/cancel).
 // The overlay window itself is kept alive and reused, so this flag: not the
 // window's existence: is what tells open_snip a snip is already in progress.
-static SNIP_ACTIVE: AtomicBool = AtomicBool::new(false);
+pub(crate) static SNIP_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 // Bumped by begin_capture every time a session starts. A capture that is already
 // running when the session is cancelled (and maybe a new one started) compares the
 // number it saw at its start, so it can tell that its session is gone and must not
 // copy, save, announce or close anything.
-static SNIP_GEN: AtomicU64 = AtomicU64::new(0);
+pub(crate) static SNIP_GEN: AtomicU64 = AtomicU64::new(0);
 
 // True while the session a capture started in is still the running one.
-fn finalize_allowed(gen_at_start: u64, gen_now: u64, active: bool) -> bool {
+pub(crate) fn finalize_allowed(gen_at_start: u64, gen_now: u64, active: bool) -> bool {
     active && gen_at_start == gen_now
 }
 
-fn snip_session_current(gen_at_start: u64) -> bool {
+pub(crate) fn snip_session_current(gen_at_start: u64) -> bool {
     finalize_allowed(gen_at_start, SNIP_GEN.load(Ordering::SeqCst), SNIP_ACTIVE.load(Ordering::SeqCst))
 }
 
 // The running session is a colour pick (loupe overlay) rather than a region
 // snip. Both share the freeze + overlay pipeline; only the overlay's mode differs.
-static PICK_ACTIVE: AtomicBool = AtomicBool::new(false);
+pub(crate) static PICK_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 // The running recording-target pick is for a live target switch on an
 // already-running recording, not for starting a new one -- read once by
 // recorder_target_picked to mark its emitted event so the two very different
 // listeners (start a recording vs. swap its source) never both react to it.
-static REC_SWITCH_PICK: AtomicBool = AtomicBool::new(false);
+pub(crate) static REC_SWITCH_PICK: AtomicBool = AtomicBool::new(false);
 
 // The labels of the app windows begin_capture actually hid for this session (the
 // ones that were visible beforehand), so the end of the session restores exactly
 // those and nothing else: a snip started with screenshots allowed, or a window that
 // was already hidden (main closed to the tray, a pill hidden on purpose), is never
 // popped up by a snip.
-static SNIP_HID_APP: Mutex<Vec<String>> = Mutex::new(Vec::new());
+pub(crate) static SNIP_HID_APP: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
-fn restore_app_windows_after_snip(app: &AppHandle) {
+pub(crate) fn restore_app_windows_after_snip(app: &AppHandle) {
     let hid = std::mem::take(&mut *SNIP_HID_APP.lock().unwrap_or_else(|e| e.into_inner()));
     if !hid.is_empty() {
         show_app_windows(app, &hid);
@@ -15565,7 +15565,7 @@ fn restore_app_windows_after_snip(app: &AppHandle) {
 
 // The hidden windows a snip session put away, as the restore set: only what was
 // visible before the hide pass.
-fn windows_to_restore(before: &[(String, bool)]) -> Vec<String> {
+pub(crate) fn windows_to_restore(before: &[(String, bool)]) -> Vec<String> {
     before
         .iter()
         .filter(|(_, visible)| *visible)
@@ -15576,7 +15576,7 @@ fn windows_to_restore(before: &[(String, bool)]) -> Vec<String> {
 // Bring a snip's result to the main window (editor, result dialog, OCR text): the
 // restore pass no longer shows a main window that was hidden before the snip, so
 // the paths that hand something to main show it themselves.
-fn reveal_main_for_snip_result(app: &AppHandle) {
+pub(crate) fn reveal_main_for_snip_result(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("main") {
         let _ = win.show();
         let _ = win.unminimize();
@@ -15588,7 +15588,7 @@ fn reveal_main_for_snip_result(app: &AppHandle) {
 // warm WebView2 survives for the next snip, bring the app's own windows back, and
 // drop the temp preview. Closing the overlay is what forced every snip to pay the
 // full WebView2 cold-start: keeping it alive is the whole speed win.
-fn close_all_snip(app: &AppHandle) {
+pub(crate) fn close_all_snip(app: &AppHandle) {
     for (label, win) in app.webview_windows() {
         if label.starts_with("snip-") {
             let _ = win.hide();
@@ -15614,7 +15614,7 @@ fn close_all_snip(app: &AppHandle) {
 // main window was covering, e.g. Task Manager). Returns the labels that were
 // visible beforehand and are now hidden: that is the set the end of the session
 // restores, and begin_capture skips its post-hide settle delay when it is empty.
-fn hide_app_windows(app: &AppHandle) -> Vec<String> {
+pub(crate) fn hide_app_windows(app: &AppHandle) -> Vec<String> {
     let mut before: Vec<(String, bool)> = Vec::new();
     for (label, win) in app.webview_windows() {
         if is_snip_hidden_label(&label) {
@@ -15628,14 +15628,14 @@ fn hide_app_windows(app: &AppHandle) -> Vec<String> {
 // A folder window is always-on-top exactly like a pill, and every other caller that
 // hides float- windows for a screenshot already pairs it with folder-: missing it
 // left an open folder sitting in the snip capture.
-fn is_snip_hidden_label(label: &str) -> bool {
+pub(crate) fn is_snip_hidden_label(label: &str) -> bool {
     label == "main" || label.starts_with("float-") || label.starts_with("folder-")
 }
 
 // Show the windows hide_app_windows put away. The main window also comes out of
 // any minimized state and gets the focus, so finishing or cancelling a snip never
 // leaves it behind other windows, which reads as the app having minimized itself.
-fn show_app_windows(app: &AppHandle, labels: &[String]) {
+pub(crate) fn show_app_windows(app: &AppHandle, labels: &[String]) {
     for label in labels {
         if let Some(win) = app.get_webview_window(label) {
             let _ = win.show();
@@ -15650,7 +15650,7 @@ fn show_app_windows(app: &AppHandle, labels: &[String]) {
 // Hide (or re-show) only the snip overlay(s). Used by the window-capture
 // workaround, which needs to grab the LIVE desktop: the overlay (showing the
 // frozen image) would otherwise be what gets captured.
-fn set_snip_overlay_hidden(app: &AppHandle, hidden: bool) {
+pub(crate) fn set_snip_overlay_hidden(app: &AppHandle, hidden: bool) {
     for (label, win) in app.webview_windows() {
         if label.starts_with("snip-") {
             let _ = if hidden { win.hide() } else { win.show() };
@@ -15661,12 +15661,12 @@ fn set_snip_overlay_hidden(app: &AppHandle, hidden: bool) {
 // The snip preview JPEG is written to a temp file and shown via the asset
 // protocol: far quicker than passing a multi-MB base64 data URL through IPC and
 // decoding it in the overlay. A rotating name avoids any stale webview cache.
-static SNIP_PREVIEW_SEQ: AtomicU64 = AtomicU64::new(0);
-static SNIP_PREVIEW_FILE: Mutex<Option<PathBuf>> = Mutex::new(None);
+pub(crate) static SNIP_PREVIEW_SEQ: AtomicU64 = AtomicU64::new(0);
+pub(crate) static SNIP_PREVIEW_FILE: Mutex<Option<PathBuf>> = Mutex::new(None);
 
 // None when the file could not be written or when the session `gen` belongs to is
 // gone: a stale encode must never replace (and delete) the newer session's preview.
-fn write_snip_preview(jpeg: &[u8], gen: u64) -> Option<String> {
+pub(crate) fn write_snip_preview(jpeg: &[u8], gen: u64) -> Option<String> {
     let seq = SNIP_PREVIEW_SEQ.fetch_add(1, Ordering::Relaxed);
     let path = std::env::temp_dir().join(format!("{}-snip-{}.jpg", brand::TEMP_PREFIX, seq));
     let mut slot = SNIP_PREVIEW_FILE.lock().unwrap_or_else(|e| e.into_inner());
@@ -15690,11 +15690,11 @@ fn write_snip_preview(jpeg: &[u8], gen: u64) -> Option<String> {
 // saving/discarding it, so anything older than this was abandoned (a crash, a
 // kill) rather than in active use: well short of catching a file another,
 // concurrently running instance ("Allow multiple instances") is using right now.
-const STALE_TEMP_FILE_AGE: Duration = Duration::from_secs(3600);
+pub(crate) const STALE_TEMP_FILE_AGE: Duration = Duration::from_secs(3600);
 // How often the sweep repeats while the app keeps running.
-const STALE_TEMP_SWEEP_SECS: u64 = 6 * 3600;
+pub(crate) const STALE_TEMP_SWEEP_SECS: u64 = 6 * 3600;
 
-fn sweep_stale_temp_files() {
+pub(crate) fn sweep_stale_temp_files() {
     let dir = std::env::temp_dir();
     // This process's own live preview is exempt whatever its age says. A modal
     // left open past the stale age is unusual but perfectly legitimate, and the
@@ -15790,7 +15790,7 @@ fn sweep_stale_temp_files() {
 // leaving them for the age-based sweep. Only names carrying this pid are touched
 // (working copies opened for editing, still frames), so a second running
 // instance keeps its own files.
-fn remove_own_temp_leftovers_in(temp_root: &Path, pid: u32) {
+pub(crate) fn remove_own_temp_leftovers_in(temp_root: &Path, pid: u32) {
     let dir = temp_root.join(brand::TEMP_DIR);
     let openedit_prefix = format!("{}-openedit-", brand::TEMP_PREFIX);
     let openedit_suffix = format!("-{pid}");
@@ -15806,7 +15806,7 @@ fn remove_own_temp_leftovers_in(temp_root: &Path, pid: u32) {
     }
 }
 
-fn remove_own_temp_leftovers() {
+pub(crate) fn remove_own_temp_leftovers() {
     remove_snip_preview();
     remove_own_temp_leftovers_in(&std::env::temp_dir(), std::process::id());
 }
@@ -15819,7 +15819,7 @@ fn remove_own_temp_leftovers() {
 // (count, bytes) removed -- the temporary-exports row's cleanup button
 // reports what this actually did, same reasoning as sweep_recordings_now's
 // own on-demand result.
-fn sweep_clip_export_temp(age: Duration) -> (u32, u64) {
+pub(crate) fn sweep_clip_export_temp(age: Duration) -> (u32, u64) {
     let dir = std::env::temp_dir().join(brand::TEMP_DIR);
     let prefix = format!("{}-clipexport-", brand::TEMP_PREFIX);
     let Ok(entries) = fs::read_dir(&dir) else { return (0, 0) };
@@ -15849,7 +15849,7 @@ fn sweep_clip_export_temp(age: Duration) -> (u32, u64) {
 // The overview row's amount readout for the same folder sweep_clip_export_temp cleans --
 // every "-clipexport-" file regardless of age, so the overview row can show
 // what is there right now, not just what the next sweep would remove.
-fn clip_export_temp_stats() -> (u64, u64) {
+pub(crate) fn clip_export_temp_stats() -> (u64, u64) {
     let dir = std::env::temp_dir().join(brand::TEMP_DIR);
     let prefix = format!("{}-clipexport-", brand::TEMP_PREFIX);
     let Ok(entries) = fs::read_dir(&dir) else { return (0, 0) };
@@ -15868,7 +15868,7 @@ fn clip_export_temp_stats() -> (u64, u64) {
     (count, bytes)
 }
 
-fn clip_export_ttl_from(settings: &Settings) -> Duration {
+pub(crate) fn clip_export_ttl_from(settings: &Settings) -> Duration {
     let min = settings.ui_values.get("videoClipTtlMin").copied().unwrap_or(60.0).max(1.0);
     Duration::from_secs((min * 60.0) as u64)
 }
@@ -15882,7 +15882,7 @@ fn sweep_clip_export_temp_now(app: AppHandle) -> (u32, u64) {
 // Reads the live expert setting so the periodic sweep always uses whatever
 // the user has it set to right now, the same way update_check_interval does
 // for its own re-timed job.
-fn clip_export_ttl(app: &AppHandle) -> Duration {
+pub(crate) fn clip_export_ttl(app: &AppHandle) -> Duration {
     app.try_state::<Db>()
         .map(|s| clip_export_ttl_from(&s.lock().unwrap_or_else(|e| e.into_inner()).settings))
         .unwrap_or(Duration::from_secs(3600))
@@ -15890,62 +15890,62 @@ fn clip_export_ttl(app: &AppHandle) -> Duration {
 
 // How often the clip-export sweep re-checks -- finer than STALE_TEMP_SWEEP_SECS
 // since videoClipTtlMin can be set as low as 5 minutes.
-const CLIP_EXPORT_SWEEP_SECS: u64 = 5 * 60;
+pub(crate) const CLIP_EXPORT_SWEEP_SECS: u64 = 5 * 60;
 
-fn remove_snip_preview() {
+pub(crate) fn remove_snip_preview() {
     if let Some(p) = SNIP_PREVIEW_FILE.lock().unwrap_or_else(|e| e.into_inner()).take() {
         let _ = fs::remove_file(p);
     }
 }
 
 #[derive(Serialize, Clone)]
-struct SnipBg {
+pub(crate) struct SnipBg {
     // Preview source: a temp-file path (is_file=true, loaded via convertFileSrc)
     // or a base64 data URL fallback (is_file=false).
-    src: String,
-    is_file: bool,
+    pub(crate) src: String,
+    pub(crate) is_file: bool,
     // Full stitched dimensions (the display image may be downscaled); the
     // frontend maps coordinates against these, so crops stay full-resolution.
-    width: u32,
-    height: u32,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
     // Run the overlay as a colour picker instead of a region selector, with
     // the loupe magnification and output notation the expert menu asks for.
-    pick: bool,
-    pick_zoom: u32,
-    pick_format: String,
+    pub(crate) pick: bool,
+    pub(crate) pick_zoom: u32,
+    pub(crate) pick_format: String,
     // Loupe grid size, expert-tunable (kept odd by the frontend).
-    pick_cells: u32,
+    pub(crate) pick_cells: u32,
     // The last picked colours as #rrggbb, newest first. Handed over with the
     // session so the overlay page never has to keep history state of its own.
-    pick_history: Vec<String>,
+    pub(crate) pick_history: Vec<String>,
     // Run the overlay as a recording-target picker instead: same window
     // hover/drag-region mechanics as a screenshot, but a click/drag resolves a
     // recording target instead of capturing an image.
-    record: bool,
+    pub(crate) record: bool,
     // Stitched-canvas origin in true virtual-desktop physical pixels. The
     // overlay's own coordinates are canvas-relative (see SnipWindow); the
     // recorder needs true absolute coordinates to resolve which monitor a
     // region belongs to.
-    origin_x: i32,
-    origin_y: i32,
+    pub(crate) origin_x: i32,
+    pub(crate) origin_y: i32,
 }
 
 #[derive(Serialize, Clone)]
-struct SnipResult {
-    data_url: String,
-    path: String,
+pub(crate) struct SnipResult {
+    pub(crate) data_url: String,
+    pub(crate) path: String,
     // Suggested button name: "Screenshot <app?> <timestamp>".
-    name: String,
+    pub(crate) name: String,
 }
 
 // A selectable top-level window in stitched-image physical pixels.
 #[derive(Serialize)]
-struct SnipWindow {
-    id: u32,
-    x: i32,
-    y: i32,
-    width: u32,
-    height: u32,
+pub(crate) struct SnipWindow {
+    pub(crate) id: u32,
+    pub(crate) x: i32,
+    pub(crate) y: i32,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
 }
 
 // ---- Fast screen capture via GDI (one BitBlt; no per-monitor DXGI setup) ----
@@ -15953,7 +15953,7 @@ struct SnipWindow {
 // Capture a screen rectangle (global physical px) with GDI BitBlt. Immediate (no
 // DXGI latency) and includes every visible window: elevated ones too.
 #[cfg(windows)]
-fn capture_screen_rect(x: i32, y: i32, w: i32, h: i32) -> Option<image::RgbaImage> {
+pub(crate) fn capture_screen_rect(x: i32, y: i32, w: i32, h: i32) -> Option<image::RgbaImage> {
     #[link(name = "user32")]
     extern "system" {
         fn GetDC(hwnd: isize) -> isize;
@@ -16038,7 +16038,7 @@ fn capture_screen_rect(x: i32, y: i32, w: i32, h: i32) -> Option<image::RgbaImag
 
 // Whole virtual desktop via GDI → (image, origin_x, origin_y) global physical px.
 #[cfg(windows)]
-fn capture_desktop() -> Option<(image::RgbaImage, i32, i32)> {
+pub(crate) fn capture_desktop() -> Option<(image::RgbaImage, i32, i32)> {
     #[link(name = "user32")]
     extern "system" {
         fn GetSystemMetrics(n: i32) -> i32;
@@ -16061,7 +16061,7 @@ fn capture_desktop() -> Option<(image::RgbaImage, i32, i32)> {
 
 // Freeze the whole desktop into one image (global physical px). Fast GDI path on
 // Windows; per-monitor xcap stitch as a fallback (and on other platforms).
-fn freeze_desktop() -> Result<(image::RgbaImage, i32, i32), String> {
+pub(crate) fn freeze_desktop() -> Result<(image::RgbaImage, i32, i32), String> {
     #[cfg(windows)]
     if let Some(res) = capture_desktop() {
         return Ok(res);
@@ -16096,7 +16096,7 @@ fn freeze_desktop() -> Result<(image::RgbaImage, i32, i32), String> {
 // monitor sits left of or above the primary, so this shift: not any DPI scale
 // factor: is what makes a pixel on a differently scaled second monitor address
 // the byte the capture actually holds. Every frozen coordinate is physical.
-fn stitch_offset(global: i32, origin: i32) -> i64 {
+pub(crate) fn stitch_offset(global: i32, origin: i32) -> i64 {
     (global - origin) as i64
 }
 
@@ -16105,14 +16105,14 @@ fn stitch_offset(global: i32, origin: i32) -> i64 {
 // The picked value goes to the CLIPBOARD ONLY: no prompt, no copy history.
 
 // Loupe magnification + output notation, straight from the expert menu.
-struct PickCfg {
-    zoom: u32,
-    format: String,
-    cells: u32,
+pub(crate) struct PickCfg {
+    pub(crate) zoom: u32,
+    pub(crate) format: String,
+    pub(crate) cells: u32,
 }
 
 // Only the three notations the expert dropdown offers; anything else is hex.
-fn color_format(raw: &str) -> &'static str {
+pub(crate) fn color_format(raw: &str) -> &'static str {
     match raw {
         "rgb" => "rgb",
         "hsl" => "hsl",
@@ -16120,7 +16120,7 @@ fn color_format(raw: &str) -> &'static str {
     }
 }
 
-fn pick_cfg(settings: &Settings) -> PickCfg {
+pub(crate) fn pick_cfg(settings: &Settings) -> PickCfg {
     PickCfg {
         zoom: settings.ui_values.get("loupeZoom").copied().unwrap_or(4.0).clamp(4.0, 16.0) as u32,
         format: color_format(settings.ui_texts.get("pickerFormat").map(String::as_str).unwrap_or("hex")).to_string(),
@@ -16128,7 +16128,7 @@ fn pick_cfg(settings: &Settings) -> PickCfg {
     }
 }
 
-fn rgb_to_hex(r: u8, g: u8, b: u8) -> String {
+pub(crate) fn rgb_to_hex(r: u8, g: u8, b: u8) -> String {
     format!("#{:02X}{:02X}{:02X}", r, g, b)
 }
 
@@ -16137,12 +16137,12 @@ fn rgb_to_hex(r: u8, g: u8, b: u8) -> String {
 // clipboard: a hidden or reloaded webview cannot lose the list. Kept in memory
 // for the running session, mirrored into `ui_texts["pickHistory"]` (comma-joined
 // hex) so it survives a restart; the mirror is the only thing ever written to disk.
-const PICK_HISTORY_DEFAULT: usize = 5;
-const PICK_HISTORY_CAP: usize = 20;
-static PICK_HISTORY: Mutex<Vec<[u8; 3]>> = Mutex::new(Vec::new());
+pub(crate) const PICK_HISTORY_DEFAULT: usize = 5;
+pub(crate) const PICK_HISTORY_CAP: usize = 20;
+pub(crate) static PICK_HISTORY: Mutex<Vec<[u8; 3]>> = Mutex::new(Vec::new());
 
 // The user-configurable cap (expert value `pickHistoryN`, 0 = history off).
-fn pick_history_max(settings: &Settings) -> usize {
+pub(crate) fn pick_history_max(settings: &Settings) -> usize {
     settings
         .ui_values
         .get("pickHistoryN")
@@ -16152,7 +16152,7 @@ fn pick_history_max(settings: &Settings) -> usize {
         .clamp(0.0, PICK_HISTORY_CAP as f64) as usize
 }
 
-fn hex_to_rgb(hex: &str) -> Option<[u8; 3]> {
+pub(crate) fn hex_to_rgb(hex: &str) -> Option<[u8; 3]> {
     let d = hex.trim().strip_prefix('#')?;
     if d.len() != 6 {
         return None;
@@ -16162,7 +16162,7 @@ fn hex_to_rgb(hex: &str) -> Option<[u8; 3]> {
 }
 
 // Push a pick, newest first, skipping a repeat of the entry already on top.
-fn record_pick(rgb: [u8; 3], max: usize) {
+pub(crate) fn record_pick(rgb: [u8; 3], max: usize) {
     let mut hist = PICK_HISTORY.lock().unwrap_or_else(|e| e.into_inner());
     if hist.first() == Some(&rgb) {
         return;
@@ -16171,7 +16171,7 @@ fn record_pick(rgb: [u8; 3], max: usize) {
     hist.truncate(max);
 }
 
-fn pick_history_hex() -> Vec<String> {
+pub(crate) fn pick_history_hex() -> Vec<String> {
     PICK_HISTORY
         .lock()
         .unwrap_or_else(|e| e.into_inner())
@@ -16181,7 +16181,7 @@ fn pick_history_hex() -> Vec<String> {
 }
 
 // One-time load from the persisted mirror: called once when the store loads.
-fn load_pick_history(settings: &Settings) {
+pub(crate) fn load_pick_history(settings: &Settings) {
     let max = pick_history_max(settings);
     let mut hist = PICK_HISTORY.lock().unwrap_or_else(|e| e.into_inner());
     hist.clear();
@@ -16198,7 +16198,7 @@ fn load_pick_history(settings: &Settings) {
 // of their arguments bit-for-bit, no arithmetic happens in between, so this is
 // exact identity, not the "drifted after computation" case the lint warns about.
 #[allow(clippy::float_cmp)]
-fn rgb_to_hsl(r: u8, g: u8, b: u8) -> (u32, u32, u32) {
+pub(crate) fn rgb_to_hsl(r: u8, g: u8, b: u8) -> (u32, u32, u32) {
     let (rf, gf, bf) = (r as f64 / 255.0, g as f64 / 255.0, b as f64 / 255.0);
     let max = rf.max(gf).max(bf);
     let min = rf.min(gf).min(bf);
@@ -16219,7 +16219,7 @@ fn rgb_to_hsl(r: u8, g: u8, b: u8) -> (u32, u32, u32) {
     (deg as u32, (s * 100.0).round() as u32, (l * 100.0).round() as u32)
 }
 
-fn format_color(fmt: &str, r: u8, g: u8, b: u8) -> String {
+pub(crate) fn format_color(fmt: &str, r: u8, g: u8, b: u8) -> String {
     match color_format(fmt) {
         "rgb" => format!("rgb({},{},{})", r, g, b),
         "hsl" => {
@@ -16233,7 +16233,7 @@ fn format_color(fmt: &str, r: u8, g: u8, b: u8) -> String {
 // Read one pixel of the frozen desktop, addressed in stitched physical pixels.
 // Out-of-bounds returns None instead of clamping, so a bogus coordinate can never
 // silently copy the colour of some other pixel.
-fn sample_frozen(caps: &[MonitorCap], x: i32, y: i32) -> Option<[u8; 3]> {
+pub(crate) fn sample_frozen(caps: &[MonitorCap], x: i32, y: i32) -> Option<[u8; 3]> {
     let cap = caps.first()?;
     if x < 0 || y < 0 || x >= cap.width as i32 || y >= cap.height as i32 {
         return None;
@@ -16245,7 +16245,7 @@ fn sample_frozen(caps: &[MonitorCap], x: i32, y: i32) -> Option<[u8; 3]> {
 // One rectangular patch of the frozen desktop as packed RGB, row by row. The rect
 // must lie fully inside the image: a caller that clamped badly gets nothing back
 // rather than a silently shifted patch.
-fn crop_rgb(img: &image::RgbaImage, x: u32, y: u32, w: u32, h: u32) -> Vec<u8> {
+pub(crate) fn crop_rgb(img: &image::RgbaImage, x: u32, y: u32, w: u32, h: u32) -> Vec<u8> {
     let (iw, ih) = img.dimensions();
     // Checked, so a wild x/y from the overlay can never wrap into a valid-looking rect.
     let fits = |a: u32, len: u32, max: u32| a.checked_add(len).is_some_and(|end| end <= max);
@@ -16265,19 +16265,19 @@ fn crop_rgb(img: &image::RgbaImage, x: u32, y: u32, w: u32, h: u32) -> Vec<u8> {
 
 // What the main window needs to show the confirmation toast in the picked colour.
 #[derive(Serialize, Clone)]
-struct ColorPick {
-    text: String,
-    hex: String,
+pub(crate) struct ColorPick {
+    pub(crate) text: String,
+    pub(crate) hex: String,
     // All three notations, pre-formatted: so the toast can offer them as
     // separate copy-this-format chips without duplicating format_color() in JS.
-    rgb: String,
-    hsl: String,
+    pub(crate) rgb: String,
+    pub(crate) hsl: String,
 }
 
 // Longest tile edge the overlay may ask for. The loupe needs a few dozen pixels
 // around the cursor, so this is generous: but it is also the cap that stops a
 // bogus request from allocating a desktop-sized buffer.
-const PICK_TILE_MAX: u32 = 512;
+pub(crate) const PICK_TILE_MAX: u32 = 512;
 
 // Hand the overlay ONE patch of the frozen desktop as packed RGB (3 bytes per
 // pixel, row order). The loupe samples locally, so it caches a patch and only asks
@@ -16381,7 +16381,7 @@ fn copy_pick_history_entry(app: AppHandle, hex: String) -> Result<String, String
 // size, always-on-top. Created once and reused across snips so the WebView2
 // cold-start is paid a single time. A Destroyed handler clears the session and
 // restores the app's windows if the overlay is ever torn down.
-fn build_snip_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String> {
+pub(crate) fn build_snip_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String> {
     let win = WebviewWindowBuilder::new(app, "snip-0", WebviewUrl::App("snip.html".into()))
         .title("")
         .decorations(false)
@@ -16479,7 +16479,7 @@ async fn open_recorder_switch(
     begin_capture(app, state, preview, false, true).await
 }
 
-async fn begin_capture(
+pub(crate) async fn begin_capture(
     app: AppHandle,
     state: State<'_, SnipState>,
     preview: State<'_, SnipPreview>,
@@ -16655,7 +16655,7 @@ async fn begin_capture(
 // and re-assert after the per-monitor DPI settle the show can trigger. Used by the
 // page (snip_present, fast path after the frozen image decodes) and by a backend
 // watchdog that force-reveals if the page somehow never asks.
-async fn reveal_snip(app: &AppHandle) {
+pub(crate) async fn reveal_snip(app: &AppHandle) {
     let geom = {
         let state: State<SnipState> = app.state();
         let guard = state.0.lock().unwrap_or_else(|e| e.into_inner());
@@ -16687,7 +16687,7 @@ async fn snip_present(app: AppHandle) -> Result<(), String> {
 // Belt-and-suspenders: if the page hasn't revealed the overlay shortly after a
 // snip starts (e.g. a hidden WebView2 ever suspended its JS), force it visible so
 // the screenshot view can never get stuck hidden. No-op once already shown.
-fn spawn_reveal_watchdog(app: AppHandle) {
+pub(crate) fn spawn_reveal_watchdog(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_millis(300)).await;
         if !SNIP_ACTIVE.load(Ordering::SeqCst) {
@@ -16712,14 +16712,14 @@ fn snip_should_begin() -> bool {
 
 // Rect (x, y, width, height) the overlay hit-tests and highlights for a window:
 // its visible frame when known, else the client rect xcap reports.
-fn snip_window_rect(frame: Option<(i32, i32, i32, i32)>, client: (i32, i32, i32, i32)) -> (i32, i32, i32, i32) {
+pub(crate) fn snip_window_rect(frame: Option<(i32, i32, i32, i32)>, client: (i32, i32, i32, i32)) -> (i32, i32, i32, i32) {
     frame.unwrap_or(client)
 }
 
 // The window's visible frame in global physical pixels (DWM extended frame
 // bounds: no invisible resize border, but title bar and borders included).
 #[cfg(windows)]
-fn window_frame_rect(id: u32) -> Option<(i32, i32, i32, i32)> {
+pub(crate) fn window_frame_rect(id: u32) -> Option<(i32, i32, i32, i32)> {
     #[repr(C)]
     #[derive(Default)]
     struct Rect {
@@ -16742,7 +16742,7 @@ fn window_frame_rect(id: u32) -> Option<(i32, i32, i32, i32)> {
 }
 
 #[cfg(not(windows))]
-fn window_frame_rect(_id: u32) -> Option<(i32, i32, i32, i32)> {
+pub(crate) fn window_frame_rect(_id: u32) -> Option<(i32, i32, i32, i32)> {
     None
 }
 
@@ -16790,23 +16790,23 @@ fn snip_windows(state: State<SnipState>, index: usize) -> Vec<SnipWindow> {
 
 // Overlay preview JPEG quality, encoded at native resolution: fixed, it only affects
 // how fast the frozen desktop appears.
-const SNIP_PREVIEW_Q: u8 = 80;
+pub(crate) const SNIP_PREVIEW_Q: u8 = 80;
 // The colour picker shows the frozen desktop as the reference for the colour it is
 // about to copy, so its background must not carry JPEG's subsampled chroma: below
 // quality 90 the encoder halves the colour resolution, which is exactly the "washed
 // out" look. 92 keeps full chroma (4:4:4). Measured cost: ~1.6x the q80 encode; paid
 // only when the pipette is opened, never on the screenshot path.
-const PICK_Q: u8 = 92;
+pub(crate) const PICK_Q: u8 = 92;
 // Saved-button JPEG quality: higher (crisp text) but still a fraction of a PNG's
 // size + encode time: a full-res PNG data URL used to stall the whole app on save.
 // Default for the expert-tunable snipSaveQuality (read in finalize_capture) --
 // also mirrored by SNIP_EDIT_EXPORT_Q in main.js for the post-edit re-export,
 // so both sides of the same screenshot's lifetime share one visible quality.
-const SNIP_SAVE_Q: u8 = 90;
+pub(crate) const SNIP_SAVE_Q: u8 = 90;
 
 // Encode RGBA bytes to a JPEG for the overlay preview. jpeg-encoder = SIMD baseline JPEG,
 // much faster than the image crate's. Returns the raw JPEG bytes.
-fn encode_snip_jpeg(rgba: &[u8], w: u32, h: u32, quality: u8) -> Option<Vec<u8>> {
+pub(crate) fn encode_snip_jpeg(rgba: &[u8], w: u32, h: u32, quality: u8) -> Option<Vec<u8>> {
     let mut buf = Vec::<u8>::new();
     jpeg_encoder::Encoder::new(&mut buf, quality)
         .encode(rgba, w as u16, h as u16, jpeg_encoder::ColorType::Rgba)
@@ -16819,7 +16819,7 @@ fn encode_snip_jpeg(rgba: &[u8], w: u32, h: u32, quality: u8) -> Option<Vec<u8>>
 // that could drift apart. Any value other than the four named ones (an old
 // setting from before this list existed, a hand-edited settings file) falls
 // back to png, the current default.
-fn screenshot_format_ext(format: &str) -> &'static str {
+pub(crate) fn screenshot_format_ext(format: &str) -> &'static str {
     match format {
         "jpeg" => "jpg",
         "webp" => "webp",
@@ -16828,7 +16828,7 @@ fn screenshot_format_ext(format: &str) -> &'static str {
         _ => "png",
     }
 }
-fn screenshot_format_mime(format: &str) -> &'static str {
+pub(crate) fn screenshot_format_mime(format: &str) -> &'static str {
     match format {
         "jpeg" => "image/jpeg",
         "webp" => "image/webp",
@@ -16841,7 +16841,7 @@ fn screenshot_format_mime(format: &str) -> &'static str {
 // Mime for a format the `image` crate itself sniffed from a file's content
 // when opening it for editing -- distinct from screenshot_format_mime above,
 // which maps the SETTING's chosen output format, not a guessed input one.
-fn image_format_mime(fmt: image::ImageFormat) -> &'static str {
+pub(crate) fn image_format_mime(fmt: image::ImageFormat) -> &'static str {
     match fmt {
         image::ImageFormat::Jpeg => "image/jpeg",
         image::ImageFormat::WebP => "image/webp",
@@ -16859,7 +16859,7 @@ fn image_format_mime(fmt: image::ImageFormat) -> &'static str {
 // lossless -- the image crate's own WebP encoder only ever writes lossless
 // VP8L, it has no lossy/quality mode to plug snipSaveQuality into, so quality
 // only ever applies to JPEG (see screenshot_format_needs_quality below).
-fn encode_screenshot(rgba: &[u8], w: u32, h: u32, format: &str, jpeg_quality: u8) -> Option<Vec<u8>> {
+pub(crate) fn encode_screenshot(rgba: &[u8], w: u32, h: u32, format: &str, jpeg_quality: u8) -> Option<Vec<u8>> {
     if screenshot_format_needs_quality(format) {
         return encode_snip_jpeg(rgba, w, h, jpeg_quality);
     }
@@ -16880,7 +16880,7 @@ fn encode_screenshot(rgba: &[u8], w: u32, h: u32, format: &str, jpeg_quality: u8
 // Whether the quality slider means anything for this format -- JPEG only
 // (see encode_screenshot's own comment on why WebP does not qualify too,
 // despite the image crate technically supporting it as a target format).
-fn screenshot_format_needs_quality(format: &str) -> bool {
+pub(crate) fn screenshot_format_needs_quality(format: &str) -> bool {
     format == "jpeg"
 }
 
@@ -16892,7 +16892,7 @@ fn screenshot_format_needs_quality(format: &str) -> bool {
 // back to raw pixels first and re-encode fresh rather than writing the
 // existing bytes under a new, wrong extension. Lossless start to lossless
 // end never loses anything; only landing on jpeg is ever lossy, exactly once.
-fn reencode_screenshot_bytes(bytes: &[u8], format: &str, quality: u8) -> Result<Vec<u8>, String> {
+pub(crate) fn reencode_screenshot_bytes(bytes: &[u8], format: &str, quality: u8) -> Result<Vec<u8>, String> {
     let img = image::load_from_memory(bytes).map_err(|e| e.to_string())?;
     let (w, h) = (img.width(), img.height());
     encode_screenshot(&img.into_rgba8().into_raw(), w, h, format, quality).ok_or_else(|| "encode failed".to_string())
@@ -16976,7 +16976,7 @@ fn recorder_target_picked(
 // window_is_protected, rather than pulling in more `windows` crate features
 // for two calls used nowhere else.
 #[cfg(windows)]
-fn resolve_region_monitor(x: i32, y: i32, w: u32, h: u32) -> Result<(i64, i32, i32), String> {
+pub(crate) fn resolve_region_monitor(x: i32, y: i32, w: u32, h: u32) -> Result<(i64, i32, i32), String> {
     #[repr(C)]
     struct RectI { left: i32, top: i32, right: i32, bottom: i32 }
     #[link(name = "user32")]
@@ -16994,7 +16994,7 @@ fn resolve_region_monitor(x: i32, y: i32, w: u32, h: u32) -> Result<(i64, i32, i
     Ok((hmon as i64, x - left, y - top))
 }
 #[cfg(not(windows))]
-fn resolve_region_monitor(x: i32, y: i32, _w: u32, _h: u32) -> Result<(i64, i32, i32), String> {
+pub(crate) fn resolve_region_monitor(x: i32, y: i32, _w: u32, _h: u32) -> Result<(i64, i32, i32), String> {
     Ok((0, x, y))
 }
 
@@ -17009,7 +17009,7 @@ fn set_snip_mode(state: State<'_, SnipModeState>, mode: String) -> Result<(), St
 }
 
 // Target folder for saved screenshots: a custom expert path, else Pictures\Screenshots.
-fn screenshot_dir(custom: &str) -> PathBuf {
+pub(crate) fn screenshot_dir(custom: &str) -> PathBuf {
     let c = custom.trim();
     if !c.is_empty() {
         return PathBuf::from(c);
@@ -17022,7 +17022,7 @@ fn screenshot_dir(custom: &str) -> PathBuf {
 
 // Save already-encoded screenshot bytes into the given folder as "<stem>.<ext>".
 // "" on failure. Never re-encodes -- the caller decides the format up front.
-fn save_screenshot(bytes: &[u8], dir: &std::path::Path, stem: &str, ext: &str) -> String {
+pub(crate) fn save_screenshot(bytes: &[u8], dir: &std::path::Path, stem: &str, ext: &str) -> String {
     use std::io::Write;
     let _ = fs::create_dir_all(dir);
     // Never replace a file that is already there (two shots in the same second
@@ -17047,7 +17047,7 @@ fn save_screenshot(bytes: &[u8], dir: &std::path::Path, stem: &str, ext: &str) -
 }
 
 // Decode a "data:...;base64,..." URL to its raw image bytes (format-agnostic).
-fn data_url_bytes(data_url: &str) -> Vec<u8> {
+pub(crate) fn data_url_bytes(data_url: &str) -> Vec<u8> {
     let b64 = data_url.rsplit_once(',').map(|(_, b)| b).unwrap_or(data_url);
     base64_decode(b64.trim())
 }
@@ -17208,10 +17208,10 @@ fn default_sync_dir(app: AppHandle) -> String {
 // before the setter call lands, without leaving the grant valid forever: a
 // subverted renderer replaying an old pick after this window closes gets the
 // same stable error as one that never showed the user a picker at all.
-const PICKER_GRANT_TTL: Duration = Duration::from_secs(10 * 60);
+pub(crate) const PICKER_GRANT_TTL: Duration = Duration::from_secs(10 * 60);
 // Bounded so a compromised renderer spamming the picker cannot grow this
 // forever; the oldest grant is dropped once the cap is hit.
-const PICKER_GRANT_MAX: usize = 16;
+pub(crate) const PICKER_GRANT_MAX: usize = 16;
 
 // Every folder the user actually picked through pick_folder/pick_export_folder,
 // each spendable exactly once by the matching set_*_dir command -- the only
@@ -17223,15 +17223,15 @@ const PICKER_GRANT_MAX: usize = 16;
 // for one setting no longer authorizes a different setter, so a subverted
 // renderer cannot pick a folder through one dialog and spend the grant on an
 // unrelated command that never showed the user that folder at all.
-static PICKER_GRANTS: Mutex<Vec<(PathBuf, String, SystemTime)>> = Mutex::new(Vec::new());
+pub(crate) static PICKER_GRANTS: Mutex<Vec<(PathBuf, String, SystemTime)>> = Mutex::new(Vec::new());
 
-fn picker_grant_key(path: &Path) -> PathBuf {
+pub(crate) fn picker_grant_key(path: &Path) -> PathBuf {
     fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 // A dialog result is proof the user picked this folder just now for `purpose`
 // -- recorded so the matching setter call that follows can spend it.
-fn grant_picked_dir(path: &Path, purpose: &str) {
+pub(crate) fn grant_picked_dir(path: &Path, purpose: &str) {
     let key = picker_grant_key(path);
     let mut grants = PICKER_GRANTS.lock().unwrap_or_else(|e| e.into_inner());
     grants.retain(|(_, _, at)| at.elapsed().map(|e| e < PICKER_GRANT_TTL).unwrap_or(true));
@@ -17246,7 +17246,7 @@ fn grant_picked_dir(path: &Path, purpose: &str) {
 // call that follows the picker can ever use it -- a captured dir string
 // cannot be replayed for a second write once that call has gone through, and
 // a grant picked for a different purpose is never a match.
-fn consume_granted_dir(dir: &Path, purpose: &str) -> bool {
+pub(crate) fn consume_granted_dir(dir: &Path, purpose: &str) -> bool {
     let key = picker_grant_key(dir);
     let mut grants = PICKER_GRANTS.lock().unwrap_or_else(|e| e.into_inner());
     grants.retain(|(_, _, at)| at.elapsed().map(|e| e < PICKER_GRANT_TTL).unwrap_or(true));
@@ -17264,7 +17264,7 @@ fn consume_granted_dir(dir: &Path, purpose: &str) -> bool {
 // pick_folder/pick_export_folder for THIS setting's own purpose in this same
 // flow -- never a raw string the renderer made up on its own, and never a
 // grant picked for a different setting.
-fn accept_dir_setting(dir: &str, default_dir: &Path, purpose: &str) -> Result<String, String> {
+pub(crate) fn accept_dir_setting(dir: &str, default_dir: &Path, purpose: &str) -> Result<String, String> {
     let trimmed = dir.trim();
     if trimmed.is_empty() {
         return Ok(String::new());
@@ -17285,7 +17285,7 @@ fn accept_dir_setting(dir: &str, default_dir: &Path, purpose: &str) -> Result<St
 // could point at any purpose string it likes. An unknown purpose has no
 // title here on purpose: pick_folder below treats that as a reason to refuse
 // the pick outright, before any dialog opens.
-fn folder_picker_title(purpose: &str, lang: &str) -> Option<&'static str> {
+pub(crate) fn folder_picker_title(purpose: &str, lang: &str) -> Option<&'static str> {
     let de = lang == "de";
     match purpose {
         "screenshot" => Some(if de { "Screenshot-Ordner wählen" } else { "Choose the screenshot folder" }),
@@ -17330,12 +17330,12 @@ fn current_data_dir(app: AppHandle) -> String {
 // The exact folder the last set_data_dir moved AWAY from: the only directory
 // delete_data_dir is allowed to clean, so the webview can never point that command
 // at another app's folder full of same-named files (settings.json / data.db).
-static LAST_OLD_DATA_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
+pub(crate) static LAST_OLD_DATA_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
 
 // Plain recursive copy: used to bring backups/ along on a data-dir move/adopt,
 // which only ever copied the store files themselves (data.db/prompts.json/
 // settings.json), leaving the Backup panel showing 0 snapshots at the new location.
-fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+pub(crate) fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
     fs::create_dir_all(dst)?;
     for entry in fs::read_dir(src)? {
         let entry = entry?;
@@ -17353,7 +17353,7 @@ fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result
 // first failure. `landed` is set as soon as ANY of them arrived: a half-copied
 // destination is no longer the store the caller has in memory, and a caller that
 // keeps using the old one would write it straight over the files that did arrive.
-fn copy_store_files(src: &Path, dst: &Path, landed: &mut bool) -> Result<(), String> {
+pub(crate) fn copy_store_files(src: &Path, dst: &Path, landed: &mut bool) -> Result<(), String> {
     for f in STORE_FILES {
         let from = src.join(f);
         if from.exists() {
@@ -17373,7 +17373,7 @@ fn copy_store_files(src: &Path, dst: &Path, landed: &mut bool) -> Result<(), Str
 // offering to delete it would be offering to delete the data itself.
 // `flush` persists the live store into `current`; `rebind` is called once the file
 // the process will write to is a different one.
-fn move_store_dir(
+pub(crate) fn move_store_dir(
     current: &Path,
     new: &Path,
     pointer_dir: &Path,
@@ -17515,21 +17515,21 @@ async fn delete_data_dir(path: String) -> bool {
 // collide with something a user (portable mode especially) already has
 // beside their data, and build_demo_store's wipe-and-rebuild must never
 // touch a folder it did not create itself (see DEMO_MARKER_FILE).
-const DEMO_SUBFOLDER: &str = "prompt-saver-demo";
+pub(crate) const DEMO_SUBFOLDER: &str = "prompt-saver-demo";
 // Written into DEMO_SUBFOLDER the first time this app builds it there;
 // build_demo_store refuses to wipe an existing folder at that path unless
 // this marker is present, so an unrelated folder that merely happens to
 // share the name survives untouched.
-const DEMO_MARKER_FILE: &str = ".prompt-saver-demo-marker";
-const DEMO_POINTER_BACKUP: &str = "datapath.before-demo";
+pub(crate) const DEMO_MARKER_FILE: &str = ".prompt-saver-demo-marker";
+pub(crate) const DEMO_POINTER_BACKUP: &str = "datapath.before-demo";
 
 // A small solid-colour picture, generated once and kept as a literal instead
 // of a shipped file, since the sample image tile needs a valid PNG, not a real
 // photo.
-const DEMO_IMAGE_PNG_BASE64: &str =
+pub(crate) const DEMO_IMAGE_PNG_BASE64: &str =
     "iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAIAAABvFaqvAAAAH0lEQVR42mNwm7aKKohh1KBRg0YNGjVo1KBRgwbeIACHvm2u1wMIiAAAAABJRU5ErkJggg==";
 
-fn demo_prompt(id: &str, name: &str, text: &str) -> Prompt {
+pub(crate) fn demo_prompt(id: &str, name: &str, text: &str) -> Prompt {
     Prompt { name: name.to_string(), text: text.to_string(), ..sync_blank_prompt(id.to_string()) }
 }
 
@@ -17538,7 +17538,7 @@ fn demo_prompt(id: &str, name: &str, text: &str) -> Prompt {
 // placeholder, a favorite, two members of the sample folder, and (best
 // effort, skipped if ffmpeg is not on hand) a real attached video next to a
 // plain attached text file.
-fn demo_prompts(dir: &Path, ffmpeg: Option<&Path>, lang: &str) -> Vec<Prompt> {
+pub(crate) fn demo_prompts(dir: &Path, ffmpeg: Option<&Path>, lang: &str) -> Vec<Prompt> {
     let d = demo_text::demo_text(lang);
     let mut list = vec![
         Prompt {
@@ -17602,7 +17602,7 @@ fn demo_prompts(dir: &Path, ffmpeg: Option<&Path>, lang: &str) -> Vec<Prompt> {
 
 // Two views and one grid folder, arranged the same way every time a fresh
 // sample store is built.
-fn demo_settings(has_video: bool, lang: &str) -> Settings {
+pub(crate) fn demo_settings(has_video: bool, lang: &str) -> Settings {
     let d = demo_text::demo_text(lang);
     let mut settings = Settings::default();
     settings.ui_flags.insert("demoMode".to_string(), true);
@@ -17667,7 +17667,7 @@ fn demo_settings(has_video: bool, lang: &str) -> Settings {
 // absent or already carries the marker this function itself writes below --
 // a pre-existing, unrelated folder that merely happens to sit at that path
 // is left completely alone.
-fn build_demo_store(dir: &Path, ffmpeg: Option<&Path>, lang: &str) -> Result<(), String> {
+pub(crate) fn build_demo_store(dir: &Path, ffmpeg: Option<&Path>, lang: &str) -> Result<(), String> {
     if dir.is_dir() && !dir.join(DEMO_MARKER_FILE).is_file() {
         return Err("a folder already exists at the demo data path and was not created by demo mode; refusing to touch it".to_string());
     }
@@ -17721,7 +17721,7 @@ fn build_demo_store(dir: &Path, ffmpeg: Option<&Path>, lang: &str) -> Result<(),
 // put it back exactly. Split out of enter_demo_mode so a caller can build the
 // sample store (build_demo_store, possibly running ffmpeg) well before ever
 // touching the redirect -- see enable_demo_mode's own comment.
-fn flip_pointer_to_demo(canonical: &Path, demo: &Path) -> Result<(), String> {
+pub(crate) fn flip_pointer_to_demo(canonical: &Path, demo: &Path) -> Result<(), String> {
     let pointer = canonical.join("datapath");
     let backup = canonical.join(DEMO_POINTER_BACKUP);
     // Never overwrite an existing backup: one is already there only when a
@@ -17750,7 +17750,7 @@ fn flip_pointer_to_demo(canonical: &Path, demo: &Path) -> Result<(), String> {
 // build_demo_store and flip_pointer_to_demo separately instead, with the
 // store lock and DEMO_TRANSITION_LOCKED sitting in between them.
 #[cfg(test)]
-fn enter_demo_mode(canonical: &Path, ffmpeg: Option<&Path>) -> Result<PathBuf, String> {
+pub(crate) fn enter_demo_mode(canonical: &Path, ffmpeg: Option<&Path>) -> Result<PathBuf, String> {
     fs::create_dir_all(canonical).map_err(|e| e.to_string())?;
     let demo = canonical.join(DEMO_SUBFOLDER);
     build_demo_store(&demo, ffmpeg, "de")?;
@@ -17770,17 +17770,17 @@ fn enter_demo_mode(canonical: &Path, ffmpeg: Option<&Path>) -> Result<PathBuf, S
 // removes it again on a clean exit; checking for another LIVE pid there is
 // real evidence, independent of anything either process's Settings currently
 // says.
-fn instances_dir(canonical: &Path) -> PathBuf {
+pub(crate) fn instances_dir(canonical: &Path) -> PathBuf {
     canonical.join("instances")
 }
 
-fn register_running_instance(canonical: &Path) {
+pub(crate) fn register_running_instance(canonical: &Path) {
     let dir = instances_dir(canonical);
     let _ = fs::create_dir_all(&dir);
     let _ = fs::write(dir.join(std::process::id().to_string()), b"");
 }
 
-fn unregister_running_instance(canonical: &Path) {
+pub(crate) fn unregister_running_instance(canonical: &Path) {
     let _ = fs::remove_file(instances_dir(canonical).join(std::process::id().to_string()));
 }
 
@@ -17806,7 +17806,7 @@ fn unregister_running_instance(canonical: &Path) {
 // out from under a running process, or an access-denied edge case). Its own
 // function, pulled out of instance_pid_is_this_exe below, so the comparison
 // itself is unit testable without a live pid.
-fn same_exe_path(a: &Path, b: &Path) -> bool {
+pub(crate) fn same_exe_path(a: &Path, b: &Path) -> bool {
     let same = |a: &Path, b: &Path| a.to_string_lossy().to_lowercase() == b.to_string_lossy().to_lowercase();
     match (fs::canonicalize(a), fs::canonicalize(b)) {
         (Ok(a), Ok(b)) => same(&a, &b),
@@ -17815,7 +17815,7 @@ fn same_exe_path(a: &Path, b: &Path) -> bool {
 }
 
 #[cfg(windows)]
-fn instance_pid_is_this_exe(pid: u32) -> bool {
+pub(crate) fn instance_pid_is_this_exe(pid: u32) -> bool {
     #[link(name = "kernel32")]
     extern "system" {
         fn OpenProcess(access: u32, inherit: i32, pid: u32) -> isize;
@@ -17843,7 +17843,7 @@ fn instance_pid_is_this_exe(pid: u32) -> bool {
     }
 }
 #[cfg(not(windows))]
-fn instance_pid_is_this_exe(_pid: u32) -> bool {
+pub(crate) fn instance_pid_is_this_exe(_pid: u32) -> bool {
     true // conservative off Windows: never treat a registered entry as a reused pid
 }
 
@@ -17858,7 +17858,7 @@ fn instance_pid_is_this_exe(_pid: u32) -> bool {
 // Failing the image check without the pid being dead still refuses to count
 // it as another instance (the pid is either reused by something unrelated,
 // or genuinely not this exe), it just leaves the marker alone either way.
-fn other_instance_running(canonical: &Path) -> bool {
+pub(crate) fn other_instance_running(canonical: &Path) -> bool {
     let Ok(entries) = fs::read_dir(instances_dir(canonical)) else {
         return false;
     };
@@ -17886,7 +17886,7 @@ fn other_instance_running(canonical: &Path) -> bool {
 // subfolder itself is left alone: the next enable wipes and rebuilds it, so
 // there is nothing to clean up here, and nothing changed during the session
 // that just ended is kept anywhere the app will read from again.
-fn exit_demo_mode(canonical: &Path) -> Result<(), String> {
+pub(crate) fn exit_demo_mode(canonical: &Path) -> Result<(), String> {
     let pointer = canonical.join("datapath");
     let backup = canonical.join(DEMO_POINTER_BACKUP);
     let demo = canonical.join(DEMO_SUBFOLDER);
@@ -18005,7 +18005,7 @@ async fn disable_demo_mode(app: AppHandle, state: State<'_, Db>) -> Result<(), S
 
 // Local wall-clock stamp for screenshot names: "YYYY-MM-DD_HH-MM-SS" (filename-safe).
 #[cfg(windows)]
-fn local_stamp() -> String {
+pub(crate) fn local_stamp() -> String {
     #[repr(C)]
     struct SystemTimeW { year: u16, month: u16, dow: u16, day: u16, hour: u16, min: u16, sec: u16, ms: u16 }
     #[link(name = "kernel32")]
@@ -18015,11 +18015,11 @@ fn local_stamp() -> String {
     format!("{:04}-{:02}-{:02}_{:02}-{:02}-{:02}", st.year, st.month, st.day, st.hour, st.min, st.sec)
 }
 #[cfg(not(windows))]
-fn local_stamp() -> String { now_secs().to_string() }
+pub(crate) fn local_stamp() -> String { now_secs().to_string() }
 
 // App label for a window shot: drop ".exe" + any path, strip characters illegal in
 // a filename, trim. Empty if nothing usable.
-fn clean_app_name(raw: &str) -> String {
+pub(crate) fn clean_app_name(raw: &str) -> String {
     let base = raw.rsplit(['\\', '/']).next().unwrap_or(raw);
     let stem = base.strip_suffix(".exe").or_else(|| base.strip_suffix(".EXE")).unwrap_or(base);
     stem.chars().filter(|c| !"<>:\"/\\|?*".contains(*c)).collect::<String>().trim().to_string()
@@ -18031,13 +18031,13 @@ fn clean_app_name(raw: &str) -> String {
 // sibling finalize_ocr_capture -- this used to run inline on the async worker thread,
 // blocking whichever other command happened to land on it for however long the encode
 // and disk write take.
-fn discard_cancelled_file(path: &str) {
+pub(crate) fn discard_cancelled_file(path: &str) {
     if !path.is_empty() {
         let _ = fs::remove_file(path);
     }
 }
 
-async fn finalize_capture(app: &AppHandle, gen: u64, crop: image::RgbaImage, app_name: Option<String>) -> Result<(), String> {
+pub(crate) async fn finalize_capture(app: &AppHandle, gen: u64, crop: image::RgbaImage, app_name: Option<String>) -> Result<(), String> {
     let (cw, ch) = crop.dimensions();
     if cw == 0 || ch == 0 {
         return Err("empty region".to_string());
@@ -18127,7 +18127,7 @@ async fn finalize_capture(app: &AppHandle, gen: u64, crop: image::RgbaImage, app
 // but capture_region's OCR branch has no such call site of its own -- it reads them
 // here instead, the same way finalize_capture just above reads screenshotSave and
 // screenshotDir off the Db state rather than needing them passed in.
-fn ocr_settings_from(app: &AppHandle) -> (u32, bool, String, bool) {
+pub(crate) fn ocr_settings_from(app: &AppHandle) -> (u32, bool, String, bool) {
     app.try_state::<Db>()
         .map(|s| {
             let g = s.lock().unwrap_or_else(|e| e.into_inner());
@@ -18151,7 +18151,7 @@ fn ocr_settings_from(app: &AppHandle) -> (u32, bool, String, bool) {
 // finalize_capture, that failure runs BEFORE close_all_snip, so the overlay stays
 // open and the caller's showError() can offer a retry with the freeze still in
 // place, instead of silently ending the session on a failed recognition.
-async fn finalize_ocr_capture(app: &AppHandle, state: &State<'_, SnipState>, gen: u64, crop: image::RgbaImage) -> Result<(), String> {
+pub(crate) async fn finalize_ocr_capture(app: &AppHandle, state: &State<'_, SnipState>, gen: u64, crop: image::RgbaImage) -> Result<(), String> {
     let (cw, ch) = crop.dimensions();
     if cw == 0 || ch == 0 {
         return Err("empty region".to_string());
@@ -18182,7 +18182,7 @@ async fn finalize_ocr_capture(app: &AppHandle, state: &State<'_, SnipState>, gen
 }
 
 // Crop an image at a physical-pixel rect (clamped to its bounds).
-fn crop_rgba(img: &image::RgbaImage, x: i32, y: i32, width: u32, height: u32) -> Option<image::RgbaImage> {
+pub(crate) fn crop_rgba(img: &image::RgbaImage, x: i32, y: i32, width: u32, height: u32) -> Option<image::RgbaImage> {
     let (iw, ih) = img.dimensions();
     // Both edges are clamped on their own: a rect that starts left of or above the
     // image loses that part, it does not reach further right or down instead.
@@ -18197,7 +18197,7 @@ fn crop_rgba(img: &image::RgbaImage, x: i32, y: i32, width: u32, height: u32) ->
 }
 
 // Crop the frozen monitor capture at a physical-pixel rect.
-fn crop_frozen(
+pub(crate) fn crop_frozen(
     state: &State<SnipState>,
     index: usize,
     x: i32,
@@ -18210,7 +18210,7 @@ fn crop_frozen(
 }
 
 // Min/max luminance over a 4×4 sample grid (used by the capture quality checks).
-fn luma_range(img: &image::RgbaImage) -> Option<(i32, i32)> {
+pub(crate) fn luma_range(img: &image::RgbaImage) -> Option<(i32, i32)> {
     let (w, h) = img.dimensions();
     if w == 0 || h == 0 {
         return None;
@@ -18232,7 +18232,7 @@ fn luma_range(img: &image::RgbaImage) -> Option<(i32, i32)> {
 // True when a direct PrintWindow capture looks blocked: near black OR perfectly
 // uniform. Used only to decide whether to fall back to the frozen screen, where a
 // uniform-but-valid window still ends up captured.
-fn capture_looks_bad(img: &image::RgbaImage) -> bool {
+pub(crate) fn capture_looks_bad(img: &image::RgbaImage) -> bool {
     match luma_range(img) {
         Some((min_l, max_l)) => max_l < 12 || max_l - min_l < 4,
         None => true,
@@ -18242,7 +18242,7 @@ fn capture_looks_bad(img: &image::RgbaImage) -> bool {
 // True when the FINAL crop is unusable: empty or pure black. Protected windows
 // (Task Manager, secured dialogs) that even the frozen screen could not capture
 // end up black; such a defective image must never be saved (we error instead).
-fn capture_is_blank(img: &image::RgbaImage) -> bool {
+pub(crate) fn capture_is_blank(img: &image::RgbaImage) -> bool {
     match luma_range(img) {
         Some((_, max_l)) => max_l < 12,
         None => true,
@@ -18278,7 +18278,7 @@ async fn capture_region(
 // desktop; the capture workaround minimizes them. Windows without a caption
 // (overlays, shell surfaces, our own title-less snip overlay) are skipped.
 #[cfg(windows)]
-fn occluders_above(id: u32, tx: i32, ty: i32, tw: i32, th: i32) -> Vec<isize> {
+pub(crate) fn occluders_above(id: u32, tx: i32, ty: i32, tw: i32, th: i32) -> Vec<isize> {
     #[repr(C)]
     struct RectW { left: i32, top: i32, right: i32, bottom: i32 }
     #[link(name = "user32")]
@@ -18318,7 +18318,7 @@ fn occluders_above(id: u32, tx: i32, ty: i32, tw: i32, th: i32) -> Vec<isize> {
 }
 
 #[cfg(windows)]
-fn show_window(hwnd: isize, cmd: i32) {
+pub(crate) fn show_window(hwnd: isize, cmd: i32) {
     #[link(name = "user32")]
     extern "system" {
         fn ShowWindow(hwnd: isize, cmd: i32) -> i32;
@@ -18333,7 +18333,7 @@ fn show_window(hwnd: isize, cmd: i32) {
 // regardless of elevation. Heuristic: a medium-integrity caller cannot open an
 // elevated process for PROCESS_QUERY_INFORMATION (access denied).
 #[cfg(windows)]
-fn window_is_protected(id: u32) -> bool {
+pub(crate) fn window_is_protected(id: u32) -> bool {
     #[link(name = "user32")]
     extern "system" {
         fn GetWindowThreadProcessId(hwnd: isize, pid: *mut u32) -> u32;
@@ -18493,7 +18493,7 @@ async fn capture_window(
 }
 
 // Passes `res` through, calling `show` first when it is an error.
-fn show_overlay_again_on_error<T>(res: Result<T, String>, show: impl FnOnce()) -> Result<T, String> {
+pub(crate) fn show_overlay_again_on_error<T>(res: Result<T, String>, show: impl FnOnce()) -> Result<T, String> {
     if res.is_err() {
         show();
     }
@@ -18524,7 +18524,7 @@ fn open_repo(page: Option<String>) -> Result<(), String> {
 // dependency manifests and embedded here as a plain JSON string; the frontend parses
 // it. Regenerating THIRD-PARTY-NOTICES.md from the same source happens in build.rs
 // too, so the two never show a different list.
-static THIRD_PARTY_LICENSES_JSON: &str =
+pub(crate) static THIRD_PARTY_LICENSES_JSON: &str =
     include_str!(concat!(env!("OUT_DIR"), "/third_party_licenses.json"));
 
 #[tauri::command]
@@ -18536,7 +18536,7 @@ fn third_party_notices() -> &'static str {
 // 680x460 floor by the same factor keeps at least 680x460 CSS pixels visible
 // (zoom scales CSS pixels inside a fixed window frame), capped to the monitor
 // so this never asks for a window bigger than the screen.
-fn zoom_min_size(factor: f64, cap: (u32, u32)) -> (u32, u32) {
+pub(crate) fn zoom_min_size(factor: f64, cap: (u32, u32)) -> (u32, u32) {
     let min_w = ((MAIN_WIN_MIN_W as f64 * factor).round() as u32).min(cap.0);
     let min_h = ((MAIN_WIN_MIN_H as f64 * factor).round() as u32).min(cap.1);
     (min_w, min_h)
@@ -18590,15 +18590,15 @@ fn set_ui_zoom(app: AppHandle, factor: f64) -> Result<(), String> {
 // `#[cfg(windows)]`, the same split this file already uses for `mod clipwatch`.
 
 #[derive(Serialize)]
-struct OcrLang {
-    tag: String,
-    label: String,
+pub(crate) struct OcrLang {
+    pub(crate) tag: String,
+    pub(crate) label: String,
 }
 
 #[derive(Serialize, Clone)]
-struct OcrResult {
-    text: String,
-    lang: String,
+pub(crate) struct OcrResult {
+    pub(crate) text: String,
+    pub(crate) lang: String,
 }
 
 // ---------- OCR language packs, managed from inside the app ----------
@@ -18607,14 +18607,14 @@ struct OcrResult {
 // "Language.OCR*"`. Size/version are exactly what Windows reports -- a size
 // Windows does not know becomes `None` (frontend renders "-"), never a guess.
 #[derive(Serialize, Clone)]
-struct OcrCap {
-    name: String,
-    tag: String,
-    label: String,
-    state: String,
-    version: String,
-    download_size: Option<u64>,
-    install_size: Option<u64>,
+pub(crate) struct OcrCap {
+    pub(crate) name: String,
+    pub(crate) tag: String,
+    pub(crate) label: String,
+    pub(crate) state: String,
+    pub(crate) version: String,
+    pub(crate) download_size: Option<u64>,
+    pub(crate) install_size: Option<u64>,
 }
 
 // A capability row before its localized label is looked up. The label needs
@@ -18622,13 +18622,13 @@ struct OcrCap {
 // here is plain JSON parsing, kept free of any Windows API so the parser is
 // unit-testable on any platform, same split as ocr_join_lines/ocr_resize_target.
 #[derive(Debug, Clone, PartialEq)]
-struct OcrCapRaw {
-    name: String,
-    tag: String,
-    state: String,
-    version: String,
-    download_size: Option<u64>,
-    install_size: Option<u64>,
+pub(crate) struct OcrCapRaw {
+    pub(crate) name: String,
+    pub(crate) tag: String,
+    pub(crate) state: String,
+    pub(crate) version: String,
+    pub(crate) download_size: Option<u64>,
+    pub(crate) install_size: Option<u64>,
 }
 
 // What was last seen while a language WAS installed -- kept across restarts
@@ -18636,23 +18636,23 @@ struct OcrCapRaw {
 // Windows feature update that silently drops a language pack is still
 // detected as "needs update" after the app relaunches.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
-struct OcrCapSnapshot {
-    version: String,
-    installed: bool,
+pub(crate) struct OcrCapSnapshot {
+    pub(crate) version: String,
+    pub(crate) installed: bool,
 }
 
 #[derive(Serialize, Clone)]
-struct OcrInstallResult {
-    ok: bool,
-    error: Option<String>,
+pub(crate) struct OcrInstallResult {
+    pub(crate) ok: bool,
+    pub(crate) error: Option<String>,
 }
 
 // Payload for the "ocr-lang-update-due" event (background watcher).
 #[derive(Serialize, Clone)]
-struct OcrLangUpdateDue {
-    name: String,
-    tag: String,
-    label: String,
+pub(crate) struct OcrLangUpdateDue {
+    pub(crate) name: String,
+    pub(crate) tag: String,
+    pub(crate) label: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -18664,18 +18664,18 @@ struct OcrLangUpdateDue {
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Clone)]
-struct VoiceLang {
-    tag: String,
-    label: String,
-    installed: bool,
+pub(crate) struct VoiceLang {
+    pub(crate) tag: String,
+    pub(crate) label: String,
+    pub(crate) installed: bool,
 }
 
 #[derive(Serialize, Clone)]
-struct VoiceSupport {
-    supported: bool,
-    engine: &'static str,
-    langs: Vec<VoiceLang>,
-    needs_online: bool,
+pub(crate) struct VoiceSupport {
+    pub(crate) supported: bool,
+    pub(crate) engine: &'static str,
+    pub(crate) langs: Vec<VoiceLang>,
+    pub(crate) needs_online: bool,
 }
 
 // voice_start's success payload. `lang` is the tag actually resolved from
@@ -18683,33 +18683,33 @@ struct VoiceSupport {
 // post-processing in the language that is really being recognized, which is
 // not necessarily the UI's own display language.
 #[derive(Serialize, Clone)]
-struct VoiceStartResult {
-    id: u64,
-    lang: String,
+pub(crate) struct VoiceStartResult {
+    pub(crate) id: u64,
+    pub(crate) lang: String,
 }
 
 // Payload for voice-partial / voice-text.
 #[derive(Serialize, Clone)]
-struct VoiceTextEvent {
-    id: u64,
-    token: u64,
-    text: String,
+pub(crate) struct VoiceTextEvent {
+    pub(crate) id: u64,
+    pub(crate) token: u64,
+    pub(crate) text: String,
 }
 
 // Payload for voice-stopped.
 #[derive(Serialize, Clone)]
-struct VoiceStoppedEvent {
-    id: u64,
-    token: u64,
-    reason: String, // manual | silence | max | error | shutdown
+pub(crate) struct VoiceStoppedEvent {
+    pub(crate) id: u64,
+    pub(crate) token: u64,
+    pub(crate) reason: String, // manual | silence | max | error | shutdown
 }
 
 // Payload for voice-error.
 #[derive(Serialize, Clone)]
-struct VoiceErrorEvent {
-    id: u64,
-    token: u64,
-    code: String,
+pub(crate) struct VoiceErrorEvent {
+    pub(crate) id: u64,
+    pub(crate) token: u64,
+    pub(crate) code: String,
 }
 
 // One session at a time -- a second voice_start while this holds Some(..) gets
@@ -18718,37 +18718,37 @@ struct VoiceErrorEvent {
 // emitted; every stop path (button, hotkey, shutdown, hard cap, silence) reads
 // it first so a session that already finished itself is never stopped twice --
 // a second StopAsync on an already-Completed session throws (0x80131509).
-struct VoiceHandle {
-    id: u64,
+pub(crate) struct VoiceHandle {
+    pub(crate) id: u64,
     #[allow(dead_code)] // carried alongside id for a future cross-check; the frontend already does this matching itself
-    token: u64,
-    stop: std::sync::mpsc::Sender<&'static str>,
+    pub(crate) token: u64,
+    pub(crate) stop: std::sync::mpsc::Sender<&'static str>,
     #[allow(dead_code)] // read by a future "how long has this run" indicator; harmless to keep now
-    started: std::time::Instant,
+    pub(crate) started: std::time::Instant,
     #[allow(dead_code)]
-    lang: String,
-    ended: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    pub(crate) lang: String,
+    pub(crate) ended: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 // Second field: claimed while a voice_start call is between its busy check and
 // the real VoiceHandle landing in the first field -- see voice_start for why.
-struct VoiceState(Mutex<Option<VoiceHandle>>, std::sync::atomic::AtomicBool);
+pub(crate) struct VoiceState(pub(crate) Mutex<Option<VoiceHandle>>, pub(crate) std::sync::atomic::AtomicBool);
 
-const MAX_OCR_IMAGE_BYTES: u64 = 200 * 1024 * 1024; // a single image, not a whole export (MAX_IMPORT_BYTES)
+pub(crate) const MAX_OCR_IMAGE_BYTES: u64 = 200 * 1024 * 1024; // a single image, not a whole export (MAX_IMPORT_BYTES)
 // Encoded length of a data URL handed over IPC; a 4K PNG from the screenshot
 // editor is ~40 MB, so this only stops runaway input.
-const MAX_IMAGE_DATA_URL_BYTES: u64 = 200 * 1024 * 1024;
-const OCR_IMAGE_EXTS: [&str; 5] = ["png", "jpg", "jpeg", "bmp", "webp"];
+pub(crate) const MAX_IMAGE_DATA_URL_BYTES: u64 = 200 * 1024 * 1024;
+pub(crate) const OCR_IMAGE_EXTS: [&str; 5] = ["png", "jpg", "jpeg", "bmp", "webp"];
 
 // Shared oversized-input guard for a data URL decoded straight from IPC:
 // each caller supplies its own ceiling (OCR keeps its own MAX_OCR_IMAGE_BYTES).
-fn data_url_within_limit(data_url: &str, limit: u64) -> bool {
+pub(crate) fn data_url_within_limit(data_url: &str, limit: u64) -> bool {
     data_url.len() as u64 <= limit
 }
 
 // Pure decision for mod ocr's resize_for_ocr: shrink an oversized image down to
 // max_dim, enlarge a very small one 2x, or leave it alone. Kept outside
 // `#[cfg(windows)]` so it is unit-testable on any platform, same as ocr_join_lines.
-fn ocr_resize_target(w: u32, h: u32, max_dim: u32, upscale_below_px: u32) -> Option<(u32, u32)> {
+pub(crate) fn ocr_resize_target(w: u32, h: u32, max_dim: u32, upscale_below_px: u32) -> Option<(u32, u32)> {
     if w > max_dim || h > max_dim {
         let scale = max_dim as f64 / (w.max(h) as f64);
         let nw = ((w as f64 * scale).round() as u32).max(1);
@@ -18765,7 +18765,7 @@ fn ocr_resize_target(w: u32, h: u32, max_dim: u32, upscale_below_px: u32) -> Opt
 // forward-slash path (what a webview or a script hands over) or an
 // extended-length one fails with a bad-pathname error that used to reach the
 // user as raw Windows text.
-fn winrt_file_path(path: &str) -> String {
+pub(crate) fn winrt_file_path(path: &str) -> String {
     let flat = path.replace('/', r"\");
     if let Some(rest) = flat.strip_prefix(r"\\?\UNC\") {
         return format!(r"\\{rest}");
@@ -18776,7 +18776,7 @@ fn winrt_file_path(path: &str) -> String {
     }
 }
 
-fn ocr_validate_path(path: &str) -> Result<PathBuf, String> {
+pub(crate) fn ocr_validate_path(path: &str) -> Result<PathBuf, String> {
     let p = Path::new(path);
     let meta = fs::metadata(p).map_err(|e| e.to_string())?;
     if !meta.is_file() {
@@ -18802,7 +18802,7 @@ fn ocr_validate_path(path: &str) -> Result<PathBuf, String> {
 // own result already has lines in correct reading order, and this function
 // only ever inspects whitespace/case at the edges, so it never assumes an
 // LTR character order.
-fn ocr_join_lines(lines: &[String]) -> String {
+pub(crate) fn ocr_join_lines(lines: &[String]) -> String {
     fn ends_sentence(line: &str) -> bool {
         let trimmed = line.trim_end_matches(['"', '\'', ')', ']', '\u{201d}', '\u{2019}']);
         matches!(trimmed.chars().last(), Some(c) if matches!(c, '.' | '!' | '?' | '\u{2026}'))
@@ -18840,7 +18840,7 @@ fn ocr_join_lines(lines: &[String]) -> String {
 // result -- an image whose lines are all empty must yield a genuinely empty
 // string, not a run of newlines, so the caller can tell "nothing was
 // recognized" apart from a real (whitespace-only-looking) result.
-fn ocr_assemble_text(lines: &[String], join_lines: bool) -> String {
+pub(crate) fn ocr_assemble_text(lines: &[String], join_lines: bool) -> String {
     let joined = if join_lines { ocr_join_lines(lines) } else { lines.join("\n") };
     joined.trim().to_string()
 }
@@ -18856,7 +18856,7 @@ fn ocr_assemble_text(lines: &[String], join_lines: bool) -> String {
 // inside mod ocr) -- kept as a plain &str here rather than taking CapKind
 // itself, since these three functions run BEFORE the #[cfg(windows)] branch
 // in every caller below (mod ocr, where CapKind lives, is windows-only).
-fn ocr_capability_name_is_well_formed(prefix: &str, name: &str) -> bool {
+pub(crate) fn ocr_capability_name_is_well_formed(prefix: &str, name: &str) -> bool {
     const SUFFIX: &str = "~0.0.1.0";
     if name.len() < prefix.len() + SUFFIX.len() + 2 {
         return false; // too short to hold prefix + a 2-char tag + suffix
@@ -18872,7 +18872,7 @@ fn ocr_capability_name_is_well_formed(prefix: &str, name: &str) -> bool {
 // equivalent). None for anything that does not have that exact shape
 // (callers only ever pass an already-validated name, but this stays total
 // rather than panicking).
-fn ocr_tag_from_capability_name(prefix: &str, name: &str) -> Option<String> {
+pub(crate) fn ocr_tag_from_capability_name(prefix: &str, name: &str) -> Option<String> {
     let rest = name.strip_prefix(prefix)?;
     let tag = rest.split('~').next()?;
     (!tag.is_empty()).then(|| tag.to_string())
@@ -18896,7 +18896,7 @@ fn ocr_tag_from_capability_name(prefix: &str, name: &str) -> Option<String> {
 // maps to NotPresent -- for a feature this consequential (it gates whether the
 // UI thinks a language is already usable), understating readiness is the safe
 // default, never the reverse.
-fn ocr_capability_state_from_value(v: &serde_json::Value) -> String {
+pub(crate) fn ocr_capability_state_from_value(v: &serde_json::Value) -> String {
     match v {
         serde_json::Value::String(s) => s.clone(),
         serde_json::Value::Number(n) => match n.as_i64() {
@@ -18907,7 +18907,7 @@ fn ocr_capability_state_from_value(v: &serde_json::Value) -> String {
     }
 }
 
-fn ocr_parse_capabilities_json(prefix: &str, json: &str) -> Result<Vec<OcrCapRaw>, String> {
+pub(crate) fn ocr_parse_capabilities_json(prefix: &str, json: &str) -> Result<Vec<OcrCapRaw>, String> {
     let trimmed = json.trim();
     if trimmed.is_empty() {
         return Ok(Vec::new());
@@ -18944,7 +18944,7 @@ fn ocr_parse_capabilities_json(prefix: &str, json: &str) -> Result<Vec<OcrCapRaw
 // regression. Only a previously-Installed language that either changed
 // version or vanished (state flipped to NotPresent, the real case after a
 // Windows feature update removes language packs) counts.
-fn ocr_lang_needs_update(previous: Option<&OcrCapSnapshot>, current_state: &str, current_version: &str) -> bool {
+pub(crate) fn ocr_lang_needs_update(previous: Option<&OcrCapSnapshot>, current_state: &str, current_version: &str) -> bool {
     match previous {
         None => false,
         Some(prev) => {
@@ -18963,11 +18963,11 @@ fn ocr_lang_needs_update(previous: Option<&OcrCapSnapshot>, current_state: &str,
 // "ocrLangNextCheck" for CapKind::Ocr (unchanged keys, existing settings
 // survive), "voiceLangVersions"/"voiceLangNextCheck" for CapKind::Speech.
 #[cfg(windows)]
-fn lang_versions_key(kind: ocr::CapKind) -> String {
+pub(crate) fn lang_versions_key(kind: ocr::CapKind) -> String {
     format!("{}LangVersions", kind.slug())
 }
 #[cfg(windows)]
-fn lang_next_check_key(kind: ocr::CapKind) -> String {
+pub(crate) fn lang_next_check_key(kind: ocr::CapKind) -> String {
     format!("{}LangNextCheck", kind.slug())
 }
 
@@ -18975,7 +18975,7 @@ fn lang_next_check_key(kind: ocr::CapKind) -> String {
 // (tag -> OcrCapSnapshot) tucked into the existing free-form ui_texts map
 // rather than a new Settings field.
 #[cfg(windows)]
-fn lang_load_snapshots(settings: &Settings, kind: ocr::CapKind) -> HashMap<String, OcrCapSnapshot> {
+pub(crate) fn lang_load_snapshots(settings: &Settings, kind: ocr::CapKind) -> HashMap<String, OcrCapSnapshot> {
     settings
         .ui_texts
         .get(&lang_versions_key(kind))
@@ -18984,7 +18984,7 @@ fn lang_load_snapshots(settings: &Settings, kind: ocr::CapKind) -> HashMap<Strin
 }
 
 #[cfg(windows)]
-fn lang_save_snapshots(settings: &mut Settings, kind: ocr::CapKind, snapshots: &HashMap<String, OcrCapSnapshot>) {
+pub(crate) fn lang_save_snapshots(settings: &mut Settings, kind: ocr::CapKind, snapshots: &HashMap<String, OcrCapSnapshot>) {
     if let Ok(json) = serde_json::to_string(snapshots) {
         settings.ui_texts.insert(lang_versions_key(kind), json);
     }
@@ -19058,14 +19058,14 @@ async fn ocr_image_data(data_url: String, upscale_under_px: u32, join_lines: boo
 // Default matches the spec's own default (20000): long enough for a real
 // screenshot of text, short enough that a photo of a wall of text cannot
 // inflate the database.
-fn ocr_index_max_chars(settings: &Settings) -> usize {
+pub(crate) fn ocr_index_max_chars(settings: &Settings) -> usize {
     settings.ui_values.get("ocrIndexMaxChars").copied().unwrap_or(20000.0).max(0.0) as usize
 }
 
 // The cap itself, split out from ocr_index_text below so it is testable
 // without a real OCR engine: char-safe (never splits a multi-byte character),
 // which `.chars().take(n)` already guarantees.
-fn cap_ocr_text(text: &str, max_chars: usize) -> String {
+pub(crate) fn cap_ocr_text(text: &str, max_chars: usize) -> String {
     text.chars().take(max_chars).collect()
 }
 
@@ -19078,7 +19078,7 @@ fn cap_ocr_text(text: &str, max_chars: usize) -> String {
 // no language pack installed, or a blank result all come back as "", the
 // same "nothing to index" outcome a caller cannot tell apart from an error
 // and does not need to.
-fn ocr_index_text(data_url: &str, max_chars: usize) -> String {
+pub(crate) fn ocr_index_text(data_url: &str, max_chars: usize) -> String {
     if data_url.is_empty() || !data_url_within_limit(data_url, MAX_OCR_IMAGE_BYTES) {
         return String::new();
     }
@@ -19097,7 +19097,7 @@ fn ocr_index_text(data_url: &str, max_chars: usize) -> String {
 // provable without a real OCR engine or a running app: `recognize` is called
 // at most once, only for a non-empty picture with the switch on, and its
 // result is what a test controls instead of Windows.Media.Ocr.
-fn resolved_image_text(new_image: &str, ocr_index_on: bool, recognize: impl FnOnce(&str) -> String) -> String {
+pub(crate) fn resolved_image_text(new_image: &str, ocr_index_on: bool, recognize: impl FnOnce(&str) -> String) -> String {
     if new_image.is_empty() || !ocr_index_on {
         String::new()
     } else {
@@ -19111,7 +19111,7 @@ fn resolved_image_text(new_image: &str, ocr_index_on: bool, recognize: impl FnOn
 // crosses into the frontend at all (see SlimPrompt's From impl), so the
 // plain-text search every other field goes through client-side asks the
 // backend for this one field alone.
-fn image_text_matches(prompts: &[Prompt], ocr_index_on: bool, query: &str) -> Vec<String> {
+pub(crate) fn image_text_matches(prompts: &[Prompt], ocr_index_on: bool, query: &str) -> Vec<String> {
     if !ocr_index_on {
         return Vec::new();
     }
@@ -19134,7 +19134,7 @@ fn search_image_text(state: State<Db>, query: String) -> Vec<String> {
 }
 
 // Set by cancel_ocr_index_backfill, polled between pictures in the loop below.
-static OCR_INDEX_CANCEL: AtomicBool = AtomicBool::new(false);
+pub(crate) static OCR_INDEX_CANCEL: AtomicBool = AtomicBool::new(false);
 
 #[tauri::command]
 fn cancel_ocr_index_backfill() {
@@ -19144,7 +19144,7 @@ fn cancel_ocr_index_backfill() {
 // Writes recognized text onto a prompt only while it still shows the picture the text
 // came from and has no text yet: the user may have replaced or removed the picture
 // (or the text may have been refreshed) while the recognition ran.
-fn apply_backfill_text(p: &mut Prompt, recognized_from: &str, text: String) -> bool {
+pub(crate) fn apply_backfill_text(p: &mut Prompt, recognized_from: &str, text: String) -> bool {
     if p.image != recognized_from || !p.image_text.is_empty() {
         return false;
     }
@@ -19155,7 +19155,7 @@ fn apply_backfill_text(p: &mut Prompt, recognized_from: &str, text: String) -> b
 // Switching the picture-text index off must not leave the recognized text
 // behind: it is searchable content read out of the user's pictures. Returns
 // whether anything was cleared, so the caller saves only when needed.
-fn clear_image_text(prompts: &mut [Prompt]) -> bool {
+pub(crate) fn clear_image_text(prompts: &mut [Prompt]) -> bool {
     let mut changed = false;
     for p in prompts.iter_mut().filter(|p| !p.image_text.is_empty()) {
         p.image_text.clear();
@@ -19166,13 +19166,13 @@ fn clear_image_text(prompts: &mut [Prompt]) -> bool {
 
 // Bumped by every clear. A recognition pass remembers the value it started with and
 // never writes its text back once it changed (or the switch is off).
-static OCR_EPOCH: AtomicU64 = AtomicU64::new(0);
+pub(crate) static OCR_EPOCH: AtomicU64 = AtomicU64::new(0);
 
-fn ocr_epoch() -> u64 {
+pub(crate) fn ocr_epoch() -> u64 {
     OCR_EPOCH.load(Ordering::SeqCst)
 }
 
-fn ocr_index_flag_on(store: &Store) -> bool {
+pub(crate) fn ocr_index_flag_on(store: &Store) -> bool {
     store.settings.ui_flags.get("ocrIndex").copied().unwrap_or(false)
 }
 
@@ -19180,11 +19180,11 @@ fn ocr_index_flag_on(store: &Store) -> bool {
 // prompts AND trash. Caller holds the store lock and saves when this returns true.
 // Settings that arrive from outside (a settings import, a settings restore) may
 // switch the index off: its text goes with it, like the switch itself does.
-fn clear_ocr_text_if_switched_off(was_on: bool, store: &mut Store) -> bool {
+pub(crate) fn clear_ocr_text_if_switched_off(was_on: bool, store: &mut Store) -> bool {
     was_on && !ocr_index_flag_on(store) && clear_ocr_index_text(store)
 }
 
-fn clear_ocr_index_text(store: &mut Store) -> bool {
+pub(crate) fn clear_ocr_index_text(store: &mut Store) -> bool {
     cancel_ocr_index_backfill();
     OCR_EPOCH.fetch_add(1, Ordering::SeqCst);
     let live = clear_image_text(&mut store.prompts);
@@ -19195,7 +19195,7 @@ fn clear_ocr_index_text(store: &mut Store) -> bool {
 // Writes one recognized text back, only while the index is still on and no clear
 // happened since the pass started and the prompt still shows the same picture.
 // Returns whether it was written.
-fn apply_ocr_backfill_text(store: &mut Store, id: &str, recognized_from: &str, text: String, started_epoch: u64) -> bool {
+pub(crate) fn apply_ocr_backfill_text(store: &mut Store, id: &str, recognized_from: &str, text: String, started_epoch: u64) -> bool {
     if ocr_epoch() != started_epoch || !ocr_index_flag_on(store) {
         return false;
     }
@@ -19483,7 +19483,7 @@ fn voice_lang_snooze(app: AppHandle, state: State<Db>) {
 // re-nagged on every restart. Does not touch the check cadence itself; a
 // manual "Jetzt prüfen" (force: true) is unaffected by this.
 #[cfg(windows)]
-fn lang_snooze(app: &AppHandle, state: &State<Db>, kind: ocr::CapKind) {
+pub(crate) fn lang_snooze(app: &AppHandle, state: &State<Db>, kind: ocr::CapKind) {
     let mut store = lock(state);
     let hours = lang_snooze_hours(kind);
     let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
@@ -19496,19 +19496,19 @@ fn lang_snooze(app: &AppHandle, state: &State<Db>, kind: ocr::CapKind) {
 // how long a checked capability list is trusted (hours), how often the
 // background watcher looks for updates (hours), and how long "Cancel" on the
 // update notice defers the next notice (hours).
-const OCR_LANG_CACHE_H: f64 = 24.0;
-const VOICE_LANG_CACHE_H: f64 = 24.0;
+pub(crate) const OCR_LANG_CACHE_H: f64 = 24.0;
+pub(crate) const VOICE_LANG_CACHE_H: f64 = 24.0;
 #[cfg(windows)]
-const OCR_LANG_CHECK_H: f64 = 168.0;
+pub(crate) const OCR_LANG_CHECK_H: f64 = 168.0;
 #[cfg(windows)]
-const VOICE_LANG_CHECK_H: f64 = 168.0;
+pub(crate) const VOICE_LANG_CHECK_H: f64 = 168.0;
 #[cfg(windows)]
-const OCR_LANG_SNOOZE_H: f64 = 168.0;
+pub(crate) const OCR_LANG_SNOOZE_H: f64 = 168.0;
 #[cfg(windows)]
-const VOICE_LANG_SNOOZE_H: f64 = 168.0;
+pub(crate) const VOICE_LANG_SNOOZE_H: f64 = 168.0;
 
 #[cfg(windows)]
-fn lang_cache_hours(kind: ocr::CapKind) -> f64 {
+pub(crate) fn lang_cache_hours(kind: ocr::CapKind) -> f64 {
     match kind {
         ocr::CapKind::Ocr => OCR_LANG_CACHE_H,
         ocr::CapKind::Speech => VOICE_LANG_CACHE_H,
@@ -19516,7 +19516,7 @@ fn lang_cache_hours(kind: ocr::CapKind) -> f64 {
 }
 
 #[cfg(windows)]
-fn lang_check_hours(kind: ocr::CapKind) -> f64 {
+pub(crate) fn lang_check_hours(kind: ocr::CapKind) -> f64 {
     match kind {
         ocr::CapKind::Ocr => OCR_LANG_CHECK_H,
         ocr::CapKind::Speech => VOICE_LANG_CHECK_H,
@@ -19524,7 +19524,7 @@ fn lang_check_hours(kind: ocr::CapKind) -> f64 {
 }
 
 #[cfg(windows)]
-fn lang_snooze_hours(kind: ocr::CapKind) -> f64 {
+pub(crate) fn lang_snooze_hours(kind: ocr::CapKind) -> f64 {
     match kind {
         ocr::CapKind::Ocr => OCR_LANG_SNOOZE_H,
         ocr::CapKind::Speech => VOICE_LANG_SNOOZE_H,
@@ -19533,10 +19533,10 @@ fn lang_snooze_hours(kind: ocr::CapKind) -> f64 {
 
 // Well after launch -- the first round must never compete with window build.
 #[cfg(windows)]
-const OCR_LANG_FIRST_DELAY_SECS: u64 = 30;
+pub(crate) const OCR_LANG_FIRST_DELAY_SECS: u64 = 30;
 
 #[cfg(windows)]
-fn lang_check_interval(kind: ocr::CapKind) -> Duration {
+pub(crate) fn lang_check_interval(kind: ocr::CapKind) -> Duration {
     Duration::from_secs((lang_check_hours(kind) * 3600.0) as u64)
 }
 
@@ -19549,7 +19549,7 @@ fn lang_check_interval(kind: ocr::CapKind) -> Duration {
 // "multiple due packages processed sequentially, never in parallel" is
 // automatically satisfied: one round only ever lists what is due in one event.
 #[cfg(windows)]
-fn start_lang_update_watcher(app: AppHandle, kind: ocr::CapKind) {
+pub(crate) fn start_lang_update_watcher(app: AppHandle, kind: ocr::CapKind) {
     let job_name = format!("{}-lang-check", kind.slug());
     let name_for_job = job_name.clone();
     scheduler::register_periodic(&job_name, Duration::from_secs(OCR_LANG_FIRST_DELAY_SECS), lang_check_interval(kind), move || {
@@ -19561,7 +19561,7 @@ fn start_lang_update_watcher(app: AppHandle, kind: ocr::CapKind) {
 // One round of the watcher. The persisted next-due time is what really decides
 // whether anything happens, so a restart neither skips nor duplicates a check.
 #[cfg(windows)]
-fn lang_update_tick(app: &AppHandle, kind: ocr::CapKind) {
+pub(crate) fn lang_update_tick(app: &AppHandle, kind: ocr::CapKind) {
     let auto_update_key = format!("{}LangAutoUpdate", kind.slug());
     let snapshot = app.try_state::<Db>().map(|s| {
         let store = s.lock().unwrap_or_else(|e| e.into_inner());
@@ -19639,11 +19639,11 @@ mod ocr;
 // `#[cfg(windows)]`, calling into `mod voice` for the real Windows API work.
 // ---------------------------------------------------------------------------
 
-static VOICE_SESSION_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+pub(crate) static VOICE_SESSION_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 // How long self_stop waits for WinRT's own Completed callback after
 // StopAsync() before giving up and reporting the end itself, so a stuck
 // callback never holds the session thread -- and the microphone -- open.
-const VOICE_SELF_STOP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+pub(crate) const VOICE_SELF_STOP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 #[tauri::command]
 async fn voice_support() -> VoiceSupport {
@@ -19776,7 +19776,7 @@ async fn voice_start(
 // on an already-Completed session throws (0x80131509). Pure decision, kept
 // separate from the State<> plumbing so it is unit-testable like every other
 // table/decision in this module.
-fn should_send_stop(target: Option<u64>, running_id: u64, already_ended: bool) -> bool {
+pub(crate) fn should_send_stop(target: Option<u64>, running_id: u64, already_ended: bool) -> bool {
     (target.is_none() || target == Some(running_id)) && !already_ended
 }
 
@@ -19847,7 +19847,7 @@ fn open_privacy_mic() -> Result<(), String> {
 // Cancels whatever session is running, without waiting for it to actually
 // finish -- called on window close/hide and on app exit. A hidden window
 // never keeps listening.
-fn voice_shutdown(app: &AppHandle) {
+pub(crate) fn voice_shutdown(app: &AppHandle) {
     if let Some(vs) = app.try_state::<VoiceState>() {
         let guard = vs.0.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(h) = guard.as_ref() {
@@ -19894,21 +19894,21 @@ mod voice;
 // The recording state machine: pure functions of the current phase, so the
 // allowed transitions are testable without a capture session.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum RecPhase {
+pub(crate) enum RecPhase {
     Idle,
     Recording,
     Paused,
 }
-fn rec_can_start(phase: RecPhase) -> bool {
+pub(crate) fn rec_can_start(phase: RecPhase) -> bool {
     phase == RecPhase::Idle
 }
-fn rec_can_pause(phase: RecPhase) -> bool {
+pub(crate) fn rec_can_pause(phase: RecPhase) -> bool {
     phase == RecPhase::Recording
 }
-fn rec_can_resume(phase: RecPhase) -> bool {
+pub(crate) fn rec_can_resume(phase: RecPhase) -> bool {
     phase == RecPhase::Paused
 }
-fn rec_can_finish(phase: RecPhase) -> bool {
+pub(crate) fn rec_can_finish(phase: RecPhase) -> bool {
     // stop and cancel are reachable from the same two phases.
     matches!(phase, RecPhase::Recording | RecPhase::Paused)
 }
@@ -19917,35 +19917,35 @@ fn rec_can_finish(phase: RecPhase) -> bool {
 // same unit VideoEncoder::send_frame_buffer expects). Kept as a pure function
 // of its inputs so the pause-freezes-time behaviour is testable without a
 // real clock.
-fn rec_clock_ticks(accumulated_ticks: i64, active_segment_elapsed_ticks: Option<i64>) -> i64 {
+pub(crate) fn rec_clock_ticks(accumulated_ticks: i64, active_segment_elapsed_ticks: Option<i64>) -> i64 {
     accumulated_ticks.saturating_add(active_segment_elapsed_ticks.unwrap_or(0))
 }
 
 // rec-YYYY-MM-DD_HHMMSS.mp4, built from already-split components so the
 // formatting is testable without touching the system clock.
-fn rec_filename(year: i32, month: u32, day: u32, hour: u32, minute: u32, second: u32) -> String {
+pub(crate) fn rec_filename(year: i32, month: u32, day: u32, hour: u32, minute: u32, second: u32) -> String {
     format!("rec-{year:04}-{month:02}-{day:02}_{hour:02}{minute:02}{second:02}.mp4")
 }
 
 // Instant-based wrapper around rec_clock_ticks: accumulates active time across
 // pauses and converts to 100ns ticks.
 pub(crate) struct RecordClock {
-    paused: std::sync::atomic::AtomicBool,
-    accumulated_ticks: std::sync::atomic::AtomicI64,
-    segment_start: Mutex<Option<std::time::Instant>>,
+    pub(crate) paused: std::sync::atomic::AtomicBool,
+    pub(crate) accumulated_ticks: std::sync::atomic::AtomicI64,
+    pub(crate) segment_start: Mutex<Option<std::time::Instant>>,
 }
 impl RecordClock {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             paused: std::sync::atomic::AtomicBool::new(false),
             accumulated_ticks: std::sync::atomic::AtomicI64::new(0),
             segment_start: Mutex::new(Some(std::time::Instant::now())),
         }
     }
-    fn is_paused(&self) -> bool {
+    pub(crate) fn is_paused(&self) -> bool {
         self.paused.load(std::sync::atomic::Ordering::SeqCst)
     }
-    fn now_ticks(&self) -> i64 {
+    pub(crate) fn now_ticks(&self) -> i64 {
         let elapsed = self
             .segment_start
             .lock()
@@ -19953,7 +19953,7 @@ impl RecordClock {
             .map(|t0| (t0.elapsed().as_nanos() / 100) as i64);
         rec_clock_ticks(self.accumulated_ticks.load(std::sync::atomic::Ordering::SeqCst), elapsed)
     }
-    fn pause(&self) {
+    pub(crate) fn pause(&self) {
         if self.paused.swap(true, std::sync::atomic::Ordering::SeqCst) {
             return; // already paused
         }
@@ -19963,7 +19963,7 @@ impl RecordClock {
             self.accumulated_ticks.fetch_add(add, std::sync::atomic::Ordering::SeqCst);
         }
     }
-    fn resume(&self) {
+    pub(crate) fn resume(&self) {
         if !self.paused.swap(false, std::sync::atomic::Ordering::SeqCst) {
             return; // was not paused
         }
@@ -19980,7 +19980,7 @@ impl RecordClock {
 // source and always delivers the whole monitor. Independent of any capture-frame
 // type so it is unit-testable without a GPU or a Windows build.
 #[allow(clippy::too_many_arguments)]
-fn crop_and_flip_rows_bottom_up(
+pub(crate) fn crop_and_flip_rows_bottom_up(
     raw: &[u8],
     src_width: usize,
     src_height: usize,
@@ -20018,7 +20018,7 @@ fn crop_and_flip_rows_bottom_up(
 // which routes a GROWN frame through scale_to_fit_frame_top_down instead --
 // cropping it here would have cut off whatever grew past the canvas) --
 // independent of the capture-frame type so it stays unit-testable.
-fn letterbox_frame_top_down(
+pub(crate) fn letterbox_frame_top_down(
     raw: &[u8], width: usize, height: usize, stride: usize, target_w: usize, target_h: usize,
 ) -> (Vec<u8>, usize) {
     let dst_stride = target_w * 4;
@@ -20042,7 +20042,7 @@ fn letterbox_frame_top_down(
 // ratio preserved, nearest-neighbour -- cheap enough for a capture thread and
 // plenty for the brief span a live resize actually spans) and centre it, so
 // nothing recorded is ever lost to a resize.
-fn scale_to_fit_frame_top_down(
+pub(crate) fn scale_to_fit_frame_top_down(
     raw: &[u8], width: usize, height: usize, stride: usize, target_w: usize, target_h: usize,
 ) -> (Vec<u8>, usize) {
     let dst_stride = target_w * 4;
@@ -20082,7 +20082,7 @@ fn scale_to_fit_frame_top_down(
 // capture-frame type so it stays unit-testable without a GPU or a Windows
 // build.
 #[allow(clippy::too_many_arguments)]
-fn place_frame_in_canvas(
+pub(crate) fn place_frame_in_canvas(
     raw: &[u8], width: usize, height: usize, stride: usize,
     canvas_w: usize, canvas_h: usize, at_x: i64, at_y: i64,
 ) -> (Vec<u8>, usize) {
@@ -20124,7 +20124,7 @@ fn place_frame_in_canvas(
 // already the union of every display, so no per-display enumeration or
 // union math is needed on top of it.
 #[cfg(windows)]
-fn virtual_screen_bounds() -> Result<(i32, i32, u32, u32), String> {
+pub(crate) fn virtual_screen_bounds() -> Result<(i32, i32, u32, u32), String> {
     #[link(name = "user32")]
     extern "system" {
         fn GetSystemMetrics(index: i32) -> i32;
@@ -20152,14 +20152,14 @@ fn virtual_screen_bounds() -> Result<(i32, i32, u32, u32), String> {
 // of a very large combined-display output). `build_encoder` is still tried
 // on top of this and can still fail on its own; this only short-circuits the
 // obviously too-large case before paying for that attempt.
-fn canvas_within_ceiling(w: u32, h: u32, ceiling_w: u32, ceiling_h: u32) -> bool {
+pub(crate) fn canvas_within_ceiling(w: u32, h: u32, ceiling_w: u32, ceiling_h: u32) -> bool {
     w <= ceiling_w && h <= ceiling_h
 }
 
 // A value from an imported settings file or a stray manual edit can carry
 // anything; fall back to the smallest, most conservative capture ("window")
 // for any string that is not one of the three modes this actually knows.
-fn sanitize_canvas_mode(raw: &str) -> &'static str {
+pub(crate) fn sanitize_canvas_mode(raw: &str) -> &'static str {
     match raw {
         "monitor" => "monitor",
         "all" => "all",
@@ -20171,14 +20171,14 @@ fn sanitize_canvas_mode(raw: &str) -> &'static str {
 // in main.js) so a value written outside the menu, such as an imported
 // settings file, cannot push the recording canvas ceiling past what the UI
 // ever lets a user pick.
-fn clamp_canvas_max_px(raw: f64) -> u32 {
+pub(crate) fn clamp_canvas_max_px(raw: f64) -> u32 {
     raw.clamp(2048.0, 15360.0) as u32
 }
 
 // Pure predicate for the two optional recording safety nets (recMaxMin and
 // recMaxMb, both 0 = off) -- kept free of the watch thread's sleep loop so it
 // is unit-testable without spinning up a real recording.
-fn recording_limit_reached(elapsed_secs: u64, file_len: u64, max_min: f64, max_mb: f64) -> bool {
+pub(crate) fn recording_limit_reached(elapsed_secs: u64, file_len: u64, max_min: f64, max_mb: f64) -> bool {
     let by_time = max_min > 0.0 && elapsed_secs >= (max_min * 60.0) as u64;
     let by_size = max_mb > 0.0 && file_len >= (max_mb * 1024.0 * 1024.0) as u64;
     by_time || by_size
@@ -20189,7 +20189,7 @@ fn recording_limit_reached(elapsed_secs: u64, file_len: u64, max_min: f64, max_m
 // `resolve_region_monitor` already does for region recordings (no second way
 // to ask which display a point belongs to).
 #[cfg(windows)]
-fn monitor_rect_at(x: i32, y: i32) -> Option<(i32, i32, u32, u32)> {
+pub(crate) fn monitor_rect_at(x: i32, y: i32) -> Option<(i32, i32, u32, u32)> {
     let (hmon, ..) = resolve_region_monitor(x, y, 1, 1).ok()?;
     let (left, top, right, bottom) = monitor_bounds(hmon as isize)?;
     Some((left, top, (right - left).max(1) as u32, (bottom - top).max(1) as u32))
@@ -20203,14 +20203,14 @@ fn monitor_rect_at(x: i32, y: i32) -> Option<(i32, i32, u32, u32)> {
 // capture thread and must never block behind a lock a slow reader could be
 // holding.
 pub(crate) struct UsedAreaTracker {
-    min_x: std::sync::atomic::AtomicU32,
-    min_y: std::sync::atomic::AtomicU32,
-    max_x: std::sync::atomic::AtomicU32, // exclusive (x + w)
-    max_y: std::sync::atomic::AtomicU32, // exclusive (y + h)
-    seen: std::sync::atomic::AtomicBool,
+    pub(crate) min_x: std::sync::atomic::AtomicU32,
+    pub(crate) min_y: std::sync::atomic::AtomicU32,
+    pub(crate) max_x: std::sync::atomic::AtomicU32, // exclusive (x + w)
+    pub(crate) max_y: std::sync::atomic::AtomicU32, // exclusive (y + h)
+    pub(crate) seen: std::sync::atomic::AtomicBool,
 }
 impl UsedAreaTracker {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             min_x: std::sync::atomic::AtomicU32::new(u32::MAX),
             min_y: std::sync::atomic::AtomicU32::new(u32::MAX),
@@ -20221,7 +20221,7 @@ impl UsedAreaTracker {
     }
     // (x, y) is the frame's top-left placement in output coordinates
     // (already clamped by the caller), (w, h) its size.
-    fn update(&self, x: u32, y: u32, w: u32, h: u32) {
+    pub(crate) fn update(&self, x: u32, y: u32, w: u32, h: u32) {
         use std::sync::atomic::Ordering::Relaxed;
         self.min_x.fetch_min(x, Relaxed);
         self.min_y.fetch_min(y, Relaxed);
@@ -20251,7 +20251,7 @@ impl UsedAreaTracker {
 // on a huge canvas never gets an unusably low rate, and never scaled UP past
 // the configured value even if the "window" size handed in is somehow
 // already bigger than the canvas.
-fn scale_bitrate_to_used_area(full_canvas_kbps: u32, used_w: u32, used_h: u32, canvas_w: u32, canvas_h: u32) -> u32 {
+pub(crate) fn scale_bitrate_to_used_area(full_canvas_kbps: u32, used_w: u32, used_h: u32, canvas_w: u32, canvas_h: u32) -> u32 {
     if canvas_w == 0 || canvas_h == 0 {
         return full_canvas_kbps;
     }
@@ -20269,12 +20269,12 @@ fn scale_bitrate_to_used_area(full_canvas_kbps: u32, used_w: u32, used_h: u32, c
 // this fixed target format before it reaches the encoder. Recording always
 // asks the encoder for exactly this format, so only the CAPTURE side ever
 // has to adapt to a device's own native format.
-const REC_AUDIO_SAMPLE_RATE: u32 = 48_000;
-const REC_AUDIO_CHANNELS: u32 = 2;
+pub(crate) const REC_AUDIO_SAMPLE_RATE: u32 = 48_000;
+pub(crate) const REC_AUDIO_CHANNELS: u32 = 2;
 
 // f32 sample in [-1.0, 1.0] (WASAPI's shared-mode mix format is virtually
 // always IEEE float) -> i16 PCM, hard-clipped rather than wrapped.
-fn audio_f32_to_i16(sample: f32) -> i16 {
+pub(crate) fn audio_f32_to_i16(sample: f32) -> i16 {
     (sample.clamp(-1.0, 1.0) * i16::MAX as f32).round() as i16
 }
 
@@ -20285,7 +20285,7 @@ fn audio_f32_to_i16(sample: f32) -> i16 {
 // interpolation (adequate for speech/system audio at these sample rates; a
 // polyphase resampler would be overkill for this use case). Returns
 // interleaved i16 PCM at `out_channels`/`out_rate`.
-fn audio_convert_to_target(
+pub(crate) fn audio_convert_to_target(
     samples: &[f32],
     in_channels: u32,
     in_rate: u32,
@@ -20328,7 +20328,7 @@ fn audio_convert_to_target(
 // Sums two equal-length interleaved i16 buffers (both sources active), with
 // saturating (hard-clip) addition rather than wraparound -- clipping on loud
 // combined peaks is far less objectionable than digital wraparound noise.
-fn audio_mix_i16(a: &[i16], b: &[i16]) -> Vec<i16> {
+pub(crate) fn audio_mix_i16(a: &[i16], b: &[i16]) -> Vec<i16> {
     a.iter().zip(b.iter()).map(|(&x, &y)| x.saturating_add(y)).collect()
 }
 
@@ -20338,7 +20338,7 @@ fn audio_mix_i16(a: &[i16], b: &[i16]) -> Vec<i16> {
 // the answer, same "trust the output file's own numbers" approach 191 used
 // for its pause-gap proof).
 #[cfg(test)]
-fn mp4_child_boxes(data: &[u8]) -> Vec<(String, std::ops::Range<usize>)> {
+pub(crate) fn mp4_child_boxes(data: &[u8]) -> Vec<(String, std::ops::Range<usize>)> {
     let mut out = Vec::new();
     let mut i = 0usize;
     while i + 8 <= data.len() {
@@ -20372,7 +20372,7 @@ fn mp4_child_boxes(data: &[u8]) -> Vec<(String, std::ops::Range<usize>)> {
 // so this returns every leaf box matching the full path, in file order.
 #[cfg(test)]
 #[allow(clippy::single_range_in_vec_init)] // a Vec<Range> search scope, not an index list
-fn mp4_find_path(data: &[u8], path: &[&str]) -> Vec<std::ops::Range<usize>> {
+pub(crate) fn mp4_find_path(data: &[u8], path: &[&str]) -> Vec<std::ops::Range<usize>> {
     let mut current = vec![0..data.len()];
     for name in path {
         let mut next = Vec::new();
@@ -20395,7 +20395,7 @@ fn mp4_find_path(data: &[u8], path: &[&str]) -> Vec<std::ops::Range<usize>> {
 // verifies which declared duration in mp4_track_durations_secs actually
 // belongs to which stream, rather than assuming trak order.
 #[cfg(test)]
-fn mp4_track_handler_types(data: &[u8]) -> Vec<String> {
+pub(crate) fn mp4_track_handler_types(data: &[u8]) -> Vec<String> {
     let mut out = Vec::new();
     for trak in mp4_find_path(data, &["moov", "trak"]) {
         let trak_bytes = &data[trak.clone()];
@@ -20409,7 +20409,7 @@ fn mp4_track_handler_types(data: &[u8]) -> Vec<String> {
 }
 
 #[cfg(test)]
-fn mp4_track_durations_secs(data: &[u8]) -> Vec<f64> {
+pub(crate) fn mp4_track_durations_secs(data: &[u8]) -> Vec<f64> {
     let mut out = Vec::new();
     for trak in mp4_find_path(data, &["moov", "trak"]) {
         let trak_bytes = &data[trak.clone()];
@@ -20444,24 +20444,24 @@ fn mp4_track_durations_secs(data: &[u8]) -> Vec<f64> {
 // generous (2s) since audio packets arrive in small, frequent bursts, unlike
 // video frames.
 pub(crate) struct AudioQueueShared {
-    samples: Mutex<std::collections::VecDeque<i16>>,
-    lost: std::sync::atomic::AtomicBool,
+    pub(crate) samples: Mutex<std::collections::VecDeque<i16>>,
+    pub(crate) lost: std::sync::atomic::AtomicBool,
     // The rec bar's mute buttons flip this instead of stopping the
     // WASAPI capture thread itself -- push() below just stops feeding the
     // queue while it is set, and drain()'s existing zero-pad-on-underflow
     // (a few lines down) does the rest, so the muted span of the track comes
     // out as real silence rather than a gap, with zero change to timing.
-    muted: std::sync::atomic::AtomicBool,
+    pub(crate) muted: std::sync::atomic::AtomicBool,
 }
 impl AudioQueueShared {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             samples: Mutex::new(std::collections::VecDeque::new()),
             lost: std::sync::atomic::AtomicBool::new(false),
             muted: std::sync::atomic::AtomicBool::new(false),
         }
     }
-    fn push(&self, chunk: &[i16]) {
+    pub(crate) fn push(&self, chunk: &[i16]) {
         if self.muted.load(std::sync::atomic::Ordering::Relaxed) {
             return;
         }
@@ -20481,7 +20481,7 @@ impl AudioQueueShared {
     // Drains exactly `n` samples, zero-padding (silence) if fewer are
     // available -- the tick must never block or shrink to keep the encoder's
     // own monotonic audio clock in step with real wall-clock time.
-    fn drain(&self, n: usize) -> Vec<i16> {
+    pub(crate) fn drain(&self, n: usize) -> Vec<i16> {
         let mut q = self.samples.lock().unwrap_or_else(|e| e.into_inner());
         let mut out = Vec::with_capacity(n);
         for _ in 0..n {
@@ -20489,7 +20489,7 @@ impl AudioQueueShared {
         }
         out
     }
-    fn mark_lost(&self) {
+    pub(crate) fn mark_lost(&self) {
         self.lost.store(true, std::sync::atomic::Ordering::Relaxed);
     }
     pub(crate) fn is_lost(&self) -> bool {
@@ -20504,7 +20504,7 @@ impl AudioQueueShared {
     // frame's own timestamp, per send_frame_buffer's self-normalization) --
     // measured as an audio track running ~0.3s longer than the video track
     // in every real recording before this fix.
-    fn clear(&self) {
+    pub(crate) fn clear(&self) {
         self.samples.lock().unwrap_or_else(|e| e.into_inner()).clear();
     }
 }
@@ -20523,12 +20523,12 @@ impl AudioQueueShared {
 // recording (see video_editor::mux_mic_track's contract).
 // A hand-rolled 44-byte RIFF/WAVE header rather than a new crate dependency --
 // the format is small and fixed (mono/stereo 16-bit PCM), not worth a dep.
-struct RecWavWriter {
-    file: fs::File,
-    data_bytes: u32,
+pub(crate) struct RecWavWriter {
+    pub(crate) file: fs::File,
+    pub(crate) data_bytes: u32,
 }
 impl RecWavWriter {
-    fn create(path: &Path, sample_rate: u32, channels: u16) -> std::io::Result<Self> {
+    pub(crate) fn create(path: &Path, sample_rate: u32, channels: u16) -> std::io::Result<Self> {
         use std::io::Write;
         let mut file = fs::File::create(path)?;
         let bits_per_sample: u16 = 16;
@@ -20549,7 +20549,7 @@ impl RecWavWriter {
         file.write_all(&0u32.to_le_bytes())?; // patched by finish()
         Ok(Self { file, data_bytes: 0 })
     }
-    fn write_samples(&mut self, samples: &[i16]) -> std::io::Result<()> {
+    pub(crate) fn write_samples(&mut self, samples: &[i16]) -> std::io::Result<()> {
         use std::io::Write;
         for s in samples {
             self.file.write_all(&s.to_le_bytes())?;
@@ -20560,7 +20560,7 @@ impl RecWavWriter {
     // Seeks back to patch the two placeholder sizes now that the real total is
     // known -- streamed formats (WAV included) put their length in the header,
     // so it cannot be written until the last sample has landed.
-    fn finish(mut self) -> std::io::Result<()> {
+    pub(crate) fn finish(mut self) -> std::io::Result<()> {
         use std::io::{Seek, SeekFrom, Write};
         let riff_size = 36u32.saturating_add(self.data_bytes);
         self.file.seek(SeekFrom::Start(4))?;
@@ -20572,7 +20572,7 @@ impl RecWavWriter {
 }
 
 // The mp4 sibling of a "<name>.mic.wav" sidecar, or None if `path` is not one.
-fn mic_sidecar_video_path(path: &Path) -> Option<PathBuf> {
+pub(crate) fn mic_sidecar_video_path(path: &Path) -> Option<PathBuf> {
     let name = path.file_name()?.to_str()?;
     let stem = name.strip_suffix(".mic.wav")?;
     Some(path.with_file_name(format!("{stem}.mp4")))
@@ -20586,7 +20586,7 @@ fn mic_sidecar_video_path(path: &Path) -> Option<PathBuf> {
 // treated a key-overlay sidecar as unreferenced -- it was deleted out from
 // under a KEPT recording as soon as it aged past the stale window, even
 // though the mp4 itself was correctly kept.
-fn keys_sidecar_video_path(path: &Path) -> Option<PathBuf> {
+pub(crate) fn keys_sidecar_video_path(path: &Path) -> Option<PathBuf> {
     let name = path.file_name()?.to_str()?;
     let stem = name.strip_suffix(".keys.json")?;
     Some(path.with_file_name(format!("{stem}.mp4")))
@@ -20595,11 +20595,11 @@ fn keys_sidecar_video_path(path: &Path) -> Option<PathBuf> {
 #[cfg(windows)]
 mod audio;
 
-const REC_QUEUE_CAP: usize = 4; // bounded frame queue -- drop-oldest once the feeder falls behind
+pub(crate) const REC_QUEUE_CAP: usize = 4; // bounded frame queue -- drop-oldest once the feeder falls behind
 
-struct RecFrameItem {
-    bytes: Vec<u8>,
-    ts: i64,
+pub(crate) struct RecFrameItem {
+    pub(crate) bytes: Vec<u8>,
+    pub(crate) ts: i64,
 }
 
 // Shared between the WGC capture callback (producer) and the encoder feeder
@@ -20609,21 +20609,21 @@ struct RecFrameItem {
 // rather than blocking the capture callback (and with it the desktop
 // compositor). Dropped frames are counted and logged, never silent.
 pub(crate) struct RecFeederShared {
-    queue: Mutex<std::collections::VecDeque<RecFrameItem>>,
-    cv: std::sync::Condvar,
-    dropped: std::sync::atomic::AtomicU64,
-    stopping: std::sync::atomic::AtomicBool,
+    pub(crate) queue: Mutex<std::collections::VecDeque<RecFrameItem>>,
+    pub(crate) cv: std::sync::Condvar,
+    pub(crate) dropped: std::sync::atomic::AtomicU64,
+    pub(crate) stopping: std::sync::atomic::AtomicBool,
     // First unrecoverable encoder write failure (e.g. disk full), if any --
     // surfaced to the user rather than left as a silently truncated recording.
     // Only the first is kept: a failing encoder tends to fail identically on
     // every following frame, and one message is all the user needs.
-    encode_error: Mutex<Option<String>>,
+    pub(crate) encode_error: Mutex<Option<String>>,
     // Set once, the same instant the audio feeder sees its first video
     // frame -- lets a parallel mic-sidecar writer thread (RecWavWriter, spawned
     // only when both system and mic are captured) discard its own pre-roll at
     // the same "time zero" the main track uses, without stealing frames from
     // the feeder's single-consumer queue to find that moment itself.
-    first_frame: std::sync::atomic::AtomicBool,
+    pub(crate) first_frame: std::sync::atomic::AtomicBool,
     // Written only by the capture callback (never the feeder thread), the
     // same "window size" canvas default's resize-safety-net path
     // (scale_to_fit_frame_top_down) that shrinks a grown window's picture to
@@ -20634,18 +20634,18 @@ pub(crate) struct RecFeederShared {
     // 0 unambiguously means "never happened" -- a real first frame at ms=0 is
     // not something this recorder can produce anyway (on_frame_arrived does
     // real work before ever reading the clock a second time).
-    resize_crop_max_w: std::sync::atomic::AtomicU32,
-    resize_crop_max_h: std::sync::atomic::AtomicU32,
-    resize_crop_first_ms_plus_one: std::sync::atomic::AtomicU64,
+    pub(crate) resize_crop_max_w: std::sync::atomic::AtomicU32,
+    pub(crate) resize_crop_max_h: std::sync::atomic::AtomicU32,
+    pub(crate) resize_crop_first_ms_plus_one: std::sync::atomic::AtomicU64,
     // Set at most once per recording, by the disk-space watch thread, the
     // first time free space drops below recDiskWarnMb -- read (and cleared)
     // by the live recording_status poll so the control bar can show it
     // exactly once, never stopping the recording (that is the hard, separate
     // "low-disk-space" threshold at warn_mb/4 below).
-    disk_low: Mutex<Option<(u64, u64)>>,
+    pub(crate) disk_low: Mutex<Option<(u64, u64)>>,
 }
 impl RecFeederShared {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             queue: Mutex::new(std::collections::VecDeque::new()),
             cv: std::sync::Condvar::new(),
@@ -20663,7 +20663,7 @@ impl RecFeederShared {
     // the exact instant a grown window's picture is being shrunk to keep
     // fitting the canvas -- never from the 369 placement-canvas branch, which
     // is deliberately oversized and can never lose content this way.
-    fn mark_resize_crop(&self, width: u32, height: u32, ts_ticks: i64) {
+    pub(crate) fn mark_resize_crop(&self, width: u32, height: u32, ts_ticks: i64) {
         use std::sync::atomic::Ordering::Relaxed;
         self.resize_crop_max_w.fetch_max(width, Relaxed);
         self.resize_crop_max_h.fetch_max(height, Relaxed);
@@ -20674,18 +20674,18 @@ impl RecFeederShared {
     // finish_and_stop has run session.control.stop()) -- the same threading
     // rule as the used-area tracker: written only by the capture thread,
     // read only once that thread is guaranteed to have stopped writing.
-    fn resize_crop_at_ms(&self) -> Option<u64> {
+    pub(crate) fn resize_crop_at_ms(&self) -> Option<u64> {
         use std::sync::atomic::Ordering::Relaxed;
         let plus_one = self.resize_crop_first_ms_plus_one.load(Relaxed);
         (plus_one > 0).then(|| plus_one - 1)
     }
-    fn mark_first_frame(&self) {
+    pub(crate) fn mark_first_frame(&self) {
         self.first_frame.store(true, std::sync::atomic::Ordering::Relaxed);
     }
-    fn has_first_frame(&self) -> bool {
+    pub(crate) fn has_first_frame(&self) -> bool {
         self.first_frame.load(std::sync::atomic::Ordering::Relaxed)
     }
-    fn note_disk_low(&self, free_mb: u64, est_seconds: u64) {
+    pub(crate) fn note_disk_low(&self, free_mb: u64, est_seconds: u64) {
         let mut d = self.disk_low.lock().unwrap_or_else(|e| e.into_inner());
         if d.is_none() {
             *d = Some((free_mb, est_seconds));
@@ -20693,10 +20693,10 @@ impl RecFeederShared {
     }
     // Consuming: recording_status() takes it exactly once, so the control
     // bar's toast fires exactly once per recording, not on every poll tick.
-    fn take_disk_low(&self) -> Option<(u64, u64)> {
+    pub(crate) fn take_disk_low(&self) -> Option<(u64, u64)> {
         self.disk_low.lock().unwrap_or_else(|e| e.into_inner()).take()
     }
-    fn set_encode_error(&self, msg: String) {
+    pub(crate) fn set_encode_error(&self, msg: String) {
         let mut e = self.encode_error.lock().unwrap_or_else(|e| e.into_inner());
         if e.is_none() {
             *e = Some(msg);
@@ -20705,10 +20705,10 @@ impl RecFeederShared {
     // Non-consuming: the live status poll (recording_status) and the final
     // stop payload both need to read this, and the live poll must not eat it
     // before the stop payload gets a turn.
-    fn peek_encode_error(&self) -> Option<String> {
+    pub(crate) fn peek_encode_error(&self) -> Option<String> {
         self.encode_error.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
-    fn push(&self, item: RecFrameItem) {
+    pub(crate) fn push(&self, item: RecFrameItem) {
         let mut q = self.queue.lock().unwrap_or_else(|e| e.into_inner());
         if q.len() >= REC_QUEUE_CAP {
             q.pop_front();
@@ -20718,7 +20718,7 @@ impl RecFeederShared {
         drop(q);
         self.cv.notify_one();
     }
-    fn pop_or_stop(&self) -> Option<RecFrameItem> {
+    pub(crate) fn pop_or_stop(&self) -> Option<RecFrameItem> {
         let mut q = self.queue.lock().unwrap_or_else(|e| e.into_inner());
         loop {
             if let Some(item) = q.pop_front() {
@@ -20733,11 +20733,11 @@ impl RecFeederShared {
     // Non-blocking pop, used by the audio-tick feeder loop: video frames are
     // drained whenever available between ticks, never waited on (the audio
     // tick's own pacing must not stall behind an empty video queue).
-    fn try_pop(&self) -> Option<RecFrameItem> {
+    pub(crate) fn try_pop(&self) -> Option<RecFrameItem> {
         let mut q = self.queue.lock().unwrap_or_else(|e| e.into_inner());
         q.pop_front()
     }
-    fn request_stop(&self) {
+    pub(crate) fn request_stop(&self) {
         self.stopping.store(true, std::sync::atomic::Ordering::Relaxed);
         self.cv.notify_all();
     }
@@ -20748,52 +20748,52 @@ impl RecFeederShared {
     // the encoder is finalised, see Trap 1 below), while audio had already
     // gone silent, so the video track ended up measurably longer than the
     // audio track at the end of every recording.
-    fn is_stopping(&self) -> bool {
+    pub(crate) fn is_stopping(&self) -> bool {
         self.stopping.load(std::sync::atomic::Ordering::Relaxed)
     }
 }
 
 #[cfg(windows)]
-struct RecordingState(Mutex<Option<recording::RecSession>>);
+pub(crate) struct RecordingState(pub(crate) Mutex<Option<recording::RecSession>>);
 #[cfg(not(windows))]
-struct RecordingState(Mutex<Option<()>>);
+pub(crate) struct RecordingState(pub(crate) Mutex<Option<()>>);
 
 #[derive(serde::Serialize, Clone)]
-struct RecordingStoppedPayload {
-    path: String,
-    dropped_frames: u64,
-    encode_error: Option<String>,
+pub(crate) struct RecordingStoppedPayload {
+    pub(crate) path: String,
+    pub(crate) dropped_frames: u64,
+    pub(crate) encode_error: Option<String>,
     // Set when both system and mic were captured -- the video editor
     // consolidates this sidecar into the mp4's second AAC track on open.
-    mic_wav_path: Option<String>,
+    pub(crate) mic_wav_path: Option<String>,
     // One sentence naming the canvas a window recording actually used
     // (e.g. "every display", "the display the window is on", "the
     // window's own size") -- None for Monitor/Region targets, which have
     // exactly one candidate and nothing to report.
-    canvas_note: Option<String>,
+    pub(crate) canvas_note: Option<String>,
     // True when the window used less of its canvas than the canvas itself,
     // leaving a black margin the frontend should now trim automatically
     // (crop_recording_to_used_area) before showing the result. Always
     // false for Monitor/Region and for the "window's own size" fallback.
-    needs_crop: bool,
+    pub(crate) needs_crop: bool,
     // Milliseconds into the recording when the "window size" canvas default
     // first had to shrink the picture to keep it fitting (the window grew
     // past its starting size) -- None if that never happened. Drives the
     // reactive notice offering to switch recCanvasMode to "all" from now on.
-    resize_crop_at_ms: Option<u64>,
+    pub(crate) resize_crop_at_ms: Option<u64>,
     // Every earlier part of this recording, oldest first, when the "finish and
     // continue" button was used at least once -- empty for a plain recording,
     // so existing callers reading only `path` see no change at all. The
     // frontend chains [...parts, { path, mic_wav_path }] when it wants the
     // full sequence, e.g. to open every part in the video editor one after
     // another with its own mic sidecar muxed in.
-    parts: Vec<RecordingPartInfo>,
+    pub(crate) parts: Vec<RecordingPartInfo>,
 }
 
 #[derive(serde::Serialize, Clone)]
-struct RecordingPartInfo {
-    path: String,
-    mic_wav_path: Option<String>,
+pub(crate) struct RecordingPartInfo {
+    pub(crate) path: String,
+    pub(crate) mic_wav_path: Option<String>,
 }
 
 // A cancel discards the WHOLE take, not just its current file -- every
@@ -20802,7 +20802,7 @@ struct RecordingPartInfo {
 // missing file (already moved/deleted by the user) is not a reason to fail
 // an otherwise-successful cancel.
 #[cfg(windows)]
-fn remove_recording_part_files(part: &RecordingPartInfo) {
+pub(crate) fn remove_recording_part_files(part: &RecordingPartInfo) {
     let _ = std::fs::remove_file(&part.path);
     if let Some(w) = &part.mic_wav_path {
         let _ = std::fs::remove_file(w);
@@ -20811,20 +20811,20 @@ fn remove_recording_part_files(part: &RecordingPartInfo) {
 }
 
 #[derive(serde::Serialize, Clone)]
-struct RecordingContinuedPayload {
+pub(crate) struct RecordingContinuedPayload {
     // The just-finished part's own outcome -- surfaced here (rather than only
     // logged) because this part gets no result dialog of its own; the final
     // stop is still the only place a dropped-frame count or encode error
     // becomes visible to the user, via `RecordingStoppedPayload.parts`.
-    finished_part_path: String,
-    finished_part_dropped_frames: u64,
-    finished_part_encode_error: Option<String>,
-    new_path: String,
-    part_number: u32,
+    pub(crate) finished_part_path: String,
+    pub(crate) finished_part_dropped_frames: u64,
+    pub(crate) finished_part_encode_error: Option<String>,
+    pub(crate) new_path: String,
+    pub(crate) part_number: u32,
     // How long the switch itself took, start to finish -- shown briefly in
     // the control bar so the missing moment between the two files is never
     // silently hidden from the user.
-    gap_ms: u64,
+    pub(crate) gap_ms: u64,
 }
 
 // System-wide key capture for the recording's "keys" overlay. Only
@@ -20852,7 +20852,7 @@ mod recording;
 // does. GetDiskFreeSpaceExW resolves whichever drive the given path sits on --
 // never a fixed "C:\" -- so a target on a secondary drive is checked correctly.
 #[cfg(windows)]
-fn free_space_bytes(path: &std::path::Path) -> std::io::Result<u64> {
+pub(crate) fn free_space_bytes(path: &std::path::Path) -> std::io::Result<u64> {
     use std::os::windows::ffi::OsStrExt;
     use windows::core::PCWSTR;
     use windows::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
@@ -20874,7 +20874,7 @@ fn free_space_bytes(path: &std::path::Path) -> std::io::Result<u64> {
 // message. Empty when the path has no such prefix -- never happens for the
 // absolute paths this app always deals in; a message missing the drive is
 // harmless either way.
-fn drive_label(path: &std::path::Path) -> String {
+pub(crate) fn drive_label(path: &std::path::Path) -> String {
     match path.components().next() {
         Some(std::path::Component::Prefix(p)) => p.as_os_str().to_string_lossy().into_owned(),
         _ => String::new(),
@@ -20884,7 +20884,7 @@ fn drive_label(path: &std::path::Path) -> String {
 // Bitrate times time, with a flat surcharge for whichever audio track(s) are
 // active (matches recAudioKbps's own default) -- good enough for a warning
 // message, not a byte-exact prediction.
-fn estimate_recording_seconds_remaining(free_bytes: u64, video_kbps: u32, audio_active: bool) -> u64 {
+pub(crate) fn estimate_recording_seconds_remaining(free_bytes: u64, video_kbps: u32, audio_active: bool) -> u64 {
     let total_kbps = video_kbps as u64 + if audio_active { 192 } else { 0 };
     let bytes_per_sec = (total_kbps * 1000) / 8;
     if bytes_per_sec == 0 {
@@ -20894,15 +20894,15 @@ fn estimate_recording_seconds_remaining(free_bytes: u64, video_kbps: u32, audio_
 }
 
 #[derive(serde::Serialize)]
-struct RecDiskWarning {
-    drive: String,
-    free_mb: u64,
-    est_seconds: u64,
+pub(crate) struct RecDiskWarning {
+    pub(crate) drive: String,
+    pub(crate) free_mb: u64,
+    pub(crate) est_seconds: u64,
 }
 
 // Pure so the threshold decision itself has a real unit test, not just its
 // AppHandle/Db wiring (same reasoning as estimate_export_bytes above it).
-fn recording_disk_warning(drive: String, free_bytes: u64, warn_mb: f64, video_kbps: u32, audio_active: bool) -> Option<RecDiskWarning> {
+pub(crate) fn recording_disk_warning(drive: String, free_bytes: u64, warn_mb: f64, video_kbps: u32, audio_active: bool) -> Option<RecDiskWarning> {
     let free_mb = free_bytes / (1024 * 1024);
     if free_mb as f64 >= warn_mb {
         return None;
@@ -20936,16 +20936,16 @@ fn check_recording_disk_space(app: AppHandle, db: State<Db>) -> Option<RecDiskWa
 }
 
 #[derive(serde::Serialize)]
-struct ExportDiskWarning {
-    drive: String,
-    free_mb: u64,
-    needed_mb: u64,
+pub(crate) struct ExportDiskWarning {
+    pub(crate) drive: String,
+    pub(crate) free_mb: u64,
+    pub(crate) needed_mb: u64,
 }
 
 // needed_bytes already includes whatever headroom the caller wants (see
 // check_export_disk_space: the estimate plus a working-file margin) -- this
 // function only compares it against what is actually free.
-fn export_disk_warning(drive: String, free_bytes: u64, needed_bytes: u64) -> Option<ExportDiskWarning> {
+pub(crate) fn export_disk_warning(drive: String, free_bytes: u64, needed_bytes: u64) -> Option<ExportDiskWarning> {
     let free_mb = free_bytes / (1024 * 1024);
     let needed_mb = needed_bytes / (1024 * 1024);
     if free_mb >= needed_mb {
@@ -21004,7 +21004,7 @@ fn check_export_disk_space_batch(dest_dir: String, format: String, video_kbps: O
 // this way at all (it reopens against RecSession.target, whatever the
 // running session is ACTUALLY capturing right now, not a fresh pick).
 #[cfg(windows)]
-fn resolve_recording_target(
+pub(crate) fn resolve_recording_target(
     target_kind: &str, target_id: i64, region_x: i32, region_y: i32, region_w: u32, region_h: u32,
 ) -> Result<recording::RecTarget, String> {
     match target_kind {
@@ -21027,7 +21027,7 @@ fn resolve_recording_target(
 // canvas mode, ...) is meant to take effect starting at the next part, the
 // same way it already would have at the very first start_recording call.
 #[cfg(windows)]
-fn resolve_recording_settings(db: &State<Db>) -> (bool, recording::AudioConfig, u32, u32, String, (u32, u32), f64, f64, f64) {
+pub(crate) fn resolve_recording_settings(db: &State<Db>) -> (bool, recording::AudioConfig, u32, u32, String, (u32, u32), f64, f64, f64) {
     // recCursor ships ON -- only an explicit false switches it off.
     // recAudioSystem and recAudioMic both ship ON now -- the mic is
     // captured by default too (into its own track, see start()'s both_active
@@ -21094,10 +21094,10 @@ fn resolve_recording_settings(db: &State<Db>) -> (bool, recording::AudioConfig, 
 // (an early return, a panic, or a normal finish) so a refused or failed start
 // never leaves the next one locked out for good.
 #[cfg(windows)]
-static REC_STARTING: AtomicBool = AtomicBool::new(false);
+pub(crate) static REC_STARTING: AtomicBool = AtomicBool::new(false);
 
 #[cfg(windows)]
-struct RecStartingGuard;
+pub(crate) struct RecStartingGuard;
 #[cfg(windows)]
 impl Drop for RecStartingGuard {
     fn drop(&mut self) {
@@ -21251,7 +21251,7 @@ async fn switch_recording_target(app: AppHandle, rstate: State<'_, RecordingStat
 }
 
 #[cfg(windows)]
-enum ContinueOutcome {
+pub(crate) enum ContinueOutcome {
     Continued(Box<recording::RecSession>, RecordingContinuedPayload),
     // The switch itself failed after the old file was already closed for
     // good -- there is no way back to "still recording" from there, so this
@@ -21535,7 +21535,7 @@ fn set_audio_muted(rstate: State<'_, RecordingState>, source: String, muted: boo
 // dedicated OS thread, so there is no tokio worker to protect here; the
 // actual command below still off-loads through spawn_blocking for that.
 #[cfg(windows)]
-fn stop_recording_now(app: &AppHandle) -> Result<RecordingStoppedPayload, String> {
+pub(crate) fn stop_recording_now(app: &AppHandle) -> Result<RecordingStoppedPayload, String> {
     let rstate = app.state::<RecordingState>();
     let session = {
         let mut guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
@@ -21666,35 +21666,35 @@ async fn cancel_recording(app: AppHandle, rstate: State<'_, RecordingState>) -> 
 
 // ---------- Updates (GitHub releases) ----------
 
-const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
+pub(crate) const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 // The project's own GitHub repo: the only host any of this ever talks to.
-fn repo_url() -> String {
+pub(crate) fn repo_url() -> String {
     format!("https://github.com/{}", brand::REPO)
 }
-fn update_api() -> String {
+pub(crate) fn update_api() -> String {
     format!("https://api.github.com/repos/{}/releases/latest", brand::REPO)
 }
-const UPDATE_MAX_BYTES: u64 = 100 * 1024 * 1024;
+pub(crate) const UPDATE_MAX_BYTES: u64 = 100 * 1024 * 1024;
 
 // Spawn a child process without flashing a console window.
 #[cfg(windows)]
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+pub(crate) const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 #[derive(Serialize, Clone)]
-struct UpdateInfo {
-    available: bool,
-    version: String,
-    url: String,
+pub(crate) struct UpdateInfo {
+    pub(crate) available: bool,
+    pub(crate) version: String,
+    pub(crate) url: String,
     // Release changelog (GitHub release body); empty when none was published.
-    notes: String,
+    pub(crate) notes: String,
     // True when this version is on the user's skip list (manual check only).
-    skipped: bool,
+    pub(crate) skipped: bool,
 }
 
 // Latest release tag, installer asset URL and changelog body. None on any
 // failure (offline, private repo, rate limit): checks never disturb the app.
-fn fetch_latest() -> Option<(String, String, String)> {
+pub(crate) fn fetch_latest() -> Option<(String, String, String)> {
     let body = ureq::get(&update_api())
         .set("User-Agent", brand::USER_AGENT)
         .timeout(std::time::Duration::from_secs(10))
@@ -21716,7 +21716,7 @@ fn fetch_latest() -> Option<(String, String, String)> {
     Some((tag, url, notes))
 }
 
-fn version_newer(latest: &str, current: &str) -> bool {
+pub(crate) fn version_newer(latest: &str, current: &str) -> bool {
     let parse = |s: &str| -> Vec<u64> {
         s.split('.').map(|p| p.parse().unwrap_or(0)).collect()
     };
@@ -21732,7 +21732,7 @@ fn version_newer(latest: &str, current: &str) -> bool {
     false
 }
 
-fn updater_check() -> Option<UpdateInfo> {
+pub(crate) fn updater_check() -> Option<UpdateInfo> {
     let (version, url, notes) = fetch_latest()?;
     version_newer(&version, APP_VERSION).then_some(UpdateInfo {
         available: true,
@@ -21744,11 +21744,11 @@ fn updater_check() -> Option<UpdateInfo> {
 }
 
 // Far enough past launch that the first check never competes with window build.
-const UPDATE_CHECK_FIRST_DELAY_SECS: u64 = 2;
+pub(crate) const UPDATE_CHECK_FIRST_DELAY_SECS: u64 = 2;
 
 // Hours between automatic update checks, kept inside what the setting offers. Never
 // means "off" here: that is the Auto update switch, not a short or zero interval.
-fn clamp_update_hours(hours: f64) -> f64 {
+pub(crate) fn clamp_update_hours(hours: f64) -> f64 {
     if hours.is_finite() {
         hours.clamp(1.0, 168.0)
     } else {
@@ -21757,7 +21757,7 @@ fn clamp_update_hours(hours: f64) -> f64 {
 }
 
 // Expert-tunable, clamped to the range the setting offers.
-fn update_check_interval(app: &AppHandle) -> Duration {
+pub(crate) fn update_check_interval(app: &AppHandle) -> Duration {
     let hours = app
         .try_state::<Db>()
         .map(|s| {
@@ -21774,7 +21774,7 @@ fn update_check_interval(app: &AppHandle) -> Duration {
 }
 
 // One round of the automatic update check.
-fn update_check_tick(app: &AppHandle) {
+pub(crate) fn update_check_tick(app: &AppHandle) {
     let enabled = app
         .try_state::<Db>()
         .map(|s| s.lock().unwrap_or_else(|e| e.into_inner()).settings.auto_update)
@@ -22046,16 +22046,16 @@ fn set_ui_value(app: AppHandle, state: State<Db>, key: String, value: f64) -> Re
 // set_recording_dir, set_sync_dir), so a subverted renderer calling the
 // generic string setter, or a hostile imported settings file, cannot grant
 // itself write or delete authority over a folder of its choosing.
-const PROTECTED_FOLDER_KEYS: [&str; 4] = ["screenshotDir", "videoExportDir", "recordingDir", "syncDir"];
+pub(crate) const PROTECTED_FOLDER_KEYS: [&str; 4] = ["screenshotDir", "videoExportDir", "recordingDir", "syncDir"];
 
-fn is_protected_folder_key(key: &str) -> bool {
+pub(crate) fn is_protected_folder_key(key: &str) -> bool {
     PROTECTED_FOLDER_KEYS.contains(&key)
 }
 
 // Text rows with their own validated writer (folders, receiver secrets and
 // ranges, sealed backup password, vault salt and verifier): the generic string
 // setter never writes them.
-fn is_generic_text_write_denied(key: &str) -> bool {
+pub(crate) fn is_generic_text_write_denied(key: &str) -> bool {
     is_machine_text_key(key) || is_vault_key(key)
 }
 
@@ -22119,7 +22119,7 @@ fn set_recording_dir(app: AppHandle, state: State<Db>, dir: String) -> Result<()
 // Clears the expert flags, values and texts. The texts that are keys rather than
 // preferences stay: the backup password, the receiver's certificate values and
 // the vault's salt and verifier (the confidential prompts are sealed with it).
-fn reset_expert_settings(settings: &mut Settings) {
+pub(crate) fn reset_expert_settings(settings: &mut Settings) {
     settings.ui_flags.clear();
     settings.ui_values.clear();
     let kept = settings_after_reset(settings).ui_texts;
@@ -22162,32 +22162,32 @@ fn skip_version(app: AppHandle, state: State<Db>, version: String) {
 
 // The shipped changelog, baked into the binary at compile time: the "what's
 // new" window needs nothing from the network to show the current version.
-const EMBEDDED_RELEASE_NOTES: &str = include_str!("../../docs/release-notes.md");
-const RELEASE_NOTES_MAX_BYTES: u64 = 2 * 1024 * 1024;
+pub(crate) const EMBEDDED_RELEASE_NOTES: &str = include_str!("../../docs/release-notes.md");
+pub(crate) const RELEASE_NOTES_MAX_BYTES: u64 = 2 * 1024 * 1024;
 
 #[derive(Serialize, Clone)]
-struct WhatsNewSection {
-    version: String,
+pub(crate) struct WhatsNewSection {
+    pub(crate) version: String,
     // Raw Markdown, including its own "## <version>" heading. The frontend
     // renders it node by node, the same safe path the update-changelog dialog
     // already uses, never through innerHTML.
-    markdown: String,
+    pub(crate) markdown: String,
 }
 
 #[derive(Serialize, Clone)]
-struct WhatsNewResult {
-    sections: Vec<WhatsNewSection>,
+pub(crate) struct WhatsNewResult {
+    pub(crate) sections: Vec<WhatsNewSection>,
     // The version boundary the sections were computed from, None for "fresh
     // install" or "current version only". Echoed back to whats_new_refresh so
     // a GitHub refresh reproduces the exact same range.
-    since: Option<String>,
+    pub(crate) since: Option<String>,
 }
 
 // Split a release-notes document on its "## " version headings. A heading's
 // version is its last whitespace-separated token, so "## Prompt Saver 2.7.0"
 // yields "2.7.0"; a heading without a trailing version-shaped token is
 // skipped rather than guessed at.
-fn parse_release_notes(text: &str) -> Vec<WhatsNewSection> {
+pub(crate) fn parse_release_notes(text: &str) -> Vec<WhatsNewSection> {
     let mut sections = Vec::new();
     let mut current: Option<(String, Vec<&str>)> = None;
     for line in text.lines() {
@@ -22213,7 +22213,7 @@ fn parse_release_notes(text: &str) -> Vec<WhatsNewSection> {
 
 // True when `a` and `b` name the same version, component-wise, like
 // version_newer, so "1.9" and "1.9.0" compare equal.
-fn version_eq(a: &str, b: &str) -> bool {
+pub(crate) fn version_eq(a: &str, b: &str) -> bool {
     !version_newer(a, b) && !version_newer(b, a)
 }
 
@@ -22222,7 +22222,7 @@ fn version_eq(a: &str, b: &str) -> bool {
 // including `current`, and an unknown/absent `since` (fresh install, or a
 // caller that only ever wants the current entry) shows the current version
 // only.
-fn sections_for_update(all: &[WhatsNewSection], since: Option<&str>, current: &str) -> Vec<WhatsNewSection> {
+pub(crate) fn sections_for_update(all: &[WhatsNewSection], since: Option<&str>, current: &str) -> Vec<WhatsNewSection> {
     match since {
         Some(v) if version_eq(v, current) => Vec::new(),
         Some(v) => all
@@ -22236,7 +22236,7 @@ fn sections_for_update(all: &[WhatsNewSection], since: Option<&str>, current: &s
 
 // An empty stored version means "never shown" (fresh install), split out so
 // this mapping is unit-testable without an AppHandle (mirrors version_newer).
-fn whats_new_check_impl(all: &[WhatsNewSection], last_seen: &str, current: &str) -> Vec<WhatsNewSection> {
+pub(crate) fn whats_new_check_impl(all: &[WhatsNewSection], last_seen: &str, current: &str) -> Vec<WhatsNewSection> {
     let since = if last_seen.is_empty() { None } else { Some(last_seen) };
     sections_for_update(all, since, current)
 }
@@ -22299,7 +22299,7 @@ async fn whats_new_refresh(since: Option<String>) -> Result<Vec<WhatsNewSection>
 // `..` and `\` as path separators, so `.../releases/download/../../attacker/...` would
 // pass a prefix check yet resolve to a different repo. Reject every escape vector and
 // require exactly the two trailing path segments (tag / asset), no query or fragment.
-fn valid_update_url(url: &str) -> bool {
+pub(crate) fn valid_update_url(url: &str) -> bool {
     let prefix = format!("{}/releases/download/", repo_url());
     let rest = match url.strip_prefix(prefix.as_str()) {
         Some(r) => r,
@@ -22324,7 +22324,7 @@ fn valid_update_url(url: &str) -> bool {
 // and confirm it is actually newer than the installed version. Kept as its own pure
 // function so `install_update` cannot install a version-shaped-but-old release, and so
 // the downgrade rejection is unit-testable without needing a live AppHandle.
-fn update_url_is_newer_release(url: &str) -> bool {
+pub(crate) fn update_url_is_newer_release(url: &str) -> bool {
     let prefix = format!("{}/releases/download/", repo_url());
     let tag = url
         .strip_prefix(prefix.as_str())
@@ -22373,7 +22373,7 @@ async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
 // The blocking body of `install_update` above, split out so it can run inside
 // `spawn_blocking` without an `AppHandle` (not needed here) crossing the
 // boundary.
-fn install_update_blocking(url: String) -> Result<(), String> {
+pub(crate) fn install_update_blocking(url: String) -> Result<(), String> {
     let resp = ureq::get(&url)
         .set("User-Agent", brand::USER_AGENT)
         .timeout(std::time::Duration::from_secs(300))
@@ -22463,7 +22463,7 @@ fn install_update_blocking(url: String) -> Result<(), String> {
 // popover's list of jobs, so the two views can never disagree about what is
 // actually running.
 #[derive(Clone, Copy, Debug, PartialEq)]
-enum OpPhase {
+pub(crate) enum OpPhase {
     Running(u8), // a percent value, never above 100
     Indeterminate,
     Error,
@@ -22473,24 +22473,24 @@ enum OpPhase {
 }
 
 #[derive(Clone, Debug)]
-struct BgOp {
+pub(crate) struct BgOp {
     // Feature grouping ("export", "convert", "ffmpeg-download", ...) shown to
     // the frontend for its label/icon/cancel-command lookup. Distinct from the
     // registry's own key (see bg_ops() below), which is unique PER JOB so a
     // batch of same-kind jobs (several exports at once) each get their own
     // row instead of overwriting one shared "export" entry.
-    kind: String,
-    phase: OpPhase,
-    target: Option<String>, // destination file/folder, for the popover's "open folder"
-    started_at_ms: u64,
-    finished_at_ms: Option<u64>,
+    pub(crate) kind: String,
+    pub(crate) phase: OpPhase,
+    pub(crate) target: Option<String>, // destination file/folder, for the popover's "open folder"
+    pub(crate) started_at_ms: u64,
+    pub(crate) finished_at_ms: Option<u64>,
 }
 
 impl BgOp {
-    fn fresh(kind: &str) -> Self {
+    pub(crate) fn fresh(kind: &str) -> Self {
         Self { kind: kind.to_string(), phase: OpPhase::Indeterminate, target: None, started_at_ms: now_ms(), finished_at_ms: None }
     }
-    fn state_str(&self) -> &'static str {
+    pub(crate) fn state_str(&self) -> &'static str {
         match self.phase {
             OpPhase::Running(_) => "running",
             OpPhase::Indeterminate => "indeterminate",
@@ -22498,7 +22498,7 @@ impl BgOp {
             OpPhase::Done => "done",
         }
     }
-    fn pct(&self) -> Option<u8> {
+    pub(crate) fn pct(&self) -> Option<u8> {
         match self.phase {
             OpPhase::Running(v) => Some(v),
             _ => None,
@@ -22512,23 +22512,23 @@ impl BgOp {
 // grouping ("export", "convert", "ffmpeg-download", ...) the frontend already
 // keys its label/cancel-command lookup on.
 #[derive(Clone, Debug, serde::Serialize)]
-struct BgOpInfo {
-    id: String,
-    kind: String,
-    target: Option<String>,
-    state: String,
-    pct: Option<u8>,
-    started_at_ms: u64,
-    finished_at_ms: Option<u64>,
+pub(crate) struct BgOpInfo {
+    pub(crate) id: String,
+    pub(crate) kind: String,
+    pub(crate) target: Option<String>,
+    pub(crate) state: String,
+    pub(crate) pct: Option<u8>,
+    pub(crate) started_at_ms: u64,
+    pub(crate) finished_at_ms: Option<u64>,
 }
 
-fn bg_ops() -> &'static Mutex<HashMap<String, BgOp>> {
+pub(crate) fn bg_ops() -> &'static Mutex<HashMap<String, BgOp>> {
     use std::sync::OnceLock;
     static OPS: OnceLock<Mutex<HashMap<String, BgOp>>> = OnceLock::new();
     OPS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-fn now_ms() -> u64 {
+pub(crate) fn now_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
@@ -22541,7 +22541,7 @@ fn now_ms() -> u64 {
 // any error still running wins outright; otherwise no active job is "off";
 // otherwise any indeterminate operation wins over a plain percentage;
 // otherwise the shown percentage is the average across every running operation.
-fn aggregate_taskbar_state(ops: &HashMap<String, BgOp>) -> (&'static str, Option<u8>) {
+pub(crate) fn aggregate_taskbar_state(ops: &HashMap<String, BgOp>) -> (&'static str, Option<u8>) {
     let active: Vec<&BgOp> = ops.values().filter(|o| o.phase != OpPhase::Done).collect();
     if active.iter().any(|o| o.phase == OpPhase::Error) {
         return ("error", None);
@@ -22558,12 +22558,12 @@ fn aggregate_taskbar_state(ops: &HashMap<String, BgOp>) -> (&'static str, Option
 
 // A finished job survives for `keep_min` minutes so the header popover still
 // shows it, then is swept away on the next read or write.
-fn prune_finished_ops(ops: &mut HashMap<String, BgOp>, keep_min: f64) {
+pub(crate) fn prune_finished_ops(ops: &mut HashMap<String, BgOp>, keep_min: f64) {
     let cutoff = now_ms().saturating_sub((keep_min.max(0.0) * 60_000.0) as u64);
     ops.retain(|_, o| o.finished_at_ms.map_or(true, |f| f >= cutoff));
 }
 
-fn bg_ops_running_count() -> usize {
+pub(crate) fn bg_ops_running_count() -> usize {
     bg_ops()
         .lock()
         .unwrap_or_else(|e| e.into_inner())
@@ -22572,7 +22572,7 @@ fn bg_ops_running_count() -> usize {
         .count()
 }
 
-fn bg_done_keep_min(state_db: &State<Db>) -> f64 {
+pub(crate) fn bg_done_keep_min(state_db: &State<Db>) -> f64 {
     state_db
         .lock()
         .unwrap_or_else(|e| e.into_inner())
@@ -22589,7 +22589,7 @@ fn bg_done_keep_min(state_db: &State<Db>) -> f64 {
 // directly (see export_video_blocking's caller), so a job keeps reporting
 // correctly even once the window that started it is gone -- proved with no
 // window at all by export_progress_survives_a_closed_window below.
-fn record_bg_op(id: &str, kind: &str, state: &str, value: Option<u32>, target: Option<String>, keep_min: f64) -> (&'static str, Option<u8>) {
+pub(crate) fn record_bg_op(id: &str, kind: &str, state: &str, value: Option<u32>, target: Option<String>, keep_min: f64) -> (&'static str, Option<u8>) {
     let mut ops = bg_ops().lock().unwrap_or_else(|e| e.into_inner());
     match state {
         "done" => {
@@ -22627,7 +22627,7 @@ fn record_bg_op(id: &str, kind: &str, state: &str, value: Option<u32>, target: O
     aggregate_taskbar_state(&ops)
 }
 
-fn list_bg_ops_impl(keep_min: f64) -> Vec<BgOpInfo> {
+pub(crate) fn list_bg_ops_impl(keep_min: f64) -> Vec<BgOpInfo> {
     let mut ops = bg_ops().lock().unwrap_or_else(|e| e.into_inner());
     prune_finished_ops(&mut ops, keep_min);
     let mut list: Vec<BgOpInfo> = ops
@@ -22647,7 +22647,7 @@ fn list_bg_ops_impl(keep_min: f64) -> Vec<BgOpInfo> {
 }
 
 #[cfg(windows)]
-fn apply_taskbar_state(app: &AppHandle, state: &str, value: Option<u8>) {
+pub(crate) fn apply_taskbar_state(app: &AppHandle, state: &str, value: Option<u8>) {
     use windows::Win32::Foundation::HWND;
     use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED};
     use windows::Win32::UI::Shell::{ITaskbarList3, TaskbarList, TBPF_ERROR, TBPF_INDETERMINATE, TBPF_NOPROGRESS, TBPF_NORMAL};
@@ -22678,7 +22678,7 @@ fn apply_taskbar_state(app: &AppHandle, state: &str, value: Option<u8>) {
 }
 
 #[cfg(not(windows))]
-fn apply_taskbar_state(_app: &AppHandle, _state: &str, _value: Option<u8>) {}
+pub(crate) fn apply_taskbar_state(_app: &AppHandle, _state: &str, _value: Option<u8>) {}
 
 // `op` names which feature is reporting ("export", "convert", "ffmpeg-download",
 // "backup", "import"); `state` is "running" (with a 0-100 `value`),
@@ -22711,7 +22711,7 @@ fn set_taskbar_progress(app: AppHandle, op: String, state: String, value: Option
 // anywhere in Rust that already holds an AppHandle, with no window or
 // command-invocation round trip required. `id` is this job's own unique
 // registry key; `kind` is the feature grouping shown to the frontend.
-fn push_bg_op(app: &AppHandle, id: &str, kind: &str, state: &str, value: Option<u32>, target: Option<String>) {
+pub(crate) fn push_bg_op(app: &AppHandle, id: &str, kind: &str, state: &str, value: Option<u32>, target: Option<String>) {
     let keep_min = app.try_state::<Db>().map(|s| bg_done_keep_min(&s)).unwrap_or(10.0);
     let (agg_state, agg_value) = record_bg_op(id, kind, state, value, target, keep_min);
     // One shared broadcast point for every state change (running tick, done,
@@ -22761,7 +22761,7 @@ fn cancel_all_bg_ops() {
 // every "open folder" button whose path was computed by this app itself
 // (a job's own recorded target, a storage-breakdown row's own location),
 // never one typed or picked by the user directly.
-fn open_explorer_at(path: &str) -> Result<(), String> {
+pub(crate) fn open_explorer_at(path: &str) -> Result<(), String> {
     let p = PathBuf::from(path);
     let dir = if p.is_dir() { p } else { p.parent().map(|d| d.to_path_buf()).unwrap_or(p) };
     if !dir.is_dir() {
@@ -22784,12 +22784,12 @@ fn open_bg_op_folder(path: String) -> Result<(), String> {
 // bg-quit-requested prompt -- the close() that follows re-enters
 // CloseRequested a second time, and this flag lets that second pass through
 // instead of asking again. Never reset: a fresh app run starts at false.
-static QUIT_CONFIRMED: AtomicBool = AtomicBool::new(false);
+pub(crate) static QUIT_CONFIRMED: AtomicBool = AtomicBool::new(false);
 
 // The app's one real shutdown sequence -- same three steps whether it runs
 // straight from CloseRequested (nothing was running) or from
 // confirm_quit_with_running_ops (the user chose to quit anyway).
-fn do_full_exit(handle: &AppHandle) {
+pub(crate) fn do_full_exit(handle: &AppHandle) {
     if let Some(state) = handle.try_state::<Db>() {
         let store = state.lock().unwrap_or_else(|e| e.into_inner());
         save_settings(handle, &store.settings);
@@ -22806,7 +22806,7 @@ fn do_full_exit(handle: &AppHandle) {
 // instead of the tray simply skipping it. Shows the main window first: the
 // confirm dialog lives in its webview, so asking while it is still hidden
 // (minimized to tray) would leave the question unseen.
-fn request_app_quit(app: &AppHandle) {
+pub(crate) fn request_app_quit(app: &AppHandle) {
     let running = bg_ops_running_count();
     if running > 0 && !QUIT_CONFIRMED.load(Ordering::SeqCst) {
         show_main(app);
@@ -22849,27 +22849,27 @@ async fn confirm_quit_with_running_ops(app: AppHandle) {
 // subprocess only requires shipping the licence text and a source pointer (see
 // THIRD-PARTY-NOTICES.md) -- the same pattern OBS Studio uses -- and does not
 // affect the licensing of this app's own code.
-const FFMPEG_URL: &str =
+pub(crate) const FFMPEG_URL: &str =
     "https://github.com/GyanD/codexffmpeg/releases/download/9.0.1/ffmpeg-9.0.1-essentials_build.zip";
-const FFMPEG_SHA256: &str = "fec81ae03971d9dd4be3ebe02e263bd2ec1d789483f931bdba5f5715e65da2e9";
-const FFMPEG_ZIP_ENTRY: &str = "ffmpeg-9.0.1-essentials_build/bin/ffmpeg.exe";
+pub(crate) const FFMPEG_SHA256: &str = "fec81ae03971d9dd4be3ebe02e263bd2ec1d789483f931bdba5f5715e65da2e9";
+pub(crate) const FFMPEG_ZIP_ENTRY: &str = "ffmpeg-9.0.1-essentials_build/bin/ffmpeg.exe";
 // The video editor needs structured probing (duration/fps/dimensions,
 // stream count for the mic-mux check) that parsing ffmpeg's own banner text
 // cannot give reliably -- ffprobe's JSON output can. Same zip, same already
 // -verified hash (FFMPEG_SHA256 covers the whole archive, not per-file), so
 // extracting a second entry from it needs no extra pinned hash of its own.
-const FFPROBE_ZIP_ENTRY: &str = "ffmpeg-9.0.1-essentials_build/bin/ffprobe.exe";
+pub(crate) const FFPROBE_ZIP_ENTRY: &str = "ffmpeg-9.0.1-essentials_build/bin/ffprobe.exe";
 // The zip itself is ~106 MB (it also carries ffplay.exe, never extracted);
 // capped generously above that so a legitimate download is never mistaken for
 // a truncation attempt.
-const FFMPEG_ZIP_MAX_BYTES: u64 = 160 * 1024 * 1024;
+pub(crate) const FFMPEG_ZIP_MAX_BYTES: u64 = 160 * 1024 * 1024;
 
 // Set by `cancel_ffmpeg_download`, polled between chunks in the download loop --
 // a cancelled or failed download simply leaves nothing behind, so no resumable
 // retry is needed.
-static FFMPEG_DOWNLOAD_CANCEL: AtomicBool = AtomicBool::new(false);
+pub(crate) static FFMPEG_DOWNLOAD_CANCEL: AtomicBool = AtomicBool::new(false);
 
-fn hex_decode(s: &str) -> Option<Vec<u8>> {
+pub(crate) fn hex_decode(s: &str) -> Option<Vec<u8>> {
     if s.len() % 2 != 0 || !s.chars().all(|c| c.is_ascii_hexdigit()) {
         return None;
     }
@@ -22879,7 +22879,7 @@ fn hex_decode(s: &str) -> Option<Vec<u8>> {
 // The two hashes here are both public/pinned, not secrets -- this is not a
 // timing-attack-relevant comparison -- but the spec asks for a constant-time
 // compare, so this never short-circuits on the first differing byte.
-fn ct_eq(a: &[u8], b: &[u8]) -> bool {
+pub(crate) fn ct_eq(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
         return false;
     }
@@ -22895,7 +22895,7 @@ fn ct_eq(a: &[u8], b: &[u8]) -> bool {
 // ever happens in `download_ffmpeg`, and only after explicit user consent.
 // The installer's bundled copy lands next to the exe, so an installed build
 // never reaches this function's "not found" case at all.
-fn find_media_tool(app: &AppHandle, name: &str) -> Option<PathBuf> {
+pub(crate) fn find_media_tool(app: &AppHandle, name: &str) -> Option<PathBuf> {
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             let p = dir.join(name);
@@ -22912,7 +22912,7 @@ fn find_media_tool(app: &AppHandle, name: &str) -> Option<PathBuf> {
         std::env::split_paths(&paths).map(|dir| dir.join(name)).find(|p| p.is_file())
     })
 }
-fn ffmpeg_search_path(app: &AppHandle) -> Option<PathBuf> {
+pub(crate) fn ffmpeg_search_path(app: &AppHandle) -> Option<PathBuf> {
     find_media_tool(app, "ffmpeg.exe")
 }
 // Alongside ffmpeg.exe once download_ffmpeg_blocking has run -- same
@@ -22920,7 +22920,7 @@ fn ffmpeg_search_path(app: &AppHandle) -> Option<PathBuf> {
 // support was added only has ffmpeg.exe; probing/editor features degrade to
 // "ffmpeg-missing" until the user re-runs the (idempotent) download, same
 // fetch-on-demand story ffmpeg.exe itself already tells.
-fn ffprobe_search_path(app: &AppHandle) -> Option<PathBuf> {
+pub(crate) fn ffprobe_search_path(app: &AppHandle) -> Option<PathBuf> {
     find_media_tool(app, "ffprobe.exe")
 }
 
@@ -22940,7 +22940,7 @@ fn cancel_ffmpeg_download() {
 // Where a downloaded ffmpeg.exe is written: beside the exe when that folder is
 // writable (the portable case), otherwise the app's data folder. Never PATH,
 // never a system directory, never elevated.
-fn ffmpeg_install_dir(app: &AppHandle) -> PathBuf {
+pub(crate) fn ffmpeg_install_dir(app: &AppHandle) -> PathBuf {
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             let probe = dir.join(format!(".wtest-{}", std::process::id()));
@@ -22980,7 +22980,7 @@ async fn download_ffmpeg(app: AppHandle) -> Result<String, String> {
 // (install_update_blocking). Split out from the download itself, and taking the
 // expected hash as a parameter, so a wrong-hash rejection is provable in a unit
 // test without a live download (see `ffmpeg_wrong_hash_is_rejected` below).
-fn verify_ffmpeg_zip_against(bytes: &[u8], want_hex: &str) -> Result<(), String> {
+pub(crate) fn verify_ffmpeg_zip_against(bytes: &[u8], want_hex: &str) -> Result<(), String> {
     if bytes.len() < 4 || &bytes[0..2] != b"PK" {
         return Err("downloaded file is not a valid archive".to_string());
     }
@@ -22993,11 +22993,11 @@ fn verify_ffmpeg_zip_against(bytes: &[u8], want_hex: &str) -> Result<(), String>
     Ok(())
 }
 
-fn verify_ffmpeg_zip(bytes: &[u8]) -> Result<(), String> {
+pub(crate) fn verify_ffmpeg_zip(bytes: &[u8]) -> Result<(), String> {
     verify_ffmpeg_zip_against(bytes, FFMPEG_SHA256)
 }
 
-fn download_ffmpeg_blocking(app: &AppHandle) -> Result<String, String> {
+pub(crate) fn download_ffmpeg_blocking(app: &AppHandle) -> Result<String, String> {
     let resp = ureq::get(FFMPEG_URL)
         .set("User-Agent", brand::USER_AGENT)
         .timeout(std::time::Duration::from_secs(300))
@@ -23085,11 +23085,11 @@ fn download_ffmpeg_blocking(app: &AppHandle) -> Result<String, String> {
 // the new file is confirmed on disk, so a failed or cancelled run always
 // leaves the original recording intact.
 
-static REC_CONVERT_CANCEL: AtomicBool = AtomicBool::new(false);
+pub(crate) static REC_CONVERT_CANCEL: AtomicBool = AtomicBool::new(false);
 
 #[derive(serde::Serialize, Clone)]
-struct ConvertProgressPayload {
-    ms: u32,
+pub(crate) struct ConvertProgressPayload {
+    pub(crate) ms: u32,
 }
 
 #[tauri::command]
@@ -23105,9 +23105,9 @@ fn cancel_recording_convert() {
 // recording already started) is refused rather than acting on the wrong
 // file.
 // (recording path, crop rect as x, y, w, h)
-type PendingRecCrop = Option<(PathBuf, (u32, u32, u32, u32))>;
-static PENDING_REC_CROP: Mutex<PendingRecCrop> = Mutex::new(None);
-static REC_CROP_CANCEL: AtomicBool = AtomicBool::new(false);
+pub(crate) type PendingRecCrop = Option<(PathBuf, (u32, u32, u32, u32))>;
+pub(crate) static PENDING_REC_CROP: Mutex<PendingRecCrop> = Mutex::new(None);
+pub(crate) static REC_CROP_CANCEL: AtomicBool = AtomicBool::new(false);
 
 // Every part a "finish and continue" chain has already closed, oldest first
 // -- read once the recording finally stops for real (stop_recording_now) to
@@ -23117,7 +23117,7 @@ static REC_CROP_CANCEL: AtomicBool = AtomicBool::new(false);
 // empty the whole time. Each entry keeps its own mic sidecar path too (both
 // system and mic audio active), so a cancel can remove every part's leftover
 // files, not just its video.
-static REC_SESSION_PARTS: Mutex<Vec<RecordingPartInfo>> = Mutex::new(Vec::new());
+pub(crate) static REC_SESSION_PARTS: Mutex<Vec<RecordingPartInfo>> = Mutex::new(Vec::new());
 
 // One entry per interim continuation-part crop currently running in the
 // background -- a cancel of the whole take signals every one of these to stop
@@ -23126,11 +23126,11 @@ static REC_SESSION_PARTS: Mutex<Vec<RecordingPartInfo>> = Mutex::new(Vec::new())
 // deleted-then-recreated file, or a delete that fails outright because the
 // file is still open). Each thread removes its own entry once it is done,
 // cancelled or not.
-static REC_INTERIM_CROPS: Mutex<Vec<(Arc<AtomicBool>, std::thread::JoinHandle<()>)>> = Mutex::new(Vec::new());
+pub(crate) static REC_INTERIM_CROPS: Mutex<Vec<(Arc<AtomicBool>, std::thread::JoinHandle<()>)>> = Mutex::new(Vec::new());
 
 #[derive(serde::Serialize, Clone)]
-struct CropProgressPayload {
-    ms: u32,
+pub(crate) struct CropProgressPayload {
+    pub(crate) ms: u32,
 }
 
 #[tauri::command]
@@ -23174,7 +23174,7 @@ async fn crop_recording_to_used_area(app: AppHandle, path: String) -> Result<Str
 // just to stay visually transparent while it removes a plain black border.
 // Audio is copied untouched -- cropping never touches timing, so
 // re-encoding it would only risk a sync drift for no benefit.
-fn crop_recording_blocking(
+pub(crate) fn crop_recording_blocking(
     ffmpeg: &Path, src: &Path, rect: (u32, u32, u32, u32), is_cancelled: impl Fn() -> bool, mut on_progress: impl FnMut(u32),
 ) -> Result<String, String> {
     // libx264 requires even dimensions; the offset is floored to even too so
@@ -23244,7 +23244,7 @@ async fn convert_recording(
 // it is rejected as a caller mistake rather than run through ffmpeg. The
 // lossless step is the one exception: its whole point IS an mp4 -> mp4
 // re-encode, so same-extension alone cannot be the guard.
-fn convert_is_noop(same_extension: bool, format: &str, lossless: bool) -> bool {
+pub(crate) fn convert_is_noop(same_extension: bool, format: &str, lossless: bool) -> bool {
     same_extension && !(format == "mp4" && lossless)
 }
 
@@ -23252,7 +23252,7 @@ fn convert_is_noop(same_extension: bool, format: &str, lossless: bool) -> bool {
 // the same string -- "webpanim" is the one exception (an animated WebP is
 // still just a ".webp" file; the "anim" half only distinguishes it, inside
 // this app, from a possible future single-frame WebP screenshot format).
-fn video_format_ext(format: &str) -> &str {
+pub(crate) fn video_format_ext(format: &str) -> &str {
     if format == "webpanim" { "webp" } else { format }
 }
 
@@ -23268,7 +23268,7 @@ fn video_format_ext(format: &str) -> &str {
 // separately (see is_cancelled() below) and never reaches this classifier at
 // all -- it is not an error.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum FfmpegErrorKey {
+pub(crate) enum FfmpegErrorKey {
     Truncated,
     Unreadable,
     Missing,
@@ -23281,7 +23281,7 @@ enum FfmpegErrorKey {
 }
 
 impl FfmpegErrorKey {
-    fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             FfmpegErrorKey::Truncated => "ffErrTruncated",
             FfmpegErrorKey::Unreadable => "ffErrUnreadable",
@@ -23303,7 +23303,7 @@ impl FfmpegErrorKey {
 // std::io::Error wording Rust itself produces for a failed spawn, wait or
 // rename, since both kinds of text reach this function from the call sites
 // below.
-fn classify_ffmpeg_error(text: &str) -> FfmpegErrorKey {
+pub(crate) fn classify_ffmpeg_error(text: &str) -> FfmpegErrorKey {
     if text.contains("moov atom not found") {
         FfmpegErrorKey::Truncated
     } else if text.contains("No such file or directory")
@@ -23332,26 +23332,26 @@ fn classify_ffmpeg_error(text: &str) -> FfmpegErrorKey {
 // diagnostic lines is not cut off mid-sentence the way a character cap
 // would; not a user-facing setting, just a sane bound on the collapsible
 // "technical details" text.
-const FFMPEG_ERROR_TAIL_LINES: usize = 20;
+pub(crate) const FFMPEG_ERROR_TAIL_LINES: usize = 20;
 
-fn tail_lines(text: &str, n: usize) -> String {
+pub(crate) fn tail_lines(text: &str, n: usize) -> String {
     let lines: Vec<&str> = text.lines().collect();
     let start = lines.len().saturating_sub(n);
     lines[start..].join("\n")
 }
 
 #[derive(serde::Serialize)]
-struct FfmpegErrorPayload {
-    key: &'static str,
-    code: Option<i32>,
-    raw: String,
+pub(crate) struct FfmpegErrorPayload {
+    pub(crate) key: &'static str,
+    pub(crate) code: Option<i32>,
+    pub(crate) raw: String,
 }
 
 // The one place an ffmpeg failure becomes the string a Tauri command
 // actually returns: a small JSON envelope the frontend's shared
 // parseFfmpegError() unwraps, rather than a copy of this classify-and-format
 // logic per call site.
-fn ffmpeg_error_json(key: FfmpegErrorKey, code: Option<i32>, raw_text: &str) -> String {
+pub(crate) fn ffmpeg_error_json(key: FfmpegErrorKey, code: Option<i32>, raw_text: &str) -> String {
     let payload = FfmpegErrorPayload { key: key.as_str(), code, raw: tail_lines(raw_text, FFMPEG_ERROR_TAIL_LINES) };
     serde_json::to_string(&payload).unwrap_or_else(|_| key.as_str().to_string())
 }
@@ -23360,14 +23360,14 @@ fn ffmpeg_error_json(key: FfmpegErrorKey, code: Option<i32>, raw_text: &str) -> 
 // closes, which includes this process ending for any reason. Without it a quit
 // (or a crash) while an export runs leaves ffmpeg alive and still writing its
 // staged file into the user's folder.
-struct KillOnCloseJob(windows::Win32::Foundation::HANDLE);
+pub(crate) struct KillOnCloseJob(pub(crate) windows::Win32::Foundation::HANDLE);
 
 // A job handle is a plain kernel object handle, usable from any thread.
 unsafe impl Send for KillOnCloseJob {}
 unsafe impl Sync for KillOnCloseJob {}
 
 impl KillOnCloseJob {
-    fn new() -> Option<Self> {
+    pub(crate) fn new() -> Option<Self> {
         use windows::Win32::System::JobObjects::{
             CreateJobObjectW, JobObjectExtendedLimitInformation, SetInformationJobObject,
             JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
@@ -23390,7 +23390,7 @@ impl KillOnCloseJob {
         }
     }
 
-    fn assign(&self, child: &std::process::Child) -> bool {
+    pub(crate) fn assign(&self, child: &std::process::Child) -> bool {
         use std::os::windows::io::AsRawHandle;
         use windows::Win32::System::JobObjects::AssignProcessToJobObject;
         let process = windows::Win32::Foundation::HANDLE(child.as_raw_handle());
@@ -23409,14 +23409,14 @@ impl Drop for KillOnCloseJob {
 // The app's own job, created on first use and never closed before the process
 // ends. None when the OS refused: children then simply run unsupervised, as
 // before.
-fn app_job() -> Option<&'static KillOnCloseJob> {
+pub(crate) fn app_job() -> Option<&'static KillOnCloseJob> {
     static JOB: std::sync::OnceLock<Option<KillOnCloseJob>> = std::sync::OnceLock::new();
     JOB.get_or_init(KillOnCloseJob::new).as_ref()
 }
 
 // Spawns `cmd` and puts the child into `job`. A failed assignment is not an error:
 // the child still runs, it just is not covered.
-fn spawn_in_job(cmd: &mut std::process::Command, job: Option<&KillOnCloseJob>) -> std::io::Result<std::process::Child> {
+pub(crate) fn spawn_in_job(cmd: &mut std::process::Command, job: Option<&KillOnCloseJob>) -> std::io::Result<std::process::Child> {
     let child = cmd.spawn()?;
     if let Some(job) = job {
         if !job.assign(&child) {
@@ -23427,12 +23427,12 @@ fn spawn_in_job(cmd: &mut std::process::Command, job: Option<&KillOnCloseJob>) -
 }
 
 // `Command::status()` for a helper that should die with the app.
-fn status_in_job(cmd: &mut std::process::Command) -> std::io::Result<std::process::ExitStatus> {
+pub(crate) fn status_in_job(cmd: &mut std::process::Command) -> std::io::Result<std::process::ExitStatus> {
     spawn_in_job(cmd, app_job())?.wait()
 }
 
 // `Command::output()` for a helper that should die with the app.
-fn output_in_job(cmd: &mut std::process::Command) -> std::io::Result<std::process::Output> {
+pub(crate) fn output_in_job(cmd: &mut std::process::Command) -> std::io::Result<std::process::Output> {
     cmd.stdout(std::process::Stdio::piped());
     cmd.stderr(std::process::Stdio::piped());
     spawn_in_job(cmd, app_job())?.wait_with_output()
@@ -23441,22 +23441,22 @@ fn output_in_job(cmd: &mut std::process::Command) -> std::io::Result<std::proces
 // Where run_ffmpeg_to_staged notes the staged files it has in flight, one path
 // per line, so a start after a killed run can remove what the dead process left
 // in the user's folders. Set once at start-up; without it nothing is recorded.
-static EXPORT_JOURNAL: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
-static EXPORT_JOURNAL_LOCK: Mutex<()> = Mutex::new(());
+pub(crate) static EXPORT_JOURNAL: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+pub(crate) static EXPORT_JOURNAL_LOCK: Mutex<()> = Mutex::new(());
 
 // One line per staged file: `host<TAB>pid<TAB>path`. The data folder may be shared
 // between machines, so a line is only ever acted on by the host that wrote it.
-fn journal_lines(journal: &Path) -> Vec<String> {
+pub(crate) fn journal_lines(journal: &Path) -> Vec<String> {
     fs::read_to_string(journal)
         .map(|t| t.lines().filter(|l| !l.is_empty()).map(String::from).collect())
         .unwrap_or_default()
 }
 
-fn journal_line(host: &str, pid: u32, staged: &Path) -> String {
+pub(crate) fn journal_line(host: &str, pid: u32, staged: &Path) -> String {
     format!("{}\t{}\t{}", host.replace(['\t', '\r', '\n'], " "), pid, staged.to_string_lossy())
 }
 
-fn parse_journal_line(line: &str) -> Option<(&str, u32, &str)> {
+pub(crate) fn parse_journal_line(line: &str) -> Option<(&str, u32, &str)> {
     let mut it = line.splitn(3, '\t');
     let host = it.next()?;
     let pid = it.next()?.parse().ok()?;
@@ -23465,7 +23465,7 @@ fn parse_journal_line(line: &str) -> Option<(&str, u32, &str)> {
 }
 
 // Atomic replace: a reader never sees a half-written list.
-fn journal_write(journal: &Path, lines: &[String]) {
+pub(crate) fn journal_write(journal: &Path, lines: &[String]) {
     if lines.is_empty() {
         let _ = fs::remove_file(journal);
     } else {
@@ -23480,7 +23480,7 @@ fn journal_write(journal: &Path, lines: &[String]) {
 // create-new lock file covers a second local instance. A lock older than ten
 // seconds belongs to a dead run and is taken over; if it cannot be had within
 // a second the change runs unlocked rather than blocking an export.
-fn with_journal_lock<R>(journal: &Path, f: impl FnOnce() -> R) -> R {
+pub(crate) fn with_journal_lock<R>(journal: &Path, f: impl FnOnce() -> R) -> R {
     let _guard = EXPORT_JOURNAL_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let lock = journal.with_extension("lock");
     let mut held = false;
@@ -23507,7 +23507,7 @@ fn with_journal_lock<R>(journal: &Path, f: impl FnOnce() -> R) -> R {
     out
 }
 
-fn export_journal_add(journal: &Path, staged: &Path) {
+pub(crate) fn export_journal_add(journal: &Path, staged: &Path) {
     with_journal_lock(journal, || {
         let mut lines = journal_lines(journal);
         lines.push(journal_line(&local_host_name(), std::process::id(), staged));
@@ -23515,7 +23515,7 @@ fn export_journal_add(journal: &Path, staged: &Path) {
     });
 }
 
-fn export_journal_remove(journal: &Path, staged: &Path) {
+pub(crate) fn export_journal_remove(journal: &Path, staged: &Path) {
     with_journal_lock(journal, || {
         let mine = journal_line(&local_host_name(), std::process::id(), staged);
         let lines: Vec<String> = journal_lines(journal).into_iter().filter(|l| *l != mine).collect();
@@ -23525,7 +23525,7 @@ fn export_journal_remove(journal: &Path, staged: &Path) {
 
 // The process id in a `.export-<pid>-<stamp>.<ext>` staged name, and only for a
 // name of exactly that shape: the journal is never trusted to name other files.
-fn staged_export_pid(path: &Path) -> Option<u32> {
+pub(crate) fn staged_export_pid(path: &Path) -> Option<u32> {
     let name = path.file_name()?.to_str()?;
     let rest = name.strip_prefix(".export-")?;
     let (pid, tail) = rest.split_once('-')?;
@@ -23539,7 +23539,7 @@ fn staged_export_pid(path: &Path) -> Option<u32> {
 // Only a local absolute path may be deleted from a journal line: a UNC or other
 // network path (or a relative one) would make every start talk to a host the
 // journal's writer picked.
-fn is_local_absolute_path(raw: &str) -> bool {
+pub(crate) fn is_local_absolute_path(raw: &str) -> bool {
     if raw.starts_with("\\\\") || raw.starts_with("//") {
         return false;
     }
@@ -23556,7 +23556,7 @@ fn is_local_absolute_path(raw: &str) -> bool {
 // them. Lines of other hosts are kept verbatim (a pid means nothing there); a
 // file whose process is still alive stays listed. Callers skip this entirely in
 // a read-only instance.
-fn sweep_stale_exports(journal: &Path, host: &str, is_alive: impl Fn(u32) -> bool) {
+pub(crate) fn sweep_stale_exports(journal: &Path, host: &str, is_alive: impl Fn(u32) -> bool) {
     with_journal_lock(journal, || {
         let mut keep: Vec<String> = Vec::new();
         for line in journal_lines(journal) {
@@ -23586,7 +23586,7 @@ fn sweep_stale_exports(journal: &Path, host: &str, is_alive: impl Fn(u32) -> boo
 // Generous on purpose: this is a last-resort safety net against a hung
 // ffmpeg process, not a quality-of-service limit, so it must never fire on a
 // large export that is genuinely just slow.
-const FFMPEG_MAX_RUN_SECS: u64 = 30 * 60;
+pub(crate) const FFMPEG_MAX_RUN_SECS: u64 = 30 * 60;
 
 // Shared by convert_recording (240, simple format conversion) and the video
 // editor's export (implementing the "one export path" requirement): spawns
@@ -23596,7 +23596,7 @@ const FFMPEG_MAX_RUN_SECS: u64 = 30 * 60;
 // renames it into place only once it is confirmed complete, so a failed or
 // cancelled run never leaves a half-written file at any real name. Neither
 // caller talks to the ffmpeg process directly.
-fn run_ffmpeg_to_staged(
+pub(crate) fn run_ffmpeg_to_staged(
     ffmpeg: &Path,
     src: &Path,
     dst: &Path,
@@ -23729,7 +23729,7 @@ fn run_ffmpeg_to_staged(
 // report, so it takes no dependency on Tauri's runtime or REC_CONVERT_CANCEL at all and
 // can be exercised in a unit test against a real ffmpeg binary, with its own local
 // cancel flag and no app instance needed.
-fn convert_recording_blocking(
+pub(crate) fn convert_recording_blocking(
     ffmpeg: &Path, src: &Path, format: &str, lossless: bool, is_cancelled: impl Fn() -> bool, mut on_progress: impl FnMut(u32),
 ) -> Result<String, String> {
     let same_extension = src.extension().is_some_and(|e| e.eq_ignore_ascii_case(video_format_ext(format)));
@@ -23820,23 +23820,23 @@ fn convert_recording_blocking(
 // progress / cancel implementation.
 
 #[derive(serde::Serialize)]
-struct RecordingProbe {
-    duration_ms: u64,
-    width: u32,
-    height: u32,
-    fps: f64,
-    has_audio: bool,
-    has_mic_track: bool,
-    mic_sidecar: Option<String>,
+pub(crate) struct RecordingProbe {
+    pub(crate) duration_ms: u64,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) fps: f64,
+    pub(crate) has_audio: bool,
+    pub(crate) has_mic_track: bool,
+    pub(crate) mic_sidecar: Option<String>,
     // The lossless "-c copy" fast path only ever produces a valid mp4 if
     // every mapped stream is already a codec mp4 can carry as-is -- a source
     // dragged in from elsewhere (e.g. a webm/VP9 file) fails ffmpeg outright
     // when the export path blindly assumes "trim-only" means "safe to copy".
-    stream_copy_safe: bool,
+    pub(crate) stream_copy_safe: bool,
     // Whether this recording has a key-overlay sidecar (see `keylog`) --
     // the video editor only offers the "keys" overlay's presets once it
     // knows there is something to show.
-    has_keys_sidecar: bool,
+    pub(crate) has_keys_sidecar: bool,
 }
 
 // The text-overlay font list used to hardcode "C:/Windows/Fonts/..." --
@@ -23884,14 +23884,14 @@ async fn probe_extra_video_source(app: AppHandle, path: String) -> Result<Record
     .map_err(|e| e.to_string())?
 }
 
-fn parse_ffprobe_rate(s: &str) -> Option<f64> {
+pub(crate) fn parse_ffprobe_rate(s: &str) -> Option<f64> {
     let (num, den) = s.split_once('/')?;
     let num: f64 = num.parse().ok()?;
     let den: f64 = den.parse().ok()?;
     if den == 0.0 { None } else { Some(num / den) }
 }
 
-fn probe_recording_blocking(ffprobe: &Path, src: &Path) -> Result<RecordingProbe, String> {
+pub(crate) fn probe_recording_blocking(ffprobe: &Path, src: &Path) -> Result<RecordingProbe, String> {
     use std::os::windows::process::CommandExt;
     let mut cmd = std::process::Command::new(ffprobe);
     cmd.args(["-v", "quiet", "-print_format", "json", "-show_format", "-show_streams"]).arg(src);
@@ -23955,7 +23955,7 @@ fn probe_recording_blocking(ffprobe: &Path, src: &Path) -> Result<RecordingProbe
 // runs before a sidecar follows its recording into an editor working copy,
 // so both ever accept exactly the same shape of file.
 #[cfg(windows)]
-fn parse_key_sidecar(data: &str) -> Option<keylog::KeySidecar> {
+pub(crate) fn parse_key_sidecar(data: &str) -> Option<keylog::KeySidecar> {
     // dec_str passes an old unsealed file through unchanged.
     serde_json::from_str(&dec_str(data)).ok()
 }
@@ -23963,7 +23963,7 @@ fn parse_key_sidecar(data: &str) -> Option<keylog::KeySidecar> {
 // Reads through the same size cap the copy check uses, so an oversized or
 // replaced file is refused instead of being read into memory whole.
 #[cfg(windows)]
-fn read_key_sidecar_at(sidecar: &Path) -> Option<keylog::KeySidecar> {
+pub(crate) fn read_key_sidecar_at(sidecar: &Path) -> Option<keylog::KeySidecar> {
     let bytes = read_file_capped(sidecar, KEY_SIDECAR_MAX_COPY_BYTES).ok()?;
     parse_key_sidecar(std::str::from_utf8(&bytes).ok()?)
 }
@@ -23990,7 +23990,7 @@ async fn read_key_sidecar(path: String) -> Option<()> {
 // probe_recording_blocking does. Nothing here returns an error: a value that
 // could not be determined comes back as 0, which the caller and the frontend
 // both already treat as "unknown, show nothing" rather than a placeholder.
-fn probe_media_meta(ffprobe: Option<&Path>, path: &Path) -> (u64, u32, u32, u64) {
+pub(crate) fn probe_media_meta(ffprobe: Option<&Path>, path: &Path) -> (u64, u32, u32, u64) {
     let size = fs::metadata(path).map(|m| m.len()).unwrap_or(0);
     if let Ok(img) = image::image_dimensions(path) {
         return (0, img.0, img.1, size);
@@ -24098,7 +24098,7 @@ async fn mux_mic_track(app: AppHandle, state: State<'_, Db>, video_path: String,
         .map_err(|e| e.to_string())?
 }
 
-fn mux_mic_track_blocking(ffmpeg: &Path, video: &Path, sidecar: &Path, audio_kbps: u32) -> Result<(), String> {
+pub(crate) fn mux_mic_track_blocking(ffmpeg: &Path, video: &Path, sidecar: &Path, audio_kbps: u32) -> Result<(), String> {
     use std::os::windows::process::CommandExt;
     let stamp = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
     let staged = video.with_file_name(format!(".mux-{}-{}.mp4", std::process::id(), stamp));
@@ -24144,7 +24144,7 @@ fn mux_mic_track_blocking(ffmpeg: &Path, video: &Path, sidecar: &Path, audio_kbp
 // different moments in the recording, so reusing one count's files for
 // another silently produced a filmstrip that only covered part of the clip.
 // Swept by age in sweep_stale_temp_files, not here.
-fn filmstrip_cache_dir(src: &Path, count: u32) -> Option<PathBuf> {
+pub(crate) fn filmstrip_cache_dir(src: &Path, count: u32) -> Option<PathBuf> {
     let mtime = fs::metadata(src).ok()?.modified().ok()?.duration_since(UNIX_EPOCH).ok()?.as_secs();
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     use std::hash::{Hash, Hasher};
@@ -24176,7 +24176,7 @@ async fn generate_filmstrip(app: AppHandle, path: String, count: u32) -> Result<
 // `-vf select` pass: a recording's variable frame rate (WGC capture never
 // guarantees CFR) makes frame-index-based selection unreliable, while a
 // wall-clock `-ss` seek before `-i` is exact regardless of frame timing.
-fn generate_filmstrip_blocking(ffmpeg: &Path, ffprobe: &Path, src: &Path, count: u32) -> Result<Vec<String>, String> {
+pub(crate) fn generate_filmstrip_blocking(ffmpeg: &Path, ffprobe: &Path, src: &Path, count: u32) -> Result<Vec<String>, String> {
     use std::os::windows::process::CommandExt;
     let duration_ms = probe_recording_blocking(ffprobe, src)?.duration_ms;
     let Some(cache_dir) = filmstrip_cache_dir(src, count) else {
@@ -24216,7 +24216,7 @@ fn generate_filmstrip_blocking(ffmpeg: &Path, ffprobe: &Path, src: &Path, count:
     Ok(out.into_iter().map(|p| p.to_string_lossy().to_string()).collect())
 }
 
-const WAVEFORM_SAMPLE_RATE: u32 = 8_000;
+pub(crate) const WAVEFORM_SAMPLE_RATE: u32 = 8_000;
 
 #[tauri::command]
 async fn generate_waveform_peaks(app: AppHandle, path: String, track: u32, buckets: u32) -> Result<Vec<f32>, String> {
@@ -24231,7 +24231,7 @@ async fn generate_waveform_peaks(app: AppHandle, path: String, track: u32, bucke
         .map_err(|e| e.to_string())?
 }
 
-fn generate_waveform_peaks_blocking(ffmpeg: &Path, src: &Path, track: u32, buckets: u32) -> Result<Vec<f32>, String> {
+pub(crate) fn generate_waveform_peaks_blocking(ffmpeg: &Path, src: &Path, track: u32, buckets: u32) -> Result<Vec<f32>, String> {
     use std::os::windows::process::CommandExt;
     let map = format!("0:a:{track}");
     let mut cmd = std::process::Command::new(ffmpeg);
@@ -24254,7 +24254,7 @@ fn generate_waveform_peaks_blocking(ffmpeg: &Path, src: &Path, track: u32, bucke
 // Running max tracked as u16: i16::MIN.unsigned_abs() is 32768, one past
 // i16::MAX, so a signed running max would silently wrap on exactly that
 // sample -- normalizing by dividing the u16 max by 32768.0 sidesteps it.
-fn pcm_s16le_to_peaks(pcm: &[u8], buckets: u32) -> Vec<f32> {
+pub(crate) fn pcm_s16le_to_peaks(pcm: &[u8], buckets: u32) -> Vec<f32> {
     let sample_count = pcm.len() / 2;
     if sample_count == 0 || buckets == 0 {
         return vec![0.0; buckets.max(1) as usize];
@@ -24303,7 +24303,7 @@ async fn extract_still_frame(app: AppHandle, state: State<'_, Db>, path: String,
 // knob (meaningless, and unset, for every lossless target), and -lossless 1
 // keeps WebP consistent with encode_screenshot's own image-crate WebP, which
 // has no lossy mode to diverge from in the first place.
-fn extract_still_frame_blocking(ffmpeg: &Path, src: &Path, at_ms: u64, format: &str) -> Result<Vec<u8>, String> {
+pub(crate) fn extract_still_frame_blocking(ffmpeg: &Path, src: &Path, at_ms: u64, format: &str) -> Result<Vec<u8>, String> {
     use std::os::windows::process::CommandExt;
     let stamp = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
     let tmp_dir = std::env::temp_dir().join(brand::TEMP_DIR);
@@ -24338,7 +24338,7 @@ fn extract_still_frame_blocking(ffmpeg: &Path, src: &Path, at_ms: u64, format: &
 
 // Reads the extracted frame and removes it; on a failed run the file is removed
 // too, since ffmpeg can leave a partial one behind.
-fn take_still_output(tmp: &Path, succeeded: bool) -> Result<Vec<u8>, String> {
+pub(crate) fn take_still_output(tmp: &Path, succeeded: bool) -> Result<Vec<u8>, String> {
     let bytes = if succeeded && tmp.is_file() {
         fs::read(tmp).map_err(|e| e.to_string())
     } else {
@@ -24364,27 +24364,27 @@ fn take_still_output(tmp: &Path, succeeded: bool) -> Result<Vec<u8>, String> {
 // "-t <duration>" -- so a plain trim/cut with no other operation and
 // lossless_copy=true never touches a filter graph or re-encodes at all.
 #[derive(serde::Deserialize)]
-struct ExportRequest {
-    src_path: String,
-    dest_path: String,
-    filter_chain: Option<String>,
-    audio_map: Option<String>,
-    lossless_copy: bool,
+pub(crate) struct ExportRequest {
+    pub(crate) src_path: String,
+    pub(crate) dest_path: String,
+    pub(crate) filter_chain: Option<String>,
+    pub(crate) audio_map: Option<String>,
+    pub(crate) lossless_copy: bool,
     // Distinct from lossless_copy (the stream-copy fast path) -- this is
     // "Lossless" picked as a re-encode QUALITY tier, which has no bitrate of
     // its own to map to and used to silently fall back to a fixed, lossy
     // 8000kbps. True whenever the quality dropdown is on "lossless", even
     // when some other op (crop, overlay, ...) still forces a real re-encode.
-    lossless_quality: bool,
-    format: String,
-    video_kbps: Option<u32>,
-    trim_start_ms: Option<u64>,
-    trim_end_ms: Option<u64>,
+    pub(crate) lossless_quality: bool,
+    pub(crate) format: String,
+    pub(crate) video_kbps: Option<u32>,
+    pub(crate) trim_start_ms: Option<u64>,
+    pub(crate) trim_end_ms: Option<u64>,
     // The finished export's own expected length, in the caller's own words --
     // never read by export_video_blocking itself, only by export_video's own
     // progress wrapper, to turn a raw "ms encoded so far" reading into the
     // percent the header's running-jobs list actually shows.
-    total_ms: u64,
+    pub(crate) total_ms: u64,
 }
 
 // Each export owns the generation number it was handed at start. Cancelling
@@ -24396,13 +24396,13 @@ struct ExportRequest {
 // or wrongly cancel the other. A set of cancelled generations fixes this --
 // each generation is cancelled (or not) independently, and a finished job
 // removes its own entry so the set never grows unbounded.
-static VIDEO_EXPORT_GEN: AtomicU64 = AtomicU64::new(0);
+pub(crate) static VIDEO_EXPORT_GEN: AtomicU64 = AtomicU64::new(0);
 // The generation of the export the video editor itself has in flight (0 =
 // none). The editor's Cancel must hit exactly this one, not whichever
 // generation a batch export reserved last.
-static EDITOR_EXPORT_GEN: AtomicU64 = AtomicU64::new(0);
+pub(crate) static EDITOR_EXPORT_GEN: AtomicU64 = AtomicU64::new(0);
 
-fn video_export_cancelled() -> &'static Mutex<std::collections::HashSet<u64>> {
+pub(crate) fn video_export_cancelled() -> &'static Mutex<std::collections::HashSet<u64>> {
     use std::sync::OnceLock;
     static SET: OnceLock<Mutex<std::collections::HashSet<u64>>> = OnceLock::new();
     SET.get_or_init(|| Mutex::new(std::collections::HashSet::new()))
@@ -24414,9 +24414,9 @@ fn video_export_cancelled() -> &'static Mutex<std::collections::HashSet<u64>> {
 // a `dest_path` string from the IPC call on its own, since that call could in
 // principle be made with any argument at all rather than the one a dialog
 // actually returned.
-static LAST_EXPORT_DEST_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
+pub(crate) static LAST_EXPORT_DEST_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
 
-fn remember_export_dest_dir(dir: &Path) {
+pub(crate) fn remember_export_dest_dir(dir: &Path) {
     if let Ok(canon) = fs::canonicalize(dir) {
         *LAST_EXPORT_DEST_DIR.lock().unwrap_or_else(|e| e.into_inner()) = Some(canon);
     }
@@ -24431,10 +24431,10 @@ fn remember_export_dest_dir(dir: &Path) {
 // after every export whose target was not itself a recording folder).
 // Bounded so a very long session cannot grow this without limit; the oldest
 // entry is dropped once the cap is hit, same shape as PICKER_GRANTS above.
-const EXPORT_OUTPUT_MAX: usize = 64;
-static EXPORT_OUTPUTS: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
+pub(crate) const EXPORT_OUTPUT_MAX: usize = 64;
+pub(crate) static EXPORT_OUTPUTS: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
 
-fn remember_export_output(path: &Path) {
+pub(crate) fn remember_export_output(path: &Path) {
     let Ok(canon) = fs::canonicalize(path) else { return };
     let mut outputs = EXPORT_OUTPUTS.lock().unwrap_or_else(|e| e.into_inner());
     if outputs.len() >= EXPORT_OUTPUT_MAX {
@@ -24443,7 +24443,7 @@ fn remember_export_output(path: &Path) {
     outputs.push(canon);
 }
 
-fn is_known_export_output(path: &Path) -> bool {
+pub(crate) fn is_known_export_output(path: &Path) -> bool {
     let Ok(canon) = fs::canonicalize(path) else { return false };
     EXPORT_OUTPUTS.lock().unwrap_or_else(|e| e.into_inner()).contains(&canon)
 }
@@ -24451,7 +24451,7 @@ fn is_known_export_output(path: &Path) -> bool {
 // Moves a file and, when it was one of this session's own export outputs,
 // carries that proof over to its new place (and drops the old entry), so the
 // same export can be moved again from where it landed.
-fn move_tracked_export_output(src: &Path, dst: &Path) -> std::io::Result<()> {
+pub(crate) fn move_tracked_export_output(src: &Path, dst: &Path) -> std::io::Result<()> {
     let old = if is_known_export_output(src) { fs::canonicalize(src).ok() } else { None };
     move_file(src, dst)?;
     if let Some(old) = old {
@@ -24468,7 +24468,7 @@ fn move_tracked_export_output(src: &Path, dst: &Path) -> std::io::Result<()> {
 // a sibling instead -- recording the requested path there would remember a
 // file this export never wrote, while the file that actually exists stays
 // unrecognized by save_recording_as.
-fn export_output_to_remember(result: &Result<String, String>) -> Option<PathBuf> {
+pub(crate) fn export_output_to_remember(result: &Result<String, String>) -> Option<PathBuf> {
     result.as_ref().ok().map(PathBuf::from)
 }
 
@@ -24494,12 +24494,12 @@ fn export_output_to_remember(result: &Result<String, String>) -> Option<PathBuf>
 // Windows reserved device names, matched case-insensitively against the part
 // of the stem before its first dot -- "CON.take2" is just as reserved as
 // "CON" itself. Kept in sync by hand with ui/exportName.js's own copy.
-const EXPORT_RESERVED_STEMS: [&str; 22] = [
+pub(crate) const EXPORT_RESERVED_STEMS: [&str; 22] = [
     "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4",
     "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
 ];
 
-fn export_file_name_is_valid(name: &str) -> bool {
+pub(crate) fn export_file_name_is_valid(name: &str) -> bool {
     let trimmed = name.trim();
     if trimmed.is_empty() || trimmed == "." || trimmed == ".." {
         return false;
@@ -24526,7 +24526,7 @@ fn export_file_name_is_valid(name: &str) -> bool {
 // (that is the normal case for a fresh export), so only its parent folder is
 // canonicalized; the file name itself is compared case-insensitively, the way
 // Windows treats two names that differ only in case as the same file.
-fn export_dest_is_same_as_src(dest: &Path, src: &Path) -> bool {
+pub(crate) fn export_dest_is_same_as_src(dest: &Path, src: &Path) -> bool {
     let Ok(src_canon) = fs::canonicalize(src) else { return false };
     let dest_parent = dest.parent().unwrap_or_else(|| Path::new("."));
     let Ok(dest_parent_canon) = fs::canonicalize(dest_parent) else { return false };
@@ -24537,7 +24537,7 @@ fn export_dest_is_same_as_src(dest: &Path, src: &Path) -> bool {
 
 // Split from `export_dest_dir_is_authorized` below so the actual decision is
 // a plain function of paths and can be unit-tested without a running app.
-fn export_dest_dir_is_authorized_against(
+pub(crate) fn export_dest_dir_is_authorized_against(
     dest: &Path,
     src: &Path,
     last_picked: Option<&Path>,
@@ -24577,7 +24577,7 @@ fn export_dest_dir_is_authorized_against(
     false
 }
 
-fn export_dest_dir_is_authorized(app: &AppHandle, state: &State<'_, Db>, dest: &Path, src: &Path) -> bool {
+pub(crate) fn export_dest_dir_is_authorized(app: &AppHandle, state: &State<'_, Db>, dest: &Path, src: &Path) -> bool {
     let last_picked = LAST_EXPORT_DEST_DIR.lock().unwrap_or_else(|e| e.into_inner()).clone();
     let configured = lock(state).settings.ui_texts.get("videoExportDir").cloned();
     // A fresh capture still sits in <data>/recordings when the editor opens it,
@@ -24598,7 +24598,7 @@ fn export_dest_dir_is_authorized(app: &AppHandle, state: &State<'_, Db>, dest: &
 // started (it only ever has one in flight), never a batch job that reserved a
 // later generation in the meantime. Nothing in flight means nothing to cancel,
 // so no stale entry is left behind either.
-fn cancel_editor_export_in(editor_gen: &AtomicU64) {
+pub(crate) fn cancel_editor_export_in(editor_gen: &AtomicU64) {
     let gen = editor_gen.load(Ordering::SeqCst);
     if gen != 0 {
         video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).insert(gen);
@@ -24627,7 +24627,7 @@ fn cancel_export_job(generation: u64) {
 // them gets cancelled instead of just the last one, which is what the app-quit
 // path actually needs. The current generation is also inserted directly, in
 // case a brand new export's own bg-ops row has not been written yet.
-fn cancel_all_exports() {
+pub(crate) fn cancel_all_exports() {
     let running_gens: Vec<u64> = bg_ops()
         .lock()
         .unwrap_or_else(|e| e.into_inner())
@@ -24715,16 +24715,16 @@ async fn export_video(app: AppHandle, state: State<'_, Db>, req: ExportRequest) 
 // ---------- Batch export: several whole recordings, one dialog ----------
 
 #[derive(serde::Deserialize)]
-struct BatchExportItem {
-    src_path: String,
-    dest_path: String,
-    total_ms: u64,
+pub(crate) struct BatchExportItem {
+    pub(crate) src_path: String,
+    pub(crate) dest_path: String,
+    pub(crate) total_ms: u64,
 }
 
 #[derive(serde::Serialize)]
-struct BatchExportResult {
-    ok: usize,
-    failed: usize,
+pub(crate) struct BatchExportResult {
+    pub(crate) ok: usize,
+    pub(crate) failed: usize,
 }
 
 // One batch item's whole outcome: missing source is rejected the same way
@@ -24740,7 +24740,7 @@ struct BatchExportResult {
 // "running" row before the job even starts -- same reasoning as
 // export_video_blocking's own `my_gen` parameter.
 #[allow(clippy::too_many_arguments)]
-fn run_batch_job_blocking(
+pub(crate) fn run_batch_job_blocking(
     ffmpeg: &Path, src_path: &str, dest_path: &str, total_ms: u64, format: &str, lossless_quality: bool, video_kbps: Option<u32>, my_gen: u64,
     on_progress: impl FnMut(u32),
 ) -> Result<String, String> {
@@ -24767,13 +24767,13 @@ fn run_batch_job_blocking(
     result
 }
 
-type ExportJoinHandle = tauri::async_runtime::JoinHandle<Result<String, String>>;
+pub(crate) type ExportJoinHandle = tauri::async_runtime::JoinHandle<Result<String, String>>;
 
 // Awaits one in-flight export and records its outcome in the bg-ops registry
 // -- pulled out of export_recordings_batch below so the concurrency-window
 // loop and the final drain (after the last item is spawned) share the exact
 // same bookkeeping instead of two near-identical copies.
-async fn await_batch_export(handle: ExportJoinHandle, id: String, generation: u64, app: AppHandle) -> Result<bool, String> {
+pub(crate) async fn await_batch_export(handle: ExportJoinHandle, id: String, generation: u64, app: AppHandle) -> Result<bool, String> {
     let res = handle.await.map_err(|e| e.to_string())?;
     let ok = match &res {
         Ok(_) => {
@@ -24876,21 +24876,21 @@ async fn export_recordings_batch(
 // ---------- Export size estimate: "roughly this big" in the format's own hint ----------
 
 #[derive(serde::Serialize)]
-struct ExportSizeEstimate {
+pub(crate) struct ExportSizeEstimate {
     // A plain bitrate-based format gets a single number; the three
     // image-based formats below get a low/high bracket instead, since their
     // real size depends far more on motion and color count than on a fixed
     // bitrate. Exactly one of the two shapes is ever filled in.
-    bytes: Option<u64>,
-    low_bytes: Option<u64>,
-    high_bytes: Option<u64>,
+    pub(crate) bytes: Option<u64>,
+    pub(crate) low_bytes: Option<u64>,
+    pub(crate) high_bytes: Option<u64>,
 }
 
 // Mirrors export_video_blocking's own per-format "-b:a" settings above
 // exactly, so the estimate can never quietly drift from what the encoder
 // actually burns into the file. gif/webpanim/apng are always silent (-an),
 // hence 0 -- they never reach this function anyway (see the match below).
-fn export_audio_kbps(format: &str, lossless_quality: bool) -> u32 {
+pub(crate) fn export_audio_kbps(format: &str, lossless_quality: bool) -> u32 {
     match format {
         "mp4" if lossless_quality => 320,
         "mp4" | "mov" | "mkv" | "avi" => 192,
@@ -24904,7 +24904,7 @@ fn export_audio_kbps(format: &str, lossless_quality: bool) -> u32 {
 // bitrate of its own to estimate from at all -- the frontend never calls
 // this for that case (see isLosslessCopy() in video.js), the same way this
 // function never claims to know what a copy would weigh.
-fn estimate_export_bytes(format: &str, video_kbps: Option<u32>, lossless_quality: bool, duration_ms: u64) -> ExportSizeEstimate {
+pub(crate) fn estimate_export_bytes(format: &str, video_kbps: Option<u32>, lossless_quality: bool, duration_ms: u64) -> ExportSizeEstimate {
     let secs = duration_ms as f64 / 1000.0;
     match format {
         "gif" | "webpanim" | "apng" => {
@@ -24927,7 +24927,7 @@ fn estimate_export_size(format: String, video_kbps: Option<u32>, lossless_qualit
     estimate_export_bytes(&format, video_kbps, lossless_quality, duration_ms)
 }
 
-fn export_video_blocking(
+pub(crate) fn export_video_blocking(
     ffmpeg: &Path, src: &Path, dst: &Path, req: &ExportRequest, my_gen: u64, mut on_progress: impl FnMut(u32),
 ) -> Result<String, String> {
     let mut input_args: Vec<String> = Vec::new();
@@ -25075,11 +25075,11 @@ fn export_video_blocking(
 // decorations(false)+transparent(true)+resizable(true), same shape as the
 // main window's own (custom HTML titlebar drawn by video.html itself), not
 // the fixed-size borderless-pill pattern the other satellite windows use.
-const VIDEO_WIN_LABEL: &str = "video-editor";
-const VIDEO_WIN_W: u32 = 1100;
-const VIDEO_WIN_H: u32 = 720;
-const VIDEO_WIN_MIN_W: u32 = 760;
-const VIDEO_WIN_MIN_H: u32 = 520;
+pub(crate) const VIDEO_WIN_LABEL: &str = "video-editor";
+pub(crate) const VIDEO_WIN_W: u32 = 1100;
+pub(crate) const VIDEO_WIN_H: u32 = 720;
+pub(crate) const VIDEO_WIN_MIN_W: u32 = 760;
+pub(crate) const VIDEO_WIN_MIN_H: u32 = 520;
 
 // Holds the recording path the (single) editor window should be showing, plus
 // the origin folder to suggest on save when that path is a working copy made
@@ -25097,22 +25097,22 @@ const VIDEO_WIN_MIN_H: u32 = 520;
 // never carried alongside it here -- it lives in the camera recording's own
 // sidecar (camera::CamSidecar::overlay_start_ms), which
 // ui/video.js's addAlignedCameraOverlay reads directly.
-struct VideoEditorPending(Mutex<(String, String, String)>);
+pub(crate) struct VideoEditorPending(pub(crate) Mutex<(String, String, String)>);
 impl VideoEditorPending {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self(Mutex::new((String::new(), String::new(), String::new())))
     }
-    fn lock(&self) -> std::sync::MutexGuard<'_, (String, String, String)> {
+    pub(crate) fn lock(&self) -> std::sync::MutexGuard<'_, (String, String, String)> {
         self.0.lock().unwrap_or_else(|e| e.into_inner())
     }
 }
 
 #[derive(Serialize, Clone)]
-struct VideoEditorSource {
-    path: String,
-    origin_dir: String,
+pub(crate) struct VideoEditorSource {
+    pub(crate) path: String,
+    pub(crate) origin_dir: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    overlay_path: Option<String>,
+    pub(crate) overlay_path: Option<String>,
 }
 
 // Opens the editor for one recording. A second call while it is already open
@@ -25185,7 +25185,7 @@ fn video_editor_source(pending: State<VideoEditorPending>) -> Option<VideoEditor
 // True once a file is past the configured ceiling -- kept as its own pure
 // function so the boundary (exactly at the limit still opens) is unit
 // testable without a running app.
-fn exceeds_open_edit_limit(bytes: u64, max_mb: f64) -> bool {
+pub(crate) fn exceeds_open_edit_limit(bytes: u64, max_mb: f64) -> bool {
     let cap = ((max_mb.max(1.0)) as u64).saturating_mul(1024 * 1024);
     bytes > cap
 }
@@ -25197,7 +25197,7 @@ fn exceeds_open_edit_limit(bytes: u64, max_mb: f64) -> bool {
 // unit test that has no bundled
 // ffprobe.exe, which correctly makes every video case fall through to "not
 // media" there rather than false-negative on the image branch.
-fn detect_media_kind(path: &Path, ffprobe: Option<&Path>) -> Option<(&'static str, Option<image::ImageFormat>)> {
+pub(crate) fn detect_media_kind(path: &Path, ffprobe: Option<&Path>) -> Option<(&'static str, Option<image::ImageFormat>)> {
     if decode_image_file(&path.to_string_lossy()).is_some() {
         let fmt = image::ImageReader::open(path)
             .ok()
@@ -25215,7 +25215,7 @@ fn detect_media_kind(path: &Path, ffprobe: Option<&Path>) -> Option<(&'static st
 
 #[derive(Serialize)]
 #[serde(tag = "kind")]
-enum OpenEditResult {
+pub(crate) enum OpenEditResult {
     #[serde(rename = "image")]
     Image { data_url: String, origin_dir: String, name: String },
     #[serde(rename = "video")]
@@ -25237,7 +25237,7 @@ enum OpenEditResult {
 // somewhere else entirely -- either way not worth reading into memory just to
 // carry it into a throwaway editor folder.
 #[cfg(windows)]
-const KEY_SIDECAR_MAX_COPY_BYTES: u64 = 16 * 1024 * 1024;
+pub(crate) const KEY_SIDECAR_MAX_COPY_BYTES: u64 = 16 * 1024 * 1024;
 
 // Whether `path` is safe to carry along as a key-overlay sidecar: present,
 // under the size ceiling, and parseable as the same KeySidecar shape
@@ -25245,7 +25245,7 @@ const KEY_SIDECAR_MAX_COPY_BYTES: u64 = 16 * 1024 * 1024;
 // destination involved) so a test can prove an oversized or malformed file is
 // rejected without going through open_file_in_editor's whole command.
 #[cfg(windows)]
-fn key_sidecar_is_safe_to_copy(path: &Path) -> bool {
+pub(crate) fn key_sidecar_is_safe_to_copy(path: &Path) -> bool {
     let Ok(meta) = fs::metadata(path) else { return false };
     if !meta.is_file() || meta.len() > KEY_SIDECAR_MAX_COPY_BYTES {
         return false;
@@ -25254,14 +25254,14 @@ fn key_sidecar_is_safe_to_copy(path: &Path) -> bool {
 }
 
 #[cfg(windows)]
-fn copy_keys_sidecar_alongside(src: &Path, dest: &Path) {
+pub(crate) fn copy_keys_sidecar_alongside(src: &Path, dest: &Path) {
     let src_sidecar = keylog::sidecar_path(src);
     if key_sidecar_is_safe_to_copy(&src_sidecar) {
         let _ = fs::copy(&src_sidecar, keylog::sidecar_path(dest));
     }
 }
 #[cfg(not(windows))]
-fn copy_keys_sidecar_alongside(_src: &Path, _dest: &Path) {}
+pub(crate) fn copy_keys_sidecar_alongside(_src: &Path, _dest: &Path) {}
 
 // Right-click "Open a file in the editor" (the screenshot/record buttons, and
 // an image/video attachment in the library) all land here. The original file
@@ -25321,7 +25321,7 @@ async fn open_file_in_editor(app: AppHandle, state: State<'_, Db>, path: String)
 // Videos\<app>. Mirrors screenshot_dir. The raw capture itself always keeps
 // landing in <data>/recordings until explicitly saved/copied -- 281's sweep
 // stays in charge of whatever is still undecided there.
-fn recording_dir(custom: &str) -> PathBuf {
+pub(crate) fn recording_dir(custom: &str) -> PathBuf {
     let c = custom.trim();
     if !c.is_empty() {
         return PathBuf::from(c);
@@ -25346,7 +25346,7 @@ fn default_recording_dir() -> String {
 // checks its `dir` parameter against this before touching anything, so a
 // call made with some other folder string can only ever read/delete inside
 // the one folder this app actually keeps recordings in.
-fn configured_recording_dir(state: &State<'_, Db>) -> PathBuf {
+pub(crate) fn configured_recording_dir(state: &State<'_, Db>) -> PathBuf {
     let custom = lock(state).settings.ui_texts.get("recordingDir").cloned().unwrap_or_default();
     recording_dir(&custom)
 }
@@ -25356,7 +25356,7 @@ fn configured_recording_dir(state: &State<'_, Db>) -> PathBuf {
 // case-insensitive comparison when it does not exist yet -- there is nothing
 // to list, clean or delete from a folder that was never created either way,
 // so a name-only comparison costs nothing extra there.
-fn path_matches_configured_dir(candidate: &Path, configured: &Path) -> bool {
+pub(crate) fn path_matches_configured_dir(candidate: &Path, configured: &Path) -> bool {
     match (fs::canonicalize(candidate), fs::canonicalize(configured)) {
         (Ok(a), Ok(b)) => a == b,
         _ => {
@@ -25370,9 +25370,9 @@ fn path_matches_configured_dir(candidate: &Path, configured: &Path) -> bool {
 // the user could point it at any folder they like (including one already full
 // of unrelated files), so both the size readout and the cleanup below must
 // never so much as count, let alone delete, anything this app did not create.
-const VIDEO_FOLDER_EXTS: [&str; 8] = ["mp4", "webm", "gif", "avi", "mov", "mkv", "webp", "apng"];
+pub(crate) const VIDEO_FOLDER_EXTS: [&str; 8] = ["mp4", "webm", "gif", "avi", "mov", "mkv", "webp", "apng"];
 
-fn is_video_folder_file(path: &std::path::Path) -> bool {
+pub(crate) fn is_video_folder_file(path: &std::path::Path) -> bool {
     // The extension check alone still leaves every OTHER file with a matching
     // extension in a shared folder (a real video the user already had there,
     // or one from some other app) open to being counted and swept up by the
@@ -25389,7 +25389,7 @@ fn is_video_folder_file(path: &std::path::Path) -> bool {
             .unwrap_or(false)
 }
 
-fn video_folder_stats_in(dir: &std::path::Path) -> (u64, u64) {
+pub(crate) fn video_folder_stats_in(dir: &std::path::Path) -> (u64, u64) {
     let Ok(entries) = fs::read_dir(dir) else { return (0, 0) };
     let mut count = 0u64;
     let mut bytes = 0u64;
@@ -25413,7 +25413,7 @@ fn video_folder_stats_in(dir: &std::path::Path) -> (u64, u64) {
 // `configured_recording_dir`); `dir` is only ever trusted once it is proven
 // to be that same folder, kept apart from the tauri::command wrapper below so
 // it can be unit-tested without a running app.
-fn video_folder_stats_impl(dir: &str, configured: &Path) -> (u64, u64) {
+pub(crate) fn video_folder_stats_impl(dir: &str, configured: &Path) -> (u64, u64) {
     let base = std::path::Path::new(dir);
     if !path_matches_configured_dir(base, configured) {
         return (0, 0);
@@ -25429,14 +25429,14 @@ fn video_folder_stats(state: State<'_, Db>, dir: String) -> (u64, u64) {
 }
 
 #[derive(Serialize)]
-struct VideoFolderFile {
-    name: String,
-    size: u64,
+pub(crate) struct VideoFolderFile {
+    pub(crate) name: String,
+    pub(crate) size: u64,
 }
 
 // Shared by the preview and the real delete, so what the user confirms is
 // exactly what gets removed -- never a second, independently computed list.
-fn video_folder_stale(dir: &str, age_days: u32) -> Vec<(std::path::PathBuf, VideoFolderFile)> {
+pub(crate) fn video_folder_stale(dir: &str, age_days: u32) -> Vec<(std::path::PathBuf, VideoFolderFile)> {
     let age = Duration::from_secs(u64::from(age_days) * 24 * 3600);
     let Ok(entries) = fs::read_dir(dir) else { return Vec::new() };
     let mut out = Vec::new();
@@ -25453,7 +25453,7 @@ fn video_folder_stale(dir: &str, age_days: u32) -> Vec<(std::path::PathBuf, Vide
     out
 }
 
-fn video_folder_cleanup_preview_impl(dir: &str, age_days: u32, configured: &Path) -> Vec<VideoFolderFile> {
+pub(crate) fn video_folder_cleanup_preview_impl(dir: &str, age_days: u32, configured: &Path) -> Vec<VideoFolderFile> {
     if !path_matches_configured_dir(std::path::Path::new(dir), configured) {
         return Vec::new();
     }
@@ -25469,7 +25469,7 @@ fn video_folder_cleanup_preview(state: State<'_, Db>, dir: String, age_days: u32
 // re-scans with different criteria, so the confirmed list and the
 // actually-deleted files can never drift apart (e.g. a file aging past the
 // threshold between preview and confirm just stays for next time, not a bug).
-fn video_folder_cleanup_impl(dir: &str, age_days: u32, configured: &Path) -> usize {
+pub(crate) fn video_folder_cleanup_impl(dir: &str, age_days: u32, configured: &Path) -> usize {
     if !path_matches_configured_dir(std::path::Path::new(dir), configured) {
         return 0;
     }
@@ -25492,7 +25492,7 @@ fn video_folder_cleanup(state: State<'_, Db>, dir: String, age_days: u32) -> usi
 // for a library attachment. A file that cannot be probed (missing, corrupt)
 // comes back as 0, the same "unknown" fallback probe_media_meta uses
 // everywhere else, rather than failing the whole batch over one bad file.
-fn video_folder_file_durations_ms_impl(ffprobe: Option<&Path>, dir: &Path, names: &[String]) -> Vec<u64> {
+pub(crate) fn video_folder_file_durations_ms_impl(ffprobe: Option<&Path>, dir: &Path, names: &[String]) -> Vec<u64> {
     use rayon::prelude::*;
     // Probed in parallel (each one is a child process); collect keeps the order of `names`.
     names.par_iter().map(|name| probe_media_meta(ffprobe, &dir.join(name)).0).collect()
@@ -25510,7 +25510,7 @@ async fn video_folder_file_durations_ms(app: AppHandle, dir: String, names: Vec<
 // Never overwrite an existing file at the target: "<stem>.<ext>", then
 // "<stem> (2).<ext>", "<stem> (3).<ext>", etc. Shared by every 280 button
 // that writes into a folder instead of a dialog-chosen exact path.
-fn unique_dest_path(dir: &std::path::Path, stem: &str, ext: &str) -> PathBuf {
+pub(crate) fn unique_dest_path(dir: &std::path::Path, stem: &str, ext: &str) -> PathBuf {
     let mut candidate = dir.join(format!("{stem}.{ext}"));
     let mut n = 2;
     while candidate.exists() {
@@ -25530,7 +25530,7 @@ fn unique_dest_path(dir: &std::path::Path, stem: &str, ext: &str) -> PathBuf {
 // always one nothing else could have claimed first. The empty placeholder
 // file it leaves behind still needs to be replaced (or removed on failure) by
 // the caller, same as before.
-fn reserve_unique_dest_path(dir: &std::path::Path, stem: &str, ext: &str) -> std::io::Result<PathBuf> {
+pub(crate) fn reserve_unique_dest_path(dir: &std::path::Path, stem: &str, ext: &str) -> std::io::Result<PathBuf> {
     let mut n: u32 = 1;
     loop {
         let candidate = if n == 1 { dir.join(format!("{stem}.{ext}")) } else { dir.join(format!("{stem} ({n}).{ext}")) };
@@ -25545,7 +25545,7 @@ fn reserve_unique_dest_path(dir: &std::path::Path, stem: &str, ext: &str) -> std
 // fs::rename fails across drives (recordingDir can be anywhere the user
 // picks, unlike the fixed same-drive <data>/recordings) -- fall back to
 // copy+remove there.
-fn move_file(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+pub(crate) fn move_file(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
     if fs::rename(src, dst).is_ok() {
         return Ok(());
     }
@@ -25560,7 +25560,7 @@ fn move_file(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()
 // before it was ever opened in the editor. Best-effort: the primary move
 // already succeeded by the time this runs, so a sidecar move failure is
 // logged, not propagated.
-fn move_mic_sidecar_alongside(old_video: &std::path::Path, new_video: &std::path::Path) {
+pub(crate) fn move_mic_sidecar_alongside(old_video: &std::path::Path, new_video: &std::path::Path) {
     let old_sidecar = old_video.with_extension("mic.wav");
     if old_sidecar.is_file() {
         let new_sidecar = new_video.with_extension("mic.wav");
@@ -25601,7 +25601,7 @@ fn move_mic_sidecar_alongside(old_video: &std::path::Path, new_video: &std::path
 // Shared by Save/Copy: if the file already sits in the target folder
 // (e.g. Copy running after a Save already placed it there), leave its name
 // alone; otherwise move it in under a name that never overwrites anything.
-fn place_in_dir(src: &std::path::Path, dir: &std::path::Path) -> std::io::Result<PathBuf> {
+pub(crate) fn place_in_dir(src: &std::path::Path, dir: &std::path::Path) -> std::io::Result<PathBuf> {
     fs::create_dir_all(dir)?;
     let same_dir = src
         .parent()
@@ -25737,7 +25737,7 @@ async fn copy_recording_to_clipboard(app: AppHandle, state: State<'_, Db>, src_p
 // file in the app's own temp folder rather than anywhere the user chose, so
 // it can be swept away automatically (see sweep_clip_export_temp below)
 // without ever touching a real save.
-fn clip_export_path_impl(ext: &str) -> Result<String, String> {
+pub(crate) fn clip_export_path_impl(ext: &str) -> Result<String, String> {
     let dir = std::env::temp_dir().join(brand::TEMP_DIR);
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let safe_ext = if !ext.is_empty() && ext.chars().all(|c| c.is_ascii_alphanumeric()) { ext } else { "mp4" };
@@ -25760,7 +25760,7 @@ async fn copy_file_to_clipboard(path: String) -> bool {
 // recDiscardKeepH has no expert-menu row yet (same "future menu writes it
 // directly" state as recCanvasMode/recDiskWarnMb above) -- 0 disables the
 // whole discard-trash cleanup, keeping everything in "verworfen" forever.
-fn discard_keep_hours(state: &State<'_, Db>) -> f64 {
+pub(crate) fn discard_keep_hours(state: &State<'_, Db>) -> f64 {
     lock(state).settings.ui_values.get("recDiscardKeepH").copied().unwrap_or(24.0)
 }
 
@@ -25770,7 +25770,7 @@ fn discard_keep_hours(state: &State<'_, Db>) -> f64 {
 // the currently configured recordingDir (where Save/Copy leave it before the
 // result window closes). Shared by discard/convert/save/copy below so they
 // all draw the line in exactly the same place.
-fn recording_source_dirs(app: &AppHandle, state: &State<'_, Db>) -> [PathBuf; 2] {
+pub(crate) fn recording_source_dirs(app: &AppHandle, state: &State<'_, Db>) -> [PathBuf; 2] {
     let custom = lock(state).settings.ui_texts.get("recordingDir").cloned().unwrap_or_default();
     [data_dir(app).join("recordings"), recording_dir(&custom)]
 }
@@ -25782,7 +25782,7 @@ fn recording_source_dirs(app: &AppHandle, state: &State<'_, Db>) -> [PathBuf; 2]
 // convert_recording/save_recording_now/copy_recording_to_clipboard cannot be
 // made to move, replace or feed ffmpeg an unrelated file just because a
 // subverted renderer sent that file's path as `src_path`.
-fn is_own_recording_source(allowed: &[PathBuf], path: &Path) -> bool {
+pub(crate) fn is_own_recording_source(allowed: &[PathBuf], path: &Path) -> bool {
     let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     if !name.starts_with("rec-") || !path.is_file() {
         return false;
@@ -25796,7 +25796,7 @@ fn is_own_recording_source(allowed: &[PathBuf], path: &Path) -> bool {
 // is_own_recording_source (which only proves `video` itself is ours) so a
 // second, unrelated path cannot ride along just because it happens to sit in
 // an allowed folder too.
-fn is_own_mic_sidecar(video: &Path, sidecar: &Path) -> bool {
+pub(crate) fn is_own_mic_sidecar(video: &Path, sidecar: &Path) -> bool {
     sidecar == video.with_extension("mic.wav")
 }
 
@@ -25811,7 +25811,7 @@ fn is_own_mic_sidecar(video: &Path, sidecar: &Path) -> bool {
 // Split out so the actual move logic has a real unit test against a plain
 // tempdir, no AppHandle/Db needed -- same split as sweep_stale_recordings_in
 // above. Returns the file's new path in "verworfen" on success.
-fn discard_recording_file_in(allowed: &[PathBuf], path: &std::path::Path) -> Option<PathBuf> {
+pub(crate) fn discard_recording_file_in(allowed: &[PathBuf], path: &std::path::Path) -> Option<PathBuf> {
     // The directory check alone let this touch ANY file directly inside
     // recordingDir -- often the user's normal Videos folder, shared with files
     // this app never touched. delete_screenshot_file's own comment already
@@ -25883,14 +25883,14 @@ fn discard_recording_file(app: AppHandle, state: State<'_, Db>, path: String) ->
 // folder's listing, but this guard stops a hand-crafted "../x" from ever
 // escaping it, the same defense-in-depth discard_recording_file already
 // applies to the file it moves in.
-fn is_bare_filename(name: &str) -> bool {
+pub(crate) fn is_bare_filename(name: &str) -> bool {
     !name.is_empty() && std::path::Path::new(name).file_name().is_some_and(|f| f == std::ffi::OsStr::new(name))
 }
 
 // The Aufnahmeordner dialog's own listing of what is currently sitting in
 // the trash, waiting out its retention window -- same shape and same
 // extension filter as video_folder_stats/video_folder_cleanup_preview above.
-fn list_discarded_recordings_impl(dir: &str, configured: &Path) -> Vec<VideoFolderFile> {
+pub(crate) fn list_discarded_recordings_impl(dir: &str, configured: &Path) -> Vec<VideoFolderFile> {
     if !path_matches_configured_dir(std::path::Path::new(dir), configured) {
         return Vec::new();
     }
@@ -25912,7 +25912,7 @@ fn list_discarded_recordings(state: State<'_, Db>, dir: String) -> Vec<VideoFold
     list_discarded_recordings_impl(&dir, &configured_recording_dir(&state))
 }
 
-fn restore_discarded_recording_impl(dir: &str, name: &str, configured: &Path) -> bool {
+pub(crate) fn restore_discarded_recording_impl(dir: &str, name: &str, configured: &Path) -> bool {
     if !is_bare_filename(name) {
         return false;
     }
@@ -25950,7 +25950,7 @@ fn restore_discarded_recording(state: State<'_, Db>, dir: String, name: String) 
     restore_discarded_recording_impl(&dir, &name, &configured_recording_dir(&state))
 }
 
-fn delete_discarded_recording_now_impl(dir: &str, name: &str, configured: &Path) -> bool {
+pub(crate) fn delete_discarded_recording_now_impl(dir: &str, name: &str, configured: &Path) -> bool {
     if !is_bare_filename(name) {
         return false;
     }
@@ -26001,7 +26001,7 @@ async fn edit_prompt_request(app: AppHandle, id: String) -> Result<(), String> {
 
 // Add/remove the app in the per-user Windows autostart registry key.
 #[cfg(windows)]
-fn apply_autostart(enabled: bool, minimized: bool) -> Result<(), String> {
+pub(crate) fn apply_autostart(enabled: bool, minimized: bool) -> Result<(), String> {
     use winreg::enums::{HKEY_CURRENT_USER, KEY_SET_VALUE};
     use winreg::RegKey;
     let run = RegKey::predef(HKEY_CURRENT_USER)
@@ -26030,7 +26030,7 @@ fn apply_autostart(enabled: bool, minimized: bool) -> Result<(), String> {
 }
 
 #[cfg(not(windows))]
-fn apply_autostart(_enabled: bool, _minimized: bool) -> Result<(), String> {
+pub(crate) fn apply_autostart(_enabled: bool, _minimized: bool) -> Result<(), String> {
     Err("autostart is only supported on Windows".to_string())
 }
 
@@ -26056,7 +26056,7 @@ fn set_always_on_top(app: AppHandle, state: State<Db>, enabled: bool) {
 // The run entry as it stands right now (None = no entry), so a failed change can
 // put back exactly what was there.
 #[cfg(windows)]
-fn autostart_command() -> Result<Option<String>, String> {
+pub(crate) fn autostart_command() -> Result<Option<String>, String> {
     use winreg::enums::{HKEY_CURRENT_USER, KEY_READ};
     use winreg::RegKey;
     let run = RegKey::predef(HKEY_CURRENT_USER)
@@ -26070,12 +26070,12 @@ fn autostart_command() -> Result<Option<String>, String> {
 }
 
 #[cfg(not(windows))]
-fn autostart_command() -> Result<Option<String>, String> {
+pub(crate) fn autostart_command() -> Result<Option<String>, String> {
     Ok(None)
 }
 
 #[cfg(windows)]
-fn autostart_restore(prior: Option<String>) -> Result<(), String> {
+pub(crate) fn autostart_restore(prior: Option<String>) -> Result<(), String> {
     use winreg::enums::{HKEY_CURRENT_USER, KEY_SET_VALUE};
     use winreg::RegKey;
     let run = RegKey::predef(HKEY_CURRENT_USER)
@@ -26092,7 +26092,7 @@ fn autostart_restore(prior: Option<String>) -> Result<(), String> {
 }
 
 #[cfg(not(windows))]
-fn autostart_restore(_prior: Option<String>) -> Result<(), String> {
+pub(crate) fn autostart_restore(_prior: Option<String>) -> Result<(), String> {
     Ok(())
 }
 
@@ -26102,7 +26102,7 @@ fn autostart_restore(_prior: Option<String>) -> Result<(), String> {
 // and the registration both end up as they were and the caller reports an error
 // (the control then reverts). `restore_setting` gets `false` when nothing was
 // written, so it only undoes the in-memory change.
-fn two_state_change<C, P>(
+pub(crate) fn two_state_change<C, P>(
     ctx: &mut C,
     prior_os: P,
     set_setting: impl FnOnce(&mut C) -> bool,
@@ -26129,7 +26129,7 @@ fn two_state_change<C, P>(
 // Whose registration an entry is. Only our own (or one whose program is gone)
 // is ever rewritten or removed at start; another copy's entry is left alone.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-enum RegistryOwner {
+pub(crate) enum RegistryOwner {
     Missing,
     ThisExe,
     Gone,
@@ -26137,7 +26137,7 @@ enum RegistryOwner {
 }
 
 // The program a registry command line starts: quoted path, or up to the first space.
-fn command_program(command: &str) -> Option<String> {
+pub(crate) fn command_program(command: &str) -> Option<String> {
     let c = command.trim();
     let exe = match c.strip_prefix('"') {
         Some(rest) => rest.split('"').next()?,
@@ -26146,12 +26146,12 @@ fn command_program(command: &str) -> Option<String> {
     (!exe.is_empty()).then(|| exe.to_string())
 }
 
-fn same_program_path(a: &str, b: &str) -> bool {
+pub(crate) fn same_program_path(a: &str, b: &str) -> bool {
     let norm = |p: &str| p.trim_start_matches(r"\\?\").replace('/', "\\").to_lowercase();
     norm(a) == norm(b)
 }
 
-fn registry_owner(command: Option<&str>, this_exe: &str, exists: impl Fn(&str) -> bool) -> RegistryOwner {
+pub(crate) fn registry_owner(command: Option<&str>, this_exe: &str, exists: impl Fn(&str) -> bool) -> RegistryOwner {
     let Some(program) = command.and_then(command_program) else {
         return RegistryOwner::Missing;
     };
@@ -26169,13 +26169,13 @@ fn registry_owner(command: Option<&str>, this_exe: &str, exists: impl Fn(&str) -
 // removes anything: a restart into default settings (demo mode, a missing or
 // unreadable settings row) must not delete the user's real registrations, and
 // removal belongs to the switches. Demo mode skips the whole pass.
-fn boot_reconcile_writes(setting_on: bool, demo: bool, owner: RegistryOwner) -> bool {
+pub(crate) fn boot_reconcile_writes(setting_on: bool, demo: bool, owner: RegistryOwner) -> bool {
     setting_on && !demo && owner != RegistryOwner::OtherExe
 }
 
 // Turning a switch off must not remove an entry another copy (portable versus
 // installed) registered; the setting still turns off.
-fn skip_registry_removal(enabled: bool, owner: RegistryOwner) -> bool {
+pub(crate) fn skip_registry_removal(enabled: bool, owner: RegistryOwner) -> bool {
     !enabled && owner == RegistryOwner::OtherExe
 }
 
@@ -26188,7 +26188,7 @@ pub(crate) fn url_scheme_removal_skipped() -> bool {
     }
 }
 
-fn current_registry_owner(command: Option<&str>) -> RegistryOwner {
+pub(crate) fn current_registry_owner(command: Option<&str>) -> RegistryOwner {
     match std::env::current_exe() {
         Ok(exe) => registry_owner(command, &exe.display().to_string(), |p| std::path::Path::new(p).exists()),
         Err(_) => RegistryOwner::Missing,
@@ -26197,7 +26197,7 @@ fn current_registry_owner(command: Option<&str>) -> RegistryOwner {
 
 // Start-up: refresh autostart and the address scheme registrations that the
 // stored settings ask for.
-fn reconcile_windows_state(autostart_on: bool, start_min: bool, url_scheme_on: bool, demo: bool) {
+pub(crate) fn reconcile_windows_state(autostart_on: bool, start_min: bool, url_scheme_on: bool, demo: bool) {
     match autostart_command() {
         Ok(cmd) => {
             if boot_reconcile_writes(autostart_on, demo, current_registry_owner(cmd.as_deref())) {
@@ -26273,7 +26273,7 @@ fn set_start_minimized(app: AppHandle, state: State<Db>, enabled: bool) -> Resul
 
 // The address scheme switch: stored flag and registration change together, like
 // autostart. A failed registry change leaves the flag as it was and reports it.
-fn set_url_scheme_flag(app: &AppHandle, state: &State<Db>, enabled: bool) -> Result<(), String> {
+pub(crate) fn set_url_scheme_flag(app: &AppHandle, state: &State<Db>, enabled: bool) -> Result<(), String> {
     let mut store = lock(state);
     let prior = store.settings.ui_flags.get("urlScheme").copied();
     let prior_os = remote::url_scheme_command()?;
@@ -26299,7 +26299,7 @@ fn set_url_scheme_flag(app: &AppHandle, state: &State<Db>, enabled: bool) -> Res
 
 // ---------- Import / export ----------
 
-fn csv_cell(s: &str) -> String {
+pub(crate) fn csv_cell(s: &str) -> String {
     // CSV formula injection: a cell starting with =, +, -, @ or a tab is read as a
     // formula by Excel/LibreOffice once reopened: CSV-quoting only protects the
     // CSV syntax, not spreadsheet evaluation. A leading single quote forces text.
@@ -26309,7 +26309,7 @@ fn csv_cell(s: &str) -> String {
 }
 
 // Position lines: one per view+grid-size the prompt is placed in.
-fn csv_row(cells: &[&str]) -> String {
+pub(crate) fn csv_row(cells: &[&str]) -> String {
     cells.iter().map(|c| csv_cell(c)).collect::<Vec<_>>().join(";")
 }
 
@@ -26321,15 +26321,15 @@ fn csv_row(cells: &[&str]) -> String {
 // would be ambiguous with either. An HTML-comment marker cannot collide with
 // either delimiter and reads clearly as "generated" to a human editing the
 // Markdown-sync file by hand.
-const VARIANT_SEP: &str = "\n<!-- next -->\n";
+pub(crate) const VARIANT_SEP: &str = "\n<!-- next -->\n";
 // Escaped form of the marker, used ONLY so an entry that happens to contain the
 // literal separator text survives the round trip instead of being silently
 // split into extra entries: the inserted backslash means this
 // string can never equal VARIANT_SEP itself, so .split(VARIANT_SEP) never
 // matches inside it.
-const VARIANT_SEP_ESCAPED: &str = "\n<!-- \\next -->\n";
+pub(crate) const VARIANT_SEP_ESCAPED: &str = "\n<!-- \\next -->\n";
 
-fn join_variants(text: &str, variants: &[String]) -> String {
+pub(crate) fn join_variants(text: &str, variants: &[String]) -> String {
     // Escaped even with no further entries: a single text that contains the marker
     // verbatim must not come back split in two.
     let escape = |s: &str| s.replace(VARIANT_SEP, VARIANT_SEP_ESCAPED);
@@ -26342,7 +26342,7 @@ fn join_variants(text: &str, variants: &[String]) -> String {
         .join(VARIANT_SEP)
 }
 
-fn split_variants(joined: &str) -> (String, Vec<String>) {
+pub(crate) fn split_variants(joined: &str) -> (String, Vec<String>) {
     let unescape = |s: &str| s.replace(VARIANT_SEP_ESCAPED, VARIANT_SEP);
     let mut parts = joined.split(VARIANT_SEP);
     let text = unescape(parts.next().unwrap_or(""));
@@ -26359,7 +26359,7 @@ fn split_variants(joined: &str) -> (String, Vec<String>) {
 // someone else's Markdown folder. A dynamic name (/date\, /uuid\, ...) is
 // left exactly as written: its value only means something at the moment of
 // copy, and a background write has no such moment.
-fn parse_ui_text_map(settings: &Settings, key: &str) -> HashMap<String, String> {
+pub(crate) fn parse_ui_text_map(settings: &Settings, key: &str) -> HashMap<String, String> {
     settings
         .ui_texts
         .get(key)
@@ -26370,7 +26370,7 @@ fn parse_ui_text_map(settings: &Settings, key: &str) -> HashMap<String, String> 
 // Same token shape as the frontend's VAR_RE: `{#{` + a body with no `}` or
 // newline, at most 200 characters, + `}#}`. Returns (start, end, trimmed
 // body) triples in source order, char-indexed and non-overlapping.
-fn find_var_tokens(text: &str) -> Vec<(usize, usize, String)> {
+pub(crate) fn find_var_tokens(text: &str) -> Vec<(usize, usize, String)> {
     let chars: Vec<char> = text.chars().collect();
     let n = chars.len();
     let mut out = Vec::new();
@@ -26407,7 +26407,7 @@ fn find_var_tokens(text: &str) -> Vec<(usize, usize, String)> {
 // an equals sign before it (or before the whole token with no bar) sets the
 // default. A bar with no usable options after it falls back to a plain
 // variable, same as parseVar.
-fn parse_var_token(token: &str) -> (String, Vec<String>, String) {
+pub(crate) fn parse_var_token(token: &str) -> (String, Vec<String>, String) {
     let raw = token.trim();
     let (name_part, options): (&str, Vec<String>) = match raw.find('|') {
         Some(bar) => {
@@ -26433,11 +26433,11 @@ fn parse_var_token(token: &str) -> (String, Vec<String>, String) {
 
 // A name written as /name\ is a reserved dynamic variable (date, uuid, the
 // clipboard, ...), meaningful only at the moment of copy.
-fn is_dyn_var_name(name: &str) -> bool {
+pub(crate) fn is_dyn_var_name(name: &str) -> bool {
     name.len() > 2 && name.starts_with('/') && name.ends_with('\\')
 }
 
-fn resolve_static_vars(text: &str, remembered: &HashMap<String, String>, fixed: &HashMap<String, String>) -> String {
+pub(crate) fn resolve_static_vars(text: &str, remembered: &HashMap<String, String>, fixed: &HashMap<String, String>) -> String {
     let tokens = find_var_tokens(text);
     if tokens.is_empty() {
         return text.to_string();
@@ -26469,7 +26469,7 @@ fn resolve_static_vars(text: &str, remembered: &HashMap<String, String>, fixed: 
 // Resolves a prompt's own text AND every rotating-entry variant the same way,
 // for a caller that is about to export or sync it, never the live prompt
 // itself.
-fn resolved_for_export(p: &Prompt, remembered: &HashMap<String, String>, fixed: &HashMap<String, String>) -> Prompt {
+pub(crate) fn resolved_for_export(p: &Prompt, remembered: &HashMap<String, String>, fixed: &HashMap<String, String>) -> Prompt {
     let mut rp = p.clone();
     rp.text = resolve_static_vars(&rp.text, remembered, fixed);
     rp.variants = rp.variants.iter().map(|v| resolve_static_vars(v, remembered, fixed)).collect();
@@ -26478,7 +26478,7 @@ fn resolved_for_export(p: &Prompt, remembered: &HashMap<String, String>, fixed: 
 
 // Export the prompt library only (incl. images/files): never app settings,
 // views or grid layout, so importing elsewhere can't clobber the user's setup.
-fn to_csv(prompts: &[Prompt]) -> String {
+pub(crate) fn to_csv(prompts: &[Prompt]) -> String {
     // pdfpage appended at the END, not inserted among the existing columns:
     // an older export re-imported here has no such column, and row.get() on a
     // short row already returns None (-> the same default 0), never shifting
@@ -26519,7 +26519,7 @@ fn to_csv(prompts: &[Prompt]) -> String {
     rows.join("\r\n")
 }
 
-fn to_txt(prompts: &[Prompt]) -> String {
+pub(crate) fn to_txt(prompts: &[Prompt]) -> String {
     use std::fmt::Write;
     let blocks: Vec<String> = prompts.iter().map(|p| {
         // Entries 2..n ride along inside the body itself, joined by the same
@@ -26586,46 +26586,46 @@ fn to_txt(prompts: &[Prompt]) -> String {
 // resurrected a trashed_at, would be a real footgun, not a feature). Rotating
 // entries ride as a real JSON array -- no VARIANT_SEP text marker needed here.
 #[derive(Serialize, Deserialize, Default)]
-struct ExportPrompt {
+pub(crate) struct ExportPrompt {
     #[serde(default)]
-    name: String,
+    pub(crate) name: String,
     #[serde(default)]
-    text: String,
+    pub(crate) text: String,
     #[serde(default)]
-    color: String,
+    pub(crate) color: String,
     #[serde(default)]
-    image: String,
+    pub(crate) image: String,
     #[serde(default)]
-    show_image: bool,
+    pub(crate) show_image: bool,
     #[serde(default)]
-    copy_image: bool,
+    pub(crate) copy_image: bool,
     #[serde(default)]
-    file_path: String,
+    pub(crate) file_path: String,
     #[serde(default)]
-    pdf_page: u32,
+    pub(crate) pdf_page: u32,
     #[serde(default)]
-    icon_path: String,
+    pub(crate) icon_path: String,
     #[serde(default)]
-    caption: String,
+    pub(crate) caption: String,
     #[serde(default)]
-    caption_size: u32,
+    pub(crate) caption_size: u32,
     #[serde(default)]
-    font: String,
+    pub(crate) font: String,
     #[serde(default)]
-    font_size: u32,
+    pub(crate) font_size: u32,
     #[serde(default)]
-    favorite: bool,
+    pub(crate) favorite: bool,
     #[serde(default)]
-    tags: Vec<String>,
+    pub(crate) tags: Vec<String>,
     #[serde(default)]
-    notes: String,
+    pub(crate) notes: String,
     #[serde(default)]
-    variants: Vec<String>,
+    pub(crate) variants: Vec<String>,
     #[serde(default)]
-    rotate_mode: String,
+    pub(crate) rotate_mode: String,
 }
 
-fn to_json(prompts: &[Prompt]) -> String {
+pub(crate) fn to_json(prompts: &[Prompt]) -> String {
     let items: Vec<ExportPrompt> = prompts
         .iter()
         .map(|p| ExportPrompt {
@@ -26654,7 +26654,7 @@ fn to_json(prompts: &[Prompt]) -> String {
     serde_json::to_string_pretty(&items).unwrap_or_default()
 }
 
-fn parse_json_data(content: &str) -> Result<ImportData, String> {
+pub(crate) fn parse_json_data(content: &str) -> Result<ImportData, String> {
     let items: Vec<ExportPrompt> = serde_json::from_str(content)
         .map_err(|_| "the file is not valid JSON".to_string())?;
     let mut data = ImportData::default();
@@ -26693,7 +26693,7 @@ fn parse_json_data(content: &str) -> Result<ImportData, String> {
 // again -- `false` (the default, matching a fresh install's "aus") drops it from
 // the export entirely rather than silently shipping ciphertext nobody asked for.
 // Pure and unit-testable apart from export_prompts' own file-dialog/format side effects.
-fn filter_export_secrets(prompts: Vec<Prompt>, include_secrets: bool) -> Vec<Prompt> {
+pub(crate) fn filter_export_secrets(prompts: Vec<Prompt>, include_secrets: bool) -> Vec<Prompt> {
     if include_secrets {
         prompts
     } else {
@@ -26766,7 +26766,7 @@ async fn export_prompts(
 // Reverses csv_cell's formula-injection guard: a field re-quoted with a leading
 // `'` in front of =, +, -, @, tab or CR gets that quote stripped back off, so a
 // round trip through this app's own export/import never gains a stray character.
-fn strip_formula_guard(s: String) -> String {
+pub(crate) fn strip_formula_guard(s: String) -> String {
     let mut chars = s.chars();
     if chars.next() == Some('\'') && matches!(chars.next(), Some('=' | '+' | '-' | '@' | '\t' | '\r')) {
         return s[1..].to_string();
@@ -26774,7 +26774,7 @@ fn strip_formula_guard(s: String) -> String {
     s
 }
 
-fn parse_csv(content: &str) -> Vec<Vec<String>> {
+pub(crate) fn parse_csv(content: &str) -> Vec<Vec<String>> {
     let mut rows = Vec::new();
     let mut row = Vec::new();
     let mut field = String::new();
@@ -26810,31 +26810,31 @@ fn parse_csv(content: &str) -> Vec<Vec<String>> {
     rows
 }
 
-struct ImportedPrompt {
-    name: String,
-    text: String,
-    color: String,
-    font: String,
-    font_size: u32,
-    file_path: String,
-    pdf_page: u32,
-    icon_path: String,
-    caption: String,
-    caption_size: u32,
-    show_image: bool,
-    copy_image: bool,
-    image: String,
-    tags: Vec<String>,
-    notes: String,
-    variants: Vec<String>,
-    rotate_mode: String,
+pub(crate) struct ImportedPrompt {
+    pub(crate) name: String,
+    pub(crate) text: String,
+    pub(crate) color: String,
+    pub(crate) font: String,
+    pub(crate) font_size: u32,
+    pub(crate) file_path: String,
+    pub(crate) pdf_page: u32,
+    pub(crate) icon_path: String,
+    pub(crate) caption: String,
+    pub(crate) caption_size: u32,
+    pub(crate) show_image: bool,
+    pub(crate) copy_image: bool,
+    pub(crate) image: String,
+    pub(crate) tags: Vec<String>,
+    pub(crate) notes: String,
+    pub(crate) variants: Vec<String>,
+    pub(crate) rotate_mode: String,
     // Only ever true coming from a JSON file (the one format that also
     // exports this) -- CSV/TXT parsers always set this false.
-    favorite: bool,
+    pub(crate) favorite: bool,
 }
 
 // "a,b , c" -> ["a", "b", "c"]. Used by both import parsers; empty parts drop out.
-fn split_tag_list(raw: &str) -> Vec<String> {
+pub(crate) fn split_tag_list(raw: &str) -> Vec<String> {
     raw.split(',')
         .map(|t| t.trim().to_string())
         .filter(|t| !t.is_empty())
@@ -26842,30 +26842,30 @@ fn split_tag_list(raw: &str) -> Vec<String> {
 }
 
 // 0 = follow settings, 1 = auto-fit, otherwise a fixed pixel size.
-fn clamp_font_size(size: u32) -> u32 {
+pub(crate) fn clamp_font_size(size: u32) -> u32 {
     if size <= 1 { size } else { size.clamp(10, 40) }
 }
 
-fn clamp_caption_size(size: u32) -> u32 {
+pub(crate) fn clamp_caption_size(size: u32) -> u32 {
     clamp_font_size(size)
 }
 
 #[derive(Default)]
-struct ImportData {
-    language: Option<String>,
-    theme: Option<String>,
-    tile_font: Option<String>,
-    tile_size: Option<u32>,
-    minimize_to_tray: Option<bool>,
-    auto_update: Option<bool>,
-    show_header: Option<bool>,
-    show_composer: Option<bool>,
-    view_defs: Vec<String>,
-    prompts: Vec<ImportedPrompt>,
+pub(crate) struct ImportData {
+    pub(crate) language: Option<String>,
+    pub(crate) theme: Option<String>,
+    pub(crate) tile_font: Option<String>,
+    pub(crate) tile_size: Option<u32>,
+    pub(crate) minimize_to_tray: Option<bool>,
+    pub(crate) auto_update: Option<bool>,
+    pub(crate) show_header: Option<bool>,
+    pub(crate) show_composer: Option<bool>,
+    pub(crate) view_defs: Vec<String>,
+    pub(crate) prompts: Vec<ImportedPrompt>,
 }
 
 // "key=value" lines from an @settings block.
-fn parse_settings_lines(lines: &str, data: &mut ImportData) {
+pub(crate) fn parse_settings_lines(lines: &str, data: &mut ImportData) {
     let flag = |v: &str| Some(v.trim() == "1");
     for line in lines.lines() {
         let line = line.trim();
@@ -26890,13 +26890,13 @@ fn parse_settings_lines(lines: &str, data: &mut ImportData) {
 }
 
 // The metadata keys a TXT block may end with (see to_txt).
-const TXT_META_KEYS: [&str; 12] = [
+pub(crate) const TXT_META_KEYS: [&str; 12] = [
     "rotatemode", "imagedata", "flags", "capsize", "caption", "icon", "pdfpage", "file", "style", "tags", "notes", "color",
 ];
 
 // True for a body line that would read as metadata or as the block rule once
 // written out: "@..." or a bare "---", behind any number of escaping backslashes.
-fn txt_line_needs_escape(line: &str) -> bool {
+pub(crate) fn txt_line_needs_escape(line: &str) -> bool {
     let bare = line.trim_start_matches('\\');
     bare.starts_with('@') || bare == "---"
 }
@@ -26904,14 +26904,14 @@ fn txt_line_needs_escape(line: &str) -> bool {
 // A body line that could be mistaken for metadata or for the block separator gets
 // one extra leading backslash; every other line, including one that merely starts
 // with a backslash, is written as it is.
-fn txt_escape_body(body: &str) -> String {
+pub(crate) fn txt_escape_body(body: &str) -> String {
     body.split('\n')
         .map(|l| if txt_line_needs_escape(l) { format!("\\{l}") } else { l.to_string() })
         .collect::<Vec<_>>()
         .join("\n")
 }
 
-fn txt_unescape_body(body: &str) -> String {
+pub(crate) fn txt_unescape_body(body: &str) -> String {
     body.split('\n')
         .map(|l| match l.strip_prefix('\\') {
             Some(rest) if txt_line_needs_escape(l) => rest,
@@ -26923,7 +26923,7 @@ fn txt_unescape_body(body: &str) -> String {
 
 // Splits a block body into its text and the trailing run of "@key value" lines
 // (known keys only, each at most once, the run ends at the first other line).
-fn split_txt_meta(body: &str) -> (String, HashMap<&'static str, String>) {
+pub(crate) fn split_txt_meta(body: &str) -> (String, HashMap<&'static str, String>) {
     let mut lines: Vec<&str> = body.split('\n').collect();
     let mut meta: HashMap<&'static str, String> = HashMap::new();
     while let Some(last) = lines.last() {
@@ -26938,7 +26938,7 @@ fn split_txt_meta(body: &str) -> (String, HashMap<&'static str, String>) {
     (lines.join("\n"), meta)
 }
 
-fn parse_txt(content: &str) -> ImportData {
+pub(crate) fn parse_txt(content: &str) -> ImportData {
     let mut data = ImportData::default();
     for block in content.replace("\r\n", "\n").split("\n\n---\n\n") {
         let block = block.trim();
@@ -27024,7 +27024,7 @@ fn parse_txt(content: &str) -> ImportData {
 // Create/update views from "Name|CxR" definition lines.
 
 // Our own CSV export format back into import data.
-fn parse_csv_data(content: &str) -> ImportData {
+pub(crate) fn parse_csv_data(content: &str) -> ImportData {
     let mut data = ImportData::default();
     for row in parse_csv(content).into_iter().skip(1) {
             if row.is_empty() || row[0].trim().is_empty() {
@@ -27082,14 +27082,14 @@ fn parse_csv_data(content: &str) -> ImportData {
 // The signature a prompt is de-duplicated by, on both the preview and the real
 // import: the two must always agree, or the preview's "new"/"duplicate" label
 // could lie about what actually happens on confirm.
-fn import_sig(name: &str, text: &str, file: &str, image: &str, copy: bool) -> String {
+pub(crate) fn import_sig(name: &str, text: &str, file: &str, image: &str, copy: bool) -> String {
     format!("{name}\u{1}{text}\u{1}{file}\u{1}{image}\u{1}{copy}")
 }
 
 // Parse already-read file bytes (the caller reads once, hashes those same
 // bytes for the changed-since-preview check, and parses them here: never a
 // second read of the file).
-fn parse_import_bytes(bytes: &[u8], path: &std::path::Path) -> Result<ImportData, String> {
+pub(crate) fn parse_import_bytes(bytes: &[u8], path: &std::path::Path) -> Result<ImportData, String> {
     let content = String::from_utf8(bytes.to_vec()).map_err(|_| "the file is not valid UTF-8 text".to_string())?;
     let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
     let data = match ext.as_str() {
@@ -27103,7 +27103,7 @@ fn parse_import_bytes(bytes: &[u8], path: &std::path::Path) -> Result<ImportData
     Ok(data)
 }
 
-fn import_file_hash(bytes: &[u8]) -> String {
+pub(crate) fn import_file_hash(bytes: &[u8]) -> String {
     use sha2::{Digest, Sha256};
     format!("{:x}", Sha256::digest(bytes))
 }
@@ -27115,15 +27115,15 @@ fn import_file_hash(bytes: &[u8]) -> String {
 // replacing it in that window) instead of silently importing something the
 // user never saw.
 #[derive(Serialize)]
-struct ImportPreviewItem {
-    name: String,
-    duplicate: bool,
+pub(crate) struct ImportPreviewItem {
+    pub(crate) name: String,
+    pub(crate) duplicate: bool,
 }
 #[derive(Serialize)]
-struct ImportPreview {
-    path: String,
-    hash: String,
-    items: Vec<ImportPreviewItem>,
+pub(crate) struct ImportPreview {
+    pub(crate) path: String,
+    pub(crate) hash: String,
+    pub(crate) items: Vec<ImportPreviewItem>,
 }
 #[tauri::command]
 async fn preview_import(app: AppHandle, state: State<'_, Db>) -> Result<ImportPreview, String> {
@@ -27157,7 +27157,7 @@ async fn preview_import(app: AppHandle, state: State<'_, Db>) -> Result<ImportPr
 // each parsed item and appends it, skipping one that is an exact duplicate of
 // one already present (so the original is kept, no duplicate buttons). A
 // malformed tag or note on one item never aborts the whole batch.
-fn append_imported_prompts(store: &mut Store, items: Vec<ImportedPrompt>) -> usize {
+pub(crate) fn append_imported_prompts(store: &mut Store, items: Vec<ImportedPrompt>) -> usize {
     let mut seen: std::collections::HashSet<String> = store
         .prompts
         .iter()
@@ -27272,23 +27272,23 @@ async fn import_prompts(app: AppHandle, state: State<'_, Db>, path: String, hash
 // A file past `importFolderMax` (ui_values, default 500) is left out the same
 // way, by stopping the scan rather than filtering the result afterwards, so
 // nothing skipped this way could later be picked by name and still get in.
-const IMPORT_FOLDER_EXTS: [&str; 2] = ["md", "txt"];
+pub(crate) const IMPORT_FOLDER_EXTS: [&str; 2] = ["md", "txt"];
 // A file bigger than this is almost certainly not a hand-written note; treated
 // the same as an unreadable one (grayed out with a reason, never imported).
-const MAX_IMPORT_FOLDER_FILE_BYTES: u64 = 2 * 1024 * 1024;
+pub(crate) const MAX_IMPORT_FOLDER_FILE_BYTES: u64 = 2 * 1024 * 1024;
 // The first line becomes the standalone note only while it stays this short --
 // past this length it clearly already IS the body, not a one-line summary.
-const IMPORT_FOLDER_NOTE_MAX_CHARS: usize = 120;
+pub(crate) const IMPORT_FOLDER_NOTE_MAX_CHARS: usize = 120;
 
-fn import_folder_depth_setting(store: &Store) -> u32 {
+pub(crate) fn import_folder_depth_setting(store: &Store) -> u32 {
     store.settings.ui_values.get("importFolderDepth").copied().unwrap_or(3.0).clamp(1.0, 5.0) as u32
 }
 
-fn import_folder_max_setting(store: &Store) -> usize {
+pub(crate) fn import_folder_max_setting(store: &Store) -> usize {
     store.settings.ui_values.get("importFolderMax").copied().unwrap_or(500.0).max(1.0) as usize
 }
 
-fn is_import_folder_file(path: &Path) -> bool {
+pub(crate) fn is_import_folder_file(path: &Path) -> bool {
     path.is_file()
         && path
             .extension()
@@ -27300,20 +27300,20 @@ fn is_import_folder_file(path: &Path) -> bool {
 // imported and why not otherwise -- the same read that decides this also
 // measures its size, so preview and confirm can never disagree about it.
 #[derive(Serialize, Clone)]
-struct FolderImportEntry {
-    rel_path: String,
-    name: String,
-    tags: Vec<String>,
-    size: u64,
-    readable: bool,
-    skip_reason: String,
+pub(crate) struct FolderImportEntry {
+    pub(crate) rel_path: String,
+    pub(crate) name: String,
+    pub(crate) tags: Vec<String>,
+    pub(crate) size: u64,
+    pub(crate) readable: bool,
+    pub(crate) skip_reason: String,
 }
 
 #[derive(Serialize)]
-struct FolderImportPreview {
-    dir: String,
-    items: Vec<FolderImportEntry>,
-    truncated: bool,
+pub(crate) struct FolderImportPreview {
+    pub(crate) dir: String,
+    pub(crate) items: Vec<FolderImportEntry>,
+    pub(crate) truncated: bool,
 }
 
 // Depth-first, alphabetical so the same folder always previews in the same
@@ -27321,7 +27321,7 @@ struct FolderImportPreview {
 // a child only happens while the CHILD's own depth still fits inside
 // `max_depth`, so a folder past the limit contributes no file at all, not
 // just the ones further down inside it.
-fn walk_import_folder(dir: &Path, depth: u32, max_depth: u32, max_files: usize, out: &mut Vec<PathBuf>) {
+pub(crate) fn walk_import_folder(dir: &Path, depth: u32, max_depth: u32, max_files: usize, out: &mut Vec<PathBuf>) {
     if out.len() >= max_files {
         return;
     }
@@ -27346,14 +27346,14 @@ fn walk_import_folder(dir: &Path, depth: u32, max_depth: u32, max_files: usize, 
 
 // One tag per subfolder level between `base` and the file, in order --
 // `base` itself never becomes a tag.
-fn import_folder_tags(base: &Path, path: &Path) -> Vec<String> {
+pub(crate) fn import_folder_tags(base: &Path, path: &Path) -> Vec<String> {
     path.parent()
         .and_then(|p| p.strip_prefix(base).ok())
         .map(|rel| rel.components().filter_map(|c| c.as_os_str().to_str()).map(|s| s.to_string()).collect())
         .unwrap_or_default()
 }
 
-fn import_folder_rel_path(base: &Path, path: &Path) -> String {
+pub(crate) fn import_folder_rel_path(base: &Path, path: &Path) -> String {
     path.strip_prefix(base).unwrap_or(path).to_string_lossy().replace('\\', "/")
 }
 
@@ -27361,7 +27361,7 @@ fn import_folder_rel_path(base: &Path, path: &Path) -> String {
 // follows it; the rest of the file becomes the prompt text. A first line
 // already long, or a file with nothing after it, stays the whole text with no
 // note extracted -- a one-line file has no "rest" to separate it from.
-fn split_folder_note(content: &str) -> (String, String) {
+pub(crate) fn split_folder_note(content: &str) -> (String, String) {
     let content = content.replace("\r\n", "\n");
     let mut lines = content.splitn(2, '\n');
     let first = lines.next().unwrap_or("");
@@ -27377,7 +27377,7 @@ fn split_folder_note(content: &str) -> (String, String) {
 // Checks readability the same way the confirm step will actually read the
 // file (size cap, then UTF-8), so a file shown as importable here can never
 // turn out unreadable at confirm time on the same, unchanged disk state.
-fn read_import_folder_file(path: &Path) -> Result<String, &'static str> {
+pub(crate) fn read_import_folder_file(path: &Path) -> Result<String, &'static str> {
     let meta = fs::metadata(path).map_err(|_| "read-error")?;
     if meta.len() > MAX_IMPORT_FOLDER_FILE_BYTES {
         return Err("too-large");
@@ -27386,7 +27386,7 @@ fn read_import_folder_file(path: &Path) -> Result<String, &'static str> {
     String::from_utf8(bytes).map_err(|_| "bad-encoding")
 }
 
-fn scan_import_folder(base: &Path, max_depth: u32, max_files: usize) -> (Vec<FolderImportEntry>, bool) {
+pub(crate) fn scan_import_folder(base: &Path, max_depth: u32, max_files: usize) -> (Vec<FolderImportEntry>, bool) {
     let mut paths = Vec::new();
     // One extra slot so the scan can tell "exactly max_files" and "more than
     // max_files" apart; the extra entry is dropped again right below.
@@ -27487,9 +27487,9 @@ async fn import_folder_files(app: AppHandle, state: State<'_, Db>, dir: String, 
 
 // Full backup: prompts + settings as one JSON file ("export/import everything").
 #[derive(Serialize, Deserialize)]
-struct Backup {
-    prompts: Vec<Prompt>,
-    settings: Settings,
+pub(crate) struct Backup {
+    pub(crate) prompts: Vec<Prompt>,
+    pub(crate) settings: Settings,
 }
 
 // ---------- Encrypted single-file backups ----------
@@ -27497,20 +27497,20 @@ struct Backup {
 // Modes 0/2 = fixed key (portable: any install restores it), 1/3 = user password
 // (Argon2id(password + pepper, salt)); 2/3 additionally deflate the JSON before
 // encrypting. Old plaintext .json backups are still read.
-const BACKUP_MAGIC: &[u8; 4] = b"PSB1";
+pub(crate) const BACKUP_MAGIC: &[u8; 4] = b"PSB1";
 // Fixed obfuscation key: MUST stay identical across all versions or old fixed-key
 // backups become unreadable. Not a secret (open source); it only keeps backups from
 // being plainly readable while staying restorable on any machine.
-const BACKUP_FIXED_KEY: [u8; 32] = [
+pub(crate) const BACKUP_FIXED_KEY: [u8; 32] = [
     0x8f, 0x2a, 0x41, 0xd7, 0x63, 0x1c, 0xb9, 0x05, 0xe4, 0x77, 0x38, 0xaa, 0x1e, 0x90, 0x6d, 0xc2,
     0x54, 0x0b, 0xf3, 0x82, 0x9c, 0x2d, 0x71, 0x48, 0xba, 0x66, 0x0f, 0xd5, 0x37, 0xe1, 0x59, 0x84,
 ];
 // Appended to the user's password before the KDF to harden brute force ("extend by code").
-const BACKUP_PEPPER: &[u8] = b"prompt-saver::backup::pepper::v1";
-const BACKUP_PW_MAX: usize = 128; // password length ceiling (bounds KDF input)
-const BACKUP_PW_KEY: &str = "backupPw"; // ui_texts slot (DPAPI-sealed via enc_str)
+pub(crate) const BACKUP_PEPPER: &[u8] = b"prompt-saver::backup::pepper::v1";
+pub(crate) const BACKUP_PW_MAX: usize = 128; // password length ceiling (bounds KDF input)
+pub(crate) const BACKUP_PW_KEY: &str = "backupPw"; // ui_texts slot (DPAPI-sealed via enc_str)
 
-fn backup_derive_key(password: &str, salt: &[u8]) -> Result<[u8; 32], String> {
+pub(crate) fn backup_derive_key(password: &str, salt: &[u8]) -> Result<[u8; 32], String> {
     use argon2::Argon2;
     let mut input = Vec::with_capacity(password.len() + BACKUP_PEPPER.len());
     input.extend_from_slice(password.as_bytes());
@@ -27525,7 +27525,7 @@ fn backup_derive_key(password: &str, salt: &[u8]) -> Result<[u8; 32], String> {
 // A backup is JSON, so deflating it before encryption shrinks the file to a
 // fraction. Compression must happen BEFORE encryption: ciphertext does not
 // compress. Modes 2/3 mark a deflated payload; 0/1 stay readable forever.
-fn deflate(raw: &[u8]) -> Result<Vec<u8>, String> {
+pub(crate) fn deflate(raw: &[u8]) -> Result<Vec<u8>, String> {
     use flate2::{write::DeflateEncoder, Compression};
     let mut enc = DeflateEncoder::new(Vec::new(), Compression::best());
     std::io::Write::write_all(&mut enc, raw).map_err(|e| e.to_string())?;
@@ -27535,17 +27535,17 @@ fn deflate(raw: &[u8]) -> Result<Vec<u8>, String> {
 // Ceiling for anything we decompress. The default backup key ships inside the exe, so
 // a valid-looking .psb is something anyone can craft: without a cap a few KB of
 // deflate expands until the process is killed. Far above any real library.
-const MAX_INFLATED: u64 = 512 * 1024 * 1024;
+pub(crate) const MAX_INFLATED: u64 = 512 * 1024 * 1024;
 
 // Pure predicate, kept apart from do_backup's own AppHandle/filesystem side
 // effects so the size threshold itself is directly unit-testable.
-fn too_large_to_restore(len: u64) -> bool {
+pub(crate) fn too_large_to_restore(len: u64) -> bool {
     len > MAX_INFLATED
 }
 
 // Decompress at most MAX_INFLATED bytes, refusing anything larger instead of growing
 // the buffer until the allocator gives up.
-fn inflate_capped<R: std::io::Read>(reader: R) -> Result<Vec<u8>, String> {
+pub(crate) fn inflate_capped<R: std::io::Read>(reader: R) -> Result<Vec<u8>, String> {
     use std::io::Read;
     let mut out = Vec::new();
     // cap + 1 byte: reaching the extra byte is what proves the stream was too big.
@@ -27559,12 +27559,12 @@ fn inflate_capped<R: std::io::Read>(reader: R) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
-fn inflate(packed: &[u8]) -> Result<Vec<u8>, String> {
+pub(crate) fn inflate(packed: &[u8]) -> Result<Vec<u8>, String> {
     use flate2::read::DeflateDecoder;
     inflate_capped(DeflateDecoder::new(packed))
 }
 
-fn backup_encrypt(plain: &[u8], password: Option<&str>) -> Result<Vec<u8>, String> {
+pub(crate) fn backup_encrypt(plain: &[u8], password: Option<&str>) -> Result<Vec<u8>, String> {
     use aes_gcm::aead::{Aead, KeyInit};
     use aes_gcm::{Aes256Gcm, Key, Nonce};
     use rand::RngCore;
@@ -27598,7 +27598,7 @@ fn backup_encrypt(plain: &[u8], password: Option<&str>) -> Result<Vec<u8>, Strin
 
 // Ok(Some(json)) = decrypted; Ok(None) = not our format (caller tries plaintext JSON);
 // Err("password-required") = a password-mode backup and no/failed key.
-fn backup_decrypt(data: &[u8], password: Option<&str>) -> Result<Option<Vec<u8>>, String> {
+pub(crate) fn backup_decrypt(data: &[u8], password: Option<&str>) -> Result<Option<Vec<u8>>, String> {
     use aes_gcm::aead::{Aead, KeyInit};
     use aes_gcm::{Aes256Gcm, Key, Nonce};
     if data.len() < 5 || &data[0..4] != BACKUP_MAGIC {
@@ -27640,17 +27640,17 @@ fn backup_decrypt(data: &[u8], password: Option<&str>) -> Result<Option<Vec<u8>>
 // with a backup password and must not accept one as a substitute. Format: b"PSE1" |
 // nonce(12) | AES-256-GCM ciphertext, base64. No compression: a prompt's text is far
 // too small for it to matter, and it would only add a length side channel.
-const SECRET_MAGIC: &[u8; 4] = b"PSE1";
-const SECRET_PEPPER: &[u8] = b"prompt-saver::secret::pepper::v1";
-const SECRET_PW_MAX: usize = 128;
+pub(crate) const SECRET_MAGIC: &[u8; 4] = b"PSE1";
+pub(crate) const SECRET_PEPPER: &[u8] = b"prompt-saver::secret::pepper::v1";
+pub(crate) const SECRET_PW_MAX: usize = 128;
 // ui_texts slots: the vault's own salt and a ciphertext of a known marker, used to
 // check a password before trusting it: never the password itself, and never
 // DPAPI-sealed on top, since neither value is a secret on its own.
-const SECRET_SALT_KEY: &str = "secretVaultSalt";
-const SECRET_VERIFY_KEY: &str = "secretVaultVerify";
-const SECRET_VERIFY_MARKER: &str = "prompt-saver-secret-vault-ok";
+pub(crate) const SECRET_SALT_KEY: &str = "secretVaultSalt";
+pub(crate) const SECRET_VERIFY_KEY: &str = "secretVaultVerify";
+pub(crate) const SECRET_VERIFY_MARKER: &str = "prompt-saver-secret-vault-ok";
 
-fn secret_derive_key(password: &str, salt: &[u8]) -> Result<[u8; 32], String> {
+pub(crate) fn secret_derive_key(password: &str, salt: &[u8]) -> Result<[u8; 32], String> {
     use argon2::Argon2;
     let mut input = Vec::with_capacity(password.len() + SECRET_PEPPER.len());
     input.extend_from_slice(password.as_bytes());
@@ -27662,7 +27662,7 @@ fn secret_derive_key(password: &str, salt: &[u8]) -> Result<[u8; 32], String> {
     Ok(key)
 }
 
-fn secret_encrypt(plain: &str, key: &[u8; 32]) -> String {
+pub(crate) fn secret_encrypt(plain: &str, key: &[u8; 32]) -> String {
     use aes_gcm::aead::{Aead, KeyInit};
     use aes_gcm::{Aes256Gcm, Key, Nonce};
     use rand::RngCore;
@@ -27682,7 +27682,7 @@ fn secret_encrypt(plain: &str, key: &[u8; 32]) -> String {
 // Wrong password and corrupt ciphertext fail the exact same way (AEAD tag
 // mismatch): there is no separate "wrong password" code path to get subtly
 // wrong, the cipher itself is the check.
-fn secret_decrypt(stored: &str, key: &[u8; 32]) -> Result<String, String> {
+pub(crate) fn secret_decrypt(stored: &str, key: &[u8; 32]) -> Result<String, String> {
     use aes_gcm::aead::{Aead, KeyInit};
     use aes_gcm::{Aes256Gcm, Key, Nonce};
     let raw = base64_decode(stored);
@@ -27705,7 +27705,7 @@ fn secret_decrypt(stored: &str, key: &[u8; 32]) -> Result<String, String> {
 // in memory again -- every copy, peek and rotation-changed path goes through
 // it instead of reading Prompt.text/variants directly, so none of them can
 // hand ciphertext to the clipboard or an event payload by mistake.
-fn reveal_secret_text(p: &Prompt, key: Option<[u8; 32]>) -> Result<(String, Vec<String>), String> {
+pub(crate) fn reveal_secret_text(p: &Prompt, key: Option<[u8; 32]>) -> Result<(String, Vec<String>), String> {
     if !p.secret {
         return Ok((p.text.clone(), p.variants.clone()));
     }
@@ -27726,7 +27726,7 @@ fn reveal_secret_text(p: &Prompt, key: Option<[u8; 32]>) -> Result<(String, Vec<
 // confidential right now: keeps an already-encrypted value as-is instead of
 // encrypting it a second time, and encrypts a plain one so it never lands on
 // disk unencrypted under a confidential entry.
-fn secret_encrypt_if_plain(value: &str, key: &[u8; 32]) -> String {
+pub(crate) fn secret_encrypt_if_plain(value: &str, key: &[u8; 32]) -> String {
     if secret_decrypt(value, key).is_ok() {
         value.to_string()
     } else {
@@ -27739,15 +27739,15 @@ fn secret_encrypt_if_plain(value: &str, key: &[u8; 32]) -> String {
 // default, 0 = only on quit). Every confidential entry shares this one key; nothing about it is
 // per-entry, matching "own salt, own verification value" for the FEATURE, not
 // for each prompt.
-struct SecretSession {
-    key: [u8; 32],
-    unlocked_at: std::time::Instant,
+pub(crate) struct SecretSession {
+    pub(crate) key: [u8; 32],
+    pub(crate) unlocked_at: std::time::Instant,
 }
-static SECRET_SESSION: Mutex<Option<SecretSession>> = Mutex::new(None);
+pub(crate) static SECRET_SESSION: Mutex<Option<SecretSession>> = Mutex::new(None);
 
-const SECRET_TIMEOUT_DEFAULT_MIN: f64 = 15.0;
+pub(crate) const SECRET_TIMEOUT_DEFAULT_MIN: f64 = 15.0;
 
-fn secret_timeout_min(settings: &Settings) -> u32 {
+pub(crate) fn secret_timeout_min(settings: &Settings) -> u32 {
     settings
         .ui_values
         .get("secretTimeoutMin")
@@ -27758,7 +27758,7 @@ fn secret_timeout_min(settings: &Settings) -> u32 {
 
 // None means locked: no session yet, or the idle timeout already elapsed. A
 // timeout of 0 means "until quit" and is never checked here.
-fn secret_session_key(timeout_min: u32) -> Option<[u8; 32]> {
+pub(crate) fn secret_session_key(timeout_min: u32) -> Option<[u8; 32]> {
     let mut guard = SECRET_SESSION.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(sess) = guard.as_ref() {
         if timeout_min > 0 && sess.unlocked_at.elapsed().as_secs() >= (timeout_min as u64) * 60 {
@@ -27771,9 +27771,9 @@ fn secret_session_key(timeout_min: u32) -> Option<[u8; 32]> {
 }
 
 #[derive(Serialize)]
-struct SecretVaultStatus {
-    configured: bool,
-    unlocked: bool,
+pub(crate) struct SecretVaultStatus {
+    pub(crate) configured: bool,
+    pub(crate) unlocked: bool,
 }
 
 #[tauri::command]
@@ -27792,7 +27792,7 @@ fn secret_vault_status(state: State<Db>) -> SecretVaultStatus {
 }
 
 // Verifies a password against the stored salt and verifier and returns the key.
-fn secret_vault_verify(password: &str, salt_b64: &str, verify_b64: &str) -> Result<[u8; 32], String> {
+pub(crate) fn secret_vault_verify(password: &str, salt_b64: &str, verify_b64: &str) -> Result<[u8; 32], String> {
     let salt = base64_decode(salt_b64);
     if salt.is_empty() {
         return Err("corrupt-vault".to_string());
@@ -27807,7 +27807,7 @@ fn secret_vault_verify(password: &str, salt_b64: &str, verify_b64: &str) -> Resu
 // (never replace an existing salt: it would orphan every ciphertext). On a failed
 // save both slots return to what they held, so no unlocked state can ever rest on
 // a salt that is not durable.
-fn secret_vault_first_setup(
+pub(crate) fn secret_vault_first_setup(
     settings: &mut Settings,
     salt: &[u8],
     verify: String,
@@ -27835,7 +27835,7 @@ fn secret_vault_first_setup(
 // Converts a copy of one prompt to the requested confidential state, every field
 // authenticated or encrypted before anything is returned. None = already in that
 // state. The live prompt is never touched here.
-fn secret_convert_prompt(p: &Prompt, secret: bool, key: &[u8; 32]) -> Result<Option<Prompt>, String> {
+pub(crate) fn secret_convert_prompt(p: &Prompt, secret: bool, key: &[u8; 32]) -> Result<Option<Prompt>, String> {
     if secret == p.secret {
         return Ok(None);
     }
@@ -27855,7 +27855,7 @@ fn secret_convert_prompt(p: &Prompt, secret: bool, key: &[u8; 32]) -> Result<Opt
 
 // Swaps the converted prompt in, persists, and puts the original back when the
 // save fails, so a failed conversion can never ride along on a later save.
-fn apply_prompt_secret(
+pub(crate) fn apply_prompt_secret(
     store: &mut Store,
     id: &str,
     secret: bool,
@@ -28010,7 +28010,7 @@ async fn has_backup_password(state: State<'_, Db>) -> Result<bool, String> {
 }
 
 // The clear backup password for this machine (sealed → dec_str), if one is set.
-fn stored_backup_password(store: &Store) -> Option<String> {
+pub(crate) fn stored_backup_password(store: &Store) -> Option<String> {
     store
         .settings
         .ui_texts
@@ -28052,17 +28052,17 @@ async fn export_all(app: AppHandle, state: State<'_, Db>) -> Result<usize, Strin
 
 // What a full import restored: the UI names the file in its confirmation.
 #[derive(Serialize)]
-struct ImportSummary {
-    name: String,
-    count: usize,
+pub(crate) struct ImportSummary {
+    pub(crate) name: String,
+    pub(crate) count: usize,
     // Prompt hotkeys the restore had to give up (unusable or already bound).
-    dropped_hotkeys: usize,
+    pub(crate) dropped_hotkeys: usize,
     // The file carried its own (foreign-machine, undecryptable-here) backup
     // password, which was discarded in favour of this machine's own.
-    backup_pw_dropped: bool,
+    pub(crate) backup_pw_dropped: bool,
     // Confidential entries in the trash were sealed with a vault key that the
     // imported prompt set replaced.
-    vault_mismatch: bool,
+    pub(crate) vault_mismatch: bool,
 }
 
 #[tauri::command]
@@ -28079,23 +28079,23 @@ async fn pick_backup_file(app: AppHandle) -> Option<String> {
 // separate, smaller pair of commands rather than export_all/import_all's
 // "settings" scope, which carries the WHOLE Settings struct (window
 // geometry, the hotkey, ...).
-const MAX_SETTINGS_IMPORT_BYTES: u64 = 2 * 1024 * 1024;
+pub(crate) const MAX_SETTINGS_IMPORT_BYTES: u64 = 2 * 1024 * 1024;
 
 #[derive(serde::Serialize, serde::Deserialize, Default)]
-struct SettingsOnlyExport {
+pub(crate) struct SettingsOnlyExport {
     #[serde(default)]
-    ui_flags: HashMap<String, bool>,
+    pub(crate) ui_flags: HashMap<String, bool>,
     #[serde(default)]
-    ui_values: HashMap<String, f64>,
+    pub(crate) ui_values: HashMap<String, f64>,
     #[serde(default)]
-    ui_texts: HashMap<String, String>,
+    pub(crate) ui_texts: HashMap<String, String>,
 }
 
 // The settings-only export copy. Everything an import would skip is left out
 // of the file too: the receiver's password hash and certificate, the sealed
 // backup password, network and machine switches. The vault's salt and
 // verifier stay in (not secrets).
-fn settings_only_payload(settings: &Settings) -> SettingsOnlyExport {
+pub(crate) fn settings_only_payload(settings: &Settings) -> SettingsOnlyExport {
     let mut payload = SettingsOnlyExport {
         ui_flags: settings.ui_flags.clone(),
         ui_values: settings.ui_values.clone(),
@@ -28129,7 +28129,7 @@ async fn pick_settings_import_file(app: AppHandle) -> Option<String> {
     file_dialog(&app).add_filter("JSON", &["json"]).pick_file().map(|p| p.display().to_string())
 }
 
-fn parse_settings_only(raw: &[u8]) -> Result<SettingsOnlyExport, String> {
+pub(crate) fn parse_settings_only(raw: &[u8]) -> Result<SettingsOnlyExport, String> {
     let text = std::str::from_utf8(raw).map_err(|_| "bad-file".to_string())?;
     // A wholly empty or non-object file (no ui_flags/ui_values/ui_texts key at
     // all) is rejected too -- this ONLY accepts a file this same export produced,
@@ -28147,7 +28147,7 @@ fn parse_settings_only(raw: &[u8]) -> Result<SettingsOnlyExport, String> {
 // Counts how many of the file's own rows would actually change against the
 // live store, without writing anything -- what the import preview shows before
 // the user confirms.
-fn settings_import_diff(current: &Settings, incoming: &SettingsOnlyExport) -> (usize, usize) {
+pub(crate) fn settings_import_diff(current: &Settings, incoming: &SettingsOnlyExport) -> (usize, usize) {
     let mut changed = 0;
     let total = incoming.ui_flags.len() + incoming.ui_values.len() + incoming.ui_texts.len();
     for (k, v) in &incoming.ui_flags {
@@ -28176,7 +28176,7 @@ fn settings_import_diff(current: &Settings, incoming: &SettingsOnlyExport) -> (u
 // password hash and certificate values come in through the same helper the
 // generic setters use; every other `remote*` row is covered by the prefix, so
 // a receiver setting added later is denied without touching this list.
-const IMPORT_DENIED_FLAGS: [&str; 12] = [
+pub(crate) const IMPORT_DENIED_FLAGS: [&str; 12] = [
     "clipWatcher",
     "remoteApi",
     "remoteNetworkFilter",
@@ -28193,31 +28193,31 @@ const IMPORT_DENIED_FLAGS: [&str; 12] = [
     "clipSkipSecrets",
 ];
 
-fn is_import_denied_flag(key: &str) -> bool {
+pub(crate) fn is_import_denied_flag(key: &str) -> bool {
     key.starts_with("remote") || IMPORT_DENIED_FLAGS.contains(&key)
 }
 
-fn is_import_denied_value(key: &str) -> bool {
+pub(crate) fn is_import_denied_value(key: &str) -> bool {
     key.starts_with("remote")
 }
 
 // Text rows that belong to this machine: the receiver's password hash,
 // allowed ranges and certificate, the sealed backup password and the folder
 // authority keys (see PROTECTED_FOLDER_KEYS).
-fn is_machine_text_key(key: &str) -> bool {
+pub(crate) fn is_machine_text_key(key: &str) -> bool {
     remote::is_remote_secret_key(key) || key.starts_with("remote") || is_protected_folder_key(key) || key == BACKUP_PW_KEY
 }
 
 // The confidential-prompt vault's salt and verifier. Not secrets, but the
 // prompts on this machine are sealed with a key derived from THIS salt, so a
 // foreign one would make every confidential prompt unreadable.
-fn is_vault_key(key: &str) -> bool {
+pub(crate) fn is_vault_key(key: &str) -> bool {
     key == SECRET_SALT_KEY || key == SECRET_VERIFY_KEY
 }
 
 // Copies the vault salt and verifier of `from` into `to`, overwriting what `to`
 // has. A `from` without them leaves `to` untouched.
-fn carry_vault_keys(from: &Settings, to: &mut Settings) {
+pub(crate) fn carry_vault_keys(from: &Settings, to: &mut Settings) {
     for key in [SECRET_SALT_KEY, SECRET_VERIFY_KEY] {
         if let Some(v) = from.ui_texts.get(key) {
             to.ui_texts.insert(key.to_string(), v.clone());
@@ -28225,21 +28225,21 @@ fn carry_vault_keys(from: &Settings, to: &mut Settings) {
     }
 }
 
-fn clear_vault_keys(settings: &mut Settings) {
+pub(crate) fn clear_vault_keys(settings: &mut Settings) {
     settings.ui_texts.remove(SECRET_SALT_KEY);
     settings.ui_texts.remove(SECRET_VERIFY_KEY);
 }
 
-fn has_vault_keys(settings: &Settings) -> bool {
+pub(crate) fn has_vault_keys(settings: &Settings) -> bool {
     settings.ui_texts.contains_key(SECRET_SALT_KEY) || settings.ui_texts.contains_key(SECRET_VERIFY_KEY)
 }
 
-fn vault_keys_differ(a: &Settings, b: &Settings) -> bool {
+pub(crate) fn vault_keys_differ(a: &Settings, b: &Settings) -> bool {
     [SECRET_SALT_KEY, SECRET_VERIFY_KEY].iter().any(|k| a.ui_texts.get(*k) != b.ui_texts.get(*k))
 }
 
 // Removes every denied row from a settings block that came from a file.
-fn drop_machine_rows(incoming: &mut Settings) {
+pub(crate) fn drop_machine_rows(incoming: &mut Settings) {
     incoming.ui_flags.retain(|k, _| !is_import_denied_flag(k));
     incoming.ui_values.retain(|k, _| !is_import_denied_value(k));
     incoming.ui_texts.retain(|k, _| !is_machine_text_key(k));
@@ -28248,7 +28248,7 @@ fn drop_machine_rows(incoming: &mut Settings) {
 // After a whole Settings block was replaced by an imported one: every denied
 // row goes back to what `local` had (or stays absent), plus the autostart
 // registration flag. Hotkeys, themes and layouts do come along.
-fn keep_machine_settings(local: &Settings, incoming: &mut Settings) {
+pub(crate) fn keep_machine_settings(local: &Settings, incoming: &mut Settings) {
     drop_machine_rows(incoming);
     for (k, v) in &local.ui_flags {
         if is_import_denied_flag(k) {
@@ -28277,7 +28277,7 @@ fn keep_machine_settings(local: &Settings, incoming: &mut Settings) {
 // before it is diffed or applied, so preview and apply always agree on what
 // would change. The vault rows are dropped too but not counted: they are never
 // something the user chose.
-fn strip_denied_import_keys(incoming: &mut SettingsOnlyExport) -> usize {
+pub(crate) fn strip_denied_import_keys(incoming: &mut SettingsOnlyExport) -> usize {
     let count = |i: &SettingsOnlyExport| i.ui_flags.len() + i.ui_values.len() + i.ui_texts.len();
     incoming.ui_texts.retain(|k, _| !is_vault_key(k));
     let before = count(incoming);
@@ -28300,7 +28300,7 @@ async fn preview_settings_import(state: State<'_, Db>, path: String) -> Result<(
 // Merges the file's rows into `settings` and persists through `persist`. A
 // failed save puts the previous settings back and reports save-failed, so a
 // settings block that is not on disk is never left active.
-fn merge_settings_only(
+pub(crate) fn merge_settings_only(
     settings: &mut Settings,
     incoming: SettingsOnlyExport,
     persist: impl FnOnce(&Settings) -> bool,
@@ -28330,7 +28330,7 @@ fn merge_settings_only(
 // What every import re-applies without a restart, for the settings that just
 // landed: theme, screenshot exclusion, global hotkeys, tray, the pill windows
 // and the error log's size cap.
-fn refresh_after_import(app: &AppHandle, settings: &Settings) {
+pub(crate) fn refresh_after_import(app: &AppHandle, settings: &Settings) {
     push_theme(app, settings);
     apply_capture_exclusion_all(app, capture_excluded(settings));
     rearm_hotkeys(app);
@@ -28365,7 +28365,7 @@ async fn apply_settings_import(app: AppHandle, state: State<'_, Db>, path: Strin
 // AppHandle-dependent side of the contract). Returns (prompt count, dropped
 // hotkeys, whether the backup's own backup-password was dropped in favour of
 // this machine's).
-fn apply_import(store: &mut Store, backup: Backup, want_data: bool, want_settings: bool) -> (usize, usize, bool) {
+pub(crate) fn apply_import(store: &mut Store, backup: Backup, want_data: bool, want_settings: bool) -> (usize, usize, bool) {
     if want_data {
         store.prompts = backup.prompts;
         // A backup written by hand could miss ids; keep every prompt addressable.
@@ -28442,7 +28442,7 @@ fn apply_import(store: &mut Store, backup: Backup, want_data: bool, want_setting
 // to be written. A failed write puts the ENTIRE previous state back (prompts,
 // settings and both lock flags), so memory never holds an import the disk does
 // not, and the caller reports a failure only for an import that is not active.
-fn run_import(
+pub(crate) fn run_import(
     store: &mut Store,
     backup: Backup,
     want_data: bool,
@@ -28491,7 +28491,7 @@ fn run_import(
 // Writes the halves an import touched in one database transaction. No JSON
 // fallback: that file pair cannot be replaced atomically, so an import that
 // cannot reach the database fails and changes nothing.
-fn db_write_import(conn: &mut Connection, store: &Store, prompts: &[Prompt], write_prompts: bool, write_settings: bool) -> rusqlite::Result<()> {
+pub(crate) fn db_write_import(conn: &mut Connection, store: &Store, prompts: &[Prompt], write_prompts: bool, write_settings: bool) -> rusqlite::Result<()> {
     let mut written = store.written.borrow_mut();
     match (write_prompts, write_settings) {
         (true, true) => db_write_prompts_and_settings(conn, prompts, &store.settings, &mut written),
@@ -28501,7 +28501,7 @@ fn db_write_import(conn: &mut Connection, store: &Store, prompts: &[Prompt], wri
     }
 }
 
-fn save_import(app: &AppHandle, store: &Store, write_prompts: bool, write_settings: bool) -> bool {
+pub(crate) fn save_import(app: &AppHandle, store: &Store, write_prompts: bool, write_settings: bool) -> bool {
     if data_dir_write_blocked(app) || (store.prompts_locked && write_prompts) {
         return false;
     }
@@ -28599,7 +28599,7 @@ async fn import_all(
 
 // ---------- Window geometry ----------
 
-fn point_on_monitor(monitors: &[tauri::Monitor], x: i32, y: i32) -> bool {
+pub(crate) fn point_on_monitor(monitors: &[tauri::Monitor], x: i32, y: i32) -> bool {
     monitors.iter().any(|m| {
         let p = m.position();
         let s = m.size();
@@ -28614,11 +28614,11 @@ fn point_on_monitor(monitors: &[tauri::Monitor], x: i32, y: i32) -> bool {
 // Keep in sync with tauri.conf.json's main-window minWidth/minHeight. The OS/WebView2
 // minSize constraint only guards interactive resize-dragging, not a programmatic
 // set_size() call: resolve_geometry's first-start branch has to floor itself.
-const MAIN_WIN_MIN_W: u32 = 680;
-const MAIN_WIN_MIN_H: u32 = 460;
+pub(crate) const MAIN_WIN_MIN_W: u32 = 680;
+pub(crate) const MAIN_WIN_MIN_H: u32 = 460;
 
 // Center a window of the given LOGICAL size on the primary monitor.
-fn centered_on_primary(main: &tauri::WebviewWindow, width: u32, height: u32) -> WindowGeom {
+pub(crate) fn centered_on_primary(main: &tauri::WebviewWindow, width: u32, height: u32) -> WindowGeom {
     if let Some(m) = main.primary_monitor().ok().flatten() {
         let p = m.position();
         let s = m.size();
@@ -28635,7 +28635,7 @@ fn centered_on_primary(main: &tauri::WebviewWindow, width: u32, height: u32) -> 
 // "no cap" if none is given (lookup failed): the multiplication that feeds
 // zoom_min_size is already bounded by the 75-300% zoom clamp, so an unread
 // monitor never produces a runaway size, just an un-clamped (bounded) one.
-fn monitor_cap(monitor: Option<tauri::window::Monitor>) -> (u32, u32) {
+pub(crate) fn monitor_cap(monitor: Option<tauri::window::Monitor>) -> (u32, u32) {
     monitor
         .map(|m| {
             let s = m.size();
@@ -28649,7 +28649,7 @@ fn monitor_cap(monitor: Option<tauri::window::Monitor>) -> (u32, u32) {
 
 // First start: 50% of the primary monitor, centered. Afterwards the saved size
 // is kept (capped at the monitor); if its monitor is gone, re-center.
-fn resolve_geometry(main: &tauri::WebviewWindow, saved: Option<WindowGeom>) -> WindowGeom {
+pub(crate) fn resolve_geometry(main: &tauri::WebviewWindow, saved: Option<WindowGeom>) -> WindowGeom {
     // Hard cap: the window can never start larger than the primary monitor.
     let cap = monitor_cap(main.primary_monitor().ok().flatten());
     if let Some(mut g) = saved {
@@ -28672,7 +28672,7 @@ fn resolve_geometry(main: &tauri::WebviewWindow, saved: Option<WindowGeom>) -> W
 }
 
 // Persist a partial geometry update in memory (flushed to disk on close).
-fn update_geom<F: FnOnce(&mut WindowGeom)>(handle: &AppHandle, f: F) {
+pub(crate) fn update_geom<F: FnOnce(&mut WindowGeom)>(handle: &AppHandle, f: F) {
     if let Some(state) = handle.try_state::<Db>() {
         // try_lock, never block: this runs on the event-loop thread for every move/
         // resize tick. If the store is busy (e.g. a backup VACUUM holds the lock), skip
@@ -28698,14 +28698,14 @@ fn update_geom<F: FnOnce(&mut WindowGeom)>(handle: &AppHandle, f: F) {
 // throughout this file have no `State<Db>` handy: set once at startup from
 // the persisted setting (see `load_store`'s caller) and again on every
 // `set_ui_value("errorLogKeepKb", ..)`, read here without touching the DB.
-static ERROR_LOG_KEEP_BYTES: AtomicU64 = AtomicU64::new(256 * 1024);
+pub(crate) static ERROR_LOG_KEEP_BYTES: AtomicU64 = AtomicU64::new(256 * 1024);
 
 // Name of the env var `crash_log_path` checks before falling back to the real
 // %APPDATA% location. Checked unconditionally (not only in a test build) so a test
 // can prove the redirect actually took effect on the exact value `append_crash_log`
 // reads, rather than proving a separate compile-time flag that could drift out of
 // sync with it.
-const CRASH_LOG_DIR_ENV: &str = "PROMPT_SAVER_TEST_CRASH_LOG_DIR";
+pub(crate) const CRASH_LOG_DIR_ENV: &str = "PROMPT_SAVER_TEST_CRASH_LOG_DIR";
 
 // Where `append_crash_log` writes. `cargo test` must never touch the real file:
 // dozens of call sites throughout this module fire during entirely unrelated tests
@@ -28715,7 +28715,7 @@ const CRASH_LOG_DIR_ENV: &str = "PROMPT_SAVER_TEST_CRASH_LOG_DIR";
 // a per-process temp folder, the same `ps-<name>test-<pid>` shape the recording
 // tests already use for their own scratch files, and every later call, from any
 // thread, just reads the now-stable value; `Once` keeps that seeding itself race-free.
-fn crash_log_path() -> PathBuf {
+pub(crate) fn crash_log_path() -> PathBuf {
     #[cfg(test)]
     {
         static INIT: std::sync::Once = std::sync::Once::new();
@@ -28744,13 +28744,13 @@ fn crash_log_path() -> PathBuf {
 // module: a lock nobody will ever release (a stale marker left by a crash) must
 // never hang the app over a log line forever, so acquiring gives up after a
 // short wait and proceeds unlocked rather than freezing the caller.
-struct CrashLogLock {
-    lock_path: PathBuf,
-    held: bool,
+pub(crate) struct CrashLogLock {
+    pub(crate) lock_path: PathBuf,
+    pub(crate) held: bool,
 }
 
 impl CrashLogLock {
-    fn acquire(path: &Path) -> Self {
+    pub(crate) fn acquire(path: &Path) -> Self {
         let lock_path = path.with_extension("log.lock");
         let deadline = std::time::Instant::now() + Duration::from_secs(2);
         loop {
@@ -28771,7 +28771,7 @@ impl Drop for CrashLogLock {
     }
 }
 
-fn with_crash_log_lock<T>(path: &Path, f: impl FnOnce() -> T) -> T {
+pub(crate) fn with_crash_log_lock<T>(path: &Path, f: impl FnOnce() -> T) -> T {
     let _lock = CrashLogLock::acquire(path);
     f()
 }
@@ -28786,7 +28786,7 @@ fn with_crash_log_lock<T>(path: &Path, f: impl FnOnce() -> T) -> T {
 // self-locking so a test can prove the trimming against a private file it owns)
 // and from inside `append_crash_log`'s own lock (`rotate_log_file_locked`, which
 // must not try to acquire the same lock twice).
-fn rotate_log_file_locked(path: &Path, cap: usize) {
+pub(crate) fn rotate_log_file_locked(path: &Path, cap: usize) {
     let Ok(contents) = fs::read(path) else { return };
     if contents.len() <= cap {
         return;
@@ -28811,7 +28811,7 @@ fn rotate_log_file_locked(path: &Path, cap: usize) {
 // `append_line_locked`, which shares its own lock across the rotation and the
 // append that follows it rather than acquiring the lock twice.
 #[cfg(test)]
-fn rotate_log_file(path: &Path, cap: usize) {
+pub(crate) fn rotate_log_file(path: &Path, cap: usize) {
     with_crash_log_lock(path, || rotate_log_file_locked(path, cap));
 }
 
@@ -28820,7 +28820,7 @@ fn rotate_log_file(path: &Path, cap: usize) {
 // same time, and asserting exact content against that shared, moving target
 // would be a race, not a test, so this takes an explicit path for the same
 // reason `rotate_log_file` does. Shared by `append_crash_log` and its tests.
-fn append_line_locked(path: &Path, cap: usize, line: &str) {
+pub(crate) fn append_line_locked(path: &Path, cap: usize, line: &str) {
     if let Some(dir) = path.parent() {
         let _ = fs::create_dir_all(dir);
     }
@@ -28841,7 +28841,7 @@ fn append_line_locked(path: &Path, cap: usize, line: &str) {
 // newest, rather than deleting the whole file, so a real failure a user just hit
 // is never the one line that gets thrown away. Best-effort: every step is ignored
 // on failure.
-fn append_crash_log(msg: &str) {
+pub(crate) fn append_crash_log(msg: &str) {
     let path = crash_log_path();
     let cap = ERROR_LOG_KEEP_BYTES.load(std::sync::atomic::Ordering::Relaxed) as usize;
     let secs = SystemTime::now()
@@ -28856,14 +28856,14 @@ fn append_crash_log(msg: &str) {
 // to resolve on the spot: `data_dir` and `sync_dir_path` record whatever they last
 // resolved here instead, as a side effect, so a log line can be scrubbed without
 // adding an `AppHandle` parameter to every one of those call sites.
-static LAST_KNOWN_DATA_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
-static LAST_KNOWN_SYNC_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
+pub(crate) static LAST_KNOWN_DATA_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
+pub(crate) static LAST_KNOWN_SYNC_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
 
 // Every folder this build knows the identity of, longest path first so a folder
 // nested inside another (the sync folder inside the data folder, the data folder
 // inside the user profile) is matched by its own, more specific placeholder before
 // the outer one gets a chance to eat part of it.
-fn known_path_placeholders() -> Vec<(PathBuf, &'static str)> {
+pub(crate) fn known_path_placeholders() -> Vec<(PathBuf, &'static str)> {
     let mut out: Vec<(PathBuf, &'static str)> = Vec::new();
     if let Some(p) = LAST_KNOWN_SYNC_DIR.lock().unwrap_or_else(|e| e.into_inner()).clone() {
         out.push((p, "<sync>"));
@@ -28886,7 +28886,7 @@ fn known_path_placeholders() -> Vec<(PathBuf, &'static str)> {
 // swap: ASCII-only lowercasing never changes a string's byte length, so the
 // indices found against the lowercased copy still cut the original in the right
 // place.
-fn replace_case_insensitive(haystack: &str, needle: &str, replacement: &str) -> String {
+pub(crate) fn replace_case_insensitive(haystack: &str, needle: &str, replacement: &str) -> String {
     if needle.is_empty() {
         return haystack.to_string();
     }
@@ -28907,7 +28907,7 @@ fn replace_case_insensitive(haystack: &str, needle: &str, replacement: &str) -> 
 // Swaps every folder this build recognises for its placeholder, tried both with
 // backslashes and with the forward slashes a cross-platform crate's own error text
 // sometimes uses in place of them.
-fn replace_known_dirs(line: &str, dirs: &[(PathBuf, &'static str)]) -> String {
+pub(crate) fn replace_known_dirs(line: &str, dirs: &[(PathBuf, &'static str)]) -> String {
     let mut out = line.to_string();
     for (dir, placeholder) in dirs {
         let win = dir.to_string_lossy().into_owned();
@@ -28927,7 +28927,7 @@ fn replace_known_dirs(line: &str, dirs: &[(PathBuf, &'static str)]) -> String {
 // (`D:\...`), a UNC share (`\\server\...`), or Unix-style with at least two
 // segments (`/mnt/data/...`), and it actually carries a separator beyond that
 // root so a bare `C:` or `/` is left alone.
-fn looks_like_a_path(s: &str) -> bool {
+pub(crate) fn looks_like_a_path(s: &str) -> bool {
     let bytes = s.as_bytes();
     let drive_rooted = bytes.len() > 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && (bytes[2] == b'\\' || bytes[2] == b'/');
     let unc = s.starts_with(r"\\") && s.len() > 2;
@@ -28938,7 +28938,7 @@ fn looks_like_a_path(s: &str) -> bool {
 // Whether `line[at..]` starts a path, and if it is preceded by an ASCII
 // letter or digit (so a bare "D:\" is only ever recognised at a real word
 // boundary, never mid-word).
-fn path_starts_at(line: &str, at: usize) -> bool {
+pub(crate) fn path_starts_at(line: &str, at: usize) -> bool {
     if at > 0 {
         let prev = line[..at].chars().next_back().unwrap_or(' ');
         if prev.is_ascii_alphanumeric() {
@@ -28960,7 +28960,7 @@ fn path_starts_at(line: &str, at: usize) -> bool {
 // closing quote (spaces and all); an unquoted path runs to the next quote
 // character or the end of the line, since nothing in a Windows path itself
 // ends it earlier than that.
-fn shorten_stray_paths(line: &str) -> String {
+pub(crate) fn shorten_stray_paths(line: &str) -> String {
     let mut out = String::with_capacity(line.len());
     let mut i = 0;
     while i < line.len() {
@@ -29001,7 +29001,7 @@ fn shorten_stray_paths(line: &str) -> String {
 // catch-all for anything shaped like a path that is not one of them. Shared by
 // `append_crash_log`, which scrubs as it writes, and `strip_user_path_lines`,
 // which re-applies it once to whatever an older build already wrote.
-fn scrub_log_line(line: &str) -> String {
+pub(crate) fn scrub_log_line(line: &str) -> String {
     shorten_stray_paths(&replace_known_dirs(line, &known_path_placeholders()))
 }
 
@@ -29020,7 +29020,7 @@ fn scrub_log_line(line: &str) -> String {
 // Rewritten atomically (temp file + rename) under the same lock
 // `append_crash_log` uses, so this can never interleave with a concurrent
 // append and leave the file half old, half rewritten.
-fn strip_user_path_lines(path: &Path) {
+pub(crate) fn strip_user_path_lines(path: &Path) {
     // Read, transform and swap all under the one lock: an append landing between a
     // read outside it and the rename would be overwritten by the older copy.
     with_crash_log_lock(path, || {
@@ -29066,7 +29066,7 @@ fn strip_user_path_lines(path: &Path) {
 // the machine that BUILT the exe, essentially never the machine running it, which
 // is why this checks the structural shape of a user path rather than today's own
 // account name. Best-effort, like everything else here; runs once at startup.
-fn scrub_user_paths_from_crash_log() {
+pub(crate) fn scrub_user_paths_from_crash_log() {
     strip_user_path_lines(&crash_log_path());
 }
 
@@ -29079,18 +29079,18 @@ fn scrub_user_paths_from_crash_log() {
 // (remote.rs), which record every access here directly, on purpose, so a
 // silent read or write from outside this window still leaves a visible trace.
 #[derive(Clone, serde::Serialize)]
-struct ErrorLogEntry {
-    ts: u64,
-    text: String,
-    origin: String,
-    raw: Option<String>,
+pub(crate) struct ErrorLogEntry {
+    pub(crate) ts: u64,
+    pub(crate) text: String,
+    pub(crate) origin: String,
+    pub(crate) raw: Option<String>,
 }
 
 // How many recent error messages the in-app list keeps.
-const ERROR_LOG_MAX: usize = 100;
-static ERROR_LOG: Mutex<Vec<ErrorLogEntry>> = Mutex::new(Vec::new());
+pub(crate) const ERROR_LOG_MAX: usize = 100;
+pub(crate) static ERROR_LOG: Mutex<Vec<ErrorLogEntry>> = Mutex::new(Vec::new());
 
-fn error_log_enabled(settings: &Settings) -> bool {
+pub(crate) fn error_log_enabled(settings: &Settings) -> bool {
     settings.ui_flags.get("errorLog") != Some(&false) // on by default
 }
 
@@ -29099,9 +29099,9 @@ fn error_log_enabled(settings: &Settings) -> bool {
 // caller passes any -- but a stray long string is treated as if it might and
 // collapsed to a short stand-in rather than written out in full, so a future
 // call site cannot leak one by accident.
-const ERROR_LOG_TEXT_MAX_CHARS: usize = 160;
+pub(crate) const ERROR_LOG_TEXT_MAX_CHARS: usize = 160;
 
-fn scrub_error_log_text(s: &str) -> String {
+pub(crate) fn scrub_error_log_text(s: &str) -> String {
     let path_clean = scrub_log_line(s);
     if path_clean.chars().count() > ERROR_LOG_TEXT_MAX_CHARS {
         let id: String = path_clean.chars().take(8).collect();
@@ -29120,7 +29120,7 @@ fn scrub_error_log_text(s: &str) -> String {
 // list with a fixed "other" fallback for anything else keeps it from ever
 // becoming a free-text field, the same reasoning `scrub_error_log_text`
 // already applies to `text`/`raw`.
-const ERROR_LOG_ORIGINS: [&str; 31] = [
+pub(crate) const ERROR_LOG_ORIGINS: [&str; 31] = [
     "about-modal", "backup-modal", "batch-export-modal", "compare-modal", "confirm-modal",
     "dupes-modal", "error-log-modal", "global-search", "help", "import-folder-modal",
     "import-preview-modal", "library", "lightbox", "modal", "ocr-langs-modal", "ocr-modal",
@@ -29129,7 +29129,7 @@ const ERROR_LOG_ORIGINS: [&str; 31] = [
     "video-cleanup-modal", "view-modal", "settings-expert", "main",
 ];
 
-fn sanitize_error_log_origin(origin: &str) -> &'static str {
+pub(crate) fn sanitize_error_log_origin(origin: &str) -> &'static str {
     if let Some(&known) = ERROR_LOG_ORIGINS.iter().find(|&&known| known == origin) {
         return known;
     }
@@ -29141,7 +29141,7 @@ fn sanitize_error_log_origin(origin: &str) -> &'static str {
 }
 
 // Newest first; anything past `max` is dropped from the old end.
-fn record_error_log(text: &str, origin: &str, raw: Option<&str>, max: usize) {
+pub(crate) fn record_error_log(text: &str, origin: &str, raw: Option<&str>, max: usize) {
     let mut log = ERROR_LOG.lock().unwrap_or_else(|e| e.into_inner());
     let ts = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     log.insert(
@@ -29184,7 +29184,7 @@ fn clear_error_log() {
 // WebView2 runtime is the only external requirement; offer the official
 // installer if it is missing instead of failing with a cryptic error.
 #[cfg(windows)]
-fn ensure_webview2() -> bool {
+pub(crate) fn ensure_webview2() -> bool {
     if tauri::webview_version().is_ok() {
         return true;
     }
@@ -29224,7 +29224,7 @@ fn ensure_webview2() -> bool {
 // size cap + "MZ" header check above are only a corruption/wrong-format guard, not
 // authentication on their own.
 #[cfg(windows)]
-fn verify_authenticode_signature(path: &std::path::Path) -> bool {
+pub(crate) fn verify_authenticode_signature(path: &std::path::Path) -> bool {
     use std::os::windows::ffi::OsStrExt;
     use windows::core::PCWSTR;
     use windows::Win32::Foundation::HWND;
@@ -29269,7 +29269,7 @@ fn verify_authenticode_signature(path: &std::path::Path) -> bool {
 // Returns true only if the installer reports success. Fully guarded: any failure
 // falls back to the manual download link.
 #[cfg(windows)]
-fn install_webview2_runtime() -> bool {
+pub(crate) fn install_webview2_runtime() -> bool {
     use std::io::Read;
     use std::os::windows::process::CommandExt;
     const BOOTSTRAPPER_URL: &str = "https://go.microsoft.com/fwlink/p/?LinkId=2124703";
@@ -29352,7 +29352,7 @@ mod scheduler;
 
 // How long app close waits for the timer thread to leave a running job before
 // going ahead without it.
-const SCHEDULER_STOP_WAIT_MS: u64 = 500;
+pub(crate) const SCHEDULER_STOP_WAIT_MS: u64 = 500;
 
 pub fn run() {
     // A launch whose own arguments name one of the command line's subcommands
@@ -30292,11 +30292,11 @@ pub fn run() {
 // None of these lose data outright: worst case a change waits one more poll
 // interval: but this has NOT had the multi-instance crash-simulation stress test
 // the original spec calls for as a "done" gate. Treat it as a beta feature.
-const SYNC_POLL_SECS: u64 = 5;
+pub(crate) const SYNC_POLL_SECS: u64 = 5;
 
 // Expert-tunable poll interval, clamped the same way as tray_label_max: an
 // absent or out-of-range stored value falls back to the shipped default.
-fn sync_poll_secs(settings: &Settings) -> u64 {
+pub(crate) fn sync_poll_secs(settings: &Settings) -> u64 {
     settings.ui_values.get("syncPollSecs").copied().unwrap_or(SYNC_POLL_SECS as f64).clamp(2.0, 30.0) as u64
 }
 // A lock is only ever held around one small file write, so 15 s is already far
@@ -30305,37 +30305,37 @@ fn sync_poll_secs(settings: &Settings) -> u64 {
 // is still alive, so a genuinely slow write by a running instance is never
 // stolen however long it takes, and a lock left by a crashed one is picked up as
 // soon as the age passes.
-const SYNC_LOCK_STALE_SECS: u64 = 15;
+pub(crate) const SYNC_LOCK_STALE_SECS: u64 = 15;
 
 // After this many consecutive failed rounds (an unreachable folder, a network
 // share that is not mounted) the poll pauses instead of retrying every tick
 // forever, says so once, and from then on only tries again at
 // SYNC_PAUSED_FACTOR times the interval.
-const SYNC_FAIL_MAX: u32 = 5;
-const SYNC_PAUSED_FACTOR: u64 = 10;
+pub(crate) const SYNC_FAIL_MAX: u32 = 5;
+pub(crate) const SYNC_PAUSED_FACTOR: u64 = 10;
 
-fn sync_enabled(settings: &Settings) -> bool {
+pub(crate) fn sync_enabled(settings: &Settings) -> bool {
     settings.ui_flags.get("promptSync").copied().unwrap_or(false)
 }
 
 // The shipped folder, built from the brand slug rather than written out: the name
 // lives in exactly one place, and a fork gets its own folder without a code change.
-fn sync_dir_leaf(slug: &str) -> String {
+pub(crate) fn sync_dir_leaf(slug: &str) -> String {
     format!("{slug}-sync")
 }
 
-fn sync_default_dir(app: &AppHandle) -> PathBuf {
+pub(crate) fn sync_default_dir(app: &AppHandle) -> PathBuf {
     data_dir(app).join(sync_dir_leaf(brand::SLUG))
 }
 
 // What earlier versions used before the folder was named after the brand. Adopted
 // once for anyone who already syncs (sync_adopt_legacy_dir), never written to again.
-const SYNC_LEGACY_DIR_NAME: &str = "Prompts";
+pub(crate) const SYNC_LEGACY_DIR_NAME: &str = "Prompts";
 // Set to "1" the first time the legacy folder was considered, so the adoption
 // below can never run twice and move a folder the user has since changed.
-const SYNC_LEGACY_MARK: &str = "syncDirLegacyChecked";
+pub(crate) const SYNC_LEGACY_MARK: &str = "syncDirLegacyChecked";
 
-fn sync_dir_path(app: &AppHandle, settings: &Settings) -> PathBuf {
+pub(crate) fn sync_dir_path(app: &AppHandle, settings: &Settings) -> PathBuf {
     let custom = settings.ui_texts.get("syncDir").cloned().unwrap_or_default();
     let resolved = if custom.is_empty() { sync_default_dir(app) } else { PathBuf::from(custom) };
     // Recorded for `append_crash_log`'s scrubbing, see `LAST_KNOWN_SYNC_DIR`.
@@ -30345,7 +30345,7 @@ fn sync_dir_path(app: &AppHandle, settings: &Settings) -> PathBuf {
 
 // Whether a folder holds at least one file this feature could have written. Used
 // by the one-time legacy adoption, which must not claim an empty leftover folder.
-fn sync_dir_has_md(dir: &Path) -> bool {
+pub(crate) fn sync_dir_has_md(dir: &Path) -> bool {
     let Ok(entries) = fs::read_dir(dir) else { return false };
     entries.flatten().any(|e| {
         let name = e.file_name().to_string_lossy().to_string();
@@ -30360,7 +30360,7 @@ fn sync_dir_has_md(dir: &Path) -> bool {
 // on the first start after the change their old folder becomes their explicit
 // choice. Runs once (marked in ui_texts), only when no custom folder is set and the
 // old folder actually holds our files. Returns the adopted path for the log line.
-fn sync_adopt_legacy_dir(settings: &mut Settings, legacy: &Path) -> Option<String> {
+pub(crate) fn sync_adopt_legacy_dir(settings: &mut Settings, legacy: &Path) -> Option<String> {
     if settings.ui_texts.contains_key(SYNC_LEGACY_MARK) {
         return None;
     }
@@ -30390,7 +30390,7 @@ fn sync_adopt_legacy_dir(settings: &mut Settings, legacy: &Path) -> Option<Strin
 // out, never written encrypted. An entry that was already synced and is later
 // marked confidential drops out of `wanted` the same way a deleted prompt does,
 // so sync_sweep_orphans removes the stale plaintext file on the next sync.
-fn sync_eligible(p: &Prompt) -> bool {
+pub(crate) fn sync_eligible(p: &Prompt) -> bool {
     sync_safe_id(&p.id) && !p.secret
 }
 
@@ -30400,11 +30400,11 @@ fn sync_eligible(p: &Prompt) -> bool {
 // real one and still small enough that re-reading the folder on a timer costs
 // nothing. A bigger file in the sync folder is simply not one of ours and is
 // skipped instead of being pulled into memory every cycle.
-const MAX_SYNC_MD_BYTES: u64 = 8 * 1024 * 1024;
+pub(crate) const MAX_SYNC_MD_BYTES: u64 = 8 * 1024 * 1024;
 
 // Text as an editor may have saved it: plain UTF-8, UTF-8 with a byte order mark, or
 // UTF-16 (Windows PowerShell's default for `>`). Anything else is not text.
-fn sync_decode_text(bytes: Vec<u8>) -> Option<String> {
+pub(crate) fn sync_decode_text(bytes: Vec<u8>) -> Option<String> {
     if let Some(rest) = bytes.strip_prefix(&[0xFF, 0xFE]).or_else(|| bytes.strip_prefix(&[0xFE, 0xFF])) {
         if rest.len() % 2 != 0 {
             return None;
@@ -30420,7 +30420,7 @@ fn sync_decode_text(bytes: Vec<u8>) -> Option<String> {
     Some(text.strip_prefix('\u{feff}').map(str::to_string).unwrap_or(text))
 }
 
-fn sync_safe_id(id: &str) -> bool {
+pub(crate) fn sync_safe_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 64
         && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
@@ -30428,7 +30428,7 @@ fn sync_safe_id(id: &str) -> bool {
 
 // Header fields are one line each: flattening a stray newline is simpler and safer
 // than a real multi-line frontmatter parser for what are normally short values.
-fn md_escape_line(s: &str) -> String {
+pub(crate) fn md_escape_line(s: &str) -> String {
     s.replace(['\n', '\r'], " ")
 }
 
@@ -30437,7 +30437,7 @@ fn md_escape_line(s: &str) -> String {
 // flagged with a `notes_enc` line; one without stays exactly as it always was, so
 // older files and single-line notes (which may hold a path with backslashes) read
 // back unchanged.
-fn md_escape_notes(s: &str) -> Option<String> {
+pub(crate) fn md_escape_notes(s: &str) -> Option<String> {
     if !s.contains(['\n', '\r']) {
         return None;
     }
@@ -30453,7 +30453,7 @@ fn md_escape_notes(s: &str) -> Option<String> {
     Some(out)
 }
 
-fn md_unescape_notes(s: &str) -> String {
+pub(crate) fn md_unescape_notes(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut chars = s.chars();
     while let Some(c) = chars.next() {
@@ -30479,13 +30479,13 @@ fn md_unescape_notes(s: &str) -> String {
 // derived from Settings (view.layouts / tile_folders / float_folders), never
 // stored on Prompt itself. An empty field means "not applicable".
 #[derive(Default)]
-struct SyncPlacement {
-    view: String,
-    grid: String,
-    cell: String,
-    tile_folder: String,
-    tile_folder_color: String,
-    float_folder: String,
+pub(crate) struct SyncPlacement {
+    pub(crate) view: String,
+    pub(crate) grid: String,
+    pub(crate) cell: String,
+    pub(crate) tile_folder: String,
+    pub(crate) tile_folder_color: String,
+    pub(crate) float_folder: String,
 }
 
 // A grid-folder member has no view.layouts entry of its own: save_tile_folder
@@ -30498,7 +30498,7 @@ struct SyncPlacement {
 // whatever grid tile it also is: and only membership syncs there, never the
 // folder's own desktop pixel position/scale, which is inherently per-machine
 // (a coordinate valid on one monitor layout can be off-screen on another).
-fn sync_placement_for(p: &Prompt, settings: &Settings) -> SyncPlacement {
+pub(crate) fn sync_placement_for(p: &Prompt, settings: &Settings) -> SyncPlacement {
     let float_folder = settings
         .float_folders
         .iter()
@@ -30542,7 +30542,7 @@ fn sync_placement_for(p: &Prompt, settings: &Settings) -> SyncPlacement {
     }
 }
 
-fn prompt_to_md(p: &Prompt, placement: &SyncPlacement) -> String {
+pub(crate) fn prompt_to_md(p: &Prompt, placement: &SyncPlacement) -> String {
     prompt_to_md_impl(p, placement, false)
 }
 
@@ -30551,11 +30551,11 @@ fn prompt_to_md(p: &Prompt, placement: &SyncPlacement) -> String {
 // (notes flattened to one line, no extra newline after a text that ends with one).
 // Without the second form, every file an older version wrote would read as an edit
 // by someone else right after the update.
-fn sync_md_matches(p: &Prompt, placement: &SyncPlacement, content: &str) -> bool {
+pub(crate) fn sync_md_matches(p: &Prompt, placement: &SyncPlacement, content: &str) -> bool {
     prompt_to_md_impl(p, placement, false) == content || prompt_to_md_impl(p, placement, true) == content
 }
 
-fn prompt_to_md_impl(p: &Prompt, placement: &SyncPlacement, legacy: bool) -> String {
+pub(crate) fn prompt_to_md_impl(p: &Prompt, placement: &SyncPlacement, legacy: bool) -> String {
     let (notes, notes_enc) = match (legacy, md_escape_notes(&p.notes)) {
         (false, Some(escaped)) => (escaped, "notes_enc: escaped\n"),
         _ => (md_escape_line(&p.notes), ""),
@@ -30597,7 +30597,7 @@ fn prompt_to_md_impl(p: &Prompt, placement: &SyncPlacement, legacy: bool) -> Str
 
 // `None` means "not a file this feature wrote" (no opening `---` header): the
 // caller leaves such files alone rather than guessing at a malformed one.
-fn parse_frontmatter(content: &str) -> Option<(HashMap<String, String>, String)> {
+pub(crate) fn parse_frontmatter(content: &str) -> Option<(HashMap<String, String>, String)> {
     let content = content.strip_prefix('\u{feff}').unwrap_or(content);
     let mut lines = content.split('\n');
     if lines.next()?.trim_end_matches('\r') != "---" {
@@ -30628,11 +30628,11 @@ fn parse_frontmatter(content: &str) -> Option<(HashMap<String, String>, String)>
 // A file only counts as ours when it carries the FULL header this feature writes.
 // A user's own note (Obsidian, Jekyll, …) also opens with `---`; importing one and
 // then rewriting it would destroy their own frontmatter fields.
-fn md_is_ours(fields: &HashMap<String, String>) -> bool {
+pub(crate) fn md_is_ours(fields: &HashMap<String, String>) -> bool {
     ["name", "color", "tags", "notes"].iter().all(|k| fields.contains_key(*k))
 }
 
-fn apply_md_to_prompt(base: &Prompt, content: &str) -> Option<Prompt> {
+pub(crate) fn apply_md_to_prompt(base: &Prompt, content: &str) -> Option<Prompt> {
     let (fields, body) = parse_frontmatter(content)?;
     if !md_is_ours(&fields) {
         return None;
@@ -30717,7 +30717,7 @@ fn apply_md_to_prompt(base: &Prompt, content: &str) -> Option<Prompt> {
 // or a folder left on one machine reappears there forever: this machine's own
 // next outgoing write would keep re-asserting the stale membership, and the
 // machine that dropped it would re-join on the next poll.
-fn apply_md_placement(settings: &mut Settings, prompt_id: &str, fields: &HashMap<String, String>) -> (bool, bool) {
+pub(crate) fn apply_md_placement(settings: &mut Settings, prompt_id: &str, fields: &HashMap<String, String>) -> (bool, bool) {
     let mut folders_touched = false;
     if let Some(raw) = fields.get("float_folder") {
         let name = raw.trim();
@@ -30771,7 +30771,7 @@ fn apply_md_placement(settings: &mut Settings, prompt_id: &str, fields: &HashMap
 // Parses the "view" / "grid" / "cell" trio out of an incoming file's header. An
 // unparsable `grid` falls back to the app's own default size (only matters when
 // the view has to be created); an unparsable `cell` is None, not a wrong guess.
-fn sync_parse_view_grid_cell(fields: &HashMap<String, String>) -> (&str, u32, u32, Option<[u32; 2]>) {
+pub(crate) fn sync_parse_view_grid_cell(fields: &HashMap<String, String>) -> (&str, u32, u32, Option<[u32; 2]>) {
     let view = fields.get("view").map(|s| s.as_str()).unwrap_or("");
     let (cols, rows) = fields
         .get("grid")
@@ -30785,7 +30785,7 @@ fn sync_parse_view_grid_cell(fields: &HashMap<String, String>) -> (&str, u32, u3
     (view, cols, rows, cell)
 }
 
-fn folder_cells_in_view(settings: &Settings, view_id: &str) -> Vec<[u32; 2]> {
+pub(crate) fn folder_cells_in_view(settings: &Settings, view_id: &str) -> Vec<[u32; 2]> {
     settings.tile_folders.iter().filter(|f| f.view_id == view_id).map(|f| f.cell).collect()
 }
 
@@ -30793,7 +30793,7 @@ fn folder_cells_in_view(settings: &Settings, view_id: &str) -> Vec<[u32; 2]> {
 // on the folder's own cell (see folder_cells_in_view), never in the view's own
 // layout, so place_ids_in_view/view_capacity_deficit must not count them as
 // needing a cell of their own.
-fn folder_members_in_view(settings: &Settings, view_id: &str) -> std::collections::HashSet<String> {
+pub(crate) fn folder_members_in_view(settings: &Settings, view_id: &str) -> std::collections::HashSet<String> {
     settings
         .tile_folders
         .iter()
@@ -30812,7 +30812,7 @@ fn folder_members_in_view(settings: &Settings, view_id: &str) -> std::collection
 // differ from the machine that sent the file: a view only takes its incoming
 // grid size once, at creation (sync_find_or_create_view), never a forced resize
 // afterward.
-fn sync_resolve_cell(settings: &Settings, view_id: &str, prompt_id: &str, wanted: [u32; 2]) -> Option<[u32; 2]> {
+pub(crate) fn sync_resolve_cell(settings: &Settings, view_id: &str, prompt_id: &str, wanted: [u32; 2]) -> Option<[u32; 2]> {
     let view = settings.views.iter().find(|v| v.id == view_id)?;
     let folder_cells = folder_cells_in_view(settings, view_id);
     let key = grid_key(view.cols, view.rows);
@@ -30832,7 +30832,7 @@ fn sync_resolve_cell(settings: &Settings, view_id: &str, prompt_id: &str, wanted
 // that already matches (only the prompt's content changed elsewhere) left the
 // prompt duplicated across every view it was ever placed in on ANY machine. With
 // the flag on, multiple placements are legitimate and deliberately left alone.
-fn sync_place_in_view(settings: &mut Settings, prompt_id: &str, view_id: &str, wanted: [u32; 2]) {
+pub(crate) fn sync_place_in_view(settings: &mut Settings, prompt_id: &str, view_id: &str, wanted: [u32; 2]) {
     let Some(cell) = sync_resolve_cell(settings, view_id, prompt_id, wanted) else { return };
     let multi_view = settings.ui_flags.get("multiViewPrompt") == Some(&true);
     if !multi_view {
@@ -30856,7 +30856,7 @@ fn sync_place_in_view(settings: &mut Settings, prompt_id: &str, view_id: &str, w
 // Finds a view by NAME or creates one at the incoming grid size (clamped like
 // every other view creation). Ids never travel between machines: the name is the
 // only thing an incoming file and a local view can agree on.
-fn sync_find_or_create_view(settings: &mut Settings, name: &str, cols: u32, rows: u32) -> String {
+pub(crate) fn sync_find_or_create_view(settings: &mut Settings, name: &str, cols: u32, rows: u32) -> String {
     if let Some(v) = settings.views.iter().find(|v| v.name == name) {
         return v.id.clone();
     }
@@ -30881,7 +30881,7 @@ fn sync_find_or_create_view(settings: &mut Settings, name: &str, cols: u32, rows
 // and a re-join take (moving folders is a leave-then-join). Returns whether it
 // actually removed anything, so a no-op leave (never was a member) doesn't count
 // as a change worth persisting.
-fn sync_leave_tile_folder(settings: &mut Settings, prompt_id: &str) -> bool {
+pub(crate) fn sync_leave_tile_folder(settings: &mut Settings, prompt_id: &str) -> bool {
     let mut removed = false;
     for folder in settings.tile_folders.iter_mut() {
         let before = folder.members.len();
@@ -30893,7 +30893,7 @@ fn sync_leave_tile_folder(settings: &mut Settings, prompt_id: &str) -> bool {
     removed
 }
 
-fn sync_leave_float_folder(settings: &mut Settings, prompt_id: &str) -> bool {
+pub(crate) fn sync_leave_float_folder(settings: &mut Settings, prompt_id: &str) -> bool {
     let mut removed = false;
     for folder in settings.float_folders.iter_mut() {
         let before = folder.members.len();
@@ -30909,7 +30909,7 @@ fn sync_leave_float_folder(settings: &mut Settings, prompt_id: &str) -> bool {
 // carries the same name/color/place, so any one of them can recreate it. Mirrors
 // save_tile_folder: pulled out of every OTHER folder first, and a folder member is
 // not a tile of its own, so its own layout entry is dropped the moment it joins.
-fn sync_join_tile_folder(settings: &mut Settings, prompt_id: &str, name: &str, color: &str, view_id: &str, cell: Option<[u32; 2]>) -> bool {
+pub(crate) fn sync_join_tile_folder(settings: &mut Settings, prompt_id: &str, name: &str, color: &str, view_id: &str, cell: Option<[u32; 2]>) -> bool {
     let Ok(name) = folder_name_of(name) else { return false };
     if name.is_empty() {
         return false;
@@ -30971,7 +30971,7 @@ fn sync_join_tile_folder(settings: &mut Settings, prompt_id: &str, name: &str, c
 // the kind of machine-specific side effect the sync deliberately keeps out of scope
 // (position/monitor layout differ per machine, and so does whether the feature is
 // even in use here).
-fn sync_join_float_folder(settings: &mut Settings, prompt_id: &str, name: &str) -> bool {
+pub(crate) fn sync_join_float_folder(settings: &mut Settings, prompt_id: &str, name: &str) -> bool {
     if !settings.floating.contains_key(prompt_id) {
         return false;
     }
@@ -31007,7 +31007,7 @@ fn sync_join_float_folder(settings: &mut Settings, prompt_id: &str, name: &str) 
 // never grows past 1 still gets cleaned up the next time a NON-sync path (any
 // UI-driven folder command) touches it, since those keep calling the general,
 // stricter version.
-fn sync_normalize_tile_folders(folders: &mut Vec<TileFolder>, prompt_ids: &[String], view_ids: &[String]) {
+pub(crate) fn sync_normalize_tile_folders(folders: &mut Vec<TileFolder>, prompt_ids: &[String], view_ids: &[String]) {
     let mut taken: Vec<String> = Vec::new();
     for folder in folders.iter_mut() {
         // See normalize_tile_folders: an incoming sync file's `cell:` header is
@@ -31036,7 +31036,7 @@ fn sync_normalize_tile_folders(folders: &mut Vec<TileFolder>, prompt_ids: &[Stri
     folders.truncate(MAX_TILE_FOLDERS);
 }
 
-fn sync_normalize_float_folders(folders: &mut Vec<FloatFolder>, prompt_ids: &[String]) {
+pub(crate) fn sync_normalize_float_folders(folders: &mut Vec<FloatFolder>, prompt_ids: &[String]) {
     let mut taken: Vec<String> = Vec::new();
     for folder in folders.iter_mut() {
         folder.scale = if folder.scale.is_finite() { folder.scale.clamp(0.5, 3.0) } else { 1.0 };
@@ -31054,14 +31054,14 @@ fn sync_normalize_float_folders(folders: &mut Vec<FloatFolder>, prompt_ids: &[St
 
 // The note's first line, which is also how this folder's own file is recognised
 // again later (a note from an older version still counts as ours).
-fn sync_agents_md_head() -> String {
+pub(crate) fn sync_agents_md_head() -> String {
     format!("# {} sync folder", brand::DISPLAY_NAME)
 }
 
 // Written into the user's own folder, so it obeys the fork rule like every other
 // visible text: the product name and the word for what it stores both come from
 // the brand, never from a literal here.
-fn sync_agents_md() -> String {
+pub(crate) fn sync_agents_md() -> String {
     let head = sync_agents_md_head();
     let app = brand::DISPLAY_NAME;
     let item = brand::ITEM;
@@ -31094,7 +31094,7 @@ the file is yours to keep or delete.
     )
 }
 
-fn sync_write_agents_md(dir: &Path) {
+pub(crate) fn sync_write_agents_md(dir: &Path) {
     let path = dir.join("AGENTS.md");
     if !path.exists() {
         let _ = fs::write(&path, sync_agents_md());
@@ -31110,23 +31110,23 @@ fn sync_write_agents_md(dir: &Path) {
 // the file (rather than the usual temp-file-and-rename) can be caught mid-write.
 // One round later the stamp has settled and what is read is a whole file.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
-struct SyncStamp {
-    mtime_ns: u128,
-    len: u64,
+pub(crate) struct SyncStamp {
+    pub(crate) mtime_ns: u128,
+    pub(crate) len: u64,
 }
 
 // A file the app wrote itself is recorded as already handled: its content is known,
 // so the next round has nothing to read.
 #[derive(Clone, Copy, Debug)]
-struct SyncSeen {
-    stamp: SyncStamp,
-    handled: bool,
+pub(crate) struct SyncSeen {
+    pub(crate) stamp: SyncStamp,
+    pub(crate) handled: bool,
     /// Hash of the file's bytes when the app wrote or read them, 0 when unknown. A
     /// cloud client re-touching the modification time does not change it.
-    hash: u64,
+    pub(crate) hash: u64,
 }
 
-fn sync_hash(bytes: &[u8]) -> u64 {
+pub(crate) fn sync_hash(bytes: &[u8]) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
     bytes.hash(&mut h);
@@ -31134,7 +31134,7 @@ fn sync_hash(bytes: &[u8]) -> u64 {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum SyncScan {
+pub(crate) enum SyncScan {
     /// Changed (or never seen): remember the stamp and look again next round.
     Settle,
     /// Unchanged since the last round and not read yet: this one is safe to read.
@@ -31143,7 +31143,7 @@ enum SyncScan {
     Skip,
 }
 
-fn sync_scan_decision(prev: Option<SyncSeen>, now: SyncStamp) -> SyncScan {
+pub(crate) fn sync_scan_decision(prev: Option<SyncSeen>, now: SyncStamp) -> SyncScan {
     match prev {
         Some(p) if p.stamp == now => {
             if p.handled {
@@ -31156,7 +31156,7 @@ fn sync_scan_decision(prev: Option<SyncSeen>, now: SyncStamp) -> SyncScan {
     }
 }
 
-fn sync_stamp_of(path: &Path) -> Option<SyncStamp> {
+pub(crate) fn sync_stamp_of(path: &Path) -> Option<SyncStamp> {
     let meta = fs::metadata(path).ok()?;
     let mtime_ns = meta
         .modified()
@@ -31167,32 +31167,32 @@ fn sync_stamp_of(path: &Path) -> Option<SyncStamp> {
     Some(SyncStamp { mtime_ns, len: meta.len() })
 }
 
-type SyncSeenMap = HashMap<String, SyncSeen>;
-static SYNC_SEEN: std::sync::OnceLock<Mutex<SyncSeenMap>> = std::sync::OnceLock::new();
+pub(crate) type SyncSeenMap = HashMap<String, SyncSeen>;
+pub(crate) static SYNC_SEEN: std::sync::OnceLock<Mutex<SyncSeenMap>> = std::sync::OnceLock::new();
 
-fn sync_seen() -> &'static Mutex<SyncSeenMap> {
+pub(crate) fn sync_seen() -> &'static Mutex<SyncSeenMap> {
     SYNC_SEEN.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-fn sync_seen_lock() -> std::sync::MutexGuard<'static, SyncSeenMap> {
+pub(crate) fn sync_seen_lock() -> std::sync::MutexGuard<'static, SyncSeenMap> {
     sync_seen().lock().unwrap_or_else(|e| e.into_inner())
 }
 
 // Keyed by the whole path, never by the file name alone: the same `<id>.md` exists
 // in the old and the new folder after a folder change, and a stamp from one of them
 // must never be read as the other one's.
-fn sync_seen_key(path: &Path) -> String {
+pub(crate) fn sync_seen_key(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
 
 // Called right after the app writes a file itself: the content is ours and known,
 // so the poll neither has to re-read it nor may mistake it for someone's edit.
 #[cfg(test)]
-fn sync_seen_record_own_write(path: &Path) {
+pub(crate) fn sync_seen_record_own_write(path: &Path) {
     sync_seen_record_own_write_of(path, 0);
 }
 
-fn sync_seen_record_own_write_of(path: &Path, hash: u64) {
+pub(crate) fn sync_seen_record_own_write_of(path: &Path, hash: u64) {
     let Some(stamp) = sync_stamp_of(path) else { return };
     sync_seen_lock().insert(sync_seen_key(path), SyncSeen { stamp, handled: true, hash });
 }
@@ -31202,16 +31202,16 @@ fn sync_seen_record_own_write_of(path: &Path, hash: u64) {
 // app has never known (another machine's folder the user just pointed us at, a file
 // made or renamed by hand, one that arrived a moment ago) is not ours to delete, even
 // when it carries our header: the poll has to import it first.
-static SYNC_KNOWN: std::sync::OnceLock<Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
+pub(crate) static SYNC_KNOWN: std::sync::OnceLock<Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
 
-fn sync_known_lock() -> std::sync::MutexGuard<'static, std::collections::HashSet<String>> {
+pub(crate) fn sync_known_lock() -> std::sync::MutexGuard<'static, std::collections::HashSet<String>> {
     SYNC_KNOWN
         .get_or_init(|| Mutex::new(std::collections::HashSet::new()))
         .lock()
         .unwrap_or_else(|e| e.into_inner())
 }
 
-fn sync_known_note(path: &Path) {
+pub(crate) fn sync_known_note(path: &Path) {
     sync_known_lock().insert(sync_seen_key(path));
 }
 
@@ -31220,14 +31220,14 @@ fn sync_known_note(path: &Path) {
 // and the file still carries that stamp, the file is known to hold exactly that
 // content and is not read back at all. An outside edit changes the stamp, so it
 // is never skipped.
-type SyncWrittenMap = HashMap<String, (u64, SyncStamp)>;
-static SYNC_WRITTEN: std::sync::OnceLock<Mutex<SyncWrittenMap>> = std::sync::OnceLock::new();
+pub(crate) type SyncWrittenMap = HashMap<String, (u64, SyncStamp)>;
+pub(crate) static SYNC_WRITTEN: std::sync::OnceLock<Mutex<SyncWrittenMap>> = std::sync::OnceLock::new();
 
-fn sync_written_lock() -> std::sync::MutexGuard<'static, SyncWrittenMap> {
+pub(crate) fn sync_written_lock() -> std::sync::MutexGuard<'static, SyncWrittenMap> {
     SYNC_WRITTEN.get_or_init(|| Mutex::new(HashMap::new())).lock().unwrap_or_else(|e| e.into_inner())
 }
 
-fn sync_content_hash(content: &str) -> u64 {
+pub(crate) fn sync_content_hash(content: &str) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
     content.hash(&mut h);
@@ -31235,7 +31235,7 @@ fn sync_content_hash(content: &str) -> u64 {
 }
 
 // True when `path` is known to already hold the content with this hash.
-fn sync_file_known_current(path: &Path, hash: u64) -> bool {
+pub(crate) fn sync_file_known_current(path: &Path, hash: u64) -> bool {
     let Some(now) = sync_stamp_of(path) else { return false };
     sync_written_lock().get(&sync_seen_key(path)).is_some_and(|(h, stamp)| *h == hash && *stamp == now)
 }
@@ -31245,14 +31245,14 @@ fn sync_file_known_current(path: &Path, hash: u64) -> bool {
 // A stamp younger than SYNC_STAMP_TRUST_NS is not trusted: on a file system with a
 // coarse clock (FAT/exFAT/SMB) an outside edit of the same length inside the same tick
 // would carry the very same stamp. Such a file is simply compared by content next round.
-const SYNC_STAMP_TRUST_NS: u128 = 2_000_000_000;
+pub(crate) const SYNC_STAMP_TRUST_NS: u128 = 2_000_000_000;
 
-fn sync_stamp_is_settled(stamp: &SyncStamp) -> bool {
+pub(crate) fn sync_stamp_is_settled(stamp: &SyncStamp) -> bool {
     let now_ns = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
     now_ns.saturating_sub(stamp.mtime_ns) >= SYNC_STAMP_TRUST_NS
 }
 
-fn sync_file_note_current(path: &Path, hash: u64) {
+pub(crate) fn sync_file_note_current(path: &Path, hash: u64) {
     if let Some(stamp) = sync_stamp_of(path) {
         if sync_stamp_is_settled(&stamp) {
             sync_written_lock().insert(sync_seen_key(path), (hash, stamp));
@@ -31272,7 +31272,7 @@ fn sync_file_note_current(path: &Path, hash: u64) {
 //
 // With a recorded hash the bytes decide: a changed stamp alone (a cloud client
 // touching the file, an identical rewrite by another instance) is no edit.
-fn sync_changed_since_seen(path: &Path, on_disk: &[u8]) -> bool {
+pub(crate) fn sync_changed_since_seen(path: &Path, on_disk: &[u8]) -> bool {
     let seen = sync_seen_lock();
     match (seen.get(&sync_seen_key(path)), sync_stamp_of(path)) {
         (Some(prev), Some(_)) if prev.hash != 0 => sync_hash(on_disk) != prev.hash,
@@ -31293,7 +31293,7 @@ fn sync_changed_since_seen(path: &Path, on_disk: &[u8]) -> bool {
 // Writes `bytes` to a fresh `<id>.conflict-<secs>[-<n>]<tag>.md` in `dir`. The
 // name is claimed with create_new first, so two conflicts in the same second
 // (or an earlier copy) never overwrite each other.
-fn sync_write_conflict_copy(dir: &Path, id: &str, tag: &str, bytes: &[u8]) -> Option<PathBuf> {
+pub(crate) fn sync_write_conflict_copy(dir: &Path, id: &str, tag: &str, bytes: &[u8]) -> Option<PathBuf> {
     let secs = now_secs();
     for n in 0..1000u32 {
         let suffix = if n == 0 { String::new() } else { format!("-{n}") };
@@ -31313,7 +31313,7 @@ fn sync_write_conflict_copy(dir: &Path, id: &str, tag: &str, bytes: &[u8]) -> Op
     None
 }
 
-fn sync_edit_unsaved(path: &Path, on_disk: &[u8], p: &Prompt, placement: &SyncPlacement) -> bool {
+pub(crate) fn sync_edit_unsaved(path: &Path, on_disk: &[u8], p: &Prompt, placement: &SyncPlacement) -> bool {
     if on_disk.is_empty() {
         return false;
     }
@@ -31331,30 +31331,30 @@ fn sync_edit_unsaved(path: &Path, on_disk: &[u8], p: &Prompt, placement: &SyncPl
 
 // ---- How the folder itself is doing (shown in the expert menu) ----
 #[derive(Clone, Default)]
-struct SyncHealth {
+pub(crate) struct SyncHealth {
     /// Unix seconds of the last round that could read the folder.
-    last_ok: u64,
+    pub(crate) last_ok: u64,
     /// Files seen in that round.
-    files: usize,
-    fails: u32,
-    paused: bool,
+    pub(crate) files: usize,
+    pub(crate) fails: u32,
+    pub(crate) paused: bool,
     /// Plain-language reason the poll is paused, for the status line.
-    reason: String,
+    pub(crate) reason: String,
 }
 
-static SYNC_HEALTH: std::sync::OnceLock<Mutex<SyncHealth>> = std::sync::OnceLock::new();
+pub(crate) static SYNC_HEALTH: std::sync::OnceLock<Mutex<SyncHealth>> = std::sync::OnceLock::new();
 
-fn sync_health() -> &'static Mutex<SyncHealth> {
+pub(crate) fn sync_health() -> &'static Mutex<SyncHealth> {
     SYNC_HEALTH.get_or_init(|| Mutex::new(SyncHealth::default()))
 }
 
-fn sync_health_lock() -> std::sync::MutexGuard<'static, SyncHealth> {
+pub(crate) fn sync_health_lock() -> std::sync::MutexGuard<'static, SyncHealth> {
     sync_health().lock().unwrap_or_else(|e| e.into_inner())
 }
 
 // Returns true exactly on the round that flips the pause on, so the log line is
 // written once instead of on every failed round.
-fn sync_health_note_fail(h: &mut SyncHealth, max: u32, reason: &str) -> bool {
+pub(crate) fn sync_health_note_fail(h: &mut SyncHealth, max: u32, reason: &str) -> bool {
     h.fails = h.fails.saturating_add(1);
     h.reason = reason.to_string();
     if h.paused || h.fails < max {
@@ -31364,7 +31364,7 @@ fn sync_health_note_fail(h: &mut SyncHealth, max: u32, reason: &str) -> bool {
     true
 }
 
-fn sync_health_note_ok(h: &mut SyncHealth, files: usize, now: u64) {
+pub(crate) fn sync_health_note_ok(h: &mut SyncHealth, files: usize, now: u64) {
     h.fails = 0;
     h.paused = false;
     h.reason.clear();
@@ -31374,7 +31374,7 @@ fn sync_health_note_ok(h: &mut SyncHealth, files: usize, now: u64) {
 
 // Switching to a folder that was written fine ends whatever the old one caused: the
 // pause and its reason describe a folder the app no longer uses.
-fn sync_health_after_dir_change(h: &mut SyncHealth) {
+pub(crate) fn sync_health_after_dir_change(h: &mut SyncHealth) {
     h.fails = 0;
     h.paused = false;
     h.reason.clear();
@@ -31382,10 +31382,10 @@ fn sync_health_after_dir_change(h: &mut SyncHealth) {
 
 // Wakes the poll loop out of its (possibly stretched) sleep, so a new folder is read
 // at once instead of after up to ten intervals.
-static SYNC_WAKE: tokio::sync::Notify = tokio::sync::Notify::const_new();
+pub(crate) static SYNC_WAKE: tokio::sync::Notify = tokio::sync::Notify::const_new();
 
 // A paused poll still comes back, just far less often.
-fn sync_wait_secs(paused: bool, poll: u64) -> u64 {
+pub(crate) fn sync_wait_secs(paused: bool, poll: u64) -> u64 {
     if paused {
         poll.saturating_mul(SYNC_PAUSED_FACTOR)
     } else {
@@ -31393,18 +31393,18 @@ fn sync_wait_secs(paused: bool, poll: u64) -> u64 {
     }
 }
 
-fn sync_lock_path(md_path: &Path) -> PathBuf {
+pub(crate) fn sync_lock_path(md_path: &Path) -> PathBuf {
     let mut s = md_path.as_os_str().to_os_string();
     s.push(".lock");
     PathBuf::from(s)
 }
 
-fn pid_from_lock(lock_path: &Path) -> Option<u32> {
+pub(crate) fn pid_from_lock(lock_path: &Path) -> Option<u32> {
     fs::read_to_string(lock_path).ok()?.trim().parse().ok()
 }
 
 #[cfg(windows)]
-fn pid_is_alive(pid: u32) -> bool {
+pub(crate) fn pid_is_alive(pid: u32) -> bool {
     #[link(name = "kernel32")]
     extern "system" {
         fn OpenProcess(access: u32, inherit: i32, pid: u32) -> isize;
@@ -31422,11 +31422,11 @@ fn pid_is_alive(pid: u32) -> bool {
     }
 }
 #[cfg(not(windows))]
-fn pid_is_alive(_pid: u32) -> bool {
+pub(crate) fn pid_is_alive(_pid: u32) -> bool {
     true // conservative off Windows: never treat a lock as stale
 }
 
-fn sync_lock_is_stale(lock_path: &Path) -> bool {
+pub(crate) fn sync_lock_is_stale(lock_path: &Path) -> bool {
     let Ok(meta) = fs::metadata(lock_path) else { return true }; // gone already
     let old_enough = meta
         .modified()
@@ -31446,7 +31446,7 @@ fn sync_lock_is_stale(lock_path: &Path) -> bool {
 // instances). A held, non-stale lock means "leave this file for the next poll
 // cycle", never a blocking wait: this runs in a background task with no UI to
 // block, so retrying later is the safe choice over hanging the poll loop.
-fn sync_lock_acquire(md_path: &Path) -> bool {
+pub(crate) fn sync_lock_acquire(md_path: &Path) -> bool {
     let lock_path = sync_lock_path(md_path);
     let try_create = |p: &Path| {
         fs::OpenOptions::new().write(true).create_new(true).open(p).map(|mut f| {
@@ -31463,7 +31463,7 @@ fn sync_lock_acquire(md_path: &Path) -> bool {
     false
 }
 
-fn sync_lock_release(md_path: &Path) {
+pub(crate) fn sync_lock_release(md_path: &Path) {
     let _ = fs::remove_file(sync_lock_path(md_path));
 }
 
@@ -31478,7 +31478,7 @@ fn sync_lock_release(md_path: &Path) {
 // empty is the worst outcome this feature has: the user sees the switch on, the
 // files never appear, and nothing anywhere says why. Every failure is logged, and
 // the count lets the one caller the user is actually waiting on say so out loud.
-fn sync_write_all_impl(app: &AppHandle, prompts: &[Prompt], settings: &Settings) -> usize {
+pub(crate) fn sync_write_all_impl(app: &AppHandle, prompts: &[Prompt], settings: &Settings) -> usize {
     if !sync_enabled(settings) {
         return 0;
     }
@@ -31507,13 +31507,13 @@ fn sync_write_all_impl(app: &AppHandle, prompts: &[Prompt], settings: &Settings)
 // `dir`, then sweeps what this process knows to be orphaned. Free of any window or
 // state access so a test can run it against a temp folder.
 #[cfg(test)]
-fn sync_write_dir(dir: &Path, prompts: &[Prompt], settings: &Settings) -> usize {
+pub(crate) fn sync_write_dir(dir: &Path, prompts: &[Prompt], settings: &Settings) -> usize {
     sync_write_dir_checked(dir, prompts, settings, &|_| false)
 }
 
 // `is_live` is asked right before a file would be swept: true means the library holds
 // that id now, so the file is not an orphan after all.
-fn sync_write_dir_checked(dir: &Path, prompts: &[Prompt], settings: &Settings, is_live: &dyn Fn(&str) -> bool) -> usize {
+pub(crate) fn sync_write_dir_checked(dir: &Path, prompts: &[Prompt], settings: &Settings, is_live: &dyn Fn(&str) -> bool) -> usize {
     let dir = dir.to_path_buf();
     if let Err(e) = fs::create_dir_all(&dir) {
         append_crash_log(&format!("prompt-sync: the sync folder could not be created: {e}"));
@@ -31598,11 +31598,11 @@ fn sync_write_dir_checked(dir: &Path, prompts: &[Prompt], settings: &Settings, i
 // still read "enabled"); re-checking the live settings immediately before writing
 // closes that gap, and also means the actual file content written is never staler
 // than it has to be even if the worker was mid-write for a while.
-struct SyncWriteQueue(Mutex<SyncWriteState>);
+pub(crate) struct SyncWriteQueue(pub(crate) Mutex<SyncWriteState>);
 #[derive(Default)]
-struct SyncWriteState {
-    pending: bool,
-    active: bool,
+pub(crate) struct SyncWriteState {
+    pub(crate) pending: bool,
+    pub(crate) active: bool,
 }
 
 // Called from save_prompts()/save_prompts_and_trash() after every successful
@@ -31610,7 +31610,7 @@ struct SyncWriteState {
 // bools under a brief lock, never touching the filesystem or cloning the library
 // itself, so it keeps that mutex from being held for however long a large or slow
 // sync folder takes to read and compare.
-fn spawn_sync_write_all(app: &AppHandle, store: &Store) {
+pub(crate) fn spawn_sync_write_all(app: &AppHandle, store: &Store) {
     if !sync_enabled(&store.settings) {
         return; // common case (feature off): nothing to queue
     }
@@ -31678,11 +31678,11 @@ fn spawn_sync_write_all(app: &AppHandle, store: &Store) {
 // documents. A document without our `---` frontmatter is never imported by
 // sync_poll_once either, so deleting it would destroy data the app does not own.
 #[cfg(test)]
-fn sync_sweep_orphans(dir: &Path, wanted: &std::collections::HashSet<String>) {
+pub(crate) fn sync_sweep_orphans(dir: &Path, wanted: &std::collections::HashSet<String>) {
     sync_sweep_orphans_checked(dir, wanted, &|_| false);
 }
 
-fn sync_sweep_orphans_checked(dir: &Path, wanted: &std::collections::HashSet<String>, is_live: &dyn Fn(&str) -> bool) {
+pub(crate) fn sync_sweep_orphans_checked(dir: &Path, wanted: &std::collections::HashSet<String>, is_live: &dyn Fn(&str) -> bool) {
     let Ok(entries) = fs::read_dir(dir) else { return };
     for e in entries.flatten() {
         let name = e.file_name().to_string_lossy().to_string();
@@ -31720,7 +31720,7 @@ fn sync_sweep_orphans_checked(dir: &Path, wanted: &std::collections::HashSet<Str
     }
 }
 
-fn sync_blank_prompt(id: String) -> Prompt {
+pub(crate) fn sync_blank_prompt(id: String) -> Prompt {
     Prompt {
         id,
         trashed_at: 0,
@@ -31761,7 +31761,7 @@ fn sync_blank_prompt(id: String) -> Prompt {
 // and folds them into the store. `on_replace` sees a prompt right before a file
 // replaces it (the caller keeps a restore point). Returns (prompts_changed,
 // settings_changed); the caller persists whichever is set.
-fn sync_poll_apply(
+pub(crate) fn sync_poll_apply(
     store: &mut Store,
     candidates: Vec<(String, String, bool)>,
     on_replace: &mut dyn FnMut(&Settings, &Prompt, &Prompt),
@@ -31871,7 +31871,7 @@ fn sync_poll_apply(
 // and the file-level lock happen unlocked; apply_md_to_prompt runs once the
 // store lock is back, against each prompt's CURRENT state.
 // Puts the files of candidates that were never applied back to "noted, not read".
-fn sync_requeue_candidates(dir: &Path, candidates: &[(String, String, bool)]) {
+pub(crate) fn sync_requeue_candidates(dir: &Path, candidates: &[(String, String, bool)]) {
     let mut seen = sync_seen_lock();
     for (stem, _, _) in candidates {
         if let Some(entry) = seen.get_mut(&sync_seen_key(&dir.join(format!("{stem}.md")))) {
@@ -31882,12 +31882,12 @@ fn sync_requeue_candidates(dir: &Path, candidates: &[(String, String, bool)]) {
 }
 
 // A file the stat scan wants read this round.
-struct SyncToRead {
-    path: PathBuf,
-    key: String,
-    stem: String,
-    name: String,
-    stamp: SyncStamp,
+pub(crate) struct SyncToRead {
+    pub(crate) path: PathBuf,
+    pub(crate) key: String,
+    pub(crate) stem: String,
+    pub(crate) name: String,
+    pub(crate) stamp: SyncStamp,
 }
 
 // Stat-only pass over the folder: decides which files changed and have settled,
@@ -31897,8 +31897,8 @@ struct SyncToRead {
 // Also returns (stem, key) of every file in the folder: the caller marks the files of
 // known prompts as known (SYNC_KNOWN) once it has the library's ids, every round and
 // for every such file, changed or not, so the sweep's gate stays as strict as before.
-type SyncScanOut = (Vec<SyncToRead>, usize, Vec<(String, String)>);
-fn sync_scan_folder(dir: &Path) -> std::io::Result<SyncScanOut> {
+pub(crate) type SyncScanOut = (Vec<SyncToRead>, usize, Vec<(String, String)>);
+pub(crate) fn sync_scan_folder(dir: &Path) -> std::io::Result<SyncScanOut> {
     let entries = fs::read_dir(dir)?;
     let mut to_read = Vec::new();
     let mut all: Vec<(String, String)> = Vec::new();
@@ -31941,7 +31941,7 @@ fn sync_scan_folder(dir: &Path) -> std::io::Result<SyncScanOut> {
     Ok((to_read, files, all))
 }
 
-fn sync_poll_once(app: &AppHandle) {
+pub(crate) fn sync_poll_once(app: &AppHandle) {
     let Some(state) = app.try_state::<Db>() else { return };
     let dir = {
         let store = lock(&state);
@@ -32106,14 +32106,14 @@ fn sync_poll_once(app: &AppHandle) {
 // only ever removes files this app wrote itself, in one folder, never into
 // sub-folders, never by pattern, and the folder itself only if it ends up empty.
 #[derive(Default)]
-struct SyncDirScan {
+pub(crate) struct SyncDirScan {
     /// Files this app wrote and may therefore remove.
-    ours: Vec<PathBuf>,
+    pub(crate) ours: Vec<PathBuf>,
     /// Everything else, in the order found. One of these aborts a delete.
-    foreign: Vec<String>,
+    pub(crate) foreign: Vec<String>,
 }
 
-fn sync_dir_scan(dir: &Path) -> SyncDirScan {
+pub(crate) fn sync_dir_scan(dir: &Path) -> SyncDirScan {
     let mut scan = SyncDirScan::default();
     let Ok(entries) = fs::read_dir(dir) else { return scan };
     for e in entries.flatten() {
@@ -32160,7 +32160,7 @@ fn sync_dir_scan(dir: &Path) -> SyncDirScan {
 // Refuses a path that is not a plain, existing folder of its own. The caller
 // already only ever passes the folder the app itself is syncing to; this is the
 // second lock on the door, not the first.
-fn sync_dir_is_deletable(dir: &Path, data: &Path) -> Result<(), String> {
+pub(crate) fn sync_dir_is_deletable(dir: &Path, data: &Path) -> Result<(), String> {
     if !dir.is_absolute() || dir.parent().is_none() {
         return Err("not a folder that can be removed".into());
     }
@@ -32175,7 +32175,7 @@ fn sync_dir_is_deletable(dir: &Path, data: &Path) -> Result<(), String> {
 
 // Returns how many files were removed, or a plain-language reason it did not
 // touch anything. Never partially deletes on a refusal: the scan decides first.
-fn sync_delete_dir(dir: &Path, data: &Path) -> Result<usize, String> {
+pub(crate) fn sync_delete_dir(dir: &Path, data: &Path) -> Result<usize, String> {
     sync_dir_is_deletable(dir, data)?;
     let scan = sync_dir_scan(dir);
     if !scan.foreign.is_empty() {
@@ -32204,10 +32204,10 @@ fn sync_delete_dir(dir: &Path, data: &Path) -> Result<usize, String> {
 // What the window needs to phrase its question: how many of the files in the
 // current folder are ours, and whether anything else is in there.
 #[derive(Serialize)]
-struct SyncDirInfo {
-    path: String,
-    ours: usize,
-    foreign: usize,
+pub(crate) struct SyncDirInfo {
+    pub(crate) path: String,
+    pub(crate) ours: usize,
+    pub(crate) foreign: usize,
 }
 
 #[tauri::command]
@@ -32236,12 +32236,12 @@ fn sync_dir_info(app: AppHandle, state: State<Db>) -> SyncDirInfo {
 // Live state of the feature for the expert menu: the last round that could read the
 // folder, how many files it saw, and why it is paused if it is.
 #[derive(Serialize)]
-struct SyncStatus {
-    enabled: bool,
-    last_ok: u64,
-    files: usize,
-    paused: bool,
-    reason: String,
+pub(crate) struct SyncStatus {
+    pub(crate) enabled: bool,
+    pub(crate) last_ok: u64,
+    pub(crate) files: usize,
+    pub(crate) paused: bool,
+    pub(crate) reason: String,
 }
 
 #[tauri::command]
@@ -32260,7 +32260,7 @@ fn sync_status(state: State<Db>) -> SyncStatus {
 // case it was typed in). A path that cannot be resolved right now (permissions, a
 // share briefly gone) counts as "maybe the same": the only thing this answer ever
 // gates is a delete, and a delete that wrongly does not happen loses nothing.
-fn sync_same_dir(a: &Path, b: &Path) -> bool {
+pub(crate) fn sync_same_dir(a: &Path, b: &Path) -> bool {
     let (ca, cb) = match (fs::canonicalize(a), fs::canonicalize(b)) {
         (Ok(x), Ok(y)) => (x, y),
         _ => return true,
@@ -32323,15 +32323,15 @@ fn set_sync_dir(app: AppHandle, state: State<Db>, dir: String, delete_old: bool)
 // again before the previous loop has noticed it was switched off (or the setup
 // call and an immediate activation race), and either way only one timer may
 // ever be ticking at once.
-static SYNC_POLL_RUNNING: AtomicBool = AtomicBool::new(false);
+pub(crate) static SYNC_POLL_RUNNING: AtomicBool = AtomicBool::new(false);
 
 // Claims the single poll slot. False means a loop already holds it and this
 // caller must not start a second one.
-fn sync_poll_try_claim() -> bool {
+pub(crate) fn sync_poll_try_claim() -> bool {
     !SYNC_POLL_RUNNING.swap(true, Ordering::SeqCst)
 }
 
-fn sync_poll_release() {
+pub(crate) fn sync_poll_release() {
     SYNC_POLL_RUNNING.store(false, Ordering::SeqCst);
 }
 
@@ -32341,7 +32341,7 @@ fn sync_poll_release() {
 // differs (edited while the app was closed, or by another machine through the
 // cloud) stays unhandled, so a save landing before the poll has imported it keeps
 // a copy of it instead of overwriting it.
-fn sync_seed_seen(dir: &Path, prompts: &[Prompt], settings: &Settings) {
+pub(crate) fn sync_seed_seen(dir: &Path, prompts: &[Prompt], settings: &Settings) {
     for p in prompts.iter().filter(|p| sync_eligible(p)) {
         let path = dir.join(format!("{}.md", p.id));
         if !path.is_file() {
@@ -32364,7 +32364,7 @@ fn sync_seed_seen(dir: &Path, prompts: &[Prompt], settings: &Settings) {
     }
 }
 
-fn start_sync_poll(app: AppHandle) {
+pub(crate) fn start_sync_poll(app: AppHandle) {
     if !sync_poll_try_claim() {
         return; // already running - set_ui_flag calls this again on every activation
     }
