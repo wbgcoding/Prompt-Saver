@@ -15,53 +15,18 @@ Chromium browser is installed.
 Run:  python tests/ui/smoke_test.py
 Exit: 0 = clean, 1 = problems found.
 """
-import hashlib
 import json
 import os
 import re
 import shutil
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[2]
-HERE = Path(__file__).parent
-# A dynamic import that was not preloaded never resolves under --virtual-time-budget,
-# and the language passes switch the UI language at run time, so every language file
-# is preloaded in the staged main page.
-LANG_PRELOADS = "".join(
-    f'<link rel="modulepreload" href="i18n/{c}.js" />'
-    for c in ("en", "de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro"))
+from smoke.harness import (REPO, HERE, LANG_PRELOADS, MIN_W, MIN_H, SIZES, WRAPPER,
+                           CHROME_CANDIDATES, SIDE_SCAN, unescape,
+                           install_manifest_recorder, run_chrome)
 
-# The floor is the app's own minimum window size: read it, so this sweep follows
-# tauri.conf.json instead of drifting away from it.
-_WIN = json.loads((REPO / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8"))["app"]["windows"][0]
-MIN_W, MIN_H = _WIN["minWidth"], _WIN["minHeight"]
-SIZES = [(1280, 800), (1366, 768), (900, 650), (620, 500), (MIN_W + 60, MIN_H + 40), (MIN_W, MIN_H)]
-
-# Headless Chrome refuses to make its window narrower than ~500px, so the page is
-# loaded in an iframe of the exact size instead; the wrapper republishes the probe
-# result because --dump-dom only prints the top document.
-WRAPPER = """<!doctype html><meta charset="utf-8">
-<style>html,body{margin:0}iframe{border:0;display:block}</style>
-<iframe id="f" src="ui/index.html" style="width:%dpx;height:%dpx"></iframe><pre id="SMOKE"></pre>
-<script>
-setInterval(() => {
-  try {
-    const p = f.contentDocument.getElementById('SMOKE');
-    const own = document.getElementById('SMOKE');
-    if (p && !own.textContent) own.textContent = p.textContent;
-  } catch (e) {}
-}, 200);
-</script>"""
-
-CHROME_CANDIDATES = [
-    r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-    r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-    r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-    r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
-]
 
 PROBE = """
 <script>
@@ -10231,29 +10196,6 @@ PROBE = """
 """
 
 
-# The secondary windows are small by nature, so they get the same "nothing escapes the
-# window" rule as the main one. Their own scroll containers are allowed to clip.
-SIDE_SCAN = """
-  const sideScan = (errs, where) => {
-    for (const el of document.querySelectorAll('body *')) {
-      const s = getComputedStyle(el);
-      if (s.display === 'none' || s.visibility === 'hidden' || s.position === 'fixed' ||
-          !el.getClientRects().length) continue;
-      let clipped = false;
-      for (let p = el.parentElement; p; p = p.parentElement) {
-        const ps = getComputedStyle(p);
-        if (ps.overflowX !== 'visible' || ps.overflowY !== 'visible') { clipped = true; break; }
-      }
-      if (clipped) continue;
-      const r = el.getBoundingClientRect();
-      if (!r.width || !r.height) continue;
-      if (r.right > innerWidth + 1 || r.left < -1) {
-        errs.push(where + ': ' + (el.id || el.className || el.tagName) + ' is outside the window (x ' +
-          Math.round(r.left) + '..' + Math.round(r.right) + ' of ' + innerWidth + ')');
-      }
-    }
-  };
-"""
 
 # F25 + F22: the pill window is the only place these two are observable. Both used to
 # fail for the same kind of reason -- a drag that never reports its end, and settings
@@ -15359,51 +15301,6 @@ EXPERT_PRESET_PROBE = """
 """
 
 
-def install_manifest_recorder(tmp):
-    """Refactor proof, off unless SMOKE_MANIFEST names a file: one line per Chrome call
-    (masked args, timeout, hash of the staged temp tree). SMOKE_MANIFEST_DRY=1 skips
-    the browser, so a run finishes in seconds."""
-    target = os.environ.get("SMOKE_MANIFEST")
-    if not target:
-        return
-    target = Path(target)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text("", encoding="utf-8")
-    dry = os.environ.get("SMOKE_MANIFEST_DRY") == "1"
-    original = subprocess.run
-    count = [0]
-
-    def tree_hash():
-        digest = hashlib.sha256()
-        for f in sorted(p for p in tmp.rglob("*") if p.is_file()):
-            rel = f.relative_to(tmp)
-            if any(part.startswith("profile-") for part in rel.parts):
-                continue
-            digest.update(rel.as_posix().encode("utf-8") + b"\0" + f.read_bytes())
-        return digest.hexdigest()
-
-    def mask(arg):
-        arg = str(arg)
-        return arg.replace(tmp.as_uri(), "<TMP-URI>").replace(str(tmp), "<TMP>").replace(tmp.as_posix(), "<TMP>")
-
-    def recorded(*args, **kwargs):
-        argv = args[0] if args else kwargs.get("args")
-        line = json.dumps({"i": count[0], "args": [mask(a) for a in argv],
-                           "timeout": kwargs.get("timeout"), "tree": tree_hash()}, sort_keys=True)
-        count[0] += 1
-        with open(target, "a", encoding="utf-8", newline="\n") as fh:
-            fh.write(line + "\n")
-        if dry:
-            return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
-        return original(*args, **kwargs)
-
-    subprocess.run = recorded
-
-
-def unescape(s):
-    for a, b in (("&quot;", '"'), ("&lt;", "<"), ("&gt;", ">"), ("&amp;", "&")):
-        s = s.replace(a, b)
-    return s
 
 # Folder window, drag-out on: a modifier-click that never moves is a plain copy,
 # the same rule the pill states. No OS drag starts, so the click must not vanish.
@@ -15525,44 +15422,37 @@ def main():
             wrapper.write_text(WRAPPER % (w, h), encoding="utf-8")
             # An isolated profile is required or Chrome hands the URL to a running
             # instance and prints nothing.
-            proc = subprocess.run(
-                [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-                 f"--user-data-dir={tmp / ('profile-%s' % size_tag)}", "--allow-file-access-from-files",
-                 # The probe walks more UI than it used to; 30s of virtual time ran
-                 # out mid-run on the smallest window and produced no result at all;
-                 # raised to 60s, then to 75s once the P10 quick-grid hover-only check
-                 # (two more expert-menu round trips) pushed past that too, then to 95s
-                 # once 91/51/70's regressions (trash dialog, multi-view popover, three
-                 # restore-scope round trips) added their own expert-menu detours, then
-                 # to 110s once 90-94's six new expert rows pushed past that too, then
-                 # to 120s once the injected-markup grid/library check added its own
-                 # create-and-verify round trip, then to 126s once 171's late-voice-text
-                 # probe added its own editor round trip plus the 3s late-delivery grace
-                 # window it has to sit through, then to 132s once the recording
-                 # result dialog's probe added its own four expert-menu round trips,
-                 # then to 138s once the tag-merge check added its own batch-select
-                 # round trip (two disposable tags added before the merge itself),
-                 # then to 146s once the copy-sound check added its own four
-                 # copy-and-listen round trips plus a volume-slider detour,
-                 # then to 149s once the number-field check added its own
-                 # click/hold/wheel/preset/disabled-state round trip, then to
-                 # 151s once the media-viewer zoom check added its own
-                 # prompt-editor-to-lightbox round trip, then to 154s once the
-                 # editor-scale check added its own draw/resize/undo round trip,
-                 # then to 172s once the sync-folder check added three full
-                 # question-and-answer rounds, each with its own tab walk, then
-                 # to 220s once the undo-toast checks (434) added six of their
-                 # own round trips (view delete, tag delete, copy history,
-                 # clipboard inbox, batch delete, batch tag add/remove).
-                 # The window has to hold the iframe plus Chrome's own frame.
-                 f"--window-size={max(w + 30, 520)},{h + 140}",
-                 "--virtual-time-budget=250000", "--dump-dom",
-                 wrapper.as_uri()],
-                # The dumped DOM carries all 20 languages; without an explicit
-                # codec Windows decodes it as cp1252 and the reader thread dies,
-                # leaving stdout empty.
-                capture_output=True, text=True, encoding="utf-8", errors="replace",
-                timeout=270)
+            # The probe walks more UI than it used to; 30s of virtual time ran
+            # out mid-run on the smallest window and produced no result at all;
+            # raised to 60s, then to 75s once the P10 quick-grid hover-only check
+            # (two more expert-menu round trips) pushed past that too, then to 95s
+            # once 91/51/70's regressions (trash dialog, multi-view popover, three
+            # restore-scope round trips) added their own expert-menu detours, then
+            # to 110s once 90-94's six new expert rows pushed past that too, then
+            # to 120s once the injected-markup grid/library check added its own
+            # create-and-verify round trip, then to 126s once 171's late-voice-text
+            # probe added its own editor round trip plus the 3s late-delivery grace
+            # window it has to sit through, then to 132s once the recording
+            # result dialog's probe added its own four expert-menu round trips,
+            # then to 138s once the tag-merge check added its own batch-select
+            # round trip (two disposable tags added before the merge itself),
+            # then to 146s once the copy-sound check added its own four
+            # copy-and-listen round trips plus a volume-slider detour,
+            # then to 149s once the number-field check added its own
+            # click/hold/wheel/preset/disabled-state round trip, then to
+            # 151s once the media-viewer zoom check added its own
+            # prompt-editor-to-lightbox round trip, then to 154s once the
+            # editor-scale check added its own draw/resize/undo round trip,
+            # then to 172s once the sync-folder check added three full
+            # question-and-answer rounds, each with its own tab walk, then
+            # to 220s once the undo-toast checks (434) added six of their
+            # own round trips (view delete, tag delete, copy history,
+            # clipboard inbox, batch delete, batch tag add/remove).
+            # The window has to hold the iframe plus Chrome's own frame.
+            # The dumped DOM carries all 20 languages; without an explicit
+            # codec Windows decodes it as cp1252 and the reader thread dies,
+            # leaving stdout empty.
+            proc = run_chrome(browser, tmp / ('profile-%s' % size_tag), f"{max(w + 30, 520)},{h + 140}", 250000, wrapper.as_uri(), 270)
             m = re.search(r'<pre id="SMOKE">(\{.*?\})</pre>', proc.stdout, re.S)
             if not m:
                 print(f"FAIL {w}x{h}: the UI produced no probe result")
@@ -15599,22 +15489,15 @@ def main():
             size_tag = f"it-{w}x{h}"
             wrapper = tmp / f"wrap-{size_tag}.html"
             wrapper.write_text(WRAPPER.replace("ui/index.html", "ui/index-it.html") % (w, h), encoding="utf-8")
-            proc = subprocess.run(
-                [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-                 f"--user-data-dir={tmp / ('profile-%s' % size_tag)}", "--allow-file-access-from-files",
-                 f"--window-size={max(w + 30, 520)},{h + 140}",
-                 # Raised from 126s once the clipboard-secret expert-menu check
-                 # (password-skip switch plus its length slider, each gated on the
-                 # other) added its own round of tab walks and switch toggles, then
-                 # from 134s once the Capture tab split (372) added a 7th expert
-                 # tab -- lengthening every existing tab walk by one click -- plus
-                 # its own group-survives-the-split probe, itself two full walks.
-                 # Kept equal to the English sweep's own budget just above, since
-                 # this runs the exact same probe script and had fallen behind it.
-                 "--virtual-time-budget=250000", "--dump-dom",
-                 wrapper.as_uri()],
-                capture_output=True, text=True, encoding="utf-8", errors="replace",
-                timeout=270)
+            # Raised from 126s once the clipboard-secret expert-menu check
+            # (password-skip switch plus its length slider, each gated on the
+            # other) added its own round of tab walks and switch toggles, then
+            # from 134s once the Capture tab split (372) added a 7th expert
+            # tab -- lengthening every existing tab walk by one click -- plus
+            # its own group-survives-the-split probe, itself two full walks.
+            # Kept equal to the English sweep's own budget just above, since
+            # this runs the exact same probe script and had fallen behind it.
+            proc = run_chrome(browser, tmp / ('profile-%s' % size_tag), f"{max(w + 30, 520)},{h + 140}", 250000, wrapper.as_uri(), 270)
             m = re.search(r'<pre id="SMOKE">(\{.*?\})</pre>', proc.stdout, re.S)
             if not m:
                 print(f"FAIL it {w}x{h}: the UI produced no probe result")
@@ -15666,13 +15549,7 @@ def main():
                 .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
                 .replace("</body>", probe + "</body>"),
                 encoding="utf-8")
-            proc = subprocess.run(
-                [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-                 f"--user-data-dir={tmp / ('profile-%s' % name)}", "--allow-file-access-from-files",
-                 f"--window-size={size[0]},{size[1]}", f"--virtual-time-budget={budget}",
-                 "--dump-dom", side.as_uri()],
-                capture_output=True, text=True, encoding="utf-8", errors="replace",
-                timeout=180)
+            proc = run_chrome(browser, tmp / ('profile-%s' % name), f"{size[0]},{size[1]}", budget, side.as_uri(), 180)
             m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
             errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
             print(f"-- {name}")
@@ -15695,18 +15572,12 @@ def main():
             .replace("</body>", VIDEO_PROBE + "</body>"),
             encoding="utf-8")
         for w, h in ((1100, 720), (760, 520)):
-            proc = subprocess.run(
-                [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-                 f"--user-data-dir={tmp / ('profile-video-%dx%d' % (w, h))}", "--allow-file-access-from-files",
-                 # Same "headless Chrome eats part of the requested window" offset
-                 # the main sweep already compensates for (see WRAPPER above) --
-                 # without it "760x520" never actually delivers that innerWidth/
-                 # innerHeight to the page, and the min-size run silently tests a
-                 # bigger window than the one this feature ships with.
-                 f"--window-size={w + 30},{h + 140}", "--virtual-time-budget=30000",
-                 "--dump-dom", video_side.as_uri()],
-                capture_output=True, text=True, encoding="utf-8", errors="replace",
-                timeout=180)
+            # Same "headless Chrome eats part of the requested window" offset
+            # the main sweep already compensates for (see WRAPPER above) --
+            # without it "760x520" never actually delivers that innerWidth/
+            # innerHeight to the page, and the min-size run silently tests a
+            # bigger window than the one this feature ships with.
+            proc = run_chrome(browser, tmp / ('profile-video-%dx%d' % (w, h)), f"{w + 30},{h + 140}", 30000, video_side.as_uri(), 180)
             m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
             errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
             print(f"-- video.html {w}x{h}")
@@ -15735,13 +15606,7 @@ def main():
                          '<script src="tauri_stub.js"></script>\n<script', 1)
                 .replace("</body>", EDIT_STATE_PROBE + "</body>"),
                 encoding="utf-8")
-            proc = subprocess.run(
-                [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-                 f"--user-data-dir={tmp / ('profile-video-restore-%s' % action)}", "--allow-file-access-from-files",
-                 "--window-size=1130,860", "--virtual-time-budget=30000",
-                 "--dump-dom", side.as_uri()],
-                capture_output=True, text=True, encoding="utf-8", errors="replace",
-                timeout=180)
+            proc = run_chrome(browser, tmp / ('profile-video-restore-%s' % action), "1130,860", 30000, side.as_uri(), 180)
             m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
             errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
             print(f"-- video.html restore dialog ({action})")
@@ -15760,13 +15625,7 @@ def main():
                      '<script src="tauri_stub.js"></script>\n<script', 1)
             .replace("</body>", SCALE_UP_PROBE + "</body>"),
             encoding="utf-8")
-        proc = subprocess.run(
-            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-             f"--user-data-dir={tmp / 'profile-video-scale-up'}", "--allow-file-access-from-files",
-             "--window-size=1130,860", "--virtual-time-budget=30000",
-             "--dump-dom", side.as_uri()],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=180)
+        proc = run_chrome(browser, tmp / 'profile-video-scale-up', "1130,860", 30000, side.as_uri(), 180)
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- video.html scale presets on a 720p source")
@@ -15785,13 +15644,7 @@ def main():
                      '<script src="tauri_stub.js"></script>\n<script', 1)
             .replace("</body>", EDIT_STATE_SUPERSEDE_PROBE + "</body>"),
             encoding="utf-8")
-        proc = subprocess.run(
-            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-             f"--user-data-dir={tmp / 'profile-video-restore-superseded'}", "--allow-file-access-from-files",
-             "--window-size=1130,860", "--virtual-time-budget=30000",
-             "--dump-dom", side.as_uri()],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=180)
+        proc = run_chrome(browser, tmp / 'profile-video-restore-superseded', "1130,860", 30000, side.as_uri(), 180)
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- video.html restore dialog (superseded by a second recording)")
@@ -15811,13 +15664,7 @@ def main():
                      '<script src="tauri_stub.js"></script>\n<script', 1)
             .replace("</body>", UNDO_OFF_PROBE + "</body>"),
             encoding="utf-8")
-        proc = subprocess.run(
-            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-             f"--user-data-dir={tmp / 'profile-undo-off'}", "--allow-file-access-from-files",
-             "--window-size=1000,780", "--virtual-time-budget=45000",
-             "--dump-dom", side.as_uri()],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=180)
+        proc = run_chrome(browser, tmp / 'profile-undo-off', "1000,780", 45000, side.as_uri(), 180)
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- Undo off: view delete and tag merge ask first")
@@ -15839,13 +15686,7 @@ def main():
                      '<script src="tauri_stub.js"></script>\n<script', 1)
             .replace("</body>", DRAG_VIEW_PROBE + "</body>"),
             encoding="utf-8")
-        proc = subprocess.run(
-            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-             f"--user-data-dir={tmp / 'profile-drag-view'}", "--allow-file-access-from-files",
-             "--window-size=1000,780", "--virtual-time-budget=45000",
-             "--dump-dom", side.as_uri()],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=180)
+        proc = run_chrome(browser, tmp / 'profile-drag-view', "1000,780", 45000, side.as_uri(), 180)
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- drag a tile onto a view tab")
@@ -15869,13 +15710,7 @@ def main():
                          '<script src="tauri_stub.js"></script>\n<script', 1)
                 .replace("</body>", SEAL_PROBE + "</body>"),
                 encoding="utf-8")
-            proc = subprocess.run(
-                [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-                 f"--user-data-dir={tmp / ('profile-seal-%s' % tag)}", "--allow-file-access-from-files",
-                 "--window-size=1000,780", "--virtual-time-budget=45000",
-                 "--dump-dom", side.as_uri()],
-                capture_output=True, text=True, encoding="utf-8", errors="replace",
-                timeout=180)
+            proc = run_chrome(browser, tmp / ('profile-seal-%s' % tag), "1000,780", 45000, side.as_uri(), 180)
             m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
             errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
             print(f"-- store sealing ({tag} store)")
@@ -15897,13 +15732,7 @@ def main():
                          '<script src="tauri_stub.js"></script>\n<script', 1)
                 .replace("</body>", TOUR_FIRSTRUN_PROBE + "</body>"),
                 encoding="utf-8")
-            proc = subprocess.run(
-                [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-                 f"--user-data-dir={tmp / ('profile-tour-firstrun-%s' % mode)}", "--allow-file-access-from-files",
-                 "--window-size=1000,780", "--virtual-time-budget=45000",
-                 "--dump-dom", side.as_uri()],
-                capture_output=True, text=True, encoding="utf-8", errors="replace",
-                timeout=180)
+            proc = run_chrome(browser, tmp / ('profile-tour-firstrun-%s' % mode), "1000,780", 45000, side.as_uri(), 180)
             m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
             errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
             print(f"-- first-run tour draft buffering ({mode})")
@@ -15924,13 +15753,7 @@ def main():
                      '<script src="tauri_stub.js"></script>\n<script', 1)
             .replace("</body>", SECRET_PROBE + "</body>"),
             encoding="utf-8")
-        proc = subprocess.run(
-            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-             f"--user-data-dir={tmp / 'profile-secret'}", "--allow-file-access-from-files",
-             "--window-size=1000,780", "--virtual-time-budget=45000",
-             "--dump-dom", side.as_uri()],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=180)
+        proc = run_chrome(browser, tmp / 'profile-secret', "1000,780", 45000, side.as_uri(), 180)
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- confidential prompt: locked bar, password prompt, unlock")
@@ -15953,13 +15776,7 @@ def main():
                          '<script src="tauri_stub.js"></script>\n<script', 1)
                 .replace("</body>", WRITE_FAIL_PROBE + "</body>"),
                 encoding="utf-8")
-            proc = subprocess.run(
-                [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-                 f"--user-data-dir={tmp / ('profile-writefail-%s' % tag)}", "--allow-file-access-from-files",
-                 "--window-size=1000,780", "--virtual-time-budget=45000",
-                 "--dump-dom", side.as_uri()],
-                capture_output=True, text=True, encoding="utf-8", errors="replace",
-                timeout=180)
+            proc = run_chrome(browser, tmp / ('profile-writefail-%s' % tag), "1000,780", 45000, side.as_uri(), 180)
             m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
             errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
             print(f"-- settings write ({tag})")
@@ -15984,13 +15801,7 @@ def main():
                 .replace("<script", extra, 1)
                 .replace("</body>", DATA_DIR_READONLY_PROBE + "</body>"),
                 encoding="utf-8")
-            proc = subprocess.run(
-                [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-                 f"--user-data-dir={tmp / ('profile-ddlock-%s' % tag)}", "--allow-file-access-from-files",
-                 "--window-size=1000,780", "--virtual-time-budget=45000",
-                 "--dump-dom", side.as_uri()],
-                capture_output=True, text=True, encoding="utf-8", errors="replace",
-                timeout=180)
+            proc = run_chrome(browser, tmp / ('profile-ddlock-%s' % tag), "1000,780", 45000, side.as_uri(), 180)
             m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
             errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
             print(f"-- data folder lock ({tag})")
@@ -16011,13 +15822,7 @@ def main():
             .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
             .replace("</body>", FOLDER_WORDING_PROBE + "</body>"),
             encoding="utf-8")
-        proc = subprocess.run(
-            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-             f"--user-data-dir={tmp / 'profile-folder-wording'}", "--allow-file-access-from-files",
-             "--window-size=1000,780", "--virtual-time-budget=45000",
-             "--dump-dom", side.as_uri()],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=180)
+        proc = run_chrome(browser, tmp / 'profile-folder-wording', "1000,780", 45000, side.as_uri(), 180)
         m = re.search(r'<pre id="SMOKE">(\{.*?\})</pre>', proc.stdout, re.S)
         result = json.loads(unescape(m.group(1))) if m else {"errs": ["no probe result"], "gridDissolve": None}
         errs = list(result.get("errs") or [])
@@ -16033,13 +15838,7 @@ def main():
             .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
             .replace("</body>", PILL_WORDING_PROBE + "</body>"),
             encoding="utf-8")
-        proc = subprocess.run(
-            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-             f"--user-data-dir={tmp / 'profile-pill-wording'}", "--allow-file-access-from-files",
-             "--window-size=520,420", "--virtual-time-budget=15000",
-             "--dump-dom", side.as_uri()],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=180)
+        proc = run_chrome(browser, tmp / 'profile-pill-wording', "520,420", 15000, side.as_uri(), 180)
         m = re.search(r'<pre id="SMOKE">(\{.*?\})</pre>', proc.stdout, re.S)
         pill_result = json.loads(unescape(m.group(1))) if m else {"errs": ["no probe result"], "pillDissolve": None}
         errs.extend(pill_result.get("errs") or [])
@@ -16068,13 +15867,7 @@ def main():
             .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
             .replace("</body>", TILE_HOTKEY_BADGE_PROBE + "</body>"),
             encoding="utf-8")
-        proc = subprocess.run(
-            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-             f"--user-data-dir={tmp / 'profile-tile-hotkey-badge'}", "--allow-file-access-from-files",
-             "--window-size=1000,780", "--virtual-time-budget=45000",
-             "--dump-dom", side.as_uri()],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=180)
+        proc = run_chrome(browser, tmp / 'profile-tile-hotkey-badge', "1000,780", 45000, side.as_uri(), 180)
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- tile hotkey badge")
@@ -16093,13 +15886,7 @@ def main():
                      '<script src="tauri_stub.js"></script>\n<script', 1)
             .replace("</body>", DEMO_PROBE + "</body>"),
             encoding="utf-8")
-        proc = subprocess.run(
-            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-             f"--user-data-dir={tmp / 'profile-demo-mode'}", "--allow-file-access-from-files",
-             "--window-size=1000,780", "--virtual-time-budget=45000",
-             "--dump-dom", side.as_uri()],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=180)
+        proc = run_chrome(browser, tmp / 'profile-demo-mode', "1000,780", 45000, side.as_uri(), 180)
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- demo mode")
@@ -16118,13 +15905,7 @@ def main():
             .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
             .replace("</body>", CAP_NEEDS_ADMIN_PROBE + "</body>"),
             encoding="utf-8")
-        proc = subprocess.run(
-            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-             f"--user-data-dir={tmp / 'profile-cap-needs-admin'}", "--allow-file-access-from-files",
-             "--window-size=1000,780", "--virtual-time-budget=45000",
-             "--dump-dom", side.as_uri()],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=180)
+        proc = run_chrome(browser, tmp / 'profile-cap-needs-admin', "1000,780", 45000, side.as_uri(), 180)
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- OCR/voice elevation: no admin rights vs transient failure")
@@ -16141,13 +15922,7 @@ def main():
             .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
             .replace("</body>", WHATS_NEW_PROBE + "</body>"),
             encoding="utf-8")
-        proc = subprocess.run(
-            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-             f"--user-data-dir={tmp / 'profile-whats-new'}", "--allow-file-access-from-files",
-             "--window-size=1000,780", "--virtual-time-budget=45000",
-             "--dump-dom", side.as_uri()],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=180)
+        proc = run_chrome(browser, tmp / 'profile-whats-new', "1000,780", 45000, side.as_uri(), 180)
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- whats new: toast, window, About entry, GitHub refresh")
@@ -16164,13 +15939,7 @@ def main():
             .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
             .replace("</body>", LICENSES_PROBE + "</body>"),
             encoding="utf-8")
-        proc = subprocess.run(
-            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-             f"--user-data-dir={tmp / 'profile-licenses'}", "--allow-file-access-from-files",
-             "--window-size=1000,780", "--virtual-time-budget=45000",
-             "--dump-dom", side.as_uri()],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=180)
+        proc = run_chrome(browser, tmp / 'profile-licenses', "1000,780", 45000, side.as_uri(), 180)
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- third-party license list in the About window")
@@ -16193,13 +15962,7 @@ def main():
                          '<script src="tauri_stub.js"></script>\n<script', 1)
                 .replace("</body>", PARKED_BADGE_PROBE + "</body>"),
                 encoding="utf-8")
-            proc = subprocess.run(
-                [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-                 f"--user-data-dir={tmp / ('profile-parked-%s' % name)}", "--allow-file-access-from-files",
-                 f"--window-size={w},{h}", "--virtual-time-budget=15000",
-                 "--dump-dom", side.as_uri()],
-                capture_output=True, text=True, encoding="utf-8", errors="replace",
-                timeout=180)
+            proc = run_chrome(browser, tmp / ('profile-parked-%s' % name), f"{w},{h}", 15000, side.as_uri(), 180)
             m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
             errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
             print(f"-- parked marker ({name})")
@@ -16216,13 +15979,7 @@ def main():
             .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
             .replace("</body>", FLOAT_RECALL_PROBE + "</body>"),
             encoding="utf-8")
-        proc = subprocess.run(
-            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-             f"--user-data-dir={tmp / 'profile-float-recall'}", "--allow-file-access-from-files",
-             "--window-size=1000,780", "--virtual-time-budget=45000",
-             "--dump-dom", side.as_uri()],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=180)
+        proc = run_chrome(browser, tmp / 'profile-float-recall', "1000,780", 45000, side.as_uri(), 180)
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- float-recall expert action")
@@ -16241,13 +15998,7 @@ def main():
             .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
             .replace("</body>", EXTRA_CLIPS_MAX_PROBE + "</body>"),
             encoding="utf-8")
-        proc = subprocess.run(
-            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-             f"--user-data-dir={tmp / 'profile-extra-clips-max'}", "--allow-file-access-from-files",
-             "--window-size=1130,860", "--virtual-time-budget=30000",
-             "--dump-dom", side.as_uri()],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=180)
+        proc = run_chrome(browser, tmp / 'profile-extra-clips-max', "1130,860", 30000, side.as_uri(), 180)
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- video editor extra-source limit as an expert value")
@@ -16266,13 +16017,7 @@ def main():
             .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
             .replace("</body>", RETENTION_PANEL_PROBE + "</body>"),
             encoding="utf-8")
-        proc = subprocess.run(
-            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-             f"--user-data-dir={tmp / 'profile-retention-panel'}", "--allow-file-access-from-files",
-             "--window-size=1000,780", "--virtual-time-budget=45000",
-             "--dump-dom", side.as_uri()],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=180)
+        proc = run_chrome(browser, tmp / 'profile-retention-panel', "1000,780", 45000, side.as_uri(), 180)
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- retention overview in the statistics/backups window")
@@ -16291,13 +16036,7 @@ def main():
             .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
             .replace("</body>", EDITOR_DRAFT_PROBE + "</body>"),
             encoding="utf-8")
-        proc = subprocess.run(
-            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-             f"--user-data-dir={tmp / 'profile-editor-draft'}", "--allow-file-access-from-files",
-             "--window-size=1000,780", "--virtual-time-budget=45000",
-             "--dump-dom", side.as_uri()],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=180)
+        proc = run_chrome(browser, tmp / 'profile-editor-draft', "1000,780", 45000, side.as_uri(), 180)
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- editor draft: crash recovery offered once, decline discards it")
@@ -16315,13 +16054,7 @@ def main():
             .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
             .replace("</body>", VAR_FIXED_PROBE + "</body>"),
             encoding="utf-8")
-        proc = subprocess.run(
-            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-             f"--user-data-dir={tmp / 'profile-var-fixed'}", "--allow-file-access-from-files",
-             "--window-size=1000,780", "--virtual-time-budget=45000",
-             "--dump-dom", side.as_uri()],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=180)
+        proc = run_chrome(browser, tmp / 'profile-var-fixed', "1000,780", 45000, side.as_uri(), 180)
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- fixed placeholder values: list editor and fill-in suggestion")
@@ -16340,13 +16073,7 @@ def main():
             .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
             .replace("</body>", EXPERT_PRESET_PROBE + "</body>"),
             encoding="utf-8")
-        proc = subprocess.run(
-            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-             f"--user-data-dir={tmp / 'profile-expert-preset'}", "--allow-file-access-from-files",
-             "--window-size=1000,780", "--virtual-time-budget=45000",
-             "--dump-dom", side.as_uri()],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=180)
+        proc = run_chrome(browser, tmp / 'profile-expert-preset', "1000,780", 45000, side.as_uri(), 180)
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- expert menu quick profiles: change count and no lasting marker")
@@ -16363,13 +16090,7 @@ def main():
             .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
             .replace("</body>", FOLDER_DRAGOUT_PROBE + "</body>"),
             encoding="utf-8")
-        proc = subprocess.run(
-            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-             f"--user-data-dir={tmp / 'profile-folder-dragout'}", "--allow-file-access-from-files",
-             "--window-size=520,420", "--virtual-time-budget=15000",
-             "--dump-dom", side.as_uri()],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=180)
+        proc = run_chrome(browser, tmp / 'profile-folder-dragout', "520,420", 15000, side.as_uri(), 180)
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- folder window: modifier-click without movement copies")
@@ -16385,13 +16106,7 @@ def main():
             .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
             .replace("</body>", FLOAT_SCALE_RACE_PROBE + "</body>"),
             encoding="utf-8")
-        proc = subprocess.run(
-            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-             f"--user-data-dir={tmp / 'profile-float-scale-race'}", "--allow-file-access-from-files",
-             "--window-size=240,60", "--virtual-time-budget=15000",
-             "--dump-dom", side.as_uri()],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=180)
+        proc = run_chrome(browser, tmp / 'profile-float-scale-race', "240,60", 15000, side.as_uri(), 180)
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- pill window: closing the menu during a size change")
@@ -16529,13 +16244,7 @@ def main():
             .replace("<script", seed + '<script src="tauri_stub.js"></script>\n<script', 1)
             .replace("</body>", video_expert_probe + "</body>"),
             encoding="utf-8")
-        proc = subprocess.run(
-            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-             f"--user-data-dir={tmp / 'profile-video-expert-seeded'}", "--allow-file-access-from-files",
-             "--window-size=1130,860", "--virtual-time-budget=30000",
-             "--dump-dom", side.as_uri()],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=180)
+        proc = run_chrome(browser, tmp / 'profile-video-expert-seeded', "1130,860", 30000, side.as_uri(), 180)
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- video.html seeded non-default expert values")
@@ -16572,13 +16281,7 @@ def main():
                 .replace("</body>", ar_scaffold % (ar_common, body) + "</body>"),
                 encoding="utf-8")
             w, h = size.split("x")
-            proc = subprocess.run(
-                [browser, "--headless=new", "--disable-gpu", "--no-first-run",
-                 f"--user-data-dir={tmp / ('profile-ar-' + tag)}", "--allow-file-access-from-files",
-                 f"--window-size={w},{h}", "--virtual-time-budget=45000",
-                 "--dump-dom", side.as_uri()],
-                capture_output=True, text=True, encoding="utf-8", errors="replace",
-                timeout=180)
+            proc = run_chrome(browser, tmp / ('profile-ar-' + tag), f"{w},{h}", 45000, side.as_uri(), 180)
             m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
             errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
             print(f"-- {label}")
