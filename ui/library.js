@@ -1373,12 +1373,9 @@ export async function libraryCopy(p) {
   if (flag("closeAfterCopy")) hideLibrary();
 }
 
-// Reflect the close-after-copy flag on the library header toggle.
+// Reflect the close-after-copy flag on the library header checkbox.
 export function syncLibraryToggle() {
-  const btn = $("library-close-toggle");
-  const on = flag("closeAfterCopy");
-  btn.classList.toggle("active", on);
-  btn.setAttribute("aria-pressed", String(on));
+  $("library-close-toggle").checked = flag("closeAfterCopy");
 }
 
 // Library list columns. ONE place decides it: the expert value. The segmented
@@ -1418,9 +1415,9 @@ export function bindLibrary() {
   });
   $("library-tab-prompts").addEventListener("click", () => setLibraryTab("prompts"));
   $("library-tab-history").addEventListener("click", () => setLibraryTab("history"));
-  // "Close after copy" toggle in the library header (mirrors the expert flag).
-  $("library-close-toggle").addEventListener("click", async () => {
-    const enabled = !flag("closeAfterCopy");
+  // "Close after copy" checkbox in the library header (mirrors the expert flag).
+  $("library-close-toggle").addEventListener("change", async (e) => {
+    const enabled = e.target.checked;
     settings.ui_flags = { ...(settings.ui_flags || {}), closeAfterCopy: enabled };
     try { await invoke("set_ui_flag", { key: "closeAfterCopy", enabled }); } catch (err) { errToast(err); }
     syncLibraryToggle();

@@ -69,6 +69,27 @@ SECTION = """\
         out.errors.push('709: the library row of a prompt with reserved names does not show [date]: ' + (dynRow ? dynRow.textContent : 'row missing'));
       }
     }
+    // 710: "Close after copy" in the library head is a checkbox that follows the flag.
+    {
+      const closeBox = document.getElementById('library-close-toggle');
+      const flagNow = async () => (await window.__TAURI__.core.invoke('get_settings')).ui_flags.closeAfterCopy !== false;
+      if (!closeBox || closeBox.type !== 'checkbox') {
+        out.errors.push('710: the library close-after-copy control is not a checkbox');
+      } else {
+        const before = await flagNow();
+        if (closeBox.checked !== before) out.errors.push('710: the checkbox does not show the flag: ' + closeBox.checked + ' vs ' + before);
+        closeBox.click();
+        await sleep(250);
+        if ((await flagNow()) === before || closeBox.checked === before) {
+          out.errors.push('710: ticking the checkbox did not flip the flag (box ' + closeBox.checked + ', flag ' + (await flagNow()) + ')');
+        }
+        closeBox.click();
+        await sleep(250);
+        if ((await flagNow()) !== before || closeBox.checked !== before) {
+          out.errors.push('710: ticking the checkbox again did not restore the flag');
+        }
+      }
+    }
     // A library row with an image attachment opens the same actions menu as any
     // other row: edit, edit image, duplicate ... delete, not just "open in editor".
     {

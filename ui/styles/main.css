@@ -4333,6 +4333,10 @@ body.drag-over::after {
   cursor: pointer;
 }
 .head-toggle:hover { border-color: var(--accent); }
+/* A compact option in a dialog head (the library's Close after copy): a plain themed
+   checkbox with its label, since a switch there reads as another tab. */
+.head-check { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); cursor: pointer; }
+.head-check input { margin: 0; accent-color: var(--accent); cursor: pointer; }
 /* Reusable busy state for a button: the label fades out and a small ring fades
    in on the same spot, so the button never changes width. Under no-animations
    and reduced motion the ring simply stays still. */
