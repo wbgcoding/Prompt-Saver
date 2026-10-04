@@ -1,6 +1,6 @@
 // The help view: search, tabs, collapsed sections and deep links.
 import { HELP_CONTENT } from "./help.js";
-import { $, ALL_SHORTCUT_SCOPES, debounced, flag, LANG, t, txt } from "./core.js";
+import { $, ALL_SHORTCUT_SCOPES, debounced, flag, ICON_OCR, ICON_RECORD, ICON_SNIP, LANG, t, txt } from "./core.js";
 import { HELP_SKETCHES } from "./helpSketches.js";
 import { openShortcutsModal } from "./windowChrome.js";
 
@@ -65,9 +65,9 @@ export function appendTermMarks(el, text, terms) {
 // help sentence naming a button this way always shows the button as it looks
 // today, including a future icon redesign, with zero upkeep in help.js itself.
 export const HELP_ICON_SOURCES = {
-  screenshot: () => $("snip-btn")?.querySelector("svg")?.outerHTML,
-  record: () => $("record-btn")?.querySelector("svg")?.outerHTML,
-  ocr: () => $("ocr-btn")?.querySelector("svg")?.outerHTML,
+  screenshot: () => ICON_SNIP,
+  record: () => ICON_RECORD,
+  ocr: () => ICON_OCR,
   mic: () => $("voice-btn")?.querySelector("svg")?.outerHTML,
   library: () => $("library-btn")?.querySelector("svg")?.outerHTML,
   themeEditor: () => $("theme-edit-open")?.querySelector("svg")?.outerHTML,

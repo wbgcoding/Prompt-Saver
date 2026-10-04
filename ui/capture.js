@@ -1,5 +1,5 @@
 // Screen capture, recording, OCR and the editor hand-off.
-import { $, convertFileSrc, errToast, flag, invoke, listen, OCR_LANG_NOTICE_MS, optFlag, settings, t, toast, txt, val, VOICE_LANG_NOTICE_MS } from "./core.js";
+import { $, convertFileSrc, errToast, flag, ICON_FILE, ICON_OCR, ICON_PICKER, ICON_RECORD, ICON_SNIP, invoke, listen, OCR_LANG_NOTICE_MS, optFlag, settings, t, toast, txt, val, VOICE_LANG_NOTICE_MS } from "./core.js";
 import { openFileCreate, openModal, startFileCreate, startFileFromClipboard, withDialog } from "./editor.js";
 import { placePopover } from "./popover.js";
 import { recordToolUsage } from "./management.js";
@@ -12,7 +12,7 @@ import { ocrErrToast, openOcrLangsModal } from "./dictation.js";
 import { openMiniMenu } from "./views.js";
 import { attachSelectPicker } from "./selectpop.js";
 
-// ---- Colour-pick history popover (right-click on #picker-btn) ----
+// ---- Colour-pick history popover (the capture menu's "recent colors" entry) ----
 export const pickHistoryPop = document.createElement("div");
 
 export function closePickHistoryPop() { pickHistoryPop.classList.add("hidden"); }
@@ -25,23 +25,12 @@ export function bindCapture() {
     startFileFromClipboard();
   });
 
-  // Snipping tool: open the overlay; the backend notifies us with the crop.
-  $("snip-btn").addEventListener("click", () => {
-    invoke("open_snip").catch((err) => errToast(err));
-  });
-
-  // Pipette: the same frozen-desktop overlay, in colour-pick mode. The result
-  // is a clipboard value only: no prompt is created and nothing enters the history.
-  $("picker-btn").addEventListener("click", () => {
-    invoke("open_picker").catch((err) => errToast(err));
-  });
-
-  // Screen recording: the same frozen-desktop overlay, in record-target
+  // Start or stop a screen recording: the same frozen-desktop overlay, in record-target
   // mode. The backend resolves the click/drag into a window, monitor or region
   // and notifies us with "recorder-target-picked"; a short countdown (0 = none)
   // then the actual capture starts.
-  $("record-btn").addEventListener("click", async () => {
-    const btn = $("record-btn");
+  async function startOrStopRecording() {
+    const btn = $("capture-btn");
     // A glowing button always meant "start a second recording" before -- the
     // click reached open_recorder regardless, which the backend now refuses
     // with recording-busy, but the button itself should just stop the one
@@ -61,57 +50,12 @@ export function bindCapture() {
       setRecordBtnState("idle");
     }
     invoke("open_recorder").catch((err) => errToast(err));
-  });
+  }
 
-  // A right-click on either composer button opens a quiet, one-item
-  // menu to edit an EXISTING file instead of only ever reaching an editor
-  // through a fresh capture/recording. Which editor opens is decided by the
-  // file's own content (open_file_in_editor), never by which button was used.
-  const openEditorPop = document.createElement("div");
-  openEditorPop.className = "ctx open-editor-pop hidden";
-  openEditorPop.setAttribute("role", "menu");
-  openEditorPop.innerHTML =
-    '<button type="button" role="menuitem" id="open-editor-pop-item"></button>' +
-    // A second, camera-only entry on the SAME popover the record button
-    // already opens on right-click -- shown only when cameraRecord is on, so
-    // the default-off feature stays invisible until someone actually enables it.
-    '<button type="button" role="menuitem" id="camera-menu-item" class="hidden"></button>';
-  document.body.appendChild(openEditorPop);
-  function closeOpenEditorPop() {
-    openEditorPop.classList.add("hidden");
-  }
-  // path is set only when the menu is opened for a KNOWN attachment (the
-  // library's own right-click, below); left empty it means "let the user
-  // pick a file", which is what the composer buttons always do.
-  let openEditorPopPath = "";
-  function openOpenEditorPopAt(anchorEl, path, showCamera) {
-    openEditorPopPath = path || "";
-    openEditorPop.querySelector("#open-editor-pop-item").textContent = t("openFileInEditor");
-    const camItem = openEditorPop.querySelector("#camera-menu-item");
-    camItem.classList.toggle("hidden", !showCamera);
-    if (showCamera) camItem.textContent = t("cameraMenuItem");
-    placePopover(openEditorPop, anchorEl.getBoundingClientRect());
-  }
-  openEditorPop.querySelector("#open-editor-pop-item").addEventListener("click", () => {
-    const path = openEditorPopPath;
-    closeOpenEditorPop();
-    openExternalFileInEditor(path || undefined);
-  });
-  openEditorPop.querySelector("#camera-menu-item").addEventListener("click", () => {
-    closeOpenEditorPop();
-    invoke("open_camera_window").catch((e) => errToast(e));
-  });
-  $("snip-btn").addEventListener("contextmenu", (e) => {
-    e.preventDefault();
-    openOpenEditorPopAt($("snip-btn"));
-  });
-  $("record-btn").addEventListener("contextmenu", (e) => {
-    e.preventDefault();
-    openOpenEditorPopAt($("record-btn"), undefined, optFlag("cameraRecord"));
-  });
-  // Shared by the composer menu above and the library's own "Open in editor"
+  // Shared by the capture menu and the library's own "Open in editor"
   // right-click on an image/video attachment -- existingPath lets the caller
-  // hand over a path it already knows instead of showing the picker.
+  // hand over a path it already knows instead of showing the picker. Which editor
+  // opens is decided by the file's own content, never by the entry used.
   async function openExternalFileInEditor(existingPath) {
     const path = existingPath || (await invoke("pick_media_file_path").catch(() => null));
     if (!path) return;
@@ -138,13 +82,12 @@ export function bindCapture() {
   // successful start, cleared on stop/cancel/auto-stop, and re-synced by a
   // slow poll so a missed event can never leave the button glowing forever.
   function setRecordBtnState(state) {
-    const btn = $("record-btn");
+    const btn = $("capture-btn");
     btn.classList.toggle("is-recording", state === "recording");
     btn.classList.toggle("is-paused", state === "paused");
-    // Idle keeps its own data-i18n-title tooltip (with the right-click hint) and
-    // the plain name as accessible name; the click now stops the recording instead
-    // of trying to start a second one while either indicator is glowing, so the
-    // tooltip has to say that.
+    // Idle keeps its own data-i18n-title tooltip and the plain name as accessible
+    // name; the click stops the recording instead of opening the menu while either
+    // indicator is glowing, so the tooltip has to say that.
     const idle = state === "idle";
     btn.title = idle ? t(btn.dataset.i18nTitle) : t("recBtnStopTip");
     btn.setAttribute("aria-label", idle ? t(btn.dataset.i18nAria) : t("recBtnStopTip"));
@@ -598,7 +541,7 @@ export function bindCapture() {
     if (path) openFileCreate(path);
   });
 
-  // Right-click reaches the picker's history without opening the overlay:
+  // The "recent colors" entry reaches the picker's history without opening the overlay:
   // it lives in the backend (survives a restart), this popover just displays it.
   function renderPickHistoryPop(hex) {
     pickHistoryPop.innerHTML = "";
@@ -630,13 +573,12 @@ export function bindCapture() {
       }
     }
   }
-  $("picker-btn").addEventListener("contextmenu", async (e) => {
-    e.preventDefault();
+  async function openPickHistory() {
     let hex = [];
     try { hex = (await invoke("pick_history")) || []; } catch { /* history stays empty */ }
     renderPickHistoryPop(hex);
-    placePopover(pickHistoryPop, $("picker-btn").getBoundingClientRect());
-  });
+    placePopover(pickHistoryPop, $("capture-btn").getBoundingClientRect());
+  }
   listen("color-picked", async (e) => {
     const value = e.payload?.text || "";
     if (!value) return;
@@ -869,31 +811,57 @@ export function bindCapture() {
       recordToolUsage("ocr");
     } catch (err) { ocrErrToast(err); }
   });
-  // (b) standalone composer button -- small menu (Screenshot / From image file).
-  $("ocr-btn").addEventListener("click", () => {
-    const r = $("ocr-btn").getBoundingClientRect();
-    openMiniMenu([
-      {
-        label: t("ocrMenuFromFile"),
-        run: async () => {
-          const path = await withDialog(() => invoke("pick_file_path"));
-          if (!path) return;
-          try {
-            showOcrResult(await invoke("ocr_image", { path, ...ocrSettings() }));
-            recordToolUsage("ocr");
-          } catch (err) { ocrErrToast(err); }
-        },
-      },
-      {
-        label: t("ocrMenuScreenshot"),
-        run: async () => {
-          // Arms the NEXT capture for OCR instead of a normal screenshot save; the
-          // backend resets this the moment the session ends (capture or cancel).
-          await invoke("set_snip_mode", { mode: "ocr" }).catch(() => {});
-          invoke("open_snip").catch((err) => errToast(err));
-        },
-      },
-    ], r.left, r.bottom + 4);
+  // (b) the capture menu entries "text from a screenshot" and "text from an image file".
+  async function ocrFromFile() {
+    const path = await withDialog(() => invoke("pick_file_path"));
+    if (!path) return;
+    try {
+      showOcrResult(await invoke("ocr_image", { path, ...ocrSettings() }));
+      recordToolUsage("ocr");
+    } catch (err) { ocrErrToast(err); }
+  }
+  async function ocrFromScreenshot() {
+    // Arms the NEXT capture for OCR instead of a normal screenshot save; the
+    // backend resets this the moment the session ends (capture or cancel).
+    await invoke("set_snip_mode", { mode: "ocr" }).catch(() => {});
+    invoke("open_snip").catch((err) => errToast(err));
+  }
+  // The one composer entry for every capture tool. While a recording runs the
+  // button glows and a click stops it; otherwise it opens the menu.
+  function openCaptureMenu() {
+    const r = $("capture-btn").getBoundingClientRect();
+    const items = [];
+    if (flag("screenshot")) {
+      items.push({ label: t("snipTitle"), icon: ICON_SNIP, run: () => invoke("open_snip").catch((err) => errToast(err)) });
+    }
+    if (flag("screenRecord")) {
+      items.push({ label: t("recordTitle"), icon: ICON_RECORD, run: startOrStopRecording });
+    }
+    if (optFlag("cameraRecord")) {
+      items.push({ label: t("cameraMenuItem"), icon: ICON_RECORD, run: () => invoke("open_camera_window").catch((e) => errToast(e)) });
+    }
+    // The picker is a clipboard value only: no prompt is created and nothing
+    // enters the history.
+    if (flag("colorPicker")) {
+      items.push({ label: t("pickerMenu"), icon: ICON_PICKER, run: () => invoke("open_picker").catch((err) => errToast(err)) });
+      items.push({ label: t("pickRecentColors"), icon: ICON_PICKER, run: openPickHistory });
+    }
+    if (flag("ocr")) {
+      items.push({ label: t("ocrFromScreenshot"), icon: ICON_OCR, run: ocrFromScreenshot });
+      items.push({ label: t("ocrFromFile"), icon: ICON_OCR, run: ocrFromFile });
+    }
+    if (flag("screenshot")) {
+      items.push({ label: t("openFileInEditor"), icon: ICON_FILE, run: () => openExternalFileInEditor() });
+    }
+    if (items.length) openMiniMenu(items, r.left, r.top);
+  }
+  $("capture-btn").addEventListener("click", () => {
+    const btn = $("capture-btn");
+    if (btn.classList.contains("is-recording") || btn.classList.contains("is-paused")) {
+      startOrStopRecording();
+      return;
+    }
+    openCaptureMenu();
   });
   // Screenshot-into-OCR result, emitted by capture_region's OCR branch -- a
   // separate event from "snip-captured" so the normal screenshot flow above is
@@ -948,7 +916,7 @@ export function bindCapture() {
   });
 
   attachSelectPicker($("snip-modal-saveas-format"));
-  return { openEditorPop, closeOpenEditorPop, openExternalFileInEditor, closeRecMorePop, closeRecModal, snipEdit };
+  return { openExternalFileInEditor, closeRecMorePop, closeRecModal, snipEdit };
 }
 
 export function wireCapture() {
@@ -956,7 +924,7 @@ export function wireCapture() {
   document.body.appendChild(pickHistoryPop);
   document.addEventListener("pointerdown", (e) => {
     if (pickHistoryPop.classList.contains("hidden")) return;
-    if (!pickHistoryPop.contains(e.target) && !e.target.closest("#picker-btn")) {
+    if (!pickHistoryPop.contains(e.target)) {
       closePickHistoryPop();
     }
   });

@@ -1155,7 +1155,7 @@ body.chain-mode:not(.grid-selecting) .tile .tile-select { opacity: 0; pointer-ev
    this one included; the colour change alone (not an animation/transition)
    still marks the state as active with the ring gone. */
 #voice-btn.is-listening, #modal-voice-btn.is-listening,
-#record-btn.is-recording {
+#capture-btn.is-recording {
   color: var(--accent);
   box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
   animation: capture-pulse 1.6s ease-out infinite;
@@ -1167,7 +1167,7 @@ body.chain-mode:not(.grid-selecting) .tile .tile-select { opacity: 0; pointer-ev
    reason recAudio's own bar draws its pause differently from recording: a
    pulsing button next to a paused recording would be a lie. */
 #voice-btn.is-arming, #modal-voice-btn.is-arming,
-#record-btn.is-paused {
+#capture-btn.is-paused {
   color: var(--accent);
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 35%, transparent);
 }
@@ -1582,13 +1582,9 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
 .expert-notice span { min-width: 0; }
 .expert-notice-action { display: inline-flex; margin: -4px 0 4px; align-self: flex-start; color: var(--danger); border-color: var(--danger); }
 .noflag-fileAttach #file-btn { display: none; }
-.noflag-screenshot #snip-btn { display: none; }
-.noflag-colorPicker #picker-btn { display: none; }
-.noflag-screenRecord #record-btn { display: none; }
 .noflag-dupFinder #library-dupes { display: none; }
 /* OCR ships on -- a default-on flag only ever sets noflag-<key>, never flag-<key>,
-   so both entry points hide via noflag-ocr. */
-.noflag-ocr #ocr-btn,
+   so its entry point hides via noflag-ocr. */
 .noflag-ocr #snip-modal-ocr { display: none; }
 /* Voice ships on too, same noflag-<key> pattern; a Windows build with no
    speech engine at all hides the button regardless of the flag's own value. */

@@ -270,10 +270,21 @@ SECTION = """\
     // and gone once the flag is switched off), then switch it back on via the
     // real expert-menu checkbox and exercise the menu plus the result dialog.
     {
-      const ocrBtn = document.getElementById('ocr-btn');
+      const captureBtn17 = document.getElementById('capture-btn');
       const snipModalOcrBtn = document.getElementById('snip-modal-ocr');
       const hiddenNow = (el) => !el || getComputedStyle(el).display === 'none';
-      if (hiddenNow(ocrBtn) || hiddenNow(snipModalOcrBtn)) {
+      // The OCR entries of the capture menu (the app runs in German here), read by opening the
+      // menu and closing it again.
+      const ocrMenuLabels = async () => {
+        captureBtn17.click();
+        await sleep(100);
+        const m = document.querySelector('.tab-menu:not(.hidden)');
+        const labels = m ? [...m.querySelectorAll('button[role=menuitem]')].map((b) => b.textContent.trim()) : [];
+        document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+        await sleep(50);
+        return labels.filter((l) => l.startsWith('Text aus '));
+      };
+      if (hiddenNow(captureBtn17) || hiddenNow(snipModalOcrBtn)) {
         out.errors.push('OCR entry points are hidden while the ocr flag is on');
       }
       const rowByLabel = (text) => {
@@ -296,21 +307,16 @@ SECTION = """\
         await click('expert-back');
         await sleep(50);
       };
-      if (!ocrBtn.title.trim() || /^[a-z]+[A-Z]/.test(ocrBtn.title)) {
-        out.errors.push('OCR composer button has no real title (raw i18n key or empty)');
+      if (!captureBtn17.title.trim() || /^[a-z]+[A-Z]/.test(captureBtn17.title)) {
+        out.errors.push('capture button has no real title (raw i18n key or empty)');
       }
-      ocrBtn.click();
-      await sleep(100);
-      const menu = document.querySelector('.tab-menu:not(.hidden)');
-      const menuItems = menu ? [...menu.querySelectorAll('button[role=menuitem]')] : [];
-      if (menuItems.length !== 2) {
-        out.errors.push('OCR menu: expected 2 entries, found ' + menuItems.length);
-      } else if (menuItems[1].textContent.trim() !== 'Screenshot') {
-        // The screenshot entry belongs at the bottom of the menu.
-        out.errors.push('OCR menu: last entry is ' + JSON.stringify(menuItems[1].textContent.trim()) + ', expected the screenshot one');
+      const ocrOn = await ocrMenuLabels();
+      if (ocrOn.length !== 2) {
+        out.errors.push('OCR menu: expected 2 entries, found ' + ocrOn.length);
+      } else if (ocrOn[0] !== 'Text aus Screenshot erkennen' || ocrOn[1] !== 'Text aus Bilddatei erkennen') {
+        // The screenshot entry comes first, the image file second.
+        out.errors.push('OCR menu: entries are ' + JSON.stringify(ocrOn));
       }
-      document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
-      await sleep(50);
       const injected = '<b>bold</b> and a tag look-alike </p>';
       window.__FIRE__('ocr-captured', { text: injected, lang: 'en' });
       await sleep(150);
@@ -357,13 +363,13 @@ SECTION = """\
         await sleep(250);
       }
       await toggleOcrFlag(false);
-      if (!hiddenNow(ocrBtn) || !hiddenNow(snipModalOcrBtn)) {
+      if ((await ocrMenuLabels()).length || !hiddenNow(snipModalOcrBtn)) {
         out.errors.push('OCR entry points stayed visible after switching the flag off');
       }
       // Back to the shipped state -- later probes (the tour's step 5) read the
       // live flags and would otherwise see a value this probe left behind.
       await toggleOcrFlag(true);
-      if (hiddenNow(ocrBtn) || hiddenNow(snipModalOcrBtn)) {
+      if ((await ocrMenuLabels()).length !== 2 || hiddenNow(snipModalOcrBtn)) {
         out.errors.push('OCR entry points stayed hidden after switching the flag back on');
       }
     }

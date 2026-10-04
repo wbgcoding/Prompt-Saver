@@ -74,7 +74,7 @@ wireTheme();
 function bind() {
   bindEditor();
   bindCopyFlow();
-  const { openEditorPop, closeOpenEditorPop, openExternalFileInEditor, closeRecMorePop, closeRecModal, snipEdit } = bindCapture();
+  const { openExternalFileInEditor, closeRecMorePop, closeRecModal, snipEdit } = bindCapture();
   bindDictation();
   bindSettingsPanel();
   bindExpertMenu();
@@ -114,9 +114,6 @@ function bind() {
     // The toolbar button toggles its own popover, so let its own press through.
     if (!gridTagPop.classList.contains("hidden") && !gridTagPop.contains(e.target) &&
         !e.target.closest("#grid-tag-btn")) closeGridTagPop();
-    // The two composer buttons toggle it themselves (their own contextmenu handler).
-    if (!openEditorPop.classList.contains("hidden") && !openEditorPop.contains(e.target) &&
-        !e.target.closest("#snip-btn") && !e.target.closest("#record-btn")) closeOpenEditorPop();
   });
   // Ctrl+Tab walks the views in the order the tab bar shows them.
   document.addEventListener("keydown", (e) => {
@@ -153,7 +150,6 @@ function bind() {
     if (!viewsPop.classList.contains("hidden")) { trapTabWithin(viewsPop, e); return; }
     if (!moveToFolderPop.classList.contains("hidden")) { trapTabWithin(moveToFolderPop, e); return; }
     if (!gridTagPop.classList.contains("hidden")) { trapTabWithin(gridTagPop, e); return; }
-    if (!openEditorPop.classList.contains("hidden")) { trapTabWithin(openEditorPop, e); return; }
     if (!$("rec-modal-more-pop").classList.contains("hidden")) { trapTabWithin($("rec-modal-more-pop"), e); return; }
     if (!$("lightbox").classList.contains("hidden")) { trapTabWithin($("lightbox"), e); return; }
     if (!$("confirm-modal").classList.contains("hidden")) { trapTabWithin($("confirm-modal"), e); return; }
@@ -186,7 +182,6 @@ function bind() {
     if (!viewsPop.classList.contains("hidden")) { closeViewsPop(); return; }
     if (!moveToFolderPop.classList.contains("hidden")) { closeMoveToFolderPop(); return; }
     if (!gridTagPop.classList.contains("hidden")) { closeGridTagPop(); return; }
-    if (!openEditorPop.classList.contains("hidden")) { closeOpenEditorPop(); return; }
     if (!$("rec-modal-more-pop").classList.contains("hidden")) { closeRecMorePop(); return; }
     if (!$("lightbox").classList.contains("hidden")) closeLightbox();
     else if (dismissConfirm()) { /* the dialog closed itself */ }

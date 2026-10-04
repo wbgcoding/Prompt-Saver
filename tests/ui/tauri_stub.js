@@ -405,7 +405,9 @@ const RESULTS = {
   // show_size/size_eta_secs mirror what rec_bar_size_state would compute
   // server side; __REC_STATUS_OVERRIDE__ lets a probe swap in a different
   // reading (e.g. past the size ceiling) between polls.
-  recording_status: () => Object.assign(
+  // window.__REC_IDLE__ = true reports "no recording" (null), the way the backend does
+  // between recordings; the main window's capture button reads it on a poll.
+  recording_status: () => window.__REC_IDLE__ ? null : Object.assign(
     { paused: false, elapsed_ms: 65000, bytes: 600000000, show_size: true, size_eta_secs: null, target_switch_enabled: false },
     window.__REC_STATUS_OVERRIDE__ || {},
   ),
