@@ -1605,6 +1605,7 @@ the video editor and the introduction tour ship on).
 
 ### Changed
 
+- **Clearer tile badges.** The file type and hotkey badges on a tile are larger, and a prompt's hotkey now also shows in the tile tooltip.
 - **Tidier top bar.** Library, search, pin and settings stay; the tag filter sits at the end of the view tabs, the chain button appears while a chain runs, and hiding the top bar moved to the right-click menu of the gear and the top bar.
 - **Calmer tiles.** Hovering a tile shows only its menu button; select through the menu or Ctrl+click.
 - **Tile menu.** Right-click now offers Copy, Favorite, Select and Start chain, every entry has an icon, entries are grouped, and Delete sits apart at the bottom in red.

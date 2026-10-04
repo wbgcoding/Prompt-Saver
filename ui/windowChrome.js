@@ -132,10 +132,11 @@ export function wireTooltips() {
   tipEl = document.createElement("div");
   tipEl.className = "tile-tip";
   tipEl.setAttribute("role", "tooltip");
-  tipEl.innerHTML = '<div class="tile-tip-name"></div><div class="tile-tip-body"></div><div class="tile-tip-len"></div><div class="tile-tip-times"></div><div class="tile-tip-media"></div><div class="tile-tip-notes"></div><div class="tile-tip-rotate"></div><div class="tile-tip-hint"></div>';
+  tipEl.innerHTML = '<div class="tile-tip-name"></div><div class="tile-tip-body"></div><div class="tile-tip-hotkey"></div><div class="tile-tip-len"></div><div class="tile-tip-times"></div><div class="tile-tip-media"></div><div class="tile-tip-notes"></div><div class="tile-tip-rotate"></div><div class="tile-tip-hint"></div>';
   document.body.appendChild(tipEl);
   const nameEl = tipEl.querySelector(".tile-tip-name");
   const bodyEl = tipEl.querySelector(".tile-tip-body");
+  const hotkeyEl = tipEl.querySelector(".tile-tip-hotkey");
   const lenEl = tipEl.querySelector(".tile-tip-len");
   const timesEl = tipEl.querySelector(".tile-tip-times");
   const mediaEl = tipEl.querySelector(".tile-tip-media");
@@ -170,6 +171,7 @@ export function wireTooltips() {
     // carries these same two lines, just without the rest of the rich box.
     timesEl.textContent = el.dataset.tipTimes || "";
     mediaEl.textContent = el.dataset.tipMedia || "";
+    hotkeyEl.textContent = el.dataset.tipHotkey || "";
     if (rich) {
       nameEl.textContent = name;
       fillVarHighlighted(bodyEl, el.dataset.tipBody || "");

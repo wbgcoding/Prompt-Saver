@@ -824,9 +824,11 @@ body.drag-active .cell.drag-over {
   left: 6px;
   z-index: 3;
   display: flex;
-  opacity: 0.4;
+  opacity: 0.7;
   pointer-events: none;
 }
+.tile-type > svg,
+.tile-hotkey-badge > svg { width: 16px; height: 16px; }
 .tile.has-image .tile-type {
   color: #fff;
   opacity: 0.75;
@@ -839,7 +841,7 @@ body.drag-active .cell.drag-over {
 .tile-hotkey-badge {
   position: absolute;
   top: 6px;
-  left: 26px;
+  left: 28px;
   z-index: 3;
   display: flex;
   opacity: var(--hotkey-badge-opacity, 0.4);
@@ -1080,6 +1082,7 @@ body.chain-mode:not(.grid-selecting) .tile .tile-select { opacity: 0; pointer-ev
 /* Same rule as the real grid tile: an image replaces the name, not overlays it. */
 .folder-member-tile.has-image .tile-name { display: none; }
 .folder-member-tile .tile-type { width: 14px; height: 14px; }
+.folder-member-tile .tile-type > svg { width: 13px; height: 13px; }
 /* Same missing-file banner as the grid tile; the box has a fixed size, so it is
    its own size container for the banner's text scaling. */
 .folder-member-tile { container-type: size; }
@@ -1883,6 +1886,7 @@ body.noflag-chainPrompts #chain-btn { display: none; }
 .var-token { color: var(--accent); font-weight: 600; }
 /* Length readout: same weight as the hint line below it, not the prompt text. */
 .tile-tip-len { margin-top: 5px; font-size: 11px; color: var(--muted); }
+.tile-tip-hotkey { margin-top: 5px; font-size: 11px; color: var(--muted); }
 /* Last-copied/last-edited lines -- one per line, muted like the length readout. */
 .tile-tip-times { margin-top: 5px; font-size: 11px; color: var(--muted); white-space: pre-line; }
 /* Resolution + file size -- same weight as the timestamps line above it,
@@ -1901,6 +1905,7 @@ body.noflag-chainPrompts #chain-btn { display: none; }
 }
 .tile-tip-body:empty,
 .tile-tip-len:empty,
+.tile-tip-hotkey:empty,
 .tile-tip-times:empty,
 .tile-tip-media:empty,
 .tile-tip-notes:empty,

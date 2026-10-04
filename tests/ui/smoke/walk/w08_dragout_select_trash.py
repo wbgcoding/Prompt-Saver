@@ -586,6 +586,34 @@ SECTION = """\
         if (document.body.classList.contains('grid-selecting')) out.errors.push('699: a second Ctrl+click did not unselect the tile');
       }
     }
+    // 702: the type badge and the hotkey badge are 16px, and the tile tooltip carries a hotkey line.
+    {
+      const typeSvg = document.querySelector('#grid .tile .tile-type svg');
+      if (!typeSvg) {
+        out.errors.push('702: no tile shows a type badge');
+      } else if (Math.round(typeSvg.getBoundingClientRect().width) !== 16) {
+        out.errors.push('702: the type badge icon is ' + typeSvg.getBoundingClientRect().width + 'px wide, expected 16');
+      }
+      const hkSvg = document.querySelector('#grid .tile .tile-hotkey-badge svg');
+      if (hkSvg && Math.round(hkSvg.getBoundingClientRect().width) !== 16) {
+        out.errors.push('702: the hotkey badge icon is ' + hkSvg.getBoundingClientRect().width + 'px wide, expected 16');
+      }
+      const hkTile = gridTile('p0'); // fixture: carries the hotkey Ctrl+Shift+9
+      const plainHk = gridTile('p2');
+      if (!hkTile) {
+        out.errors.push('702: no tile p0 for the hotkey tooltip check');
+      } else {
+        const tipHk = () => (document.querySelector('.tile-tip .tile-tip-hotkey') || {}).textContent || '';
+        hkTile.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, clientX: 30, clientY: 40 }));
+        await sleep(700); // longer than the tooltip show-delay
+        if (!tipHk().includes('Shift') || !tipHk().includes('9')) out.errors.push('702: the tile tooltip shows no hotkey line, got: ' + tipHk());
+        if (plainHk) {
+          plainHk.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, clientX: 90, clientY: 40 }));
+          await sleep(700);
+          if (tipHk().trim()) out.errors.push('702: a prompt without a hotkey shows a hotkey line: ' + tipHk());
+        }
+      }
+    }
     // 91: trash - the dialog opened from the expert menu's Data group. Restore,
     // single purge and "Clear all" (empty_trash) each get their own target so all
     // three new commands are exercised, not just the happy path of one.

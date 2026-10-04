@@ -332,6 +332,9 @@ export function buildTile(p) {
   // prompts read comfortably at a constrained width.
   tile.dataset.tipName = p.name;
   if (preview && preview !== p.name) tile.dataset.tipBody = preview;
+  // The prompt's own hotkey rides along as a line after the body: the corner
+  // badge cannot show it (it ignores the pointer).
+  if (p.hotkey && promptHotkeysOn()) tile.dataset.tipHotkey = t("tileHotkeyBadgeTitle").replace("{accel}", prettyAccel(p.hotkey));
   // Two prompts of wildly different length look identical on the tile itself:
   // the same char/~token readout the editor already shows, reused here so there is
   // only one formula for "how long is this" in the whole app.
