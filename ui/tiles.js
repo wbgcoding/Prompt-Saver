@@ -14,9 +14,7 @@ import { prettyAccel, promptHotkeysOn } from "./hotkeys.js";
 import { recordToolUsage } from "./management.js";
 import { openModal } from "./editor.js";
 import { armFolderDrop, disarmFolder, dropIntoFolder, folderById, openTileFolderPop, saveFolder } from "./gridFolders.js";
-
-let openCtx; // linked from main.js
-export function linkTiles(fns) { ({ openCtx } = fns); }
+import { openCtx } from "./gridMenus.js";
 
 // Auto-fit cache per (text, cell size); cleared on font changes.
 export const fitCache = new Map();

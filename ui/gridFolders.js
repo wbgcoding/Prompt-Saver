@@ -12,9 +12,7 @@ import { chainMode, toggleChainPick } from "./chain.js";
 import { dialogTokens, peekRotatedText } from "./promptVars.js";
 import { copyOnCooldown, copyTextWithVars, maybeCloseOnCopy, recordCopy } from "./copyFlow.js";
 import { copyResolved } from "./library.js";
-
-let openCtx; // linked from main.js
-export function linkGridFolders(fns) { ({ openCtx } = fns); }
+import { openCtx } from "./gridMenus.js";
 
 // ---- Grid folders: several prompts collapsed into one cell ----
 // Ships ON. A member has no layout entry of its own while it sits in a folder, so

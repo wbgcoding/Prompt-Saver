@@ -15,9 +15,7 @@ import { openCompareView, recordToolUsage, renderStatsPanel } from "./management
 import { closeBackups } from "./backups.js";
 import { buildSwatches, editPrompt, ensureSecretVaultUnlocked } from "./editor.js";
 import { foldersOfView } from "./gridFolders.js";
-
-let openCtx; // linked from main.js
-export function linkLibrary(fns) { ({ openCtx } = fns); }
+import { openCtx } from "./gridMenus.js";
 
 export let libQuery = ""; // prompt library search text
 export function assignLibQuery(v) { libQuery = v; }
