@@ -19,6 +19,7 @@ Range display keeps a plain ASCII hyphen with no spaces (e.g. `00:12-00:34`,
 `{low}-{high}`, `(A-Z)`) -- that is not a dash character this guard looks
 for, so it needs no exception.
 """
+import fnmatch
 import re
 import subprocess
 import sys
@@ -53,17 +54,7 @@ COMMENT_SYNTAX = {
 STRING_SPAN = re.compile(r"""(?<!\\)(?:"[^"\n]*"|'[^'\n]*')""")
 
 # A line range excepted wholesale, keyed by file and inclusive (start, end).
-# Temporary: mod keylog is being rewritten in a parallel lane and is left
-# byte-identical here on purpose; cleaned up (removed from this list) once
-# that lane merges and the module gets its own dash pass.
 RANGE_EXCEPTIONS = [
-    {
-        "file": "src-tauri/src/lib.rs",
-        "start": 20982,
-        "end": 21357,
-        "reason": "mod keylog -- rewritten in a parallel change, cleaned "
-                  "after merge.",
-    },
     {
         "file": "tools/brand.js",
         "start": 204,
@@ -117,7 +108,7 @@ EXCEPTIONS = [
                   "displayed app text, so it stays untouched.",
     },
     {
-        "file": "src-tauri/src/lib.rs",
+        "file": "src-tauri/src/*.rs",
         "when": lambda line: "no usable checksum published" in line
                   or "update hash mismatch" in line,
         "reason": "Raw Err(...) strings matched verbatim by the frontend's "
@@ -125,7 +116,7 @@ EXCEPTIONS = [
                   "keys, never rendered to the user directly.",
     },
     {
-        "file": "src-tauri/src/lib.rs",
+        "file": "src-tauri/src/*.rs",
         "when": lambda line: "sync_agents_md" not in line and (
                   "an icon or a PDF page lists those as paths" in line
                   or "Edit the text (or a header field) and save" in line
@@ -136,7 +127,7 @@ EXCEPTIONS = [
                   "a source comment.",
     },
     {
-        "file": "src-tauri/src/lib.rs",
+        "file": "src-tauri/src/*.rs",
         "when": lambda line: 'text.push(' in line
                   or "grid fields were valid" in line
                   or "a stale map really does skip the write" in line
@@ -155,7 +146,7 @@ def is_excepted(rel_path, lineno, line):
         if exc["file"] == rel_path and exc["start"] <= lineno <= exc["end"]:
             return True
     return any(
-        (exc["file"] is None or exc["file"] == rel_path) and exc["when"](line)
+        (exc["file"] is None or fnmatch.fnmatchcase(rel_path, exc["file"])) and exc["when"](line)
         for exc in EXCEPTIONS
     )
 

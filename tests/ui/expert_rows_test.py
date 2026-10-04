@@ -410,10 +410,14 @@ OUTLINE_PROBE = """
 
 def outline_init_script(color):
     """The Rust rec_outline_init_script template with the colour filled in."""
-    src = (REPO / "src-tauri" / "src" / "lib.rs").read_text(encoding="utf-8")
+    src = "\n".join(
+        p.read_text(encoding="utf-8")
+        for p in sorted((REPO / "src-tauri" / "src").glob("*.rs"))
+        if p.name != "tests.rs"
+    )
     m = re.search(r"fn rec_outline_init_script\(color: &str\) -> String \{\s*format!\(\s*\"(.*?)\"\s*\)\s*\}", src, re.S)
     if not m:
-        raise RuntimeError("rec_outline_init_script not found in lib.rs")
+        raise RuntimeError("rec_outline_init_script not found in the Rust sources")
     return m.group(1).replace("{{", "{").replace("}}", "}").replace("{color}", color)
 
 

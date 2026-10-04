@@ -395,38 +395,50 @@ function stampBuildFiles(root, b) {
 // The pin test duplicates the brand literals on purpose: a refactor that moves a
 // user's data must break a test, not an installation.
 function stampPinTest(root, b) {
-  const libPath = path.join(root, "src-tauri", "src", "lib.rs");
+  // The block sits in whichever source file holds the brand pin test; exactly one
+  // file may carry the markers.
+  const srcDir = path.join(root, "src-tauri", "src");
+  const marker = /^([ \t]*)\/\/ BRAND-PIN-START\r?$/m;
+  const hits = fs
+    .readdirSync(srcDir)
+    .filter((n) => n.endsWith(".rs"))
+    .sort()
+    .map((n) => path.join(srcDir, n))
+    .filter((p) => marker.test(read(p)));
+  if (hits.length !== 1) fail("BRAND-PIN markers: expected one source file with them, found " + hits.length);
+  const libPath = hits[0];
   const src = read(libPath);
-  // lib.rs is checked out with CRLF on Windows, so the markers cannot be matched
+  // The source is checked out with CRLF on Windows, so the markers cannot be matched
   // against a hardcoded "\n": find the real terminator and write the generated
   // block with the SAME one, or the file ends up with mixed endings.
   const eol = src.includes("\r\n") ? "\r\n" : "\n";
-  const start = `        // BRAND-PIN-START${eol}`;
-  const end = `        // BRAND-PIN-END${eol}`;
+  const ind = marker.exec(src)[1];
+  const start = `${ind}// BRAND-PIN-START${eol}`;
+  const end = `${ind}// BRAND-PIN-END${eol}`;
   const i = src.indexOf(start);
   const j = src.indexOf(end);
-  if (i < 0 || j < 0 || j < i) fail("lib.rs: BRAND-PIN markers not found");
+  if (i < 0 || j < 0 || j < i) fail(path.basename(libPath) + ": BRAND-PIN markers not found");
   const nl = (s) => s.split("\n").join(eol);
   const body = nl(
-    `        assert_eq!(brand::DISPLAY_NAME, ${rs(b.displayName)});\n` +
-    `        assert_eq!(brand::SLUG, ${rs(b.slug)});\n` +
-    `        assert_eq!(brand::IDENTIFIER, ${rs(b.identifier)});\n` +
-    `        assert_eq!(brand::DATA_FOLDER, ${rs(b.dataFolder)});\n` +
-    `        assert_eq!(brand::AUTOSTART_KEY, ${rs(b.autostartKey)});\n` +
-    `        assert_eq!(brand::TEMP_DIR, ${rs(b.tempDir)});\n` +
-    `        assert_eq!(brand::TEMP_PREFIX, ${rs(b.tempPrefix)});\n` +
-    `        assert_eq!(brand::WINDOW_CLASS, ${rs(b.windowClass)});\n` +
-    `        assert_eq!(brand::USER_AGENT, ${rs(b.userAgent)});\n` +
-    `        assert_eq!(brand::REPO, ${rs(b.repo)});\n` +
-    `        assert_eq!(brand::LEGACY_DATA_FOLDER, ${rs(b.legacyDataFolder)});\n` +
-    `        assert_eq!(brand::LEGACY_AUTOSTART_KEY, ${rs(b.legacyAutostartKey)});\n` +
-    `        assert_eq!(brand::LEGACY_SCREENSHOT_PREFIX, ${rs(b.legacyScreenshotPrefix)});\n` +
-    `        assert_eq!(env!("CARGO_PKG_NAME"), ${rs(b.slug)});\n` +
-    `        let conf = include_str!("../tauri.conf.json");\n` +
-    `        assert!(conf.contains(${rs(`"productName": ${rs(b.displayName)}`)}));\n` +
-    `        assert!(conf.contains(${rs(`"identifier": ${rs(b.identifier)}`)}));\n` +
-    `        let js = include_str!("../../ui/brand.js");\n` +
-    `        assert!(js.contains(${rs(`APP_NAME = ${rs(b.displayName)};`)}));\n`);
+    `${ind}assert_eq!(brand::DISPLAY_NAME, ${rs(b.displayName)});\n` +
+    `${ind}assert_eq!(brand::SLUG, ${rs(b.slug)});\n` +
+    `${ind}assert_eq!(brand::IDENTIFIER, ${rs(b.identifier)});\n` +
+    `${ind}assert_eq!(brand::DATA_FOLDER, ${rs(b.dataFolder)});\n` +
+    `${ind}assert_eq!(brand::AUTOSTART_KEY, ${rs(b.autostartKey)});\n` +
+    `${ind}assert_eq!(brand::TEMP_DIR, ${rs(b.tempDir)});\n` +
+    `${ind}assert_eq!(brand::TEMP_PREFIX, ${rs(b.tempPrefix)});\n` +
+    `${ind}assert_eq!(brand::WINDOW_CLASS, ${rs(b.windowClass)});\n` +
+    `${ind}assert_eq!(brand::USER_AGENT, ${rs(b.userAgent)});\n` +
+    `${ind}assert_eq!(brand::REPO, ${rs(b.repo)});\n` +
+    `${ind}assert_eq!(brand::LEGACY_DATA_FOLDER, ${rs(b.legacyDataFolder)});\n` +
+    `${ind}assert_eq!(brand::LEGACY_AUTOSTART_KEY, ${rs(b.legacyAutostartKey)});\n` +
+    `${ind}assert_eq!(brand::LEGACY_SCREENSHOT_PREFIX, ${rs(b.legacyScreenshotPrefix)});\n` +
+    `${ind}assert_eq!(env!("CARGO_PKG_NAME"), ${rs(b.slug)});\n` +
+    `${ind}let conf = include_str!("../tauri.conf.json");\n` +
+    `${ind}assert!(conf.contains(${rs(`"productName": ${rs(b.displayName)}`)}));\n` +
+    `${ind}assert!(conf.contains(${rs(`"identifier": ${rs(b.identifier)}`)}));\n` +
+    `${ind}let js = include_str!("../../ui/brand.js");\n` +
+    `${ind}assert!(js.contains(${rs(`APP_NAME = ${rs(b.displayName)};`)}));\n`);
   write(libPath, src.slice(0, i + start.length) + body + src.slice(j));
 }
 
@@ -641,4 +653,5 @@ function main(argv) {
   if (out) console.log("  the working tree was not touched");
 }
 
-main(process.argv.slice(2));
+if (require.main === module) main(process.argv.slice(2));
+else module.exports = { loadBrand, stampPinTest };

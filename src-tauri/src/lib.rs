@@ -44795,17 +44795,41 @@ mod tests {
         let _ = fs::remove_dir_all(&base);
     }
 
+    // Every production source file of the crate: src/*.rs except the test file,
+    // each cut at its own inline test module, in name order, with \n line ends.
+    // The structural checks below read this instead of one fixed file, so they
+    // keep finding a function after it moves to another file of the crate.
+    fn production_sources() -> String {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut files: Vec<PathBuf> = fs::read_dir(&dir)
+            .expect("read the src dir")
+            .map(|e| e.expect("src dir entry").path())
+            .filter(|p| p.extension().is_some_and(|x| x == "rs"))
+            .filter(|p| p.file_name().is_some_and(|n| n != "tests.rs"))
+            .collect();
+        files.sort();
+        let mut out = String::new();
+        for f in &files {
+            let text = fs::read_to_string(f).expect("read a source file").replace("\r\n", "\n");
+            let cut = text.find("\n#[cfg(test)]\nmod tests {").map_or(text.len(), |i| i + 1);
+            out.push_str(&text[..cut]);
+            out.push('\n');
+        }
+        out
+    }
+
     // Structural check (no timing-based red exists for "the lock is not held
     // during the copy"): in add_prompt the copy, the probe and the OCR pass all
     // sit before the lock that inserts, and update_prompt stages the same three
     // before its locked section.
     #[test]
     fn add_and_update_prompt_do_the_slow_work_before_the_insert_lock() {
-        let src = include_str!("lib.rs");
+        let src = production_sources();
         let body = |from: &str, to: &str| {
+            assert_eq!(src.matches(from).count(), 1, "{from} must occur exactly once in the crate sources");
             let a = src.find(from).expect("start marker");
             let b = a + src[a..].find(to).expect("end marker");
-            &src[a..b]
+            src[a..b].to_string()
         };
         let add = body("async fn add_prompt(", "// One example prompt as the frontend supplies it");
         let insert_lock = add.rfind(concat!("let mut store = lock(&", "state);")).expect("insert lock");
@@ -44921,7 +44945,8 @@ mod tests {
         let got = video_folder_file_durations_ms_impl(None, &dir, &names);
         assert_eq!(got, vec![0u64; 12], "one value per name, unknown files as 0");
         // Structural: the command runs the probes on the blocking pool, not a runtime worker.
-        let src = include_str!("lib.rs");
+        let src = production_sources();
+        assert_eq!(src.matches("async fn video_folder_file_durations_ms(").count(), 1, "one durations command");
         let at = src.find("async fn video_folder_file_durations_ms(").unwrap();
         assert!(src[at..at + 600].contains("spawn_blocking"), "the durations command must use spawn_blocking");
         let _ = fs::remove_dir_all(&dir);
@@ -53089,10 +53114,11 @@ mod tests {
     // an unrelated comment elsewhere that happens to mention the old shape.
     #[test]
     fn export_prompts_unsupported_format_uses_a_stable_error_code() {
-        let src = include_str!("lib.rs");
+        let src = production_sources();
+        assert_eq!(src.matches("async fn export_prompts(").count(), 1, "one export_prompts command");
         let start = src
             .find("async fn export_prompts(")
-            .expect("export_prompts exists in lib.rs");
+            .expect("export_prompts exists in the crate sources");
         let end = start
             + src[start..]
                 .find("\n// Minimal CSV reader")
@@ -55513,7 +55539,7 @@ mod tests {
     // `lock(&state)` guard of its own function.
     #[test]
     fn sweep_orphan_files_is_never_called_under_the_store_guard() {
-        let src = include_str!("lib.rs");
+        let src = production_sources();
         let code: String = src
             .lines()
             .map(|l| match l.find("//") {
@@ -55522,15 +55548,30 @@ mod tests {
             })
             .collect::<Vec<_>>()
             .join("\n");
-        let starts: Vec<usize> = code.match_indices("\nfn ").map(|(i, _)| i).collect();
+        // Every top-level fn start, whatever its visibility or asyncness.
+        let mut starts: Vec<usize> = Vec::new();
+        let mut off = 0;
+        for line in code.split('\n') {
+            let rest = line.strip_prefix("pub(crate) ").or_else(|| line.strip_prefix("pub ")).unwrap_or(line);
+            if rest.strip_prefix("async ").unwrap_or(rest).starts_with("fn ") {
+                starts.push(off);
+            }
+            off += line.len() + 1;
+        }
         let mut checked = 0;
+        let mut defs = 0;
         for (n, &start) in starts.iter().enumerate() {
             let end = starts.get(n + 1).copied().unwrap_or(code.len());
             let body = &code[start..end];
-            if body.starts_with("\nfn sweep_orphan_files(") || !body.contains("sweep_orphan_files(") {
+            let head = body.lines().next().unwrap_or("");
+            let name = head.split("fn ").nth(1).unwrap_or("?").split(['(', '<']).next().unwrap_or("?").to_string();
+            if name == "sweep_orphan_files" {
+                defs += 1;
                 continue;
             }
-            let name = body[4..].split('(').next().unwrap_or("?").to_string();
+            if !body.contains("sweep_orphan_files(") {
+                continue;
+            }
             // (guard name, brace depth it was declared at)
             let mut guards: Vec<(String, i32)> = Vec::new();
             let mut depth = 0i32;
@@ -55562,7 +55603,8 @@ mod tests {
                 }
             }
         }
-        assert!(checked >= 4, "the scan found only {checked} call sites");
+        assert_eq!(defs, 1, "sweep_orphan_files must be defined exactly once in the crate sources");
+        assert!(checked >= 5, "the scan found only {checked} call sites");
     }
 
     #[test]

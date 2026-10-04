@@ -7,6 +7,7 @@ A comment states the fact or the reason. It never states where the fact came
 from -- not the plan item that ordered it, not the round it was decided in, not
 the tool that helped write it. Every rule below is one shape that leaks that.
 """
+import fnmatch
 import re
 import subprocess
 import sys
@@ -85,14 +86,14 @@ OLD_COPYRIGHT_SPELLING = "BG Coding"
 # line-pinned so they survive edits that shift line numbers.
 EXCEPTIONS = [
     {
-        "file": "src-tauri/src/lib.rs",
+        "file": "src-tauri/src/*.rs",
         "when": lambda line: "AGENTS.md" in line,
         "reason": "AGENTS.md here is the read-me the markdown-sync folder "
                   "writes for the user -- a product file name, not a "
                   "planning-doc reference.",
     },
     {
-        "file": "src-tauri/src/lib.rs",
+        "file": "src-tauri/src/*.rs",
         "when": lambda line: "Alt+F4" in line or "Ctrl+F4" in line,
         "reason": "A keyboard key, not a work-item code.",
     },
@@ -102,7 +103,7 @@ EXCEPTIONS = [
         "reason": "An easing control point, not a work-item code.",
     },
     {
-        "file": "src-tauri/src/lib.rs",
+        "file": "src-tauri/src/*.rs",
         "when": lambda line: 'b"PSB1"' in line,
         "reason": "A byte-format spec (mode(1) | salt(16) | nonce(12)) -- the "
                   "parenthesised numbers are field widths, not work-item refs.",
@@ -166,7 +167,7 @@ def tracked_files():
 
 def is_excepted(rel_path, line):
     return any(
-        exc["file"] == rel_path and exc["when"](line) for exc in EXCEPTIONS
+        fnmatch.fnmatchcase(rel_path, exc["file"]) and exc["when"](line) for exc in EXCEPTIONS
     )
 
 

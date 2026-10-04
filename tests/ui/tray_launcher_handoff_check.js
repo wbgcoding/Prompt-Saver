@@ -11,7 +11,7 @@
 // A launcher window that is built with the focus flag takes the operating system focus
 // away from the tray even while it is still hidden (measured in a real window: the tray
 // blurred about 60 ms after the first key, before the launcher page existed, and the key
-// typed in that gap went nowhere). The model therefore reads lib.rs: when the hand-off
+// typed in that gap went nowhere). The model therefore reads the Rust sources: when the hand-off
 // build in open_launcher_window still passes `.focused(true)`, the launcher takes the
 // focus at build time; the same goes for the 200 character limit of the launcher field
 // (maxlength in launcher.html), which only native typing is subject to.
@@ -23,8 +23,19 @@ const { pathToFileURL } = require("url");
 
 const uiDir = path.join(__dirname, "..", "..", "ui");
 const MODEL = process.env.HANDOFF_MODEL === "old" ? "old" : "new";
-const rustSrc = fs.readFileSync(path.join(__dirname, "..", "..", "src-tauri", "src", "lib.rs"), "utf8");
-const openFn = rustSrc.slice(rustSrc.indexOf("fn open_launcher_window("), rustSrc.indexOf("fn reveal_launcher("));
+// Every Rust source of the crate except the test file, so the check follows the
+// launcher code into whichever file holds it.
+const rustDir = path.join(__dirname, "..", "..", "src-tauri", "src");
+const rustSrc = fs
+  .readdirSync(rustDir)
+  .filter((n) => n.endsWith(".rs") && n !== "tests.rs")
+  .sort()
+  .map((n) => fs.readFileSync(path.join(rustDir, n), "utf8"))
+  .join("\n");
+const openAt = rustSrc.indexOf("fn open_launcher_window(");
+const revealAt = openAt < 0 ? -1 : rustSrc.indexOf("fn reveal_launcher(", openAt);
+if (openAt < 0 || revealAt < 0) throw new Error("open_launcher_window or reveal_launcher not found in the Rust sources");
+const openFn = rustSrc.slice(openAt, revealAt);
 // true: the hidden launcher is built focused and grabs the focus from the tray at once
 const BUILD_STEALS_FOCUS = /\.focused\(true\)/.test(openFn);
 const maxLenMatch = /id="search"[^>]*\smaxlength="(\d+)"/.exec(fs.readFileSync(path.join(uiDir, "launcher.html"), "utf8"));
