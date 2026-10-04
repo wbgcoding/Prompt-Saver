@@ -1497,6 +1497,8 @@ export default {
     clipPurgeBackupsDone: "Verwijderd uit {n} back-up(s)",
     clipPurgeBackupsFailed: "{n} back-up(s) konden niet worden opgeschoond",
     clipPurgeBackupsCheck: "Verwijder ook kopieën uit andere apps uit elke back-up (kan niet ongedaan worden gemaakt)",
+    clipWatchOn: "Andere apps: aan",
+    clipWatchOff: "Andere apps: uit",
     clipEmpty: "Nog niets gekopieerd in andere apps",
     sourceApp: "In {app}",
     sourceElsewhere: "Elders",

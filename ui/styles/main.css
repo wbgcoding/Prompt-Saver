@@ -1297,6 +1297,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .watch-toggle:hover { color: var(--fg); }
 .watch-toggle.active { color: var(--accent-fg); background: var(--accent); }
 .watch-toggle.active:hover { background: color-mix(in srgb, var(--accent) 85%, #000); color: var(--accent-fg); }
+.head-toggle.watch-toggle { display: inline-flex; align-items: center; gap: 6px; }
 /* Jumping from the statistics into the library raises it over the backups dialog it
    was opened from, without closing it; the edit dialog keeps its place on top. */
 body.library-front #library.overlay { z-index: 66; }

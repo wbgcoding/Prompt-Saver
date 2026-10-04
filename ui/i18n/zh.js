@@ -1497,6 +1497,8 @@ export default {
     clipPurgeBackupsDone: "已从 {n} 个备份中删除",
     clipPurgeBackupsFailed: "{n} 个备份未能清除",
     clipPurgeBackupsCheck: "同时从所有备份中删除来自其他应用的复制内容（无法撤销）",
+    clipWatchOn: "其他应用：开",
+    clipWatchOff: "其他应用：关",
     clipEmpty: "尚未在其他应用中复制任何内容",
     sourceApp: "在 {app} 中",
     sourceElsewhere: "其他位置",

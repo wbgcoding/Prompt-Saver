@@ -1497,6 +1497,8 @@ export default {
     clipPurgeBackupsDone: "{n} 件のバックアップから削除しました",
     clipPurgeBackupsFailed: "{n} 件のバックアップをクリアできませんでした",
     clipPurgeBackupsCheck: "他のアプリでのコピーもすべてのバックアップから削除する（元に戻せません）",
+    clipWatchOn: "他のアプリ：オン",
+    clipWatchOff: "他のアプリ：オフ",
     clipEmpty: "他のアプリでコピーしたものはまだありません",
     sourceApp: "{app} 内",
     sourceElsewhere: "その他",

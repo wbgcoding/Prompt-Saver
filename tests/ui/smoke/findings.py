@@ -1065,5 +1065,20 @@ def run(browser, tmp):
     if (!callsFor('clip_inbox_clear').length) errs.push('17003: the clear did not run without the dialog');
     if (callsFor('purge_clip_inbox_from_backups').length) errs.push('17003: the backups were purged without the dialog');
 """)
+    failed += ar_probe('bx721', 'copy history: the other-apps switch carries a word that follows its state', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { clipWatcher: true } };</script>\n', r"""
+    await bootReady();
+    document.getElementById('library-btn').click(); await sleep(400);
+    document.getElementById('library-tab-history').click(); await sleep(500);
+    const tog = document.getElementById('clip-toggle');
+    const word = () => tog.textContent.trim();
+    if (!tog.classList.contains('head-toggle')) errs.push('721: the switch is not a head-toggle');
+    if (word() !== 'Other apps: on') errs.push('721: with the watcher on the switch reads ' + JSON.stringify(word()));
+    if (!tog.classList.contains('active')) errs.push('721: the switch is not marked active while on');
+    tog.click(); await sleep(300);
+    // Switching off asks once about the stored entries; keeping them is the way out.
+    if (!document.getElementById('confirm-modal').classList.contains('hidden')) { document.getElementById('confirm-cancel').click(); await sleep(300); }
+    if (word() !== 'Other apps: off') errs.push('721: after a click the switch reads ' + JSON.stringify(word()));
+    if (tog.classList.contains('active')) errs.push('721: the switch is still active after switching off');
+""")
     # ---- main window findings: generated block end ----
     return failed

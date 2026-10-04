@@ -1497,6 +1497,8 @@ export default {
     clipPurgeBackupsDone: "Eliminado de {n} copia(s) de seguridad",
     clipPurgeBackupsFailed: "{n} copia(s) de seguridad no se pudieron limpiar",
     clipPurgeBackupsCheck: "Eliminar también las copias de otras aplicaciones de todas las copias de seguridad (no se puede deshacer)",
+    clipWatchOn: "Otras apps: activado",
+    clipWatchOff: "Otras apps: desactivado",
     clipEmpty: "Aún no se ha copiado nada en otras aplicaciones",
     sourceApp: "En {app}",
     sourceElsewhere: "En otro sitio",

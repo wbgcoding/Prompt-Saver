@@ -265,7 +265,9 @@ export function journalClipRow(it) {
 export function syncJournalSourceBar(on) {
   $("journal-source").classList.toggle("hidden", !on);
   $("clip-toggle").classList.toggle("hidden", !on);
-  $("clip-toggle").classList.toggle("active", optFlag("clipWatcher"));
+  const watching = optFlag("clipWatcher");
+  $("clip-toggle").classList.toggle("active", watching);
+  $("clip-toggle").querySelector(".clip-toggle-label").textContent = t(watching ? "clipWatchOn" : "clipWatchOff");
   $("journal-source").value = journalSource;
 }
 

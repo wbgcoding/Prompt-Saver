@@ -563,11 +563,12 @@
         <span id="journal-count" class="modal-count lib-history-only hidden"></span>
         <div class="modal-head-actions">
           <!-- Pause/resume recording copies from other apps without leaving the list -->
-          <button id="clip-toggle" type="button" class="icon-btn watch-toggle lib-history-only hidden" data-i18n-title="flagClipWatcher" data-i18n-aria="flagClipWatcher">
-            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <button id="clip-toggle" type="button" class="head-toggle watch-toggle lib-history-only hidden" data-i18n-title="flagClipWatcher">
+            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
               <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 3.6v7.2"/>
               <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M17.4 6.3a7.2 7.2 0 1 1-10.8 0"/>
             </svg>
+            <span class="clip-toggle-label"></span>
           </button>
           <button id="journal-clear" type="button" class="head-toggle head-clear lib-history-only" data-i18n="clearHistory">Clear copy history</button>
           <button id="library-dupes" type="button" class="head-toggle lib-prompts-only" data-i18n="dupTitle">Find duplicates</button>

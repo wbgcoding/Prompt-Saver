@@ -1497,6 +1497,8 @@ export default {
     clipPurgeBackupsDone: "{n} yedekten silindi",
     clipPurgeBackupsFailed: "{n} yedek temizlenemedi",
     clipPurgeBackupsCheck: "Diğer uygulamalardan kopyaları tüm yedeklerden de sil (geri alınamaz)",
+    clipWatchOn: "Diğer uygulamalar: açık",
+    clipWatchOff: "Diğer uygulamalar: kapalı",
     clipEmpty: "Diğer uygulamalarda henüz bir şey kopyalanmadı",
     sourceApp: "{app} içinde",
     sourceElsewhere: "Başka yerde",

@@ -1497,6 +1497,8 @@ export default {
     clipPurgeBackupsDone: "Șters din {n} backup(uri)",
     clipPurgeBackupsFailed: "{n} backup(uri) nu au putut fi curățate",
     clipPurgeBackupsCheck: "Șterge și copiile din alte aplicații din toate backup-urile (nu poate fi anulat)",
+    clipWatchOn: "Alte aplicații: pornit",
+    clipWatchOff: "Alte aplicații: oprit",
     clipEmpty: "Nimic copiat încă în alte aplicații",
     sourceApp: "În {app}",
     sourceElsewhere: "În altă parte",
