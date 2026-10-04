@@ -83,7 +83,7 @@ async function run({ text, keyMs, loadMs, ipcMs }) {
       .replace(/^import \{ applyFloatTheme \} from "\.\/floattheme\.js";$/m, "const applyFloatTheme = () => {};")
       .replace(/^import \{ APP_NAME \} from "\.\/brand\.js";$/m, 'const APP_NAME = "App";')
       .replace(/^import \{ LANGS, compactTexts \} from "\.\/i18n\.js";$/m, "const { LANGS, compactTexts } = __i18n;")
-      .replace(/^import \{ resolveLang \} from "\.\/floatShared\.js";$/m, "const { resolveLang } = __shared;");
+      .replace(/^import \{ resolveLang, varPreview \} from "\.\/floatShared\.js";$/m, "const { resolveLang, varPreview } = __shared;");
     const sandbox = {
       console, setTimeout, clearTimeout, Date, __i18n: i18n, __shared: shared,
       document: {

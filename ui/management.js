@@ -10,7 +10,7 @@ import { wireClearButtons } from "./windowChrome.js";
 import { assignLibQuery, lastEdited, libLabel, libQuery, refreshImageHits, renderLibrary, restoreBatchDelete } from "./library.js";
 import { renderGrid, renderViews } from "./views.js";
 import { confirmDialog } from "./dialog.js";
-import { fmtBytes } from "./floatShared.js";
+import { fmtBytes, varPreview } from "./floatShared.js";
 import { saveBackupSetting, saveUiState } from "./backups.js";
 import { editPrompt, renderDiffInto, splitDiffSides } from "./editor.js";
 
@@ -679,7 +679,7 @@ export function renderTrashList() {
     head.textContent = `${libLabel(p)} · ${new Date(p.trashed_at * 1000).toLocaleDateString(LANG)}`;
     const prev = document.createElement("div");
     prev.className = "clip-preview";
-    prev.textContent = p.file_path || p.text || "";
+    prev.textContent = p.file_path || varPreview(p.text);
     const actions = document.createElement("div");
     actions.className = "clip-actions";
     const restore = document.createElement("button");

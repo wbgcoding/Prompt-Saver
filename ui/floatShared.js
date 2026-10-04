@@ -15,6 +15,19 @@ export const DRAG_OUT_MODS = { ctrl: "ctrlKey", alt: "altKey", shift: "shiftKey"
 // "ungroup" menu entries, and the "group into a folder" entry.
 export const FOLDER_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.2l2 2.4h8.8A1.5 1.5 0 0 1 21 8.9v9.6a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5Z"/></svg>';
 
+// A prompt placeholder reads as [name] wherever raw prompt text is previewed (library
+// and history rows, search hits, the quick launcher). Same pattern as VAR_RE in
+// promptVars.js (a test keeps the two identical); the label is the part before an
+// equals sign or a bar, a reserved name loses its slash fence. A fence with no usable
+// name stays as typed.
+const VAR_PATTERN = /\{#\{\s*([^}\n]{1,200}?)\s*\}#\}/g;
+export function varPreview(text) {
+  return String(text ?? "").replace(VAR_PATTERN, (whole, body) => {
+    const label = body.split(/[=|]/)[0].trim().replace(/^\//, "").replace(/[\/\\]$/, "").trim();
+    return label ? `[${label}]` : whole;
+  });
+}
+
 // Resolve the active UI language: the explicit setting first, the browser locale
 // as fallback, matched against a list of available language codes (pass the
 // canonical LANGS export from i18n.js). Takes that list as a parameter instead of

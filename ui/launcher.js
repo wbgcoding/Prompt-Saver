@@ -10,7 +10,7 @@ import { APP_NAME } from "./brand.js";
 // press) and unlike floating.js's pill, it needs the translated placeholder/empty
 // text from the very first frame, not after a lazy follow-up load.
 import { LANGS, compactTexts } from "./i18n.js";
-import { resolveLang } from "./floatShared.js";
+import { resolveLang, varPreview } from "./floatShared.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
 // switcher, so it comes from the brand rather than a hardcoded English word.
@@ -86,7 +86,7 @@ function renderRow(p, i) {
   name.className = "launcher-row-name";
   name.textContent = p.name || "";
   row.appendChild(name);
-  const preview = (p.text || "").replace(/\s+/g, " ").trim();
+  const preview = varPreview(p.text).replace(/\s+/g, " ").trim();
   if (preview) {
     const prev = document.createElement("span");
     prev.className = "launcher-row-preview";

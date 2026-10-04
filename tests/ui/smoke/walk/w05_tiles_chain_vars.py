@@ -188,7 +188,7 @@ SECTION = """\
         }
         const varSpans = [...document.querySelectorAll('.tile-tip .tile-tip-body .var-token')];
         const varTexts = varSpans.map((s) => s.textContent);
-        if (varTexts.length !== 2 || !varTexts.includes('{#{Text=Hello}#}') || !varTexts.includes('{#{Language}#}')) {
+        if (varTexts.length !== 2 || !varTexts.includes('[Text]') || !varTexts.includes('[Language]')) {
           out.errors.push('the tile tooltip does not highlight both variables: ' + JSON.stringify(varTexts));
         }
       }

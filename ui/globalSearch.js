@@ -4,6 +4,7 @@ import { assignLibQuery, computeLibSearchScore, copyResolved, libQuery, toastCop
 import { $, debounced, flag, gateOpen, invoke, prompts, settings, t, val } from "./core.js";
 import { editPrompt } from "./editor.js";
 import { switchToView } from "./views.js";
+import { varPreview } from "./floatShared.js";
 import { EXPERT_DEFS, EXPERT_LABEL_KEYS, jumpToExpertSetting, openSettingsDirectoryEntry, settingHit, SETTINGS_DIRECTORY, settingsDirectoryHit } from "./expertMenu.js";
 import { EXPERT_TABS, flagLabelKey, groupFlags, SETTINGS_AREA_LABEL } from "./expertConfig.js";
 import { assignHelpCollapsed, assignHelpQuery, helpCategories, helpNorm, helpSectionLabel, renderHelp } from "./helpView.js";
@@ -57,7 +58,7 @@ export function gsPromptHits(q) {
   }
   return scored.map(({ p }) => ({
     label: p.name || "",
-    sub: (p.text || "").replace(/\s+/g, " ").trim().slice(0, 80),
+    sub: varPreview(p.text).replace(/\s+/g, " ").trim().slice(0, 80),
     color: p.color,
     run: () => gsCopyPrompt(p),
   }));
@@ -87,7 +88,7 @@ export function gsHistoryHits(q) {
   }
   return scored.map(({ p }) => ({
     label: p.name || "",
-    sub: (p.text || "").replace(/\s+/g, " ").trim().slice(0, 80),
+    sub: varPreview(p.text).replace(/\s+/g, " ").trim().slice(0, 80),
     color: p.color,
     run: () => gsCopyPrompt(p),
   }));

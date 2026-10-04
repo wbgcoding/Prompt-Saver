@@ -3,7 +3,7 @@ import { $, assignDrag, assignPrompts, assignSettings, cellKey, COLORS, convertF
 import { mediaKind } from "./media.js";
 import { armDragOut, autoPasteDouble, autoPasteNow, fitAllTiles, hasImage, imageOf, notesOn, placeTile } from "./tiles.js";
 import { openLightbox, wireSearchSuggest } from "./windowChrome.js";
-import { fmtBytes } from "./floatShared.js";
+import { fmtBytes, varPreview } from "./floatShared.js";
 import { anyEntryHasVars, dialogTokens, extractVars, parseVar, peekRotatedText, resolveVars, varTokens } from "./promptVars.js";
 import { confirmDialog } from "./dialog.js";
 import { activeView, firstFree, layoutOf, renderGrid, renderViews } from "./views.js";
@@ -801,7 +801,7 @@ export function renderLibrary() {
     // hitVariant is never non-null on a prompt that also has a file_path.
     const text = document.createElement("span");
     text.className = "lib-text";
-    text.textContent = p.file_path || (hitVariant ?? p.text);
+    text.textContent = p.file_path || varPreview(hitVariant ?? p.text);
     body.appendChild(name);
     if (hitVariant != null) {
       const tag = document.createElement("span");

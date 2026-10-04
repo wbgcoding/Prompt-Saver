@@ -1,5 +1,6 @@
-import { flag, invoke, LANG, settings, t, toast, txt } from "./core.js";
+import { flag, invoke, LANG, settings, t, toast, TOOLTIP_PREVIEW_CHARS, txt } from "./core.js";
 import { activeThemeVars } from "./theme.js";
+import { varPreview } from "./floatShared.js";
 
 // ---- Prompt variables ({#{placeholder}#}) ----
 // The {#{ ... }#} fence is deliberately uncommon so a literal "{{" pasted from a
@@ -22,20 +23,35 @@ export const hasEmptyVarToken = (text) =>
   [...String(text || "").matchAll(VAR_RE)].some((m) => !m[1].trim());
 
 // A placeholder gets a visible accent wherever raw prompt text is previewed, so
-// "does this prompt ask for anything" no longer surprises you only at copy time. DOM
-// text nodes + a plain span, never innerHTML: a token is user-typed text.
+// "does this prompt ask for anything" no longer surprises you only at copy time. It
+// reads as [name] (varPreview) and that shortened length is what counts against the
+// preview limit. DOM text nodes + a plain span, never innerHTML: a token is
+// user-typed text.
 export function fillVarHighlighted(el, text) {
   el.textContent = "";
+  let used = 0;
   let last = 0;
+  const room = () => TOOLTIP_PREVIEW_CHARS - used;
+  const addText = (s) => {
+    if (!s) return;
+    const part = s.slice(0, Math.max(0, room()));
+    if (part) el.appendChild(document.createTextNode(part));
+    used += part.length;
+  };
   for (const m of text.matchAll(VAR_RE)) {
-    if (m.index > last) el.appendChild(document.createTextNode(text.slice(last, m.index)));
+    if (room() <= 0) break;
+    addText(text.slice(last, m.index));
+    if (room() <= 0) { last = text.length; break; }
+    const shown = varPreview(m[0]);
     const span = document.createElement("span");
     span.className = "var-token";
-    span.textContent = m[0];
+    span.textContent = shown;
     el.appendChild(span);
+    used += shown.length;
     last = m.index + m[0].length;
   }
-  if (last < text.length) el.appendChild(document.createTextNode(text.slice(last)));
+  addText(text.slice(last));
+  if (varPreview(text).length > TOOLTIP_PREVIEW_CHARS) el.appendChild(document.createTextNode("…"));
 }
 
 // Reserved names that fill themselves in at copy time, no dialog. They win

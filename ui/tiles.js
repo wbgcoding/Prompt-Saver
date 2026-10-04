@@ -1,5 +1,5 @@
 // Grid tiles: building, auto-fit, images, video thumbs, drag-out and auto-paste.
-import { assignDrag, assignMemberDrag, BUBBLE_MS, convertFileSrc, DOTS, drag, DRAG_THRESHOLD, errToast, favView, flag, folderArm, gateOpen, gridEl, gridSelected, gridTags, ICON_FILE, ICON_IMAGE, ICON_KEYBOARD, ICON_PDF, ICON_UNDO, ICON_VIDEO, IMG_WAIT, inkShadow, invoke, journalThumbCache, LANG, libraryEl, libThumbCache, mediaBarLabels, memberDrag, optFlag, PDF_EXT, prompts, readableInk, ROTATE_SHORT_MAX, settings, t, toast, TOOLTIP_PREVIEW_CHARS, txt, val, videoCache } from "./core.js";
+import { assignDrag, assignMemberDrag, BUBBLE_MS, convertFileSrc, DOTS, drag, DRAG_THRESHOLD, errToast, favView, flag, folderArm, gateOpen, gridEl, gridSelected, gridTags, ICON_FILE, ICON_IMAGE, ICON_KEYBOARD, ICON_PDF, ICON_UNDO, ICON_VIDEO, IMG_WAIT, inkShadow, invoke, journalThumbCache, LANG, libraryEl, libThumbCache, mediaBarLabels, memberDrag, optFlag, PDF_EXT, prompts, readableInk, ROTATE_SHORT_MAX, settings, t, toast, txt, val, videoCache } from "./core.js";
 import { applyChainToTile, chainMode, toggleChainPick } from "./chain.js";
 import { applyVideoPrefs, buildMediaBar, mediaKind } from "./media.js";
 import { fitText, FONTS } from "./fonts.js";
@@ -325,11 +325,11 @@ export function buildTile(p) {
   selBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
   selBtn.addEventListener("click", (e) => { e.stopPropagation(); toggleGridSelect(p.id); });
   tile.appendChild(selBtn);
-  const raw = p.file_path || p.text || "";
-  const preview = raw.length > TOOLTIP_PREVIEW_CHARS ? `${raw.slice(0, TOOLTIP_PREVIEW_CHARS)}…` : raw;
+  const preview = p.file_path || p.text || "";
   // Themed hover tooltip (rendered by wireTooltips' shared popup, not the native
-  // title): stash name + preview on the tile; the popup wraps + grows tall so long
-  // prompts read comfortably at a constrained width.
+  // title): stash name + the raw text on the tile; the popup shortens it while it
+  // draws (fillVarHighlighted) and wraps + grows tall so long prompts read comfortably
+  // at a constrained width.
   tile.dataset.tipName = p.name;
   if (preview && preview !== p.name) tile.dataset.tipBody = preview;
   // The prompt's own hotkey rides along as a line after the body: the corner

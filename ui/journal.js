@@ -6,6 +6,7 @@ import { allTags, renderTagBar, tagChipEl, tagKey, tagsOn } from "./tags.js";
 import { JOURNAL_ROWS_MAX } from "./expertConfig.js";
 import { copyOnCooldown, recordCopy } from "./copyFlow.js";
 import { wireSearchSuggest } from "./windowChrome.js";
+import { varPreview } from "./floatShared.js";
 import { applyFlags } from "./expertMenu.js";
 import { editPrompt, openModal } from "./editor.js";
 
@@ -75,7 +76,7 @@ export function journalRow(p, meta, onClick) {
     head.append(chip);
   }
   body.append(head);
-  const preview = p.file_path || p.text;
+  const preview = p.file_path || varPreview(p.text);
   if (preview) {
     const text = document.createElement("span");
     text.className = "lib-text";
