@@ -246,20 +246,6 @@
       <div id="modal-notes">
         <textarea id="modal-notes-text" class="modal-input modal-notes-text" rows="2" data-i18n-ph="notesPh" data-i18n-title="notesHint"></textarea>
       </div>
-      <!-- Font/size sit right under the name: kept, not dropped, just moved
-           up from the bottom so the row-level settings live together. -->
-      <div id="modal-style-row" class="two-col">
-        <label class="field">
-          <span data-i18n="tileFont">Font</span>
-          <!-- Options filled by JS from the shared font catalog -->
-          <select id="modal-font" class="modal-input"></select>
-        </label>
-        <label class="field">
-          <span data-i18n="tileSize">Tile text size</span>
-          <!-- Options filled by JS: Like settings + Automatic + 10..40 -->
-          <select id="modal-size" class="modal-input"></select>
-        </label>
-      </div>
       <!-- Image preview + display toggle (visible only when prompt has an image) -->
       <div id="modal-img-wrap" class="modal-img-wrap hidden">
         <div class="modal-media-stage">
@@ -395,6 +381,22 @@
           </span>
         </button>
         <div id="modal-advanced-body" class="modal-collapse-body hidden">
+          <!-- Font and tile text size: they apply to every prompt kind, so they lead
+               the advanced options and the head never hides. -->
+          <div class="modal-advanced-sub">
+            <div id="modal-style-row" class="two-col">
+              <label class="field">
+                <span data-i18n="tileFont">Font</span>
+                <!-- Options filled by JS from the shared font catalog -->
+                <select id="modal-font" class="modal-input"></select>
+              </label>
+              <label class="field">
+                <span data-i18n="tileSize">Tile text size</span>
+                <!-- Options filled by JS: Like settings + Automatic + 10..40 -->
+                <select id="modal-size" class="modal-input"></select>
+              </label>
+            </div>
+          </div>
           <!-- Tags: assigned chips + type-ahead input (feature-gated via body.flag-tags) -->
           <div id="modal-tags" class="modal-tags modal-advanced-sub">
             <span class="modal-tags-label" data-i18n="tagsLabel">Tags</span>

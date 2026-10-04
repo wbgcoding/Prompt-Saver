@@ -3,7 +3,7 @@ import { $, assignModalState, autoGrow, closeColorPop, COLORS, convertFileSrc, d
 import { DYN_VARS, dynToken, extractVars, hasEmptyVarToken, readFixedVars, resolveVars, saveFixedVars } from "./promptVars.js";
 import { EXPERT_DROPDOWNS, renderExpert } from "./expertMenu.js";
 import { normSize } from "./settingsPanel.js";
-import { closeTagPop, closeTagSuggest, renderTagChips, tagsOn } from "./tags.js";
+import { closeTagPop, closeTagSuggest, renderTagChips } from "./tags.js";
 import { bindHotkeyField, HOTKEY_ERRORS, hotkeyMessage, promptHotkeysOn, renderPromptHotkey, setPromptHotkey, showHotkeyError } from "./hotkeys.js";
 import { confirmDialog } from "./dialog.js";
 import { renderGrid } from "./views.js";
@@ -824,14 +824,14 @@ export function syncModalImageUi(mode) {
   // reopens collapsed. The hotkey row exists for every prompt kind (a hotkey
   // copies whatever the prompt holds). Version history is offered for every existing
   // prompt kind: a snapshot also captures name-only changes on an image/file/colour
-  // prompt, so it stays reachable there too. The outer section itself hides only if
-  // none of the three apply.
+  // prompt, so it stays reachable there too. The outer section itself never hides.
   modal.hotkey.classList.toggle("hidden", !promptHotkeysOn());
   showHotkeyError("");
   const histOn = mode === "edit" && flag("promptHistory");
   $("modal-history").classList.toggle("hidden", !histOn);
   if (histOn) $("modal-history-body").innerHTML = "";
-  modal.advanced.classList.toggle("hidden", !tagsOn() && !promptHotkeysOn() && !histOn);
+  // Font and tile text size always live in here, so the head never hides.
+  modal.advanced.classList.remove("hidden");
   modal.advancedBody.classList.add("hidden");
   modal.advancedHead.setAttribute("aria-expanded", "false");
   modal.advanced.classList.remove("open");

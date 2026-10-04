@@ -153,6 +153,27 @@ SECTION = """\
       const cmHist9 = document.getElementById('confirm-modal');
       if (!cmHist9.classList.contains('hidden')) { await click('confirm-ok'); await sleep(200); }
     }
+    // 749: font and tile text size live in the Advanced options body, and the
+    // Advanced head stays visible even with tags, hotkeys and history all off.
+    {
+      const flags749 = ['Tags', 'Hotkey per prompt', 'Prompt versions'];
+      for (const f of flags749) await setExpertFlag(f, false);
+      if (!await openEditor('p9')) {
+        out.errors.push('749: the file prompt did not open in the editor');
+      } else {
+        const body749 = document.getElementById('modal-advanced-body');
+        const font749 = document.getElementById('modal-font');
+        if (!font749 || !body749.contains(font749)) out.errors.push('749: the font select is not inside the advanced options');
+        if (document.getElementById('modal-advanced').classList.contains('hidden')) {
+          out.errors.push('749: the advanced options head is hidden with tags, hotkeys and history off');
+        }
+        await click('modal-close-x');
+        await sleep(200);
+        const cm749 = document.getElementById('confirm-modal');
+        if (!cm749.classList.contains('hidden')) { await click('confirm-ok'); await sleep(200); }
+      }
+      for (const f of flags749) await setExpertFlag(f, true);
+    }
     // 429: a prompt with both a stored preview and a real attachment gets a line
     // explaining the difference, spelled out and not a raw i18n key.
     if (!await openEditor('p11')) {

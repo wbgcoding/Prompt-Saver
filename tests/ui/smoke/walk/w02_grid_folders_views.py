@@ -48,22 +48,18 @@ SECTION = """\
       }
       if (window.innerWidth >= 1000 && !seen707) out.errors.push('707: no auto-fitted Prompt 2 tile in the grid to check');
     }
-    // P32: font/size sit right under the name row, not down by the prompt text -
-    // kept, just moved. A pure DOM-order check, no need to open the editor.
+    // P32: font/size are advanced options now: the style row sits inside the
+    // collapsed Advanced body, after the prompt text. A pure DOM-order check.
     {
-      const nameRow = document.querySelector('#modal .modal-name-row');
       const styleRow = document.getElementById('modal-style-row');
+      const advBody = document.getElementById('modal-advanced-body');
       const textWrap = document.getElementById('modal-text-wrap');
-      if (!nameRow || !styleRow || !textWrap) {
-        out.errors.push('the editor is missing the name row, style row or text wrap');
+      if (!styleRow || !advBody || !textWrap) {
+        out.errors.push('the editor is missing the style row, advanced body or text wrap');
       } else {
-        const pos = nameRow.compareDocumentPosition(styleRow);
-        if (!(pos & Node.DOCUMENT_POSITION_FOLLOWING)) {
-          out.errors.push('the font/size row does not come after the name row');
-        }
-        const pos2 = styleRow.compareDocumentPosition(textWrap);
-        if (!(pos2 & Node.DOCUMENT_POSITION_FOLLOWING)) {
-          out.errors.push('the font/size row is not above the prompt text anymore');
+        if (!advBody.contains(styleRow)) out.errors.push('the font/size row is not inside the advanced options');
+        if (!(textWrap.compareDocumentPosition(styleRow) & Node.DOCUMENT_POSITION_FOLLOWING)) {
+          out.errors.push('the font/size row is not below the prompt text');
         }
       }
     }
