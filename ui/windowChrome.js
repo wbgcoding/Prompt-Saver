@@ -61,8 +61,8 @@ export function setBars(header, composer) {
 // text instead of a second translated sentence.
 export function applyBarToggleTips() {
   const hint = flag("barToggleBoth") ? ` ${t("tipBarToggleBoth")}` : "";
-  $("hide-bottom").title = t("hideBar") + hint;
-  for (const id of ["show-top", "show-bottom"]) $(id).title = t("showBar") + hint;
+  const keys = { "hide-bottom": "hideBarBottom", "show-top": "showBarTop", "show-bottom": "showBarBottom" };
+  for (const [id, key] of Object.entries(keys)) $(id).title = t(key) + hint;
 }
 
 // ---- Themed tooltips: ONE shared popup for every hover hint; rich tile previews

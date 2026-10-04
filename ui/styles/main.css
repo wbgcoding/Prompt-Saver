@@ -419,7 +419,7 @@ body.no-composer .composer { display: none; }
    more room; this never touches the stored show_composer setting, so it comes
    back exactly as it was once the selection is cleared. */
 body.grid-selecting .composer { display: none; }
-.bar-toggle { opacity: 0.45; }
+.bar-toggle { opacity: 0.6; }
 .bar-toggle:hover { opacity: 1; }
 /* Bottom toggle: same height as the Save button -> shared center line. */
 .composer .bar-toggle {

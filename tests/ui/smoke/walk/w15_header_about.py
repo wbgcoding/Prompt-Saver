@@ -110,6 +110,13 @@ SECTION = """\
       const winControls = document.querySelector('.win-controls');
       const saveBtn = document.getElementById('save');
       if (document.getElementById('hide-top')) out.errors.push('700: the top bar still has a hide button');
+      // 704: each bar button names its own bar in the tooltip and the accessible name.
+      for (const [id704, want704] of [['hide-bottom', 'Hide input bar'], ['show-bottom', 'Show input bar'], ['show-top', 'Show top bar']]) {
+        const el704 = document.getElementById(id704);
+        if (!el704) { out.errors.push('704: ' + id704 + ' is missing'); continue; }
+        if (el704.getAttribute('aria-label') !== want704) out.errors.push('704: ' + id704 + ' has the accessible name "' + el704.getAttribute('aria-label') + '"');
+        if (!(el704.title || '').startsWith(want704)) out.errors.push('704: ' + id704 + ' has the tooltip "' + el704.title + '"');
+      }
       if (!hb || !winControls || !saveBtn) {
         out.errors.push('hide-bottom, win-controls or save missing');
       } else if (window.innerWidth >= 700) {

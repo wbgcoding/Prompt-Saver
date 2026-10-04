@@ -1610,6 +1610,7 @@ the video editor and the introduction tour ship on).
 - **Calmer tiles.** Hovering a tile shows only its menu button; select through the menu or Ctrl+click.
 - **Tile menu.** Right-click now offers Copy, Favorite, Select and Start chain, every entry has an icon, entries are grouped, and Delete sits apart at the bottom in red.
 - **One Capture button.** Screenshot, screen recording, color picker and text recognition now share one button with a menu; a running recording lights it up and one click stops it.
+- **Clearer bar arrows.** The hide and show arrows of the bars now point onto a line, and each one is named after its bar (input bar, top bar).
 - The clipboard inbox is part of the copy history now: one list with a filter
   for copies made in the app and elsewhere.
 - The expert switch that kept the buttons of disabled features in the toolbar
