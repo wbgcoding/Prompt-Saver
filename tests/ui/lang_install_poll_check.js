@@ -1,10 +1,10 @@
-// Language install polling (ui/main.js, pollLangInstall / closeLangsModal): an
+// Language install polling (ui/dictation.js, pollLangInstall / closeLangsModal): an
 // install_result answer that arrives after the dialog was closed must still be
 // handled. The backend deletes the result file and drops its nonce the moment it
 // answers, so a dropped answer left the row busy and the next poller waiting for a
 // result that can never come again (until the ~10 minute poll limit).
 //
-// main.js is one big module with boot code, so the real source text of the two
+// The window script is split into modules with boot code, so the real source text of the two
 // functions is extracted and run in a vm against fake timers and a scripted backend.
 // Run:  node tests/ui/lang_install_poll_check.js      Exit: 0 = clean, 1 = problems.
 const fs = require("fs");
@@ -41,6 +41,8 @@ async function scenario(reopenBeforeAnswer) {
     LANG_CMDS: { ocr: { installResult: "ocr_install_result", languages: "ocr_languages" } },
     langDialogKind: "ocr",
     ocrLangsCache: [], voiceLangsCache: [],
+    assignOcrLangsCache: (v) => { calls.push("setter:ocr"); },
+    assignVoiceLangsCache: (v) => { calls.push("setter:speech"); },
     $: () => ({ classList: { add() {}, remove() {} } }),
     t: (k) => k,
     renderLangsBody: () => {},
@@ -72,6 +74,7 @@ async function scenario(reopenBeforeAnswer) {
   if (st.installing.has("en-US")) problems.push("row still busy after the terminal answer");
   if (st.installErrors["en-US"]) problems.push(`unexpected error: ${st.installErrors["en-US"]}`);
   if (!calls.includes("caps:ocr:true")) problems.push("capability list was not refreshed");
+  if (!calls.includes("setter:ocr")) problems.push("the OCR language cache was not replaced through its setter");
   if (timers.size) problems.push("a poller is still armed and would wait for a result that is gone");
   return problems;
 }

@@ -18,9 +18,10 @@ import { bindHotkeyField, commitRecPauseHotkey, commitRecStopHotkey, prettyAccel
 import EN from "./i18n/en.js";
 import { renderStatsPanel, toggleShortLivedCert } from "./management.js";
 import { closeBackups, renderBackupPanel } from "./backups.js";
+import { openOcrLangsModal, openVoiceLangsModal } from "./dictation.js";
 
-let openOcrLangsModal, openVoiceLangsModal, varFixedListRow; // linked from main.js
-export function linkExpertMenu(fns) { ({ openOcrLangsModal, openVoiceLangsModal, varFixedListRow } = fns); }
+let varFixedListRow; // linked from main.js
+export function linkExpertMenu(fns) { ({ varFixedListRow } = fns); }
 
 export let expertResetTimer = null;
 
