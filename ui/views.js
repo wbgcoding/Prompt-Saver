@@ -3,9 +3,10 @@
 import { $, assignFavView, assignPrompts, assignSettings, cellKey, clampGrid, confirmIfNoUndo, disarmButton, drag, DRAG_THRESHOLD, errToast, favView, flag, gridEl, gridSelected, inkShadow, invoke, journalThumbCache, libraryEl, libThumbCache, openColorPop, optFlag, PLUS_ICON, prompts, pruneThumbCache, readableInk, settings, t, TB_CHECK, toast, undoToast, val, viewsEl } from "./core.js";
 import { placePopover, placePopoverAt } from "./popover.js";
 import { EXAMPLE_IMAGE_DATA_URL } from "./exampleAssets.js";
+import { buildTile, fitAllTiles, pruneVideoCache } from "./tiles.js";
 
-let applyFlags, buildFolderTile, buildSwatches, buildTile, clearGridSelection, fitAllTiles, foldersOfView, hideTileTip, isArchived, pruneVideoCache, renderLibrary, saveFolder, syncBannerStack; // linked from main.js
-export function linkViews(fns) { ({ applyFlags, buildFolderTile, buildSwatches, buildTile, clearGridSelection, fitAllTiles, foldersOfView, hideTileTip, isArchived, pruneVideoCache, renderLibrary, saveFolder, syncBannerStack } = fns); }
+let applyFlags, buildFolderTile, buildSwatches, clearGridSelection, foldersOfView, hideTileTip, isArchived, renderLibrary, saveFolder, syncBannerStack; // linked from main.js
+export function linkViews(fns) { ({ applyFlags, buildFolderTile, buildSwatches, clearGridSelection, foldersOfView, hideTileTip, isArchived, renderLibrary, saveFolder, syncBannerStack } = fns); }
 
 // ---- Grid-size value picker ----
 // Scrollable popup under a grid-size input: lists every value with a
