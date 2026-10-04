@@ -14902,999 +14902,7 @@ async function resetSettings() {
   await reloadEverything(); // in place: a page reload repaints the whole window
 }
 
-// ---- Wire events ----
-function bind() {
-  inputEl.addEventListener("input", () => {
-    autoGrow(inputEl);
-    saveBtn.disabled = !inputEl.value.trim();
-  });
-  inputEl.addEventListener("keydown", (e) => {
-    if (e.ctrlKey && e.key === "Enter") { e.preventDefault(); startCreate(); }
-    // Escape ends a dictation session targeting this field, instead of
-    // falling through to whatever the global Escape handler would otherwise do.
-    if (e.key === "Escape" && voiceState !== "idle" && voiceTargetEl === inputEl) {
-      e.stopPropagation();
-      stopVoice();
-    }
-  });
-  // Paste an image or file (Ctrl+V) to save it as a button; plain text pastes
-  // normally. A broken/unreadable image is reported, never saved.
-  inputEl.addEventListener("paste", async (e) => {
-    if (!flag("pasteMedia")) return;
-    const dt = e.clipboardData;
-    if (!dt) return;
-    // Only intercept when the clipboard carries a file/image payload; plain text
-    // keeps pasting normally.
-    const hasPayload = dt.files?.length > 0 || [...(dt.items || [])].some((it) => it.kind === "file");
-    if (!hasPayload) return;
-    e.preventDefault();
-    await withDialog(async () => {
-      // Pasted bitmaps (screenshots) arrive as a file item with an empty type,
-      // so try the image clipboard first, then fall back to a real file path.
-      const img = await invoke("get_clipboard_image").catch(() => "");
-      if (img) {
-        openModal({ mode: "image-create", title: t("imageModalTitle"), name: t("filterImage"), image: img, showImage: true, copyImage: true });
-        return;
-      }
-      const path = await invoke("get_clipboard_file_path").catch(() => "");
-      if (path) await openFileCreate(path);
-      else toast(t("imagePasteFailed"));
-    });
-  });
-  saveBtn.addEventListener("click", startCreate);
-
-  modal.confirm.addEventListener("click", confirmModal);
-  modal.closeX.addEventListener("click", () => confirmDiscardIfDirty().then((ok) => { if (ok) closeModal(); }));
-  modal.fav.addEventListener("click", () => {
-    const on = modal.fav.classList.toggle("active");
-    modal.fav.setAttribute("aria-pressed", String(on));
-  });
-  modal.secret.addEventListener("click", onModalSecretToggle);
-  // Rotating prompts.
-  modal.rotateSwitch.addEventListener("change", async () => {
-    if (modal.rotateSwitch.checked) {
-      modalState.rotateEntries = [modal.text.value];
-      // Only a prompt that never rotated before takes the shipped/expert default:
-      // re-checking the box mid-edit must not clobber a mode already chosen.
-      if (!modalState.rotateMode) {
-        modalState.rotateMode = EXPERT_DROPDOWNS.rotateDefaultMode.get() === "random" ? "random" : "";
-      }
-    } else {
-      const hasExtra = (modalState.rotateEntries || []).length > 1;
-      if (hasExtra) {
-        const ok = await confirmDialog({
-          title: t("rotateToggle"),
-          message: t("rotateDiscardConfirm"),
-          confirmLabel: t("discardConfirm"),
-          danger: true,
-        });
-        if (!ok) { modal.rotateSwitch.checked = true; return; }
-      }
-      modal.text.value = (modalState.rotateEntries || [])[0] ?? modal.text.value;
-      modalState.rotateEntries = [];
-    }
-    renderRotateUi();
-    // The switch row only exists for a text prompt, so textVisible is true here.
-    // Flipping it has to move the same three surfaces syncModalImageUi does: only
-    // hiding the textarea left the clear-X wrapper (an empty 120px box) and, with
-    // on, the rendered pane still showing entry 1 sitting above the colours.
-    const rotating = rotationActive();
-    modal.text.classList.toggle("hidden", rotating);
-    modal.voiceRow.classList.toggle("hidden", rotating);
-    const varsUi = !rotating && flag("promptVars");
-    modal.textBar.classList.toggle("hidden", !varsUi);
-    modal.varsHint.classList.toggle("hidden", !varsUi);
-    if (varsUi) renderVarHelper();
-    syncMdUi(true, rotating);
-    if (!modal.rotateSwitch.checked) modal.text.focus();
-    // This must hide/show the readout on the SAME tick as the toggle: the
-    // rAF-deferred scheduleLenCounter() left it visible for one frame, long enough
-    // for a synchronous check right after the toggle to see it.
-    updateLenCounter();
-  });
-  modal.rotateAdd.addEventListener("click", () => {
-    const max = Math.max(2, Math.round(val("rotateMaxEntries")) || 20);
-    if ((modalState.rotateEntries || []).length >= max) return;
-    modalState.rotateEntries.push("");
-    renderRotateEntries();
-    renderRotateAutoBtn();
-    const rows = modal.rotateEntries.querySelectorAll(".rotate-entry-input");
-    rows[rows.length - 1]?.focus();
-  });
-  modal.rotateMode.addEventListener("change", () => {
-    if (!modalState) return;
-    modalState.rotateMode = modal.rotateMode.value === "random" ? "random" : "";
-  });
-  modal.rotateAuto.addEventListener("click", () => {
-    if (modal.rotateAuto.disabled) return;
-    modalState.rotateAuto = !modalState.rotateAuto;
-    renderRotateAutoBtn();
-  });
-  modal.rotateReset.addEventListener("click", async () => {
-    if (!modalState?.id) return;
-    try {
-      await invoke("rotation_reset", { id: modalState.id });
-    } catch (err) {
-      errToast(err);
-      return;
-    }
-    toast(t("rotateResetDone"));
-    refreshRotateNext();
-  });
-  // Click the preview media → fullscreen zoom/pan viewer.
-  modal.img.addEventListener("click", () => { if (modal.img.src) openLightbox(modal.img.src, false); });
-  modal.video.addEventListener("click", () => { if (modal.video.src) openLightbox(modal.video.src, true); });
-  modal.name.addEventListener("keydown", (e) => { if (e.key === "Enter") confirmModal(); });
-  modal.text.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && voiceState !== "idle" && voiceTargetEl === modal.text) {
-      e.stopPropagation();
-      stopVoice();
-    }
-  });
-  modal.text.addEventListener("input", scheduleLenCounter); // live length readout
-  modal.text.addEventListener("input", scheduleMdPreview);  // live preview (rAF-throttled)
-  // Replace layout: the rendered pane IS the resting state, so it has to hand the
-  // textarea over on a click and take back over once the user is done typing.
-  const mdSwap = (editing) => {
-    const from = editing ? modal.mdPreview : modal.text;
-    const span = from.scrollHeight - from.clientHeight;
-    const ratio = span > 0 ? from.scrollTop / span : 0;
-    mdEditing = editing;
-    syncMdUi(true);
-    const to = editing ? modal.text : modal.mdPreview;
-    if (editing) to.focus(); // never behind a frame callback: see scheduleMdPreview
-    // Only the scroll position waits for layout; losing it costs nothing.
-    requestAnimationFrame(() => {
-      const s = to.scrollHeight - to.clientHeight;
-      to.scrollTop = s > 0 ? Math.round(ratio * s) : 0;
-    });
-  };
-  modal.mdPreview.addEventListener("click", () => { if (flag("mdPreview")) mdSwap(true); });
-  modal.mdPreview.addEventListener("focus", () => { if (flag("mdPreview")) mdSwap(true); });
-  // Swapping back changes the height of the block, so doing it on the blur that a
-  // mousedown produces moves whatever the user is halfway through clicking: the
-  // click then lands somewhere else, or nowhere. Wait for the pointer to come up.
-  let swapAfterClick = false;
-  let pointerIsDown = false;
-  window.addEventListener("pointerdown", () => { pointerIsDown = true; }, true);
-  window.addEventListener("pointerup", () => {
-    pointerIsDown = false;
-    if (!swapAfterClick) return;
-    swapAfterClick = false;
-    if (mdEditing && document.activeElement !== modal.text) mdSwap(false);
-  }, true);
-  modal.text.addEventListener("blur", () => {
-    if (!mdEditing) return;
-    if (pointerIsDown) { swapAfterClick = true; return; }
-    mdSwap(false);
-  });
-  // Variable helper collapsible (same convention as the notes row).
-  modal.varsHead.addEventListener("click", () => {
-    const open = !modal.varsBody.classList.toggle("hidden");
-    modal.varsHead.setAttribute("aria-expanded", String(open));
-    modal.textBar.classList.toggle("open", open);
-  });
-  // Capture: the field is read-only, the key press itself is the input.
-  bindHotkeyField(modal.hotkeyInput, {
-    id: () => modalState?.id || null,
-    errEl: modal.hotkeyErr,
-    showAllEl: $("modal-hotkey-showall"),
-    current: () => modalState?.hotkey || "",
-    onCommit: async (accel) => {
-      const before = modalState?.id;
-      try {
-        await invoke("check_hotkey", { hotkey: accel, id: modalState?.id || null });
-      } catch (err) {
-        if (modalState?.id !== before) return null; // moved on: nothing to show for it
-        throw err;
-      }
-      if (modalState?.id !== before) return null; // moved on between the check and here
-      setPromptHotkey(accel);
-      return accel;
-    },
-  });
-  $("modal-hotkey-clear").addEventListener("click", () => setPromptHotkey(""));
-  $("modal-hotkey-showall").addEventListener("click", () => openAllShortcuts());
-  modal.hotkeyAction.addEventListener("change", () => {
-    if (modalState) modalState.hotkeyPaste = modal.hotkeyAction.value;
-  });
-  // Tags/hotkey/history collapsible, combined into one "Advanced options".
-  modal.advancedHead.addEventListener("click", () => {
-    const open = !modal.advancedBody.classList.toggle("hidden");
-    modal.advancedHead.setAttribute("aria-expanded", String(open));
-    modal.advanced.classList.toggle("open", open);
-    // In tall (text-edit) mode the textarea flex-grows and eats the height the open
-    // history needs; history-open caps it (CSS) so the list + Save row stay reachable.
-    // Only relevant when history itself applies to this prompt (mode/type/flag).
-    const histApplies = !$("modal-history").classList.contains("hidden");
-    modal.root.classList.toggle("history-open", open && histApplies);
-    if (open) {
-      if (histApplies) loadHistory(modalState?.id);
-      // Scroll the modal's own scroll container to the bottom so the freshly opened
-      // section (and the Save row below it) come fully into view on small windows.
-      // scrollIntoView("nearest") only nudged the already-visible head, hence unreliable.
-      const scroller = modal.advanced.closest(".modal");
-      if (scroller) requestAnimationFrame(() => requestAnimationFrame(() => {
-        scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" });
-      }));
-    }
-  });
-
-  // Image / Text display toggle (text mode shows the name on the tile).
-  modal.showImage.addEventListener("click", () => {
-    if (!modalState) return;
-    modalState.showImage = true;
-    syncModalImageUi(modalState.mode);
-  });
-  modal.showText.addEventListener("click", () => {
-    if (!modalState) return;
-    modalState.showImage = false;
-    syncModalImageUi(modalState.mode);
-  });
-  // Editor's own "Copy formatted" button: same resolveVars() path every other
-  // copy goes through, not the raw stored text.
-  modal.copyFormattedBtn.addEventListener("click", async () => {
-    const text = await resolveVars(modal.text.value);
-    if (text === null) return; // the placeholder dialog was cancelled
-    const html = renderMarkdown(text);
-    const ok = await invoke("copy_formatted", { text, html }).catch((e) => { errToast(e); return false; });
-    if (ok) toast(t("copied"));
-  });
-  // Shared media pick: image, gif or video. Stills are stored as a preview,
-  // gif/video become the icon path (shown, never copied). An image keeps the
-  // prompt's copy behaviour; a gif/video icon switches copying back to text.
-  async function pickReplacementMedia() {
-    const session = modalSession;
-    const path = await withDialog(() => invoke("pick_file_path"));
-    if (!path || !modalState || session !== modalSession) return false;
-    const kind = mediaKind(path);
-    if (!kind) {
-      toast(t("unsupportedFile"));
-      return false;
-    }
-    if (kind === "image") {
-      const data = await loadFilePreview(path);
-      if (!data || !modalState || session !== modalSession) return false;
-      modalState.image = data;
-      modalState.iconPath = "";
-    } else {
-      modalState.image = "";
-      modalState.iconPath = path;
-      modalState.copyImage = false;
-    }
-    modalState.showImage = true;
-    return true;
-  }
-  // "Replace media" (preview exists) and "Media as icon" (no media yet).
-  modal.replaceImg.addEventListener("click", async () => {
-    if (modalState && (await pickReplacementMedia())) syncModalImageUi(modalState.mode);
-  });
-  modal.addIcon.addEventListener("click", async () => {
-    if (modalState && (await pickReplacementMedia())) syncModalImageUi(modalState.mode);
-  });
-  modal.removeImg.addEventListener("click", () => {
-    if (!modalState) return;
-    modalState.image = "";
-    modalState.iconPath = "";
-    modalState.showImage = false;
-    syncModalImageUi(modalState.mode);
-  });
-
-  // Replacing the attached file re-classifies the prompt by file type:
-  // stills/gifs/videos switch to the media layout, anything else to plain file.
-  modal.replaceFile.addEventListener("click", async () => {
-    if (!modalState) return;
-    const session = modalSession;
-    const path = await withDialog(() => invoke("pick_file_path"));
-    if (!path || !modalState || session !== modalSession) return;
-    modalState.filePath = path;
-    modalState.pdfPage = 0; // a different file starts back at its own first page
-    const kind = mediaKind(path);
-    const data = await loadFilePreview(path);
-    if (!modalState || session !== modalSession) return;
-    modalState.image = data;
-    modalState.copyImage = false; // the file itself is what gets copied
-    modalState.showImage = !!kind;
-    syncModalImageUi(modalState.mode);
-  });
-
-  // Re-requests the preview at the chosen page and saves it into pdf_page:
-  // the field only ever shows for a PDF attachment (syncModalImageUi).
-  // Request token -- a fast second page change must not let the slower
-  // older reply land after the newer one and overwrite its already-fresher preview.
-  let pdfPageReq = 0;
-  modal.pdfPage.addEventListener("change", async () => {
-    if (!modalState) return;
-    const session = modalSession;
-    const page = Math.max(0, (Number(modal.pdfPage.value) || 1) - 1);
-    modalState.pdfPage = page;
-    const req = ++pdfPageReq;
-    const data = await loadFilePreview(modalState.filePath, page);
-    if (req !== pdfPageReq || !modalState || session !== modalSession) return;
-    if (data) { modalState.image = data; modal.img.src = data; }
-  });
-
-  // Paperclip button in the composer bar (files, images, gifs, videos).
-  $("file-btn").addEventListener("click", startFileCreate);
-  $("file-btn").addEventListener("contextmenu", (e) => {
-    e.preventDefault();
-    startFileFromClipboard();
-  });
-
-  // Snipping tool: open the overlay; the backend notifies us with the crop.
-  $("snip-btn").addEventListener("click", () => {
-    invoke("open_snip").catch((err) => errToast(err));
-  });
-
-  // Pipette: the same frozen-desktop overlay, in colour-pick mode. The result
-  // is a clipboard value only: no prompt is created and nothing enters the history.
-  $("picker-btn").addEventListener("click", () => {
-    invoke("open_picker").catch((err) => errToast(err));
-  });
-
-  // Screen recording: the same frozen-desktop overlay, in record-target
-  // mode. The backend resolves the click/drag into a window, monitor or region
-  // and notifies us with "recorder-target-picked"; a short countdown (0 = none)
-  // then the actual capture starts.
-  $("record-btn").addEventListener("click", async () => {
-    const btn = $("record-btn");
-    // A glowing button always meant "start a second recording" before -- the
-    // click reached open_recorder regardless, which the backend now refuses
-    // with recording-busy, but the button itself should just stop the one
-    // already running instead of making the user find the control bar first.
-    // recording_status confirms a session is actually still live before
-    // acting, so a stale glow (a missed event) falls through to open_recorder
-    // like normal rather than trying to stop a recording that is already gone.
-    if (btn.classList.contains("is-recording") || btn.classList.contains("is-paused")) {
-      const status = await invoke("recording_status").catch(() => null);
-      if (status) {
-        // The control bar's own poll notices the session is gone and hides
-        // itself within its next tick (recording_status turning null) --
-        // nothing here has to close it directly.
-        try { await invoke("stop_recording"); } catch (err) { errToast(err); }
-        return;
-      }
-      setRecordBtnState("idle");
-    }
-    invoke("open_recorder").catch((err) => errToast(err));
-  });
-
-  // A right-click on either composer button opens a quiet, one-item
-  // menu to edit an EXISTING file instead of only ever reaching an editor
-  // through a fresh capture/recording. Which editor opens is decided by the
-  // file's own content (open_file_in_editor), never by which button was used.
-  const openEditorPop = document.createElement("div");
-  openEditorPop.className = "ctx open-editor-pop hidden";
-  openEditorPop.setAttribute("role", "menu");
-  openEditorPop.innerHTML =
-    '<button type="button" role="menuitem" id="open-editor-pop-item"></button>' +
-    // A second, camera-only entry on the SAME popover the record button
-    // already opens on right-click -- shown only when cameraRecord is on, so
-    // the default-off feature stays invisible until someone actually enables it.
-    '<button type="button" role="menuitem" id="camera-menu-item" class="hidden"></button>';
-  document.body.appendChild(openEditorPop);
-  function closeOpenEditorPop() {
-    openEditorPop.classList.add("hidden");
-  }
-  // path is set only when the menu is opened for a KNOWN attachment (the
-  // library's own right-click, below); left empty it means "let the user
-  // pick a file", which is what the composer buttons always do.
-  let openEditorPopPath = "";
-  function openOpenEditorPopAt(anchorEl, path, showCamera) {
-    openEditorPopPath = path || "";
-    openEditorPop.querySelector("#open-editor-pop-item").textContent = t("openFileInEditor");
-    const camItem = openEditorPop.querySelector("#camera-menu-item");
-    camItem.classList.toggle("hidden", !showCamera);
-    if (showCamera) camItem.textContent = t("cameraMenuItem");
-    placePopover(openEditorPop, anchorEl.getBoundingClientRect());
-  }
-  openEditorPop.querySelector("#open-editor-pop-item").addEventListener("click", () => {
-    const path = openEditorPopPath;
-    closeOpenEditorPop();
-    openExternalFileInEditor(path || undefined);
-  });
-  openEditorPop.querySelector("#camera-menu-item").addEventListener("click", () => {
-    closeOpenEditorPop();
-    invoke("open_camera_window").catch((e) => errToast(e));
-  });
-  $("snip-btn").addEventListener("contextmenu", (e) => {
-    e.preventDefault();
-    openOpenEditorPopAt($("snip-btn"));
-  });
-  $("record-btn").addEventListener("contextmenu", (e) => {
-    e.preventDefault();
-    openOpenEditorPopAt($("record-btn"), undefined, optFlag("cameraRecord"));
-  });
-  // Shared by the composer menu above and the library's own "Open in editor"
-  // right-click on an image/video attachment -- existingPath lets the caller
-  // hand over a path it already knows instead of showing the picker.
-  async function openExternalFileInEditor(existingPath) {
-    const path = existingPath || (await invoke("pick_media_file_path").catch(() => null));
-    if (!path) return;
-    let res;
-    try {
-      res = await invoke("open_file_in_editor", { path });
-    } catch (err) {
-      const msg = String(err);
-      if (msg === "not-media") toast(t("openFileNotMedia"));
-      else if (msg.startsWith("too-large:")) toast(t("openFileTooBig").replace("{mb}", msg.split(":")[1] || ""));
-      else errToast(err);
-      return;
-    }
-    if (res.kind === "image") {
-      openImageFileInEditor(res);
-    } else if (res.kind === "video") {
-      toast(t("openedCopyNote"));
-      await invoke("open_video_editor", { srcPath: res.copied_path, originDir: res.origin_dir })
-        .then(() => recordToolUsage("video_editor"))
-        .catch((e) => errToast(e));
-    }
-  }
-  // Driven by the recording state, not by the click -- set on a
-  // successful start, cleared on stop/cancel/auto-stop, and re-synced by a
-  // slow poll so a missed event can never leave the button glowing forever.
-  function setRecordBtnState(state) {
-    const btn = $("record-btn");
-    btn.classList.toggle("is-recording", state === "recording");
-    btn.classList.toggle("is-paused", state === "paused");
-    // Idle keeps its own data-i18n-title tooltip (with the right-click hint) and
-    // the plain name as accessible name; the click now stops the recording instead
-    // of trying to start a second one while either indicator is glowing, so the
-    // tooltip has to say that.
-    const idle = state === "idle";
-    btn.title = idle ? t(btn.dataset.i18nTitle) : t("recBtnStopTip");
-    btn.setAttribute("aria-label", idle ? t(btn.dataset.i18nAria) : t("recBtnStopTip"));
-  }
-  async function syncRecordBtnFromStatus() {
-    // Skipped while the window is hidden (minimized to tray) -- the button
-    // it updates is not visible either, so there is nothing to resync until
-    // the window is shown again, which re-applies the real state on its own.
-    if (document.hidden) return;
-    const status = await invoke("recording_status").catch(() => null);
-    setRecordBtnState(!status ? "idle" : status.paused ? "paused" : "recording");
-  }
-  setInterval(syncRecordBtnFromStatus, 5000);
-  // Catches up the moment the window is shown again instead of waiting out
-  // the rest of the 5s poll interval for a state change that happened while
-  // hidden.
-  document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) syncRecordBtnFromStatus();
-  });
-  listen("recording-cancelled", () => setRecordBtnState("idle"));
-  let recCountdownTimer = 0;
-  function cancelRecCountdown() {
-    clearTimeout(recCountdownTimer);
-    recCountdownTimer = 0;
-  }
-  listen("recorder-target-picked", async (e) => {
-    const p = e.payload || {};
-    // A pick made from the running recording's own bar, switching its target
-    // instead of starting a new one -- recbar.js's own listener handles that
-    // one, this window must not also try to start a second recording from it.
-    if (p.forSwitch) return;
-    const kind = p.kind;
-    let targetId = 0, regionX = 0, regionY = 0, regionW = 0, regionH = 0;
-    if (kind === "window") targetId = p.id;
-    else if (kind === "monitor") targetId = p.monitor;
-    else if (kind === "region") {
-      targetId = p.monitor;
-      regionX = p.x; regionY = p.y; regionW = p.width; regionH = p.height;
-    } else return;
-
-    const startNow = async () => {
-      try {
-        await invoke("start_recording", { targetKind: kind, targetId, regionX, regionY, regionW, regionH });
-        recordToolUsage("recording_start");
-        setRecordBtnState("recording");
-        await invoke("show_rec_bar", { targetKind: kind, id: targetId });
-      } catch (err) { errToast(err); }
-    };
-    // Checked before the countdown even starts -- discovering low disk space
-    // only after a 3-2-1 count would just waste the user's time on a "no" answer.
-    const diskWarn = await invoke("check_recording_disk_space").catch(() => null);
-    if (diskWarn) {
-      const minutes = Math.max(1, Math.round(diskWarn.est_seconds / 60));
-      const proceed = await confirmDialog({
-        title: t("recDiskWarnTitle"),
-        message: t("recDiskWarnMsg")
-          .replace("{drive}", diskWarn.drive)
-          .replace("{free}", fmtBytes(diskWarn.free_mb * 1024 * 1024))
-          .replace("{minutes}", String(minutes)),
-        confirmLabel: t("recDiskWarnRecordAnyway"),
-      });
-      if (!proceed) return;
-    }
-    cancelRecCountdown();
-    let n = Math.round(val("recCountdownS"));
-    if (n <= 0) { await startNow(); return; }
-    const tick = () => {
-      toast(t("recCountdownToast").replace("{n}", n));
-      n -= 1;
-      if (n < 0) { recCountdownTimer = 0; startNow(); return; }
-      recCountdownTimer = setTimeout(tick, 1000);
-    };
-    tick();
-  });
-
-  // ---- Recording result: mirrors the #snip-modal flow above, plus an
-  // optional conversion step (recFormat/recQuality != the raw mp4 capture).
-  // "recording-captured" is emitted by stop_recording (and by the auto-stop
-  // path when the recorded window itself closes) -- the rec-bar is its own
-  // window, so this is how the main window learns a file is ready.
-  const recModal = $("rec-modal");
-  const recPreview = $("rec-preview");
-  const recStatus = $("rec-modal-status");
-  const recFolderOut = $("rec-modal-folder");
-  const recFolderChangeBtn = $("rec-modal-folder-change");
-  const recMoreBtn = $("rec-modal-more");
-  const recMorePop = $("rec-modal-more-pop");
-  // The menu behind "More...": editing, Save as, Copy and the save folder.
-  function closeRecMorePop() {
-    if (recMorePop.classList.contains("hidden")) return;
-    const hadFocus = recMorePop.contains(document.activeElement);
-    recMorePop.classList.add("hidden");
-    recMoreBtn.setAttribute("aria-expanded", "false");
-    if (hadFocus) recMoreBtn.focus();
-  }
-  let pendingRecPath = "";
-  let recGen = 0; // invalidated on every close/discard so a late progress tick or a
-                   // finished conversion from a superseded recording is ignored
-  let recProgressOff = null;
-  // Same "closed by default, raw text only under Technical details" treatment
-  // as the video editor's own export error row, for a recording conversion
-  // that fails instead of exporting.
-  function showRecErrorDetails(raw) {
-    const box = $("rec-modal-error-details");
-    box.classList.toggle("hidden", !raw);
-    box.open = false;
-    $("rec-modal-error-raw").textContent = raw || "";
-  }
-  $("rec-modal-error-copy").addEventListener("click", () => {
-    invoke("copy_text", { text: $("rec-modal-error-raw").textContent }).then(() => toast(t("copied"))).catch(() => {});
-  });
-  // Closing the result window without an explicit
-  // Save/Save as.../Attach deletes the recording -- Discard, the X button,
-  // the backdrop and Escape all end up in closeRecModal(). Copy alone does
-  // NOT count as "saving" (it only relocates the file so the clipboard
-  // reference survives), so a copy-then-close still removes the working file
-  // -- recCopiedNotSaved is what gates the confirm-before-delete for that case.
-  let recSavedOrAttached = false;
-  let recCopiedNotSaved = false;
-  // Elide a long path in the middle rather than at the end -- the last
-  // segment (the actual folder name) is what tells destinations apart, so it
-  // has to stay visible; the title attribute always carries the full path.
-  function elideMiddle(s, max = 60) {
-    if (s.length <= max) return s;
-    const head = Math.ceil((max - 1) / 2);
-    return s.slice(0, head) + "…" + s.slice(s.length - (max - 1 - head));
-  }
-  function renderRecFolder() {
-    const dir = EXPERT_PATHS.recordingDir.get();
-    recFolderOut.textContent = elideMiddle(dir);
-    recFolderOut.title = dir;
-  }
-  // Once saved/attached, nothing that reaches this function may delete
-  // the file anymore -- "discard" used to force deletion regardless, which is
-  // exactly how clicking Discard right after a successful Save deleted the
-  // file the user had just saved. Both a real Discard click and an
-  // implicit close (X, backdrop, Escape) before any Save/Attach/Edit already
-  // meant "throw this away", so the two no longer need separate handling.
-  async function closeRecModal() {
-    const path = pendingRecPath;
-    const shouldDelete = !recSavedOrAttached;
-    // Copy alone does not count as saving, but it already moved the file to
-    // where the clipboard reference points -- closing without confirming
-    // first would delete that file out from under the still-live clipboard
-    // reference (280's own rule). A toast after the fact is too late; ask now,
-    // before anything else changes, so declining leaves the modal untouched.
-    if (shouldDelete && path && recCopiedNotSaved) {
-      const ok = await confirmDialog({
-        title: t("recDiscard"),
-        message: t("recClosedAfterCopy"),
-        confirmLabel: t("recDiscard"),
-        cancelLabel: t("cancel"),
-      });
-      if (!ok) return;
-    }
-    recGen += 1;
-    invoke("cancel_recording_convert").catch(() => {});
-    invoke("cancel_recording_crop").catch(() => {});
-    if (recProgressOff) { recProgressOff(); recProgressOff = null; }
-    closeRecMorePop();
-    recModal.classList.add("hidden");
-    recPreview.classList.add("hidden");
-    recPreview.removeAttribute("src");
-    recStatus.classList.remove("rec-status-cancellable");
-    recStatus.onclick = null;
-    pendingRecPath = "";
-    recSavedOrAttached = false;
-    recCopiedNotSaved = false;
-    if (shouldDelete && path) {
-      // A number back means it actually moved to "verworfen" (see
-      // discard_recording_file) -- null/failure stays silent, same as before.
-      const keepH = await invoke("discard_recording_file", { path }).catch(() => null);
-      if (keepH != null) toast(t("recDiscardedToast").replace("{hours}", String(Math.round(keepH))));
-    }
-  }
-  // needsCrop: the window recording's canvas was bigger than the window
-  // ever used (369's multi-display canvas) -- trim the black margin first,
-  // with the same visible/cancellable status line as the format conversion
-  // below, before either showing the raw preview or starting that conversion.
-  // A cancel or any failure here just keeps the untouched, letterboxed
-  // recording -- never something worth an error toast.
-  async function runRecCrop(rawPath, gen) {
-    let secs = 0;
-    const showCropping = () => { recStatus.textContent = t("recCropping").replace("{s}", String(secs)); };
-    showCropping();
-    recStatus.classList.add("rec-status-cancellable");
-    recStatus.onclick = () => { if (gen === recGen) invoke("cancel_recording_crop").catch(() => {}); };
-    recProgressOff = await listen("recording-crop-progress", (e) => {
-      if (gen !== recGen) return;
-      secs = Math.floor((e.payload?.ms || 0) / 1000);
-      showCropping();
-    });
-    const myOff = recProgressOff;
-    if (gen === recGen) {
-      try {
-        await invoke("crop_recording_to_used_area", { path: rawPath });
-      } catch (e) {
-        if (e === "ffmpeg-missing") toast(t("recCropSkippedNoTools"));
-      }
-    }
-    myOff();
-    if (recProgressOff === myOff) recProgressOff = null;
-    if (gen !== recGen) return;
-    recStatus.classList.remove("rec-status-cancellable");
-    recStatus.onclick = null;
-    recStatus.textContent = "";
-  }
-  async function openRecModal(rawPath, needsCrop) {
-    pendingRecPath = rawPath;
-    recSavedOrAttached = false;
-    recCopiedNotSaved = false;
-    recGen += 1;
-    const gen = recGen;
-    renderRecFolder();
-    $("rec-modal-edit").classList.toggle("hidden", !flag("videoEditor"));
-    recModal.classList.remove("hidden");
-    // recAutoCrop off means the user chose to keep the border -- skip the whole
-    // cropping step (and its status line) silently, same as a canvas that
-    // never needed cropping in the first place.
-    if (needsCrop && flag("recAutoCrop")) {
-      recPreview.classList.add("hidden");
-      showRecErrorDetails("");
-      await runRecCrop(rawPath, gen);
-      if (gen !== recGen) return;
-    }
-    const format = settings.ui_texts?.recFormat || "mp4";
-    const lossless = (settings.ui_texts?.recQuality || "high") === "lossless";
-    if (format === "mp4" && !lossless) {
-      recPreview.classList.remove("hidden");
-      recPreview.src = convertFileSrc(rawPath);
-      recStatus.textContent = "";
-      return;
-    }
-    recPreview.classList.add("hidden");
-    showRecErrorDetails("");
-    let secs = 0;
-    const showConverting = () => { recStatus.textContent = t("recConverting").replace("{s}", String(secs)); };
-    showConverting();
-    recStatus.classList.add("rec-status-cancellable");
-    recStatus.onclick = () => { if (gen === recGen) invoke("cancel_recording_convert").catch(() => {}); };
-    recProgressOff = await listen("recording-convert-progress", (e) => {
-      if (gen !== recGen) return;
-      secs = Math.floor((e.payload?.ms || 0) / 1000);
-      showConverting();
-    });
-    const myOff = recProgressOff;
-    if (gen !== recGen) {
-      // The modal was closed/discarded/attached while this await was in
-      // flight -- do not start a conversion nobody will see, and do not race
-      // whatever that close already did with this recording's file (discard
-      // deletes it by the same path convert_recording would then also touch).
-      myOff();
-      if (recProgressOff === myOff) recProgressOff = null;
-      return;
-    }
-    try {
-      const outPath = await invoke("convert_recording", { srcPath: rawPath, format, lossless });
-      if (gen !== recGen) return;
-      pendingRecPath = outPath;
-      recStatus.classList.remove("rec-status-cancellable");
-      recStatus.onclick = null;
-      recStatus.textContent = "";
-      recPreview.classList.remove("hidden");
-      recPreview.src = convertFileSrc(outPath);
-    } catch (err) {
-      if (gen !== recGen) return;
-      recStatus.classList.remove("rec-status-cancellable");
-      recStatus.onclick = null;
-      // Cancelled by the user's own click above, ffmpeg missing, or ffmpeg
-      // genuinely failed on this input -- either way the untouched raw
-      // recording is still there to fall back to, and only a real failure
-      // gets the "Technical details" row (never a cancel).
-      const raw = String(err);
-      if (raw.includes("cancel")) {
-        recStatus.textContent = t("recConvertCancelled");
-      } else if (raw.includes("ffmpeg-missing")) {
-        recStatus.textContent = `${t("recFfmpegMissingHint")} ${t("recConvertFailedKeepRaw")}`;
-      } else {
-        const { message, details } = parseFfmpegError(err, t);
-        recStatus.textContent = `${message} ${t("recConvertFailedKeepRaw")}`;
-        showRecErrorDetails(details);
-      }
-      recPreview.classList.remove("hidden");
-      recPreview.src = convertFileSrc(rawPath);
-    } finally {
-      // Unlisten this call's own listener, never whatever the global variable
-      // currently points at -- a superseded (older) call's finally must not
-      // tear down a newer, still-active openRecModal call's own listener.
-      myOff();
-      if (recProgressOff === myOff) recProgressOff = null;
-    }
-  }
-  // The periodic sweep and "once a recording ends" both fire this live
-  // (they always run after this listener exists) -- only when it removed
-  // something, per "a toast... when the total is worth mentioning".
-  listen("recording-sweep-done", (e) => {
-    const { count, bytes } = e.payload || {};
-    if (count > 0) toast(t("recSweepDone").replace("{n}", String(count)).replace("{v}", fmtBytes(bytes)));
-  });
-  // The control bar's own target-switch button lives in a separate
-  // window with no toast of its own -- a failed switch always leaves the
-  // previous source still recording, this is purely the "here is why" note.
-  listen("recording-target-switch-failed", (e) => errToast(e.payload));
-  listen("recording-captured", async (e) => {
-    setRecordBtnState("idle"); // covers both a normal stop and the auto-stop path
-    const path = e.payload?.path || "";
-    // An encoder write failure (disk full, etc.) already stopped the feeder
-    // itself before this event fired -- whatever got captured up to that
-    // point is still a valid, playable file, just cut short unexpectedly.
-    // "low-disk-space" is the one case with a message of its own: the
-    // disk-space watch stopped the recording proactively, before the
-    // encoder itself would have hit that same wall.
-    if (e.payload?.encode_error === "low-disk-space") toast(t("recDiskStoppedMsg"));
-    else if (e.payload?.encode_error === "max-limit-reached") toast(t("recStoppedByLimit"));
-    else if (e.payload?.encode_error) toast(t("recEncodeError"));
-    // A window recording whose canvas had to fall back below the
-    // "every display" default (too large for the encoder, or the user
-    // picked a smaller mode) says so once, here -- the normal "every
-    // display" case stays silent since that is simply the default working.
-    if (e.payload?.canvas_note === "monitor") toast(t("recCanvasFallbackMonitor"));
-    else if (e.payload?.canvas_note === "window") toast(t("recCanvasFallbackWindow"));
-    // The "window size" canvas default (today's Vorgabe) just cut off part
-    // of the picture because the window grew mid-recording -- offer, once
-    // per occurrence and only while the notice is on, to switch the canvas
-    // to every display so a resize like this stops losing content. Runs
-    // before the result menu itself opens, never instead of it.
-    const cropMs = e.payload?.resize_crop_at_ms;
-    if (cropMs != null && flag("recCropNotice")) {
-      const secs = Math.floor(cropMs / 1000);
-      toast(t("recCropNoticeMsg").replace("{s}", String(secs)), {
-        label: t("recCropNoticeSwitch"),
-        onClick: () => {
-          settings.ui_texts = { ...(settings.ui_texts || {}), recCanvasMode: "all" };
-          invoke("set_ui_text", { key: "recCanvasMode", value: "all" }).catch(() => {});
-        },
-      }, "", null, 12000);
-    }
-    // "Finish and continue" split this recording into several files -- the
-    // result dialog below still only ever opens the LAST one (opening every
-    // part in sequence in the editor is future work), so at least name how
-    // many earlier parts exist and were kept, rather than the split going
-    // unmentioned.
-    const partsCount = e.payload?.parts?.length || 0;
-    if (partsCount > 0) toast(t("recContinuePartsSaved").replace("{n}", String(partsCount)));
-    if (path) openRecModal(path, !!e.payload?.needs_crop);
-  });
-  $("rec-modal-close").addEventListener("click", () => closeRecModal());
-  recModal.addEventListener("pointerdown", (e) => {
-    if (e.target === recModal) closeRecModal();
-  });
-  $("rec-modal-discard").addEventListener("click", () => closeRecModal());
-  recMoreBtn.addEventListener("click", () => {
-    if (!recMorePop.classList.contains("hidden")) { closeRecMorePop(); return; }
-    placePopover(recMorePop, recMoreBtn.getBoundingClientRect());
-    recMoreBtn.setAttribute("aria-expanded", "true");
-    recMorePop.querySelector("button:not(.hidden)")?.focus();
-  });
-  // Capture phase: any menu item closes the menu first, then runs its own listener.
-  recMorePop.addEventListener("click", (e) => { if (e.target.closest("button")) closeRecMorePop(); }, true);
-  document.addEventListener("pointerdown", (e) => {
-    if (recMorePop.classList.contains("hidden")) return;
-    if (recMorePop.contains(e.target) || recMoreBtn.contains(e.target)) return;
-    closeRecMorePop();
-  });
-  // Opening the editor hands the raw file to another window that keeps working
-  // with it -- treat this like Save/Attach so closing this modal afterward never
-  // deletes a file the editor might still be reading from.
-  $("rec-modal-edit").addEventListener("click", async () => {
-    if (!pendingRecPath) return;
-    try {
-      await invoke("open_video_editor", { srcPath: pendingRecPath });
-      recordToolUsage("video_editor");
-      recSavedOrAttached = true;
-    } catch (err) {
-      errToast(err);
-    }
-  });
-  recFolderChangeBtn.addEventListener("click", async () => {
-    await EXPERT_PATHS.recordingDir.change();
-    renderRecFolder();
-  });
-  // Update the preview + pending path to a command's returned new location --
-  // Save/Save as.../Copy all move the file, so a later action in the same
-  // still-open window (Attach, another Copy) must act on where it ended up,
-  // not on the now-stale original <data>/recordings path.
-  function adoptRecPath(newPath) {
-    if (!newPath || newPath === pendingRecPath) return;
-    pendingRecPath = newPath;
-    if (!recPreview.classList.contains("hidden")) recPreview.src = convertFileSrc(newPath);
-  }
-  let recSaveBusy = false;
-  $("rec-modal-save").addEventListener("click", async () => {
-    if (!pendingRecPath || recSaveBusy) return;
-    recSaveBusy = true;
-    try {
-      const newPath = await invoke("save_recording_now", { srcPath: pendingRecPath });
-      adoptRecPath(newPath);
-      recSavedOrAttached = true;
-      toast(t("recSaved"));
-    } catch (err) {
-      errToast(err);
-    } finally {
-      recSaveBusy = false;
-    }
-  });
-  let recSaveAsBusy = false;
-  $("rec-modal-saveas").addEventListener("click", async () => {
-    if (!pendingRecPath || recSaveAsBusy) return;
-    recSaveAsBusy = true;
-    try {
-      const newPath = await invoke("save_recording_as", { srcPath: pendingRecPath }).catch((err) => { errToast(err); return null; });
-      if (newPath) {
-        adoptRecPath(newPath);
-        recSavedOrAttached = true;
-      }
-    } finally {
-      recSaveAsBusy = false;
-    }
-  });
-  let recCopyBusy = false;
-  $("rec-modal-copy").addEventListener("click", async () => {
-    if (!pendingRecPath || recCopyBusy) return;
-    recCopyBusy = true;
-    try {
-      // The file is already relocated by the time the backend even
-      // attempts the clipboard write, so the new path is adopted regardless
-      // of whether that write succeeded -- otherwise a clipboard failure left
-      // this window pointing at a path that no longer exists.
-      const [newPath, clipOk] = await invoke("copy_recording_to_clipboard", { srcPath: pendingRecPath });
-      adoptRecPath(newPath);
-      if (clipOk) {
-        recCopiedNotSaved = !recSavedOrAttached;
-        toast(t("copied"));
-      } else {
-        errToast("clipboard write failed");
-      }
-    } catch (err) {
-      errToast(err);
-    } finally {
-      recCopyBusy = false;
-    }
-  });
-  $("rec-modal-yes").addEventListener("click", () => {
-    const path = pendingRecPath;
-    // Reuses the exact same path a picked/dropped video file already takes --
-    // media.js's video detection and the editor's video preview need nothing new.
-    // Attaching counts as "saving": mark it before closeRecModal() so the
-    // close path does not delete the file out from under the newly opened editor.
-    recSavedOrAttached = true;
-    closeRecModal();
-    if (path) openFileCreate(path);
-  });
-
-  // Right-click reaches the picker's history without opening the overlay:
-  // it lives in the backend (survives a restart), this popover just displays it.
-  function renderPickHistoryPop(hex) {
-    pickHistoryPop.innerHTML = "";
-    if (!hex.length) {
-      const empty = document.createElement("div");
-      empty.className = "pick-history-empty";
-      empty.textContent = t("pickHistoryEmpty");
-      pickHistoryPop.appendChild(empty);
-    } else {
-      for (const h of hex) {
-        const row = document.createElement("button");
-        row.type = "button";
-        row.className = "pick-history-row";
-        const sw = document.createElement("span");
-        sw.className = "pick-history-swatch";
-        sw.style.background = h;
-        const label = document.createElement("span");
-        label.className = "pick-history-hex";
-        label.textContent = h;
-        row.append(sw, label);
-        row.addEventListener("click", async () => {
-          closePickHistoryPop();
-          try {
-            const text = await invoke("copy_pick_history_entry", { hex: h });
-            toast(t("colorCopied"), null, text);
-          } catch (err) { errToast(err); }
-        });
-        pickHistoryPop.appendChild(row);
-      }
-    }
-  }
-  $("picker-btn").addEventListener("contextmenu", async (e) => {
-    e.preventDefault();
-    let hex = [];
-    try { hex = (await invoke("pick_history")) || []; } catch { /* history stays empty */ }
-    renderPickHistoryPop(hex);
-    placePopover(pickHistoryPop, $("picker-btn").getBoundingClientRect());
-  });
-  listen("color-picked", async (e) => {
-    const value = e.payload?.text || "";
-    if (!value) return;
-    // The picked notation is already on the clipboard (unchanged behaviour);
-    // these three chips let a click re-copy any of the OTHER notations too.
-    const chips = ["hex", "rgb", "hsl"]
-      .map((k) => e.payload?.[k])
-      .filter(Boolean)
-      .map((v) => ({
-        label: v,
-        // The notation already on the clipboard is marked instead of being repeated
-        // in the message: that duplication was what pushed the row onto a second line.
-        current: v === value,
-        onClick: () => invoke("copy_text", { text: v }).catch((err) => errToast(err)),
-      }));
-    toast(t("colorCopied"), null, e.payload?.hex || "", chips);
-    // Live-update the recent-colours popover if the user left it open across a
-    // pick, instead of it staying frozen at whatever it showed when it opened.
-    if (!pickHistoryPop.classList.contains("hidden")) {
-      try { renderPickHistoryPop((await invoke("pick_history")) || []); } catch { /* leave it as-is on a read hiccup */ }
-    }
-  });
-
-  // Chain mode: combine several text buttons into one clipboard copy. Single
-  // click toggles it; a quick double-click latches it "always on".
-  $("chain-btn").addEventListener("click", onChainClick);
-  // A paste inside this window ends chain mode (unless latched); the clipboard
-  // already holds the chain. A paste in another program is not seen here, so the
-  // chain simply stays until the chain button ends it.
-  document.addEventListener("keydown", (e) => {
-    if (chainMode && !chainLock && (e.ctrlKey || e.metaKey) && (e.key === "v" || e.key === "V")) setChainMode(false);
-  });
-  // Arrow keys move a focus ring across grid tiles; Enter/Space copies.
-  const NAV = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
-  document.addEventListener("keydown", (e) => {
-    if (!flag("keyboardNav")) return;
-    if (e.ctrlKey || e.metaKey || e.altKey) return;
-    if (e.target?.closest?.("input, textarea, [contenteditable]")) return;
-    if (document.querySelector(".overlay:not(.hidden)")) return; // a dialog is open
-    if (NAV[e.key]) { e.preventDefault(); moveKbFocus(...NAV[e.key]); }
-    else if ((e.key === "Enter" || e.key === " ") && kbFocus) { e.preventDefault(); activateTile(kbFocus); }
-  });
-  // Hold Shift during keyboard navigation to arm chaining on the fly: it switches
-  // on while Shift is down and off again when released: unless a prompt was picked
-  // into the chain during the hold, in which case it latches "always on" so the
-  // user can keep building the chain from there.
-  let shiftChain = false;
-  const kbBlocked = (e) => e.target.closest("input, textarea, [contenteditable]") || document.querySelector(".overlay:not(.hidden)");
-  document.addEventListener("keydown", (e) => {
-    if (e.key !== "Shift" || e.repeat || shiftChain || chainMode) return;
-    if (!flag("keyboardNav") || !flag("chainPrompts") || kbBlocked(e)) return;
-    shiftChain = true;
-    setChainMode(true);
-  });
-  document.addEventListener("keyup", (e) => {
-    if (e.key !== "Shift" || !shiftChain) return;
-    shiftChain = false;
-    if (!chainSel.length) { setChainMode(false); return; }
-    if (flag("chainLock")) setChainLock(); // picked something → keep the chain alive
-  });
-  // Switching to another program never touches a chain, locked or not: it ends
-  // only through the chain button or Ctrl+V pressed inside this window.
+function initSnipEditor() {
   // ==== 117/118: screenshot editor ====
   // Opens right after a capture, before #snip-modal. Pure frontend: it receives a
   // data URL and hands back an edited one; everything downstream of #snip-modal is
@@ -17889,6 +16897,1003 @@ function bind() {
     e.preventDefault();
     getCurrentWindow().startResizeDragging(ResizeDirection.SouthEast).catch(() => {});
   });
+  return { snipEditOpen, snipEdit };
+}
+
+// ---- Wire events ----
+function bind() {
+  inputEl.addEventListener("input", () => {
+    autoGrow(inputEl);
+    saveBtn.disabled = !inputEl.value.trim();
+  });
+  inputEl.addEventListener("keydown", (e) => {
+    if (e.ctrlKey && e.key === "Enter") { e.preventDefault(); startCreate(); }
+    // Escape ends a dictation session targeting this field, instead of
+    // falling through to whatever the global Escape handler would otherwise do.
+    if (e.key === "Escape" && voiceState !== "idle" && voiceTargetEl === inputEl) {
+      e.stopPropagation();
+      stopVoice();
+    }
+  });
+  // Paste an image or file (Ctrl+V) to save it as a button; plain text pastes
+  // normally. A broken/unreadable image is reported, never saved.
+  inputEl.addEventListener("paste", async (e) => {
+    if (!flag("pasteMedia")) return;
+    const dt = e.clipboardData;
+    if (!dt) return;
+    // Only intercept when the clipboard carries a file/image payload; plain text
+    // keeps pasting normally.
+    const hasPayload = dt.files?.length > 0 || [...(dt.items || [])].some((it) => it.kind === "file");
+    if (!hasPayload) return;
+    e.preventDefault();
+    await withDialog(async () => {
+      // Pasted bitmaps (screenshots) arrive as a file item with an empty type,
+      // so try the image clipboard first, then fall back to a real file path.
+      const img = await invoke("get_clipboard_image").catch(() => "");
+      if (img) {
+        openModal({ mode: "image-create", title: t("imageModalTitle"), name: t("filterImage"), image: img, showImage: true, copyImage: true });
+        return;
+      }
+      const path = await invoke("get_clipboard_file_path").catch(() => "");
+      if (path) await openFileCreate(path);
+      else toast(t("imagePasteFailed"));
+    });
+  });
+  saveBtn.addEventListener("click", startCreate);
+
+  modal.confirm.addEventListener("click", confirmModal);
+  modal.closeX.addEventListener("click", () => confirmDiscardIfDirty().then((ok) => { if (ok) closeModal(); }));
+  modal.fav.addEventListener("click", () => {
+    const on = modal.fav.classList.toggle("active");
+    modal.fav.setAttribute("aria-pressed", String(on));
+  });
+  modal.secret.addEventListener("click", onModalSecretToggle);
+  // Rotating prompts.
+  modal.rotateSwitch.addEventListener("change", async () => {
+    if (modal.rotateSwitch.checked) {
+      modalState.rotateEntries = [modal.text.value];
+      // Only a prompt that never rotated before takes the shipped/expert default:
+      // re-checking the box mid-edit must not clobber a mode already chosen.
+      if (!modalState.rotateMode) {
+        modalState.rotateMode = EXPERT_DROPDOWNS.rotateDefaultMode.get() === "random" ? "random" : "";
+      }
+    } else {
+      const hasExtra = (modalState.rotateEntries || []).length > 1;
+      if (hasExtra) {
+        const ok = await confirmDialog({
+          title: t("rotateToggle"),
+          message: t("rotateDiscardConfirm"),
+          confirmLabel: t("discardConfirm"),
+          danger: true,
+        });
+        if (!ok) { modal.rotateSwitch.checked = true; return; }
+      }
+      modal.text.value = (modalState.rotateEntries || [])[0] ?? modal.text.value;
+      modalState.rotateEntries = [];
+    }
+    renderRotateUi();
+    // The switch row only exists for a text prompt, so textVisible is true here.
+    // Flipping it has to move the same three surfaces syncModalImageUi does: only
+    // hiding the textarea left the clear-X wrapper (an empty 120px box) and, with
+    // on, the rendered pane still showing entry 1 sitting above the colours.
+    const rotating = rotationActive();
+    modal.text.classList.toggle("hidden", rotating);
+    modal.voiceRow.classList.toggle("hidden", rotating);
+    const varsUi = !rotating && flag("promptVars");
+    modal.textBar.classList.toggle("hidden", !varsUi);
+    modal.varsHint.classList.toggle("hidden", !varsUi);
+    if (varsUi) renderVarHelper();
+    syncMdUi(true, rotating);
+    if (!modal.rotateSwitch.checked) modal.text.focus();
+    // This must hide/show the readout on the SAME tick as the toggle: the
+    // rAF-deferred scheduleLenCounter() left it visible for one frame, long enough
+    // for a synchronous check right after the toggle to see it.
+    updateLenCounter();
+  });
+  modal.rotateAdd.addEventListener("click", () => {
+    const max = Math.max(2, Math.round(val("rotateMaxEntries")) || 20);
+    if ((modalState.rotateEntries || []).length >= max) return;
+    modalState.rotateEntries.push("");
+    renderRotateEntries();
+    renderRotateAutoBtn();
+    const rows = modal.rotateEntries.querySelectorAll(".rotate-entry-input");
+    rows[rows.length - 1]?.focus();
+  });
+  modal.rotateMode.addEventListener("change", () => {
+    if (!modalState) return;
+    modalState.rotateMode = modal.rotateMode.value === "random" ? "random" : "";
+  });
+  modal.rotateAuto.addEventListener("click", () => {
+    if (modal.rotateAuto.disabled) return;
+    modalState.rotateAuto = !modalState.rotateAuto;
+    renderRotateAutoBtn();
+  });
+  modal.rotateReset.addEventListener("click", async () => {
+    if (!modalState?.id) return;
+    try {
+      await invoke("rotation_reset", { id: modalState.id });
+    } catch (err) {
+      errToast(err);
+      return;
+    }
+    toast(t("rotateResetDone"));
+    refreshRotateNext();
+  });
+  // Click the preview media → fullscreen zoom/pan viewer.
+  modal.img.addEventListener("click", () => { if (modal.img.src) openLightbox(modal.img.src, false); });
+  modal.video.addEventListener("click", () => { if (modal.video.src) openLightbox(modal.video.src, true); });
+  modal.name.addEventListener("keydown", (e) => { if (e.key === "Enter") confirmModal(); });
+  modal.text.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && voiceState !== "idle" && voiceTargetEl === modal.text) {
+      e.stopPropagation();
+      stopVoice();
+    }
+  });
+  modal.text.addEventListener("input", scheduleLenCounter); // live length readout
+  modal.text.addEventListener("input", scheduleMdPreview);  // live preview (rAF-throttled)
+  // Replace layout: the rendered pane IS the resting state, so it has to hand the
+  // textarea over on a click and take back over once the user is done typing.
+  const mdSwap = (editing) => {
+    const from = editing ? modal.mdPreview : modal.text;
+    const span = from.scrollHeight - from.clientHeight;
+    const ratio = span > 0 ? from.scrollTop / span : 0;
+    mdEditing = editing;
+    syncMdUi(true);
+    const to = editing ? modal.text : modal.mdPreview;
+    if (editing) to.focus(); // never behind a frame callback: see scheduleMdPreview
+    // Only the scroll position waits for layout; losing it costs nothing.
+    requestAnimationFrame(() => {
+      const s = to.scrollHeight - to.clientHeight;
+      to.scrollTop = s > 0 ? Math.round(ratio * s) : 0;
+    });
+  };
+  modal.mdPreview.addEventListener("click", () => { if (flag("mdPreview")) mdSwap(true); });
+  modal.mdPreview.addEventListener("focus", () => { if (flag("mdPreview")) mdSwap(true); });
+  // Swapping back changes the height of the block, so doing it on the blur that a
+  // mousedown produces moves whatever the user is halfway through clicking: the
+  // click then lands somewhere else, or nowhere. Wait for the pointer to come up.
+  let swapAfterClick = false;
+  let pointerIsDown = false;
+  window.addEventListener("pointerdown", () => { pointerIsDown = true; }, true);
+  window.addEventListener("pointerup", () => {
+    pointerIsDown = false;
+    if (!swapAfterClick) return;
+    swapAfterClick = false;
+    if (mdEditing && document.activeElement !== modal.text) mdSwap(false);
+  }, true);
+  modal.text.addEventListener("blur", () => {
+    if (!mdEditing) return;
+    if (pointerIsDown) { swapAfterClick = true; return; }
+    mdSwap(false);
+  });
+  // Variable helper collapsible (same convention as the notes row).
+  modal.varsHead.addEventListener("click", () => {
+    const open = !modal.varsBody.classList.toggle("hidden");
+    modal.varsHead.setAttribute("aria-expanded", String(open));
+    modal.textBar.classList.toggle("open", open);
+  });
+  // Capture: the field is read-only, the key press itself is the input.
+  bindHotkeyField(modal.hotkeyInput, {
+    id: () => modalState?.id || null,
+    errEl: modal.hotkeyErr,
+    showAllEl: $("modal-hotkey-showall"),
+    current: () => modalState?.hotkey || "",
+    onCommit: async (accel) => {
+      const before = modalState?.id;
+      try {
+        await invoke("check_hotkey", { hotkey: accel, id: modalState?.id || null });
+      } catch (err) {
+        if (modalState?.id !== before) return null; // moved on: nothing to show for it
+        throw err;
+      }
+      if (modalState?.id !== before) return null; // moved on between the check and here
+      setPromptHotkey(accel);
+      return accel;
+    },
+  });
+  $("modal-hotkey-clear").addEventListener("click", () => setPromptHotkey(""));
+  $("modal-hotkey-showall").addEventListener("click", () => openAllShortcuts());
+  modal.hotkeyAction.addEventListener("change", () => {
+    if (modalState) modalState.hotkeyPaste = modal.hotkeyAction.value;
+  });
+  // Tags/hotkey/history collapsible, combined into one "Advanced options".
+  modal.advancedHead.addEventListener("click", () => {
+    const open = !modal.advancedBody.classList.toggle("hidden");
+    modal.advancedHead.setAttribute("aria-expanded", String(open));
+    modal.advanced.classList.toggle("open", open);
+    // In tall (text-edit) mode the textarea flex-grows and eats the height the open
+    // history needs; history-open caps it (CSS) so the list + Save row stay reachable.
+    // Only relevant when history itself applies to this prompt (mode/type/flag).
+    const histApplies = !$("modal-history").classList.contains("hidden");
+    modal.root.classList.toggle("history-open", open && histApplies);
+    if (open) {
+      if (histApplies) loadHistory(modalState?.id);
+      // Scroll the modal's own scroll container to the bottom so the freshly opened
+      // section (and the Save row below it) come fully into view on small windows.
+      // scrollIntoView("nearest") only nudged the already-visible head, hence unreliable.
+      const scroller = modal.advanced.closest(".modal");
+      if (scroller) requestAnimationFrame(() => requestAnimationFrame(() => {
+        scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" });
+      }));
+    }
+  });
+
+  // Image / Text display toggle (text mode shows the name on the tile).
+  modal.showImage.addEventListener("click", () => {
+    if (!modalState) return;
+    modalState.showImage = true;
+    syncModalImageUi(modalState.mode);
+  });
+  modal.showText.addEventListener("click", () => {
+    if (!modalState) return;
+    modalState.showImage = false;
+    syncModalImageUi(modalState.mode);
+  });
+  // Editor's own "Copy formatted" button: same resolveVars() path every other
+  // copy goes through, not the raw stored text.
+  modal.copyFormattedBtn.addEventListener("click", async () => {
+    const text = await resolveVars(modal.text.value);
+    if (text === null) return; // the placeholder dialog was cancelled
+    const html = renderMarkdown(text);
+    const ok = await invoke("copy_formatted", { text, html }).catch((e) => { errToast(e); return false; });
+    if (ok) toast(t("copied"));
+  });
+  // Shared media pick: image, gif or video. Stills are stored as a preview,
+  // gif/video become the icon path (shown, never copied). An image keeps the
+  // prompt's copy behaviour; a gif/video icon switches copying back to text.
+  async function pickReplacementMedia() {
+    const session = modalSession;
+    const path = await withDialog(() => invoke("pick_file_path"));
+    if (!path || !modalState || session !== modalSession) return false;
+    const kind = mediaKind(path);
+    if (!kind) {
+      toast(t("unsupportedFile"));
+      return false;
+    }
+    if (kind === "image") {
+      const data = await loadFilePreview(path);
+      if (!data || !modalState || session !== modalSession) return false;
+      modalState.image = data;
+      modalState.iconPath = "";
+    } else {
+      modalState.image = "";
+      modalState.iconPath = path;
+      modalState.copyImage = false;
+    }
+    modalState.showImage = true;
+    return true;
+  }
+  // "Replace media" (preview exists) and "Media as icon" (no media yet).
+  modal.replaceImg.addEventListener("click", async () => {
+    if (modalState && (await pickReplacementMedia())) syncModalImageUi(modalState.mode);
+  });
+  modal.addIcon.addEventListener("click", async () => {
+    if (modalState && (await pickReplacementMedia())) syncModalImageUi(modalState.mode);
+  });
+  modal.removeImg.addEventListener("click", () => {
+    if (!modalState) return;
+    modalState.image = "";
+    modalState.iconPath = "";
+    modalState.showImage = false;
+    syncModalImageUi(modalState.mode);
+  });
+
+  // Replacing the attached file re-classifies the prompt by file type:
+  // stills/gifs/videos switch to the media layout, anything else to plain file.
+  modal.replaceFile.addEventListener("click", async () => {
+    if (!modalState) return;
+    const session = modalSession;
+    const path = await withDialog(() => invoke("pick_file_path"));
+    if (!path || !modalState || session !== modalSession) return;
+    modalState.filePath = path;
+    modalState.pdfPage = 0; // a different file starts back at its own first page
+    const kind = mediaKind(path);
+    const data = await loadFilePreview(path);
+    if (!modalState || session !== modalSession) return;
+    modalState.image = data;
+    modalState.copyImage = false; // the file itself is what gets copied
+    modalState.showImage = !!kind;
+    syncModalImageUi(modalState.mode);
+  });
+
+  // Re-requests the preview at the chosen page and saves it into pdf_page:
+  // the field only ever shows for a PDF attachment (syncModalImageUi).
+  // Request token -- a fast second page change must not let the slower
+  // older reply land after the newer one and overwrite its already-fresher preview.
+  let pdfPageReq = 0;
+  modal.pdfPage.addEventListener("change", async () => {
+    if (!modalState) return;
+    const session = modalSession;
+    const page = Math.max(0, (Number(modal.pdfPage.value) || 1) - 1);
+    modalState.pdfPage = page;
+    const req = ++pdfPageReq;
+    const data = await loadFilePreview(modalState.filePath, page);
+    if (req !== pdfPageReq || !modalState || session !== modalSession) return;
+    if (data) { modalState.image = data; modal.img.src = data; }
+  });
+
+  // Paperclip button in the composer bar (files, images, gifs, videos).
+  $("file-btn").addEventListener("click", startFileCreate);
+  $("file-btn").addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    startFileFromClipboard();
+  });
+
+  // Snipping tool: open the overlay; the backend notifies us with the crop.
+  $("snip-btn").addEventListener("click", () => {
+    invoke("open_snip").catch((err) => errToast(err));
+  });
+
+  // Pipette: the same frozen-desktop overlay, in colour-pick mode. The result
+  // is a clipboard value only: no prompt is created and nothing enters the history.
+  $("picker-btn").addEventListener("click", () => {
+    invoke("open_picker").catch((err) => errToast(err));
+  });
+
+  // Screen recording: the same frozen-desktop overlay, in record-target
+  // mode. The backend resolves the click/drag into a window, monitor or region
+  // and notifies us with "recorder-target-picked"; a short countdown (0 = none)
+  // then the actual capture starts.
+  $("record-btn").addEventListener("click", async () => {
+    const btn = $("record-btn");
+    // A glowing button always meant "start a second recording" before -- the
+    // click reached open_recorder regardless, which the backend now refuses
+    // with recording-busy, but the button itself should just stop the one
+    // already running instead of making the user find the control bar first.
+    // recording_status confirms a session is actually still live before
+    // acting, so a stale glow (a missed event) falls through to open_recorder
+    // like normal rather than trying to stop a recording that is already gone.
+    if (btn.classList.contains("is-recording") || btn.classList.contains("is-paused")) {
+      const status = await invoke("recording_status").catch(() => null);
+      if (status) {
+        // The control bar's own poll notices the session is gone and hides
+        // itself within its next tick (recording_status turning null) --
+        // nothing here has to close it directly.
+        try { await invoke("stop_recording"); } catch (err) { errToast(err); }
+        return;
+      }
+      setRecordBtnState("idle");
+    }
+    invoke("open_recorder").catch((err) => errToast(err));
+  });
+
+  // A right-click on either composer button opens a quiet, one-item
+  // menu to edit an EXISTING file instead of only ever reaching an editor
+  // through a fresh capture/recording. Which editor opens is decided by the
+  // file's own content (open_file_in_editor), never by which button was used.
+  const openEditorPop = document.createElement("div");
+  openEditorPop.className = "ctx open-editor-pop hidden";
+  openEditorPop.setAttribute("role", "menu");
+  openEditorPop.innerHTML =
+    '<button type="button" role="menuitem" id="open-editor-pop-item"></button>' +
+    // A second, camera-only entry on the SAME popover the record button
+    // already opens on right-click -- shown only when cameraRecord is on, so
+    // the default-off feature stays invisible until someone actually enables it.
+    '<button type="button" role="menuitem" id="camera-menu-item" class="hidden"></button>';
+  document.body.appendChild(openEditorPop);
+  function closeOpenEditorPop() {
+    openEditorPop.classList.add("hidden");
+  }
+  // path is set only when the menu is opened for a KNOWN attachment (the
+  // library's own right-click, below); left empty it means "let the user
+  // pick a file", which is what the composer buttons always do.
+  let openEditorPopPath = "";
+  function openOpenEditorPopAt(anchorEl, path, showCamera) {
+    openEditorPopPath = path || "";
+    openEditorPop.querySelector("#open-editor-pop-item").textContent = t("openFileInEditor");
+    const camItem = openEditorPop.querySelector("#camera-menu-item");
+    camItem.classList.toggle("hidden", !showCamera);
+    if (showCamera) camItem.textContent = t("cameraMenuItem");
+    placePopover(openEditorPop, anchorEl.getBoundingClientRect());
+  }
+  openEditorPop.querySelector("#open-editor-pop-item").addEventListener("click", () => {
+    const path = openEditorPopPath;
+    closeOpenEditorPop();
+    openExternalFileInEditor(path || undefined);
+  });
+  openEditorPop.querySelector("#camera-menu-item").addEventListener("click", () => {
+    closeOpenEditorPop();
+    invoke("open_camera_window").catch((e) => errToast(e));
+  });
+  $("snip-btn").addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    openOpenEditorPopAt($("snip-btn"));
+  });
+  $("record-btn").addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    openOpenEditorPopAt($("record-btn"), undefined, optFlag("cameraRecord"));
+  });
+  // Shared by the composer menu above and the library's own "Open in editor"
+  // right-click on an image/video attachment -- existingPath lets the caller
+  // hand over a path it already knows instead of showing the picker.
+  async function openExternalFileInEditor(existingPath) {
+    const path = existingPath || (await invoke("pick_media_file_path").catch(() => null));
+    if (!path) return;
+    let res;
+    try {
+      res = await invoke("open_file_in_editor", { path });
+    } catch (err) {
+      const msg = String(err);
+      if (msg === "not-media") toast(t("openFileNotMedia"));
+      else if (msg.startsWith("too-large:")) toast(t("openFileTooBig").replace("{mb}", msg.split(":")[1] || ""));
+      else errToast(err);
+      return;
+    }
+    if (res.kind === "image") {
+      openImageFileInEditor(res);
+    } else if (res.kind === "video") {
+      toast(t("openedCopyNote"));
+      await invoke("open_video_editor", { srcPath: res.copied_path, originDir: res.origin_dir })
+        .then(() => recordToolUsage("video_editor"))
+        .catch((e) => errToast(e));
+    }
+  }
+  // Driven by the recording state, not by the click -- set on a
+  // successful start, cleared on stop/cancel/auto-stop, and re-synced by a
+  // slow poll so a missed event can never leave the button glowing forever.
+  function setRecordBtnState(state) {
+    const btn = $("record-btn");
+    btn.classList.toggle("is-recording", state === "recording");
+    btn.classList.toggle("is-paused", state === "paused");
+    // Idle keeps its own data-i18n-title tooltip (with the right-click hint) and
+    // the plain name as accessible name; the click now stops the recording instead
+    // of trying to start a second one while either indicator is glowing, so the
+    // tooltip has to say that.
+    const idle = state === "idle";
+    btn.title = idle ? t(btn.dataset.i18nTitle) : t("recBtnStopTip");
+    btn.setAttribute("aria-label", idle ? t(btn.dataset.i18nAria) : t("recBtnStopTip"));
+  }
+  async function syncRecordBtnFromStatus() {
+    // Skipped while the window is hidden (minimized to tray) -- the button
+    // it updates is not visible either, so there is nothing to resync until
+    // the window is shown again, which re-applies the real state on its own.
+    if (document.hidden) return;
+    const status = await invoke("recording_status").catch(() => null);
+    setRecordBtnState(!status ? "idle" : status.paused ? "paused" : "recording");
+  }
+  setInterval(syncRecordBtnFromStatus, 5000);
+  // Catches up the moment the window is shown again instead of waiting out
+  // the rest of the 5s poll interval for a state change that happened while
+  // hidden.
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) syncRecordBtnFromStatus();
+  });
+  listen("recording-cancelled", () => setRecordBtnState("idle"));
+  let recCountdownTimer = 0;
+  function cancelRecCountdown() {
+    clearTimeout(recCountdownTimer);
+    recCountdownTimer = 0;
+  }
+  listen("recorder-target-picked", async (e) => {
+    const p = e.payload || {};
+    // A pick made from the running recording's own bar, switching its target
+    // instead of starting a new one -- recbar.js's own listener handles that
+    // one, this window must not also try to start a second recording from it.
+    if (p.forSwitch) return;
+    const kind = p.kind;
+    let targetId = 0, regionX = 0, regionY = 0, regionW = 0, regionH = 0;
+    if (kind === "window") targetId = p.id;
+    else if (kind === "monitor") targetId = p.monitor;
+    else if (kind === "region") {
+      targetId = p.monitor;
+      regionX = p.x; regionY = p.y; regionW = p.width; regionH = p.height;
+    } else return;
+
+    const startNow = async () => {
+      try {
+        await invoke("start_recording", { targetKind: kind, targetId, regionX, regionY, regionW, regionH });
+        recordToolUsage("recording_start");
+        setRecordBtnState("recording");
+        await invoke("show_rec_bar", { targetKind: kind, id: targetId });
+      } catch (err) { errToast(err); }
+    };
+    // Checked before the countdown even starts -- discovering low disk space
+    // only after a 3-2-1 count would just waste the user's time on a "no" answer.
+    const diskWarn = await invoke("check_recording_disk_space").catch(() => null);
+    if (diskWarn) {
+      const minutes = Math.max(1, Math.round(diskWarn.est_seconds / 60));
+      const proceed = await confirmDialog({
+        title: t("recDiskWarnTitle"),
+        message: t("recDiskWarnMsg")
+          .replace("{drive}", diskWarn.drive)
+          .replace("{free}", fmtBytes(diskWarn.free_mb * 1024 * 1024))
+          .replace("{minutes}", String(minutes)),
+        confirmLabel: t("recDiskWarnRecordAnyway"),
+      });
+      if (!proceed) return;
+    }
+    cancelRecCountdown();
+    let n = Math.round(val("recCountdownS"));
+    if (n <= 0) { await startNow(); return; }
+    const tick = () => {
+      toast(t("recCountdownToast").replace("{n}", n));
+      n -= 1;
+      if (n < 0) { recCountdownTimer = 0; startNow(); return; }
+      recCountdownTimer = setTimeout(tick, 1000);
+    };
+    tick();
+  });
+
+  // ---- Recording result: mirrors the #snip-modal flow above, plus an
+  // optional conversion step (recFormat/recQuality != the raw mp4 capture).
+  // "recording-captured" is emitted by stop_recording (and by the auto-stop
+  // path when the recorded window itself closes) -- the rec-bar is its own
+  // window, so this is how the main window learns a file is ready.
+  const recModal = $("rec-modal");
+  const recPreview = $("rec-preview");
+  const recStatus = $("rec-modal-status");
+  const recFolderOut = $("rec-modal-folder");
+  const recFolderChangeBtn = $("rec-modal-folder-change");
+  const recMoreBtn = $("rec-modal-more");
+  const recMorePop = $("rec-modal-more-pop");
+  // The menu behind "More...": editing, Save as, Copy and the save folder.
+  function closeRecMorePop() {
+    if (recMorePop.classList.contains("hidden")) return;
+    const hadFocus = recMorePop.contains(document.activeElement);
+    recMorePop.classList.add("hidden");
+    recMoreBtn.setAttribute("aria-expanded", "false");
+    if (hadFocus) recMoreBtn.focus();
+  }
+  let pendingRecPath = "";
+  let recGen = 0; // invalidated on every close/discard so a late progress tick or a
+                   // finished conversion from a superseded recording is ignored
+  let recProgressOff = null;
+  // Same "closed by default, raw text only under Technical details" treatment
+  // as the video editor's own export error row, for a recording conversion
+  // that fails instead of exporting.
+  function showRecErrorDetails(raw) {
+    const box = $("rec-modal-error-details");
+    box.classList.toggle("hidden", !raw);
+    box.open = false;
+    $("rec-modal-error-raw").textContent = raw || "";
+  }
+  $("rec-modal-error-copy").addEventListener("click", () => {
+    invoke("copy_text", { text: $("rec-modal-error-raw").textContent }).then(() => toast(t("copied"))).catch(() => {});
+  });
+  // Closing the result window without an explicit
+  // Save/Save as.../Attach deletes the recording -- Discard, the X button,
+  // the backdrop and Escape all end up in closeRecModal(). Copy alone does
+  // NOT count as "saving" (it only relocates the file so the clipboard
+  // reference survives), so a copy-then-close still removes the working file
+  // -- recCopiedNotSaved is what gates the confirm-before-delete for that case.
+  let recSavedOrAttached = false;
+  let recCopiedNotSaved = false;
+  // Elide a long path in the middle rather than at the end -- the last
+  // segment (the actual folder name) is what tells destinations apart, so it
+  // has to stay visible; the title attribute always carries the full path.
+  function elideMiddle(s, max = 60) {
+    if (s.length <= max) return s;
+    const head = Math.ceil((max - 1) / 2);
+    return s.slice(0, head) + "…" + s.slice(s.length - (max - 1 - head));
+  }
+  function renderRecFolder() {
+    const dir = EXPERT_PATHS.recordingDir.get();
+    recFolderOut.textContent = elideMiddle(dir);
+    recFolderOut.title = dir;
+  }
+  // Once saved/attached, nothing that reaches this function may delete
+  // the file anymore -- "discard" used to force deletion regardless, which is
+  // exactly how clicking Discard right after a successful Save deleted the
+  // file the user had just saved. Both a real Discard click and an
+  // implicit close (X, backdrop, Escape) before any Save/Attach/Edit already
+  // meant "throw this away", so the two no longer need separate handling.
+  async function closeRecModal() {
+    const path = pendingRecPath;
+    const shouldDelete = !recSavedOrAttached;
+    // Copy alone does not count as saving, but it already moved the file to
+    // where the clipboard reference points -- closing without confirming
+    // first would delete that file out from under the still-live clipboard
+    // reference (280's own rule). A toast after the fact is too late; ask now,
+    // before anything else changes, so declining leaves the modal untouched.
+    if (shouldDelete && path && recCopiedNotSaved) {
+      const ok = await confirmDialog({
+        title: t("recDiscard"),
+        message: t("recClosedAfterCopy"),
+        confirmLabel: t("recDiscard"),
+        cancelLabel: t("cancel"),
+      });
+      if (!ok) return;
+    }
+    recGen += 1;
+    invoke("cancel_recording_convert").catch(() => {});
+    invoke("cancel_recording_crop").catch(() => {});
+    if (recProgressOff) { recProgressOff(); recProgressOff = null; }
+    closeRecMorePop();
+    recModal.classList.add("hidden");
+    recPreview.classList.add("hidden");
+    recPreview.removeAttribute("src");
+    recStatus.classList.remove("rec-status-cancellable");
+    recStatus.onclick = null;
+    pendingRecPath = "";
+    recSavedOrAttached = false;
+    recCopiedNotSaved = false;
+    if (shouldDelete && path) {
+      // A number back means it actually moved to "verworfen" (see
+      // discard_recording_file) -- null/failure stays silent, same as before.
+      const keepH = await invoke("discard_recording_file", { path }).catch(() => null);
+      if (keepH != null) toast(t("recDiscardedToast").replace("{hours}", String(Math.round(keepH))));
+    }
+  }
+  // needsCrop: the window recording's canvas was bigger than the window
+  // ever used (369's multi-display canvas) -- trim the black margin first,
+  // with the same visible/cancellable status line as the format conversion
+  // below, before either showing the raw preview or starting that conversion.
+  // A cancel or any failure here just keeps the untouched, letterboxed
+  // recording -- never something worth an error toast.
+  async function runRecCrop(rawPath, gen) {
+    let secs = 0;
+    const showCropping = () => { recStatus.textContent = t("recCropping").replace("{s}", String(secs)); };
+    showCropping();
+    recStatus.classList.add("rec-status-cancellable");
+    recStatus.onclick = () => { if (gen === recGen) invoke("cancel_recording_crop").catch(() => {}); };
+    recProgressOff = await listen("recording-crop-progress", (e) => {
+      if (gen !== recGen) return;
+      secs = Math.floor((e.payload?.ms || 0) / 1000);
+      showCropping();
+    });
+    const myOff = recProgressOff;
+    if (gen === recGen) {
+      try {
+        await invoke("crop_recording_to_used_area", { path: rawPath });
+      } catch (e) {
+        if (e === "ffmpeg-missing") toast(t("recCropSkippedNoTools"));
+      }
+    }
+    myOff();
+    if (recProgressOff === myOff) recProgressOff = null;
+    if (gen !== recGen) return;
+    recStatus.classList.remove("rec-status-cancellable");
+    recStatus.onclick = null;
+    recStatus.textContent = "";
+  }
+  async function openRecModal(rawPath, needsCrop) {
+    pendingRecPath = rawPath;
+    recSavedOrAttached = false;
+    recCopiedNotSaved = false;
+    recGen += 1;
+    const gen = recGen;
+    renderRecFolder();
+    $("rec-modal-edit").classList.toggle("hidden", !flag("videoEditor"));
+    recModal.classList.remove("hidden");
+    // recAutoCrop off means the user chose to keep the border -- skip the whole
+    // cropping step (and its status line) silently, same as a canvas that
+    // never needed cropping in the first place.
+    if (needsCrop && flag("recAutoCrop")) {
+      recPreview.classList.add("hidden");
+      showRecErrorDetails("");
+      await runRecCrop(rawPath, gen);
+      if (gen !== recGen) return;
+    }
+    const format = settings.ui_texts?.recFormat || "mp4";
+    const lossless = (settings.ui_texts?.recQuality || "high") === "lossless";
+    if (format === "mp4" && !lossless) {
+      recPreview.classList.remove("hidden");
+      recPreview.src = convertFileSrc(rawPath);
+      recStatus.textContent = "";
+      return;
+    }
+    recPreview.classList.add("hidden");
+    showRecErrorDetails("");
+    let secs = 0;
+    const showConverting = () => { recStatus.textContent = t("recConverting").replace("{s}", String(secs)); };
+    showConverting();
+    recStatus.classList.add("rec-status-cancellable");
+    recStatus.onclick = () => { if (gen === recGen) invoke("cancel_recording_convert").catch(() => {}); };
+    recProgressOff = await listen("recording-convert-progress", (e) => {
+      if (gen !== recGen) return;
+      secs = Math.floor((e.payload?.ms || 0) / 1000);
+      showConverting();
+    });
+    const myOff = recProgressOff;
+    if (gen !== recGen) {
+      // The modal was closed/discarded/attached while this await was in
+      // flight -- do not start a conversion nobody will see, and do not race
+      // whatever that close already did with this recording's file (discard
+      // deletes it by the same path convert_recording would then also touch).
+      myOff();
+      if (recProgressOff === myOff) recProgressOff = null;
+      return;
+    }
+    try {
+      const outPath = await invoke("convert_recording", { srcPath: rawPath, format, lossless });
+      if (gen !== recGen) return;
+      pendingRecPath = outPath;
+      recStatus.classList.remove("rec-status-cancellable");
+      recStatus.onclick = null;
+      recStatus.textContent = "";
+      recPreview.classList.remove("hidden");
+      recPreview.src = convertFileSrc(outPath);
+    } catch (err) {
+      if (gen !== recGen) return;
+      recStatus.classList.remove("rec-status-cancellable");
+      recStatus.onclick = null;
+      // Cancelled by the user's own click above, ffmpeg missing, or ffmpeg
+      // genuinely failed on this input -- either way the untouched raw
+      // recording is still there to fall back to, and only a real failure
+      // gets the "Technical details" row (never a cancel).
+      const raw = String(err);
+      if (raw.includes("cancel")) {
+        recStatus.textContent = t("recConvertCancelled");
+      } else if (raw.includes("ffmpeg-missing")) {
+        recStatus.textContent = `${t("recFfmpegMissingHint")} ${t("recConvertFailedKeepRaw")}`;
+      } else {
+        const { message, details } = parseFfmpegError(err, t);
+        recStatus.textContent = `${message} ${t("recConvertFailedKeepRaw")}`;
+        showRecErrorDetails(details);
+      }
+      recPreview.classList.remove("hidden");
+      recPreview.src = convertFileSrc(rawPath);
+    } finally {
+      // Unlisten this call's own listener, never whatever the global variable
+      // currently points at -- a superseded (older) call's finally must not
+      // tear down a newer, still-active openRecModal call's own listener.
+      myOff();
+      if (recProgressOff === myOff) recProgressOff = null;
+    }
+  }
+  // The periodic sweep and "once a recording ends" both fire this live
+  // (they always run after this listener exists) -- only when it removed
+  // something, per "a toast... when the total is worth mentioning".
+  listen("recording-sweep-done", (e) => {
+    const { count, bytes } = e.payload || {};
+    if (count > 0) toast(t("recSweepDone").replace("{n}", String(count)).replace("{v}", fmtBytes(bytes)));
+  });
+  // The control bar's own target-switch button lives in a separate
+  // window with no toast of its own -- a failed switch always leaves the
+  // previous source still recording, this is purely the "here is why" note.
+  listen("recording-target-switch-failed", (e) => errToast(e.payload));
+  listen("recording-captured", async (e) => {
+    setRecordBtnState("idle"); // covers both a normal stop and the auto-stop path
+    const path = e.payload?.path || "";
+    // An encoder write failure (disk full, etc.) already stopped the feeder
+    // itself before this event fired -- whatever got captured up to that
+    // point is still a valid, playable file, just cut short unexpectedly.
+    // "low-disk-space" is the one case with a message of its own: the
+    // disk-space watch stopped the recording proactively, before the
+    // encoder itself would have hit that same wall.
+    if (e.payload?.encode_error === "low-disk-space") toast(t("recDiskStoppedMsg"));
+    else if (e.payload?.encode_error === "max-limit-reached") toast(t("recStoppedByLimit"));
+    else if (e.payload?.encode_error) toast(t("recEncodeError"));
+    // A window recording whose canvas had to fall back below the
+    // "every display" default (too large for the encoder, or the user
+    // picked a smaller mode) says so once, here -- the normal "every
+    // display" case stays silent since that is simply the default working.
+    if (e.payload?.canvas_note === "monitor") toast(t("recCanvasFallbackMonitor"));
+    else if (e.payload?.canvas_note === "window") toast(t("recCanvasFallbackWindow"));
+    // The "window size" canvas default (today's Vorgabe) just cut off part
+    // of the picture because the window grew mid-recording -- offer, once
+    // per occurrence and only while the notice is on, to switch the canvas
+    // to every display so a resize like this stops losing content. Runs
+    // before the result menu itself opens, never instead of it.
+    const cropMs = e.payload?.resize_crop_at_ms;
+    if (cropMs != null && flag("recCropNotice")) {
+      const secs = Math.floor(cropMs / 1000);
+      toast(t("recCropNoticeMsg").replace("{s}", String(secs)), {
+        label: t("recCropNoticeSwitch"),
+        onClick: () => {
+          settings.ui_texts = { ...(settings.ui_texts || {}), recCanvasMode: "all" };
+          invoke("set_ui_text", { key: "recCanvasMode", value: "all" }).catch(() => {});
+        },
+      }, "", null, 12000);
+    }
+    // "Finish and continue" split this recording into several files -- the
+    // result dialog below still only ever opens the LAST one (opening every
+    // part in sequence in the editor is future work), so at least name how
+    // many earlier parts exist and were kept, rather than the split going
+    // unmentioned.
+    const partsCount = e.payload?.parts?.length || 0;
+    if (partsCount > 0) toast(t("recContinuePartsSaved").replace("{n}", String(partsCount)));
+    if (path) openRecModal(path, !!e.payload?.needs_crop);
+  });
+  $("rec-modal-close").addEventListener("click", () => closeRecModal());
+  recModal.addEventListener("pointerdown", (e) => {
+    if (e.target === recModal) closeRecModal();
+  });
+  $("rec-modal-discard").addEventListener("click", () => closeRecModal());
+  recMoreBtn.addEventListener("click", () => {
+    if (!recMorePop.classList.contains("hidden")) { closeRecMorePop(); return; }
+    placePopover(recMorePop, recMoreBtn.getBoundingClientRect());
+    recMoreBtn.setAttribute("aria-expanded", "true");
+    recMorePop.querySelector("button:not(.hidden)")?.focus();
+  });
+  // Capture phase: any menu item closes the menu first, then runs its own listener.
+  recMorePop.addEventListener("click", (e) => { if (e.target.closest("button")) closeRecMorePop(); }, true);
+  document.addEventListener("pointerdown", (e) => {
+    if (recMorePop.classList.contains("hidden")) return;
+    if (recMorePop.contains(e.target) || recMoreBtn.contains(e.target)) return;
+    closeRecMorePop();
+  });
+  // Opening the editor hands the raw file to another window that keeps working
+  // with it -- treat this like Save/Attach so closing this modal afterward never
+  // deletes a file the editor might still be reading from.
+  $("rec-modal-edit").addEventListener("click", async () => {
+    if (!pendingRecPath) return;
+    try {
+      await invoke("open_video_editor", { srcPath: pendingRecPath });
+      recordToolUsage("video_editor");
+      recSavedOrAttached = true;
+    } catch (err) {
+      errToast(err);
+    }
+  });
+  recFolderChangeBtn.addEventListener("click", async () => {
+    await EXPERT_PATHS.recordingDir.change();
+    renderRecFolder();
+  });
+  // Update the preview + pending path to a command's returned new location --
+  // Save/Save as.../Copy all move the file, so a later action in the same
+  // still-open window (Attach, another Copy) must act on where it ended up,
+  // not on the now-stale original <data>/recordings path.
+  function adoptRecPath(newPath) {
+    if (!newPath || newPath === pendingRecPath) return;
+    pendingRecPath = newPath;
+    if (!recPreview.classList.contains("hidden")) recPreview.src = convertFileSrc(newPath);
+  }
+  let recSaveBusy = false;
+  $("rec-modal-save").addEventListener("click", async () => {
+    if (!pendingRecPath || recSaveBusy) return;
+    recSaveBusy = true;
+    try {
+      const newPath = await invoke("save_recording_now", { srcPath: pendingRecPath });
+      adoptRecPath(newPath);
+      recSavedOrAttached = true;
+      toast(t("recSaved"));
+    } catch (err) {
+      errToast(err);
+    } finally {
+      recSaveBusy = false;
+    }
+  });
+  let recSaveAsBusy = false;
+  $("rec-modal-saveas").addEventListener("click", async () => {
+    if (!pendingRecPath || recSaveAsBusy) return;
+    recSaveAsBusy = true;
+    try {
+      const newPath = await invoke("save_recording_as", { srcPath: pendingRecPath }).catch((err) => { errToast(err); return null; });
+      if (newPath) {
+        adoptRecPath(newPath);
+        recSavedOrAttached = true;
+      }
+    } finally {
+      recSaveAsBusy = false;
+    }
+  });
+  let recCopyBusy = false;
+  $("rec-modal-copy").addEventListener("click", async () => {
+    if (!pendingRecPath || recCopyBusy) return;
+    recCopyBusy = true;
+    try {
+      // The file is already relocated by the time the backend even
+      // attempts the clipboard write, so the new path is adopted regardless
+      // of whether that write succeeded -- otherwise a clipboard failure left
+      // this window pointing at a path that no longer exists.
+      const [newPath, clipOk] = await invoke("copy_recording_to_clipboard", { srcPath: pendingRecPath });
+      adoptRecPath(newPath);
+      if (clipOk) {
+        recCopiedNotSaved = !recSavedOrAttached;
+        toast(t("copied"));
+      } else {
+        errToast("clipboard write failed");
+      }
+    } catch (err) {
+      errToast(err);
+    } finally {
+      recCopyBusy = false;
+    }
+  });
+  $("rec-modal-yes").addEventListener("click", () => {
+    const path = pendingRecPath;
+    // Reuses the exact same path a picked/dropped video file already takes --
+    // media.js's video detection and the editor's video preview need nothing new.
+    // Attaching counts as "saving": mark it before closeRecModal() so the
+    // close path does not delete the file out from under the newly opened editor.
+    recSavedOrAttached = true;
+    closeRecModal();
+    if (path) openFileCreate(path);
+  });
+
+  // Right-click reaches the picker's history without opening the overlay:
+  // it lives in the backend (survives a restart), this popover just displays it.
+  function renderPickHistoryPop(hex) {
+    pickHistoryPop.innerHTML = "";
+    if (!hex.length) {
+      const empty = document.createElement("div");
+      empty.className = "pick-history-empty";
+      empty.textContent = t("pickHistoryEmpty");
+      pickHistoryPop.appendChild(empty);
+    } else {
+      for (const h of hex) {
+        const row = document.createElement("button");
+        row.type = "button";
+        row.className = "pick-history-row";
+        const sw = document.createElement("span");
+        sw.className = "pick-history-swatch";
+        sw.style.background = h;
+        const label = document.createElement("span");
+        label.className = "pick-history-hex";
+        label.textContent = h;
+        row.append(sw, label);
+        row.addEventListener("click", async () => {
+          closePickHistoryPop();
+          try {
+            const text = await invoke("copy_pick_history_entry", { hex: h });
+            toast(t("colorCopied"), null, text);
+          } catch (err) { errToast(err); }
+        });
+        pickHistoryPop.appendChild(row);
+      }
+    }
+  }
+  $("picker-btn").addEventListener("contextmenu", async (e) => {
+    e.preventDefault();
+    let hex = [];
+    try { hex = (await invoke("pick_history")) || []; } catch { /* history stays empty */ }
+    renderPickHistoryPop(hex);
+    placePopover(pickHistoryPop, $("picker-btn").getBoundingClientRect());
+  });
+  listen("color-picked", async (e) => {
+    const value = e.payload?.text || "";
+    if (!value) return;
+    // The picked notation is already on the clipboard (unchanged behaviour);
+    // these three chips let a click re-copy any of the OTHER notations too.
+    const chips = ["hex", "rgb", "hsl"]
+      .map((k) => e.payload?.[k])
+      .filter(Boolean)
+      .map((v) => ({
+        label: v,
+        // The notation already on the clipboard is marked instead of being repeated
+        // in the message: that duplication was what pushed the row onto a second line.
+        current: v === value,
+        onClick: () => invoke("copy_text", { text: v }).catch((err) => errToast(err)),
+      }));
+    toast(t("colorCopied"), null, e.payload?.hex || "", chips);
+    // Live-update the recent-colours popover if the user left it open across a
+    // pick, instead of it staying frozen at whatever it showed when it opened.
+    if (!pickHistoryPop.classList.contains("hidden")) {
+      try { renderPickHistoryPop((await invoke("pick_history")) || []); } catch { /* leave it as-is on a read hiccup */ }
+    }
+  });
+
+  // Chain mode: combine several text buttons into one clipboard copy. Single
+  // click toggles it; a quick double-click latches it "always on".
+  $("chain-btn").addEventListener("click", onChainClick);
+  // A paste inside this window ends chain mode (unless latched); the clipboard
+  // already holds the chain. A paste in another program is not seen here, so the
+  // chain simply stays until the chain button ends it.
+  document.addEventListener("keydown", (e) => {
+    if (chainMode && !chainLock && (e.ctrlKey || e.metaKey) && (e.key === "v" || e.key === "V")) setChainMode(false);
+  });
+  // Arrow keys move a focus ring across grid tiles; Enter/Space copies.
+  const NAV = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+  document.addEventListener("keydown", (e) => {
+    if (!flag("keyboardNav")) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.target?.closest?.("input, textarea, [contenteditable]")) return;
+    if (document.querySelector(".overlay:not(.hidden)")) return; // a dialog is open
+    if (NAV[e.key]) { e.preventDefault(); moveKbFocus(...NAV[e.key]); }
+    else if ((e.key === "Enter" || e.key === " ") && kbFocus) { e.preventDefault(); activateTile(kbFocus); }
+  });
+  // Hold Shift during keyboard navigation to arm chaining on the fly: it switches
+  // on while Shift is down and off again when released: unless a prompt was picked
+  // into the chain during the hold, in which case it latches "always on" so the
+  // user can keep building the chain from there.
+  let shiftChain = false;
+  const kbBlocked = (e) => e.target.closest("input, textarea, [contenteditable]") || document.querySelector(".overlay:not(.hidden)");
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Shift" || e.repeat || shiftChain || chainMode) return;
+    if (!flag("keyboardNav") || !flag("chainPrompts") || kbBlocked(e)) return;
+    shiftChain = true;
+    setChainMode(true);
+  });
+  document.addEventListener("keyup", (e) => {
+    if (e.key !== "Shift" || !shiftChain) return;
+    shiftChain = false;
+    if (!chainSel.length) { setChainMode(false); return; }
+    if (flag("chainLock")) setChainLock(); // picked something → keep the chain alive
+  });
+  // Switching to another program never touches a chain, locked or not: it ends
+  // only through the chain button or Ctrl+V pressed inside this window.
+  const { snipEditOpen, snipEdit } = initSnipEditor();
 
   const snipModal = $("snip-modal");
   let pendingSnip = null;
