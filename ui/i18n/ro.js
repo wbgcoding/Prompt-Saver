@@ -903,6 +903,7 @@ export default {
     flagLibraryVideoPreview: "Redă videoclipuri în liste",
     flagConfirmDiscard: "Confirmă renunțarea la modificări",
     searchPh: "Caută prompturi…",
+    searchHistoryPh: "Caută în istoricul copierilor…",
     globalSearchBtn: "Caută peste tot",
     gsRecentClearAll: "Șterge tot",
     globalSearchPh: "Caută în prompturi, istoric copieri, setări și ajutor…",

@@ -1311,6 +1311,7 @@ export default {
     closeAfterCopy: "Nach dem Kopieren schließen",
     expertResetConfirm: "Wirklich zurücksetzen?",
     searchPh: "Prompts durchsuchen…",
+    searchHistoryPh: "Kopierverlauf durchsuchen…",
     globalSearchBtn: "Alles durchsuchen",
     gsRecentClearAll: "Alle löschen",
     globalSearchPh: "Prompts, Kopierverlauf, Einstellungen, Hilfe durchsuchen…",

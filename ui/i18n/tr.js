@@ -903,6 +903,7 @@ export default {
     flagLibraryVideoPreview: "Listelerde videoları oynat",
     flagConfirmDiscard: "Değişiklikleri silmeden önce onayla",
     searchPh: "İstem ara…",
+    searchHistoryPh: "Kopyalama geçmişinde ara…",
     globalSearchBtn: "Tümünde ara",
     gsRecentClearAll: "Tümünü temizle",
     globalSearchPh: "İstemlerde, kopyalama geçmişinde, ayarlarda ve yardımda ara…",

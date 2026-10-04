@@ -903,6 +903,7 @@ export default {
     flagLibraryVideoPreview: "在列表中播放视频",
     flagConfirmDiscard: "放弃更改前确认",
     searchPh: "搜索提示词…",
+    searchHistoryPh: "搜索复制历史…",
     globalSearchBtn: "搜索全部",
     gsRecentClearAll: "清除全部",
     globalSearchPh: "搜索提示词、复制历史、设置和帮助…",

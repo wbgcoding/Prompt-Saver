@@ -1311,6 +1311,7 @@ export default {
     closeAfterCopy: "Close after copy",
     expertResetConfirm: "Really reset?",
     searchPh: "Search prompts…",
+    searchHistoryPh: "Search copy history…",
     globalSearchBtn: "Search everything",
     gsRecentClearAll: "Clear all",
     globalSearchPh: "Search prompts, copy history, settings, help…",

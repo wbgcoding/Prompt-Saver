@@ -903,6 +903,7 @@ export default {
     flagLibraryVideoPreview: "Riproduci video negli elenchi",
     flagConfirmDiscard: "Conferma annullamento modifiche",
     searchPh: "Cerca prompt…",
+    searchHistoryPh: "Cerca nella cronologia copie…",
     globalSearchBtn: "Cerca ovunque",
     gsRecentClearAll: "Cancella tutto",
     globalSearchPh: "Cerca tra prompt, cronologia copie, impostazioni e guida…",

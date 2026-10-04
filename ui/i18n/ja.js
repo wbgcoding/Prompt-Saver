@@ -903,6 +903,7 @@ export default {
     flagLibraryVideoPreview: "リストで動画を再生",
     flagConfirmDiscard: "変更の破棄を確認",
     searchPh: "プロンプトを検索…",
+    searchHistoryPh: "コピー履歴を検索…",
     globalSearchBtn: "すべてを検索",
     gsRecentClearAll: "すべて消去",
     globalSearchPh: "プロンプト、コピー履歴、設定、ヘルプを検索…",

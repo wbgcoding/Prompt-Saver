@@ -1788,6 +1788,7 @@ the video editor and the introduction tour ship on).
 - **Zero hours reads Never.** The delay after which parked buttons are hidden shows "Never" at 0 instead of "0h".
 - **One list in the copy history.** A sort field switches between Recently copied and Most used (top 20) instead of showing two columns side by side.
 - **Copy history filters in two rows.** The source (All, In the app, Elsewhere) is a select beside the search field; the type chips and colors share the second row, with a single All chip.
+- **The history search says what it searches.** The field reads "Search copy history…" instead of the library wording.
 
 ## 2.6.3 (2026-07-26)
 

@@ -903,6 +903,7 @@ export default {
     flagLibraryVideoPreview: "Video's afspelen in lijsten",
     flagConfirmDiscard: "Wijzigingen verwerpen bevestigen",
     searchPh: "Prompts zoeken…",
+    searchHistoryPh: "Kopieergeschiedenis doorzoeken…",
     globalSearchBtn: "Alles doorzoeken",
     gsRecentClearAll: "Alles wissen",
     globalSearchPh: "Doorzoek prompts, kopieergeschiedenis, instellingen en hulp…",
