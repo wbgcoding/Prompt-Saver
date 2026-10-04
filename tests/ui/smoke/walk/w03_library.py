@@ -125,6 +125,17 @@ SECTION = """\
         out.errors.push('712: the archive chip does not show a word: "' + chipText + '"');
       }
     }
+    // 714: the Prompts tab carries the count, the header spans only keep it for readers.
+    {
+      const promptsTab = document.getElementById('library-tab-prompts');
+      const headCount = document.getElementById('library-count');
+      const nPrompts = headCount ? headCount.textContent : '';
+      const tabText = promptsTab ? promptsTab.textContent.trim() : '';
+      if (!nPrompts || !tabText.endsWith('(' + nPrompts + ')')) {
+        out.errors.push('714: the Prompts tab does not end with the count (' + nPrompts + '): "' + tabText + '"');
+      }
+      if (!headCount.classList.contains('hidden')) out.errors.push('714: the count in the library header is still visible');
+    }
     // A library row with an image attachment opens the same actions menu as any
     // other row: edit, edit image, duplicate ... delete, not just "open in editor".
     {

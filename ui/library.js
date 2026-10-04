@@ -768,6 +768,8 @@ export function renderLibrary() {
     count.textContent = items.length === all
       ? String(all)
       : t("libraryCount").replace("{n}", items.length).replace("{v}", all);
+    const tabCount = $("library-tab-prompts-count");
+    if (tabCount) tabCount.textContent = `(${count.textContent})`;
   }
   sortLibraryItems(items); // chosen sort (stable), before the favorites float
   // Favorites float to the top (stable otherwise) when the feature is on.

@@ -1771,6 +1771,7 @@ the video editor and the introduction tour ship on).
 - **The colour filter lists only colours in use.** The library and the copy history show a dot for each colour a prompt really has, and hide the row when fewer than two colours are used.
 - **The archive chip says Archive.** The filter chip that shows archived prompts in the library carries its name instead of a small picture.
 - **Aligned titles in the library and the copy history.** Rows with a colour dot now start their title at the same place as rows with a picture or video thumbnail.
+- **The count sits in the library tab.** The number of prompts (or "3 of 12" while a filter is on) is shown next to the Prompts and Copy history tab names instead of in the header.
 
 ## 2.6.3 (2026-07-26)
 

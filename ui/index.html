@@ -576,11 +576,11 @@
       <div class="modal-head">
         <h2 class="modal-title" data-i18n="library">Library</h2>
         <div id="library-tabs" class="lib-tabs" role="tablist">
-          <button id="library-tab-prompts" type="button" role="tab" class="lib-tab active" aria-selected="true" data-i18n="libraryTabItems">Prompts</button>
-          <button id="library-tab-history" type="button" role="tab" class="lib-tab" aria-selected="false" data-i18n="journal">Copy history</button>
+          <button id="library-tab-prompts" type="button" role="tab" class="lib-tab active" aria-selected="true"><span data-i18n="libraryTabItems">Prompts</span><span id="library-tab-prompts-count" class="lib-tab-count"></span></button>
+          <button id="library-tab-history" type="button" role="tab" class="lib-tab" aria-selected="false"><span data-i18n="journal">Copy history</span><span id="library-tab-history-count" class="lib-tab-count"></span></button>
         </div>
-        <span id="library-count" class="modal-count lib-prompts-only"></span>
-        <span id="journal-count" class="modal-count lib-history-only"></span>
+        <span id="library-count" class="modal-count lib-prompts-only hidden"></span>
+        <span id="journal-count" class="modal-count lib-history-only hidden"></span>
         <div class="modal-head-actions">
           <!-- Pause/resume recording copies from other apps without leaving the list -->
           <button id="clip-toggle" type="button" class="icon-btn watch-toggle lib-history-only hidden" data-i18n-title="flagClipWatcher" data-i18n-aria="flagClipWatcher">

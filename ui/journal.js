@@ -324,6 +324,8 @@ export function renderJournal() {
     jcount.textContent = recent.length === all
       ? String(all)
       : t("libraryCount").replace("{n}", recent.length).replace("{v}", all);
+    const tabCount = $("library-tab-history-count");
+    if (tabCount) tabCount.textContent = `(${jcount.textContent})`;
   }
   // Most used: copy count + last-used timestamp, busiest first (or least-first).
   const lastUsed = settings.last_used || {};

@@ -1345,8 +1345,13 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+  display: inline-flex;
+  align-items: baseline;
 }
 .lib-tab:hover { color: var(--fg); }
+.lib-tab-count { color: var(--muted); margin-left: 4px; font-weight: 400; }
+.lib-tab-count:empty { display: none; }
+.lib-tab.active .lib-tab-count { color: inherit; opacity: 0.8; }
 .lib-tab.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
 .lib-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 #library[data-tab="history"] .lib-prompts-only,
