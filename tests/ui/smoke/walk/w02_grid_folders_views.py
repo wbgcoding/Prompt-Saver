@@ -4,6 +4,50 @@ SECTION = """\
     if (getComputedStyle(document.documentElement).getPropertyValue('--lib-preview-lines').trim() !== '2') {
       out.errors.push('the library preview line-count CSS var is not applied');
     }
+    // 707: an automatic tile text stays at 32 px or less; a short name keeps to one
+    // line, a long one still wraps and fits its box. Driven through the real
+    // fitTileText on detached tiles, then read back on the live grid.
+    {
+      let fit707 = null;
+      try { fit707 = (await import('./tiles.js')).fitTileText; } catch (e) { out.errors.push('707: tiles.js not importable: ' + e); }
+      if (fit707) {
+        const host707 = document.createElement('div');
+        host707.style.cssText = 'position:fixed;left:0;top:0;width:200px;visibility:hidden;';
+        document.body.appendChild(host707);
+        const lines707 = (el) => { const rg = document.createRange(); rg.selectNodeContents(el); return new Set([...rg.getClientRects()].map((q) => Math.round(q.top))).size; };
+        for (const [label707, text707, wantOne707] of [['short', 'Prompt 2', true], ['long', 'Write a friendly reply to the customer about the delayed order', false]]) {
+          const tile707 = document.createElement('div');
+          // No .tile class: its padding would narrow the name below the measured box.
+          tile707.dataset.fitMode = 'auto';
+          const nm707 = document.createElement('span');
+          nm707.className = 'tile-name';
+          nm707.textContent = text707;
+          tile707.appendChild(nm707);
+          host707.appendChild(tile707);
+          fit707(tile707, 200, 96);
+          const px707 = parseFloat(nm707.style.fontSize);
+          if (!(px707 <= 32)) out.errors.push('707: the ' + label707 + ' name fitted at ' + px707 + 'px, above the 32px cap');
+          const n707 = lines707(nm707);
+          if (wantOne707 && n707 !== 1) out.errors.push('707: the short name wraps onto ' + n707 + ' lines');
+          if (!wantOne707) {
+            if (n707 < 2) out.errors.push('707: the long name did not wrap');
+            if (nm707.scrollHeight > 96 || nm707.scrollWidth > 200) out.errors.push('707: the long name overflows its box (' + nm707.scrollWidth + 'x' + nm707.scrollHeight + ')');
+          }
+          if (nm707.classList.contains('fit-one-line') !== wantOne707) out.errors.push('707: the ' + label707 + ' name has the wrong line mode');
+        }
+        host707.remove();
+      }
+      let seen707 = false;
+      for (const nm of document.querySelectorAll('#grid .tile-name.fit')) {
+        const px = parseFloat(nm.style.fontSize);
+        if (nm.textContent === 'Prompt 2') seen707 = true;
+        if (px > 32) out.errors.push('707: a grid tile name is set at ' + px + 'px, above the 32px cap');
+        if (window.innerWidth >= 1000 && nm.textContent === 'Prompt 2' && !nm.classList.contains('fit-one-line')) {
+          out.errors.push('707: the Prompt 2 tile is not on one line in the default grid (' + px + 'px)');
+        }
+      }
+      if (window.innerWidth >= 1000 && !seen707) out.errors.push('707: no auto-fitted Prompt 2 tile in the grid to check');
+    }
     // P32: font/size sit right under the name row, not down by the prompt text -
     // kept, just moved. A pure DOM-order check, no need to open the editor.
     {
