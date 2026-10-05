@@ -70,16 +70,10 @@ pub(crate) async fn finalize_capture(app: &AppHandle, gen: u64, crop: image::Rgb
 
     let (data_url, path) = tauri::async_runtime::spawn_blocking(move || -> Result<(String, String), String> {
         // The data URL feeds an <img>/canvas on the JS side (the result dialog's
-        // preview, then the editor if it opens) -- tiff has no browser decoder,
-        // so it alone falls back to png here; every other format already is one.
-        let data_format: &str = if format == "tiff" { "png" } else { &format };
-        let data_bytes = encode_screenshot(crop.as_raw(), cw, ch, data_format, save_q).ok_or("encode failed")?;
-        // Computed before the tiff-only second encode below needs crop.as_raw()
-        // again, and before the clipboard write just after consumes crop outright.
-        let folder_bytes_if_different = (save_to_folder && format != data_format)
-            .then(|| encode_screenshot(crop.as_raw(), cw, ch, &format, save_q))
-            .flatten();
-        let data_url = format!("data:{};base64,{}", screenshot_format_mime(data_format), base64_encode(&data_bytes));
+        // preview, then the editor if it opens); every offered format is one a
+        // browser decodes, so the same bytes also go to the folder copy.
+        let data_bytes = encode_screenshot(crop.as_raw(), cw, ch, &format, save_q).ok_or("encode failed")?;
+        let data_url = format!("data:{};base64,{}", screenshot_format_mime(&format), base64_encode(&data_bytes));
         // The encode can take a while: a cancel that came in meanwhile wins.
         if !snip_session_current(gen) {
             return Err("cancelled".to_string());
@@ -92,8 +86,7 @@ pub(crate) async fn finalize_capture(app: &AppHandle, gen: u64, crop: image::Rgb
             })
         });
         let path = if save_to_folder {
-            let bytes = folder_bytes_if_different.as_deref().unwrap_or(&data_bytes);
-            save_screenshot(bytes, &screenshot_dir(&custom_dir), &stem, screenshot_format_ext(&format))
+            save_screenshot(&data_bytes, &screenshot_dir(&custom_dir), &stem, screenshot_format_ext(&format))
         } else {
             String::new()
         };

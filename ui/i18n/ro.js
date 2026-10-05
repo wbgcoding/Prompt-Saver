@@ -1165,7 +1165,6 @@ export default {
     optScreenshotFormatJpeg: "JPEG",
     optScreenshotFormatWebp: "WebP",
     optScreenshotFormatBmp: "BMP",
-    optScreenshotFormatTiff: "TIFF",
     valRecBitrateKbps: "Rată de biți",
     recFormatGifHint: "Înregistrările GIF sunt limitate la 30 de secunde și nu au sunet.",
     recQualityLosslessHint: "Fișierele fără pierderi pot ajunge la câțiva gigaocteți pentru înregistrări mai lungi.",

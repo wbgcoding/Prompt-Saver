@@ -1416,7 +1416,6 @@ pub(crate) fn screenshot_format_ext(format: &str) -> &'static str {
         "jpeg" => "jpg",
         "webp" => "webp",
         "bmp" => "bmp",
-        "tiff" => "tiff",
         _ => "png",
     }
 }
@@ -1425,7 +1424,6 @@ pub(crate) fn screenshot_format_mime(format: &str) -> &'static str {
         "jpeg" => "image/jpeg",
         "webp" => "image/webp",
         "bmp" => "image/bmp",
-        "tiff" => "image/tiff",
         _ => "image/png",
     }
 }
@@ -1445,7 +1443,7 @@ pub(crate) fn image_format_mime(fmt: image::ImageFormat) -> &'static str {
     }
 }
 
-// Encodes a screenshot in whichever of the five formats the setting names.
+// Encodes a screenshot in whichever of the four formats the setting names.
 // JPEG keeps the fast SIMD path above; the other four go through the image
 // crate, already linked for thumbnails elsewhere. All four are written
 // lossless -- the image crate's own WebP encoder only ever writes lossless
@@ -1459,7 +1457,6 @@ pub(crate) fn encode_screenshot(rgba: &[u8], w: u32, h: u32, format: &str, jpeg_
     let out_format = match format {
         "webp" => image::ImageFormat::WebP,
         "bmp" => image::ImageFormat::Bmp,
-        "tiff" => image::ImageFormat::Tiff,
         _ => image::ImageFormat::Png,
     };
     let mut buf = Vec::<u8>::new();

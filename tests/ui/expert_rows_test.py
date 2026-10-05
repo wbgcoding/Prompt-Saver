@@ -114,7 +114,7 @@ FIND = """
   };
 """
 
-# A stored format that is no longer offered shows the fixed choice, and the list holds only the kept formats.
+# A stored format that is no longer offered (a video or screenshot format) shows the fixed choice, and the list holds only the kept formats.
 FORMAT_PROBE = """
 <script>
 (async () => {""" + FIND + """
@@ -586,9 +586,11 @@ def consumer_problems(browser, tmp):
                         ("video overlays ignore removed settings", stale)):
         probe = VIDEO_PROBE.replace("__OUTLINE__", "3").replace("__ACTIVE__", "#3fa7ff").replace("__VOLUME__", "0")
         check(label, "video.html", probe, seed, size=(1130, 860), budget=40000, head=FAST_AUTOSAVE)
-    wanted = json.dumps([["recFormat", "mp4", ["mp4", "webm", "gif", "avi"]]])
-    check("stored removed recFormat", "index.html", FORMAT_PROBE.replace("__WANTED__", wanted),
-          {"ui_flags": {"screenRecord": True}, "ui_texts": {"recFormat": "mov"}})
+    wanted = json.dumps([["recFormat", "mp4", ["mp4", "webm", "gif", "avi"]],
+                         ["screenshotFormat", "png", ["png", "jpeg", "webp", "bmp"]]])
+    check("stored removed formats", "index.html", FORMAT_PROBE.replace("__WANTED__", wanted),
+          {"ui_flags": {"screenRecord": True, "screenshot": True},
+           "ui_texts": {"recFormat": "mov", "screenshotFormat": "tiff"}})
     for color in ("#ff8800", "#2563eb"):
         head = "<script>" + outline_init_script(color) + "</script>"
         check("outline colour " + color, "recoutline.html", OUTLINE_PROBE.replace("__WANT__", hex_to_rgb(color)),

@@ -1,6 +1,6 @@
 // Expert menu: the renderer, its rows and the live-state parts of the setting registry.
 import { $, armButton, assignBUBBLE_MS, assignDISARM_MS, assignDRAG_THRESHOLD, assignHISTORY_PREVIEW_LEN, assignINPUT_MAX, assignLibraryTab, assignPrompts, assignROTATE_SHORT_MAX, assignSettings, assignTOAST_MS, COLORS, debounced, DEFAULT_COLORS, DICT, DISARM_MS, disarmButton, errToast, ETA_MIN_PCT, ETA_MIN_SECS, EXPERT_ACTIONS, flag, flagState, gateOpen, HEADER_PAD_Y, HEX_RE, ICON_UNDO, ICON_WARN, invoke, LANG, listen, modal, openColorPop, optFlag, PALETTE_LEN, prompts, putIcon, setStatusText, settings, settingsEl, shipsOn, SIZE_MAX, SIZE_MIN, SIZE_STEP, t, toast, txt, val } from "./core.js";
-import { ALL_FLAG_KEYS, EXPERT_BULK_NEVER, EXPERT_RESET_KEEP, EXPERT_SELECTS, EXPERT_TABS, EXPERT_TIP_SET, EXPERT_VALUES, FLAG_GATES, flagLabelKey, GRID_DOM_VALUES, groupFlags, OPT_FLAG_KEYS, REC_QUALITY_BITRATE, SETTINGS_AREA_LABEL, STYLE_OPTS, TILE_DOM_FLAGS, TILE_STYLES } from "./expertConfig.js";
+import { ALL_FLAG_KEYS, normScreenshotFormat, EXPERT_BULK_NEVER, EXPERT_RESET_KEEP, EXPERT_SELECTS, EXPERT_TABS, EXPERT_TIP_SET, EXPERT_VALUES, FLAG_GATES, flagLabelKey, GRID_DOM_VALUES, groupFlags, OPT_FLAG_KEYS, REC_QUALITY_BITRATE, SETTINGS_AREA_LABEL, STYLE_OPTS, TILE_DOM_FLAGS, TILE_STYLES } from "./expertConfig.js";
 import { FONT_LABELS, FONTS } from "./fonts.js";
 import { confirmDialog, infoDialog } from "./dialog.js";
 import { refreshFavViewUi, renderGrid, renderViews } from "./views.js";
@@ -179,12 +179,12 @@ export const EXPERT_DROPDOWNS = {
     [["all", "recCanvasAll"], ["monitor", "recCanvasMonitor"], ["window", "recCanvasWindow"]], "window", "screenRecord"),
   // Applies to every screenshot: the snip tool's own save/save-as/save-to-folder
   // paths AND the video editor's "export still frame" (same setting, one format
-  // for anything this app calls a screenshot). webp and bmp/tiff are always
+  // for anything this app calls a screenshot). webp and bmp are always
   // lossless (see encode_screenshot in capture.rs); only jpeg has a quality of its
   // own, which is why snipSaveQuality only shows for jpeg.
   screenshotFormat: enumDropdown("screenshotFormat", "valScreenshotFormat",
     [["png", "optScreenshotFormatPng"], ["jpeg", "optScreenshotFormatJpeg"], ["webp", "optScreenshotFormatWebp"],
-      ["bmp", "optScreenshotFormatBmp"], ["tiff", "optScreenshotFormatTiff"]], "png", "screenshot"),
+      ["bmp", "optScreenshotFormatBmp"]], "png", "screenshot", normScreenshotFormat),
   // Same pattern as ocrLang just above: fetched once from voice_languages()
   // at startup (voiceLangsCache), "Automatic" always first, a trailing entry
   // opens the shared language-pack dialog instead of ever being stored.

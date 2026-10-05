@@ -1620,6 +1620,7 @@ the video editor and the introduction tour ship on).
 - **The language dropdowns no longer end in a Manage entry.** The text recognition and dictation language dropdowns list only languages; the Manage languages button below them opens the dialog.
 - **Twenty editor defaults.** The video editor's starting export format, quality, resolution and tab, its fade length, bitrates and starting overlay values, and the zoom step, largest zoom, snap distance, duplicate offset and number step of both editors are fixed; the editors still remember your last export choice and the last values you used for each overlay.
 - **Fewer video formats.** MOV, MKV, animated WebP and APNG are gone from recording and export; a saved choice falls back to MP4.
+- **TIFF screenshots.** TIFF is gone from the screenshot format choice and the save dialog; a saved choice falls back to PNG.
 
 ### Changed
 

@@ -1165,7 +1165,6 @@ export default {
     optScreenshotFormatJpeg: "JPEG",
     optScreenshotFormatWebp: "WebP",
     optScreenshotFormatBmp: "BMP",
-    optScreenshotFormatTiff: "TIFF",
     valRecBitrateKbps: "Bit hızı",
     recFormatGifHint: "GIF kayıtları 30 saniyeyle sınırlıdır ve ses içermez.",
     recQualityLosslessHint: "Kayıpsız dosyalar uzun kayıtlarda birkaç gigabayta ulaşabilir.",

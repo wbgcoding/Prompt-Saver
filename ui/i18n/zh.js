@@ -1165,7 +1165,6 @@ export default {
     optScreenshotFormatJpeg: "JPEG",
     optScreenshotFormatWebp: "WebP",
     optScreenshotFormatBmp: "BMP",
-    optScreenshotFormatTiff: "TIFF",
     valRecBitrateKbps: "码率",
     recFormatGifHint: "GIF 录制最长为 30 秒且不含音频。",
     recQualityLosslessHint: "长时间录制的无损文件可能达到数 GB。",

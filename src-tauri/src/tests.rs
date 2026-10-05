@@ -1197,13 +1197,13 @@ fn only_mp4_webm_gif_and_avi_are_video_formats() {
 }
 
 #[test]
-fn screenshot_format_ext_and_mime_cover_all_five_and_fall_back_to_png() {
+fn screenshot_format_ext_and_mime_cover_all_four_and_fall_back_to_png() {
     let cases = [
         ("png", "png", "image/png"),
         ("jpeg", "jpg", "image/jpeg"),
         ("webp", "webp", "image/webp"),
         ("bmp", "bmp", "image/bmp"),
-        ("tiff", "tiff", "image/tiff"),
+        ("tiff", "png", "image/png"), // a stored choice that is no longer offered
         ("something-unknown", "png", "image/png"),
     ];
     for (format, ext, mime) in cases {
@@ -1215,7 +1215,7 @@ fn screenshot_format_ext_and_mime_cover_all_five_and_fall_back_to_png() {
 #[test]
 fn screenshot_format_needs_quality_is_true_only_for_jpeg() {
     assert!(screenshot_format_needs_quality("jpeg"));
-    for f in ["png", "webp", "bmp", "tiff", "unknown"] {
+    for f in ["png", "webp", "bmp", "unknown"] {
         assert!(!screenshot_format_needs_quality(f), "{f} should not need a quality slider");
     }
 }
@@ -1231,15 +1231,21 @@ fn checkerboard_rgba() -> Vec<u8> {
 }
 
 #[test]
-fn encode_screenshot_png_webp_bmp_tiff_all_roundtrip_losslessly() {
+fn encode_screenshot_png_webp_bmp_all_roundtrip_losslessly() {
     let rgba = checkerboard_rgba();
-    for format in ["png", "webp", "bmp", "tiff"] {
+    for format in ["png", "webp", "bmp"] {
         let bytes = encode_screenshot(&rgba, 2, 2, format, 90).unwrap_or_else(|| panic!("{format} failed to encode"));
         let decoded = image::load_from_memory(&bytes).unwrap_or_else(|e| panic!("{format} failed to decode: {e}"));
         assert_eq!(decoded.width(), 2, "{format} width");
         assert_eq!(decoded.height(), 2, "{format} height");
         assert_eq!(decoded.to_rgba8().into_raw(), rgba, "{format} must round-trip every pixel exactly");
     }
+}
+
+#[test]
+fn encode_screenshot_writes_png_for_a_stored_tiff_choice() {
+    let bytes = encode_screenshot(&checkerboard_rgba(), 2, 2, "tiff", 90).expect("encode");
+    assert_eq!(&bytes[..4], &[0x89, b'P', b'N', b'G']);
 }
 
 #[test]

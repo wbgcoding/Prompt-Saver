@@ -6,6 +6,7 @@ import { recordToolUsage } from "./management.js";
 import { confirmDialog } from "./dialog.js";
 import { fmtBytes, normRecFormat, parseFfmpegError } from "./floatShared.js";
 import { EXPERT_PATHS } from "./expertMenu.js";
+import { normScreenshotFormat } from "./expertConfig.js";
 import { initSnipEditor } from "./snipEditor.js";
 import { openLightbox } from "./windowChrome.js";
 import { ocrErrToast, openOcrLangsModal } from "./dictation.js";
@@ -636,7 +637,7 @@ export function bindCapture() {
       // Off -> the pre-117/118 flow, unedited shot straight into the result dialog.
       $("snip-preview").src = pendingSnip;
       $("snip-save-folder").checked = optFlag("screenshotSave");
-      $("snip-modal-saveas-format").value = txt("screenshotFormat") || "png";
+      $("snip-modal-saveas-format").value = normScreenshotFormat(txt("screenshotFormat"));
       snipModal.classList.remove("hidden");
       return;
     }
@@ -672,7 +673,7 @@ export function bindCapture() {
         }
         $("snip-preview").src = pendingSnip;
         $("snip-save-folder").checked = optFlag("screenshotSave") && !saveFailed;
-        $("snip-modal-saveas-format").value = txt("screenshotFormat") || "png";
+        $("snip-modal-saveas-format").value = normScreenshotFormat(txt("screenshotFormat"));
         $("snip-modal-retry").classList.remove("hidden");
         snipModal.classList.remove("hidden");
       },
@@ -700,7 +701,7 @@ export function bindCapture() {
         toast(t("openedCopyNote"));
         $("snip-preview").src = pendingSnip;
         $("snip-save-folder").checked = false;
-        $("snip-modal-saveas-format").value = txt("screenshotFormat") || "png";
+        $("snip-modal-saveas-format").value = normScreenshotFormat(txt("screenshotFormat"));
         $("snip-modal-retry").classList.add("hidden"); // "retry" means recapture -- meaningless for an opened file
         snipModal.classList.remove("hidden");
       },

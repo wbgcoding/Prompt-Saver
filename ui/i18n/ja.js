@@ -1165,7 +1165,6 @@ export default {
     optScreenshotFormatJpeg: "JPEG",
     optScreenshotFormatWebp: "WebP",
     optScreenshotFormatBmp: "BMP",
-    optScreenshotFormatTiff: "TIFF",
     valRecBitrateKbps: "ビットレート",
     recFormatGifHint: "GIF録画は30秒までに制限され、音声は含まれません。",
     recQualityLosslessHint: "長時間の録画では、ロスレスファイルが数GBに達することがあります。",

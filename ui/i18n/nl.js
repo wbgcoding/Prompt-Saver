@@ -1165,7 +1165,6 @@ export default {
     optScreenshotFormatJpeg: "JPEG",
     optScreenshotFormatWebp: "WebP",
     optScreenshotFormatBmp: "BMP",
-    optScreenshotFormatTiff: "TIFF",
     valRecBitrateKbps: "Bitsnelheid",
     recFormatGifHint: "GIF-opnamen zijn beperkt tot 30 seconden en bevatten geen audio.",
     recQualityLosslessHint: "Verliesvrije bestanden kunnen bij langere opnamen enkele gigabytes groot worden.",

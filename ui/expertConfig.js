@@ -843,6 +843,11 @@ export const EXPERT_TIPS = [
 ];
 export const EXPERT_TIP_SET = new Set(EXPERT_TIPS);
 
+// The screenshot formats on offer. A stored choice outside the list (an old
+// install) reads as PNG.
+export const SCREENSHOT_FORMATS = ["png", "jpeg", "webp", "bmp"];
+export const normScreenshotFormat = (v) => (SCREENSHOT_FORMATS.includes(v) ? v : "png");
+
 // Flags whose state changes the tile DOM itself (everything else is a body class).
 // rotatingPrompts/rotateBadge gate a tile's own rotate-badge element -- without
 // a full rebuild here, an already-open grid keeps showing (or hiding) it until some

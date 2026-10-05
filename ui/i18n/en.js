@@ -1136,7 +1136,6 @@ export default {
     optScreenshotFormatJpeg: "JPEG",
     optScreenshotFormatWebp: "WebP",
     optScreenshotFormatBmp: "BMP",
-    optScreenshotFormatTiff: "TIFF",
     valRecBitrateKbps: "Bitrate",
     recFormatGifHint: "GIF recordings are capped at 30 seconds and have no audio.",
     recQualityLosslessHint: "Lossless files can run into several gigabytes for longer recordings.",
