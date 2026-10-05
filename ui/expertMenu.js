@@ -12,7 +12,7 @@ import { offerClipInboxCleanup, refreshClipInbox } from "./journal.js";
 import { applyBarToggleTips } from "./windowChrome.js";
 import { setMediaDefaults } from "./media.js";
 import { attachSelectPicker } from "./selectpop.js";
-import { a11yProgressText, ffmpegDownloadPct, fmtBytes, formatEta, makeEtaEstimator } from "./floatShared.js";
+import { a11yProgressText, ffmpegDownloadPct, fmtBytes, formatEta, makeEtaEstimator, normRecFormat, VIDEO_FORMATS, videoFormatLabelKey } from "./floatShared.js";
 import { hideSettings, syncSettingsControls } from "./settingsPanel.js";
 import { bindHotkeyField, commitRecPauseHotkey, commitRecStopHotkey, prettyAccel } from "./hotkeys.js";
 import EN from "./i18n/en.js";
@@ -24,13 +24,13 @@ export let expertResetTimer = null;
 
 // Build a simple string-enum dropdown backed by ui_texts (default when unset).
 // `opts` is [[value, i18nLabelKey], …]. Used by expert enum params.
-export function enumDropdown(key, labelKey, opts, def, gate) {
+export function enumDropdown(key, labelKey, opts, def, gate, norm = (v) => v) {
   return {
     label: labelKey,
     gate,
     def, // "only changed" filter compares get() against this
     options: () => opts.map(([v, lk]) => [v, t(lk)]),
-    get: () => settings.ui_texts?.[key] || def,
+    get: () => norm(settings.ui_texts?.[key] || def),
     set: async (v) => {
       settings.ui_texts = { ...(settings.ui_texts || {}), [key]: v };
       try { await invoke("set_ui_text", { key, value: v }); } catch (e) { errToast(e); }
@@ -172,9 +172,7 @@ export const EXPERT_DROPDOWNS = {
   // an ffmpeg conversion pass once the recording stops (see convert_recording
   // on the backend and the post-capture menu that calls it).
   recFormat: enumDropdown("recFormat", "valRecFormat",
-    [["mp4", "optRecFormatMp4"], ["webm", "optRecFormatWebm"], ["gif", "optRecFormatGif"],
-      ["avi", "optRecFormatAvi"], ["mov", "optRecFormatMov"], ["mkv", "optRecFormatMkv"],
-      ["webpanim", "optRecFormatWebpanim"], ["apng", "optRecFormatApng"]], "mp4", "screenRecord"),
+    VIDEO_FORMATS.map((f) => [f, videoFormatLabelKey(f)]), "mp4", "screenRecord", normRecFormat),
   // "window" matches resolve_recording_settings' own existing fallback default
   // exactly -- adding this row must not change what already happens today.
   recCanvasMode: enumDropdown("recCanvasMode", "valRecCanvasMode",

@@ -6,7 +6,7 @@
 // an ordered operation list (VE.ops), exactly like the screenshot editor's own
 // list, and the export compiles that list into ONE ffmpeg filter graph. That is
 // what makes undo/redo cheap, the preview honest and the export a single pass.
-import { resolveLang, ffmpegDownloadPct, numberField, makeEtaEstimator, formatEta, a11yProgressText, parseFfmpegError, fmtBytes, fmtSizeCompact, makeHoldOrTapToggle, trapTabWithin } from "./floatShared.js";
+import { resolveLang, fillVideoFormatSelect, normRecFormat, ffmpegDownloadPct, numberField, makeEtaEstimator, formatEta, a11yProgressText, parseFfmpegError, fmtBytes, fmtSizeCompact, makeHoldOrTapToggle, trapTabWithin } from "./floatShared.js";
 import { withShortcut as withShortcutRaw, rowsForScope as rowsForScopeRaw } from "./shortcuts.js";
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
@@ -80,15 +80,11 @@ let fontsDir = "C:/Windows/Fonts";
 invoke("windows_fonts_dir").then((d) => { if (d) fontsDir = d; }).catch(() => {});
 const EXPORT_KBPS = { high: 12000, small: 4000, lossless: null };
 
-// Three of the eight export formats never carry sound at all; the internal
-// format key and the file extension it writes differ only for animated
-// WebP ("webpanim" distinguishes it, inside this app, from a possible future
-// single-frame WebP screenshot format -- the file itself is just ".webp").
-const SILENT_FORMATS = new Set(["gif", "webpanim", "apng"]);
+// GIF never carries sound. Every format key is also the file extension it writes.
+const SILENT_FORMATS = new Set(["gif"]);
 const formatHasAudio = (fmt) => !SILENT_FORMATS.has(fmt);
-const FORMAT_EXT = { webpanim: "webp" };
-const formatExt = (fmt) => FORMAT_EXT[fmt] || fmt;
-// A length above which GIF/WebP/APNG tend to balloon in size -- shown as a
+const formatExt = (fmt) => fmt;
+// A length above which a GIF tends to balloon in size -- shown as a
 // warning, never enforced (trimming or a smaller size is the user's call).
 const SILENT_FORMAT_LENGTH_WARN_MS = 10000;
 // Unlike the length warning, this one IS enforced: the same three formats
@@ -3072,7 +3068,7 @@ function buildVideoChain() {
     chain(`scale=${downscale.w}:${downscale.h}${enlarging ? ":flags=lanczos" : ""}`);
   }
 
-  // GIF, animated WebP and APNG balloon in file size fast at a high resolution
+  // A GIF balloons in file size fast at a high resolution
   // -- cap the long side regardless of any explicit scale op above.
   if (silentFormat) chain(`scale='min(iw,${MAX_SILENT_DIM})':'min(ih,${MAX_SILENT_DIM})':force_original_aspect_ratio=decrease`);
 
@@ -3222,9 +3218,9 @@ function buildAudioChain() {
 // A pure trim with nothing else touched can be copied instead of re-encoded:
 // instant, and bit-identical to the source.
 function isLosslessCopy() {
-  // mp4, mov and mkv can all carry an h264/aac stream untouched; the other
-  // five formats always need a real re-encode to become themselves at all.
-  if (!["mp4", "mov", "mkv"].includes(exportFormat())) return false;
+  // Only mp4 can carry an h264/aac stream untouched; the other three
+  // formats always need a real re-encode to become themselves at all.
+  if (exportFormat() !== "mp4") return false;
   if (exportQuality() === "lossless") return false; // an explicit re-encode was asked for
   // A source whose own streams are not already safe to copy (h264/hevc video,
   // aac-or-silent audio -- e.g. a webm/VP9 file dragged in from elsewhere)
@@ -3279,7 +3275,7 @@ function destPath() {
 
 // One explanatory note per format that needs one, kept as a lookup instead of
 // a chain of ifs so a future format only ever needs one new entry here.
-const FORMAT_NOTE_KEY = { gif: "veGifNote", avi: "veAviNote", mov: "veMovNote", mkv: "veMkvNote", webpanim: "veWebpNote", apng: "veApngNote" };
+const FORMAT_NOTE_KEY = { gif: "veGifNote", avi: "veAviNote" };
 
 // Builds everything the note can say without asking the backend anything --
 // unchanged from before the size estimate was added, so all 13 existing call
@@ -3831,7 +3827,7 @@ $("ve-add-video").addEventListener("click", (e) => {
 
 // A recording without a microphone track leaves those two controls switched off
 // and says why, rather than offering a slider that could not change anything.
-// An export format that drops audio entirely (gif/webpanim/apng) does the same
+// An export format that drops audio entirely (gif) does the same
 // to BOTH tracks' controls, on top of whichever per-track reason already applies.
 function updateAudioLabels() {
   const silent = SILENT_FORMATS.has(exportFormat());
@@ -3884,6 +3880,7 @@ function audioControl(kind, muteId, volId) {
 audioControl("sys", "ve-mute-sys", "ve-vol-sys");
 audioControl("mic", "ve-mute-mic", "ve-vol-mic");
 
+fillVideoFormatSelect($("ve-export-format"));
 for (const id of ["ve-export-format", "ve-export-quality"]) {
   attachSelectPicker($(id));
   $(id).addEventListener("change", () => {
@@ -4451,7 +4448,7 @@ function applySettings(settings) {
   armEditStateAutosave();
   const texts = settings?.ui_texts || {};
   // The export dialog opens on the user's own last choice.
-  $("ve-export-format").value = texts.videoExportFormat || "mp4";
+  $("ve-export-format").value = normRecFormat(texts.videoExportFormat);
   $("ve-export-quality").value = texts.videoExportQuality || "high";
   // VE.w/VE.h are still 0 the first time this runs (applyProbe() hasn't landed
   // yet) -- a scale preset needs the source size to turn into real pixels, so

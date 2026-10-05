@@ -840,7 +840,7 @@ pub(crate) fn cancel_all_exports() {
 // even once the window that started it has closed.
 #[tauri::command]
 pub(crate) async fn export_video(app: AppHandle, state: State<'_, Db>, req: ExportRequest) -> Result<String, String> {
-    if !matches!(req.format.as_str(), "mp4" | "webm" | "gif" | "avi" | "mov" | "mkv" | "webpanim" | "apng") {
+    if !is_video_format(&req.format) {
         return Err("unsupported format".to_string());
     }
     let src = PathBuf::from(&req.src_path);
@@ -999,7 +999,7 @@ pub(crate) async fn export_recordings_batch(
     lossless_quality: bool,
     video_kbps: Option<u32>,
 ) -> Result<BatchExportResult, String> {
-    if !matches!(format.as_str(), "mp4" | "webm" | "gif" | "avi" | "mov" | "mkv" | "webpanim" | "apng") {
+    if !is_video_format(&format) {
         return Err("unsupported format".to_string());
     }
     let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
@@ -1067,12 +1067,12 @@ pub(crate) struct ExportSizeEstimate {
 
 // Mirrors export_video_blocking's own per-format "-b:a" settings above
 // exactly, so the estimate can never quietly drift from what the encoder
-// actually burns into the file. gif/webpanim/apng are always silent (-an),
+// actually burns into the file. gif is always silent (-an),
 // hence 0 -- they never reach this function anyway (see the match below).
 pub(crate) fn export_audio_kbps(format: &str, lossless_quality: bool) -> u32 {
     match format {
         "mp4" if lossless_quality => 320,
-        "mp4" | "mov" | "mkv" | "avi" => 192,
+        "mp4" | "avi" => 192,
         "webm" => 128, // libopus with no explicit -b:a: ffmpeg's own default range
         _ => 0,
     }
@@ -1086,7 +1086,7 @@ pub(crate) fn export_audio_kbps(format: &str, lossless_quality: bool) -> u32 {
 pub(crate) fn estimate_export_bytes(format: &str, video_kbps: Option<u32>, lossless_quality: bool, duration_ms: u64) -> ExportSizeEstimate {
     let secs = duration_ms as f64 / 1000.0;
     match format {
-        "gif" | "webpanim" | "apng" => {
+        "gif" => {
             // A static, few-color clip can run under 5 KB/s; fast full-frame
             // motion easily exceeds 300 kbps once palette dithering kicks in.
             let low = (secs * 30_000.0 / 8.0).round() as u64;
@@ -1132,9 +1132,9 @@ pub(crate) fn export_video_blocking(
         // lossless trim-only export even though nothing asked to remove it.
         output_args.extend(["-map", "0:v", "-map", "0:a?", "-c", "copy"].map(String::from));
     } else {
-        // GIF, animated WebP and APNG carry no audio at all -- never map or
-        // filter an audio stream into any of them, even if the frontend sent one.
-        let is_silent = matches!(req.format.as_str(), "gif" | "webpanim" | "apng");
+        // GIF carries no audio at all -- never map or filter an audio stream
+        // into it, even if the frontend sent one.
+        let is_silent = req.format == "gif";
         let mut graphs = Vec::new();
         if let Some(v) = &req.filter_chain {
             graphs.push(v.clone());
@@ -1186,37 +1186,13 @@ pub(crate) fn export_video_blocking(
             "gif" => {
                 output_args.push("-an".to_string());
             }
-            // avi/mov/mkv: same codec families as mp4/webm, just repackaged
-            // into a container an older program, an Apple tool, or an
-            // interrupted export handles better. mkv keeps its audio mixed to
-            // one track like every other format here; muxing mic and system
-            // audio as two separate Matroska tracks was left out as
-            // disproportionate complexity for this one container alone.
+            // avi: the same codec family as mp4, repackaged into a container an
+            // older program handles better.
             "avi" => {
                 output_args.extend(["-c:v", "mpeg4"].map(String::from));
                 let kbps = req.video_kbps.unwrap_or(8000).clamp(500, 50000);
                 output_args.extend(["-b:v".to_string(), format!("{kbps}k")]);
                 output_args.extend(["-c:a", "libmp3lame", "-b:a", "192k"].map(String::from));
-            }
-            "mov" => {
-                output_args.extend(["-c:v", "libx264"].map(String::from));
-                let kbps = req.video_kbps.unwrap_or(8000).clamp(500, 50000);
-                output_args.extend(["-b:v".to_string(), format!("{kbps}k"), "-preset".to_string(), "medium".to_string()]);
-                output_args.extend(["-c:a", "aac", "-b:a", "192k"].map(String::from));
-            }
-            "mkv" => {
-                output_args.extend(["-c:v", "libx264"].map(String::from));
-                let kbps = req.video_kbps.unwrap_or(8000).clamp(500, 50000);
-                output_args.extend(["-b:v".to_string(), format!("{kbps}k"), "-preset".to_string(), "medium".to_string()]);
-                output_args.extend(["-c:a", "aac", "-b:a", "192k"].map(String::from));
-            }
-            // Animated WebP and APNG: silent, so -an is the only audio-side
-            // argument -- the -map above already left audio out entirely.
-            "webpanim" => {
-                output_args.extend(["-an", "-c:v", "libwebp_anim", "-loop", "0", "-lossless", "0", "-q:v", "75"].map(String::from));
-            }
-            "apng" => {
-                output_args.extend(["-an", "-c:v", "apng", "-plays", "0"].map(String::from));
             }
             _ => unreachable!(),
         }

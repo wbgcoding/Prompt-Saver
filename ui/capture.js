@@ -4,7 +4,7 @@ import { openFileCreate, openModal, startFileCreate, startFileFromClipboard, wit
 import { placePopover } from "./popover.js";
 import { recordToolUsage } from "./management.js";
 import { confirmDialog } from "./dialog.js";
-import { fmtBytes, parseFfmpegError } from "./floatShared.js";
+import { fmtBytes, normRecFormat, parseFfmpegError } from "./floatShared.js";
 import { EXPERT_PATHS } from "./expertMenu.js";
 import { initSnipEditor } from "./snipEditor.js";
 import { openLightbox } from "./windowChrome.js";
@@ -313,7 +313,7 @@ export function bindCapture() {
       await runRecCrop(rawPath, gen);
       if (gen !== recGen) return;
     }
-    const format = settings.ui_texts?.recFormat || "mp4";
+    const format = normRecFormat(settings.ui_texts?.recFormat);
     const lossless = (settings.ui_texts?.recQuality || "high") === "lossless";
     if (format === "mp4" && !lossless) {
       recPreview.classList.remove("hidden");

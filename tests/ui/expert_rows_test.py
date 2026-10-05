@@ -114,6 +114,40 @@ FIND = """
   };
 """
 
+# A stored format that is no longer offered shows the fixed choice, and the list holds only the kept formats.
+FORMAT_PROBE = """
+<script>
+(async () => {""" + FIND + """
+  const errs = [];
+  try {
+    await until(() => document.getElementById('gear') && document.getElementById('library-btn'));
+    await sleep(400);
+    document.getElementById('gear').click();
+    await sleep(200);
+    document.getElementById('expert-open').click();
+    await sleep(300);
+    const wanted = __WANTED__;
+    const tabs = [...document.querySelectorAll('#expert-tabs-bar .expert-tab')];
+    const seen = {};
+    for (const tb of tabs) {
+      tb.click();
+      await sleep(120);
+      for (const [key, value, options] of wanted) {
+        const sel = document.querySelector('#expert-flags [data-setting-row="' + key + '"] select');
+        if (!sel || seen[key]) continue;
+        seen[key] = true;
+        if (sel.value !== value) errs.push(key + ' shows ' + sel.value + ', expected ' + value);
+        const got = [...sel.options].map((o) => o.value).join(',');
+        if (got !== options.join(',')) errs.push(key + ' offers [' + got + '], expected [' + options.join(',') + ']');
+      }
+    }
+    for (const [key] of wanted) if (!seen[key]) errs.push(key + ': row not found');
+  } catch (e) { errs.push('probe threw: ' + (e && e.stack || e)); }
+  finish(errs);
+})();
+</script>
+"""
+
 PROBE_ON = """
 <script>
 (async () => {""" + FIND + """
@@ -552,6 +586,9 @@ def consumer_problems(browser, tmp):
                         ("video overlays ignore removed settings", stale)):
         probe = VIDEO_PROBE.replace("__OUTLINE__", "3").replace("__ACTIVE__", "#3fa7ff").replace("__VOLUME__", "0")
         check(label, "video.html", probe, seed, size=(1130, 860), budget=40000, head=FAST_AUTOSAVE)
+    wanted = json.dumps([["recFormat", "mp4", ["mp4", "webm", "gif", "avi"]]])
+    check("stored removed recFormat", "index.html", FORMAT_PROBE.replace("__WANTED__", wanted),
+          {"ui_flags": {"screenRecord": True}, "ui_texts": {"recFormat": "mov"}})
     for color in ("#ff8800", "#2563eb"):
         head = "<script>" + outline_init_script(color) + "</script>"
         check("outline colour " + color, "recoutline.html", OUTLINE_PROBE.replace("__WANT__", hex_to_rgb(color)),

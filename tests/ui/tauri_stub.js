@@ -585,7 +585,7 @@ const RESULTS = {
   // changes and carries a size -- the exact numbers are Rust's own test's job.
   estimate_export_size: (a) => {
     const secs = (a && a.durationMs) / 1000 || 0;
-    if (["gif", "webpanim", "apng"].includes(a && a.format)) {
+    if (["gif"].includes(a && a.format)) {
       return { bytes: null, low_bytes: Math.round(secs * 3750), high_bytes: Math.round(secs * 37500) };
     }
     const kbps = ((a && a.videoKbps) || 8000) + (a && a.losslessQuality ? 320 : 192);

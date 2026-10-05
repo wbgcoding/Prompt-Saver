@@ -3,7 +3,7 @@ import { $, assignDrag, assignPrompts, assignSettings, cellKey, COLORS, convertF
 import { mediaKind } from "./media.js";
 import { armDragOut, autoPasteDouble, autoPasteNow, fitAllTiles, hasImage, imageOf, notesOn, placeTile } from "./tiles.js";
 import { openLightbox, wireSearchSuggest } from "./windowChrome.js";
-import { fmtBytes, varPreview } from "./floatShared.js";
+import { fillVideoFormatSelect, fmtBytes, varPreview } from "./floatShared.js";
 import { anyEntryHasVars, dialogTokens, extractVars, parseVar, peekRotatedText, resolveVars, varTokens } from "./promptVars.js";
 import { confirmDialog } from "./dialog.js";
 import { activeView, firstFree, layoutOf, renderGrid, renderViews } from "./views.js";
@@ -1575,6 +1575,7 @@ export function bindLibrary() {
   attachSelectPicker($("grid-batch-format"));
 
   attachSelectPicker($("library-sort"));
+  fillVideoFormatSelect($("batch-export-format"));
   attachSelectPicker($("batch-export-format"));
   attachSelectPicker($("batch-export-quality"));
 }

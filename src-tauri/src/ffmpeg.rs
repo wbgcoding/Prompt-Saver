@@ -372,7 +372,7 @@ pub(crate) async fn convert_recording(
     format: String,
     lossless: bool,
 ) -> Result<String, String> {
-    if !matches!(format.as_str(), "mp4" | "webm" | "gif" | "avi" | "mov" | "mkv" | "webpanim" | "apng") {
+    if !is_video_format(&format) {
         return Err("unsupported format".to_string());
     }
     let src = PathBuf::from(&src_path);
@@ -409,12 +409,12 @@ pub(crate) fn convert_is_noop(same_extension: bool, format: &str, lossless: bool
     same_extension && !(format == "mp4" && lossless)
 }
 
-// The internal format key and the file extension it writes are almost always
-// the same string -- "webpanim" is the one exception (an animated WebP is
-// still just a ".webp" file; the "anim" half only distinguishes it, inside
-// this app, from a possible future single-frame WebP screenshot format).
-pub(crate) fn video_format_ext(format: &str) -> &str {
-    if format == "webpanim" { "webp" } else { format }
+// The formats a recording or an export can be written as. Each key is also the
+// file extension it writes.
+pub(crate) const VIDEO_FORMATS: [&str; 4] = ["mp4", "webm", "gif", "avi"];
+
+pub(crate) fn is_video_format(format: &str) -> bool {
+    VIDEO_FORMATS.contains(&format)
 }
 
 // ---------- ffmpeg errors in plain language, one classifier for every caller ----------
@@ -893,7 +893,7 @@ pub(crate) fn run_ffmpeg_to_staged(
 pub(crate) fn convert_recording_blocking(
     ffmpeg: &Path, src: &Path, format: &str, lossless: bool, is_cancelled: impl Fn() -> bool, mut on_progress: impl FnMut(u32),
 ) -> Result<String, String> {
-    let same_extension = src.extension().is_some_and(|e| e.eq_ignore_ascii_case(video_format_ext(format)));
+    let same_extension = src.extension().is_some_and(|e| e.eq_ignore_ascii_case(format));
     if convert_is_noop(same_extension, format, lossless) {
         return Err("nothing to convert".to_string());
     }
@@ -904,7 +904,7 @@ pub(crate) fn convert_recording_blocking(
     // that is also the destination is never read and written by the same
     // process at once, and a conversion that fails or is cancelled never
     // leaves a half-written file at either name.
-    let dst = src.with_extension(video_format_ext(format));
+    let dst = src.with_extension(format);
     let mut args: Vec<String> = Vec::new();
     match format {
         "mp4" => {
@@ -927,25 +927,10 @@ pub(crate) fn convert_recording_blocking(
                 "fps=15,scale=iw:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer",
             ].map(String::from));
         }
-        // avi/mov/mkv: same codec families as mp4, just repackaged into a
-        // container an older program, an Apple tool or an interrupted export
-        // handles better.
+        // avi: the same codec family as mp4, repackaged into a container an
+        // older program handles better.
         "avi" => {
             args.extend(["-c:v", "mpeg4", "-q:v", "5", "-c:a", "libmp3lame", "-b:a", "192k"].map(String::from));
-        }
-        "mov" => {
-            args.extend(["-c:v", "libx264", "-crf", "18", "-preset", "medium", "-c:a", "aac", "-b:a", "192k"].map(String::from));
-        }
-        "mkv" => {
-            args.extend(["-c:v", "libx264", "-crf", "18", "-preset", "medium", "-c:a", "aac", "-b:a", "192k"].map(String::from));
-        }
-        // Same 30s cap as GIF just above, for the same reason: this quick
-        // conversion has no interactive length warning to show first.
-        "webpanim" => {
-            args.extend(["-t", "30", "-an", "-c:v", "libwebp_anim", "-loop", "0", "-lossless", "0", "-q:v", "75"].map(String::from));
-        }
-        "apng" => {
-            args.extend(["-t", "30", "-an", "-c:v", "apng", "-plays", "0"].map(String::from));
         }
         _ => unreachable!(),
     }

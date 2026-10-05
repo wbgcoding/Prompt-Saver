@@ -755,14 +755,12 @@ fn estimate_export_bytes_lossless_quality_uses_the_higher_mp4_audio_rate() {
 }
 
 #[test]
-fn estimate_export_bytes_image_formats_return_a_range_not_a_number() {
-    for format in ["gif", "webpanim", "apng"] {
-        let est = estimate_export_bytes(format, None, false, 5_000);
-        assert!(est.bytes.is_none(), "{format} must not report a single byte figure");
-        let low = est.low_bytes.expect("range must have a low bound");
-        let high = est.high_bytes.expect("range must have a high bound");
-        assert!(low > 0 && low < high, "{format}'s range must be a real, ordered bracket");
-    }
+fn estimate_export_bytes_gif_returns_a_range_not_a_number() {
+    let est = estimate_export_bytes("gif", None, false, 5_000);
+    assert!(est.bytes.is_none(), "gif must not report a single byte figure");
+    let low = est.low_bytes.expect("range must have a low bound");
+    let high = est.high_bytes.expect("range must have a high bound");
+    assert!(low > 0 && low < high, "gif's range must be a real, ordered bracket");
 }
 
 #[test]
@@ -1189,10 +1187,12 @@ fn pcm_s16le_to_peaks_reports_zero_for_silence_and_one_bucket_per_request() {
 }
 
 #[test]
-fn video_format_ext_maps_webpanim_to_webp_and_leaves_everything_else_alone() {
-    assert_eq!(video_format_ext("webpanim"), "webp");
-    for f in ["mp4", "webm", "gif", "avi", "mov", "mkv", "apng"] {
-        assert_eq!(video_format_ext(f), f);
+fn only_mp4_webm_gif_and_avi_are_video_formats() {
+    for f in ["mp4", "webm", "gif", "avi"] {
+        assert!(is_video_format(f), "{f} must be accepted");
+    }
+    for f in ["mov", "mkv", "webpanim", "apng", "webp", "", "MP4"] {
+        assert!(!is_video_format(f), "{f} must be refused");
     }
 }
 
@@ -1554,78 +1554,6 @@ fn export_video_real_ffmpeg_avi_format_carries_mpeg4_video_and_its_audio() {
     assert!(format_name.contains("avi"), "format_name was {format_name}");
     assert_eq!(video_codec, "mpeg4");
     assert_eq!(audio_count, 1, "avi export must keep the source's audio track");
-    let _ = fs::remove_dir_all(&dir);
-}
-
-#[test]
-fn export_video_real_ffmpeg_mov_format_carries_h264_video_and_its_audio() {
-    let Some(ffmpeg) = test_ffmpeg() else { return };
-    let Some(ffprobe) = test_ffprobe() else { return };
-    let dir = std::env::temp_dir().join(format!("ps-exporttest-mov-{}", std::process::id()));
-    fs::create_dir_all(&dir).unwrap();
-    let src = make_test_mp4_with_audio(&ffmpeg, &dir, "src.mp4", 2, "64x48");
-    let dest = dir.join("out.mov");
-    let out = run_format_export(&ffmpeg, &src, &dest, "mov");
-    assert_eq!(PathBuf::from(&out), dest);
-    let (format_name, video_codec, audio_count) = ffprobe_format_and_video_codec(&ffprobe, &dest);
-    assert!(format_name.contains("mov"), "format_name was {format_name}");
-    assert_eq!(video_codec, "h264");
-    assert_eq!(audio_count, 1, "mov export must keep the source's audio track");
-    let _ = fs::remove_dir_all(&dir);
-}
-
-#[test]
-fn export_video_real_ffmpeg_mkv_format_carries_h264_video_and_its_audio() {
-    let Some(ffmpeg) = test_ffmpeg() else { return };
-    let Some(ffprobe) = test_ffprobe() else { return };
-    let dir = std::env::temp_dir().join(format!("ps-exporttest-mkv-{}", std::process::id()));
-    fs::create_dir_all(&dir).unwrap();
-    let src = make_test_mp4_with_audio(&ffmpeg, &dir, "src.mp4", 2, "64x48");
-    let dest = dir.join("out.mkv");
-    let out = run_format_export(&ffmpeg, &src, &dest, "mkv");
-    assert_eq!(PathBuf::from(&out), dest);
-    let (format_name, video_codec, audio_count) = ffprobe_format_and_video_codec(&ffprobe, &dest);
-    assert!(format_name.contains("matroska"), "format_name was {format_name}");
-    assert_eq!(video_codec, "h264");
-    // Mixed to one track like every other format here (see the comment on
-    // the "mkv" arm in export_video_blocking) -- not two separate tracks.
-    assert_eq!(audio_count, 1, "mkv export must keep the source's audio, mixed to one track");
-    let _ = fs::remove_dir_all(&dir);
-}
-
-#[test]
-fn export_video_real_ffmpeg_webpanim_format_is_silent_even_when_the_source_has_audio() {
-    let Some(ffmpeg) = test_ffmpeg() else { return };
-    let Some(ffprobe) = test_ffprobe() else { return };
-    let dir = std::env::temp_dir().join(format!("ps-exporttest-webpanim-{}", std::process::id()));
-    fs::create_dir_all(&dir).unwrap();
-    // Source deliberately HAS audio -- proves the is_silent gate strips it,
-    // not merely that there was nothing to strip.
-    let src = make_test_mp4_with_audio(&ffmpeg, &dir, "src.mp4", 2, "64x48");
-    let dest = dir.join("out.webp");
-    let out = run_format_export(&ffmpeg, &src, &dest, "webpanim");
-    assert_eq!(PathBuf::from(&out), dest);
-    let (format_name, video_codec, audio_count) = ffprobe_format_and_video_codec(&ffprobe, &dest);
-    assert!(format_name.contains("webp"), "format_name was {format_name}");
-    assert_eq!(video_codec, "webp_anim");
-    assert_eq!(audio_count, 0, "animated WebP must never carry audio");
-    let _ = fs::remove_dir_all(&dir);
-}
-
-#[test]
-fn export_video_real_ffmpeg_apng_format_is_silent_even_when_the_source_has_audio() {
-    let Some(ffmpeg) = test_ffmpeg() else { return };
-    let Some(ffprobe) = test_ffprobe() else { return };
-    let dir = std::env::temp_dir().join(format!("ps-exporttest-apng-{}", std::process::id()));
-    fs::create_dir_all(&dir).unwrap();
-    let src = make_test_mp4_with_audio(&ffmpeg, &dir, "src.mp4", 2, "64x48");
-    let dest = dir.join("out.apng");
-    let out = run_format_export(&ffmpeg, &src, &dest, "apng");
-    assert_eq!(PathBuf::from(&out), dest);
-    let (format_name, video_codec, audio_count) = ffprobe_format_and_video_codec(&ffprobe, &dest);
-    assert_eq!(format_name, "apng");
-    assert_eq!(video_codec, "apng");
-    assert_eq!(audio_count, 0, "APNG must never carry audio");
     let _ = fs::remove_dir_all(&dir);
 }
 

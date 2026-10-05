@@ -148,10 +148,7 @@ slider is then free to adjust. The slider has no effect on the lossless step,
 since what actually makes that step lossless is the re-encode afterward, not
 the recording bitrate.
 
-A format setting picks what the finished file ends up as: MP4 needs nothing
-further; WebM, AVI, MOV and MKV are produced by converting the MP4 afterward,
-keeping its audio. GIF, animated WebP and APNG are converted the same way but
-capped at 30 seconds and without audio. Converting to anything other than
+A format setting picks what the finished file ends up as. Recordings and exports come as MP4, WebM, GIF or AVI. WebM and AVI are converted from the MP4; GIF is capped at 30 seconds and has no sound. Converting to anything other than
 MP4, or to lossless MP4, needs ffmpeg (a separate, GPL-licensed tool the app
 does not ship with its portable build). If it is missing, the format and
 quality controls say so directly and offer to fetch it (a one-time download,
@@ -273,11 +270,10 @@ dragging (the middle mouse button always, the left button once zoomed in)
 for placing a small overlay precisely on a large recording. Exporting
 re-encodes once, with a few ready-made presets (unchanged
 quality, a smaller size for chat, or an animated GIF) that remember your last
-choice. The format choice goes beyond MP4, WebM and GIF to AVI, MOV, MKV,
-animated WebP and APNG as well, each with a short note on what it's good for;
-GIF, WebP and APNG carry no sound at all (the source audio stays untouched in
-the original recording) and warn past ten seconds, since all three grow large
-fast. The export destination is an editable field, not just a fixed name next
+choice. The format choice offers MP4, WebM, GIF and AVI, each with a short
+note on what it's good for; GIF carries no sound at all (the source audio
+stays untouched in the original recording) and warns past ten seconds, since
+it grows large fast. The export destination is an editable field, not just a fixed name next
 to the source file: type into it directly, or use "Export to…" to keep the
 file name and only choose a different folder; once an export has finished,
 "Save as…" moves that finished video to another place. Changing the format only
@@ -1122,10 +1118,7 @@ wird mit der aktuellen Bitrate aufgenommen und die Aufnahme danach automatisch
 verlustfrei neu kodiert, was bei längeren Aufnahmen mehrere Gigabyte groß
 werden kann. Ein Bitratenregler neben der Qualitätsstufe passt Klein/Hoch
 weiter an; er hat auf der Stufe Verlustfrei keine Wirkung. Ein Format-Feld
-bestimmt die fertige Datei: MP4 braucht nichts weiter; WebM, AVI, MOV und MKV
-entstehen durch Umwandeln der MP4-Datei danach und behalten ihren Ton. GIF,
-animiertes WebP und APNG entstehen ebenso, sind aber auf 30 Sekunden begrenzt
-und ohne Ton. Für alles außer MP4 sowie für Verlustfrei wird ffmpeg gebraucht, ein
+bestimmt die fertige Datei. Aufnahmen und Exporte gibt es als MP4, WebM, GIF oder AVI. WebM und AVI entstehen aus dem MP4; GIF ist auf 30 Sekunden begrenzt und hat keinen Ton. Für alles außer MP4 sowie für Verlustfrei wird ffmpeg gebraucht, ein
 separates, GPL-lizenziertes Werkzeug; fehlt es, sagen Format- und
 Qualitätsauswahl das direkt und bieten den Download an (einmalig, nur mit
 Zustimmung); eine installierte Version bringt es bereits mit. Eine

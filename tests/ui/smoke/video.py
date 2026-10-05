@@ -1371,11 +1371,11 @@ VIDEO_PROBE = """
       }
     }
 
-    // ---- 367: five new export formats -- extension follows, audio controls
-    // and the quality dropdown are disabled exactly for the three silent ones ----
-    const newFormats = ['avi', 'mov', 'mkv', 'webpanim', 'apng'];
-    const formatExpectedExt = { webpanim: 'webp' };
-    const silentFormats = new Set(['gif', 'webpanim', 'apng']);
+    // ---- 367: the avi export format -- extension follows, audio controls
+    // and the quality dropdown are disabled exactly for the silent one (gif) ----
+    const newFormats = ['avi'];
+    const formatExpectedExt = {};
+    const silentFormats = new Set(['gif']);
     const optionValues = formatSel ? [...formatSel.options].map((o) => o.value) : [];
     for (const fmt of newFormats) {
       if (!optionValues.includes(fmt)) errs.push(`367: export format select is missing an option for "${fmt}"`);
@@ -1404,7 +1404,7 @@ VIDEO_PROBE = """
         }
       }
     }
-    // Leaving the destination on the last silent format's ".webp"/".apng" name
+    // Leaving the destination on the last silent format's ".gif" name
     // would break the next real test step below -- put it back on mp4.
     formatSel.value = 'mp4';
     formatSel.dispatchEvent(new Event('change'));
@@ -1429,7 +1429,7 @@ VIDEO_PROBE = """
         errs.push(`412: the export note carries no size figure for mp4, got ${JSON.stringify(mp4Note)}`);
       }
     }
-    for (const fmt of ['gif', 'webpanim', 'apng']) {
+    for (const fmt of ['gif']) {
       if (!optionValues.includes(fmt)) continue;
       formatSel.value = fmt;
       formatSel.dispatchEvent(new Event('change'));

@@ -8,6 +8,23 @@ export const COPIED_MS = 900; // "copied!" tile/pill flash duration
 export const RING_MIN = 8;    // smallest resize-ring thickness (px)
 export const RING_MAX = 60;   // largest resize-ring thickness (px)
 export const DRAG_OUT_MODS = { ctrl: "ctrlKey", alt: "altKey", shift: "shiftKey" };
+// The formats a recording or an export can be written as; each key is also the
+// file extension. A stored choice outside the list (an old install) reads as MP4.
+export const VIDEO_FORMATS = ["mp4", "webm", "gif", "avi"];
+export const normRecFormat = (v) => (VIDEO_FORMATS.includes(v) ? v : "mp4");
+// i18n key and plain fallback text of a format's option label.
+export const videoFormatLabelKey = (f) => "optRecFormat" + f[0].toUpperCase() + f.slice(1);
+// Fills a format <select> from the list, so the markup never keeps its own copy.
+export function fillVideoFormatSelect(select) {
+  const names = { mp4: "MP4", webm: "WebM", gif: "GIF", avi: "AVI" };
+  select.replaceChildren(...VIDEO_FORMATS.map((f) => {
+    const o = document.createElement("option");
+    o.value = f;
+    o.textContent = names[f];
+    o.dataset.i18n = videoFormatLabelKey(f);
+    return o;
+  }));
+}
 // The one folder glyph. Pill folders, grid folders and view groups stay three
 // separate mechanisms underneath, but a user reads them as one idea, so this
 // is the single drawing all three point at instead of each keeping its own

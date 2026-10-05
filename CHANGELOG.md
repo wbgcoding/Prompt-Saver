@@ -1619,6 +1619,7 @@ the video editor and the introduction tour ship on).
 - **Two rotation timing rows.** The pause between two counted pastes (250 ms) and the length of an automatic cycling session (60 minutes) are fixed; the tooltip of the automatic cycling switch no longer points to settings below it.
 - **The language dropdowns no longer end in a Manage entry.** The text recognition and dictation language dropdowns list only languages; the Manage languages button below them opens the dialog.
 - **Twenty editor defaults.** The video editor's starting export format, quality, resolution and tab, its fade length, bitrates and starting overlay values, and the zoom step, largest zoom, snap distance, duplicate offset and number step of both editors are fixed; the editors still remember your last export choice and the last values you used for each overlay.
+- **Fewer video formats.** MOV, MKV, animated WebP and APNG are gone from recording and export; a saved choice falls back to MP4.
 
 ### Changed
 
