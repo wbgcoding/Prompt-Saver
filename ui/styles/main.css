@@ -2829,6 +2829,9 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
    `.field.` specificity guard so the column default can't stack them. */
 .field.settings-btn-row { flex-direction: row; gap: 10px; }
 .field.settings-btn-row > button { flex: 1; }
+#expert-open { flex: 1 1 100%; }
+/* Help sits in the head, right beside the close button; the title keeps the left. */
+#settings .modal-head .modal-title { margin-right: auto; }
 /* Settings sections: one titled block each, hairline between them. A section without
    a single button (the danger section until its buttons live there) stays hidden. */
 .settings-sec { display: flex; flex-direction: column; gap: 10px; }

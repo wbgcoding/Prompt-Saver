@@ -14,6 +14,35 @@ SECTION = """\
         out.errors.push('724: the visible settings section titles are "' + titles724.join('|') + '", expected "' + want724.join('|') + '"');
       }
     }
+    // 729: help is the question-mark button in the settings head, left of the close
+    // button, visible on the settings page and on the expert page; the expert menu
+    // button fills its row alone.
+    {
+      if (document.getElementById('settings').classList.contains('hidden')) await click('gear');
+      if (document.getElementById('settings-main').classList.contains('hidden')) {
+        await click('expert-back');
+        await sleep(50);
+      }
+      const help729 = document.getElementById('help-open');
+      const head729 = document.querySelector('#settings .modal-head');
+      const close729 = document.getElementById('settings-close');
+      if (!help729 || !head729 || !head729.contains(help729)) {
+        out.errors.push('729: help-open is not inside the settings head');
+      } else {
+        const hr = help729.getBoundingClientRect();
+        if (!hr.width || !hr.height) out.errors.push('729: help-open is not visible on the settings page');
+        if (!(hr.right <= close729.getBoundingClientRect().left + 1)) out.errors.push('729: help-open is not left of the close button');
+        if (!help729.getAttribute('aria-label') || !help729.title) out.errors.push('729: help-open has no accessible name or tooltip');
+        const eo729 = document.getElementById('expert-open');
+        const row729 = eo729.parentElement;
+        if (row729.querySelectorAll('button').length !== 1) out.errors.push('729: the expert menu button shares its row');
+        if (eo729.getBoundingClientRect().width < row729.getBoundingClientRect().width - 2) out.errors.push('729: the expert menu button does not fill its row');
+        await click('expert-open');
+        const hr2 = help729.getBoundingClientRect();
+        if (!hr2.width || !hr2.height) out.errors.push('729: help-open is not visible on the expert page');
+        await click('expert-back');
+      }
+    }
     // 96: the short "Latest X.Y.Z" status keeps the first update line no taller than
     // before, with the longest of the 11 translations (Romanian).
     // 727: the version status and About share the first line; the check button, the

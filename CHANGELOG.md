@@ -1809,6 +1809,7 @@ the video editor and the introduction tour ship on).
 - **Export format next to Export.** In the settings, the format choice now sits to the right of the Export button instead of in front of it.
 - **About and updates in one block.** The version status and the About button share one line; the check button, the auto-update switch and the check interval share the next.
 - **The favorites view switch is only in Settings.** The expert menu no longer repeats it; the favorites rows there still appear only while the favorites feature and the view are on.
+- **Help is a question-mark button in the settings head.** It sits beside the close button and is reachable from the expert menu page too; the Expert menu button now has its row to itself.
 
 ## 2.6.3 (2026-07-26)
 
