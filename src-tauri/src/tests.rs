@@ -819,6 +819,21 @@ fn rec_starting_guard_blocks_a_second_claim_until_dropped() {
 
 // ---- Recording bar file size ----
 
+// Structural change, so no red exists: the threshold used to be a stored setting
+// nothing in the UI wrote and is now a constant; the bar settings hand it out as is.
+#[test]
+fn rec_bar_size_threshold_is_the_fixed_constant() {
+    let store = Store {
+        prompts: Vec::new(),
+        trash: Vec::new(),
+        settings: Settings::default(),
+        prompts_locked: false,
+        written: Default::default(),
+    };
+    assert_eq!(rec_bar::REC_BAR_SIZE_FROM_MB, 500.0);
+    assert_eq!(rec_bar::rec_bar_settings(&store).1, rec_bar::REC_BAR_SIZE_FROM_MB);
+}
+
 #[test]
 fn rec_bar_size_state_hides_below_the_show_threshold() {
     let mb = 1024 * 1024;

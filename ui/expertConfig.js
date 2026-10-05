@@ -177,7 +177,7 @@ export const FLAG_LABELS = {
   // recording (still on its "window size" default) actually grows past its
   // starting size and starts losing picture at the edge. Ships ON.
   recCropNotice: "flagRecCropNotice",
-  // The control bar's file-size readout, past recBarSizeFromMb, plus a
+  // The control bar's file-size readout, from 500 MB on, plus a
   // highlighted ETA once the recording nears recMaxMb. Ships ON.
   recBarSize: "flagRecBarSize",
   // The control bar's target-switch button: swaps a running window

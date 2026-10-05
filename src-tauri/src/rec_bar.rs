@@ -418,7 +418,7 @@ pub(crate) struct RecordingStatus {
     pub(crate) stop_hotkey_ok: bool,
     pub(crate) pause_hotkey_ok: bool,
     // recBarSize (Vorgabe an): whether the bar should show the size at all
-    // right now -- false below recBarSizeFromMb, or with the switch off.
+    // right now -- false below REC_BAR_SIZE_FROM_MB, or with the switch off.
     pub(crate) show_size: bool,
     // Seconds left at the observed average rate (bytes so far / elapsed so
     // far -- never estimated from the configured bitrate, see rec_bar_size_state)
@@ -465,13 +465,16 @@ pub(crate) fn rec_bar_size_state(bytes: u64, elapsed_ms: i64, show_from_mb: f64,
     (true, Some((remaining_bytes / rate) as u64))
 }
 
+// The file size from which the recording bar shows its size readout (MB).
+pub(crate) const REC_BAR_SIZE_FROM_MB: f64 = 500.0;
+
 // The four recording-bar settings recording_status needs, read out of an
 // already-held store guard so the try_lock fallback below can share the code
 // with the normal path instead of duplicating the field list.
 pub(crate) fn rec_bar_settings(store: &Store) -> (bool, f64, f64, bool) {
     (
         store.settings.ui_flags.get("recBarSize") != Some(&false),
-        store.settings.ui_values.get("recBarSizeFromMb").copied().unwrap_or(500.0),
+        REC_BAR_SIZE_FROM_MB,
         store.settings.ui_values.get("recMaxMb").copied().unwrap_or(8000.0),
         store.settings.ui_flags.get("recTargetSwitch") != Some(&false),
     )
@@ -496,7 +499,7 @@ pub(crate) async fn recording_status(
     let (bar_size_on, show_from_mb, max_mb, target_switch_on) = match db.try_lock() {
         Ok(g) => rec_bar_settings(&g),
         Err(std::sync::TryLockError::Poisoned(e)) => rec_bar_settings(&e.into_inner()),
-        Err(std::sync::TryLockError::WouldBlock) => (true, 500.0, 8000.0, true),
+        Err(std::sync::TryLockError::WouldBlock) => (true, REC_BAR_SIZE_FROM_MB, 8000.0, true),
     };
     let guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
     let Some(session) = guard.as_ref() else { return Ok(None) };

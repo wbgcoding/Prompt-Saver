@@ -26,7 +26,7 @@ const audioMicEl = document.getElementById("audio-mic");
 const hotkeyWarnEl = document.getElementById("hotkey-warn");
 const diskWarnEl = document.getElementById("disk-warn");
 
-// recBarSize gates the whole readout, shown from recBarSizeFromMb onward
+// recBarSize gates the whole readout, shown from 500 MB onward
 // so the narrow bar stays narrow in the normal case -- the threshold decision
 // itself lives in recording_status (rec_bar_size_state), this only renders
 // what it already decided. etaSecs is only ever set past three quarters of
