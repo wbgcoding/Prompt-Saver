@@ -1,5 +1,5 @@
 // The copy history and the clipboard inbox.
-import { $, assignLibraryTab, assignSettings, debounced, errToast, flag, ICON_ADD_SQUARE, ICON_EDIT, ICON_TRASH, invoke, journalThumbCache, LANG, libraryEl, libraryTab, listen, makeKeyboardActivatable, optFlag, prompts, putIcon, settings, t, toast, undoToast, val } from "./core.js";
+import { $, assignLibraryTab, assignSettings, debounced, errToast, errUndoToast, flag, ICON_ADD_SQUARE, ICON_EDIT, ICON_TRASH, invoke, journalThumbCache, LANG, libraryEl, libraryTab, listen, makeKeyboardActivatable, optFlag, prompts, putIcon, settings, t, toast, undoToast, val } from "./core.js";
 import { confirmDialog } from "./dialog.js";
 import { attachSelectPicker } from "./selectpop.js";
 import { _journalObs, assignActiveVidObs, assignJournalObs, buildColorFilter, copyResolved, hideLibrary, lastEdited, libLabel, libSelectMode, makeVideoObserver, maybeBackfillMediaMeta, mediaThumb, mediaTipLine, paintTypeChips, promptType, renderLibrary, setActiveFilter, setLibSelectMode, tagMatches, thumbEl, toastCopied, toggleTypeFilter, typeAllowed, typeFilterOf, usedColors } from "./library.js";
@@ -565,11 +565,9 @@ export function bindJournal() {
     const appAffected = clearApp && (rows.length > 0 || Object.keys(usage).length > 0 || Object.keys(lastUsed).length > 0);
     const clipAffected = clearElsewhere && items.length > 0;
     // The scrub of every backup snapshot cannot be undone, so the entries stay gone.
-    // Returns the result text, or null after the failure was shown to the user.
+    // Returns the result text; a failed purge throws and the caller shows it.
     const purgeFromBackups = async () => {
-      let result;
-      try { result = await invoke("purge_clip_inbox_from_backups"); } catch (e) { errToast(e); return null; }
-      const [purged, failed] = result;
+      const [purged, failed] = await invoke("purge_clip_inbox_from_backups");
       let msg = t("clipPurgeBackupsDone").replace("{n}", String(purged));
       // A snapshot that could not be opened or whose scrub could not be confirmed
       // written back must not read as a silent success.
@@ -580,14 +578,17 @@ export function bindJournal() {
     // other apps. With the confirmation switched off there is no dialog and no way to purge:
     // the backups stay untouched.
     const offerPurge = sourcesOn && clearElsewhere;
+    const failAfterClear = (e) => {
+      if (appAffected) errUndoToast(e, () => restoreCopyHistory(rows, usage, lastUsed));
+      else errToast(e);
+    };
     if (!appAffected && !clipAffected) {
       // Nothing to clear, but the backups may still hold entries cleared earlier without
       // the box ticked: ask the purge question alone.
       if (!(flag("confirmClearHistory") && offerPurge)) return;
       const okPurge = await confirmDialog({ title: t("clearHistory"), message: t("clipPurgeOnlyConfirm"), confirmLabel: t("delete") });
       if (!okPurge) return;
-      const msg = await purgeFromBackups();
-      if (msg !== null) toast(msg);
+      try { toast(await purgeFromBackups()); } catch (e) { errToast(e); }
       return;
     }
     let purgeBackups = false;
@@ -611,22 +612,22 @@ export function bindJournal() {
       settings.last_used = {};
     }
     if (clipAffected) {
-      // A failed clear stops right here: no purge, and nothing may paint over the error.
+      // A failed clear stops right here: no purge. The copy log, if it was cleared a
+      // moment ago, stays undoable in the very toast that shows the error.
       try { await invoke("clip_inbox_clear"); } catch (e) {
         if (appAffected) await loadJournal();
-        errToast(e);
+        failAfterClear(e);
         return;
       }
     }
     let purgeMsg = "";
-    let purgeFailed = false;
+    let purgeErr = null;
     if (purgeBackups) {
-      const msg = await purgeFromBackups();
-      if (msg === null) purgeFailed = true; else purgeMsg = msg;
+      try { purgeMsg = await purgeFromBackups(); } catch (e) { purgeErr = e; }
     }
     await loadJournal();
-    // The failed purge was already shown; no success or undo toast may replace it.
-    if (purgeFailed) return;
+    // The stored entries stay gone as asked; only the copy log can come back.
+    if (purgeErr !== null) { failAfterClear(purgeErr); return; }
     const clearedMsg = t(appAffected ? "historyClearedToast" : "clipInboxClearedToast");
     if (!appAffected && purgeBackups) {
       toast(purgeMsg || clearedMsg);

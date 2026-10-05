@@ -491,14 +491,18 @@ export const ERROR_MSG_KEYS = {
   "folder not found": "errFolderNotFound",
   "recording file not found": "errRecordingFileNotFound",
 };
-export function errToast(err) {
+// Logs the error and returns the text the user is shown for it.
+function errText(err) {
   const s = String(err);
   const known = ERROR_MSG_KEYS[s];
   const msg = known ? t(known) : s;
   // The raw, untranslated string is only worth keeping when it differs from
   // what the user actually saw -- an unmapped error is already its own raw text.
   logErrorLogEntry(msg, known ? s : null);
-  toast(msg);
+  return msg;
+}
+export function errToast(err) {
+  toast(errText(err));
 }
 
 // Best-effort label for which part of the app an error most likely belongs to,
@@ -536,6 +540,12 @@ export function undoToast(msg, restore) {
   if (val("undoToastMs") <= 0) { toast(msg); return; }
   pendingUndo = { restore };
   toast(msg, { label: t("undo"), onClick: runPendingUndo }, "", null, val("undoToastMs"));
+}
+
+// A failure that struck after part of an action already went through: the error text
+// stays the toast message and the Undo button brings the finished part back.
+export function errUndoToast(err, restore) {
+  undoToast(errText(err), restore);
 }
 
 // For the actions that cannot go to the trash and have nothing to bring them back

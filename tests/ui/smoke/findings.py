@@ -1136,7 +1136,7 @@ def run(browser, tmp):
     if (!callsFor('clip_inbox_clear').length) errs.push('17003: fixture: the clear did not run');
     if (callsFor('purge_clip_inbox_from_backups').length) errs.push('17003: the earlier tick purged the backups with the confirmation off');
 """)
-    failed += ar_probe('bx720fails', '17003: a failed stored-entries clear skips the purge, a failed purge stays the last thing shown', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { clipWatcher: true } };</script>\n', r"""
+    failed += ar_probe('bx720fails', '17003: a failed stored-entries clear skips the purge, a failure stays readable and offers the undo for what was cleared', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { clipWatcher: true } };</script>\n', r"""
     await bootReady();
     const dlgOpen = () => !document.getElementById('confirm-modal').classList.contains('hidden');
     const purgeCalls = () => callsFor('purge_clip_inbox_from_backups').length;
@@ -1165,7 +1165,12 @@ def run(browser, tmp):
     if (!callsFor('clip_inbox_clear').length) errs.push('17003: fixture: the stored-entries clear was not attempted');
     if (purgeCalls()) errs.push('17003: the backups were purged although the stored-entries clear failed');
     if (!/clearboom/.test(toastText())) errs.push('17003: the failed clear is not what the toast shows: ' + toastText());
-    if (undoBtn()) errs.push('17003: an undo was offered after the failed clear');
+    // The copy log was already cleared: the error stays readable and the undo is offered for it.
+    if (!undoBtn()) errs.push('17003: no undo was offered for the copy log cleared before the failure');
+    else {
+      undoBtn().click(); await sleep(400);
+      if (!callsFor('restore_copy_history').length) errs.push('17003: the undo after the failed clear did not restore the copy log');
+    }
     delete RESULTS.clip_inbox_clear;
     // The purge fails, filter Elsewhere and filter All: the error stays the last toast.
     await reopen();
@@ -1175,12 +1180,13 @@ def run(browser, tmp):
     await tickAndConfirm();
     if (!purgeCalls()) errs.push('17003: fixture: the purge was not attempted');
     if (!/purgeboom/.test(toastText())) errs.push('17003: Elsewhere: the failed purge is not what the toast shows: ' + toastText());
+    if (undoBtn()) errs.push('17003: Elsewhere: an undo was offered although only stored entries were cleared');
     await reopen();
     await pickSource('all');
     window.__SMOKE_ARGS__ = [];
     await tickAndConfirm();
     if (!/purgeboom/.test(toastText())) errs.push('17003: All: the failed purge is not what the toast shows: ' + toastText());
-    if (undoBtn()) errs.push('17003: All: an undo toast replaced the purge error');
+    if (!undoBtn()) errs.push('17003: All: no undo was offered for the copy log cleared before the failed purge');
 """)
     failed += ar_probe('bx721', 'copy history: the other-apps switch carries a word that follows its state', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { clipWatcher: true } };</script>\n', r"""
     await bootReady();
