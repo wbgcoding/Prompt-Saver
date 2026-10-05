@@ -273,17 +273,26 @@ SECTION = """\
       if (document.getElementById('rec-stop-hotkey-row') || document.getElementById('rec-pause-hotkey-row')) {
         out.errors.push('343: the recording hotkey rows are still in the Settings dialog');
       }
-      const rowByLabel = (text) => {
+      // The switch and its capture field read differently ("Stop recording with a
+      // hotkey" over "Key combination"); the field is the row right under its switch.
+      // Re-queried fresh after each click rather than reused: flipping the flag
+      // rebuilds the whole group, so a reference taken before the click would be
+      // detached from the document by the time this reads or clicks it again.
+      const switchRowByLabel = (text) => {
         for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
           tb.click();
-          const hit = [...document.querySelectorAll('#expert-flags .hotkey-field')]
-            .find(r => (r.querySelector('.value-head span') || {}).textContent === text);
+          const hit = [...document.querySelectorAll('#expert-flags .switch-field')]
+            .find(r => (r.querySelector('span') || {}).textContent === text);
           if (hit) return hit;
         }
         return null;
       };
-      const stopRow = rowByLabel('Stop-recording hotkey');
-      const pauseRow = rowByLabel('Pause/resume-recording hotkey');
+      const fieldUnder = (sw) => {
+        const n = sw && sw.nextElementSibling;
+        return n && n.classList.contains('hotkey-field') ? n : null;
+      };
+      const stopRow = fieldUnder(switchRowByLabel('Stop recording with a hotkey'));
+      const pauseRow = fieldUnder(switchRowByLabel('Pause recording with a hotkey'));
       if (!stopRow || !pauseRow) {
         out.errors.push('343: the expert menu has no capture row for one or both recording hotkeys');
       } else {
@@ -293,29 +302,24 @@ SECTION = """\
           out.errors.push('343: the stop-recording row does not show its stored hotkey');
         }
         if (!clearBtn) out.errors.push('343: the stop-recording row has no Clear button');
+        const stopFieldText = (stopRow.querySelector('.value-head span') || {}).textContent;
+        if (stopFieldText !== 'Key combination' || input.getAttribute('aria-label') !== 'Key combination') {
+          out.errors.push('343: the stop-recording field is not labelled Key combination, got ' + stopFieldText);
+        }
+        if (stopFieldText === (switchRowByLabel('Stop recording with a hotkey').querySelector('span') || {}).textContent) {
+          out.errors.push('343: the stop-recording switch and its field carry the same text');
+        }
         // Turning its own flag off must drop the row, same as every other gated setting.
-        // Re-queried fresh after each click rather than reused: flipping the flag
-        // rebuilds the whole group, so a reference taken before the click would be
-        // detached from the document by the time this reads or clicks it again.
-        const switchRowByLabel = (text) => {
-          for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
-            tb.click();
-            const hit = [...document.querySelectorAll('#expert-flags .switch-field')]
-              .find(r => (r.querySelector('span') || {}).textContent === text);
-            if (hit) return hit;
-          }
-          return null;
-        };
-        const stopFlagRow = switchRowByLabel('Stop-recording hotkey');
+        const stopFlagRow = switchRowByLabel('Stop recording with a hotkey');
         if (!stopFlagRow) {
           out.errors.push('343: no flag toggle found for the stop-recording hotkey');
         } else {
           stopFlagRow.querySelector('.switch').click();
           await sleep(80);
-          if (rowByLabel('Stop-recording hotkey')) {
+          if (fieldUnder(switchRowByLabel('Stop recording with a hotkey'))) {
             out.errors.push('343: the stop-recording capture row stayed visible after its own flag was switched off');
           }
-          switchRowByLabel('Stop-recording hotkey')?.querySelector('.switch').click(); // restore
+          switchRowByLabel('Stop recording with a hotkey')?.querySelector('.switch').click(); // restore
           await sleep(80);
         }
       }
