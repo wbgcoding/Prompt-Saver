@@ -336,14 +336,14 @@ export async function offerTakeover() {
     cancelLabel: t("takeoverSkip"),
     icon: TAKEOVER_SVG,
     danger: false,
-    checkboxes: [{ key: "remember", label: t("takeoverRemember"), checked: true }],
+    checkboxes: [{ key: "remember", label: t("takeoverRemember"), checked: false }],
     checkboxesOptional: true,
   });
   // Read regardless of how the dialog closed (Adopt, Skip, Escape or a
-  // background click all leave the checkbox's own DOM state behind) -- an
-  // unticked box must leave nothing recorded, so the same folder is offered
-  // again next launch instead of being silently settled.
-  const remember = $("confirm-cb-remember")?.checked !== false;
+  // background click all leave the checkbox's own DOM state behind). The box starts
+  // unticked: only an explicit tick settles the folder, otherwise it is offered
+  // again next launch.
+  const remember = $("confirm-cb-remember")?.checked === true;
   try {
     await invoke("takeover_apply", { adopt, remember });
   } catch (e) {

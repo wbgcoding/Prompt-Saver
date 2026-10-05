@@ -26,19 +26,19 @@ SECTION = """\
       if (msg.includes('{skip}') || !skipLabel754 || !msg.includes(skipLabel754)) {
         out.errors.push('754: the take-over text does not name the skip button (' + JSON.stringify(skipLabel754) + ')');
       }
-      // 449: a "do not ask again" box, checked by default, so an answer is
-      // remembered unless the person actively opts out of that memory.
+      // 449/755: a "do not ask again" box, unticked by default, so the question
+      // comes back unless the person actively opts in to settling it.
       const rememberCb = document.getElementById('confirm-cb-remember');
       if (!rememberCb) {
         out.errors.push('take-over dialog has no "do not ask again" checkbox');
-      } else if (!rememberCb.checked) {
-        out.errors.push('the "do not ask again" checkbox is not checked by default');
+      } else if (rememberCb.checked) {
+        out.errors.push('755: the "do not ask again" checkbox is checked by default');
       }
       window.__SMOKE_ARGS__ = [];
       await click('confirm-cancel'); // "start empty"
       const applyArgs = (window.__SMOKE_ARGS__ || []).find(c => c[0] === 'takeover_apply');
-      if (!applyArgs || applyArgs[1].adopt !== false || applyArgs[1].remember !== true) {
-        out.errors.push('starting empty with the box still checked must call takeover_apply with adopt false, remember true, got: ' + JSON.stringify(applyArgs && applyArgs[1]));
+      if (!applyArgs || applyArgs[1].adopt !== false || applyArgs[1].remember !== false) {
+        out.errors.push('755: starting empty with the box untouched must call takeover_apply with adopt false, remember false, got: ' + JSON.stringify(applyArgs && applyArgs[1]));
       }
     }
     clearInterval(heartbeat);
