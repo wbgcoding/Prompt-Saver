@@ -1823,7 +1823,8 @@ def run(browser, tmp):
 
 def run_expert(browser, tmp):
     failed = 0
-    # Video editor expert values that are NOT at their shipped default.
+    # Video editor values the editor remembers (last export choice, last overlay values)
+    # next to the fixed defaults that no setting changes any more.
     # The stub is seeded before video.html loads, so the boot-time settings
     # read is what gets exercised (the backend never sends a live settings
     # event to this window). Its own boot, same reasoning as the runs above.
@@ -1848,27 +1849,27 @@ def run_expert(browser, tmp):
       document.querySelectorAll('#ve-filmstrip .ve-thumb').length > 0, 300);
     await until(() => document.getElementById('ve-scale-w').value === '1280', 100);
 
-    // Panel, export format, quality and scale preset open on the seeded values.
-    if (!document.getElementById('ve-tab-export').classList.contains('active')) {
-      errs.push('537: the seeded default panel (export) was not the open tab');
+    // The editor opens on the Edit tab; format, quality and scale preset open on the remembered export choice.
+    if (!document.getElementById('ve-tab-edit').classList.contains('active')) {
+      errs.push('537: the editor did not open on the Edit tab');
     }
     if (document.getElementById('ve-export-format').value !== 'webm') {
-      errs.push('537: the seeded default format webm was ignored, got ' + document.getElementById('ve-export-format').value);
+      errs.push('537: the remembered export format webm was ignored, got ' + document.getElementById('ve-export-format').value);
     }
     if (document.getElementById('ve-export-quality').value !== 'small') {
-      errs.push('537: the seeded default quality small was ignored, got ' + document.getElementById('ve-export-quality').value);
+      errs.push('537: the remembered export quality small was ignored, got ' + document.getElementById('ve-export-quality').value);
     }
     const sw = document.getElementById('ve-scale-w').value, sh = document.getElementById('ve-scale-h').value;
     if (sw !== '1280' || sh !== '720') {
-      errs.push('537: the seeded default scale 720 was ignored, got ' + sw + 'x' + sh);
+      errs.push('537: the remembered export scale 720 was ignored, got ' + sw + 'x' + sh);
     }
-    // The initial fade fields.
-    if (document.getElementById('ve-fade-in').value !== '900' || document.getElementById('ve-fade-out').value !== '900') {
-      errs.push('537: the seeded fade length 900 was ignored, got ' + document.getElementById('ve-fade-in').value + '/' + document.getElementById('ve-fade-out').value);
+    // The initial fade fields hold the fixed 500 ms.
+    if (document.getElementById('ve-fade-in').value !== '500' || document.getElementById('ve-fade-out').value !== '500') {
+      errs.push('537: the fade fields did not start at 500 ms, got ' + document.getElementById('ve-fade-in').value + '/' + document.getElementById('ve-fade-out').value);
     }
 
     // Export state: bitrate of the small tier scaled to 720p of a 1080p source
-    // (3000 * 720 / 1080), then the high tier (9000 * 720 / 1080), with the fade.
+    // (4000 * 720 / 1080), then the high tier (12000 * 720 / 1080), with the fade.
     document.getElementById('ve-fade-on').click();
     await sleep(80);
     document.getElementById('ve-export-start').click();
@@ -1877,10 +1878,10 @@ def run_expert(browser, tmp):
     let req = last && last[1] && last[1].req;
     if (!req) errs.push('537: no export request was made');
     else {
-      if (req.format !== 'webm') errs.push('537: the export format was ' + req.format + ', expected the seeded webm');
-      if (req.video_kbps !== 2000) errs.push('537: the small-tier bitrate was ' + req.video_kbps + ', expected the seeded 3000 scaled to 2000');
+      if (req.format !== 'webm') errs.push('537: the export format was ' + req.format + ', expected the remembered webm');
+      if (req.video_kbps !== 2667) errs.push('537: the small-tier bitrate was ' + req.video_kbps + ', expected 4000 scaled to 2667');
       const chain = String(req.filter_chain);
-      if (!/fade=t=in:st=0:d=0[.]900/.test(chain)) errs.push('537: the export fade-in did not use the seeded 900 ms: ' + chain);
+      if (!/fade=t=in:st=0:d=0[.]500/.test(chain)) errs.push('537: the export fade-in did not use the fixed 500 ms: ' + chain);
     }
     await until(() => !document.getElementById('ve-export-start').disabled, 100);
     const before = exportCalls().length;
@@ -1892,20 +1893,20 @@ def run_expert(browser, tmp):
     await until(() => exportCalls().length > before, 100);
     last = exportCalls().pop();
     req = last && last[1] && last[1].req;
-    if (!req || req.video_kbps !== 6000) {
-      errs.push('537: the high-tier bitrate was ' + (req && req.video_kbps) + ', expected the seeded 9000 scaled to 6000');
+    if (!req || req.video_kbps !== 8000) {
+      errs.push('537: the high-tier bitrate was ' + (req && req.video_kbps) + ', expected 12000 scaled to 8000');
     }
 
-    // A new overlay of each kind starts from the seeded values.
+    // A new overlay of each kind starts from the remembered values, or the fixed defaults.
     document.getElementById('ve-tab-overlays').click();
     await sleep(60);
     document.getElementById('ve-ov-add-pixelate').click();
     await until(() => overlayRows() === 1, 60);
     const block = fieldOf('Block size (px)');
-    if (!block || block.value !== '24') errs.push('537: a new pixelate overlay did not use the seeded block size 24, got ' + (block && block.value));
+    if (!block || block.value !== '24') errs.push('537: a new pixelate overlay did not use the remembered block size 24, got ' + (block && block.value));
     const rectX = fieldOf('X');
     const x0 = rectX ? Number(rectX.value) : NaN;
-    // Duplicate through the row context menu: shifted by the seeded offset.
+    // Duplicate through the row context menu: shifted by the fixed offset.
     document.querySelector('#ve-ov-list .ve-ov-row').dispatchEvent(
       new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 200, clientY: 200 }));
     await sleep(60);
@@ -1915,22 +1916,22 @@ def run_expert(browser, tmp):
       dupBtn.click();
       await until(() => overlayRows() === 2, 60);
       const dx = fieldOf('X') ? Number(fieldOf('X').value) - x0 : NaN;
-      if (dx !== 40) errs.push('537: the duplicated overlay moved by ' + dx + ' px, expected the seeded 40');
+      if (dx !== 16) errs.push('537: the duplicated overlay moved by ' + dx + ' px, expected 16');
     }
     document.getElementById('ve-ov-add-spotlight').click();
     await until(() => overlayRows() === 3, 60);
     const dim = fieldOf('Darkening (%)');
-    if (!dim || dim.value !== '70') errs.push('537: a new spotlight did not use the seeded darkening 70, got ' + (dim && dim.value));
+    if (!dim || dim.value !== '70') errs.push('537: a new spotlight did not use the remembered darkening 70, got ' + (dim && dim.value));
     document.getElementById('ve-ov-add-text').click();
     await until(() => overlayRows() === 4, 60);
     const font = fieldOf('Font');
-    if (!font || font.value !== 'consola') errs.push('537: a new text overlay did not use the seeded font consola, got ' + (font && font.value));
+    if (!font || font.value !== 'segoeui') errs.push('537: a new text overlay did not start with the fixed font segoeui, got ' + (font && font.value));
     const sel = document.querySelector('#ve-ov-editor .swatch.sel');
-    if (!sel || String(sel.title).toLowerCase() !== '#ef4444') errs.push('537: a new text overlay did not use the seeded colour #ef4444, got ' + (sel && sel.title));
+    if (!sel || String(sel.title).toLowerCase() !== '#ef4444') errs.push('537: a new text overlay did not use the remembered colour #ef4444, got ' + (sel && sel.title));
     document.getElementById('ve-ov-add-image').click();
     await until(() => overlayRows() === 5, 60);
     const opac = fieldOf('Opacity (%)');
-    if (!opac || opac.value !== '40') errs.push('537: a new image overlay did not use the seeded opacity 40, got ' + (opac && opac.value));
+    if (!opac || opac.value !== '40') errs.push('537: a new image overlay did not use the remembered opacity 40, got ' + (opac && opac.value));
   } catch (e) { errs.push('537: probe threw: ' + e); }
   const pre = document.createElement('pre');
   pre.id = 'SMOKE';
@@ -1940,12 +1941,10 @@ def run_expert(browser, tmp):
 </script>
 """
     seed = (
-        '<script>window.__SEED_UI_VALUES__ = {"veExportKbpsHigh": 9000, "veExportKbpsSmall": 3000, '
-        '"veFadeMs": 900, "veOvPixelateBlock": 24, "veOvSpotlightDim": 70, "veOvImageOpacity": 40, '
-        '"veOvDupOffsetPx": 40};'
-        'window.__SEED_UI_TEXTS__ = {"veDefaultFormat": "webm", "veDefaultQuality": "small", '
-        '"veDefaultScale": "720", "veOvColor": "#ef4444", "veOvFont": "consola", '
-        '"veDefaultPanel": "export"};</script>\n')
+        '<script>window.__SEED_UI_VALUES__ = {"veOvLastPixelateBlock": 24, "veOvLastSpotlightDim": 70, '
+        '"veOvLastImageOpacity": 40};'
+        'window.__SEED_UI_TEXTS__ = {"videoExportFormat": "webm", "videoExportQuality": "small", '
+        '"videoExportScale": "720", "veOvLastTextColor": "#ef4444"};</script>\n')
     side = tmp / "ui" / "video-expert-seeded.html"
     side.write_text(
         (REPO / "ui" / "video.html").read_text(encoding="utf-8")
@@ -1955,7 +1954,7 @@ def run_expert(browser, tmp):
     proc = run_chrome(browser, tmp / 'profile-video-expert-seeded', "1130,860", 30000, side.as_uri(), 180)
     m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
     errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
-    print("-- video.html seeded non-default expert values")
+    print("-- video.html remembered values and fixed defaults")
     for e in errs:
         print(f"   FAIL: {e}")
     failed += len(errs)

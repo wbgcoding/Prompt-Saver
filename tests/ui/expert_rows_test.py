@@ -54,15 +54,11 @@ EXPECTED = [
     ("value", "errorLogKeepKb", "expTabSystem", "expGroupData", 1),
     ("action", "error-log-open", "expTabSystem", "expGroupData", 1),
     ("color", "snipDefaultColor", "expTabCapture", "expGroupSnipEditor", 1),
-    ("color", "veOvColor", "expTabCapture", "expGroupVideoEditor", 1),
     ("flag", "recOutline", "expTabCapture", "expGroupRecWhile", 0),
     ("color", "recOutlineColor", "expTabCapture", "expGroupRecWhile", 1),
     ("value", "cameraFramerate", "expTabCapture", "expGroupCamera", 1),
     ("dropdown", "chainSeparator", "expTabFeatures", "expGroupChain", 1),
     ("value", "searchListMax", "expTabLibrary", "expGroupLibSearch", 0),
-    ("value", "veOvTextOutlinePx", "expTabCapture", "expGroupVideoEditor", 1),
-    ("color", "veOvKeysActiveColor", "expTabCapture", "expGroupVideoEditor", 1),
-    ("value", "veOvVideoVolume", "expTabCapture", "expGroupVideoEditor", 1),
 ]
 
 # Rows that stay on screen with every gate off (they have no parent switch that
@@ -441,7 +437,7 @@ FAST_AUTOSAVE = """<script>
 })();
 </script>"""
 
-# veOvTextOutlinePx / veOvKeysActiveColor / veOvVideoVolume: a new overlay starts from them.
+# A new overlay starts from the fixed constants, whatever old values a settings file still holds.
 # The editor autosaves its operations every few seconds; that record is what is read.
 VIDEO_PROBE = """
 <script>
@@ -550,12 +546,11 @@ def consumer_problems(browser, tmp):
                           ({"tileStyle": "bold"}, "tile-style-bold", "none")):
         label = "tile style " + (style.get("tileStyle") or "default")
         check(label, "index.html", STYLE_PROBE.replace("__ON__", on).replace("__TT__", tt), {"ui_texts": style})
-    seeded = {"ui_values": {"veOvTextOutlinePx": 7, "veOvVideoVolume": 40},
-              "ui_texts": {"veOvKeysActiveColor": "#ff00aa"}}
-    plain = {"ui_values": {}}
-    for label, seed, o, a, v in (("video overlays seeded", seeded, 7, "#ff00aa", 40),
-                                 ("video overlays default", plain, 3, "#3fa7ff", 0)):
-        probe = VIDEO_PROBE.replace("__OUTLINE__", str(o)).replace("__ACTIVE__", a).replace("__VOLUME__", str(v))
+    stale = {"ui_values": {"veOvTextOutlinePx": 7, "veOvVideoVolume": 40},
+             "ui_texts": {"veOvKeysActiveColor": "#ff00aa"}}
+    for label, seed in (("video overlays fixed defaults", {"ui_values": {}}),
+                        ("video overlays ignore removed settings", stale)):
+        probe = VIDEO_PROBE.replace("__OUTLINE__", "3").replace("__ACTIVE__", "#3fa7ff").replace("__VOLUME__", "0")
         check(label, "video.html", probe, seed, size=(1130, 860), budget=40000, head=FAST_AUTOSAVE)
     for color in ("#ff8800", "#2563eb"):
         head = "<script>" + outline_init_script(color) + "</script>"

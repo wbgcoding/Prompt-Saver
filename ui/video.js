@@ -121,7 +121,7 @@ const VE = {
   redo: [],
   floor: 0,             // undo may not walk back past this index
   undoMax: UNDO_MAX_DEFAULT,
-  numFieldStep: 1,      // arrow-key overlay nudge, settings-driven, see applySettings
+  numFieldStep: 1,      // arrow-key overlay nudge step
   sel: null,            // { a, b } selection on the source timeline, in ms
   selOv: null,          // id of the overlay currently being edited
   ovFields: {},         // key -> { input, getValue } for the open overlay editor,
@@ -164,9 +164,8 @@ const VE = {
   // zoom, applied on top of the video's own fit-to-stage scaling.
   previewZoom: 1,
   panPx: { x: 0, y: 0 },
-  // Overwritten by applySettings() once settings actually load -- these
-  // defaults match PREVIEW_ZOOM_MAX/the hardcoded 1.2x-per-tick exactly, for
-  // the brief window before that first happens.
+  // Fixed editor defaults. applySettings() only overrides the overlay values
+  // the editor remembers from the last use.
   zoomStepFactor: 1.2,
   zoomMax: 8,
   ovColorDefault: "#ffffff",
@@ -176,6 +175,12 @@ const VE = {
   ovTextOutlineDefault: 3,
   ovKeysActiveColorDefault: "#3fa7ff",
   ovVideoVolumeDefault: 0,
+  fadeMsDefault: 500,
+  ovFontDefault: "segoeui",
+  defaultPanel: "edit",
+  ovPixelateBlockDefault: 16,
+  ovSpotlightDimDefault: 0.6,
+  ovImageOpacityDefault: 100,
   snapOn: true,
   snapTolPx: 6,
   guide: null,
@@ -2074,8 +2079,7 @@ function createVideoOverlay({ path, probe }) {
   const op = {
     tool: "overlay", id: newId(), kind: "video", ...range,
     path, rect, opacity: VE.ovImageOpacityDefault ?? 100,
-    // Silent unless the user chose a starting volume (veOvVideoVolume, 0 by
-    // default): a freshly added video overlay carries no sound until asked to.
+    // A freshly added video overlay carries no sound until asked to.
     volume: VE.ovVideoVolumeDefault ?? 0, loop: false,
     hasAudio: !!probe.has_audio, videoDurationMs: Number(probe.duration_ms) || 0,
   };
@@ -4139,8 +4143,6 @@ function resetForNewSource() {
   // module-level default above.
   VE.audio = { sys: { mute: false, vol: 100 }, mic: { mute: true, vol: 100 } };
   syncAudioButtons();
-  // "edit" matches the Edit tab's markup default when veDefaultPanel was
-  // never touched, so a fresh install opens exactly where it does today.
   showPanel(`ve-panel-${VE.defaultPanel || "edit"}`);
   // Probe/geometry were only ever set by applyProbe() on success, never
   // cleared here -- if probing the NEW source then fails (no ffmpeg, a
@@ -4447,30 +4449,21 @@ function applySettings(settings) {
   VE.etaShow = settings?.ui_flags?.etaShow !== false;
   VE.editStateKeepOn = settings?.ui_flags?.editStateKeep !== false;
   armEditStateAutosave();
-  const numFieldStep = Number(values.numFieldStep);
-  VE.numFieldStep = Number.isFinite(numFieldStep) && numFieldStep > 0 ? numFieldStep : 1;
   const texts = settings?.ui_texts || {};
-  // The user's own last export choice always wins; only a field that was never
-  // touched (no persisted videoExport* value yet) opens on the expert default.
-  $("ve-export-format").value = texts.videoExportFormat || texts.veDefaultFormat || "mp4";
-  $("ve-export-quality").value = texts.videoExportQuality || texts.veDefaultQuality || "high";
+  // The export dialog opens on the user's own last choice.
+  $("ve-export-format").value = texts.videoExportFormat || "mp4";
+  $("ve-export-quality").value = texts.videoExportQuality || "high";
   // VE.w/VE.h are still 0 the first time this runs (applyProbe() hasn't landed
   // yet) -- a scale preset needs the source size to turn into real pixels, so
   // it is deferred to VE.pendingScaleKey and consumed once VE.w/VE.h are known.
   // A scale op the user (or an earlier default) already set is left alone, same
   // as the fade-default guard just below.
-  const scaleDef = texts.videoExportScale != null ? texts.videoExportScale : (texts.veDefaultScale || "");
+  const scaleDef = texts.videoExportScale ?? "";
   if (!opOf("scale")) {
     if (VE.w && VE.h) applyScalePresetKey(scaleDef);
     else VE.pendingScaleKey = scaleDef;
   }
   VE.destDir = texts.videoExportDir || "";
-  const kbpsHigh = Number(values.veExportKbpsHigh);
-  const kbpsSmall = Number(values.veExportKbpsSmall);
-  EXPORT_KBPS.high = Number.isFinite(kbpsHigh) && kbpsHigh > 0 ? kbpsHigh : 12000;
-  EXPORT_KBPS.small = Number.isFinite(kbpsSmall) && kbpsSmall > 0 ? kbpsSmall : 4000;
-  const fadeMs = Number(values.veFadeMs);
-  VE.fadeMsDefault = Number.isFinite(fadeMs) && fadeMs > 0 ? Math.round(fadeMs) : 500;
   // Only while fade isn't already applied -- once it is, these fields hold the
   // user's own per-export values and a stray settings-changed elsewhere (any
   // setting, anywhere) must never overwrite what they just typed.
@@ -4480,34 +4473,9 @@ function applySettings(settings) {
     $("ve-fade-in").numFieldRefresh?.();
     $("ve-fade-out").numFieldRefresh?.();
   }
-  // Percent-based shared setting mapped onto this editor's own raw-factor zoom
-  // (1x-8x) -- defaults (20%, 800%) reproduce today's hardcoded 1.2x-per-tick,
-  // 8x-max exactly, so nothing changes for anyone who never opens this row.
-  const zoomStepPct = Number(values.zoomStepPct);
-  VE.zoomStepFactor = 1 + (Number.isFinite(zoomStepPct) && zoomStepPct > 0 ? zoomStepPct : 20) / 100;
-  const zoomMaxPct = Number(values.zoomMaxPct);
-  VE.zoomMax = Number.isFinite(zoomMaxPct) && zoomMaxPct > 0 ? zoomMaxPct / 100 : PREVIEW_ZOOM_MAX;
-  VE.ovColorDefault = HEX_RE.test(texts.veOvColor || "") ? texts.veOvColor : "#ffffff";
-  VE.ovFontDefault = FONT_FILES.some(([id]) => id === texts.veOvFont) ? texts.veOvFont : FONT_FILES[0][0];
-  VE.defaultPanel = ["edit", "overlays", "export"].includes(texts.veDefaultPanel) ? texts.veDefaultPanel : "edit";
-  const pixelateBlock = Number(values.veOvPixelateBlock);
-  VE.ovPixelateBlockDefault = Number.isFinite(pixelateBlock) && pixelateBlock > 0 ? Math.round(pixelateBlock) : 16;
-  const spotlightDim = Number(values.veOvSpotlightDim);
-  VE.ovSpotlightDimDefault = Number.isFinite(spotlightDim) && spotlightDim > 0 ? spotlightDim / 100 : 0.6;
-  const imageOpacity = Number(values.veOvImageOpacity);
-  VE.ovImageOpacityDefault = Number.isFinite(imageOpacity) && imageOpacity > 0 ? Math.round(imageOpacity) : 100;
-  const textOutline = Number(values.veOvTextOutlinePx);
-  VE.ovTextOutlineDefault = Number.isFinite(textOutline) && textOutline >= 1 ? Math.min(12, Math.round(textOutline)) : 3;
-  VE.ovKeysActiveColorDefault = HEX_RE.test(texts.veOvKeysActiveColor || "") ? texts.veOvKeysActiveColor : "#3fa7ff";
-  const videoVolume = Number(values.veOvVideoVolume);
-  VE.ovVideoVolumeDefault = Number.isFinite(videoVolume) && videoVolume > 0 ? Math.min(100, Math.round(videoVolume)) : 0;
-  const dupOffset = Number(values.veOvDupOffsetPx);
-  VE.ovDupOffsetPx = Number.isFinite(dupOffset) && dupOffset >= 0 ? Math.round(dupOffset) : 16;
   // Shared with the screenshot editor's own snapping (see snap.js); the switch
   // to turn it off is per editor, same reasoning as veOvRemember above.
   VE.snapOn = settings?.ui_flags?.videoEditSnap !== false;
-  const snapTol = Number(values.editSnapTolerancePx);
-  VE.snapTolPx = Number.isFinite(snapTol) && snapTol > 0 ? snapTol : 6;
   // Each overlay kind starts from its own last-used colour/thickness/opacity/font
   // size instead of the fixed default above, kept in the ordinary settings store
   // (not the per-file edit state) because it belongs to the user, not the file.

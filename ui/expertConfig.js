@@ -200,7 +200,7 @@ export const FLAG_LABELS = {
   videoEditor: "flagVideoEditor",
   // Keeps the last colour/thickness/opacity/font size used per overlay kind as the
   // starting point for the next one of that kind, saved across sessions. Off falls
-  // back to the fixed defaults (veOvColor, veOvFont, veOvPixelateBlock, ...).
+  // back to the fixed defaults.
   veOvRemember: "flagVeOvRemember",
   // The screenshot editor has had edge/center snapping for a while
   // (snipEditSnap); this is the same behaviour for the video editor's crop box
@@ -463,39 +463,7 @@ export const EXPERT_VALUES = {
   snipSaveQuality: { label: "valSnipSaveQuality", min: 50, max: 100, step: 5, def: 90, unit: "%", gate: "screenshot" },
   // Screenshot-editor undo depth. Tool sizes are remembered per tool, not set here.
   snipEditUndoMax: { label: "valSnipEditUndoMax", min: 10, max: 200, step: 10, def: 50, unit: "", gate: "snipEditor" },
-  videoEditUndoMax: { label: "valVideoEditUndoMax", min: 10, max: 200, step: 10, def: 50, unit: "", gate: "videoEditor" },
-  // The H.264 bitrate each export-quality tier actually encodes at -- the
-  // "small"/"high" dropdown just picks between these two.
-  veExportKbpsHigh: { label: "valVeExportKbpsHigh", min: 4000, max: 30000, step: 500, def: 12000, unit: "kbps", gate: "videoEditor" },
-  veExportKbpsSmall: { label: "valVeExportKbpsSmall", min: 500, max: 8000, step: 250, def: 4000, unit: "kbps", gate: "videoEditor" },
-  // Seeds both the fade-in and fade-out fields the moment "Fade in and out" is
-  // first switched on for an export -- each field stays freely adjustable
-  // afterward, only the starting value comes from here.
-  veFadeMs: { label: "valVeFadeMs", min: 100, max: 5000, step: 100, def: 500, unit: "ms", gate: "videoEditor" },
-  veOvPixelateBlock: { label: "valVeOvPixelateBlock", min: 4, max: 64, step: 2, def: 16, unit: "px", gate: "videoEditor" },
-  veOvSpotlightDim: { label: "valVeOvSpotlightDim", min: 10, max: 95, step: 5, def: 60, unit: "%", gate: "videoEditor" },
-  veOvImageOpacity: { label: "valVeOvImageOpacity", min: 10, max: 100, step: 5, def: 100, unit: "%", gate: "videoEditor" },
-  // Starting values of a NEW overlay (one already placed keeps its own). The
-  // outline starts at 1: the overlay editor and the export treat 0 as "use 3".
-  veOvTextOutlinePx: { label: "valVeOvTextOutlinePx", min: 1, max: 12, step: 1, def: 3, unit: "px", gate: "videoEditor" },
-  veOvVideoVolume: { label: "valVeOvVideoVolume", min: 0, max: 100, step: 5, def: 0, unit: "%", gate: "videoEditor" },
-  // Shared by the screenshot editor's and the video editor's own numeric
-  // input fields (numberField() in floatShared.js) -- default matches that
-  // component's own existing hardcoded step/bigStep, so nothing changes for
-  // anyone who never opens this new group.
-  numFieldStep: { label: "valNumFieldStep", min: 1, max: 50, step: 1, def: 1, unit: "" },
-  // How far a duplicated overlay/shape is shifted from its source, in both editors,
-  // so the copy is visible right away instead of sitting exactly on top of it.
-  veOvDupOffsetPx: { label: "valVeOvDupOffsetPx", min: 0, max: 100, step: 1, def: 16, unit: "px" },
-  // Shared by both editors' snapping (snipEditSnap, videoEditSnap) -- used to
-  // live under the screenshot editor alone, moved here once the video editor
-  // grew the same feature so one value covers both.
-  editSnapTolerancePx: { label: "valEditSnapTolerancePx", min: 2, max: 20, step: 1, def: 6, unit: "px" },
-  // Percent-based so one pair of settings covers both editors' own different
-  // native zoom units (the screenshot editor's 0.05x-8x factor, the video
-  // editor's 1x-8x factor) -- see snip.js/video.js for the unit conversion.
-  zoomStepPct: { label: "valZoomStepPct", min: 5, max: 50, step: 5, def: 20, unit: "%" },
-  zoomMaxPct: { label: "valZoomMaxPct", min: 200, max: 1600, step: 100, def: 800, unit: "%" },
+  videoEditUndoMax: { label: "valVideoEditUndoMax", min: 10, max: 200, step: 10, def: 40, unit: "", gate: "videoEditor" },
   // A file past this size is rejected before it loads when opening one for
   // editing -- open_file_in_editor reads the very same key.
   // 0 means forever, same convention as trashRetentionDays.
@@ -740,10 +708,10 @@ export const EXPERT_TABS = [
     { title: "expGroupRecWhile", flags: [{ key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, { key: "recCropNotice", gate: "screenRecord" }, { key: "recBarSize", gate: "screenRecord" }, { key: "recTargetSwitch", gate: "screenRecord" }, { key: "recAutoCrop", gate: "screenRecord" }, { key: "recSweepBroken", gate: "screenRecord" }, { key: "recOutline", gate: "screenRecord" }, { key: "keyOverlay", gate: "screenRecord" }, { key: "keyOverlayShortcutsOnly", gate: "keyOverlay" }], values: ["keyOverlayHoldMs"], dropdowns: ["recMicDevice"], colors: ["recOutlineColor"],
       actions: [{ id: "rec-sweep-now", label: "recSweepNowAction", gate: "recSweepBroken" }, { id: "rec-stop-hotkey-row", type: "hotkey", hotkeyKey: "recStopHotkey", label: "recHotkeyFieldLabel", gate: "recStopHotkey" }, { id: "rec-pause-hotkey-row", type: "hotkey", hotkeyKey: "recPauseHotkey", label: "recHotkeyFieldLabel", gate: "recPauseHotkey" }] },
     { title: "expGroupCamera", flags: ["cameraRecord"], values: ["cameraFramerate"], dropdowns: ["cameraDevice", "cameraResolution"] },
-    { title: "expGroupVideoEditor", flags: ["videoEditor", { key: "veOvRemember", gate: "videoEditor" }, { key: "videoEditSnap", gate: "videoEditor" }], values: ["videoEditUndoMax", "veExportKbpsHigh", "veExportKbpsSmall", "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "videoClipTtlMin", "veOvTextOutlinePx", "veOvVideoVolume"], dropdowns: ["veDefaultFormat", "veDefaultQuality", "veDefaultScale", "veOvFont", "veDefaultPanel"], colors: ["veOvColor", "veOvKeysActiveColor"], paths: ["videoExportDir"] },
+    { title: "expGroupVideoEditor", flags: ["videoEditor", { key: "veOvRemember", gate: "videoEditor" }, { key: "videoEditSnap", gate: "videoEditor" }], values: ["videoEditUndoMax", "videoClipTtlMin"], paths: ["videoExportDir"] },
     // What the screenshot editor and the video editor share -- created here so
     // no setting key is ever declared in two groups (expert_menu_check.py).
-    { title: "expGroupEditors", flags: ["numFieldWheel", "editStateKeep"], values: ["numFieldStep", "zoomStepPct", "zoomMaxPct", "editStateKeepDays", "veOvDupOffsetPx", "editSnapTolerancePx"] },
+    { title: "expGroupEditors", flags: ["numFieldWheel", "editStateKeep"], values: ["editStateKeepDays"] },
   ] },
   { title: "expTabTiles", groups: [
     // Split by what a setting actually does: acting on a tile, the hover tooltip,
@@ -820,10 +788,8 @@ export const EXPERT_TIPS = [
   "keyOverlay", "keyOverlayHoldMs", "keyOverlayShortcutsOnly",
   "cameraRecord", "cameraDevice", "cameraResolution", "cameraFramerate",
   "videoEditor", "videoEditUndoMax", "veOvRemember", "videoEditSnap",
-  "veDefaultFormat", "veDefaultQuality", "veDefaultScale", "veExportKbpsHigh", "veExportKbpsSmall",
-  "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "veOvColor", "veOvFont",
-  "veDefaultPanel", "videoExportDir",
-  "numFieldWheel", "zoomStepPct", "zoomMaxPct", "errorLogKeepKb", "veOvDupOffsetPx", "editSnapTolerancePx",
+  "videoExportDir",
+  "numFieldWheel", "errorLogKeepKb",
   "editStateKeep", "editStateKeepDays", "editorDraftSecs",
   "snipSaveQuality", "snipDelayMs",
   "snipDefaultColor",
@@ -874,7 +840,6 @@ export const EXPERT_TIPS = [
   "barToggles", "barToggleBoth", "quickGrid", "quickGridHoverOnly", "multiView", "libraryCols", "copySize", "copyFont", "showLibrary", "composerScale", "primaryScale",
   "remoteApi", "remoteNetworkFilter", "remoteTlsShortLived", "urlScheme", "remotePort", "remoteRateLimit",
   "recOutline", "recOutlineColor", "chainSeparator",
-  "veOvTextOutlinePx", "veOvKeysActiveColor", "veOvVideoVolume",
 ];
 export const EXPERT_TIP_SET = new Set(EXPERT_TIPS);
 

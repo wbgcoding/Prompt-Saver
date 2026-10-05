@@ -179,28 +179,6 @@ export const EXPERT_DROPDOWNS = {
   // exactly -- adding this row must not change what already happens today.
   recCanvasMode: enumDropdown("recCanvasMode", "valRecCanvasMode",
     [["all", "recCanvasAll"], ["monitor", "recCanvasMonitor"], ["window", "recCanvasWindow"]], "window", "screenRecord"),
-  // The video editor's export dialog opens with these eight every time --
-  // each field stays freely changeable per export, only the opening
-  // selection comes from here.
-  veDefaultFormat: enumDropdown("veDefaultFormat", "valVeDefaultFormat",
-    [["mp4", "optRecFormatMp4"], ["webm", "optRecFormatWebm"], ["gif", "optRecFormatGif"],
-      ["avi", "optRecFormatAvi"], ["mov", "optRecFormatMov"], ["mkv", "optRecFormatMkv"],
-      ["webpanim", "optRecFormatWebpanim"], ["apng", "optRecFormatApng"]], "mp4", "videoEditor"),
-  veDefaultQuality: enumDropdown("veDefaultQuality", "valVeDefaultQuality",
-    [["high", "veQualityHigh"], ["small", "veQualitySmall"], ["lossless", "veQualityLossless"]], "high", "videoEditor"),
-  veDefaultScale: enumDropdown("veDefaultScale", "valVeDefaultScale",
-    [["", "veScaleOff"], ["2160", "optVeScale2160"], ["1440", "optVeScale1440"], ["1080", "optVeScale1080"],
-      ["720", "optVeScale720"], ["480", "optVeScale480"], ["360", "optVeScale360"],
-      ["50", "optVeScale50pct"], ["25", "optVeScale25pct"]], "", "videoEditor"),
-  // "segoeui" matches FONT_FILES[0][0] in video.js -- the hardcoded font every
-  // new text overlay opens with today.
-  veOvFont: enumDropdown("veOvFont", "valVeOvFont",
-    [["segoeui", "optFontSegoeui"], ["arial", "optFontArial"], ["arialbd", "optFontArialBold"],
-      ["consola", "optFontConsola"], ["georgia", "optFontGeorgia"]], "segoeui", "videoEditor"),
-  // "edit" matches the Edit tab's "active" class in video.html -- the panel
-  // shown today whenever the video editor opens.
-  veDefaultPanel: enumDropdown("veDefaultPanel", "valVeDefaultPanel",
-    [["edit", "veTabEdit"], ["overlays", "veTabOverlays"], ["export", "veTabExport"]], "edit", "videoEditor"),
   // Applies to every screenshot: the snip tool's own save/save-as/save-to-folder
   // paths AND the video editor's "export still frame" (same setting, one format
   // for anything this app calls a screenshot). webp and bmp/tiff are always
@@ -1124,11 +1102,6 @@ export const EXPERT_PATHS = {
 // one single stored hex string in ui_texts, so it stays out of the generic
 // EXPERT_DEFS/isRowChanged machinery the same deliberate way `palette` does.
 export const EXPERT_COLORS = {
-  // Label is "veOvDefaultColor", not "veOvColor" -- that key is already the
-  // per-overlay "Colour" field caption in the overlay editor itself (video.js),
-  // a wholly unrelated existing string this must not collide with or overwrite.
-  veOvColor: { label: "veOvDefaultColor", def: "#ffffff", gate: "videoEditor" },
-  veOvKeysActiveColor: { label: "valVeOvKeysActiveColor", def: "#3fa7ff", gate: "videoEditor" },
   // Read by the backend when a region recording starts (see show_rec_outline).
   recOutlineColor: { label: "valRecOutlineColor", def: "#2563eb", gate: "recOutline" },
   // `def` is a FUNCTION here, not a fixed hex, because the screenshot editor's
@@ -1429,6 +1402,10 @@ export async function openVideoCleanup(dir) {
   refreshVideoFolderInfo(dir);
 }
 
+// Video bitrate of the batch export's two lossy quality tiers.
+const BATCH_KBPS_HIGH = 12000;
+const BATCH_KBPS_SMALL = 4000;
+
 // One small dialog for exporting several finished recordings at once --
 // format, quality, destination, nothing else. The full video editor's export
 // panel (crop, overlays, a timeline) makes no sense for a batch of unrelated
@@ -1472,7 +1449,7 @@ export async function runBatchExportRecordings(dir, names) {
   if (!started) return;
   const format = formatSel.value;
   const losslessQuality = qualitySel.value === "lossless";
-  const videoKbps = losslessQuality ? null : (qualitySel.value === "small" ? val("veExportKbpsSmall") : val("veExportKbpsHigh"));
+  const videoKbps = losslessQuality ? null : (qualitySel.value === "small" ? BATCH_KBPS_SMALL : BATCH_KBPS_HIGH);
   const durationsMs = await invoke("video_folder_file_durations_ms", { dir, names }).catch(() => names.map(() => 0));
   const diskWarn = await invoke("check_export_disk_space_batch", { destDir, format, videoKbps, losslessQuality, durationsMs }).catch(() => null);
   if (diskWarn) {

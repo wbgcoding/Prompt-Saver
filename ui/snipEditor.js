@@ -48,8 +48,8 @@ export function initSnipEditor() {
   const SNIP_EDIT_SNAP = () => flag("snipEditSnap");
   const SNIP_TEXT_BACK = () => EXPERT_DROPDOWNS.snipTextBack.get();
   const SNIP_EDIT_DEFAULT_TOOL = () => txt("snipEditDefaultTool") || "hand";
-  const SNIP_EDIT_SNAP_TOL = () => val("editSnapTolerancePx") || 6; // px (screen)
-  const SNIP_DUP_OFFSET_PX = () => val("veOvDupOffsetPx");
+  const SNIP_EDIT_SNAP_TOL = 6; // px (screen)
+  const SNIP_DUP_OFFSET_PX = 16;
   // Small / medium / large stroke widths per tool; the middle one is the starting size.
   const SNIP_WIDTH_PRESETS_OF = (tool) => ({
     pen: [2, SNIP_DEFAULT_SIZES.pen, 14],
@@ -162,12 +162,10 @@ export function initSnipEditor() {
   });
 
   function snipEditClamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
-  // Percent-based shared setting mapped onto this editor's own raw-factor zoom
-  // (0.05x-8x) -- defaults (20%, 800%) do change today's hardcoded wheel step
-  // (1.1x) and button step (1.25x/0.8x), unifying every zoom control in this
-  // editor and the video editor under the one shared percentage.
-  const snipZoomStepFactor = () => 1 + val("zoomStepPct") / 100;
-  const snipZoomMax = () => val("zoomMaxPct") / 100;
+  // One zoom step (20 %) for the wheel, the buttons and the keys, and the
+  // 8x ceiling, the same in this editor and the video editor.
+  const snipZoomStepFactor = 1.2;
+  const snipZoomMax = 8;
   function snipEditDist(a, b) { return Math.hypot(b.x - a.x, b.y - a.y); }
   function snipEditNormRect(r) {
     if (r && "a" in r) {
@@ -213,7 +211,7 @@ export function initSnipEditor() {
   let snipEditGuide = null;
   function snipEditSnapPoint(pt) {
     if (!SNIP_EDIT_SNAP()) { snipEditGuide = null; return pt; }
-    const tol = SNIP_EDIT_SNAP_TOL() / SE.zoom;
+    const tol = SNIP_EDIT_SNAP_TOL / SE.zoom;
     const r = snapMove({ x: pt.x, y: pt.y, w: 0, h: 0 }, snipEditSnapTargets(), tol);
     snipEditGuide = (r.guideX != null || r.guideY != null) ? { x: r.guideX, y: r.guideY } : null;
     return { x: r.x, y: r.y };
@@ -1052,7 +1050,7 @@ export function initSnipEditor() {
   // remove the wrong operation.
   function snipEditDuplicateOp(op) {
     if (op.tool === "spotlight") return; // only one spotlight may exist, there is nothing to copy
-    const offset = SNIP_DUP_OFFSET_PX();
+    const offset = SNIP_DUP_OFFSET_PX;
     const dup = JSON.parse(JSON.stringify(op));
     if (dup.rect) {
       dup.rect = { ...dup.rect, x: snipEditClamp(dup.rect.x + offset, 0, SE.w - dup.rect.w), y: snipEditClamp(dup.rect.y + offset, 0, SE.h - dup.rect.h) };
@@ -1437,7 +1435,7 @@ export function initSnipEditor() {
 
   // ---- zoom: pure CSS scaling of the native-resolution canvas -- no redraw needed ----
   function snipEditSetZoom(z) {
-    SE.zoom = snipEditClamp(z, 0.05, snipZoomMax());
+    SE.zoom = snipEditClamp(z, 0.05, snipZoomMax);
     const sw = SE.w * SE.zoom, sh = SE.h * SE.zoom;
     snipEditStage.style.width = `${sw}px`;
     snipEditStage.style.height = `${sh}px`;
@@ -1654,7 +1652,7 @@ export function initSnipEditor() {
   snipEditWrap.addEventListener("wheel", (e) => {
     if (!SE.active) return;
     e.preventDefault();
-    const step = snipZoomStepFactor();
+    const step = snipZoomStepFactor;
     snipEditZoomAt(SE.zoom * (e.deltaY < 0 ? step : 1 / step), e.clientX, e.clientY);
   }, { passive: false });
   // The pan room depends on the view size, so a resized window recomputes it.
@@ -1709,14 +1707,14 @@ export function initSnipEditor() {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") { e.preventDefault(); snipEditRedo(); return; }
     // Canvas zoom: Ctrl+Plus/Minus/0, matching the video editor's preview zoom
     // keys -- plain 0 and - stay the pixelate/spotlight tool shortcuts above.
-    if ((e.ctrlKey || e.metaKey) && (e.key === "+" || e.key === "=")) { e.preventDefault(); snipEditZoomBy(snipZoomStepFactor()); return; }
-    if ((e.ctrlKey || e.metaKey) && e.key === "-") { e.preventDefault(); snipEditZoomBy(1 / snipZoomStepFactor()); return; }
+    if ((e.ctrlKey || e.metaKey) && (e.key === "+" || e.key === "=")) { e.preventDefault(); snipEditZoomBy(snipZoomStepFactor); return; }
+    if ((e.ctrlKey || e.metaKey) && e.key === "-") { e.preventDefault(); snipEditZoomBy(1 / snipZoomStepFactor); return; }
     if ((e.ctrlKey || e.metaKey) && e.key === "0") { e.preventDefault(); snipEditFit(); return; }
     if (e.key === " ") { SE.spaceDown = true; snipEditWrap.style.cursor = ""; snipEditWrap.classList.add("panning"); e.preventDefault(); return; }
     if (e.key.toLowerCase() === "v" && !e.repeat) { snipOriginalToggle.press(); return; }
     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key) && SE.lastNudged) {
       e.preventDefault();
-      const amount = e.shiftKey ? NUM_FIELD_BIG_STEP : val("numFieldStep");
+      const amount = e.shiftKey ? NUM_FIELD_BIG_STEP : 1;
       snipEditNudge(SE.lastNudged, e.key, amount, e.ctrlKey || e.metaKey);
       return;
     }
@@ -1854,8 +1852,8 @@ export function initSnipEditor() {
   });
   $("snip-edit-undo").addEventListener("click", snipEditUndo);
   $("snip-edit-redo").addEventListener("click", snipEditRedo);
-  $("snip-edit-zoom-in").addEventListener("click", () => snipEditZoomBy(snipZoomStepFactor()));
-  $("snip-edit-zoom-out").addEventListener("click", () => snipEditZoomBy(1 / snipZoomStepFactor()));
+  $("snip-edit-zoom-in").addEventListener("click", () => snipEditZoomBy(snipZoomStepFactor));
+  $("snip-edit-zoom-out").addEventListener("click", () => snipEditZoomBy(1 / snipZoomStepFactor));
   $("snip-edit-fit").addEventListener("click", snipEditFit);
   $("snip-edit-original").addEventListener("pointerdown", () => snipOriginalToggle.press());
   document.addEventListener("pointerup", () => snipOriginalToggle.release());

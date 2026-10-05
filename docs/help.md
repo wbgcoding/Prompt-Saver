@@ -312,14 +312,11 @@ timeline needs the room the screenshot editor doesn't.
 Right-clicking a shape (screenshot editor) or an overlay's row (video editor)
 opens a small menu to duplicate or delete it. A duplicate keeps the same
 values and time range and is offset a little so it sits next to the
-original instead of exactly on top of it; how far is set in an expert setting
-shared by both editors. In the video editor, the color, thickness, opacity
+original instead of exactly on top of it. In the video editor, the color, thickness, opacity
 and font size a new overlay starts with also follow whatever was last used
 for that same kind (image, frame, text, pixelation or focus area), across
 restarts too; an expert switch turns that off again in favor of the fixed
-starting values. The expert menu also sets the starting text outline width,
-the color of a pressed key in a new keys overlay and the starting volume of a
-newly inserted video overlay.
+starting values.
 
 Dragging a shape (screenshot editor) or a crop box or overlay (video editor)
 snaps to the image or frame edges, its centre in both directions, and the
@@ -337,8 +334,7 @@ color automatically for the best contrast.
 
 A selected shape (screenshot editor) or overlay (video editor) can be nudged
 with the arrow keys, a step at a time; holding Ctrl changes its size instead
-of its position, and Shift takes a bigger step. Both step sizes are expert
-settings shared by every place that uses them. In the video editor the arrow
+of its position, and Shift takes a bigger step. In the video editor the arrow
 keys only take on this job while something is selected, since they normally
 step through frames there; while selected, comma and period step frames
 instead, and a short line above the transport controls always says what the
@@ -1241,15 +1237,11 @@ genauso wie der Kopieren-Button im Aufnahme-Dialog.
 Ein Rechtsklick auf eine Form (Screenshot-Editor) oder die Zeile einer
 Überlagerung (Video-Editor) öffnet ein kleines Menü zum Duplizieren oder
 Löschen. Ein Duplikat behält Werte und Zeitbereich und wird ein Stück
-verschoben, damit es neben dem Original liegt statt genau darauf. Wie weit, legt
-eine Expertenzeile fest, die sich beide Editoren teilen. Im Video-Editor
+verschoben, damit es neben dem Original liegt statt genau darauf. Im Video-Editor
 richten sich Farbe, Stärke, Deckkraft und Schriftgröße einer neuen
 Überlagerung außerdem nach dem, was für dieselbe Art (Bild, Rahmen, Text,
 Verpixeln oder Fokusbereich) zuletzt benutzt wurde, auch über einen Neustart
 hinweg; ein Expertenschalter stellt stattdessen wieder feste Vorgabewerte ein.
-Das Expertenmenü legt außerdem die Anfangsbreite des Textumrisses, die Farbe
-einer gedrückten Taste in einer neuen Tastenüberlagerung und die
-Anfangslautstärke einer neu eingefügten Videoüberlagerung fest.
 
 Beim Ziehen einer Form (Screenshot-Editor) oder eines Zuschnitts bzw. einer
 Überlagerung (Video-Editor) rastet die Bewegung an den Kanten der Leinwand
@@ -1271,8 +1263,7 @@ Textfarbe.
 Eine ausgewählte Form (Screenshot-Editor) oder Überlagerung (Video-Editor)
 lässt sich mit den Pfeiltasten schrittweise verschieben; gedrückt gehaltenes
 Strg ändert stattdessen die Größe, Umschalt macht einen größeren Schritt.
-Beide Schrittweiten sind Expertenzeilen, die überall dort gelten, wo sie
-gebraucht werden. Im Video-Editor übernehmen die Pfeiltasten diese Aufgabe nur,
+Im Video-Editor übernehmen die Pfeiltasten diese Aufgabe nur,
 solange etwas ausgewählt ist, weil sie dort sonst durch die Einzelbilder
 schalten; solange ausgewählt, übernehmen stattdessen Komma und Punkt das
 Weiterschalten der Einzelbilder, und eine kurze Zeile über der Wiedergabeleiste
