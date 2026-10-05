@@ -1834,11 +1834,6 @@ export default {
     // --- screenshot and video editor drawing defaults, export folder ---
     valSnipDefaultColor: "Culoare implicită de desenare",
     valVideoExportDir: "Folder de export video",
-    optFontSegoeui: "Segoe UI",
-    optFontArial: "Arial",
-    optFontArialBold: "Arial Aldin",
-    optFontConsola: "Consolas",
-    optFontGeorgia: "Georgia",
     tipSnipDefaultColor: "Culoarea inițială a unui instrument la prima utilizare după deschiderea editorului de capturi de ecran. Folosește prima culoare din paleta personalizată până când setezi una aici.",
     flagVeOvRemember: "Reține valorile suprapunerii",
     tipVeOvRemember: "Reține ultima culoare, grosime, opacitate și dimensiune a fontului folosite pentru fiecare tip de suprapunere ca valoare implicită pentru următoarea, dincolo de sesiunea curentă. Dezactivat, se pornește mereu de la valorile fixe de mai sus.",

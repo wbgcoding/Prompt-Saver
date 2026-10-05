@@ -1834,11 +1834,6 @@ export default {
     // --- screenshot and video editor drawing defaults, export folder ---
     valSnipDefaultColor: "Varsayılan çizim rengi",
     valVideoExportDir: "Video dışa aktarma klasörü",
-    optFontSegoeui: "Segoe UI",
-    optFontArial: "Arial",
-    optFontArialBold: "Arial Kalın",
-    optFontConsola: "Consolas",
-    optFontGeorgia: "Georgia",
     tipSnipDefaultColor: "Ekran görüntüsü düzenleyici açıldıktan sonra bir aracın ilk kullanımındaki başlangıç rengi. Burada bir renk ayarlanana kadar özel paletinizin ilk rengini takip eder.",
     flagVeOvRemember: "Katman değerlerini hatırla",
     tipVeOvRemember: "Her katman türü için son kullanılan renk, kalınlık, opaklık ve yazı tipi boyutunu, oturum sona erse de bir sonraki katman için başlangıç değeri olarak hatırlar. Kapalıyken her zaman yukarıdaki sabit varsayılanlarla başlar.",

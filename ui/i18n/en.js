@@ -1841,11 +1841,6 @@ export default {
     // --- screenshot and video editor drawing defaults, export folder ---
     valSnipDefaultColor: "Default drawing color",
     valVideoExportDir: "Video export folder",
-    optFontSegoeui: "Segoe UI",
-    optFontArial: "Arial",
-    optFontArialBold: "Arial Bold",
-    optFontConsola: "Consolas",
-    optFontGeorgia: "Georgia",
     tipSnipDefaultColor: "Color a tool starts with the first time you use it after opening the screenshot editor. Follows your custom palette's first color until you set one here.",
     flagVeOvRemember: "Remember overlay values",
     tipVeOvRemember: "Keeps the last color, thickness, opacity and font size used for each overlay kind as the starting point for the next one, saved across sessions. Off always starts from the fixed defaults above.",

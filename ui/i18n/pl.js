@@ -1834,11 +1834,6 @@ export default {
     // --- screenshot and video editor drawing defaults, export folder ---
     valSnipDefaultColor: "Domyślny kolor rysowania",
     valVideoExportDir: "Folder eksportu wideo",
-    optFontSegoeui: "Segoe UI",
-    optFontArial: "Arial",
-    optFontArialBold: "Arial Pogrubiony",
-    optFontConsola: "Consolas",
-    optFontGeorgia: "Georgia",
     tipSnipDefaultColor: "Początkowy kolor narzędzia przy pierwszym użyciu po otwarciu edytora zrzutów ekranu. Używa pierwszego koloru z własnej palety do momentu ustawienia go tutaj.",
     flagVeOvRemember: "Zapamiętuj wartości nakładki",
     tipVeOvRemember: "Zapamiętuje ostatni kolor, grubość, przezroczystość i rozmiar czcionki dla każdego rodzaju nakładki jako wartość początkową dla kolejnej, także po zakończeniu sesji. Gdy opcja jest wyłączona, zawsze zaczyna od stałych wartości domyślnych powyżej.",

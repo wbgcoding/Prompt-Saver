@@ -1834,11 +1834,6 @@ export default {
     // --- screenshot and video editor drawing defaults, export folder ---
     valSnipDefaultColor: "既定の描画色",
     valVideoExportDir: "動画エクスポート先フォルダー",
-    optFontSegoeui: "Segoe UI",
-    optFontArial: "Arial",
-    optFontArialBold: "Arial 太字",
-    optFontConsola: "Consolas",
-    optFontGeorgia: "Georgia",
     tipSnipDefaultColor: "スクリーンショットエディターを開いた後、ツールを最初に使用する際の色です。ここで設定するまではカスタムパレットの最初の色が適用されます。",
     flagVeOvRemember: "オーバーレイの値を記憶",
     tipVeOvRemember: "オーバーレイの種類ごとに最後に使った色、太さ、不透明度、フォントサイズをセッションを超えて記憶し、次のオーバーレイの初期値にします。オフにすると常に上の固定初期値から始まります。",

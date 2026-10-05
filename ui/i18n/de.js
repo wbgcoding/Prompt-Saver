@@ -1841,11 +1841,6 @@ export default {
     // --- screenshot and video editor drawing defaults, export folder ---
     valSnipDefaultColor: "Vorgabefarbe zum Zeichnen",
     valVideoExportDir: "Video-Export-Ordner",
-    optFontSegoeui: "Segoe UI",
-    optFontArial: "Arial",
-    optFontArialBold: "Arial Fett",
-    optFontConsola: "Consolas",
-    optFontGeorgia: "Georgia",
     tipSnipDefaultColor: "Farbe, mit der ein Werkzeug beim ersten Einsatz nach dem Öffnen des Screenshot-Editors beginnt. Folgt der ersten Farbe deiner eigenen Palette, bis du hier eine festlegst.",
     flagVeOvRemember: "Überlagerungswerte merken",
     tipVeOvRemember: "Merkt sich Farbe, Stärke, Deckkraft und Schriftgröße je Überlagerungsart als Vorgabe für die nächste, über die Sitzung hinaus. Aus verwendet immer die festen Vorgabewerte oben.",

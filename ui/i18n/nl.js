@@ -1834,11 +1834,6 @@ export default {
     // --- screenshot and video editor drawing defaults, export folder ---
     valSnipDefaultColor: "Standaard tekenkleur",
     valVideoExportDir: "Video-exportmap",
-    optFontSegoeui: "Segoe UI",
-    optFontArial: "Arial",
-    optFontArialBold: "Arial Vet",
-    optFontConsola: "Consolas",
-    optFontGeorgia: "Georgia",
     tipSnipDefaultColor: "Kleur waarmee een gereedschap start wanneer je het voor het eerst gebruikt na het openen van de schermafbeeldingseditor. Volgt de eerste kleur van je aangepaste palet totdat je hier een kleur instelt.",
     flagVeOvRemember: "Overlaywaarden onthouden",
     tipVeOvRemember: "Onthoudt de laatst gebruikte kleur, dikte, dekking en lettergrootte per overlaytype als beginwaarde voor de volgende, ook na deze sessie. Uit gebruikt altijd de vaste standaardwaarden hierboven.",

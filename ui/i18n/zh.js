@@ -1834,11 +1834,6 @@ export default {
     // --- screenshot and video editor drawing defaults, export folder ---
     valSnipDefaultColor: "默认绘制颜色",
     valVideoExportDir: "视频导出文件夹",
-    optFontSegoeui: "Segoe UI",
-    optFontArial: "Arial",
-    optFontArialBold: "Arial 粗体",
-    optFontConsola: "Consolas",
-    optFontGeorgia: "Georgia",
     tipSnipDefaultColor: "打开截图编辑器后首次使用工具时的初始颜色。在此处设置前，将遵循自定义调色板的第一种颜色。",
     flagVeOvRemember: "记住叠加层数值",
     tipVeOvRemember: "记住每种叠加层最后使用的颜色、粗细、不透明度和字体大小，作为下一个同类叠加层的起始值，并在会话之间保留。关闭后始终使用上面的固定默认值。",

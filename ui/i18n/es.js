@@ -1834,11 +1834,6 @@ export default {
     // --- screenshot and video editor drawing defaults, export folder ---
     valSnipDefaultColor: "Color de dibujo predeterminado",
     valVideoExportDir: "Carpeta de exportación de vídeo",
-    optFontSegoeui: "Segoe UI",
-    optFontArial: "Arial",
-    optFontArialBold: "Arial Negrita",
-    optFontConsola: "Consolas",
-    optFontGeorgia: "Georgia",
     tipSnipDefaultColor: "Color inicial con el que comienza una herramienta al usarla por primera vez tras abrir el editor de capturas. Utiliza el primer color de la paleta personalizada hasta que se defina uno aquí.",
     flagVeOvRemember: "Recordar valores de superposición",
     tipVeOvRemember: "Guarda el último color, grosor, opacidad y tamaño de fuente usados para cada tipo de superposición como punto de partida para la siguiente, más allá de la sesión. Desactivado, siempre parte de los valores fijos de arriba.",
