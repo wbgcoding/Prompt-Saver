@@ -1,7 +1,6 @@
 // Expert menu: the renderer, its rows and the live-state parts of the setting registry.
-import { $, armButton, assignBUBBLE_MS, assignDISARM_MS, assignDRAG_THRESHOLD, assignHISTORY_PREVIEW_LEN, assignINPUT_MAX, assignLibraryTab, assignPrompts, assignROTATE_SHORT_MAX, assignSettings, assignTOAST_MS, COLORS, debounced, DEFAULT_COLORS, DICT, DISARM_MS, disarmButton, errToast, ETA_MIN_PCT, ETA_MIN_SECS, EXPERT_ACTIONS, flag, flagState, gateOpen, HEADER_PAD_Y, HEX_RE, ICON_UNDO, ICON_WARN, invoke, LANG, listen, modal, openColorPop, optFlag, PALETTE_LEN, prompts, putIcon, setStatusText, settings, settingsEl, shipsOn, SIZE_MAX, SIZE_MIN, SIZE_STEP, t, toast, txt, val } from "./core.js";
+import { $, armButton, assignBUBBLE_MS, assignDISARM_MS, assignDRAG_THRESHOLD, assignHISTORY_PREVIEW_LEN, assignINPUT_MAX, assignLibraryTab, assignPrompts, assignROTATE_SHORT_MAX, assignSettings, assignTOAST_MS, COLORS, debounced, DEFAULT_COLORS, DICT, DISARM_MS, disarmButton, errToast, ETA_MIN_PCT, ETA_MIN_SECS, EXPERT_ACTIONS, flag, flagState, gateOpen, HEADER_PAD_Y, HEX_RE, ICON_UNDO, ICON_WARN, invoke, LANG, listen, modal, openColorPop, optFlag, PALETTE_LEN, prompts, putIcon, setStatusText, settings, settingsEl, shipsOn, t, toast, txt, val } from "./core.js";
 import { ALL_FLAG_KEYS, normScreenshotFormat, EXPERT_BULK_NEVER, EXPERT_RESET_KEEP, EXPERT_SELECTS, EXPERT_TABS, EXPERT_TIP_SET, EXPERT_VALUES, FLAG_GATES, flagLabelKey, GRID_DOM_VALUES, groupFlags, OPT_FLAG_KEYS, REC_QUALITY_BITRATE, SETTINGS_AREA_LABEL, STYLE_OPTS, TILE_DOM_FLAGS, TILE_STYLES } from "./expertConfig.js";
-import { FONT_LABELS, FONTS } from "./fonts.js";
 import { confirmDialog, infoDialog } from "./dialog.js";
 import { refreshFavViewUi, renderGrid, renderViews } from "./views.js";
 import { fitAllTiles, fitBox, fitCache } from "./tiles.js";
@@ -12,7 +11,7 @@ import { offerClipInboxCleanup, refreshClipInbox } from "./journal.js";
 import { applyBarToggleTips } from "./windowChrome.js";
 import { setMediaDefaults } from "./media.js";
 import { attachSelectPicker } from "./selectpop.js";
-import { a11yProgressText, ffmpegDownloadPct, fmtBytes, formatEta, makeEtaEstimator, normRecFormat, VIDEO_FORMATS, videoFormatLabelKey } from "./floatShared.js";
+import { a11yProgressText, ffmpegDownloadPct, fmtBytes, formatEta, makeEtaEstimator, normCopySizeLevel, normRecFormat, VIDEO_FORMATS, videoFormatLabelKey } from "./floatShared.js";
 import { hideSettings, syncSettingsControls } from "./settingsPanel.js";
 import { bindHotkeyField, commitRecPauseHotkey, commitRecStopHotkey, prettyAccel } from "./hotkeys.js";
 import EN from "./i18n/en.js";
@@ -39,8 +38,7 @@ export function enumDropdown(key, labelKey, opts, def, gate, norm = (v) => v) {
   };
 }
 
-// Dropdowns like the settings' text-size / font selects. copySize lives in
-// ui_values (0 = auto-fit to the button), copyFont in ui_texts ("" = default).
+// Dropdowns like the settings' text-size / font selects.
 export const EXPERT_DROPDOWNS = {
   // Live counter unit selection.
   counterUnits: enumDropdown("counterUnits", "valCounterUnits",
@@ -209,41 +207,10 @@ export const EXPERT_DROPDOWNS = {
   // Tag manager / filter chip order.
   tagSort: enumDropdown("tagSort", "valTagSort",
     [["alpha", "optTagSortAlpha"], ["usage", "optTagSortUsage"]], "alpha", "tags"),
-  copySize: {
-    label: "valCopySize",
-    // Only styles the "Copied!" bubble text -- pointless while that bubble is off.
-    gate: "bubbleMs",
-    // get() always returns a String (see below): a numeric def here made
-    // isRowChanged's strict !== comparison permanently true ("0" !== 0).
-    def: "0",
-    options: () => {
-      const o = [["0", t("langAuto")]];
-      for (let s = SIZE_MIN; s <= SIZE_MAX; s += SIZE_STEP) o.push([String(s), String(s)]);
-      return o;
-    },
-    get: () => String(Number(settings.ui_values?.copySize) || 0),
-    set: async (v) => {
-      settings.ui_values = { ...(settings.ui_values || {}), copySize: Number(v) };
-      try { await invoke("set_ui_value", { key: "copySize", value: Number(v) }); } catch (e) { errToast(e); }
-    },
-  },
-  copyFont: {
-    label: "valCopyFont",
-    gate: "bubbleMs",
-    def: "",
-    options: () => {
-      const o = [["", t("styleDefault"), ""]];
-      for (const [key, stack] of Object.entries(FONTS)) {
-        o.push([key, FONT_LABELS[key] ?? t(key === "script" ? "fontScript" : "fontSystem"), stack]);
-      }
-      return o;
-    },
-    get: () => settings.ui_texts?.copyFont ?? "",
-    set: async (v) => {
-      settings.ui_texts = { ...(settings.ui_texts || {}), copyFont: v };
-      try { await invoke("set_ui_text", { key: "copyFont", value: v }); } catch (e) { errToast(e); }
-    },
-  },
+  // Text size of the "Copied!" confirmation on tiles and pills: a share of the
+  // size that fits the tile or button.
+  copySizeLevel: enumDropdown("copySizeLevel", "valCopySize",
+    [["small", "optCopySizeSmall"], ["medium", "optCopySizeMedium"], ["large", "optCopySizeLarge"]], "large", "bubbleMs", normCopySizeLevel),
 };
 
 // Mirror each disabled flag onto a body class so CSS can hide the matching UI.

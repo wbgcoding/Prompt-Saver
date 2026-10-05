@@ -8,6 +8,18 @@ export const COPIED_MS = 900; // "copied!" tile/pill flash duration
 export const RING_MIN = 8;    // smallest resize-ring thickness (px)
 export const RING_MAX = 60;   // largest resize-ring thickness (px)
 export const DRAG_OUT_MODS = { ctrl: "ctrlKey", alt: "altKey", shift: "shiftKey" };
+// "Copied!" text size: the share of the size that fits the tile or button.
+// A stored level outside the list reads as large.
+export const COPY_SIZE_FACTORS = { small: 0.6, medium: 0.8, large: 1 };
+export const normCopySizeLevel = (v) => (Object.hasOwn(COPY_SIZE_FACTORS, v) ? v : "large");
+// Shrinks an already fitted font size to the chosen level, never below 10 px
+// and never above the fitted size.
+export function applyCopySizeLevel(el, level) {
+  const factor = COPY_SIZE_FACTORS[normCopySizeLevel(level)];
+  if (factor >= 1) return;
+  const px = parseFloat(el.style.fontSize);
+  if (px > 0) el.style.fontSize = `${Math.min(px, Math.max(10, Math.round(px * factor)))}px`;
+}
 // The formats a recording or an export can be written as; each key is also the
 // file extension. A stored choice outside the list (an old install) reads as MP4.
 export const VIDEO_FORMATS = ["mp4", "webm", "gif", "avi"];

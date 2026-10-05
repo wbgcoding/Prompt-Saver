@@ -148,6 +148,28 @@ FORMAT_PROBE = """
 </script>
 """
 
+# copySizeLevel: the "Copied!" bubble of a copied tile reports its font size, the run compares the levels.
+COPYSIZE_PROBE = """
+<script>
+(async () => {""" + FIND + """
+  const errs = [];
+  try {
+    await until(() => document.querySelectorAll('#grid .tile').length > 6);
+    await sleep(400);
+    const tile = document.querySelector('#grid .tile');
+    for (const type of ['pointerdown', 'pointerup', 'click']) {
+      tile.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, button: 0, isPrimary: true, pointerId: 1 }));
+    }
+    let pop = null;
+    for (let i = 0; i < 40 && !pop; i++) { await sleep(25); pop = document.querySelector('.copy-pop'); }
+    if (!pop) errs.push('no copy bubble appeared');
+    else errs.push('px=' + parseFloat(pop.style.fontSize));
+  } catch (e) { errs.push('probe threw: ' + (e && e.stack || e)); }
+  finish(errs);
+})();
+</script>
+"""
+
 PROBE_ON = """
 <script>
 (async () => {""" + FIND + """
@@ -214,8 +236,8 @@ VALUE_GATE_PROBE = """
     await sleep(200);
     document.getElementById('expert-open').click();
     await sleep(300);
-    const found = await scan([{ kind: 'dropdown', key: 'copySize' }, { kind: 'dropdown', key: 'copyFont' }]);
-    for (const id of ['dropdown:copySize', 'dropdown:copyFont']) {
+    const found = await scan([{ kind: 'dropdown', key: 'copySizeLevel' }]);
+    for (const id of ['dropdown:copySizeLevel']) {
       if (!!found[id] !== __WANT__) errs.push(id + ' is ' + (found[id] ? 'shown' : 'hidden') + ' with the bubble time __BUBBLE__');
     }
   } catch (e) { errs.push('probe threw: ' + (e && e.stack || e)); }
@@ -591,6 +613,18 @@ def consumer_problems(browser, tmp):
     check("stored removed formats", "index.html", FORMAT_PROBE.replace("__WANTED__", wanted),
           {"ui_flags": {"screenRecord": True, "screenshot": True},
            "ui_texts": {"recFormat": "mov", "screenshotFormat": "tiff"}})
+    px = {}
+    for level in ("large", "medium", "small"):
+        res = run(browser, tmp, "index.html", COPYSIZE_PROBE, {"ui_texts": {"copySizeLevel": level}})
+        got = [e[3:] for e in res if e.startswith("px=")]
+        if len(res) != 1 or len(got) != 1:
+            out.append(f"[copySizeLevel {level}] " + "; ".join(res))
+        else:
+            px[level] = float(got[0])
+    if len(px) == 3:
+        for level, factor in (("medium", 0.8), ("small", 0.6)):
+            if abs(px[level] - factor * px["large"]) > 1:
+                out.append(f"[copySizeLevel {level}] bubble font is {px[level]}px, expected {factor} x {px['large']}px (+-1)")
     for color in ("#ff8800", "#2563eb"):
         head = "<script>" + outline_init_script(color) + "</script>"
         check("outline colour " + color, "recoutline.html", OUTLINE_PROBE.replace("__WANT__", hex_to_rgb(color)),

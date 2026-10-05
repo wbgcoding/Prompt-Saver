@@ -7,7 +7,7 @@ import { applyFloatTheme, inkForColor, onInkChange } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
 import { LANGS, compactTexts } from "./i18n.js";
 import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT, COPY_SOUND_VOLUME_DEFAULT } from "./copyDefaults.js";
-import { COPIED_MS, RING_MIN, RING_MAX, DRAG_OUT_MODS, resolveLang, fileUri, playCopySound } from "./floatShared.js";
+import { COPIED_MS, RING_MIN, RING_MAX, DRAG_OUT_MODS, resolveLang, fileUri, playCopySound, applyCopySizeLevel } from "./floatShared.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
 // switcher, so it comes from the brand rather than a hardcoded English word.
@@ -31,8 +31,7 @@ const parkedBadge = document.getElementById("parked-badge");
 let scale = 1;
 let tileSize = 0; // global text size setting (0 = auto)
 let globalFontKey = "system";
-let copySize = 0; // expert copy-text size (0 = auto-fit to the pill)
-let copyFont = ""; // expert copy-text font key ("" = pill font)
+let copySizeLevel = "large"; // "Copied!" text size level: small, medium or large (large fills the pill)
 let pFont = ""; // per-prompt overrides ("" / 0 = follow settings)
 let cooldownMs = COOLDOWN_MS_DEFAULT; // re-copy throttle for this pill (expert value)
 let videoControlsOn = true; // gates the hover media bar, mirrors flag("videoControls") in core.js
@@ -230,7 +229,7 @@ function applyPrefs(s) {
   scale = Number.isFinite(rawScale) && rawScale > 0 ? Math.min(SCALE_MAX, Math.max(SCALE_MIN, rawScale)) : 1;
   tileSize = Number(s.tile_size) || 0;
   globalFontKey = s.tile_font || "system";
-  copySize = Number(s.ui_values?.copySize) || 0;
+  copySizeLevel = s.ui_texts?.copySizeLevel;
   const cd = Number(s.ui_values?.copyCooldownMs);
   cooldownMs = Number.isFinite(cd) ? cd : COOLDOWN_MS_DEFAULT;
   const dt = Number(s.ui_values?.dragThreshold);
@@ -255,8 +254,6 @@ function applyPrefs(s) {
   // badge is off (47's own "no peek while off" guard), so flipping the flag back on
   // here needs a fresh peek, not just a re-render of whatever was last known.
   primeRotateBadge();
-  copyFont = s.ui_texts?.copyFont || "";
-  document.getElementById("feedback").style.fontFamily = FONTS[copyFont] || "";
   const op = Number(s.ui_values?.floatOpacity);
   pill.style.opacity = Number.isFinite(op) ? `${Math.max(0.2, op / 100)}` : "";
   const pfs = Number(s.ui_values?.pillFontSize);
@@ -518,8 +515,8 @@ listen("missing-files", (e) => {
 
 function showCopied() {
   const fb = document.getElementById("feedback");
-  if (copySize > 0) fb.style.fontSize = `${copySize}px`;
-  else fitText(fb, pill.clientWidth - 10, pill.clientHeight - 6, 120);
+  fitText(fb, pill.clientWidth - 10, pill.clientHeight - 6, 120);
+  applyCopySizeLevel(fb, copySizeLevel);
   // Cleared and reset rather than left alone: the text never actually changed
   // since the pill was made, so a screen reader needs an actual mutation to
   // announce it again on a second copy in a row.

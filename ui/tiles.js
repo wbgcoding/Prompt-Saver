@@ -4,7 +4,7 @@ import { applyChainToTile, chainMode, toggleChainPick } from "./chain.js";
 import { applyVideoPrefs, buildMediaBar, mediaKind } from "./media.js";
 import { fitText, FONTS } from "./fonts.js";
 import { FLAG_GATES } from "./expertConfig.js";
-import { DRAG_OUT_MODS, fileUri } from "./floatShared.js";
+import { applyCopySizeLevel, DRAG_OUT_MODS, fileUri } from "./floatShared.js";
 import { activeView, clearViewDropHover, dropTilesOnView, gridKeyOf, layoutOf, openGridSizeFor, openMiniMenu, placeFav, renderGrid, resolveViewDropTarget, updateViewDropHover, viewsContaining } from "./views.js";
 import { dialogTokens, peekRotatedText } from "./promptVars.js";
 import { copyOnCooldown, copyTextWithVars, maybeCloseOnCopy, recordCopy } from "./copyFlow.js";
@@ -692,13 +692,11 @@ export function resumeDragVideos(el) {
   });
 }
 
-// Apply the expert copy-feedback font + size to a "Copied!" element. copySize 0
-// (default) auto-fits the text to the element's button; otherwise a fixed px.
+// Size a "Copied!" element: fit the text to its box, then scale it to the chosen
+// level (large is the full fit).
 export function styleCopyText(el, maxW, maxH, cap) {
-  el.style.fontFamily = FONTS[txt("copyFont")] || "";
-  const cs = Number(settings.ui_values?.copySize) || 0;
-  if (cs > 0) el.style.fontSize = `${cs}px`;
-  else fitText(el, maxW, maxH, cap);
+  fitText(el, maxW, maxH, cap);
+  applyCopySizeLevel(el, txt("copySizeLevel"));
 }
 
 // Named (not the pill/folder windows' shared COPIED_MS=900 -- this tile flash

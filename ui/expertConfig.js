@@ -675,7 +675,7 @@ export const EXPERT_TABS = [
     // highlighter only ever paints inside the preview.
     { title: "expGroupEditor", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }, { key: "copyFormatted", gate: "mdPreview" }, "lengthCounter", "promptHistory", { key: "historyDiff", gate: "promptHistory" }, "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace", "confirmDiscard"], values: ["hlFontPx", "historyPerPrompt", "notesTipLen", "historyPreviewLen", "editorDraftSecs", "nameMaxLen"], dropdowns: ["counterUnits"] },
     // Everything that happens between a click and the clipboard.
-    { title: "expGroupCopy", flags: ["promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, { key: "autoPasteEnter", gate: "autoPaste" }, "hideWindowOnCopy", "copyFlash", "copySound"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs", "bubbleMs", "copySoundVolume"], dropdowns: ["dragOutModifier", "copySize", "copyFont"] },
+    { title: "expGroupCopy", flags: ["promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, { key: "autoPasteEnter", gate: "autoPaste" }, "hideWindowOnCopy", "copyFlash", "copySound"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs", "bubbleMs", "copySoundVolume"], dropdowns: ["dragOutModifier", "copySizeLevel"] },
     // Copying several different prompts as one text.
     { title: "expGroupChain", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "chainQuickStart", gate: "chainPrompts" }, { key: "chainVarCheck", gate: "chainPrompts" }], dropdowns: ["chainSeparator"] },
     // Floating buttons and the two kinds of folder they can form.
@@ -837,7 +837,7 @@ export const EXPERT_TIPS = [
   "similarThreshold", "similarHint", "clipMinChars", "clipInboxMax", "historyMax",
   "nameMaxLen", "searchListMax", "savedSearchMax", "maxViews", "gridMax",
   "viewBorder", "statsTopN", "multiViewPrompt",
-  "barToggles", "barToggleBoth", "quickGrid", "quickGridHoverOnly", "multiView", "libraryCols", "copySize", "copyFont", "showLibrary", "composerScale", "primaryScale",
+  "barToggles", "barToggleBoth", "quickGrid", "quickGridHoverOnly", "multiView", "libraryCols", "copySizeLevel", "showLibrary", "composerScale", "primaryScale",
   "remoteApi", "remoteNetworkFilter", "remoteTlsShortLived", "urlScheme", "remotePort", "remoteRateLimit",
   "recOutline", "recOutlineColor", "chainSeparator",
 ];
