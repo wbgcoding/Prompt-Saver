@@ -9,6 +9,7 @@ use super::*;
 // crashed-out webview or a bug can leave behind) is rebuilt first instead of
 // leaving the call a silent no-op.
 pub(crate) fn show_main(app: &AppHandle) {
+    park_idle_snip_overlay(app);
     let win = show_main_seam(app.get_webview_window("main"), || build_main_window(app));
     let Some(win) = win else { return };
     if let Some(state) = app.try_state::<Db>() {

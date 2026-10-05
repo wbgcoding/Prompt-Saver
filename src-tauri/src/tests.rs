@@ -17492,3 +17492,45 @@ fn pill_and_folder_windows_are_built_hidden_and_shown_on_page_load() {
         assert!(!src[b..rest_end].contains("win.show()"), "{page} window must not be shown right after build()");
     }
 }
+
+// The pre-warmed snip overlay is built once at launch and then idles hidden. If
+// anything ever shows it while idle (a slow boot, a window-manager quirk) it must
+// not be an 800x600 white rectangle at the default spot of the main screen: it is
+// built tiny, far outside every monitor and with a dark native backdrop, and an
+// idle sweep puts it away again. The real snip path always sets its own bounds
+// before it reveals the overlay.
+#[test]
+fn prewarmed_snip_overlay_is_tiny_off_screen_and_dark() {
+    let spec = snip_prewarm_spec();
+    assert!(spec.width <= 4 && spec.height <= 4, "the idle overlay must be a few pixels at most");
+    assert!(spec.x <= -10000 && spec.y <= -10000, "the idle overlay must sit far outside every monitor");
+    assert_eq!(spec.color.3, 255, "the idle overlay backdrop must be opaque, never white");
+    assert!(spec.color.0 < 64 && spec.color.1 < 64 && spec.color.2 < 64, "the idle overlay backdrop must be dark");
+}
+
+#[test]
+fn idle_snip_overlay_is_parked_whenever_it_shows_up() {
+    assert!(snip_idle_needs_parking(false, true), "visible with no session: park it");
+    assert!(!snip_idle_needs_parking(true, true), "a live session owns the overlay");
+    assert!(!snip_idle_needs_parking(false, false), "already hidden: nothing to do");
+    assert!(!snip_idle_needs_parking(true, false));
+}
+
+#[test]
+fn snip_overlay_builder_uses_the_prewarm_spec_and_every_reveal_sets_bounds() {
+    let src = production_sources();
+    let a = src.find("pub(crate) fn build_snip_window").expect("build_snip_window");
+    let b = a + src[a..].find("\n}\n").expect("end of build_snip_window");
+    let body = &src[a..b];
+    assert!(body.contains(".visible(false)"), "the overlay is built hidden");
+    assert!(body.contains(".inner_size(") && body.contains(".position("), "the overlay is built tiny and off-screen");
+    assert!(body.contains("set_background_color"), "the overlay never shows the default white backdrop");
+    // The reveal puts the full bounds on before the show, on the reuse path and the shared reveal.
+    let r = src.find("pub(crate) async fn reveal_snip").expect("reveal_snip");
+    let rend = r + src[r..].find("\n}\n").expect("end of reveal_snip");
+    let reveal = &src[r..rend];
+    let size = reveal.find("set_size(").expect("reveal sets size");
+    let pos = reveal.find("set_position(").expect("reveal sets position");
+    let show = reveal.find("win.show()").expect("reveal shows");
+    assert!(size < show && pos < show, "reveal_snip must set size and position before show");
+}

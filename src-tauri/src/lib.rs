@@ -748,6 +748,14 @@ pub fn run() {
                         let _ = build_snip_window(&h);
                     }
                 });
+                // The overlay must stay invisible while idle: look again a few
+                // times through the slow part of a boot and put it away if
+                // anything showed it (a no-op while it is hidden or in use).
+                for wait_ms in [0u64, 2500, 10000] {
+                    tokio::time::sleep(std::time::Duration::from_millis(wait_ms)).await;
+                    let h = h_pw.clone();
+                    let _ = h_pw.run_on_main_thread(move || park_idle_snip_overlay(&h));
+                }
             });
 
             // Update check: right after launch, then once a day (if enabled).

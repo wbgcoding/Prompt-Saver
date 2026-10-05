@@ -890,6 +890,11 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **No white field on the main screen after start-up.** The hidden
+  screenshot overlay that is prepared at launch is now created tiny, far
+  outside every monitor and with a dark backdrop, and is put away again if
+  anything shows it while no screenshot is running. It can no longer appear as
+  an empty white rectangle until the main window is opened.
 - **No empty window at start-up.** Floating buttons and button folders now
   appear only once their content has loaded, so a slow start of the web view
   after logging in no longer leaves a blank rectangle on screen.

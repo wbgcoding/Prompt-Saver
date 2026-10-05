@@ -905,13 +905,52 @@ pub(crate) fn copy_pick_history_entry(app: AppHandle, hex: String) -> Result<Str
     Ok(text)
 }
 
-// Build the (hidden) snip overlay window: borderless WS_POPUP, no shadow, fixed
-// size, always-on-top. Created once and reused across snips so the WebView2
-// cold-start is paid a single time. A Destroyed handler clears the session and
-// restores the app's windows if the overlay is ever torn down.
+// Where and how the idle, pre-warmed snip overlay sits: a few pixels, far outside
+// every monitor, with an opaque dark native backdrop. Should anything ever show it
+// while no snip is running, it is then a speck nobody can see, never the default
+// 800x600 white rectangle at the system's default spot on the main screen.
+pub(crate) struct SnipPrewarmSpec {
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) x: i32,
+    pub(crate) y: i32,
+    pub(crate) color: (u8, u8, u8, u8),
+}
+
+pub(crate) fn snip_prewarm_spec() -> SnipPrewarmSpec {
+    SnipPrewarmSpec { width: 2, height: 2, x: -32000, y: -32000, color: (0, 0, 0, 255) }
+}
+
+// Pure: an overlay that is on screen while no snip session owns it has to go away.
+pub(crate) fn snip_idle_needs_parking(session_active: bool, visible: bool) -> bool {
+    visible && !session_active
+}
+
+// Put the overlay away again when something showed it outside a session: tiny,
+// off-screen and hidden, so the next snip still finds its warm webview.
+pub(crate) fn park_idle_snip_overlay(app: &AppHandle) {
+    let Some(win) = app.get_webview_window("snip-0") else { return };
+    if !snip_idle_needs_parking(SNIP_ACTIVE.load(Ordering::SeqCst), win.is_visible().unwrap_or(false)) {
+        return;
+    }
+    let spec = snip_prewarm_spec();
+    let _ = win.set_size(PhysicalSize::new(spec.width, spec.height));
+    let _ = win.set_position(PhysicalPosition::new(spec.x, spec.y));
+    let _ = win.hide();
+}
+
+// Build the (hidden) snip overlay window: borderless WS_POPUP, no shadow,
+// always-on-top. It is born tiny and off-screen (snip_prewarm_spec); every real
+// snip sets the full desktop bounds before it reveals the window. Created once
+// and reused across snips so the WebView2 cold-start is paid a single time. A
+// Destroyed handler clears the session and restores the app's windows if the
+// overlay is ever torn down.
 pub(crate) fn build_snip_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String> {
+    let spec = snip_prewarm_spec();
     let win = WebviewWindowBuilder::new(app, "snip-0", WebviewUrl::App("snip.html".into()))
         .title("")
+        .inner_size(f64::from(spec.width), f64::from(spec.height))
+        .position(f64::from(spec.x), f64::from(spec.y))
         .decorations(false)
         .shadow(false)
         .always_on_top(true)
@@ -922,6 +961,11 @@ pub(crate) fn build_snip_window(app: &AppHandle) -> Result<tauri::WebviewWindow,
         .visible(false)
         .build()
         .map_err(|e| e.to_string())?;
+    // Native backdrop dark instead of the default white, and the exact physical
+    // geometry regardless of DPI scaling (the builder values are logical).
+    let _ = win.set_background_color(Some(tauri::webview::Color(spec.color.0, spec.color.1, spec.color.2, spec.color.3)));
+    let _ = win.set_size(PhysicalSize::new(spec.width, spec.height));
+    let _ = win.set_position(PhysicalPosition::new(spec.x, spec.y));
     let excluded = app
         .try_state::<Db>()
         .map(|s| capture_excluded(&s.lock().unwrap_or_else(|e| e.into_inner()).settings))
