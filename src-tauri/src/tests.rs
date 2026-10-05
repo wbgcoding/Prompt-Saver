@@ -17473,3 +17473,22 @@ fn secret_timeout_defaults_to_15() {
     s.ui_values.insert("secretTimeoutMin".into(), 60.0);
     assert_eq!(secret_timeout_min(&s), 60);
 }
+
+// A pill or folder window shown at creation is an empty rectangle on screen until
+// WebView2 has loaded its page (seen as a blank window at a slow boot). Both are
+// built hidden and revealed by the page-load handler, never by a direct show().
+#[test]
+fn pill_and_folder_windows_are_built_hidden_and_shown_on_page_load() {
+    let src = production_sources();
+    for page in ["floating.html", "folder.html"] {
+        let start_marker = format!("WebviewWindowBuilder::new(app, &label, WebviewUrl::App(\"{page}\".into()))");
+        assert_eq!(src.matches(&start_marker).count(), 1, "{page} builder must occur exactly once");
+        let a = src.find(&start_marker).unwrap();
+        let b = a + src[a..].find(".build();").expect("end of builder chain");
+        let chain = &src[a..b];
+        assert!(chain.contains(".visible(false)"), "{page} window must be built hidden");
+        assert!(chain.contains(".on_page_load(reveal_when_loaded)"), "{page} window must be revealed on page load");
+        let rest_end = b + src[b..].find("\n}\n").expect("end of function");
+        assert!(!src[b..rest_end].contains("win.show()"), "{page} window must not be shown right after build()");
+    }
+}

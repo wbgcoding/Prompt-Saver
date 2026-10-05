@@ -86,6 +86,15 @@ pub(crate) fn file_dialog(app: &AppHandle) -> rfd::FileDialog {
     file_dialog_for(app, "main")
 }
 
+// A pill or folder window is built hidden and shown by this once its page has
+// loaded: a window shown at creation sits on screen as an empty rectangle for as
+// long as WebView2 needs to start, which at a slow boot is long enough to be seen.
+fn reveal_when_loaded(win: tauri::WebviewWindow, payload: tauri::webview::PageLoadPayload<'_>) {
+    if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+        let _ = win.show();
+    }
+}
+
 // `taken` collects the box this pill actually lands in (real or parked) so
 // the next call in the same sync_float_windows pass fans its own park spot
 // out from this one instead of landing on top of it.
@@ -136,6 +145,8 @@ pub(crate) fn open_floating(app: &AppHandle, prompt: &Prompt, taken: &mut Vec<Re
         .skip_taskbar(true)
         .resizable(false)
         .shadow(false)
+        .visible(false)
+        .on_page_load(reveal_when_loaded)
         .build();
 
     if let Ok(win) = win {
@@ -144,7 +155,6 @@ pub(crate) fn open_floating(app: &AppHandle, prompt: &Prompt, taken: &mut Vec<Re
         let _ = win.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
         set_capture_exclusion(&win, excluded);
         let _ = win.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32));
-        let _ = win.show();
 
         let app2 = app.clone();
         let pid = prompt.id.clone();
@@ -777,13 +787,14 @@ pub(crate) fn open_folder_window(app: &AppHandle, folder: &FloatFolder, taken: &
         .skip_taskbar(true)
         .resizable(false)
         .shadow(false)
+        .visible(false)
+        .on_page_load(reveal_when_loaded)
         .build();
 
     if let Ok(win) = win {
         let _ = win.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
         set_capture_exclusion(&win, excluded);
         let _ = win.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32));
-        let _ = win.show();
 
         let app2 = app.clone();
         let fid = folder.id.clone();

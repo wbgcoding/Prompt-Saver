@@ -890,6 +890,9 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **No empty window at start-up.** Floating buttons and button folders now
+  appear only once their content has loaded, so a slow start of the web view
+  after logging in no longer leaves a blank rectangle on screen.
 - **Uninstalling an all-users install leaves no entry behind.** The app no
   longer stays listed under installed apps, and its Start menu shortcut is
   removed, after uninstalling an install made for all users.
