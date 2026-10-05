@@ -1799,6 +1799,7 @@ the video editor and the introduction tour ship on).
 - **The prompt text comes first in the editor.** The text field now sits directly under the name; placeholders, rotation, the private note and the colours follow below it, and the note starts as a single line.
 - **The note field explains itself in its placeholder.** The editor's note field says "Private note, never copied" as its placeholder; the extra tooltip that popped up over it when the editor opened is gone.
 - **A one-line colour row in the editor.** The editor shows no colour, the free picker, the colours your prompts already use and a "More colors" button that opens the whole palette.
+- **The take-over question names the real button.** The portable take-over dialog now says which button leaves the portable version empty (for example "Start empty") instead of a Yes/No answer that did not match the buttons.
 
 ## 2.6.3 (2026-07-26)
 

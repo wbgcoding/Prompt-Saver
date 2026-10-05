@@ -56,7 +56,7 @@ export default {
     valImportFolderMax: "Folder import: maximum files",
     importConfirm: "Import",
     takeoverTitle: "Take over existing data?",
-    takeoverBody: "Saved prompts were found here:\n{path} ({details})\n\nCopy them into this portable version?\n\nNo starts the portable version empty.\nThe existing data is kept either way.",
+    takeoverBody: "Saved prompts were found here:\n{path} ({details})\n\nCopy them into this portable version?\n\n\"{skip}\" leaves the portable version empty.\nThe existing data is kept either way.",
     takeoverAdopt: "Take data over",
     takeoverSkip: "Start empty",
     takeoverPromptCount: "{n} prompts",

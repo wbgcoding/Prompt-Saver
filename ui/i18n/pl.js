@@ -82,7 +82,7 @@ export default {
     valImportFolderMax: "Import z folderu: maksymalna liczba plików",
     importConfirm: "Importuj",
     takeoverTitle: "Przejąć istniejące dane?",
-    takeoverBody: "Znaleziono tutaj zapisane prompty:\n{path} ({details})\n\nSkopiować je do tej przenośnej wersji?\n\nWybranie „Nie” uruchomi przenośną wersję pustą.\nIstniejące dane pozostają zachowane w obu przypadkach.",
+    takeoverBody: "Znaleziono tutaj zapisane prompty:\n{path} ({details})\n\nSkopiować je do tej przenośnej wersji?\n\n„{skip}” pozostawia przenośną wersję pustą.\nIstniejące dane pozostają zachowane w obu przypadkach.",
     takeoverAdopt: "Przejmij dane",
     takeoverSkip: "Zacznij pusto",
     takeoverPromptCount: "{n} promptów",

@@ -82,7 +82,7 @@ export default {
     valImportFolderMax: "Import din folder: numărul maxim de fișiere",
     importConfirm: "Importă",
     takeoverTitle: "Preluați datele existente?",
-    takeoverBody: "Prompturile salvate au fost găsite aici:\n{path} ({details})\n\nSă fie copiate în această versiune portabilă?\n\nNu pornește versiunea portabilă goală.\nDatele existente sunt păstrate în ambele cazuri.",
+    takeoverBody: "Prompturile salvate au fost găsite aici:\n{path} ({details})\n\nSă fie copiate în această versiune portabilă?\n\n„{skip}” lasă versiunea portabilă goală.\nDatele existente sunt păstrate în ambele cazuri.",
     takeoverAdopt: "Preia datele",
     takeoverSkip: "Pornește gol",
     takeoverPromptCount: "{n} prompturi",

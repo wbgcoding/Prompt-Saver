@@ -331,7 +331,7 @@ export async function offerTakeover() {
   const details = `${fmtBytes(offer.size)}, ${countText}`;
   const adopt = await confirmDialog({
     title: t("takeoverTitle"),
-    message: t("takeoverBody").replace("{path}", offer.path).replace("{details}", details),
+    message: t("takeoverBody").replace("{path}", offer.path).replace("{details}", details).replace("{skip}", t("takeoverSkip")),
     confirmLabel: t("takeoverAdopt"),
     cancelLabel: t("takeoverSkip"),
     icon: TAKEOVER_SVG,

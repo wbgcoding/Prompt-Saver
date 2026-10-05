@@ -82,7 +82,7 @@ export default {
     valImportFolderMax: "Mapimport: maximum aantal bestanden",
     importConfirm: "Importeren",
     takeoverTitle: "Bestaande gegevens overnemen?",
-    takeoverBody: "Opgeslagen prompts zijn hier gevonden:\n{path} ({details})\n\nDeze naar deze portable versie kopiëren?\n\nNee start de portable versie leeg.\nDe bestaande gegevens blijven in beide gevallen behouden.",
+    takeoverBody: "Opgeslagen prompts zijn hier gevonden:\n{path} ({details})\n\nDeze naar deze portable versie kopiëren?\n\n‘{skip}’ laat de portable versie leeg.\nDe bestaande gegevens blijven in beide gevallen behouden.",
     takeoverAdopt: "Gegevens overnemen",
     takeoverSkip: "Leeg starten",
     takeoverPromptCount: "{n} prompts",

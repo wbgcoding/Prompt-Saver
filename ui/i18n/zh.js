@@ -82,7 +82,7 @@ export default {
     valImportFolderMax: "文件夹导入：文件数量上限",
     importConfirm: "导入",
     takeoverTitle: "接管现有数据？",
-    takeoverBody: "在此处找到了已保存的提示词：\n{path}（{details}）\n\n是否将它们复制到此便携版中？\n\n选择“否”将以空白状态启动便携版。\n无论选择哪个，现有数据都会保留。",
+    takeoverBody: "在此处找到了已保存的提示词：\n{path}（{details}）\n\n是否将它们复制到此便携版中？\n\n选择“{skip}”将使便携版保持空白。\n无论选择哪个，现有数据都会保留。",
     takeoverAdopt: "接管数据",
     takeoverSkip: "空白启动",
     takeoverPromptCount: "{n} 个提示词",

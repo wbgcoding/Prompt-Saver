@@ -82,7 +82,7 @@ export default {
     valImportFolderMax: "Importazione cartella: numero massimo di file",
     importConfirm: "Importa",
     takeoverTitle: "Recuperare i dati esistenti?",
-    takeoverBody: "Sono stati trovati prompt salvati qui:\n{path} ({details})\n\nCopiarli in questa versione portatile?\n\nNo avvia la versione portatile vuota.\nI dati esistenti vengono conservati in entrambi i casi.",
+    takeoverBody: "Sono stati trovati prompt salvati qui:\n{path} ({details})\n\nCopiarli in questa versione portatile?\n\n«{skip}» lascia vuota la versione portatile.\nI dati esistenti vengono conservati in entrambi i casi.",
     takeoverAdopt: "Recupera i dati",
     takeoverSkip: "Inizia vuoto",
     takeoverPromptCount: "{n} prompt",

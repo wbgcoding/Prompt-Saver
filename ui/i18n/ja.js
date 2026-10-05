@@ -82,7 +82,7 @@ export default {
     valImportFolderMax: "フォルダインポート：最大ファイル数",
     importConfirm: "インポート",
     takeoverTitle: "既存のデータを引き継ぎますか？",
-    takeoverBody: "保存されたプロンプトがここに見つかりました：\n{path}（{details}）\n\nこのポータブル版にコピーしますか？\n\n「いいえ」を選ぶとポータブル版は空の状態で起動します。\nどちらの場合も既存のデータはそのまま残ります。",
+    takeoverBody: "保存されたプロンプトがここに見つかりました：\n{path}（{details}）\n\nこのポータブル版にコピーしますか？\n\n「{skip}」を選ぶとポータブル版は空の状態のままになります。\nどちらの場合も既存のデータはそのまま残ります。",
     takeoverAdopt: "データを引き継ぐ",
     takeoverSkip: "空の状態で開始",
     takeoverPromptCount: "{n} 件のプロンプト",

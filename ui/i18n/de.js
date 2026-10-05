@@ -56,7 +56,7 @@ export default {
     valImportFolderMax: "Ordner-Import: Höchstzahl Dateien",
     importConfirm: "Importieren",
     takeoverTitle: "Vorhandene Daten übernehmen?",
-    takeoverBody: "Gespeicherte Prompts wurden hier gefunden:\n{path} ({details})\n\nSollen sie in diese portable Version kopiert werden?\n\nNein startet die portable Version leer.\nDie vorhandenen Daten bleiben in beiden Fällen erhalten.",
+    takeoverBody: "Gespeicherte Prompts wurden hier gefunden:\n{path} ({details})\n\nSollen sie in diese portable Version kopiert werden?\n\n„{skip}“ lässt die portable Version leer.\nDie vorhandenen Daten bleiben in beiden Fällen erhalten.",
     takeoverAdopt: "Daten übernehmen",
     takeoverSkip: "Leer starten",
     takeoverPromptCount: "{n} Prompts",

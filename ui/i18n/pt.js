@@ -82,7 +82,7 @@ export default {
     valImportFolderMax: "Importação de pasta: máximo de arquivos",
     importConfirm: "Importar",
     takeoverTitle: "Assumir os dados existentes?",
-    takeoverBody: "Foram encontrados prompts salvos aqui:\n{path} ({details})\n\nCopiá-los para esta versão portátil?\n\n“Não” inicia a versão portátil vazia.\nOs dados existentes são mantidos em ambos os casos.",
+    takeoverBody: "Foram encontrados prompts salvos aqui:\n{path} ({details})\n\nCopiá-los para esta versão portátil?\n\n“{skip}” mantém a versão portátil vazia.\nOs dados existentes são mantidos em ambos os casos.",
     takeoverAdopt: "Assumir dados",
     takeoverSkip: "Iniciar vazio",
     takeoverPromptCount: "{n} prompts",

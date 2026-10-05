@@ -21,6 +21,11 @@ SECTION = """\
       if (!msg.includes('Example-Store')) out.errors.push('take-over dialog does not name the folder');
       if (!msg.includes('7')) out.errors.push('take-over dialog does not name the prompt count');
       if (!/\\n/.test(msg)) out.errors.push('take-over dialog lost its line breaks');
+      // 754: the sentence about the skip button names the real button label.
+      const skipLabel754 = document.getElementById('confirm-cancel').textContent.trim();
+      if (msg.includes('{skip}') || !skipLabel754 || !msg.includes(skipLabel754)) {
+        out.errors.push('754: the take-over text does not name the skip button (' + JSON.stringify(skipLabel754) + ')');
+      }
       // 449: a "do not ask again" box, checked by default, so an answer is
       // remembered unless the person actively opts out of that memory.
       const rememberCb = document.getElementById('confirm-cb-remember');

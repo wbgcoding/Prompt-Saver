@@ -82,7 +82,7 @@ export default {
     valImportFolderMax: "Klasör içe aktarma: azami dosya sayısı",
     importConfirm: "İçe aktar",
     takeoverTitle: "Mevcut veriler alınsın mı?",
-    takeoverBody: "Kaydedilmiş istemler burada bulundu:\n{path} ({details})\n\nBunlar bu taşınabilir sürüme kopyalansın mı?\n\nHayır, taşınabilir sürümü boş başlatır.\nMevcut veriler her iki durumda da korunur.",
+    takeoverBody: "Kaydedilmiş istemler burada bulundu:\n{path} ({details})\n\nBunlar bu taşınabilir sürüme kopyalansın mı?\n\n“{skip}” taşınabilir sürümü boş bırakır.\nMevcut veriler her iki durumda da korunur.",
     takeoverAdopt: "Verileri al",
     takeoverSkip: "Boş başlat",
     takeoverPromptCount: "{n} istem",
