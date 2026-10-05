@@ -1291,8 +1291,8 @@
           <span data-i18n="screenshotToFolder">Always save screenshots</span>
           <input id="snip-save-folder" type="checkbox" class="switch" />
         </label>
-        <!-- OCR -- runs on the capture already shown above; off by default
-             (flagOcr), hidden until on. -->
+        <!-- OCR -- runs on the capture already shown above; on by default,
+             hidden while the OCR switch (flagOcr) is off. -->
         <button id="snip-modal-ocr" class="ghost-btn" data-i18n="snipModalOcr" data-i18n-title="snipModalOcr"></button>
         <!-- Per-save format override; defaults to the expert-menu screenshotFormat setting. -->
         <select id="snip-modal-saveas-format" class="batch-view-select" data-i18n-aria="valScreenshotFormat">
@@ -1350,7 +1350,7 @@
   </div>
 
   <!-- OCR result -- editable text, recognized language + character count,
-       copy / create-as-prompt / close. Off by default (flagOcr). -->
+       copy / create-as-prompt / close. Gated by the OCR switch (flagOcr). -->
   <div id="ocr-modal" class="overlay hidden" role="dialog" aria-modal="true">
     <div class="modal">
       <div class="modal-head">
@@ -1376,8 +1376,8 @@
        (installed + available, from ocr_capabilities()), each row a checkmark or a
        "Download (size)" button; the size sits inside the button so nobody
        downloads blind. Opened from the ocrLang dropdown's trailing "Manage
-       languages..." entry or the ocr-langs-open expert action. Off by default
-       (flagOcr, same gate as the rest of OCR). -->
+       languages..." entry or the ocr-langs-open expert action. Same gate as the
+       rest of OCR (flagOcr). -->
   <div id="ocr-langs-modal" class="overlay hidden" role="dialog" aria-modal="true">
     <div class="modal">
       <div class="modal-head">

@@ -272,7 +272,7 @@ export const OPT_FLAG_LABELS = {
   autoPasteEnter: "flagAutoPasteEnter",
   clipWatcher: "flagClipWatcher",
   backupGfs: "flagBackupGfs",           // period-based retention
-  // v2.6.0 additions (all default off → "(Standard Aus)").
+  // v2.6.0 additions (all default off, shown with the default-off suffix).
   editorMonospace: "flagEditorMonospace",       // monospace editor textarea
   hideWindowOnCopy: "flagHideWindowOnCopy",     // hide window after copying a prompt
   dedupCopyLog: "flagDedupCopyLog",             // skip identical consecutive copies
