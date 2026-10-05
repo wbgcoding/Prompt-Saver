@@ -1808,6 +1808,7 @@ the video editor and the introduction tour ship on).
 - **Reset and delete buttons stand out.** Reset settings and Delete all data now sit in their own section at the bottom of the settings page and are red even when the pointer is elsewhere. Clicking them still needs a second click to confirm.
 - **Export format next to Export.** In the settings, the format choice now sits to the right of the Export button instead of in front of it.
 - **About and updates in one block.** The version status and the About button share one line; the check button, the auto-update switch and the check interval share the next.
+- **The favorites view switch is only in Settings.** The expert menu no longer repeats it; the favorites rows there still appear only while the favorites feature and the view are on.
 
 ## 2.6.3 (2026-07-26)
 

@@ -48,6 +48,8 @@ NOT_IN_EXPERT = {
     "tooltipsEnabled",
     # Update interval, beside the auto-update switch on the normal settings page.
     "updateCheckH",
+    # Favorites view switch: the normal settings page and the top-bar right-click menu.
+    "favViewButton",
 }
 
 # Every setting that only makes sense while another feature is on, and the gate it
@@ -324,6 +326,11 @@ for m in re.finditer(r'\{\s*title:\s*"(expGroup\w+)"', tabs):
 
 for _, _, flag_gates, _ in groups:
     declared.update(flag_gates)
+
+# A switch that lives outside the expert menu (Settings) keeps its gate for the rows
+# that depend on it through an explicit assignment after FLAG_GATES is built.
+for m in re.finditer(r'FLAG_GATES\.(\w+)\s*=\s*"([^"]+)"\s*;', SRC):
+    declared[m.group(1)] = m.group(2)
 
 used = {}
 group_of = {}

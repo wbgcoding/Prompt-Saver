@@ -771,7 +771,7 @@ export const EXPERT_TABS = [
     { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "dragToView", "tilePressScale", "tileHotkeyBadge"], values: ["hoverLift", "hoverDim", "dragThreshold", "tileHotkeyBadgeOpacity"] },
     { title: "expGroupTooltips", values: ["tooltipWidth", "tooltipDelayMs"] },
     { title: "expGroupTileLook", flags: ["tileShadow", "typeBadges", "captions", "gridLines", "autoInk", "inkHalo"], values: ["tileRadius", "tileBorderWidth", "inkThreshold", "inkHaloStrength"], dropdowns: ["tileStyle"] },
-    { title: "expGroupFavorites", flags: ["favorites", { key: "favViewButton", gate: "favorites" }, { key: "favViewReorder", gate: "favViewButton" }], values: ["favStarSize", "favMaxCols"] },
+    { title: "expGroupFavorites", flags: ["favorites", { key: "favViewReorder", gate: "favViewButton" }], values: ["favStarSize", "favMaxCols"] },
     { title: "expGroupMedia", flags: ["videoControls", "videoAutoplay", "videoMuted", "videoLoop", "mediaMeta", "mediaMetaBackfill", "grayscaleMedia", "mediaBorder", "roundMedia"], values: ["videoVolume", "mediaRadius"] },
   ] },
   { title: "expTabAppearance", groups: [
@@ -812,6 +812,8 @@ export const FLAG_GATES = Object.fromEntries(
     .filter((f) => f.gate)
     .map((f) => [f.key, f.gate])
 );
+// The switch lives in Settings; its gate still applies to the dependent rows.
+FLAG_GATES.favViewButton = "favorites";
 
 // Demo mode is a session with its own enable and disable commands and a restart,
 // so no bulk action (category reset, reset all) may ever write it.

@@ -192,7 +192,7 @@ export const HELP_CONTENT = {
       whatItIs: "A star marks a tile as a favorite for quick access later.",
       howTo: ["Click the star on a tile, or use \"Favorite\" from its menu.", "Open the dedicated favorites view to see only starred tiles."],
       whatHappens: "Favorites get their own reorderable view, independent of wherever else the tile lives.",
-      settings: ["Favorites view, its own reordering: Expert menu → Tiles → Favorites"],
+      settings: ["Favorites view: Settings. Its own reordering: Expert menu → Tiles → Favorites"],
     },
     {
       section: "look",
@@ -941,7 +941,7 @@ export const HELP_CONTENT = {
       whatItIs: "Ein Stern markiert eine Kachel als Favorit für schnellen späteren Zugriff.",
       howTo: ["Auf den Stern einer Kachel klicken, oder \"Favorisieren\" in ihrem Menü nutzen.", "Die eigene Favoriten-Ansicht öffnen, um nur markierte Kacheln zu sehen."],
       whatHappens: "Favoriten erhalten ihre eigene sortierbare Ansicht, unabhängig davon, wo die Kachel sonst liegt.",
-      settings: ["Favoriten-Ansicht, eigene Sortierung: Expertenmenü → Kacheln → Favoriten"],
+      settings: ["Favoriten-Ansicht: Einstellungen. Eigene Sortierung: Expertenmenü → Kacheln → Favoriten"],
     },
     {
       section: "look",

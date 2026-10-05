@@ -229,6 +229,44 @@ SECTION = """\
       search3.dispatchEvent(new Event('input', { bubbles: true }));
       await sleep(150);
     }
+    // 728: the favorites view switch lives in Settings only; the expert menu keeps no
+    // row for it, and the dependent rows follow it and the favorites feature.
+    {
+      if (document.getElementById('settings').classList.contains('hidden')) await click('gear');
+      if (document.getElementById('settings-main').classList.contains('hidden')) await click('expert-back');
+      const favSwitch728 = document.getElementById('opt-favview');
+      const wasOn728 = favSwitch728.checked;
+      if (!wasOn728) { favSwitch728.click(); await sleep(150); }
+      await click('expert-open');
+      const rowOf728 = (key) => document.querySelector('#settings-expert [data-setting-row="' + key + '"]');
+      const search728 = document.getElementById('expert-search');
+      const find728 = async (q) => {
+        search728.value = q;
+        search728.dispatchEvent(new Event('input', { bubbles: true }));
+        await sleep(250);
+      };
+      await find728('Favorites');
+      if (!rowOf728('favorites')) out.errors.push('728: the favorites feature switch is missing from the expert menu');
+      if (rowOf728('favViewButton')) out.errors.push('728: the favorites view switch is still a row in the expert menu');
+      if (!rowOf728('favStarSize') || !rowOf728('favMaxCols')) out.errors.push('728: the favorites value rows are missing with the feature and the view switch on');
+      const favRow728 = rowOf728('favorites');
+      const favInput728 = favRow728 && favRow728.querySelector('input.switch');
+      if (favInput728) {
+        favInput728.click();
+        await sleep(250);
+        await find728('Favorites');
+        if (rowOf728('favStarSize') || rowOf728('favMaxCols')) out.errors.push('728: the favorites value rows stay with the feature off');
+        const again728 = rowOf728('favorites');
+        if (again728) { again728.querySelector('input.switch').click(); await sleep(250); }
+      }
+      await find728('Favorites view');
+      const hits728 = [...document.querySelectorAll('#expert-flags span')].filter((el) => el.textContent.trim() === 'Favorites view');
+      if (hits728.some((el) => !el.closest('.expert-foreign-row'))) out.errors.push('728: the expert search for Favorites view finds an expert row');
+      if (!document.querySelector('.expert-foreign-row')) out.errors.push('728: the expert search for Favorites view has no Settings hit');
+      await find728('');
+      await click('expert-back');
+      if (!wasOn728) { document.getElementById('opt-favview').click(); await sleep(150); }
+    }
     // 343: the recording stop/pause hotkeys moved out of Settings and into the
     // expert menu itself, as a real capture row (not a jump-to-settings button).
     {
