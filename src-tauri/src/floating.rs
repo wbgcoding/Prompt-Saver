@@ -91,8 +91,79 @@ pub(crate) fn file_dialog(app: &AppHandle) -> rfd::FileDialog {
 // long as WebView2 needs to start, which at a slow boot is long enough to be seen.
 fn reveal_when_loaded(win: tauri::WebviewWindow, payload: tauri::webview::PageLoadPayload<'_>) {
     if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
-        let _ = win.show();
+        reveal_float_window(&win);
     }
+}
+
+#[derive(Debug, PartialEq)]
+pub(crate) enum Reveal {
+    Now,
+    AfterSnip,
+    Skip,
+}
+
+// What the reveal of a freshly built pill or folder does: nothing when it is already
+// up, wait for the end of a running snip session (it would sit in the capture or on
+// the overlay), else show it now.
+pub(crate) fn reveal_decision(visible: bool, snip_active: bool) -> Reveal {
+    if visible {
+        Reveal::Skip
+    } else if snip_active {
+        Reveal::AfterSnip
+    } else {
+        Reveal::Now
+    }
+}
+
+// Put a label into the set the end of a snip session brings back (once).
+pub(crate) fn queue_for_snip_restore(hid: &mut Vec<String>, label: &str) {
+    if !hid.iter().any(|l| l == label) {
+        hid.push(label.to_string());
+    }
+}
+
+// Show without taking the foreground from the app the user is typing in; the window
+// was built always-on-top and stays so.
+pub(crate) fn show_without_focus(win: &tauri::WebviewWindow) {
+    #[cfg(windows)]
+    {
+        const SW_SHOWNOACTIVATE: i32 = 4;
+        if let Ok(h) = win.hwnd() {
+            show_window(h.0 as isize, SW_SHOWNOACTIVATE);
+            let _ = win.set_always_on_top(true);
+            return;
+        }
+    }
+    let _ = win.show();
+}
+
+fn reveal_float_window(win: &tauri::WebviewWindow) {
+    match reveal_decision(win.is_visible().unwrap_or(false), SNIP_ACTIVE.load(Ordering::SeqCst)) {
+        Reveal::Skip => {}
+        Reveal::Now => show_without_focus(win),
+        Reveal::AfterSnip => {
+            queue_for_snip_restore(&mut SNIP_HID_APP.lock().unwrap_or_else(|e| e.into_inner()), win.label());
+            // The session may have ended between the check and the queueing, with the
+            // restore pass already gone: nobody would bring the window back then.
+            if !SNIP_ACTIVE.load(Ordering::SeqCst) {
+                SNIP_HID_APP.lock().unwrap_or_else(|e| e.into_inner()).retain(|l| l != win.label());
+                show_without_focus(win);
+            }
+        }
+    }
+}
+
+// The page-load event is the normal reveal; if it never arrives (a stalled
+// WebView2 start) the window still comes up after a few seconds.
+const FLOAT_REVEAL_FALLBACK_MS: u64 = 3000;
+fn spawn_reveal_fallback(app: &AppHandle, label: String) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(FLOAT_REVEAL_FALLBACK_MS)).await;
+        if let Some(win) = app.get_webview_window(&label) {
+            reveal_float_window(&win);
+        }
+    });
 }
 
 // `taken` collects the box this pill actually lands in (real or parked) so
@@ -155,6 +226,7 @@ pub(crate) fn open_floating(app: &AppHandle, prompt: &Prompt, taken: &mut Vec<Re
         let _ = win.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
         set_capture_exclusion(&win, excluded);
         let _ = win.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32));
+        spawn_reveal_fallback(app, label.clone());
 
         let app2 = app.clone();
         let pid = prompt.id.clone();
@@ -781,6 +853,7 @@ pub(crate) fn open_folder_window(app: &AppHandle, folder: &FloatFolder, taken: &
         let _ = win.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
         set_capture_exclusion(&win, excluded);
         let _ = win.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32));
+        spawn_reveal_fallback(app, label.clone());
 
         let app2 = app.clone();
         let fid = folder.id.clone();

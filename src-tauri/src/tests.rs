@@ -17457,6 +17457,22 @@ fn pill_and_folder_windows_are_built_hidden_and_shown_on_page_load() {
     }
 }
 
+// A pill or folder that finishes loading while a snip session runs must not appear
+// in the capture or over the overlay: it is queued for the restore pass instead, once.
+// A window that is already visible is left alone (the fallback timer runs after the
+// page-load reveal in the normal case).
+#[test]
+fn float_reveal_decision_defers_during_a_snip_and_skips_a_visible_window() {
+    assert_eq!(reveal_decision(false, false), Reveal::Now);
+    assert_eq!(reveal_decision(false, true), Reveal::AfterSnip);
+    assert_eq!(reveal_decision(true, false), Reveal::Skip);
+    assert_eq!(reveal_decision(true, true), Reveal::Skip);
+    let mut hid = vec!["main".to_string()];
+    queue_for_snip_restore(&mut hid, "float-1");
+    queue_for_snip_restore(&mut hid, "float-1");
+    assert_eq!(hid, vec!["main".to_string(), "float-1".to_string()]);
+}
+
 // The pre-warmed snip overlay is built once at launch and then idles hidden. If
 // anything ever shows it while idle (a slow boot, a window-manager quirk) it must
 // not be an 800x600 white rectangle at the default spot of the main screen: it is

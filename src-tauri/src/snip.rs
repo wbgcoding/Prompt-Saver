@@ -166,10 +166,13 @@ pub(crate) fn is_snip_hidden_label(label: &str) -> bool {
 pub(crate) fn show_app_windows(app: &AppHandle, labels: &[String]) {
     for label in labels {
         if let Some(win) = app.get_webview_window(label) {
-            let _ = win.show();
             if label == "main" {
+                let _ = win.show();
                 let _ = win.unminimize();
                 let _ = win.set_focus();
+            } else {
+                // A pill or folder must not take the focus from the app being typed in.
+                show_without_focus(&win);
             }
         }
     }
