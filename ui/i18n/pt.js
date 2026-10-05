@@ -856,7 +856,7 @@ export default {
     snipSaveCopied: "Captura copiada para a área de transferência.",
     snipSaveKeep: "Salvar como botão?",
     snipRetry: "Nova captura",
-    screenshotToFolder: "Sempre salvar as capturas na pasta Capturas",
+    screenshotToFolder: "Sempre salvar as capturas",
     screenshotSaveAs: "Salvar como…",
     valScreenshotDir: "Pasta de capturas",
     valDataDir: "Pasta de dados",

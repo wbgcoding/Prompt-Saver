@@ -938,7 +938,7 @@ export default {
     snipSaveCopied: "Screenshot in die Zwischenablage kopiert.",
     snipSaveKeep: "Als Button speichern?",
     snipRetry: "Neuer Screenshot",
-    screenshotToFolder: "Screenshots immer im Screenshots-Ordner speichern",
+    screenshotToFolder: "Screenshots immer speichern",
     screenshotSaveAs: "Speichern unter…",
     valScreenshotDir: "Screenshot-Ordner",
     valDataDir: "Datenordner",

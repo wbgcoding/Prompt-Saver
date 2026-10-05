@@ -856,7 +856,7 @@ export default {
     snipSaveCopied: "Screenshot copiato negli appunti.",
     snipSaveKeep: "Salvarlo come pulsante?",
     snipRetry: "Nuovo screenshot",
-    screenshotToFolder: "Salva sempre gli screenshot nella cartella Screenshot",
+    screenshotToFolder: "Salva sempre gli screenshot",
     screenshotSaveAs: "Salva con nome…",
     valScreenshotDir: "Cartella screenshot",
     valDataDir: "Cartella dati",

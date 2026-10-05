@@ -856,7 +856,7 @@ export default {
     snipSaveCopied: "Ekran görüntüsü panoya kopyalandı.",
     snipSaveKeep: "Düğme olarak kaydedilsin mi?",
     snipRetry: "Yeni ekran görüntüsü",
-    screenshotToFolder: "Ekran görüntülerini her zaman Ekran Görüntüleri klasörüne kaydet",
+    screenshotToFolder: "Ekran görüntülerini her zaman kaydet",
     screenshotSaveAs: "Farklı kaydet…",
     valScreenshotDir: "Ekran görüntüsü klasörü",
     valDataDir: "Veri klasörü",

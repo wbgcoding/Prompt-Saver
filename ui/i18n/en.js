@@ -938,7 +938,7 @@ export default {
     snipSaveCopied: "Screenshot copied to clipboard.",
     snipSaveKeep: "Keep it as a button?",
     snipRetry: "New screenshot",
-    screenshotToFolder: "Always save screenshots to the Screenshots folder",
+    screenshotToFolder: "Always save screenshots",
     screenshotSaveAs: "Save as…",
     valScreenshotDir: "Screenshot folder",
     valDataDir: "Data folder",

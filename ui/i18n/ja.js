@@ -856,7 +856,7 @@ export default {
     snipSaveCopied: "スクリーンショットをクリップボードにコピーしました。",
     snipSaveKeep: "ボタンとして保存しますか？",
     snipRetry: "新しいスクリーンショット",
-    screenshotToFolder: "スクリーンショットを常に「スクリーンショット」フォルダーに保存",
+    screenshotToFolder: "スクリーンショットを常に保存",
     screenshotSaveAs: "名前を付けて保存…",
     valScreenshotDir: "スクリーンショットフォルダー",
     valDataDir: "データフォルダー",

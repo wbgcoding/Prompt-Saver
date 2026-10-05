@@ -856,7 +856,7 @@ export default {
     snipSaveCopied: "Zrzut skopiowany do schowka.",
     snipSaveKeep: "Zapisać jako przycisk?",
     snipRetry: "Nowy zrzut",
-    screenshotToFolder: "Zawsze zapisuj zrzuty w folderze Zrzuty ekranu",
+    screenshotToFolder: "Zawsze zapisuj zrzuty",
     screenshotSaveAs: "Zapisz jako…",
     valScreenshotDir: "Folder zrzutów",
     valDataDir: "Folder danych",

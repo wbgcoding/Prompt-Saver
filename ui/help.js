@@ -507,7 +507,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "The app's own windows are hidden for the moment of capture so they never end up in the shot. The result reaches the clipboard immediately; saving it as a tile or file is a separate, optional step. Saving into the screenshots folder never replaces an existing file; it takes the next free name.",
-      settings: ["Screenshot tool, save location, format and quality, preview size, capture delay: Expert menu → Capture → Screenshot", "Always save screenshots in the screenshots folder: Settings"],
+      settings: ["Screenshot tool, save location, format and quality, preview size, capture delay: Expert menu → Capture → Screenshot", "Always save screenshots: Settings"],
     },
     {
       section: "basics",
@@ -1256,7 +1256,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Die eigenen Fenster der App werden für den Moment der Aufnahme ausgeblendet, sodass sie nie im Bild landen. Das Ergebnis erreicht sofort die Zwischenablage; das Speichern als Kachel oder Datei ist ein separater, optionaler Schritt. Beim Speichern im Screenshots-Ordner wird nie eine vorhandene Datei ersetzt; die Aufnahme bekommt den nächsten freien Namen.",
-      settings: ["Screenshot-Tool, Speicherort, Format und Qualität, Vorschaugröße, Aufnahmeverzögerung: Expertenmenü → Aufnehmen → Screenshot", "Screenshots immer im Screenshots-Ordner speichern: Einstellungen"],
+      settings: ["Screenshot-Tool, Speicherort, Format und Qualität, Vorschaugröße, Aufnahmeverzögerung: Expertenmenü → Aufnehmen → Screenshot", "Screenshots immer speichern: Einstellungen"],
     },
     {
       section: "basics",

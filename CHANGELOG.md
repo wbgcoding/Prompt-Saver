@@ -1810,6 +1810,7 @@ the video editor and the introduction tour ship on).
 - **About and updates in one block.** The version status and the About button share one line; the check button, the auto-update switch and the check interval share the next.
 - **The favorites view switch is only in Settings.** The expert menu no longer repeats it; the favorites rows there still appear only while the favorites feature and the view are on.
 - **Help is a question-mark button in the settings head.** It sits beside the close button and is reachable from the expert menu page too; the Expert menu button now has its row to itself.
+- **A shorter label for the screenshot switch.** The setting now reads "Always save screenshots"; its tooltip still explains the Screenshots folder.
 
 ## 2.6.3 (2026-07-26)
 

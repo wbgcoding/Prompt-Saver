@@ -856,7 +856,7 @@ export default {
     snipSaveCopied: "Schermafbeelding gekopieerd naar klembord.",
     snipSaveKeep: "Opslaan als knop?",
     snipRetry: "Nieuwe schermafbeelding",
-    screenshotToFolder: "Schermafbeeldingen altijd in de map Schermafbeeldingen opslaan",
+    screenshotToFolder: "Schermafbeeldingen altijd opslaan",
     screenshotSaveAs: "Opslaan als…",
     valScreenshotDir: "Schermafbeeldingenmap",
     valDataDir: "Gegevensmap",

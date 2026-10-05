@@ -856,7 +856,7 @@ export default {
     snipSaveCopied: "Captură copiată în clipboard.",
     snipSaveKeep: "Salvezi ca buton?",
     snipRetry: "Captură nouă",
-    screenshotToFolder: "Salvează întotdeauna capturile în folderul Capturi de ecran",
+    screenshotToFolder: "Salvează întotdeauna capturile",
     screenshotSaveAs: "Salvează ca…",
     valScreenshotDir: "Folder capturi",
     valDataDir: "Folder de date",

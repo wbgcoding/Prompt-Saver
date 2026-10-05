@@ -856,7 +856,7 @@ export default {
     snipSaveCopied: "截图已复制到剪贴板。",
     snipSaveKeep: "保存为按钮？",
     snipRetry: "新建截图",
-    screenshotToFolder: "始终将截图保存到“屏幕截图”文件夹",
+    screenshotToFolder: "始终保存截图",
     screenshotSaveAs: "另存为…",
     valScreenshotDir: "截图文件夹",
     valDataDir: "数据文件夹",

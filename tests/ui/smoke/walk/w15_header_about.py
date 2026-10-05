@@ -43,6 +43,19 @@ SECTION = """\
         await click('expert-back');
       }
     }
+    // 730: the screenshot switch carries the short label and keeps it on one line.
+    {
+      if (document.getElementById('settings').classList.contains('hidden')) await click('gear');
+      if (document.getElementById('settings-main').classList.contains('hidden')) {
+        await click('expert-back');
+        await sleep(50);
+      }
+      const span730 = document.querySelector('#opt-screenshot-folder').closest('label').querySelector('span');
+      if (span730.textContent.trim() !== 'Always save screenshots') out.errors.push('730: the screenshot switch reads "' + span730.textContent.trim() + '"');
+      const range730 = document.createRange();
+      range730.selectNodeContents(span730);
+      if (range730.getClientRects().length !== 1) out.errors.push('730: the screenshot switch label wraps at ' + window.innerWidth + 'px');
+    }
     // 96: the short "Latest X.Y.Z" status keeps the first update line no taller than
     // before, with the longest of the 11 translations (Romanian).
     // 727: the version status and About share the first line; the check button, the
