@@ -17587,3 +17587,22 @@ fn snip_overlay_builder_uses_the_prewarm_spec_and_every_reveal_sets_bounds() {
     let show = reveal.find("win.show()").expect("reveal shows");
     assert!(size < show && pos < show, "reveal_snip must set size and position before show");
 }
+
+// A finished snip must not leave the overlay hidden at full desktop size: it goes
+// back to the tiny off-screen resting place, so a stray show can never put a
+// desktop-sized window on screen.
+#[test]
+fn ending_a_snip_parks_the_overlay_tiny_and_off_screen() {
+    let src = production_sources();
+    let a = src.find("pub(crate) fn close_all_snip").expect("close_all_snip");
+    let b = a + src[a..].find("
+}
+").expect("end of close_all_snip");
+    assert!(src[a..b].contains("park_snip_window(&win)"), "close_all_snip must park the overlay");
+    let c = src.find("pub(crate) fn park_snip_window").expect("park_snip_window");
+    let d = c + src[c..].find("
+}
+").expect("end of park_snip_window");
+    let body = &src[c..d];
+    assert!(body.contains("snip_prewarm_spec()") && body.contains(".hide()") && body.contains("set_size(") && body.contains("set_position("));
+}

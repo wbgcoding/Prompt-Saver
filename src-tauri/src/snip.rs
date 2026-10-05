@@ -119,7 +119,7 @@ pub(crate) fn reveal_main_for_snip_result(app: &AppHandle) {
 pub(crate) fn close_all_snip(app: &AppHandle) {
     for (label, win) in app.webview_windows() {
         if label.starts_with("snip-") {
-            let _ = win.hide();
+            park_snip_window(&win);
         }
     }
     restore_app_windows_after_snip(app);
@@ -946,10 +946,18 @@ pub(crate) fn park_idle_snip_overlay(app: &AppHandle) {
     if !snip_idle_needs_parking(SNIP_ACTIVE.load(Ordering::SeqCst), win.is_visible().unwrap_or(false)) {
         return;
     }
+    park_snip_window(&win);
+}
+
+// Hidden, tiny and far off-screen: the resting place of the overlay between
+// snips. A session ends with this too, so a hidden overlay never keeps the full
+// desktop size it had for the last snip; the next snip sets its bounds again
+// before it reveals the window.
+pub(crate) fn park_snip_window(win: &tauri::WebviewWindow) {
     let spec = snip_prewarm_spec();
+    let _ = win.hide();
     let _ = win.set_size(PhysicalSize::new(spec.width, spec.height));
     let _ = win.set_position(PhysicalPosition::new(spec.x, spec.y));
-    let _ = win.hide();
 }
 
 // Build the (hidden) snip overlay window: borderless WS_POPUP, no shadow,
