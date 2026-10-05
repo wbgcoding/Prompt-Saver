@@ -223,7 +223,12 @@ pub(crate) const STALE_TEMP_FILE_AGE: Duration = Duration::from_secs(3600);
 pub(crate) const STALE_TEMP_SWEEP_SECS: u64 = 6 * 3600;
 
 pub(crate) fn sweep_stale_temp_files() {
-    let dir = std::env::temp_dir();
+    sweep_stale_temp_files_in(&std::env::temp_dir());
+}
+
+// The sweep over an explicit temp root, so a test can point it at a folder of
+// its own instead of the shared one.
+pub(crate) fn sweep_stale_temp_files_in(dir: &Path) {
     // This process's own live preview is exempt whatever its age says. A modal
     // left open past the stale age is unusual but perfectly legitimate, and the
     // repeat sweeps mean the file is no longer guaranteed to be young.
@@ -239,7 +244,7 @@ pub(crate) fn sweep_stale_temp_files() {
             .and_then(|t| SystemTime::now().duration_since(t).map_err(std::io::Error::other))
             .is_ok_and(|age| age >= STALE_TEMP_FILE_AGE)
     };
-    if let Ok(entries) = fs::read_dir(&dir) {
+    if let Ok(entries) = fs::read_dir(dir) {
         for e in entries.flatten() {
             let name = e.file_name().to_string_lossy().to_string();
             if name.starts_with(&snip_prefix) && name.ends_with(".jpg") {
@@ -348,9 +353,13 @@ pub(crate) fn remove_own_temp_leftovers() {
 // reports what this actually did, same reasoning as sweep_recordings_now's
 // own on-demand result.
 pub(crate) fn sweep_clip_export_temp(age: Duration) -> (u32, u64) {
-    let dir = std::env::temp_dir().join(brand::TEMP_DIR);
+    sweep_clip_export_temp_in(&std::env::temp_dir().join(brand::TEMP_DIR), age)
+}
+
+// Same sweep over an explicit app temp folder (a test's own, not the shared one).
+pub(crate) fn sweep_clip_export_temp_in(dir: &Path, age: Duration) -> (u32, u64) {
     let prefix = format!("{}-clipexport-", brand::TEMP_PREFIX);
-    let Ok(entries) = fs::read_dir(&dir) else { return (0, 0) };
+    let Ok(entries) = fs::read_dir(dir) else { return (0, 0) };
     let mut count = 0u32;
     let mut bytes = 0u64;
     for e in entries.flatten() {
@@ -378,9 +387,13 @@ pub(crate) fn sweep_clip_export_temp(age: Duration) -> (u32, u64) {
 // every "-clipexport-" file regardless of age, so the overview row can show
 // what is there right now, not just what the next sweep would remove.
 pub(crate) fn clip_export_temp_stats() -> (u64, u64) {
-    let dir = std::env::temp_dir().join(brand::TEMP_DIR);
+    clip_export_temp_stats_in(&std::env::temp_dir().join(brand::TEMP_DIR))
+}
+
+// Same count over an explicit app temp folder (a test's own, not the shared one).
+pub(crate) fn clip_export_temp_stats_in(dir: &Path) -> (u64, u64) {
     let prefix = format!("{}-clipexport-", brand::TEMP_PREFIX);
-    let Ok(entries) = fs::read_dir(&dir) else { return (0, 0) };
+    let Ok(entries) = fs::read_dir(dir) else { return (0, 0) };
     let mut count = 0u64;
     let mut bytes = 0u64;
     for e in entries.flatten() {

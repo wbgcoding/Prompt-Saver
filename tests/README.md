@@ -7,6 +7,11 @@ installed. Run the whole list after any UI change.
 `cargo test` and `cargo clippy` create `src-tauri/target/debug/` (~4 GB). Delete it as
 soon as the run has been evaluated; only `target/release/` ships.
 
+The Rust test process runs in a sandbox (`src-tauri/src/test_env.rs`): `APPDATA`, `LOCALAPPDATA`
+and the temp folder point at a per-pid folder that is removed on exit, so a run never touches
+the real data folder or error log and two runs at once never share scratch files. Tests that
+sweep the temp folder take their own root (`sweep_test_root`).
+
 ## The suites
 
 | Command | What it guards |

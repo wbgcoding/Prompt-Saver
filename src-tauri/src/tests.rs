@@ -6243,9 +6243,21 @@ fn take_still_output_removes_a_partial_frame_after_a_failed_run() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+// A temp root of its own for one sweep test. The sweeps look at every file
+// carrying the app's prefixes, so a folder shared between tests (or between two
+// test runs, or left over from an earlier one) lets one test's files change
+// another's counts; a fresh folder per test keeps each sweep to its own files.
+fn sweep_test_root(name: &str) -> PathBuf {
+    let root = std::env::temp_dir().join(format!("ps-sweeptest-{name}-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    root
+}
+
 #[test]
 fn sweep_stale_temp_files_also_reclaims_an_abandoned_still_frame() {
-    let sub = std::env::temp_dir().join(brand::TEMP_DIR);
+    let root = sweep_test_root("still");
+    let sub = root.join(brand::TEMP_DIR);
     fs::create_dir_all(&sub).unwrap();
     let pid = std::process::id();
     let old = sub.join(format!("{}-still-{}-sweeptest-old.png", brand::TEMP_PREFIX, pid));
@@ -6253,10 +6265,10 @@ fn sweep_stale_temp_files_also_reclaims_an_abandoned_still_frame() {
     fs::write(&old, b"x").unwrap();
     fs::write(&fresh, b"x").unwrap();
     backdate(&old, STALE_TEMP_FILE_AGE + Duration::from_secs(60));
-    sweep_stale_temp_files();
+    sweep_stale_temp_files_in(&root);
     assert!(!old.exists(), "a stale still frame must be swept");
     assert!(fresh.exists(), "a young still frame may belong to a running extraction");
-    let _ = fs::remove_file(&fresh);
+    let _ = fs::remove_dir_all(&root);
 }
 
 #[test]
@@ -6280,7 +6292,7 @@ fn remove_own_temp_leftovers_takes_only_this_pids_files() {
 
 #[test]
 fn sweep_stale_temp_files_removes_only_its_own_stale_leftovers() {
-    let dir = std::env::temp_dir();
+    let dir = sweep_test_root("own-stale");
     let pid = std::process::id();
     let snip = dir.join(format!("{}-snip-{}.jpg", brand::TEMP_PREFIX, pid));
     let update_dir = dir.join(format!("{}-update-{}-1", brand::SLUG, pid));
@@ -6320,7 +6332,7 @@ fn sweep_stale_temp_files_removes_only_its_own_stale_leftovers() {
     backdate(&caps_json, STALE_TEMP_FILE_AGE + Duration::from_secs(60));
     backdate(&pdfium_cache, STALE_TEMP_FILE_AGE + Duration::from_secs(60));
 
-    sweep_stale_temp_files();
+    sweep_stale_temp_files_in(&dir);
 
     assert!(!snip.exists(), "a stale leftover snip preview must be swept");
     assert!(!update_dir.exists(), "a stale leftover update stage dir must be swept");
@@ -6335,11 +6347,7 @@ fn sweep_stale_temp_files_removes_only_its_own_stale_leftovers() {
     assert!(unrelated_file.exists(), "an unrelated file must survive");
     assert!(pdfium_cache.exists(), "the pdfium dll cache must never be touched by this sweep");
 
-    let _ = fs::remove_file(&fresh_snip);
-    let _ = fs::remove_file(&fresh_ocr_png);
-    let _ = fs::remove_file(&pdfium_cache);
-    let _ = fs::remove_file(&unrelated_ext);
-    let _ = fs::remove_file(&unrelated_file);
+    let _ = fs::remove_dir_all(&dir);
 }
 
 // The clip-export sweep has its own configurable age, separate from
@@ -6347,7 +6355,8 @@ fn sweep_stale_temp_files_removes_only_its_own_stale_leftovers() {
 // whatever age it is called with rather than the fixed constant above.
 #[test]
 fn sweep_clip_export_temp_respects_its_own_configurable_age() {
-    let dir = std::env::temp_dir().join(brand::TEMP_DIR);
+    let root = sweep_test_root("clipage");
+    let dir = root.join(brand::TEMP_DIR);
     fs::create_dir_all(&dir).unwrap();
     let pid = std::process::id();
     let stale = dir.join(format!("{}-clipexport-{}-stale.mp4", brand::TEMP_PREFIX, pid));
@@ -6361,22 +6370,22 @@ fn sweep_clip_export_temp_respects_its_own_configurable_age() {
     backdate(&fresh, Duration::from_secs(5));
     backdate(&unrelated, age + Duration::from_secs(5));
 
-    let (count, bytes) = sweep_clip_export_temp(age);
+    let (count, bytes) = sweep_clip_export_temp_in(&dir, age);
 
     assert!(!stale.exists(), "a clip-export file older than the given age must be swept");
     assert!(fresh.exists(), "a clip-export file younger than the given age must survive");
     assert!(unrelated.exists(), "a differently-prefixed file must never be touched by this sweep");
     assert_eq!(count, 1, "the swept count must report exactly the one stale file");
     assert_eq!(bytes, 3, "the swept bytes must report that one file's own size");
-    let _ = fs::remove_file(&fresh);
-    let _ = fs::remove_file(&unrelated);
+    let _ = fs::remove_dir_all(&root);
 }
 
 // The overview row's amount readout counts every clip-export file
 // regardless of age -- unlike the sweep above, a fresh file still counts.
 #[test]
 fn clip_export_temp_stats_counts_every_clip_export_file_regardless_of_age() {
-    let dir = std::env::temp_dir().join(brand::TEMP_DIR);
+    let root = sweep_test_root("clipstats");
+    let dir = root.join(brand::TEMP_DIR);
     fs::create_dir_all(&dir).unwrap();
     let pid = std::process::id();
     let old = dir.join(format!("{}-clipexport-{}-statsold.mp4", brand::TEMP_PREFIX, pid));
@@ -6387,13 +6396,11 @@ fn clip_export_temp_stats_counts_every_clip_export_file_regardless_of_age() {
     fs::write(&unrelated, b"png").unwrap();
     backdate(&old, Duration::from_secs(999_999));
 
-    let (count, bytes) = clip_export_temp_stats();
+    let (count, bytes) = clip_export_temp_stats_in(&dir);
 
-    assert!(count >= 2, "both clip-export files must be counted regardless of age, got {count}");
-    assert!(bytes >= 10, "bytes must sum both clip-export files own sizes, got {bytes}");
-    let _ = fs::remove_file(&old);
-    let _ = fs::remove_file(&young);
-    let _ = fs::remove_file(&unrelated);
+    assert_eq!(count, 2, "both clip-export files, and only those, must be counted regardless of age");
+    assert_eq!(bytes, 10, "bytes must sum both clip-export files own sizes");
+    let _ = fs::remove_dir_all(&root);
 }
 
 #[test]
@@ -7236,7 +7243,7 @@ fn filmstrip_cache_dir_keys_on_requested_count_too() {
 // cache entry for a since-deleted/renamed/re-encoded recording sat forever.
 #[test]
 fn sweep_stale_temp_files_also_reclaims_stale_filmstrip_cache_dirs() {
-    let dir = std::env::temp_dir();
+    let dir = sweep_test_root("filmstrip");
     let pid = std::process::id();
     let thumb_root = dir.join(brand::TEMP_DIR).join("video-thumbs");
     let stale_entry = thumb_root.join(format!("stale-{pid}"));
@@ -7247,11 +7254,11 @@ fn sweep_stale_temp_files_also_reclaims_stale_filmstrip_cache_dirs() {
     fs::write(fresh_entry.join("thumb-0000.jpg"), b"jpeg").unwrap();
     backdate(&stale_entry, STALE_TEMP_FILE_AGE + Duration::from_secs(60));
 
-    sweep_stale_temp_files();
+    sweep_stale_temp_files_in(&dir);
 
     assert!(!stale_entry.exists(), "an old, unrevisited filmstrip cache dir must be swept");
     assert!(fresh_entry.exists(), "a recently-touched filmstrip cache dir must survive");
-    let _ = fs::remove_dir_all(&fresh_entry);
+    let _ = fs::remove_dir_all(&dir);
 }
 
 // A recording nobody decided on (attach/save/discard) yet, old enough that
@@ -8886,6 +8893,21 @@ fn test_runs_never_resolve_into_the_real_data_folder() {
     assert_eq!(before, stamp(&real_log), "the real error.log must be untouched by the unit tests");
     let redirected = fs::read_to_string(crash_log_path()).unwrap_or_default();
     assert!(redirected.contains("PROBE-guard-plain-line"), "the lines must land in the per-run file");
+}
+
+// Tests write fixed-name scratch files straight into the temp folder; two runs
+// at once (two checkouts) or a file an earlier run left behind must never meet
+// there, so each test process gets a temp folder named after its own pid.
+#[test]
+fn test_runs_use_a_temp_folder_of_their_own() {
+    let temp = std::env::temp_dir();
+    let own = format!("ps-testenv-{}", std::process::id());
+    assert!(
+        temp.components().any(|c| c.as_os_str().to_string_lossy() == own),
+        "the temp folder must sit inside this process's sandbox, got {}",
+        temp.display()
+    );
+    assert!(temp.is_dir(), "the sandbox temp folder must exist");
 }
 
 // A data folder outside the profile (a custom location the user picked, or any

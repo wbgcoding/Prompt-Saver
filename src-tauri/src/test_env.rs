@@ -1,8 +1,10 @@
 // The unit-test process's own environment. A constructor that runs before the
 // test harness starts any thread points the roaming and local app-data folders
 // at a per-process sandbox, so no code path a test reaches can resolve into the
-// owner's real data folder (the error log, the store fallbacks). The guard test
-// in `tests.rs` proves it.
+// owner's real data folder (the error log, the store fallbacks), and the temp
+// folder there too, so two test runs at the same time, or leftovers an earlier
+// run did not clean up, can never meet in a shared folder. The guard test in
+// `tests.rs` proves it.
 
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -16,10 +18,17 @@ pub(crate) fn real_appdata() -> Option<OsString> {
     std::env::var_os(REAL_APPDATA_ENV).or_else(|| std::env::var_os("APPDATA"))
 }
 
+// Name of the variable holding the sandbox folder once it exists (the temp
+// folder itself moves into it, so it cannot be derived from `temp_dir()` again).
+const SANDBOX_ENV: &str = "PROMPT_SAVER_TEST_SANDBOX";
+
 // The per-process sandbox folder, named after the pid so two test runs at the
 // same time never share one.
 fn sandbox_root() -> PathBuf {
-    std::env::temp_dir().join(format!("ps-testenv-{}", std::process::id()))
+    match std::env::var_os(SANDBOX_ENV) {
+        Some(root) => PathBuf::from(root),
+        None => std::env::temp_dir().join(format!("ps-testenv-{}", std::process::id())),
+    }
 }
 
 extern "C" fn remove_sandbox() {
@@ -33,7 +42,8 @@ extern "C" fn enter_sandbox() {
     let _ = std::fs::remove_dir_all(&root);
     let roaming = root.join("Roaming");
     let local = root.join("Local");
-    if std::fs::create_dir_all(&roaming).is_err() || std::fs::create_dir_all(&local).is_err() {
+    let temp = root.join("Temp");
+    if [&roaming, &local, &temp].iter().any(|d| std::fs::create_dir_all(d).is_err()) {
         return;
     }
     // Sandboxes of runs that were killed outright are not removed by their own
@@ -58,6 +68,9 @@ extern "C" fn enter_sandbox() {
     unsafe {
         std::env::set_var("APPDATA", &roaming);
         std::env::set_var("LOCALAPPDATA", &local);
+        std::env::set_var("TEMP", &temp);
+        std::env::set_var("TMP", &temp);
+        std::env::set_var(SANDBOX_ENV, &root);
     }
     extern "C" {
         fn atexit(cb: extern "C" fn()) -> i32;
