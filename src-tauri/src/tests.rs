@@ -17473,6 +17473,30 @@ fn float_reveal_decision_defers_during_a_snip_and_skips_a_visible_window() {
     assert_eq!(hid, vec!["main".to_string(), "float-1".to_string()]);
 }
 
+// The overlay watchdog must fire for a page that never presents, also on the reuse
+// path where the parked overlay already counts as visible: it keys off "presented",
+// never off the window's visibility.
+#[test]
+fn snip_watchdog_keys_off_presented_state() {
+    assert!(watchdog_should_reveal(true, false), "session running, nothing presented yet");
+    assert!(!watchdog_should_reveal(true, true), "already presented");
+    assert!(!watchdog_should_reveal(false, false), "no session any more");
+}
+
+// Surfacing the overlay of an already running session goes through the same bounds
+// assert as the normal reveal; a bare show() left a parked overlay at its parking spot.
+#[test]
+fn snip_already_active_path_sets_bounds_before_showing() {
+    let src = production_sources();
+    let start = src.find("pub(crate) async fn begin_capture(").expect("begin_capture");
+    let end = start + src[start..].find("PICK_ACTIVE.store(pick").expect("end of the claim block");
+    let claim = &src[start..end];
+    let revealed = claim.find("reveal_snip(&app).await").expect("the already-active branch must reveal through reveal_snip");
+    if let Some(shown) = claim.find("win.show()") {
+        assert!(revealed < shown, "the already-active branch must not show the overlay before setting its bounds");
+    }
+}
+
 // The pre-warmed snip overlay is built once at launch and then idles hidden. If
 // anything ever shows it while idle (a slow boot, a window-manager quirk) it must
 // not be an 800x600 white rectangle at the default spot of the main screen: it is

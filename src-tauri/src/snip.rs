@@ -52,6 +52,15 @@ pub(crate) fn preview_slot_store<T>(slot: &mut Option<(u64, T)>, gen_now: u64, g
 // window's existence: is what tells open_snip a snip is already in progress.
 pub(crate) static SNIP_ACTIVE: AtomicBool = AtomicBool::new(false);
 
+// True once the running session's overlay was put on screen (snip_present or the
+// watchdog). The reveal watchdog keys off this, not off the window's visibility: on
+// the reuse path the parked overlay already counts as visible.
+pub(crate) static SNIP_PRESENTED: AtomicBool = AtomicBool::new(false);
+
+pub(crate) fn watchdog_should_reveal(session_active: bool, presented: bool) -> bool {
+    session_active && !presented
+}
+
 // Bumped by begin_capture every time a session starts. A capture that is already
 // running when the session is cancelled (and maybe a new one started) compares the
 // number it saw at its start, so it can tell that its session is gone and must not
@@ -128,6 +137,7 @@ pub(crate) fn close_all_snip(app: &AppHandle) {
     // late one never ends, copies or announces on behalf of the next session.
     SNIP_GEN.fetch_add(1, Ordering::SeqCst);
     SNIP_ACTIVE.store(false, Ordering::SeqCst);
+    SNIP_PRESENTED.store(false, Ordering::SeqCst);
     PICK_ACTIVE.store(false, Ordering::SeqCst);
     // Every path that ends a snip session (capture, cancel, window click)
     // funnels through here, so this is the one place that can guarantee OCR mode
@@ -1089,13 +1099,20 @@ pub(crate) async fn begin_capture(
         .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
         .is_err()
     {
-        if let Some(win) = app.get_webview_window("snip-0") {
-            let _ = win.show();
-            let _ = win.set_focus();
+        if app.get_webview_window("snip-0").is_some() {
+            // Same bounds assert as the normal reveal; a bare show() would leave a
+            // parked overlay at its parking spot.
+            if !reveal_snip(&app).await {
+                if let Some(win) = app.get_webview_window("snip-0") {
+                    let _ = win.show();
+                    let _ = win.set_focus();
+                }
+            }
             return Ok(());
         }
         SNIP_ACTIVE.store(true, Ordering::SeqCst);
     }
+    SNIP_PRESENTED.store(false, Ordering::SeqCst);
     PICK_ACTIVE.store(pick, Ordering::SeqCst);
     let gen = SNIP_GEN.fetch_add(1, Ordering::SeqCst) + 1;
     // Loupe/quality/delay settings are read once here, in both capture modes,
@@ -1222,7 +1239,7 @@ pub(crate) async fn begin_capture(
         let _ = win.set_position(PhysicalPosition::new(min_x, min_y + total_h as i32 + 100));
         let _ = win.show();
         let _ = app.emit_to("snip-0", "snip-begin", ());
-        spawn_reveal_watchdog(app.clone());
+        spawn_reveal_watchdog(app.clone(), gen);
         return Ok(());
     }
 
@@ -1243,7 +1260,7 @@ pub(crate) async fn begin_capture(
     // otherwise nudge). snip_present re-asserts after the DPI settle, then shows.
     let _ = win.set_size(PhysicalSize::new(total_w, total_h));
     let _ = win.set_position(PhysicalPosition::new(min_x, min_y));
-    spawn_reveal_watchdog(app.clone());
+    spawn_reveal_watchdog(app.clone(), gen);
     Ok(())
 }
 
@@ -1251,7 +1268,7 @@ pub(crate) async fn begin_capture(
 // and re-assert after the per-monitor DPI settle the show can trigger. Used by the
 // page (snip_present, fast path after the frozen image decodes) and by a backend
 // watchdog that force-reveals if the page somehow never asks.
-pub(crate) async fn reveal_snip(app: &AppHandle) {
+pub(crate) async fn reveal_snip(app: &AppHandle) -> bool {
     let geom = {
         let state: State<SnipState> = app.state();
         let guard = state.0.lock().unwrap_or_else(|e| e.into_inner());
@@ -1259,8 +1276,9 @@ pub(crate) async fn reveal_snip(app: &AppHandle) {
     };
     let (min_x, min_y, total_w, total_h) = match geom {
         Some(g) => g,
-        None => return,
+        None => return false,
     };
+    SNIP_PRESENTED.store(true, Ordering::SeqCst);
     if let Some(win) = app.get_webview_window("snip-0") {
         // Already full-size (parked off-screen on reuse), so this moves it on-screen in
         // one shot: no resize, no re-assert → no flicker. The frozen image is already
@@ -1270,6 +1288,7 @@ pub(crate) async fn reveal_snip(app: &AppHandle) {
         let _ = win.show();
         let _ = win.set_focus();
     }
+    true
 }
 
 // Reveal the prepared overlay once its frozen image has decoded in the page, so
@@ -1283,16 +1302,11 @@ pub(crate) async fn snip_present(app: AppHandle) -> Result<(), String> {
 // Belt-and-suspenders: if the page hasn't revealed the overlay shortly after a
 // snip starts (e.g. a hidden WebView2 ever suspended its JS), force it visible so
 // the screenshot view can never get stuck hidden. No-op once already shown.
-pub(crate) fn spawn_reveal_watchdog(app: AppHandle) {
+pub(crate) fn spawn_reveal_watchdog(app: AppHandle, gen: u64) {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-        if !SNIP_ACTIVE.load(Ordering::SeqCst) {
-            return;
-        }
-        if let Some(win) = app.get_webview_window("snip-0") {
-            if !win.is_visible().unwrap_or(true) {
-                reveal_snip(&app).await;
-            }
+        if snip_session_current(gen) && watchdog_should_reveal(true, SNIP_PRESENTED.load(Ordering::SeqCst)) {
+            reveal_snip(&app).await;
         }
     });
 }
