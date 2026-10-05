@@ -1052,8 +1052,8 @@ body.chain-mode:not(.grid-selecting) .tile .tile-select { opacity: 0; pointer-ev
   font-weight: 600;
 }
 /* ~30% bigger than the old 84x56 box in both dimensions, still comfortably
-   inside the popover's own max-width (`min(420px, 92vw)`) at 5 columns, the
-   most `tileFolderCols` allows. */
+   inside the popover's own max-width (`min(420px, 92vw)`) at the 3 columns of
+   the grid folder (TILE_FOLDER_COLS in gridFolders.js). */
 .tile-folder-grid { display: grid; gap: 6px; }
 .folder-member-tile {
   position: relative;

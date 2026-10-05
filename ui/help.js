@@ -1309,7 +1309,7 @@ export const HELP_CONTENT = {
       whatItIs: "Nimmt die Webcam in ein eigenes Video auf, allein oder neben einer Bildschirmaufnahme.",
       howTo: [
         "Die Kameraaufnahme im Expertenmenü einschalten.",
-        "Auf den Knopf „Aufnehmen“ links vom Eingabefeld klicken und \"Kamera aufnehmen\" {icon:record} wählen.",
+        "Auf den Knopf „Aufnehmen“ links vom Eingabefeld klicken und „Kamera aufnehmen“ {icon:record} wählen.",
         "Im eigenen Fenster die Vorschau prüfen, Tonquelle, Auflösung und Ordner wählen, dann Start.",
       ],
       whatHappens:

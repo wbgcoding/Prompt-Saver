@@ -1179,7 +1179,7 @@ für Aufnahmen mit vertraulichen Eingaben. Wie lange eine
 losgelassene Taste sichtbar bleibt, ist im Expertenmenü einstellbar.
 
 Eine optionale Kameraaufnahme (Standard aus, im Expertenmenü) fügt dem
-Menü des Knopfs „Aufnehmen“ links vom Eingabefeld den Eintrag „Kamera aufnehmen" hinzu. Sie
+Menü des Knopfs „Aufnehmen“ links vom Eingabefeld den Eintrag „Kamera aufnehmen“ hinzu. Sie
 öffnet ein eigenes kleines Fenster mit Live-Vorschau, eigenem
 Start/Pause/Stopp, einer Tonquelle, einer Auflösungswahl und einem
 Zielordner: denselben Bedienelementen wie die Bildschirmaufnahme selbst. Ein
