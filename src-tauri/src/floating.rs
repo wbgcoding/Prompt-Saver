@@ -215,24 +215,10 @@ pub(crate) fn notify_float_settings(app: &AppHandle) {
         }
     }
 }
-pub(crate) fn merge_radius(settings: &Settings) -> f64 {
-    settings
-        .ui_values
-        .get("pillMergeRadius")
-        .copied()
-        .filter(|v| v.is_finite())
-        .unwrap_or(40.0)
-        .clamp(20.0, 80.0)
-}
-pub(crate) fn folder_cols(settings: &Settings) -> u32 {
-    settings
-        .ui_values
-        .get("folderGridCols")
-        .copied()
-        .filter(|v| v.is_finite())
-        .unwrap_or(3.0)
-        .clamp(2.0, 5.0) as u32
-}
+// How close two floating buttons have to be when released before they merge.
+pub(crate) const MERGE_RADIUS: f64 = 40.0;
+// Columns of an open button folder's grid.
+pub(crate) const FOLDER_COLS: u32 = 3;
 
 // A box in PHYSICAL desktop pixels: the one coordinate space every monitor shares,
 // whatever its DPI. Sizes are converted per window with its own scale factor, so a

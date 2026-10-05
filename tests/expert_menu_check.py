@@ -119,10 +119,6 @@ DEPENDENCIES = {
     # Workspace
     "floatOpacity": "floating",
     "pillFolders": "floating",
-    "pillMergeRadius": "pillFolders",
-    "folderGridCols": "pillFolders",
-    "tileFolderHoverMs": "tileFolders",
-    "tileFolderCols": "tileFolders",
     "trayRecentN": "trayRecent",
     "trayFavN": "trayFavs",
     # Tiles + copying

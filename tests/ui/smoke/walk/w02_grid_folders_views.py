@@ -132,7 +132,7 @@ SECTION = """\
       const pop = document.querySelector('.tile-folder-pop:not(.hidden)');
       const members = pop ? pop.querySelectorAll('.folder-member-tile').length : 0;
       if (members !== 5) out.errors.push('the open folder shows ' + members + ' of 5 entries');
-      // 30: member cells now size from tileFolderCols + the popover width (bigger
+      // 30: member cells now size from the column count + the popover width (bigger
       // than the old fixed 84x56 box) and no member's name text overflows its cell.
       if (pop) {
         const cellRect = pop.querySelector('.folder-member-tile')?.getBoundingClientRect();

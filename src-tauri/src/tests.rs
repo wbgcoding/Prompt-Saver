@@ -16155,18 +16155,11 @@ fn the_window_plan_follows_the_feature_flag() {
 }
 
 #[test]
-fn folder_expert_settings_use_their_slider_range() {
+fn folder_layout_keeps_its_fixed_defaults() {
     let s = Settings::default();
     assert!(folders_on(&s), "the feature ships on");
-    assert_eq!(merge_radius(&s), 40.0);
-    assert_eq!(folder_cols(&s), 3);
-    let mut s = Settings::default();
-    s.ui_values.insert("pillMergeRadius".into(), 9999.0);
-    s.ui_values.insert("folderGridCols".into(), 0.0);
-    assert_eq!(merge_radius(&s), 80.0);
-    assert_eq!(folder_cols(&s), 2);
-    s.ui_values.insert("pillMergeRadius".into(), f64::NAN);
-    assert_eq!(merge_radius(&s), 40.0);
+    assert_eq!(MERGE_RADIUS, 40.0);
+    assert_eq!(FOLDER_COLS, 3);
 }
 
 #[test]

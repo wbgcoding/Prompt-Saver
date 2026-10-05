@@ -329,7 +329,6 @@ pub(crate) fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled
 #[tauri::command]
 pub(crate) fn set_ui_value(app: AppHandle, state: State<Db>, key: String, value: f64) -> Result<(), String> {
     let is_tray = key == "trayRecentN" || key == "trayFavN" || key == "trayLabelMax";
-    let is_folder_grid = key == "folderGridCols";
     let is_error_log_cap = key == "errorLogKeepKb";
     // A stored interval outside what the setting offers would show as one thing and
     // run as another.
@@ -351,14 +350,6 @@ pub(crate) fn set_ui_value(app: AppHandle, state: State<Db>, key: String, value:
     }
     if is_tray {
         rebuild_tray(&app); // dragging a slider must not rebuild on every step
-    }
-    // An open folder re-lays out its grid with the new column count.
-    if is_folder_grid {
-        for label in app.webview_windows().keys() {
-            if label.starts_with("folder-") {
-                let _ = app.emit_to(label.as_str(), "folder-changed", ());
-            }
-        }
     }
     // append_crash_log has no DB access at most of its call sites, so its
     // rotation cap lives in this static instead, kept current from here.

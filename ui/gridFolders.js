@@ -1,5 +1,5 @@
 // Grid folders: folder tiles, the folder popup, drag in and out.
-import { assignDrag, assignFolderArm, assignMemberDrag, assignSettings, convertFileSrc, drag, DRAG_THRESHOLD, errToast, favView, flag, folderArm, gridEl, ICON_FILE, ICON_IMAGE, ICON_PDF, ICON_VIDEO, inkShadow, invoke, memberDrag, openColorPop, PDF_EXT, prompts, readableInk, settings, t, TILE_FOLDER_ZONE, val } from "./core.js";
+import { assignDrag, assignFolderArm, assignMemberDrag, assignSettings, convertFileSrc, drag, DRAG_THRESHOLD, errToast, favView, flag, folderArm, gridEl, ICON_FILE, ICON_IMAGE, ICON_PDF, ICON_VIDEO, inkShadow, invoke, memberDrag, openColorPop, PDF_EXT, prompts, readableInk, settings, t, TILE_FOLDER_ZONE } from "./core.js";
 import { confirmDialog } from "./dialog.js";
 import { activeView, openMiniMenu, renderGrid } from "./views.js";
 import { recordToolUsage } from "./management.js";
@@ -13,6 +13,9 @@ import { dialogTokens, peekRotatedText } from "./promptVars.js";
 import { copyOnCooldown, copyTextWithVars, maybeCloseOnCopy, recordCopy } from "./copyFlow.js";
 import { copyResolved } from "./library.js";
 import { openCtx } from "./gridMenus.js";
+
+const TILE_FOLDER_COLS = 3; // columns of the open grid-folder popover
+const TILE_FOLDER_HOVER_MS = 300; // dwell time over a folder before a dragged prompt drops in
 
 // ---- Grid folders: several prompts collapsed into one cell ----
 // Ships ON. A member has no layout entry of its own while it sits in a folder, so
@@ -215,7 +218,7 @@ export function openTileFolderPop(f, anchor) {
   tileFolderPop.appendChild(head);
   const grid = document.createElement("div");
   grid.className = "tile-folder-grid";
-  grid.style.gridTemplateColumns = `repeat(${val("tileFolderCols")}, 1fr)`;
+  grid.style.gridTemplateColumns = `repeat(${TILE_FOLDER_COLS}, 1fr)`;
   for (const p of folderMembers(f)) {
     const btn = document.createElement("button");
     btn.type = "button";
@@ -291,7 +294,7 @@ export function openTileFolderPop(f, anchor) {
   }
   tileFolderPop.appendChild(grid);
   placePopover(tileFolderPop, anchor.getBoundingClientRect());
-  // Cells now size themselves from tileFolderCols + the popover width (CSS
+  // Cells now size themselves from the column count + the popover width (CSS
   // grid + aspect-ratio), so the fit box is measured per tile instead of a
   // constant: 1px border + 4px padding each side, same auto-shrink as the grid.
   for (const btn of grid.children) {
@@ -322,7 +325,7 @@ export function armFolderDrop(e) {
   if (folderArm && folderArm.el === host) return;
   disarmFolder();
   const arm = { el: host, armed: false, timer: 0 };
-  const wait = Math.max(0, val("tileFolderHoverMs"));
+  const wait = TILE_FOLDER_HOVER_MS;
   // Show the wait instead of making the user guess it: a ring fills over exactly the
   // dwell time, then the target flips to the armed scrim. Without it the folder
   // appeared out of nothing and a drag that was only passing through looked broken.

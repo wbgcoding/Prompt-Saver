@@ -109,7 +109,7 @@ pub(crate) async fn float_drag_hint(app: AppHandle, state: State<'_, Db>, id: St
     }
     let (on, radius) = {
         let store = lock(&state);
-        (folders_on(&store.settings), merge_radius(&store.settings))
+        (folders_on(&store.settings), MERGE_RADIUS)
     };
     if !on {
         return Ok(());
@@ -152,7 +152,7 @@ pub(crate) async fn float_folder_drop(app: AppHandle, state: State<'_, Db>, id: 
         let store = lock(&state);
         (
             folders_on(&store.settings),
-            merge_radius(&store.settings),
+            MERGE_RADIUS,
             store.settings.float_folders.len() >= MAX_FLOAT_FOLDERS,
         )
     };
@@ -244,7 +244,7 @@ pub(crate) fn float_folder_state(state: State<Db>, id: String) -> Option<FolderV
         id: folder.id.clone(),
         name: folder.name.clone(),
         scale: folder.scale,
-        cols: folder_cols(&store.settings),
+        cols: FOLDER_COLS,
         members,
     })
 }

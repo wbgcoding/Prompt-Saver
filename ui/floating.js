@@ -96,14 +96,12 @@ const SCALE_MAX = 8;
 const PILL_H = 80;
 const PILL_IMG = 400;
 const PILL_FONT_SIZE_DEFAULT = 26; // text pill font size at scale 1
-const PILL_TEXT_MIN_W_DEFAULT = 200; // smallest text-pill width; grows with the label
-const PILL_BORDER_W_DEFAULT = 5; // colored frame width around media pills
+const PILL_TEXT_MIN_W = 200; // smallest text-pill width; grows with the label
+const PILL_BORDER_W = 5; // colored frame width around media pills
 const SIZE_EPSILON = 2; // px tolerance ending the self-healing resize loop
 const PILL_RING_FRAC = 0.18; // ring thickness as a fraction of the shorter window side
 // pillTextFontBase, not pillFontSize -- that name is already the function below.
 let pillTextFontBase = PILL_FONT_SIZE_DEFAULT;
-let pillTextMinW = PILL_TEXT_MIN_W_DEFAULT;
-let pillBorderW = PILL_BORDER_W_DEFAULT;
 
 // Resizes and visibility flips can leave the looping video paused; make
 // sure a visible video is always playing again afterwards. Only a pause made
@@ -157,7 +155,7 @@ function pillBox() {
   // floor while only the text changes. Floored to a pill ratio so it never rounds
   // into a circle. (At scale 1 this is exactly the old 200 min / 60 padding.)
   const padX = Math.round(30 * scale);
-  const minW = Math.round(pillTextMinW * scale);
+  const minW = Math.round(PILL_TEXT_MIN_W * scale);
   const w = Math.max(minW, label.scrollWidth + 2 * padX, Math.round(h * RATIO));
   return { w, h };
 }
@@ -263,10 +261,6 @@ function applyPrefs(s) {
   pill.style.opacity = Number.isFinite(op) ? `${Math.max(0.2, op / 100)}` : "";
   const pfs = Number(s.ui_values?.pillFontSize);
   pillTextFontBase = Number.isFinite(pfs) ? pfs : PILL_FONT_SIZE_DEFAULT;
-  const ptmw = Number(s.ui_values?.pillTextMinW);
-  pillTextMinW = Number.isFinite(ptmw) ? ptmw : PILL_TEXT_MIN_W_DEFAULT;
-  const pbw = Number(s.ui_values?.pillBorderW);
-  pillBorderW = Number.isFinite(pbw) ? pbw : PILL_BORDER_W_DEFAULT;
   applyFont();
   markSelectedSize();
   applyPillSize();
@@ -440,8 +434,8 @@ function applyPrompt(p) {
     pill.style.background = "transparent";
     paintOwnInk("");
     // The chosen color frames the media; the window hugs the media box.
-    borderW = p.color ? pillBorderW : 0;
-    pill.style.border = p.color ? `${pillBorderW}px solid ${p.color}` : "none";
+    borderW = p.color ? PILL_BORDER_W : 0;
+    pill.style.border = p.color ? `${PILL_BORDER_W}px solid ${p.color}` : "none";
     const onRatio = (ratio) => {
       imgRatio = ratio || 1;
       applyPillSize(); // resize the window to the media's aspect ratio

@@ -33,11 +33,10 @@ const memberMenu = document.getElementById("member-menu");
 
 // Keep FOLDER_BOX in sync with the backend constant of the same name.
 const FOLDER_BOX = 96; // collapsed icon (square) at scale 1
-const TILE_DEFAULT = 72; // one member tile in the open grid
+const TILE = 72; // one member tile in the open grid
 const GAP = 8; // gap between tiles
 const PAD = 10; // padding inside the popover
 const POP_GAP = 6; // gap between icon and popover
-let TILE = TILE_DEFAULT;
 const PREVIEW_MAX = 4; // mini previews on the closed folder (2x2)
 let DRAG_THRESHOLD = DRAG_THRESHOLD_DEFAULT; // expert-tunable
 const MENU_W = 230; // matches .menu in floating.css
@@ -438,8 +437,6 @@ function applyPrefs(s) {
   const speed = Number(s.ui_values?.animSpeed);
   animMs = s.ui_flags?.animations === false ? 0 : Number.isFinite(speed) ? Math.max(0, speed) : 150;
   document.documentElement.style.setProperty("--transition", `${animMs}ms cubic-bezier(0.4, 0, 0.2, 1)`);
-  const ts = Number(s.ui_values?.pillFolderTileSize);
-  TILE = Number.isFinite(ts) ? ts : TILE_DEFAULT;
   const op = Number(s.ui_values?.floatOpacity);
   iconEl.style.opacity = Number.isFinite(op) ? `${Math.max(0.2, op / 100)}` : "";
   markSelectedSize();
@@ -741,7 +738,7 @@ listen("merge-hint", (e) => iconEl.classList.toggle("merge-hint", e.payload === 
 listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars));
 listen("language-changed", () => applySettings().catch(() => {}));
 // Same as the pill: an expert change has to reach a folder that is already open.
-// applySettings() alone never reaches state.cols (folderGridCols) -- that only
+// applySettings() alone never reaches state.cols (the grid column count) -- that only
 // arrives through loadState()'s own float_folder_state call, so a changed grid
 // column count never reached an already-open folder window without it too.
 // applySettings must land BEFORE loadState's own reflow/resize: reflow() sizes

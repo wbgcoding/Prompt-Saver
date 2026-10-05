@@ -391,26 +391,14 @@ export const EXPERT_VALUES = {
   attachPreviewKb: { label: "valAttachPreviewKb", min: 1, max: 64, step: 1, def: 8, unit: "KB", display: "words", gate: "attachTextPreview" },
   // Floating-button opacity (%). Floored at 20% so the pill never vanishes.
   floatOpacity: { label: "valFloatOpacity", min: 20, max: 100, step: 5, def: 100, unit: "%", gate: "floating" },
-  // How close two floating buttons must be on drop to merge, and how wide the
-  // grid of an opened folder is. Both mirrored by the backend (merge_radius/folder_cols).
-  pillMergeRadius: { label: "valPillMergeRadius", min: 20, max: 80, step: 1, def: 40, unit: "px", gate: "pillFolders" },
-  folderGridCols: { label: "valFolderGridCols", min: 2, max: 5, step: 1, def: 3, unit: "", gate: "pillFolders" },
-  // Grid folders: how much of a tile counts as its middle, how long the pointer
-  // has to rest there before the folder is offered, and how wide the open folder is.
-  tileFolderHoverMs: { label: "valTileFolderHoverMs", min: 100, max: 800, step: 50, def: 300, unit: "ms", gate: "tileFolders" },
-  tileFolderCols: { label: "valTileFolderCols", min: 2, max: 5, step: 1, def: 3, unit: "", gate: "tileFolders" },
-  // Floating pill appearance -- font, minimum text-pill width, media-pill border,
-  // resize-ring thickness and the gap to its own context menu.
+  // Floating pill appearance -- the text size.
   pillFontSize: { label: "valPillFontSize", min: 14, max: 40, step: 1, def: 26, unit: "px", gate: "floating" },
-  pillTextMinW: { label: "valPillTextMinW", min: 100, max: 400, step: 10, def: 200, unit: "px", gate: "floating" },
-  pillBorderW: { label: "valPillBorderW", min: 0, max: 12, step: 1, def: 5, unit: "px", gate: "floating" },
   // 0 = off (never clears the parked view, only the position keeps living in
   // settings either way). Above 0, a button parked this many hours loses only
   // its view -- the same "hide for now" mechanism -- never the saved entry.
   floatParkCleanupH: { label: "valFloatParkCleanupH", min: 0, max: 168, step: 1, def: 0, unit: "h", zeroLabel: "updateNever", gate: "floating" },
   // Pill folders: how much a pill grows for the merge-target hint, and the open
   // folder popover's own tile size / gap / padding.
-  pillFolderTileSize: { label: "valPillFolderTileSize", min: 48, max: 120, step: 4, def: 72, unit: "px", gate: "pillFolders" },
   // Custom tile tooltip max width (it wraps + grows taller instead of widening).
   tooltipWidth: { label: "valTooltipWidth", min: 180, max: 640, step: 10, def: 340, unit: "px", gate: "tooltipsEnabled" },
   // How long the pointer must rest on an element before its tooltip appears, so a
@@ -725,7 +713,7 @@ export const EXPERT_TABS = [
     // Copying several different prompts as one text.
     { title: "expGroupChain", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "chainQuickStart", gate: "chainPrompts" }, { key: "chainVarCheck", gate: "chainPrompts" }], dropdowns: ["chainSeparator"] },
     // Floating buttons and the two kinds of folder they can form.
-    { title: "expGroupFolders", flags: ["floating", { key: "floatPark", gate: "floating" }, { key: "pillFolders", gate: "floating" }, "tileFolders"], values: ["floatOpacity", "pillFontSize", "pillTextMinW", "pillBorderW", "floatParkCleanupH", "pillMergeRadius", "pillFolderTileSize", "folderGridCols", "tileFolderHoverMs", "tileFolderCols"],
+    { title: "expGroupFolders", flags: ["floating", { key: "floatPark", gate: "floating" }, { key: "pillFolders", gate: "floating" }, "tileFolders"], values: ["floatOpacity", "pillFontSize", "floatParkCleanupH"],
       actions: [{ id: "float-recall", label: "floatRecallAction", gate: "floating" }] },
     // The quick-copy sections of the tray menu, each with its own entry count.
     { title: "expGroupTray", flags: ["trayCustomMenu", "trayRecent", "trayFavs", "traySearch"], values: ["trayRecentN", "trayFavN", "trayLabelMax"] },
@@ -851,10 +839,8 @@ export const EXPERT_TIPS = [
   "importExport", "hoverDim", "keyboardNav", "allowMultipleInstances",
   "taskbarProgress", "etaShow", "dataDir", "dataDirLock", "demoMode",
   "floating", "floatPark", "floatParkCleanupH",
-  "pillFolders", "pillFontSize", "pillTextMinW", "pillBorderW",
-  "pillMergeRadius", "pillFolderTileSize",
-  "folderGridCols",
-  "tileFolders", "tileFolderHoverMs", "tileFolderCols",
+  "pillFolders", "pillFontSize",
+  "tileFolders",
   "rotatingPrompts", "rotateDefaultMode", "rotateMaxEntries", "rotateBadge", "rotateTipLen",
   "rotateAuto", "rotateAutoTimeoutMin", "rotateAutoCooldownMs",
   "helpTips", "helpSketches", "firstRunTour",
