@@ -74,7 +74,6 @@ export const FLAG_LABELS = {
   inkHalo: "flagInkHalo",
   tilePressScale: "flagTilePressScale",
   copyFlash: "flagCopyFlash",
-  headerSeparators: "flagHeaderSeparators",
   cleanupFiles: "flagCleanupFiles",
   // A text prompt can hold a list of variants instead of one text; each
   // copy serves the next entry (in order, or shuffled without repeats). Default
@@ -257,7 +256,6 @@ export const OPT_FLAG_LABELS = {
   // recognition costs time and reads a picture the user may not expect read.
   ocrIndex: "flagOcrIndex",
   // Appearance extras
-  accentHeader: "flagAccentHeader",
   frostedModals: "flagFrostedModals",
   hideScrollbars: "flagHideScrollbars",
   accentScrollbar: "flagAccentScrollbar",
@@ -776,7 +774,7 @@ export const EXPERT_TABS = [
   ] },
   { title: "expTabAppearance", groups: [
     { title: "expGroupScales", values: ["modalScale", "composerScale", "primaryScale"] },
-    { title: "expGroupAppearanceDetails", flags: ["animations", "accentHeader", "hideScrollbars", { key: "accentScrollbar", gate: "!hideScrollbars" }, "smoothScroll", "frostedModals", "customThemes"], values: ["animSpeed", "gridGap", "gridPad", "modalRadius", "overlayDim", "scrollbarWidth", "frostedBlur", "composerMaxH", "toastWidth", "toastMs", "modalMaxVh", "customThemeMax"], dropdowns: ["toastPos"], palette: true },
+    { title: "expGroupAppearanceDetails", flags: ["animations", "hideScrollbars", { key: "accentScrollbar", gate: "!hideScrollbars" }, "smoothScroll", "frostedModals", "customThemes"], values: ["animSpeed", "gridGap", "gridPad", "modalRadius", "overlayDim", "scrollbarWidth", "frostedBlur", "composerMaxH", "toastWidth", "toastMs", "modalMaxVh", "customThemeMax"], dropdowns: ["toastPos"], palette: true },
   ] },
   { title: "expTabLibrary", groups: [
     { title: "expGroupLibSearch", flags: ["librarySearch", "globalSearch", "searchSuggest", "savedSearches", "fuzzySearch", "libraryTypeFilter", "colorFilter", "searchAutofocus", "ocrIndex"], values: ["searchListMax", "savedSearchMax", "searchDebounceMs", "ocrIndexMaxChars", "libraryCols"], dropdowns: ["fuzzyMaxTypos"],
@@ -788,7 +786,7 @@ export const EXPERT_TABS = [
   ] },
   { title: "expTabSystem", groups: [
     // Toolbar button visibility (mirrors the header right-click tool list).
-    { title: "expGroupToolbar", flags: ["barToggles", { key: "barToggleBoth", gate: "barToggles" }, "showLibrary", "showLogo", "showTitle", "headerSeparators"] },
+    { title: "expGroupToolbar", flags: [{ key: "barToggleBoth", gate: "barToggles" }, "showLibrary"] },
     { title: "expGroupPrivacy", notices: ["storeUnsealed", "settingsLocked", "settingsWriteFailed"], flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "secretPrompts"], values: ["tileBlur", "mediaBlur", "secretTimeoutMin"] },
     { title: "expGroupSystem", notices: ["dataDirReadOnly"], flags: ["keyboardNav", "allowMultipleInstances", "dataDirLock", "demoMode", "taskbarProgress", "etaShow"], values: ["bgDoneKeepMin"], paths: ["dataDir"],
       actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }] },
@@ -856,7 +854,7 @@ export const EXPERT_TIPS = [
   "trayCustomMenu", "trayRecent", "trayFavs", "trayRecentN", "trayFavN", "trayLabelMax", "traySearch",
   "importExport", "hoverDim", "keyboardNav", "allowMultipleInstances",
   "taskbarProgress", "etaShow", "dataDir", "dataDirLock", "demoMode",
-  "headerSeparators", "floating", "floatPark", "floatParkCleanupH",
+  "floating", "floatPark", "floatParkCleanupH",
   "pillFolders", "pillFontSize", "pillTextMinW", "pillBorderW",
   "pillMergeRadius", "pillFolderTileSize",
   "folderGridCols",

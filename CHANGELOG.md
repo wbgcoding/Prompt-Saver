@@ -1613,6 +1613,7 @@ the video editor and the introduction tour ship on).
 - **The red caution line.** The warning text at the top of the expert menu is gone.
 - **Quick profiles.** The Quiet / Standard / All on buttons above the expert menu are gone; Reset stays.
 - **Ten copy history switches.** The expert switches for the search field, the type, color and tag filters, the two columns, the group button, both sort arrows and the clear button are gone; those controls are always there.
+- **Two header switches.** The expert switches for the header divider lines and the accent-tinted header are gone; the dividers are always shown and the header is never tinted. The expert menu no longer lists the logo, title and bar-button switches; they stay in the top bar right-click menu.
 
 ### Changed
 

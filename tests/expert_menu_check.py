@@ -50,6 +50,8 @@ NOT_IN_EXPERT = {
     "updateCheckH",
     # Favorites view switch: the normal settings page and the top-bar right-click menu.
     "favViewButton",
+    # Switched from the header right-click menu.
+    "barToggles", "showLogo", "showTitle",
 }
 
 # Every setting that only makes sense while another feature is on, and the gate it

@@ -1794,7 +1794,6 @@ body.noflag-chainPrompts #chain-btn { display: none; }
 /* Appearance extras */
 .tile-style-compact .tile { padding: 2px; }
 .tile-style-gradient .tile:not(.has-image) { background: linear-gradient(160deg, var(--surface), var(--surface-2)); }
-.flag-accentHeader .header { background: color-mix(in srgb, var(--accent) 8%, var(--bg)); }
 .flag-frostedModals .overlay { backdrop-filter: blur(var(--frosted-blur, 4px)); }
 /* GLOBAL themed scrollbar: every scrollable element gets the same look, so the
    browser's default ugly bar never appears anywhere. A transparent 3px border with
@@ -1905,7 +1904,6 @@ body.noflag-chainPrompts #chain-btn { display: none; }
 .tile-tip.plain { padding: 5px 9px; max-width: 300px; }
 .tile-tip.plain .tile-tip-name { font-weight: 500; font-size: 12px; }
 /* Expert visual toggles. */
-.noflag-headerSeparators .header-sep { display: none; }
 /* Without the grid size fields the first divider would open the row. */
 body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display: none; }
 .noflag-tileShadow .tile,
