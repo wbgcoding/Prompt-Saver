@@ -34,20 +34,25 @@ pub(crate) struct AutoCfg {
 // may re-arm itself.
 #[cfg(windows)]
 pub(crate) const ROTATE_AUTO_SETTLE_MS: u32 = 350;
+// Pause after a counted paste before the next one counts, and how long a
+// session lasts before it stops cycling (0 would mean no limit).
+#[cfg(windows)]
+pub(crate) const ROTATE_AUTO_COOLDOWN_MS: u32 = 250;
+#[cfg(windows)]
+pub(crate) const ROTATE_AUTO_TIMEOUT_MIN: u32 = 60;
 #[cfg(windows)]
 pub(crate) const ROTATE_AUTO_INPUT_MS: u32 = 3000;
 #[cfg(windows)]
 pub(crate) const ROTATE_AUTO_REARM_MAX: u32 = 12;
 
 #[cfg(windows)]
-pub(crate) fn auto_cfg(settings: &Settings) -> AutoCfg {
-    let v = |key: &str, def: f64| settings.ui_values.get(key).copied().unwrap_or(def).max(0.0);
+pub(crate) fn auto_cfg() -> AutoCfg {
     AutoCfg {
         settle_ms: ROTATE_AUTO_SETTLE_MS,
-        cooldown_ms: v("rotateAutoCooldownMs", 250.0) as u32,
+        cooldown_ms: ROTATE_AUTO_COOLDOWN_MS,
         input_ms: ROTATE_AUTO_INPUT_MS,
         rearm_max: ROTATE_AUTO_REARM_MAX,
-        timeout_min: v("rotateAutoTimeoutMin", 60.0) as u32,
+        timeout_min: ROTATE_AUTO_TIMEOUT_MIN,
     }
 }
 

@@ -110,8 +110,6 @@ DEPENDENCIES = {
     "rotateTipLen": "rotatingPrompts",
     # 90-94: auto-advance
     "rotateAuto": "rotatingPrompts",
-    "rotateAutoTimeoutMin": "rotateAuto",
-    "rotateAutoCooldownMs": "rotateAuto",
     # Markdown preview
     "codeHighlight": "mdPreview",
     "codeAutoDetect": "mdPreview",

@@ -650,8 +650,6 @@ export const EXPERT_VALUES = {
   // Tile tooltip preview length for a rotating prompt's short text.
   rotateTipLen: { label: "valRotateTipLen", min: 0, max: 300, step: 10, def: 60, unit: "", gate: "rotatingPrompts" },
   // Auto-advance session tuning: mirrors the backend's auto_cfg() defaults.
-  rotateAutoTimeoutMin: { label: "valRotateAutoTimeoutMin", min: 0, max: 480, step: 5, def: 60, unit: "min", zeroLabel: "valUnlimited", gate: "rotateAuto" },
-  rotateAutoCooldownMs: { label: "valRotateAutoCooldownMs", min: 0, max: 2000, step: 50, def: 250, unit: "ms", gate: "rotateAuto" },
   // A remaining-time estimate only shows once a progress bar has moved this
   // far, and only if what's left is still worth naming a number for.
   bgDoneKeepMin: { label: "bgDoneKeepMin", min: 1, max: 120, step: 1, def: 10, unit: "min" },
@@ -720,7 +718,7 @@ export const EXPERT_TABS = [
     // Prompt folders as Markdown (beta): mirrors text-only prompts as .md files.
     { title: "expGroupSync", flags: ["promptSync"], values: ["syncPollSecs"], paths: ["syncDir"] },
     // Auto-advancing through a rotation -- not a capture tool, stays in tab 1.
-    { title: "expGroupRotation", flags: ["rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }, { key: "rotateAuto", gate: "rotatingPrompts" }], values: ["rotateMaxEntries", "rotateTipLen", "rotateAutoTimeoutMin", "rotateAutoCooldownMs"], dropdowns: ["rotateDefaultMode"] },
+    { title: "expGroupRotation", flags: ["rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }, { key: "rotateAuto", gate: "rotatingPrompts" }], values: ["rotateMaxEntries", "rotateTipLen"], dropdowns: ["rotateDefaultMode"] },
     // Voice dictation -- not a capture tool either (it puts text into the composer,
     // the same way typing does), stays in tab 1.
     { title: "expGroupVoice", flags: ["voice", { key: "voiceInterim", gate: "voice" }, { key: "voicePunct", gate: "voice" }, { key: "voiceAutoCaps", gate: "voicePunct" }, { key: "voiceAutoStop", gate: "voice" }, { key: "voiceOnlineOk", gate: "voice" }, { key: "voiceAutoPickLang", gate: "voice" }, { key: "voiceLangAutoUpdate", gate: "voice" }, { key: "voiceHotkey", gate: "voice" }], values: ["voiceAutoStopSec", "voiceMaxMin"], dropdowns: ["voiceLang", "voiceInsert", "voiceHotkeyTarget"],
@@ -842,7 +840,7 @@ export const EXPERT_TIPS = [
   "pillFolders", "pillFontSize",
   "tileFolders",
   "rotatingPrompts", "rotateDefaultMode", "rotateMaxEntries", "rotateBadge", "rotateTipLen",
-  "rotateAuto", "rotateAutoTimeoutMin", "rotateAutoCooldownMs",
+  "rotateAuto",
   "helpTips", "helpSketches", "firstRunTour",
   // Tiles / copying
   "tileMenu", "typeBadges", "tileHotkeyBadge", "bubbleMs", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "chainQuickStart", "chainVarCheck", "autoPasteEnter",

@@ -1616,6 +1616,7 @@ the video editor and the introduction tour ship on).
 - **Two header switches.** The expert switches for the header divider lines and the accent-tinted header are gone; the dividers are always shown and the header is never tinted. The expert menu no longer lists the logo, title and bar-button switches; they stay in the top bar right-click menu.
 - **Four technical limits.** The largest recording area (8192 px), the number of recordings a batch export encodes at once (one), the largest file the editors open (2048 MB) and the most extra videos in one project (ten) are no longer expert settings; they keep their previous defaults.
 - **Seven floating-button and folder tunables.** The expert rows for the minimum text-button width, the media button border width, the merge distance, the button folder tile size, the columns of an open button folder and the hover time and columns of a tile folder are gone; the button text size, opacity and the park cleanup stay. Each keeps its previous default.
+- **Two rotation timing rows.** The pause between two counted pastes (250 ms) and the length of an automatic cycling session (60 minutes) are fixed; the tooltip of the automatic cycling switch no longer points to settings below it.
 
 ### Changed
 

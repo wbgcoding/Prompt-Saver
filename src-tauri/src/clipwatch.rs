@@ -350,7 +350,7 @@ fn handle_render_format() {
     let (rearm, blocked, id) = {
         let state = app.state::<Db>();
         let mut store = lock(&state);
-        let cfg = super::auto_cfg(&store.settings);
+        let cfg = super::auto_cfg();
         let timed_out = cfg.timeout_min != 0
             && now.wrapping_sub(session.session_start) >= cfg.timeout_min.saturating_mul(60_000);
         let counted = !timed_out
