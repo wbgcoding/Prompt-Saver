@@ -834,7 +834,7 @@ export const EXPERT_TIPS = [
   "archiveTag",
   // Values that need a unit/behaviour explanation
   "copyCooldownMs", "dblClickMs", "autoPasteDelayMs", "snipPreviewVh",
-  "similarThreshold", "similarHint", "clipMinChars", "clipInboxMax", "historyMax",
+  "similarThreshold", "importFolderDepth", "similarHint", "clipMinChars", "clipInboxMax", "historyMax",
   "nameMaxLen", "searchListMax", "savedSearchMax", "maxViews", "gridMax",
   "viewBorder", "statsTopN", "multiViewPrompt",
   "barToggles", "barToggleBoth", "quickGrid", "quickGridHoverOnly", "multiView", "libraryCols", "copySizeLevel", "showLibrary", "composerScale", "primaryScale",

@@ -193,6 +193,15 @@ PROBE_ON = """
         errs.push(what + ': depth ' + f.depth + ', expected ' + (depth === 0 ? '0' : 'at least ' + depth));
       }
     }
+    // importFolderDepth: the value row carries the tooltip text from the dictionary.
+    let depthTip = null;
+    for (const tb of document.querySelectorAll('#expert-tabs-bar .expert-tab')) {
+      tb.click();
+      await sleep(120);
+      const row = document.querySelector('#expert-flags [data-setting-row="importFolderDepth"]');
+      if (row) { depthTip = row.title; break; }
+    }
+    if (!depthTip) errs.push('importFolderDepth: the row has no tooltip');
   } catch (e) { errs.push('probe threw: ' + (e && e.stack || e)); }
   finish(errs);
 })();
