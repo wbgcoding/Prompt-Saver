@@ -365,6 +365,8 @@ export function openModal({ mode, id, name = "", text = "", color = "", image = 
   mdEditing = false; // every prompt opens rendered; a click on the pane starts editing
   mdLastText = null;
   modal.notesText.value = notes;
+  // A note of several lines opens at its full height (a one-row field would crush it).
+  requestAnimationFrame(() => autoGrow(modal.notesText));
   modal.caption.value = caption;
   modal.captionSize.value = String(normSize(captionSize) || 0);
   updateCaptionPreview();
@@ -1559,6 +1561,7 @@ export function bindEditor() {
       stopVoice();
     }
   });
+  modal.notesText.addEventListener("input", () => autoGrow(modal.notesText));
   modal.text.addEventListener("input", scheduleLenCounter); // live length readout
   modal.text.addEventListener("input", scheduleMdPreview);  // live preview (rAF-throttled)
   // Replace layout: the rendered pane IS the resting state, so it has to hand the

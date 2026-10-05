@@ -660,6 +660,9 @@ SECTION = """\
         }
         if (first748 !== 'ok') out.errors.push('748: the prompt text does not follow the name row, ' + first748 + ' comes first');
         if (innerWidth <= 700 && innerHeight <= 470) {
+          // Unscrolled: the earlier reach checks left the dialog scrolled to its end.
+          document.querySelector('#modal .modal').scrollTop = 0;
+          await sleep(50);
           const mr748 = document.querySelector('#modal .modal').getBoundingClientRect();
           const cr748 = document.getElementById('modal-confirm').getBoundingClientRect();
           if (cr748.bottom > mr748.bottom + 1 || cr748.top < mr748.top - 1) {

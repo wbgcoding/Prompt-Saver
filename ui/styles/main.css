@@ -1390,8 +1390,8 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
    The clear-X wrapper is the real flex item (wireClear moves the textarea into it),
    so the cap must sit on the wrapper: a rule on .modal-text alone loses the cascade
    to the .clear-wrap-ta > .modal-text rule further down and does nothing. */
-#modal.tall.history-open .clear-wrap-ta,
-#modal.tall.history-open .clear-wrap-ta > .modal-text { flex: 0 1 auto; min-height: 96px; max-height: 26vh; }
+#modal.tall.history-open #modal-text-wrap .clear-wrap-ta,
+#modal.tall.history-open #modal-text-wrap .clear-wrap-ta > .modal-text { flex: 0 1 auto; min-height: 96px; max-height: 26vh; }
 /* A flex item that has its own overflow gets an automatic minimum size of ZERO, so on
    a short window flexbox squeezed the open history down to a sliver instead of letting
    the dialog scroll, which is why the list stayed out of reach. EVERY row of the
@@ -1401,6 +1401,14 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
    rows one by one left the ones nobody thought of (the media block above all)
    shrinking until their content was drawn over the colour row below. */
 #modal .modal > * { flex: 0 0 auto; }
+/* The action row stays at the foot of the visible dialog while the rest scrolls, so
+   Save is reachable at the smallest window. It covers the dialog's bottom padding
+   (negative margin + its own padding) so nothing scrolls into view below it. */
+#modal .modal > .modal-actions {
+  position: sticky; bottom: 0; z-index: 2;
+  margin: 0 -20px -20px; padding: 10px 20px 20px;
+  background: var(--surface);
+}
 /* Themed scrollbar for the prompt textarea. */
 .modal-text::-webkit-scrollbar { width: var(--sb-width, 12px); }
 .modal-text::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; border: 3px solid var(--surface); }
@@ -3222,8 +3230,8 @@ select.modal-input { padding-right: 30px; }
    while the field inside kept its 120px; the textarea then spilled out of its own
    box and was drawn over the colour row, which is what expanding the variable helper
    made obvious. */
-#modal.tall .clear-wrap-ta { flex: 1 1 auto; min-height: 120px; }
-#modal.tall .clear-wrap-ta > .modal-text { flex: 1 1 auto; min-height: 120px; max-height: none; }
+#modal.tall #modal-text-wrap .clear-wrap-ta { flex: 1 1 auto; min-height: 120px; }
+#modal.tall #modal-text-wrap .clear-wrap-ta > .modal-text { flex: 1 1 auto; min-height: 120px; max-height: none; }
 .clear-btn {
   position: absolute; right: 7px; top: 50%; transform: translateY(-50%);
   width: 24px; height: 24px; display: grid; place-items: center;
