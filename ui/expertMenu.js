@@ -561,14 +561,15 @@ export async function commitValue(key, value) {
 // How a number reads on its row. The stored value never changes, only the text:
 // milliseconds show as seconds, the attachment preview size as roughly that many
 // words (about 170 per kilobyte) and the error log size in megabytes.
-// A 0-stop can carry a special label (e.g. auto-advance "unlimited") instead of "0min".
+// A 0-stop can carry a special label (e.g. auto-advance "unlimited") instead of "0 min".
 export function formatValue(cfg, v) {
   if (v === 0 && cfg.zeroLabel) return t(cfg.zeroLabel);
   const nf = (opts) => new Intl.NumberFormat(LANG, opts);
   if (cfg.display === "words") return t("valWordsApprox").replace("{n}", nf({}).format(Math.round(v * 170 / 10) * 10));
   if (cfg.display === "mb") return `${nf({ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v / 1024)} MB`;
   if (cfg.unit === "ms") return `${nf({ minimumFractionDigits: 0, maximumFractionDigits: (cfg.step ?? 100) < 100 ? 2 : 1 }).format(v / 1000)} s`;
-  return `${v}${cfg.unit}`;
+  // One style for every unit: number, space, unit; percent, the times sign and a per-minute rate hug the number.
+  return `${v}${cfg.unit && !/^[%×]$|^\//.test(cfg.unit) ? " " : ""}${cfg.unit}`;
 }
 
 export function valueRow(key) {

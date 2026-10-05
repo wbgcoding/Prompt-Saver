@@ -326,14 +326,21 @@ VALUE_TEXT_PROBE = """
       floatParkCleanupH: 'Nie',
     };
     const got = {};
+    // One style for every unit: number, space, unit (percent, the times sign and a per-minute rate stay tight).
+    const tight = new Set();
     for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
       tb.click();
       await sleep(80);
+      for (const el of document.querySelectorAll('#expert-flags .value-out, #expert-flags .value-field option')) {
+        const tx = el.textContent.trim();
+        if (/^[0-9][0-9.,]*(px|min|h|d|s|KB|MB|fps|kbps)$/.test(tx)) tight.add(tx);
+      }
       for (const key of Object.keys(want)) {
         const out = document.querySelector('#expert-flags [data-setting-row="' + key + '"] .value-out');
         if (out) got[key] = out.textContent.trim();
       }
     }
+    if (tight.size) errs.push('unit not separated by a space: ' + [...tight].slice(0, 8).join(', '));
     for (const key of Object.keys(want)) {
       if (got[key] !== want[key]) errs.push(key + ' reads ' + JSON.stringify(got[key]) + ', expected ' + JSON.stringify(want[key]));
     }
