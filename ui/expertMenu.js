@@ -18,7 +18,6 @@ import { bindHotkeyField, commitRecPauseHotkey, commitRecStopHotkey, prettyAccel
 import EN from "./i18n/en.js";
 import { renderStatsPanel, toggleShortLivedCert } from "./management.js";
 import { closeBackups, renderBackupPanel } from "./backups.js";
-import { openOcrLangsModal, openVoiceLangsModal } from "./dictation.js";
 import { varFixedListRow } from "./editor.js";
 
 export let expertResetTimer = null;
@@ -105,12 +104,10 @@ export const EXPERT_DROPDOWNS = {
     label: "valOcrLang",
     gate: "ocr",
     def: "auto",
-    // Trailing "Manage languages..." entry opens #ocr-langs-modal instead of
-    // ever being persisted as the chosen language -- see set() below.
-    options: () => [["auto", t("langAuto")], ...ocrLangsCache.map((l) => [l.tag, l.label]), ["__manage__", t("ocrLangsManage")]],
+    // The language dialog opens from the ocr-langs-open button below.
+    options: () => [["auto", t("langAuto")], ...ocrLangsCache.map((l) => [l.tag, l.label])],
     get: () => settings.ui_texts?.ocrLang || "auto",
     set: async (v) => {
-      if (v === "__manage__") { openOcrLangsModal(); return; }
       settings.ui_texts = { ...(settings.ui_texts || {}), ocrLang: v };
       try { await invoke("set_ui_text", { key: "ocrLang", value: v }); } catch (e) { errToast(e); }
     },
@@ -219,10 +216,9 @@ export const EXPERT_DROPDOWNS = {
     label: "valVoiceLang",
     gate: "voice",
     def: "auto",
-    options: () => [["auto", t("langAuto")], ...voiceLangsCache.map((l) => [l.tag, l.label]), ["__manage__", t("voiceLangsManage")]],
+    options: () => [["auto", t("langAuto")], ...voiceLangsCache.map((l) => [l.tag, l.label])],
     get: () => settings.ui_texts?.voiceLang || "auto",
     set: async (v) => {
-      if (v === "__manage__") { openVoiceLangsModal(); return; }
       settings.ui_texts = { ...(settings.ui_texts || {}), voiceLang: v };
       try { await invoke("set_ui_text", { key: "voiceLang", value: v }); } catch (e) { errToast(e); }
     },
@@ -832,11 +828,10 @@ export function dropdownRow(key) {
   sel.value = cfg.get();
   sel.addEventListener("change", async () => {
     await cfg.set(sel.value);
-    // A setter may decline the picked value instead of persisting it --
-    // ocrLang's "Manage languages..." entry opens a dialog and leaves the actual
-    // language untouched -- resync so the select never keeps showing a choice
-    // that never took effect. A no-op for every other dropdown, whose get()
-    // already reports back exactly what set() just wrote.
+    // A setter may decline the picked value instead of persisting it; resync
+    // so the select never keeps showing a choice that never took effect. A
+    // no-op for a dropdown whose get() already reports back exactly what
+    // set() just wrote.
     sel.value = cfg.get();
     if (expertOnlyChanged) renderExpert();
     else syncRowReset("dropdowns", key); // reset icon must not wait for an unrelated rebuild
