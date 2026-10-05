@@ -12,6 +12,14 @@ import { wireClearButtons } from "./windowChrome.js";
 // ---- Backups & restore ----
 // A backup folder name as a readable local date + time ("29.07.2026 18:15" in German,
 // and whatever the picked language writes elsewhere).
+// One stat card: the value on top, its label below.
+export function statCard(value, label) {
+  const c = document.createElement("div"); c.className = "stat-card";
+  const vv = document.createElement("div"); vv.className = "stat-val"; vv.textContent = value;
+  const ll = document.createElement("div"); ll.className = "stat-label"; ll.textContent = label;
+  c.append(vv, ll); return c;
+}
+
 export function prettyStamp(name) {
   const dt = parseStamp(name);
   if (dt) return `${dt.toLocaleDateString(LANG)} ${dt.toLocaleTimeString(LANG, { hour: "2-digit", minute: "2-digit" })}`;
@@ -289,12 +297,6 @@ export async function renderBackupPanel(body) {
   catch (e) { errToast(e); return; }
   body.innerHTML = "";
   const nf = (n) => Number(n).toLocaleString(LANG);
-  const card = (l, v) => {
-    const c = document.createElement("div"); c.className = "stat-card";
-    const vv = document.createElement("div"); vv.className = "stat-val"; vv.textContent = v;
-    const ll = document.createElement("div"); ll.className = "stat-label"; ll.textContent = l;
-    c.append(vv, ll); return c;
-  };
   // Date/time card: date on top, time below (no comma), a touch larger than the
   // plain small value so the timestamps read clearly.
   const dtCard = (l, d) => {
@@ -539,13 +541,13 @@ export async function renderBackupPanel(body) {
   // Row 1: how many backups there are and what they cost in disk space.
   // Row 2: the time axis; how far back they reach and when the next one is due.
   cards.append(
-    card(t("backupCount"), nf(backups.length)),
-    card(t("backupTotalSize"), fmtBytes(total)),
-    card(t("backupLargest"), backups.length ? fmtBytes(Math.max(...sizes)) : "\u2014"),
-    card(t("backupSmallest"), backups.length ? fmtBytes(Math.min(...sizes)) : "\u2014"),
-    card(t("backupSpan"), newest && oldest
+    statCard(nf(backups.length), t("backupCount")),
+    statCard(fmtBytes(total), t("backupTotalSize")),
+    statCard(backups.length ? fmtBytes(Math.max(...sizes)) : "\u2014", t("backupLargest")),
+    statCard(backups.length ? fmtBytes(Math.min(...sizes)) : "\u2014", t("backupSmallest")),
+    statCard(newest && oldest
       ? `${nf(Math.max(0, Math.round((newest - oldest) / 86400000)))} d`
-      : "\u2014"),
+      : "\u2014", t("backupSpan")),
     dtCard(t("backupNext"), newest && flag("autoBackup") ? new Date(newest.getTime() + val("backupIntervalH") * 3600000) : null),
     dtCard(t("backupNewest"), newest),
     dtCard(t("backupOldest"), oldest),
@@ -659,20 +661,14 @@ export async function renderBackupContent(box, name) {
   try { data = await invoke("backup_contents", { name }); }
   catch (e) { box.textContent = String(e); return; }
   const nf = (n) => Number(n).toLocaleString(LANG);
-  const mkCard = (l, v) => {
-    const c = document.createElement("div"); c.className = "stat-card";
-    const vv = document.createElement("div"); vv.className = "stat-val"; vv.textContent = v;
-    const ll = document.createElement("div"); ll.className = "stat-label"; ll.textContent = l;
-    c.append(vv, ll); return c;
-  };
   const cards = document.createElement("div"); cards.className = "stat-cards backup-content-cards";
   cards.append(
-    mkCard(t("backupContentEntries"), nf(data.entries)),
-    mkCard(t("backupContentViews"), nf(data.views)),
-    mkCard(t("backupContentTags"), nf(data.tags)),
-    mkCard(t("backupContentLastChange"), data.last_change ? new Date(data.last_change * 1000).toLocaleDateString(LANG) : "\u2014"),
-    mkCard(t("backupContentVersion"), data.program_version || "\u2014"),
-    mkCard(t("backupContentEncrypted"), data.encrypted ? t("backupContentEncryptedYes") : t("backupContentEncryptedNo")),
+    statCard(nf(data.entries), t("backupContentEntries")),
+    statCard(nf(data.views), t("backupContentViews")),
+    statCard(nf(data.tags), t("backupContentTags")),
+    statCard(data.last_change ? new Date(data.last_change * 1000).toLocaleDateString(LANG) : "\u2014", t("backupContentLastChange")),
+    statCard(data.program_version || "\u2014", t("backupContentVersion")),
+    statCard(data.encrypted ? t("backupContentEncryptedYes") : t("backupContentEncryptedNo"), t("backupContentEncrypted")),
   );
   box.appendChild(cards);
 

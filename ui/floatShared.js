@@ -464,3 +464,37 @@ export function numberField({ input, value, min, max, step, bigStep, presets, de
   wrap.setValue = (v) => { el.value = String(clampVal(v)); refreshButtons(); };
   return wrap;
 }
+
+// Relative luminance of a "#rrggbb" colour (null when it is not one).
+export function hexLuminance(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || ""));
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  const lin = (c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * lin(((n >> 16) & 255) / 255) + 0.7152 * lin(((n >> 8) & 255) / 255) + 0.0722 * lin((n & 255) / 255);
+}
+
+// Black or white, whichever reads better on top of the given colour. Full 6-digit
+// hex on purpose: the result also feeds ffmpeg's colour parser, which does not
+// expand a 3-digit hex the way a browser does.
+export function contrastTextColor(hex) {
+  const c = String(hex || "").replace("#", "");
+  if (c.length !== 6) return "#ffffff";
+  const r = parseInt(c.slice(0, 2), 16), g = parseInt(c.slice(2, 4), 16), b = parseInt(c.slice(4, 6), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? "#111111" : "#ffffff";
+}
+
+// Marks the size button of `menu` whose data-scale matches the current scale.
+export function markSelectedSize(menu, scale) {
+  for (const btn of menu.querySelectorAll("[data-scale]")) {
+    btn.classList.toggle("sel", Math.abs(Number(btn.dataset.scale) - scale) < 0.01);
+  }
+}
+
+// "pos/total" for one rotation entry (empty when there is none). Pos, not index + 1:
+// in random mode the index is the absolute entry that will be drawn next (it jumps
+// around), while pos is the 1-based draw number within the current shuffle cycle,
+// counting up and restarting on reshuffle.
+export function rotateBadgeLabel(info) {
+  return info ? `${info.pos}/${info.total}` : "";
+}

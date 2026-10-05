@@ -7,7 +7,7 @@ import { applyFloatTheme, inkForColor, onInkChange } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
 import { LANGS, compactTexts } from "./i18n.js";
 import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT, COPY_SOUND_VOLUME_DEFAULT } from "./copyDefaults.js";
-import { COPIED_MS, RING_MIN, RING_MAX, DRAG_OUT_MODS, resolveLang, fileUri, playCopySound, applyCopySizeLevel } from "./floatShared.js";
+import { COPIED_MS, RING_MIN, RING_MAX, DRAG_OUT_MODS, resolveLang, fileUri, playCopySound, applyCopySizeLevel, markSelectedSize } from "./floatShared.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
 // switcher, so it comes from the brand rather than a hardcoded English word.
@@ -172,12 +172,6 @@ function applyPillSize() {
   invoke("resize_float_pill", { id: promptId, width: box.w, height: box.h }).catch(() => {});
 }
 
-function markSelectedSize() {
-  for (const btn of menu.querySelectorAll("[data-scale]")) {
-    btn.classList.toggle("sel", Math.abs(Number(btn.dataset.scale) - scale) < 0.01);
-  }
-}
-
 // The labels need the translation module, which is imported lazily because it is
 // large and the pill has to open fast. Behaviour must NOT wait for it: a slow or
 // failed import used to take the cooldown, opacity, folders and drag-out with it.
@@ -259,7 +253,7 @@ function applyPrefs(s) {
   const pfs = Number(s.ui_values?.pillFontSize);
   pillTextFontBase = Number.isFinite(pfs) ? pfs : PILL_FONT_SIZE_DEFAULT;
   applyFont();
-  markSelectedSize();
+  markSelectedSize(menu, scale);
   applyPillSize();
 }
 
@@ -672,7 +666,7 @@ window.addEventListener("blur", () => { if (!drag) closeMenu(); });
 for (const btn of menu.querySelectorAll("[data-scale]")) {
   btn.addEventListener("click", async () => {
     scale = Number(btn.dataset.scale) || 1;
-    markSelectedSize();
+    markSelectedSize(menu, scale);
     await invoke("set_float_scale", { id: promptId, scale, resize: false }).catch(() => {});
     // The menu may have been closed (Escape) while the scale was being stored;
     // closeMenu already restored the window, so there is nothing left to place.
@@ -849,7 +843,7 @@ async function endResize() {
   rzPending = null;
   pill.classList.remove("resizing");
   await invoke("set_float_scale", { id: promptId, scale, resize: false }).catch(() => {});
-  markSelectedSize();
+  markSelectedSize(menu, scale);
   ensureVideoPlaying();
 }
 

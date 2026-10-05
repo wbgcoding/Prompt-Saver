@@ -1,5 +1,5 @@
 import { attachSelectPicker } from "./selectpop.js";
-import { makeHoldOrTapToggle, numberField, trapTabWithin } from "./floatShared.js";
+import { contrastTextColor, makeHoldOrTapToggle, numberField, trapTabWithin } from "./floatShared.js";
 import { placePopover, placePopoverAt } from "./popover.js";
 import { snapMove } from "./snap.js";
 import { $, colorPop, COLORS, drag, errToast, flag, getCurrentWindow, invoke, NUM_FIELD_BIG_STEP, openColorPop, ResizeDirection, settings, t, toast, txt, val, withShortcut } from "./core.js";
@@ -259,12 +259,6 @@ export function initSnipEditor() {
     }
     return SE.perTool[tool];
   }
-  function snipEditContrastColor(hex) {
-    const c = String(hex || "").replace("#", "");
-    if (c.length !== 6) return "#fff";
-    const r = parseInt(c.slice(0, 2), 16), g = parseInt(c.slice(2, 4), 16), b = parseInt(c.slice(4, 6), 16);
-    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? "#111" : "#fff";
-  }
   function snipEditGetPixelColor(pt) {
     const x = snipEditClamp(Math.round(pt.x), 0, SE.w - 1);
     const y = snipEditClamp(Math.round(pt.y), 0, SE.h - 1);
@@ -404,7 +398,7 @@ export function initSnipEditor() {
     ctx.shadowOffsetY = 1;
     if (op.back === "outline") {
       ctx.lineWidth = op.outlinePx || SNIP_DEFAULT_SIZES.outlinePx;
-      ctx.strokeStyle = snipEditContrastColor(op.color);
+      ctx.strokeStyle = contrastTextColor(op.color);
       ctx.strokeText(op.text, op.point.x, op.point.y);
     }
     ctx.fillStyle = op.color;
@@ -425,7 +419,7 @@ export function initSnipEditor() {
     ctx.beginPath();
     ctx.arc(op.point.x, op.point.y, r, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = snipEditContrastColor(op.color);
+    ctx.fillStyle = contrastTextColor(op.color);
     ctx.font = `${Math.round(r * 1.1)}px sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";

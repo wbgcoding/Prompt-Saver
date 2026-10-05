@@ -2,7 +2,7 @@
 // They carry their OWN tokens (floating.css), so a custom theme's colours are mapped
 // onto them; a floating button follows the same palette as the main window instead
 // of falling back to the base theme's colours.
-import { themeColorScheme } from "./floatShared.js";
+import { hexLuminance, themeColorScheme } from "./floatShared.js";
 
 const FLOAT_THEME_MAP = {
   accent: "--pill-bg",
@@ -24,15 +24,9 @@ let lastTheme = null;
 let lastVars = null;
 let applied = false; // true once applyFloatTheme has run at least once
 
-// Relative luminance -> the ink that stays readable on `hex`. Duplicated from
-// core.js's own readableInk rather than shared: this module ships to every
-// satellite window, none of which load core.js.
-function hexLuminance(hex) {
-  const n = parseInt(hex.slice(1), 16);
-  const lin = (c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
-  return 0.2126 * lin(((n >> 16) & 255) / 255) + 0.7152 * lin(((n >> 8) & 255) / 255) + 0.0722 * lin((n & 255) / 255);
-}
-
+// Relative luminance -> the ink that stays readable on `hex`. This module ships
+// to every satellite window, none of which load core.js (which has its own
+// readableInk on the same luminance helper).
 function readableInk(hex) {
   if (!INK.auto) return "#fff";
   return hexLuminance(hex) > INK.threshold / 100 ? "#000" : "#fff";

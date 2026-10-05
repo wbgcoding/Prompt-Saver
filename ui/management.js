@@ -11,7 +11,7 @@ import { assignLibQuery, lastEdited, libLabel, libQuery, refreshImageHits, rende
 import { renderGrid, renderViews } from "./views.js";
 import { confirmDialog } from "./dialog.js";
 import { fmtBytes, varPreview } from "./floatShared.js";
-import { saveBackupSetting, saveUiState } from "./backups.js";
+import { saveBackupSetting, saveUiState, statCard } from "./backups.js";
 import { editPrompt, renderDiffInto, splitDiffSides } from "./editor.js";
 
 // ---- Usage statistics dashboard (opened from the expert menu) ----
@@ -170,30 +170,24 @@ export async function renderStatsPanel(body) {
   const nf1 = (n) => Number(n).toLocaleString(LANG, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   const cards = document.createElement("div");
   cards.className = "stat-cards";
-  const card = (label, value) => {
-    const c = document.createElement("div"); c.className = "stat-card";
-    const v = document.createElement("div"); v.className = "stat-val"; v.textContent = value;
-    const l = document.createElement("div"); l.className = "stat-label"; l.textContent = label;
-    c.append(v, l); return c;
-  };
   // Three rows of four: what the library holds, how long/heavily used the prompts
   // are, and the raw copy activity.
   cards.append(
     // ---- Inventory ----
-    card(t("statTotalPrompts"), nf(s.total_prompts)),
-    card(t("statWithMedia"), nf(prompts.filter((p) => hasImage(p) || p.file_path || p.copy_image).length)),
-    card(t("statWithVars"), nf(prompts.filter((p) => extractVars(p.text || "").length > 0).length)),
-    card(t("statViews"), nf((settings.views || []).length)),
+    statCard(nf(s.total_prompts), t("statTotalPrompts")),
+    statCard(nf(prompts.filter((p) => hasImage(p) || p.file_path || p.copy_image).length), t("statWithMedia")),
+    statCard(nf(prompts.filter((p) => extractVars(p.text || "").length > 0).length), t("statWithVars")),
+    statCard(nf((settings.views || []).length), t("statViews")),
     // ---- Content + intensity ----
-    card(t("statTopCopies"), s.top && s.top.length ? nf(s.top[0].count) : "\u2014"),
-    card(t("statAvg"), s.used_count ? nf1(s.avg_copies) : "\u2014"),
-    card(t("statChars"), nf(s.total_chars)),
-    card(t("statAvgLen"), s.total_prompts ? nf(Math.round(s.total_chars / s.total_prompts)) : "\u2014"),
+    statCard(s.top && s.top.length ? nf(s.top[0].count) : "\u2014", t("statTopCopies")),
+    statCard(s.used_count ? nf1(s.avg_copies) : "\u2014", t("statAvg")),
+    statCard(nf(s.total_chars), t("statChars")),
+    statCard(s.total_prompts ? nf(Math.round(s.total_chars / s.total_prompts)) : "\u2014", t("statAvgLen")),
     // ---- Copy activity ----
-    card(t("statTotalCopies"), nf(s.total_copies)),
-    card(t("statCopies7"), s.history_on ? nf(s.copies7) : "\u2014"),
-    card(t("statCopies30"), s.history_on ? nf(s.copies30) : "\u2014"),
-    card(t("statPerDay"), s.history_on ? nf1(s.copies30 / 30) : "\u2014"),
+    statCard(nf(s.total_copies), t("statTotalCopies")),
+    statCard(s.history_on ? nf(s.copies7) : "\u2014", t("statCopies7")),
+    statCard(s.history_on ? nf(s.copies30) : "\u2014", t("statCopies30")),
+    statCard(s.history_on ? nf1(s.copies30 / 30) : "\u2014", t("statPerDay")),
   );
   body.appendChild(cards);
   // Last 14 days as a small bar chart: copies7/copies30 above are just two flat

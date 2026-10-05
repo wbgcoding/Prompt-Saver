@@ -3,7 +3,7 @@
 // Imports no feature module.
 
 import { DRAG_THRESHOLD_DEFAULT } from "./copyDefaults.js";
-import { resolveLang } from "./floatShared.js";
+import { hexLuminance, resolveLang } from "./floatShared.js";
 import { LANGS, loadLang } from "./i18n.js";
 import { applyTerms } from "./terms.js";
 import { APP_NAME, FLAG_DEFAULTS } from "./brand.js";
@@ -313,14 +313,6 @@ export const TOAST_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" aria-
 // (autoInk), the text is always white; switched on, black only above the
 // expert-tunable inkThreshold (a plain WCAG 0.179 split flipped black text
 // onto medium colors that read as too dark for black text).
-export function hexLuminance(hex) {
-  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || ""));
-  if (!m) return null;
-  const n = parseInt(m[1], 16);
-  const lin = (c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
-  return 0.2126 * lin(((n >> 16) & 255) / 255) + 0.7152 * lin(((n >> 8) & 255) / 255) + 0.0722 * lin((n & 255) / 255);
-}
-
 export function readableInk(hex) {
   const l = hexLuminance(hex);
   if (l === null) return "#fff";

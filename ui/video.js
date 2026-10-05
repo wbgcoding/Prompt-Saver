@@ -6,7 +6,7 @@
 // an ordered operation list (VE.ops), exactly like the screenshot editor's own
 // list, and the export compiles that list into ONE ffmpeg filter graph. That is
 // what makes undo/redo cheap, the preview honest and the export a single pass.
-import { resolveLang, fillVideoFormatSelect, normRecFormat, ffmpegDownloadPct, numberField, makeEtaEstimator, formatEta, a11yProgressText, parseFfmpegError, fmtBytes, fmtSizeCompact, makeHoldOrTapToggle, trapTabWithin } from "./floatShared.js";
+import { resolveLang, fillVideoFormatSelect, normRecFormat, ffmpegDownloadPct, numberField, makeEtaEstimator, formatEta, a11yProgressText, parseFfmpegError, fmtBytes, fmtSizeCompact, makeHoldOrTapToggle, trapTabWithin, contrastTextColor } from "./floatShared.js";
 import { withShortcut as withShortcutRaw, rowsForScope as rowsForScopeRaw } from "./shortcuts.js";
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
@@ -1264,20 +1264,6 @@ function renderOverlayLive(vb) {
       VE.liveEls.delete(id);
     }
   }
-}
-
-// Black or white, whichever reads better on top of the given color -- the
-// same luminance formula the screenshot editor's snipEditContrastColor uses,
-// duplicated here rather than shared since the two editors' text-drawing code
-// does not otherwise call into each other.
-// Full 6-digit hex (not the 3-digit "#fff" shorthand CSS would also accept):
-// the result feeds hexToFf() for ffmpeg's bordercolor, and ffmpeg's own color
-// parser does not expand a 3-digit hex the way a browser does.
-function contrastTextColor(hex) {
-  const c = String(hex || "").replace("#", "");
-  if (c.length !== 6) return "#ffffff";
-  const r = parseInt(c.slice(0, 2), 16), g = parseInt(c.slice(2, 4), 16), b = parseInt(c.slice(4, 6), 16);
-  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? "#111111" : "#ffffff";
 }
 
 // `reuse`, when given, is the SAME element returned for this overlay last

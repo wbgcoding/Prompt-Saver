@@ -4,7 +4,7 @@ import { applyChainToTile, chainMode, toggleChainPick } from "./chain.js";
 import { applyVideoPrefs, buildMediaBar, mediaKind } from "./media.js";
 import { fitText, FONTS } from "./fonts.js";
 import { FLAG_GATES } from "./expertConfig.js";
-import { applyCopySizeLevel, DRAG_OUT_MODS, fileUri } from "./floatShared.js";
+import { applyCopySizeLevel, DRAG_OUT_MODS, fileUri, rotateBadgeLabel } from "./floatShared.js";
 import { activeView, clearViewDropHover, dropTilesOnView, gridKeyOf, layoutOf, openGridSizeFor, openMiniMenu, placeFav, renderGrid, resolveViewDropTarget, updateViewDropHover, viewsContaining } from "./views.js";
 import { dialogTokens, peekRotatedText } from "./promptVars.js";
 import { copyOnCooldown, copyTextWithVars, maybeCloseOnCopy, recordCopy } from "./copyFlow.js";
@@ -178,19 +178,10 @@ export const rotateState = new Map(); // id -> { index, pos, total, text }
 // rotateReqs).
 export const rotateReqs = new Map(); // id -> latest request number
 
-// `pos` (not `index + 1`): in random mode `index` is the absolute entry that
-// will be drawn next (jumps around), while `pos` is the 1-based draw number within
-// the current shuffle cycle, counting up and restarting at the next reshuffle. In
-// order mode the two coincide (the backend already returns pos = index + 1 there).
-export function rotateBadgeLabel(id) {
-  const s = rotateState.get(id);
-  return s ? `${s.pos}/${s.total}` : "";
-}
-
 // Pushes the cached state (however stale/empty) into one tile's badge + tooltip.
 export function applyRotateState(tile, id) {
   const badge = tile.querySelector(".tile-rotate-badge");
-  if (badge) badge.textContent = rotateBadgeLabel(id);
+  if (badge) badge.textContent = rotateBadgeLabel(rotateState.get(id));
   const s = rotateState.get(id);
   if (s) {
     // 0 = show the whole entry, same convention as notesTipLen/clipNote.

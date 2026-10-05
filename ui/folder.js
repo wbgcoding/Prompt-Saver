@@ -9,7 +9,7 @@ import { mediaKind } from "./media.js";
 import { APP_NAME } from "./brand.js";
 import { LANGS, compactTexts } from "./i18n.js";
 import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT, COPY_SOUND_VOLUME_DEFAULT } from "./copyDefaults.js";
-import { COPIED_MS, RING_MIN, RING_MAX, DRAG_OUT_MODS, FOLDER_SVG, resolveLang, fileUri, playCopySound } from "./floatShared.js";
+import { COPIED_MS, RING_MIN, RING_MAX, DRAG_OUT_MODS, FOLDER_SVG, resolveLang, fileUri, playCopySound, markSelectedSize, rotateBadgeLabel } from "./floatShared.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
 // switcher, so it comes from the brand rather than a hardcoded English word.
@@ -75,14 +75,6 @@ const rotateInfo = new Map(); // member id -> { index, pos, total }
 const rotateReqs = new Map(); // member id -> latest request number
 let rotateBadgeOn = true; // mirrors flag("rotateBadge"), which ships on
 
-// Pos (not index + 1): in random mode index is the absolute entry that will
-// be drawn next (jumps around); pos is the 1-based draw number within the current
-// shuffle cycle, counting up and restarting on reshuffle.
-function rotateBadgeLabel(id) {
-  const s = rotateInfo.get(id);
-  return s ? `${s.pos}/${s.total}` : "";
-}
-
 function primeMemberRotate(id) {
   if (rotateInfo.has(id)) return;
   const req = (rotateReqs.get(id) || 0) + 1;
@@ -91,7 +83,7 @@ function primeMemberRotate(id) {
     if (!r || rotateReqs.get(id) !== req) return;
     rotateInfo.set(id, { index: r.index, pos: r.pos, total: r.total });
     const el = gridEl.querySelector(`.folder-member[data-id="${CSS.escape(id)}"] .rotate-badge`);
-    if (el) el.textContent = rotateBadgeLabel(id);
+    if (el) el.textContent = rotateBadgeLabel(rotateInfo.get(id));
   }).catch(() => {});
 }
 
@@ -207,7 +199,7 @@ function renderGrid() {
     if (rotateBadgeOn && (p.variants || []).length) {
       const rb = document.createElement("span");
       rb.className = "rotate-badge";
-      rb.textContent = rotateBadgeLabel(p.id);
+      rb.textContent = rotateBadgeLabel(rotateInfo.get(p.id));
       tile.appendChild(rb);
       primeMemberRotate(p.id);
     }
@@ -365,7 +357,7 @@ async function loadState() {
   renderIcon();
   // The stored scale arrives here, not through applyPrefs, and both run in
   // parallel; without this the size menu keeps whatever applySettings marked.
-  markSelectedSize();
+  markSelectedSize(menuEl, state.scale);
   if (open === "grid") await reflow();
 }
 
@@ -439,14 +431,8 @@ function applyPrefs(s) {
   document.documentElement.style.setProperty("--transition", `${animMs}ms cubic-bezier(0.4, 0, 0.2, 1)`);
   const op = Number(s.ui_values?.floatOpacity);
   iconEl.style.opacity = Number.isFinite(op) ? `${Math.max(0.2, op / 100)}` : "";
-  markSelectedSize();
+  markSelectedSize(menuEl, state.scale);
   if (open === "grid") renderGrid();
-}
-
-function markSelectedSize() {
-  for (const btn of menuEl.querySelectorAll("[data-scale]")) {
-    btn.classList.toggle("sel", Math.abs(Number(btn.dataset.scale) - state.scale) < 0.01);
-  }
 }
 
 // ---- folder icon: click opens, press-and-move drags the window ----
@@ -488,7 +474,7 @@ const GRIP_PAINT_MS = 16;
 function gripPaint() {
   gripPainted = performance.now();
   renderIcon();
-  markSelectedSize();
+  markSelectedSize(menuEl, state.scale);
 }
 
 function gripResize(e) {
@@ -597,7 +583,7 @@ for (const btn of menuEl.querySelectorAll("[data-scale]")) {
   btn.addEventListener("click", async () => {
     const scale = Number(btn.dataset.scale) || 1;
     state.scale = scale;
-    markSelectedSize();
+    markSelectedSize(menuEl, state.scale);
     renderIcon();
     open = null; // the backend collapses the window with the new size
     menuEl.classList.remove("shown");
@@ -766,7 +752,7 @@ listen("rotation-changed", (e) => {
   rotateReqs.set(id, (rotateReqs.get(id) || 0) + 1);
   rotateInfo.set(id, { index, pos, total });
   const el = gridEl.querySelector(`.folder-member[data-id="${CSS.escape(id)}"] .rotate-badge`);
-  if (el) el.textContent = rotateBadgeLabel(id);
+  if (el) el.textContent = rotateBadgeLabel(rotateInfo.get(id));
 });
 
 // Moving onto a monitor with a different DPI invalidates the physical box the
