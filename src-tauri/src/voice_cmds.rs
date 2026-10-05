@@ -126,7 +126,7 @@ pub(crate) async fn voice_start(
             return Err(e.to_string());
         }
         *vstate.0.lock().unwrap_or_else(|e| e.into_inner()) =
-            Some(VoiceHandle { id, token, stop: tx, started: std::time::Instant::now(), lang: resolved_lang.clone(), ended });
+            Some(VoiceHandle { id, stop: tx, ended });
         vstate.1.store(false, std::sync::atomic::Ordering::SeqCst);
         Ok(VoiceStartResult { id, lang: resolved_lang })
     }

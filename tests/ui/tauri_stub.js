@@ -368,7 +368,6 @@ const RESULTS = {
     SECRET_UNLOCKED = true;
     return null;
   },
-  secret_vault_lock: () => { SECRET_UNLOCKED = false; return null; },
   set_prompt_secret: (a) => {
     const p = PROMPTS.find((x) => x.id === (a && a.id));
     if (!p) throw new Error("not-found");

@@ -141,13 +141,7 @@ pub(crate) struct VoiceErrorEvent {
 // a second StopAsync on an already-Completed session throws (0x80131509).
 pub(crate) struct VoiceHandle {
     pub(crate) id: u64,
-    #[allow(dead_code)] // carried alongside id for a future cross-check; the frontend already does this matching itself
-    pub(crate) token: u64,
     pub(crate) stop: std::sync::mpsc::Sender<&'static str>,
-    #[allow(dead_code)] // read by a future "how long has this run" indicator; harmless to keep now
-    pub(crate) started: std::time::Instant,
-    #[allow(dead_code)]
-    pub(crate) lang: String,
     pub(crate) ended: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 // Second field: claimed while a voice_start call is between its busy check and

@@ -437,18 +437,6 @@ pub(crate) async fn secret_vault_unlock(app: AppHandle, state: State<'_, Db>, pa
     })
 }
 
-// Explicit re-lock (settings menu action): the automatic paths (quit, idle
-// timeout) never call this; they simply stop having a session at all.
-#[tauri::command]
-pub(crate) async fn secret_vault_lock(state: State<'_, Db>) -> Result<AppState, String> {
-    *SECRET_SESSION.lock().unwrap_or_else(|e| e.into_inner()) = None;
-    let store = lock(&state);
-    Ok(AppState {
-        prompts: slim_prompts(&store.prompts, None),
-        settings: webview_settings(&store.settings),
-    })
-}
-
 // Turns one prompt's confidential flag on or off, encrypting/decrypting its text
 // and every variant with the current session key. Requires an unlocked session
 // either way -- turning it OFF still needs the key to recover the plain text, so

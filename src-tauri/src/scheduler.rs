@@ -83,14 +83,6 @@ impl Scheduler {
         }
     }
 
-    #[allow(dead_code)]
-    pub fn remove(&self, name: &str) {
-        let mut jobs = self.jobs.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(h) = jobs.remove(name) {
-            let _ = h.tx.send(JobMsg::Stop);
-        }
-    }
-
     // Wakes every job thread out of its wait and waits a bounded time for
     // all of them to finish. False means at least one job was still running
     // when the deadline passed; the caller carries on rather than holding
@@ -191,11 +183,6 @@ pub fn register_periodic(
 
 pub fn retime(name: &str, interval: Duration) {
     global().retime(name, interval);
-}
-
-#[allow(dead_code)]
-pub fn remove(name: &str) {
-    global().remove(name);
 }
 
 // Never started (no periodic job was ever registered) means nothing to stop.

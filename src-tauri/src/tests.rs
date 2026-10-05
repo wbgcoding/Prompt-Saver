@@ -16484,29 +16484,6 @@ fn every_registered_job_fires_in_due_order() {
 }
 
 #[test]
-fn a_removed_job_stops_firing() {
-    let hits = Arc::new(AtomicU64::new(0));
-    let s = Scheduler::start();
-    {
-        let hits = hits.clone();
-        s.register_periodic("tick", Duration::from_millis(5), Duration::from_millis(5), move || {
-            hits.fetch_add(1, Ordering::SeqCst);
-        });
-    }
-    assert!(
-        wait_until(|| hits.load(Ordering::SeqCst) >= 3, Duration::from_secs(5)),
-        "the job never got going"
-    );
-    s.remove("tick");
-    // Long enough for a round already under way to finish and for the removal
-    // to be applied, then a stretch that would have carried many more ticks.
-    std::thread::sleep(Duration::from_millis(60));
-    let settled = hits.load(Ordering::SeqCst);
-    std::thread::sleep(Duration::from_millis(120));
-    assert_eq!(hits.load(Ordering::SeqCst), settled, "a removed job kept firing");
-}
-
-#[test]
 fn a_shortened_interval_wakes_the_thread_early() {
     let hits = Arc::new(AtomicU64::new(0));
     let s = Scheduler::start();

@@ -298,7 +298,6 @@ pub(crate) fn list_bg_ops(state_db: State<Db>) -> Vec<BgOpInfo> {
 // mid-flight is the genuinely risky case), so quitting with one of those still
 // running is gated by asking first (see the CloseRequested handler below),
 // never by trying to abort it here.
-#[tauri::command]
 pub(crate) fn cancel_all_bg_ops() {
     cancel_all_exports();
     cancel_recording_convert();
