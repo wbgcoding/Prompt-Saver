@@ -8857,6 +8857,37 @@ fn append_crash_log_never_writes_the_real_appdata_file() {
     assert!(redirected.contains(MARKER), "the message must land in the redirected file instead");
 }
 
+// Every writer the unit tests reach (the error log, the data folder fallbacks)
+// must resolve into a per-run location, never into the owner's real roaming
+// folder, and writing through them must leave the real error.log untouched.
+#[test]
+fn test_runs_never_resolve_into_the_real_data_folder() {
+    let real_dir = PathBuf::from(test_env::real_appdata().expect("APPDATA is set on Windows")).join(DATA_FOLDER);
+    let real_log = real_dir.join("error.log");
+    let stamp = |p: &Path| fs::metadata(p).ok().map(|m| (m.len(), m.modified().ok()));
+    let before = stamp(&real_log);
+    assert_ne!(std::env::var_os("APPDATA"), test_env::real_appdata(), "the test process must run with a sandboxed APPDATA");
+
+    for (what, path) in [
+        ("crash_log_path", crash_log_path()),
+        ("default_data_dir_headless", default_data_dir_headless()),
+        ("data_dir_headless", data_dir_headless()),
+    ] {
+        assert!(!path.starts_with(&real_dir), "{what} resolved into the real data folder: {}", path.display());
+    }
+
+    // The writers: a plain log line, the startup scrub, and the call sites that
+    // fire inside unrelated tests (sealing without DPAPI, a failed conversion).
+    append_crash_log("PROBE-guard-plain-line");
+    scrub_user_paths_from_crash_log();
+    append_crash_log("DPAPI encryption unavailable - probe line from the guard test");
+    append_crash_log("recording convert failed (webm): probe line from the guard test");
+
+    assert_eq!(before, stamp(&real_log), "the real error.log must be untouched by the unit tests");
+    let redirected = fs::read_to_string(crash_log_path()).unwrap_or_default();
+    assert!(redirected.contains("PROBE-guard-plain-line"), "the lines must land in the per-run file");
+}
+
 // A data folder outside the profile (a custom location the user picked, or any
 // other drive-rooted path this run never resolved to a known folder) is never
 // a folder the named placeholders recognise -- the structural catch-all must

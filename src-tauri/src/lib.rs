@@ -1184,4 +1184,6 @@ mod md_sync;
 use md_sync::*;
 
 #[cfg(test)]
+mod test_env;
+#[cfg(test)]
 mod tests;
