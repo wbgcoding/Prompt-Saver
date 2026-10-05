@@ -1587,9 +1587,8 @@ window.__EDITOR_DRAFT_FIXTURE__ = {
 """
 
 
-# 475: the extra-video-source limit used to be a fixed constant; it is now an
-# expert value the smoke run can dial down and prove the "add a video" flow
-# actually reads.
+# 475: the extra-video-source limit is a fixed ten; the probe fills the list
+# through the stub and proves the eleventh source is refused with the limit toast.
 EXTRA_CLIPS_MAX_PROBE = """
 <script>
 (async () => {
@@ -1612,21 +1611,20 @@ EXTRA_CLIPS_MAX_PROBE = """
     if (beforeClips !== 0) {
       errs.push('475: setup: the clip list was not empty before the limit test, found ' + beforeClips);
     }
-    await window.__TAURI__.core.invoke('set_ui_value', { key: 'veExtraClipsMax', value: 1 });
-    window.__FIRE__('settings-changed');
-
     // Every wait below polls the real DOM state instead of sleeping a fixed
     // guess -- a fixed sleep here was too short under load (many probes
     // running at once), flaking this whole check.
-    document.getElementById('ve-add-video').click();
     let pickPop = null;
-    await until(() => {
-      pickPop = document.getElementById('ve-add-video-pop');
-      return pickPop && !pickPop.classList.contains('hidden') && pickPop.querySelectorAll('button').length === 2;
-    }, 100);
-    if (!pickPop || pickPop.classList.contains('hidden') || pickPop.querySelectorAll('button').length !== 2) {
-      errs.push('475: lowering the limit to one still blocked the first extra source');
-    } else {
+    for (let n = 1; n <= 10; n++) {
+      document.getElementById('ve-add-video').click();
+      await until(() => {
+        pickPop = document.getElementById('ve-add-video-pop');
+        return pickPop && !pickPop.classList.contains('hidden') && pickPop.querySelectorAll('button').length === 2;
+      }, 100);
+      if (!pickPop || pickPop.classList.contains('hidden') || pickPop.querySelectorAll('button').length !== 2) {
+        errs.push('475: extra source number ' + n + ' was blocked below the limit of ten');
+        break;
+      }
       pickPop.querySelectorAll('button')[1].click(); // as its own section
       let posButtons = [];
       await until(() => {
@@ -1634,15 +1632,19 @@ EXTRA_CLIPS_MAX_PROBE = """
         return !pickPop.classList.contains('hidden') && posButtons.length === 3;
       }, 100);
       if (pickPop.classList.contains('hidden') || posButtons.length !== 3) {
-        errs.push('475: choosing as its own section did not open the position choice');
-      } else {
-        posButtons[1].click(); // at the end
-        await until(() => document.querySelectorAll('#ve-clip-list .ve-op-row').length === 1, 100);
+        errs.push('475: choosing as its own section did not open the position choice for source ' + n);
+        break;
+      }
+      posButtons[1].click(); // at the end
+      await until(() => document.querySelectorAll('#ve-clip-list .ve-op-row').length === n, 100);
+      if (document.querySelectorAll('#ve-clip-list .ve-op-row').length !== n) {
+        errs.push('475: extra source number ' + n + ' was not inserted');
+        break;
       }
     }
     const afterFirst = document.querySelectorAll('#ve-clip-list .ve-op-row').length;
-    if (afterFirst !== 1) {
-      errs.push('475: the first extra source under a limit of one was not inserted, found ' + afterFirst + ' clip row(s)');
+    if (afterFirst !== 10) {
+      errs.push('475: ten extra sources were not inserted, found ' + afterFirst + ' clip row(s)');
     }
 
     document.getElementById('ve-add-video').click();
@@ -1651,16 +1653,16 @@ EXTRA_CLIPS_MAX_PROBE = """
     pickPop = document.getElementById('ve-add-video-pop');
     const popOpened = pickPop && !pickPop.classList.contains('hidden') && pickPop.querySelectorAll('button').length;
     if (popOpened) {
-      errs.push('475: a second extra source was still allowed once the lowered limit of one was reached');
+      errs.push('475: an eleventh extra source was still allowed once the limit of ten was reached');
     }
-    if (toastEl.classList.contains('hidden') || !toastEl.textContent || !toastEl.textContent.includes('1')) {
-      errs.push('475: the limit toast did not report the lowered value of one, got: ' + toastEl.textContent);
+    if (toastEl.classList.contains('hidden') || !toastEl.textContent || !toastEl.textContent.includes('10')) {
+      errs.push('475: the limit toast did not report the limit of ten, got: ' + toastEl.textContent);
     }
     if (/^ve[A-Z][A-Za-z]+$/.test((toastEl.textContent || '').trim())) {
       errs.push('475: the limit toast rendered a raw i18n key: ' + toastEl.textContent);
     }
     const afterSecond = document.querySelectorAll('#ve-clip-list .ve-op-row').length;
-    if (afterSecond !== 1) {
+    if (afterSecond !== 10) {
       errs.push('475: a rejected extra source still changed the clip list, found ' + afterSecond + ' row(s)');
     }
   } catch (e) { errs.push('475 probe: ' + e.message); }

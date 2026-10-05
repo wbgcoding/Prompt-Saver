@@ -10,7 +10,10 @@ pub(crate) fn video_editor_source(pending: State<VideoEditorPending>) -> Option<
 // ---- Open an existing file (not a fresh capture/recording) in whichever
 // editor its actual content calls for. ----
 
-// True once a file is past the configured ceiling -- kept as its own pure
+// Largest file, in megabytes, the editors will open.
+pub(crate) const EDITOR_OPEN_MAX_MB: f64 = 2048.0;
+
+// True once a file is past the ceiling -- kept as its own pure
 // function so the boundary (exactly at the limit still opens) is unit
 // testable without a running app.
 pub(crate) fn exceeds_open_edit_limit(bytes: u64, max_mb: f64) -> bool {
@@ -98,12 +101,12 @@ pub(crate) fn copy_keys_sidecar_alongside(_src: &Path, _dest: &Path) {}
 // throwaway working folder (swept by sweep_stale_temp_files) and THAT copy is
 // what open_video_editor is pointed at.
 #[tauri::command]
-pub(crate) async fn open_file_in_editor(app: AppHandle, state: State<'_, Db>, path: String) -> Result<OpenEditResult, String> {
+pub(crate) async fn open_file_in_editor(app: AppHandle, path: String) -> Result<OpenEditResult, String> {
     let p = PathBuf::from(&path);
     if !p.is_file() {
         return Err("file-missing".to_string());
     }
-    let max_mb = lock(&state).settings.ui_values.get("editorOpenMaxMb").copied().unwrap_or(2048.0);
+    let max_mb = EDITOR_OPEN_MAX_MB;
     let len = fs::metadata(&p).map_err(|e| e.to_string())?.len();
     if exceeds_open_edit_limit(len, max_mb) {
         return Err(format!("too-large:{}", max_mb.max(1.0) as u64));

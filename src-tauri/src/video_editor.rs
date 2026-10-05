@@ -580,7 +580,7 @@ pub(crate) struct ExportRequest {
 // used to store a single "cancel whichever generation is current" value
 // (a plain AtomicU64) -- correct as long as at most one export ever ran at
 // once. A batch export can run several generations at the same time
-// (exportParallel, 1 to 4), so a single slot is no longer enough: two jobs
+// (the batch window can be wider than one), so a single slot is no longer enough: two jobs
 // running together would fight over it, and cancelling one would either miss
 // or wrongly cancel the other. A set of cancelled generations fixes this --
 // each generation is cancelled (or not) independently, and a finished job
@@ -811,7 +811,7 @@ pub(crate) fn cancel_export_job(generation: u64) {
 // currently in flight, not just the most recent one -- unlike cancel_export()
 // above, whose "whichever is current" is correct ONLY because the editor
 // never has more than one export of its own running. A batch can have
-// several generations running at once (exportParallel, 1 to 4); scanning the
+// several generations running at once (a wider batch window); scanning the
 // bg-ops registry for every still-running "export" row is how every one of
 // them gets cancelled instead of just the last one, which is what the app-quit
 // path actually needs. The current generation is also inserted directly, in
@@ -978,10 +978,13 @@ pub(crate) async fn await_batch_export(handle: ExportJoinHandle, id: String, gen
     Ok(ok)
 }
 
+// How many recordings a batch export encodes at once.
+pub(crate) const EXPORT_PARALLEL: usize = 1;
+
 // One format/quality/target choice (from the one export dialog the batch
 // opens up front instead of one per file) applied to every selected
-// recording. Runs them with a concurrency window (exportParallel, 1 to 4,
-// default 1) rather than all at once -- ffmpeg is single-threaded-decode-bound
+// recording. Runs them with a concurrency window (EXPORT_PARALLEL, one at a
+// time) rather than all at once -- ffmpeg is single-threaded-decode-bound
 // enough that four truly parallel encodes already make a normal machine
 // unpleasant to use. A source file that fails to open, or an encode that
 // fails partway, only counts against that one file -- every other job in the
@@ -1000,20 +1003,7 @@ pub(crate) async fn export_recordings_batch(
         return Err("unsupported format".to_string());
     }
     let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
-    let parallel = app
-        .try_state::<Db>()
-        .map(|s| {
-            s.lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .settings
-                .ui_values
-                .get("exportParallel")
-                .copied()
-                .unwrap_or(1.0)
-                .clamp(1.0, 4.0) as usize
-        })
-        .unwrap_or(1)
-        .max(1);
+    let parallel = EXPORT_PARALLEL;
 
     let mut ok = 0usize;
     let mut failed = 0usize;

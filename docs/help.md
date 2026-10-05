@@ -224,8 +224,7 @@ The same cleanup dialog can also export several finished recordings at once.
 A checkbox per file, plus Select all/none, picks which ones; "Export
 selected" opens a small dialog for format, quality and a destination folder,
 then encodes every checked recording and reports how many finished and how
-many failed. How many export at the same time is adjustable in the expert
-menu.
+many failed.
 
 An optional keys overlay (off by default, in the expert menu) records which
 keys are pressed anywhere on the screen while a recording runs, so a tutorial
@@ -1169,8 +1168,7 @@ Schließt sich das aufgenommene Fenster von selbst, stoppt die Aufnahme
 automatisch und behält, was bis dahin aufgenommen wurde. Der
 Aufräumen-Dialog im Aufnahmeordner (Expertenmenü) kann mehrere fertige
 Aufnahmen auch in einem Rutsch exportieren: Häkchen setzen, dann Format,
-Qualität und Zielordner für alle zusammen wählen. Wie viele davon
-gleichzeitig laufen, ist im Expertenmenü einstellbar. Die Aufnahmeordner-Zeile
+Qualität und Zielordner für alle zusammen wählen. Die Aufnahmeordner-Zeile
 im Expertenmenü zeigt außerdem, wie viele Videos darin liegen und wie viel
 Platz sie belegen, mit einem „Aufräumen…"-Button daneben: 7, 30 oder 90 Tage
 wählen, die genaue Dateiliste und die frei werdende Größe prüfen, dann

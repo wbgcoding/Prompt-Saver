@@ -300,13 +300,9 @@ pub(crate) fn sanitize_canvas_mode(raw: &str) -> &'static str {
     }
 }
 
-// Clamped to the same range the expert menu itself offers (`recCanvasMaxPx`
-// in ui/expertConfig.js) so a value written outside the menu, such as an imported
-// settings file, cannot push the recording canvas ceiling past what the UI
-// ever lets a user pick.
-pub(crate) fn clamp_canvas_max_px(raw: f64) -> u32 {
-    raw.clamp(2048.0, 15360.0) as u32
-}
+// Largest width and height, in pixels, the recording canvas may reach. A set
+// of screens wider than this falls back to the screen the window is on.
+pub(crate) const REC_CANVAS_MAX_PX: u32 = 8192;
 
 // Pure predicate for the two optional recording safety nets (recMaxMin and
 // recMaxMb, both 0 = off) -- kept free of the watch thread's sleep loop so it

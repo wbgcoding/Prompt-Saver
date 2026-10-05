@@ -2212,7 +2212,7 @@ fn editor_cancel_targets_the_editor_generation_not_a_later_batch_one() {
 // cancel_all_bg_ops used to call plain cancel_export(), which only ever
 // cancels the single latest generation -- correct for the single-editor
 // button, wrong for a batch with several generations running at once
-// (exportParallel > 1). Proves the fix: two concurrently "running" export
+// (a window above one). Proves the fix: two concurrently "running" export
 // rows must BOTH end up cancelled.
 #[test]
 fn cancel_all_exports_cancels_every_running_generation_not_just_the_latest() {
@@ -3083,14 +3083,6 @@ fn sanitize_canvas_mode_keeps_the_two_known_alternatives_and_rejects_the_rest() 
     assert_eq!(sanitize_canvas_mode(""), "window");
     assert_eq!(sanitize_canvas_mode("Monitor"), "window");
     assert_eq!(sanitize_canvas_mode("drop table settings"), "window");
-}
-
-#[test]
-fn clamp_canvas_max_px_stays_inside_the_expert_menus_own_range() {
-    assert_eq!(clamp_canvas_max_px(8192.0), 8192);
-    assert_eq!(clamp_canvas_max_px(0.0), 2048);
-    assert_eq!(clamp_canvas_max_px(-1.0), 2048);
-    assert_eq!(clamp_canvas_max_px(1_000_000_000.0), 15360);
 }
 
 #[test]

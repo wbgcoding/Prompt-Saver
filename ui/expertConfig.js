@@ -487,7 +487,6 @@ export const EXPERT_VALUES = {
   veOvPixelateBlock: { label: "valVeOvPixelateBlock", min: 4, max: 64, step: 2, def: 16, unit: "px", gate: "videoEditor" },
   veOvSpotlightDim: { label: "valVeOvSpotlightDim", min: 10, max: 95, step: 5, def: 60, unit: "%", gate: "videoEditor" },
   veOvImageOpacity: { label: "valVeOvImageOpacity", min: 10, max: 100, step: 5, def: 100, unit: "%", gate: "videoEditor" },
-  veExtraClipsMax: { label: "veExtraClipsMax", min: 1, max: 32, step: 1, def: 10, unit: "", gate: "videoEditor" },
   // Starting values of a NEW overlay (one already placed keeps its own). The
   // outline starts at 1: the overlay editor and the export treat 0 as "use 3".
   veOvTextOutlinePx: { label: "valVeOvTextOutlinePx", min: 1, max: 12, step: 1, def: 3, unit: "px", gate: "videoEditor" },
@@ -511,7 +510,6 @@ export const EXPERT_VALUES = {
   zoomMaxPct: { label: "valZoomMaxPct", min: 200, max: 1600, step: 100, def: 800, unit: "%" },
   // A file past this size is rejected before it loads when opening one for
   // editing -- open_file_in_editor reads the very same key.
-  editorOpenMaxMb: { label: "valEditorOpenMaxMb", min: 64, max: 8192, step: 64, def: 2048, unit: "MB" },
   // 0 means forever, same convention as trashRetentionDays.
   editStateKeepDays: { label: "valEditStateKeepDays", min: 0, max: 365, step: 1, def: 30, unit: "", gate: "editStateKeep" },
   // A crop smaller than this (either side) is upscaled 2x before recognition --
@@ -531,7 +529,6 @@ export const EXPERT_VALUES = {
   // Replaces the two separate width/height ceiling constants resolve_recording_settings
   // used to read (8192/4320) -- there was never a settings row for either, so unifying
   // them into one value is not a behaviour change for anyone who never set them.
-  recCanvasMaxPx: { label: "valRecCanvasMaxPx", min: 2048, max: 15360, step: 256, def: 8192, unit: "px", gate: "screenRecord" },
   // Matches resolve_recording_settings' own existing default of 500 -- adding
   // this row must not change what already happens today.
   recDiskWarnMb: { label: "valRecDiskWarnMb", min: 200, max: 20000, step: 100, def: 500, unit: "MB", gate: "screenRecord" },
@@ -542,7 +539,6 @@ export const EXPERT_VALUES = {
   // How many recordings the "export selected" batch dialog encodes at once --
   // more overlaps ffmpeg calls and finishes sooner, at the cost of more CPU
   // and disk I/O in parallel.
-  exportParallel: { label: "valExportParallel", min: 1, max: 4, step: 1, def: 1, unit: "", gate: "screenRecord" },
   // How young a moov-less (broken) recording has to be to still get a pass
   // (the post-capture menu's stop might just still be finalising) and how often
   // the background sweep for it (and for merely-undecided recordings) runs.
@@ -754,14 +750,14 @@ export const EXPERT_TABS = [
     // The recording hotkeys render their own capture row directly (hotkeyRow())
     // instead of a button that jumps to a settings field -- see actionRow()'s
     // "hotkey" branch.
-    { title: "expGroupRecording", flags: ["screenRecord"], values: ["recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "recCanvasMaxPx", "exportParallel", "recDiskWarnMb", "recMaxMin", "recMaxMb", "recDiscardKeepH"], selects: ["recordingRetentionDays"], dropdowns: ["recQuality", "recFormat", "recCanvasMode"], paths: ["recordingDir"] },
+    { title: "expGroupRecording", flags: ["screenRecord"], values: ["recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "recDiskWarnMb", "recMaxMin", "recMaxMb", "recDiscardKeepH"], selects: ["recordingRetentionDays"], dropdowns: ["recQuality", "recFormat", "recCanvasMode"], paths: ["recordingDir"] },
     { title: "expGroupRecWhile", flags: [{ key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, { key: "recCropNotice", gate: "screenRecord" }, { key: "recBarSize", gate: "screenRecord" }, { key: "recTargetSwitch", gate: "screenRecord" }, { key: "recAutoCrop", gate: "screenRecord" }, { key: "recSweepBroken", gate: "screenRecord" }, { key: "recOutline", gate: "screenRecord" }, { key: "keyOverlay", gate: "screenRecord" }, { key: "keyOverlayShortcutsOnly", gate: "keyOverlay" }], values: ["keyOverlayHoldMs"], dropdowns: ["recMicDevice"], colors: ["recOutlineColor"],
       actions: [{ id: "rec-sweep-now", label: "recSweepNowAction", gate: "recSweepBroken" }, { id: "rec-stop-hotkey-row", type: "hotkey", hotkeyKey: "recStopHotkey", label: "recStopHotkeyLabel", gate: "recStopHotkey" }, { id: "rec-pause-hotkey-row", type: "hotkey", hotkeyKey: "recPauseHotkey", label: "recPauseHotkeyLabel", gate: "recPauseHotkey" }] },
     { title: "expGroupCamera", flags: ["cameraRecord"], values: ["cameraFramerate"], dropdowns: ["cameraDevice", "cameraResolution"] },
-    { title: "expGroupVideoEditor", flags: ["videoEditor", { key: "veOvRemember", gate: "videoEditor" }, { key: "videoEditSnap", gate: "videoEditor" }], values: ["videoEditUndoMax", "veExportKbpsHigh", "veExportKbpsSmall", "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "veExtraClipsMax", "videoClipTtlMin", "veOvTextOutlinePx", "veOvVideoVolume"], dropdowns: ["veDefaultFormat", "veDefaultQuality", "veDefaultScale", "veOvFont", "veDefaultPanel"], colors: ["veOvColor", "veOvKeysActiveColor"], paths: ["videoExportDir"] },
+    { title: "expGroupVideoEditor", flags: ["videoEditor", { key: "veOvRemember", gate: "videoEditor" }, { key: "videoEditSnap", gate: "videoEditor" }], values: ["videoEditUndoMax", "veExportKbpsHigh", "veExportKbpsSmall", "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "videoClipTtlMin", "veOvTextOutlinePx", "veOvVideoVolume"], dropdowns: ["veDefaultFormat", "veDefaultQuality", "veDefaultScale", "veOvFont", "veDefaultPanel"], colors: ["veOvColor", "veOvKeysActiveColor"], paths: ["videoExportDir"] },
     // What the screenshot editor and the video editor share -- created here so
     // no setting key is ever declared in two groups (expert_menu_check.py).
-    { title: "expGroupEditors", flags: ["numFieldWheel", "editStateKeep"], values: ["numFieldStep", "zoomStepPct", "zoomMaxPct", "editStateKeepDays", "veOvDupOffsetPx", "editSnapTolerancePx", "editorOpenMaxMb"] },
+    { title: "expGroupEditors", flags: ["numFieldWheel", "editStateKeep"], values: ["numFieldStep", "zoomStepPct", "zoomMaxPct", "editStateKeepDays", "veOvDupOffsetPx", "editSnapTolerancePx"] },
   ] },
   { title: "expTabTiles", groups: [
     // Split by what a setting actually does: acting on a tile, the hover tooltip,
@@ -834,15 +830,15 @@ export const EXPERT_TIPS = [
   "screenRecord", "recCursor", "recCountdownS", "recFps", "recAudioSystem", "recAudioMic", "recAudioKbps", "recMicDevice",
   "recQuality", "recBitrateKbps", "recFormat", "recordingDir",
   "recStopHotkey", "recPauseHotkey", "recTrayEntries", "recCropNotice", "recBarSize", "recTargetSwitch",
-  "recAutoCrop", "recCanvasMode", "recCanvasMaxPx", "recMaxMin", "recMaxMb", "recDiskWarnMb", "exportParallel",
+  "recAutoCrop", "recCanvasMode", "recMaxMin", "recMaxMb", "recDiskWarnMb",
   "keyOverlay", "keyOverlayHoldMs", "keyOverlayShortcutsOnly",
   "cameraRecord", "cameraDevice", "cameraResolution", "cameraFramerate",
   "videoEditor", "videoEditUndoMax", "veOvRemember", "videoEditSnap",
   "veDefaultFormat", "veDefaultQuality", "veDefaultScale", "veExportKbpsHigh", "veExportKbpsSmall",
   "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "veOvColor", "veOvFont",
-  "veDefaultPanel", "videoExportDir", "veExtraClipsMax",
+  "veDefaultPanel", "videoExportDir",
   "numFieldWheel", "zoomStepPct", "zoomMaxPct", "errorLogKeepKb", "veOvDupOffsetPx", "editSnapTolerancePx",
-  "editStateKeep", "editStateKeepDays", "editorOpenMaxMb", "editorDraftSecs",
+  "editStateKeep", "editStateKeepDays", "editorDraftSecs",
   "snipSaveQuality", "snipDelayMs",
   "snipDefaultColor",
   "snipEditUndoMax", "snipEditSnap", "snipTextBack", "snipEditDefaultTool", "snipScaleFilter",

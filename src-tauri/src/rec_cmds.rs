@@ -219,14 +219,8 @@ pub(crate) fn resolve_recording_settings(db: &State<Db>) -> (bool, recording::Au
         let raw = db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_texts.get("recCanvasMode").cloned().unwrap_or_else(|| "window".to_string());
         sanitize_canvas_mode(&raw).to_string()
     };
-    // One expert-menu row (`recCanvasMaxPx`) now governs both the width and
-    // the height ceiling -- there was never a settings row for the two
-    // separate constants this replaces, so no stored value can have relied
-    // on them differing.
-    let canvas_ceiling = {
-        let max_px = clamp_canvas_max_px(db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("recCanvasMaxPx").copied().unwrap_or(8192.0));
-        (max_px, max_px)
-    };
+    // One fixed ceiling governs both the width and the height of the canvas.
+    let canvas_ceiling = (REC_CANVAS_MAX_PX, REC_CANVAS_MAX_PX);
     // The mid-recording disk-space watch's own threshold -- see
     // check_recording_disk_space for the same value used before the start.
     let disk_warn_mb = db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("recDiskWarnMb").copied().unwrap_or(500.0);
