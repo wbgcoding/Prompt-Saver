@@ -1540,6 +1540,10 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
 .expert-filter-row { display: flex; align-items: center; gap: 8px; }
 /* wireClear() wraps the search input at runtime, so the wrapper is the flex item. */
 .expert-filter-row > .clear-wrap, .expert-filter-row > #expert-search { flex: 1 1 auto; min-width: 0; }
+/* The clear button is invisible while the field is empty, so its reserved padding must not
+   eat into the placeholder: the longest translation has to read in full at the minimum
+   window width. */
+.expert-filter-row .clear-wrap > #expert-search:placeholder-shown { padding-right: 12px; }
 .expert-chip {
   flex: 0 0 auto;
   display: inline-flex;

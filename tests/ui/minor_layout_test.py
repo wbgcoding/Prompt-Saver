@@ -306,6 +306,7 @@ CASES = (
     ("counts", COUNTS, 1000, 800, "en"),
     ("history-tags", HISTORY_TAGS, MIN_W, 800, "en"),
     ("expert-strip", EXPERT_STRIP, MIN_W, 800, "de"),
+    ("expert-search", EXPERT_SEARCH, MIN_W, 800, "de"),
 )
 
 LANGS = ("en", "de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro")
