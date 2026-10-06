@@ -493,7 +493,7 @@ export async function renderBackupPanel(body) {
       pwIn.value = "";
       pwIn.type = "password";
       syncPwButtons();
-    } catch (e) { toast(String(e) === "save-failed" ? t("persistFailed") : String(e)); }
+    } catch (e) { errToast(e); }
   });
   remove.type = "button";
   remove.className = "ghost-btn danger-btn backup-pw-remove";
@@ -514,7 +514,7 @@ export async function renderBackupPanel(body) {
       pwIn.value = "";
       pwIn.type = "password";
       syncPwButtons();
-    } catch (e) { toast(String(e) === "save-failed" ? t("persistFailed") : String(e)); }
+    } catch (e) { errToast(e); }
   });
   syncPwButtons();
   pwWrap.append(pwIn, eye);

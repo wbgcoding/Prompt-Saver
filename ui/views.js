@@ -648,7 +648,7 @@ export async function runViewMutation(ids, targetViewId, fromViewId, copy, mySeq
     if (mySeq !== viewMutationSeq) return; // superseded meanwhile -- its own toast would be stale too
     const m = String(e).match(/view-full:(\d+)/);
     if (m) toast(t("viewDropFull").replace("{name}", viewById(targetViewId)?.name || "").replace("{n}", m[1]));
-    else toast(String(e) === "save-failed" ? t("persistFailed") : String(e));
+    else errToast(e);
     return;
   }
   if (mySeq !== viewMutationSeq) return; // a later drop already applied; this answer is stale

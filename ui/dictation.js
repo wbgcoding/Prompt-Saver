@@ -580,7 +580,7 @@ export function routeVoiceError(err) {
     return;
   }
   const key = { "voice-busy": "voiceErrBusy", "voice-failed": "voiceErrFailed" }[code];
-  errToast(key ? t(key) : code);
+  if (key) toast(t(key)); else errToast(code);
 }
 // Joins a new recognized chunk onto whatever the target already holds: one
 // space, except right after a newline or an opening bracket, and never a

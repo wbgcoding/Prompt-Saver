@@ -472,7 +472,7 @@ export function flagRow(key) {
       else if (msg === "remote-off-not-saved") toast(t("remoteOffNotSaved"));
       else if (msg === "remote-network-off-not-saved") toast(t("remoteNetworkOffNotSaved"));
       else if (msg === "the certificate key could not be protected") toast(t("remoteTlsKeyNotProtected"));
-      else toast(msg);
+      else errToast(err);
       // Switching the receiver off always takes effect, even when the write did
       // not land, so that one error keeps the switch off instead of reverting it.
       const stayed = msg === "remote-off-not-saved" || msg === "remote-network-off-not-saved";
@@ -1518,7 +1518,7 @@ export async function savePalette(colors) {
     if (oldHues[i] && newHues[i] && oldHues[i] !== newHues[i]) pairs.push([oldHues[i], newHues[i]]);
   }
   if (pairs.length) {
-    try { await invoke("remap_colors", { pairs }); } catch (e) { toast(String(e) === "save-failed" ? t("persistFailed") : String(e)); }
+    try { await invoke("remap_colors", { pairs }); } catch (e) { errToast(e); }
     // Reload the caches so the grid/views reflect the remap without a restart.
     try {
       const s = await invoke("get_state");

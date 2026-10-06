@@ -31,8 +31,8 @@ import { bindGridMenus, closeCtx, closeGridTagPop, closeMoveToFolderPop, closeTo
 primeLang("en", EN);
 
 // Surface unexpected errors as a toast instead of failing silently.
-window.addEventListener("error", (e) => toast(String(e.message)));
-window.addEventListener("unhandledrejection", (e) => toast(String(e.reason)));
+window.addEventListener("error", (e) => errToast(e.message));
+window.addEventListener("unhandledrejection", (e) => errToast(e.reason));
 
 // Right-click is disabled everywhere inside the app (tiles re-enable it).
 window.addEventListener("contextmenu", (e) => e.preventDefault());

@@ -455,7 +455,7 @@ export async function onModalSecretToggle() {
   try {
     await invoke("set_prompt_secret", { id, secret: next });
   } catch (e) {
-    toast(String(e) === "secret-locked" ? t("secretWrongPassword") : String(e));
+    if (String(e) === "secret-locked") toast(t("secretWrongPassword")); else errToast(e);
     return;
   }
   modalState.secret = next;
@@ -717,8 +717,7 @@ export async function loadHistory(id) {
           loadHistory(id); // the restore itself added a fresh snapshot
         }
       } catch (err) {
-        const s = String(err);
-        toast(s === "save-failed" || s === "snapshot-failed" ? t("persistFailed") : s);
+        errToast(err);
       }
     });
     // Keeps the current entry untouched and adds the snapshot as a separate one
@@ -742,8 +741,7 @@ export async function loadHistory(id) {
           toast(t("historyRestoredAsNew"));
         }
       } catch (err) {
-        const s = String(err);
-        toast(s === "save-failed" ? t("persistFailed") : s);
+        errToast(err);
       }
     });
     head.append(expand, restore, restoreNew);

@@ -1,5 +1,5 @@
 // Hotkey recording and the hotkey list.
-import { $, EXPERT_ACTIONS, flag, invoke, modal, modalState, prompts, settings, settingsEl, t, toast } from "./core.js";
+import { $, errToast, EXPERT_ACTIONS, flag, invoke, modal, modalState, prompts, settings, settingsEl, t, toast } from "./core.js";
 import { openAllShortcuts } from "./windowChrome.js";
 import { assignSettingsOpener } from "./settingsPanel.js";
 import { showExpertPage } from "./expertMenu.js";
@@ -292,7 +292,7 @@ export async function toggleRotateAutoDirect(id) {
     p.rotate_auto = saved.rotate_auto;
     if (!p.rotate_auto) await invoke("rotation_end_auto", { id }).catch(() => {});
   } catch (err) {
-    toast(String(err) === "save-failed" ? t("persistFailed") : String(err));
+    errToast(err);
   }
 }
 

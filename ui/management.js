@@ -447,7 +447,7 @@ export async function keepOneDup(group, keepId) {
     const gone = new Set(remove);
     assignSettings(await invoke("batch_prompts", { ids: remove, action: "delete", color: null, favorite: null, viewId: null }));
     assignPrompts(prompts.filter((p) => !gone.has(p.id)));
-  } catch (e) { toast(String(e) === "save-failed" ? t("persistFailed") : String(e)); return; }
+  } catch (e) { errToast(e); return; }
   closeCompareView();
   renderViews();
   await renderGrid(true);
@@ -608,7 +608,7 @@ export async function takeCompareSide(target, source) {
       rotateAuto: source.rotate_auto || false,
     });
   } catch (err) {
-    toast(String(err) === "save-failed" ? t("persistFailed") : String(err));
+    errToast(err);
     return;
   }
   if (updated) {
@@ -689,7 +689,7 @@ export function renderTrashList() {
 }
 export async function restoreTrashItem(id) {
   let st;
-  try { st = await invoke("restore_prompt", { id }); } catch (e) { toast(String(e) === "save-failed" ? t("persistFailed") : String(e)); return; }
+  try { st = await invoke("restore_prompt", { id }); } catch (e) { errToast(e); return; }
   assignPrompts(st.prompts);
   assignSettings(st.settings);
   trashList = trashList.filter((p) => p.id !== id);

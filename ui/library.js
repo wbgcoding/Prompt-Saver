@@ -1038,7 +1038,7 @@ export async function toggleFavoritePrompt(p) {
     await invoke("set_favorite", { id: p.id, favorite: p.favorite });
   } catch (err) {
     p.favorite = !p.favorite; // backend rolled back on a failed save: mirror it locally
-    toast(String(err) === "save-failed" ? t("persistFailed") : String(err));
+    errToast(err);
   }
   if (!libraryEl.classList.contains("hidden")) renderLibrary();
   if (favView) renderGrid(true); // favorites grid updates live underneath
@@ -1088,7 +1088,7 @@ export function clearGridSelection() {
 // addView is all-or-nothing on the backend now: a full target view rejects
 // the whole batch with this one error string instead of silently dropping ids.
 export function batchErrorToast(e) {
-  toast(String(e).includes("view-full") ? t("gridFull") : String(e));
+  if (String(e).includes("view-full")) toast(t("gridFull")); else errToast(e);
 }
 // Returns whether the batch went through (same contract as doBatch), so the
 // shared tag/archive/delete helpers never report success over a failure.
@@ -1220,7 +1220,7 @@ export async function trashPromptWithUndo(id, name) {
   try {
     await invoke("delete_prompt", { id });
   } catch (err) {
-    toast(String(err) === "save-failed" ? t("persistFailed") : String(err));
+    errToast(err);
     return false;
   }
   undoToast(t("promptTrashedToast").replace("{name}", label), () => restoreBatchDelete([id], placements));

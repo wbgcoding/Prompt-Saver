@@ -1159,12 +1159,12 @@ def run(browser, tmp):
     document.getElementById('library-tab-history').click(); await sleep(500);
     // The stored-entries clear fails: no purge, the error stays.
     RESULTS.purge_clip_inbox_from_backups = () => [2, 0];
-    RESULTS.clip_inbox_clear = () => { throw 'clearboom'; };
+    RESULTS.clip_inbox_clear = () => { throw 'delete-incomplete'; };
     window.__SMOKE_ARGS__ = [];
     await tickAndConfirm();
     if (!callsFor('clip_inbox_clear').length) errs.push('17003: fixture: the stored-entries clear was not attempted');
     if (purgeCalls()) errs.push('17003: the backups were purged although the stored-entries clear failed');
-    if (!/clearboom/.test(toastText())) errs.push('17003: the failed clear is not what the toast shows: ' + toastText());
+    if (!/could not be deleted/.test(toastText())) errs.push('17003: the failed clear is not what the toast shows: ' + toastText());
     // The copy log was already cleared: the error stays readable and the undo is offered for it.
     if (!undoBtn()) errs.push('17003: no undo was offered for the copy log cleared before the failure');
     else {
@@ -1174,18 +1174,18 @@ def run(browser, tmp):
     delete RESULTS.clip_inbox_clear;
     // The purge fails, filter Elsewhere and filter All: the error stays the last toast.
     await reopen();
-    RESULTS.purge_clip_inbox_from_backups = () => { throw 'purgeboom'; };
+    RESULTS.purge_clip_inbox_from_backups = () => { throw 'delete-incomplete'; };
     await pickSource('elsewhere');
     window.__SMOKE_ARGS__ = [];
     await tickAndConfirm();
     if (!purgeCalls()) errs.push('17003: fixture: the purge was not attempted');
-    if (!/purgeboom/.test(toastText())) errs.push('17003: Elsewhere: the failed purge is not what the toast shows: ' + toastText());
+    if (!/could not be deleted/.test(toastText())) errs.push('17003: Elsewhere: the failed purge is not what the toast shows: ' + toastText());
     if (undoBtn()) errs.push('17003: Elsewhere: an undo was offered although only stored entries were cleared');
     await reopen();
     await pickSource('all');
     window.__SMOKE_ARGS__ = [];
     await tickAndConfirm();
-    if (!/purgeboom/.test(toastText())) errs.push('17003: All: the failed purge is not what the toast shows: ' + toastText());
+    if (!/could not be deleted/.test(toastText())) errs.push('17003: All: the failed purge is not what the toast shows: ' + toastText());
     if (!undoBtn()) errs.push('17003: All: no undo was offered for the copy log cleared before the failed purge');
 """)
     failed += ar_probe('bx721', 'copy history: the other-apps switch carries a word that follows its state', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { clipWatcher: true } };</script>\n', r"""

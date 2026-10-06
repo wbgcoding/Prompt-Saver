@@ -726,7 +726,9 @@ export async function autoPasteNow(el) {
     if (el) showCopied(el, t("pasted")); else toast(t("pasted"));
   } catch (e) {
     const m = String(e);
-    toast(m === "no-target" ? t("pasteNoTarget") : m === "focus-failed" ? t("pasteFocusFail") : m);
+    if (m === "no-target") toast(t("pasteNoTarget"));
+    else if (m === "focus-failed") toast(t("pasteFocusFail"));
+    else errToast(e);
   }
 }
 
