@@ -1,5 +1,5 @@
 // Backup dialog: storage and retention panels, restore and selective restore.
-import { $, armButton, DISARM_MS, disarmButton, errToast, flag, invoke, LANG, LOCK_SVG, optFlag, settings, t, toast, undoToast, val, withTaskbarBusy } from "./core.js";
+import { $, armButton, DISARM_MS, disarmButton, errText, errToast, flag, invoke, LANG, LOCK_SVG, optFlag, settings, t, toast, undoToast, val, withTaskbarBusy } from "./core.js";
 import { applyFlags, applyValues, EXPERT_PATHS, jumpToExpertSetting, openVideoCleanup, rowResetBtn, withTip } from "./expertMenu.js";
 import { collapsibleHead, numRow, PROMPT_TYPE_LABELS, recordToolUsage, renderStatsPanel, statSection } from "./management.js";
 import { fmtBytes } from "./floatShared.js";
@@ -659,7 +659,7 @@ export async function renderBackupContent(box, name) {
   box.innerHTML = "";
   let data;
   try { data = await invoke("backup_contents", { name }); }
-  catch (e) { box.textContent = String(e); return; }
+  catch (e) { box.textContent = errText(e); return; }
   const nf = (n) => Number(n).toLocaleString(LANG);
   const cards = document.createElement("div"); cards.className = "stat-cards backup-content-cards";
   cards.append(

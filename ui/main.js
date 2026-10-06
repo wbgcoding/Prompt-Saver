@@ -501,7 +501,7 @@ async function init() {
     // Never strand the user with an invisible app: log, surface a toast if the
     // UI got far enough to have one, and still reveal the window below.
     console.error(e);
-    try { toast(String((e && e.message) || e)); } catch (_) {}
+    try { errToast(e); } catch (_) {}
   } finally {
     // Reveal only after the first fitted paint: the user never sees text sizing.
     // A hidden WebView2 window can stop producing frames, so a timer backs the

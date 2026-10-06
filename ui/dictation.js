@@ -1,5 +1,5 @@
 // Voice dictation and the OCR and speech language packs.
-import { $, autoGrow, errToast, EXPERT_ACTIONS, flag, inputEl, invoke, LANG, listen, modal, settings, t, toast, txt, val } from "./core.js";
+import { $, autoGrow, errText, errToast, EXPERT_ACTIONS, flag, inputEl, invoke, LANG, listen, modal, settings, t, toast, txt, val } from "./core.js";
 import { confirmDialog } from "./dialog.js";
 import { fmtCopyTime } from "./journal.js";
 import { fmtBytes } from "./floatShared.js";
@@ -111,7 +111,7 @@ export async function startElevatedCapsScan(kind) {
     if (err === "ocr-elevate-no-rights") {
       renderLangsRetry(kind, `${t("capNeedsAdmin")} ${t("capNeedsAdminWhat")}`, null, true);
     } else {
-      renderLangsRetry(kind, err === "ocr-elevate-cancelled" ? t("ocrElevateCancelled") : err);
+      renderLangsRetry(kind, err === "ocr-elevate-cancelled" ? t("ocrElevateCancelled") : errText(e));
     }
     return;
   }
@@ -129,7 +129,7 @@ export function pollElevatedCaps(kind) {
     st.elevTimer = null;
     let res;
     try { res = await invoke(LANG_CMDS[kind].elevatedResult); }
-    catch (e) { st.elevRunning = false; renderLangsRetry(kind, String(e)); return; }
+    catch (e) { st.elevRunning = false; renderLangsRetry(kind, errText(e)); return; }
     if (res == null) {
       if (--st.elevLeft <= 0) { st.elevRunning = false; renderLangsRetry(kind, t("ocrLangsNeedElevation")); return; }
       st.elevTimer = setTimeout(tick, 2000);

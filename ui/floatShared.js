@@ -3,6 +3,7 @@
 // helpers that had drifted into near-duplicate copies. Values are unchanged from
 // what each window already used on its own -- this is drift prevention.
 import { placePopover } from "./popover.js";
+import { errMessage } from "./errors.js";
 
 export const COPIED_MS = 900; // "copied!" tile/pill flash duration
 export const RING_MIN = 8;    // smallest resize-ring thickness (px)
@@ -220,7 +221,7 @@ export function parseFfmpegError(err, t) {
   } catch {
     payload = null;
   }
-  if (!payload) return { message: text, details: "" };
+  if (!payload) return { message: errMessage(text, t), details: text };
   const message = payload.key === "ffErrOther"
     ? t("ffErrOther").replace("{code}", payload.code != null ? String(payload.code) : "?")
     : t(payload.key);

@@ -94,11 +94,44 @@ def rust_errors():
 
 
 def mapped_keys():
-    with open(os.path.join(ROOT, "ui", "core.js"), encoding="utf8") as fh:
+    with open(os.path.join(ROOT, "ui", "errors.js"), encoding="utf8") as fh:
         core = fh.read()
     start = core.index("export const ERROR_MSG_KEYS = {")
     end = core.index("\n};", start)
     return dict(re.findall(r'^\s*"((?:[^"\\]|\\.)*)":\s*"(\w+)"', core[start:end], re.M)), core
+
+
+# A raw error (String(err), err.message) handed to a toast or put into the page is English
+# whatever the app language is: it has to go through errMessage/errText (ui/errors.js).
+ERR_VAR = r"(?:err|e|e2|error|ex|reason)"
+# String(err) used as a value; String(err).includes(..) / .slice(..) only inspects it.
+RAW_ERR = re.compile(rf"\bString\({ERR_VAR}\)(?!\.)|\b{ERR_VAR}\.message\b")
+# hotkeyMessage() turns the code into a translated text.
+MAPPED_ERR = re.compile(rf"hotkeyMessage\(String\({ERR_VAR}\)\)")
+SINKS = re.compile(
+    r"(?<![A-Za-z_.])(?:toast|showError|infoDialog|renderLangsRetry|alert)\(|\.(?:textContent|innerText)\s*=")
+# (file, text the offending line contains) -> why a raw error is fine there.
+RAW_OK = []
+
+
+def raw_error_display():
+    out = []
+    for path in sorted(glob.glob(os.path.join(ROOT, "ui", "*.js"))):
+        name = "ui/" + os.path.basename(path)
+        if name in ("ui/help.js", "ui/errors.js"):
+            continue
+        with open(path, encoding="utf8") as fh:
+            lines = fh.read().split("\n")
+        for no, line in enumerate(lines, 1):
+            code = line.split("//")[0] if line.lstrip().startswith("//") else line
+            code = MAPPED_ERR.sub("hotkeyMessage()", code)
+            m = SINKS.search(code)
+            if not m or not RAW_ERR.search(code[m.start():]):
+                continue
+            if any(f == name and frag in line for f, frag, _ in RAW_OK):
+                continue
+            out.append(f"{name}:{no}: a raw error reaches the user, route it through errMessage/errText: {line.strip()[:110]}")
+    return out
 
 
 def main():
@@ -112,7 +145,8 @@ def main():
             problems.append(f"ERROR_MSG_KEYS maps {lit!r} to {key}, which is no en string")
     fb = re.search(r'"errUnexpected"', core)
     if not fb:
-        problems.append("ui/core.js errText has no errUnexpected fallback")
+        problems.append("ui/errors.js has no errUnexpected fallback")
+    problems.extend(raw_error_display())
 
     allowed = {}
     for reason, lits in ALLOW.items():

@@ -72,7 +72,7 @@ EXCEPTIONS = [
                   "as-is here too.",
     },
     {
-        "file": "ui/core.js",
+        "file": "ui/errors.js",
         "when": lambda line: "update hash mismatch" in line,
         "reason": "Matches the Rust backend's raw Err(...) string verbatim "
                   "(src-tauri/src/lib.rs) so the ERROR_MSG_KEYS lookup "
@@ -97,7 +97,7 @@ EXCEPTIONS = [
         "when": lambda line: "no usable checksum published" in line
                   or "update hash mismatch" in line,
         "reason": "Raw Err(...) strings matched verbatim by the frontend's "
-                  "ERROR_MSG_KEYS lookup (ui/core.js); internal dictionary "
+                  "ERROR_MSG_KEYS lookup (ui/errors.js); internal dictionary "
                   "keys, never rendered to the user directly.",
     },
     {

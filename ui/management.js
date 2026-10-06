@@ -819,7 +819,9 @@ export async function openRemoteRangesDialog() {
     await invoke("set_remote_allowed_ranges", { ranges: value });
     settings.ui_texts = { ...(settings.ui_texts || {}), remoteAllowedRanges: value };
   } catch (e) {
-    toast(String(e) === "save-failed" ? t("persistFailed") : t("remoteRangesInvalid").replace("{value}", String(e)));
+    const prefix = "not a valid address or range: ";
+    if (String(e).startsWith(prefix)) toast(t("remoteRangesInvalid").replace("{value}", String(e).slice(prefix.length)));
+    else errToast(e);
   }
 }
 

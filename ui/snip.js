@@ -87,6 +87,9 @@ const SEED = {
     recHint: "Bereich ziehen · Fenster zum Aufnehmen anklicken · Esc zum Abbrechen",
   },
 };
+// This window's own text lookup once its language is loaded (null before that).
+let snipTx = null;
+let snipErrMessage = null;
 const T = { ...((navigator.language || "en").toLowerCase().startsWith("de") ? SEED.de : SEED.en) };
 hint.textContent = T.hint;
 
@@ -198,8 +201,8 @@ async function beginSession() {
 // The overlay window is only ever hidden, never closed, so this has to run again
 // when the language changes or the old texts would stay until the next restart.
 function loadTexts() {
-  Promise.all([invoke("get_settings"), import("./i18n.js"), import("./floatShared.js")])
-    .then(async ([s, { LANGS, fullTexts }, { resolveLang }]) => {
+  Promise.all([invoke("get_settings"), import("./i18n.js"), import("./floatShared.js"), import("./errors.js")])
+    .then(async ([s, { LANGS, fullTexts }, { resolveLang }, { errMessage }]) => {
       const { tx } = await fullTexts(resolveLang(s.language, LANGS));
       T.hint = tx("snipHint");
       T.failed = tx("snipFailed");
@@ -207,6 +210,8 @@ function loadTexts() {
       T.pickFailed = tx("pickFailed");
       T.ocrNoLang = tx("snipOcrNoLang");
       T.recHint = tx("recPickHint");
+      snipTx = tx;
+      snipErrMessage = errMessage;
       if (!hint.classList.contains("error")) hint.textContent = pickMode ? T.pick : recordMode ? T.recHint : T.hint;
     })
     .catch(() => {});
@@ -592,6 +597,11 @@ async function pickHere() {
   }
 }
 
+// Text for a failed color pick: translated, never the raw backend string.
+function pickErrorText(err) {
+  return snipTx ? snipErrMessage(err, snipTx) : T.pickFailed;
+}
+
 // Text for a failed capture: a specific message for the one cause worth naming (no
 // OCR language installed), undefined for the generic failure text, null when the
 // session was cancelled underneath the capture (nothing to report).
@@ -690,7 +700,7 @@ window.addEventListener("mouseup", async (e) => {
       }
     } catch (err) {
       busy = false;
-      showError(String(err));
+      showError(pickErrorText(err));
     }
     return;
   }

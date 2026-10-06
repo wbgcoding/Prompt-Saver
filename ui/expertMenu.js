@@ -1,5 +1,5 @@
 // Expert menu: the renderer, its rows and the live-state parts of the setting registry.
-import { $, armButton, assignBUBBLE_MS, assignDISARM_MS, assignDRAG_THRESHOLD, assignHISTORY_PREVIEW_LEN, assignINPUT_MAX, assignLibraryTab, assignPrompts, assignROTATE_SHORT_MAX, assignSettings, assignTOAST_MS, COLORS, debounced, DEFAULT_COLORS, DICT, DISARM_MS, disarmButton, errToast, ETA_MIN_PCT, ETA_MIN_SECS, EXPERT_ACTIONS, flag, flagState, gateOpen, HEADER_PAD_Y, HEX_RE, ICON_UNDO, ICON_WARN, invoke, LANG, listen, modal, openColorPop, optFlag, PALETTE_LEN, prompts, putIcon, setStatusText, settings, settingsEl, shipsOn, t, toast, txt, val } from "./core.js";
+import { $, armButton, assignBUBBLE_MS, assignDISARM_MS, assignDRAG_THRESHOLD, assignHISTORY_PREVIEW_LEN, assignINPUT_MAX, assignLibraryTab, assignPrompts, assignROTATE_SHORT_MAX, assignSettings, assignTOAST_MS, COLORS, debounced, DEFAULT_COLORS, DICT, DISARM_MS, disarmButton, errText, errToast, ETA_MIN_PCT, ETA_MIN_SECS, EXPERT_ACTIONS, flag, flagState, gateOpen, HEADER_PAD_Y, HEX_RE, ICON_UNDO, ICON_WARN, invoke, LANG, listen, modal, openColorPop, optFlag, PALETTE_LEN, prompts, putIcon, setStatusText, settings, settingsEl, shipsOn, t, toast, txt, val } from "./core.js";
 import { ALL_FLAG_KEYS, normScreenshotFormat, EXPERT_BULK_NEVER, EXPERT_RESET_KEEP, EXPERT_SELECTS, EXPERT_TABS, EXPERT_TIP_SET, EXPERT_VALUES, FLAG_GATES, flagLabelKey, GRID_DOM_VALUES, groupFlags, OPT_FLAG_KEYS, REC_QUALITY_BITRATE, SETTINGS_AREA_LABEL, STYLE_OPTS, TILE_DOM_FLAGS, TILE_STYLES } from "./expertConfig.js";
 import { confirmDialog, infoDialog } from "./dialog.js";
 import { refreshFavViewUi, renderGrid, renderViews } from "./views.js";
@@ -1138,7 +1138,7 @@ export async function applySyncDir(dir) {
     // in the old folder and why nothing there was touched.
     await infoDialog(
       t("syncOldDirTitle"),
-      t("syncOldDirKept").replace("{path}", info?.path || "").replace("{what}", String(e)),
+      t("syncOldDirKept").replace("{path}", info?.path || "").replace("{what}", errText(e)),
     );
   }
   refreshSyncStatus(true);

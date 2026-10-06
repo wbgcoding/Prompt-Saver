@@ -1,5 +1,5 @@
 // Settings dialog: export and import, data wipe, scale presets, settings apply and reload.
-import { $, appVersion, armButton, assignSettings, DISARM_MS, disarmButton, errToast, flag, invoke, LANG, libraryEl, LOCK_SVG, modal, optFlag, setLang, setLangSelect, setStatusText, settings, settingsEl, SIZE_MAX, SIZE_MIN, SIZE_STEP, t, TAKEOVER_SVG, toast, val, withTaskbarBusy } from "./core.js";
+import { $, appVersion, armButton, assignSettings, DISARM_MS, disarmButton, errText, errToast, flag, invoke, LANG, libraryEl, LOCK_SVG, modal, optFlag, setLang, setLangSelect, setStatusText, settings, settingsEl, SIZE_MAX, SIZE_MIN, SIZE_STEP, t, TAKEOVER_SVG, toast, val, withTaskbarBusy } from "./core.js";
 import { confirmSecretExport, renderLibrary } from "./library.js";
 import { favViewEnabled, refreshFavViewUi, renderGrid, seedExamplesIfNeeded } from "./views.js";
 import { applyBars, applyI18n, wireClearButtons } from "./windowChrome.js";
@@ -301,7 +301,7 @@ export async function runImportAll() {
     } catch (err) {
       const m = String(err);
       if (!/password/i.test(m)) {
-        await infoDialog(t("importFailed"), m); // the reason, not just "failed"
+        await infoDialog(t("importFailed"), errText(err)); // the reason, not just "failed"
         return;
       }
       password = await confirmDialog({
