@@ -46,7 +46,7 @@ export const HELP_CONTENT = {
       whatItIs: "A five-step walkthrough of the basics, shown once automatically right after the example tiles are created.",
       howTo: [
         "First launch: opens on its own, right after the example prompts are seeded.",
-        "Later: reopen it from the settings dialog, or the expert menu's \"Reopen introduction\" action.",
+        "Later: reopen it from the settings dialog, or the expert menu's \"Show the introduction again\" action.",
         "←/→ or the dots move between steps, Enter continues, Escape or \"Skip\" leaves any time; Escape shows an Undo notice that reopens the tour.",
       ],
       whatHappens:
@@ -115,7 +115,7 @@ export const HELP_CONTENT = {
       title: "Floating buttons",
       whatItIs: "Floating buttons are small always-on-top copy buttons that sit outside the main window, over whatever app is in use.",
       howTo: [
-        "Right-click a tile, then \"Toggle floating button\", to pin it as a floating button.",
+        "Right-click a tile, then \"Show floating button\", to pin it as a floating button.",
         "Drag the floating button to move it; right-click it for size, edit, or remove.",
       ],
       whatHappens: "Positions survive app restarts. A button whose saved screen is no longer connected opens on the main screen, marked as parked, and jumps back on its own once that screen returns. An action in the expert menu brings every floating window to the main screen at once.",
@@ -238,7 +238,7 @@ export const HELP_CONTENT = {
         "Move with the arrow keys and press Enter, or click a hit.",
       ],
       whatHappens:
-        "Enter does what fits the hit: it copies a tile or copy history entry, opens an attachment, switches to a view, opens and highlights a setting, or opens the help article. Each group shows a few hits and a \"show more\". With the box empty, recent searches are offered. Escape, a click outside, or the magnifier again closes it.",
+        "Enter does what fits the hit: it copies a tile or copy history entry, opens an attachment, switches to a view, opens and highlights a setting, or opens the help article. Each group shows a few hits and a \"Show … more\". With the box empty, recent searches are offered. Escape, a click outside, or the magnifier again closes it.",
       settings: ["Search everything: Expert menu → Library & copy history → Search"],
     },
     {
@@ -306,7 +306,7 @@ export const HELP_CONTENT = {
         "Turn on tile or media blur or hidden tile names in the expert menu, as needed.",
       ],
       whatHappens:
-        "Screen-capture exclusion makes the window invisible to screenshot and recording tools, including its own, so if a capture comes out empty, check this setting first. An optional, off-by-default setting reads text out of an attached picture so the library search can find it too; a hit found only there carries a \"found in image\" badge, so it never looks like a random match. That recognized text stays out of the app otherwise: it is never shown, never exported, never synchronized, and its length is capped. Removing or replacing the picture clears it right away, and switching the setting off removes it from every tile, the trash included. A single tile can also be marked confidential; see \"Confidential tiles\" below.",
+        "Screen-capture exclusion makes the window invisible to screenshot and recording tools, including its own, so if a capture comes out empty, check this setting first. An optional, off-by-default setting reads text out of an attached picture so the library search can find it too; a hit found only there carries a \"found in image\" badge, so it never looks like a random match. That recognized text stays out of the app otherwise: it is never shown, never exported, never synchronized, and its length is capped. Removing or replacing the picture clears it right away, and switching the setting off removes it from every tile, the trash included. A single tile can also be marked confidential; see \"Confidential prompts\" below.",
       settings: ["Exclude from screen capture, blur tiles or media, hide names: Expert menu → System & data → Privacy", "Index text inside attached pictures for search, image text length limit: Expert menu → Library & copy history → Search", "Mark a tile confidential, vault lock timeout: Expert menu → System & data → Privacy"],
       tip: "Screen-capture exclusion ships on: turn it off for normal screenshots or recordings of this window.",
     },
@@ -379,7 +379,7 @@ export const HELP_CONTENT = {
         "Right-click a tab to rename, resize, recolor, or delete it.",
         "Move a tab with \"move further left\" or \"move further right\" in its menu, or drag it onto another tab.",
       ],
-      whatHappens: "A tile normally sits in exactly one view (adding it elsewhere moves it there) unless \"Tile in several views\" is on, which ships off. Deleting a view does not delete the tiles placed on it; a tile also shown in another view keeps working there.",
+      whatHappens: "A tile normally sits in exactly one view (adding it elsewhere moves it there) unless \"Prompt in multiple views\" is on, which ships off. Deleting a view does not delete the tiles placed on it; a tile also shown in another view keeps working there.",
       settings: ["Multiple views, tile in several views, maximum views: Expert menu → Features → Views and quick grid"],
     },
     {
@@ -579,7 +579,7 @@ export const HELP_CONTENT = {
         "Export: a lossless fast path applies when only trimming; otherwise the whole clip re-encodes once.",
       ],
       whatHappens:
-        "Nothing is processed until you export: the live preview plays your edits directly. A filmstrip and waveform give a zoomable overview of the whole clip for frame-exact navigation. The preview itself also zooms with the scroll wheel (up to 8×) and pans by dragging (the middle mouse button always, the left button once zoomed in) for placing a small overlay precisely on a large recording. The export destination is an editable field: type a path directly, or use \"Export to…\" to keep the file name and change only the folder; once an export has finished, \"Save as…\" moves that finished video to another place. Switching format only rewrites the extension. \"Export and copy\" skips naming entirely, exporting into a self-cleaning temporary copy (removed after an hour, and again on the next launch) and placing the finished file straight on the clipboard. A few ready-made export presets (unchanged quality, a smaller size for chat, an animated GIF) remember your last choice. The export format list offers MP4, WebM, GIF and AVI, each with a short note on what it's for; GIF never carries audio, warns once the clip runs past ten seconds, and is capped to a maximum resolution since it grows large fast. Undo/redo covers every editing step, capped by an adjustable limit. \"Add a video\" lays another clip on top as an overlay, and the Keys overlay turns the keys pressed during a recording into a keyboard picture. Right-click an overlay's row to duplicate or delete it. Dragging a crop box or overlay snaps to the frame edges, its center and other overlays; hold Alt to drag freely. A new overlay starts from the color, thickness and size last used for its kind. Unfinished cuts and overlays are remembered, so reopening the same recording offers to continue. The export file name has its own field; an existing file is never replaced, the export takes the next free name.",
+        "Nothing is processed until you export: the live preview plays your edits directly. A filmstrip and waveform give a zoomable overview of the whole clip for frame-exact navigation. The preview itself also zooms with the scroll wheel (up to 8×) and pans by dragging (the middle mouse button always, the left button once zoomed in) for placing a small overlay precisely on a large recording. The export destination is an editable field: type a path directly, or use \"Export to…\" to keep the file name and change only the folder; once an export has finished, \"Save as…\" moves that finished video to another place. Switching format only rewrites the extension. The \"Copy\" button next to the export field skips naming entirely, exporting into a self-cleaning temporary copy (removed after an hour, and again on the next launch) and placing the finished file straight on the clipboard. A few ready-made export presets (unchanged quality, a smaller size for chat, an animated GIF) remember your last choice. The export format list offers MP4, WebM, GIF and AVI, each with a short note on what it's for; GIF never carries audio, warns once the clip runs past ten seconds, and is capped to a maximum resolution since it grows large fast. Undo/redo covers every editing step, capped by an adjustable limit. \"Add a video\" lays another clip on top as an overlay, and the Keys overlay turns the keys pressed during a recording into a keyboard picture. Right-click an overlay's row to duplicate or delete it. Dragging a crop box or overlay snaps to the frame edges, its center and other overlays; hold Alt to drag freely. A new overlay starts from the color, thickness and size last used for its kind. Unfinished cuts and overlays are remembered, so reopening the same recording offers to continue. The export file name has its own field; an existing file is never replaced, the export takes the next free name.",
       settings: ["Video editor, undo limit, remember overlay values, snap to edges: Expert menu → Capture → Video editor", "Remember unfinished video edits, and for how many days: Expert menu → Capture → Both editors"],
       sketches: ["editorTimeline"],
     },
@@ -608,7 +608,7 @@ export const HELP_CONTENT = {
         "Click the icon again, press Escape, or save/close to stop.",
       ],
       whatHappens:
-        "Recognition runs locally through Windows' own speech engine; nothing leaves the machine unless online recognition is explicitly allowed. Spoken punctuation words (\"comma\", \"new line\", …) turn into real punctuation; say \"literal\" before a word to type it instead of triggering it as a command. A missing language pack opens the language dialog directly, shared with text recognition (OCR). An optional global hotkey starts and stops a session without opening the window at all, delivering the text to the clipboard, pasted, or straight into the composer; the tray icon's tooltip shows \"recording\" for as long as it runs.",
+        "Recognition runs locally through Windows' own speech engine; nothing leaves the machine unless online recognition is explicitly allowed. Spoken punctuation words (\"comma\", \"new line\", …) turn into real punctuation; say \"literal\" before a word to type it instead of triggering it as a command. A missing language pack opens the language dialog directly, shared with text recognition (OCR). An optional global hotkey starts and stops a session without opening the window at all, delivering the text to the clipboard, pasted, or straight into the composer; the tray icon's tooltip shows \"Recording…\" for as long as it runs.",
       settings: ["Voice dictation, punctuation commands, auto-capitalize, silence auto-stop, insert position, global hotkey: Expert menu → Features → Dictation"],
     },
     {
@@ -621,7 +621,7 @@ export const HELP_CONTENT = {
         "\"Manage text recognition languages…\" (or \"Manage dictation languages…\" for dictation) at the bottom of the language dropdown reopens the same dialog any time.",
       ],
       whatHappens:
-        "On some Windows builds even listing what is installed needs administrator rights; if so, a button re-runs that check through the same elevation prompt. A background watcher notices when an installed pack's version changed or a Windows update silently removed it, and flags it without asking to reinstall right away; dismiss it for a while with \"remind me later\", or turn the watcher off entirely.",
+        "On some Windows builds even listing what is installed needs administrator rights; if so, a button re-runs that check through the same elevation prompt. A background watcher notices when an installed pack's version changed or a Windows update silently removed it, and flags it without asking to reinstall right away; dismiss it for a while with the notice's \"Cancel\" button, or turn the watcher off entirely.",
       settings: ["Auto-pick the recognition language, background watcher for missing or changed packs: Expert menu → Capture → Text recognition, and again under Expert menu → Features → Dictation"],
     },
     {
@@ -752,7 +752,7 @@ export const HELP_CONTENT = {
       title: "Common questions",
       whatItIs: "This section answers the questions that come up most often.",
       howTo: [
-        "\"My screenshot came out empty\": screen-capture exclusion is working as intended; switch on \"Allow screenshots\" in the expert menu if unwanted.",
+        "\"My screenshot came out empty\": screen-capture exclusion is working as intended; switch on \"Allow screenshots of Prompt Saver\" in the expert menu if unwanted.",
         "\"The app will not start\": it needs the Microsoft WebView2 runtime, offered automatically by the installer.",
         "\"I cannot find a setting\": the expert menu's search box scans every tab at once.",
         "\"A hotkey does not do anything\": another app may already hold that combination; the editor explains why.",
@@ -794,7 +794,7 @@ export const HELP_CONTENT = {
       whatItIs: "Eine Einführung in fünf Schritten, die direkt nach dem Erstellen der Beispiel-Kacheln einmal automatisch angezeigt wird.",
       howTo: [
         "Beim ersten Start: öffnet sich direkt nach dem Anlegen der Beispiel-Prompts automatisch.",
-        "Später: über den Einstellungsdialog oder die Aktion „Einführung erneut öffnen“ im Expertenmenü erneut öffnen.",
+        "Später: über den Einstellungsdialog oder die Aktion „Einführung erneut zeigen“ im Expertenmenü erneut öffnen.",
         "←/→ oder die Punkte wechseln zwischen den Schritten, Enter fährt fort, Escape oder „Überspringen“ beendet die Einführung jederzeit; Escape zeigt eine Meldung mit Rückgängig, die die Einführung wieder öffnet.",
       ],
       whatHappens:
@@ -863,7 +863,7 @@ export const HELP_CONTENT = {
       title: "Schwebende Buttons",
       whatItIs: "Schwebende Buttons sind kleine, immer im Vordergrund liegende Kopier-Buttons außerhalb des Hauptfensters, über jeder anderen App.",
       howTo: [
-        "Rechtsklick auf eine Kachel, dann \"Schwebenden Button umschalten\", um sie als schwebenden Button anzuheften.",
+        "Rechtsklick auf eine Kachel, dann „Schwebenden Button anzeigen“, um sie als schwebenden Button anzuheften.",
         "Den schwebenden Button ziehen, um ihn zu bewegen; Rechtsklick für Größe, Bearbeiten oder Entfernen.",
       ],
       whatHappens: "Positionen bleiben nach Neustarts erhalten. Ein Button, dessen gespeicherter Bildschirm nicht mehr angeschlossen ist, öffnet sich auf dem Hauptbildschirm, als geparkt markiert, und springt von selbst zurück, sobald dieser Bildschirm wieder da ist. Eine Aktion im Expertenmenü holt alle schwebenden Fenster auf einmal auf den Hauptbildschirm.",
@@ -939,7 +939,7 @@ export const HELP_CONTENT = {
       section: "organising",
       title: "Favoriten",
       whatItIs: "Ein Stern markiert eine Kachel als Favorit für schnellen späteren Zugriff.",
-      howTo: ["Auf den Stern einer Kachel klicken, oder „Favorisieren“ in ihrem Menü nutzen.", "Die eigene Favoriten-Ansicht öffnen, um nur markierte Kacheln zu sehen."],
+      howTo: ["Auf den Stern einer Kachel klicken, oder „Als Favorit markieren“ in ihrem Menü nutzen.", "Die eigene Favoriten-Ansicht öffnen, um nur markierte Kacheln zu sehen."],
       whatHappens: "Favoriten erhalten ihre eigene sortierbare Ansicht, unabhängig davon, wo die Kachel sonst liegt.",
       settings: ["Favoriten-Ansicht: Einstellungen. Eigene Sortierung: Expertenmenü → Kacheln → Favoriten"],
     },
@@ -987,7 +987,7 @@ export const HELP_CONTENT = {
         "Mit den Pfeiltasten wählen und Enter drücken, oder einen Treffer anklicken.",
       ],
       whatHappens:
-        "Enter tut, was zum Treffer passt: Es kopiert eine Kachel oder einen Eintrag im Kopierverlauf, öffnet einen Anhang, wechselt in eine Ansicht, öffnet und markiert eine Einstellung oder öffnet den Hilfeartikel. Jede Gruppe zeigt einige Treffer und ein „Mehr anzeigen“. Ist das Feld leer, werden die letzten Suchen angeboten. Escape, ein Klick daneben oder die Lupe schließt es wieder.",
+        "Enter tut, was zum Treffer passt: Es kopiert eine Kachel oder einen Eintrag im Kopierverlauf, öffnet einen Anhang, wechselt in eine Ansicht, öffnet und markiert eine Einstellung oder öffnet den Hilfeartikel. Jede Gruppe zeigt einige Treffer und ein „… weitere anzeigen“. Ist das Feld leer, werden die letzten Suchen angeboten. Escape, ein Klick daneben oder die Lupe schließt es wieder.",
       settings: ["Alles durchsuchen: Expertenmenü → Bibliothek & Kopierverlauf → Suche"],
     },
     {
@@ -1007,11 +1007,11 @@ export const HELP_CONTENT = {
       whatItIs: "Das Archiv legt eine Kachel beiseite, ohne sie zu löschen.",
       howTo: [
         "Das Archiv im Expertenmenü einschalten.",
-        "„Ins Archiv“ im Menü einer Kachel wählen, oder mehrere auf einmal über die Auswahlleiste der Bibliothek archivieren.",
+        "„Archivieren“ im Menü einer Kachel wählen, oder mehrere auf einmal über die Auswahlleiste der Bibliothek archivieren.",
         "Mit dem Schalter über der Bibliotheksliste archivierte Kacheln wieder anzeigen.",
       ],
       whatHappens:
-        "Eine archivierte Kachel verschwindet aus dem Raster und der Bibliotheksliste, die Suche findet sie aber weiterhin, und Exporte und Backups behalten sie wie jede andere Kachel. „Aus dem Archiv“ im selben Menü holt sie zurück.",
+        "Eine archivierte Kachel verschwindet aus dem Raster und der Bibliotheksliste, die Suche findet sie aber weiterhin, und Exporte und Backups behalten sie wie jede andere Kachel. „Aus dem Archiv holen“ im selben Menü holt sie zurück.",
       settings: ["Archiv: Expertenmenü → Bibliothek & Kopierverlauf → Anzeige"],
       tip: "Ab Werk aus.",
     },
@@ -1055,7 +1055,7 @@ export const HELP_CONTENT = {
         "Bei Bedarf Unschärfe für Kacheln oder Medien, versteckte Namen im Expertenmenü aktivieren.",
       ],
       whatHappens:
-        "Der Ausschluss von Bildschirmaufnahmen macht das Fenster für Screenshot- und Aufnahmeprogramme unsichtbar, auch für die eigenen. Bleibt eine Aufnahme also leer, zuerst diese Einstellung prüfen. Eine optionale, standardmäßig ausgeschaltete Einstellung liest Text aus einem angehängten Bild, damit die Bibliothekssuche ihn auch findet; ein Treffer nur dort trägt die Kennzeichnung „im Bild gefunden“, damit er nie wie ein zufälliger Treffer wirkt. Dieser erkannte Text bleibt sonst außerhalb der App: nirgends angezeigt, nie exportiert, nie synchronisiert, und in der Länge begrenzt. Wird das Bild entfernt oder ersetzt, ist der Text sofort weg, und das Ausschalten der Einstellung entfernt ihn aus jeder Kachel, auch im Papierkorb. Eine einzelne Kachel kann außerdem als vertraulich markiert werden; siehe „Vertrauliche Kacheln“ weiter unten.",
+        "Der Ausschluss von Bildschirmaufnahmen macht das Fenster für Screenshot- und Aufnahmeprogramme unsichtbar, auch für die eigenen. Bleibt eine Aufnahme also leer, zuerst diese Einstellung prüfen. Eine optionale, standardmäßig ausgeschaltete Einstellung liest Text aus einem angehängten Bild, damit die Bibliothekssuche ihn auch findet; ein Treffer nur dort trägt die Kennzeichnung „im Bild gefunden“, damit er nie wie ein zufälliger Treffer wirkt. Dieser erkannte Text bleibt sonst außerhalb der App: nirgends angezeigt, nie exportiert, nie synchronisiert, und in der Länge begrenzt. Wird das Bild entfernt oder ersetzt, ist der Text sofort weg, und das Ausschalten der Einstellung entfernt ihn aus jeder Kachel, auch im Papierkorb. Eine einzelne Kachel kann außerdem als vertraulich markiert werden; siehe „Vertrauliche Prompts“ weiter unten.",
       settings: ["Von Bildschirmaufnahmen ausschließen, Kacheln oder Medien unscharf machen, Namen verbergen: Expertenmenü → System & Daten → Datenschutz", "Text in angehängten Bildern für die Suche erfassen, Bildtext-Grenze: Expertenmenü → Bibliothek & Kopierverlauf → Suche", "Eine Kachel als vertraulich markieren, Sperr-Zeit des Tresors: Expertenmenü → System & Daten → Datenschutz"],
       tip: "Der Ausschluss von Bildschirmaufnahmen ist standardmäßig an: für normale Screenshots oder Aufnahmen dieses Fensters ausschalten.",
     },
@@ -1128,7 +1128,7 @@ export const HELP_CONTENT = {
         "Rechtsklick auf einen Tab zum Umbenennen, Größenändern, Umfärben oder Löschen.",
         "Einen Tab mit „weiter nach links“ oder „weiter nach rechts“ aus seinem Menü verschieben, oder ihn auf einen anderen Tab ziehen.",
       ],
-      whatHappens: "Eine Kachel sitzt normalerweise in genau einer Ansicht (wird sie woanders abgelegt, wandert sie dorthin), außer „Kachel in mehreren Ansichten“ ist aktiv, was ab Werk aus ist. Das Löschen einer Ansicht löscht nicht die dort platzierten Kacheln; eine auch anderswo gezeigte Kachel funktioniert dort weiter.",
+      whatHappens: "Eine Kachel sitzt normalerweise in genau einer Ansicht (wird sie woanders abgelegt, wandert sie dorthin), außer „Prompt in mehreren Ansichten“ ist aktiv, was ab Werk aus ist. Das Löschen einer Ansicht löscht nicht die dort platzierten Kacheln; eine auch anderswo gezeigte Kachel funktioniert dort weiter.",
       settings: ["Mehrere Ansichten, Kachel in mehreren Ansichten, höchste Zahl an Ansichten: Expertenmenü → Funktionen → Ansichten und Schnellraster"],
     },
     {
@@ -1328,7 +1328,7 @@ export const HELP_CONTENT = {
         "Exportieren: bei reinem Kürzen greift ein verlustfreier Schnellpfad, sonst wird der ganze Clip einmal neu kodiert.",
       ],
       whatHappens:
-        "Bis zum Export wird nichts verarbeitet: Die Live-Vorschau spielt die Bearbeitungen direkt ab. Filmstreifen und Wellenform geben eine zoombare Übersicht über den ganzen Clip für bildgenaue Navigation. Die Vorschau selbst zoomt außerdem mit dem Mausrad (bis 8×) und lässt sich durch Ziehen verschieben (mit der mittleren Maustaste immer, mit der linken, sobald hineingezoomt ist), um ein kleines Overlay bei einer großen Aufnahme genau zu platzieren. Das Exportziel ist ein Eingabefeld: den Pfad direkt eintippen, oder „Exportieren nach…“, um nur den Ordner zu wechseln und den Dateinamen zu behalten; nach einem fertigen Export verschiebt „Speichern unter…“ das fertige Video an einen anderen Ort. Ein Formatwechsel ändert nur die Endung. „Exportieren und kopieren“ verzichtet ganz auf einen Namen und exportiert in eine selbst aufräumende temporäre Kopie (nach einer Stunde entfernt, und erneut beim nächsten Start), die direkt in der Zwischenablage landet. Ein paar fertige Export-Voreinstellungen (unveränderte Qualität, kleiner für Chat, animiertes GIF) merken sich die letzte Wahl. Die Formatauswahl beim Export bietet MP4, WebM, GIF und AVI, jeweils mit einem kurzen Hinweis, wofür es gedacht ist; GIF hat nie Ton, warnt ab zehn Sekunden Länge und ist auf eine Höchstauflösung begrenzt, da es schnell groß wird. Rückgängig/Wiederholen deckt jeden Bearbeitungsschritt ab, begrenzt durch ein einstellbares Limit. „Video hinzufügen“ legt einen weiteren Clip als Überlagerung darüber, und die Überlagerung \\\"Tasten\\\" macht aus den während einer Aufnahme gedrückten Tasten ein Tastaturbild. Rechtsklick auf die Zeile einer Überlagerung dupliziert oder löscht sie. Ein Zuschnitt oder eine Überlagerung rastet beim Ziehen an den Bildkanten, an der Mitte und an anderen Überlagerungen ein; mit gehaltener Alt-Taste wird frei gezogen. Eine neue Überlagerung startet mit der zuletzt für ihre Art benutzten Farbe, Stärke und Größe. Unfertige Schnitte und Überlagerungen werden gemerkt, sodass das erneute Öffnen derselben Aufnahme das Weitermachen anbietet. Der Name der Exportdatei hat ein eigenes Feld; eine vorhandene Datei wird nie ersetzt, der Export nimmt den nächsten freien Namen.",
+        "Bis zum Export wird nichts verarbeitet: Die Live-Vorschau spielt die Bearbeitungen direkt ab. Filmstreifen und Wellenform geben eine zoombare Übersicht über den ganzen Clip für bildgenaue Navigation. Die Vorschau selbst zoomt außerdem mit dem Mausrad (bis 8×) und lässt sich durch Ziehen verschieben (mit der mittleren Maustaste immer, mit der linken, sobald hineingezoomt ist), um ein kleines Overlay bei einer großen Aufnahme genau zu platzieren. Das Exportziel ist ein Eingabefeld: den Pfad direkt eintippen, oder „Exportieren nach…“, um nur den Ordner zu wechseln und den Dateinamen zu behalten; nach einem fertigen Export verschiebt „Speichern unter…“ das fertige Video an einen anderen Ort. Ein Formatwechsel ändert nur die Endung. Die Schaltfläche „Kopieren“ daneben verzichtet ganz auf einen Namen und exportiert in eine selbst aufräumende temporäre Kopie (nach einer Stunde entfernt, und erneut beim nächsten Start), die direkt in der Zwischenablage landet. Ein paar fertige Export-Voreinstellungen (unveränderte Qualität, kleiner für Chat, animiertes GIF) merken sich die letzte Wahl. Die Formatauswahl beim Export bietet MP4, WebM, GIF und AVI, jeweils mit einem kurzen Hinweis, wofür es gedacht ist; GIF hat nie Ton, warnt ab zehn Sekunden Länge und ist auf eine Höchstauflösung begrenzt, da es schnell groß wird. Rückgängig/Wiederholen deckt jeden Bearbeitungsschritt ab, begrenzt durch ein einstellbares Limit. „Video hinzufügen“ legt einen weiteren Clip als Überlagerung darüber, und die Überlagerung „Tasten“ macht aus den während einer Aufnahme gedrückten Tasten ein Tastaturbild. Rechtsklick auf die Zeile einer Überlagerung dupliziert oder löscht sie. Ein Zuschnitt oder eine Überlagerung rastet beim Ziehen an den Bildkanten, an der Mitte und an anderen Überlagerungen ein; mit gehaltener Alt-Taste wird frei gezogen. Eine neue Überlagerung startet mit der zuletzt für ihre Art benutzten Farbe, Stärke und Größe. Unfertige Schnitte und Überlagerungen werden gemerkt, sodass das erneute Öffnen derselben Aufnahme das Weitermachen anbietet. Der Name der Exportdatei hat ein eigenes Feld; eine vorhandene Datei wird nie ersetzt, der Export nimmt den nächsten freien Namen.",
       settings: ["Video-Editor, Rückgängig-Limit, Überlagerungswerte merken, Einrasten an Kanten: Expertenmenü → Aufnehmen → Video-Editor", "Unfertige Video-Bearbeitungen merken, und wie viele Tage: Expertenmenü → Aufnehmen → Beide Editoren"],
       sketches: ["editorTimeline"],
     },
@@ -1357,7 +1357,7 @@ export const HELP_CONTENT = {
         "Erneut klicken, Escape drücken, oder speichern/schließen, um zu stoppen.",
       ],
       whatHappens:
-        "Die Erkennung läuft lokal über die eigene Spracherkennung von Windows: es verlässt nichts das Gerät, außer die Online-Erkennung wird ausdrücklich erlaubt. Gesprochene Satzzeichen-Wörter („Komma“, „neue Zeile“, …) werden zu echten Satzzeichen; „wörtlich“ vor einem Wort tippt es statt es als Befehl auszulösen. Ein fehlendes Sprachpaket öffnet direkt den Sprachpaket-Dialog, gemeinsam mit der Texterkennung (OCR). Ein optionaler globaler Kurzbefehl startet und stoppt eine Aufnahme, ohne das Fenster zu öffnen. Der Text landet in der Zwischenablage, wird eingefügt oder geht direkt in die Eingabeleiste; das Taskleisten-Symbol zeigt währenddessen „Nimmt auf …“ im Tooltip.",
+        "Die Erkennung läuft lokal über die eigene Spracherkennung von Windows: es verlässt nichts das Gerät, außer die Online-Erkennung wird ausdrücklich erlaubt. Gesprochene Satzzeichen-Wörter („Komma“, „neue Zeile“, …) werden zu echten Satzzeichen; „wörtlich“ vor einem Wort tippt es statt es als Befehl auszulösen. Ein fehlendes Sprachpaket öffnet direkt den Sprachpaket-Dialog, gemeinsam mit der Texterkennung (OCR). Ein optionaler globaler Kurzbefehl startet und stoppt eine Aufnahme, ohne das Fenster zu öffnen. Der Text landet in der Zwischenablage, wird eingefügt oder geht direkt in die Eingabeleiste; das Taskleisten-Symbol zeigt währenddessen „Aufnahme läuft…“ im Tooltip.",
       settings: ["Spracheingabe, Satzzeichen-Befehle, automatische Großschreibung, Stille-Auto-Stopp, Einfügeposition, globaler Hotkey: Expertenmenü → Funktionen → Diktat"],
     },
     {
@@ -1370,7 +1370,7 @@ export const HELP_CONTENT = {
         "„Sprachen der Texterkennung verwalten…“ (bei der Spracheingabe „Diktatsprachen verwalten…“) am unteren Rand des Sprach-Dropdowns öffnet denselben Dialog jederzeit erneut.",
       ],
       whatHappens:
-        "Bei manchen Windows-Versionen sind selbst zum Auflisten der installierten Pakete Administratorrechte erforderlich. In diesem Fall führt ein Button die Prüfung über dieselbe Administratorabfrage erneut aus. Eine Hintergrundüberwachung erkennt, wenn sich die Version eines installierten Pakets geändert hat oder ein Windows-Update es unbemerkt entfernt hat, und kennzeichnet es, ohne sofort zur Neuinstallation aufzufordern. Mit „Später erinnern“ lässt sich der Hinweis vorübergehend ausblenden; die Überwachung kann auch vollständig deaktiviert werden.",
+        "Bei manchen Windows-Versionen sind selbst zum Auflisten der installierten Pakete Administratorrechte erforderlich. In diesem Fall führt ein Button die Prüfung über dieselbe Administratorabfrage erneut aus. Eine Hintergrundüberwachung erkennt, wenn sich die Version eines installierten Pakets geändert hat oder ein Windows-Update es unbemerkt entfernt hat, und kennzeichnet es, ohne sofort zur Neuinstallation aufzufordern. Mit „Abbrechen“ im Hinweis lässt sich der Hinweis vorübergehend ausblenden; die Überwachung kann auch vollständig deaktiviert werden.",
       settings: ["Erkennungssprache automatisch wählen, Hintergrundüberwachung für fehlende oder geänderte Pakete: Expertenmenü → Aufnehmen → Texterkennung, und noch einmal unter Expertenmenü → Funktionen → Diktat"],
     },
     {
@@ -1493,7 +1493,7 @@ export const HELP_CONTENT = {
         "Ein angebotenes Update annehmen, um es mit einem Klick herunterzuladen und zu installieren.",
       ],
       whatHappens:
-        "Die Update-Prüfung ist zusammen mit einem Download des Microsoft-WebView2-Installers beim ersten Start, falls diese Laufzeit fehlt, eine von nur zwei Arten von Netzwerkverkehr, den die App von sich aus macht. Ein heruntergeladenes Update wird vor der Ausführung anhand einer veröffentlichten Prüfsumme verifiziert: eine fehlende oder falsche Prüfsumme blockiert die Installation, statt eine unbestätigte Datei auszuführen. Die dritte und letzte Art ist ffmpeg, für Videoexport/-konvertierung: Eine installierte Version bringt es mit und greift dafür nie auf das Netzwerk zu, eine portable Version bietet einen einmaligen Download nur an, wenn eine Videofunktion es tatsächlich braucht, und nur mit ausdrücklicher Zustimmung, nie automatisch, nie im Hintergrund. Nach einem Update verlinkt eine kleine Meldung auf die Änderungen. Das Fenster Über, neben „Update suchen“ in den Einstellungen, zeigt die Version, die ganze Änderungsgeschichte und jeden mitgelieferten Open-Source-Bestandteil mit seiner Lizenz.",
+        "Die Update-Prüfung ist zusammen mit einem Download des Microsoft-WebView2-Installers beim ersten Start, falls diese Laufzeit fehlt, eine von nur zwei Arten von Netzwerkverkehr, den die App von sich aus macht. Ein heruntergeladenes Update wird vor der Ausführung anhand einer veröffentlichten Prüfsumme verifiziert: eine fehlende oder falsche Prüfsumme blockiert die Installation, statt eine unbestätigte Datei auszuführen. Die dritte und letzte Art ist ffmpeg, für Videoexport/-konvertierung: Eine installierte Version bringt es mit und greift dafür nie auf das Netzwerk zu, eine portable Version bietet einen einmaligen Download nur an, wenn eine Videofunktion es tatsächlich braucht, und nur mit ausdrücklicher Zustimmung, nie automatisch, nie im Hintergrund. Nach einem Update verlinkt eine kleine Meldung auf die Änderungen. Das Fenster Über, neben „Nach Updates suchen“ in den Einstellungen, zeigt die Version, die ganze Änderungsgeschichte und jeden mitgelieferten Open-Source-Bestandteil mit seiner Lizenz.",
       settings: ["Auto-Update und wie oft es prüft: Einstellungen"],
     },
     {

@@ -278,7 +278,7 @@ to the source file: type into it directly, or use "Export to…" to keep the
 file name and only choose a different folder; once an export has finished,
 "Save as…" moves that finished video to another place. Changing the format only
 rewrites the extension, never a folder or name you already typed. The chosen folder is remembered as
-the default for next time. "Export and copy" next to it skips naming anything
+the default for next time. The "Copy" button next to it skips naming anything
 at all: it exports into a copy that cleans itself up on its own (after an hour,
 and again on the next launch, both adjustable in the expert menu) and puts the
 finished file straight on the clipboard for pasting into another app, the way
@@ -404,7 +404,7 @@ too, and the dialog offers to run the listing itself with administrator
 rights instead of coming up blank; that step only lists packs, it installs
 nothing. A background check flags a pack whose version changed or that a
 Windows update silently removed, without asking to reinstall right away:
-"remind me later" dismisses it for a while, or the background check can be
+the notice's "Cancel" button dismisses it for a while, or the background check can be
 switched off entirely.
 
 ### Color picker & pick history
@@ -545,7 +545,7 @@ back on its own next time.
 
 The magnifier icon in the toolbar, or Ctrl+K, opens an overlay that searches
 prompts, copy history, attachments, views, settings and help all at once,
-each in its own group with up to eight hits and a "show more". Arrow keys
+each in its own group with up to eight hits and a "Show … more". Arrow keys
 move the highlight across group boundaries; Enter runs the fitting action for
 whatever is highlighted: copies a prompt or copy history entry, opens an
 attachment, switches to a view, opens and highlights a setting, or opens the
@@ -1166,7 +1166,7 @@ Bestätigung. Eine neue Installation löscht nicht verwendete Aufnahmen nach 90
 Tagen (Expertenmenü, 0 = für immer). Eine Tastenanzeige
 (Standard aus, im Expertenmenü) zeichnet während einer Aufnahme systemweit
 mit, welche Tasten gedrückt werden, damit eine Anleitung sie hinterher über
-die „Tasten"-Überlagerung des Video-Editors zeigen kann. Aufgezeichnet werden
+die „Tasten“-Überlagerung des Video-Editors zeigen kann. Aufgezeichnet werden
 nur Tastenkennungen mit Zeitstempeln, nie ein Textinhalt. Ab Werk wird jede
 Taste angezeigt, auch getippter Text; ein fokussiertes Passwortfeld wird für
 diese Zeit ausgelassen und erscheint als Lücke, ohne dass das garantiert ist,
@@ -1217,7 +1217,7 @@ Eingabefeld, kein fester Name mehr: direkt hineintippen, oder „Exportieren nac
 nur den Ordner zu ändern und den Dateinamen zu behalten; nach einem fertigen
 Export verschiebt „Speichern unter…" das fertige Video an einen anderen Ort.
 Ein Formatwechsel ändert nur die Endung, nie Ordner oder Namen, die man selbst eingetippt hat.
-„Exportieren und kopieren" daneben verzichtet ganz auf einen Namen: es
+Die Schaltfläche „Kopieren“ daneben verzichtet ganz auf einen Namen: es
 exportiert in eine Kopie, die sich selbst aufräumt (nach einer Stunde, und
 erneut beim nächsten Start, beides im Expertenmenü einstellbar), und legt die
 fertige Datei direkt in die Zwischenablage zum Einfügen in eine andere App,
@@ -1300,7 +1300,7 @@ Windows-Systemen aber doch; der Dialog sagt das dann offen und bietet an, die
 Abfrage mit Administratorrechten auszuführen, statt leer zu bleiben. Dabei wird
 nur aufgelistet, nichts installiert. Eine Hintergrundprüfung meldet ein Paket,
 dessen Version sich geändert hat oder das ein Windows-Update entfernt hat, ohne
-gleich zur Neuinstallation aufzufordern: „später erinnern" blendet den Hinweis
+gleich zur Neuinstallation aufzufordern: „Abbrechen“ im Hinweis blendet ihn
 vorübergehend aus, oder die Prüfung lässt sich ganz abschalten.
 
 **Farbpipette & Auswahlverlauf**: Pixel als Hex/RGB/HSL kopieren; die letzten
@@ -1422,7 +1422,7 @@ sich seinen Stand je Filter.
 **Alles durchsuchen**: Lupensymbol in der Werkzeugleiste oder Strg+K öffnet
 eine Überlagerung, die Prompts, Kopierverlauf, Anhänge, Ansichten,
 Einstellungen und Hilfe zugleich durchsucht, jede Quelle in ihrer eigenen
-Gruppe mit bis zu acht Treffern und „weitere anzeigen". Pfeiltasten bewegen
+Gruppe mit bis zu acht Treffern und „… weitere anzeigen“. Pfeiltasten bewegen
 die Markierung über Gruppengrenzen hinweg; Eingabetaste löst die passende
 Aktion aus: kopiert einen Prompt oder Eintrag im Kopierverlauf, öffnet einen Anhang,
 wechselt die Ansicht, öffnet und markiert eine Einstellung, oder öffnet das
