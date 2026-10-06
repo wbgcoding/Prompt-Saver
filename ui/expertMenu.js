@@ -1959,10 +1959,33 @@ export function emitExpertRows(list, parent, actionById, depth) {
   }
 }
 
+// Which edge of the tab strip still has tabs behind it: drives the soft fade (CSS).
+function syncTabFade(bar) {
+  const more = bar.scrollWidth - bar.clientWidth > 1;
+  const start = more && bar.scrollLeft > 1;
+  const end = more && bar.scrollLeft < bar.scrollWidth - bar.clientWidth - 1;
+  if (start && end) bar.dataset.fade = "both";
+  else if (start) bar.dataset.fade = "start";
+  else if (end) bar.dataset.fade = "end";
+  else delete bar.dataset.fade;
+}
+
+// Scrolls the strip sideways (never the dialog) until the active tab is fully on screen,
+// clear of the fade at either edge.
+function showActiveTab(bar) {
+  const act = bar.querySelector(".expert-tab.active");
+  if (!act) return;
+  const a = act.getBoundingClientRect(), b = bar.getBoundingClientRect();
+  const FADE = 32;
+  if (a.left < b.left + FADE) bar.scrollLeft -= b.left + FADE - a.left;
+  else if (a.right > b.right - FADE) bar.scrollLeft += a.right - (b.right - FADE);
+}
+
 export function renderExpert() {
   const box = $("expert-flags");
   const tabBar = $("expert-tabs-bar");
   const keepScroll = box.scrollTop; // survive live re-renders (e.g. a toggled gate)
+  const keepTabScroll = tabBar.querySelector(".expert-tabs")?.scrollLeft || 0;
   box.innerHTML = "";
   tabBar.innerHTML = "";
   if (expertTab >= EXPERT_TABS.length) expertTab = 0;
@@ -1985,8 +2008,13 @@ export function renderExpert() {
       bar.appendChild(b);
     });
     tabBar.appendChild(bar);
-    // The bar is rebuilt on every render, so the chosen tab is brought into view here.
-    bar.querySelector(".expert-tab.active")?.scrollIntoView({ inline: "nearest", block: "nearest" });
+    // The bar is rebuilt on every render: put it back where it was, then bring the
+    // chosen tab fully into view.
+    bar.scrollLeft = keepTabScroll;
+    showActiveTab(bar);
+    syncTabFade(bar);
+    bar.addEventListener("scroll", () => syncTabFade(bar), { passive: true });
+    if (typeof ResizeObserver === "function") new ResizeObserver(() => { showActiveTab(bar); syncTabFade(bar); }).observe(bar);
   }
   const tabs = globalView ? EXPERT_TABS : [EXPERT_TABS[expertTab]];
   const collapsed = expertCollapsedSet();

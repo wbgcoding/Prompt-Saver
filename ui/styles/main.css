@@ -2475,6 +2475,20 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
 /* The expert dialog's tabs stay on one line; a window too narrow for all six scrolls the bar sideways. */
 #expert-tabs-bar .expert-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
 #expert-tabs-bar .expert-tab { flex: 0 0 auto; white-space: nowrap; }
+/* A soft fade on the edge that still has tabs behind it; expertMenu.js keeps data-fade
+   (start, end, both) in step with the scroll position. */
+#expert-tabs-bar .expert-tabs[data-fade="end"] {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+}
+#expert-tabs-bar .expert-tabs[data-fade="start"] {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 28px);
+  mask-image: linear-gradient(to right, transparent, #000 28px);
+}
+#expert-tabs-bar .expert-tabs[data-fade="both"] {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+}
 .expert-tab.active { background: var(--accent-strong); color: var(--accent-fg); border-color: var(--accent-strong); }
 
 /* Appearance scales: CSS zoom on their own elements (1 = unchanged, the default).
