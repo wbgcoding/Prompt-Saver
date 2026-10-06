@@ -5274,14 +5274,16 @@ button.tag-chip:hover { border-color: var(--accent); }
 .tag-manager-list { display: flex; flex-direction: column; gap: 4px; min-height: 0; overflow-y: auto; }
 .tag-manage-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   padding: 5px 2px;
   border-bottom: 1px solid var(--border);
 }
 .tag-manage-row:last-child { border-bottom: none; }
+/* The name keeps readable room; on a narrow window the buttons wrap below it instead. */
 .tag-manage-name {
-  flex: 1;
+  flex: 1 1 120px;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

@@ -301,8 +301,34 @@ ABOUT = """
 </script>
 """ % (MIN_W, MIN_W)
 
+# Tag manager at the minimum width: every tag name keeps readable room beside its buttons.
+TAG_MANAGER = """
+<script>
+(async () => {""" + COMMON + """
+  try {
+    await openLibrary();
+    const manage = [...document.querySelectorAll('.tag-action')].pop();
+    if (!manage) { errs.push('tags: the manage action is missing'); }
+    else {
+      manage.click();
+      await sleep(400);
+      const names = [...document.querySelectorAll('#tag-modal .tag-manage-name')];
+      if (!names.length) errs.push('tags: the tag manager lists no tags');
+      for (const el of names) {
+        const w = el.getBoundingClientRect().width;
+        if (w < 60) errs.push('tags: "' + el.textContent + '" gets only ' + Math.round(w) + 'px');
+      }
+      info.push('tags widths=' + names.map((el) => Math.round(el.getBoundingClientRect().width)).join(','));
+    }
+  } catch (e) { errs.push('probe: ' + e.message); }
+  finish();
+})();
+</script>
+"""
+
 # (name, probe, width, height, UI language)
 CASES = (
+    ("tag-manager", TAG_MANAGER, MIN_W, 800, "de"),
     ("counts", COUNTS, 1000, 800, "en"),
     ("history-tags", HISTORY_TAGS, MIN_W, 800, "en"),
     ("expert-strip", EXPERT_STRIP, MIN_W, 800, "de"),
