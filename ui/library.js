@@ -420,6 +420,12 @@ export function isArchived(p) {
   return (p.tags || []).some((t2) => tagKey(t2) === key);
 }
 
+// Browsing without a query leaves an archived prompt out of the list (the show-archive
+// toggle or a typed query brings it back). The header counts follow the same rule.
+function archiveHidden() {
+  return flag("archiveTag") && !libQuery.trim() && !libShowArchive;
+}
+
 export function libMatches(p) {
   if (libFav && !p.favorite) return false;
   if (!typeAllowed(libTypes, p)) return false;
@@ -427,7 +433,7 @@ export function libMatches(p) {
   if (!tagMatches(p)) return false;
   // Browsing without a search query hides an archived prompt unless the show-archive
   // toggle is on; typing an actual query still finds it, the list is only quieter.
-  if (flag("archiveTag") && !libQuery.trim() && !libShowArchive && isArchived(p)) return false;
+  if (archiveHidden() && isArchived(p)) return false;
   return libSearchScore(p).score > 0;
 }
 
@@ -764,7 +770,8 @@ export function renderLibrary() {
   // How hard the filters are biting, in the header where the filters are.
   const count = $("library-count");
   if (count) {
-    const all = prompts.length;
+    // A prompt the archive toggle hides counts neither as shown nor in the total.
+    const all = archiveHidden() ? prompts.filter((p) => !isArchived(p)).length : prompts.length;
     count.textContent = items.length === all
       ? String(all)
       : t("libraryCount").replace("{n}", items.length).replace("{v}", all);
