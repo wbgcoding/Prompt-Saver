@@ -4078,7 +4078,9 @@ body.drag-over::after {
    dialog once an update is pending. */
 .update-version {
   flex: 1 1 0; min-width: 0;
-  background: none; border: none; padding: 0;
+  /* The left padding is the check button's (14px) plus its border (1px), so the version
+     text starts on the same edge as the button text on the line below. */
+  background: none; border: none; padding: 0 0 0 15px;
   color: var(--fg); font: inherit; font-size: 13px; font-weight: 600;
   cursor: pointer; text-align: left; white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis;
