@@ -17557,3 +17557,28 @@ fn ending_a_snip_parks_the_overlay_tiny_and_off_screen() {
     let body = &src[c..d];
     assert!(body.contains("snip_prewarm_spec()") && body.contains(".hide()") && body.contains("set_size(") && body.contains("set_position("));
 }
+
+#[test]
+fn uia_class_order_prefers_the_eight_class_and_falls_back() {
+    use windows::Win32::UI::Accessibility::{CUIAutomation, CUIAutomation8};
+    let order = keylog::uia_class_order();
+    assert_eq!(order, [CUIAutomation8, CUIAutomation]);
+    // Eight works: the original class is never tried.
+    let mut tried = Vec::new();
+    let got = keylog::first_ready_uia(&order, |c| {
+        tried.push(*c);
+        Some(1)
+    });
+    assert_eq!(got, Some(1));
+    assert_eq!(tried, vec![CUIAutomation8]);
+    // Eight fails: falls back to the original class.
+    let mut tried = Vec::new();
+    let got = keylog::first_ready_uia(&order, |c| {
+        tried.push(*c);
+        (*c == CUIAutomation).then_some(2)
+    });
+    assert_eq!(got, Some(2));
+    assert_eq!(tried, vec![CUIAutomation8, CUIAutomation]);
+    // Neither works: None, so the gap-everything path runs.
+    assert_eq!(keylog::first_ready_uia::<u8>(&order, |_| None), None);
+}

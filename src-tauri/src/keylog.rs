@@ -13,7 +13,7 @@ use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CoUninitiali
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
 use windows::Win32::UI::Accessibility::{
-    CUIAutomation, IUIAutomation, IUIAutomation2, IUIAutomationElement, IUIAutomationFocusChangedEventHandler,
+    CUIAutomation, CUIAutomation8, IUIAutomation, IUIAutomation2, IUIAutomationElement, IUIAutomationFocusChangedEventHandler,
     IUIAutomationFocusChangedEventHandler_Impl, IUIAutomationTextPattern, IUIAutomationValuePattern, UIA_CONTROLTYPE_ID,
     UIA_ButtonControlTypeId, UIA_CheckBoxControlTypeId, UIA_DocumentControlTypeId, UIA_EditControlTypeId, UIA_HyperlinkControlTypeId,
     UIA_ImageControlTypeId, UIA_ListItemControlTypeId, UIA_MenuItemControlTypeId, UIA_RadioButtonControlTypeId, UIA_ScrollBarControlTypeId,
@@ -1205,6 +1205,19 @@ fn resolve_pending(
     }
 }
 
+// The UI Automation classes to try, in order: CUIAutomation8 is the one
+// that serves IUIAutomation2 everywhere, the original class only on some
+// builds.
+pub(crate) fn uia_class_order() -> [windows::core::GUID; 2] {
+    [CUIAutomation8, CUIAutomation]
+}
+
+// Returns the first class for which `try_class` produces a ready object;
+// later classes are not touched once one worked.
+pub(crate) fn first_ready_uia<T>(classes: &[windows::core::GUID], try_class: impl FnMut(&windows::core::GUID) -> Option<T>) -> Option<T> {
+    classes.iter().find_map(try_class)
+}
+
 fn consumer_thread_main(rx: Receiver<RawKey>, clock: Arc<Mutex<ActiveClock>>, cutoff: Arc<Mutex<Option<u64>>>, shortcuts_only: bool) -> KeySidecar {
     // MTA, not STA: an apartment-threaded COM object needs its own
     // message pump for cross-thread calls (the focus-changed event
@@ -1224,13 +1237,18 @@ fn consumer_thread_main(rx: Receiver<RawKey>, clock: Arc<Mutex<ActiveClock>>, cu
     let mut uia: Option<IUIAutomation> = None;
     let mut uia_ready = false;
     if co_init_ok {
-        uia = unsafe { CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER) }.ok();
-        if let Some(candidate) = &uia {
-            uia_ready = match candidate.cast::<IUIAutomation2>() {
-                Ok(uia2) => unsafe { uia2.SetConnectionTimeout(UIA_TIMEOUT_MS).is_ok() && uia2.SetTransactionTimeout(UIA_TIMEOUT_MS).is_ok() },
-                Err(_) => false,
-            };
-        }
+        // CUIAutomation8 first: on some Windows 11 builds the plain
+        // CUIAutomation class does not answer for IUIAutomation2
+        // (E_NOINTERFACE) while CUIAutomation8 does. The first class that
+        // yields a fully bounded object wins; none -> the gap-everything
+        // path below stays the last resort.
+        uia = first_ready_uia(&uia_class_order(), |clsid| {
+            let candidate: IUIAutomation = unsafe { CoCreateInstance(clsid, None, CLSCTX_INPROC_SERVER) }.ok()?;
+            let uia2 = candidate.cast::<IUIAutomation2>().ok()?;
+            let bounded = unsafe { uia2.SetConnectionTimeout(UIA_TIMEOUT_MS).is_ok() && uia2.SetTransactionTimeout(UIA_TIMEOUT_MS).is_ok() };
+            bounded.then_some(candidate)
+        });
+        uia_ready = uia.is_some();
     }
     if !uia_ready {
         uia = None;
