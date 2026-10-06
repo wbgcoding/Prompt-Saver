@@ -1109,7 +1109,7 @@ Ansicht): Breite, Höhe oder Prozentwert einstellbar, mit Voreinstellungen für
 machbarer Schritt.
 
 **Bildschirmaufnahme**: nimmt ein Fenster, einen Monitor oder einen gezogenen
-Bereich als Video auf, über den Knopf „Aufnehmen“ links vom Eingabefeld.
+Bereich als Video auf, über den Button „Aufnehmen“ links vom Eingabefeld.
 Eine Bereichsaufnahme zeigt einen dünnen Rahmen um den Bereich; er erscheint nie
 im Video, und das Expertenmenü schaltet ihn ab oder ändert seine Farbe.
 Aufgenommen wird immer MP4 (H.264); drei Qualitätsstufen wählen davor die
@@ -1127,15 +1127,15 @@ MP4-Aufnahme immer unangetastet. Ein Fehlschlag nennt den eigentlichen Grund
 in Klartext (Datei unvollständig, kein Platz mehr und so weiter) statt einer
 rohen ffmpeg-Protokollzeile; eine zugeklappte Zeile „Technische Angaben"
 darunter hält diese Zeile samt Kopier-Button für alle bereit, die sie brauchen.
-Der Menüeintrag „Bildschirm aufnehmen“ des Knopfs „Aufnehmen“ öffnet
+Der Menüeintrag „Bildschirm aufnehmen“ des Buttons „Aufnehmen“ öffnet
 dieselbe Bildschirm-Übersicht wie ein Screenshot: Fenster anklicken, Bereich
 ziehen oder auf den freien Desktop klicken für den ganzen Bildschirm. Ein
 Countdown zählt danach herunter, bevor die Aufnahme wirklich startet
 (3 Sekunden Standard, im Expertenmenü einstellbar, `0` schaltet ihn ab). Eine
 kleine Bedienleiste begleitet die Aufnahme (roter Punkt, Laufzeit,
-Dateigröße, zwei Ton-Knöpfe, Pause/Fortsetzen, Stopp, Verwerfen), folgt einem
+Dateigröße, zwei Ton-Buttons, Pause/Fortsetzen, Stopp, Verwerfen), folgt einem
 verschobenen Aufnahmefenster und ist selbst niemals im Video zu sehen. Zieht
-man die Leiste selbst (nicht ihre Knöpfe), lässt sie sich frei verschieben,
+man die Leiste selbst (nicht ihre Buttons), lässt sie sich frei verschieben,
 auch auf einen anderen Monitor; ab dem ersten Ziehen folgt sie dem
 Aufnahmefenster nicht mehr, sondern bleibt dort stehen, wo man sie
 hingezogen hat, für den Rest dieser einen Aufnahme. Die nächste Aufnahme
@@ -1143,7 +1143,7 @@ folgt wieder von vorn. Systemton
 (Standard an) und Mikrofon (Standard aus, Gerät wählbar im Expertenmenü)
 werden je als eigene Spur aufgenommen; zieht man das Mikrofon während der
 Aufnahme ab, laufen Bild und Systemton weiter, das Mikrofon-Symbol zeigt nur
-„verloren". Die beiden Ton-Knöpfe in der Leiste schalten Systemton und
+„verloren". Die beiden Ton-Buttons in der Leiste schalten Systemton und
 Mikrofon während der Aufnahme sofort stumm, ohne die Spur zu beenden: eine
 stumme Quelle nimmt weiter Stille auf statt auszusetzen, lässt sich also
 innerhalb derselben Aufnahme wieder zuschalten, und die Leiste zeigt beim
@@ -1179,7 +1179,7 @@ für Aufnahmen mit vertraulichen Eingaben. Wie lange eine
 losgelassene Taste sichtbar bleibt, ist im Expertenmenü einstellbar.
 
 Eine optionale Kameraaufnahme (Standard aus, im Expertenmenü) fügt dem
-Menü des Knopfs „Aufnehmen“ links vom Eingabefeld den Eintrag „Kamera aufnehmen“ hinzu. Sie
+Menü des Buttons „Aufnehmen“ links vom Eingabefeld den Eintrag „Kamera aufnehmen“ hinzu. Sie
 öffnet ein eigenes kleines Fenster mit Live-Vorschau, eigenem
 Start/Pause/Stopp, einer Tonquelle, einer Auflösungswahl und einem
 Zielordner: denselben Bedienelementen wie die Bildschirmaufnahme selbst. Ein
@@ -1365,7 +1365,7 @@ weiterhin genau den Markdown-Text bekommt wie bei einer normalen Kopie.
 **Hotkeys**: ein globaler Hotkey öffnet den Schnellstarter (Standard
 Strg+Alt+P), ein eigener Hotkey pro Kachel kopiert (und fügt optional ein). Bei
 einer Kollision gewinnt der App-Hotkey, sonst die erste Kachel in der Liste.
-"Alle Tastenkürzel" neben dem globalen Feld öffnet die Tastenkürzel-Übersicht mit jedem Hotkey, durchsuchbar, und
+„Alle Tastenkürzel“ neben dem globalen Feld öffnet die Tastenkürzel-Übersicht mit jedem Hotkey, durchsuchbar, und
 belegt jede Zeile direkt um, ohne den jeweiligen Editor zu öffnen. Eine Kachel
 mit eigenem Hotkey zeigt ein kleines Tastatursymbol.
 
@@ -1739,7 +1739,7 @@ auf einmal. Hotkey tut nichts? Eine andere App hält die Kombination
 vermutlich schon.
 
 **Eigenständig: Backup-Verwaltung.** Verschlüsselte Backups, Aufbewahrung nach Tag, Woche, Monat und Jahr,
-gezieltes Wiederherstellen. Mit den zwei Knöpfen neben Backup erstellen lässt
+gezieltes Wiederherstellen. Mit den zwei Buttons neben „Backup erstellen“ lässt
 sich ein Backup in eine Datei deiner Wahl speichern oder aus einer Datei
 importieren. Im selben Fenster außerdem eine
 Nutzungsstatistik (Summen, 14-Tage-Diagramm, meistgenutzte Kacheln),

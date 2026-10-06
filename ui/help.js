@@ -785,7 +785,7 @@ export const HELP_CONTENT = {
         "Den globalen Hotkey, Auto-Einfügen bei Doppelklick und das Speichern von Screenshots im Screenshots-Ordner einstellen.",
       ],
       whatHappens:
-        "Jede Änderung gilt sofort, ohne Speichern-Button. \"Automatisch\" als Sprache folgt Windows und fällt auf Englisch zurück. Zurücksetzen stellt jede Einstellung auf die Vorgabe zurück und behält die Kacheln; Löschen entfernt alle Daten und fragt vorher nach.",
+        "Jede Änderung gilt sofort, ohne Speichern-Button. „Automatisch“ als Sprache folgt Windows und fällt auf Englisch zurück. Zurücksetzen stellt jede Einstellung auf die Vorgabe zurück und behält die Kacheln; Löschen entfernt alle Daten und fragt vorher nach.",
       settings: [],
     },
     {
@@ -840,7 +840,7 @@ export const HELP_CONTENT = {
         "Markdown-Vorschau, Syntax-Hervorhebung, Versionen oder private Notizen im Expertenmenü anpassen.",
       ],
       whatHappens:
-        "Die Versionen speichern jede Änderung, sodass eine frühere wiederhergestellt werden kann. Die Markdown-Vorschau erscheint neben oder anstelle des Textfelds, ohne den gespeicherten Inhalt zu verändern. Private Notizen werden nie mit dem Text kopiert oder exportiert. Der offene Text wird alle paar Sekunden als Entwurf gesichert; schließt sich das Fenster oder die App vor dem Speichern, bietet der nächste Start den Entwurf einmal wieder an. Eine vertrauliche Kachel bekommt nie einen Entwurf. Wer eine neue Kachel speichert, die einer vorhandenen sehr ähnelt, sieht einen leisen Hinweis, das Speichern wird nicht aufgehalten. Bei einem Text mit Markdown legt \"Formatiert kopieren\" im Editor und im Kachel-Menü zusätzlich die gerenderte Fassung in die Zwischenablage, sodass Word oder ein Mailprogramm die Formatierung zeigt. In der Liste der Versionen behält ein zweiter Button neben Wiederherstellen die gewählte Fassung als neue Kachel und lässt die aktuelle unverändert.",
+        "Die Versionen speichern jede Änderung, sodass eine frühere wiederhergestellt werden kann. Die Markdown-Vorschau erscheint neben oder anstelle des Textfelds, ohne den gespeicherten Inhalt zu verändern. Private Notizen werden nie mit dem Text kopiert oder exportiert. Der offene Text wird alle paar Sekunden als Entwurf gesichert; schließt sich das Fenster oder die App vor dem Speichern, bietet der nächste Start den Entwurf einmal wieder an. Eine vertrauliche Kachel bekommt nie einen Entwurf. Wer eine neue Kachel speichert, die einer vorhandenen sehr ähnelt, sieht einen leisen Hinweis, das Speichern wird nicht aufgehalten. Bei einem Text mit Markdown legt „Formatiert kopieren“ im Editor und im Kachel-Menü zusätzlich die gerenderte Fassung in die Zwischenablage, sodass Word oder ein Mailprogramm die Formatierung zeigt. In der Liste der Versionen behält ein zweiter Button neben Wiederherstellen die gewählte Fassung als neue Kachel und lässt die aktuelle unverändert.",
       settings: ["Markdown-Vorschau, Syntax-Hervorhebung, Versionen, private Notizen: Expertenmenü → Funktionen → Editor", "Textfeld in dicktengleicher Schrift: Expertenmenü → Funktionen → Editor", "Formatiert kopieren, Live-Längenzähler, wortweiser Vergleich der Versionen, Verwerfen bestätigen, Entwurf automatisch sichern und wie oft: Expertenmenü → Funktionen → Editor", "Hinweis auf ähnliche Prompts beim Speichern: Expertenmenü → System & Daten → Daten & Wartung"],
       tip: "Markdown-Vorschau und private Notizen sind ab Werk aktiviert.",
     },
@@ -888,7 +888,7 @@ export const HELP_CONTENT = {
       section: "alwaysOnTop",
       title: "Infobereich-Menü",
       whatItIs: "Das Rechtsklick-Menü des Infobereich-Symbols bietet schnellen Zugriff, ohne das Hauptfenster zu öffnen.",
-      howTo: ["Rechtsklick auf das Infobereich-Symbol.", "Einen Eintrag aus \"Zuletzt kopiert\" oder \"Favoriten\" wählen, um ihn sofort zu kopieren."],
+      howTo: ["Rechtsklick auf das Infobereich-Symbol.", "Einen Eintrag aus „Zuletzt kopiert“ oder „Favoriten“ wählen, um ihn sofort zu kopieren."],
       whatHappens: "Das Menü kopiert direkt aus dem Infobereich; das Hauptfenster muss dafür nicht geöffnet werden. Das Menü erscheint als abgerundetes Fenster im Theme der App; ausgeschaltet kommt das schlichte Windows-Menü. Tippen ins Suchfeld des Infobereich-Menüs öffnet den Schnellstarter mit dem Getippten.",
       settings: ["Infobereich-Menü im Windows-11-Stil, Suchfeld, Bereich für zuletzt Kopiertes, Bereich für Favoriten, Anzahl der Einträge, Länge der Beschriftung: Expertenmenü → Funktionen → Infobereich-Menü"],
     },
@@ -903,7 +903,7 @@ export const HELP_CONTENT = {
         "Bibliothek → Kopierverlauf öffnen, den Herkunftsfilter auf „Anderswo“ stellen und nützliche Einträge als Kacheln speichern.",
       ],
       whatHappens:
-        "Es wird nichts überwacht, bis die Funktion eingeschaltet ist. Kopien unter der Mindestlänge werden ignoriert, und die ältesten dieser Einträge fallen weg, sobald sie ihre Obergrenze überschreiten. Mit \"Vermutete Passwörter überspringen\" landet eine Kopie, die wie ein Passwort aussieht (eine Zeile, keine Leerzeichen, gemischte Buchstaben, Ziffern und Zeichen), nie im Eingang; das ist eine Schätzung, die im Zweifel lieber überspringt. Beim Ausschalten fragt die App, ob das Gesammelte behalten oder gelöscht werden soll; wer die Frage schließt, behält es. Nach dem Leeren des Eingangs bietet die Meldung einen Rückgängig-Button.",
+        "Es wird nichts überwacht, bis die Funktion eingeschaltet ist. Kopien unter der Mindestlänge werden ignoriert, und die ältesten dieser Einträge fallen weg, sobald sie ihre Obergrenze überschreiten. Mit „Vermutete Passwörter überspringen“ landet eine Kopie, die wie ein Passwort aussieht (eine Zeile, keine Leerzeichen, gemischte Buchstaben, Ziffern und Zeichen), nie im Eingang; das ist eine Schätzung, die im Zweifel lieber überspringt. Beim Ausschalten fragt die App, ob das Gesammelte behalten oder gelöscht werden soll; wer die Frage schließt, behält es. Nach dem Leeren des Eingangs bietet die Meldung einen Rückgängig-Button.",
       settings: ["Vermutete Passwörter überspringen, Mindestlänge, Obergrenze: Expertenmenü → Bibliothek & Kopierverlauf → Kopierverlauf"],
       tip: "Standardmäßig aus: es wird nichts überwacht, bis die Funktion eingeschaltet ist.",
     },
@@ -939,7 +939,7 @@ export const HELP_CONTENT = {
       section: "organising",
       title: "Favoriten",
       whatItIs: "Ein Stern markiert eine Kachel als Favorit für schnellen späteren Zugriff.",
-      howTo: ["Auf den Stern einer Kachel klicken, oder \"Favorisieren\" in ihrem Menü nutzen.", "Die eigene Favoriten-Ansicht öffnen, um nur markierte Kacheln zu sehen."],
+      howTo: ["Auf den Stern einer Kachel klicken, oder „Favorisieren“ in ihrem Menü nutzen.", "Die eigene Favoriten-Ansicht öffnen, um nur markierte Kacheln zu sehen."],
       whatHappens: "Favoriten erhalten ihre eigene sortierbare Ansicht, unabhängig davon, wo die Kachel sonst liegt.",
       settings: ["Favoriten-Ansicht: Einstellungen. Eigene Sortierung: Expertenmenü → Kacheln → Favoriten"],
     },
@@ -968,11 +968,11 @@ export const HELP_CONTENT = {
         "Klick auf den Bibliothek-Button {icon:library} in der Werkzeugleiste öffnet sie.",
         "Tippen zum Suchen, oder Typ- und Farb-Filter zum Eingrenzen der Liste nutzen.",
         "Klick auf eine Zeile zum Kopieren.",
-        "Der Knopf „Nach dem Kopieren schließen“ im Kopf der Bibliothek entscheidet, ob Kopieren die Bibliothek schließt, und merkt sich die Wahl.",
+        "Das Häkchen „Nach dem Kopieren schließen“ im Kopf der Bibliothek entscheidet, ob Kopieren die Bibliothek schließt, und merkt sich die Wahl.",
         "Das Menü zum Bearbeiten, auf das Raster Ziehen, Taggen oder Löschen nutzen.",
         "Eine Suche mit Tag-Filtern und Sortierung als Chip über dem Feld behalten; ein Klick holt sie zurück.",
         "Der Umschalter Liste oder Kacheln neben dem Typ-Filter wechselt zu großen Vorschaukacheln.",
-        "Zwei Zeilen auswählen und in der Auswahlleiste \"Vergleichen\" klicken, um beide nebeneinander mit markierten Unterschieden zu sehen.",
+        "Zwei Zeilen auswählen und in der Auswahlleiste „Vergleichen“ klicken, um beide nebeneinander mit markierten Unterschieden zu sehen.",
       ],
       whatHappens: "Die Suche ist standardmäßig fehlertolerant und sortiert, falls nicht deaktiviert, nach am häufigsten oder zuletzt Verwendetem. Im Vergleich lässt sich der Text einer Seite in die andere übernehmen. Die Kachelansicht verhält sich bei Klicks, Menüs und Mehrfachauswahl genau wie die Liste.",
       settings: ["Fuzzy-Suche, Typ- und Farb-Filter, gespeicherte Suchen: Expertenmenü → Bibliothek & Kopierverlauf → Suche", "Suchfeld beim Öffnen fokussieren: Expertenmenü → Bibliothek & Kopierverlauf → Suche", "Einträge je Suchliste (Bibliothek, Alles durchsuchen, Schnellstarter): Expertenmenü → Bibliothek & Kopierverlauf → Suche", "Clevere Sortierung, Mehrfachauswahl für Stapelaktionen, Bild- und Video-Vorschau in den Zeilen, Kachelansicht: Expertenmenü → Bibliothek & Kopierverlauf → Anzeige"],
@@ -987,7 +987,7 @@ export const HELP_CONTENT = {
         "Mit den Pfeiltasten wählen und Enter drücken, oder einen Treffer anklicken.",
       ],
       whatHappens:
-        "Enter tut, was zum Treffer passt: Es kopiert eine Kachel oder einen Eintrag im Kopierverlauf, öffnet einen Anhang, wechselt in eine Ansicht, öffnet und markiert eine Einstellung oder öffnet den Hilfeartikel. Jede Gruppe zeigt einige Treffer und ein \"Mehr anzeigen\". Ist das Feld leer, werden die letzten Suchen angeboten. Escape, ein Klick daneben oder die Lupe schließt es wieder.",
+        "Enter tut, was zum Treffer passt: Es kopiert eine Kachel oder einen Eintrag im Kopierverlauf, öffnet einen Anhang, wechselt in eine Ansicht, öffnet und markiert eine Einstellung oder öffnet den Hilfeartikel. Jede Gruppe zeigt einige Treffer und ein „Mehr anzeigen“. Ist das Feld leer, werden die letzten Suchen angeboten. Escape, ein Klick daneben oder die Lupe schließt es wieder.",
       settings: ["Alles durchsuchen: Expertenmenü → Bibliothek & Kopierverlauf → Suche"],
     },
     {
@@ -1007,11 +1007,11 @@ export const HELP_CONTENT = {
       whatItIs: "Das Archiv legt eine Kachel beiseite, ohne sie zu löschen.",
       howTo: [
         "Das Archiv im Expertenmenü einschalten.",
-        "\"Ins Archiv\" im Menü einer Kachel wählen, oder mehrere auf einmal über die Auswahlleiste der Bibliothek archivieren.",
+        "„Ins Archiv“ im Menü einer Kachel wählen, oder mehrere auf einmal über die Auswahlleiste der Bibliothek archivieren.",
         "Mit dem Schalter über der Bibliotheksliste archivierte Kacheln wieder anzeigen.",
       ],
       whatHappens:
-        "Eine archivierte Kachel verschwindet aus dem Raster und der Bibliotheksliste, die Suche findet sie aber weiterhin, und Exporte und Backups behalten sie wie jede andere Kachel. \"Aus dem Archiv\" im selben Menü holt sie zurück.",
+        "Eine archivierte Kachel verschwindet aus dem Raster und der Bibliotheksliste, die Suche findet sie aber weiterhin, und Exporte und Backups behalten sie wie jede andere Kachel. „Aus dem Archiv“ im selben Menü holt sie zurück.",
       settings: ["Archiv: Expertenmenü → Bibliothek & Kopierverlauf → Anzeige"],
       tip: "Ab Werk aus.",
     },
@@ -1042,7 +1042,7 @@ export const HELP_CONTENT = {
       section: "look",
       title: "Werkzeugleiste",
       whatItIs: "Die Werkzeugleiste bestimmt, welche Buttons der Kopfbereich und die Composer-Leiste zeigen.",
-      howTo: ["Rechtsklick auf den Kopfbereich blendet seine Knöpfe ein oder aus; die Funktionen selbst schaltet das Expertenmenü.", "Obere Leiste ausblenden: Rechtsklick auf Zahnrad oder Kopfzeile."],
+      howTo: ["Rechtsklick auf den Kopfbereich blendet seine Buttons ein oder aus; die Funktionen selbst schaltet das Expertenmenü.", "Obere Leiste ausblenden: Rechtsklick auf Zahnrad oder Kopfzeile."],
       whatHappens: "Das Ausblenden eines Buttons blendet ihn nur aus; die dahinterliegende Funktion funktioniert weiterhin über ihren eigenen Hotkey oder Menüeintrag.",
       settings: ["Bibliotheksknopf und Doppelklick auf die Leisten-Buttons: Expertenmenü → System & Daten → Werkzeugleiste; Logo, Titel und Leisten-Buttons: Rechtsklick auf die Kopfzeile.", "Schnelle Rastergrößen-Steuerung und sie erst beim Hovern zeigen, mehrere Ansichten: Expertenmenü → Funktionen → Ansichten und Schnellraster"],
     },
@@ -1055,7 +1055,7 @@ export const HELP_CONTENT = {
         "Bei Bedarf Unschärfe für Kacheln oder Medien, versteckte Namen im Expertenmenü aktivieren.",
       ],
       whatHappens:
-        "Der Ausschluss von Bildschirmaufnahmen macht das Fenster für Screenshot- und Aufnahmeprogramme unsichtbar, auch für die eigenen. Bleibt eine Aufnahme also leer, zuerst diese Einstellung prüfen. Eine optionale, standardmäßig ausgeschaltete Einstellung liest Text aus einem angehängten Bild, damit die Bibliothekssuche ihn auch findet; ein Treffer nur dort trägt die Kennzeichnung \"im Bild gefunden\", damit er nie wie ein zufälliger Treffer wirkt. Dieser erkannte Text bleibt sonst außerhalb der App: nirgends angezeigt, nie exportiert, nie synchronisiert, und in der Länge begrenzt. Wird das Bild entfernt oder ersetzt, ist der Text sofort weg, und das Ausschalten der Einstellung entfernt ihn aus jeder Kachel, auch im Papierkorb. Eine einzelne Kachel kann außerdem als vertraulich markiert werden; siehe \"Vertrauliche Kacheln\" weiter unten.",
+        "Der Ausschluss von Bildschirmaufnahmen macht das Fenster für Screenshot- und Aufnahmeprogramme unsichtbar, auch für die eigenen. Bleibt eine Aufnahme also leer, zuerst diese Einstellung prüfen. Eine optionale, standardmäßig ausgeschaltete Einstellung liest Text aus einem angehängten Bild, damit die Bibliothekssuche ihn auch findet; ein Treffer nur dort trägt die Kennzeichnung „im Bild gefunden“, damit er nie wie ein zufälliger Treffer wirkt. Dieser erkannte Text bleibt sonst außerhalb der App: nirgends angezeigt, nie exportiert, nie synchronisiert, und in der Länge begrenzt. Wird das Bild entfernt oder ersetzt, ist der Text sofort weg, und das Ausschalten der Einstellung entfernt ihn aus jeder Kachel, auch im Papierkorb. Eine einzelne Kachel kann außerdem als vertraulich markiert werden; siehe „Vertrauliche Kacheln“ weiter unten.",
       settings: ["Von Bildschirmaufnahmen ausschließen, Kacheln oder Medien unscharf machen, Namen verbergen: Expertenmenü → System & Daten → Datenschutz", "Text in angehängten Bildern für die Suche erfassen, Bildtext-Grenze: Expertenmenü → Bibliothek & Kopierverlauf → Suche", "Eine Kachel als vertraulich markieren, Sperr-Zeit des Tresors: Expertenmenü → System & Daten → Datenschutz"],
       tip: "Der Ausschluss von Bildschirmaufnahmen ist standardmäßig an: für normale Screenshots oder Aufnahmen dieses Fensters ausschalten.",
     },
@@ -1089,7 +1089,7 @@ export const HELP_CONTENT = {
       whatItIs: "Die Datenwartung bündelt Wartungswerkzeuge aus der Daten-Gruppe des Expertenmenüs.",
       howTo: ["Im Expertenmenü unter System & Daten die Gruppe Daten & Wartung öffnen.", "Den Papierkorb öffnen oder von dort importieren oder exportieren. Der Duplikat-Finder hat seinen eigenen Button „Duplikate finden“ in der Bibliothek."],
       whatHappens:
-        "Eine gelöschte Kachel liegt zunächst im Papierkorb mit eigener Aufbewahrungsdauer, bevor sie endgültig verschwindet. Der Duplikat-Finder markiert nur textlich fast identische Kacheln; er löscht von sich aus nichts. \"Letzte Meldungen\" hält eine kurze Liste der Fehlermeldungen fest, die nur kurz als Hinweis erschienen, mit Zeit und Ort; die Liste lässt sich in ihrem Fenster kopieren oder leeren. Die Einstellungen allein lassen sich in derselben Gruppe in eine Datei speichern und wieder laden.",
+        "Eine gelöschte Kachel liegt zunächst im Papierkorb mit eigener Aufbewahrungsdauer, bevor sie endgültig verschwindet. Der Duplikat-Finder markiert nur textlich fast identische Kacheln; er löscht von sich aus nichts. „Letzte Meldungen“ hält eine kurze Liste der Fehlermeldungen fest, die nur kurz als Hinweis erschienen, mit Zeit und Ort; die Liste lässt sich in ihrem Fenster kopieren oder leeren. Die Einstellungen allein lassen sich in derselben Gruppe in eine Datei speichern und wieder laden.",
       settings: ["Duplikat-Finder, Papierkorb-Aufbewahrung, Import und Export: Expertenmenü → System & Daten → Daten & Wartung", "Vor einem Zurücksetzen oder Alles-Löschen ein Backup anlegen: Expertenmenü → System & Daten → Daten & Wartung", "Letzte Meldungen und wie viel davon bleibt, Einstellungen exportieren und importieren, Rückgängig-Button: Expertenmenü → System & Daten → Daten & Wartung"],
     },
     {
@@ -1099,7 +1099,7 @@ export const HELP_CONTENT = {
       howTo: [
         "Die Backup-Verwaltung in den Einstellungen öffnen.",
         "Automatische Backups aktivieren und ein Intervall wählen, oder manuell eines erstellen.",
-        "Mit den zwei Knöpfen neben Backup erstellen ein Backup in eine Datei deiner Wahl speichern oder aus einer Datei importieren.",
+        "Mit den zwei Buttons neben „Backup erstellen“ ein Backup in eine Datei deiner Wahl speichern oder aus einer Datei importieren.",
         "Aus der Snapshot-Liste wiederherstellen und dabei nur Daten, nur Einstellungen oder beides wählen.",
       ],
       whatHappens:
@@ -1126,9 +1126,9 @@ export const HELP_CONTENT = {
       howTo: [
         "Klick auf Plus neben den Ansichts-Tabs fügt eine Ansicht hinzu.",
         "Rechtsklick auf einen Tab zum Umbenennen, Größenändern, Umfärben oder Löschen.",
-        "Einen Tab mit \"weiter nach links\" oder \"weiter nach rechts\" aus seinem Menü verschieben, oder ihn auf einen anderen Tab ziehen.",
+        "Einen Tab mit „weiter nach links“ oder „weiter nach rechts“ aus seinem Menü verschieben, oder ihn auf einen anderen Tab ziehen.",
       ],
-      whatHappens: "Eine Kachel sitzt normalerweise in genau einer Ansicht (wird sie woanders abgelegt, wandert sie dorthin), außer \"Kachel in mehreren Ansichten\" ist aktiv, was ab Werk aus ist. Das Löschen einer Ansicht löscht nicht die dort platzierten Kacheln; eine auch anderswo gezeigte Kachel funktioniert dort weiter.",
+      whatHappens: "Eine Kachel sitzt normalerweise in genau einer Ansicht (wird sie woanders abgelegt, wandert sie dorthin), außer „Kachel in mehreren Ansichten“ ist aktiv, was ab Werk aus ist. Das Löschen einer Ansicht löscht nicht die dort platzierten Kacheln; eine auch anderswo gezeigte Kachel funktioniert dort weiter.",
       settings: ["Mehrere Ansichten, Kachel in mehreren Ansichten, höchste Zahl an Ansichten: Expertenmenü → Funktionen → Ansichten und Schnellraster"],
     },
     {
@@ -1167,7 +1167,7 @@ export const HELP_CONTENT = {
         "Den globalen Hotkey in den Einstellungen festlegen (Standard: Strg+Alt+P).",
         "Einer Kachel im Editor einen eigenen Hotkey geben.",
         "Wählen, ob er nach dem Kopieren auch einfügen soll.",
-        "\"Alle Tastenkürzel\" neben dem globalen Feld öffnet eine Liste: oben globale Hotkeys und Hotkeys der Kacheln, durchsuchbar, darunter die Tasten jedes Fensters.",
+        "„Alle Tastenkürzel“ neben dem globalen Feld öffnet eine Liste: oben globale Hotkeys und Hotkeys der Kacheln, durchsuchbar, darunter die Tasten jedes Fensters.",
         "Jede Zeile wird dort direkt umbelegt oder gelöscht.",
         "Ist eine Kombination bereits vergeben, erklärt das Feld den Grund, statt sie stillschweigend zu akzeptieren.",
       ],
@@ -1226,7 +1226,7 @@ export const HELP_CONTENT = {
         "Ein Format aus der Auswahl neben dem Export-Button wählen; ein CSV- oder JSON-Import zeigt zuerst Name und Duplikat-Status je Eintrag.",
         "Ein vollständiges Backup stellt direkt wieder her, aus seinem eigenen Fenster.",
         "Zum tatsächlichen Import bestätigen, oder abbrechen, wodurch sich nichts ändert.",
-        "\"Ordner importieren\" in den Einstellungen macht aus einem Ordner mit .md- oder .txt-Dateien Kacheln, eine pro Datei, nach einer Vorschau mit einem Häkchen pro Datei.",
+        "„Ordner importieren“ in den Einstellungen macht aus einem Ordner mit .md- oder .txt-Dateien Kacheln, eine pro Datei, nach einer Vorschau mit einem Häkchen pro Datei.",
       ],
       whatHappens: "CSV und TXT transportieren nur Text; JSON trägt zusätzlich die vollen Rotationstexte einer Kachel mit Rotation, Tags, Notiz, Tastenkürzel und Farbe, die in den anderen beiden nicht sauber Platz finden. Bilder, Dateien, Layout und Einstellungen benötigen weiterhin das vollständige Backup-Format. Der Import entscheidet anhand des Dateiinhalts zwischen CSV und JSON, nie anhand der Endung. Ein Ordner-Import liest nur: Nichts wird verschoben oder gelöscht. Der Dateiname wird zum Namen, jeder Unterordner zum Tag, und eine unlesbare Datei erscheint ausgegraut mit dem Grund.",
       settings: ["Import und Export: Expertenmenü → System & Daten → Daten & Wartung", "Tiefe und Dateigrenze des Ordner-Imports: Expertenmenü → System & Daten → Daten & Wartung"],
@@ -1250,7 +1250,7 @@ export const HELP_CONTENT = {
       title: "Screenshot-Tool",
       whatItIs: "Das Screenshot-Tool erfasst einen Teil oder den gesamten Bildschirm direkt in eine neue Kachel.",
       howTo: [
-        "Auf den Knopf „Aufnehmen“ links vom Eingabefeld klicken und „Screenshot“ wählen.",
+        "Auf den Button „Aufnehmen“ links vom Eingabefeld klicken und „Screenshot“ wählen.",
         "Einen Bereich ziehen oder ein Fenster anklicken, um es ganz zu erfassen, auch geschützte.",
         "Im Bestätigungsdialog als Kachel speichern, als Datei speichern, oder einfach in der Zwischenablage belassen.",
       ],
@@ -1268,7 +1268,7 @@ export const HELP_CONTENT = {
         "Ein Werkzeug aus der Symbolleiste wählen: Zuschneiden, Stift, Marker, Linie, Pfeil, Rechteck, Ellipse, Text, Schrittnummer, Verpixeln, Fokusbereich oder Hand.",
         "Rechtsklick auf ein Rechteck, eine Ellipse, Linie, einen Pfeil oder eine verpixelte Fläche, um es zu duplizieren oder zu löschen; ein Fokusbereich lässt sich nur löschen.",
         "Pfeiltasten verschieben die gewählte Form, Strg+Pfeil ändert ihre Größe, Umschalt macht größere Schritte, Escape hebt die Auswahl auf.",
-        "\"Größe ändern\" ändert die echte Pixelgröße des Bildes; \"Original zeigen\" (oder V) zeigt die unbearbeitete Aufnahme, solange gedrückt, ein Tippen hält sie fest.",
+        "„Größe ändern“ ändert die echte Pixelgröße des Bildes; „Original zeigen“ (oder V) zeigt die unbearbeitete Aufnahme, solange gedrückt, ein Tippen hält sie fest.",
         "Mit Rückgängig/Wiederholen schrittweise durch die Bearbeitungen gehen; anschließend speichern.",
       ],
       whatHappens:
@@ -1280,7 +1280,7 @@ export const HELP_CONTENT = {
       title: "Datei im Editor öffnen",
       whatItIs: "Öffnet ein vorhandenes Bild oder Video in dem Editor, den sein Inhalt verlangt, statt einen Editor nur über eine frische Aufnahme zu erreichen.",
       howTo: [
-        "Auf den Knopf „Aufnehmen“ links vom Eingabefeld klicken, \"Datei im Editor öffnen\" wählen und die Datei aussuchen.",
+        "Auf den Button „Aufnehmen“ links vom Eingabefeld klicken, „Datei im Editor öffnen“ wählen und die Datei aussuchen.",
         "Oder per Rechtsklick auf eine Bild- oder Videokachel bzw. Bibliothekszeile Bild bearbeiten oder Video bearbeiten wählen.",
         "Wie gewohnt bearbeiten; beim Speichern wird nach dem Ziel gefragt.",
       ],
@@ -1294,13 +1294,13 @@ export const HELP_CONTENT = {
       id: "screenRecording",
       whatItIs: "Nimmt ein Fenster, einen Monitor oder einen gezogenen Bereich als Video auf, neben dem Screenshot-Werkzeug.",
       howTo: [
-        "Auf den Knopf „Aufnehmen“ links vom Eingabefeld klicken und \"Bildschirm aufnehmen\" {icon:record} wählen; ein Fenster anklicken, einen Bereich ziehen oder auf den freien Desktop klicken für den ganzen Bildschirm. Das ist dieselbe Übersicht wie beim Screenshot-Werkzeug.",
+        "Auf den Button „Aufnehmen“ links vom Eingabefeld klicken und „Bildschirm aufnehmen“ {icon:record} wählen; ein Fenster anklicken, einen Bereich ziehen oder auf den freien Desktop klicken für den ganzen Bildschirm. Das ist dieselbe Übersicht wie beim Screenshot-Werkzeug.",
         "Ein Countdown zählt optional herunter, bevor die Aufnahme wirklich startet.",
         "Eine kleine Bedienleiste zeigt Laufzeit und Dateigröße, zwei Ton-Stummschalt-Buttons und bietet Pause/Fortsetzen, Stopp und Verwerfen; zwei optionale globale Hotkeys sowie das Tray-Menü können sie ebenfalls stoppen oder pausieren/fortsetzen, aber nur, solange die Aufnahme wirklich läuft. Eine Fensteraufnahme mit der Leinwand für alle Bildschirme oder den aktuellen Bildschirm bekommt zusätzlich einen Button zum Wechseln des Aufnahmeziels, ohne von vorn zu beginnen.",
         "Stopp bietet Speichern, Speichern unter…, Kopieren, Bearbeiten oder Verwerfen an.",
       ],
       whatHappens:
-        "Aufgenommen wird immer MP4 (H.264); drei Qualitätsstufen (Klein/Hoch/Verlustfrei) tauschen Dateigröße gegen Bildschärfe, ein Format-Feld kann das Ergebnis danach in WebM, GIF oder AVI umwandeln (WebM und AVI entstehen aus dem MP4; GIF ist auf 30 Sekunden begrenzt und hat keinen Ton). Alles außer reinem MP4 sowie die Stufe Verlustfrei braucht ffmpeg (ein separater Download, direkt angeboten, wenn es fehlt); eine fehlgeschlagene oder abgebrochene Umwandlung fällt immer auf die unangetastete Originalaufnahme zurück. Systemton und Mikrofon werden beide standardmäßig aufgenommen, je als eigene Spur: die Mikrofonspur wird zwar aufgezeichnet, aber erst hörbar, wenn man sie später selbst im Video-Editor dazumischt; zieht man das Mikrofon während der Aufnahme ab, laufen Bild und Systemton weiter, nur diese Spur gilt als verloren. Die beiden Ton-Knöpfe in der Bedienleiste schalten Systemton oder Mikrofon sofort stumm, ohne die Spur zu beenden: eine stumme Quelle nimmt weiter Stille auf und lässt sich in derselben Aufnahme wieder zuschalten. Speichern und Kopieren teilen sich einen Aufnahme-Ordner; Bearbeiten öffnet den Clip im Video-Editor, ohne über sein Schicksal zu entscheiden; schließt man den Dialog danach, ohne gespeichert oder kopiert zu haben, wird die Datei trotzdem verworfen. Zieht man die Bedienleiste selbst (nicht ihre Knöpfe), folgt sie für den Rest dieser einen Aufnahme nicht mehr dem Aufnahmefenster, sondern bleibt frei beweglich stehen, auch auf einem anderen Monitor; die nächste Aufnahme folgt wieder von vorn, und die Leiste ist ansonsten nie Teil der Aufnahme. Schließt sich das aufgenommene Fenster von selbst, stoppt die Aufnahme automatisch und behält, was bis dahin aufgenommen wurde. Eine Aufnahme, die nie ordnungsgemäß gestoppt wurde (Absturz, erzwungenes Beenden), wird automatisch entfernt, sobald sie eine Schonfrist überschreitet; eine gerade gestoppte Aufnahme, die noch abgeschlossen wird, bleibt dabei unangetastet. Die Aufnahme-Ordner-Zeile im Expertenmenü zeigt Anzahl und Größe der enthaltenen Videos, mit einem „Aufräumen…“-Button, der Dateien älter als 7, 30 oder 90 Tage samt der frei werdenden Größe zur Bestätigung auflistet, bevor irgendetwas gelöscht wird. Eine optionale Tastenanzeige zeichnet auf, welche Tasten während einer Aufnahme gedrückt werden, nur als Tastenkennungen mit Zeitstempeln, nie als Textinhalt; sie zeigt ab Werk jede Taste, auch getippten Text, und lässt ein Passwortfeld aus, wenn Windows es als solches meldet, ohne dass das garantiert ist. Ein Schalter „Nur Tastenkürzel“ beschränkt die Aufzeichnung auf Kombinationen mit Strg, Alt oder Win sowie Enter, Tab, Esc, Rücktaste, Entf, Einfg, Pfeile, Pos1, Ende, Bild auf, Bild ab und F-Tasten, für Aufnahmen mit vertraulichen Eingaben. Derselbe Aufräum-Dialog hat ein Häkchen pro Datei: \"Auswahl exportieren\" wandelt alle angehakten Aufnahmen in einem Rutsch in Format, Qualität und Ordner der Wahl um und meldet, wie viele fertig wurden. Eine neue Installation löscht nicht verwendete Aufnahmen nach 90 Tagen (Expertenmenü, 0 = für immer).",
+        "Aufgenommen wird immer MP4 (H.264); drei Qualitätsstufen (Klein/Hoch/Verlustfrei) tauschen Dateigröße gegen Bildschärfe, ein Format-Feld kann das Ergebnis danach in WebM, GIF oder AVI umwandeln (WebM und AVI entstehen aus dem MP4; GIF ist auf 30 Sekunden begrenzt und hat keinen Ton). Alles außer reinem MP4 sowie die Stufe Verlustfrei braucht ffmpeg (ein separater Download, direkt angeboten, wenn es fehlt); eine fehlgeschlagene oder abgebrochene Umwandlung fällt immer auf die unangetastete Originalaufnahme zurück. Systemton und Mikrofon werden beide standardmäßig aufgenommen, je als eigene Spur: die Mikrofonspur wird zwar aufgezeichnet, aber erst hörbar, wenn man sie später selbst im Video-Editor dazumischt; zieht man das Mikrofon während der Aufnahme ab, laufen Bild und Systemton weiter, nur diese Spur gilt als verloren. Die beiden Ton-Buttons in der Bedienleiste schalten Systemton oder Mikrofon sofort stumm, ohne die Spur zu beenden: eine stumme Quelle nimmt weiter Stille auf und lässt sich in derselben Aufnahme wieder zuschalten. Speichern und Kopieren teilen sich einen Aufnahme-Ordner; Bearbeiten öffnet den Clip im Video-Editor, ohne über sein Schicksal zu entscheiden; schließt man den Dialog danach, ohne gespeichert oder kopiert zu haben, wird die Datei trotzdem verworfen. Zieht man die Bedienleiste selbst (nicht ihre Buttons), folgt sie für den Rest dieser einen Aufnahme nicht mehr dem Aufnahmefenster, sondern bleibt frei beweglich stehen, auch auf einem anderen Monitor; die nächste Aufnahme folgt wieder von vorn, und die Leiste ist ansonsten nie Teil der Aufnahme. Schließt sich das aufgenommene Fenster von selbst, stoppt die Aufnahme automatisch und behält, was bis dahin aufgenommen wurde. Eine Aufnahme, die nie ordnungsgemäß gestoppt wurde (Absturz, erzwungenes Beenden), wird automatisch entfernt, sobald sie eine Schonfrist überschreitet; eine gerade gestoppte Aufnahme, die noch abgeschlossen wird, bleibt dabei unangetastet. Die Aufnahme-Ordner-Zeile im Expertenmenü zeigt Anzahl und Größe der enthaltenen Videos, mit einem „Aufräumen…“-Button, der Dateien älter als 7, 30 oder 90 Tage samt der frei werdenden Größe zur Bestätigung auflistet, bevor irgendetwas gelöscht wird. Eine optionale Tastenanzeige zeichnet auf, welche Tasten während einer Aufnahme gedrückt werden, nur als Tastenkennungen mit Zeitstempeln, nie als Textinhalt; sie zeigt ab Werk jede Taste, auch getippten Text, und lässt ein Passwortfeld aus, wenn Windows es als solches meldet, ohne dass das garantiert ist. Ein Schalter „Nur Tastenkürzel“ beschränkt die Aufzeichnung auf Kombinationen mit Strg, Alt oder Win sowie Enter, Tab, Esc, Rücktaste, Entf, Einfg, Pfeile, Pos1, Ende, Bild auf, Bild ab und F-Tasten, für Aufnahmen mit vertraulichen Eingaben. Derselbe Aufräum-Dialog hat ein Häkchen pro Datei: „Auswahl exportieren“ wandelt alle angehakten Aufnahmen in einem Rutsch in Format, Qualität und Ordner der Wahl um und meldet, wie viele fertig wurden. Eine neue Installation löscht nicht verwendete Aufnahmen nach 90 Tagen (Expertenmenü, 0 = für immer).",
       settings: ["Bildschirmaufnahme, Countdown, Bitrate, Qualität, Format, Aufnahme-Ordner: Expertenmenü → Aufnehmen → Bildschirmaufnahme", "Mauszeiger, Tonquellen und -gerät, Stopp-/Pause-Hotkeys, Tray-Einträge, defekte Aufnahmen automatisch entfernen, Tastenanzeige, Rahmen um einen aufgenommenen Bereich und seine Farbe: Expertenmenü → Aufnehmen → Während der Aufnahme"],
     },
     {
@@ -1309,7 +1309,7 @@ export const HELP_CONTENT = {
       whatItIs: "Nimmt die Webcam in ein eigenes Video auf, allein oder neben einer Bildschirmaufnahme.",
       howTo: [
         "Die Kameraaufnahme im Expertenmenü einschalten.",
-        "Auf den Knopf „Aufnehmen“ links vom Eingabefeld klicken und „Kamera aufnehmen“ {icon:record} wählen.",
+        "Auf den Button „Aufnehmen“ links vom Eingabefeld klicken und „Kamera aufnehmen“ {icon:record} wählen.",
         "Im eigenen Fenster die Vorschau prüfen, Tonquelle, Auflösung und Ordner wählen, dann Start.",
       ],
       whatHappens:
@@ -1328,7 +1328,7 @@ export const HELP_CONTENT = {
         "Exportieren: bei reinem Kürzen greift ein verlustfreier Schnellpfad, sonst wird der ganze Clip einmal neu kodiert.",
       ],
       whatHappens:
-        "Bis zum Export wird nichts verarbeitet: Die Live-Vorschau spielt die Bearbeitungen direkt ab. Filmstreifen und Wellenform geben eine zoombare Übersicht über den ganzen Clip für bildgenaue Navigation. Die Vorschau selbst zoomt außerdem mit dem Mausrad (bis 8×) und lässt sich durch Ziehen verschieben (mit der mittleren Maustaste immer, mit der linken, sobald hineingezoomt ist), um ein kleines Overlay bei einer großen Aufnahme genau zu platzieren. Das Exportziel ist ein Eingabefeld: den Pfad direkt eintippen, oder „Exportieren nach…“, um nur den Ordner zu wechseln und den Dateinamen zu behalten; nach einem fertigen Export verschiebt „Speichern unter…“ das fertige Video an einen anderen Ort. Ein Formatwechsel ändert nur die Endung. „Exportieren und kopieren“ verzichtet ganz auf einen Namen und exportiert in eine selbst aufräumende temporäre Kopie (nach einer Stunde entfernt, und erneut beim nächsten Start), die direkt in der Zwischenablage landet. Ein paar fertige Export-Voreinstellungen (unveränderte Qualität, kleiner für Chat, animiertes GIF) merken sich die letzte Wahl. Die Formatauswahl beim Export bietet MP4, WebM, GIF und AVI, jeweils mit einem kurzen Hinweis, wofür es gedacht ist; GIF hat nie Ton, warnt ab zehn Sekunden Länge und ist auf eine Höchstauflösung begrenzt, da es schnell groß wird. Rückgängig/Wiederholen deckt jeden Bearbeitungsschritt ab, begrenzt durch ein einstellbares Limit. \"Video hinzufügen\" legt einen weiteren Clip als Überlagerung darüber, und die Überlagerung \\\"Tasten\\\" macht aus den während einer Aufnahme gedrückten Tasten ein Tastaturbild. Rechtsklick auf die Zeile einer Überlagerung dupliziert oder löscht sie. Ein Zuschnitt oder eine Überlagerung rastet beim Ziehen an den Bildkanten, an der Mitte und an anderen Überlagerungen ein; mit gehaltener Alt-Taste wird frei gezogen. Eine neue Überlagerung startet mit der zuletzt für ihre Art benutzten Farbe, Stärke und Größe. Unfertige Schnitte und Überlagerungen werden gemerkt, sodass das erneute Öffnen derselben Aufnahme das Weitermachen anbietet. Der Name der Exportdatei hat ein eigenes Feld; eine vorhandene Datei wird nie ersetzt, der Export nimmt den nächsten freien Namen.",
+        "Bis zum Export wird nichts verarbeitet: Die Live-Vorschau spielt die Bearbeitungen direkt ab. Filmstreifen und Wellenform geben eine zoombare Übersicht über den ganzen Clip für bildgenaue Navigation. Die Vorschau selbst zoomt außerdem mit dem Mausrad (bis 8×) und lässt sich durch Ziehen verschieben (mit der mittleren Maustaste immer, mit der linken, sobald hineingezoomt ist), um ein kleines Overlay bei einer großen Aufnahme genau zu platzieren. Das Exportziel ist ein Eingabefeld: den Pfad direkt eintippen, oder „Exportieren nach…“, um nur den Ordner zu wechseln und den Dateinamen zu behalten; nach einem fertigen Export verschiebt „Speichern unter…“ das fertige Video an einen anderen Ort. Ein Formatwechsel ändert nur die Endung. „Exportieren und kopieren“ verzichtet ganz auf einen Namen und exportiert in eine selbst aufräumende temporäre Kopie (nach einer Stunde entfernt, und erneut beim nächsten Start), die direkt in der Zwischenablage landet. Ein paar fertige Export-Voreinstellungen (unveränderte Qualität, kleiner für Chat, animiertes GIF) merken sich die letzte Wahl. Die Formatauswahl beim Export bietet MP4, WebM, GIF und AVI, jeweils mit einem kurzen Hinweis, wofür es gedacht ist; GIF hat nie Ton, warnt ab zehn Sekunden Länge und ist auf eine Höchstauflösung begrenzt, da es schnell groß wird. Rückgängig/Wiederholen deckt jeden Bearbeitungsschritt ab, begrenzt durch ein einstellbares Limit. „Video hinzufügen“ legt einen weiteren Clip als Überlagerung darüber, und die Überlagerung \\\"Tasten\\\" macht aus den während einer Aufnahme gedrückten Tasten ein Tastaturbild. Rechtsklick auf die Zeile einer Überlagerung dupliziert oder löscht sie. Ein Zuschnitt oder eine Überlagerung rastet beim Ziehen an den Bildkanten, an der Mitte und an anderen Überlagerungen ein; mit gehaltener Alt-Taste wird frei gezogen. Eine neue Überlagerung startet mit der zuletzt für ihre Art benutzten Farbe, Stärke und Größe. Unfertige Schnitte und Überlagerungen werden gemerkt, sodass das erneute Öffnen derselben Aufnahme das Weitermachen anbietet. Der Name der Exportdatei hat ein eigenes Feld; eine vorhandene Datei wird nie ersetzt, der Export nimmt den nächsten freien Namen.",
       settings: ["Video-Editor, Rückgängig-Limit, Überlagerungswerte merken, Einrasten an Kanten: Expertenmenü → Aufnehmen → Video-Editor", "Unfertige Video-Bearbeitungen merken, und wie viele Tage: Expertenmenü → Aufnehmen → Beide Editoren"],
       sketches: ["editorTimeline"],
     },
@@ -1338,7 +1338,7 @@ export const HELP_CONTENT = {
       id: "ocr",
       whatItIs: "Liest mit der geräteeigenen Erkennung von Windows Text aus einem Screenshot oder einer Bilddatei. Das läuft vollständig offline und nichts verlässt das Gerät.",
       howTo: [
-        "Über die Eingabeleiste: der Knopf „Aufnehmen“ links vom Eingabefeld {icon:ocr} bietet Text aus einem Screenshot oder aus einer vorhandenen Bilddatei an.",
+        "Über die Eingabeleiste: der Button „Aufnehmen“ links vom Eingabefeld {icon:ocr} bietet Text aus einem Screenshot oder aus einer vorhandenen Bilddatei an.",
         "Bei einem bereits aufgenommenen Screenshot: über den Button „Text erkennen“ im Aufnahme-Dialog.",
         "Das Ergebnis prüfen und anschließend kopieren oder direkt einfügen.",
       ],
@@ -1357,7 +1357,7 @@ export const HELP_CONTENT = {
         "Erneut klicken, Escape drücken, oder speichern/schließen, um zu stoppen.",
       ],
       whatHappens:
-        "Die Erkennung läuft lokal über die eigene Spracherkennung von Windows: es verlässt nichts das Gerät, außer die Online-Erkennung wird ausdrücklich erlaubt. Gesprochene Satzzeichen-Wörter (\"Komma\", \"neue Zeile\", …) werden zu echten Satzzeichen; \"wörtlich\" vor einem Wort tippt es statt es als Befehl auszulösen. Ein fehlendes Sprachpaket öffnet direkt den Sprachpaket-Dialog, gemeinsam mit der Texterkennung (OCR). Ein optionaler globaler Kurzbefehl startet und stoppt eine Aufnahme, ohne das Fenster zu öffnen. Der Text landet in der Zwischenablage, wird eingefügt oder geht direkt in die Eingabeleiste; das Taskleisten-Symbol zeigt währenddessen \"Nimmt auf …\" im Tooltip.",
+        "Die Erkennung läuft lokal über die eigene Spracherkennung von Windows: es verlässt nichts das Gerät, außer die Online-Erkennung wird ausdrücklich erlaubt. Gesprochene Satzzeichen-Wörter („Komma“, „neue Zeile“, …) werden zu echten Satzzeichen; „wörtlich“ vor einem Wort tippt es statt es als Befehl auszulösen. Ein fehlendes Sprachpaket öffnet direkt den Sprachpaket-Dialog, gemeinsam mit der Texterkennung (OCR). Ein optionaler globaler Kurzbefehl startet und stoppt eine Aufnahme, ohne das Fenster zu öffnen. Der Text landet in der Zwischenablage, wird eingefügt oder geht direkt in die Eingabeleiste; das Taskleisten-Symbol zeigt währenddessen „Nimmt auf …“ im Tooltip.",
       settings: ["Spracheingabe, Satzzeichen-Befehle, automatische Großschreibung, Stille-Auto-Stopp, Einfügeposition, globaler Hotkey: Expertenmenü → Funktionen → Diktat"],
     },
     {
@@ -1379,9 +1379,9 @@ export const HELP_CONTENT = {
       id: "colorPicker",
       whatItIs: "Die Farbpipette liest jeden Bildschirmpixel als Hex, RGB oder HSL aus.",
       howTo: [
-        "Auf den Knopf „Aufnehmen“ links vom Eingabefeld klicken und \"Farbe vom Bildschirm aufnehmen\" wählen.",
+        "Auf den Button „Aufnehmen“ links vom Eingabefeld klicken und „Farbe vom Bildschirm aufnehmen“ wählen.",
         "Die Lupe zum gewünschten Pixel bewegen; scrollen oder Plus/Minus zum Zoomen nutzen.",
-        "Klick kopiert die Farbe; im selben Menü öffnet \"Letzte Farben\" die letzten paar Auswahlen erneut.",
+        "Klick kopiert die Farbe; im selben Menü öffnet „Letzte Farben“ die letzten paar Auswahlen erneut.",
       ],
       whatHappens:
         "Es wird nie automatisch etwas in einer Kachel gespeichert; eine Auswahl landet nur in der Zwischenablage. Der Auswahlverlauf hält die letzten paar Farben und übersteht einen Neustart, begrenzt durch eine eigene Einstellung.",
@@ -1394,14 +1394,14 @@ export const HELP_CONTENT = {
       whatItIs: "Eine Kachel kann eine Liste von Texten statt nur einem tragen; jede Kopie liefert den nächsten Eintrag.",
       howTo: [
         "Die Rotation ist standardmäßig an; die Funktion im Expertenmenü ausschalten, falls nie genutzt.",
-        "Im Editor einer Kachel \"Rotation\" über dem Textbereich einschalten.",
+        "Im Editor einer Kachel „Rotation“ über dem Textbereich einschalten.",
         "Die Liste der Rotationstexte ersetzt dann das normale Textfeld.",
-        "Mit \"+ Rotationstext\" weitere Rotationstexte hinzufügen; Icons daneben sortieren um oder entfernen sie.",
+        "Mit „+ Rotationstext“ weitere Rotationstexte hinzufügen; Icons daneben sortieren um oder entfernen sie.",
         "Reihenfolge (der Reihe nach) oder Mischen (zufällig, ohne Wiederholung) wählen.",
         "Die Kachel wie gewohnt kopieren: sie liefert immer den nächsten Eintrag, ohne zu fragen, welchen.",
       ],
       whatHappens:
-        "Ein kleines Badge zählt auf einer Raster-Kachel, einem schwebenden Button und einem Mitglied eines Button-Ordners hoch, wie \"2/5\"; ein Kachelordner-Mitglied zeigt nur sein Dateityp-Icon, nicht dieses Badge. Im Reihenfolge-Modus ist das die absolute Position; im Zufalls-Modus zählt es die Ziehungen im aktuellen Durchlauf und beginnt wieder bei 1, sobald jeder Eintrag einmal drankam, statt auf eine beliebige Position zu springen. Der Zählerstand übersteht Neustarts und vollständige Backups; ein CSV/TXT-Import erstellt eine neue Kachel mit frischem Zeiger, sodass nur die Textliste und ihr Reihenfolge- oder Misch-Modus übernommen werden, nicht die genaue Position. Wird die Rotation bei einer Kachel mit mehreren Einträgen ausgeschaltet, bleiben alle erhalten; nur der erste wird genutzt, bis sie wieder aktiviert wird. Das optionale \"Beim Einfügen rotieren\" bringt eine Kachel mit Rotation bei jedem echten Einfügen zum nächsten Text, nicht nur beim Kopieren.",
+        "Ein kleines Badge zählt auf einer Raster-Kachel, einem schwebenden Button und einem Mitglied eines Button-Ordners hoch, wie „2/5“; ein Kachelordner-Mitglied zeigt nur sein Dateityp-Icon, nicht dieses Badge. Im Reihenfolge-Modus ist das die absolute Position; im Zufalls-Modus zählt es die Ziehungen im aktuellen Durchlauf und beginnt wieder bei 1, sobald jeder Eintrag einmal drankam, statt auf eine beliebige Position zu springen. Der Zählerstand übersteht Neustarts und vollständige Backups; ein CSV/TXT-Import erstellt eine neue Kachel mit frischem Zeiger, sodass nur die Textliste und ihr Reihenfolge- oder Misch-Modus übernommen werden, nicht die genaue Position. Wird die Rotation bei einer Kachel mit mehreren Einträgen ausgeschaltet, bleiben alle erhalten; nur der erste wird genutzt, bis sie wieder aktiviert wird. Das optionale „Beim Einfügen rotieren“ bringt eine Kachel mit Rotation bei jedem echten Einfügen zum nächsten Text, nicht nur beim Kopieren.",
       settings: ["Rotation (standardmäßig an), Standard Reihenfolge oder Mischen, Badge, maximale Rotationstexte, beim Einfügen rotieren: Expertenmenü → Funktionen → Rotation. Der Schalter pro Kachel sitzt im Editor über dem Eintragsbereich."],
     },
     {
@@ -1411,7 +1411,7 @@ export const HELP_CONTENT = {
       howTo: [
         "Einstellungen, dann das Expertenmenü öffnen.",
         "Einen Tab wählen, oder im Suchfeld tippen, um alle Tabs auf einmal zu durchsuchen.",
-        "\"Nur geänderte\" einschalten, um nur das zu sehen, was an den Standardwerten angepasst wurde.",
+        "„Nur geänderte“ einschalten, um nur das zu sehen, was an den Standardwerten angepasst wurde.",
       ],
       whatHappens:
         "Eine standardmäßig deaktivierte Funktion trägt ein kleines Punkt-Badge an ihrer Beschriftung, mit einem erklärenden Tooltip. Zurücksetzen funktioniert auf drei Ebenen: das eigene Rückgängig-Icon eines Werts, das Zurücksetzen-Icon einer ganzen Gruppe in ihrer Kopfzeile, oder alles auf einmal über die allgemeine Zurücksetzen-Aktion. Ein Profil zeigt zuerst, wie viele Einstellungen sich ändern würden, und bleibt nie als Modus gemerkt; Alles an lässt alles Zerstörerische und alles, was Daten nach außen schickt, aus. Die Suche findet auch Einstellungen außerhalb des Expertenmenüs, etwa im Einstellungsfenster oder im Fenster der Backups, mit einem Hinweis, wo sie liegen; ein Klick öffnet diese Stelle.",
@@ -1448,9 +1448,9 @@ export const HELP_CONTENT = {
       howTo: [
         "promptsaver-Links im Expertenmenü einschalten, damit ein Link eine Kachel öffnen oder kopieren kann.",
         "Den Fernzugriff einschalten, damit ein anderes Programm auf diesem Rechner Befehle senden kann; das einmal angezeigte Passwort kopieren.",
-        "Für andere Geräte \"Aus dem lokalen Netzwerk zulassen\" einschalten und die erlaubten Adressbereiche eintragen.",
-        "\"Zertifikat…\" öffnen, um den Fingerabdruck zu sehen, das Zertifikat für das andere Gerät zu speichern oder ein neues zu erzeugen.",
-        "Für iPhone, iPad oder Mac \"Kurzes Zertifikat für Apple-Geräte (825 Tage)\" einschalten; das Umschalten fragt zuerst nach und erzeugt dann ein neues Zertifikat.",
+        "Für andere Geräte „Aus dem lokalen Netzwerk zulassen“ einschalten und die erlaubten Adressbereiche eintragen.",
+        "„Zertifikat…“ öffnen, um den Fingerabdruck zu sehen, das Zertifikat für das andere Gerät zu speichern oder ein neues zu erzeugen.",
+        "Für iPhone, iPad oder Mac „Kurzes Zertifikat für Apple-Geräte (825 Tage)“ einschalten; das Umschalten fragt zuerst nach und erzeugt dann ein neues Zertifikat.",
       ],
       whatHappens:
         "Beides ist ab Werk aus. Ein Link kann nur öffnen oder kopieren, nie ändern oder löschen, und das erste Öffnen und das erste Kopieren fragen je einmal nach. Der Empfänger startet nie ohne Passwort, und die App speichert es nur in einer Form, aus der es nicht wieder lesbar wird; zehn falsche Versuche sperren den Aufrufer zehn Minuten. Anfragen sind in Größe und Anzahl begrenzt und werden ohne das Passwort protokolliert. Solange er läuft, bleibt ein Banner mit Port und Ausschalter sichtbar. Ohne den Netzwerk-Schalter lauscht er nur auf diesem Rechner; mit ihm ist die Verbindung verschlüsselt, und jedes Gerät muss dem gespeicherten Zertifikat vertrauen. Ein neues Zertifikat ersetzt das alte sofort, jedes Gerät braucht dann die neue Datei; nach einer geänderten Netzwerkadresse dieses Rechners ein neues erzeugen. Das Zurücksetzen der Einstellungen schaltet Fernzugriff und Links aus. Das Zertifikat gilt 10 Jahre, mit der kurzen Einstellung 825 Tage, was Apple-Geräte verlangen; Geräte brauchen dann etwa alle zwei Jahre das neue Zertifikat. Ein abgelaufenes Zertifikat wird beim Start des Empfängers erneuert, mit einer Meldung.",
@@ -1493,7 +1493,7 @@ export const HELP_CONTENT = {
         "Ein angebotenes Update annehmen, um es mit einem Klick herunterzuladen und zu installieren.",
       ],
       whatHappens:
-        "Die Update-Prüfung ist zusammen mit einem Download des Microsoft-WebView2-Installers beim ersten Start, falls diese Laufzeit fehlt, eine von nur zwei Arten von Netzwerkverkehr, den die App von sich aus macht. Ein heruntergeladenes Update wird vor der Ausführung anhand einer veröffentlichten Prüfsumme verifiziert: eine fehlende oder falsche Prüfsumme blockiert die Installation, statt eine unbestätigte Datei auszuführen. Die dritte und letzte Art ist ffmpeg, für Videoexport/-konvertierung: Eine installierte Version bringt es mit und greift dafür nie auf das Netzwerk zu, eine portable Version bietet einen einmaligen Download nur an, wenn eine Videofunktion es tatsächlich braucht, und nur mit ausdrücklicher Zustimmung, nie automatisch, nie im Hintergrund. Nach einem Update verlinkt eine kleine Meldung auf die Änderungen. Das Fenster Über, neben \"Update suchen\" in den Einstellungen, zeigt die Version, die ganze Änderungsgeschichte und jeden mitgelieferten Open-Source-Bestandteil mit seiner Lizenz.",
+        "Die Update-Prüfung ist zusammen mit einem Download des Microsoft-WebView2-Installers beim ersten Start, falls diese Laufzeit fehlt, eine von nur zwei Arten von Netzwerkverkehr, den die App von sich aus macht. Ein heruntergeladenes Update wird vor der Ausführung anhand einer veröffentlichten Prüfsumme verifiziert: eine fehlende oder falsche Prüfsumme blockiert die Installation, statt eine unbestätigte Datei auszuführen. Die dritte und letzte Art ist ffmpeg, für Videoexport/-konvertierung: Eine installierte Version bringt es mit und greift dafür nie auf das Netzwerk zu, eine portable Version bietet einen einmaligen Download nur an, wenn eine Videofunktion es tatsächlich braucht, und nur mit ausdrücklicher Zustimmung, nie automatisch, nie im Hintergrund. Nach einem Update verlinkt eine kleine Meldung auf die Änderungen. Das Fenster Über, neben „Update suchen“ in den Einstellungen, zeigt die Version, die ganze Änderungsgeschichte und jeden mitgelieferten Open-Source-Bestandteil mit seiner Lizenz.",
       settings: ["Auto-Update und wie oft es prüft: Einstellungen"],
     },
     {
@@ -1501,10 +1501,10 @@ export const HELP_CONTENT = {
       title: "Häufige Fragen",
       whatItIs: "Dieser Abschnitt beantwortet die am häufigsten auftauchenden Fragen.",
       howTo: [
-        "\"Mein Screenshot ist leer\": der Bildschirmaufnahme-Ausschluss funktioniert wie vorgesehen; bei Bedarf im Expertenmenü ausschalten.",
-        "\"Die App startet nicht\": sie benötigt die Microsoft-WebView2-Laufzeit, vom Installer automatisch angeboten.",
-        "\"Ich finde eine Einstellung nicht\": das Suchfeld im Expertenmenü durchsucht alle Tabs auf einmal.",
-        "\"Ein Hotkey bewirkt nichts\": eine andere App hält diese Kombination möglicherweise bereits; der Editor erklärt, warum.",
+        "„Mein Screenshot ist leer“: der Bildschirmaufnahme-Ausschluss funktioniert wie vorgesehen; bei Bedarf im Expertenmenü ausschalten.",
+        "„Die App startet nicht“: sie benötigt die Microsoft-WebView2-Laufzeit, vom Installer automatisch angeboten.",
+        "„Ich finde eine Einstellung nicht“: das Suchfeld im Expertenmenü durchsucht alle Tabs auf einmal.",
+        "„Ein Hotkey bewirkt nichts“: eine andere App hält diese Kombination möglicherweise bereits; der Editor erklärt, warum.",
       ],
       settings: [],
     },
