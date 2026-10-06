@@ -5215,6 +5215,11 @@ button.tag-chip:hover { border-color: var(--accent); }
 /* The filter row carries the SAME chip metrics as the type filter above it, or the
    two rows read as two different controls stacked by accident. */
 .lib-tagbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+/* The copy history header is already two filter rows tall; its tag row stays one line and
+   scrolls sideways (no visible bar, like the expert menu tab strip) instead of wrapping
+   into a third. */
+#journal-tags { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+#journal-tags > * { flex: 0 0 auto; white-space: nowrap; }
 .tag-chip.tag-filter {
   padding: 5px 12px;
   border: 1px solid var(--border);

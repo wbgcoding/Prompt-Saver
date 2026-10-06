@@ -304,6 +304,7 @@ ABOUT = """
 # (name, probe, width, height, UI language)
 CASES = (
     ("counts", COUNTS, 1000, 800, "en"),
+    ("history-tags", HISTORY_TAGS, MIN_W, 800, "en"),
 )
 
 LANGS = ("en", "de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro")
