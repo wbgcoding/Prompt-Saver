@@ -17559,6 +17559,33 @@ fn ending_a_snip_parks_the_overlay_tiny_and_off_screen() {
 }
 
 #[test]
+fn even_dim_rounds_down_to_even_with_a_floor_of_two() {
+    assert_eq!(recording::even_dim(1008), 1008);
+    assert_eq!(recording::even_dim(163), 162);
+    assert_eq!(recording::even_dim(1921), 1920);
+    assert_eq!(recording::even_dim(2), 2);
+    assert_eq!(recording::even_dim(3), 2);
+    assert_eq!(recording::even_dim(1), 2);
+    assert_eq!(recording::even_dim(0), 2);
+}
+
+#[test]
+fn discard_empty_output_removes_only_an_empty_file() {
+    let dir = std::env::temp_dir().join(format!("ps-discard-empty-{}", std::process::id()));
+    fs::create_dir_all(&dir).unwrap();
+    let empty = dir.join("rec-empty.mp4");
+    fs::write(&empty, b"").unwrap();
+    assert!(recording::discard_empty_output(&empty));
+    assert!(!empty.exists());
+    let full = dir.join("rec-full.mp4");
+    fs::write(&full, b"data").unwrap();
+    assert!(!recording::discard_empty_output(&full));
+    assert!(full.exists());
+    assert!(!recording::discard_empty_output(&dir.join("missing.mp4")));
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn uia_class_order_prefers_the_eight_class_and_falls_back() {
     use windows::Win32::UI::Accessibility::{CUIAutomation, CUIAutomation8};
     let order = keylog::uia_class_order();

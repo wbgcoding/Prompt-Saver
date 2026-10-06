@@ -135,7 +135,13 @@ export function bindCapture() {
         recordToolUsage("recording_start");
         setRecordBtnState("recording");
         await invoke("show_rec_bar", { targetKind: kind, id: targetId });
-      } catch (err) { errToast(err); }
+      } catch (err) {
+        // A refused start leaves no recording: close any bar and put the
+        // record button back before the single error toast.
+        invoke("hide_rec_bar").catch(() => {});
+        setRecordBtnState("idle");
+        errToast(err);
+      }
     };
     // Checked before the countdown even starts -- discovering low disk space
     // only after a 3-2-1 count would just waste the user's time on a "no" answer.

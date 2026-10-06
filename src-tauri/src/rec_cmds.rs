@@ -296,7 +296,20 @@ pub(crate) async fn start_recording(
         )
     })
     .await
-    .map_err(|e| e.to_string())??;
+    .map_err(|e| e.to_string())
+    .and_then(|r| r);
+    let session = match session {
+        Ok(s) => s,
+        Err(e) => {
+            // A refused start (the encoder rejected the type, the target is
+            // gone) must leave nothing behind: no control bar, and the
+            // composer's record button back to idle. recording::start has
+            // already deleted the empty output file.
+            super::rec_bar::hide_rec_bar(app.clone());
+            let _ = app.emit("recording-cancelled", ());
+            return Err(e);
+        }
+    };
     // Started BEFORE the session is published: a stop/cancel racing in the
     // instant after publish used to see an already-live recording with no
     // key-overlay capture yet, since maybe_start ran only after that publish

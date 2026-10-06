@@ -74,8 +74,26 @@ fn resolve_capture_item(target: RecTarget) -> Result<CaptureItem, String> {
 // whole frame (Monitor/Window targets).
 fn resolve_crop(target: RecTarget) -> Option<(u32, u32, u32, u32)> {
     match target {
-        RecTarget::Region { x, y, w, h, .. } => Some((x.max(0) as u32, y.max(0) as u32, w, h)),
+        RecTarget::Region { x, y, w, h, .. } => Some((x.max(0) as u32, y.max(0) as u32, even_dim(w), even_dim(h))),
         _ => None,
+    }
+}
+
+// The H.264 Media Foundation encoder rejects an odd width or height
+// (0xC00DA412), so every size that reaches it is rounded DOWN to even
+// (the picture then stays inside the captured area) with a floor of 2
+// so a 1-px edge never becomes an empty size.
+pub(crate) fn even_dim(n: u32) -> u32 {
+    (n & !1).max(2)
+}
+
+// Removes the output file a failed start left behind: the encoder creates
+// it before it can reject the type, so a refused start leaves a 0-byte
+// file. A file with content is never touched. Returns whether it deleted.
+pub(crate) fn discard_empty_output(path: &Path) -> bool {
+    match fs::metadata(path) {
+        Ok(m) if m.is_file() && m.len() == 0 => fs::remove_file(path).is_ok(),
+        _ => false,
     }
 }
 
@@ -188,7 +206,7 @@ impl GraphicsCaptureApiHandler for RecHandler {
             placement.used_area.update(clamped_x, clamped_y, width.min(ew) as u32, height.min(eh) as u32);
             let (padded, padded_stride) = place_frame_in_canvas(fb.as_raw_buffer(), width, height, stride, ew, eh, at_x, at_y);
             crop_and_flip_rows_bottom_up(&padded, ew, eh, padded_stride, 0, 0, ew, eh)
-        } else if self.crop.is_none() && (width as u32, height as u32) != self.enc_size {
+        } else if self.crop.is_none() && (even_dim(width as u32), even_dim(height as u32)) != self.enc_size {
             // Live resize: re-anchor the frame into the encoder's original,
             // fixed canvas instead of passing through the now-mismatched
             // size. Grown past the canvas in either dimension -> scale the
@@ -204,7 +222,9 @@ impl GraphicsCaptureApiHandler for RecHandler {
             };
             crop_and_flip_rows_bottom_up(&padded, ew, eh, padded_stride, 0, 0, ew, eh)
         } else {
-            let (cx, cy, cw, ch) = self.crop.unwrap_or((0, 0, width as u32, height as u32));
+            // An odd-sized frame whose even-rounded size is the encoder size
+            // drops its last odd row/column here.
+            let (cx, cy, cw, ch) = self.crop.unwrap_or((0, 0, even_dim(width as u32), even_dim(height as u32)));
             crop_and_flip_rows_bottom_up(
                 fb.as_raw_buffer(), width, height, stride,
                 cx as usize, cy as usize, cw as usize, ch as usize,
@@ -577,19 +597,20 @@ fn resolve_target_size(target: RecTarget) -> Result<(u32, u32), String> {
         if w == 0 || h == 0 {
             return Err("region has no size".to_string());
         }
-        return Ok((w, h));
+        return Ok((even_dim(w), even_dim(h)));
     }
     match resolve_capture_item(target)? {
-        CaptureItem::Monitor(m) => {
-            Ok((m.width().map_err(|e| e.to_string())?, m.height().map_err(|e| e.to_string())?))
-        }
+        CaptureItem::Monitor(m) => Ok((
+            even_dim(m.width().map_err(|e| e.to_string())?),
+            even_dim(m.height().map_err(|e| e.to_string())?),
+        )),
         CaptureItem::Window(w) => {
             let width = w.width().map_err(|e| e.to_string())?;
             let height = w.height().map_err(|e| e.to_string())?;
             if width <= 0 || height <= 0 {
                 return Err("window has no visible size".to_string());
             }
-            Ok((width as u32, height as u32))
+            Ok((even_dim(width as u32), even_dim(height as u32)))
         }
     }
 }
@@ -673,6 +694,16 @@ pub struct RecStartOptions {
 pub fn start(
     target: RecTarget, output_path: PathBuf, audio: AudioConfig, canvas_mode: &str, opts: RecStartOptions,
 ) -> Result<RecSession, String> {
+    let result = start_inner(target, output_path.clone(), audio, canvas_mode, opts);
+    if result.is_err() {
+        discard_empty_output(&output_path);
+    }
+    result
+}
+
+fn start_inner(
+    target: RecTarget, output_path: PathBuf, audio: AudioConfig, canvas_mode: &str, opts: RecStartOptions,
+) -> Result<RecSession, String> {
     let RecStartOptions { show_cursor, video_kbps, video_fps, canvas_ceiling, disk_warn_mb, max_min, max_mb } = opts;
     let (native_w, native_h) = resolve_target_size(target)?;
     let audio_active = audio.system || audio.mic;
@@ -695,7 +726,8 @@ pub fn start(
     };
     let mut built: Option<(VideoEncoder, CanvasCandidate)> = None;
     let mut last_err = String::new();
-    for cand in candidates {
+    for mut cand in candidates {
+        cand.size = (even_dim(cand.size.0), even_dim(cand.size.1));
         let kbps = if cand.placement {
             scale_bitrate_to_used_area(video_kbps, native_w, native_h, cand.size.0, cand.size.1)
         } else {
@@ -855,7 +887,7 @@ pub(crate) fn target_fits_canvas(
 ) -> bool {
     match canvas_note {
         Some("all") => true,
-        Some("monitor") => new_monitor == Some((canvas_origin.0, canvas_origin.1, canvas_size.0, canvas_size.1)),
+        Some("monitor") => new_monitor.map(|(l, t, w, h)| (l, t, even_dim(w), even_dim(h))) == Some((canvas_origin.0, canvas_origin.1, canvas_size.0, canvas_size.1)),
         _ => false,
     }
 }
