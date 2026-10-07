@@ -1050,7 +1050,9 @@ body.chain-mode:not(.grid-selecting) .tile .tile-select { opacity: 0; pointer-ev
   font-weight: 600;
 }
 .tile-folder-grid { display: grid; gap: 6px; }
-.folder-member-tile {
+/* Under .tile-folder-pop so it outranks the generic .ctx button rule (font, padding,
+   border), which otherwise turned members into thin, borderless buttons. */
+.tile-folder-pop .folder-member-tile {
   position: relative;
   display: flex;
   align-items: center;
@@ -1065,6 +1067,7 @@ body.chain-mode:not(.grid-selecting) .tile .tile-select { opacity: 0; pointer-ev
   color: var(--fg);
   font: inherit;
   font-size: 12px;
+  font-weight: 600; /* matches .tile and the measuring ruler */
   cursor: pointer;
   transition: border-color var(--transition), transform var(--transition), opacity var(--transition);
 }
@@ -1337,6 +1340,10 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
 #library .modal { width: min(var(--lib-width, 900px), 95vw); height: var(--full-modal-h); max-height: var(--full-modal-h); overflow: hidden auto; }
 /* The two tabs of the library: one panel each, the dialog keeps one size. */
 .lib-tabs { display: flex; gap: 4px; margin-left: 12px; }
+/* Library head: title, tabs and the close X on the first line, the tab's own actions
+   as a toolbar on the line below, so the X always keeps its corner. */
+#library-close { order: 1; margin-left: auto; }
+#library .modal-head > .modal-head-actions { order: 2; flex: 1 1 100%; justify-content: flex-start; }
 .lib-tab {
   padding: 5px 12px;
   border: 1px solid var(--border);
@@ -2474,17 +2481,21 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
 /* The expert dialog's tabs stay on one line; a window too narrow for all six scrolls the bar sideways. */
 #expert-tabs-bar .expert-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
 #expert-tabs-bar .expert-tab { flex: 0 0 auto; white-space: nowrap; }
-/* A soft fade on the edge that still has tabs behind it; expertMenu.js keeps data-fade
-   (start, end, both) in step with the scroll position. */
-#expert-tabs-bar .expert-tabs[data-fade="end"] {
+/* A soft fade on the edge that still has tabs behind it (expert tabs, header view
+   tabs); syncEdgeFade in core.js keeps data-fade (start, end, both) in step with the
+   scroll position. */
+#expert-tabs-bar .expert-tabs[data-fade="end"],
+.views[data-fade="end"] {
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
   mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
 }
-#expert-tabs-bar .expert-tabs[data-fade="start"] {
+#expert-tabs-bar .expert-tabs[data-fade="start"],
+.views[data-fade="start"] {
   -webkit-mask-image: linear-gradient(to right, transparent, #000 28px);
   mask-image: linear-gradient(to right, transparent, #000 28px);
 }
-#expert-tabs-bar .expert-tabs[data-fade="both"] {
+#expert-tabs-bar .expert-tabs[data-fade="both"],
+.views[data-fade="both"] {
   -webkit-mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
   mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
 }

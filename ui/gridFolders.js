@@ -309,13 +309,16 @@ export function openTileFolderPop(f, anchor) {
   // Same text sizing rule as the grid: auto-fit when the grid auto-fits or the
   // prompt asks for it, the box being the member tile minus its border and padding.
   const globalAuto = Number(settings.tile_size) === 0;
+  // The same air around the text as on a grid tile (fitAllTiles in tiles.js).
+  const airX = 2 * Math.round(memberW * 0.04);
+  const airY = memberH >= 80 ? 2 * 16 : 2 * 4;
   for (const btn of grid.children) {
     if (!globalAuto && btn.dataset.fitMode !== "auto") continue;
     const cs = getComputedStyle(btn);
     // clientWidth/Height already leave out the border; floor because scrollWidth/Height
     // are integers and a fractional box can fail its own <= check.
-    fitTileText(btn, Math.floor(btn.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)),
-      Math.floor(btn.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom)));
+    fitTileText(btn, Math.floor(btn.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - airX),
+      Math.floor(btn.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - airY));
   }
 }
 

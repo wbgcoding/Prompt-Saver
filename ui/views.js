@@ -1,6 +1,6 @@
 // View tabs, the view modal, the grid-size number popup, the examples banner and the
 // favourites view.
-import { $, assignFavView, assignPrompts, assignSettings, cellKey, clampGrid, confirmIfNoUndo, disarmButton, drag, DRAG_THRESHOLD, errToast, favView, flag, gridEl, gridSelected, inkShadow, invoke, journalThumbCache, libraryEl, libThumbCache, openColorPop, optFlag, PLUS_ICON, prompts, pruneThumbCache, readableInk, settings, t, TB_CHECK, toast, undoToast, val, viewsEl } from "./core.js";
+import { $, assignFavView, assignPrompts, assignSettings, cellKey, clampGrid, confirmIfNoUndo, disarmButton, drag, DRAG_THRESHOLD, errToast, favView, flag, gridEl, gridSelected, inkShadow, invoke, journalThumbCache, libraryEl, libThumbCache, openColorPop, optFlag, PLUS_ICON, prompts, pruneThumbCache, readableInk, settings, syncEdgeFade, t, TB_CHECK, toast, undoToast, val, viewsEl } from "./core.js";
 import { placePopover, placePopoverAt } from "./popover.js";
 import { EXAMPLE_IMAGE_DATA_URL } from "./exampleAssets.js";
 import { buildTile, fitAllTiles, pruneVideoCache } from "./tiles.js";
@@ -384,6 +384,7 @@ export function renderViews() {
     viewsEl.appendChild(add);
   }
   viewsEl.classList.toggle("hidden", viewsEl.childElementCount === 0);
+  syncEdgeFade(viewsEl);
 }
 
 export async function switchToView(id) {
@@ -920,6 +921,9 @@ export function wireNumPop() {
 }
 
 export function wireViews() {
+  // A narrow window scrolls the view tabs sideways; a soft fade marks the hidden side.
+  viewsEl.addEventListener("scroll", () => syncEdgeFade(viewsEl), { passive: true });
+  if (typeof ResizeObserver === "function") new ResizeObserver(() => syncEdgeFade(viewsEl)).observe(viewsEl);
   miniMenu.className = "ctx tab-menu hidden";
   miniMenu.setAttribute("role", "menu");
   document.body.appendChild(miniMenu);

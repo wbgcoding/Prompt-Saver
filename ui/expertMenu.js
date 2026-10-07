@@ -1,5 +1,5 @@
 // Expert menu: the renderer, its rows and the live-state parts of the setting registry.
-import { $, armButton, assignBUBBLE_MS, assignDISARM_MS, assignDRAG_THRESHOLD, assignHISTORY_PREVIEW_LEN, assignINPUT_MAX, assignLibraryTab, assignPrompts, assignROTATE_SHORT_MAX, assignSettings, assignTOAST_MS, COLORS, debounced, DEFAULT_COLORS, DICT, DISARM_MS, disarmButton, errText, errToast, ETA_MIN_PCT, ETA_MIN_SECS, EXPERT_ACTIONS, flag, flagState, gateOpen, HEADER_PAD_Y, HEX_RE, ICON_UNDO, ICON_WARN, invoke, LANG, listen, modal, openColorPop, optFlag, PALETTE_LEN, prompts, putIcon, setStatusText, settings, settingsEl, shipsOn, t, toast, txt, val } from "./core.js";
+import { $, armButton, assignBUBBLE_MS, assignDISARM_MS, assignDRAG_THRESHOLD, assignHISTORY_PREVIEW_LEN, assignINPUT_MAX, assignLibraryTab, assignPrompts, assignROTATE_SHORT_MAX, assignSettings, assignTOAST_MS, COLORS, debounced, DEFAULT_COLORS, DICT, DISARM_MS, disarmButton, errText, errToast, ETA_MIN_PCT, ETA_MIN_SECS, EXPERT_ACTIONS, flag, flagState, gateOpen, HEADER_PAD_Y, HEX_RE, ICON_UNDO, ICON_WARN, invoke, LANG, listen, modal, openColorPop, optFlag, PALETTE_LEN, prompts, putIcon, setStatusText, settings, settingsEl, shipsOn, syncEdgeFade, t, toast, txt, val } from "./core.js";
 import { ALL_FLAG_KEYS, normScreenshotFormat, EXPERT_BULK_NEVER, EXPERT_RESET_KEEP, EXPERT_SELECTS, EXPERT_TABS, EXPERT_TIP_SET, EXPERT_VALUES, FLAG_GATES, flagLabelKey, GRID_DOM_VALUES, groupFlags, OPT_FLAG_KEYS, REC_QUALITY_BITRATE, SETTINGS_AREA_LABEL, STYLE_OPTS, TILE_DOM_FLAGS, TILE_STYLES } from "./expertConfig.js";
 import { confirmDialog, infoDialog } from "./dialog.js";
 import { refreshFavViewUi, renderGrid, renderViews } from "./views.js";
@@ -1956,17 +1956,6 @@ export function emitExpertRows(list, parent, actionById, depth) {
   }
 }
 
-// Which edge of the tab strip still has tabs behind it: drives the soft fade (CSS).
-function syncTabFade(bar) {
-  const more = bar.scrollWidth - bar.clientWidth > 1;
-  const start = more && bar.scrollLeft > 1;
-  const end = more && bar.scrollLeft < bar.scrollWidth - bar.clientWidth - 1;
-  if (start && end) bar.dataset.fade = "both";
-  else if (start) bar.dataset.fade = "start";
-  else if (end) bar.dataset.fade = "end";
-  else delete bar.dataset.fade;
-}
-
 // Scrolls the strip sideways (never the dialog) until the active tab is fully on screen,
 // clear of the fade at either edge.
 function showActiveTab(bar) {
@@ -2009,9 +1998,9 @@ export function renderExpert() {
     // chosen tab fully into view.
     bar.scrollLeft = keepTabScroll;
     showActiveTab(bar);
-    syncTabFade(bar);
-    bar.addEventListener("scroll", () => syncTabFade(bar), { passive: true });
-    if (typeof ResizeObserver === "function") new ResizeObserver(() => { showActiveTab(bar); syncTabFade(bar); }).observe(bar);
+    syncEdgeFade(bar);
+    bar.addEventListener("scroll", () => syncEdgeFade(bar), { passive: true });
+    if (typeof ResizeObserver === "function") new ResizeObserver(() => { showActiveTab(bar); syncEdgeFade(bar); }).observe(bar);
   }
   const tabs = globalView ? EXPERT_TABS : [EXPERT_TABS[expertTab]];
   const collapsed = expertCollapsedSet();

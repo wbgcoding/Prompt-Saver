@@ -143,6 +143,18 @@ export function assignAppVersion(v) { appVersion = v; }
 // A status line that carries a live value ("Version 1.6.0", a port, a host) is
 // remembered as key + token + value, so applyI18n can draw it again after a
 // language switch instead of leaving the old language standing.
+// Which edge of a sideways-scrolling strip still has content behind it: sets data-fade
+// (start, end, both) for the soft edge fade in CSS.
+export function syncEdgeFade(bar) {
+  const more = bar.scrollWidth - bar.clientWidth > 1;
+  const start = more && bar.scrollLeft > 1;
+  const end = more && bar.scrollLeft < bar.scrollWidth - bar.clientWidth - 1;
+  if (start && end) bar.dataset.fade = "both";
+  else if (start) bar.dataset.fade = "start";
+  else if (end) bar.dataset.fade = "end";
+  else delete bar.dataset.fade;
+}
+
 export function setStatusText(el, key, token, value) {
   if (!el) return;
   el.dataset.statusKey = key;
