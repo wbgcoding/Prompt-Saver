@@ -2429,7 +2429,7 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
 /* Hand-drawn help diagrams instead of screenshots, coloured entirely through
    currentColor so every theme stays readable and no image ever goes stale. */
 .help-sketch { margin: 2px 0; color: var(--fg); max-width: 100%; }
-.help-sketch svg { display: block; width: 100%; height: auto; max-width: 420px; }
+.help-sketch svg { display: block; width: 100%; height: auto; max-width: 520px; }
 .value-field { gap: 6px; }
 .value-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .value-head span { font-size: 13px; color: var(--fg); }

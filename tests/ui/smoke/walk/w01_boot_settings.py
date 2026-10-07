@@ -233,6 +233,17 @@ SECTION = """\
           if (empties.length) out.errors.push(empties.length + ' help category has an empty overview (tab ' + i + ')');
           if (document.querySelector('#help-body .help-tip')) sawTip = true;
           if (document.querySelector('#help-body .help-sketch svg')) sawSketch = true;
+          // 790: every shape and label of a help sketch stays inside its own canvas.
+          for (const svg790 of document.querySelectorAll('#help-body .help-sketch svg')) {
+            if (!svg790.getClientRects().length) continue;
+            const vb790 = svg790.viewBox.baseVal;
+            for (const el790 of svg790.querySelectorAll('text, rect, line, path, circle')) {
+              const b790 = el790.getBBox();
+              if (b790.x < vb790.x - 0.5 || b790.y < vb790.y - 0.5 || b790.x + b790.width > vb790.x + vb790.width + 0.5 || b790.y + b790.height > vb790.y + vb790.height + 0.5) {
+                out.errors.push('790: a help sketch ' + el790.tagName + ' (' + (el790.textContent || '').slice(0, 20) + ') leaves its canvas (tab ' + i + ')');
+              }
+            }
+          }
           // 500: a {icon:key} placeholder in ui/help.js is swapped for the real
           // button's own svg at render time, never left as raw text, never empty.
           const icons = [...document.querySelectorAll('#help-body .help-icon')];

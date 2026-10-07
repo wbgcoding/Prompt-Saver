@@ -13,38 +13,37 @@ const label = (x, y, text, opts = {}) =>
 
 function flowToTarget(lang) {
   const words = lang === "de"
-    ? { create: "Prompt anlegen", copy: "kopieren", paste: "einfügen", ways: ["Kachel", "Tastenkürzel", "Schwebeknopf", "Infobereich"] }
+    ? { create: "Prompt anlegen", copy: "kopieren", paste: "einfügen", ways: ["Kachel", "Tastenkürzel", "Schwebe-Button", "Infobereich"] }
     : { create: "Create prompt", copy: "Copy", paste: "Paste", ways: ["Tile", "Hotkey", "Floating button", "Tray"] };
-  const wayX = [60, 190, 320, 450];
-  return `<svg viewBox="0 0 560 130" xmlns="http://www.w3.org/2000/svg" role="img">` +
-    box(20, 15, 110, 34) + label(75, 36, words.create) +
-    arrow(130, 32, 195) +
-    box(195, 15, 170, 34) + label(280, 36, words.copy) +
-    arrow(365, 32, 430) +
-    box(430, 15, 110, 34) + label(485, 36, words.paste) +
-    `<line x1="280" y1="49" x2="280" y2="70" stroke="currentColor" stroke-width="1" stroke-dasharray="2 2"/>` +
-    words.ways.map((w, i) => box(wayX[i], 78, 115, 34) + label(wayX[i] + 57, 99, w, { size: 10 })).join("") +
+  const wayX = [10, 147, 284, 421];
+  return `<svg viewBox="0 0 560 124" xmlns="http://www.w3.org/2000/svg" role="img">` +
+    box(10, 10, 140, 36) + label(80, 33, words.create, { size: 14 }) +
+    arrow(150, 28, 210) +
+    box(210, 10, 140, 36) + label(280, 33, words.copy, { size: 14 }) +
+    arrow(350, 28, 410) +
+    box(410, 10, 140, 36) + label(480, 33, words.paste, { size: 14 }) +
+    `<line x1="280" y1="46" x2="280" y2="78" stroke="currentColor" stroke-width="1" stroke-dasharray="2 2"/>` +
+    words.ways.map((w, i) => box(wayX[i], 78, 129, 36) + label(wayX[i] + 64.5, 101, w, { size: 13 })).join("") +
     `</svg>`;
 }
 
 function folderTypes(lang) {
   const words = lang === "de"
-    ? { view: "Ansichtsgruppe", pill: "Pill-Ordner", tile: "Kachel-Ordner" }
-    : { view: "View group", pill: "Pill folder", tile: "Grid folder" };
-  return `<svg viewBox="0 0 560 120" xmlns="http://www.w3.org/2000/svg" role="img">` +
+    ? { view: "Ansichtsgruppe", pill: "Button-Ordner", tile: "Kachelordner" }
+    : { view: "View group", pill: "Button folder", tile: "Tile folder" };
+  return `<svg viewBox="0 0 560 124" xmlns="http://www.w3.org/2000/svg" role="img">` +
     // View group: a tab strip inside a tab.
-    box(20, 20, 150, 70) + box(30, 30, 40, 16) + box(74, 30, 40, 16) + box(30, 52, 120, 30) +
-    label(95, 108, words.view) +
-    // Pill folder: a row of small floating round buttons.
-    `<circle cx="255" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/>` +
-    `<circle cx="295" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/>` +
-    `<circle cx="335" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/>` +
-    label(295, 108, words.pill) +
-    // Grid folder: one cell of a grid, marked as a folder.
-    box(430, 20, 100, 70) +
-    `<line x1="430" y1="55" x2="530" y2="55" stroke="currentColor" stroke-width="1"/>` +
-    `<line x1="480" y1="20" x2="480" y2="90" stroke="currentColor" stroke-width="1"/>` +
-    label(480, 108, words.tile) +
+    box(20, 10, 150, 76) + box(30, 20, 40, 16) + box(74, 20, 40, 16) + box(30, 44, 130, 32) +
+    label(95, 112, words.view, { size: 14 }) +
+    // Button folder: a row of small floating round buttons.
+    `<circle cx="240" cy="48" r="18" fill="none" stroke="currentColor" stroke-width="1.5"/>` +
+    `<circle cx="285" cy="48" r="18" fill="none" stroke="currentColor" stroke-width="1.5"/>` +
+    `<circle cx="330" cy="48" r="18" fill="none" stroke="currentColor" stroke-width="1.5"/>` +
+    label(285, 112, words.pill, { size: 14 }) +
+    // Tile folder: one tile holding a 2x2 preview of its members.
+    box(420, 10, 110, 76) +
+    box(447, 18, 26, 26) + box(477, 18, 26, 26) + box(447, 48, 26, 26) + box(477, 48, 26, 26) +
+    label(475, 112, words.tile, { size: 14 }) +
     `</svg>`;
 }
 
@@ -52,41 +51,50 @@ function placeholderAnatomy(lang) {
   const words = lang === "de"
     ? { name: "Name", def: "Vorgabe", choices: "Auswahlliste" }
     : { name: "Name", def: "Default", choices: "Choice list" };
-  const text = "{#{Kunde=Meier|Meier,Schulz}#}";
-  return `<svg viewBox="0 0 560 130" xmlns="http://www.w3.org/2000/svg" role="img">` +
-    label(30, 45, text, { anchor: "start", size: 15 }) +
-    `<line x1="65" y1="55" x2="65" y2="80" stroke="currentColor" stroke-width="1"/>` +
-    label(65, 95, words.name, { size: 11 }) +
-    `<line x1="118" y1="55" x2="150" y2="80" stroke="currentColor" stroke-width="1"/>` +
-    label(150, 95, words.def, { size: 11 }) +
-    `<line x1="240" y1="55" x2="260" y2="80" stroke="currentColor" stroke-width="1"/>` +
-    label(260, 95, words.choices, { size: 11 }) +
-    `</svg>`;
+  // Every piece of the markup is its own monospace run, stretched to exactly CH px per
+  // character (textLength), so the bracket under each part sits on it in any font.
+  const CH = 11;
+  const parts = [["{#{"], ["Kunde", words.name], ["="], ["Meier", words.def], ["|"], ["Meier,Schulz", words.choices], ["}#}"]];
+  let x = 20;
+  let out = "";
+  for (const [text, name] of parts) {
+    const w = text.length * CH;
+    out += `<text x="${x}" y="34" font-size="17" font-family="Consolas, ui-monospace, monospace" textLength="${w}" lengthAdjust="spacingAndGlyphs" fill="currentColor"${name ? "" : ' opacity="0.55"'}>${text}</text>`;
+    if (name) {
+      const mid = x + w / 2;
+      out += `<path d="M ${x + 1} 44 V 50 H ${x + w - 1} V 44" fill="none" stroke="currentColor" stroke-width="1.5"/>` +
+        `<line x1="${mid}" y1="50" x2="${mid}" y2="64" stroke="currentColor" stroke-width="1.5"/>` +
+        label(mid, 80, name, { size: 12 });
+    }
+    x += w;
+  }
+  // Same 560 wide canvas as the other sketches, so it is drawn at their scale.
+  return `<svg viewBox="0 0 560 92" xmlns="http://www.w3.org/2000/svg" role="img">${out}</svg>`;
 }
 
 function editorTimeline(lang) {
   const words = lang === "de"
     ? { timeline: "Zeitleiste", cut: "Schnittmarke", overlay: "Überlagerung", audio: "Tonspur" }
     : { timeline: "Timeline", cut: "Cut mark", overlay: "Overlay", audio: "Audio track" };
-  return `<svg viewBox="0 0 560 130" xmlns="http://www.w3.org/2000/svg" role="img">` +
-    box(60, 15, 120, 30) + label(120, 34, words.overlay, { size: 10 }) +
-    box(20, 55, 520, 22) +
-    `<line x1="180" y1="55" x2="180" y2="77" stroke="currentColor" stroke-width="1.5"/>` +
-    `<line x1="340" y1="55" x2="340" y2="77" stroke="currentColor" stroke-width="1.5"/>` +
-    label(180, 95, words.cut, { size: 10 }) +
-    `<path d="M 20 115 q 15 -15 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0" fill="none" stroke="currentColor" stroke-width="1"/>` +
-    label(480, 95, words.audio, { size: 10 }) +
-    label(290, 12, words.timeline, { size: 10 }) +
+  // 26 waves of 20 px span the same 520 px as the timeline above them.
+  const wave = "M 20 128 q 10 -12 20 0" + " t 20 0".repeat(25);
+  return `<svg viewBox="0 0 560 140" xmlns="http://www.w3.org/2000/svg" role="img">` +
+    box(80, 8, 160, 30) + label(160, 28, words.overlay, { size: 14 }) +
+    box(20, 50, 520, 28) + label(380, 69, words.timeline, { size: 13 }) +
+    `<line x1="250" y1="44" x2="250" y2="84" stroke="currentColor" stroke-width="2"/>` +
+    label(250, 100, words.cut, { size: 13 }) +
+    `<path d="${wave}" fill="none" stroke="currentColor" stroke-width="1"/>` +
+    label(540, 100, words.audio, { size: 13, anchor: "end" }) +
     `</svg>`;
 }
 
 function chainSteps(lang) {
   const words = lang === "de" ? { step: "Schritt" } : { step: "Step" };
-  const stepX = [30, 230, 430];
-  return `<svg viewBox="0 0 560 90" xmlns="http://www.w3.org/2000/svg" role="img">` +
-    stepX.map((x, i) => box(x, 20, 100, 34) + label(x + 50, 41, `${words.step} ${i + 1}`)).join("") +
-    arrow(130, 37, 225) + label(177, 25, "{#{X}#}", { size: 10 }) +
-    arrow(330, 37, 425) + label(377, 25, "{#{Y}#}", { size: 10 }) +
+  const stepX = [20, 220, 420];
+  return `<svg viewBox="0 0 560 70" xmlns="http://www.w3.org/2000/svg" role="img">` +
+    stepX.map((x, i) => box(x, 26, 120, 36) + label(x + 60, 49, `${words.step} ${i + 1}`, { size: 14 })).join("") +
+    arrow(140, 44, 220) + label(180, 20, "{#{X}#}", { size: 13 }) +
+    arrow(340, 44, 420) + label(380, 20, "{#{Y}#}", { size: 13 }) +
     `</svg>`;
 }
 

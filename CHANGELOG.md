@@ -1633,6 +1633,7 @@ the video editor and the introduction tour ship on).
 - **Disabled buttons look disabled.** A greyed-out main button, like Save with nothing typed, is now plain grey instead of a faded accent color.
 - **The input field names its shortcut.** The placeholder of the input field now says which keys save the prompt (Ctrl+Enter), in the language of the app.
 - **Grid folders look like tiles.** A folder in the grid is now a normal card with a flat 2 by 2 preview and its name at the bottom, instead of a smaller rounded plate.
+- **Cleaner help diagrams.** The placeholder diagram marks each part of the markup with a bracket that sits exactly under it, and the other help diagrams use larger labels and stay inside their frame.
 - **Full-size tiles in an open grid folder.** The prompts in an open folder are as big as the tiles in the grid, with the same text size, and only shrink when the window is too narrow for three side by side.
 - The clipboard inbox is part of the copy history now: one list with a filter
   for copies made in the app and elsewhere.
