@@ -14,7 +14,8 @@ import { copyOnCooldown, copyTextWithVars, maybeCloseOnCopy, recordCopy } from "
 import { copyResolved } from "./library.js";
 import { openCtx } from "./gridMenus.js";
 
-const TILE_FOLDER_COLS = 3; // columns of the open grid-folder popover
+const TILE_FOLDER_COLS = 3; // most columns of the open grid-folder popover
+const TILE_FOLDER_GAP = 6; // gap between member tiles, matches .tile-folder-grid
 const TILE_FOLDER_HOVER_MS = 300; // dwell time over a folder before a dragged prompt drops in
 
 // ---- Grid folders: several prompts collapsed into one cell ----
@@ -218,8 +219,19 @@ export function openTileFolderPop(f, anchor) {
   tileFolderPop.appendChild(head);
   const grid = document.createElement("div");
   grid.className = "tile-folder-grid";
-  grid.style.gridTemplateColumns = `repeat(${TILE_FOLDER_COLS}, 1fr)`;
-  for (const p of folderMembers(f)) {
+  // Members are as big as a tile in the grid (the folder cell itself), shrunk only
+  // as far as the window needs to fit the columns side by side.
+  const members = folderMembers(f);
+  const cell = anchor.getBoundingClientRect();
+  const cols = Math.max(1, Math.min(TILE_FOLDER_COLS, members.length));
+  const room = window.innerWidth * 0.96 - 18 - (cols - 1) * TILE_FOLDER_GAP;
+  const scale = Math.min(1, room / (cols * cell.width));
+  const memberW = Math.max(60, Math.floor(cell.width * scale));
+  const memberH = Math.max(40, Math.floor(cell.height * scale));
+  grid.style.gridTemplateColumns = `repeat(${cols}, ${memberW}px)`;
+  grid.style.setProperty("--member-w", `${memberW}px`);
+  grid.style.setProperty("--member-h", `${memberH}px`);
+  for (const p of members) {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "folder-member-tile";
@@ -294,14 +306,16 @@ export function openTileFolderPop(f, anchor) {
   }
   tileFolderPop.appendChild(grid);
   placePopover(tileFolderPop, anchor.getBoundingClientRect());
-  // Cells now size themselves from the column count + the popover width (CSS
-  // grid + aspect-ratio), so the fit box is measured per tile instead of a
-  // constant: 1px border + 4px padding each side, same auto-shrink as the grid.
+  // Same text sizing rule as the grid: auto-fit when the grid auto-fits or the
+  // prompt asks for it, the box being the member tile minus its border and padding.
+  const globalAuto = Number(settings.tile_size) === 0;
   for (const btn of grid.children) {
-    const r = btn.getBoundingClientRect();
-    // Floor, not the raw fractional rect: scrollWidth/Height are integers, so a
-    // fractional maxW like 76.65 can fail its own <= check against a rounded 77.
-    fitTileText(btn, Math.floor(r.width - 10), Math.floor(r.height - 10));
+    if (!globalAuto && btn.dataset.fitMode !== "auto") continue;
+    const cs = getComputedStyle(btn);
+    // clientWidth/Height already leave out the border; floor because scrollWidth/Height
+    // are integers and a fractional box can fail its own <= check.
+    fitTileText(btn, Math.floor(btn.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)),
+      Math.floor(btn.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom)));
   }
 }
 

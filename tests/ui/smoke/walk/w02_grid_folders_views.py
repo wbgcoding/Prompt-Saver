@@ -117,12 +117,19 @@ SECTION = """\
       const pop = document.querySelector('.tile-folder-pop:not(.hidden)');
       const members = pop ? pop.querySelectorAll('.folder-member-tile').length : 0;
       if (members !== 5) out.errors.push('the open folder shows ' + members + ' of 5 entries');
-      // 30: member cells now size from the column count + the popover width (bigger
-      // than the old fixed 84x56 box) and no member's name text overflows its cell.
+      // 30: a member is as big as a grid tile (the folder cell) whenever three of
+      // them fit the window side by side, and no member's name overflows its cell.
       if (pop) {
-        const cellRect = pop.querySelector('.folder-member-tile')?.getBoundingClientRect();
-        if (!cellRect || cellRect.width <= 84) {
-          out.errors.push('30: folder member cells did not grow past the old 84px width (' + (cellRect && cellRect.width) + ')');
+        // Layout sizes, not rects: the popover's pop-in animation scales it for a moment.
+        const m30 = pop.querySelector('.folder-member-tile');
+        const cellRect = m30 && { width: m30.offsetWidth, height: m30.offsetHeight };
+        const fitsThree = 3 * anchor.width + 2 * 6 + 18 <= window.innerWidth * 0.96;
+        if (!cellRect) {
+          out.errors.push('30: the open folder has no member tile to measure');
+        } else if (fitsThree && (Math.abs(cellRect.width - anchor.width) > 1.5 || Math.abs(cellRect.height - anchor.height) > 1.5)) {
+          out.errors.push('30: a folder member is ' + Math.round(cellRect.width) + 'x' + Math.round(cellRect.height) + ', not the grid tile size ' + Math.round(anchor.width) + 'x' + Math.round(anchor.height));
+        } else if (!fitsThree && 3 * cellRect.width > window.innerWidth) {
+          out.errors.push('30: three folder members are wider than the window (' + Math.round(cellRect.width) + ' each)');
         }
         // Compare rendered rects, not scrollHeight/clientHeight: the auto-fit
         // text-box-trim on .tile-name.fit intentionally reports a layout height
