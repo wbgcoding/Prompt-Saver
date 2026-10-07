@@ -329,7 +329,9 @@ body.video-body {
 .ve-h-flat { margin: 0; flex: 1 1 auto; text-transform: none; letter-spacing: 0; }
 .ve-panel .modal-hint { margin: 0; }
 .ve-row2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
-.ve-row4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); gap: 8px; }
+/* A column holds a whole -/number/+ stepper (22 + 56 + 22 px plus gaps), so a four-digit
+   size like 1920 is never cut; a narrow panel takes two rows of two. */
+.ve-row4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(116px, 1fr)); gap: 8px; }
 .ve-wide { width: 100%; }
 .ve-switch-row { flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; }
 .ve-switch-row > span { color: var(--fg); font-size: 13px; }
