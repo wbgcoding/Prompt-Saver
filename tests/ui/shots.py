@@ -4,6 +4,7 @@
 
 A surface is `main`, `settings`, `settings_end`, `expert`, `library`, `history`,
 `tilemenu`, `editor`, `folder`, `help`, or another page such as `video.html`.
+A group (`@settings`, `@library`, `@tiles`) shoots its surfaces.
 Without a surface every one is shot. Not a test: it never fails on what it sees.
 """
 import argparse
@@ -50,6 +51,12 @@ ACTS = {
                "window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, clientX: 5, clientY: 5 }));"
                "await sleep(600);"),
     "help": "$('gear').click(); await sleep(300); $('help-open').click(); await sleep(500);",
+}
+# Area groups, so a review of one area shoots only its surfaces.
+GROUPS = {
+    "@settings": ["settings", "settings_end", "expert", "help"],
+    "@library": ["library", "history"],
+    "@tiles": ["main", "tilemenu", "editor", "folder"],
 }
 
 
@@ -103,7 +110,8 @@ def main():
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     w, h = args.size.split("x")
-    for s in args.surfaces or list(ACTS):
+    picked = [x for s in args.surfaces for x in GROUPS.get(s, [s])] if args.surfaces else list(ACTS)
+    for s in dict.fromkeys(picked):
         page, act = (s, "main") if s.endswith(".html") else ("index.html", s)
         png = out / f"{Path(page).stem}_{act}_{args.lang}_{w}x{h}.png"
         subprocess.run([chrome, "--headless=new", "--disable-gpu", "--hide-scrollbars",
