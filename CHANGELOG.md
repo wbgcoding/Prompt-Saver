@@ -1817,10 +1817,10 @@ the video editor and the introduction tour ship on).
 - **A one-line colour row in the editor.** The editor shows no colour, the free picker, the colours your prompts already use and a "More colors" button that opens the whole palette.
 - **The take-over question names the real button.** The portable take-over dialog now says which button leaves the portable version empty (for example "Start empty") instead of a Yes/No answer that did not match the buttons.
 - **"Do not ask again" starts unticked.** In the portable take-over dialog the box is no longer ticked beforehand, so leaving it alone asks again next time.
-- **Settings in titled sections.** The settings page is split into Appearance, Behavior, Data and About and updates, each with its own heading and a thin line between them.
+- **Settings in titled sections.** The settings page is split into Appearance, Behavior, Data and System, each with its own heading and a thin line between them.
 - **Reset and delete buttons stand out.** Reset settings and Delete all data now sit in their own section at the bottom of the settings page and are red even when the pointer is elsewhere. Clicking them still needs a second click to confirm.
 - **Export format next to Export.** In the settings, the format choice now sits to the right of the Export button instead of in front of it.
-- **About and updates in one block.** The version status and the About button share one line; the check button, the auto-update switch and the check interval share the next.
+- **System in one line.** In the System section the version status, About, the check button, the auto-update switch and the check interval share one line, and an available update reads as a short "Update v2.8.0".
 - **The favorites view switch is only in Settings.** The expert menu no longer repeats it; the favorites rows there still appear only while the favorites feature and the view are on.
 - **Help is a question-mark button in the settings head.** It sits beside the close button and is reachable from the expert menu page too; the Expert menu button now has its row to itself.
 - **A shorter label for the screenshot switch.** The setting now reads "Always save screenshots"; its tooltip still explains the Screenshots folder.

@@ -9,7 +9,7 @@ SECTION = """\
       }
       const titles724 = [...document.querySelectorAll('#settings-main .settings-sec-title')]
         .filter((el) => el.getBoundingClientRect().height > 0).map((el) => el.textContent.trim());
-      const want724 = ['Appearance', 'Behavior', 'Data', 'About and updates', 'Reset and delete'];
+      const want724 = ['Appearance', 'Behavior', 'Data', 'System', 'Reset and delete'];
       if (titles724.join('|') !== want724.join('|')) {
         out.errors.push('724: the visible settings section titles are "' + titles724.join('|') + '", expected "' + want724.join('|') + '"');
       }
@@ -58,8 +58,8 @@ SECTION = """\
     }
     // 96: the short "Latest X.Y.Z" status keeps the first update line no taller than
     // before, with the longest of the 11 translations (Romanian).
-    // 727: the version status and About share the first line; the check button, the
-    // auto-update switch and the interval share the second.
+    // 727: the System section is one line: version status, About, the check button, the
+    // auto-update switch and the interval, in English and German at every size.
     {
       if (document.getElementById('settings').classList.contains('hidden')) await click('gear');
       if (document.getElementById('settings-main').classList.contains('hidden')) {
@@ -81,17 +81,29 @@ SECTION = """\
           out.errors.push('the short status is taller than the old long sentence was: ' + Math.round(lineH) + ' vs ' + Math.round(lineHOld));
         }
         uv.textContent = 'Version 2.7.0';
+        const kids727 = [...line1.children];
+        if (kids727.length !== 5 || !line1.contains(ub) || !line1.contains(ui727)) {
+          out.errors.push('727: the System line does not hold all five controls (' + kids727.length + ')');
+        }
+        const oneRow727 = (label) => {
+          // Below the minimum window size the line may wrap; it never cuts a text.
+          const mids = kids727.map((k) => { const r = k.getBoundingClientRect(); return r.top + r.height / 2; });
+          if (window.innerWidth >= 680 && Math.max(...mids) - Math.min(...mids) > 4) out.errors.push('727: the System line wraps in ' + label + ' at ' + window.innerWidth + 'px');
+          const cut = [uv, aboutBtn, ub].filter((el) => el.scrollWidth > el.clientWidth + 1);
+          if (cut.length) out.errors.push('727: ' + cut.map((el) => el.id).join(', ') + ' cut in ' + label + ' at ' + window.innerWidth + 'px');
+        };
+        oneRow727('the page language');
+        const prev727 = [aboutBtn.textContent, ub.textContent, line1.querySelector('.switch-field > span').textContent];
+        aboutBtn.textContent = 'Über';
+        ub.textContent = 'Nach Updates suchen';
+        line1.querySelector('.switch-field > span').textContent = 'Auto-Update';
+        uv.textContent = 'Update v2.10.0';
+        oneRow727('German');
+        [aboutBtn.textContent, ub.textContent, line1.querySelector('.switch-field > span').textContent] = prev727;
         const rect = (el) => el.getBoundingClientRect();
-        if (Math.abs(rect(uv).top + rect(uv).height / 2 - (rect(aboutBtn).top + rect(aboutBtn).height / 2)) > 4) {
-          out.errors.push('727: update-version and about-btn do not share a row at ' + window.innerWidth + 'px');
+        if (window.innerWidth >= 680 && !(rect(aboutBtn).left > rect(uv).left && rect(ub).left > rect(aboutBtn).left && rect(ui727).left > rect(ub).left)) {
+          out.errors.push('727: the System line is not in the order version, About, check, switch, interval');
         }
-        if (Math.abs(rect(ui727).top - rect(ub).top) > 4) {
-          out.errors.push('727: opt-update-interval and update-btn do not share a row at ' + window.innerWidth + 'px: ' + Math.round(rect(ui727).top) + ' vs ' + Math.round(rect(ub).top));
-        }
-        if (!(rect(ub).top > rect(aboutBtn).bottom - 1)) {
-          out.errors.push('727: the check button row is not below the version row at ' + window.innerWidth + 'px');
-        }
-        if (!(rect(aboutBtn).left > rect(uv).left)) out.errors.push('727: about-btn is not right of update-version');
         if (!ui727.getAttribute('aria-label')) out.errors.push('727: the interval select has no accessible name');
         if (document.querySelector('.update-row, .update-actions')) out.errors.push('727: the old update grid markup is still there');
         uv.textContent = prevText;

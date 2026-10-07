@@ -9,7 +9,7 @@ Boots the real index.html against tests/ui/tauri_stub.js in headless Chromium an
     fade on the edge that has more content, the active tab scrolled into view when the
     menu opens and when a tab is chosen,
   * expert menu search field at 680 px (German): the whole placeholder is visible,
-  * settings About and updates block at 680 px: both lines start at the same left edge.
+  * settings System section at 680 px: one line, every item centred on it.
 
 Run:  python tests/ui/minor_layout_test.py
 Exit: 0 = clean, 1 = problems found. Skips cleanly when no Chromium is installed.
@@ -257,7 +257,7 @@ EXPERT_SEARCH = """
 </script>
 """ % (MIN_W, MIN_W)
 
-# Settings About and updates: both lines on one left edge.
+# Settings System section: one line, every item centred on it.
 ABOUT = """
 <script>
 (async () => {""" + COMMON + """
@@ -268,22 +268,8 @@ ABOUT = """
     $('gear').click();
     await sleep(400);
     const lines = [...document.querySelectorAll('#updates-field > .update-line')];
-    if (lines.length !== 2) { errs.push('about: expected 2 update lines, found ' + lines.length); }
+    if (lines.length !== 1) { errs.push('about: expected 1 System line, found ' + lines.length); }
     else {
-      const left = (el) => Math.round(el.getBoundingClientRect().left * 10) / 10;
-      const a = lines[0].firstElementChild, b = lines[1].firstElementChild;
-      info.push('about left1=' + left(a) + ' left2=' + left(b) + ' top1=' + Math.round(a.getBoundingClientRect().top) + ' top2=' + Math.round(b.getBoundingClientRect().top));
-      if (Math.abs(left(a) - left(b)) > 1) errs.push('about: the two lines start ' + Math.abs(left(a) - left(b)) + 'px apart (' + left(a) + ' vs ' + left(b) + ')');
-      // The visible text of each first item starts on the same edge too.
-      const textLeft = (el) => {
-        const r = document.createRange();
-        r.selectNodeContents(el);
-        return Math.round(r.getBoundingClientRect().left * 10) / 10;
-      };
-      info.push('about text1=' + textLeft(a) + ' text2=' + textLeft(b));
-      const h1 = lines[0].getBoundingClientRect(), h2 = lines[1].getBoundingClientRect();
-      if (Math.abs(h1.left - h2.left) > 1) errs.push('about: the line boxes start at different edges');
-      if (Math.abs(textLeft(a) - textLeft(b)) > 1) errs.push('about: the first text of the two lines starts ' + Math.abs(textLeft(a) - textLeft(b)) + 'px apart (' + textLeft(a) + ' vs ' + textLeft(b) + ')');
       // Vertical alignment: every item is centred on its own line.
       for (const ln of lines) {
         const lr = ln.getBoundingClientRect();

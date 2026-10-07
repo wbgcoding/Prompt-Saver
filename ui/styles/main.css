@@ -4060,20 +4060,21 @@ body.drag-over::after {
    width the row above still has room to wrap this button onto its own line
    instead, unlike letting the text itself break. */
 #import-folder-btn { white-space: nowrap; }
-/* About and updates: two lines. Line one holds the version status (left) and About
-   (right); line two the check button, the auto-update switch and the interval. */
-.update-line { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.update-line > .ghost-btn { flex: 0 0 auto; }
-.update-line > .switch-field { flex: 0 1 auto; min-width: 0; }
-.update-line > .switch-field > span:first-child { flex: 0 1 auto; }
-.update-interval { flex: 0 1 150px; min-width: 0; margin-left: auto; }
+/* System: one line with the version status, About, the check button, the auto-update
+   switch and the interval, which takes the room left over at the right edge. */
+.update-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.update-line > .ghost-btn { flex: 0 0 auto; padding-inline: 10px; white-space: nowrap; }
+/* The interval list grows into the room left over, from a narrow start. Only when even
+   that is not enough (the minimum window in a long language) the line wraps instead of
+   cutting a text. */
+.update-line > .switch-field { flex: 0 0 auto; gap: 8px; white-space: nowrap; }
+.update-interval { flex: 1 1 84px; min-width: 84px; max-width: 150px; margin-left: auto; }
+.update-interval > select { width: 100%; }
 /* Clickable version/status label, plain text look → releases page, or the update
    dialog once an update is pending. */
 .update-version {
-  flex: 1 1 0; min-width: 0;
-  /* The left padding is the check button's (14px) plus its border (1px), so the version
-     text starts on the same edge as the button text on the line below. */
-  background: none; border: none; padding: 0 0 0 15px;
+  flex: 0 0 auto;
+  background: none; border: none; padding: 0;
   color: var(--fg); font: inherit; font-size: 13px; font-weight: 600;
   cursor: pointer; text-align: left; white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis;
