@@ -1629,7 +1629,6 @@ the video editor and the introduction tour ship on).
 - **Tidier top bar.** Library, search, pin and settings stay; the tag filter sits at the end of the view tabs, the chain button appears while a chain runs, and hiding the top bar moved to the right-click menu of the gear and the top bar.
 - **Calmer tiles.** Hovering a tile shows only its menu button; select through the menu or Ctrl+click.
 - **Tile menu.** Right-click now offers Copy, Favorite, Select and Start chain, every entry has an icon, entries are grouped, and Delete sits apart at the bottom in red.
-- **One Capture button.** Screenshot, screen recording, color picker and text recognition now share one button with a menu; a running recording lights it up and one click stops it.
 - **Clearer bar arrows.** The hide and show arrows of the bars now point onto a line, and each one is named after its bar (input bar, top bar).
 - **Disabled buttons look disabled.** A greyed-out main button, like Save with nothing typed, is now plain grey instead of a faded accent color.
 - **The input field names its shortcut.** The placeholder of the input field now says which keys save the prompt (Ctrl+Enter), in the language of the app.

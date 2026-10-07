@@ -174,17 +174,37 @@
   </section>
 
   <footer class="composer">
-    <!-- One capture entry: four corner brackets around a dot. Its menu holds screenshot,
-         screen and camera recording, colour picker, text recognition and the file editor. -->
-    <button id="capture-btn" class="icon-btn composer-img-btn" aria-haspopup="menu" data-i18n-title="captureBtnTip" data-i18n-aria="captureBtn">
+    <button id="snip-btn" class="icon-btn composer-img-btn" data-i18n-title="snipBtnTip" data-i18n-aria="snipTitle">
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-        <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4"/>
-        <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/>
+        <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 7h2.5L7 4h6l1.5 3H21v13H3V7Z"/>
+        <circle cx="12" cy="13" r="3.5" fill="none" stroke="currentColor" stroke-width="2"/>
+      </svg>
+    </button>
+    <!-- Screen recording: camera body with a lens triangle, like a classic video-camera glyph. -->
+    <button id="record-btn" class="icon-btn composer-img-btn" data-i18n-title="recordBtnTip" data-i18n-aria="recordTitle">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+        <rect x="3" y="6" width="12" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+        <path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M15 10.2 21 7v10l-6-3.2Z"/>
+      </svg>
+    </button>
+    <!-- Pipette: round squeeze bulb on a straight tube ending in a point. -->
+    <button id="picker-btn" class="icon-btn composer-img-btn" data-i18n-title="pickerTitle" data-i18n-aria="pickerTitle">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+        <circle cx="17.6" cy="6.4" r="3.9" fill="none" stroke="currentColor" stroke-width="2"/>
+        <path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M16.4 9.9 8.2 18.1 3.6 19.6 5.1 15 13.3 6.8Z"/>
       </svg>
     </button>
     <button id="file-btn" class="icon-btn composer-img-btn" data-i18n-title="addFile" data-i18n-aria="addFile">
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
         <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21.2 11.2l-8.4 8.4a5.5 5.5 0 0 1-7.8-7.8l8.4-8.4a3.7 3.7 0 0 1 5.2 5.2l-8.4 8.4a1.9 1.9 0 0 1-2.6-2.6l7.7-7.7"/>
+      </svg>
+    </button>
+    <!-- OCR -- corner brackets around three text lines. Opens a small menu
+         (screenshot / image file); off by default (flagOcr), hidden until on. -->
+    <button id="ocr-btn" class="icon-btn composer-img-btn" data-i18n-title="ocrBtnTitle" data-i18n-aria="ocrBtnTitle">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+        <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4"/>
+        <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M8 9h8M8 12h8M8 15h5"/>
       </svg>
     </button>
     <!-- Microphone, capsule + bracket + foot. Off by default (flagVoice) and

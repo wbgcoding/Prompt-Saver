@@ -222,9 +222,6 @@ export function applyFlags() {
   for (const key of OPT_FLAG_KEYS) {
     document.body.classList.toggle(`flag-${key}`, optFlag(key));
   }
-  // The capture button has nothing to offer once all four tools behind it are off.
-  $("capture-btn")?.classList.toggle("hidden",
-    !(flag("screenshot") || flag("screenRecord") || flag("colorPicker") || flag("ocr")));
   // Not a setting -- a runtime fact from voice_support(). A Windows build
   // with no speech engine at all must hide the button regardless of the flag.
   document.body.classList.toggle("no-voice-engine", !voiceSupport.supported);

@@ -265,7 +265,7 @@ SECTION = """\
         if (!sawIcon) out.errors.push('500: no help category shows a real button icon inline');
         // 500: every icon a placeholder can point at is a button that actually
         // exists in the program, not a name help.js made up.
-        for (const id of ['capture-btn', 'voice-btn', 'library-btn', 'theme-edit-open']) {
+        for (const id of ['snip-btn', 'record-btn', 'ocr-btn', 'voice-btn', 'library-btn', 'theme-edit-open']) {
           if (!document.getElementById(id)) out.errors.push('500: help icon source button #' + id + ' does not exist');
         }
         const search = document.getElementById('help-search');

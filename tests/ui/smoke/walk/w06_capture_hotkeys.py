@@ -1,31 +1,13 @@
 SECTION = """\
-    // F26: the colour picker is an entry of the capture menu, and a picked colour reports
-    // back as a toast tinted with that colour.
-    const captureBtnEl = document.getElementById('capture-btn');
-    // The fixture reports a running recording by default, and the capture button
-    // follows it on its poll: report none until the 506 probe asks for one.
-    window.__REC_IDLE__ = true;
-    document.dispatchEvent(new Event('visibilitychange'));
-    await sleep(150);
-    const captureEntries = () => {
-      const m = document.querySelector('.tab-menu:not(.hidden)');
-      return m ? [...m.querySelectorAll('button[role=menuitem]')] : [];
-    };
-    const captureEntry = async (text) => {
-      captureBtnEl.click();
-      await sleep(120);
-      return captureEntries().find((b) => b.textContent.trim() === text) || null;
-    };
-    if (!captureBtnEl) out.errors.push('the capture button is missing');
+    // F26: the pipette is in the composer bar, and a picked colour reports back as a
+    // toast tinted with that colour.
+    const pickBtn = document.getElementById('picker-btn');
+    if (!pickBtn) out.errors.push('the colour picker button is missing');
     else {
-      if (getComputedStyle(captureBtnEl).display === 'none') out.errors.push('the capture button stays hidden although the features are on');
-      const pickEntry = await captureEntry('Pick a color from the screen');
-      if (!pickEntry) out.errors.push('F26: the capture menu has no colour picker entry');
-      else {
-        pickEntry.click();
-        await sleep(150);
-        if (!(window.__SMOKE_CALLS__ || []).includes('open_picker')) out.errors.push('F26: the picker entry did not open the picker');
-      }
+      if (getComputedStyle(pickBtn).display === 'none') out.errors.push('the colour picker button stays hidden although the feature is on');
+      pickBtn.click();
+      await sleep(150);
+      if (!(window.__SMOKE_CALLS__ || []).includes('open_picker')) out.errors.push('the pipette did not open the picker');
     }
     window.__FIRE__('color-picked', { text: '#1A2B3C', hex: '#1A2B3C' });
     await sleep(150);
@@ -37,12 +19,10 @@ SECTION = """\
     if (toastEl.style.getPropertyValue('--toast-tint') !== '#1A2B3C') {
       out.errors.push('the picker toast carries no colour');
     }
-    // 19: the "Recent colors" entry reaches the pick history without opening the
+    // 19: right-click on the pipette reaches its history without opening the
     // overlay - the fixture backend always returns a fixed two-colour list.
-    if (captureBtnEl) {
-      const recentEntry = await captureEntry('Recent colors');
-      if (!recentEntry) out.errors.push('19: the capture menu has no Recent colors entry');
-      else recentEntry.click();
+    if (pickBtn) {
+      pickBtn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
       await sleep(150);
       const pop = document.querySelector('.pick-history-pop');
       const rows = pop ? [...pop.querySelectorAll('.pick-history-row')] : [];
@@ -61,8 +41,7 @@ SECTION = """\
         if (!pop.classList.contains('hidden')) out.errors.push('19: the pick-history popover stayed open after picking an entry');
       }
       // An outside click must close it too, same as every other popover.
-      const recentAgain = await captureEntry('Recent colors');
-      if (recentAgain) recentAgain.click();
+      pickBtn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
       await sleep(120);
       document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
       await sleep(120);
@@ -70,25 +49,54 @@ SECTION = """\
         out.errors.push('19: clicking outside the pick-history popover did not close it');
       }
     }
-    // 417: the capture menu opens an existing file in whichever editor its content
-    // calls for, not only through a fresh capture or recording.
-    if (!captureBtnEl) {
-      out.errors.push('417: the capture button is missing');
+    // 417: right-click either composer button for a quiet menu to open an
+    // existing file in whichever editor its content calls for, not only
+    // through a fresh capture or recording.
+    const snipBtnEl = document.getElementById('snip-btn');
+    const recordBtnEl = document.getElementById('record-btn');
+    if (!snipBtnEl || !recordBtnEl) {
+      out.errors.push('417: the screenshot or record button is missing');
     } else {
-      const capTip = captureBtnEl.title || '';
-      if (!/^Capture: /.test(capTip)) out.errors.push('417: the capture button tooltip does not name its tools: ' + capTip);
-      const capAria = captureBtnEl.getAttribute('aria-label') || '';
-      if (capAria !== 'Capture') out.errors.push('417: the capture button has no plain accessible name: ' + capAria);
-      if (captureBtnEl.getAttribute('aria-haspopup') !== 'menu') out.errors.push('417: the capture button does not announce its menu');
-      const openEntry = await captureEntry('Open a file in the editor');
-      if (!openEntry) {
-        out.errors.push('417: the capture menu has no open-in-editor entry');
+      // Every composer button with a right-click function names it in parentheses
+      // in its tooltip; the accessible name of the first two stays the plain name.
+      for (const id of ['snip-btn', 'record-btn', 'picker-btn', 'file-btn']) {
+        const btnEl = document.getElementById(id) || {};
+        // A running recording swaps the record tooltip for its stop text.
+        if (id === 'record-btn' && btnEl.classList && (btnEl.classList.contains('is-recording') || btnEl.classList.contains('is-paused'))) {
+          if (btnEl.dataset.i18nTitle !== 'recordBtnTip') out.errors.push('the record button idle tooltip is not the one with the right-click hint');
+          continue;
+        }
+        const tip = btnEl.title || '';
+        if (!/[(（].+[:：].+[)）]/.test(tip)) out.errors.push('composer button ' + id + ' tooltip does not name its right-click function: ' + tip);
+      }
+      for (const b of [snipBtnEl, recordBtnEl]) {
+        const al = b.getAttribute('aria-label') || '';
+        if (!al || /[(（]/.test(al)) out.errors.push('composer button ' + b.id + ' has no plain accessible name: ' + al);
+      }
+      recordBtnEl.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await sleep(150);
+      let openEditPop = document.querySelector('.open-editor-pop');
+      if (!openEditPop || openEditPop.classList.contains('hidden')) {
+        out.errors.push('417: right-clicking the record button did not open the open-in-editor menu');
+      }
+      document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+      await sleep(120);
+      if (openEditPop && !openEditPop.classList.contains('hidden')) {
+        out.errors.push('417: clicking outside the open-in-editor menu did not close it');
+      }
+      // Picking a VIDEO through the screenshot (image) button must still open
+      // the video editor: content decides, never which button was used.
+      snipBtnEl.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await sleep(150);
+      openEditPop = document.querySelector('.open-editor-pop');
+      if (!openEditPop || openEditPop.classList.contains('hidden')) {
+        out.errors.push('417: right-clicking the screenshot button did not open the open-in-editor menu');
+      } else if (!(openEditPop.querySelector('button').textContent || '').trim()) {
+        out.errors.push('417: the open-in-editor menu entry has no label');
       } else {
-        // Picking a VIDEO through this entry must open the video editor:
-        // content decides, never which entry was used.
         window.__SMOKE_CALLS__ = [];
         window.__SMOKE_ARGS__ = [];
-        openEntry.click();
+        openEditPop.querySelector('button').click();
         await sleep(200);
         if (!window.__SMOKE_CALLS__.includes('pick_media_file_path')) {
           out.errors.push('417: choosing the menu entry did not offer a file picker');
@@ -98,7 +106,7 @@ SECTION = """\
         }
         const openCall = (window.__SMOKE_ARGS__ || []).find((c) => c[0] === 'open_video_editor');
         if (!openCall) {
-          out.errors.push('417: picking a video through the capture menu did not open the video editor');
+          out.errors.push('417: picking a video through the screenshot button did not open the video editor');
         } else {
           if (openCall[1].srcPath !== 'C:\\\\Temp\\\\ps-smoke-openedit-copy.mp4') {
             out.errors.push('417: the video editor opened on the wrong file: ' + openCall[1].srcPath);
@@ -108,57 +116,28 @@ SECTION = """\
           }
         }
       }
-      // An outside click closes the menu, same as every other popover.
-      captureBtnEl.click();
-      await sleep(120);
-      document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
-      await sleep(120);
-      if (captureEntries().length) out.errors.push('417: clicking outside the capture menu did not close it');
     }
-    // 703: with every capture tool on and the camera off the menu lists exactly the
-    // seven entries in order; while a recording runs a click stops it instead of
-    // opening the menu (506 below drives the recording state).
-    if (captureBtnEl) {
-      captureBtnEl.click();
-      await sleep(120);
-      const labels703 = captureEntries().map((b) => b.textContent.trim());
-      const want703 = ['Screenshot', 'Record screen', 'Pick a color from the screen', 'Recent colors',
-        'Text from a screenshot (OCR)', 'Text from an image file (OCR)', 'Open a file in the editor'];
-      if (labels703.join('|') !== want703.join('|')) {
-        out.errors.push('703: the capture menu reads ' + JSON.stringify(labels703));
-      }
-      if (captureEntries().some((b) => !b.querySelector('svg'))) out.errors.push('703: a capture menu entry has no icon');
-      document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
-      await sleep(120);
-    }
-    // 506: a capture-button click while a recording is already running must stop
+    // 506: a record-btn click while a recording is already running must stop
     // it instead of trying to open a second one -- recording_status's own
     // fixture always reports an active recording, so forcing one resync
     // through the same visibilitychange path the real app uses (rather than
     // waiting out the real 5-second poll) is enough to reach that state.
     window.__SMOKE_CALLS__ = [];
-    window.__REC_IDLE__ = false;
     document.dispatchEvent(new Event('visibilitychange'));
     await sleep(150);
-    if (!captureBtnEl.classList.contains('is-recording') && !captureBtnEl.classList.contains('is-paused')) {
-      out.errors.push('506: capture button never picked up the active-recording state from recording_status');
+    if (!recordBtnEl.classList.contains('is-recording') && !recordBtnEl.classList.contains('is-paused')) {
+      out.errors.push('506: record button never picked up the active-recording state from recording_status');
     } else {
-      if (captureBtnEl.title !== 'Stop recording') out.errors.push('703: the capture button tooltip while recording is ' + captureBtnEl.title);
       window.__SMOKE_CALLS__ = [];
-      captureBtnEl.click();
+      recordBtnEl.click();
       await sleep(150);
       if (!window.__SMOKE_CALLS__.includes('stop_recording')) {
-        out.errors.push('506: clicking the capture button during an active recording did not call stop_recording');
+        out.errors.push('506: clicking the record button during an active recording did not call stop_recording');
       }
       if (window.__SMOKE_CALLS__.includes('open_recorder')) {
-        out.errors.push('506: clicking the capture button during an active recording also called open_recorder');
+        out.errors.push('506: clicking the record button during an active recording also called open_recorder');
       }
-      if (captureEntries().length) out.errors.push('703: a click during a recording opened the menu instead of stopping it');
     }
-    // Back to "no recording" so the later probes find the capture button idle.
-    window.__REC_IDLE__ = true;
-    document.dispatchEvent(new Event('visibilitychange'));
-    await sleep(150);
     // P60: an automatic backup toasts the same way a manual one already did -
     // the backend has no other call site to toast from, so it fires this itself.
     window.__FIRE__('backup-done');

@@ -119,7 +119,7 @@ its own undoable step, so scaling back and forth never loses quality beyond
 what the last resize itself introduced.
 
 Both editors can also open a file you already have, not just a fresh
-capture or recording: click the Capture button left of the input field and choose
+capture or recording: right-click the screenshot or record button and choose
 "Open a file in the editor", or right-click an image or video tile or library
 row and choose Edit image or Edit video. The content of the file decides which editor opens, no matter what
 its extension says. The editor always works on a copy, so the original file
@@ -159,7 +159,7 @@ plain language (the file was incomplete, there was no space left, and so on)
 instead of a raw ffmpeg log line; a "Technical details" row underneath, closed
 by default, holds that log line with a copy button for anyone who wants it.
 
-Choosing "Record screen" in the Capture button's menu opens the same frozen-desktop overlay a screenshot
+Clicking the record button opens the same frozen-desktop overlay a screenshot
 uses: click a window, drag a region, or click empty desktop for the whole
 screen. An optional countdown toast then counts down before capture actually
 starts (3 seconds by default, adjustable in the expert menu, 0 turns it off).
@@ -238,7 +238,7 @@ for a recording with confidential input. How long a released
 key stays visible is adjustable in the expert menu.
 
 An optional camera recording (off by default, in the expert menu) adds a
-"Record camera" entry to the menu of the Capture button left of the input field. It opens its
+"Record camera" entry to the record button's right-click menu. It opens its
 own small window with a live preview, its own Start/Pause/Stop, an audio
 source, a resolution choice and a target folder: the same controls the
 screen recorder itself has. A camera-shaped window with no visible preview
@@ -354,8 +354,8 @@ None of it touches the export.
 
 On by default. A button on the composer and in the screenshot dialog pulls the
 text out of a screenshot or an image file, entirely on this device via Windows'
-own text recognizer; nothing is uploaded or sent anywhere. The Capture button left of the input field
-lists it in its menu: from an image file, or from a screenshot you take right now.
+own text recognizer; nothing is uploaded or sent anywhere. The composer button
+opens a small menu: from an image file, or from a screenshot you take right now.
 It needs a Windows language pack: see "Language packs" below for how that
 install works. Recognized text can auto-copy to the clipboard and auto-join
 wrapped lines into full sentences, both adjustable.
@@ -410,7 +410,7 @@ switched off entirely.
 ### Color picker & pick history
 
 A pipette that freezes the screen, magnifies the pixel under the cursor, and copies
-it as hex, rgb, or hsl. Choose "Recent colors" in the Capture button's menu to reopen the last few picks;
+it as hex, rgb, or hsl. Right-click the pipette icon to reopen the last few picks;
 the history is mirrored into settings, so it survives a restart too.
 
 ### Rotation
@@ -1109,7 +1109,7 @@ Ansicht): Breite, Höhe oder Prozentwert einstellbar, mit Voreinstellungen für
 machbarer Schritt.
 
 **Bildschirmaufnahme**: nimmt ein Fenster, einen Monitor oder einen gezogenen
-Bereich als Video auf, über den Button „Aufnehmen“ links vom Eingabefeld.
+Bereich als Video auf, über den Aufnahme-Button neben dem Screenshot-Werkzeug.
 Eine Bereichsaufnahme zeigt einen dünnen Rahmen um den Bereich; er erscheint nie
 im Video, und das Expertenmenü schaltet ihn ab oder ändert seine Farbe.
 Aufgenommen wird immer MP4 (H.264); drei Qualitätsstufen wählen davor die
@@ -1127,7 +1127,7 @@ MP4-Aufnahme immer unangetastet. Ein Fehlschlag nennt den eigentlichen Grund
 in Klartext (Datei unvollständig, kein Platz mehr und so weiter) statt einer
 rohen ffmpeg-Protokollzeile; eine zugeklappte Zeile „Technische Angaben"
 darunter hält diese Zeile samt Kopier-Button für alle bereit, die sie brauchen.
-Der Menüeintrag „Bildschirm aufnehmen“ des Buttons „Aufnehmen“ öffnet
+Ein Klick auf den Aufnahme-Button öffnet
 dieselbe Bildschirm-Übersicht wie ein Screenshot: Fenster anklicken, Bereich
 ziehen oder auf den freien Desktop klicken für den ganzen Bildschirm. Ein
 Countdown zählt danach herunter, bevor die Aufnahme wirklich startet
@@ -1179,7 +1179,7 @@ für Aufnahmen mit vertraulichen Eingaben. Wie lange eine
 losgelassene Taste sichtbar bleibt, ist im Expertenmenü einstellbar.
 
 Eine optionale Kameraaufnahme (Standard aus, im Expertenmenü) fügt dem
-Menü des Buttons „Aufnehmen“ links vom Eingabefeld den Eintrag „Kamera aufnehmen“ hinzu. Sie
+Rechtsklickmenü des Aufnahme-Buttons den Eintrag „Kamera aufnehmen“ hinzu. Sie
 öffnet ein eigenes kleines Fenster mit Live-Vorschau, eigenem
 Start/Pause/Stopp, einer Tonquelle, einer Auflösungswahl und einem
 Zielordner: denselben Bedienelementen wie die Bildschirmaufnahme selbst. Ein

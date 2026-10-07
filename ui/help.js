@@ -501,7 +501,7 @@ export const HELP_CONTENT = {
       title: "Screenshot tool",
       whatItIs: "The screenshot tool captures part or all of the screen into a new tile.",
       howTo: [
-        "Click the Capture button left of the input field and choose \"Screenshot\".",
+        "Click the camera icon.",
         "Drag a region, or click a window to capture it whole, including protected ones.",
         "In the confirmation dialog, save it as a tile, a file, or leave it on the clipboard.",
       ],
@@ -531,7 +531,7 @@ export const HELP_CONTENT = {
       title: "Open a file in the editor",
       whatItIs: "Opens an existing picture or video in whichever editor its content calls for, instead of only ever reaching an editor through a fresh capture or recording.",
       howTo: [
-        "Click the Capture button left of the input field, choose \"Open a file in the editor\" and pick the file.",
+        "Right-click the screenshot {icon:screenshot} or record {icon:record} button, choose \"Open a file in the editor\" and pick the file.",
         "Or right-click an image or video tile or library row and choose Edit image or Edit video.",
         "Edit as usual; saving asks where to put the result.",
       ],
@@ -545,7 +545,7 @@ export const HELP_CONTENT = {
       id: "screenRecording",
       whatItIs: "Records a window, a monitor, or a dragged region as a video, next to the screenshot tool.",
       howTo: [
-        "Click the Capture button left of the input field and choose \"Record screen\" {icon:record}; pick a window, drag a region, or click empty desktop for the whole screen. It is the same overlay as the screenshot tool.",
+        "Click the record button {icon:record}; pick a window, drag a region, or click empty desktop for the whole screen. It is the same overlay as the screenshot tool.",
         "An optional countdown toast counts down before capture actually starts.",
         "A small floating control bar shows elapsed time and file size, two audio mute buttons, and offers Pause/Resume, Stop and Discard; two optional global hotkeys and the tray menu can stop or pause/resume it too, live only while it is actually running. A window recording whose recording area is All screens or Current screen also gets a switch-target button, to swap what it is capturing without starting over.",
         "Stopping offers Save, Save as…, Copy, Edit or Discard.",
@@ -560,7 +560,7 @@ export const HELP_CONTENT = {
       whatItIs: "Records the webcam into its own video, alone or next to a screen recording.",
       howTo: [
         "Turn on camera recording in the expert menu.",
-        "Click the Capture button left of the input field and choose \"Record camera\" {icon:record}.",
+        "Right-click the record button {icon:record} and choose \"Record camera\".",
         "In its window, check the live preview, pick the audio source, resolution and folder, then Start.",
       ],
       whatHappens:
@@ -589,7 +589,7 @@ export const HELP_CONTENT = {
       id: "ocr",
       whatItIs: "Pulls text out of a screenshot or an image file using Windows' own on-device recognizer. It runs fully offline and nothing leaves the machine.",
       howTo: [
-        "From the composer: the Capture button left of the input field {icon:ocr} offers text from a screenshot or from an existing image file.",
+        "From the composer: the OCR button {icon:ocr} offers a screenshot or an existing image file.",
         "From a screenshot already taken: the snip dialog's \"Recognize text\" button.",
         "Review the result, then copy it or insert it directly.",
       ],
@@ -630,9 +630,9 @@ export const HELP_CONTENT = {
       id: "colorPicker",
       whatItIs: "The color picker is a pipette that reads any on-screen pixel as hex, RGB, or HSL.",
       howTo: [
-        "Click the Capture button left of the input field and choose \"Pick a color from the screen\".",
+        "Click the pipette icon in the composer bar.",
         "Move the loupe to the pixel wanted; scroll or use plus/minus to zoom.",
-        "Click to copy the color; choose \"Recent colors\" in the same menu to reopen the last few picks.",
+        "Click to copy the color; right-click the pipette icon to reopen the last few picks.",
       ],
       whatHappens:
         "Nothing is ever saved to a tile automatically; a pick only reaches the clipboard. The pick history holds the last few colors and survives a restart, capped by its own setting.",
@@ -1250,7 +1250,7 @@ export const HELP_CONTENT = {
       title: "Screenshot-Tool",
       whatItIs: "Das Screenshot-Tool erfasst einen Teil oder den gesamten Bildschirm direkt in eine neue Kachel.",
       howTo: [
-        "Auf den Button „Aufnehmen“ links vom Eingabefeld klicken und „Screenshot“ wählen.",
+        "Auf das Kamera-Icon klicken.",
         "Einen Bereich ziehen oder ein Fenster anklicken, um es ganz zu erfassen, auch geschützte.",
         "Im Bestätigungsdialog als Kachel speichern, als Datei speichern, oder einfach in der Zwischenablage belassen.",
       ],
@@ -1280,7 +1280,7 @@ export const HELP_CONTENT = {
       title: "Datei im Editor öffnen",
       whatItIs: "Öffnet ein vorhandenes Bild oder Video in dem Editor, den sein Inhalt verlangt, statt einen Editor nur über eine frische Aufnahme zu erreichen.",
       howTo: [
-        "Auf den Button „Aufnehmen“ links vom Eingabefeld klicken, „Datei im Editor öffnen“ wählen und die Datei aussuchen.",
+        "Rechtsklick auf den Screenshot- {icon:screenshot} oder Aufnahme-Button {icon:record}, „Datei im Editor öffnen“ wählen und die Datei aussuchen.",
         "Oder per Rechtsklick auf eine Bild- oder Videokachel bzw. Bibliothekszeile Bild bearbeiten oder Video bearbeiten wählen.",
         "Wie gewohnt bearbeiten; beim Speichern wird nach dem Ziel gefragt.",
       ],
@@ -1294,7 +1294,7 @@ export const HELP_CONTENT = {
       id: "screenRecording",
       whatItIs: "Nimmt ein Fenster, einen Monitor oder einen gezogenen Bereich als Video auf, neben dem Screenshot-Werkzeug.",
       howTo: [
-        "Auf den Button „Aufnehmen“ links vom Eingabefeld klicken und „Bildschirm aufnehmen“ {icon:record} wählen; ein Fenster anklicken, einen Bereich ziehen oder auf den freien Desktop klicken für den ganzen Bildschirm. Das ist dieselbe Übersicht wie beim Screenshot-Werkzeug.",
+        "Auf den Aufnahme-Button {icon:record} klicken; ein Fenster anklicken, einen Bereich ziehen oder auf den freien Desktop klicken für den ganzen Bildschirm. Das ist dieselbe Übersicht wie beim Screenshot-Werkzeug.",
         "Ein Countdown zählt optional herunter, bevor die Aufnahme wirklich startet.",
         "Eine kleine Bedienleiste zeigt Laufzeit und Dateigröße, zwei Ton-Stummschalt-Buttons und bietet Pause/Fortsetzen, Stopp und Verwerfen; zwei optionale globale Hotkeys sowie das Tray-Menü können sie ebenfalls stoppen oder pausieren/fortsetzen, aber nur, solange die Aufnahme wirklich läuft. Eine Fensteraufnahme mit der Leinwand für alle Bildschirme oder den aktuellen Bildschirm bekommt zusätzlich einen Button zum Wechseln des Aufnahmeziels, ohne von vorn zu beginnen.",
         "Stopp bietet Speichern, Speichern unter…, Kopieren, Bearbeiten oder Verwerfen an.",
@@ -1309,7 +1309,7 @@ export const HELP_CONTENT = {
       whatItIs: "Nimmt die Webcam in ein eigenes Video auf, allein oder neben einer Bildschirmaufnahme.",
       howTo: [
         "Die Kameraaufnahme im Expertenmenü einschalten.",
-        "Auf den Button „Aufnehmen“ links vom Eingabefeld klicken und „Kamera aufnehmen“ {icon:record} wählen.",
+        "Rechtsklick auf den Aufnahme-Button {icon:record} und „Kamera aufnehmen“ wählen.",
         "Im eigenen Fenster die Vorschau prüfen, Tonquelle, Auflösung und Ordner wählen, dann Start.",
       ],
       whatHappens:
@@ -1338,7 +1338,7 @@ export const HELP_CONTENT = {
       id: "ocr",
       whatItIs: "Liest mit der geräteeigenen Erkennung von Windows Text aus einem Screenshot oder einer Bilddatei. Das läuft vollständig offline und nichts verlässt das Gerät.",
       howTo: [
-        "Über die Eingabeleiste: der Button „Aufnehmen“ links vom Eingabefeld {icon:ocr} bietet Text aus einem Screenshot oder aus einer vorhandenen Bilddatei an.",
+        "Über die Eingabeleiste: der OCR-Button {icon:ocr} bietet einen Screenshot oder eine vorhandene Bilddatei an.",
         "Bei einem bereits aufgenommenen Screenshot: über den Button „Text erkennen“ im Aufnahme-Dialog.",
         "Das Ergebnis prüfen und anschließend kopieren oder direkt einfügen.",
       ],
@@ -1379,9 +1379,9 @@ export const HELP_CONTENT = {
       id: "colorPicker",
       whatItIs: "Die Farbpipette liest jeden Bildschirmpixel als Hex, RGB oder HSL aus.",
       howTo: [
-        "Auf den Button „Aufnehmen“ links vom Eingabefeld klicken und „Farbe vom Bildschirm aufnehmen“ wählen.",
+        "Auf das Pipetten-Icon in der Eingabeleiste klicken.",
         "Die Lupe zum gewünschten Pixel bewegen; scrollen oder Plus/Minus zum Zoomen nutzen.",
-        "Klick kopiert die Farbe; im selben Menü öffnet „Letzte Farben“ die letzten paar Auswahlen erneut.",
+        "Klick kopiert die Farbe; Rechtsklick auf das Pipetten-Icon öffnet die letzten paar Auswahlen erneut.",
       ],
       whatHappens:
         "Es wird nie automatisch etwas in einer Kachel gespeichert; eine Auswahl landet nur in der Zwischenablage. Der Auswahlverlauf hält die letzten paar Farben und übersteht einen Neustart, begrenzt durch eine eigene Einstellung.",
