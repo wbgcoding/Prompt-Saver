@@ -460,8 +460,8 @@ fast too often pauses the session with a toast instead of looping.
   tile as the first entry directly, switchable off on its own in the expert
   menu under Chain, alongside the rest of the chain settings, including what goes between two
   chained tiles (a blank line unless changed). A chain stays when you
-  switch to another program. A running chain shows the chain button in the top
-  bar; click it to end the chain. Pasting with Ctrl+V in the app window ends it too.
+  switch to another program. The chain button in the top bar starts and ends
+  a chain. Pasting with Ctrl+V in the app window ends it too.
 - Chain overview: while chaining, a strip above the grid lists the picked
   steps in order, with small marks for the placeholders each step needs and
   the reserved names it fills by itself. A step turns red when nothing
@@ -1336,8 +1336,8 @@ Kachel nur ihren Menüknopf.
 **Kopieren**: Verketten (mehrere verschiedene Kacheln als ein Text, anders als
 Rotation oben; auch direkt über Kette hier starten: Rechtsklick auf eine Textkachel, einzeln
 abschaltbar unter Kette im Expertenmenü). Eine Kette bleibt beim Wechsel in ein
-anderes Programm bestehen. Solange eine Kette läuft, steht der Kettenknopf
-oben; ein Klick beendet sie. Auch Strg+V im App-Fenster beendet sie. Was zwischen zwei verketteten
+anderes Programm bestehen. Der Ketten-Button oben startet
+und beendet eine Kette. Auch Strg+V im App-Fenster beendet sie. Was zwischen zwei verketteten
 Kacheln steht, legt das Expertenmenü fest (ab Werk eine Leerzeile). Beim Verketten zeigt
 eine Leiste über dem Raster die gewählten
 Schritte der Reihe nach, mit Marken für die Platzhalter, die jeder Schritt

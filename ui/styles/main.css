@@ -1779,13 +1779,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .chain-ov-missing-note { font-size: 11px; color: var(--danger); font-weight: 600; }
 
 /* Expert toggles that hide whole sections / controls. */
-/* The chain button shows only while a chain runs, so a running chain can always
-   be ended. With the tile-menu start switched off it stays, as the only way to
-   start one. */
-#chain-btn { display: none; }
-body.chain-mode #chain-btn,
-body.noflag-chainQuickStart #chain-btn { display: inline-flex; }
-body.noflag-chainPrompts #chain-btn { display: none; }
+.noflag-chainPrompts #chain-btn { display: none; }
 .noflag-chainVarCheck #chain-overview { display: none; }
 .noflag-importExport #settings-sec-data { display: none; }
 /* Opt-in visual toggles (off by default; `flag-<key>` present only when on). */

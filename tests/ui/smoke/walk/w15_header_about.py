@@ -232,8 +232,8 @@ SECTION = """\
         }
       }
     }
-    // 700 / 701: the top bar keeps four buttons, the tag filter sits after the view tabs, the
-    // chain button shows only while a chain runs, hiding the bar lives in the right-click menu,
+    // 700 / 701: the top bar keeps five buttons with the chain button, the tag filter sits after
+    // the view tabs, hiding the bar lives in the right-click menu,
     // and the header dividers group content from window controls.
     {
       if (!document.getElementById('settings').classList.contains('hidden')) {
@@ -244,7 +244,7 @@ SECTION = """\
       const ids = () => [...document.querySelectorAll('.header-actions > button')].filter(shown).map((b) => b.id);
       const got = ids().join(',');
       // Search is hidden below 760px by design.
-      const want = window.innerWidth <= 760 ? 'library-btn,pin-top,gear' : 'library-btn,global-search-btn,pin-top,gear';
+      const want = window.innerWidth <= 760 ? 'library-btn,chain-btn,pin-top,gear' : 'library-btn,global-search-btn,chain-btn,pin-top,gear';
       if (got !== want) out.errors.push('700: the visible top bar buttons are ' + got);
       const tagBtn = document.getElementById('grid-tag-btn');
       const viewsNav = document.getElementById('views');
@@ -252,10 +252,7 @@ SECTION = """\
         out.errors.push('700: the tag filter button is not right after the view tabs inside the brand area');
       }
       const chainBtn = document.getElementById('chain-btn');
-      if (shown(chainBtn)) out.errors.push('700: the chain button is visible while no chain runs');
-      document.body.classList.add('chain-mode');
-      if (!shown(chainBtn)) out.errors.push('700: the chain button is hidden while a chain runs');
-      document.body.classList.remove('chain-mode');
+      if (!shown(chainBtn)) out.errors.push('700: the chain button is hidden while no chain runs');
       // 701: one divider between content and window buttons without the grid size fields.
       const sepInfo = () => [...document.querySelectorAll('.header-actions > .header-sep')].filter(shown).map((s) => Math.round(s.getBoundingClientRect().left));
       const xOf = (id) => document.getElementById(id).getBoundingClientRect().left;
