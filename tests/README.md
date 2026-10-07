@@ -62,6 +62,8 @@ sweep the temp folder take their own root (`sweep_test_root`).
 | `python tests/ui/smoke_test.py` | Boots the real `index.html` against `tests/ui/tauri_stub.js` and walks every window (see below). |
 | `python tests/perf_hot_paths.py` | Times four hot paths at 1000, 5000 and 10000 prompts, plus the video editor once (see below). Needs a Chromium-family browser (Chrome or Edge) installed. |
 
+Visual review (not a gate): `python tests/ui/shots.py [--size 680x460] [--lang de] [surface ...]` writes full-size screenshots of the real UI against the stub to `.tmp/shots` (surfaces: main, settings, settings_end, expert, library, history, tilemenu, editor, folder, help, or a page like `video.html`).
+
 Tests read the dictionaries through `tests/i18n_load.js` / `tests/i18n_files.py`, never by opening a language file directly.
 
 ### `source_hygiene.py` in detail
