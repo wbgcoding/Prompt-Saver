@@ -1398,9 +1398,11 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
 #modal .modal > * { flex: 0 0 auto; }
 /* The action row stays at the foot of the visible dialog while the rest scrolls, so
    Save is reachable at the smallest window. It covers the dialog's bottom padding
-   (negative margin + its own padding) so nothing scrolls into view below it. */
+   (negative margin + its own padding) so nothing scrolls into view below it. Sticky
+   offsets count from inside the dialog's padding, hence bottom: -20px, the same
+   counter the sticky head uses with top. */
 #modal .modal > .modal-actions {
-  position: sticky; bottom: 0; z-index: 2;
+  position: sticky; bottom: -20px; z-index: 2;
   margin: 0 -20px -20px; padding: 10px 20px 20px;
   background: var(--surface);
 }
@@ -2847,8 +2849,10 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
 .field.settings-btn-row { flex-direction: row; gap: 10px; }
 .field.settings-btn-row > button { flex: 1; }
 #expert-open { flex: 1 1 100%; }
-/* Help sits in the head, right beside the close button; the title keeps the left. */
-#settings .modal-head .modal-title { margin-right: auto; }
+/* Help (settings) and Shortcuts (help) sit in the head, right beside the close button;
+   the title keeps the left. */
+#settings .modal-head .modal-title,
+#help .modal-head .modal-title { margin-right: auto; }
 /* Settings sections: one titled block each, hairline between them. A section without
    a single button (the danger section until its buttons live there) stays hidden. */
 .settings-sec { display: flex; flex-direction: column; gap: 10px; }
@@ -4069,7 +4073,8 @@ body.drag-over::after {
    cutting a text. */
 .update-line > .switch-field { flex: 0 0 auto; gap: 8px; white-space: nowrap; }
 .update-interval { flex: 1 1 84px; min-width: 84px; max-width: 150px; margin-left: auto; }
-.update-interval > select { width: 100%; }
+/* Same 8px vertical padding as the buttons beside it, so the whole line is one height. */
+.update-interval > select { width: 100%; padding-block: 8px; }
 /* Clickable version/status label, plain text look → releases page, or the update
    dialog once an update is pending. */
 .update-version {

@@ -647,6 +647,16 @@ SECTION = """\
       layoutScan('prompt editor');
       collapseRows('editor');
       mustReach('prompt editor', '#modal .modal-x, #modal .modal-actions button');
+      // 791: when the dialog scrolls, its sticky action row ends on the dialog's own
+      // bottom edge, so no field ever shows below Save and Delete.
+      {
+        const box791 = document.querySelector('#modal .modal');
+        const act791 = box791.querySelector(':scope > .modal-actions');
+        if (box791.scrollHeight > box791.clientHeight + 2 && act791) {
+          const gap791 = box791.getBoundingClientRect().bottom - act791.getBoundingClientRect().bottom;
+          if (Math.abs(gap791) > 2) out.errors.push('791: the editor action row ends ' + Math.round(gap791) + 'px above the dialog edge at ' + window.innerWidth + 'x' + window.innerHeight);
+        }
+      }
       // 748: the prompt text is the first thing under the name row (the label of the
       // field may sit between), and at the app minimum size Save stays inside the
       // dialog without scrolling for a text prompt with a note and placeholders.
