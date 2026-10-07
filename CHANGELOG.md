@@ -1632,7 +1632,6 @@ the video editor and the introduction tour ship on).
 - **Clearer bar arrows.** The hide and show arrows of the bars now point onto a line, and each one is named after its bar (input bar, top bar).
 - **Disabled buttons look disabled.** A greyed-out main button, like Save with nothing typed, is now plain grey instead of a faded accent color.
 - **The input field names its shortcut.** The placeholder of the input field now says which keys save the prompt (Ctrl+Enter), in the language of the app.
-- **Calmer tile names.** The automatic text size of a tile name is capped at 32 px, and a short name such as "Prompt 2" stays on one line instead of breaking to fill the tile with huge letters.
 - **Grid folders look like tiles.** A folder in the grid is now a normal card with a flat 2 by 2 preview and its name at the bottom, instead of a smaller rounded plate.
 - The clipboard inbox is part of the copy history now: one list with a filter
   for copies made in the app and elsewhere.

@@ -760,9 +760,6 @@ body.drag-active .cell.drag-over {
   text-box-edge: cap alphabetic;
 }
 
-/* A short name that stays readable on one line keeps to it. */
-.tile-name.fit.fit-one-line { white-space: nowrap; }
-
 /* Video tiles: cached wrapper + looping preview + hover control bar. */
 .tile-media {
   position: absolute;

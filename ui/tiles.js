@@ -19,11 +19,6 @@ import { openCtx } from "./gridMenus.js";
 // Auto-fit cache per (text, cell size); cleared on font changes.
 export const fitCache = new Map();
 export const FIT_QUANT = 8; // measurement-box bucket size (see fitAllTiles)
-// An automatic tile text never grows past this, and a short name keeps to one
-// line as long as that line stays at least ONE_LINE_MIN px: otherwise a name like
-// "Prompt 2" would break after "Prompt" to fill the cell with a huge font.
-export const AUTO_FIT_MAX = 32;
-export const ONE_LINE_MIN = 14;
 
 // All fitting is measured inside ONE off-screen ruler pinned to 0/0: the
 // result can never depend on a tile's own (sub)pixel position, cell or DPI.
@@ -37,47 +32,37 @@ export function getRuler() {
   return ruler;
 }
 
-// Largest font size (up to AUTO_FIT_MAX) where the text fits the shared measurement
-// box, on one line when that stays readable, wrapped otherwise; depends only on
-// (text, font, maxW, maxH).
+// Largest font size where the wrapped text fits the shared measurement box;
+// depends only on (text, font, maxW, maxH).
 export function fitTileText(tile, maxW, maxH) {
   if (tile.classList.contains("has-image") || tile.dataset.fitMode === "fixed") return;
   const name = tile.querySelector(".tile-name");
   if (!name) return;
   name.classList.add("fit");
   const key = `${name.textContent}|${name.style.fontFamily}|${maxW}x${maxH}`;
-  let fit = fitCache.get(key);
-  if (fit == null) {
+  let size = fitCache.get(key);
+  if (size == null) {
     const r = getRuler();
     r.style.fontFamily = name.style.fontFamily;
     r.textContent = name.textContent;
     r.style.width = `${maxW}px`;
-    // scrollWidth only exceeds maxW when a single unbreakable word overflows
-    // (or, on one line, when the whole text is wider than the box).
+    // scrollWidth only exceeds maxW when a single unbreakable word overflows.
     const fits = (s) => {
       r.style.fontSize = `${s}px`;
       return r.scrollHeight <= maxH && r.scrollWidth <= maxW;
     };
-    const search = (top) => {
-      let lo = 8;
-      let hi = top;
-      while (lo < hi) {
-        const mid = Math.ceil((lo + hi) / 2);
-        if (fits(mid)) lo = mid;
-        else hi = mid - 1;
-      }
-      return lo;
-    };
-    const top = Math.max(8, Math.min(AUTO_FIT_MAX, maxH));
-    r.style.whiteSpace = "nowrap";
-    const oneLine = search(top);
-    r.style.whiteSpace = "";
-    fit = oneLine >= ONE_LINE_MIN ? { size: oneLine, one: true } : { size: search(top), one: false };
+    let lo = 8;
+    let hi = Math.max(8, Math.min(96, maxH));
+    while (lo < hi) {
+      const mid = Math.ceil((lo + hi) / 2);
+      if (fits(mid)) lo = mid;
+      else hi = mid - 1;
+    }
+    size = lo;
     if (fitCache.size > 1000) fitCache.clear();
-    fitCache.set(key, fit);
+    fitCache.set(key, size);
   }
-  name.style.fontSize = `${fit.size}px`;
-  name.classList.toggle("fit-one-line", fit.one);
+  name.style.fontSize = `${size}px`;
 }
 
 // Measurement box cached per grid state: as long as the window and grid
