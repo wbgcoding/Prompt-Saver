@@ -113,8 +113,12 @@ export function fitAllTiles(boxOnly) {
     // Quantize to an 8px bucket: DPI handoffs and monitor drags shift cell
     // rounding by ±1px: inside one bucket the fitted size cannot change,
     // and the slack guarantees the text never clips after such a shift.
-    fitBox.maxW = Math.floor((cellW - chromeW) / FIT_QUANT) * FIT_QUANT;
-    fitBox.maxH = Math.floor((cellH - chromeH - 2) / FIT_QUANT) * FIT_QUANT;
+    // A little air around the text, and on a normal-size tile enough above and below
+    // to keep the centred text clear of the corner badges (16px icon at 6px).
+    const airX = 2 * Math.round(cellW * 0.04);
+    const airY = cellH >= 80 ? 2 * 16 : 2 * 4;
+    fitBox.maxW = Math.floor((cellW - chromeW - airX) / FIT_QUANT) * FIT_QUANT;
+    fitBox.maxH = Math.floor((cellH - chromeH - 2 - airY) / FIT_QUANT) * FIT_QUANT;
     boxMoved = fitBox.maxW !== prevW || fitBox.maxH !== prevH;
   }
   if (boxOnly && !boxMoved) return;
