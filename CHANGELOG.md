@@ -890,6 +890,9 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **Double-clicking a bar button now folds both bars.** The shortcut for the
+  three bar buttons never fired because the first click hides the button; a
+  second click close to the first one now does it.
 - **Right-clicking the tray icon can no longer freeze the app.** The tray menu
   window is now prepared in the background, so a backup or an index run that is
   busy with your data no longer blocks every window while the menu opens.

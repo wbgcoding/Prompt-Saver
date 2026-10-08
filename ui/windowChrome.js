@@ -495,19 +495,47 @@ export function closeShortcutsModal() {
   shortcutsModalOpener = null;
 }
 
+// A second click close to the first one folds or unfolds both bars together, target
+// state taken from the clicked button. A dblclick listener cannot do this: the first
+// click hides the clicked button, so the second click of a real double-click lands on
+// another element and the browser never fires dblclick on the button. Instead the
+// first click arms a one-shot capture listener on the document for half a second;
+// a click within 8 px of the first is the second half of the double-click, is kept
+// from reaching whatever sits under the pointer, and applies the target to both bars.
+let barToggleDisarm = null;
+function armBarToggleBoth(first, target) {
+  if (barToggleDisarm) barToggleDisarm();
+  if (!flag("barToggleBoth")) return;
+  let timer = 0;
+  const off = () => {
+    document.removeEventListener("click", onSecond, true);
+    clearTimeout(timer);
+    barToggleDisarm = null;
+  };
+  const onSecond = (e) => {
+    off();
+    if (Math.hypot(e.clientX - first.clientX, e.clientY - first.clientY) > 8) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setBars(target, target);
+  };
+  document.addEventListener("click", onSecond, true);
+  timer = setTimeout(off, 500);
+  barToggleDisarm = off;
+}
+
 export function bindWindowChrome() {
   // Show/hide the top and bottom bars.
-  $("show-top").addEventListener("click", () => setBars(true, settings.show_composer !== false));
-  $("hide-bottom").addEventListener("click", () => setBars(settings.show_header !== false, false));
-  $("show-bottom").addEventListener("click", () => setBars(settings.show_header !== false, true));
-
-  // A double-click on any one of the three buttons folds or unfolds both bars
-  // together, target state taken from the clicked button; the single click
-  // that already fired on the way to the double-click is left as it landed.
-  const bindBarToggleDbl = (id, target) => $(id).addEventListener("dblclick", () => {
-    if (flag("barToggleBoth")) setBars(target, target);
+  $("show-top").addEventListener("click", (e) => {
+    setBars(true, settings.show_composer !== false);
+    armBarToggleBoth(e, true);
   });
-  bindBarToggleDbl("show-top", true);
-  bindBarToggleDbl("hide-bottom", false);
-  bindBarToggleDbl("show-bottom", true);
+  $("hide-bottom").addEventListener("click", (e) => {
+    setBars(settings.show_header !== false, false);
+    armBarToggleBoth(e, false);
+  });
+  $("show-bottom").addEventListener("click", (e) => {
+    setBars(settings.show_header !== false, true);
+    armBarToggleBoth(e, true);
+  });
 }

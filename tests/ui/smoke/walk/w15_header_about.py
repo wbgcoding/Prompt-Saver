@@ -303,24 +303,29 @@ SECTION = """\
     }
     // 426: a double-click on any of the three bar buttons folds/unfolds both
     // bars together while barToggleBoth stays on; a single click is untouched
-    // either way. A real double-click fires click, click, dblclick -- click()
-    // exercises the existing single-bar toggle, the synthetic dblclick layers
-    // the extra behaviour on top, same as a genuine double-click would.
+    // either way. The second click of a real double-click lands where the first
+    // button was and no longer on the button, so dbl() clicks the button at its
+    // centre and then the element found at the same point.
     {
       if (!document.getElementById('settings').classList.contains('hidden')) {
         await click('settings-close');
         await sleep(50);
       }
-      const dbl = async (id) => {
-        await click(id);
-        document.getElementById(id).dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
-        await sleep(100);
+      const clickAt = (el, x, y) => el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: x, clientY: y, view: window }));
+      const dbl = async (id, twice) => {
+        const el = document.getElementById(id);
+        const r = el.getBoundingClientRect();
+        const x = r.left + r.width / 2, y = r.top + r.height / 2;
+        clickAt(el, x, y);
+        await sleep(60);
+        if (twice) clickAt(document.elementFromPoint(x, y) || document.body, x, y);
+        await sleep(600);
       };
       const bothHidden = () => document.body.classList.contains('no-header') && document.body.classList.contains('no-composer');
       const bothShown = () => !document.body.classList.contains('no-header') && !document.body.classList.contains('no-composer');
-      await dbl('hide-bottom');
+      await dbl('hide-bottom', true);
       if (!bothHidden()) out.errors.push('426: double-clicking hide-bottom did not fold both bars');
-      await dbl('show-bottom');
+      await dbl('show-bottom', true);
       if (!bothShown()) out.errors.push('426: double-clicking show-bottom did not unfold both bars');
       // Switch barToggleBoth off through its real expert switch, same idiom as
       // the prompt-hotkey-paste option above.
@@ -345,7 +350,7 @@ SECTION = """\
         await sleep(200);
         await click('expert-back');
         document.getElementById('settings').classList.add('hidden');
-        await dbl('hide-bottom');
+        await dbl('hide-bottom', false);
         if (document.body.classList.contains('no-header')) {
           out.errors.push('426: double-click still folded the other bar with the option off');
         }
@@ -362,6 +367,39 @@ SECTION = """\
         if (firstTab426) { firstTab426.click(); await sleep(200); }
         await click('expert-back');
         document.getElementById('settings').classList.add('hidden');
+      }
+    }
+    // 822: the second click of a double-click is recognised by position and time, not
+    // by a dblclick event. Both clicks within 500 ms and 8 px fold both bars; the same
+    // two clicks 700 ms apart, or 40 px apart, leave the top bar alone.
+    {
+      const clickAt = (el, x, y) => el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: x, clientY: y, view: window }));
+      const reset = async () => {
+        if (document.body.classList.contains('no-composer')) clickAt(document.getElementById('show-bottom'), 300, 300);
+        await sleep(100);
+        if (document.body.classList.contains('no-header')) clickAt(document.getElementById('show-top'), 300, 300);
+        await sleep(700);
+      };
+      const pair = async (gap, dx) => {
+        await reset();
+        const hb = document.getElementById('hide-bottom');
+        const r = hb.getBoundingClientRect();
+        const x = r.left + r.width / 2, y = r.top + r.height / 2;
+        clickAt(hb, x, y);
+        await sleep(gap);
+        clickAt(document.elementFromPoint(x + dx, y) || document.body, x + dx, y);
+        await sleep(60);
+        return [document.body.classList.contains('no-header'), document.body.classList.contains('no-composer')];
+      };
+      const quick = await pair(60, 0);
+      if (!(quick[0] && quick[1])) out.errors.push('822: two quick clicks on hide-bottom did not fold both bars: ' + quick);
+      const slow = await pair(700, 0);
+      if (slow[0] || !slow[1]) out.errors.push('822: two clicks 700 ms apart changed more than the composer: ' + slow);
+      const apart = await pair(60, 40);
+      if (apart[0] || !apart[1]) out.errors.push('822: a second click 40 px away changed more than the composer: ' + apart);
+      await reset();
+      if (document.body.classList.contains('no-header') || document.body.classList.contains('no-composer')) {
+        out.errors.push('822: the bars did not come back after the checks');
       }
     }
     // 427: a synthesised "copy" sound plays on every successful copy -- exactly
