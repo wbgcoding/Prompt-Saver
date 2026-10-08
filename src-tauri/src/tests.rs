@@ -15696,6 +15696,26 @@ fn tray_custom_menu_defaults_on_and_the_flag_turns_it_off() {
     assert!(tray_custom_menu_on(&settings), "explicitly re-enabling it must also work");
 }
 
+// The right-click on the tray icon prepares its plan from ONE store reference, off
+// the event-loop thread. No red exists for the old shape: the old code took the lock
+// twice on the main thread, and a hang needs a second thread holding the store, which
+// a unit test cannot stage deterministically. This pins the new contract instead.
+#[test]
+fn tray_open_prep_skips_while_the_custom_window_is_off_and_carries_the_plan_when_on() {
+    let mut store = Store { prompts: Vec::new(), trash: Vec::new(), settings: Settings::default(), prompts_locked: false, written: Default::default() };
+    store.settings.ui_flags.insert(ALLOW_SCREENSHOT_KEY.to_string(), true);
+    let (plan, excluded) = tray_open_prep_from_store(&store, None).expect("custom window ships on");
+    assert!(!excluded, "a window that may be captured is not excluded");
+    assert!(!plan.show_label.is_empty() && !plan.quit_label.is_empty());
+    assert!(plan.rec_entries.is_empty(), "no recording running, no recording rows");
+    let (with_rec, _) = tray_open_prep_from_store(&store, Some(RecPhase::Paused)).unwrap();
+    assert_eq!(with_rec.rec_entries.len(), 2, "stop + pause rows while a recording runs");
+    store.settings.ui_flags.insert(ALLOW_SCREENSHOT_KEY.to_string(), false);
+    assert!(tray_open_prep_from_store(&store, None).unwrap().1, "default keeps the window out of captures");
+    store.settings.ui_flags.insert(TRAY_CUSTOM_MENU_KEY.to_string(), false);
+    assert!(tray_open_prep_from_store(&store, None).is_none(), "native popup owns the click");
+}
+
 #[test]
 fn tray_kind_str_round_trips_every_kind_to_a_distinct_lowercase_word() {
     let all = [

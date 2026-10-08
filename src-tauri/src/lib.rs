@@ -682,30 +682,32 @@ pub fn run() {
                         ..
                     } = event
                     {
-                        // The native popup only shows up here when trayCustomMenu is
-                        // off (apply_tray_menu detaches its menu entirely while it is
-                        // on) -- otherwise this window would appear right next to it.
-                        let app = tray.app_handle();
-                        let custom = app
-                            .try_state::<Db>()
-                            .map(|s| tray_custom_menu_on(&lock(&s).settings))
-                            .unwrap_or(false);
-                        if custom {
-                            // Same root cause as the show_rec_bar hang: this
-                            // handler runs on the main thread, and building a webview
-                            // window from inside it never returns. Queue the build for
-                            // the next main-thread turn instead, with a log line on each
-                            // side so a future hang would be visible instead of silent.
-                            let app2 = app.clone();
-                            tauri::async_runtime::spawn(async move {
+                        // This handler runs on the event-loop thread, so it takes
+                        // no lock: the store can be held for a long time by a backup
+                        // or an index run, and waiting for it here froze every
+                        // window. A worker reads the flag and builds the plan; only
+                        // the window itself is created on the main thread (building
+                        // a webview window from inside this handler never returns),
+                        // with a log line on each side so a hang would be visible.
+                        // The native popup owns the click while trayCustomMenu is
+                        // off (apply_tray_menu detaches its menu while it is on).
+                        let app2 = tray.app_handle().clone();
+                        tauri::async_runtime::spawn(async move {
+                            let prep = tauri::async_runtime::spawn_blocking({
                                 let app3 = app2.clone();
-                                let _ = app2.run_on_main_thread(move || {
-                                    append_crash_log("tray window: about to build");
-                                    open_tray_window(&app3);
-                                    append_crash_log("tray window: build ok");
-                                });
+                                move || tray_open_prep(&app3)
+                            })
+                            .await
+                            .ok()
+                            .flatten();
+                            let Some((plan, excluded)) = prep else { return };
+                            let app3 = app2.clone();
+                            let _ = app2.run_on_main_thread(move || {
+                                append_crash_log("tray window: about to build");
+                                open_tray_window(&app3, plan, excluded);
+                                append_crash_log("tray window: build ok");
                             });
-                        }
+                        });
                     }
                 });
             if let Some(icon) = app.default_window_icon() {

@@ -527,7 +527,15 @@ pub(crate) fn build_tray_win_plan(app: &AppHandle) -> TrayWinPlan {
             return TrayWinPlan { rec_entries: Vec::new(), sections: Vec::new(), show_label: String::new(), quit_label: String::new(), search_on: false, search_ph: String::new() };
         }
     };
+    let phase = recording_phase(app);
     let store = lock(&state);
+    tray_win_plan_from_store(&store, phase)
+}
+
+// The plan from plain data, so the store lock is the only thing the caller holds
+// while this runs and the content stays testable without an app handle. The
+// recording phase is read before the lock is taken (it has its own mutex).
+pub(crate) fn tray_win_plan_from_store(store: &Store, phase: Option<RecPhase>) -> TrayWinPlan {
     let cfg = tray_cfg(&store.settings);
     let plan = tray_plan(&store.prompts, &store.settings.last_used, &cfg);
     let lang = resolve_lang(&store.settings.language);
@@ -536,9 +544,8 @@ pub(crate) fn build_tray_win_plan(app: &AppHandle) -> TrayWinPlan {
     let rec_entries_on = store.settings.ui_flags.get("screenRecord") != Some(&false)
         && store.settings.ui_flags.get("recTrayEntries") != Some(&false);
     let search_on = tray_search_on(&store.settings);
-    drop(store);
     let rec_entries = if rec_entries_on {
-        match recording_phase(app) {
+        match phase {
             Some(phase) => {
                 let paused = phase == RecPhase::Paused;
                 vec![
@@ -573,6 +580,25 @@ pub(crate) fn build_tray_win_plan(app: &AppHandle) -> TrayWinPlan {
         search_on,
         search_ph: tray_search_placeholder(lang).to_string(),
     }
+}
+
+// Everything a right-click on the tray icon needs from the store, taken under ONE
+// lock: None while the custom window is switched off (the native popup owns the
+// click then), otherwise the plan and the capture-exclusion flag. Runs on a worker
+// thread: the store lock can be held for a long time by a backup or an index run,
+// and waiting for it on the event-loop thread froze every window.
+pub(crate) fn tray_open_prep(app: &AppHandle) -> Option<(TrayWinPlan, bool)> {
+    let phase = recording_phase(app);
+    let state = app.try_state::<Db>()?;
+    let store = lock(&state);
+    tray_open_prep_from_store(&store, phase)
+}
+
+pub(crate) fn tray_open_prep_from_store(store: &Store, phase: Option<RecPhase>) -> Option<(TrayWinPlan, bool)> {
+    if !tray_custom_menu_on(&store.settings) {
+        return None;
+    }
+    Some((tray_win_plan_from_store(store, phase), capture_excluded(&store.settings)))
 }
 
 // Pure, so the row/header/separator arithmetic stays testable without an app
@@ -612,19 +638,14 @@ pub(crate) fn tray_window_rect(app: &AppHandle, plan: &TrayWinPlan) -> Rect {
     Rect { x, y, w, h }
 }
 
-// Opens at the cursor, clamped into that monitor's work area -- same helper every
+// Runs on the event-loop thread, so it takes the plan prepared by tray_open_prep and
+// touches no lock. Opens at the cursor, clamped into that monitor's work area -- same helper every
 // other cursor-anchored popup (launcher, var prompt) already uses. Replaces an
 // already-open one instead of stacking a second, matching those windows too.
-pub(crate) fn open_tray_window(app: &AppHandle) {
+pub(crate) fn open_tray_window(app: &AppHandle, plan: TrayWinPlan, excluded: bool) {
     if let Some(win) = app.get_webview_window(TRAY_WIN_LABEL) {
         let _ = win.close();
     }
-    let excluded = {
-        let state: State<Db> = app.state();
-        let store = lock(&state);
-        capture_excluded(&store.settings)
-    };
-    let plan = build_tray_win_plan(app);
     let rect = tray_window_rect(app, &plan);
     let win = match WebviewWindowBuilder::new(app, TRAY_WIN_LABEL, WebviewUrl::App("tray.html".into()))
         .title(brand::DISPLAY_NAME)
@@ -649,8 +670,10 @@ pub(crate) fn open_tray_window(app: &AppHandle) {
     let _ = win.set_focus();
 }
 
+// Async on purpose: a sync command runs on the event-loop thread, and the plan
+// waits for the store lock.
 #[tauri::command]
-pub(crate) fn tray_window_plan(app: AppHandle) -> TrayWinPlan {
+pub(crate) async fn tray_window_plan(app: AppHandle) -> TrayWinPlan {
     build_tray_win_plan(&app)
 }
 

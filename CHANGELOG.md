@@ -890,6 +890,9 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **Right-clicking the tray icon can no longer freeze the app.** The tray menu
+  window is now prepared in the background, so a backup or an index run that is
+  busy with your data no longer blocks every window while the menu opens.
 - **No white field on the main screen after start-up.** The hidden
   screenshot overlay that is prepared at launch is now created tiny, far
   outside every monitor and with a dark backdrop, and is put away again if
