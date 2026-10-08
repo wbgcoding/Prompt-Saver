@@ -3,8 +3,9 @@
     python tests/ui/shots.py [--size 880x600] [--lang de] [--out .tmp/shots] [surface ...]
 
 A surface is `main`, `settings`, `settings_end`, `expert`, `library`, `history`,
-`tilemenu`, `editor`, `folder`, `help`, or another page such as `video.html`.
-A group (`@settings`, `@library`, `@tiles`) shoots its surfaces.
+`tilemenu`, `editor`, `folder`, `help`, `backup`, `snipedit`, `snipdraw`, or another
+page such as `video.html`.
+A group (`@settings`, `@library`, `@tiles`, `@snip`) shoots its surfaces.
 Without a surface every one is shot. Not a test: it never fails on what it sees.
 """
 import argparse
@@ -37,6 +38,16 @@ const t = document.querySelector('#grid .tile[data-id]'); const r = t.getBoundin
 t.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 30, clientY: r.top + 30 }));
 await sleep(300);
 """
+# Opens the screenshot editor on a 1400x800 white canvas with lines of small text,
+# the same way a real capture arrives.
+SNIP_OPEN = """
+const cv = document.createElement('canvas'); cv.width = 1400; cv.height = 800;
+const c = cv.getContext('2d'); c.fillStyle = '#fff'; c.fillRect(0, 0, 1400, 800);
+c.fillStyle = '#222'; c.font = '16px Segoe UI';
+for (let i = 0; i < 30; i++) c.fillText('Sample text line ' + i + ' 0123456789', 20, 30 + i * 25);
+window.__FIRE__('snip-captured', { data_url: cv.toDataURL('image/png'), path: '', name: 'x.png' });
+await sleep(800);
+"""
 ACTS = {
     "main": "",
     "settings": "$('gear').click(); await sleep(300);",
@@ -51,12 +62,16 @@ ACTS = {
                "window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, clientX: 5, clientY: 5 }));"
                "await sleep(600);"),
     "help": "$('gear').click(); await sleep(300); $('help-open').click(); await sleep(500);",
+    "backup": "$('gear').click(); await sleep(300); $('settings-backup-btn').click(); await sleep(600);",
+    "snipedit": SNIP_OPEN,
+    "snipdraw": SNIP_OPEN + "document.querySelector('#snip-edit-tools [data-tool=\"rect\"]')?.click(); await sleep(300);",
 }
 # Area groups, so a review of one area shoots only its surfaces.
 GROUPS = {
     "@settings": ["settings", "settings_end", "expert", "help"],
     "@library": ["library", "history"],
     "@tiles": ["main", "tilemenu", "editor", "folder"],
+    "@snip": ["snipedit", "snipdraw"],
 }
 
 
