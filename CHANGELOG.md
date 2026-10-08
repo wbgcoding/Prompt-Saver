@@ -606,6 +606,9 @@ the video editor and the introduction tour ship on).
 
 ### Improved
 
+- **Folder tiles show a bigger preview.** The preview of a folder on the grid
+  now fills the tile above its name and shows up to six members (four on a
+  narrow tile), with one or two members shown large.
 - **Demo mode speaks your language.** The sample entries, tags, tabs, folder
   and attached files are now shown in the language the app is set to, in all
   eleven interface languages. Starting demo mode again after a language

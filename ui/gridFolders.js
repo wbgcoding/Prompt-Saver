@@ -139,7 +139,7 @@ export async function takeOutOfFolder(id, cell) {
   await renderGrid(true);
 }
 
-// A folder cell: up to four member faces, the name and the count.
+// A folder cell: up to six member faces (the CSS shows four, or six on a wide tile) and the name.
 export function buildFolderTile(f) {
   const tile = document.createElement("div");
   tile.className = "tile folder-tile";
@@ -154,7 +154,9 @@ export function buildFolderTile(f) {
   const mini = document.createElement("span");
   mini.className = "folder-mini";
   const members = folderMembers(f);
-  for (const p of members.slice(0, 4)) {
+  const faces = members.slice(0, 6);
+  mini.dataset.n = String(faces.length);
+  for (const p of faces) {
     const face = document.createElement("span");
     face.className = "folder-mini-cell";
     if (p.color) {

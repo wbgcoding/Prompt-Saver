@@ -1262,5 +1262,46 @@ def run(browser, tmp):
 """
     for size_824 in ('880x600', '680x460'):
         failed += ar_probe('bh824-' + size_824, '824: help close button inset matches settings at ' + size_824, 'index', size_824, '', help_close_body)
+    # The folder preview fills the tile and the face count picks the layout.
+    failed += ar_probe('bf826', '826: the folder preview fills the tile and shows the right number of faces', 'index', '880x600', '', r"""
+    await bootReady();
+    const gf = await import('./gridFolders.js');
+    const real = document.querySelector('#grid .folder-tile');
+    if (!real) errs.push('826: no folder tile on the grid (fixture)');
+    else {
+      const mini = real.querySelector('.folder-mini');
+      const title = real.querySelector('.folder-title');
+      const cs = getComputedStyle(real);
+      const tr = real.getBoundingClientRect();
+      const left = tr.left + parseFloat(cs.borderLeftWidth) + parseFloat(cs.paddingLeft);
+      const right = tr.right - parseFloat(cs.borderRightWidth) - parseFloat(cs.paddingRight);
+      const top = tr.top + parseFloat(cs.borderTopWidth) + parseFloat(cs.paddingTop);
+      const room = (right - left) * (title.getBoundingClientRect().top - top);
+      const mr = mini.getBoundingClientRect();
+      const share = (mr.width * mr.height) / room;
+      if (share < 0.75) errs.push('826: the preview fills only ' + Math.round(share * 100) + ' percent of the room above the caption');
+      if (mini.dataset.n !== '5') errs.push('826: five members should render five faces, got ' + mini.dataset.n);
+    }
+    const faces = (n, w, h) => {
+      const box = document.createElement('div');
+      box.style.cssText = 'position:fixed;left:0;top:0;z-index:99999;width:' + w + 'px;height:' + h + 'px';
+      const ids = ['p1', 'p2', 'p3', 'p5', 'p7', 'p9', 'p4'].slice(0, n);
+      const tile = gf.buildFolderTile({ id: 'tfx', name: 'X', color: '', view_id: 'home', cell: [0, 0], members: ids });
+      box.appendChild(tile);
+      document.body.appendChild(box);
+      const mini = tile.querySelector('.folder-mini');
+      const shown = [...mini.children].filter((c) => getComputedStyle(c).display !== 'none').length;
+      const res = [shown, mini.dataset.n];
+      box.remove();
+      return res;
+    };
+    for (const [n, narrow, wide] of [[1, 1, 1], [2, 2, 2], [4, 4, 4], [6, 4, 6], [7, 4, 6]]) {
+      const a = faces(n, 207, 148);
+      const b = faces(n, 260, 150);
+      if (a[0] !== narrow) errs.push('826: ' + n + ' members show ' + a[0] + ' faces on a narrow tile, want ' + narrow);
+      if (b[0] !== wide) errs.push('826: ' + n + ' members show ' + b[0] + ' faces on a wide tile, want ' + wide);
+      if (a[1] !== String(Math.min(n, 6))) errs.push('826: ' + n + ' members set data-n ' + a[1]);
+    }
+""")
     # ---- main window findings: generated block end ----
     return failed

@@ -894,8 +894,8 @@ body.grid-selecting .tile-type { opacity: 0; }
 body.chain-mode:not(.grid-selecting) .tile .tile-select { opacity: 0; pointer-events: none; }
 
 /* ---- Grid folders ----
-   A folder is a cell like any other: the four newest members as a 2x2 face, the name
-   under it and the member count in the corner. Everything is drawn INSIDE the tile;
+   A folder is a cell like any other: up to six member faces filling the cell, the name
+   under them. Everything is drawn INSIDE the tile;
    the grid clips its cells, so nothing may reach past the edge. */
 /* ---- Grid folder tile ----
    Reads like a folder on a desktop: a big preview of what is inside, a small label
@@ -904,7 +904,8 @@ body.chain-mode:not(.grid-selecting) .tile .tile-select { opacity: 0; pointer-ev
    tile auto-fitter scales to prompt size, and a two-word folder name then filled the
    whole cell. */
 /* The tile is a normal card (surface, border, radius, hover accent from .tile); only
-   its content differs: a flat 2x2 preview and the name as a caption at the bottom. */
+   its content differs: a flat preview that fills the room above the name, which sits
+   as a caption at the bottom. */
 .folder-tile {
   flex-direction: column;
   justify-content: center;
@@ -917,14 +918,11 @@ body.chain-mode:not(.grid-selecting) .tile .tile-select { opacity: 0; pointer-ev
   display: grid;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr 1fr;
-  gap: 4px;
-  /* Square and 70% of the card, never taller than the room above the caption.
-     0 0 auto, or the column flex shrinks it back to nothing. The auto margins
-     centre it in that room and leave the caption at the bottom. */
-  flex: 0 0 auto;
-  margin-block: auto;
-  width: min(70%, 70cqh);
-  aspect-ratio: 1;
+  gap: clamp(3px, 3cqi, 8px);
+  /* Takes all the room above the caption; min-height 0 lets the column flex shrink
+     it with the card instead of pushing the caption out. */
+  flex: 1 1 auto;
+  width: 100%;
   min-height: 0;
   padding: 0;
   border-radius: 0;
@@ -937,7 +935,7 @@ body.chain-mode:not(.grid-selecting) .tile .tile-select { opacity: 0; pointer-ev
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border-radius: 26%;
+  border-radius: clamp(4px, 12cqi, 14px);
   background: var(--surface-2);
   color: var(--fg);
   font-size: clamp(8px, 4.4cqi, 16px);
@@ -946,6 +944,18 @@ body.chain-mode:not(.grid-selecting) .tile .tile-select { opacity: 0; pointer-ev
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
 .folder-mini-cell > img { width: 100%; height: 100%; object-fit: cover; }
+/* The face count picks the layout: one big face, two side by side, then a 2x2 that
+   hides the fifth and sixth face, except on a wide tile where five or six faces go
+   into three columns of two rows. */
+.folder-mini[data-n="1"] { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+.folder-mini[data-n="2"] { grid-template-rows: 1fr; }
+.folder-mini[data-n="5"] > .folder-mini-cell:nth-child(n+5),
+.folder-mini[data-n="6"] > .folder-mini-cell:nth-child(n+5) { display: none; }
+@container (min-aspect-ratio: 8/5) {
+  .folder-mini[data-n="5"], .folder-mini[data-n="6"] { grid-template-columns: repeat(3, 1fr); }
+  .folder-mini[data-n="5"] > .folder-mini-cell:nth-child(n+5),
+  .folder-mini[data-n="6"] > .folder-mini-cell:nth-child(n+5) { display: flex; }
+}
 .folder-title {
   flex: 0 0 auto;
   max-width: 100%;

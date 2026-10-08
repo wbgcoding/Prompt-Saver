@@ -101,7 +101,6 @@ SECTION = """\
         if (mini708 && getComputedStyle(mini708).backgroundColor !== 'rgba(0, 0, 0, 0)') out.errors.push('708: the folder preview still has a plate of its own');
         if (mini708) {
           const mr708 = mini708.getBoundingClientRect();
-          if (Math.abs(mr708.width - mr708.height) > 1) out.errors.push('708: the folder preview is not square');
           if (mr708.right > fr708.right + 1 || mr708.bottom > fr708.bottom + 1 || mr708.left < fr708.left - 1 || mr708.top < fr708.top - 1) out.errors.push('708: the folder preview leaves its tile');
         }
         if (mini708 && title708) {
