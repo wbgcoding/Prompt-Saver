@@ -3505,6 +3505,12 @@ select.modal-input { padding-right: 30px; }
 .backup-body .stat-section { margin-top: 2px; }
 .backup-body .expert-custom > .stat-section:first-child { margin-top: 0; }
 .backup-body .stat-cards { margin-top: 0; }
+/* The statistics panel stacks its blocks (switch row, export row, cards, chart,
+   overview) with one gap; its own stat-cards margin would only add to it. The storage
+   and retention panels share the stats-panel-body class and stay as they are. */
+#stats-panel > .stats-panel-body { display: flex; flex-direction: column; gap: 12px; }
+#stats-panel .stat-cards { margin-top: 0; }
+#stats-panel > .stats-panel-body > .stat-section { margin-top: 2px; }
 /* Divider between the three sections of the statistics/backups window (usage,
    storage, backups). Usage is first and needs none; storage's own collapsible
    head carries this class directly, backups has no single head of its own so

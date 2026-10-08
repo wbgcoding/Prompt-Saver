@@ -1225,5 +1225,25 @@ def run(browser, tmp):
     if (jr.fmtWhen(yesterday) !== jr.fmtCopyTime(yesterday)) errs.push('722: yesterday does not read like the short date and time');
     await core.setLang('en');
 """)
+    # The statistics panel keeps its blocks apart: the switch row, the export row and the cards.
+    stats_gap_body = r"""
+    await bootReady();
+    document.getElementById('gear').click();
+    await sleep(200);
+    document.getElementById('settings-backup-btn').click();
+    await sleep(600);
+    const head = document.querySelector('#stats-panel .stats-head-row');
+    const exp = document.querySelector('#stats-panel .stats-export-row');
+    const cards = document.querySelector('#stats-panel .stat-cards');
+    if (!head || !exp || !cards) errs.push('823: a block of the statistics panel is missing (fixture)');
+    else {
+      const g1 = exp.getBoundingClientRect().top - head.getBoundingClientRect().bottom;
+      const g2 = cards.getBoundingClientRect().top - exp.getBoundingClientRect().bottom;
+      if (g1 < 10) errs.push('823: the switch row and the export row are ' + g1 + ' px apart');
+      if (g2 < 10) errs.push('823: the export row and the cards are ' + g2 + ' px apart');
+    }
+"""
+    for size_823 in ('880x600', '680x460'):
+        failed += ar_probe('bs823-' + size_823, '823: statistics panel blocks keep a gap at ' + size_823, 'index', size_823, '<script>window.__SEED_SETTINGS__ = { ui_flags: { usageStats: true } };</script>\n', stats_gap_body)
     # ---- main window findings: generated block end ----
     return failed
