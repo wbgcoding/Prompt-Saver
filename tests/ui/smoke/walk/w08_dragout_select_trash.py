@@ -217,7 +217,7 @@ SECTION = """\
     }
 
     // 11: grid bulk selection - checkbox click must never fall through to the
-    // tile's own copy/drag handling (same .tile-select guard as .tile-menu).
+    // tile's own copy/drag handling (the .tile-select pointerdown guard).
     {
       const calls = () => (window.__SMOKE_CALLS__ = window.__SMOKE_CALLS__ || []);
       const t4 = gridTile('p4'), t5 = gridTile('p5');

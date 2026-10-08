@@ -1571,6 +1571,8 @@ the video editor and the introduction tour ship on).
 
 ### Removed
 
+- **The three-dot button on tiles.** Tiles no longer show the three-dot button;
+  right-click opens the tile menu.
 - **Eight themes are gone**: Gradient, Sunset, Forest, Midnight, Retro, Lavender,
   Candy and Coffee. Eight remain — System, Light, Dark, Programmer, Neon Violet,
   Ocean, Cyberpunk and Black & White — each covering something the others do not.

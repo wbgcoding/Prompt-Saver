@@ -452,7 +452,7 @@ fast too often pauses the session with a toast instead of looping.
 ### Copying
 
 - Selecting tiles: right-click a tile (or Ctrl+click) to select it; while
-  selecting, every tile shows its checkbox. Hovering a tile shows only its menu button.
+  selecting, every tile shows its checkbox. The tile menu opens with a right-click.
 - Chaining: not the same as rotation (see Rotation above). Several
   DIFFERENT tiles copied together as one text, rather than one tile changing
   what it holds. Click several tiles in a row, they combine into one clipboard
@@ -1330,8 +1330,8 @@ Experteneinstellungen regeln Zeitlimit und Erkennungsfenster; zu schnelles,
 zu häufiges Einfügen pausiert die Sitzung mit einem Hinweis statt zu wiederholen.
 
 **Kacheln auswählen**: Rechtsklick auf eine Kachel (oder Strg+Klick) wählt sie aus;
-solange du auswählst, zeigt jede Kachel ihr Kästchen. Beim Überfahren zeigt eine
-Kachel nur ihren Menüknopf.
+solange du auswählst, zeigt jede Kachel ihr Kästchen. Das Kachelmenü öffnet per
+Rechtsklick.
 
 **Kopieren**: Verketten (mehrere verschiedene Kacheln als ein Text, anders als
 Rotation oben; auch direkt über Kette hier starten: Rechtsklick auf eine Textkachel, einzeln

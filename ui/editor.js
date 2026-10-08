@@ -1293,7 +1293,7 @@ export async function confirmModal() {
       saved = await invoke("update_prompt", args);
       // Save can turn rotateAuto off (or drop it below two entries) while a
       // session for THIS prompt happens to be armed: end it now instead of
-      // waiting for the next paste to notice, same as the tile-menu toggle.
+      // waiting for the next paste to notice, same as the tile menu's own toggle.
       // A no-op on the backend if no session is running for this id.
       if (!rotateAuto) await invoke("rotation_end_auto", { id: modalState.id }).catch(() => {});
     }

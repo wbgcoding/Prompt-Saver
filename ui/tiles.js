@@ -1,5 +1,5 @@
 // Grid tiles: building, auto-fit, images, video thumbs, drag-out and auto-paste.
-import { assignDrag, assignMemberDrag, BUBBLE_MS, convertFileSrc, DOTS, drag, DRAG_THRESHOLD, errToast, favView, flag, folderArm, gateOpen, gridEl, gridSelected, gridTags, ICON_FILE, ICON_IMAGE, ICON_KEYBOARD, ICON_PDF, ICON_UNDO, ICON_VIDEO, IMG_WAIT, inkShadow, invoke, journalThumbCache, LANG, libraryEl, libThumbCache, mediaBarLabels, memberDrag, optFlag, PDF_EXT, prompts, readableInk, ROTATE_SHORT_MAX, settings, t, toast, txt, val, videoCache } from "./core.js";
+import { assignDrag, assignMemberDrag, BUBBLE_MS, convertFileSrc, drag, DRAG_THRESHOLD, errToast, favView, flag, folderArm, gateOpen, gridEl, gridSelected, gridTags, ICON_FILE, ICON_IMAGE, ICON_KEYBOARD, ICON_PDF, ICON_UNDO, ICON_VIDEO, IMG_WAIT, inkShadow, invoke, journalThumbCache, LANG, libraryEl, libThumbCache, mediaBarLabels, memberDrag, optFlag, PDF_EXT, prompts, readableInk, ROTATE_SHORT_MAX, settings, t, toast, txt, val, videoCache } from "./core.js";
 import { applyChainToTile, chainMode, toggleChainPick } from "./chain.js";
 import { applyVideoPrefs, buildMediaBar, mediaKind } from "./media.js";
 import { fitText, FONTS } from "./fonts.js";
@@ -460,19 +460,8 @@ export function buildTile(p) {
     applyAutoBadge(tile, p.id); // survives a re-render mid-session
   }
 
-  // The actions menu (⋯ button + right-click) can be switched off entirely.
+  // The actions menu (right-click) can be switched off entirely.
   if (flag("tileMenu")) {
-    const menuBtn = document.createElement("button");
-    menuBtn.className = "tile-menu";
-    menuBtn.innerHTML = DOTS;
-    menuBtn.setAttribute("aria-label", t("actions"));
-    menuBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
-    menuBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const r = menuBtn.getBoundingClientRect();
-      openCtx(p.id, r.left, r.bottom + 4);
-    });
-    tile.appendChild(menuBtn);
     tile.addEventListener("contextmenu", (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -481,7 +470,7 @@ export function buildTile(p) {
   }
 
   tile.addEventListener("pointerdown", (e) => {
-    if (e.button !== 0 || e.target.closest(".tile-menu") || e.target.closest(".tile-select")) return;
+    if (e.button !== 0 || e.target.closest(".tile-select")) return;
     // With the modifier held the press becomes a drag-out; `out` keeps the
     // reorder machine out of it. Ctrl+click without moving selects the tile; a
     // modifier drag still drags out.

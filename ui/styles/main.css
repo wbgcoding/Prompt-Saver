@@ -649,28 +649,6 @@ body.drag-active .cell.drag-over {
    is the only hint needed, and a cursor keyword carries no colour to clash with a theme. */
 .tile[draggable="true"], .lib-item[draggable="true"] { cursor: copy; }
 
-/* Hover-revealed actions button. */
-.tile-menu {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  z-index: 3;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 26px;
-  min-height: 26px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--surface-2);
-  color: var(--accent);
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity var(--transition), color var(--transition), border-color var(--transition);
-}
-.tile:hover .tile-menu { opacity: 1; }
-.tile-menu:hover { color: var(--accent); border-color: var(--accent); }
-
 /* Brief visual feedback after copying. */
 .tile.copied {
   border-color: var(--accent);
@@ -911,9 +889,8 @@ body.grid-selecting .tile-type { opacity: 0; }
 }
 .tile.grid-selected { outline: 2px solid var(--accent); outline-offset: -2px; }
 
-/* While a chain runs, the corner belongs to the order badge: the menu button
-   and the select box stay hidden on hover too, unless multi-select is on. */
-body.chain-mode:not(.grid-selecting) .tile .tile-menu,
+/* While a chain runs, the corner belongs to the order badge: the select box stays
+   hidden on hover too, unless multi-select is on. */
 body.chain-mode:not(.grid-selecting) .tile .tile-select { opacity: 0; pointer-events: none; }
 
 /* ---- Grid folders ----
