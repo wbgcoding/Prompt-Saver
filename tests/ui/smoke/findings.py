@@ -1245,5 +1245,22 @@ def run(browser, tmp):
 """
     for size_823 in ('880x600', '680x460'):
         failed += ar_probe('bs823-' + size_823, '823: statistics panel blocks keep a gap at ' + size_823, 'index', size_823, '<script>window.__SEED_SETTINGS__ = { ui_flags: { usageStats: true } };</script>\n', stats_gap_body)
+    # The help dialog's close button sits at the same inset as the settings dialog's.
+    help_close_body = r"""
+    await bootReady();
+    const inset = (id, close) => {
+      const m = document.querySelector('#' + id + ' .modal').getBoundingClientRect();
+      return Math.round(m.right - document.getElementById(close).getBoundingClientRect().right);
+    };
+    document.getElementById('gear').click();
+    await sleep(300);
+    const setIn = inset('settings', 'settings-close');
+    document.getElementById('help-open').click();
+    await sleep(400);
+    const helpIn = inset('help', 'help-close');
+    if (Math.abs(setIn - helpIn) > 1) errs.push('824: the help close button sits ' + helpIn + ' px from the dialog edge, the settings one ' + setIn);
+"""
+    for size_824 in ('880x600', '680x460'):
+        failed += ar_probe('bh824-' + size_824, '824: help close button inset matches settings at ' + size_824, 'index', size_824, '', help_close_body)
     # ---- main window findings: generated block end ----
     return failed

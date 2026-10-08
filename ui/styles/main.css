@@ -2338,7 +2338,10 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
 #help .modal { width: min(760px, 94vw); height: var(--full-modal-h); max-height: var(--full-modal-h); overflow: hidden; padding-right: 0; }
 /* By child rather than by id: wireClear() moves the search field into a .clear-wrap
    span at runtime, so the direct child there is not #help-search itself. */
-#help .modal > *:not(.help-body) { margin-right: 20px; }
+#help .modal > *:not(.help-body):not(.modal-head) { margin-right: 20px; }
+/* The head runs to the dialog edge (this dialog has no right padding to reclaim), so its
+   close X sits at the inset the settings dialog gives it. */
+#help .modal-head { margin-right: 0; padding-right: 12px; }
 #help .modal > #help-tabs-bar { flex: 0 0 auto; }
 .help-body { display: flex; flex-direction: column; gap: 10px; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 #help .help-body { padding-right: 8px; }
