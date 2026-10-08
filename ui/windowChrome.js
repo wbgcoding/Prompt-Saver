@@ -499,27 +499,36 @@ export function closeShortcutsModal() {
 // state taken from the clicked button. A dblclick listener cannot do this: the first
 // click hides the clicked button, so the second click of a real double-click lands on
 // another element and the browser never fires dblclick on the button. Instead the
-// first click arms a one-shot capture listener on the document for half a second;
-// a click within 8 px of the first is the second half of the double-click, is kept
-// from reaching whatever sits under the pointer, and applies the target to both bars.
+// first click arms one-shot capture listeners on the document for half a second; a
+// click within 8 px of the first is the second half of the double-click and applies the
+// target to both bars. Its press is kept from reaching whatever sits under the pointer
+// too (a tile copies on pointer up, not on click), and so is the click itself.
 let barToggleDisarm = null;
 function armBarToggleBoth(first, target) {
   if (barToggleDisarm) barToggleDisarm();
   if (!flag("barToggleBoth")) return;
   let timer = 0;
+  const near = (e) => Math.hypot(e.clientX - first.clientX, e.clientY - first.clientY) <= 8;
   const off = () => {
     document.removeEventListener("click", onSecond, true);
+    document.removeEventListener("pointerdown", onPress, true);
     clearTimeout(timer);
     barToggleDisarm = null;
   };
+  const onPress = (e) => {
+    if (!near(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+  };
   const onSecond = (e) => {
     off();
-    if (Math.hypot(e.clientX - first.clientX, e.clientY - first.clientY) > 8) return;
+    if (!near(e)) return;
     e.preventDefault();
     e.stopPropagation();
     setBars(target, target);
   };
   document.addEventListener("click", onSecond, true);
+  document.addEventListener("pointerdown", onPress, true);
   timer = setTimeout(off, 500);
   barToggleDisarm = off;
 }
