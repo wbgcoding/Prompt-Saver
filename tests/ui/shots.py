@@ -1,6 +1,9 @@
 """Full-resolution screenshots of the real UI against the test stub, for a visual review.
 
-    python tests/ui/shots.py [--size 880x600] [--lang de] [--out .tmp/shots] [surface ...]
+    python tests/ui/shots.py [--size 880x600] [--lang de] [--theme dark] [--scale 1] [--out .tmp/shots] [surface ...]
+
+--size, --lang, --theme and --scale take a comma list and shoot every combination;
+`--lang all` and `--theme all` mean every UI language and every built-in theme.
 
 A surface is `main`, `settings`, `settings_end`, `expert`, `library`, `history`,
 `tilemenu`, `editor`, `folder`, `help`, `backup`, `snipedit`, `snipdraw`, or another
@@ -10,6 +13,8 @@ Without a surface every one is shot. Not a test: it never fails on what it sees.
 """
 import argparse
 import http.server
+import itertools
+import re
 import subprocess
 import sys
 import threading
@@ -90,6 +95,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             head = '<script src="tauri_stub.js"></script>\n'
             if lang.isalpha():
                 head += f'<script>SETTINGS.language = "{lang}";</script>\n'
+            theme = q.get("theme", "")
+            if theme.isalpha():
+                head += f'<script>SETTINGS.theme = "{theme}"; window.__SHOT_THEME__ = "{theme}";</script>\n'
             html = page.read_text(encoding="utf-8").replace("<script", head + "<script", 1)
             act = ACTS.get(q.get("act", ""), "")
             html = html.replace("</body>", f"<script type=module>{PRE}{act}</script></body>")
@@ -112,9 +120,16 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--size", default="880x600")
     ap.add_argument("--lang", default="de")
+    ap.add_argument("--theme", default="dark")
+    ap.add_argument("--scale", default="1")
     ap.add_argument("--out", default=str(REPO / ".tmp" / "shots"))
     ap.add_argument("surfaces", nargs="*")
     args = ap.parse_args()
+    sizes = args.size.split(",")
+    langs = sorted(f.stem for f in (UI / "i18n").glob("*.js")) if args.lang == "all" else args.lang.split(",")
+    themes = (re.search(r"BUILTIN_THEMES = \[([^\]]*)\]", (UI / "theme.js").read_text(encoding="utf-8"))
+              .group(1).replace('"', "").replace(" ", "").split(",")) if args.theme == "all" else args.theme.split(",")
+    scales = args.scale.split(",")
     chrome = next((c for c in CHROME_CANDIDATES if Path(c).exists()), None)
     if not chrome:
         print("no Chrome or Edge found")
@@ -124,15 +139,17 @@ def main():
     port = server.server_address[1]
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    w, h = args.size.split("x")
     picked = [x for s in args.surfaces for x in GROUPS.get(s, [s])] if args.surfaces else list(ACTS)
-    for s in dict.fromkeys(picked):
+    for s, size, lang, theme, scale in itertools.product(dict.fromkeys(picked), sizes, langs, themes, scales):
+        w, h = size.split("x")
         page, act = (s, "main") if s.endswith(".html") else ("index.html", s)
-        png = out / f"{Path(page).stem}_{act}_{args.lang}_{w}x{h}.png"
+        # The default theme and scale keep the short file name the tool always wrote.
+        extra = ("" if theme == "dark" else f"_{theme}") + ("" if scale == "1" else f"_x{scale}")
+        png = out / f"{Path(page).stem}_{act}_{lang}_{w}x{h}{extra}.png"
         subprocess.run([chrome, "--headless=new", "--disable-gpu", "--hide-scrollbars",
-                        "--force-device-scale-factor=1", f"--user-data-dir={out / 'profile'}",
+                        f"--force-device-scale-factor={scale}", f"--user-data-dir={out / 'profile'}",
                         f"--window-size={w},{h}", "--virtual-time-budget=6000", f"--screenshot={png}",
-                        f"http://127.0.0.1:{port}/{page}?lang={args.lang}&act={act}"],
+                        f"http://127.0.0.1:{port}/{page}?lang={lang}&theme={theme}&act={act}"],
                        capture_output=True, timeout=90)
         print(png)
     server.shutdown()

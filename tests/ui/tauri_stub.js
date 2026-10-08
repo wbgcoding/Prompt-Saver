@@ -386,7 +386,7 @@ const RESULTS = {
     last_used: JSON.parse(JSON.stringify(SETTINGS.last_used || {})),
     prefill: window.__LAUNCHER_PREFILL__ || "",
   }),
-  current_theme: () => "dark",
+  current_theme: () => window.__SHOT_THEME__ || "dark",
   theme_vars: () => ({ accent: "#ff00aa" }),
   // A probe sets window.__ATTACH_TEXT_FIXTURES__[path] to {text, truncated,
   // readable} before opening the attachment; an unlisted path reads as
