@@ -15734,7 +15734,13 @@ fn tray_menu_window_is_reused_and_revealed_by_its_page() {
     let get = body.find("get_webview_window(TRAY_WIN_LABEL)").expect("reuses the existing window");
     let build = body.find("build_tray_window(app)").expect("builds only as fallback");
     assert!(get < build);
-    assert!(!body.contains(".show()"), "the page reveals the window after drawing the plan");
+    // A hidden WebView2 is throttled: the open wakes it off-screen at full size, and
+    // only the reveal moves it into place.
+    let wake = body.find("set_bounds_phys(&win, tray_wake_rect(rect))").expect("wakes the window off-screen");
+    let show = body.find("win.show()").expect("shows the window to wake it");
+    assert!(wake < show, "the window must be off-screen before it is shown");
+    let r = tray_wake_rect(Rect { x: 100.0, y: 200.0, w: 240.0, h: 300.0 });
+    assert!(r.x <= -30000.0 && r.y <= -30000.0 && r.w == 240.0 && r.h == 300.0);
     let c = src.find("pub(crate) fn tray_window_close").expect("tray_window_close");
     let d = c + src[c..].find("
 }

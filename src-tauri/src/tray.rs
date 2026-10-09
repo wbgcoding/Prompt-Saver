@@ -629,6 +629,13 @@ pub(crate) fn tray_window_rect(app: &AppHandle, plan: &TrayWinPlan) -> Rect {
 // The plan of the open that is waiting for the page to draw it. Set on the main
 // thread by open_tray_window, taken once by the page (tray_window_plan).
 pub(crate) static TRAY_WIN_PENDING: std::sync::Mutex<Option<TrayWinPlan>> = std::sync::Mutex::new(None);
+// Where the current open puts the menu, and whether it is already on screen. The
+// counter tells a late watchdog that a newer open replaced the one it was started for.
+static TRAY_WIN_RECT: std::sync::Mutex<Option<Rect>> = std::sync::Mutex::new(None);
+static TRAY_WIN_GEN: AtomicU64 = AtomicU64::new(0);
+static TRAY_WIN_SHOWN: AtomicBool = AtomicBool::new(false);
+// How long the page gets to draw before the window is put on screen regardless.
+pub(crate) const TRAY_REVEAL_WATCHDOG_MS: u64 = 400;
 
 // The menu window is built once and then only hidden between opens: building a
 // WebView2 window costs up to seconds on a busy machine, and paying that on every
@@ -662,13 +669,19 @@ pub(crate) fn prewarm_tray_window(app: &AppHandle) {
 }
 
 // Runs on the event-loop thread, so it takes the plan prepared by tray_open_prep and
-// touches no lock but the tiny pending slot. Opens at the cursor, clamped into that
+// touches no lock but the tiny pending slots. Opens at the cursor, clamped into that
 // monitor's work area -- same helper every other cursor-anchored popup (launcher, var
-// prompt) already uses. The page draws the plan, then asks for the reveal
-// (tray_window_reveal), so a stale menu from the last open never flashes up.
+// prompt) already uses. A hidden WebView2 is throttled (paused timers and IPC), so the
+// window is first shown at its final size far off-screen, which wakes the page; the
+// page draws the plan and then asks for the reveal (tray_window_reveal), which only
+// moves it into place, so a stale menu from the last open never flashes up. A
+// watchdog puts it on screen anyway if the page does not ask in time.
 pub(crate) fn open_tray_window(app: &AppHandle, plan: TrayWinPlan, excluded: bool) {
     let rect = tray_window_rect(app, &plan);
     *TRAY_WIN_PENDING.lock().unwrap_or_else(|e| e.into_inner()) = Some(plan);
+    *TRAY_WIN_RECT.lock().unwrap_or_else(|e| e.into_inner()) = Some(rect);
+    TRAY_WIN_SHOWN.store(false, Ordering::SeqCst);
+    let gen = TRAY_WIN_GEN.fetch_add(1, Ordering::SeqCst) + 1;
     let win = match app.get_webview_window(TRAY_WIN_LABEL) {
         Some(w) => w,
         None => {
@@ -681,8 +694,34 @@ pub(crate) fn open_tray_window(app: &AppHandle, plan: TrayWinPlan, excluded: boo
         }
     };
     set_capture_exclusion(&win, excluded);
-    set_bounds_phys(&win, rect);
+    set_bounds_phys(&win, tray_wake_rect(rect));
+    let _ = win.show();
     let _ = app.emit_to(TRAY_WIN_LABEL, "tray-open", ());
+    let app2 = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(TRAY_REVEAL_WATCHDOG_MS)).await;
+        if TRAY_WIN_GEN.load(Ordering::SeqCst) == gen && !TRAY_WIN_SHOWN.load(Ordering::SeqCst) {
+            let app3 = app2.clone();
+            let _ = app2.run_on_main_thread(move || reveal_tray_window(&app3));
+        }
+    });
+}
+
+// The waking spot: the final size, far outside every monitor.
+pub(crate) fn tray_wake_rect(r: Rect) -> Rect {
+    Rect { x: -32000.0, y: -32000.0, w: r.w, h: r.h }
+}
+
+fn reveal_tray_window(app: &AppHandle) {
+    if TRAY_WIN_SHOWN.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let rect = *TRAY_WIN_RECT.lock().unwrap_or_else(|e| e.into_inner());
+    if let (Some(win), Some(rect)) = (app.get_webview_window(TRAY_WIN_LABEL), rect) {
+        set_bounds_phys(&win, rect);
+        let _ = win.show();
+        let _ = win.set_focus();
+    }
 }
 
 // The pending plan, handed out once; None when no open is waiting (the warm-up boot,
@@ -692,16 +731,15 @@ pub(crate) fn tray_window_plan() -> Option<TrayWinPlan> {
     TRAY_WIN_PENDING.lock().unwrap_or_else(|e| e.into_inner()).take()
 }
 
-// The page has drawn the plan: now the window appears and takes the focus.
+// The page has drawn the plan: now the window moves into place and takes the focus.
 #[tauri::command]
 pub(crate) fn tray_window_reveal(app: AppHandle) {
-    if let Some(win) = app.get_webview_window(TRAY_WIN_LABEL) {
-        let _ = win.show();
-        let _ = win.set_focus();
-    }
+    reveal_tray_window(&app);
 }
 
 fn hide_tray_window(app: &AppHandle) {
+    // A watchdog still pending for this open must not bring the menu back.
+    TRAY_WIN_SHOWN.store(true, Ordering::SeqCst);
     if let Some(win) = app.get_webview_window(TRAY_WIN_LABEL) {
         let _ = win.hide();
     }
