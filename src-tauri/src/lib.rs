@@ -685,10 +685,10 @@ pub fn run() {
                         // This handler runs on the event-loop thread, so it takes
                         // no lock: the store can be held for a long time by a backup
                         // or an index run, and waiting for it here froze every
-                        // window. A worker reads the flag and builds the plan; only
-                        // the window itself is created on the main thread (building
-                        // a webview window from inside this handler never returns),
-                        // with a log line on each side so a hang would be visible.
+                        // window. A worker reads the flag and builds the plan; the
+                        // warm menu window is then moved and filled on the main
+                        // thread (building a webview window from inside this
+                        // handler never returns).
                         // The native popup owns the click while trayCustomMenu is
                         // off (apply_tray_menu detaches its menu while it is on).
                         let app2 = tray.app_handle().clone();
@@ -702,11 +702,7 @@ pub fn run() {
                             .flatten();
                             let Some((plan, excluded)) = prep else { return };
                             let app3 = app2.clone();
-                            let _ = app2.run_on_main_thread(move || {
-                                append_crash_log("tray window: about to build");
-                                open_tray_window(&app3, plan, excluded);
-                                append_crash_log("tray window: build ok");
-                            });
+                            let _ = app2.run_on_main_thread(move || open_tray_window(&app3, plan, excluded));
                         });
                     }
                 });
@@ -750,6 +746,17 @@ pub fn run() {
                         let _ = build_snip_window(&h);
                     }
                 });
+                // Same for the tray menu window, so the first right-click opens at once.
+                let custom_tray = tauri::async_runtime::spawn_blocking({
+                    let h = h_pw.clone();
+                    move || h.try_state::<Db>().map(|s| tray_custom_menu_on(&lock(&s).settings)).unwrap_or(false)
+                })
+                .await
+                .unwrap_or(false);
+                if custom_tray {
+                    let h = h_pw.clone();
+                    let _ = h_pw.run_on_main_thread(move || prewarm_tray_window(&h));
+                }
                 // The overlay must stay invisible while idle: look again a few
                 // times through the slow part of a boot and put it away if
                 // anything showed it (a no-op while it is hidden or in use).
@@ -923,6 +930,7 @@ pub fn run() {
             tray::tray_window_plan,
             tray::tray_window_activate,
             tray::tray_window_close,
+            tray::tray_window_reveal,
             tray::tray_open_launcher,
             tray::tray_launcher_prefill,
             copy::copy_prompt,

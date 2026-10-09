@@ -896,9 +896,10 @@ the video editor and the introduction tour ship on).
 - **Double-clicking a bar button now folds both bars.** The shortcut for the
   three bar buttons never fired because the first click hides the button; a
   second click close to the first one now does it.
-- **Right-clicking the tray icon can no longer freeze the app.** The tray menu
-  window is now prepared in the background, so a backup or an index run that is
-  busy with your data no longer blocks every window while the menu opens.
+- **The tray icon menu opens at once and can no longer freeze the app.** The
+  menu window is now prepared once in the background and reused, instead of being
+  built anew on every right-click, and a backup or an index run that is busy with
+  your data no longer blocks every window while the menu opens.
 - **No white field on the main screen after start-up.** The hidden
   screenshot overlay that is prepared at launch is now created tiny, far
   outside every monitor and with a dark backdrop, and is put away again if

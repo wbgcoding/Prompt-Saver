@@ -360,7 +360,7 @@ pub(crate) fn apply_tray_menu(app: &AppHandle) {
         None => return,
     };
     if custom {
-        // The custom window builds its own content live from tray_window_plan()
+        // The custom window gets its content freshly prepared (tray_open_prep)
         // on every right-click, so there is nothing to precompute here: just
         // make sure no native popup is left attached to fight it for the
         // right-click. Detaching also skips every rebuild this function would
@@ -520,18 +520,6 @@ pub(crate) fn tray_kind_str(kind: TrayKind) -> &'static str {
 // a restyle, not a second menu with its own rules. Built fresh on every open, so
 // (unlike the native HMENU) there is no separate rebuild-on-change path to keep
 // in sync.
-pub(crate) fn build_tray_win_plan(app: &AppHandle) -> TrayWinPlan {
-    let state: State<Db> = match app.try_state::<Db>() {
-        Some(s) => s,
-        None => {
-            return TrayWinPlan { rec_entries: Vec::new(), sections: Vec::new(), show_label: String::new(), quit_label: String::new(), search_on: false, search_ph: String::new() };
-        }
-    };
-    let phase = recording_phase(app);
-    let store = lock(&state);
-    tray_win_plan_from_store(&store, phase)
-}
-
 // The plan from plain data, so the store lock is the only thing the caller holds
 // while this runs and the content stays testable without an app handle. The
 // recording phase is read before the lock is taken (it has its own mutex).
@@ -638,58 +626,96 @@ pub(crate) fn tray_window_rect(app: &AppHandle, plan: &TrayWinPlan) -> Rect {
     Rect { x, y, w, h }
 }
 
-// Runs on the event-loop thread, so it takes the plan prepared by tray_open_prep and
-// touches no lock. Opens at the cursor, clamped into that monitor's work area -- same helper every
-// other cursor-anchored popup (launcher, var prompt) already uses. Replaces an
-// already-open one instead of stacking a second, matching those windows too.
-pub(crate) fn open_tray_window(app: &AppHandle, plan: TrayWinPlan, excluded: bool) {
-    if let Some(win) = app.get_webview_window(TRAY_WIN_LABEL) {
-        let _ = win.close();
-    }
-    let rect = tray_window_rect(app, &plan);
-    let win = match WebviewWindowBuilder::new(app, TRAY_WIN_LABEL, WebviewUrl::App("tray.html".into()))
+// The plan of the open that is waiting for the page to draw it. Set on the main
+// thread by open_tray_window, taken once by the page (tray_window_plan).
+pub(crate) static TRAY_WIN_PENDING: std::sync::Mutex<Option<TrayWinPlan>> = std::sync::Mutex::new(None);
+
+// The menu window is built once and then only hidden between opens: building a
+// WebView2 window costs up to seconds on a busy machine, and paying that on every
+// right-click made the menu feel hung. Born hidden, unfocused and far off-screen,
+// so the warm-up never shows or steals anything; each open sets the real bounds.
+pub(crate) fn build_tray_window(app: &AppHandle) -> Option<tauri::WebviewWindow> {
+    let win = WebviewWindowBuilder::new(app, TRAY_WIN_LABEL, WebviewUrl::App("tray.html".into()))
         .title(brand::DISPLAY_NAME)
         .inner_size(TRAY_WIN_W, TRAY_WIN_W) // placeholder: set_bounds_phys owns the real box
+        .position(-32000.0, -32000.0)
         .decorations(false)
         .transparent(true)
         .always_on_top(true)
         .skip_taskbar(true)
         .resizable(false)
         .shadow(false)
-        .focused(true)
-        .visible(false) // sized in physical pixels first, so nothing flashes at the wrong size
+        .focused(false)
+        .visible(false)
         .build()
-    {
-        Ok(w) => w,
-        Err(_) => return,
-    };
+        .ok()?;
     let _ = win.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
-    set_capture_exclusion(&win, excluded);
-    set_bounds_phys(&win, rect);
-    let _ = win.show();
-    let _ = win.set_focus();
+    Some(win)
 }
 
-// Async on purpose: a sync command runs on the event-loop thread, and the plan
-// waits for the store lock.
+// Warm-up shortly after launch, only while the custom menu is on (the native popup
+// needs no window). Runs on the main thread like every other window build.
+pub(crate) fn prewarm_tray_window(app: &AppHandle) {
+    if app.get_webview_window(TRAY_WIN_LABEL).is_none() {
+        let _ = build_tray_window(app);
+    }
+}
+
+// Runs on the event-loop thread, so it takes the plan prepared by tray_open_prep and
+// touches no lock but the tiny pending slot. Opens at the cursor, clamped into that
+// monitor's work area -- same helper every other cursor-anchored popup (launcher, var
+// prompt) already uses. The page draws the plan, then asks for the reveal
+// (tray_window_reveal), so a stale menu from the last open never flashes up.
+pub(crate) fn open_tray_window(app: &AppHandle, plan: TrayWinPlan, excluded: bool) {
+    let rect = tray_window_rect(app, &plan);
+    *TRAY_WIN_PENDING.lock().unwrap_or_else(|e| e.into_inner()) = Some(plan);
+    let win = match app.get_webview_window(TRAY_WIN_LABEL) {
+        Some(w) => w,
+        None => {
+            // Not warmed up (custom menu switched on after launch): built now, and its
+            // page takes the pending plan as soon as it has booted.
+            append_crash_log("tray window: about to build");
+            let Some(w) = build_tray_window(app) else { return };
+            append_crash_log("tray window: build ok");
+            w
+        }
+    };
+    set_capture_exclusion(&win, excluded);
+    set_bounds_phys(&win, rect);
+    let _ = app.emit_to(TRAY_WIN_LABEL, "tray-open", ());
+}
+
+// The pending plan, handed out once; None when no open is waiting (the warm-up boot,
+// or a second take for the same open).
 #[tauri::command]
-pub(crate) async fn tray_window_plan(app: AppHandle) -> TrayWinPlan {
-    build_tray_win_plan(&app)
+pub(crate) fn tray_window_plan() -> Option<TrayWinPlan> {
+    TRAY_WIN_PENDING.lock().unwrap_or_else(|e| e.into_inner()).take()
+}
+
+// The page has drawn the plan: now the window appears and takes the focus.
+#[tauri::command]
+pub(crate) fn tray_window_reveal(app: AppHandle) {
+    if let Some(win) = app.get_webview_window(TRAY_WIN_LABEL) {
+        let _ = win.show();
+        let _ = win.set_focus();
+    }
+}
+
+fn hide_tray_window(app: &AppHandle) {
+    if let Some(win) = app.get_webview_window(TRAY_WIN_LABEL) {
+        let _ = win.hide();
+    }
 }
 
 #[tauri::command]
 pub(crate) fn tray_window_activate(app: AppHandle, id: String) {
     handle_tray_menu_id(&app, &id);
-    if let Some(win) = app.get_webview_window(TRAY_WIN_LABEL) {
-        let _ = win.close();
-    }
+    hide_tray_window(&app);
 }
 
 #[tauri::command]
 pub(crate) fn tray_window_close(app: AppHandle) {
-    if let Some(win) = app.get_webview_window(TRAY_WIN_LABEL) {
-        let _ = win.close();
-    }
+    hide_tray_window(&app);
 }
 
 // The tray filter row hands its first keystroke to the quick launcher: what was typed

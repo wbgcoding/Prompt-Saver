@@ -15716,6 +15716,42 @@ fn tray_open_prep_skips_while_the_custom_window_is_off_and_carries_the_plan_when
     assert!(tray_open_prep_from_store(&store, None).is_none(), "native popup owns the click");
 }
 
+// The menu window is built once and reused: a right-click only moves and refills the
+// warm window. Building a WebView2 window per click took up to seconds and made the
+// menu feel hung. No red exists as a unit test (window creation needs a running app),
+// so this pins the shape: the open path builds only when no window exists, and the page
+// reveals the window itself after drawing.
+#[test]
+fn tray_menu_window_is_reused_and_revealed_by_its_page() {
+    let src = production_sources();
+    let a = src.find("pub(crate) fn open_tray_window").expect("open_tray_window");
+    let b = a + src[a..].find("
+}
+").expect("end of open_tray_window");
+    let body = &src[a..b];
+    assert!(!body.contains("WebviewWindowBuilder"), "open_tray_window must not build a window itself");
+    assert!(!body.contains(".close()"), "the warm window must not be closed on open");
+    let get = body.find("get_webview_window(TRAY_WIN_LABEL)").expect("reuses the existing window");
+    let build = body.find("build_tray_window(app)").expect("builds only as fallback");
+    assert!(get < build);
+    assert!(!body.contains(".show()"), "the page reveals the window after drawing the plan");
+    let c = src.find("pub(crate) fn tray_window_close").expect("tray_window_close");
+    let d = c + src[c..].find("
+}
+").expect("end of tray_window_close");
+    assert!(!src[c..d].contains(".close()"), "closing the menu only hides the warm window");
+    let js = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../ui/tray.js")).expect("ui/tray.js");
+    assert!(js.contains("listen(\"tray-open\"") && js.contains("invoke(\"tray_window_reveal\")"));
+}
+
+#[test]
+fn tray_pending_plan_is_handed_out_once() {
+    let plan = TrayWinPlan { rec_entries: Vec::new(), sections: Vec::new(), show_label: "Show".into(), quit_label: "Quit".into(), search_on: false, search_ph: String::new() };
+    *TRAY_WIN_PENDING.lock().unwrap() = Some(plan);
+    assert_eq!(tray_window_plan().map(|p| p.show_label), Some("Show".to_string()));
+    assert!(tray_window_plan().is_none(), "a second take for the same open gets nothing");
+}
+
 #[test]
 fn tray_kind_str_round_trips_every_kind_to_a_distinct_lowercase_word() {
     let all = [

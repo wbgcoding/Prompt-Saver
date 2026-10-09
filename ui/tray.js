@@ -20,7 +20,7 @@ const searchEl = document.getElementById("tray-search");
 
 let rows = []; // flattened, in visual order: { id, el }
 let active = -1;
-let closed = false;
+let closed = true; // hidden until the first open
 
 function close() {
   if (closed) return;
@@ -180,7 +180,7 @@ let handover = null; // set once the first keystroke started the hand-off
 let tailSent = false;
 let tailTimer = 0;
 function sendTail() {
-  if (tailSent) return;
+  if (tailSent || !handover) return;
   tailSent = true;
   clearTimeout(tailTimer);
   invoke("tray_launcher_prefill", { query: searchEl.value }).catch(() => {}).then(close);
@@ -211,11 +211,12 @@ document.addEventListener("keydown", (e) => {
 // Same grace-period pattern as launcher.js/vars.js: the backend shows the window
 // and only then takes focus, and a blur fired in that hand-off window would
 // close before anything was ever on screen.
-const OPENED_AT = Date.now();
+let openedAt = Date.now();
 const BLUR_GRACE_MS = 400;
 window.addEventListener("blur", () => {
   if (handover) { sendTail(); return; } // the launcher took the focus: pass on the text, then close
-  const left = BLUR_GRACE_MS - (Date.now() - OPENED_AT);
+  if (closed) return; // hidden between opens: nothing to close
+  const left = BLUR_GRACE_MS - (Date.now() - openedAt);
   if (left <= 0) close();
   // A blur landing inside the hand-off window itself (the backend showing the
   // window, then taking focus) is not real activity to ignore forever -- if the
@@ -229,19 +230,31 @@ document.body.addEventListener("mousedown", (e) => {
   if (!cardEl.contains(e.target) && !handover) close();
 });
 
+// The window lives on between opens (hidden), so every open starts from a clean
+// slate: the backend parks the plan, says "tray-open", and this page takes it, draws
+// it and only then asks to be shown. No plan waiting (the warm-up boot) = nothing.
+async function openMenu() {
+  const plan = await invoke("tray_window_plan").catch(() => null);
+  if (!plan) return;
+  clearTimeout(tailTimer);
+  handover = null;
+  tailSent = false;
+  closed = false;
+  searchEl.value = "";
+  render(plan);
+  searchEl.placeholder = plan.searchPh || "";
+  searchEl.hidden = !plan.searchOn;
+  openedAt = Date.now();
+  await invoke("tray_window_reveal").catch(() => {});
+  if (plan.searchOn) searchEl.focus();
+}
+
 async function boot() {
-  const plan = await invoke("tray_window_plan").catch(() => ({ recEntries: [], sections: [], showLabel: "", quitLabel: "", searchOn: false, searchPh: "" }));
   applyFloatTheme(await invoke("current_theme").catch(() => null), await invoke("theme_vars").catch(() => ({})));
   listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars));
-  render(plan);
-  if (plan.searchOn) {
-    searchEl.placeholder = plan.searchPh || "";
-    searchEl.hidden = false;
-    searchEl.addEventListener("input", onSearchInput);
-    searchEl.focus();
-  } else {
-    searchEl.hidden = true;
-  }
+  searchEl.addEventListener("input", onSearchInput);
+  await listen("tray-open", openMenu);
+  openMenu(); // an open that arrived while this page was still loading
 }
 
 boot();
