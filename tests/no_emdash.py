@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Guards every tracked source file against em dash / en dash / horizontal bar
 / figure dash characters, in code comments as well as shipped visible text
-(item 350: every surviving comment gets the same treatment item 345 gave the
-UI text).
+(every surviving comment gets the same treatment the UI text got).
 
 Scope is the whole tracked source tree: the Rust backend, every UI script and
 markup file plus its stylesheet, the test suites and their harness, and the
@@ -68,7 +67,7 @@ EXCEPTIONS = [
         "reason": "The lone em dash used as the app's 'no value yet' "
                   "placeholder (stats, backups, OCR sizes, dates, char "
                   "counts, and every other ? val : \"—\" spot sharing "
-                  "that convention) -- Ben's decision on item 325, kept "
+                  "that convention), a deliberate product decision, kept "
                   "as-is here too.",
     },
     {

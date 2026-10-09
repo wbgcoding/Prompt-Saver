@@ -866,7 +866,7 @@ window.__LAUNCHER_PREFILL__ = 'Translate';
 """
 
 
-# The custom Windows-11-style tray menu (point 236): rendering, keyboard nav and
+# The custom Windows-11-style tray menu: rendering, keyboard nav and
 # activation. The Rust-side content (favorites/recent selection, ordering, caps)
 # has its own unit tests -- this only proves the window draws what it is given
 # and responds to the keyboard the same way the launcher and vars windows do.

@@ -266,7 +266,7 @@ SECTION = """\
         }
         // Dot navigation must support a direct jump (not just sequential Next/Back),
         // and the last step's button swaps to a distinct, translated Finish label
-        // instead of reusing Next (point 185, track 4).
+        // instead of reusing Next.
         dots[4].click();
         await sleep(80);
         if (document.getElementById('tour-back').classList.contains('hidden')) {
@@ -279,10 +279,10 @@ SECTION = """\
         }
         dots[0].click();
         await sleep(80);
-        // Keyboard focus trap (point 185, track 3): Tab from the last focusable
+        // Keyboard focus trap: Tab from the last focusable
         // control must wrap to the first, and Shift+Tab from the first must wrap
         // to the last -- the same trapTabWithin() helper the screenshot editor
-        // uses (point 181), reused here instead of a second implementation.
+        // uses, reused here instead of a second implementation.
         {
           const focusables = [...tourEl.querySelectorAll('button, input, [tabindex]:not([tabindex="-1"]), select, textarea, a[href]')]
             .filter((el) => !el.disabled && el.offsetParent !== null);

@@ -1168,7 +1168,7 @@ const RESULTS = {
     SETTINGS.views = out;
     return clone();
   },
-  // Mirror of the backend's rebuild_view_layout (point 419): membership never
+  // Mirror of the backend's rebuild_view_layout: membership never
   // changes here, only where a member sits. Keeps whatever still fits at the new
   // size, then seats the rest in the first free cell - one left without room
   // stays a member with no cell (overflow), never dropped from `members`.

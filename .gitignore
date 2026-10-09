@@ -22,7 +22,7 @@ Desktop.ini
 *.log
 __pycache__/
 
-# User data — lives in %APPDATA% or next to the portable exe, never in the repo
+# User data lives in %APPDATA% or next to the portable exe, never in the repo
 data.db
 *.db
 *.db-wal
@@ -33,7 +33,7 @@ backups/
 *.psb
 test-data/
 
-# Secrets — a signing certificate or a token must never reach the repo
+# Secrets: a signing certificate or a token must never reach the repo
 .env
 .env.*
 *.pem
