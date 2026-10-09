@@ -137,7 +137,7 @@ def main():
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     port = server.server_address[1]
-    out = Path(args.out)
+    out = Path(args.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
     picked = [x for s in args.surfaces for x in GROUPS.get(s, [s])] if args.surfaces else list(ACTS)
     for s, size, lang, theme, scale in itertools.product(dict.fromkeys(picked), sizes, langs, themes, scales):
