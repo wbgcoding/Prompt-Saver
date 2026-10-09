@@ -14458,14 +14458,14 @@ fn resolve_static_vars_leaves_a_dynamic_name_and_an_unresolved_gap_untouched() {
 
 #[test]
 fn resolved_for_export_resolves_the_text_and_every_rotating_variant() {
-    let remembered: HashMap<String, String> = [("name".to_string(), "Ben".to_string())].into_iter().collect();
+    let remembered: HashMap<String, String> = [("name".to_string(), "Alex".to_string())].into_iter().collect();
     let fixed: HashMap<String, String> = HashMap::new();
     let mut p = test_prompt("p1");
     p.text = "Hi {#{name}#}".to_string();
     p.variants = vec!["Bye {#{name}#}".to_string(), "no placeholder here".to_string()];
     let resolved = resolved_for_export(&p, &remembered, &fixed);
-    assert_eq!(resolved.text, "Hi Ben");
-    assert_eq!(resolved.variants, vec!["Bye Ben".to_string(), "no placeholder here".to_string()]);
+    assert_eq!(resolved.text, "Hi Alex");
+    assert_eq!(resolved.variants, vec!["Bye Alex".to_string(), "no placeholder here".to_string()]);
     // The live prompt itself must never be mutated by an export/sync pass.
     assert_eq!(p.text, "Hi {#{name}#}");
 }

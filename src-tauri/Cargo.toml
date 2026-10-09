@@ -60,13 +60,13 @@ xcap = "0.0.14"
 # conversion of a multi-monitor capture.
 rayon = "1"
 jpeg-encoder = "0.6"
-# Local SQLite store (bundled engine — no system dependency).
+# Local SQLite store (bundled engine, no system dependency).
 rusqlite = { version = "0.32", features = ["bundled"] }
 # Render the first page of an attached PDF as a preview image. Binds the
 # pdfium library dynamically at runtime (the DLL is embedded in the exe and
 # unpacked on first use - see pdfium_lib_path in images.rs).
 pdfium-render = "0.8"
-# Extract ffmpeg.exe from its downloaded release zip (point 246). Deflate only --
+# Extract ffmpeg.exe from its downloaded release zip. Deflate only:
 # gyan.dev's archive needs no other compression method.
 zip = { version = "2", default-features = false, features = ["deflate"] }
 # Decodes the camera window's recorded chunks -- sent as base64 over IPC
@@ -77,7 +77,7 @@ base64 = "0.22"
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
 clipboard-win = "5"
-# OCR (point 120): Windows' own built-in text recognizer, fully offline. Version
+# OCR: Windows' own built-in text recognizer, fully offline. Version
 # pinned exactly -- a newer release may need a newer compiler than this project's
 # rust-version = "1.77".
 windows = { version = "0.58", features = [
@@ -131,7 +131,7 @@ windows = { version = "0.58", features = [
 # its own types; that one is pulled in under a different local name (see
 # `webview2-windows-core`) so this crate name keeps meaning 0.58 everywhere.
 windows-core = "0.58"
-# Screen recording (point 191): Windows Graphics Capture + its own Media
+# Screen recording: Windows Graphics Capture + its own Media
 # Foundation H.264/MP4 encoder, vetted against a real desktop before use.
 # Pulls its own newer `windows` crate release transitively (0.62 alongside the
 # 0.58 pinned above) -- confirmed to build side by side, and its API surface
@@ -165,7 +165,7 @@ codegen-units = 16
 strip = true
 # NOTE: the shipped exe must not carry the paths of the machine it was built on.
 # `strip` drops the debug info, but panic locations from dependencies stay in the
-# binary as literals — build.bat remaps them via RUSTFLAGS (profile.trim-paths is
+# binary as literals; build.bat remaps them via RUSTFLAGS (profile.trim-paths is
 # still nightly-only).
 # Incremental is OFF on purpose: its codegen cache added ~2.8 GB to target/ for only
 # a few seconds off repeat builds. Deps still stay compiled in target/release/deps
