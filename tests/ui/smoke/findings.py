@@ -1593,5 +1593,20 @@ def run(browser, tmp):
     const w = document.getElementById('snip-edit-stage').getBoundingClientRect().width;
     if (Math.abs(w - 300 * 1.2 / 1.5) > 0.6) errs.push('831: at 120 percent the stage is ' + w + ' CSS px wide, expected ' + (300 * 1.2 / 1.5));
 """)
+    # At the minimum width the whole toolbar, view controls included, fits one row without scrolling, in both languages.
+    for lang_829 in ('en', 'de'):
+        failed += ar_probe('bq829w-' + lang_829, '829: the toolbar fits one row at 680x460 (' + lang_829 + ')', 'index', '680x460', '<script>window.__SEED_SETTINGS__ = { language: "' + lang_829 + '" };</script>\n', snip_common + r"""
+    await snipOpen(300, 200);
+    const bar = document.querySelector('.snip-edit-toolbar');
+    if (bar.scrollWidth > bar.clientWidth) errs.push('829: the toolbar is ' + bar.scrollWidth + ' px wide in a ' + bar.clientWidth + ' px bar');
+    if (bar.getBoundingClientRect().height > 52) errs.push('829: the toolbar is ' + bar.getBoundingClientRect().height + ' px tall');
+    const eye = document.getElementById('snip-edit-original').getBoundingClientRect();
+    if (eye.right > bar.getBoundingClientRect().right + 0.5) errs.push('829: the eye button sticks out past the toolbar');
+    for (const id of ['snip-edit-fit', 'snip-edit-scale']) {
+      const b = document.getElementById(id);
+      if (!b.getAttribute('aria-label')) errs.push('829: ' + id + ' has no accessible name');
+      if (!b.title) errs.push('829: ' + id + ' has no title');
+    }
+""")
     # ---- main window findings: generated block end ----
     return failed

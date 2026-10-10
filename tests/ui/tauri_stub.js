@@ -285,6 +285,7 @@ if (window.__SEED_SETTINGS__) {
   for (const k of ["ui_flags", "ui_values", "ui_texts"]) {
     Object.assign(SETTINGS[k], window.__SEED_SETTINGS__[k] || {});
   }
+  if (window.__SEED_SETTINGS__.language) SETTINGS.language = window.__SEED_SETTINGS__.language;
 }
 
 // 420: the drag-to-view probe needs one view it can fill with a single tile, to
