@@ -9,6 +9,8 @@ SECTION = """\
         out.errors.push('the settings page has no import button');
       } else {
         importBtn.click();
+        await sleep(150);
+        document.getElementById('import-file-btn').click();
         await sleep(300);
         const modal = document.getElementById('import-preview-modal');
         if (!modal || modal.classList.contains('hidden')) {
@@ -37,6 +39,8 @@ SECTION = """\
       if (!folderBtn) {
         out.errors.push('the settings page has no import-from-folder button');
       } else {
+        document.getElementById('import-btn').click();
+        await sleep(150);
         folderBtn.click();
         await sleep(300);
         const modal = document.getElementById('import-folder-modal');

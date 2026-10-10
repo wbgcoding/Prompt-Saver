@@ -810,7 +810,7 @@ before anything is written; a full backup restores directly. If the file
 changes after the preview is shown, confirming the import is refused rather
 than importing something different from what was previewed.
 
-"Import from a folder" turns a folder of `.md`/`.txt` files into tiles, one per
+Import → "From folder…" in Settings turns a folder of `.md`/`.txt` files into tiles, one per
 file, without touching the original files at all. The file name becomes the
 tile's name. A short first line becomes the note, with the rest carrying on as
 the text. Each subfolder becomes a tag, one per level. A file that already
@@ -1585,7 +1585,7 @@ Duplikat-Kennzeichnung; ein volles Backup stellt direkt wieder her. Ändert
 sich die Datei nach der Vorschau, wird der Import verweigert statt etwas
 anderes zu importieren als angezeigt.
 
-**Aus einem Ordner importieren** macht aus einem Ordner voller `.md`/`.txt`-
+**Importieren** → **Aus Ordner…** in den Einstellungen macht aus einem Ordner voller `.md`/`.txt`-
 Dateien Kacheln, eine je Datei, ohne die Originaldateien anzurühren. Der
 Dateiname wird der Name der Kachel. Eine kurze erste Zeile wird die Notiz, der
 Rest wird der Text. Jeder Unterordner wird ein Tag, einer je Ebene. Eine Datei,

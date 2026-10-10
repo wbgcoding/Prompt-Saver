@@ -79,13 +79,13 @@ SECTION = """\
       await click('library-close');
       layoutScan('settings in ' + lang);
       mustReach('settings in ' + lang, '#settings-main button, #settings-main select');
-      // 521: the shortened German label keeps the folder-import button's own
+      // 521: the shortened German label keeps the Import button's own
       // text on one line -- a flex row with align-items stretch equalizes
       // every button's box height regardless, so the box height alone (the
       // first thing tried here) cannot tell a wrapped label from a plain one;
       // only the text's own line count can.
       if (lang === 'de') {
-        const folderBtn521 = document.getElementById('import-folder-btn');
+        const folderBtn521 = document.getElementById('import-btn');
         if (!folderBtn521) {
           out.errors.push('521: could not find the folder-import button in de');
         } else {

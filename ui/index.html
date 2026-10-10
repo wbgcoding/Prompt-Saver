@@ -1120,8 +1120,7 @@
         <h3 class="settings-sec-title" data-i18n="settingsSecData">Data</h3>
         <div id="impexp-field" class="field">
           <div class="export-row">
-            <button id="import-btn" class="ghost-btn" data-i18n="import">Import prompts</button>
-            <button id="import-folder-btn" class="ghost-btn" data-i18n="importFolderBtn" data-i18n-title="tipImportFolder">Import folder</button>
+            <button id="import-btn" class="ghost-btn" data-i18n="import" aria-haspopup="menu" aria-expanded="false">Import</button>
             <span class="export-pair">
               <button id="export-btn" class="ghost-btn" data-i18n="exportBtn">Export</button>
               <select id="export-format" class="batch-view-select" data-i18n-aria="exportFormatLabel">
@@ -1185,6 +1184,12 @@
         <div id="expert-flags"></div>
       </div>
     </div>
+  </div>
+
+  <!-- The import menu: a file or a folder (opened from the Import button in settings) -->
+  <div id="import-menu-pop" class="ctx hidden" role="menu">
+    <button id="import-file-btn" type="button" role="menuitem" data-i18n="importFromFile">From file…</button>
+    <button id="import-folder-btn" type="button" role="menuitem" data-i18n="importFolderBtn" data-i18n-title="tipImportFolder">From folder…</button>
   </div>
 
   <!-- Add / rename / delete a view -->

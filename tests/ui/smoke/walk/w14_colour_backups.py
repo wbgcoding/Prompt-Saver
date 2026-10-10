@@ -76,16 +76,16 @@ SECTION = """\
         if (!bb.width || !bb.height) out.errors.push('settings: the backup manager button has no size');
         else if (!(bb.left > eb.right - 1 || bb.top > eb.bottom - 1)) out.errors.push('settings: the backup manager button does not follow the export button');
       }
-      // 726: the format choice sits right of the Export button, both right of Import folder.
+      // 726: the format choice sits right of the Export button, both right of Import.
       {
-        const ifb = document.getElementById('import-folder-btn').getBoundingClientRect();
+        const ifb = document.getElementById('import-btn').getBoundingClientRect();
         const eb726 = document.getElementById('export-btn').getBoundingClientRect();
         const ef = document.getElementById('export-format');
         const efr = (ef.closest('.select-picker, .select-wrap') || ef).getBoundingClientRect();
         const efShown = efr.width ? efr : ef.getBoundingClientRect();
         if (!document.querySelector('#impexp-field .export-pair #export-btn')) out.errors.push('726: export-btn is not inside the export pair');
         if (!(efShown.left >= eb726.right - 1)) out.errors.push('726: the export format is not right of the Export button: ' + Math.round(efShown.left) + ' vs ' + Math.round(eb726.right));
-        if (!(eb726.left >= ifb.right - 1 || eb726.top >= ifb.bottom - 1)) out.errors.push('726: the Export button is not after Import folder');
+        if (!(eb726.left >= ifb.right - 1 || eb726.top >= ifb.bottom - 1)) out.errors.push('726: the Export button is not after Import');
       }
       if (document.getElementById('export-all') || document.getElementById('import-all')) out.errors.push('settings: the old save/import backup buttons are still in the settings row');
       if (wasHidden) settingsEl.classList.add('hidden');

@@ -9,7 +9,7 @@ SECTION = """\
       }
       const titles724 = [...document.querySelectorAll('#settings-main .settings-sec-title')]
         .filter((el) => el.getBoundingClientRect().height > 0).map((el) => el.textContent.trim());
-      const want724 = ['Appearance', 'Behavior', 'Data', 'System', 'Reset and delete'];
+      const want724 = ['Appearance', 'Behavior', 'Capture', 'Data', 'System', 'Reset and delete'];
       if (titles724.join('|') !== want724.join('|')) {
         out.errors.push('724: the visible settings section titles are "' + titles724.join('|') + '", expected "' + want724.join('|') + '"');
       }
@@ -178,8 +178,8 @@ SECTION = """\
         if (btns725[btns725.length - 1] !== del) out.errors.push('725: delete-data is not the last button of the settings page');
         const titles725 = [...document.querySelectorAll('#settings-main .settings-sec-title')]
           .filter((el) => el.getBoundingClientRect().height > 0).map((el) => el.textContent.trim());
-        if (titles725.length !== 5 || titles725[4] !== 'Reset and delete') {
-          out.errors.push('725: the visible section titles are "' + titles725.join('|') + '", expected five ending in Reset and delete');
+        if (titles725.length !== 6 || titles725[5] !== 'Reset and delete') {
+          out.errors.push('725: the visible section titles are "' + titles725.join('|') + '", expected six ending in Reset and delete');
         }
       }
     }

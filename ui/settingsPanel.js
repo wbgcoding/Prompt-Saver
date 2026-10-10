@@ -8,6 +8,7 @@ import { fmtBytes } from "./floatShared.js";
 import { confirmDialog, infoDialog } from "./dialog.js";
 import { isHistoryTabOpen, renderJournal } from "./journal.js";
 import { attachSelectPicker } from "./selectpop.js";
+import { placePopover } from "./popover.js";
 import { FONT_LABELS, FONTS } from "./fonts.js";
 import { fitAllTiles, fitCache } from "./tiles.js";
 import { prettyAccel } from "./hotkeys.js";
@@ -27,8 +28,18 @@ export function assignSettingsOpener(v) { settingsOpener = v; }
 // Hide the settings modal and reset the Updates status line back to the version
 // number: unless a real update is pending (the "update available" state stays).
 // So a transient "already newest version" message doesn't linger after reopening.
+// The Import button's menu (from a file or from a folder).
+export function closeImportMenu() {
+  const pop = $("import-menu-pop");
+  if (pop.classList.contains("hidden")) return;
+  const hadFocus = pop.contains(document.activeElement);
+  pop.classList.add("hidden");
+  $("import-btn").setAttribute("aria-expanded", "false");
+  if (hadFocus) $("import-btn").focus();
+}
 export function hideSettings() {
   settingsEl.classList.add("hidden");
+  closeImportMenu();
   const uv = $("update-version");
   if (uv && appVersion && !uv.classList.contains("update-avail")) setStatusText(uv, "versionInstalled", "v", appVersion);
   settingsOpener?.focus?.();
@@ -462,7 +473,22 @@ export function bindSettingsPanel() {
   $("opt-ontop").addEventListener("change", (e) => setOnTop(e.target.checked));
   $("pin-top").addEventListener("click", () => setOnTop(!settings.always_on_top));
 
-  $("import-btn").addEventListener("click", runImport);
+  $("import-btn").addEventListener("click", () => {
+    const pop = $("import-menu-pop");
+    if (!pop.classList.contains("hidden")) { closeImportMenu(); return; }
+    placePopover(pop, $("import-btn").getBoundingClientRect());
+    $("import-btn").setAttribute("aria-expanded", "true");
+    pop.querySelector("button")?.focus();
+  });
+  // Capture phase: any menu item closes the menu first, then runs its own listener.
+  $("import-menu-pop").addEventListener("click", (e) => { if (e.target.closest("button")) closeImportMenu(); }, true);
+  document.addEventListener("pointerdown", (e) => {
+    const pop = $("import-menu-pop");
+    if (pop.classList.contains("hidden")) return;
+    if (pop.contains(e.target) || $("import-btn").contains(e.target)) return;
+    closeImportMenu();
+  });
+  $("import-file-btn").addEventListener("click", runImport);
   $("import-folder-btn").addEventListener("click", runImportFolder);
   $("export-btn").addEventListener("click", () => runExport($("export-format").value));
   $("reset-settings").addEventListener("click", resetSettings);

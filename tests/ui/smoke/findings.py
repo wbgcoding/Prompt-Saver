@@ -1045,6 +1045,31 @@ def run(browser, tmp):
       if (!sec.querySelector('.settings-sec-title').textContent.trim()) errs.push('909: the Capture section has no title');
     }
 """)
+    failed += ar_probe('bm910', 'settings: one Import button opens a menu with a file and a folder entry', 'index', '880x600', '', r"""
+    // 910: the Import button opens a small menu instead of two buttons.
+    await bootReady();
+    document.getElementById('gear').click();
+    await sleep(300);
+    const ib = document.getElementById('import-btn');
+    const pop = document.getElementById('import-menu-pop');
+    if (document.getElementById('import-folder-btn').closest('#import-menu-pop') !== pop) errs.push('910: the folder entry is not in the menu');
+    ib.click();
+    await sleep(200);
+    if (pop.classList.contains('hidden')) errs.push('910: the Import button did not open its menu');
+    if (pop.querySelectorAll('[role=menuitem]').length !== 2) errs.push('910: the import menu does not hold 2 entries');
+    if (ib.getAttribute('aria-expanded') !== 'true') errs.push('910: the Import button does not report the open menu');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await sleep(150);
+    if (!pop.classList.contains('hidden')) errs.push('910: Escape did not close the import menu');
+    if (document.getElementById('settings').classList.contains('hidden')) errs.push('910: Escape closed the settings along with the menu');
+    ib.click();
+    await sleep(200);
+    window.__SMOKE_ARGS__ = [];
+    document.getElementById('import-file-btn').click();
+    await sleep(300);
+    if (!callsFor('preview_import').length) errs.push('910: From file did not start the import preview');
+    if (!pop.classList.contains('hidden')) errs.push('910: choosing an entry left the menu open');
+""")
     failed += ar_probe('bx717', 'copy history filters: at 680 px they take two rows, the source is a select and only one All chip remains', 'index', '680x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { clipWatcher: true } };</script>\n', r"""
     await bootReady();
     document.getElementById('library-btn').click(); await sleep(400);
