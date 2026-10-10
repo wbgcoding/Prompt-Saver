@@ -15,6 +15,7 @@
 // build in open_launcher_window still passes `.focused(true)`, the launcher takes the
 // focus at build time; the same goes for the 200 character limit of the launcher field
 // (maxlength in launcher.html), which only native typing is subject to.
+// All waiting runs on a fake clock (makeClock), so the result does not depend on load.
 // Run:  node tests/ui/tray_launcher_handoff_check.js      Exit: 0 = clean, 1 = problems.
 const fs = require("fs");
 const path = require("path");
@@ -41,7 +42,38 @@ const BUILD_STEALS_FOCUS = /\.focused\(true\)/.test(openFn);
 const maxLenMatch = /id="search"[^>]*\smaxlength="(\d+)"/.exec(fs.readFileSync(path.join(uiDir, "launcher.html"), "utf8"));
 const FIELD_MAX = maxLenMatch ? Number(maxLenMatch[1]) : Infinity;
 const read = (f) => fs.readFileSync(path.join(uiDir, f), "utf8").replace(/\r\n/g, "\n");
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// A fake clock the test drives itself, so the outcome does not depend on how busy the
+// machine is. Both page scripts and the model get their setTimeout / clearTimeout /
+// Date.now from it; time only moves inside sleep(), which fires every timer that falls
+// due on the way, in time order (ties in creation order), and lets all pending promise
+// work settle before the next one fires.
+function makeClock() {
+  const clock = { now: 0, timers: [], seq: 0 };
+  clock.setTimeout = (fn, ms) => {
+    const id = ++clock.seq;
+    clock.timers.push({ id, at: clock.now + Math.max(0, Number(ms) || 0), fn });
+    return id;
+  };
+  clock.clearTimeout = (id) => { clock.timers = clock.timers.filter((t) => t.id !== id); };
+  clock.Date = { now: () => clock.now };
+  const settle = () => new Promise((r) => setImmediate(r));
+  clock.sleep = async (ms) => {
+    const target = clock.now + ms;
+    for (;;) {
+      await settle();
+      let next = null;
+      for (const t of clock.timers) if (t.at <= target && (!next || t.at < next.at || (t.at === next.at && t.id < next.id))) next = t;
+      if (!next) break;
+      clock.timers = clock.timers.filter((t) => t !== next);
+      clock.now = next.at;
+      next.fn();
+    }
+    clock.now = target;
+    await settle();
+  };
+  return clock;
+}
 
 function fakeEl() {
   const cls = new Set();
@@ -69,6 +101,8 @@ function fakeEl() {
 // One scripted run: keys typed every `keyMs`, launcher page loaded `loadMs` after its
 // window was built, every command answered after `ipcMs`.
 async function run({ text, keyMs, loadMs, ipcMs }) {
+  const clock = makeClock();
+  const sleep = clock.sleep;
   const shared = await import(pathToFileURL(path.join(uiDir, "floatShared.js")).href);
   const i18n = await import(pathToFileURL(path.join(uiDir, "i18n.js")).href);
   const os = { focus: "tray", trayAlive: true, launcherLoaded: false };
@@ -76,7 +110,7 @@ async function run({ text, keyMs, loadMs, ipcMs }) {
   const trayWinH = {};
   let launcherListeners = {};
   let prefill = "";
-  const call = async (fn) => { await sleep(ipcMs); return fn(); };
+  const call = async (fn) => { await new Promise((r) => clock.setTimeout(r, ipcMs)); return fn(); };
 
   function bootLauncher() {
     const code = read("launcher.js")
@@ -86,7 +120,7 @@ async function run({ text, keyMs, loadMs, ipcMs }) {
       .replace(/^import \{ mdPlain, resolveLang, varPreview \} from "\.\/floatShared\.js";$/m, "const { mdPlain, resolveLang, varPreview } = __shared;")
       .replace(/^import \{ keysLabel \} from "\.\/shortcuts\.js";$/m, "const keysLabel = () => \"\";");
     const sandbox = {
-      console, setTimeout, clearTimeout, Date, __i18n: i18n, __shared: shared,
+      console, setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout, Date: clock.Date, __i18n: i18n, __shared: shared,
       document: {
         title: "", getElementById: (id) => (launcherEls[id] ||= fakeEl()), createElement: () => fakeEl(),
         addEventListener() {}, body: fakeEl(), hasFocus: () => os.focus === "launcher",
@@ -117,7 +151,7 @@ async function run({ text, keyMs, loadMs, ipcMs }) {
   }
 
   const traySandbox = {
-    console, setTimeout, clearTimeout, Date,
+    console, setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout, Date: clock.Date,
     document: {
       title: "", getElementById: (id) => (trayEls[id] ||= fakeEl()), createElement: () => fakeEl(),
       createElementNS: () => fakeEl(), addEventListener() {}, body: fakeEl(), hasFocus: () => os.focus === "tray",
@@ -129,7 +163,7 @@ async function run({ text, keyMs, loadMs, ipcMs }) {
           if (cmd === "tray_open_launcher") {
             prefill = String(args.query || "").slice(0, 200);
             launcherListeners = {};
-            setTimeout(bootLauncher, loadMs);
+            clock.setTimeout(bootLauncher, loadMs);
             if (MODEL === "old" || BUILD_STEALS_FOCUS) {
               os.focus = "launcher";
               (trayWinH.blur || []).forEach((fn) => fn());
