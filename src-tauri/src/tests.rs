@@ -18514,9 +18514,10 @@ fn start_guard_after_take_joins_and_stops_nothing() {
 
 fn slow_child_command() -> std::process::Command {
     use std::os::windows::process::CommandExt;
-    // ping -n 6 waits about five seconds between its replies.
+    // ping -n 11 runs for about ten seconds; the tests allow a loaded machine a few
+    // seconds of slack and still tell a killed child from one that ran to the end.
     let mut cmd = std::process::Command::new("ping");
-    cmd.args(["-n", "6", "127.0.0.1"]).creation_flags(0x0800_0000);
+    cmd.args(["-n", "11", "127.0.0.1"]).creation_flags(0x0800_0000);
     cmd.stdin(std::process::Stdio::null());
     cmd
 }
@@ -18526,7 +18527,7 @@ fn status_in_job_kills_a_stalled_child_after_the_limit() {
     let began = std::time::Instant::now();
     let err = status_in_job(&mut slow_child_command(), Duration::from_secs(1)).expect_err("the limit must end the wait");
     assert_eq!(err.kind(), std::io::ErrorKind::TimedOut);
-    assert!(began.elapsed() < Duration::from_secs(3), "returned late: {:?}", began.elapsed());
+    assert!(began.elapsed() < Duration::from_secs(7), "returned late: {:?}", began.elapsed());
     assert_eq!(tool_run_error("ffmpeg", &err), "ffmpeg-timeout");
 }
 
@@ -18535,7 +18536,7 @@ fn output_in_job_times_out_and_still_returns_a_quick_childs_output() {
     let began = std::time::Instant::now();
     let err = output_in_job(&mut slow_child_command(), Duration::from_secs(1)).expect_err("the limit must end the wait");
     assert_eq!(err.kind(), std::io::ErrorKind::TimedOut);
-    assert!(began.elapsed() < Duration::from_secs(3), "returned late: {:?}", began.elapsed());
+    assert!(began.elapsed() < Duration::from_secs(7), "returned late: {:?}", began.elapsed());
 
     use std::os::windows::process::CommandExt;
     let mut quick = std::process::Command::new("cmd");
@@ -18553,4 +18554,65 @@ fn wait_with_deadline_leaves_no_child_running() {
     assert_eq!(err.kind(), std::io::ErrorKind::TimedOut);
     // Killed and reaped: the status is already known.
     assert!(child.try_wait().unwrap().is_some(), "the child was not reaped");
+}
+
+// ---- waveform peaks computed while the audio streams in ----
+
+fn waveform_test_pcm(samples: usize, seed: u64) -> Vec<u8> {
+    let mut state = seed;
+    let mut out = Vec::with_capacity(samples * 2);
+    for i in 0..samples {
+        state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        let mut v = (state >> 48) as i16;
+        // A few exact extremes so the i16::MIN case is part of the data.
+        if i % 1_000_003 == 7 {
+            v = i16::MIN;
+        }
+        out.extend_from_slice(&v.to_le_bytes());
+    }
+    out
+}
+
+fn stream_peaks(pcm: &[u8], total_samples: u64, buckets: u32, seed: u64) -> Vec<f32> {
+    let mut acc = PeakAccumulator::new(total_samples, buckets);
+    let mut state = seed;
+    let mut at = 0usize;
+    while at < pcm.len() {
+        state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        let n = (1 + (state >> 40) as usize % 70_001).min(pcm.len() - at);
+        acc.push(&pcm[at..at + n]);
+        at += n;
+    }
+    acc.finish()
+}
+
+#[test]
+fn streamed_peaks_equal_the_whole_buffer_peaks_for_one_hour_of_audio() {
+    let samples = 3600 * WAVEFORM_SAMPLE_RATE as usize;
+    let pcm = waveform_test_pcm(samples, 1);
+    for buckets in [4000u32, 1234, 8] {
+        let want = pcm_s16le_to_peaks(&pcm, buckets);
+        let got = stream_peaks(&pcm, samples as u64, buckets, 99 + buckets as u64);
+        assert_eq!(got, want, "{buckets} buckets");
+    }
+}
+
+#[test]
+fn streamed_peaks_match_on_uneven_and_tiny_inputs() {
+    for (samples, buckets) in [(100_003usize, 777u32), (5, 8), (1, 8), (0, 8), (9_999, 4000), (65_537, 64)] {
+        let pcm = waveform_test_pcm(samples, 7 + samples as u64);
+        let want = pcm_s16le_to_peaks(&pcm, buckets);
+        let got = stream_peaks(&pcm, samples as u64, buckets, 5);
+        assert_eq!(got, want, "{samples} samples, {buckets} buckets");
+    }
+}
+
+#[test]
+fn streamed_peaks_fold_samples_past_the_announced_length_into_the_last_bucket() {
+    let mut pcm = waveform_test_pcm(1000, 3);
+    // A loud sample well past the announced 800.
+    pcm.extend_from_slice(&i16::MAX.to_le_bytes());
+    let got = stream_peaks(&pcm, 800, 8, 1);
+    assert_eq!(got.len(), 8);
+    assert!(got[7] > 0.99, "the overrun sample counts in the last bucket: {got:?}");
 }

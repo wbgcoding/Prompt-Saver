@@ -421,12 +421,85 @@ pub(crate) async fn generate_waveform_peaks(app: AppHandle, path: String, track:
     }
     let buckets = buckets.clamp(8, 4000);
     let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
-    tauri::async_runtime::spawn_blocking(move || generate_waveform_peaks_blocking(&ffmpeg, &src, track, buckets))
+    let ffprobe = ffprobe_search_path(&app);
+    tauri::async_runtime::spawn_blocking(move || generate_waveform_peaks_blocking(&ffmpeg, ffprobe.as_deref(), &src, track, buckets))
         .await
         .map_err(|e| e.to_string())?
 }
 
-pub(crate) fn generate_waveform_peaks_blocking(ffmpeg: &Path, src: &Path, track: u32, buckets: u32) -> Result<Vec<f32>, String> {
+pub(crate) const WAVEFORM_TIMEOUT: Duration = Duration::from_secs(120);
+
+// Peaks built while the decoded audio streams in: one running maximum per bucket, so
+// the memory used is the bucket count, not the length of the recording (8 kHz mono
+// s16 is 57.6 MB per hour). The bucket edges are the ones `pcm_s16le_to_peaks` uses
+// for a buffer of `total_samples`, so both give the same peaks for the same audio.
+// Samples past the announced total (a duration that was a little short) fold into the
+// last bucket instead of being lost.
+pub(crate) struct PeakAccumulator {
+    buckets: usize,
+    per_bucket: f64,
+    peaks: Vec<u16>,
+    bucket: usize,
+    bucket_end: u64,
+    index: u64,
+    carry: Option<u8>,
+}
+
+impl PeakAccumulator {
+    pub(crate) fn new(total_samples: u64, buckets: u32) -> Self {
+        let buckets = buckets.max(1) as usize;
+        let per_bucket = (total_samples as f64 / buckets as f64).max(1.0);
+        let mut acc = Self { buckets, per_bucket, peaks: vec![0; buckets], bucket: 0, bucket_end: 0, index: 0, carry: None };
+        acc.bucket_end = acc.end_of(0);
+        acc
+    }
+
+    fn end_of(&self, bucket: usize) -> u64 {
+        if bucket + 1 >= self.buckets {
+            u64::MAX
+        } else {
+            ((bucket + 1) as f64 * self.per_bucket) as u64
+        }
+    }
+
+    fn add(&mut self, sample: i16) {
+        while self.index >= self.bucket_end {
+            self.bucket += 1;
+            self.bucket_end = self.end_of(self.bucket);
+        }
+        let slot = &mut self.peaks[self.bucket];
+        *slot = (*slot).max(sample.unsigned_abs());
+        self.index += 1;
+    }
+
+    // Feeds raw little-endian s16 bytes in any chunking; an odd trailing byte waits
+    // for the next chunk.
+    pub(crate) fn push(&mut self, mut bytes: &[u8]) {
+        if let Some(lo) = self.carry {
+            let Some((&hi, rest)) = bytes.split_first() else { return };
+            self.carry = None;
+            self.add(i16::from_le_bytes([lo, hi]));
+            bytes = rest;
+        }
+        let mut pairs = bytes.chunks_exact(2);
+        for p in &mut pairs {
+            self.add(i16::from_le_bytes([p[0], p[1]]));
+        }
+        if let [lo] = pairs.remainder() {
+            self.carry = Some(*lo);
+        }
+    }
+
+    pub(crate) fn finish(self) -> Vec<f32> {
+        if self.index == 0 {
+            return vec![0.0; self.buckets];
+        }
+        self.peaks.iter().map(|&m| (m as f32 / 32768.0).min(1.0)).collect()
+    }
+}
+
+pub(crate) fn generate_waveform_peaks_blocking(ffmpeg: &Path, ffprobe: Option<&Path>, src: &Path, track: u32, buckets: u32) -> Result<Vec<f32>, String> {
+    use std::io::Read;
     use std::os::windows::process::CommandExt;
     let map = format!("0:a:{track}");
     let mut cmd = std::process::Command::new(ffmpeg);
@@ -439,11 +512,38 @@ pub(crate) fn generate_waveform_peaks_blocking(ffmpeg: &Path, src: &Path, track:
     cmd.stdin(std::process::Stdio::null());
     cmd.stdout(std::process::Stdio::piped());
     cmd.stderr(std::process::Stdio::null());
-    let output = output_in_job(&mut cmd, Duration::from_secs(120)).map_err(|e| tool_run_error("ffmpeg", &e))?;
-    if !output.status.success() {
+    // The duration fixes the bucket edges up front. Without one (no ffprobe, or a file
+    // that reports none) the audio is collected whole and reduced afterwards.
+    let total_samples = ffprobe
+        .and_then(|p| probe_recording_blocking(p, src).ok())
+        .map(|p| p.duration_ms * WAVEFORM_SAMPLE_RATE as u64 / 1000)
+        .unwrap_or(0);
+    if total_samples == 0 {
+        let output = output_in_job(&mut cmd, WAVEFORM_TIMEOUT).map_err(|e| tool_run_error("ffmpeg", &e))?;
+        if !output.status.success() {
+            return Err(format!("no audio on track {track}"));
+        }
+        return Ok(pcm_s16le_to_peaks(&output.stdout, buckets));
+    }
+    let mut child = spawn_in_job(&mut cmd, app_job()).map_err(|e| tool_run_error("ffmpeg", &e))?;
+    let mut stdout = child.stdout.take().ok_or_else(|| "could not read the recording".to_string())?;
+    let mut acc = PeakAccumulator::new(total_samples, buckets);
+    let reader = std::thread::spawn(move || {
+        let mut chunk = vec![0u8; 64 * 1024];
+        loop {
+            match stdout.read(&mut chunk) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => acc.push(&chunk[..n]),
+            }
+        }
+        acc
+    });
+    let status = wait_with_deadline(&mut child, WAVEFORM_TIMEOUT).map_err(|e| tool_run_error("ffmpeg", &e))?;
+    let acc = reader.join().map_err(|_| format!("no audio on track {track}"))?;
+    if !status.success() {
         return Err(format!("no audio on track {track}"));
     }
-    Ok(pcm_s16le_to_peaks(&output.stdout, buckets))
+    Ok(acc.finish())
 }
 
 // Running max tracked as u16: i16::MIN.unsigned_abs() is 32768, one past
