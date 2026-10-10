@@ -251,7 +251,31 @@ pub(crate) fn write_file_atomic(path: &Path, content: &str) -> bool {
 // reason when it fails. The data is flushed to disk before the rename, the
 // rename replaces an existing target in one step, and on any error the temp file
 // is removed and the old target is left exactly as it was.
+//
+// A symlink as the target is followed: the file it points at is replaced, the link
+// stays. Where the folder or the file does not allow the replace (no right to
+// create files there, a file held open without delete sharing), the write falls
+// back to writing the file in place, which is what it did before.
 pub(crate) fn write_bytes_atomic(path: &Path, content: &[u8]) -> std::io::Result<()> {
+    let is_link = fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink());
+    let target = if is_link {
+        match fs::canonicalize(path) {
+            Ok(real) => real,
+            // A dangling link: nothing to replace, write through it.
+            Err(_) => return fs::write(path, content),
+        }
+    } else {
+        path.to_path_buf()
+    };
+    match replace_via_temp(&target, content) {
+        Err(e) if matches!(e.kind(), std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::Unsupported | std::io::ErrorKind::ResourceBusy) => {
+            fs::write(&target, content)
+        }
+        other => other,
+    }
+}
+
+fn replace_via_temp(path: &Path, content: &[u8]) -> std::io::Result<()> {
     use std::io::Write;
     let mut name = path.file_name().unwrap_or_default().to_os_string();
     name.push(format!(".tmp-{}", gen_id()));

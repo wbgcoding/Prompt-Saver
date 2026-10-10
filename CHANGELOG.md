@@ -914,6 +914,9 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **Safe overwrites follow links and give way where they cannot work.** Replacing
+  an export through a shortcut-like link changes the file behind the link, and a
+  folder or file that does not allow the swap is written in place as before.
 - **Leftovers of an interrupted save are cleaned up.** A crash in the middle of
   writing a settings, library, backup or sync file could leave a temporary copy
   behind; copies older than an hour are now removed at start in the data folder

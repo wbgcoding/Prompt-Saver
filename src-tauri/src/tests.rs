@@ -18346,3 +18346,43 @@ fn the_startup_sweep_removes_only_old_temp_leftovers() {
     assert_eq!(left, ["export.psb", "fresh.json.tmp-p1760000000000000000_3", "mine.tmp-abc", "notes.tmp", "sub.tmp-p1_1"]);
     let _ = fs::remove_dir_all(&dir);
 }
+
+// ---- the atomic replace keeps working where a replace is not allowed ----
+
+#[test]
+fn the_atomic_write_falls_back_to_writing_in_place_when_the_replace_is_refused() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let dir = std::env::temp_dir().join(format!("ps-atomic-fallback-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let target = dir.join("export.json");
+    fs::write(&target, b"old content that is longer").unwrap();
+    // Another program holds the file open and shares reading and writing but not
+    // deleting or renaming, so a rename over it is refused while a write is not.
+    let _holder = fs::OpenOptions::new().read(true).share_mode(1 | 2).open(&target).unwrap();
+    write_bytes_atomic(&target, b"new").unwrap();
+    assert_eq!(fs::read(&target).unwrap(), b"new");
+    let names: Vec<String> = fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+    assert_eq!(names, vec!["export.json".to_string()], "no temp file is left");
+    drop(_holder);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_atomic_write_replaces_the_file_a_symlink_points_at() {
+    let dir = std::env::temp_dir().join(format!("ps-atomic-link-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let real = dir.join("real.json");
+    let link = dir.join("link.json");
+    fs::write(&real, b"before").unwrap();
+    if std::os::windows::fs::symlink_file(&real, &link).is_err() {
+        // Creating a symlink needs developer mode or admin rights; without them there is nothing to test.
+        let _ = fs::remove_dir_all(&dir);
+        return;
+    }
+    write_bytes_atomic(&link, b"after").unwrap();
+    assert!(fs::symlink_metadata(&link).unwrap().file_type().is_symlink(), "the link itself stays a link");
+    assert_eq!(fs::read(&real).unwrap(), b"after", "the file behind the link is what changed");
+    let _ = fs::remove_dir_all(&dir);
+}
