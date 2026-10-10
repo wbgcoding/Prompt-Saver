@@ -261,7 +261,8 @@ def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html", vars_op
     <button type="button" id="modal-history-head" class="modal-collapse-head" aria-expanded="{'true' if history_open else 'false'}">
       <span>{L('historyTitle')}</span></button>
     <div id="modal-history-body" class="modal-collapse-body{'' if history_open else ' hidden'}">{rows}</div></div>
-  <div class="modal-actions"><button class="ghost-btn danger-btn">{L('delete')}</button>
+  <div class="modal-actions"><button class="text-danger-btn">{L('delete')}</button>
+    <button class="ghost-btn">{L('cancel')}</button>
     <button id="modal-confirm" class="primary-btn">{L('save')}</button></div>
 </div></div>
 <pre id="RESULT"></pre>

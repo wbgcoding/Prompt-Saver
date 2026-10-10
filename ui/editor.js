@@ -1500,6 +1500,7 @@ export function bindEditor() {
 
   modal.confirm.addEventListener("click", confirmModal);
   modal.closeX.addEventListener("click", () => confirmDiscardIfDirty().then((ok) => { if (ok) closeModal(); }));
+  modal.cancel.addEventListener("click", () => confirmDiscardIfDirty().then((ok) => { if (ok) closeModal(); }));
   modal.fav.addEventListener("click", () => {
     const on = modal.fav.classList.toggle("active");
     modal.fav.setAttribute("aria-pressed", String(on));

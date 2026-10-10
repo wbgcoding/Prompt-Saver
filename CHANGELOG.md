@@ -929,6 +929,9 @@ the video editor and the introduction tour ship on).
 - **The editor opens with the caret where you want to type.** A saved prompt
   without Markdown opens in its text with the caret at the end; other prompts
   keep the caret at the end of the name instead of selecting it.
+- **The editor footer is Delete, Cancel, Save.** Delete is red text without a
+  frame on the left; Cancel closes the editor and asks first when something was
+  changed, like the X.
 
 ### Fixed
 

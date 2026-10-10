@@ -41,6 +41,7 @@ export const modal = {
   voiceBtn: $("modal-voice-btn"),
   closeX: $("modal-close-x"),
   confirm: $("modal-confirm"),
+  cancel: $("modal-cancel"),
   delete: $("modal-delete"),
   fav: $("modal-fav"),
   secret: $("modal-secret"),

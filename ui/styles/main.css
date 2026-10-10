@@ -4843,6 +4843,19 @@ body.drag-over::after {
   border-color: var(--danger);
   color: #fff;
 }
+/* A destructive action in a dialog footer that is undone from a toast: red text, no frame. */
+.text-danger-btn {
+  padding: 6px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  color: var(--danger);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.text-danger-btn:hover { background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.text-danger-btn:focus-visible { outline: 2px solid var(--danger); outline-offset: 2px; }
 
 /* ---- Context menu ---- */
 .ctx {

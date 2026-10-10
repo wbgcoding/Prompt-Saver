@@ -342,8 +342,21 @@ window.__CONTRAST_RING_TOKENS__ = %(ring_tokens_json)s;
     for (const scene of window.__CONTRAST_SCENES__ || ['default']) {
       if (scene !== 'default') {
         try {
-          const el = document.querySelector(scene);
-          if (el) el.click();
+          // "edit:<selector>" opens the tile context menu and picks Edit, so the
+          // editor dialog in edit mode (with its Delete button) gets measured.
+          if (scene.startsWith('edit:')) {
+            const tile = document.querySelector(scene.slice(5));
+            if (tile) {
+              tile.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+              await sleep(200);
+              const edit = document.querySelector('#ctx [data-act="edit"]');
+              if (edit) edit.click();
+              await sleep(300);
+            }
+          } else {
+            const el = document.querySelector(scene);
+            if (el) el.click();
+          }
           await sleep(120);
           settleAnimations();
           await sleep(120);
@@ -403,6 +416,8 @@ SCENES = {
     # see together ever end up stacked at once.
     "index.html": [
         "default",
+        "edit:#grid .tile[data-id]",
+        "#modal-close-x",
         "#gear",
         "#about-btn",
         "#about-ok",

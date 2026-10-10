@@ -632,6 +632,53 @@ SECTION = """\
         await closeEd259();
       }
     }
+    // act260: the editor footer reads Delete (red text, no frame), Cancel, Save; Cancel
+    // takes the same path as the X (the discard question when edited); creating shows no Delete.
+    {
+      const vis260 = (el) => !!el && !el.classList.contains('hidden') && getComputedStyle(el).display !== 'none';
+      const footer260 = () => [...document.querySelectorAll('#modal .modal-actions > button')].filter(vis260).map(b => b.id);
+      if (await openEditor('p1')) {
+        const order260 = footer260().join();
+        if (order260 !== 'modal-delete,modal-cancel,modal-confirm') out.errors.push('act260: the edit footer order is ' + order260);
+        const del260 = document.getElementById('modal-delete');
+        const ref260 = document.createElement('i');
+        ref260.style.color = 'var(--danger)';
+        document.body.appendChild(ref260);
+        const danger260 = getComputedStyle(ref260).color;
+        ref260.remove();
+        if (del260) {
+          const cs260 = getComputedStyle(del260);
+          if (cs260.color !== danger260) out.errors.push('act260: Delete is ' + cs260.color + ', not the danger colour ' + danger260);
+          if (cs260.borderTopColor !== 'rgba(0, 0, 0, 0)') out.errors.push('act260: Delete has a visible border (' + cs260.borderTopColor + ')');
+        }
+        await click('modal-cancel');
+        await sleep(300);
+        if (!document.getElementById('confirm-modal').classList.contains('hidden')) out.errors.push('act260: Cancel without edits asked a question');
+        if (!document.getElementById('modal').classList.contains('hidden')) out.errors.push('act260: Cancel without edits left the editor open');
+      } else out.errors.push('act260: the editor did not open');
+      if (await openEditor('p1')) {
+        const nm260 = document.getElementById('modal-name');
+        nm260.value = nm260.value + ' edited';
+        nm260.dispatchEvent(new Event('input', { bubbles: true }));
+        await click('modal-cancel');
+        await sleep(300);
+        const cm260 = document.getElementById('confirm-modal');
+        if (cm260.classList.contains('hidden')) out.errors.push('act260: Cancel after typing did not ask about discarding');
+        else { await click('confirm-ok'); await sleep(300); }
+        if (!document.getElementById('modal').classList.contains('hidden')) out.errors.push('act260: the editor stayed open after confirming the discard');
+      } else out.errors.push('act260: the editor did not reopen');
+      const free260 = [...document.querySelectorAll('#grid .cell')].find(c => !c.firstElementChild);
+      if (!free260) out.errors.push('act260: no free cell to create a prompt in');
+      else {
+        free260.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+        await sleep(300);
+        const create260 = footer260().join();
+        if (create260 !== 'modal-cancel,modal-confirm') out.errors.push('act260: the create footer is ' + create260);
+        await click('modal-close-x');
+        await sleep(250);
+        if (!document.getElementById('confirm-modal').classList.contains('hidden')) { await click('confirm-ok'); await sleep(250); }
+      }
+    }
     // Gating: a row whose feature is off must disappear the moment that toggle is
     // flipped - no reopening the menu - and a whole branch goes with its parent.
     const rowFor = (label) => [...document.querySelectorAll('#expert-flags .field')]
