@@ -926,6 +926,9 @@ the video editor and the introduction tour ship on).
   dark themes get a slightly clearer frame too.
 - **The private note has a label.** The note field in the editor now says
   "Note (only for you, never copied)" above it instead of only a placeholder.
+- **The editor opens with the caret where you want to type.** A saved prompt
+  without Markdown opens in its text with the caret at the end; other prompts
+  keep the caret at the end of the name instead of selecting it.
 
 ### Fixed
 

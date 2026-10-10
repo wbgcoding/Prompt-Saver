@@ -591,6 +591,47 @@ SECTION = """\
     } else {
       out.errors.push('the editor did not open for the colour-picker check');
     }
+    // foc259: an existing prompt without Markdown syntax opens with the text field
+    // handed over and the caret at its end; a Markdown prompt opens rendered with the
+    // caret at the end of the name; creating still selects the whole (empty) name.
+    {
+      const closeEd259 = async () => {
+        await click('modal-close-x');
+        await sleep(250);
+        const cm259 = document.getElementById('confirm-modal');
+        if (!cm259.classList.contains('hidden')) { await click('confirm-ok'); await sleep(250); }
+      };
+      if (await openEditor('p1')) {
+        const ta259 = document.getElementById('modal-text');
+        if (document.activeElement !== ta259) out.errors.push('foc259: a plain prompt does not open with the text field focused (' + (document.activeElement && document.activeElement.id) + ')');
+        else if (ta259.selectionStart !== ta259.value.length || ta259.selectionEnd !== ta259.value.length) {
+          out.errors.push('foc259: the caret is not at the end of the text (' + ta259.selectionStart + '..' + ta259.selectionEnd + ' of ' + ta259.value.length + ')');
+        }
+        await closeEd259();
+      } else out.errors.push('foc259: the plain prompt did not open');
+      if (await openEditor('p7')) {
+        const nm259 = document.getElementById('modal-name');
+        const wrap259 = document.getElementById('modal-md-wrap');
+        if (wrap259.classList.contains('hidden')) out.errors.push('foc259: the Markdown prompt does not open rendered');
+        if (document.activeElement !== nm259) out.errors.push('foc259: a Markdown prompt does not open with the name focused (' + (document.activeElement && document.activeElement.id) + ')');
+        else if (nm259.selectionStart !== nm259.value.length || nm259.selectionEnd !== nm259.value.length) {
+          out.errors.push('foc259: the caret is not at the end of the name (' + nm259.selectionStart + '..' + nm259.selectionEnd + ' of ' + nm259.value.length + ')');
+        }
+        await closeEd259();
+      } else out.errors.push('foc259: the Markdown prompt did not open');
+      const free259 = [...document.querySelectorAll('#grid .cell')].find(c => !c.firstElementChild);
+      if (!free259) out.errors.push('foc259: no free cell to create a prompt in');
+      else {
+        free259.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+        await sleep(300);
+        const nm259 = document.getElementById('modal-name');
+        if (document.activeElement !== nm259) out.errors.push('foc259: a new prompt does not open with the name focused');
+        else if (nm259.value.length && (nm259.selectionStart !== 0 || nm259.selectionEnd !== nm259.value.length)) {
+          out.errors.push('foc259: the name of a new prompt is not fully selected');
+        }
+        await closeEd259();
+      }
+    }
     // Gating: a row whose feature is off must disappear the moment that toggle is
     // flipped - no reopening the menu - and a whole branch goes with its parent.
     const rowFor = (label) => [...document.querySelectorAll('#expert-flags .field')]

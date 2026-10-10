@@ -389,8 +389,30 @@ export function openModal({ mode, id, name = "", text = "", color = "", image = 
   modalInitial = modalSnapshot();
   armDraftAutosave();
   if (secret) invoke("discard_editor_draft").catch(() => {});
+  focusOnOpen(mode);
+}
+
+// Where the caret lands when the editor opens. A new prompt starts in the name with
+// everything selected. An existing prompt with plain text opens in the text, the caret
+// at its end; a Markdown prompt stays rendered, so the caret goes to the end of the name
+// (nothing selected). Rotating, locked and media prompts have no text field to land in.
+function focusOnOpen(mode) {
+  if (mode !== "edit") {
+    modal.name.focus();
+    modal.name.select();
+    return;
+  }
+  const textApplies = modal.root.classList.contains("tall") && !rotationUiOn() && !modalState.locked;
+  if (textApplies && (!flag("mdPreview") || !hasMarkdownSyntax(modal.text.value))) {
+    focusModalText();
+    const n = modal.text.value.length;
+    modal.text.setSelectionRange(n, n);
+    modal.text.scrollTop = modal.text.scrollHeight;
+    return;
+  }
   modal.name.focus();
-  modal.name.select();
+  const n = modal.name.value.length;
+  modal.name.setSelectionRange(n, n);
 }
 
 // ---- Confidential entries (Vorschlag 68) ----
