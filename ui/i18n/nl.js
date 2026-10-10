@@ -2102,4 +2102,9 @@ export default {
     journalMostFirst: "Meest gebruikt eerst",
     journalLeastFirst: "Minst gebruikt eerst",
     clipSaveShort: "Als prompt",
+    filterRangeLabel: "Periode",
+    rangeAny: "Altijd",
+    rangeToday: "Vandaag",
+    rangeWeek: "Laatste 7 dagen",
+    rangeMonth: "Laatste 30 dagen",
 };

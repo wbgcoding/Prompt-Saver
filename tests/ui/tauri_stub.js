@@ -849,7 +849,7 @@ const RESULTS = {
       { id: "p3", name: "Apple pie recipe", date: 1690000000, chars: 512, kind: "text" },
     ],
   }),
-  recent_copies: () => PROMPTS.slice(0, 4).map((p, i) => ({ id: p.id, ts: 1750000000 + i, rowid: i + 1 })),
+  recent_copies: () => window.__JOURNAL_LOG__ || PROMPTS.slice(0, 4).map((p, i) => ({ id: p.id, ts: 1750000000 + i, rowid: i + 1 })),
   restore_copy_history: () => null,
   delete_copy_entry: () => true,
   // 2: the fixture library is never empty, so the real seeding never actually

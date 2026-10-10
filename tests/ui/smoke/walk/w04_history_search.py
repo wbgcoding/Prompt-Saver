@@ -305,6 +305,49 @@ SECTION = """\
       const bareVideo279 = jr279.journalRow({ id: 'vid279', name: 'Clip', file_path: 'C:/x/clip.mp4' }, null, () => {});
       if (!bareVideo279.querySelector('.journal-kind')) out.errors.push('279: a video without a duration lost its type chip');
     }
+    // 946: the time range narrows "recently copied"; it steps aside in most-used mode and resets on reopen.
+    {
+      const core946 = await import('./core.js');
+      const jr946 = await import('./journal.js');
+      const range946 = document.getElementById('journal-range');
+      if (!range946) out.errors.push('946: the history has no time range field');
+      else {
+        const nowS946 = Math.floor(Date.now() / 1000);
+        window.__JOURNAL_LOG__ = [{ id: 'p0', ts: nowS946, rowid: 901 }, { id: 'p1', ts: nowS946 - 10 * 86400, rowid: 902 }];
+        await jr946.loadJournal();
+        await sleep(200);
+        const rows946 = () => [...document.querySelectorAll('#journal-body .journal-item, #journal-body .journal-clip')];
+        const names946 = () => rows946().map((r) => (r.querySelector('.lib-name') || {}).textContent || '');
+        const pick946 = async (v) => { range946.value = v; range946.dispatchEvent(new Event('change')); await sleep(200); };
+        const startRows946 = rows946().length;
+        const oldName946 = (core946.prompts.find((x) => x.id === 'p1') || {}).name;
+        if (!names946().includes(oldName946)) out.errors.push('946: the ten day old copy is missing before a range is chosen');
+        await pick946('7');
+        if (rows946().length !== 1) out.errors.push('946: a 7 day range lists ' + rows946().length + ' rows instead of 1 (from ' + startRows946 + ')');
+        const count946 = document.getElementById('journal-count').textContent;
+        const nums946 = count946.replace(/[^0-9]+/g, ' ').trim().split(' ');
+        const want946 = core946.t('libraryCount').replace('{n}', String(rows946().length)).replace('{v}', nums946[nums946.length - 1]);
+        if (nums946.length !== 2 || count946 !== want946) out.errors.push('946: the count does not read as n of m with a range: ' + JSON.stringify(count946));
+        await pick946('today');
+        if (names946().includes(oldName946)) out.errors.push('946: the ten day old copy still shows under Today');
+        const sortSel946 = document.getElementById('journal-sort');
+        sortSel946.value = 'used';
+        sortSel946.dispatchEvent(new Event('change'));
+        await sleep(200);
+        if (!range946.classList.contains('hidden')) out.errors.push('946: the range field stays visible in most-used mode');
+        const back946 = document.getElementById('journal-sort');
+        back946.value = 'recent';
+        back946.dispatchEvent(new Event('change'));
+        await sleep(200);
+        if (range946.classList.contains('hidden')) out.errors.push('946: the range field stays hidden in recently-copied mode');
+        window.__JOURNAL_LOG__ = null;
+        await click('library-close');
+        await click('library-btn');
+        await click('library-tab-history');
+        await sleep(300);
+        if (range946.value !== 'all') out.errors.push('946: the range did not reset on reopen: ' + range946.value);
+      }
+    }
     // 716: the copy history is one column; the sort field switches to "most used", the
     // pick is stored and survives closing and reopening the library.
     {

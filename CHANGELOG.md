@@ -603,6 +603,8 @@ the video editor and the introduction tour ship on).
   with a path separator or a reserved Windows character is rejected on the
   spot, with Export disabled until it is fixed. An existing file is never
   replaced: the export takes the next free name.
+- **A time range filter in the copy history.** A new field next to the source narrows
+  the recently copied list to today, the last 7 days or the last 30 days.
 
 ### Improved
 

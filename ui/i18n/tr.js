@@ -2102,4 +2102,9 @@ export default {
     journalMostFirst: "En çok önce",
     journalLeastFirst: "En az önce",
     clipSaveShort: "İstem olarak",
+    filterRangeLabel: "Zaman aralığı",
+    rangeAny: "Her zaman",
+    rangeToday: "Bugün",
+    rangeWeek: "Son 7 gün",
+    rangeMonth: "Son 30 gün",
 };

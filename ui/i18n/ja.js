@@ -2102,4 +2102,9 @@ export default {
     journalMostFirst: "多い順",
     journalLeastFirst: "少ない順",
     clipSaveShort: "プロンプトにする",
+    filterRangeLabel: "期間",
+    rangeAny: "いつでも",
+    rangeToday: "今日",
+    rangeWeek: "過去7日間",
+    rangeMonth: "過去30日間",
 };

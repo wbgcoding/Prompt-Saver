@@ -2102,4 +2102,9 @@ export default {
     journalMostFirst: "Cele mai folosite primele",
     journalLeastFirst: "Cele mai puțin folosite primele",
     clipSaveShort: "Ca prompt",
+    filterRangeLabel: "Interval de timp",
+    rangeAny: "Oricând",
+    rangeToday: "Astăzi",
+    rangeWeek: "Ultimele 7 zile",
+    rangeMonth: "Ultimele 30 de zile",
 };

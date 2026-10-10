@@ -2102,4 +2102,9 @@ export default {
     journalMostFirst: "最多优先",
     journalLeastFirst: "最少优先",
     clipSaveShort: "存为提示词",
+    filterRangeLabel: "时间范围",
+    rangeAny: "不限时间",
+    rangeToday: "今天",
+    rangeWeek: "最近 7 天",
+    rangeMonth: "最近 30 天",
 };

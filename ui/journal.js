@@ -174,6 +174,13 @@ export let journalLog = []; // cached newest copy events; refetched only on open
 export let journalInbox = []; // text copied in other apps (the stored clipboard entries), newest first
 export let clipStored = 0; // how many of those are stored: the history tab stays reachable while any are
 export let journalSource = "all"; // source filter of the copy history: "all" | "app" | "elsewhere"
+export let journalRange = "all"; // time range of the "recently copied" list: "all" | "today" | "7" | "30"
+// Start of the chosen time range in unix seconds (0 = no limit). Entries without a stamp count as 0.
+function journalRangeStart() {
+  if (journalRange === "today") return new Date().setHours(0, 0, 0, 0) / 1000;
+  if (journalRange === "7" || journalRange === "30") return Date.now() / 1000 - Number(journalRange) * 86400;
+  return 0;
+}
 export let journalRecentRev = false; // recently-copied sorted oldest-first
 export let journalUsedRev = false; // most-used sorted least-first
 
@@ -285,10 +292,14 @@ export function renderJournal() {
   syncJournalSourceBar(sourcesOn);
   const showApp = journalSource !== "elsewhere";
   const showElsewhere = sourcesOn && journalSource !== "app";
+  // "Most used" shows lifetime counts with no per-copy time, so the range steps aside there.
+  const usedMode = journalSource !== "elsewhere" && journalSortMode() === "used";
+  $("journal-range").classList.toggle("hidden", usedMode);
+  const since = usedMode ? 0 : journalRangeStart();
   let recent = showApp
     ? journalLog
       .map((e) => [byId.get(e.id), e.ts, e.rowid])
-      .filter(([p]) => p && journalMatches(p))
+      .filter(([p, ts]) => p && (ts || 0) >= since && journalMatches(p))
       .map(([p, ts, rowid]) => ({ p, ts, rowid }))
     : [];
   // An entry copied elsewhere has no type, so a type filter leaves it out; the search matches its text.
@@ -296,7 +307,7 @@ export function renderJournal() {
   const clipQuery = journalQuery.trim().toLowerCase();
   if (showElsewhere && !narrowed) {
     for (const it of journalInbox) {
-      if (!clipQuery || String(it.text || "").toLowerCase().includes(clipQuery)) recent.push({ clip: it, ts: it.ts });
+      if ((it.ts || 0) >= since && (!clipQuery || String(it.text || "").toLowerCase().includes(clipQuery))) recent.push({ clip: it, ts: it.ts });
     }
   }
   // Newest first; the sort is stable, so equal timestamps keep the copy log first.
@@ -460,6 +471,8 @@ export async function resetAndLoadJournal() {
   for (const type of typeFilterOf("journalTypeFilterPick")) journalTypes.add(type);
   paintTypeChips($("journal-types"), journalTypes);
   journalSource = "all";
+  journalRange = "all";
+  $("journal-range").value = "all";
   // renderJournal decides what the filter bar shows, so it also follows the source field.
   await loadJournal();
   if (flag("searchAutofocus")) $("journal-q").focus();
@@ -477,6 +490,11 @@ export function bindJournal() {
     applyFlags();
     if (!on && accepted) await offerClipInboxCleanup();
     await refreshClipInbox();
+  });
+  attachSelectPicker($("journal-range"));
+  $("journal-range").addEventListener("change", (e) => {
+    journalRange = e.target.value;
+    renderJournal();
   });
   attachSelectPicker($("journal-source"));
   $("journal-source").addEventListener("change", (e) => {

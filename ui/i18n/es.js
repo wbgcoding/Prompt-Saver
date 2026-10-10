@@ -2102,4 +2102,9 @@ export default {
     journalMostFirst: "Más usados primero",
     journalLeastFirst: "Menos usados primero",
     clipSaveShort: "Como prompt",
+    filterRangeLabel: "Período",
+    rangeAny: "Cualquier momento",
+    rangeToday: "Hoy",
+    rangeWeek: "Últimos 7 días",
+    rangeMonth: "Últimos 30 días",
 };
