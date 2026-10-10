@@ -25,6 +25,7 @@ pub(crate) fn show_main(app: &AppHandle) {
     let _ = win.show();
     let _ = win.unminimize();
     let _ = win.set_focus();
+    reapply_taskbar_state(app);
 }
 
 // The decision `show_main` runs on: reuse the window it already has, or ask

@@ -220,6 +220,15 @@ impl TaskbarThrottle {
     pub(crate) fn reset(&mut self) {
         self.last = None;
     }
+
+    // The decision for one tick: a pending retry request (a failed apply, or the
+    // taskbar button having been recreated) forgets the last pair first.
+    pub(crate) fn decide(&mut self, retry: &AtomicBool, hwnd: isize, state: &str, value: Option<u8>) -> bool {
+        if retry.swap(false, Ordering::SeqCst) {
+            self.reset();
+        }
+        self.should_apply(hwnd, state, value)
+    }
 }
 
 static TASKBAR_THROTTLE: Mutex<TaskbarThrottle> = Mutex::new(TaskbarThrottle { last: None });
@@ -245,10 +254,7 @@ pub(crate) fn apply_taskbar_state(app: &AppHandle, state: &str, value: Option<u8
     // Decide and queue under one lock so two workers cannot reach the UI thread
     // in a different order than their decisions.
     let mut throttle = TASKBAR_THROTTLE.lock().unwrap_or_else(|e| e.into_inner());
-    if TASKBAR_RETRY.swap(false, Ordering::SeqCst) {
-        throttle.reset();
-    }
-    if !throttle.should_apply(key, &state, value) {
+    if !throttle.decide(&TASKBAR_RETRY, key, &state, value) {
         return;
     }
     let queued = app.run_on_main_thread(move || {
@@ -283,22 +289,21 @@ fn apply_taskbar_on_main(hwnd: isize, state: &str, value: Option<u8>) -> bool {
             *slot = Some(taskbar);
         }
         let Some(taskbar) = slot.as_ref() else { return false };
-        match state {
-            "off" => {
-                let _ = taskbar.SetProgressState(hwnd, TBPF_NOPROGRESS);
-            }
-            "indeterminate" => {
-                let _ = taskbar.SetProgressState(hwnd, TBPF_INDETERMINATE);
-            }
-            "error" => {
-                let _ = taskbar.SetProgressState(hwnd, TBPF_ERROR);
-            }
+        let ok = match state {
+            "off" => taskbar.SetProgressState(hwnd, TBPF_NOPROGRESS).is_ok(),
+            "indeterminate" => taskbar.SetProgressState(hwnd, TBPF_INDETERMINATE).is_ok(),
+            "error" => taskbar.SetProgressState(hwnd, TBPF_ERROR).is_ok(),
             _ => {
-                let _ = taskbar.SetProgressValue(hwnd, value.unwrap_or(0) as u64, 100);
-                let _ = taskbar.SetProgressState(hwnd, TBPF_NORMAL);
+                let a = taskbar.SetProgressValue(hwnd, value.unwrap_or(0) as u64, 100).is_ok();
+                let b = taskbar.SetProgressState(hwnd, TBPF_NORMAL).is_ok();
+                a && b
             }
+        };
+        if !ok {
+            // The shell most likely restarted: build a fresh object next time.
+            *slot = None;
         }
-        true
+        ok
     })
 }
 
@@ -356,11 +361,39 @@ pub(crate) fn push_bg_op(app: &AppHandle, id: &str, kind: &str, state: &str, val
                 .unwrap_or(true)
         })
         .unwrap_or(true);
+    apply_taskbar_aggregate(app, enabled, agg_state, agg_value);
+}
+
+fn apply_taskbar_aggregate(app: &AppHandle, enabled: bool, state: &str, value: Option<u8>) {
     if enabled {
-        apply_taskbar_state(app, agg_state, agg_value);
+        apply_taskbar_state(app, state, value);
     } else {
         apply_taskbar_state(app, "off", None);
     }
+}
+
+// The main window's taskbar button starts without progress whenever it is created
+// anew (shown again after hiding to the tray). Applies the current state once more
+// regardless of what was applied before.
+pub(crate) fn reapply_taskbar_state(app: &AppHandle) {
+    let (state, value) = {
+        let ops = bg_ops().lock().unwrap_or_else(|e| e.into_inner());
+        aggregate_taskbar_state(&ops)
+    };
+    let enabled = app
+        .try_state::<Db>()
+        .map(|s| {
+            s.lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .settings
+                .ui_flags
+                .get("taskbarProgress")
+                .copied()
+                .unwrap_or(true)
+        })
+        .unwrap_or(true);
+    TASKBAR_RETRY.store(true, Ordering::SeqCst);
+    apply_taskbar_aggregate(app, enabled, state, value);
 }
 
 #[tauri::command(async)]

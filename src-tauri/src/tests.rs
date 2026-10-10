@@ -18110,3 +18110,17 @@ fn import_test_backup_with(minimize: bool) -> Backup {
     b.settings.minimize_to_tray = minimize;
     b
 }
+
+#[test]
+fn taskbar_throttle_retries_after_a_failed_apply_or_a_recreated_button() {
+    let retry = AtomicBool::new(false);
+    let mut t = bg_ops::TaskbarThrottle::default();
+    assert!(t.decide(&retry, 5, "indeterminate", None));
+    assert!(!t.decide(&retry, 5, "indeterminate", None), "unchanged state is skipped");
+    // A failed apply (or the button coming back) asks for a retry: the very same
+    // state goes out once more, then is skipped again.
+    retry.store(true, Ordering::SeqCst);
+    assert!(t.decide(&retry, 5, "indeterminate", None));
+    assert!(!t.decide(&retry, 5, "indeterminate", None));
+    assert!(!retry.load(Ordering::SeqCst), "the request is consumed");
+}
