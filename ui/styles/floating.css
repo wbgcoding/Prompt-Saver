@@ -2,6 +2,10 @@
 :root {
   --pill-bg: rgba(37, 99, 235, 0.96);
   --pill-fg: #ffffff;
+  /* Fill for a normal-size label painted in --pill-fg (the placeholder window's Copy
+     button): the same nudged hue the main window calls --accent-strong, so small text
+     clears 4.5:1. A custom theme replaces it with its own accent (floattheme.js). */
+  --pill-strong: var(--pill-bg);
   --pill-ok: rgba(22, 163, 74, 0.97);
   --danger: #dc2626;
   --menu-bg: rgba(255, 255, 255, 0.98);
@@ -12,6 +16,7 @@
   --folder-glyph: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M10.6 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8.2l-1.2-2Z'/></svg>");
 }
 :root[data-theme="dark"] {
+  --pill-strong: #3472d9;
   --pill-bg: rgba(59, 130, 246, 0.96);
   --menu-bg: rgba(32, 36, 44, 0.98);
   --menu-fg: #e8eaf0;
@@ -25,15 +30,18 @@
   --menu-line: rgba(255, 255, 255, 0.1);
 }
 :root[data-theme="neon"] {
+  --pill-strong: #9a4ee2;
   --pill-bg: rgba(168, 85, 247, 0.96);
   --menu-bg: rgba(23, 16, 40, 0.98);
   --menu-fg: #ede9fe;
   --menu-line: rgba(255, 255, 255, 0.12);
 }
 :root[data-theme="ocean"] {
+  --pill-strong: #027bba;
   --pill-bg: rgba(2, 132, 199, 0.96);
 }
 :root[data-theme="cyberpunk"] {
+  --pill-strong: #dd2768;
   --pill-bg: rgba(255, 45, 120, 0.95);
   --menu-bg: rgba(20, 20, 31, 0.98);
   --menu-fg: #e0e7ff;
@@ -718,7 +726,7 @@ body.vars-body {
 .vars-btn:hover { background: var(--menu-line); }
 .vars-btn-primary {
   border-color: transparent;
-  background: var(--pill-bg);
+  background: var(--pill-strong);
   color: var(--pill-fg);
   text-shadow: var(--pill-ink-shadow, none);
 }

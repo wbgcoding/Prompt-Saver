@@ -1539,6 +1539,10 @@ the video editor and the introduction tour ship on).
 - **Tile names in an open folder follow the grid rule.** Members of a tile
   folder share one name size and stay on one line when that costs little,
   instead of some names wrapping while others do not.
+- **The Copy button in the placeholder window reads well in every theme.** Its
+  white text on the default accent was below the 4.5:1 minimum in the dark,
+  neon, cyberpunk and ocean themes; the button now uses the same slightly
+  darker accent as the main window's buttons.
 
 ### Security
 

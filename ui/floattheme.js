@@ -78,7 +78,12 @@ export function applyFloatTheme(theme, vars) {
   // accent can be light enough that fixed white text no longer clears
   // WCAG's 4.5:1 minimum.
   const pillBg = style.getPropertyValue("--pill-bg").trim();
-  if (FLOAT_HEX.test(pillBg)) style.setProperty("--pill-fg", readableInk(pillBg));
+  style.removeProperty("--pill-strong");
+  if (FLOAT_HEX.test(pillBg)) {
+    style.setProperty("--pill-fg", readableInk(pillBg));
+    // A custom accent is used as it is, with ink picked from it, not the built-in nudge.
+    style.setProperty("--pill-strong", pillBg);
+  }
   style.setProperty("--pill-ink-shadow", FLOAT_HEX.test(pillBg) ? inkShadow(pillBg) : "none");
   if (inkListener) inkListener();
 }
