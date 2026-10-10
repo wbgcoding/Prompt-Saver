@@ -1216,7 +1216,54 @@ CAMERA_PROBE = """
       if (priorTheme) document.documentElement.setAttribute('data-theme', priorTheme);
       else document.documentElement.removeAttribute('data-theme');
     }
+    // 942-dg: the folder row shows the path (also as its title) and the folder
+    // button is an icon with an accessible name.
+    {
+      const pathEl = document.getElementById('cam-folder-path');
+      const folderBtn = document.getElementById('cam-folder-btn');
+      await until(() => pathEl.textContent.trim() !== '' && folderBtn.getAttribute('aria-label'));
+      if (pathEl.textContent !== 'C:/fake/Videos/Recordings') errs.push('942-dg: the folder path reads "' + pathEl.textContent + '"');
+      if (pathEl.title !== pathEl.textContent) errs.push('942-dg: the folder path has no matching title');
+      if (!(folderBtn.getAttribute('aria-label') || '').trim()) errs.push('942-dg: the folder button has no accessible name');
+      if (!folderBtn.querySelector('svg')) errs.push('942-dg: the folder button has no icon');
+    }
     errs.push(...(window.__SMOKE_ERRORS__ || []));
+  } catch (e) { errs.push('probe: ' + e.message); }
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
+# Second boot of the camera window: the default recording folder lookup fails
+# (the stub reads window.__CAM_DIR_FAIL__) while a resolution is saved. The
+# other saved settings must still load.
+CAMERA_DIRFAIL_STUB = """
+<script>
+window.__CAM_DIR_FAIL__ = true;
+const dirFailInvoke = window.__TAURI__.core.invoke;
+window.__TAURI__.core.invoke = async (cmd, args) => {
+  const r = await dirFailInvoke(cmd, args);
+  if (cmd === "get_settings") r.ui_texts = Object.assign({}, r.ui_texts, { cameraResolution: "1080" });
+  return r;
+};
+</script>
+"""
+
+
+CAMERA_DIRFAIL_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  try {
+    const res = document.getElementById('cam-res-select');
+    for (let i = 0; i < 60 && res.value !== '1080'; i++) await sleep(50);
+    // 942-dg-b: a failing default folder lookup no longer drops the other settings.
+    if (res.value !== '1080') errs.push('942-dg: the saved resolution was lost when the default folder lookup failed (' + res.value + ')');
   } catch (e) { errs.push('probe: ' + e.message); }
   const pre = document.createElement('pre');
   pre.id = 'SMOKE';
@@ -1477,8 +1524,9 @@ def run(browser, tmp):
             ("tray.html", (240, 360), TRAY_PROBE, 15000),
             ("recbar.html", (320, 56), RECBAR_PROBE, 15000),
             ("camera.html", (420, 620), CAMERA_STUB + CAMERA_PROBE, 15000),
+            ("camera_dirfail.html", (420, 620), CAMERA_STUB + CAMERA_DIRFAIL_STUB + CAMERA_DIRFAIL_PROBE, 15000),
             ("camera_rec.html", (420, 620), CAMERA_REC_STUB + CAMERA_REC_PROBE, 30000)):
-        if name == "camera_rec.html":
+        if name in ("camera_rec.html", "camera_dirfail.html"):
             shutil.copyfile(REPO / "ui" / "camera.html", tmp / "ui" / name)
         if name in ("floating_vars.html", "floating_plain.html"):
             pid = "p1" if name == "floating_vars.html" else "p0"

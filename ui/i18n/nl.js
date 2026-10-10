@@ -2106,4 +2106,5 @@ export default {
     veAudioMic: "Microfoon",
     recBarDiskLowShort: "Schijf bijna vol",
     recBarHotkeyShort: "Sneltoets geblokkeerd",
+    camChooseFolder: "Opnamemap kiezen",
 };

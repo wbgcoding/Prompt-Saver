@@ -457,11 +457,16 @@ pauseBtn.addEventListener("click", () => {
 stopBtn.addEventListener("click", stopRecording);
 audioSelect.addEventListener("change", refreshPreview);
 resSelect.addEventListener("change", refreshPreview);
+// The path is also the tooltip, so a long path the row cuts short can be read in full.
+function showFolder(dir) {
+  folderPathEl.textContent = dir;
+  folderPathEl.title = dir;
+}
 folderBtn.addEventListener("click", async () => {
   const dir = await invoke("pick_folder", { purpose: "recording" }).catch(() => null);
   if (dir) {
     await invoke("set_recording_dir", { dir }).catch(() => {});
-    folderPathEl.textContent = dir;
+    showFolder(dir);
   }
 });
 closeBtn.addEventListener("click", async () => {
@@ -525,11 +530,11 @@ import("./floattheme.js").then(({ applyFloatTheme }) => {
     .then(([theme, vars]) => applyFloatTheme(theme, vars))
     .catch(() => {});
 });
-Promise.all([invoke("get_settings"), import("./floatShared.js"), invoke("default_recording_dir")])
+Promise.all([invoke("get_settings"), import("./floatShared.js"), invoke("default_recording_dir").catch(() => "")])
   .then(async ([s, { resolveLang }, defaultDir]) => {
     ({ tx } = await fullTexts(resolveLang(s.language, LANGS)));
     applyTexts();
-    folderPathEl.textContent = s.ui_texts?.recordingDir || defaultDir || "";
+    showFolder(s.ui_texts?.recordingDir || defaultDir || "");
     videoDeviceId = s.ui_texts?.cameraDevice || "";
     frameRate = Number(s.ui_values?.cameraFramerate) || 30;
     const savedRes = s.ui_texts?.cameraResolution;

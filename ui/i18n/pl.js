@@ -2106,4 +2106,5 @@ export default {
     veAudioMic: "Mikrofon",
     recBarDiskLowShort: "Dysk prawie pełny",
     recBarHotkeyShort: "Skrót zablokowany",
+    camChooseFolder: "Wybierz folder nagrań",
 };

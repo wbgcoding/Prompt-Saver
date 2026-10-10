@@ -2106,4 +2106,5 @@ export default {
     veAudioMic: "マイク",
     recBarDiskLowShort: "ディスクの空きが少ない",
     recBarHotkeyShort: "ホットキーがブロック中",
+    camChooseFolder: "録画フォルダーを選択",
 };

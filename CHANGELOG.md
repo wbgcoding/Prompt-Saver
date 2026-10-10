@@ -1962,6 +1962,7 @@ the video editor and the introduction tour ship on).
 - **Labelled volume sliders in the video editor.** The two sliders are named System and Mic, and a muted track shows a struck-through icon, so muted and missing no longer look alike.
 - **Recording bar: Discard sits apart at the end.** The split button has a scissors icon and a clearer tooltip.
 - **The recording bar's warning says what it warns about.** The red triangle now carries a short text, such as "Hotkey blocked" or "Disk almost full".
+- **The camera window always shows its recording folder.** A folder button next to the path changes it, and a failing lookup of the default folder no longer drops the other saved settings.
 
 ## 2.6.3 (2026-07-26)
 

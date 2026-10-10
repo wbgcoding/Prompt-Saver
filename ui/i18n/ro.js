@@ -2106,4 +2106,5 @@ export default {
     veAudioMic: "Microfon",
     recBarDiskLowShort: "Disc aproape plin",
     recBarHotkeyShort: "Tastă rapidă blocată",
+    camChooseFolder: "Alege folderul înregistrărilor",
 };

@@ -2106,4 +2106,5 @@ export default {
     veAudioMic: "Mic",
     recBarDiskLowShort: "Disk almost full",
     recBarHotkeyShort: "Hotkey blocked",
+    camChooseFolder: "Choose the recording folder",
 };

@@ -2106,4 +2106,5 @@ export default {
     veAudioMic: "麦克风",
     recBarDiskLowShort: "磁盘空间不足",
     recBarHotkeyShort: "快捷键被占用",
+    camChooseFolder: "选择录制文件夹",
 };

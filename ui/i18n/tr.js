@@ -2106,4 +2106,5 @@ export default {
     veAudioMic: "Mikrofon",
     recBarDiskLowShort: "Disk neredeyse dolu",
     recBarHotkeyShort: "Kısayol engellendi",
+    camChooseFolder: "Kayıt klasörünü seç",
 };
