@@ -1873,8 +1873,6 @@ export default {
     archiveTagName: "归档",
     flagArchiveTag: "归档标签",
     tipArchiveTag: "将提示词标记为已归档而不是删除它。已归档的提示词会从库列表和网格中消失；搜索仍然可以找到它，列表上方的切换按钮可以使其重新显示。",
-    showArchiveToggle: "显示已归档",
-    libArchiveChip: "归档",
     archiveAction: "归档",
     unarchiveAction: "取消归档",
     batchArchiveDone: "已归档 {n} 个提示词",
@@ -2019,4 +2017,5 @@ export default {
     rangeMonth: "最近 30 天",
     flagFolders: "文件夹",
     tipFolders: "把一个磁贴拖到另一个磁贴的中心，或把一个悬浮按钮拖到另一个上，即可把两者收进一个文件夹。点击文件夹会展开其内容；把某项拖出去，它就恢复为独立项。",
+    showArchiveTagged: "显示带有标签“{name}”的提示词",
 };

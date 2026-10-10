@@ -1873,8 +1873,6 @@ export default {
     archiveTagName: "Arquivo",
     flagArchiveTag: "Tag de arquivo",
     tipArchiveTag: "Marca um prompt como arquivado em vez de excluí-lo. Um prompt arquivado desaparece da lista da biblioteca e da grade; a pesquisa ainda o encontra, e a chave seletora acima da lista o traz de volta à vista.",
-    showArchiveToggle: "Mostrar arquivados",
-    libArchiveChip: "Arquivo",
     archiveAction: "Arquivar",
     unarchiveAction: "Desarquivar",
     batchArchiveDone: "{n} prompts arquivados",
@@ -2019,4 +2017,5 @@ export default {
     rangeMonth: "Últimos 30 dias",
     flagFolders: "Pastas",
     tipFolders: "Arraste um bloco para o centro de outro, ou um botão flutuante sobre outro, para juntar os dois numa pasta. Clicar na pasta abre o conteúdo; arrastar um para fora volta a libertá-lo.",
+    showArchiveTagged: "Mostrar prompts com a etiqueta «{name}»",
 };

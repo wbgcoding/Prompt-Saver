@@ -1873,8 +1873,6 @@ export default {
     archiveTagName: "Archivio",
     flagArchiveTag: "Etichetta archivio",
     tipArchiveTag: "Etichetta un prompt come archiviato invece di eliminarlo. Un prompt archiviato scompare dalla lista della libreria e dalla griglia; la ricerca lo trova ancora e l'interruttore sopra la lista lo riporta in vista.",
-    showArchiveToggle: "Mostra archiviati",
-    libArchiveChip: "Archivio",
     archiveAction: "Archivia",
     unarchiveAction: "Estrai dall'archivio",
     batchArchiveDone: "Archiviati {n} prompt",
@@ -2019,4 +2017,5 @@ export default {
     rangeMonth: "Ultimi 30 giorni",
     flagFolders: "Cartelle",
     tipFolders: "Trascina un riquadro al centro di un altro, o un pulsante flottante su un altro, per raccogliere entrambi in una cartella. Un clic sulla cartella ne apre il contenuto; trascinandone uno fuori torna libero.",
+    showArchiveTagged: "Mostra i prompt con il tag «{name}»",
 };

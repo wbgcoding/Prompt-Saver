@@ -1873,8 +1873,6 @@ export default {
     archiveTagName: "Archiv",
     flagArchiveTag: "Archiv-Tag",
     tipArchiveTag: "Markiert einen Prompt als archiviert, statt ihn zu löschen. Ein archivierter Prompt verschwindet aus der Bibliotheksliste und dem Raster; die Suche findet ihn weiterhin, und der Schalter über der Liste holt ihn wieder sichtbar zurück.",
-    showArchiveToggle: "Archiv anzeigen",
-    libArchiveChip: "Archiv",
     archiveAction: "Archivieren",
     unarchiveAction: "Aus dem Archiv holen",
     batchArchiveDone: "{n} Prompts archiviert",
@@ -2019,4 +2017,5 @@ export default {
     rangeMonth: "Letzte 30 Tage",
     flagFolders: "Ordner",
     tipFolders: "Eine Kachel auf die Mitte einer anderen oder einen schwebenden Button auf einen anderen ziehen sammelt beide in einem Ordner. Ein Klick auf den Ordner öffnet den Inhalt; herausziehen löst ihn wieder.",
+    showArchiveTagged: "Prompts mit dem Tag „{name}“ anzeigen",
 };

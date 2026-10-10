@@ -249,23 +249,10 @@ export const HELP_CONTENT = {
       howTo: [
         "Type a tag name in a tile's editor to add it, or pick an existing one.",
         "Use the tag filter row in the library to narrow the list.",
+        "To archive a tile, choose \"Archive\" in its menu: it gets the archive tag and leaves the grid and the list until you show it again.",
       ],
-      whatHappens: "Renaming, recoloring, or deleting a tag from the tag manager applies everywhere it is used, in one step.",
-      settings: ["Tag filter mode (match any selected tag, or all of them): Expert menu → Library & copy history → Tags"],
-    },
-    {
-      section: "organising",
-      title: "Archive",
-      whatItIs: "The archive sets a tile aside without deleting it.",
-      howTo: [
-        "Turn the archive on in the expert menu.",
-        "Choose \"Archive\" from a tile's menu, or archive several at once from the library's selection bar.",
-        "Use the toggle above the library list to show archived tiles again.",
-      ],
-      whatHappens:
-        "An archived tile leaves the grid and the library list, but search still finds it, and exports and backups keep it like any other tile. \"Unarchive\" in the same menu brings it back.",
-      settings: ["Archive: Expert menu → Library & copy history → Display"],
-      tip: "Off by default.",
+      whatHappens: "Renaming, recoloring, or deleting a tag from the tag manager applies everywhere it is used, in one step. The archive is an ordinary tag with a reserved name: an archived tile still turns up in search and stays in exports and backups, and \"Unarchive\" in the same menu brings it back.",
+      settings: ["Tag filter mode (match any selected tag, or all of them): Expert menu → Library & copy history → Tags", "Archive tag: Expert menu → Library & copy history → Tags"],
     },
     {
       section: "copying",
@@ -1000,23 +987,10 @@ export const HELP_CONTENT = {
       howTo: [
         "Editor einer Kachel öffnen und einen Tag-Namen eintippen, um ihn hinzuzufügen, oder einen vorhandenen wählen.",
         "Die Tag-Filterleiste in der Bibliothek nutzen, um die Liste auf ein oder mehrere Tags einzugrenzen.",
+        "Zum Archivieren im Menü einer Kachel „Archivieren“ wählen: sie bekommt den Archiv-Tag und verschwindet aus Raster und Liste, bis du sie wieder anzeigst.",
       ],
-      whatHappens: "Umbenennen, Umfärben oder Löschen eines Tags im Tag-Manager wirkt überall dort, wo er genutzt wird, in einem Schritt.",
-      settings: ["Tag-Filter-Modus (irgendeinen der ausgewählten Tags treffen oder alle): Expertenmenü → Bibliothek & Kopierverlauf → Tags"],
-    },
-    {
-      section: "organising",
-      title: "Archiv",
-      whatItIs: "Das Archiv legt eine Kachel beiseite, ohne sie zu löschen.",
-      howTo: [
-        "Das Archiv im Expertenmenü einschalten.",
-        "„Archivieren“ im Menü einer Kachel wählen, oder mehrere auf einmal über die Auswahlleiste der Bibliothek archivieren.",
-        "Mit dem Schalter über der Bibliotheksliste archivierte Kacheln wieder anzeigen.",
-      ],
-      whatHappens:
-        "Eine archivierte Kachel verschwindet aus dem Raster und der Bibliotheksliste, die Suche findet sie aber weiterhin, und Exporte und Backups behalten sie wie jede andere Kachel. „Aus dem Archiv holen“ im selben Menü holt sie zurück.",
-      settings: ["Archiv: Expertenmenü → Bibliothek & Kopierverlauf → Anzeige"],
-      tip: "Ab Werk aus.",
+      whatHappens: "Umbenennen, Umfärben oder Löschen eines Tags im Tag-Manager wirkt überall dort, wo er genutzt wird, in einem Schritt. Das Archiv ist ein gewöhnlicher Tag mit reserviertem Namen: Eine archivierte Kachel taucht weiterhin in der Suche auf und bleibt in Exporten und Backups, und „Aus dem Archiv holen“ im selben Menü holt sie zurück.",
+      settings: ["Tag-Filter-Modus (irgendeinen der ausgewählten Tags treffen oder alle): Expertenmenü → Bibliothek & Kopierverlauf → Tags", "Archiv-Tag: Expertenmenü → Bibliothek & Kopierverlauf → Tags"],
     },
     {
       section: "copying",

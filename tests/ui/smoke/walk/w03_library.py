@@ -202,6 +202,12 @@ SECTION = """\
       if (chipText.length < 2 || chipText.charCodeAt(0) >= 0xD800) { // a word, not the emoji (a surrogate pair)
         out.errors.push('712: the archive chip does not show a word: "' + chipText + '"');
       }
+      // 919: the chip names the archive tag it filters by, and its title says so.
+      const archiveLabel = document.getElementById('library-archive-label');
+      const labelText = archiveLabel ? archiveLabel.textContent.trim() : '';
+      if (!labelText || !archiveChip.title.includes(labelText) || getComputedStyle(archiveLabel, '::before').content !== '"#"') {
+        out.errors.push('919: the archive chip does not carry the tag name and glyph: "' + chipText + '" / title "' + archiveChip.title + '"');
+      }
     }
     // 714: the Prompts tab carries the count, the header spans only keep it for readers.
     {

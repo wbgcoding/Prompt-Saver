@@ -1873,8 +1873,6 @@ export default {
     archiveTagName: "Archief",
     flagArchiveTag: "Archieftag",
     tipArchiveTag: "Markeert een prompt als gearchiveerd in plaats van deze te verwijderen. Een gearchiveerde prompt verdwijnt uit de bibliotheeklijst en het raster; de zoekfunctie kan hem nog steeds vinden, en de schakelaar boven de lijst brengt hem weer in beeld.",
-    showArchiveToggle: "Toon gearchiveerde",
-    libArchiveChip: "Archief",
     archiveAction: "Archiveren",
     unarchiveAction: "Uit archief halen",
     batchArchiveDone: "{n} prompts gearchiveerd",
@@ -2019,4 +2017,5 @@ export default {
     rangeMonth: "Laatste 30 dagen",
     flagFolders: "Mappen",
     tipFolders: "Sleep een tegel op het midden van een andere, of een zwevende knop op een andere, om beide in een map te verzamelen. Een klik op de map opent de inhoud; sleep je er een uit, dan staat die weer los.",
+    showArchiveTagged: "Prompts met de tag “{name}” tonen",
 };

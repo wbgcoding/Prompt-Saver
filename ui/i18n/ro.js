@@ -1873,8 +1873,6 @@ export default {
     archiveTagName: "Arhivă",
     flagArchiveTag: "Etichetă arhivă",
     tipArchiveTag: "Marchează un prompt ca arhivat în loc să îl șteargă. Un prompt arhivat dispare din lista bibliotecii și din grilă; căutarea îl găsește în continuare, iar comutatorul de deasupra listei îl readuce la vedere.",
-    showArchiveToggle: "Afișează arhivate",
-    libArchiveChip: "Arhivă",
     archiveAction: "Arhivează",
     unarchiveAction: "Dezarhivează",
     batchArchiveDone: "Au fost arhivate {n} prompturi",
@@ -2019,4 +2017,5 @@ export default {
     rangeMonth: "Ultimele 30 de zile",
     flagFolders: "Foldere",
     tipFolders: "Trage o dală în centrul alteia sau un buton flotant peste altul pentru a le aduna pe amândouă într-un folder. Un clic pe folder îi deschide conținutul; dacă tragi un element afară, redevine liber.",
+    showArchiveTagged: "Afișează prompturile cu eticheta „{name}”",
 };

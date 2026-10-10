@@ -556,16 +556,12 @@ all close it. A flag in the expert menu turns it off.
 ### Tags
 
 Free-form labels assigned to tiles; filter the library or the grid down to a set
-of tags, matching any or all of them.
-
-### Archive
-
-Off by default in the expert menu. Marks a tile as archived instead of deleting
-it: it disappears from the library list and the grid, but export, backup and
-search still treat it like any other tile; a query still finds it. A toggle
-above the library list brings archived tiles back into view. Archive or
-unarchive a tile from its right-click menu, or several at once from the
-library's batch bar.
+of tags, matching any or all of them. The archive is one of them, an ordinary
+tag with a reserved name: "Archive" in a tile's right-click menu (or the
+library's batch bar) gives a tile that tag, and it disappears from the library
+list and the grid until the archive chip above the list shows it again. Export,
+backup and search still treat it like any other tile. "Unarchive" removes the
+tag again.
 
 ### Favorites
 
@@ -1432,13 +1428,12 @@ passende Hilfethema. Das Feld merkt sich die letzten Suchen (acht ab Werk; das
 Expertenmenü stellt eine Zahl für alle Suchlisten ein) und zeigt sie, wenn es leer ist. Escape, ein Klick daneben oder das Symbol schließen
 die Überlagerung wieder. Ein Schalter im Expertenmenü stellt sie ab.
 
-**Tags**: freie Schlagwörter, UND/ODER-Filter.
-
-**Archiv**: Standardmäßig aus. Markiert eine Kachel als archiviert statt sie zu
-löschen; sie verschwindet aus Bibliothek und Raster, bleibt aber über Suche,
-Export und Backup erreichbar. Ein Schalter über der Liste holt archivierte
-Kacheln zurück; archivieren/entarchivieren geht per Rechtsklickmenü oder aus
-der Sammelleiste der Bibliothek.
+**Tags**: freie Schlagwörter, UND/ODER-Filter. Das Archiv ist ein gewöhnlicher Tag mit
+reserviertem Namen: „Archivieren“ im Rechtsklickmenü einer Kachel (oder in der
+Sammelleiste der Bibliothek) gibt ihr diesen Tag, sie verschwindet aus
+Bibliothek und Raster, bis der Archiv-Chip über der Liste sie wieder anzeigt.
+Export, Backup und Suche behandeln sie wie jede andere Kachel; „Aus dem Archiv
+holen“ entfernt den Tag wieder.
 
 **Kopierverlauf** (Bibliothek → Reiter Kopierverlauf): Protokoll, Gruppierung, Aufbewahrung (bei einer neuen
 Installation 30 Tage, einstellbar, 0 behält alles), Einzeleintrag löschen,

@@ -617,8 +617,8 @@ export const EXPERT_TABS = [
   { title: "expTabLibrary", groups: [
     { title: "expGroupLibSearch", flags: ["librarySearch", "globalSearch", "searchSuggest", "savedSearches", "fuzzySearch", "libraryTypeFilter", "colorFilter", "searchAutofocus", "ocrIndex"], values: ["searchListMax", "libraryCols"],
       actions: [{ id: "ocr-index-backfill", label: "ocrIndexBackfillAction", gate: "ocrIndex" }] },
-    { title: "expGroupLibrary", flags: ["smartSort", "batchOps", "imagePreview", "libraryVideoPreview", "archiveTag", "libraryTiles"], values: ["libraryWidth", "libPreviewLines", "libraryTileSize"] },
-    { title: "expGroupTags", flags: ["tags"], dropdowns: ["tagFilterMode", "tagSort"] },
+    { title: "expGroupLibrary", flags: ["smartSort", "batchOps", "imagePreview", "libraryVideoPreview", "libraryTiles"], values: ["libraryWidth", "libPreviewLines", "libraryTileSize"] },
+    { title: "expGroupTags", flags: ["tags", "archiveTag"], dropdowns: ["tagFilterMode", "tagSort"] },
     // Everything that records or shows copy history lives with the history view.
     { title: "expGroupJournal", flags: ["copyHistory", "historyTimestamps", "historyGrouped", "dedupCopyLog", "confirmClearHistory", "clipWatcher", { key: "clipSkipSecrets", gate: "clipWatcher" }], values: ["historyMax", "clipMinChars", "clipInboxMax"], selects: ["historyDays"] },
   ] },

@@ -4399,6 +4399,8 @@ body.drag-over::after {
 .lib-fav-chip.active { background: #f5b301; border-color: #f5b301; color: #1a1a1a; }
 /* Show-archive filter chip: same idea, its own neutral accent. */
 .lib-archive-chip { color: var(--muted); }
+/* The tag glyph in front of the name; a pseudo-element keeps the chip text to the name alone. */
+#library-archive-label::before { content: "#"; opacity: 0.7; margin-inline-end: 1px; }
 .lib-archive-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 /* Saved searches: a star inside the search field saves the current query, tag
    filters and sort; the row of chips above only exists while at least one is

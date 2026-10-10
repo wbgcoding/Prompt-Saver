@@ -2025,6 +2025,7 @@ the video editor and the introduction tour ship on).
 - **The quick launcher shows its keys.** A footer lists Enter, the arrow keys and Esc.
 - **Open and Quit are set apart in the tray menu.** They sit below the prompts with a small icon each, and Quit comes last behind its own line.
 - **Tile folders and button folders are now simply folders.** One name and one switch in the expert menu; a tile folder and a button folder still stay separate.
+- **The archive shows itself as the tag it is.** The library chip carries the tag's name, and its switch moved next to the tag settings in the expert menu.
 
 ## 2.6.3 (2026-07-26)
 

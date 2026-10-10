@@ -751,6 +751,12 @@ export function makeTileImgObserver(root) {
 }
 
 export function renderLibrary() {
+  // The archive chip names the tag it filters by, so a renamed archive tag shows where it is used.
+  const archiveChip = $("library-archive");
+  $("library-archive-label").textContent = archiveTagName();
+  const archiveTip = t("showArchiveTagged").replace("{name}", archiveTagName());
+  archiveChip.title = archiveTip;
+  archiveChip.setAttribute("aria-label", archiveTip);
   const list = $("library-list");
   list.innerHTML = "";
   libScoreCache.clear(); // fresh scores each render (query / prompt content may have changed)

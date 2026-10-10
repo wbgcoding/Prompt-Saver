@@ -1873,8 +1873,6 @@ export default {
     archiveTagName: "Archive",
     flagArchiveTag: "Archive tag",
     tipArchiveTag: "Tags a prompt as archived instead of deleting it. An archived prompt disappears from the library list and the grid; search still finds it, and the toggle above the list brings it back into view.",
-    showArchiveToggle: "Show archived",
-    libArchiveChip: "Archive",
     archiveAction: "Archive",
     unarchiveAction: "Unarchive",
     batchArchiveDone: "Archived {n} prompts",
@@ -2019,4 +2017,5 @@ export default {
     rangeMonth: "Last 30 days",
     flagFolders: "Folders",
     tipFolders: "Drop a tile onto the middle of another one, or a floating button onto another, to collect both in a folder. Clicking a folder opens its contents; dragging one out frees it again.",
+    showArchiveTagged: "Show prompts tagged \"{name}\"",
 };

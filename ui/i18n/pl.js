@@ -1873,8 +1873,6 @@ export default {
     archiveTagName: "Archiwum",
     flagArchiveTag: "Tag archiwum",
     tipArchiveTag: "Oznacza prompt jako zarchiwizowany zamiast go usuwać. Zarchiwizowany prompt znika z listy biblioteki i siatki; wyszukiwanie nadal go znajduje, a przełącznik nad listą przywraca go do widoku.",
-    showArchiveToggle: "Pokaż zarchiwizowane",
-    libArchiveChip: "Archiwum",
     archiveAction: "Archiwizuj",
     unarchiveAction: "Przywróć z archiwum",
     batchArchiveDone: "Zarchiwizowano {n} promptów",
@@ -2019,4 +2017,5 @@ export default {
     rangeMonth: "Ostatnie 30 dni",
     flagFolders: "Foldery",
     tipFolders: "Przeciągnij kafelek na środek innego albo pływający przycisk na inny, aby zebrać oba w folderze. Kliknięcie folderu otwiera jego zawartość; przeciągnięcie elementu na zewnątrz znów go uwalnia.",
+    showArchiveTagged: "Pokaż prompty z tagiem „{name}”",
 };

@@ -1873,8 +1873,6 @@ export default {
     archiveTagName: "Arşiv",
     flagArchiveTag: "Arşiv etiketi",
     tipArchiveTag: "Bir istemi silmek yerine arşivlenmiş olarak etiketler. Arşivlenmiş bir istem, kütüphane listesinden ve ızgaradan kaybolur; arama onu hâlâ bulabilir ve listenin üzerindeki anahtar onu tekrar görünüme getirir.",
-    showArchiveToggle: "Arşivlenenleri göster",
-    libArchiveChip: "Arşiv",
     archiveAction: "Arşivle",
     unarchiveAction: "Arşivden çıkar",
     batchArchiveDone: "{n} istem arşivlendi",
@@ -2019,4 +2017,5 @@ export default {
     rangeMonth: "Son 30 gün",
     flagFolders: "Klasörler",
     tipFolders: "Bir kutucuğu başka bir kutucuğun ortasına ya da bir yüzen düğmeyi diğerinin üzerine sürükleyerek ikisini bir klasörde toplayın. Klasöre tıklamak içeriğini açar; birini dışarı sürüklerseniz yeniden bağımsız olur.",
+    showArchiveTagged: "“{name}” etiketli istemleri göster",
 };

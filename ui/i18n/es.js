@@ -1873,8 +1873,6 @@ export default {
     archiveTagName: "Archivo",
     flagArchiveTag: "Etiqueta de archivo",
     tipArchiveTag: "Etiqueta un prompt como archivado en lugar de eliminarlo. Un prompt archivado desaparece de la lista de la biblioteca y de la cuadrícula; la búsqueda aún lo encuentra, y el interruptor sobre la lista lo vuelve a mostrar.",
-    showArchiveToggle: "Mostrar archivados",
-    libArchiveChip: "Archivo",
     archiveAction: "Archivar",
     unarchiveAction: "Desarchivar",
     batchArchiveDone: "Se archivaron {n} prompts",
@@ -2019,4 +2017,5 @@ export default {
     rangeMonth: "Últimos 30 días",
     flagFolders: "Carpetas",
     tipFolders: "Arrastra un mosaico al centro de otro, o un botón flotante sobre otro, para reunir ambos en una carpeta. Un clic en la carpeta abre su contenido; si sacas uno arrastrándolo, vuelve a quedar suelto.",
+    showArchiveTagged: "Mostrar prompts con la etiqueta «{name}»",
 };
