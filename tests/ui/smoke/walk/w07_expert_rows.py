@@ -246,4 +246,32 @@ SECTION = """\
       await click('expert-back');
       document.getElementById('settings').classList.add('hidden');
     }
+    // 836: rendering the expert menu over and over must not leave one live resize
+    // observer per render behind (the tab bar is rebuilt each time).
+    {
+      const NativeRO = window.ResizeObserver;
+      const liveRO = new Set();
+      window.ResizeObserver = class extends NativeRO {
+        observe(el, o) { liveRO.add(this); return super.observe(el, o); }
+        unobserve(el) { return super.unobserve(el); }
+        disconnect() { liveRO.delete(this); return super.disconnect(); }
+      };
+      document.getElementById('settings').classList.remove('hidden');
+      await click('expert-open');
+      for (let i = 0; i < 20; i++) {
+        const tabsNow = document.querySelectorAll('#expert-tabs-bar .expert-tab');
+        if (!tabsNow.length) break;
+        tabsNow[i % tabsNow.length].click();
+        await sleep(20);
+      }
+      await sleep(100);
+      if (liveRO.size > 1) {
+        out.errors.push('836: ' + liveRO.size + ' resize observers are still live after 20 expert menu renders');
+      }
+      window.ResizeObserver = NativeRO;
+      const firstTab836 = document.querySelector('#expert-tabs-bar .expert-tab');
+      if (firstTab836) { firstTab836.click(); await sleep(100); }
+      await click('expert-back');
+      document.getElementById('settings').classList.add('hidden');
+    }
 """

@@ -1967,6 +1967,9 @@ function showActiveTab(bar) {
   else if (a.right > b.right - FADE) bar.scrollLeft += a.right - (b.right - FADE);
 }
 
+// The tab bar is rebuilt on every render; one observer follows the current bar.
+let tabBarObserver = null;
+
 export function renderExpert() {
   const box = $("expert-flags");
   const tabBar = $("expert-tabs-bar");
@@ -1974,6 +1977,7 @@ export function renderExpert() {
   const keepTabScroll = tabBar.querySelector(".expert-tabs")?.scrollLeft || 0;
   box.innerHTML = "";
   tabBar.innerHTML = "";
+  if (tabBarObserver) { tabBarObserver.disconnect(); tabBarObserver = null; }
   if (expertTab >= EXPERT_TABS.length) expertTab = 0;
   const q = expertQuery.trim().toLowerCase();
   const searching = q.length > 0;
@@ -2000,7 +2004,10 @@ export function renderExpert() {
     showActiveTab(bar);
     syncEdgeFade(bar);
     bar.addEventListener("scroll", () => syncEdgeFade(bar), { passive: true });
-    if (typeof ResizeObserver === "function") new ResizeObserver(() => { showActiveTab(bar); syncEdgeFade(bar); }).observe(bar);
+    if (typeof ResizeObserver === "function") {
+      tabBarObserver = new ResizeObserver(() => { showActiveTab(bar); syncEdgeFade(bar); });
+      tabBarObserver.observe(bar);
+    }
   }
   const tabs = globalView ? EXPERT_TABS : [EXPERT_TABS[expertTab]];
   const collapsed = expertCollapsedSet();
