@@ -1010,7 +1010,7 @@ SECTION = """\
           if (!/9$/.test(p1Input().value)) out.errors.push('restoring Prompt 1s original hotkey failed: ' + p1Input().value);
           // The global row clears (and restores) the same way - it never disappears
           // from the list even with no binding, unlike a per-prompt row.
-          const clearBtn = globalRow().querySelector('.ghost-btn');
+          const clearBtn = globalRow().querySelector('.clear-btn');
           clearBtn.click();
           await sleep(150);
           if (globalInput().value) out.errors.push('clearing the global row from the popup left a value behind');

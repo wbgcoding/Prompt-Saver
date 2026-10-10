@@ -990,6 +990,41 @@ def run(browser, tmp):
       if (!document.querySelector('#stats-panel .stat-cards')) errs.push('654: no statistics cards after switching on');
     }
 """)
+    failed += ar_probe('bm908', 'hotkey fields: a small X inside the field removes the shortcut, no Clear button', 'index', '880x600', '', r"""
+    // 908: the X shows while a shortcut is set and removes only the shortcut.
+    await bootReady();
+    document.getElementById('gear').click();
+    await sleep(300);
+    const hk = document.getElementById('opt-hotkey');
+    const x = document.getElementById('hotkey-clear');
+    if (!x || !hk.parentElement.classList.contains('hotkey-clear-wrap') || x.parentElement !== hk.parentElement) {
+      errs.push('908: the global hotkey X is not inside the field wrapper');
+    } else {
+      if (!hk.value) errs.push('908: fixture: the global hotkey field is empty');
+      x.style.transition = 'none'; // headless frames stall, a running fade would read as a half value
+      if (Number(getComputedStyle(x).opacity) <= 0) errs.push('908: the X is invisible while a shortcut is set');
+      if (x.textContent.trim()) errs.push('908: the X carries text instead of an icon');
+      window.__SMOKE_ARGS__ = [];
+      x.click();
+      await sleep(400);
+      const call = callsFor('set_hotkey').pop();
+      if (!call || call.hotkey !== '') errs.push('908: clicking the X did not store an empty hotkey');
+      if (hk.value) errs.push('908: the field still holds a shortcut after the X');
+      if (Number(getComputedStyle(x).opacity) !== 0) errs.push('908: the X stays visible after the shortcut is gone');
+    }
+    const mx = document.getElementById('modal-hotkey-clear');
+    const mi = document.getElementById('modal-hotkey-input');
+    if (!mx || mx.parentElement !== mi.parentElement || !mi.parentElement.classList.contains('hotkey-clear-wrap')) {
+      errs.push('908: the editor hotkey X is not inside the field wrapper');
+    } else {
+      mx.style.transition = 'none';
+      mi.value = '';
+      if (Number(getComputedStyle(mx).opacity) !== 0) errs.push('908: the editor X shows on an empty field');
+      mi.value = 'Ctrl + 9';
+      if (Number(getComputedStyle(mx).opacity) <= 0) errs.push('908: the editor X is hidden while a shortcut is set');
+    }
+    if (document.querySelector('.hotkey-row button.ghost-btn[id$="-clear"]')) errs.push('908: a text Clear button is still in the markup');
+""")
     failed += ar_probe('bx717', 'copy history filters: at 680 px they take two rows, the source is a select and only one All chip remains', 'index', '680x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { clipWatcher: true } };</script>\n', r"""
     await bootReady();
     document.getElementById('library-btn').click(); await sleep(400);

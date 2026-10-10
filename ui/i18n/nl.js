@@ -1106,7 +1106,6 @@ export default {
     favViewTitle: "Favorietenweergave",
     favViewEmpty: "Nog geen favorieten: markeer prompts met de ster.",
     hotkeyPh: "Klik en druk op een toetscombinatie…",
-    hotkeyClear: "Wissen",
     hotkeySet: "Sneltoets ingesteld",
     hotkeyFail: "Die sneltoets is niet beschikbaar",
     hotkeysAllBtn: "Alle sneltoetsen",
@@ -2065,4 +2064,5 @@ export default {
     optSnipToolLast: "Laatst gebruikt",
     tipSettingsStats: "Opent de gebruiksstatistieken: hoeveel prompts je hebt, hoe vaak je de afgelopen 7 dagen hebt gekopieerd, je meest gebruikte en je ongebruikte prompts.",
     statTopEmpty: "Nog niets gekopieerd.",
+    hotkeyRemove: "Sneltoets verwijderen",
 };

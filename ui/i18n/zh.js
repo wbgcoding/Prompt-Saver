@@ -1106,7 +1106,6 @@ export default {
     favViewTitle: "收藏夹视图",
     favViewEmpty: "还没有收藏：用星标标记提示词。",
     hotkeyPh: "点击后按下组合键…",
-    hotkeyClear: "清除",
     hotkeySet: "快捷键已设置",
     hotkeyFail: "该快捷键不可用",
     hotkeysAllBtn: "所有快捷键",
@@ -2065,4 +2064,5 @@ export default {
     optSnipToolLast: "上次使用的",
     tipSettingsStats: "打开使用统计：提示词总数、最近 7 天的复制次数、最常使用和从未使用的提示词。",
     statTopEmpty: "尚未复制任何内容。",
+    hotkeyRemove: "移除快捷键",
 };

@@ -37,7 +37,7 @@ SECTION = """\
         if (document.body.classList.contains('win-maximized') === false && winMax.title !== wantMax) {
           out.errors.push('lang switch: maximize button title is "' + winMax.title + '" in ' + lang + ', expected "' + wantMax + '"');
         }
-        const clearLabels = new Set([...document.querySelectorAll('.clear-btn')].map((b) => b.getAttribute('aria-label')));
+        const clearLabels = new Set([...document.querySelectorAll('.clear-btn:not(.hotkey-clear-wrap > .clear-btn)')].map((b) => b.getAttribute('aria-label')));
         if (clearLabels.size !== 1) {
           out.errors.push('lang switch: clear-field buttons carry ' + clearLabels.size + ' different labels in ' + lang + ': ' + [...clearLabels].join(' | '));
         } else if (window.__PREV_CLEAR_LABEL__ === [...clearLabels][0]) {

@@ -1070,7 +1070,6 @@ export default {
     favViewTitle: "Favoriten-Ansicht",
     favViewEmpty: "Noch keine Favoriten: markiere Prompts mit dem Stern.",
     hotkeyPh: "Klicken, dann Hotkey drücken…",
-    hotkeyClear: "Löschen",
     hotkeySet: "Hotkey gesetzt",
     hotkeyFail: "Dieser Hotkey ist nicht verfügbar",
     hotkeysAllBtn: "Alle Tastenkürzel",
@@ -2065,4 +2064,5 @@ export default {
     optSnipToolLast: "Zuletzt benutztes",
     tipSettingsStats: "Öffnet die Nutzungsstatistik: wie viele Prompts du hast, wie oft du in den letzten 7 Tagen kopiert hast, deine meistgenutzten und deine ungenutzten Prompts.",
     statTopEmpty: "Noch nichts kopiert.",
+    hotkeyRemove: "Tastenkürzel entfernen",
 };

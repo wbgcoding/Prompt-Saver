@@ -1106,7 +1106,6 @@ export default {
     favViewTitle: "Vista de favoritos",
     favViewEmpty: "Aún no hay favoritos: marca prompts con la estrella.",
     hotkeyPh: "Haz clic y pulsa una combinación…",
-    hotkeyClear: "Borrar",
     hotkeySet: "Atajo establecido",
     hotkeyFail: "Ese atajo no está disponible",
     hotkeysAllBtn: "Todos los atajos",
@@ -2065,4 +2064,5 @@ export default {
     optSnipToolLast: "Última usada",
     tipSettingsStats: "Abre las estadísticas de uso: cuántos prompts tienes, cuántas veces copiaste en los últimos 7 días, tus prompts más usados y los que no usas.",
     statTopEmpty: "Todavía no se ha copiado nada.",
+    hotkeyRemove: "Quitar atajo",
 };

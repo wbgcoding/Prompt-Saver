@@ -1106,7 +1106,6 @@ export default {
     favViewTitle: "Widok ulubionych",
     favViewEmpty: "Brak ulubionych: oznacz prompty gwiazdką.",
     hotkeyPh: "Kliknij i naciśnij kombinację…",
-    hotkeyClear: "Wyczyść",
     hotkeySet: "Skrót ustawiony",
     hotkeyFail: "Ten skrót jest niedostępny",
     hotkeysAllBtn: "Wszystkie skróty",
@@ -2065,4 +2064,5 @@ export default {
     optSnipToolLast: "Ostatnio użyte",
     tipSettingsStats: "Otwiera statystyki użycia: ile jest promptów, ile razy kopiowano w ostatnich 7 dniach, najczęściej używane i nieużywane prompty.",
     statTopEmpty: "Jeszcze nic nie skopiowano.",
+    hotkeyRemove: "Usuń skrót",
 };

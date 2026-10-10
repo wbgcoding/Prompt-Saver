@@ -2022,6 +2022,7 @@ the video editor and the introduction tour ship on).
 - **The quick launcher shows its keys.** A footer lists Enter, the arrow keys and Esc.
 - **Open and Quit are set apart in the tray menu.** They sit below the prompts with a small icon each, and Quit comes last behind its own line.
 - **Usage statistics have their own window.** It opens from Settings and shows the number of prompts, the copies of the last 7 days, the most used prompts by name (a list of 5, 10 or 20) and the never used ones. The backups window opens with the backups first.
+- **Hotkey fields have a small X to remove the shortcut.** It replaces the Clear button next to each hotkey field and shows only while a shortcut is set.
 
 ## 2.6.3 (2026-07-26)
 

@@ -3311,6 +3311,10 @@ select.modal-input { padding-right: 30px; }
 .clear-wrap-ta .clear-btn { top: 9px; transform: none; }
 .clear-btn.show { opacity: 0.55; pointer-events: auto; }
 .clear-btn.show:hover { opacity: 1; color: var(--fg); background: var(--surface-2); }
+/* A hotkey field has a placeholder, so the X shows exactly while a shortcut is set,
+   also when the value is filled in from code. */
+.hotkey-clear-wrap > input:not(:placeholder-shown) ~ .clear-btn { opacity: 0.55; pointer-events: auto; }
+.hotkey-clear-wrap > input:not(:placeholder-shown) ~ .clear-btn:hover { opacity: 1; color: var(--fg); background: var(--surface-2); }
 
 /* Shared mouse-only number stepper (numberField() in floatShared.js):
    minus/input/plus, plus a presets popover when the field has one. Narrow

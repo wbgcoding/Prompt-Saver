@@ -8,7 +8,7 @@ import { loadPalette, refreshColorUI, refreshCustomThemes } from "./theme.js";
 import { assignChainLock, chainLock, chainMode, setChainMode } from "./chain.js";
 import { renderLibrary } from "./library.js";
 import { offerClipInboxCleanup, refreshClipInbox } from "./journal.js";
-import { applyBarToggleTips } from "./windowChrome.js";
+import { applyBarToggleTips, hotkeyClearX } from "./windowChrome.js";
 import { setMediaDefaults } from "./media.js";
 import { attachSelectPicker } from "./selectpop.js";
 import { ffmpegDownloadActive, fmtBytes, normCopySizeLevel, normRecFormat, runFfmpegDownload, VIDEO_FORMATS, videoFormatLabelKey } from "./floatShared.js";
@@ -1903,16 +1903,12 @@ export function hotkeyRow(key, labelKey) {
   input.placeholder = t("hotkeyPh");
   input.setAttribute("aria-label", t(labelKey));
   input.value = prettyAccel(def.current());
-  const clear = document.createElement("button");
-  clear.type = "button";
-  clear.className = "ghost-btn";
-  clear.textContent = t("hotkeyClear");
-  clear.addEventListener("click", async () => {
+  wrap.append(input);
+  row.append(head, wrap);
+  hotkeyClearX(input, async () => {
     try { await def.onCommit(""); } catch (_) { /* Clear always leaves an empty field regardless */ }
     input.value = "";
   });
-  wrap.append(input, clear);
-  row.append(head, wrap);
   bindHotkeyField(input, { current: def.current, onCommit: def.onCommit });
   return withTip(row, key);
 }

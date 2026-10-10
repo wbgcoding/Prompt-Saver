@@ -1106,7 +1106,6 @@ export default {
     favViewTitle: "Vizualizare favorite",
     favViewEmpty: "Încă niciun favorit: marchează prompturi cu steaua.",
     hotkeyPh: "Faceți clic și apăsați o combinație…",
-    hotkeyClear: "Șterge",
     hotkeySet: "Scurtătură setată",
     hotkeyFail: "Acea scurtătură nu este disponibilă",
     hotkeysAllBtn: "Toate scurtăturile",
@@ -2065,4 +2064,5 @@ export default {
     optSnipToolLast: "Ultimul folosit",
     tipSettingsStats: "Deschide statisticile de utilizare: câte prompturi ai, de câte ori ai copiat în ultimele 7 zile, cele mai utilizate prompturi și cele neutilizate.",
     statTopEmpty: "Încă nu s-a copiat nimic.",
+    hotkeyRemove: "Elimină scurtătura",
 };

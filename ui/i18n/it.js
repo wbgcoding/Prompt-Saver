@@ -1106,7 +1106,6 @@ export default {
     favViewTitle: "Vista preferiti",
     favViewEmpty: "Ancora nessun preferito: aggiungi prompt con la stella.",
     hotkeyPh: "Clicca e premi una combinazione…",
-    hotkeyClear: "Cancella",
     hotkeySet: "Scorciatoia impostata",
     hotkeyFail: "Quella scorciatoia non è disponibile",
     hotkeysAllBtn: "Tutte le scorciatoie",
@@ -2065,4 +2064,5 @@ export default {
     optSnipToolLast: "Ultimo usato",
     tipSettingsStats: "Apre le statistiche d'uso: quanti prompt hai, quante volte hai copiato negli ultimi 7 giorni, i prompt più usati e quelli mai usati.",
     statTopEmpty: "Ancora nulla copiato.",
+    hotkeyRemove: "Rimuovi scorciatoia",
 };

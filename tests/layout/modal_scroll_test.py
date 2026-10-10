@@ -255,8 +255,8 @@ def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html", vars_op
       <span>{L('promptHotkeyTitle')}</span>
       <span class="modal-collapse-side"><span id="modal-hotkey-badge" class="modal-collapse-badge">Ctrl + Shift + 9</span></span></button>
     <div id="modal-hotkey-body" class="modal-collapse-body hidden">
-      <div class="hotkey-row"><input id="modal-hotkey-input" class="modal-input" type="text" readonly>
-        <button type="button" id="modal-hotkey-clear" class="ghost-btn">{L('hotkeyClear')}</button></div></div></div>
+      <div class="hotkey-row"><span class="clear-wrap hotkey-clear-wrap"><input id="modal-hotkey-input" class="modal-input" type="text" readonly>
+        <button type="button" id="modal-hotkey-clear" class="clear-btn" aria-label="{L('hotkeyRemove')}"></button></span></div></div></div>
   <div id="modal-history" class="modal-collapse{' open' if history_open else ''}">
     <button type="button" id="modal-history-head" class="modal-collapse-head" aria-expanded="{'true' if history_open else 'false'}">
       <span>{L('historyTitle')}</span></button>

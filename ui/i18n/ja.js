@@ -1106,7 +1106,6 @@ export default {
     favViewTitle: "お気に入りビュー",
     favViewEmpty: "まだお気に入りがありません。プロンプトに星を付けるとここに表示されます。",
     hotkeyPh: "クリックしてキーを押す…",
-    hotkeyClear: "クリア",
     hotkeySet: "ホットキーを設定しました",
     hotkeyFail: "そのキーの組み合わせは使用できません",
     hotkeysAllBtn: "すべてのホットキー",
@@ -2065,4 +2064,5 @@ export default {
     optSnipToolLast: "前回使用したもの",
     tipSettingsStats: "利用統計を開きます。プロンプトの数、直近7日間のコピー数、よく使うプロンプトと未使用のプロンプトを確認できます。",
     statTopEmpty: "まだ何もコピーされていません。",
+    hotkeyRemove: "ショートカットを削除",
 };

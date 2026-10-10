@@ -1,6 +1,6 @@
 // Hotkey recording and the hotkey list.
 import { $, errToast, EXPERT_ACTIONS, flag, invoke, modal, modalState, prompts, settings, settingsEl, t, toast } from "./core.js";
-import { openAllShortcuts } from "./windowChrome.js";
+import { hotkeyClearX, openAllShortcuts } from "./windowChrome.js";
 import { assignSettingsOpener } from "./settingsPanel.js";
 import { showExpertPage } from "./expertMenu.js";
 
@@ -340,18 +340,14 @@ export function renderHotkeysList() {
     input.readOnly = true;
     input.placeholder = t("hotkeyPh");
     input.value = prettyAccel(r.accel);
-    const clear = document.createElement("button");
-    clear.type = "button";
-    clear.className = "ghost-btn";
-    clear.textContent = t("hotkeyClear");
-    row.append(name, input, clear);
+    row.append(name, input);
     box.appendChild(row);
     bindHotkeyField(input, {
       id: r.id,
       current: () => kindDef.current(r.id),
       onCommit: (accel) => kindDef.onCommit(accel, r.id),
     });
-    clear.addEventListener("click", async () => {
+    hotkeyClearX(input, async () => {
       try { input.value = prettyAccel(await kindDef.onCommit("", r.id)); }
       catch (err) { toast(hotkeyMessage(String(err))); }
     });
@@ -364,19 +360,19 @@ export function bindHotkeys() {
     current: () => settings.hotkey,
     onCommit: commitGlobalHotkey,
   });
-  $("hotkey-clear").addEventListener("click", async () => {
+  hotkeyClearX($("opt-hotkey"), async () => {
     try { await commitGlobalHotkey(""); } catch (_) { /* Clear always leaves an empty field regardless */ }
     $("opt-hotkey").value = "";
-  });
+  }, "hotkey-clear");
   $("hotkey-list-btn").addEventListener("click", openAllShortcuts);
   bindHotkeyField($("opt-voice-hotkey"), {
     current: () => settings.voice_hotkey,
     onCommit: commitVoiceHotkey,
   });
-  $("voice-hotkey-clear").addEventListener("click", async () => {
+  hotkeyClearX($("opt-voice-hotkey"), async () => {
     try { await commitVoiceHotkey(""); } catch (_) { /* Clear always leaves an empty field regardless */ }
     $("opt-voice-hotkey").value = "";
-  });
+  }, "voice-hotkey-clear");
   EXPERT_ACTIONS["voice-hotkey-set"] = () => {
     assignSettingsOpener(document.activeElement);
     showExpertPage(false);

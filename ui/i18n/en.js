@@ -1070,7 +1070,6 @@ export default {
     favViewTitle: "Favorites view",
     favViewEmpty: "No favorites yet. Star prompts to see them here.",
     hotkeyPh: "Click, then press a key combo…",
-    hotkeyClear: "Clear",
     hotkeySet: "Hotkey set",
     hotkeyFail: "That key combination is unavailable",
     hotkeysAllBtn: "All shortcuts",
@@ -2065,4 +2064,5 @@ export default {
     optSnipToolLast: "Last used",
     tipSettingsStats: "Opens the usage statistics: how many prompts you have, how often you copied in the last 7 days, your most used and your unused prompts.",
     statTopEmpty: "Nothing copied yet.",
+    hotkeyRemove: "Remove shortcut",
 };

@@ -1106,7 +1106,6 @@ export default {
     favViewTitle: "Favoriler görünümü",
     favViewEmpty: "Henüz favori yok. Burada görmek için istemleri yıldızlayın.",
     hotkeyPh: "Tıklayın ve tuş kombinasyonuna basın…",
-    hotkeyClear: "Temizle",
     hotkeySet: "Kısayol ayarlandı",
     hotkeyFail: "Bu kısayol kullanılamıyor",
     hotkeysAllBtn: "Tüm kısayollar",
@@ -2065,4 +2064,5 @@ export default {
     optSnipToolLast: "Son kullanılan",
     tipSettingsStats: "Kullanım istatistiklerini açar: kaç isteminiz olduğunu, son 7 günde kaç kez kopyaladığınızı, en çok kullandığınız ve hiç kullanmadığınız istemleri gösterir.",
     statTopEmpty: "Henüz hiçbir şey kopyalanmadı.",
+    hotkeyRemove: "Kısayolu kaldır",
 };
