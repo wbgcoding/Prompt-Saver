@@ -773,7 +773,6 @@ export default {
     chainStepHint: "Trascina per riordinare, clic destro per rimuovere.",
     expGroupTiles: "Riquadri",
     expGroupTooltips: "Suggerimenti",
-    expGroupScales: "Dimensioni (%)",
     expGroupTileLook: "Aspetto dei riquadri",
     expGroupMedia: "Media",
     flagVideoControls: "Barra di controllo video",

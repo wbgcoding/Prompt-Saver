@@ -773,7 +773,6 @@ export default {
     chainStepHint: "Arrastra para reordenar, clic derecho para quitar.",
     expGroupTiles: "Mosaicos",
     expGroupTooltips: "Información emergente",
-    expGroupScales: "Tamaños (%)",
     expGroupTileLook: "Aspecto de los mosaicos",
     expGroupMedia: "Multimedia",
     flagVideoControls: "Barra de control de vídeo",

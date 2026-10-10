@@ -773,7 +773,6 @@ export default {
     chainStepHint: "Sleep om te herordenen, klik met de rechtermuisknop om te verwijderen.",
     expGroupTiles: "Tegels",
     expGroupTooltips: "Tooltips",
-    expGroupScales: "Groottes (%)",
     expGroupTileLook: "Weergave van tegels",
     expGroupMedia: "Media",
     flagVideoControls: "Videobedieningsbalk",

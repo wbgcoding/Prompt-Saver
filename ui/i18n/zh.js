@@ -773,7 +773,6 @@ export default {
     chainStepHint: "拖动可重新排序，右键单击可移除。",
     expGroupTiles: "磁贴",
     expGroupTooltips: "提示",
-    expGroupScales: "大小 (%)",
     expGroupTileLook: "磁贴外观",
     expGroupMedia: "媒体",
     flagVideoControls: "视频控制栏",

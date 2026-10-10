@@ -671,7 +671,7 @@ end of the theme list in Settings.
 
 Independent size sliders for the overall UI and the icons.
 Interface size is in Settings; icon size is in
-Expert menu → Appearance → Sizes (%).
+Expert menu → Appearance → Visual.
 
 ## Library & copy history
 
@@ -1494,7 +1494,7 @@ sobald sie zum ersten Mal angezeigt werden. Das Hauptraster bleibt unverändert.
 
 **Skalierung & Zoom**: UI- und Symbolgröße getrennt einstellbar.
 Die Größe der Oberfläche steht in den Einstellungen; die Symbolgröße
-im Expertenmenü → Aussehen → Größen (%).
+im Expertenmenü → Aussehen → Visuell.
 
 ### Bibliothek & Kopierverlauf
 

@@ -773,7 +773,6 @@ export default {
     chainStepHint: "Yeniden sıralamak için sürükleyin, kaldırmak için sağ tıklayın.",
     expGroupTiles: "Kutucuklar",
     expGroupTooltips: "Araç ipuçları",
-    expGroupScales: "Boyutlar (%)",
     expGroupTileLook: "Kutucuk görünümü",
     expGroupMedia: "Medya",
     flagVideoControls: "Video kontrol çubuğu",

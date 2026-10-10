@@ -773,7 +773,6 @@ export default {
     chainStepHint: "Arraste para reordenar, clique com o botão direito para remover.",
     expGroupTiles: "Blocos",
     expGroupTooltips: "Dicas",
-    expGroupScales: "Tamanhos (%)",
     expGroupTileLook: "Aparência dos blocos",
     expGroupMedia: "Mídia",
     flagVideoControls: "Barra de controle de vídeo",

@@ -750,7 +750,6 @@ export default {
     chainStepHint: "Drag to reorder, right-click to remove.",
     expGroupTiles: "Tiles",
     expGroupTooltips: "Tooltips",
-    expGroupScales: "Sizes (%)",
     expGroupTileLook: "Tile appearance",
     expGroupMedia: "Media",
     flagVideoControls: "Video control bar",

@@ -773,7 +773,6 @@ export default {
     chainStepHint: "Przeciągnij, aby zmienić kolejność, kliknij prawym przyciskiem, aby usunąć.",
     expGroupTiles: "Kafelki",
     expGroupTooltips: "Podpowiedzi",
-    expGroupScales: "Rozmiary (%)",
     expGroupTileLook: "Wygląd kafelków",
     expGroupMedia: "Multimedia",
     flagVideoControls: "Pasek sterowania wideo",

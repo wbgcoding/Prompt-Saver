@@ -750,7 +750,6 @@ export default {
     chainStepHint: "Ziehen zum Umsortieren, Rechtsklick zum Entfernen.",
     expGroupTiles: "Kacheln",
     expGroupTooltips: "Kurzinfos",
-    expGroupScales: "Größen (%)",
     expGroupTileLook: "Kachel-Aussehen",
     expGroupMedia: "Medien",
     flagVideoControls: "Video-Steuerleiste",

@@ -610,8 +610,7 @@ export const EXPERT_TABS = [
     { title: "expGroupMedia", flags: ["videoControls", "videoAutoplay", "videoMuted", "videoLoop", "mediaMeta", "mediaBorder", "roundMedia"], values: ["videoVolume"] },
   ] },
   { title: "expTabAppearance", groups: [
-    { title: "expGroupScales", values: ["iconScale"] },
-    { title: "expGroupAppearanceDetails", flags: ["animations", "hideScrollbars", "frostedModals", "customThemes"], values: ["frostedBlur", "customThemeMax"], dropdowns: ["toastPos"], palette: true },
+    { title: "expGroupAppearanceDetails", flags: ["animations", "hideScrollbars", "frostedModals", "customThemes"], values: ["iconScale", "frostedBlur", "customThemeMax"], dropdowns: ["toastPos"], palette: true },
   ] },
   { title: "expTabLibrary", groups: [
     { title: "expGroupLibSearch", flags: ["librarySearch", "globalSearch", "searchSuggest", "savedSearches", "fuzzySearch", "libraryTypeFilter", "searchAutofocus", "ocrIndex"], values: ["searchListMax", "libraryCols"],

@@ -773,7 +773,6 @@ export default {
     chainStepHint: "ドラッグで並べ替え、右クリックで削除します。",
     expGroupTiles: "タイル",
     expGroupTooltips: "ツールチップ",
-    expGroupScales: "サイズ (%)",
     expGroupTileLook: "タイルの外観",
     expGroupMedia: "メディア",
     flagVideoControls: "動画コントロールバー",

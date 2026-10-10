@@ -773,7 +773,6 @@ export default {
     chainStepHint: "Trage pentru a reordona, clic dreapta pentru a elimina.",
     expGroupTiles: "Dale",
     expGroupTooltips: "Indicii",
-    expGroupScales: "Dimensiuni (%)",
     expGroupTileLook: "Aspectul dalelor",
     expGroupMedia: "Media",
     flagVideoControls: "Bară de control video",
