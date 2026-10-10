@@ -930,11 +930,34 @@ pub(crate) fn take_out_of_tile_folder(
     for folder in store.settings.tile_folders.iter_mut() {
         folder.members.retain(|m| m != &id);
     }
+    let settings = &mut store.settings;
+    settle_lone_folder_members(&mut settings.views, &settings.tile_folders);
     let ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
     let view_ids: Vec<String> = store.settings.views.iter().map(|v| v.id.clone()).collect();
     normalize_tile_folders(&mut store.settings.tile_folders, &ids, &view_ids);
     save_settings(&app, &store.settings);
     Ok(webview_settings(&store.settings))
+}
+
+// A folder left with one member is about to be dropped; that member lives outside
+// view.layouts, so it gets the folder's own cell (or the first free one when the
+// taken-out prompt was put there) instead of vanishing from the grid.
+pub(crate) fn settle_lone_folder_members(views: &mut [View], folders: &[TileFolder]) {
+    for folder in folders.iter().filter(|f| f.members.len() == 1) {
+        let Some(view) = views.iter_mut().find(|v| v.id == folder.view_id) else { continue };
+        let other_cells: Vec<[u32; 2]> = folders
+            .iter()
+            .filter(|f| f.view_id == folder.view_id && f.id != folder.id && f.members.len() >= 2)
+            .map(|f| f.cell)
+            .collect();
+        let key = grid_key(view.cols, view.rows);
+        let in_grid = folder.cell[0] < view.cols && folder.cell[1] < view.rows;
+        let taken = view.layouts.get(&key).is_some_and(|l| l.values().any(|c| *c == folder.cell));
+        let cell = if in_grid && !taken { Some(folder.cell) } else { first_free_cell_excluding(view, &other_cells) };
+        if let Some(cell) = cell {
+            view.layouts.entry(key).or_default().insert(folder.members[0].clone(), cell);
+        }
+    }
 }
 
 // Dissolve a grid folder: its prompts become tiles again, nothing is deleted. Each

@@ -17089,6 +17089,32 @@ fn taking_a_prompt_out_moves_the_occupant_instead_of_dropping_it() {
 }
 
 #[test]
+fn the_last_folder_member_takes_the_folder_cell() {
+    let mut view = test_view("v");
+    view.cols = 3;
+    view.rows = 1;
+    let key = grid_key(3, 1);
+    view.layouts.entry(key.clone()).or_default().insert("out".to_string(), [2, 0]);
+    let folders = vec![test_tile_folder("f", "v", [1, 0], &["rest"])];
+    let mut views = vec![view];
+    settle_lone_folder_members(&mut views, &folders);
+    assert_eq!(views[0].layouts[&key].get("rest"), Some(&[1, 0]));
+}
+
+#[test]
+fn the_last_folder_member_moves_aside_when_its_cell_was_taken() {
+    let mut view = test_view("v");
+    view.cols = 3;
+    view.rows = 1;
+    let key = grid_key(3, 1);
+    view.layouts.entry(key.clone()).or_default().insert("out".to_string(), [1, 0]);
+    let folders = vec![test_tile_folder("f", "v", [1, 0], &["rest"])];
+    let mut views = vec![view];
+    settle_lone_folder_members(&mut views, &folders);
+    assert_eq!(views[0].layouts[&key].get("rest"), Some(&[0, 0]));
+}
+
+#[test]
 fn taking_a_prompt_out_is_refused_when_nowhere_is_free() {
     let mut view = test_view("v");
     view.cols = 2;
