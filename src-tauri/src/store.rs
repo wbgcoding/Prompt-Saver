@@ -210,8 +210,10 @@ pub(crate) fn read_data_dir_lock(path: &Path) -> Option<DataDirLockInfo> {
     serde_json::from_str(&fs::read_to_string(path).ok()?).ok()
 }
 
+// Never written in place: another process reads this file while it is refreshed.
+// A refused swap leaves the old lock and the next refresh tick tries again.
 pub(crate) fn write_data_dir_lock(path: &Path, info: &DataDirLockInfo) -> bool {
-    serde_json::to_string(info).is_ok_and(|json| write_bytes_atomic(path, json.as_bytes()).is_ok())
+    serde_json::to_string(info).is_ok_and(|json| write_bytes_atomic_strict(path, json.as_bytes()).is_ok())
 }
 
 pub(crate) static DATA_DIR_READONLY: AtomicBool = AtomicBool::new(false);
@@ -319,7 +321,7 @@ pub(crate) fn claim_data_dir_lock(path: &Path, me: &LockMe, obs: &mut LockObserv
             }
         }
     }
-    if write_bytes_atomic(path, json.as_bytes()).is_err() {
+    if write_bytes_atomic_strict(path, json.as_bytes()).is_err() {
         return unknown();
     }
     std::thread::sleep(settle);

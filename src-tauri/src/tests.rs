@@ -18110,23 +18110,61 @@ fn refreshing_the_lock_never_shows_a_reader_a_broken_file() {
     let reader = {
         let (path, done) = (path.clone(), done.clone());
         std::thread::spawn(move || {
-            let (mut reads, mut broken) = (0u32, 0u32);
+            // `broken` = a file that opened but did not parse (a half-written lock).
+            // `unopened` = the open itself was refused for a moment while the swap
+            // ran; the caller treats that as "unknown right now", never as a lock.
+            let (mut reads, mut broken, mut unopened) = (0u32, 0u32, 0u32);
             while !done.load(AtomicOrdering::Relaxed) {
                 reads += 1;
-                if read_data_dir_lock(&path).is_none() {
-                    broken += 1;
+                match fs::read_to_string(&path) {
+                    Ok(text) => {
+                        if serde_json::from_str::<DataDirLockInfo>(&text).is_err() {
+                            broken += 1;
+                        }
+                    }
+                    Err(_) => unopened += 1,
                 }
             }
-            (reads, broken)
+            (reads, broken, unopened)
         })
     };
+    // A swap the system refuses while the reader has the file open is allowed to
+    // fail (the old lock stays, the next tick retries); it must never fall back to
+    // a write in place.
+    let mut landed = 0u32;
     for n in 0..1000u64 {
-        assert!(write_data_dir_lock(&path, &DataDirLockInfo { host: "A".into(), pid: 1, seen: unix_now() + n, id: String::new(), beat: 0 }));
+        if write_data_dir_lock(&path, &DataDirLockInfo { host: "A".into(), pid: 1, seen: unix_now() + n, id: String::new(), beat: 0 }) {
+            landed += 1;
+        }
     }
+    assert!(landed > 0, "no refresh landed at all");
     done.store(true, AtomicOrdering::Relaxed);
-    let (reads, broken) = reader.join().unwrap();
+    let (reads, broken, unopened) = reader.join().unwrap();
     assert!(reads > 0);
-    assert_eq!(broken, 0, "{broken} of {reads} reads found no parsable lock");
+    assert_eq!(broken, 0, "{broken} of {reads} reads found a half-written lock ({unopened} could not open it)");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+// A refused swap must leave the old lock untouched: the lock is read by other
+// processes while it is rewritten, so it is never written in place.
+#[cfg(windows)]
+#[test]
+fn a_refused_lock_swap_keeps_the_old_lock_instead_of_writing_in_place() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let dir = std::env::temp_dir().join(format!("ps-lockstrict-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let path = data_dir_lock_path(&dir);
+    let old = DataDirLockInfo { host: "A".into(), pid: 1, seen: 100, id: String::new(), beat: 0 };
+    assert!(write_data_dir_lock(&path, &old));
+    // Open for reading and writing but without delete sharing: the rename over it is refused.
+    let held = fs::OpenOptions::new().read(true).share_mode(3).open(&path).unwrap();
+    let newer = DataDirLockInfo { seen: 200, ..old.clone() };
+    assert!(!write_data_dir_lock(&path, &newer), "a refused swap must report failure");
+    assert_eq!(read_data_dir_lock(&path).map(|l| l.seen), Some(100), "the old lock must stay as it was");
+    drop(held);
+    assert!(write_data_dir_lock(&path, &newer), "the next round writes it");
+    assert_eq!(read_data_dir_lock(&path).map(|l| l.seen), Some(200));
     let _ = fs::remove_dir_all(&dir);
 }
 

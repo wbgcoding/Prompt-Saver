@@ -275,6 +275,13 @@ pub(crate) fn write_bytes_atomic(path: &Path, content: &[u8]) -> std::io::Result
     }
 }
 
+// The replace with no fallback: a refused swap is an error and the old file stays
+// exactly as it was. For a file other processes read while it is rewritten (the
+// data-folder lock), where an in-place write would show them a half-written file.
+pub(crate) fn write_bytes_atomic_strict(path: &Path, content: &[u8]) -> std::io::Result<()> {
+    replace_via_temp(path, content)
+}
+
 fn replace_via_temp(path: &Path, content: &[u8]) -> std::io::Result<()> {
     use std::io::Write;
     let mut name = path.file_name().unwrap_or_default().to_os_string();
