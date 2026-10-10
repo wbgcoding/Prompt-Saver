@@ -1969,7 +1969,12 @@ export function initSnipEditor() {
   $("snip-edit-apply").addEventListener("click", snipEditApply);
   $("snip-edit-copy").addEventListener("click", async () => {
     const dataUrl = snipEditExportDataUrl();
-    await invoke("copy_image_data", { dataUrl }).catch((err) => errToast(err));
+    try {
+      await invoke("copy_image_data", { dataUrl });
+      toast(t("copied"));
+    } catch (err) {
+      errToast(err);
+    }
   });
   $("snip-edit-undo").addEventListener("click", snipEditUndo);
   $("snip-edit-redo").addEventListener("click", snipEditRedo);

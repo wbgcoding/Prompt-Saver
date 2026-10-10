@@ -148,7 +148,7 @@ export default {
     snipScaleTooLarge: "Dit formaat is te groot om naar te schalen.",
     snipEditCancelTip: "Annuleren (Esc)",
     snipEditCopyTip: "Kopieer de huidige afbeelding naar het klembord",
-    snipEditApplyTip: "Toepassen (Enter)",
+    snipEditApplyTip: "Bewerken afronden en kiezen wat er met de afbeelding gebeurt (Enter)",
     snipEditOpenFailed: "Deze schermafbeelding kon niet worden geopend om te bewerken; de onbewerkte afbeelding wordt hierdoor niet beïnvloed.",
     snipEditSaveAsTip: "De bewerkte afbeelding als bestand opslaan",
     snipEditResizeTip: "Sleep om het venster te vergroten of verkleinen",
@@ -2091,4 +2091,5 @@ export default {
     recBarDiskLowShort: "Schijf bijna vol",
     recBarHotkeyShort: "Sneltoets geblokkeerd",
     camChooseFolder: "Opnamemap kiezen",
+    snipEditDone: "Klaar",
 };

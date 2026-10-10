@@ -521,7 +521,7 @@ export const HELP_CONTENT = {
         "Right-click a rectangle, ellipse, line, arrow or pixelated area to duplicate or delete it; a focus area can only be deleted.",
         "Arrow keys move the selected shape, Ctrl+arrow resizes it, Shift takes bigger steps, Escape deselects.",
         "\"Resize\" changes the image's real pixel size; \"Show original\" (or V) shows the untouched capture while held, a tap locks it.",
-        "Undo/redo steps back through edits; save when done.",
+        "Undo/redo steps back through edits; \"Done\" finishes editing and opens the save dialog.",
       ],
       whatHappens:
         "Every edit is one step in an undo/redo list capped by its own setting; pixelate always samples the original screenshot, never an already-edited layer, so blurring a spot never smears earlier marks. Snap-to-edges lines a shape up with the image border, its center and the other shapes while dragging, with a thin guide line; hold Alt to drag freely. A text label can get a background plate or an outline, so light text stays readable on a light background. Undo covers every step, including a duplicate, a delete, a resize and a run of arrow-key moves, which counts as one step. Once zoomed in, the hand tool (or holding Space, or the middle mouse button) drags the view around for pixel-precise work, and the crop tool shows a resize cursor at each handle and a move cursor inside the current selection. Switching the editor off (below) skips straight to the confirmation dialog instead.",
@@ -1271,7 +1271,7 @@ export const HELP_CONTENT = {
         "Rechtsklick auf ein Rechteck, eine Ellipse, Linie, einen Pfeil oder eine verpixelte Fläche, um es zu duplizieren oder zu löschen; ein Fokusbereich lässt sich nur löschen.",
         "Pfeiltasten verschieben die gewählte Form, Strg+Pfeil ändert ihre Größe, Umschalt macht größere Schritte, Escape hebt die Auswahl auf.",
         "„Größe ändern“ ändert die echte Pixelgröße des Bildes; „Original zeigen“ (oder V) zeigt die unbearbeitete Aufnahme, solange gedrückt, ein Tippen hält sie fest.",
-        "Mit Rückgängig/Wiederholen schrittweise durch die Bearbeitungen gehen; anschließend speichern.",
+        "Mit Rückgängig/Wiederholen schrittweise durch die Bearbeitungen gehen; „Fertig“ beendet die Bearbeitung und öffnet den Speichern-Dialog.",
       ],
       whatHappens:
         "Jede Bearbeitung ist ein Schritt in einer Rückgängig/Wiederholen-Liste, deren Höchstzahl separat einstellbar ist. Beim Verpixeln wird immer der ursprüngliche Screenshot verwendet, nie eine bereits bearbeitete Ebene; dadurch werden frühere Markierungen beim Unkenntlichmachen einer Stelle nicht verschmiert. Das Einrasten an Kanten richtet eine Form beim Ziehen am Bildrand, an der Mitte und an den anderen Formen aus, mit einer dünnen Hilfslinie; mit gehaltener Alt-Taste wird frei gezogen. Eine Textbeschriftung kann eine Hintergrundfläche oder einen Umriss bekommen, damit heller Text auch auf hellem Grund lesbar bleibt. Rückgängig deckt jeden Schritt ab, auch Duplizieren, Löschen, Größe ändern und eine Folge von Pfeiltasten-Schritten, die als ein Schritt zählt. Beim Hineinzoomen verschiebt das Hand-Werkzeug (oder gehaltene Leertaste bzw. die mittlere Maustaste) die Ansicht für pixelgenaues Arbeiten, und das Zuschneide-Werkzeug zeigt an jedem Anfasser einen passenden Richtungspfeil sowie innerhalb des Ausschnitts einen Verschieben-Zeiger. Ist der Editor unten deaktiviert, erscheint stattdessen direkt der Bestätigungsdialog.",

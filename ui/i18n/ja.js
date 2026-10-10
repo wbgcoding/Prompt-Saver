@@ -148,7 +148,7 @@ export default {
     snipScaleTooLarge: "サイズが大きすぎるため拡大縮小できません。",
     snipEditCancelTip: "キャンセル (Esc)",
     snipEditCopyTip: "現在の画像をクリップボードにコピー",
-    snipEditApplyTip: "適用 (Enter)",
+    snipEditApplyTip: "編集を終了し、画像をどうするか選ぶ (Enter)",
     snipEditOpenFailed: "このスクリーンショットを編集用に開けませんでした。編集前の画像には影響ありません。",
     snipEditSaveAsTip: "編集した画像をファイルとして保存",
     snipEditResizeTip: "ドラッグしてウィンドウのサイズを変更",
@@ -2091,4 +2091,5 @@ export default {
     recBarDiskLowShort: "ディスクの空きが少ない",
     recBarHotkeyShort: "ホットキーがブロック中",
     camChooseFolder: "録画フォルダーを選択",
+    snipEditDone: "完了",
 };

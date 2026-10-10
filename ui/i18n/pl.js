@@ -148,7 +148,7 @@ export default {
     snipScaleTooLarge: "Ten rozmiar jest zbyt duży do przeskalowania.",
     snipEditCancelTip: "Anuluj (Esc)",
     snipEditCopyTip: "Skopiuj bieżący obraz do schowka",
-    snipEditApplyTip: "Zastosuj (Enter)",
+    snipEditApplyTip: "Zakończ edycję i wybierz, co zrobić z obrazem (Enter)",
     snipEditOpenFailed: "Nie można otworzyć tego zrzutu ekranu do edycji; nieedytowany obraz pozostaje bez zmian.",
     snipEditSaveAsTip: "Zapisz edytowany obraz jako plik",
     snipEditResizeTip: "Przeciągnij, aby zmienić rozmiar okna",
@@ -2091,4 +2091,5 @@ export default {
     recBarDiskLowShort: "Dysk prawie pełny",
     recBarHotkeyShort: "Skrót zablokowany",
     camChooseFolder: "Wybierz folder nagrań",
+    snipEditDone: "Gotowe",
 };

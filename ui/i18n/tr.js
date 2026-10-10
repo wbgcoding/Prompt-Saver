@@ -148,7 +148,7 @@ export default {
     snipScaleTooLarge: "Bu boyut ölçeklendirmek için çok büyük.",
     snipEditCancelTip: "İptal (Esc)",
     snipEditCopyTip: "Geçerli görüntüyü panoya kopyala",
-    snipEditApplyTip: "Uygula (Enter)",
+    snipEditApplyTip: "Düzenlemeyi bitir ve görüntüye ne yapılacağını seç (Enter)",
     snipEditOpenFailed: "Bu ekran görüntüsü düzenleme için açılamadı; düzenlenmemiş görüntü bundan etkilenmez.",
     snipEditSaveAsTip: "Düzenlenen görüntüyü dosya olarak kaydet",
     snipEditResizeTip: "Pencereyi yeniden boyutlandırmak için sürükleyin",
@@ -2091,4 +2091,5 @@ export default {
     recBarDiskLowShort: "Disk neredeyse dolu",
     recBarHotkeyShort: "Kısayol engellendi",
     camChooseFolder: "Kayıt klasörünü seç",
+    snipEditDone: "Bitti",
 };

@@ -148,7 +148,7 @@ export default {
     snipScaleTooLarge: "Această dimensiune este prea mare pentru redimensionare.",
     snipEditCancelTip: "Anulare (Esc)",
     snipEditCopyTip: "Copiază imaginea curentă în clipboard",
-    snipEditApplyTip: "Aplicare (Enter)",
+    snipEditApplyTip: "Termină editarea și alege ce se întâmplă cu imaginea (Enter)",
     snipEditOpenFailed: "Această captură de ecran nu a putut fi deschisă pentru editare; imaginea needitată nu este afectată.",
     snipEditSaveAsTip: "Salvează imaginea editată ca fișier",
     snipEditResizeTip: "Trage pentru a redimensiona fereastra",
@@ -2091,4 +2091,5 @@ export default {
     recBarDiskLowShort: "Disc aproape plin",
     recBarHotkeyShort: "Tastă rapidă blocată",
     camChooseFolder: "Alege folderul înregistrărilor",
+    snipEditDone: "Gata",
 };

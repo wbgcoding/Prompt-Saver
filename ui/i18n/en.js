@@ -122,7 +122,7 @@ export default {
     snipScaleTooLarge: "That size is too large to scale to.",
     snipEditCancelTip: "Cancel (Esc)",
     snipEditCopyTip: "Copy the current image to the clipboard",
-    snipEditApplyTip: "Apply (Enter)",
+    snipEditApplyTip: "Finish editing and choose what happens to the image (Enter)",
     snipEditOpenFailed: "This screenshot could not be opened for editing; the unedited image is unaffected.",
     snipEditSaveAsTip: "Save the edited image to a file",
     snipEditResizeTip: "Drag to resize the window",
@@ -2091,4 +2091,5 @@ export default {
     recBarDiskLowShort: "Disk almost full",
     recBarHotkeyShort: "Hotkey blocked",
     camChooseFolder: "Choose the recording folder",
+    snipEditDone: "Done",
 };

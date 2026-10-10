@@ -924,6 +924,8 @@ the video editor and the introduction tour ship on).
   window.
 - **The tile folder has a clearly visible frame in the light themes.** The
   dark themes get a slightly clearer frame too.
+- **Screenshot editor: the finish button is now called Done.** It says what
+  it does, and Copy confirms with a short notice.
 
 ### Fixed
 

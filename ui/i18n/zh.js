@@ -148,7 +148,7 @@ export default {
     snipScaleTooLarge: "该尺寸过大，无法缩放。",
     snipEditCancelTip: "取消 (Esc)",
     snipEditCopyTip: "将当前图像复制到剪贴板",
-    snipEditApplyTip: "应用 (Enter)",
+    snipEditApplyTip: "完成编辑并选择如何处理图像 (Enter)",
     snipEditOpenFailed: "无法打开此截图进行编辑；未编辑的图像不受影响。",
     snipEditSaveAsTip: "将编辑后的图像另存为文件",
     snipEditResizeTip: "拖动以调整窗口大小",
@@ -2091,4 +2091,5 @@ export default {
     recBarDiskLowShort: "磁盘空间不足",
     recBarHotkeyShort: "快捷键被占用",
     camChooseFolder: "选择录制文件夹",
+    snipEditDone: "完成",
 };

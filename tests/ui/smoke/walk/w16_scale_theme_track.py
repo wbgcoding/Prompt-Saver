@@ -144,6 +144,32 @@ SECTION = """\
             out.errors.push('928-de: ' + vid + ' tooltip "' + vtip + '" lacks name or key');
           }
         }
+        // 929-de: the finish button is called Done (Fertig in German) and a click
+        // on Copy answers with a short notice.
+        {
+          const doneBtn = document.getElementById('snip-edit-apply');
+          const isDe = document.documentElement.lang === 'de';
+          const doneTxt = (doneBtn.textContent || '').trim();
+          if (isDe && doneTxt !== 'Fertig') {
+            out.errors.push('929-de: finish button reads "' + doneTxt + '", expected "Fertig"');
+          }
+          if (/^(Apply|Übernehmen)$/.test(doneTxt)) {
+            out.errors.push('929-de: finish button still reads "' + doneTxt + '"');
+          }
+          const toastBox = document.getElementById('toast');
+          toastBox.classList.remove('show');
+          toastBox.textContent = '';
+          document.getElementById('snip-edit-copy').click();
+          await sleep(300);
+          const toastTxt = (toastBox.textContent || '').trim();
+          const wantToast = isDe ? 'Kopiert!' : 'Copied!';
+          if (!toastTxt.includes(wantToast)) {
+            out.errors.push('929-de: Copy gave no confirmation, notice reads "' + toastTxt + '"');
+          }
+          // Let the notice run out completely so its delayed hide cannot land on
+          // a toast a later probe expects to see.
+          await sleep(1800);
+        }
         // 178: the toolbar must stay a couple of rows tall no matter which tool
         // is active -- a full inline swatch grid used to collapse into one tall
         // column here and blow the toolbar height up. This is the check that
