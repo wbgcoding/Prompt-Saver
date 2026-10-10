@@ -267,6 +267,65 @@ REC_CONVERT_PROBE = """
     }
 """
 
+# 859: a resize keeps the earlier image for undo, but only as far back as the undo limit
+# reaches; what lies behind it is released, and closing the editor releases the whole session.
+SNIP_HOLD_SEED = '<script>window.__SEED_SETTINGS__ = { ui_values: { snipEditUndoMax: 10 } };</script>'
+SNIP_HOLD_PROBE = """
+    // 859:
+    {
+      const edit = $('snip-edit'), undo = $('snip-edit-undo'), redo = $('snip-edit-redo');
+      const cv = document.createElement('canvas'); cv.width = 200; cv.height = 120;
+      const g = cv.getContext('2d'); g.fillStyle = '#88aacc'; g.fillRect(0, 0, 200, 120);
+      window.__FIRE__('snip-captured', { data_url: cv.toDataURL('image/png'), path: '', name: 'hold.png' });
+      await until(() => visible(edit), 60);
+      if (!visible(edit)) {
+        errs.push('859: the editor did not open');
+      } else {
+        const resize = async (label) => {
+          $('snip-edit-scale').click();
+          await sleep(100);
+          const pop = document.querySelector('.snip-scale-pop');
+          [...pop.querySelectorAll('.snip-scale-presets button')].find((b) => b.textContent === label).click();
+          await sleep(30);
+          pop.querySelector('.primary-btn').click();
+          await sleep(120);
+        };
+        for (let i = 0; i < 12; i++) await resize(i % 2 === 0 ? '50%' : '200%');
+        const held = window.__snipEditHeld().resizes;
+        if (held !== 10) errs.push('859: after 12 resizes with an undo limit of 10, ' + held + ' resizes still hold their earlier image, wanted 10');
+        let steps = 0;
+        while (!undo.disabled && steps < 40) { undo.click(); steps++; await sleep(20); }
+        if (steps !== 10) errs.push('859: undo walked ' + steps + ' resizes, wanted 10');
+        let redos = 0;
+        while (!redo.disabled && redos < 40) { redo.click(); redos++; await sleep(20); }
+        if (redos !== 10) errs.push('859: redo walked ' + redos + ' resizes, wanted 10');
+        $('snip-edit-cancel').click();
+        await sleep(200);
+        const after = window.__snipEditHeld();
+        if (after.ops || after.redo || after.img || after.raw || after.resizes) errs.push('859: closing the editor left the session alive: ' + JSON.stringify(after));
+        // Strokes drawn after a resize push it below the undo floor: its earlier image goes too.
+        window.__FIRE__('snip-captured', { data_url: cv.toDataURL('image/png'), path: '', name: 'hold2.png' });
+        await until(() => visible(edit), 60);
+        await resize('50%');
+        if (window.__snipEditHeld().resizes !== 1) errs.push('859: a fresh resize does not hold its earlier image: ' + window.__snipEditHeld().resizes);
+        document.querySelector('#snip-edit-tools button[data-tool="pen"]').click();
+        await sleep(50);
+        const live = $('snip-edit-live');
+        const r = live.getBoundingClientRect();
+        for (let i = 0; i < 12; i++) {
+          const x = r.left + 4 + i * 3, y = r.top + 4 + i * 3;
+          live.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 1, clientX: x, clientY: y }));
+          live.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 1, clientX: x + 5, clientY: y + 5 }));
+          window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1, clientX: x + 5, clientY: y + 5 }));
+          await sleep(20);
+        }
+        const behind = window.__snipEditHeld().resizes;
+        if (behind !== 0) errs.push('859: a resize behind the undo limit still holds its earlier image: ' + behind);
+        $('snip-edit-cancel').click();
+      }
+    }
+"""
+
 def _boot(browser, tmp, tag, body, budget=45000, seed=""):
     side = tmp / "ui" / f"logic-{tag}.html"
     side.write_text(
@@ -287,7 +346,8 @@ def run(browser, tmp):
             ("cooldown-dialog", COOLDOWN_DIALOG_PROBE, ""),
             ("search-race", SEARCH_RACE_PROBE, ""),
             ("snip-replace", SNIP_REPLACE_PROBE, SNIP_REPLACE_SEED),
-            ("rec-convert", REC_CONVERT_PROBE, REC_CONVERT_SEED)):
+            ("rec-convert", REC_CONVERT_PROBE, REC_CONVERT_SEED),
+            ("snip-hold", SNIP_HOLD_PROBE, SNIP_HOLD_SEED)):
         errs = _boot(browser, tmp, tag, body, seed=seed)
         print(f"-- ui logic ({tag})")
         for e in errs:

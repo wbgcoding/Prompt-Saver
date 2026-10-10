@@ -489,6 +489,7 @@ export function initSnipEditor() {
   // `bare` leaves the crop dimming out, for the one caller that bakes this canvas
   // into the image itself (a resize).
   function snipEditRedrawBase(bare) {
+    if (!SE.img) return; // no session (the editor was closed)
     const ctx = snipEditBaseCtx;
     ctx.clearRect(0, 0, SE.w, SE.h);
     // Showing the original means the untouched capture, not just "before the
@@ -517,6 +518,37 @@ export function initSnipEditor() {
     $("snip-edit-undo").disabled = SE.ops.length <= SE.floor;
     $("snip-edit-redo").disabled = !SE.redo.length;
   }
+  // A resize keeps the image, raw capture and op list from before it so Undo can swap them
+  // back. Once undo can no longer reach the resize those are dead weight, and every earlier
+  // resolution of the screenshot would otherwise stay alive until the next editor session.
+  function snipEditReleaseResize(op) {
+    op.prevImg = null;
+    op.prevRawCanvas = null;
+    op.prevOps = [];
+  }
+  // Resizes that sit below the undo floor can never be undone.
+  function snipEditReleaseBelowFloor() {
+    const n = Math.min(SE.floor, SE.ops.length);
+    for (let i = 0; i < n; i++) if (SE.ops[i].tool === "scale") snipEditReleaseResize(SE.ops[i]);
+  }
+  // Resizes bake the history into the image, so they chain through `prevOps` instead of
+  // piling up in SE.ops: the undo limit has to be applied along that chain. The resize past
+  // the limit is released, and the next newer one remembers it as permanent (its floor).
+  function snipEditTrimResizeChain(newest) {
+    let depth = 1;
+    let cur = newest;
+    for (;;) {
+      const older = cur.prevOps.find((o) => o.tool === "scale");
+      if (!older) return;
+      depth++;
+      if (depth > SNIP_EDIT_UNDO_MAX()) {
+        if (!older.prevImg) return; // this one and everything behind it was released already
+        cur.prevFloor = Math.max(cur.prevFloor, cur.prevOps.indexOf(older) + 1);
+        snipEditReleaseResize(older);
+      }
+      cur = older;
+    }
+  }
   // `nudge` is what the arrow keys act on afterwards: the op itself by default, or
   // whatever the caller names (an undo entry is not something to nudge).
   function snipEditPushOp(op, nudge) {
@@ -526,6 +558,7 @@ export function initSnipEditor() {
     // it stays drawn (snipEditRedrawBase still walks every op) but becomes
     // permanent, undo just can no longer walk back past it.
     if (SE.ops.length - SE.floor > SNIP_EDIT_UNDO_MAX()) SE.floor = SE.ops.length - SNIP_EDIT_UNDO_MAX();
+    snipEditReleaseBelowFloor();
     SE.redo.length = 0;
     SE.lastNudged = nudge === undefined ? op : nudge;
     snipEditUpdateNudgeHint();
@@ -671,6 +704,7 @@ export function initSnipEditor() {
     snipEditLiveCv.width = targetW;
     snipEditLiveCv.height = targetH;
     snipEditPushOp(op);
+    snipEditTrimResizeChain(op);
     snipEditSyncCropFromOps(); // the crop op was rescaled above, the editable box must follow
     snipEditFit();
     return true;
@@ -723,6 +757,7 @@ export function initSnipEditor() {
       // The floor the resize itself produced, worked out the same way it was then.
       SE.floor = Math.max(0, op.prevFloor - (op.prevOps.length - op.keptOps.length));
       if (SE.ops.length - SE.floor > SNIP_EDIT_UNDO_MAX()) SE.floor = SE.ops.length - SNIP_EDIT_UNDO_MAX();
+      snipEditReleaseBelowFloor();
     } else if (op.tool === "edit") {
       snipEditRedoEdit(op);
     } else if ((op.tool === "spotlight" || op.tool === "crop") && op.replaced) {
@@ -1874,6 +1909,13 @@ export function initSnipEditor() {
     snipEditCancelTextInput();
     closeSnipCtxPop();
     closeSnipEditContext();
+    // Nothing of the session stays alive behind the hidden editor: the next open starts
+    // from a fresh capture anyway.
+    SE.img = null;
+    SE.rawCanvas = null;
+    SE.ops = [];
+    SE.redo = [];
+    SE.floor = 0;
   }
   function snipEditCancel() {
     const cb = SE.onCancel;
@@ -2085,5 +2127,21 @@ export function initSnipEditor() {
   function snipEditState() {
     return { active: SE.active, dirty: SE.ops.length > 0 };
   }
+  // Read by the smoke test: what the session still keeps alive, counting the resizes whose
+  // earlier image is still held (also inside the history a resize carries) and the redo list.
+  window.__snipEditHeld = () => {
+    const seen = new Set();
+    const heldResizes = (list) => {
+      let n = 0;
+      for (const o of list) {
+        if (o.tool !== "scale" || seen.has(o)) continue;
+        seen.add(o);
+        if (o.prevImg) n++;
+        n += heldResizes(o.prevOps || []);
+      }
+      return n;
+    };
+    return { resizes: heldResizes([...SE.ops, ...SE.redo]), ops: SE.ops.length, redo: SE.redo.length, img: !!SE.img, raw: !!SE.rawCanvas };
+  };
   return { snipEditOpen, snipEdit, snipEditState, snipEditCancel };
 }

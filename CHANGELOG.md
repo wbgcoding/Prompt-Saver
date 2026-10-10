@@ -914,6 +914,10 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **The screenshot editor lets go of old image sizes.** Every resize kept the
+  picture from before it for as long as the editor stayed open. Only the steps
+  Undo can still reach are kept now, and closing the editor frees the whole
+  session.
 - **The camera clock stops while a take is paused.** The running time used to keep
   counting through a pause and showed more than the recording holds; it now
   freezes on pause and carries on from there.
