@@ -1137,6 +1137,35 @@ def run(browser, tmp):
     const sel = document.getElementById('theme-select');
     if ([...sel.options].some((o) => o.value === '__theme-editor')) errs.push('914: the editor entry shows although custom themes are off');
 """)
+    failed += ar_probe('bm916', 'icon size: gone from the settings page, a slider in the expert menu sets the icon zoom', 'index', '880x600', '', r"""
+    // 916: the icon size lives in the expert menu, Appearance tab, group Sizes.
+    await bootReady();
+    document.getElementById('gear').click();
+    await sleep(300);
+    if ([...document.querySelectorAll('#settings-main select')].some((sl) => sl.id.startsWith('icon-'))) errs.push('916: an icon size select is still on the settings page');
+    document.getElementById('expert-open').click();
+    await sleep(300);
+    let row = null;
+    for (const tb of document.querySelectorAll('#expert-tabs-bar .expert-tab')) {
+      tb.click();
+      await sleep(120);
+      row = document.querySelector('#expert-flags [data-setting-row="iconScale"]');
+      if (row) break;
+    }
+    if (!row) errs.push('916: the icon size row is not in the expert menu');
+    else {
+      const slider = row.querySelector('input[type=range]');
+      if (!slider) errs.push('916: the icon size row has no slider');
+      else {
+        slider.value = '150';
+        slider.dispatchEvent(new Event('input', { bubbles: true }));
+        slider.dispatchEvent(new Event('change', { bubbles: true }));
+        await sleep(300);
+        const z = document.documentElement.style.getPropertyValue('--icon-zoom');
+        if (Number(z) !== 1.5) errs.push('916: --icon-zoom is "' + z + '" after moving the slider to 150, expected 1.5');
+      }
+    }
+""")
     failed += ar_probe('bx717', 'copy history filters: at 680 px they take two rows, the source is a select and only one All chip remains', 'index', '680x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { clipWatcher: true } };</script>\n', r"""
     await bootReady();
     document.getElementById('library-btn').click(); await sleep(400);

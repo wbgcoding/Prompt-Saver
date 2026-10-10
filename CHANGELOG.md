@@ -2030,6 +2030,7 @@ the video editor and the introduction tour ship on).
 - **The update interval sits right beside the Auto update switch** and only shows while it is on.
 - **The theme editor opens from a “Custom theme…” entry** at the end of the theme list instead of an unlabelled palette button.
 - **The font choice in Settings is now labelled Tile font.**
+- **Icon size moved from Settings to the expert menu** (Appearance, Sizes).
 
 ## 2.6.3 (2026-07-26)
 

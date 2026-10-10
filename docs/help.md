@@ -659,6 +659,8 @@ end of the theme list in Settings.
 ### Scaling & zoom
 
 Independent size sliders for the overall UI, dialogs, the composer, and icons.
+Interface size is in Settings; icon, composer and main-button scale are in
+Expert menu → Appearance → Sizes (%).
 
 ### Tooltips
 
@@ -1421,6 +1423,8 @@ lässt sich der Schatten abschalten oder seine Stärke einstellen.
 **Favoriten**: Stern-Markierung, eigene Favoriten-Ansicht. „Zu Favoriten hinzufügen“ im Rechtsklickmenü einer Kachel oder den Stern in der Bibliothek nutzen; eine Favoriten-Kachel zeigt oben rechts einen kleinen Stern.
 
 **Skalierung & Zoom**: UI-, Dialog-, Editor- und Icon-Größe getrennt einstellbar.
+Die Größe der Oberfläche steht in den Einstellungen; die Symbol-, Editor- und
+Hauptknopf-Skalierung im Expertenmenü → Aussehen → Größen (%).
 
 **Aussehen & Themes**: sieben mitgelieferte Themes, optionaler Theme-Editor.
 

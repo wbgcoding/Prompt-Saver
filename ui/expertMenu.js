@@ -1621,7 +1621,6 @@ export const SETTINGS_DIRECTORY = [
   { key: "lang-select", area: "normal", label: "language" },
   { key: "tile-font", area: "normal", label: "tileFont" },
   { key: "ui-scale", area: "normal", label: "valUiScale" },
-  { key: "icon-scale", area: "normal", label: "valIconScale" },
   { key: "tile-size", area: "normal", label: "tileSize" },
   { key: "opt-ontop", area: "normal", label: "alwaysOnTop" },
   { key: "opt-minimize", area: "normal", label: "minimizeOnClose" },

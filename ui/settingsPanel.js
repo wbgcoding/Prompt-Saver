@@ -143,7 +143,6 @@ export async function runImport() {
     $("tile-font").value = settings.tile_font || "system";
     $("tile-size").value = String(normSize(Number(settings.tile_size ?? 0)));
     fillScaleSelect("ui-scale", "uiScale");
-    fillScaleSelect("icon-scale", "iconScale");
     $("opt-minimize").checked = settings.minimize_to_tray === true;
     $("opt-screenshot-folder").checked = optFlag("screenshotSave");
     $("opt-tooltips").checked = flag("tooltipsEnabled");
@@ -540,9 +539,8 @@ export function bindSettingsPanel() {
 
   attachSelectPicker($("export-format"));
 
-  // UI size + icon size: percentage-preset selects mirroring the expert scales.
+  // Interface size: a percentage-preset select mirroring the expert scale.
   fillScaleSelect("ui-scale", "uiScale");
-  fillScaleSelect("icon-scale", "iconScale");
   const scaleChanged = (key) => async (e) => {
     const v = Number(e.target.value);
     settings.ui_values = { ...(settings.ui_values || {}), [key]: v };
@@ -550,9 +548,7 @@ export function bindSettingsPanel() {
     applyValues();
   };
   $("ui-scale").addEventListener("change", scaleChanged("uiScale"));
-  $("icon-scale").addEventListener("change", scaleChanged("iconScale"));
   attachSelectPicker($("ui-scale"));
-  attachSelectPicker($("icon-scale"));
 }
 
 // Fill a UI/icon size select with percentage presets (plus the current value if it

@@ -1022,20 +1022,16 @@
             </select>
           </label>
           <label class="field">
-            <span data-i18n="tileFont">Tile font</span>
-            <!-- Options filled by JS from the shared font catalog -->
-            <select id="tile-font" class="modal-input"></select>
-          </label>
-          <label class="field">
             <span data-i18n="valUiScale">Interface size</span>
             <!-- Options filled by JS: scale presets -->
             <select id="ui-scale" class="modal-input"></select>
           </label>
+          <!-- Row 1: theme, language, interface size. Row 2: tile font and tile text size. -->
           <label class="field">
-            <span data-i18n="valIconScale">Icon size</span>
-            <select id="icon-scale" class="modal-input"></select>
+            <span data-i18n="tileFont">Tile font</span>
+            <!-- Options filled by JS from the shared font catalog -->
+            <select id="tile-font" class="modal-input"></select>
           </label>
-          <!-- Text size sits in the third column, directly under Font. -->
           <label class="field">
             <span data-i18n="tileSize">Tile text size</span>
             <!-- Options filled by JS: Automatic + 10..40 in steps of 2 -->

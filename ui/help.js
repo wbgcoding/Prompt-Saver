@@ -201,7 +201,7 @@ export const HELP_CONTENT = {
       whatItIs: "Independent size sliders adjust different parts of the window separately.",
       howTo: ["Open Settings and find the scaling sliders.", "Adjust overall UI, dialog, composer, or icon scale independently."],
       whatHappens: "Each slider only affects its own part of the window: raising icon scale, for example, does not resize dialogs.",
-      settings: ["Interface size and icon size: Settings", "Dialog, composer and main-button scale: Expert menu → Appearance → Sizes (%)"],
+      settings: ["Interface size: Settings", "Icon, composer and main-button scale: Expert menu → Appearance → Sizes (%)"],
     },
     {
       section: "look",
@@ -965,7 +965,7 @@ export const HELP_CONTENT = {
       whatItIs: "Unabhängige Größenregler passen verschiedene Teile des Fensters getrennt voneinander an.",
       howTo: ["Einstellungen öffnen und die Skalierungs-Regler finden.", "UI-, Dialog-, Editor- oder Icon-Skalierung unabhängig voneinander anpassen."],
       whatHappens: "Jeder Regler beeinflusst nur seinen eigenen Teil des Fensters: eine höhere Icon-Skalierung vergrößert zum Beispiel keine Dialoge.",
-      settings: ["Größe der Oberfläche und Icon-Größe: Einstellungen", "Dialog-, Editor- und Hauptknopf-Skalierung: Expertenmenü → Aussehen → Größen (%)"],
+      settings: ["Größe der Oberfläche: Einstellungen", "Symbol-, Editor- und Hauptknopf-Skalierung: Expertenmenü → Aussehen → Größen (%)"],
     },
     {
       section: "look",
