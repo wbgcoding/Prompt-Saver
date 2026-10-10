@@ -558,7 +558,6 @@ export default {
     veTabsLabel: "エディターのセクション",
     veTabEdit: "編集",
     veTabOverlays: "オーバーレイ",
-    veTabExport: "書き出し",
     veTrimGroup: "トリミングとカット",
     veCutCount: "カット {n} 件 · 完成後の長さ {d}",
     veCutNone: "完成後の長さ {d}",
@@ -2101,4 +2100,6 @@ export default {
     tipRemoteRateLimit: "リモートアクセスが1つのアドレスからの要求を減速させるまでに、1分間に受け付ける件数。一番右の位置で制限が解除されます。誤ったパスワードによるロックはそのまま有効です。",
     veSelGroup: "選択範囲",
     veZoomGroup: "タイムライン表示",
+    veExportOpen: "書き出し…",
+    veExportOpenTip: "形式、サイズ、保存先を選んでから書き出します",
 };

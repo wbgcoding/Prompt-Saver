@@ -18,6 +18,7 @@
   <div class="ve-titlebar" data-tauri-drag-region>
     <span class="ve-titlebar-label" data-i18n="veTitle">Video editor</span>
     <span id="ve-file" class="ve-file"></span>
+    <button id="ve-export-open" class="primary-btn ve-export-open" type="button" data-tauri-drag-region="false" data-i18n="veExportOpen" data-i18n-title="veExportOpenTip">Export…</button>
     <button id="ve-shortcuts" class="icon-btn" type="button" data-tauri-drag-region="false" data-i18n-title="shortcutsTitle" data-i18n-aria="shortcutsTitle">
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M9.2 9.5a2.8 2.8 0 1 1 3.9 2.6c-.9.4-1.4 1-1.4 2.1"/><circle cx="12" cy="16.6" r="1" fill="currentColor" stroke="none"/></svg>
     </button>
@@ -172,7 +173,6 @@
       <div class="ve-tabs" role="tablist" data-i18n-aria="veTabsLabel">
         <button id="ve-tab-edit" class="ve-tab active" type="button" role="tab" aria-selected="true" data-panel="ve-panel-edit" data-i18n="veTabEdit">Edit</button>
         <button id="ve-tab-overlays" class="ve-tab" type="button" role="tab" aria-selected="false" data-panel="ve-panel-overlays" data-i18n="veTabOverlays">Overlays</button>
-        <button id="ve-tab-export" class="ve-tab" type="button" role="tab" aria-selected="false" data-panel="ve-panel-export" data-i18n="veTabExport">Export</button>
       </div>
 
       <div class="ve-panels">

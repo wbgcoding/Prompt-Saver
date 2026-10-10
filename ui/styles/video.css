@@ -39,6 +39,7 @@ body.video-body {
   color: var(--muted);
 }
 .ve-close { flex: 0 0 auto; }
+.ve-export-open { padding: 4px 14px; font-size: 12.5px; flex: 0 0 auto; }
 
 /* ---- ffmpeg banner ---- */
 .ve-banner {

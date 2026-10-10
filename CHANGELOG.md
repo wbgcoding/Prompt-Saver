@@ -1950,6 +1950,7 @@ the video editor and the introduction tour ship on).
 - **Clearer recording hotkey rows.** The two switches now read "Stop recording with a hotkey" and "Pause recording with a hotkey", and the capture field under each is labelled "Key combination".
 - **The preview keeps its size in a narrow video editor window.** The preview takes at least 40 % of the height and stays on top while the controls scroll below it.
 - **Grouped buttons in the video editor tool row.** The cut buttons are grouped, Fit is an icon and Export frame sits next to the frame number.
+- **Export is a button at the top of the video editor.** It sits in the title bar instead of being a third tab and opens the export settings.
 
 ## 2.6.3 (2026-07-26)
 

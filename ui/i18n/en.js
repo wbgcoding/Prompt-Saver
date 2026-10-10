@@ -532,7 +532,6 @@ export default {
     veTabsLabel: "Editor sections",
     veTabEdit: "Edit",
     veTabOverlays: "Overlays",
-    veTabExport: "Export",
     veTrimGroup: "Trim and cut",
     veCutCount: "{n} cut(s) · finished length {d}",
     veCutNone: "Finished length {d}",
@@ -2101,4 +2100,6 @@ export default {
     tipRemoteRateLimit: "How many requests per minute remote access accepts from one address before it slows down. The rightmost position removes the limit; the lockout after wrong passwords stays active.",
     veSelGroup: "Selection",
     veZoomGroup: "Timeline view",
+    veExportOpen: "Export…",
+    veExportOpenTip: "Choose format, size and destination, then export",
 };

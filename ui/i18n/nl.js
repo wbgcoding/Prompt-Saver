@@ -558,7 +558,6 @@ export default {
     veTabsLabel: "Editorsecties",
     veTabEdit: "Bewerken",
     veTabOverlays: "Overlays",
-    veTabExport: "Exporteren",
     veTrimGroup: "Bijsnijden en knippen",
     veCutCount: "{n} knipbewerking(en) · uiteindelijke lengte {d}",
     veCutNone: "Uiteindelijke lengte {d}",
@@ -2101,4 +2100,6 @@ export default {
     tipRemoteRateLimit: "Hoeveel verzoeken per minuut de lokale externe toegang van één adres accepteert voordat deze wordt afgeremd. De stand helemaal rechts verwijdert de limiet; de vergrendeling na verkeerde wachtwoorden blijft actief.",
     veSelGroup: "Selectie",
     veZoomGroup: "Tijdlijnweergave",
+    veExportOpen: "Exporteren…",
+    veExportOpenTip: "Kies formaat, grootte en bestemming en exporteer dan",
 };

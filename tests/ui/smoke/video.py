@@ -1190,10 +1190,27 @@ VIDEO_PROBE = """
       }
     }
 
-    document.getElementById('ve-tab-export').click();
+    // 935: Export opens from the title bar button; no tab is selected then,
+    // the start button has the focus, and the Edit tab leads back.
+    document.getElementById('ve-export-open').click();
     await sleep(80);
     if (document.getElementById('ve-panel-export').classList.contains('hidden')) {
-      errs.push('the Export tab did not reveal its panel');
+      errs.push('the export button did not reveal the export panel');
+    }
+    if ([...document.querySelectorAll('.ve-tab')].some((t) => t.getAttribute('aria-selected') !== 'false')) {
+      errs.push('935: a tab stayed selected while the export panel is shown');
+    }
+    if (document.activeElement.id !== 've-export-start') {
+      errs.push('935: the export start button did not take the focus: ' + document.activeElement.id);
+    }
+    if (document.querySelector('.ve-tab[data-panel="ve-panel-export"]')) errs.push('935: the Export tab still exists');
+    {
+      const tabEdit = document.getElementById('ve-tab-edit');
+      tabEdit.click();
+      await sleep(60);
+      if (document.getElementById('ve-panel-edit').classList.contains('hidden')) errs.push('935: the Edit tab did not lead back from the export panel');
+      document.getElementById('ve-export-open').click();
+      await sleep(60);
     }
     rawKeyCheck('export tab');
     sideScan(errs, 'export tab');
@@ -1266,7 +1283,7 @@ VIDEO_PROBE = """
 
       // The Export tab mirrors the same target as a read-only summary, and
       // its "Change..." button jumps back to the Edit tab.
-      document.getElementById('ve-tab-export').click();
+      document.getElementById('ve-export-open').click();
       await sleep(80);
       const summary = document.getElementById('ve-export-scale-summary').textContent;
       if (!summary.includes('480') || !summary.includes('270')) {

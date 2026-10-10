@@ -558,7 +558,6 @@ export default {
     veTabsLabel: "Secțiunile editorului",
     veTabEdit: "Editare",
     veTabOverlays: "Suprapuneri",
-    veTabExport: "Export",
     veTrimGroup: "Decupare și tăiere",
     veCutCount: "{n} tăieri · durată finală {d}",
     veCutNone: "Durată finală {d}",
@@ -2101,4 +2100,6 @@ export default {
     tipRemoteRateLimit: "Câte cereri pe minut acceptă accesul la distanță de la o adresă înainte să o încetinească. Poziția cea mai din dreapta elimină limita; blocarea după parole greșite rămâne activă.",
     veSelGroup: "Selecție",
     veZoomGroup: "Vizualizare cronologie",
+    veExportOpen: "Exportă…",
+    veExportOpenTip: "Alege formatul, dimensiunea și destinația, apoi exportă",
 };

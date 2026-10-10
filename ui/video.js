@@ -3548,6 +3548,8 @@ for (const tab of document.querySelectorAll(".ve-tab")) {
   tab.addEventListener("click", () => showPanel(tab.dataset.panel));
 }
 
+$("ve-export-open").addEventListener("click", () => { showPanel("ve-panel-export"); $("ve-export-start").focus(); });
+
 $("ve-close").addEventListener("click", () => closeWindow());
 $("ve-shortcuts").addEventListener("click", () => openShortcutsModal("videoEditor"));
 $("shortcuts-modal-close").addEventListener("click", closeShortcutsModal);

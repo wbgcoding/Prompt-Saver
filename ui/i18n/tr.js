@@ -558,7 +558,6 @@ export default {
     veTabsLabel: "Düzenleyici bölümleri",
     veTabEdit: "Düzenle",
     veTabOverlays: "Katmanlar",
-    veTabExport: "Dışa aktar",
     veTrimGroup: "Kırp ve kes",
     veCutCount: "{n} kesim · son uzunluk {d}",
     veCutNone: "Son uzunluk {d}",
@@ -2101,4 +2100,6 @@ export default {
     tipRemoteRateLimit: "Yerel uzaktan erişimin bir adresi yavaşlatmadan önce dakikada kabul ettiği istek sayısı. En sağdaki konum sınırı kaldırır; yanlış parolalardan sonraki kilitlenme etkin kalır.",
     veSelGroup: "Seçim",
     veZoomGroup: "Zaman çizelgesi görünümü",
+    veExportOpen: "Dışa aktar…",
+    veExportOpenTip: "Biçimi, boyutu ve hedefi seçin, sonra dışa aktarın",
 };

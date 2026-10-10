@@ -558,7 +558,6 @@ export default {
     veTabsLabel: "Sekcje edytora",
     veTabEdit: "Edycja",
     veTabOverlays: "Nakładki",
-    veTabExport: "Eksport",
     veTrimGroup: "Przycinanie i wycinanie",
     veCutCount: "Liczba cięć: {n} · długość końcowa {d}",
     veCutNone: "Długość końcowa {d}",
@@ -2101,4 +2100,6 @@ export default {
     tipRemoteRateLimit: "Ile żądań na minutę z jednego adresu przyjmuje lokalny dostęp zdalny, zanim je spowolni. Skrajna prawa pozycja usuwa limit; blokada po błędnych hasłach nadal działa.",
     veSelGroup: "Zaznaczenie",
     veZoomGroup: "Widok osi czasu",
+    veExportOpen: "Eksportuj…",
+    veExportOpenTip: "Wybierz format, rozmiar i miejsce docelowe, a potem wyeksportuj",
 };

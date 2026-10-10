@@ -558,7 +558,6 @@ export default {
     veTabsLabel: "Seções do editor",
     veTabEdit: "Editar",
     veTabOverlays: "Sobreposições",
-    veTabExport: "Exportar",
     veTrimGroup: "Aparar e cortar",
     veCutCount: "{n} corte(s) · duração final {d}",
     veCutNone: "Duração final {d}",
@@ -2101,4 +2100,6 @@ export default {
     tipRemoteRateLimit: "Quantos pedidos por minuto o acesso remoto local aceita de um endereço antes de desacelerá-lo. A posição mais à direita remove o limite; o bloqueio após senhas erradas continua ativo.",
     veSelGroup: "Seleção",
     veZoomGroup: "Visualização da linha do tempo",
+    veExportOpen: "Exportar…",
+    veExportOpenTip: "Escolha formato, tamanho e destino e depois exporte",
 };

@@ -171,7 +171,7 @@ VIDEO_PROBE = """
       audit('overlay panel ' + id);
       if (!document.querySelector('#ve-ov-editor select')) errs.push('the overlay editor built no select for ' + id);
     }
-    document.getElementById('ve-tab-export').click();
+    document.getElementById('ve-export-open').click();
     await sleep(150);
     audit('export tab');
     await keyboardCheck(document.getElementById('ve-export-format'), 'video export format');

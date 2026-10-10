@@ -558,7 +558,6 @@ export default {
     veTabsLabel: "编辑器分区",
     veTabEdit: "编辑",
     veTabOverlays: "叠加层",
-    veTabExport: "导出",
     veTrimGroup: "修剪和剪切",
     veCutCount: "{n} 处剪切 · 最终时长 {d}",
     veCutNone: "最终时长 {d}",
@@ -2101,4 +2100,6 @@ export default {
     tipRemoteRateLimit: "本地远程访问接口在放慢某个地址之前，每分钟接受该地址的请求数量。最右侧的位置会取消限制；错误密码导致的锁定仍然有效。",
     veSelGroup: "选区",
     veZoomGroup: "时间线视图",
+    veExportOpen: "导出…",
+    veExportOpenTip: "选择格式、尺寸和保存位置，然后导出",
 };
