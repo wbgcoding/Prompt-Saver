@@ -52,6 +52,14 @@ VIDEO_DE_PROBE = """
         errs.push('934: Fit did not return the zoom to 100% (' + document.getElementById('ve-zoom-val').textContent + ')');
       }
     }
+    // 936: the clip start and end fields are compact and sit on one line.
+    {
+      const a = document.getElementById('ve-trim-start-val').getBoundingClientRect();
+      const b = document.getElementById('ve-trim-end-val').getBoundingClientRect();
+      if (a.width > 160) errs.push('936: the clip start field is ' + a.width.toFixed(0) + 'px wide');
+      if (Math.abs(a.top - b.top) > 2) errs.push('936: the clip start and end fields are not on one line');
+    }
+    if (window.innerWidth > 880) errs.push('the German boot did not get its exact window size: ' + window.innerWidth);
     // DE-PROBES
   } catch (e) { errs.push('probe: ' + e.message); }
   errs.push(...(window.__SMOKE_ERRORS__ || []));
@@ -1975,7 +1983,8 @@ def run(browser, tmp):
         .replace("</body>", VIDEO_DE_PROBE + "</body>"),
         encoding="utf-8")
     for w, h in ((880, 600), (760, 520)):
-        proc = run_chrome(browser, tmp / ('profile-video-de-%dx%d' % (w, h)), f"{w + 30},{h + 140}", 30000, video_de.as_uri(), 180)
+        # 16 and 95 px are what headless Chrome keeps for its own frame, so the page sees exactly w x h.
+        proc = run_chrome(browser, tmp / ('profile-video-de-%dx%d' % (w, h)), f"{w + 16},{h + 95}", 30000, video_de.as_uri(), 180)
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print(f"-- video.html German {w}x{h}")

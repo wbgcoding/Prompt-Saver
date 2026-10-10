@@ -295,7 +295,7 @@ body.video-body {
   flex: 0 0 auto;
 }
 .ve-tool-group { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; }
-.ve-tools .ghost-btn { padding: 4px 10px; font-size: 12px; }
+.ve-tools .ghost-btn { padding: 4px 6px; font-size: 12px; }
 .ve-tools .icon-btn.active { background: var(--accent); color: var(--accent-fg); }
 .ve-zoom-val { min-width: 46px; text-align: center; font-size: 12px; color: var(--muted); }
 .ve-original-badge {
@@ -337,7 +337,9 @@ body.video-body {
 .ve-wide { width: 100%; }
 .ve-switch-row { flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; }
 .ve-switch-row > span { color: var(--fg); font-size: 13px; }
-.ve-timefield { font-variant-numeric: tabular-nums; }
+.ve-trim-row { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.ve-trim-row .field { flex-direction: row; align-items: center; gap: 6px; }
+.ve-timefield { font-variant-numeric: tabular-nums; width: 9.5em; flex: 0 0 auto; }
 .ve-steps { display: flex; flex-wrap: wrap; gap: 4px; }
 .ve-step { padding: 4px 8px; font-size: 12px; }
 .ve-step.sel { background: var(--accent-strong); border-color: var(--accent-strong); color: var(--accent-fg); }
