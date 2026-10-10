@@ -3905,7 +3905,7 @@ input[type="password"]::-ms-clear { display: none; }
 }
 .lib-section:first-child { padding-top: 0; }
 
-/* Library color filter */
+/* Color dots of the batch color bars */
 .lib-colors { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .lib-color {
   width: 18px;
@@ -4067,7 +4067,6 @@ option:checked { background-color: var(--accent); color: var(--accent-fg); }
 
 /* Header icons hidden when their feature flag is off */
 /* Hidden when copy history is off, unless the user keeps paused buttons around. */
-.noflag-colorFilter #library-colors { display: none; }
 
 /* Drag & drop highlight while a file/text hovers the window */
 body.drag-over::after {

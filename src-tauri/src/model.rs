@@ -837,6 +837,7 @@ pub(crate) fn removed_ui_flag_keys() -> &'static [&'static str] {
     &[
         "tileFolders",
         "pillFolders",
+        "colorFilter",
         "pinButton",
         "favView",
         "libraryCloseToggle",

@@ -528,7 +528,7 @@ The copy history is one list; the sort field switches between Recently copied an
 ### Library & search
 
 The library lists every tile as a searchable, filterable list: fuzzy search,
-smart sort (most-used / most-recent), and type/color filters. Type -word to
+smart sort (most-used / most-recent), and the type filter. Type -word to
 exclude matches, or tag:word / var:word to search only tags or placeholder
 names. A bookmark button inside the search field saves the current query, tag filters
 and sort as a chip shown above the field; click it to bring the whole search
@@ -1407,7 +1407,7 @@ lässt sich der Schatten abschalten oder seine Stärke einstellen.
 
 **Aussehen & Themes**: sieben mitgelieferte Themes, optionaler Theme-Editor.
 
-**Bibliothek & Suche**: unscharfe Suche, intelligente Sortierung, Filter,
+**Bibliothek & Suche**: unscharfe Suche, intelligente Sortierung, Typfilter,
 `tag:`/`var:`-Suchpräfixe (mit `-` auch verneint). Ein Stern neben dem Suchfeld
 speichert Anfrage, Tag-Filter und Sortierung als Kachel darüber; Rechtsklick
 bietet Umbenennen und Löschen, Ziehen sortiert die Zeile um. Standardmäßig

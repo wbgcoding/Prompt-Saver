@@ -2026,6 +2026,7 @@ the video editor and the introduction tour ship on).
 - **Open and Quit are set apart in the tray menu.** They sit below the prompts with a small icon each, and Quit comes last behind its own line.
 - **Tile folders and button folders are now simply folders.** One name and one switch in the expert menu; a tile folder and a button folder still stay separate.
 - **The archive shows itself as the tag it is.** The library chip carries the tag's name, and its switch moved next to the tag settings in the expert menu.
+- **The library no longer filters by tile colour.** Colours are for looks only; the type, favorite and tag filters stay.
 
 ## 2.6.3 (2026-07-26)
 

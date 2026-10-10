@@ -218,7 +218,7 @@ export const HELP_CONTENT = {
       whatItIs: "The library lists every tile as a searchable, filterable list, unlike the grid, which shows only what fits.",
       howTo: [
         "Click the library button {icon:library} in the toolbar to open it.",
-        "Type to search, or use the type and color filters to narrow the list.",
+        "Type to search, or use the type filter to narrow the list.",
         "Click a row to copy.",
         "The Close after copy box at the bottom of the library decides whether copying closes the library; it remembers your choice.",
         "Use its menu to edit, drag onto the grid, tag, or delete.",
@@ -227,7 +227,7 @@ export const HELP_CONTENT = {
         "Pick two rows and click \"Compare\" in the selection bar to see both side by side with the differences marked.",
       ],
       whatHappens: "Search is typo-tolerant by default and, unless turned off, sorts by most-used or most-recently-used. In the comparison, either side's text can be taken over into the other. Tiles view behaves exactly like the list for clicks, menus and multi-select.",
-      settings: ["Fuzzy search, type and color filters, saved searches: Expert menu → Library & copy history → Search", "Focus the search field on opening: Expert menu → Library & copy history → Search", "Entries per search list (library, Search everything, quick launcher): Expert menu → Library & copy history → Search", "Smart sort, multi-select for batch actions, image and video previews in the rows, tiles view: Expert menu → Library & copy history → Display"],
+      settings: ["Fuzzy search, type filter, saved searches: Expert menu → Library & copy history → Search", "Focus the search field on opening: Expert menu → Library & copy history → Search", "Entries per search list (library, Search everything, quick launcher): Expert menu → Library & copy history → Search", "Smart sort, multi-select for batch actions, image and video previews in the rows, tiles view: Expert menu → Library & copy history → Display"],
     },
     {
       section: "organising",
@@ -956,7 +956,7 @@ export const HELP_CONTENT = {
       whatItIs: "Die Bibliothek listet jede Kachel als durchsuchbare, filterbare Liste, anders als das Raster, das nur zeigt, was passt.",
       howTo: [
         "Klick auf den Bibliothek-Button {icon:library} in der Werkzeugleiste öffnet sie.",
-        "Tippen zum Suchen, oder Typ- und Farb-Filter zum Eingrenzen der Liste nutzen.",
+        "Tippen zum Suchen, oder die Liste mit dem Typfilter eingrenzen.",
         "Klick auf eine Zeile zum Kopieren.",
         "Das Häkchen „Nach dem Kopieren schließen“ unten in der Bibliothek entscheidet, ob Kopieren die Bibliothek schließt, und merkt sich die Wahl.",
         "Das Menü zum Bearbeiten, auf das Raster Ziehen, Taggen oder Löschen nutzen.",
@@ -965,7 +965,7 @@ export const HELP_CONTENT = {
         "Zwei Zeilen auswählen und in der Auswahlleiste „Vergleichen“ klicken, um beide nebeneinander mit markierten Unterschieden zu sehen.",
       ],
       whatHappens: "Die Suche ist standardmäßig fehlertolerant und sortiert, falls nicht deaktiviert, nach am häufigsten oder zuletzt Verwendetem. Im Vergleich lässt sich der Text einer Seite in die andere übernehmen. Die Kachelansicht verhält sich bei Klicks, Menüs und Mehrfachauswahl genau wie die Liste.",
-      settings: ["Fuzzy-Suche, Typ- und Farb-Filter, gespeicherte Suchen: Expertenmenü → Bibliothek & Kopierverlauf → Suche", "Suchfeld beim Öffnen fokussieren: Expertenmenü → Bibliothek & Kopierverlauf → Suche", "Einträge je Suchliste (Bibliothek, Alles durchsuchen, Schnellstarter): Expertenmenü → Bibliothek & Kopierverlauf → Suche", "Clevere Sortierung, Mehrfachauswahl für Stapelaktionen, Bild- und Video-Vorschau in den Zeilen, Kachelansicht: Expertenmenü → Bibliothek & Kopierverlauf → Anzeige"],
+      settings: ["Unscharfe Suche, Typfilter, gespeicherte Suchen: Expertenmenü → Bibliothek & Kopierverlauf → Suche", "Suchfeld beim Öffnen fokussieren: Expertenmenü → Bibliothek & Kopierverlauf → Suche", "Einträge je Suchliste (Bibliothek, Alles durchsuchen, Schnellstarter): Expertenmenü → Bibliothek & Kopierverlauf → Suche", "Clevere Sortierung, Mehrfachauswahl für Stapelaktionen, Bild- und Video-Vorschau in den Zeilen, Kachelansicht: Expertenmenü → Bibliothek & Kopierverlauf → Anzeige"],
     },
     {
       section: "organising",

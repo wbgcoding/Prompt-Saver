@@ -93,7 +93,7 @@ export function buildSwatches(container, selected, onPick, onCustom, opts = {}) 
 let colorsExpanded = false;
 // Up to eight palette colours in use, most used first, ties in palette order; with
 // none in use the first eight of the palette.
-function usedColors() {
+function colorsInUse() {
   const hues = COLORS.slice(1);
   const count = new Map();
   for (const p of prompts) if (hues.includes(p.color)) count.set(p.color, (count.get(p.color) || 0) + 1);
@@ -113,7 +113,7 @@ export function renderSwatches(selected) {
     }),
     {
       compact: !colorsExpanded,
-      used: usedColors(),
+      used: colorsInUse(),
       onMore: () => { colorsExpanded = true; renderSwatches(selected); },
     }
   );

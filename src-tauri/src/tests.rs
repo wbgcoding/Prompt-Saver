@@ -13808,6 +13808,18 @@ fn fixed_size_and_timing_values_are_dropped_on_load() {
 }
 
 #[test]
+fn the_library_colour_filter_switch_is_dropped_on_load() {
+    let mut s = Settings::default();
+    s.ui_flags.insert("colorFilter".into(), false);
+    s.ui_flags.insert("libraryTypeFilter".into(), false);
+    assert!(s.has_removed_ui_values());
+    s.migrate();
+    assert!(!s.ui_flags.contains_key("colorFilter"), "colorFilter survived migrate");
+    assert_eq!(s.ui_flags.get("libraryTypeFilter"), Some(&false), "the neighbouring switch stays");
+    assert!(!s.has_removed_ui_values());
+}
+
+#[test]
 fn visual_effect_switches_and_their_blur_value_are_dropped_on_load() {
     // The five effects are gone, and tileBlur only ever belonged to the first one.
     let flags = ["blurTilesUntilHover", "grayscaleMedia", "hideTileNames", "accentScrollbar", "smoothScroll"];

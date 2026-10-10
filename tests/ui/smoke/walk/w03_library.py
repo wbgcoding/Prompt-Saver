@@ -150,7 +150,7 @@ SECTION = """\
       const coreL267 = await import('./core.js');
       const libMod267 = await import('./library.js');
       const flags267 = coreL267.settings.ui_flags;
-      coreL267.settings.ui_flags = { ...(flags267 || {}), libraryTypeFilter: false, colorFilter: false, favorites: false, tags: false };
+      coreL267.settings.ui_flags = { ...(flags267 || {}), libraryTypeFilter: false, favorites: false, tags: false };
       libMod267.renderLibrary();
       await sleep(40);
       const search267 = document.getElementById('library-search');
@@ -168,33 +168,8 @@ SECTION = """\
         out.errors.push('lay267: the filter rows did not come back with the flags');
       }
     }
-    // 711: the colour filter offers only the colours the prompts really use, and
-    // hides itself below two of them.
-    {
-      const invoke711 = window.__TAURI__.core.invoke;
-      const state711 = await invoke711('get_state');
-      const saved711 = state711.prompts.map((p) => [p.id, p.color]);
-      const paint711 = async (colors) => {
-        for (const [i, [id]] of saved711.entries()) await invoke711('update_prompt', { id, color: colors[i % colors.length] });
-        window.__FIRE__('store-synced', null);
-        await sleep(450);
-      };
-      const wrap711 = () => document.getElementById('library-colors');
-      await paint711(['#ef4444', '#3b82f6']);
-      const twoColours = wrap711().querySelectorAll('.lib-color').length;
-      if (twoColours !== 3 || wrap711().classList.contains('hidden')) {
-        out.errors.push('711: two used colours should give 3 filter chips (all + 2), got ' + twoColours);
-      }
-      await paint711(['#ef4444']);
-      if (!wrap711().classList.contains('hidden')) out.errors.push('711: the colour filter stays visible with a single used colour');
-      for (const [id, color] of saved711) await invoke711('update_prompt', { id, color });
-      window.__FIRE__('store-synced', null);
-      await sleep(450);
-      const allColours = wrap711().querySelectorAll('.lib-color').length;
-      if (allColours < 4 || wrap711().classList.contains('hidden')) {
-        out.errors.push('711: the colour filter did not come back after the colours were restored: ' + allColours);
-      }
-    }
+    // 920: the library has no colour filter any more; colours are for looks only.
+    if (document.getElementById('library-colors')) out.errors.push('920: the library still has a colour filter');
     // 712: the archive chip carries a word, not the file-cabinet emoji.
     {
       const archiveChip = document.getElementById('library-archive');

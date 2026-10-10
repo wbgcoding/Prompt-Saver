@@ -40,7 +40,6 @@ export const FLAG_LABELS = {
   searchSuggest: "flagSearchSuggest",
   savedSearches: "flagSavedSearches",
   libraryTiles: "flagLibraryTiles",
-  colorFilter: "flagColorFilter",
   closeAfterCopy: "flagCloseAfterCopy",
   imagePreview: "flagImagePreview",
   libraryVideoPreview: "flagLibraryVideoPreview",
@@ -615,7 +614,7 @@ export const EXPERT_TABS = [
     { title: "expGroupAppearanceDetails", flags: ["animations", "hideScrollbars", "frostedModals", "customThemes"], values: ["frostedBlur", "customThemeMax"], dropdowns: ["toastPos"], palette: true },
   ] },
   { title: "expTabLibrary", groups: [
-    { title: "expGroupLibSearch", flags: ["librarySearch", "globalSearch", "searchSuggest", "savedSearches", "fuzzySearch", "libraryTypeFilter", "colorFilter", "searchAutofocus", "ocrIndex"], values: ["searchListMax", "libraryCols"],
+    { title: "expGroupLibSearch", flags: ["librarySearch", "globalSearch", "searchSuggest", "savedSearches", "fuzzySearch", "libraryTypeFilter", "searchAutofocus", "ocrIndex"], values: ["searchListMax", "libraryCols"],
       actions: [{ id: "ocr-index-backfill", label: "ocrIndexBackfillAction", gate: "ocrIndex" }] },
     { title: "expGroupLibrary", flags: ["smartSort", "batchOps", "imagePreview", "libraryVideoPreview", "libraryTiles"], values: ["libraryWidth", "libPreviewLines", "libraryTileSize"] },
     { title: "expGroupTags", flags: ["tags", "archiveTag"], dropdowns: ["tagFilterMode", "tagSort"] },
