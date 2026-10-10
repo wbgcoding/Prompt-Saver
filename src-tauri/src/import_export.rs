@@ -1093,7 +1093,7 @@ pub(crate) fn scan_import_folder(base: &Path, max_depth: u32, max_files: usize) 
     let mut paths = Vec::new();
     // One extra slot so the scan can tell "exactly max_files" and "more than
     // max_files" apart; the extra entry is dropped again right below.
-    walk_import_folder(base, 0, max_depth, max_files + 1, &mut paths);
+    walk_import_folder(base, 0, max_depth, max_files.saturating_add(1), &mut paths);
     let truncated = paths.len() > max_files;
     paths.truncate(max_files);
     let items = paths

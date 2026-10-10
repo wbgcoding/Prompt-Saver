@@ -914,6 +914,11 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **Numeric settings are held to their slider range when they load.** A
+  hand-edited settings file or a settings import with an absurd number (a
+  folder import limit of a quintillion, a negative port) is now brought back
+  into the range the expert menu offers, and a value that is not a number is
+  dropped in favour of its default.
 - **Two computers starting on one shared data folder can no longer both take
   ownership.** The folder lock is now claimed in one step and rewritten
   atomically, so a refresh no longer leaves it briefly unreadable.

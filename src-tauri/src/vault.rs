@@ -817,6 +817,7 @@ pub(crate) fn merge_settings_only(
     for (k, v) in incoming.ui_texts {
         settings.ui_texts.insert(k, v);
     }
+    clamp_ui_values(&mut settings.ui_values);
     // The prompts stay, so their vault keys stay.
     carry_vault_keys(&original, settings);
     if !persist(settings) {

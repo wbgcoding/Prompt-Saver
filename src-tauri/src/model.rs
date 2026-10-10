@@ -826,6 +826,22 @@ pub(crate) fn removed_ui_flag_keys() -> &'static [&'static str] {
     ]
 }
 
+// Holds every numeric expert value to the range its slider enforces (the table
+// is generated from ui/expertConfig.js). A hand-edited settings file or an
+// import can carry any number; a value that is not finite is dropped so the
+// key falls back to its default, and a key whose top stop means "unlimited"
+// keeps its 0.
+pub(crate) fn clamp_ui_values(map: &mut HashMap<String, f64>) {
+    for &(key, min, max, top_unlimited) in crate::ui_ranges::UI_VALUE_RANGES {
+        let Some(&v) = map.get(key) else { continue };
+        if !v.is_finite() {
+            map.remove(key);
+        } else if !(top_unlimited && v == 0.0) {
+            map.insert(key.to_string(), v.clamp(min, max));
+        }
+    }
+}
+
 impl Settings {
     pub(crate) fn has_removed_ui_values(&self) -> bool {
         removed_ui_value_keys().iter().any(|k| self.ui_values.contains_key(*k))
@@ -1076,6 +1092,8 @@ impl Settings {
                 self.active_view = first.id.clone();
             }
         }
+        // Last, so values the steps above wrote are held to the same limits.
+        clamp_ui_values(&mut self.ui_values);
     }
 
     pub(crate) fn active_index(&self) -> usize {
