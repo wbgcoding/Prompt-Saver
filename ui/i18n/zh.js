@@ -1493,7 +1493,7 @@ export default {
     autoPasteSetting: "双击时自动粘贴",
     clearField: "清除",
     tipAutoPaste: "双击提示词复制并将其粘贴到您最后使用的应用程序中。专家菜单：粘贴延迟、双击速度以及“粘贴后按回车键”。",
-    tipTooltips: "悬停时显示工具提示。专家菜单：显示延迟和工具提示宽度。",
+    tipTooltips: "悬停时显示工具提示。专家菜单：显示延迟。",
     tipScreenshotFolder: "始终将屏幕截图作为文件保存在“屏幕截图”文件夹中。专家菜单：预览大小和自定义保存文件夹。",
     openRepo: "在 GitHub 上打开项目",
     tipClipWatcher: "将你在别处复制的文本收集到收件箱中，随时可变成提示词。",

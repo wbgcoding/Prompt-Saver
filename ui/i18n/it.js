@@ -1493,7 +1493,7 @@ export default {
     autoPasteSetting: "Incolla automatico con doppio clic",
     clearField: "Cancella",
     tipAutoPaste: "Fai doppio clic su un prompt per copiarlo E incollarlo nell'ultima applicazione. Menu esperto: ritardo di incollatura, velocità del doppio clic e 'premi Invio dopo aver incollato'.",
-    tipTooltips: "Mostra tooltip al passaggio del mouse. Menu esperto: ritardo di visualizzazione e larghezza del tooltip.",
+    tipTooltips: "Mostra tooltip al passaggio del mouse. Menu esperto: ritardo di visualizzazione.",
     tipScreenshotFolder: "Mantieni sempre gli screenshot come file nella cartella Screenshot. Menu esperto: dimensioni dell'anteprima e cartella di salvataggio personalizzata.",
     openRepo: "Apri il progetto su GitHub",
     tipClipWatcher: "Raccoglie il testo copiato altrove in una casella, pronto a diventare un prompt.",

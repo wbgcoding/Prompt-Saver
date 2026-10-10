@@ -1493,7 +1493,7 @@ export default {
     autoPasteSetting: "Lipire automată la dublu clic",
     clearField: "Golește",
     tipAutoPaste: "Faceți dublu clic pe un prompt pentru a-l copia ȘI lipi în ultima aplicație. Meniu expert: întârziere la lipire, viteza dublu clic și 'apăsați Enter după lipire'.",
-    tipTooltips: "Afișați sfaturile instrument la trecerea mouse-ului. Meniu expert: întârziere afișare și lățimea sfatului.",
+    tipTooltips: "Afișați sfaturile instrument la trecerea mouse-ului. Meniu expert: întârziere afișare.",
     tipScreenshotFolder: "Păstrați întotdeauna capturile de ecran ca fișiere în folderul Capturi de ecran. Meniu expert: dimensiune previzualizare și folder personalizat pentru salvare.",
     openRepo: "Deschide proiectul pe GitHub",
     tipClipWatcher: "Adună textul copiat în altă parte într-o cutie, gata să devină un prompt.",

@@ -1493,7 +1493,7 @@ export default {
     autoPasteSetting: "Colar automático com clique duplo",
     clearField: "Limpar",
     tipAutoPaste: "Clique duas vezes em um prompt para copiar E colar no seu último aplicativo. Menu de especialista: atraso ao colar, velocidade do clique duplo e 'pressionar Enter após colar'.",
-    tipTooltips: "Mostrar dicas ao passar o mouse. Menu de especialista: atraso de exibição e largura da dica.",
+    tipTooltips: "Mostrar dicas ao passar o mouse. Menu de especialista: atraso de exibição.",
     tipScreenshotFolder: "Sempre manter capturas de tela como arquivos na pasta Capturas de tela. Menu de especialista: tamanho da visualização e uma pasta de salvamento personalizada.",
     openRepo: "Abrir o projeto no GitHub",
     tipClipWatcher: "Recolhe o texto que você copia em outros lugares em uma caixa, pronto para virar um prompt.",

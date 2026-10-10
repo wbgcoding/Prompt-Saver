@@ -1500,7 +1500,7 @@ export default {
     autoPasteSetting: "Auto-paste on double-click",
     clearField: "Clear",
     tipAutoPaste: "Double-click a prompt to copy AND paste it into your last app. Expert menu: paste delay, double-click speed, and 'press Enter after paste'.",
-    tipTooltips: "Show hover tooltips. Expert menu: show delay and tooltip width.",
+    tipTooltips: "Show hover tooltips. Expert menu: show delay.",
     tipScreenshotFolder: "Always keep screenshots as files in the Screenshots folder. Expert menu: preview size and a custom save folder.",
     openRepo: "Open the project on GitHub",
     tipClipWatcher: "Collects text you copy elsewhere in an inbox, ready to become a prompt.",
