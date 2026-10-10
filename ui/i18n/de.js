@@ -9,7 +9,6 @@ export default {
     themeNeon: "Neon-Violett",
     themeOcean: "Ozean",
     themeCyberpunk: "Cyberpunk",
-    themeMono: "Schwarz-Weiß",
     language: "Sprache",
     langAuto: "Automatisch",
     tileFont: "Schriftart",

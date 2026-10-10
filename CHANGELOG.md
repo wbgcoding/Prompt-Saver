@@ -1952,6 +1952,7 @@ the video editor and the introduction tour ship on).
 - **Help names the right way to create a tile.** The first help article no longer points at the plus button, which creates a view; it says to double-click an empty cell or type into the box at the bottom and press Save.
 - **Light tile colours get dark text.** Orange, yellow, green, teal and light blue tiles (and the same colours on view tabs, folders and floating buttons) now show dark text by default, which reads better than white there; darker colours keep white text with its shadow. The same rule picks the glyph colour in the tray menu. A threshold you set yourself in the expert menu is kept.
 - **Sizes use your language's number format.** File sizes in the backup list, the storage figures, the video export estimate and the recording bar now write the decimal separator of the UI language, for example "572,2 MB" in German instead of "572.2 MB".
+- **The Black & White theme is gone.** If you used it, the app switches to Light, and a custom theme built on it keeps its colours on a Light base.
 
 ## 2.6.3 (2026-07-26)
 

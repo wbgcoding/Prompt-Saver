@@ -36,7 +36,6 @@ export default {
     themeNeon: "ネオンバイオレット",
     themeOcean: "海",
     themeCyberpunk: "サイバーパンク",
-    themeMono: "白黒",
     language: "言語",
     langAuto: "自動",
     tileFont: "フォント",

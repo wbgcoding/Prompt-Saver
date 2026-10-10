@@ -28,7 +28,7 @@ SECTION = """\
     // already-closed modal elsewhere in this probe.
     {
       const priorTheme2 = document.documentElement.getAttribute('data-theme');
-      const BUILTIN_THEMES2 = ['light', 'dark', 'programmer', 'neon', 'cyberpunk', 'mono', 'ocean'];
+      const BUILTIN_THEMES2 = ['light', 'dark', 'programmer', 'neon', 'cyberpunk', 'ocean'];
       const chevronByTheme = {};
       for (const theme of BUILTIN_THEMES2) {
         document.documentElement.setAttribute('data-theme', theme);
@@ -52,7 +52,7 @@ SECTION = """\
     // border and background unset.
     {
       const priorTheme3 = document.documentElement.getAttribute('data-theme');
-      const SELECT_THEMES = ['light', 'dark', 'programmer', 'neon', 'cyberpunk', 'mono', 'ocean'];
+      const SELECT_THEMES = ['light', 'dark', 'programmer', 'neon', 'cyberpunk', 'ocean'];
       const mainSelects = [...document.querySelectorAll('select')].filter((s) => s.options.length > 0);
       if (!mainSelects.length) out.errors.push('508: no populated select found in the main window to audit');
       const swatch = document.createElement('div');

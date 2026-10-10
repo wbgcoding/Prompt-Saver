@@ -1046,7 +1046,7 @@ SECTION = """\
     {
       const TINY_PNG2 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
       const priorTheme = document.documentElement.getAttribute('data-theme');
-      const BUILTIN_THEMES = ['light', 'dark', 'programmer', 'neon', 'cyberpunk', 'mono', 'ocean'];
+      const BUILTIN_THEMES = ['light', 'dark', 'programmer', 'neon', 'cyberpunk', 'ocean'];
       const swatch508 = document.createElement('div');
       swatch508.style.cssText = 'position:absolute;left:-9999px;top:-9999px;background-color:var(--surface)';
       document.body.appendChild(swatch508);

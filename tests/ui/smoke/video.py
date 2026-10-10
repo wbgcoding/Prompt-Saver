@@ -1349,7 +1349,7 @@ VIDEO_PROBE = """
     // theme -- a bare select used to fall back to the plain OS look.
     {
       const priorTheme = document.documentElement.getAttribute('data-theme');
-      const BUILTIN_THEMES508 = ['light', 'dark', 'programmer', 'neon', 'cyberpunk', 'mono', 'ocean'];
+      const BUILTIN_THEMES508 = ['light', 'dark', 'programmer', 'neon', 'cyberpunk', 'ocean'];
       const swatch = document.createElement('div');
       swatch.style.cssText = 'position:absolute;left:-9999px;top:-9999px;background-color:var(--surface)';
       document.body.appendChild(swatch);

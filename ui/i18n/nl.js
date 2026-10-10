@@ -36,7 +36,6 @@ export default {
     themeNeon: "Neonviolet",
     themeOcean: "Oceaan",
     themeCyberpunk: "Cyberpunk",
-    themeMono: "Zwart-wit",
     language: "Taal",
     langAuto: "Automatisch",
     tileFont: "Lettertype",

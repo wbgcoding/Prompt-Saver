@@ -644,8 +644,8 @@ default).
 
 ### Appearance & themes
 
-Seven built-in themes: system/light, dark, Programmer, Neon Violet, Ocean,
-Cyberpunk, and Black & White. The theme editor adjusts any theme's colors and
+Six built-in themes: system/light, dark, Programmer, Neon Violet, Ocean, and
+Cyberpunk. The theme editor adjusts any theme's colors and
 saves the result as a custom theme.
 
 ### Standalone: Theme editor

@@ -4,8 +4,8 @@ use super::*;
 
 // Every theme that has its own rules in main.css. "system" is not in here: it
 // resolves to light/dark at runtime, and it is not a valid custom-theme base.
-pub(crate) const BUILTIN_THEMES: [&str; 7] =
-    ["light", "dark", "programmer", "neon", "ocean", "cyberpunk", "mono"];
+pub(crate) const BUILTIN_THEMES: [&str; 6] =
+    ["light", "dark", "programmer", "neon", "ocean", "cyberpunk"];
 // The colour variables a custom theme may override: the `:root` colour tokens of
 // main.css. Everything else (shadow, radius, timings) stays with the base theme.
 pub(crate) const THEME_VAR_KEYS: [&str; 9] = [
@@ -161,7 +161,6 @@ pub(crate) fn apply_window_bg(app: &AppHandle, theme: &str, custom_bg: Option<&s
             "neon" => tauri::webview::Color(12, 8, 23, 255),
             "ocean" => tauri::webview::Color(238, 249, 254, 255),
             "cyberpunk" => tauri::webview::Color(10, 10, 18, 255),
-            "mono" => tauri::webview::Color(250, 250, 250, 255),
             _ => tauri::webview::Color(247, 247, 248, 255),
         };
         let _ = win.set_background_color(Some(color));

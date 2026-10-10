@@ -1070,6 +1070,17 @@ impl Settings {
                 c.base = "neon".to_string();
             }
         }
+        // The Black & White theme was removed: it was a light one, so whoever used it
+        // (as the theme itself or as the base of a custom theme) gets Light, with the
+        // custom theme's own colours kept.
+        if self.theme == "mono" {
+            self.theme = "light".to_string();
+        }
+        for c in self.custom_themes.iter_mut() {
+            if c.base == "mono" {
+                c.base = "light".to_string();
+            }
+        }
         if self.views.is_empty() {
             let mut layouts = HashMap::new();
             if !self.legacy_layout.is_empty() {

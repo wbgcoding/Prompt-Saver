@@ -36,7 +36,6 @@ export default {
     themeNeon: "霓虹紫",
     themeOcean: "海洋",
     themeCyberpunk: "赛博朋克",
-    themeMono: "黑白",
     language: "语言",
     langAuto: "自动",
     tileFont: "字体",

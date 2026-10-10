@@ -36,7 +36,6 @@ export default {
     themeNeon: "Neon Mor",
     themeOcean: "Okyanus",
     themeCyberpunk: "Siberpunk",
-    themeMono: "Siyah Beyaz",
     language: "Dil",
     langAuto: "Otomatik",
     tileFont: "Yazı tipi",

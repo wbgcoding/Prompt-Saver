@@ -43,7 +43,7 @@ CHROME_CANDIDATES = [
 # The seven shipped colour worlds (ui/main.js BUILTIN_THEMES) plus, on the
 # main window only, three generated palettes exercising the colour editor's
 # own inline-override path (applyThemeVars in ui/main.js).
-BUILTIN_THEMES = ["light", "dark", "programmer", "neon", "cyberpunk", "mono", "ocean"]
+BUILTIN_THEMES = ["light", "dark", "programmer", "neon", "cyberpunk", "ocean"]
 GENERATED_PALETTES = {
     "generated-very-light": {
         "bg": "#ffffff", "surface": "#f5f5f5", "surface-2": "#ececec",

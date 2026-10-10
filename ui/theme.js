@@ -21,7 +21,7 @@ export const THEME_VAR_GROUPS = [
 ];
 // The built-in themes a custom theme can inherit from ("system" is not one of
 // them: it has no rules of its own). Order matches the settings dropdown.
-export const BUILTIN_THEMES = ["light", "dark", "programmer", "neon", "cyberpunk", "mono", "ocean"];
+export const BUILTIN_THEMES = ["light", "dark", "programmer", "neon", "cyberpunk", "ocean"];
 
 export const customThemes = () => (flag("customThemes") ? settings.custom_themes || [] : []);
 export const customThemeId = (pref) => (String(pref || "").startsWith("custom:") ? String(pref).slice(7) : "");
@@ -68,13 +68,19 @@ export function applyThemeVars(vars) {
   }
 }
 
+// Built-in themes that no longer exist, and the one each renders as now (the removed
+// Black & White theme was a light one). The backend rewrites a stored value on load;
+// this keeps a not yet migrated copy from falling through to "system".
+const RETIRED_BASES = { mono: "light" };
+
 // Which built-in theme a preference renders as. A custom theme keeps its base even
 // while the feature is switched off, so the dropdown still shows something truthful.
 export function themeBase(pref) {
   const id = customThemeId(pref);
   if (!id) return pref;
   const raw = (settings.custom_themes || []).find((c) => c.id === id);
-  return raw && BUILTIN_THEMES.includes(raw.base) ? raw.base : "system";
+  const base = raw && (RETIRED_BASES[raw.base] || raw.base);
+  return BUILTIN_THEMES.includes(base) ? base : "system";
 }
 
 // Same data-URI SVG every built-in theme bakes its own copy of in main.css
@@ -122,7 +128,7 @@ export function applyTileStyle() {
 // ---- Custom theme editor ----
 export const THEME_LABELS = {
   light: "themeLight", dark: "themeDark", programmer: "themeProgrammer", neon: "themeNeon",
-  cyberpunk: "themeCyberpunk", mono: "themeMono", ocean: "themeOcean",
+  cyberpunk: "themeCyberpunk", ocean: "themeOcean",
 };
 export const THEME_VAR_LABELS = {
   bg: "themeVarBg", surface: "themeVarSurface", "surface-2": "themeVarSurface2",

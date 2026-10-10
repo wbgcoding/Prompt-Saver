@@ -4051,6 +4051,34 @@ fn stored_ai_theme_migrates_to_neon_not_system() {
     assert_eq!(theme_base_of(&s, &s.theme), "neon");
 }
 
+#[test]
+fn stored_black_and_white_theme_migrates_to_light() {
+    // The Black & White theme is gone: it was a light one, so a stored preference and a
+    // custom theme built on it land on Light, and the custom colours stay.
+    let mut s = Settings { theme: "mono".into(), ..Default::default() };
+    s.custom_themes.push(CustomTheme {
+        id: "t1".into(),
+        name: "Mine".into(),
+        base: "mono".into(),
+        vars: HashMap::from([("bg".to_string(), "#123456".to_string())]),
+    });
+    s.migrate();
+    assert_eq!(s.theme, "light");
+    assert_eq!(s.custom_themes[0].base, "light");
+    assert_eq!(s.custom_themes[0].vars.get("bg").map(String::as_str), Some("#123456"));
+    assert!(!BUILTIN_THEMES.contains(&"mono"));
+
+    let mut custom = Settings { theme: "custom:t1".into(), ..Default::default() };
+    custom.custom_themes.push(CustomTheme {
+        id: "t1".into(),
+        name: "Mine".into(),
+        base: "mono".into(),
+        vars: HashMap::new(),
+    });
+    custom.migrate();
+    assert_eq!(theme_base_of(&custom, &custom.theme), "light");
+}
+
 // An existing install (real prompts, or the example-seeding marker set --
 // even if those examples were later dismissed) must never see the first-run
 // tour; only a genuinely blank store should.
@@ -14742,7 +14770,7 @@ fn custom_theme_resolves_to_its_base() {
     assert_eq!(theme_base_of(&settings, &settings.theme), "system");
     assert!(theme_vars_of(&settings).is_empty());
     // Built-in preferences pass through untouched.
-    assert_eq!(theme_base_of(&settings, "mono"), "mono");
+    assert_eq!(theme_base_of(&settings, "cyberpunk"), "cyberpunk");
 }
 
 #[test]
