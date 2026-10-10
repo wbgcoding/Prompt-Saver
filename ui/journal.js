@@ -236,11 +236,16 @@ export function journalClipRow(it) {
     makeKeyboardActivatable(b);
     return b;
   };
+  const save = icon(ICON_ADD_SQUARE, t("clipSave"), () => {
+    hideLibrary();
+    openModal({ mode: "create", text: it.text, title: t("nameModalTitle") });
+  });
+  save.classList.add("clip-save");
+  const saveLabel = document.createElement("span");
+  saveLabel.textContent = t("clipSaveShort");
+  save.append(saveLabel);
   actions.append(
-    icon(ICON_ADD_SQUARE, t("clipSave"), () => {
-      hideLibrary();
-      openModal({ mode: "create", text: it.text, title: t("nameModalTitle") });
-    }),
+    save,
     icon(ICON_TRASH, t("clipDismiss"), async () => {
       await invoke("clip_inbox_dismiss", { id: it.id }).catch((e) => errToast(e));
       refreshClipInbox();

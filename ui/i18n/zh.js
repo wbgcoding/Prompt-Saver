@@ -2101,4 +2101,5 @@ export default {
     journalOldestFirst: "最早优先",
     journalMostFirst: "最多优先",
     journalLeastFirst: "最少优先",
+    clipSaveShort: "存为提示词",
 };

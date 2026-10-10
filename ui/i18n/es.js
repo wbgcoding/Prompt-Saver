@@ -2101,4 +2101,5 @@ export default {
     journalOldestFirst: "Más antiguos primero",
     journalMostFirst: "Más usados primero",
     journalLeastFirst: "Menos usados primero",
+    clipSaveShort: "Como prompt",
 };

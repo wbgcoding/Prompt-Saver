@@ -2101,4 +2101,5 @@ export default {
     journalOldestFirst: "En eski önce",
     journalMostFirst: "En çok önce",
     journalLeastFirst: "En az önce",
+    clipSaveShort: "İstem olarak",
 };

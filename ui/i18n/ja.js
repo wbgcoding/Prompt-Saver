@@ -2101,4 +2101,5 @@ export default {
     journalOldestFirst: "古い順",
     journalMostFirst: "多い順",
     journalLeastFirst: "少ない順",
+    clipSaveShort: "プロンプトにする",
 };

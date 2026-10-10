@@ -3831,6 +3831,7 @@ input[type="password"]::-ms-clear { display: none; }
 .clip-row.journal-clip .clip-actions { flex: 0 0 auto; align-items: center; }
 .clip-row.journal-clip .clip-actions .icon-btn { border: 1px solid var(--border); border-radius: 8px; }
 .clip-row.journal-clip .clip-actions .icon-btn:hover { color: var(--accent); border-color: var(--accent); }
+.clip-row.journal-clip .clip-actions .clip-save { display: inline-flex; align-items: center; gap: 6px; width: auto; padding: 0 10px; font-size: 12px; }
 
 /* OCR language pack management dialog (#ocr-langs-modal) -- rows reuse the
    .clip-row/.clip-list list chrome above, laid out as a horizontal strip: the

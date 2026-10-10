@@ -122,6 +122,18 @@ SECTION = """\
         await sleep(150);
         if (clipRows().length !== 2) out.errors.push('434: the Elsewhere filter lists ' + clipRows().length + ' rows instead of 2');
         if (document.querySelector('#journal-body .journal-item')) out.errors.push('434: the Elsewhere filter still lists copies made in the app');
+        // 280: the save control of an elsewhere entry says "As prompt"; the dismiss stays the last icon.
+        {
+          const core280 = await import('./core.js');
+          const first280 = document.querySelector('#journal-body .clip-row .clip-actions > :first-child');
+          if (!first280) out.errors.push('280: an elsewhere row has no save control');
+          else {
+            if (first280.textContent.trim() !== core280.t('clipSaveShort')) out.errors.push('280: the save control shows ' + JSON.stringify(first280.textContent.trim()) + ' instead of ' + JSON.stringify(core280.t('clipSaveShort')));
+            if (first280.title !== core280.t('clipSave') && first280.getAttribute('aria-label') !== core280.t('clipSave')) out.errors.push('280: the save control lost its full title');
+            const last280 = document.querySelector('#journal-body .clip-row .clip-actions .icon-btn:last-child');
+            if (!last280 || last280 === first280) out.errors.push('280: the dismiss is no longer the last icon');
+          }
+        }
         // 723: an entry copied elsewhere has two icons and no text buttons; the row copies.
         {
           const r0 = clipRows()[0];
