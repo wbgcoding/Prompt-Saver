@@ -1264,11 +1264,38 @@ export function initSnipEditor() {
     wrap.appendChild(range);
     return wrap;
   }
+  // The tool's controls live in a panel under its button. Only the tools with fields
+  // get one; the hand and crop tools have nothing to show.
+  const SNIP_CTX_INSIDE = "#snip-edit-context, .snip-color-pop, .color-pop, .select-pop, .numfield-pop";
+  const snipEditToolHasPanel = (tool) => tool !== "hand" && tool !== "crop";
+  function snipEditContextIsOpen() { return !snipEditContextEl.classList.contains("hidden"); }
+  function closeSnipEditContext() {
+    snipEditContextEl.classList.add("hidden");
+    closeSnipColorPop();
+  }
+  function snipEditPlaceContext() {
+    const btn = snipEditToolsEl.querySelector("button.active");
+    if (btn) placePopover(snipEditContextEl, btn.getBoundingClientRect(), 6);
+  }
+  function snipEditOpenContext() {
+    if (!snipEditToolHasPanel(SE.tool) || !snipEditContextEl.firstElementChild) { closeSnipEditContext(); return; }
+    snipEditPlaceContext();
+  }
+  // One listener for the whole editor's lifetime. Capture phase, so the check runs
+  // before a control inside the panel rebuilds the panel (a rebuilt control is no
+  // longer attached and would look like an outside press). A press on a tool
+  // button is handled by that button's own click.
+  document.addEventListener("pointerdown", (e) => {
+    if (!snipEditContextIsOpen()) return;
+    if (e.target.closest?.(SNIP_CTX_INSIDE) || e.target.closest?.("#snip-edit-tools button")) return;
+    closeSnipEditContext();
+  }, true);
+  window.addEventListener("resize", () => { if (SE.active && snipEditContextIsOpen()) snipEditPlaceContext(); });
   function snipEditRenderContext() {
     const box = snipEditContextEl;
     box.innerHTML = "";
     const tool = SE.tool;
-    if (tool === "crop") return; // nothing this tool understands -> nothing shown
+    if (!snipEditToolHasPanel(tool)) { closeSnipEditContext(); return; }
     const ts = snipEditToolState(tool);
     const hasWidth = ["pen", "marker", "line", "arrow", "rect", "ellipse", "step"].includes(tool);
     if (hasWidth) box.appendChild(snipEditBuildWidthField(tool, ts));
@@ -1289,6 +1316,7 @@ export function initSnipEditor() {
       box.appendChild(snipEditBuildNumField(t("snipEditBlockSize"), ts.blockPx, 4, 64, t("snipEditBlockSizeTip"), (v) => { ts.blockPx = v; snipRememberSize("pixelate", "blockPx", v); }, [8, 12, 16, 24, 32]));
     }
     if (tool === "spotlight") box.appendChild(snipEditBuildDimField(ts));
+    if (snipEditContextIsOpen()) snipEditPlaceContext();
   }
 
   // ---- toolbar (left): one tool active at a time ----
@@ -1312,7 +1340,14 @@ export function initSnipEditor() {
       b.setAttribute("aria-pressed", "false");
       b.innerHTML = SNIP_TOOL_SVG[tdef.id];
       withShortcut(b, `snipTool.${tdef.id}`);
-      b.addEventListener("click", () => snipEditSetTool(tdef.id));
+      b.addEventListener("click", () => {
+        // A second click on the active tool toggles its panel.
+        if (SE.tool === tdef.id && !SE.drag) {
+          if (snipEditContextIsOpen()) closeSnipEditContext(); else snipEditOpenContext();
+          return;
+        }
+        snipEditSetTool(tdef.id);
+      });
       snipEditToolsEl.appendChild(b);
     }
   }
@@ -1327,7 +1362,7 @@ export function initSnipEditor() {
     if (SE.drag) return;
     snipEditFinishTextIfOpen();
     SE.eyedropArm = null;
-    closeSnipColorPop();
+    closeSnipEditContext();
     SE.tool = tool;
     SE.lastNudged = null;
     snipEditUpdateNudgeHint();
@@ -1342,6 +1377,7 @@ export function initSnipEditor() {
     snipEditSyncCropFromOps();
     snipEditRenderToolButtons();
     snipEditRenderContext();
+    snipEditOpenContext();
     snipEditRedrawBase(); // toggles the crop-dim pass on/off for the new tool
   }
 
@@ -1681,6 +1717,7 @@ export function initSnipEditor() {
       e.preventDefault();
       if (!snipCtxPop.classList.contains("hidden")) { closeSnipCtxPop(); return; }
       if (snipColorPopIsOpen()) { closeSnipColorPop(); return; }
+      if (snipEditContextIsOpen()) { closeSnipEditContext(); return; }
       if (SE.eyedropArm) { SE.eyedropArm = null; snipEditRenderContext(); return; }
       if (SE.tool === "crop" && (SE.drag || SE.cropRect)) { snipEditCropDiscard(); return; }
       // A selected/just-drawn shape only gives up the arrow keys, never the
@@ -1750,7 +1787,7 @@ export function initSnipEditor() {
       SE.eyedropArm = null;
       snipOriginalToggle.reset();
       SE.drag = null;
-      closeSnipColorPop();
+      closeSnipEditContext();
       SE.onApply = onApply;
       SE.onCancel = onCancel;
       SE.active = true;
@@ -1789,6 +1826,7 @@ export function initSnipEditor() {
     snipEditWrap.style.cursor = "";
     snipEditCancelTextInput();
     closeSnipCtxPop();
+    closeSnipEditContext();
   }
   function snipEditCancel() {
     const cb = SE.onCancel;

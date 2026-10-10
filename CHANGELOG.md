@@ -606,6 +606,10 @@ the video editor and the introduction tour ship on).
 
 ### Improved
 
+- **Screenshot editor tool options open under the tool button.** Width, colour,
+  fill and the other fields of a tool no longer crowd the toolbar, which stays
+  a single row; picking a tool, or clicking the active one again, opens its
+  panel, and a press on the picture, an outside click or Escape closes it.
 - **The screenshot editor's help button sits beside the close button.** It
   used to float in the middle of the title bar.
 - **The expert menu groups are cards.** Each group sits on its own panel, two

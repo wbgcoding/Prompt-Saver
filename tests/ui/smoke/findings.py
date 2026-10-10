@@ -1323,5 +1323,115 @@ def run(browser, tmp):
     const gap = close.left - help.right;
     if (!(gap >= 0 && gap <= 8)) errs.push('828: the help button is ' + gap + ' px left of the close button, want 0 to 8');
 """)
+    # Tool options open in a panel under the tool button, not in the toolbar row.
+    snip_panel_common = snip_common + r"""
+    const panel = document.getElementById('snip-edit-context');
+    const toolBtn = (n) => document.querySelector('#snip-edit-tools button[data-tool="' + n + '"]');
+    const panelOpen = () => !panel.classList.contains('hidden');
+    const esc = async () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      await sleep(80);
+    };
+"""
+    for size_829 in ('880x600', '680x460'):
+        failed += ar_probe('bq829a-' + size_829, '829: the rect options open under the tool button and the toolbar stays one row at ' + size_829, 'index', size_829, '', snip_panel_common + r"""
+    await snipOpen(300, 200);
+    const bar = document.querySelector('.snip-edit-toolbar');
+    if (bar.getBoundingClientRect().height > 52) errs.push('829: the toolbar is ' + bar.getBoundingClientRect().height + ' px tall before a tool is picked');
+    toolBtn('rect').click(); await sleep(200);
+    if (!panelOpen()) errs.push('829: picking rect did not open the options panel');
+    else {
+      const pr = panel.getBoundingClientRect(), br = toolBtn('rect').getBoundingClientRect();
+      if (pr.top < br.bottom - 0.5) errs.push('829: the panel top ' + pr.top + ' sits above the tool button bottom ' + br.bottom);
+      if (Math.abs(pr.left - br.left) > 40) errs.push('829: the panel left ' + pr.left + ' is ' + Math.abs(pr.left - br.left) + ' px from the tool button left ' + br.left);
+      if (getComputedStyle(panel).position !== 'fixed') errs.push('829: the panel is ' + getComputedStyle(panel).position + ', not fixed');
+      if (!panel.querySelector('.snip-edit-width-row')) errs.push('829: the panel holds no width field');
+    }
+    const h = bar.getBoundingClientRect().height;
+    if (h > 52) errs.push('829: the toolbar is ' + h + ' px tall with the rect panel open, want at most 52');
+    if (bar.scrollWidth > bar.clientWidth + 1) errs.push('829: the toolbar overflows sideways (' + bar.scrollWidth + ' > ' + bar.clientWidth + ')');
+    for (const tool of ['hand', 'crop']) {
+      toolBtn(tool).click(); await sleep(120);
+      if (panelOpen()) errs.push('829: the ' + tool + ' tool opened the options panel');
+    }
+""")
+    failed += ar_probe('bq829b', '829: canvas press, outside click and Escape close the options panel', 'index', '880x600', '', snip_panel_common + r"""
+    await snipOpen(300, 200);
+    toolBtn('rect').click(); await sleep(150);
+    if (!panelOpen()) errs.push('829: the panel did not open');
+    const live = document.getElementById('snip-edit-live');
+    const lr = live.getBoundingClientRect();
+    live.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, pointerId: 1, clientX: lr.left + 20, clientY: lr.top + 20 }));
+    live.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 1, clientX: lr.left + 60, clientY: lr.top + 50 }));
+    window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1, clientX: lr.left + 60, clientY: lr.top + 50 }));
+    await sleep(120);
+    if (panelOpen()) errs.push('829: a press on the canvas left the panel open');
+    if (document.getElementById('snip-edit-undo').disabled) errs.push('829: the press on the canvas did not start the stroke');
+    // A click on the already-active tool opens it again; a press elsewhere closes it.
+    toolBtn('rect').click(); await sleep(120);
+    if (!panelOpen()) errs.push('829: a click on the active tool did not open the panel');
+    document.querySelector('.snip-edit-titlebar-label').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, pointerId: 2 }));
+    await sleep(80);
+    if (panelOpen()) errs.push('829: an outside press left the panel open');
+    // Picking another tool swaps the panel to that tool.
+    toolBtn('rect').click(); await sleep(120);
+    toolBtn('pixelate').click(); await sleep(150);
+    if (!panelOpen() || !panel.querySelector('input')) errs.push('829: pixelate did not show its own panel');
+    // Escape: first the panel, then the editor as before.
+    await esc();
+    if (panelOpen()) errs.push('829: the first Escape left the panel open');
+    if (document.getElementById('snip-edit').classList.contains('hidden')) errs.push('829: the first Escape closed the whole editor');
+    await esc();
+    if (!document.getElementById('snip-edit').classList.contains('hidden')) errs.push('829: the second Escape did not close the editor');
+""")
+    failed += ar_probe('bq829c', '829: popups that belong to the panel do not close it', 'index', '880x600', '', snip_panel_common + r"""
+    await snipOpen(300, 200);
+    toolBtn('text').click(); await sleep(200);
+    if (!panelOpen()) errs.push('829: the text tool did not open the panel');
+    const sel = panel.querySelector('select.snip-edit-select');
+    if (!sel) { errs.push('829: no background select in the text panel'); }
+    else {
+      const before = sel.value;
+      sel.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+      await sleep(120);
+      const rows = [...document.querySelectorAll('.select-pop:not(.hidden) button[role="option"]')];
+      if (rows.length < 2) errs.push('829: the select list did not open');
+      else {
+        const pick = rows.find((r) => r.getAttribute('aria-selected') !== 'true');
+        pick.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, pointerId: 3 }));
+        await sleep(150);
+        if (!panelOpen()) errs.push('829: choosing a background closed the panel');
+        const after = panel.querySelector('select.snip-edit-select');
+        if (!after || after.value === before) errs.push('829: the background choice did not stick');
+      }
+    }
+    // The colour popover is part of the panel too.
+    const trig = panel.querySelector('.snip-edit-color-trigger');
+    if (!trig) { errs.push('829: no colour trigger in the text panel'); }
+    else {
+      trig.click(); await sleep(150);
+      const cp = document.querySelector('.snip-color-pop:not(.hidden)');
+      if (!cp) errs.push('829: the colour popover did not open');
+      else {
+        const sw = cp.querySelector('.swatch');
+        sw.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, pointerId: 4 }));
+        sw.click(); await sleep(150);
+        if (!panelOpen()) errs.push('829: picking a colour closed the panel');
+      }
+    }
+    // The number field preset list is part of the panel too.
+    const lst = panel.querySelector('.numfield-list');
+    if (!lst) { errs.push('829: no preset list button in the text panel'); }
+    else {
+      lst.click(); await sleep(120);
+      const pb = document.querySelector('.numfield-pop button');
+      if (!pb) errs.push('829: the preset list did not open');
+      else {
+        pb.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, pointerId: 5 }));
+        await sleep(150);
+        if (!panelOpen()) errs.push('829: choosing a preset closed the panel');
+      }
+    }
+""")
     # ---- main window findings: generated block end ----
     return failed

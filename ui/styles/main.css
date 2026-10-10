@@ -1986,39 +1986,44 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
   padding: 8px 12px;
   border-bottom: 1px solid var(--border);
   background: var(--surface-2);
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  /* Safety net for a large icon scale: the row scrolls sideways, without a bar,
+     instead of pushing the window wider. */
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.snip-edit-toolbar::-webkit-scrollbar { display: none; }
+/* Narrow window: tighter buttons and gaps so tools and view controls still share
+   one row down to the minimum window width. */
+@media (max-width: 820px) {
+  .snip-edit-toolbar { gap: 6px; padding-inline: 8px; }
+  .snip-edit-toolbar .icon-btn { padding: 4px 3px; }
+  .snip-edit-tools { gap: 2px; }
+  .snip-edit-view { gap: 0; }
+  .snip-edit-toolbar .snip-edit-sep { margin: 0 2px; }
+  .snip-edit-toolbar .snip-edit-zoom-val { min-width: 36px; }
+  .snip-edit-view .ghost-btn { padding: 4px 8px; }
 }
 .snip-edit-tools { display: flex; gap: 4px; flex: 0 0 auto; }
 .snip-edit-tools .icon-btn.active { background: var(--accent); color: var(--accent-fg); }
+/* A tool's controls open in a panel under its button (placed by placePopover), so the
+   toolbar stays one row: the tools on the left, the view controls on the right. */
 .snip-edit-context {
+  position: fixed;
+  z-index: 40;
   display: flex;
   align-items: center;
-  gap: 12px;
-  /* flex-basis 0, not auto: with several field groups (e.g. rect: width +
-     color + filled) this row's own natural content width is wide enough
-     that a plain "auto" basis made the OUTER .snip-edit-toolbar think it
-     had to wrap the undo/redo/zoom group onto a second toolbar line, even
-     though this row can shrink to fit just fine. A 0 basis tells the wrap
-     algorithm to size this item from the remaining space, not its content. */
-  flex: 1 1 0;
-  /* min-content, not a fixed guess: a tool with no fields (hand, crop) still
-     reads as near-zero wide, so it never forces the outer toolbar to push the
-     undo/zoom group onto its own line, while a tool whose widest single field
-     (e.g. pixelate's block-size number field) needs more room than the row
-     was about to get is never squeezed narrower than that field itself. */
-  min-width: min-content;
-  /* Wrap onto a second line instead of scrolling sideways -- a field such as
-     pixelate's block size used to slide out of view with no visible scrollbar
-     hint. Wrapping keeps every field reachable without hidden overflow. */
   flex-wrap: wrap;
-  row-gap: 6px;
-  overflow: visible;
-  padding-inline: 12px;
-  margin-inline: 4px;
-  border-inline: 1px solid var(--border);
-  min-height: 30px;
+  gap: 10px 14px;
+  width: max-content;
+  max-width: calc(100vw - 12px);
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
 }
-.snip-edit-view { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
+.snip-edit-view { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; margin-left: auto; }
 .snip-edit-sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
 .snip-edit-zoom-val { min-width: 42px; text-align: center; font-size: 12px; color: var(--muted); }
 .snip-edit-view .ghost-btn { padding: 4px 10px; font-size: 12px; }
