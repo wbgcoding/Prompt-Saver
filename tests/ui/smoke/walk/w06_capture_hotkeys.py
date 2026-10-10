@@ -138,6 +138,26 @@ SECTION = """\
         out.errors.push('506: clicking the record button during an active recording also called open_recorder');
       }
     }
+    // 835: the bar failing to open after a good start must not reset a live
+    // recording to idle. The countdown runs first, so wait for the bar call.
+    window.__FIRE__('recording-cancelled');
+    await sleep(50);
+    window.__SHOW_REC_BAR_FAIL__ = true;
+    window.__SMOKE_CALLS__ = [];
+    window.__FIRE__('recorder-target-picked', { kind: 'monitor', monitor: 1 });
+    for (let i = 0; i < 160 && !(window.__SMOKE_CALLS__ || []).includes('show_rec_bar'); i++) await sleep(50);
+    await sleep(60);
+    window.__SHOW_REC_BAR_FAIL__ = false;
+    if (!(window.__SMOKE_CALLS__ || []).includes('show_rec_bar')) {
+      out.errors.push('835: the recording start never reached the bar call');
+    } else {
+      if (!recordBtnEl.classList.contains('is-recording')) {
+        out.errors.push('835: the record button went idle although the recording runs and only the bar failed');
+      }
+      if ((window.__SMOKE_CALLS__ || []).includes('hide_rec_bar')) {
+        out.errors.push('835: a failed bar open hid the bar of a running recording');
+      }
+    }
     // P60: an automatic backup toasts the same way a manual one already did -
     // the backend has no other call site to toast from, so it fires this itself.
     window.__FIRE__('backup-done');

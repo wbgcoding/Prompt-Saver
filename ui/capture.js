@@ -191,12 +191,19 @@ export function bindCapture() {
         await invoke("start_recording", { targetKind: kind, targetId, regionX, regionY, regionW, regionH });
         recordToolUsage("recording_start");
         setRecordBtnState("recording");
-        await invoke("show_rec_bar", { targetKind: kind, id: targetId });
       } catch (err) {
         // A refused start leaves no recording: close any bar and put the
         // record button back before the single error toast.
         invoke("hide_rec_bar").catch(() => {});
         setRecordBtnState("idle");
+        errToast(err);
+        return;
+      }
+      // The recording runs from here on. A bar that fails to open only costs the
+      // controls, so the state stays and the person is told.
+      try {
+        await invoke("show_rec_bar", { targetKind: kind, id: targetId });
+      } catch (err) {
         errToast(err);
       }
     };

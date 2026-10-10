@@ -414,6 +414,7 @@ const RESULTS = {
   stop_recording: () => { window.__REC_STOPPED__ = true; return null; },
   cancel_recording: () => { window.__REC_CANCELLED__ = true; return null; },
   hide_rec_bar: () => { window.__REC_BAR_HIDDEN__ = true; return null; },
+  show_rec_bar: () => { if (window.__SHOW_REC_BAR_FAIL__) throw "rec bar failed 835"; return null; },
   open_recorder_switch: () => null,
   switch_recording_target: () => null,
   finish_and_continue_recording: () => {
