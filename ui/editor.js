@@ -539,6 +539,7 @@ export function renderMdPreview(force) {
   // The only innerHTML in this feature, and it is fed a string assembled purely from
   // escaped slices plus literal tags: see renderMarkdown.
   box.innerHTML = renderMarkdown(s);
+  scheduleFitText();
 }
 export function scheduleMdPreview() {
   // Nothing to draw into while the pane is hidden: but mark it stale, so the next
@@ -591,6 +592,33 @@ export function syncMdUi(textVisible, rotating = false) {
     const cfShow = textVisible && !rotating && flag("copyFormatted") && hasMarkdownSyntax(modal.text.value);
     modal.copyFormattedBtn.classList.toggle("hidden", !cfShow);
   }
+}
+
+// The prompt field grows with its content up to the visible dialog height; past
+// that it scrolls. The history panel keeps its own cap (history-open).
+export function fitEditorTextHeight() {
+  const box = modal.root.querySelector(".modal");
+  if (!modal.root.classList.contains("tall") || modal.root.classList.contains("history-open")) {
+    box.style.removeProperty("--ta-fit");
+    return;
+  }
+  const field = modal.text.classList.contains("hidden") || (flag("mdPreview") && !mdEditing && !modal.mdWrap.classList.contains("hidden"))
+    ? modal.mdPreview : modal.text;
+  const keep = box.scrollTop;
+  box.style.setProperty("--ta-fit", "120px"); // measure the content, not the old height
+  const content = field.scrollHeight + 2;
+  const fixed = modal.root.querySelector(".modal-name-row").offsetHeight + modal.root.querySelector(".modal-actions").offsetHeight;
+  const cap = box.clientHeight - fixed - 48;
+  box.style.setProperty("--ta-fit", Math.max(120, Math.min(content, cap)) + "px");
+  box.scrollTop = keep;
+}
+// A plain timer, not requestAnimationFrame: a window that paints no frames (occluded,
+// minimised to the tray) never runs a frame callback, and a pending one would block
+// every later request (see scheduleMdPreview).
+let fitTimer = 0;
+export function scheduleFitText() {
+  if (fitTimer) return;
+  fitTimer = setTimeout(() => { fitTimer = 0; fitEditorTextHeight(); }, 16);
 }
 
 // Focus the prompt text field. With the Markdown preview standing in for it, the
@@ -955,6 +983,7 @@ export function syncModalImageUi(mode) {
     modal.pdfPage.classList.add("hidden");
   }
   renderAttachTextPreview(filePath);
+  scheduleFitText();
 }
 
 // ---- Rotating prompts (editor) ----
@@ -1543,6 +1572,7 @@ export function bindEditor() {
     modal.varsHint.classList.toggle("hidden", !varsUi);
     if (varsUi) renderVarHelper();
     syncMdUi(true, rotating);
+    scheduleFitText();
     if (!modal.rotateSwitch.checked) modal.text.focus();
     // This must hide/show the readout on the SAME tick as the toggle: the
     // rAF-deferred scheduleLenCounter() left it visible for one frame, long enough
@@ -1591,6 +1621,8 @@ export function bindEditor() {
   modal.notesText.addEventListener("input", () => autoGrow(modal.notesText));
   modal.text.addEventListener("input", scheduleLenCounter); // live length readout
   modal.text.addEventListener("input", scheduleMdPreview);  // live preview (rAF-throttled)
+  modal.text.addEventListener("input", scheduleFitText);    // the field follows its content
+  window.addEventListener("resize", scheduleFitText);
   // Replace layout: the rendered pane IS the resting state, so it has to hand the
   // textarea over on a click and take back over once the user is done typing.
   const mdSwap = (editing) => {
@@ -1599,10 +1631,12 @@ export function bindEditor() {
     const ratio = span > 0 ? from.scrollTop / span : 0;
     mdEditing = editing;
     syncMdUi(true);
+    scheduleFitText();
     const to = editing ? modal.text : modal.mdPreview;
     if (editing) to.focus(); // never behind a frame callback: see scheduleMdPreview
     // Only the scroll position waits for layout; losing it costs nothing.
     requestAnimationFrame(() => {
+      fitEditorTextHeight();
       const s = to.scrollHeight - to.clientHeight;
       to.scrollTop = s > 0 ? Math.round(ratio * s) : 0;
     });
@@ -1666,6 +1700,7 @@ export function bindEditor() {
     // Only relevant when history itself applies to this prompt (mode/type/flag).
     const histApplies = !$("modal-history").classList.contains("hidden");
     modal.root.classList.toggle("history-open", open && histApplies);
+    scheduleFitText();
     if (open) {
       if (histApplies) loadHistory(modalState?.id);
       // Scroll the modal's own scroll container to the bottom so the freshly opened

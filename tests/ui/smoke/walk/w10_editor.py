@@ -706,6 +706,51 @@ SECTION = """\
         await closeEd261();
       } else out.errors.push('ico261: the editor did not open for the image prompt');
     }
+    // fit262: the prompt field grows with its content up to the dialog height, then
+    // scrolls inside itself; the name row stays reachable; the history cap still wins.
+    {
+      const closeEd262 = async () => {
+        await click('modal-close-x');
+        await sleep(250);
+        if (!document.getElementById('confirm-modal').classList.contains('hidden')) { await click('confirm-ok'); await sleep(250); }
+      };
+      if (await openEditor('p1')) {
+        const ta262 = document.getElementById('modal-text');
+        const box262 = document.querySelector('#modal .modal');
+        const flag262 = () => document.getElementById('modal-md-wrap').classList.contains('hidden') ? 'wrap-hidden' : 'wrap-shown';
+        const setText262 = async (n) => {
+          ta262.value = Array.from({ length: n }, (_, i) => 'line ' + (i + 1)).join('\\n');
+          ta262.dispatchEvent(new Event('input', { bubbles: true }));
+          await sleep(200);
+          return ta262.getBoundingClientRect().height;
+        };
+        if (document.activeElement !== ta262) { document.getElementById('modal-md-preview').click(); await sleep(150); }
+        const h3 = await setText262(3);
+        // A tall window leaves free height the field takes anyway (flex), so the upper
+        // bounds only mean something where the dialog has no room to spare.
+        const snug262 = innerHeight < 700;
+        if (h3 < 110 || (snug262 && h3 > 140)) out.errors.push('fit262: a 3 line prompt field is ' + Math.round(h3) + 'px tall');
+        const h60 = await setText262(60);
+        if (h60 < 200) out.errors.push('fit262: a 60 line prompt field stays ' + Math.round(h60) + 'px tall (fit ' + box262.style.getPropertyValue('--ta-fit') + ', box ' + box262.clientHeight + ', active ' + (document.activeElement && document.activeElement.id) + ', hidden ' + ta262.classList.contains('hidden') + ', md ' + flag262() + ')');
+        if (!(ta262.scrollHeight > ta262.clientHeight)) out.errors.push('fit262: a 60 line prompt field does not scroll inside itself');
+        box262.scrollTop = 0;
+        await sleep(50);
+        if (document.querySelector('#modal .modal-name-row').getBoundingClientRect().top < box262.getBoundingClientRect().top - 1) out.errors.push('fit262: the name row is scrolled out of the dialog');
+        const h1 = await setText262(1);
+        if (snug262 && h1 > 140) out.errors.push('fit262: the field stays ' + Math.round(h1) + 'px tall after deleting back to 1 line');
+        ta262.value = '';
+        await closeEd262();
+      } else out.errors.push('fit262: the editor did not open');
+      if (await openEditor('p6')) {
+        document.getElementById('modal-advanced-head').click();
+        await sleep(300);
+        const box262 = document.querySelector('#modal .modal');
+        const field262 = document.getElementById('modal-md-wrap').classList.contains('hidden') ? document.getElementById('modal-text') : document.getElementById('modal-md-wrap');
+        if (box262.style.getPropertyValue('--ta-fit')) out.errors.push('fit262: the fit stays set while the history is open');
+        if (field262.getBoundingClientRect().height > innerHeight * 0.26 + 2) out.errors.push('fit262: the field is ' + Math.round(field262.getBoundingClientRect().height) + 'px tall with the history open');
+        await closeEd262();
+      } else out.errors.push('fit262: the history prompt did not open');
+    }
     // Gating: a row whose feature is off must disappear the moment that toggle is
     // flipped - no reopening the menu - and a whole branch goes with its parent.
     const rowFor = (label) => [...document.querySelectorAll('#expert-flags .field')]

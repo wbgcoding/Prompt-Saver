@@ -1394,7 +1394,7 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
 /* Editing a text prompt fills the window height so the textarea shows as much as
    possible; the textarea grows to take all the free space. */
 #modal.tall .modal { height: var(--full-modal-h); max-height: var(--full-modal-h); }
-#modal.tall .modal-text { flex: 1 1 auto; min-height: 120px; max-height: none; resize: none; }
+#modal.tall .modal-text { flex: 1 1 auto; min-height: var(--ta-fit, 120px); max-height: none; resize: none; }
 /* With the version history open the textarea must stop hogging the height, or the
    expanded list + Save row get pushed out of reach on short windows. Cap it and let
    the modal scroll to the history instead.
@@ -1494,7 +1494,7 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
    with it; the pane itself just fills it. */
 .md-wrap { position: relative; display: flex; min-height: 0; }
 .md-wrap > .md-preview { flex: 1 1 auto; min-width: 0; }
-#modal.tall .md-wrap { flex: 1 1 auto; min-height: 120px; }
+#modal.tall .md-wrap { flex: 1 1 auto; min-height: var(--ta-fit, 120px); }
 #modal.tall .md-wrap > .md-preview { max-height: none; }
 #modal.tall.history-open .md-wrap { flex: 0 1 auto; min-height: 96px; max-height: 26vh; }
 /* "Copy formatted" button under the rendered Markdown pane. */
@@ -3291,8 +3291,8 @@ select.modal-input { padding-right: 30px; }
    while the field inside kept its 120px; the textarea then spilled out of its own
    box and was drawn over the colour row, which is what expanding the variable helper
    made obvious. */
-#modal.tall #modal-text-wrap .clear-wrap-ta { flex: 1 1 auto; min-height: 120px; }
-#modal.tall #modal-text-wrap .clear-wrap-ta > .modal-text { flex: 1 1 auto; min-height: 120px; max-height: none; }
+#modal.tall #modal-text-wrap .clear-wrap-ta { flex: 1 1 auto; min-height: var(--ta-fit, 120px); }
+#modal.tall #modal-text-wrap .clear-wrap-ta > .modal-text { flex: 1 1 auto; min-height: var(--ta-fit, 120px); max-height: none; }
 .clear-btn {
   position: absolute; right: 7px; top: 50%; transform: translateY(-50%);
   width: 24px; height: 24px; display: grid; place-items: center;

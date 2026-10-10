@@ -935,6 +935,9 @@ the video editor and the introduction tour ship on).
 - **The tile picture is chosen from a well before the name.** The editor's
   media button is now a dashed slot to the left of the name field, named
   "Choose a tile picture".
+- **The prompt field in the editor grows with its text.** It starts at its usual
+  size, grows as you type up to the height of the dialog, and scrolls inside
+  itself beyond that; with the history open it keeps its smaller cap.
 
 ### Fixed
 
