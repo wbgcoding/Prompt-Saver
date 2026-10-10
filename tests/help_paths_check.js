@@ -130,6 +130,67 @@ const NOT_LABELS = {
       }
     });
   }
+  // Help areas: the tab list and its labels come from ui/helpView.js; labels reuse the
+  // expert-menu tab names (basics has its own string).
+  const viewSrc = read("ui/helpView.js");
+  const sectionsM = viewSrc.match(/HELP_SECTIONS = \[([^\]]*)\]/);
+  const labelsM = viewSrc.match(/HELP_SECTION_LABELS = \{([^}]*)\}/);
+  if (!sectionsM || !labelsM) {
+    problems.push("HELP_SECTIONS / HELP_SECTION_LABELS not found in ui/helpView.js");
+  } else {
+    const SECTIONS = [...sectionsM[1].matchAll(/"(\w+)"/g)].map((m) => m[1]);
+    const SEC_KEY = Object.fromEntries([...labelsM[1].matchAll(/(\w+): "(\w+)"/g)].map((m) => [m[1], m[2]]));
+    const secLabel = (lang, id) => (SEC_KEY[id] && SEC_KEY[id].startsWith("helpSec") ? I18N[lang][SEC_KEY[id]] : label(lang, SEC_KEY[id]));
+    for (const id of SECTIONS) {
+      if (!SEC_KEY[id]) problems.push(`area "${id}" has no label key in HELP_SECTION_LABELS`);
+    }
+    // Every article sits in a known area; EN and DE agree at every index.
+    if (HELP.en.length !== HELP.de.length) problems.push(`EN has ${HELP.en.length} articles, DE has ${HELP.de.length}`);
+    HELP.en.forEach((art, i) => {
+      const de = HELP.de[i];
+      if (!SECTIONS.includes(art.section)) problems.push(`en[${i}] "${art.title}": area "${art.section}" is not in HELP_SECTIONS`);
+      if (de && !SECTIONS.includes(de.section)) problems.push(`de[${i}] "${de.title}": area "${de.section}" is not in HELP_SECTIONS`);
+      if (de && de.section !== art.section) problems.push(`index ${i}: EN "${art.title}" is in "${art.section}" but DE "${de.title}" is in "${de.section}"`);
+    });
+    // Areas come in HELP_SECTIONS order, each as one run.
+    for (const lang of ["en", "de"]) {
+      let last = -1;
+      const seen = new Set();
+      HELP[lang].forEach((art, i) => {
+        const k = SECTIONS.indexOf(art.section);
+        if (k < 0) return;
+        if (k < last) problems.push(`${lang}[${i}] "${art.title}": area "${art.section}" comes after a later area`);
+        else if (k > last) {
+          if (seen.has(k)) problems.push(`${lang}[${i}] "${art.title}": area "${art.section}" is not one contiguous run`);
+          seen.add(k);
+        }
+        last = Math.max(last, k);
+      });
+    }
+    // An article that quotes expert-menu paths names its own tab in at least one of them.
+    for (const lang of ["en", "de"]) {
+      const re = new RegExp(`${PREFIX[lang]} → ([^→.,;"]+?)(?: → ([^.,;"→]+?))?(?=[.,;"]|$)`, "g");
+      HELP[lang].forEach((art, i) => {
+        if (art.section === "basics" || !SECTIONS.includes(art.section)) return;
+        const strings = [art.whatItIs, art.whatHappens, art.tip, ...(art.howTo || []), ...(art.settings || [])].filter(Boolean);
+        const named = strings.flatMap((x) => [...x.matchAll(re)].map((m) => m[1].trim()));
+        if (named.length && !named.includes(secLabel(lang, art.section)))
+          problems.push(`${lang}[${i}] "${art.title}": sits under "${secLabel(lang, art.section)}" but its expert-menu paths name only ${[...new Set(named)].map((n) => `"${n}"`).join(", ")}`);
+      });
+    }
+    // docs/help.md mirrors the areas: EN "##" headings, then the DE "###" area headings.
+    const md = read("docs/help.md").replace(/\r\n/g, "\n").split("\n");
+    const deAt = md.findIndex((l) => l === "## Hilfe (Deutsch)");
+    if (deAt < 0) problems.push('docs/help.md has no "## Hilfe (Deutsch)" heading');
+    else {
+      const enHeads = md.slice(1, deAt).filter((l) => /^## /.test(l)).map((l) => l.slice(3));
+      const deHeads = md.slice(deAt + 1).filter((l) => /^### /.test(l)).map((l) => l.slice(4));
+      const wantEn = SECTIONS.map((id) => secLabel("en", id));
+      const wantDe = SECTIONS.map((id) => secLabel("de", id));
+      if (JSON.stringify(enHeads) !== JSON.stringify(wantEn)) problems.push(`docs/help.md EN area headings [${enHeads.join(" | ")}] differ from the tab labels [${wantEn.join(" | ")}]`);
+      if (JSON.stringify(deHeads) !== JSON.stringify(wantDe)) problems.push(`docs/help.md DE area headings [${deHeads.join(" | ")}] differ from the tab labels [${wantDe.join(" | ")}]`);
+    }
+  }
   for (const p of problems) console.log("FAIL:", p);
   console.log(`${quotes} quoted labels checked, ${checked} paths checked, ${problems.length} problem(s)`);
   process.exit(problems.length ? 1 : 0);

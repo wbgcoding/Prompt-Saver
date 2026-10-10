@@ -15,11 +15,14 @@ export function helpCategories() {
   return HELP_CONTENT[LANG] || HELP_CONTENT.en;
 }
 
-// Section ids are stable keys (see ui/help.js), never translated text: the
-// label comes from a helpSec-prefixed key (via t) so it follows the app's own
-// 11 languages even though the article content itself stays EN/DE-only.
+// Section ids are stable keys (see ui/help.js), never translated text. The six
+// non-basic areas reuse the expert-menu tab names, so a setting and its help sit
+// under the same word in all 11 languages even though the article content itself
+// stays EN/DE-only.
+export const HELP_SECTIONS = ["basics", "features", "capture", "tiles", "appearance", "library", "system"];
+const HELP_SECTION_LABELS = { basics: "helpSecBasics", features: "expTabFeatures", capture: "expTabCapture", tiles: "expTabTiles", appearance: "expTabAppearance", library: "expTabLibrary", system: "expTabSystem" };
 export function helpSectionLabel(id) {
-  return t(`helpSec${id.charAt(0).toUpperCase()}${id.slice(1)}`);
+  return t(HELP_SECTION_LABELS[id] || "helpSecBasics");
 }
 
 // Strips case and diacritics so "ordner"/"Übersicht" match "Ordner"/"ubersicht" alike.
@@ -118,7 +121,7 @@ export function renderHelp() {
   const terms = helpNorm(helpQuery).trim().split(/\s+/).filter(Boolean);
   const searching = terms.length > 0;
   const cats = helpCategories();
-  const sections = [...new Set(cats.map((c) => c.section))];
+  const sections = HELP_SECTIONS.filter((id) => cats.some((c) => c.section === id));
   if (helpTab >= sections.length) helpTab = 0;
   // Tab bar lives in the fixed header (stays visible while the rows scroll); it is
   // hidden while searching across every section, same pattern as the expert menu.

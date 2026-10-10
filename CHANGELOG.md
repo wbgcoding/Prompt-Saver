@@ -2035,6 +2035,7 @@ the video editor and the introduction tour ship on).
 - **The font choice in Settings is now labelled Tile font.**
 - **Icon size moved from Settings to the expert menu** (Appearance, Sizes).
 - **German: one German word per thing throughout** (Tastenkürzel, Sicherung, Kurzinfo, Symbol, Design).
+- **The help is organised like the expert menu:** Basics, Features, Capture, Tiles, Appearance, Library & copy history, System & data.
 
 ## 2.6.3 (2026-07-26)
 

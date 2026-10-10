@@ -145,7 +145,7 @@ for (const file of fs.readdirSync(UI).filter((f) => f.endsWith(".html"))) {
 // Many keys are reached indirectly (label: "valFoo", `tip${Key}`), so an unused
 // key is a hint, not an error. Prefixes that the code builds at runtime count as
 // referenced, otherwise the note is all noise.
-const dynamic = ["tip", "flag", "val", "exp", "helpSec"].filter((p) => code.includes("`" + p + "${"));
+const dynamic = ["tip", "flag", "val", "exp"].filter((p) => code.includes("`" + p + "${"));
 const unused = [...en].filter((k) =>
   !used.has(k) &&
   !code.includes(`"${k}"`) &&

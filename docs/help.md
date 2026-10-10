@@ -35,6 +35,16 @@ finishes. Escape or "Skip" closes it at once; after Escape an Undo notice reopen
 Reopen it anytime from the expert menu; reopened this way, a switch on that
 last step takes effect immediately instead of waiting for a Finish click.
 
+### The grid
+
+The main window's grid is a free-placement board of tiles, up to 20×20 cells by
+default (adjustable to 200×200 in the expert menu), with its own layout per view.
+Drag a tile to any empty cell, or drop it on an occupied one to swap the two; the
+grid never rearranges itself on its own. Drop a tile on a view tab above the grid
+to move it into that view instead, or hold Ctrl while dropping to copy it there
+so it stays in both. Change the grid size by
+right-clicking a view tab or an empty spot of the grid and choosing Grid size.
+
 ### Creating tiles
 
 Beyond plain text, a tile can carry an attached file, a screenshot, or a picked
@@ -44,27 +54,6 @@ screen color.
 - Screenshot tool: capture a region or a whole window straight into a new tile
 - Color picker: pick any on-screen pixel, copies as hex/RGB/HSL
 - Drag and drop: drop a file or image straight onto the grid
-
-### Placeholders
-
-Placeholder markup inside a tile's text opens a small popup asking for each value
-before the finished text reaches the clipboard.
-
-- Dynamic placeholders: `{#{/date\}#}`, `{#{/time\}#}`, `{#{/clipboard\}#}`
-  fill themselves in, no popup; their own slash-fenced syntax (not the plain
-  `{#{date}#}` form) is what triggers it; insert them from the chip buttons
-  under the editor's text box rather than typing them by hand
-- Choice placeholders: a dropdown of preset values instead of free text
-- Remember choices: the popup pre-fills the last answer for that tile
-- Fixed values (off by default, expert menu): a maintained list of name and
-  value pairs the popup suggests for a matching placeholder, one step below a
-  remembered last input and above the text's own default. Shown only as the
-  field's placeholder text, marked with a small pin, never inserted until it
-  is typed or picked.
-
-<p>
-<svg viewBox="0 0 560 130" xmlns="http://www.w3.org/2000/svg" role="img"><text x="30" y="45" font-size="15" fill="currentColor" text-anchor="start">{#{Kunde=Meier|Meier,Schulz}#}</text><line x1="65" y1="55" x2="65" y2="80" stroke="currentColor" stroke-width="1"/><text x="65" y="95" font-size="11" fill="currentColor" text-anchor="middle">Name</text><line x1="118" y1="55" x2="150" y2="80" stroke="currentColor" stroke-width="1"/><text x="150" y="95" font-size="11" fill="currentColor" text-anchor="middle">Default</text><line x1="240" y1="55" x2="260" y2="80" stroke="currentColor" stroke-width="1"/><text x="260" y="95" font-size="11" fill="currentColor" text-anchor="middle">Choice list</text></svg>
-</p>
 
 ### The editor
 
@@ -89,15 +78,280 @@ window never loses unsaved work. Only the text is drafted, never an attached
 image, and a save or a cancel removes the draft right away. If a draft is
 still there the next time the app starts, it asks once whether to restore it.
 
-### The grid
+### The expert menu
 
-The main window's grid is a free-placement board of tiles, up to 20×20 cells by
-default (adjustable to 200×200 in the expert menu), with its own layout per view.
-Drag a tile to any empty cell, or drop it on an occupied one to swap the two; the
-grid never rearranges itself on its own. Drop a tile on a view tab above the grid
-to move it into that view instead, or hold Ctrl while dropping to copy it there
-so it stays in both. Change the grid size by
-right-clicking a view tab or an empty spot of the grid and choosing Grid size.
+Every optional feature lives behind an on/off switch, with its own parameters
+right underneath once it's on. The search box scans every tab at once; a feature
+that ships switched off carries a small dot badge. Reset works at three levels:
+one value's own undo icon, a whole group's reset, or everything at once.
+
+### Keyboard-only use
+
+Arrow keys move a focus ring across the grid; Enter or Space copies whichever
+tile is focused. The ring fades out a short while after the window loses focus.
+
+### Common questions
+
+- *My screenshot of this app came out empty*: the screen-capture exclusion
+  privacy setting is working as intended; switch on "Allow screenshots of
+  Prompt Saver" in the expert menu if that's not wanted
+- *The app won't start*: it needs the Microsoft WebView2 runtime; the installer
+  offers it automatically if missing
+- *I can't find a setting*: check the expert menu's search box first; it scans
+  every tab at once
+- *A hotkey doesn't do anything*: another app may already hold that combination;
+  the editor explains this instead of accepting it silently
+
+## Features
+
+### Copying
+
+- Selecting tiles: right-click a tile (or Ctrl+click) to select it; while
+  selecting, every tile shows its checkbox. The tile menu opens with a right-click.
+- Chaining: not the same as rotation (see Rotation above). Several
+  DIFFERENT tiles copied together as one text, rather than one tile changing
+  what it holds. Click several tiles in a row, they combine into one clipboard
+  copy. Start chain here: right-click a text tile to start a chain with that
+  tile as the first entry directly, switchable off on its own in the expert
+  menu under Chain, alongside the rest of the chain settings, including what goes between two
+  chained tiles (a blank line unless changed). A chain stays when you
+  switch to another program. The chain button in the top bar starts and ends
+  a chain. Pasting with Ctrl+V in the app window ends it too.
+- Chain overview: while chaining, a strip above the grid lists the picked
+  steps in order, with small marks for the placeholders each step needs and
+  the reserved names it fills by itself. A step turns red when nothing
+  earlier in the chain answers a placeholder it needs, though the chain can
+  still be started. Drag a row to reorder the chain right there, right-click a row to
+  remove that step; the clipboard follows either change. Switchable
+  off on its own in the expert menu.
+- Chain double-click latch: with it on, chain mode stays on after copying, for
+  building several chains in a row.
+- Per-tile hotkeys: copy a specific tile from anywhere, without opening the app
+- Drag-out: hold the modifier key and drag a tile onto another window to paste
+  directly, no clipboard round-trip. An expert switch swaps the two gestures, so a
+  plain drag leaves the app and the key moves the tile instead.
+- Auto-paste: after copying, the app switches to the last active window and
+  presses paste automatically
+- Copy formatted: a second copy entry, in the tile's right-click menu and in
+  the editor, only offered for a prompt whose text actually contains Markdown
+  syntax. It puts the rendered version on the clipboard alongside the plain
+  Markdown text, so an app that reads rich text (Word, Outlook, a browser)
+  shows the formatting, while a plain text field still gets exactly the
+  Markdown source a normal copy would have given it
+
+<p>
+<svg viewBox="0 0 560 130" xmlns="http://www.w3.org/2000/svg" role="img"><rect x="20" y="15" width="110" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="75" y="36" font-size="11" fill="currentColor" text-anchor="middle">Create prompt</text><line x1="130" y1="32" x2="187" y2="32" stroke="currentColor" stroke-width="1.5"/><path d="M 185 28 L 195 32 L 185 36" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><rect x="195" y="15" width="170" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="280" y="36" font-size="11" fill="currentColor" text-anchor="middle">Copy</text><line x1="365" y1="32" x2="422" y2="32" stroke="currentColor" stroke-width="1.5"/><path d="M 420 28 L 430 32 L 420 36" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><rect x="430" y="15" width="110" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="485" y="36" font-size="11" fill="currentColor" text-anchor="middle">Paste</text><line x1="280" y1="49" x2="280" y2="70" stroke="currentColor" stroke-width="1" stroke-dasharray="2 2"/><rect x="60" y="78" width="115" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="117" y="99" font-size="10" fill="currentColor" text-anchor="middle">Tile</text><rect x="190" y="78" width="115" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="247" y="99" font-size="10" fill="currentColor" text-anchor="middle">Hotkey</text><rect x="320" y="78" width="115" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="377" y="99" font-size="10" fill="currentColor" text-anchor="middle">Floating button</text><rect x="450" y="78" width="115" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="507" y="99" font-size="10" fill="currentColor" text-anchor="middle">Tray</text></svg>
+</p>
+
+<p>
+<svg viewBox="0 0 560 90" xmlns="http://www.w3.org/2000/svg" role="img"><rect x="30" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="80" y="41" font-size="11" fill="currentColor" text-anchor="middle">Step 1</text><rect x="230" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="280" y="41" font-size="11" fill="currentColor" text-anchor="middle">Step 2</text><rect x="430" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="480" y="41" font-size="11" fill="currentColor" text-anchor="middle">Step 3</text><line x1="130" y1="37" x2="217" y2="37" stroke="currentColor" stroke-width="1.5"/><path d="M 215 33 L 225 37 L 215 41" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><text x="177" y="25" font-size="10" fill="currentColor" text-anchor="middle">{#{X}#}</text><line x1="330" y1="37" x2="417" y2="37" stroke="currentColor" stroke-width="1.5"/><path d="M 415 33 L 425 37 L 415 41" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><text x="377" y="25" font-size="10" fill="currentColor" text-anchor="middle">{#{Y}#}</text></svg>
+</p>
+
+### Placeholders
+
+Placeholder markup inside a tile's text opens a small popup asking for each value
+before the finished text reaches the clipboard.
+
+- Dynamic placeholders: `{#{/date\}#}`, `{#{/time\}#}`, `{#{/clipboard\}#}`
+  fill themselves in, no popup; their own slash-fenced syntax (not the plain
+  `{#{date}#}` form) is what triggers it; insert them from the chip buttons
+  under the editor's text box rather than typing them by hand
+- Choice placeholders: a dropdown of preset values instead of free text
+- Remember choices: the popup pre-fills the last answer for that tile
+- Fixed values (off by default, expert menu): a maintained list of name and
+  value pairs the popup suggests for a matching placeholder, one step below a
+  remembered last input and above the text's own default. Shown only as the
+  field's placeholder text, marked with a small pin, never inserted until it
+  is typed or picked.
+
+<p>
+<svg viewBox="0 0 560 130" xmlns="http://www.w3.org/2000/svg" role="img"><text x="30" y="45" font-size="15" fill="currentColor" text-anchor="start">{#{Kunde=Meier|Meier,Schulz}#}</text><line x1="65" y1="55" x2="65" y2="80" stroke="currentColor" stroke-width="1"/><text x="65" y="95" font-size="11" fill="currentColor" text-anchor="middle">Name</text><line x1="118" y1="55" x2="150" y2="80" stroke="currentColor" stroke-width="1"/><text x="150" y="95" font-size="11" fill="currentColor" text-anchor="middle">Default</text><line x1="240" y1="55" x2="260" y2="80" stroke="currentColor" stroke-width="1"/><text x="260" y="95" font-size="11" fill="currentColor" text-anchor="middle">Choice list</text></svg>
+</p>
+
+### Hotkeys
+
+Two independent kinds: one global combination that opens the quick launcher
+(default Ctrl+Alt+P), and a combination per tile that copies, and optionally
+pastes, that one tile directly. A combination must include Ctrl or Alt; the
+app hotkey always wins a conflict, and among tiles the first one in the list
+keeps a combination two tiles happen to share. Importing a backup that carries
+a colliding hotkey drops the losing one instead of failing the import.
+
+"All shortcuts", next to the global hotkey field in Settings, opens the shortcuts dialog with every hotkey,
+global and per-tile, in one searchable, live-rebindable list, so rebinding or
+clearing one no longer means opening that tile's editor.
+
+A tile with its own hotkey shows a small keyboard symbol.
+
+### Rotation
+
+Not the same as chaining (see Copying below): rotation changes the text inside
+ONE tile from copy to copy, chaining copies several DIFFERENT tiles together
+as one text.
+
+| I want... | use... |
+| --- | --- |
+| several wordings of the same prompt | rotation |
+| several different prompts, one after another | chaining |
+
+A tile can hold a list of texts instead of one: each copy serves the next rotation
+text, in order or shuffled without repeats, instead of always the same text. On by
+default; the per-tile switch is in the editor under Advanced options.
+
+- A small badge counts up (like "2/5") on a tile, floating button, or button folder
+  member; a tile-folder member shows only its file-type icon instead. In order
+  mode it is the absolute position; in shuffle mode it counts draws within the
+  current cycle and restarts at 1 once every entry has been shown once, rather
+  than jumping to an arbitrary position
+- The count survives restarts and full backups; a CSV/TXT import starts a
+  fresh pointer, since the imported tile gets a new id
+
+An eligible tile (2+ entries, no image/file attached) can also **rotate on
+paste**: switch it on with the "Rotate on paste" button next to the order/random control, or
+from a tile's right-click menu once both the per-tile and the app-wide switch
+allow it. With rotate on paste on, the next text loads on every real Ctrl+V or
+right-click-Paste, not only when copying again; the badge picks up an accent
+while a session is running. Placeholders still work; the popup asks once per
+session and the same values are reused for every rotation text. Five expert-menu
+settings (all under the same toggle) tune the session timeout and the timing
+window that tells a real paste apart from other clipboard activity; pasting too
+fast too often pauses the session with a toast instead of looping.
+
+### Floating buttons
+
+Small always-on-top copy buttons that sit outside the main window, over
+whatever app is in use.
+
+A button whose saved screen is no longer connected opens on the main screen,
+marked as parked, and jumps back on its own once that screen returns. An action
+in the expert menu brings every floating window to the main screen at once.
+
+### Folders
+
+One gesture works in two places: drop one onto another to gather it into a
+folder. A floating
+button dropped onto another makes a button folder. A tile dropped onto another
+tile makes a tile folder, and belongs to only one tile folder at a time.
+
+<p>
+<svg viewBox="200 0 360 120" xmlns="http://www.w3.org/2000/svg" role="img"><circle cx="255" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="295" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="335" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="295" y="108" font-size="11" fill="currentColor" text-anchor="middle">Button folder</text><rect x="430" y="20" width="100" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="430" y1="55" x2="530" y2="55" stroke="currentColor" stroke-width="1"/><line x1="480" y1="20" x2="480" y2="90" stroke="currentColor" stroke-width="1"/><text x="480" y="108" font-size="11" fill="currentColor" text-anchor="middle">Tile folder</text></svg>
+</p>
+
+### Tray
+
+The system tray icon's right-click menu offers a "recently copied" and a
+"favorites" section for quick access without opening the main window. It draws
+as a rounded, themed window matching the rest of the app rather than the plain
+Windows popup; the expert menu can switch back to the plain system menu if the
+custom one ever misbehaves on your setup. The expert menu also caps how long a
+prompt name may get before it is cut off with an ellipsis in that menu.
+
+Typing in the tray menu's search field opens the quick launcher with what you
+typed. Arrow keys and Enter on the menu's own entries work as before. The field
+ships on.
+
+### Quick launcher
+
+A small always-on-top popup (default hotkey Ctrl+Alt+P) with fuzzy search across
+every tile's name and text; pick one and it copies immediately, no need to bring
+the main window forward. The expert menu sets how many results it lists (8 by
+default). A line at the bottom lists its keys.
+
+### Multiple views
+
+A view is one grid page with its own size and arrangement; a tile can live in
+several views.
+
+### Voice dictation
+
+On by default. A microphone button on the composer and in the edit dialog turns
+speech into text using Windows' own on-device recognizer; nothing is uploaded
+unless online recognition is explicitly allowed (off by default; a one-time
+dialog asks the first time it's actually needed). Click to start: the button
+turns the accent color and pulses while listening, and its title switches from
+"Dictate" to "Stop dictating"; a second click, Escape in the field, saving the
+prompt, or closing the window all end the session the same way. Text lands at
+the cursor (or always at the end, an expert setting) and can stop itself after
+a few seconds of silence.
+
+Spoken punctuation and simple commands are turned into real characters unless
+Windows already placed them itself: "comma", "period", "question mark",
+"exclamation mark", "colon", "semicolon", "hyphen", "dash", "slash", "quote",
+"open paren"/"close paren" and "percent" for punctuation, "new line", "new
+paragraph" and "tab" for layout, each glued to the word before it with no
+extra space. Saying "literal" dictates the very next word as-is, instead of
+matching it as a command, useful for actually saying "comma" out loud. The
+word right after a period, question mark, exclamation mark or paragraph break
+is capitalized automatically. **The exact word matters**: only these specific
+command words (in the app's own language) are recognized; anything else is
+just dictated as plain text.
+
+Like OCR, it needs a Windows language pack: see "Language packs" below, same
+dialog either way. A global hotkey (off by default, in the expert menu) can
+start or stop a session from anywhere without bringing the window forward;
+the finished text goes to the clipboard, is pasted into whatever app was
+active, or lands in the composer, whichever the setting picks.
+
+### Language packs
+
+Text recognition and voice dictation both use Windows' own language packs and
+share one install dialog. The recognition-language dropdown offers a download
+the first time a chosen language has no pack installed; installing needs
+administrator rights, and Windows asks for them once through its own
+confirmation prompt. The dropdown's "Manage text recognition languages…" entry ("Manage
+dictation languages…" for dictation) reopens that
+same dialog any time, listing what's installed and what's available; on most
+systems listing needs no special rights, but on some Windows builds it does
+too, and the dialog offers to run the listing itself with administrator
+rights instead of coming up blank; that step only lists packs, it installs
+nothing. A background check flags a pack whose version changed or that a
+Windows update silently removed, without asking to reinstall right away:
+the notice's "Cancel" button dismisses it for a while, or the background check can be
+switched off entirely.
+
+### Markdown folder sync (beta)
+
+An optional, off-by-default mirror that writes every text tile as its own
+readable `.md` file in a chosen folder, alongside the encrypted database,
+including which view, grid cell, and folder it sits in. A view or folder named in
+an incoming file that does not exist yet on this machine is created
+automatically, matched by name.
+**The `.md` files are plain text**: unlike the database, anyone with access to
+that folder can read the content, so a synced or shared folder should be avoided
+for anything sensitive. A tile with an attached file, image, or PDF syncs as a
+reference: the header carries the path and the PDF page, never the file itself. A
+screenshot pasted straight into a tile has no path and stays in the database only.
+The expert menu controls how often the sync folder is re-checked for files
+edited outside the app.
+
+The folder is `<data folder>\prompt-saver-sync` unless you pick another one; an
+installation that was already syncing keeps the folder it has. A file is read
+once it has stopped changing, so an edit made outside can take one extra round
+to arrive. What happens in either direction is fixed and never silent:
+
+- **A file deleted in the folder does not delete the tile.** It is written again
+  from the app on the next round. Delete the tile in the app and its file goes
+  with it.
+- **Renaming a file makes a second tile.** The file name is the tile's permanent
+  id, so the renamed file arrives as a new tile and the original is written back
+  out under its own name. Rename in the app instead.
+- **A tile and its file changed at the same time?** The file wins that round, and
+  the version it replaced is kept in that tile's versions. The other way
+  round the app wins the file, and what was in the file is kept next to it as
+  `<id>.conflict-<number>.md`.
+- **Files this app did not write are never touched** in either direction, and a
+  file past 8 MB is skipped whole, never cut short. The error log says why.
+- **Picking a different folder asks** what should happen to the old one: delete
+  it, or keep it. Deleting only ever removes the `.md` files this app wrote
+  itself, never a sub-folder, and the folder itself only if it ends up empty. One
+  file in there that the app did not write and nothing at all is deleted, with a
+  message naming what is in the way.
+- **An unreachable folder pauses the sync** instead of failing every few seconds
+  (after five failed rounds, adjustable). The line under the folder in the expert
+  menu says when the folder was last read, how many files were in it, and why it
+  is paused.
+
+## Capture
 
 ### Screenshot tool
 
@@ -362,170 +616,65 @@ It needs a Windows language pack: see "Language packs" below for how that
 install works. Recognized text can auto-copy to the clipboard and auto-join
 wrapped lines into full sentences, both adjustable.
 
-### Voice dictation
-
-On by default. A microphone button on the composer and in the edit dialog turns
-speech into text using Windows' own on-device recognizer; nothing is uploaded
-unless online recognition is explicitly allowed (off by default; a one-time
-dialog asks the first time it's actually needed). Click to start: the button
-turns the accent color and pulses while listening, and its title switches from
-"Dictate" to "Stop dictating"; a second click, Escape in the field, saving the
-prompt, or closing the window all end the session the same way. Text lands at
-the cursor (or always at the end, an expert setting) and can stop itself after
-a few seconds of silence.
-
-Spoken punctuation and simple commands are turned into real characters unless
-Windows already placed them itself: "comma", "period", "question mark",
-"exclamation mark", "colon", "semicolon", "hyphen", "dash", "slash", "quote",
-"open paren"/"close paren" and "percent" for punctuation, "new line", "new
-paragraph" and "tab" for layout, each glued to the word before it with no
-extra space. Saying "literal" dictates the very next word as-is, instead of
-matching it as a command, useful for actually saying "comma" out loud. The
-word right after a period, question mark, exclamation mark or paragraph break
-is capitalized automatically. **The exact word matters**: only these specific
-command words (in the app's own language) are recognized; anything else is
-just dictated as plain text.
-
-Like OCR, it needs a Windows language pack: see "Language packs" below, same
-dialog either way. A global hotkey (off by default, in the expert menu) can
-start or stop a session from anywhere without bringing the window forward;
-the finished text goes to the clipboard, is pasted into whatever app was
-active, or lands in the composer, whichever the setting picks.
-
-### Language packs
-
-Text recognition and voice dictation both use Windows' own language packs and
-share one install dialog. The recognition-language dropdown offers a download
-the first time a chosen language has no pack installed; installing needs
-administrator rights, and Windows asks for them once through its own
-confirmation prompt. The dropdown's "Manage text recognition languages…" entry ("Manage
-dictation languages…" for dictation) reopens that
-same dialog any time, listing what's installed and what's available; on most
-systems listing needs no special rights, but on some Windows builds it does
-too, and the dialog offers to run the listing itself with administrator
-rights instead of coming up blank; that step only lists packs, it installs
-nothing. A background check flags a pack whose version changed or that a
-Windows update silently removed, without asking to reinstall right away:
-the notice's "Cancel" button dismisses it for a while, or the background check can be
-switched off entirely.
-
 ### Color picker & pick history
 
 A pipette that freezes the screen, magnifies the pixel under the cursor, and copies
 it as hex, rgb, or hsl. Right-click the pipette icon to reopen the last few picks;
 the history is mirrored into settings, so it survives a restart too.
 
-### Rotation
+## Tiles
 
-Not the same as chaining (see Copying below): rotation changes the text inside
-ONE tile from copy to copy, chaining copies several DIFFERENT tiles together
-as one text.
+### Tile behavior & appearance
 
-| I want... | use... |
-| --- | --- |
-| several wordings of the same prompt | rotation |
-| several different prompts, one after another | chaining |
+Tile menu, drag-to-reorder, hover lift, type badges, shadows, rounded corners and
+one tile style (bold, uppercase, monospace, italic, shadowed names, compact,
+gradient): behavior and pure looks, all adjustable.
+Tile, folder, view-tab and message text on a colored area picks black or white
+automatically; the expert menu can switch this off (always white) or move the
+brightness cutoff where black text starts. White text on a light color gets a
+dark shadow behind it so it stays readable; the expert menu can switch that
+shadow off or dial its strength.
 
-A tile can hold a list of texts instead of one: each copy serves the next rotation
-text, in order or shuffled without repeats, instead of always the same text. On by
-default; the per-tile switch is in the editor under Advanced options.
+### Media
 
-- A small badge counts up (like "2/5") on a tile, floating button, or button folder
-  member; a tile-folder member shows only its file-type icon instead. In order
-  mode it is the absolute position; in shuffle mode it counts draws within the
-  current cycle and restarts at 1 once every entry has been shown once, rather
-  than jumping to an arbitrary position
-- The count survives restarts and full backups; a CSV/TXT import starts a
-  fresh pointer, since the imported tile gets a new id
+Video controls, autoplay and loop (both off by default), mute, plus a blur-until-hovered look for
+privacy-leaning media tiles. The library and copy history also show a video's
+length on its thumbnail and its resolution and file size in the tooltip; older
+attachments pick this up in the background the first time they are shown. The
+main grid stays as it always was.
 
-An eligible tile (2+ entries, no image/file attached) can also **rotate on
-paste**: switch it on with the "Rotate on paste" button next to the order/random control, or
-from a tile's right-click menu once both the per-tile and the app-wide switch
-allow it. With rotate on paste on, the next text loads on every real Ctrl+V or
-right-click-Paste, not only when copying again; the badge picks up an accent
-while a session is running. Placeholders still work; the popup asks once per
-session and the same values are reused for every rotation text. Five expert-menu
-settings (all under the same toggle) tune the session timeout and the timing
-window that tells a real paste apart from other clipboard activity; pasting too
-fast too often pauses the session with a toast instead of looping.
+### Favorites
 
-## Copying
+A star marks a tile as a favorite; an optional dedicated view lists only
+starred tiles. Use "Add to favorites" from a tile's right-click menu, or the
+star in the library. A favorite tile shows a small star in its top-right corner.
 
-### Copying
+### Tooltips
 
-- Selecting tiles: right-click a tile (or Ctrl+click) to select it; while
-  selecting, every tile shows its checkbox. The tile menu opens with a right-click.
-- Chaining: not the same as rotation (see Rotation above). Several
-  DIFFERENT tiles copied together as one text, rather than one tile changing
-  what it holds. Click several tiles in a row, they combine into one clipboard
-  copy. Start chain here: right-click a text tile to start a chain with that
-  tile as the first entry directly, switchable off on its own in the expert
-  menu under Chain, alongside the rest of the chain settings, including what goes between two
-  chained tiles (a blank line unless changed). A chain stays when you
-  switch to another program. The chain button in the top bar starts and ends
-  a chain. Pasting with Ctrl+V in the app window ends it too.
-- Chain overview: while chaining, a strip above the grid lists the picked
-  steps in order, with small marks for the placeholders each step needs and
-  the reserved names it fills by itself. A step turns red when nothing
-  earlier in the chain answers a placeholder it needs, though the chain can
-  still be started. Drag a row to reorder the chain right there, right-click a row to
-  remove that step; the clipboard follows either change. Switchable
-  off on its own in the expert menu.
-- Chain double-click latch: with it on, chain mode stays on after copying, for
-  building several chains in a row.
-- Per-tile hotkeys: copy a specific tile from anywhere, without opening the app
-- Drag-out: hold the modifier key and drag a tile onto another window to paste
-  directly, no clipboard round-trip. An expert switch swaps the two gestures, so a
-  plain drag leaves the app and the key moves the tile instead.
-- Auto-paste: after copying, the app switches to the last active window and
-  presses paste automatically
-- Copy formatted: a second copy entry, in the tile's right-click menu and in
-  the editor, only offered for a prompt whose text actually contains Markdown
-  syntax. It puts the rendered version on the clipboard alongside the plain
-  Markdown text, so an app that reads rich text (Word, Outlook, a browser)
-  shows the formatting, while a plain text field still gets exactly the
-  Markdown source a normal copy would have given it
+Hovering a tile shows its full text, length, and (if present) its private note.
+The delay and the width are adjustable.
 
-<p>
-<svg viewBox="0 0 560 130" xmlns="http://www.w3.org/2000/svg" role="img"><rect x="20" y="15" width="110" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="75" y="36" font-size="11" fill="currentColor" text-anchor="middle">Create prompt</text><line x1="130" y1="32" x2="187" y2="32" stroke="currentColor" stroke-width="1.5"/><path d="M 185 28 L 195 32 L 185 36" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><rect x="195" y="15" width="170" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="280" y="36" font-size="11" fill="currentColor" text-anchor="middle">Copy</text><line x1="365" y1="32" x2="422" y2="32" stroke="currentColor" stroke-width="1.5"/><path d="M 420 28 L 430 32 L 420 36" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><rect x="430" y="15" width="110" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="485" y="36" font-size="11" fill="currentColor" text-anchor="middle">Paste</text><line x1="280" y1="49" x2="280" y2="70" stroke="currentColor" stroke-width="1" stroke-dasharray="2 2"/><rect x="60" y="78" width="115" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="117" y="99" font-size="10" fill="currentColor" text-anchor="middle">Tile</text><rect x="190" y="78" width="115" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="247" y="99" font-size="10" fill="currentColor" text-anchor="middle">Hotkey</text><rect x="320" y="78" width="115" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="377" y="99" font-size="10" fill="currentColor" text-anchor="middle">Floating button</text><rect x="450" y="78" width="115" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="507" y="99" font-size="10" fill="currentColor" text-anchor="middle">Tray</text></svg>
-</p>
+## Appearance
 
-<p>
-<svg viewBox="0 0 560 90" xmlns="http://www.w3.org/2000/svg" role="img"><rect x="30" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="80" y="41" font-size="11" fill="currentColor" text-anchor="middle">Step 1</text><rect x="230" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="280" y="41" font-size="11" fill="currentColor" text-anchor="middle">Step 2</text><rect x="430" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="480" y="41" font-size="11" fill="currentColor" text-anchor="middle">Step 3</text><line x1="130" y1="37" x2="217" y2="37" stroke="currentColor" stroke-width="1.5"/><path d="M 215 33 L 225 37 L 215 41" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><text x="177" y="25" font-size="10" fill="currentColor" text-anchor="middle">{#{X}#}</text><line x1="330" y1="37" x2="417" y2="37" stroke="currentColor" stroke-width="1.5"/><path d="M 415 33 L 425 37 L 415 41" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><text x="377" y="25" font-size="10" fill="currentColor" text-anchor="middle">{#{Y}#}</text></svg>
-</p>
+### Appearance & themes
 
-### Hotkeys
+Six built-in themes: system/light, dark, Programmer, Neon Violet, Ocean, and
+Cyberpunk. The theme editor adjusts any theme's colors and
+saves the result as a custom theme.
 
-Two independent kinds: one global combination that opens the quick launcher
-(default Ctrl+Alt+P), and a combination per tile that copies, and optionally
-pastes, that one tile directly. A combination must include Ctrl or Alt; the
-app hotkey always wins a conflict, and among tiles the first one in the list
-keeps a combination two tiles happen to share. Importing a backup that carries
-a colliding hotkey drops the losing one instead of failing the import.
+### Theme editor
 
-"All shortcuts", next to the global hotkey field in Settings, opens the shortcuts dialog with every hotkey,
-global and per-tile, in one searchable, live-rebindable list, so rebinding or
-clearing one no longer means opening that tile's editor.
+Starts from any built-in theme, changes individual colors, and saves the result
+as a new theme; the original stays untouched. Open it with "Custom theme…" at the
+end of the theme list in Settings.
 
-A tile with its own hotkey shows a small keyboard symbol.
+### Scaling & zoom
 
-### Copies from other apps
+Independent size sliders for the overall UI, dialogs, the composer, and icons.
+Interface size is in Settings; icon, composer and main-button scale are in
+Expert menu → Appearance → Sizes (%).
 
-Off by default. When switched on, text copied anywhere on the system (not just
-from this app) is also recorded in the copy history, marked as copied elsewhere;
-the source filter in Library → Copy history shows only those, and a useful one
-can be saved as a tile. A minimum-length filter and a cap keep the list from
-growing unbounded.
-
-### Copy history
-
-A tab of the library (Library → Copy history): a log of what was copied and when, through the app and, if "Record copies from
-other apps" is on, elsewhere. Grouped view, automatic retention
-(30 days for a new install, adjustable, 0 keeps everything),
-and per-entry delete.
-The copy history is one list; the sort field switches between Recently copied and Most used (top 20).
-
-## Organising
+## Library & copy history
 
 ### Library & search
 
@@ -570,110 +719,40 @@ above the library list brings archived tiles back into view. Archive or
 unarchive a tile from its right-click menu, or several at once from the
 library's batch bar.
 
-### Favorites
+### Copy history
 
-A star marks a tile as a favorite; an optional dedicated view lists only
-starred tiles. Use "Add to favorites" from a tile's right-click menu, or the
-star in the library. A favorite tile shows a small star in its top-right corner.
+A tab of the library (Library → Copy history): a log of what was copied and when, through the app and, if "Record copies from
+other apps" is on, elsewhere. Grouped view, automatic retention
+(30 days for a new install, adjustable, 0 keeps everything),
+and per-entry delete.
+The copy history is one list; the sort field switches between Recently copied and Most used (top 20).
 
-### Standalone: Multiple views
+### Copies from other apps
 
-A view is one grid page with its own size and arrangement; a tile can live in
-several views.
+Off by default. When switched on, text copied anywhere on the system (not just
+from this app) is also recorded in the copy history, marked as copied elsewhere;
+the source filter in Library → Copy history shows only those, and a useful one
+can be saved as a tile. A minimum-length filter and a cap keep the list from
+growing unbounded.
 
-### Tile behavior & appearance
+## System & data
 
-Tile menu, drag-to-reorder, hover lift, type badges, shadows, rounded corners and
-one tile style (bold, uppercase, monospace, italic, shadowed names, compact,
-gradient): behavior and pure looks, all adjustable.
-Tile, folder, view-tab and message text on a colored area picks black or white
-automatically; the expert menu can switch this off (always white) or move the
-brightness cutoff where black text starts. White text on a light color gets a
-dark shadow behind it so it stays readable; the expert menu can switch that
-shadow off or dial its strength.
+### System
 
-### Media
-
-Video controls, autoplay and loop (both off by default), mute, plus a blur-until-hovered look for
-privacy-leaning media tiles. The library and copy history also show a video's
-length on its thumbnail and its resolution and file size in the tooltip; older
-attachments pick this up in the background the first time they are shown. The
-main grid stays as it always was.
-
-## Always on top
-
-### Floating buttons
-
-Small always-on-top copy buttons that sit outside the main window, over
-whatever app is in use.
-
-A button whose saved screen is no longer connected opens on the main screen,
-marked as parked, and jumps back on its own once that screen returns. An action
-in the expert menu brings every floating window to the main screen at once.
-
-### Folders
-
-One gesture works in two places: drop one onto another to gather it into a
-folder. A floating
-button dropped onto another makes a button folder. A tile dropped onto another
-tile makes a tile folder, and belongs to only one tile folder at a time.
-
-<p>
-<svg viewBox="200 0 360 120" xmlns="http://www.w3.org/2000/svg" role="img"><circle cx="255" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="295" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="335" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="295" y="108" font-size="11" fill="currentColor" text-anchor="middle">Button folder</text><rect x="430" y="20" width="100" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="430" y1="55" x2="530" y2="55" stroke="currentColor" stroke-width="1"/><line x1="480" y1="20" x2="480" y2="90" stroke="currentColor" stroke-width="1"/><text x="480" y="108" font-size="11" fill="currentColor" text-anchor="middle">Tile folder</text></svg>
-</p>
-
-### Tray
-
-The system tray icon's right-click menu offers a "recently copied" and a
-"favorites" section for quick access without opening the main window. It draws
-as a rounded, themed window matching the rest of the app rather than the plain
-Windows popup; the expert menu can switch back to the plain system menu if the
-custom one ever misbehaves on your setup. The expert menu also caps how long a
-prompt name may get before it is cut off with an ellipsis in that menu.
-
-Typing in the tray menu's search field opens the quick launcher with what you
-typed. Arrow keys and Enter on the menu's own entries work as before. The field
-ships on.
-
-### Standalone: Quick launcher
-
-A small always-on-top popup (default hotkey Ctrl+Alt+P) with fuzzy search across
-every tile's name and text; pick one and it copies immediately, no need to bring
-the main window forward. The expert menu sets how many results it lists (8 by
-default). A line at the bottom lists its keys.
-
-## Look and feel
-
-### Appearance & themes
-
-Six built-in themes: system/light, dark, Programmer, Neon Violet, Ocean, and
-Cyberpunk. The theme editor adjusts any theme's colors and
-saves the result as a custom theme.
-
-### Standalone: Theme editor
-
-Starts from any built-in theme, changes individual colors, and saves the result
-as a new theme; the original stays untouched. Open it with "Custom theme…" at the
-end of the theme list in Settings.
-
-### Scaling & zoom
-
-Independent size sliders for the overall UI, dialogs, the composer, and icons.
-Interface size is in Settings; icon, composer and main-button scale are in
-Expert menu → Appearance → Sizes (%).
-
-### Tooltips
-
-Hovering a tile shows its full text, length, and (if present) its private note.
-The delay and the width are adjustable.
+Update checks (never installs without asking), keyboard navigation, and where
+the data folder lives; allowing multiple instances at once sits in the
+Troubleshooting group. A long export,
+conversion, ffmpeg download, backup or import fills the app's taskbar icon
+with its progress, and shows a plain "about X left" estimate once enough of
+it has run for the guess to mean something, both switchable off.
+Auto update in Settings has an interval list beside it that shows while the switch
+is on; switching Auto update off turns the automatic check off.
 
 ### Toolbar
 
 Which buttons the header and composer bar show: quick grid-size control,
 the library button, and multiple views. Hide the top bar: right-click the gear
 or the top bar.
-
-## System and data
 
 ### Privacy
 
@@ -731,32 +810,110 @@ lost on restart. The app says so the same way: once in a dialog, and as a
 permanent row in this privacy group for as long as the last save is still
 failing; it clears itself the moment a save reaches disk again.
 
-### Demo mode
+### Updates & security
 
-An expert-menu switch (System tab, Troubleshooting group) swaps the whole window to a bundled sample
-library covering most features at once: prompts with and without an image, a
-prompt with rotation, a couple of plain prompts to start a chain with, a
-placeholder, tags, a favorite, two views, a folder, an attachment and (when
-available) a video. Turning it on rebuilds the sample library fresh every
-time and restarts the app into it; the real library is never opened, written
-or even read while any of this happens. A permanent marker stays visible in
-the window for as long as demo mode is on, so nobody mistakes the sample data
-for their own. Turning it back off asks for confirmation, since anything
-changed during the session is discarded, then restarts back into the real
-library exactly as it was. The same sample library is also the source for
-this help window's own picture and for `docs/screenshot.png`: see the
-README's "Building from source" section for the exact steps.
+On first launch the app asks whether it may check for updates; until you
+answer, it never goes online. The update check is one of a short, fixed list of
+things that ever reach the network on their own: the update check itself, a first-run download of the
+Microsoft WebView2 installer if that runtime is missing, and the update
+download that follows once you choose to install one. A downloaded update is
+verified against a published checksum before it runs; a missing or
+mismatching checksum blocks the install instead of running an unverified
+file. Video export/conversion needs ffmpeg: an installed build ships it and
+never touches the network for it, while a portable build offers a one-time
+download only when a video feature actually needs it and only with your
+explicit consent, never automatically, never in the background. Two more
+things on that same short list are not update-related at all: opening the
+app's GitHub page from the logo or the version label hands the address to
+your default browser, and installing a text-recognition or dictation
+language pack (see below) has Windows itself fetch that pack online.
 
-### System
+After an update, the update dialog shows once what
+changed since the version you last saw; its list ships with the app, so
+opening it needs no network, only its own "Update from GitHub" button does.
+Reopen the current version's list any time from the About dialog.
 
-Update checks (never installs without asking), keyboard navigation, and where
-the data folder lives; allowing multiple instances at once sits in the
-Troubleshooting group. A long export,
-conversion, ffmpeg download, backup or import fills the app's taskbar icon
-with its progress, and shows a plain "about X left" estimate once enough of
-it has run for the guess to mean something, both switchable off.
-Auto update in Settings has an interval list beside it that shows while the switch
-is on; switching Auto update off turns the automatic check off.
+### Where your data lives
+
+Everything lives in one local SQLite database (plus its small WAL file).
+Installed: under AppData, shown and changeable in the expert menu. Portable:
+right next to the exe, so the whole thing stays on a USB stick or synced folder
+as one unit. Moving between the two is detected automatically and offered as a
+one-time migration.
+
+A folder that syncs across two computers (OneDrive, Dropbox, Google Drive,
+iCloud Drive, Nextcloud) needs care: two machines saving to the same database
+file at once can corrupt it. Pointing the data folder at one shows a one-time
+warning explaining that risk. A small lock file next to the database then
+tracks which computer is using it, refreshed every 30 seconds; a second
+computer that finds a fresh lock from another machine opens everything
+read-only instead and says so with a permanent banner, so nothing is silently
+lost, while a lock nobody has refreshed for a while (the other computer likely
+crashed or closed) is taken over automatically. The switch for this, on by
+default, sits in the Troubleshooting group of the expert menu's System tab. This is a
+safety net, not a way to share the library across computers: for that,
+Markdown folder sync below is the built path.
+
+### Backup manager
+
+Encrypted, compressed snapshots of the entire library and settings, on an
+automatic schedule with daily, weekly, monthly and yearly retention tiers, and a restore that can
+target data only, settings only, or both. Two buttons beside Create backup
+save a backup to a file of your choice or import one from a file. The same
+window also has a storage section that shows how much disk
+space the database, attachments, screenshots, recordings, backups, temporary
+files and the error log each use, with a button to open a listed folder.
+
+A retention section lists one row per kind of data this app keeps around on
+its own (trash, copy history, copies from other apps, recordings, discarded
+recordings, temporary exports, and unfinished-edit states), with how much is
+there right now, how long it is kept, a button to clean it up on the spot, and
+a button that jumps straight to the matching expert-menu setting. The numbers
+are measured in the background and labelled with when that happened, the same
+way the storage section above already works, not recalculated on every open.
+
+Each snapshot in the list can also show its full content on demand: entry,
+view and tag counts, the most recent change inside it, the program version
+that made it, and whether its rows are sealed the normal way or fell back to
+plain storage. Below that, every prompt it holds, with its own edit date,
+size and kind, searchable by name and sortable by any column, with a button
+to restore that single prompt right from the list instead of the whole
+snapshot.
+
+### Usage statistics
+
+A small window opened from Settings → Usage statistics, with four things: the
+number of prompts, the copies of the last 7 days, the most used prompts by
+name (a list of 5, 10 or 20, your choice) and the prompts that were never used,
+which you can click to find them in the library. The "Show statistics" switch
+turns the display on; the numbers themselves are collected by the copy
+history. Everything stays on this computer. The export button saves the full
+numbers, including daily counts and tool use, as CSV, TXT or JSON.
+
+### Import & export
+
+Plain CSV, TXT or JSON export for the text alone, or a full backup file with
+everything: tiles, views, layouts, colors, styles, and language. A single
+"Export" button and a format dropdown replace three separate buttons; JSON is
+the only one of the three that can carry the full rotation texts of a tile
+with rotation, tags, notes, a hotkey, and color, rather than joining them into one
+field the way CSV and TXT have to. JSON is the default format of the "Export" button and keeps every detail of a prompt; CSV and TXT stay available in the dropdown. Images never travel in any of the three,
+to keep the file small; use a full backup for those. Importing decides CSV or
+JSON by looking at the file itself, never its extension, and shows a preview
+first: every incoming item's name and whether it would land as a duplicate,
+before anything is written; a full backup restores directly. If the file
+changes after the preview is shown, confirming the import is refused rather
+than importing something different from what was previewed.
+
+Import → "From folder…" in Settings turns a folder of `.md`/`.txt` files into tiles, one per
+file, without touching the original files at all. The file name becomes the
+tile's name. A short first line becomes the note, with the rest carrying on as
+the text. Each subfolder becomes a tag, one per level. A file that already
+contains the rotation separator becomes a prompt with rotation texts. The preview lists
+every file with its tags, size, and a checkbox, and grays out anything that
+could not be read (too large or not plain text) with the reason why. How deep
+into subfolders it looks and how many files it stops at are both expert-menu
+settings.
 
 ### Data maintenance
 
@@ -797,127 +954,6 @@ existing one is close enough, a message names it with a button to open it and
 another to compare the two. It never holds up the save and never asks
 anything, so ignoring it costs nothing. Both share one threshold in the expert
 menu.
-
-### Import & export
-
-Plain CSV, TXT or JSON export for the text alone, or a full backup file with
-everything: tiles, views, layouts, colors, styles, and language. A single
-"Export" button and a format dropdown replace three separate buttons; JSON is
-the only one of the three that can carry the full rotation texts of a tile
-with rotation, tags, notes, a hotkey, and color, rather than joining them into one
-field the way CSV and TXT have to. JSON is the default format of the "Export" button and keeps every detail of a prompt; CSV and TXT stay available in the dropdown. Images never travel in any of the three,
-to keep the file small; use a full backup for those. Importing decides CSV or
-JSON by looking at the file itself, never its extension, and shows a preview
-first: every incoming item's name and whether it would land as a duplicate,
-before anything is written; a full backup restores directly. If the file
-changes after the preview is shown, confirming the import is refused rather
-than importing something different from what was previewed.
-
-Import → "From folder…" in Settings turns a folder of `.md`/`.txt` files into tiles, one per
-file, without touching the original files at all. The file name becomes the
-tile's name. A short first line becomes the note, with the rest carrying on as
-the text. Each subfolder becomes a tag, one per level. A file that already
-contains the rotation separator becomes a prompt with rotation texts. The preview lists
-every file with its tags, size, and a checkbox, and grays out anything that
-could not be read (too large or not plain text) with the reason why. How deep
-into subfolders it looks and how many files it stops at are both expert-menu
-settings.
-
-### Markdown folder sync (beta)
-
-An optional, off-by-default mirror that writes every text tile as its own
-readable `.md` file in a chosen folder, alongside the encrypted database,
-including which view, grid cell, and folder it sits in. A view or folder named in
-an incoming file that does not exist yet on this machine is created
-automatically, matched by name.
-**The `.md` files are plain text**: unlike the database, anyone with access to
-that folder can read the content, so a synced or shared folder should be avoided
-for anything sensitive. A tile with an attached file, image, or PDF syncs as a
-reference: the header carries the path and the PDF page, never the file itself. A
-screenshot pasted straight into a tile has no path and stays in the database only.
-The expert menu controls how often the sync folder is re-checked for files
-edited outside the app.
-
-The folder is `<data folder>\prompt-saver-sync` unless you pick another one; an
-installation that was already syncing keeps the folder it has. A file is read
-once it has stopped changing, so an edit made outside can take one extra round
-to arrive. What happens in either direction is fixed and never silent:
-
-- **A file deleted in the folder does not delete the tile.** It is written again
-  from the app on the next round. Delete the tile in the app and its file goes
-  with it.
-- **Renaming a file makes a second tile.** The file name is the tile's permanent
-  id, so the renamed file arrives as a new tile and the original is written back
-  out under its own name. Rename in the app instead.
-- **A tile and its file changed at the same time?** The file wins that round, and
-  the version it replaced is kept in that tile's versions. The other way
-  round the app wins the file, and what was in the file is kept next to it as
-  `<id>.conflict-<number>.md`.
-- **Files this app did not write are never touched** in either direction, and a
-  file past 8 MB is skipped whole, never cut short. The error log says why.
-- **Picking a different folder asks** what should happen to the old one: delete
-  it, or keep it. Deleting only ever removes the `.md` files this app wrote
-  itself, never a sub-folder, and the folder itself only if it ends up empty. One
-  file in there that the app did not write and nothing at all is deleted, with a
-  message naming what is in the way.
-- **An unreachable folder pauses the sync** instead of failing every few seconds
-  (after five failed rounds, adjustable). The line under the folder in the expert
-  menu says when the folder was last read, how many files were in it, and why it
-  is paused.
-
-### The expert menu
-
-Every optional feature lives behind an on/off switch, with its own parameters
-right underneath once it's on. The search box scans every tab at once; a feature
-that ships switched off carries a small dot badge. Reset works at three levels:
-one value's own undo icon, a whole group's reset, or everything at once.
-
-### Keyboard-only use
-
-Arrow keys move a focus ring across the grid; Enter or Space copies whichever
-tile is focused. The ring fades out a short while after the window loses focus.
-
-### Where your data lives
-
-Everything lives in one local SQLite database (plus its small WAL file).
-Installed: under AppData, shown and changeable in the expert menu. Portable:
-right next to the exe, so the whole thing stays on a USB stick or synced folder
-as one unit. Moving between the two is detected automatically and offered as a
-one-time migration.
-
-A folder that syncs across two computers (OneDrive, Dropbox, Google Drive,
-iCloud Drive, Nextcloud) needs care: two machines saving to the same database
-file at once can corrupt it. Pointing the data folder at one shows a one-time
-warning explaining that risk. A small lock file next to the database then
-tracks which computer is using it, refreshed every 30 seconds; a second
-computer that finds a fresh lock from another machine opens everything
-read-only instead and says so with a permanent banner, so nothing is silently
-lost, while a lock nobody has refreshed for a while (the other computer likely
-crashed or closed) is taken over automatically. The switch for this, on by
-default, sits in the Troubleshooting group of the expert menu's System tab. This is a
-safety net, not a way to share the library across computers: for that,
-Markdown folder sync below is the built path.
-
-### Command line
-
-`prompt-saver.exe <command> ...` runs the app as a command line tool instead
-of opening its window: list, get, copy, add, edit, delete, restore prompts,
-manage tags and views, search, export, import, and create, list or restore
-backups, plus reading or writing one setting directly. If the app is already
-running, the command is handed to that copy and its answer is printed here.
-Otherwise the command runs on its own, straight against the database, and
-exits without ever opening a window. Either way only one process ever touches
-the database at a time.
-
-Every command takes `--help`. `--json` switches a command's output to
-machine readable JSON instead of plain text. Any command that changes
-something needs `--yes`, or it only prints what it would have done and
-changes nothing. The exceptions are `copy`, which only reads a prompt's text
-onto the clipboard, `backup create`, which only ever adds a new snapshot, and
-`export`, which only needs `--yes` to overwrite a file that already exists.
-Exit codes: 0 success, 1 bad invocation, 2 not
-found, 3 the store is locked or unavailable, 4 refused (missing `--yes`, or a
-value that failed validation). Full command list: `prompt-saver.exe --help`.
 
 ### Remote access & links
 
@@ -968,76 +1004,42 @@ command's arguments and JSON response shape, the error codes, the link
 scheme, and worked examples, so nothing needs to be worked out by trial and
 error.
 
-### Updates & security
+### Command line
 
-On first launch the app asks whether it may check for updates; until you
-answer, it never goes online. The update check is one of a short, fixed list of
-things that ever reach the network on their own: the update check itself, a first-run download of the
-Microsoft WebView2 installer if that runtime is missing, and the update
-download that follows once you choose to install one. A downloaded update is
-verified against a published checksum before it runs; a missing or
-mismatching checksum blocks the install instead of running an unverified
-file. Video export/conversion needs ffmpeg: an installed build ships it and
-never touches the network for it, while a portable build offers a one-time
-download only when a video feature actually needs it and only with your
-explicit consent, never automatically, never in the background. Two more
-things on that same short list are not update-related at all: opening the
-app's GitHub page from the logo or the version label hands the address to
-your default browser, and installing a text-recognition or dictation
-language pack (see below) has Windows itself fetch that pack online.
+`prompt-saver.exe <command> ...` runs the app as a command line tool instead
+of opening its window: list, get, copy, add, edit, delete, restore prompts,
+manage tags and views, search, export, import, and create, list or restore
+backups, plus reading or writing one setting directly. If the app is already
+running, the command is handed to that copy and its answer is printed here.
+Otherwise the command runs on its own, straight against the database, and
+exits without ever opening a window. Either way only one process ever touches
+the database at a time.
 
-After an update, the update dialog shows once what
-changed since the version you last saw; its list ships with the app, so
-opening it needs no network, only its own "Update from GitHub" button does.
-Reopen the current version's list any time from the About dialog.
+Every command takes `--help`. `--json` switches a command's output to
+machine readable JSON instead of plain text. Any command that changes
+something needs `--yes`, or it only prints what it would have done and
+changes nothing. The exceptions are `copy`, which only reads a prompt's text
+onto the clipboard, `backup create`, which only ever adds a new snapshot, and
+`export`, which only needs `--yes` to overwrite a file that already exists.
+Exit codes: 0 success, 1 bad invocation, 2 not
+found, 3 the store is locked or unavailable, 4 refused (missing `--yes`, or a
+value that failed validation). Full command list: `prompt-saver.exe --help`.
 
-### Common questions
+### Demo mode
 
-- *My screenshot of this app came out empty*: the screen-capture exclusion
-  privacy setting is working as intended; switch on "Allow screenshots of
-  Prompt Saver" in the expert menu if that's not wanted
-- *The app won't start*: it needs the Microsoft WebView2 runtime; the installer
-  offers it automatically if missing
-- *I can't find a setting*: check the expert menu's search box first; it scans
-  every tab at once
-- *A hotkey doesn't do anything*: another app may already hold that combination;
-  the editor explains this instead of accepting it silently
-
-### Standalone: Backup manager
-
-Encrypted, compressed snapshots of the entire library and settings, on an
-automatic schedule with daily, weekly, monthly and yearly retention tiers, and a restore that can
-target data only, settings only, or both. Two buttons beside Create backup
-save a backup to a file of your choice or import one from a file. The same
-window also has a storage section that shows how much disk
-space the database, attachments, screenshots, recordings, backups, temporary
-files and the error log each use, with a button to open a listed folder.
-
-A retention section lists one row per kind of data this app keeps around on
-its own (trash, copy history, copies from other apps, recordings, discarded
-recordings, temporary exports, and unfinished-edit states), with how much is
-there right now, how long it is kept, a button to clean it up on the spot, and
-a button that jumps straight to the matching expert-menu setting. The numbers
-are measured in the background and labelled with when that happened, the same
-way the storage section above already works, not recalculated on every open.
-
-Each snapshot in the list can also show its full content on demand: entry,
-view and tag counts, the most recent change inside it, the program version
-that made it, and whether its rows are sealed the normal way or fell back to
-plain storage. Below that, every prompt it holds, with its own edit date,
-size and kind, searchable by name and sortable by any column, with a button
-to restore that single prompt right from the list instead of the whole
-snapshot.
-
-### Usage statistics
-
-A small window opened from Settings → Usage statistics, with four things: the
-number of prompts, the copies of the last 7 days, the most used prompts by
-name (a list of 5, 10 or 20, your choice) and the prompts that were never used,
-which you can click to find them in the library. The "Show statistics" switch
-turns the display on; the numbers themselves are collected by the copy
-history. Everything stays on this computer. The export button saves the full
-numbers, including daily counts and tool use, as CSV, TXT or JSON.
+An expert-menu switch (System tab, Troubleshooting group) swaps the whole window to a bundled sample
+library covering most features at once: prompts with and without an image, a
+prompt with rotation, a couple of plain prompts to start a chain with, a
+placeholder, tags, a favorite, two views, a folder, an attachment and (when
+available) a video. Turning it on rebuilds the sample library fresh every
+time and restarts the app into it; the real library is never opened, written
+or even read while any of this happens. A permanent marker stays visible in
+the window for as long as demo mode is on, so nobody mistakes the sample data
+for their own. Turning it back off asks for confirmation, since anything
+changed during the session is discarded, then restarts back into the real
+library exactly as it was. The same sample library is also the source for
+this help window's own picture and for `docs/screenshot.png`: see the
+README's "Building from source" section for the exact steps.
 
 ---
 
@@ -1046,6 +1048,8 @@ numbers, including daily counts and tool use, as CSV, TXT or JSON.
 Derselbe Inhalt wie oben, wie er auch im Hilfe-Menü der App steht (Einstellungen →
 Hilfe). Nur Englisch und Deutsch. Jede andere Sprache in der App fällt auf
 Englisch zurück.
+
+### Grundlagen
 
 **Erste Schritte**: Eine Kachel ist ein gespeicherter Eintrag im Raster. Doppelklick
 auf eine leere Rasterzelle (oder Text ins Feld unten tippen und „Speichern“ drücken)
@@ -1072,19 +1076,16 @@ Tour tatsächlich beendet ist. Escape oder „Überspringen" schließt sofort; n
 Escape öffnet eine Meldung mit Rückgängig die Tour wieder. Jederzeit erneut aufrufbar über das Expertenmenü: dort
 wirkt ein Schalter auf dem letzten Schritt sofort statt erst bei „Fertig".
 
+**Das Raster**: freie Platzierung, standardmäßig bis 20×20 Zellen (im
+Expertenmenü bis 200×200 einstellbar), eigenes Layout je Ansicht. Eine Kachel
+auf einen Ansichtsreiter über dem Raster gezogen verschiebt sie in diese
+Ansicht, mit gedrückter Strg-Taste wird stattdessen kopiert und sie bleibt in
+beiden. Die Rastergröße
+ändert man per Rechtsklick auf einen Ansichtsreiter oder eine freie Stelle im
+Raster unter Rastergröße.
+
 **Kacheln anlegen**: Dateianhang, Screenshot-Werkzeug, Farbpipette (aus),
 Ziehen & Ablegen.
-
-**Platzhalter**: `{#{Name}#}` im Text öffnet beim Kopieren ein Popup
-für jeden Wert. Dynamische Platzhalter (`{#{date}#}`, `{#{time}#}`,
-`{#{clipboard}#}`) füllen sich selbst. Feste Werte (im Expertenmenü, aus)
-schlagen für einen passenden Namen eine gepflegte Liste von Werten vor, nur
-als Platzhaltertext im Feld, mit einer kleinen Stecknadel markiert, nie
-eingesetzt, bevor er getippt oder übernommen wird.
-
-<p>
-<svg viewBox="0 0 560 130" xmlns="http://www.w3.org/2000/svg" role="img"><text x="30" y="45" font-size="15" fill="currentColor" text-anchor="start">{#{Kunde=Meier|Meier,Schulz}#}</text><line x1="65" y1="55" x2="65" y2="80" stroke="currentColor" stroke-width="1"/><text x="65" y="95" font-size="11" fill="currentColor" text-anchor="middle">Name</text><line x1="118" y1="55" x2="150" y2="80" stroke="currentColor" stroke-width="1"/><text x="150" y="95" font-size="11" fill="currentColor" text-anchor="middle">Vorgabe</text><line x1="240" y1="55" x2="260" y2="80" stroke="currentColor" stroke-width="1"/><text x="260" y="95" font-size="11" fill="currentColor" text-anchor="middle">Auswahlliste</text></svg>
-</p>
 
 **Der Editor**: Markdown-Vorschau, Syntax-Hervorhebung, Versionen, private
 Notizen (Markdown-Vorschau und Notizen ab Werk an, im Expertenmenü abschaltbar). Bei einer Datei-Kachel
@@ -1102,13 +1103,187 @@ Text, nie ein angehängtes Bild, und Speichern oder Abbrechen entfernt den
 Entwurf sofort wieder. Ist beim nächsten Start noch ein Entwurf vorhanden, wird
 einmal gefragt, ob er wiederhergestellt werden soll.
 
-**Das Raster**: freie Platzierung, standardmäßig bis 20×20 Zellen (im
-Expertenmenü bis 200×200 einstellbar), eigenes Layout je Ansicht. Eine Kachel
-auf einen Ansichtsreiter über dem Raster gezogen verschiebt sie in diese
-Ansicht, mit gedrückter Strg-Taste wird stattdessen kopiert und sie bleibt in
-beiden. Die Rastergröße
-ändert man per Rechtsklick auf einen Ansichtsreiter oder eine freie Stelle im
-Raster unter Rastergröße.
+**Das Expertenmenü**: jede Funktion hat einen Schalter mit ihren Parametern
+direkt darunter. Die Suche durchsucht alle Tabs auf einmal; ausgeschaltete
+Funktionen tragen ein kleines Punkt-Abzeichen. Zurücksetzen auf drei Ebenen:
+ein Wert, eine ganze Gruppe, oder alles auf einmal.
+
+**Tastaturbedienung**: Pfeiltasten bewegen einen Fokusring über das Raster
+(an), Enter oder Leertaste kopiert die fokussierte Kachel.
+
+**Häufige Fragen**: Bildschirmaufnahme dieser App leer? Der
+Datenschutz-Ausschluss wirkt wie vorgesehen, mit "Screenshots von Prompt
+Saver erlauben" im Expertenmenü aufhebbar. App
+startet nicht? Die WebView2-Laufzeit fehlt, der Installer bietet sie an.
+Einstellung nicht gefunden? Die Suche im Expertenmenü durchsucht alle Tabs
+auf einmal. Tastenkürzel tut nichts? Eine andere App hält die Kombination
+vermutlich schon.
+
+### Funktionen
+
+**Kacheln auswählen**: Rechtsklick auf eine Kachel (oder Strg+Klick) wählt sie aus;
+solange du auswählst, zeigt jede Kachel ihr Kästchen. Das Kachelmenü öffnet per
+Rechtsklick.
+
+**Kopieren**: Verketten (mehrere verschiedene Kacheln als ein Text, anders als
+Rotation oben; auch direkt über Kette hier starten: Rechtsklick auf eine Textkachel, einzeln
+abschaltbar unter Kette im Expertenmenü). Eine Kette bleibt beim Wechsel in ein
+anderes Programm bestehen. Der Ketten-Button oben startet
+und beendet eine Kette. Auch Strg+V im App-Fenster beendet sie. Was zwischen zwei verketteten
+Kacheln steht, legt das Expertenmenü fest (ab Werk eine Leerzeile). Beim Verketten zeigt
+eine Leiste über dem Raster die gewählten
+Schritte der Reihe nach, mit Marken für die Platzhalter, die jeder Schritt
+braucht und die er selbst füllt; ein Schritt ohne Antwort aus einem früheren
+Schritt wird rot markiert, lässt sich aber trotzdem starten. Die Zeilen lassen
+sich per Ziehen umsortieren und per Rechtsklick entfernen (die Zwischenablage
+folgt), die Leiste selbst ist einzeln abschaltbar.
+Mit eingeschalteter Doppelklick-Dauer-an-Funktion bleibt der Kettenmodus nach dem
+Kopieren an, um mehrere Ketten nacheinander zu bauen.
+Tastenkürzel pro Kachel, Herausziehen (mit oder, per Schalter, ohne
+Modifikatortaste), automatisches Einfügen. Formatiert kopieren (im Rechtsklick
+und im Editor, nur bei Text mit echter Markdown-Syntax): legt zusätzlich zur
+Markdown-Fassung eine gerenderte Fassung in die Zwischenablage, sodass Word,
+Outlook oder ein Browser die Formatierung sehen, ein reines Textfeld aber
+weiterhin genau den Markdown-Text bekommt wie bei einer normalen Kopie.
+
+<p>
+<svg viewBox="0 0 560 130" xmlns="http://www.w3.org/2000/svg" role="img"><rect x="20" y="15" width="110" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="75" y="36" font-size="11" fill="currentColor" text-anchor="middle">Prompt anlegen</text><line x1="130" y1="32" x2="187" y2="32" stroke="currentColor" stroke-width="1.5"/><path d="M 185 28 L 195 32 L 185 36" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><rect x="195" y="15" width="170" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="280" y="36" font-size="11" fill="currentColor" text-anchor="middle">kopieren</text><line x1="365" y1="32" x2="422" y2="32" stroke="currentColor" stroke-width="1.5"/><path d="M 420 28 L 430 32 L 420 36" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><rect x="430" y="15" width="110" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="485" y="36" font-size="11" fill="currentColor" text-anchor="middle">einfügen</text><line x1="280" y1="49" x2="280" y2="70" stroke="currentColor" stroke-width="1" stroke-dasharray="2 2"/><rect x="60" y="78" width="115" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="117" y="99" font-size="10" fill="currentColor" text-anchor="middle">Kachel</text><rect x="190" y="78" width="115" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="247" y="99" font-size="10" fill="currentColor" text-anchor="middle">Tastenkürzel</text><rect x="320" y="78" width="115" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="377" y="99" font-size="10" fill="currentColor" text-anchor="middle">Schwebeknopf</text><rect x="450" y="78" width="115" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="507" y="99" font-size="10" fill="currentColor" text-anchor="middle">Infobereich</text></svg>
+</p>
+
+<p>
+<svg viewBox="0 0 560 90" xmlns="http://www.w3.org/2000/svg" role="img"><rect x="30" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="80" y="41" font-size="11" fill="currentColor" text-anchor="middle">Schritt 1</text><rect x="230" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="280" y="41" font-size="11" fill="currentColor" text-anchor="middle">Schritt 2</text><rect x="430" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="480" y="41" font-size="11" fill="currentColor" text-anchor="middle">Schritt 3</text><line x1="130" y1="37" x2="217" y2="37" stroke="currentColor" stroke-width="1.5"/><path d="M 215 33 L 225 37 L 215 41" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><text x="177" y="25" font-size="10" fill="currentColor" text-anchor="middle">{#{X}#}</text><line x1="330" y1="37" x2="417" y2="37" stroke="currentColor" stroke-width="1.5"/><path d="M 415 33 L 425 37 L 415 41" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><text x="377" y="25" font-size="10" fill="currentColor" text-anchor="middle">{#{Y}#}</text></svg>
+</p>
+
+**Platzhalter**: `{#{Name}#}` im Text öffnet beim Kopieren ein Popup
+für jeden Wert. Dynamische Platzhalter (`{#{date}#}`, `{#{time}#}`,
+`{#{clipboard}#}`) füllen sich selbst. Feste Werte (im Expertenmenü, aus)
+schlagen für einen passenden Namen eine gepflegte Liste von Werten vor, nur
+als Platzhaltertext im Feld, mit einer kleinen Stecknadel markiert, nie
+eingesetzt, bevor er getippt oder übernommen wird.
+
+<p>
+<svg viewBox="0 0 560 130" xmlns="http://www.w3.org/2000/svg" role="img"><text x="30" y="45" font-size="15" fill="currentColor" text-anchor="start">{#{Kunde=Meier|Meier,Schulz}#}</text><line x1="65" y1="55" x2="65" y2="80" stroke="currentColor" stroke-width="1"/><text x="65" y="95" font-size="11" fill="currentColor" text-anchor="middle">Name</text><line x1="118" y1="55" x2="150" y2="80" stroke="currentColor" stroke-width="1"/><text x="150" y="95" font-size="11" fill="currentColor" text-anchor="middle">Vorgabe</text><line x1="240" y1="55" x2="260" y2="80" stroke="currentColor" stroke-width="1"/><text x="260" y="95" font-size="11" fill="currentColor" text-anchor="middle">Auswahlliste</text></svg>
+</p>
+
+**Tastenkürzel**: ein globales Tastenkürzel öffnet den Schnellstarter (Standard
+Strg+Alt+P), ein eigener Tastenkürzel pro Kachel kopiert (und fügt optional ein). Bei
+einer Kollision gewinnt der App-Tastenkürzel, sonst die erste Kachel in der Liste.
+„Alle Tastenkürzel“ neben dem globalen Feld öffnet die Tastenkürzel-Übersicht mit jedem Tastenkürzel, durchsuchbar, und
+belegt jede Zeile direkt um, ohne den jeweiligen Editor zu öffnen. Eine Kachel
+mit eigenem Tastenkürzel zeigt ein kleines Tastatursymbol.
+
+**Rotation und Kette:** zwei verschiedene Dinge. Rotation ändert den Text
+EINER Kachel, Kette kopiert MEHRERE verschiedene Kacheln zusammen.
+
+| Ich will... | nutze... |
+| --- | --- |
+| verschiedene Formulierungen desselben Prompts | Rotation |
+| mehrere verschiedene Prompts hintereinander | Kette |
+
+**Rotation**: eine Kachel trägt eine Liste von Texten, jede Kopie
+liefert den nächsten Rotationstext (Reihenfolge oder Zufall). Standardmäßig an; der
+Schalter pro Kachel steht im Editor unter „Erweiterte Optionen“. Ein Badge auf
+Kachel/schwebender Button/Mitglied eines Button-Ordners zählt hoch: im Zufalls-Modus die Ziehungen
+im aktuellen Durchlauf statt einer springenden Position; übersteht Neustart und
+Sicherung, aber keinen CSV/TXT-Import (neue Kachel, neuer Zeiger). Eine geeignete
+Kachel (2+ Einträge, kein Bild/Datei) kann zusätzlich **beim Einfügen
+rotieren**: Button „Beim Einfügen rotieren“ im Editor oder Rechtsklickmenü,
+solange Kachel- und App-Schalter beide an sind. Bei jedem echten Einfügen
+rückt der nächste Eintrag nach, nicht nur beim Kopieren; das Abzeichen zeigt
+eine Akzentfarbe, solange die Sitzung läuft. Platzhalter werden einmal pro
+Sitzung abgefragt, dieselben Werte gelten für jeden Rotationstext. Fünf
+Experteneinstellungen regeln Zeitlimit und Erkennungsfenster; zu schnelles,
+zu häufiges Einfügen pausiert die Sitzung mit einem Hinweis statt zu wiederholen.
+
+**Schwebende Buttons:** kleine, immer sichtbare Kopier-Buttons außerhalb des
+Hauptfensters, über jeder anderen App.
+Ein Button, dessen gespeicherter Bildschirm nicht mehr angeschlossen ist, öffnet sich
+auf dem Hauptbildschirm, als geparkt markiert, und springt von selbst zurück, sobald
+dieser Bildschirm wieder da ist. Eine Aktion im Expertenmenü holt alle schwebenden
+Fenster auf einmal auf den Hauptbildschirm.
+
+**Ordner:** eine Geste an zwei Stellen, ein Ziehen auf ein anderes fasst es zu
+einem Ordner zusammen. Ein schwebender Button auf einen anderen ergibt einen
+Button-Ordner. Eine Kachel auf eine andere ergibt einen Kachelordner, und
+gehört immer nur zu einem Kachelordner gleichzeitig.
+
+<p>
+<svg viewBox="200 0 360 120" xmlns="http://www.w3.org/2000/svg" role="img"><circle cx="255" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="295" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="335" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="295" y="108" font-size="11" fill="currentColor" text-anchor="middle">Button-Ordner</text><rect x="430" y="20" width="100" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="430" y1="55" x2="530" y2="55" stroke="currentColor" stroke-width="1"/><line x1="480" y1="20" x2="480" y2="90" stroke="currentColor" stroke-width="1"/><text x="480" y="108" font-size="11" fill="currentColor" text-anchor="middle">Kachelordner</text></svg>
+</p>
+
+**Infobereich-Menü**: Zuletzt kopiert, Favoriten. Erscheint als abgerundetes,
+zum Thema passendes Fenster statt des einfachen Windows-Menüs; im Expertenmenü
+lässt sich bei Bedarf auf das einfache Systemmenü zurückschalten. Dort auch
+einstellbar: die maximale Länge eines Eintragsnamens. Tippen ins Suchfeld des
+Infobereich-Menüs öffnet den Schnellstarter mit dem Getippten.
+
+**Schneller Launcher.** Strg+Alt+P, unscharfe Suche, sofortiges Kopieren. Wie viele Treffer er zeigt, stellt das Expertenmenü ein (ab Werk 8). Eine Zeile unten nennt die Tasten.
+
+**Mehrere Ansichten.** Mehrere Rasterseiten.
+
+**Spracheingabe**: standardmäßig an; der Mikrofon-Button neben der Eingabeleiste
+und im Kachel-Editor verwandelt Sprache in Text, komplett auf dem Gerät über die
+eigene Spracherkennung von Windows. Gesprochene Satzzeichen-Wörter („Komma",
+„neue Zeile" …) werden zu echten Zeichen; „wörtlich" vor einem Wort tippt es
+statt es als Befehl zu erkennen. Ein optionaler globaler Kurzbefehl startet und
+stoppt eine Aufnahme, ohne das Fenster zu öffnen. Braucht ebenfalls ein
+Windows-Sprachpaket (derselbe Dialog wie bei OCR).
+
+**Sprachpakete**: Texterkennung und Spracheingabe teilen sich Windows' eigene
+Sprachpakete und denselben Installationsdialog. Die App bietet den Download beim
+ersten Bedarf an; die Installation braucht Administratorrechte (übliche
+Windows-Bestätigung). „Sprachen der Texterkennung verwalten…" (bei der Spracheingabe
+„Diktatsprachen verwalten…") im Sprachen-Dropdown listet
+Installiertes und Verfügbares und startet Installation/Update erneut; das
+Auflisten selbst braucht normalerweise keine Sonderrechte, auf manchen
+Windows-Systemen aber doch; der Dialog sagt das dann offen und bietet an, die
+Abfrage mit Administratorrechten auszuführen, statt leer zu bleiben. Dabei wird
+nur aufgelistet, nichts installiert. Eine Hintergrundprüfung meldet ein Paket,
+dessen Version sich geändert hat oder das ein Windows-Update entfernt hat, ohne
+gleich zur Neuinstallation aufzufordern: „Abbrechen“ im Hinweis blendet ihn
+vorübergehend aus, oder die Prüfung lässt sich ganz abschalten.
+
+**Markdown-Ordner-Sync (Beta)**: spiegelt jede Text-Kachel als lesbare
+`.md`-Datei in einem gewählten Ordner, inklusive Ansicht, Rasterzelle und
+Ordner. Angehängte Dateien, Bilder und PDFs wandern als Verweis mit (Pfad und
+PDF-Seite im Kopf, nie die Datei selbst); ein direkt eingefügter Screenshot hat
+keinen Pfad und bleibt nur in der Datenbank. Eine in einer eingehenden Datei
+genannte Ansicht oder ein Ordner, den es auf diesem Rechner noch nicht gibt,
+wird automatisch angelegt, per Namensabgleich. **Die Dateien sind Klartext**:
+anders als die Datenbank, also kein synchronisierter oder geteilter Ordner für
+Sensibles. Im Expertenmenü lässt sich einstellen, wie oft der Sync-Ordner auf
+außerhalb der App bearbeitete Dateien geprüft wird.
+
+Der Ordner ist `<Datenordner>\prompt-saver-sync`, solange kein eigener gewählt
+ist; wer schon synchronisiert, behält seinen bisherigen Ordner. Eine Datei wird
+erst gelesen, wenn sie sich nicht mehr ändert, eine Änderung von außen kann also
+einen Durchlauf länger brauchen. Was in welche Richtung passiert, steht fest und
+geschieht nie stillschweigend:
+
+- **Eine im Ordner gelöschte Datei löscht die Kachel nicht.** Sie wird im
+  nächsten Durchlauf neu geschrieben. Wer die Kachel in der App löscht, löscht
+  auch die Datei.
+- **Umbenennen erzeugt eine zweite Kachel.** Der Dateiname ist die feste Kennung
+  der Kachel; die umbenannte Datei kommt als neue Kachel an, das Original wird
+  unter seinem eigenen Namen neu geschrieben. Also in der App umbenennen.
+- **Kachel und Datei gleichzeitig geändert?** In diesem Durchlauf gewinnt die
+  Datei, und die ersetzte Fassung landet in der Versionsgeschichte der Kachel.
+  Umgekehrt gewinnt die App die Datei, und der Dateiinhalt bleibt daneben als
+  `<Kennung>.conflict-<Zahl>.md` liegen.
+- **Dateien, die diese App nicht geschrieben hat, werden nie angefasst**, in
+  keiner Richtung, und eine Datei über 8 MB wird ganz übersprungen, nie
+  abgeschnitten. Das Fehlerprotokoll sagt warum.
+- **Ein Ordnerwechsel fragt nach**, was mit dem alten Ordner geschehen soll:
+  löschen oder behalten. Gelöscht werden nur die `.md`-Dateien, die diese App
+  selbst geschrieben hat, nie ein Unterordner, und der Ordner selbst nur, wenn er
+  danach leer ist. Liegt eine fremde Datei darin, wird gar nichts gelöscht und
+  eine Meldung nennt, was im Weg liegt.
+- **Ein nicht erreichbarer Ordner pausiert die Synchronisierung**, statt alle
+  paar Sekunden zu scheitern (nach fünf Fehlversuchen, einstellbar). Die Zeile
+  unter dem Ordner im Expertenmenü nennt den letzten gelesenen Stand, die Zahl
+  der Dateien und den Grund der Pause.
+
+### Aufnehmen
 
 **Screenshot-Werkzeug**: Bereich oder ganzes Fenster (auch geschützte wie den
 Task-Manager) direkt zu einer neuen Kachel. Davor öffnet sich standardmäßig ein
@@ -1298,118 +1473,10 @@ kann automatisch kopiert und umgebrochene Zeilen zu ganzen Sätzen zusammengefü
 werden, beides einstellbar. Braucht ein Windows-Sprachpaket (siehe
 „Sprachpakete" unten).
 
-**Spracheingabe**: standardmäßig an; der Mikrofon-Button neben der Eingabeleiste
-und im Kachel-Editor verwandelt Sprache in Text, komplett auf dem Gerät über die
-eigene Spracherkennung von Windows. Gesprochene Satzzeichen-Wörter („Komma",
-„neue Zeile" …) werden zu echten Zeichen; „wörtlich" vor einem Wort tippt es
-statt es als Befehl zu erkennen. Ein optionaler globaler Kurzbefehl startet und
-stoppt eine Aufnahme, ohne das Fenster zu öffnen. Braucht ebenfalls ein
-Windows-Sprachpaket (derselbe Dialog wie bei OCR).
-
-**Sprachpakete**: Texterkennung und Spracheingabe teilen sich Windows' eigene
-Sprachpakete und denselben Installationsdialog. Die App bietet den Download beim
-ersten Bedarf an; die Installation braucht Administratorrechte (übliche
-Windows-Bestätigung). „Sprachen der Texterkennung verwalten…" (bei der Spracheingabe
-„Diktatsprachen verwalten…") im Sprachen-Dropdown listet
-Installiertes und Verfügbares und startet Installation/Update erneut; das
-Auflisten selbst braucht normalerweise keine Sonderrechte, auf manchen
-Windows-Systemen aber doch; der Dialog sagt das dann offen und bietet an, die
-Abfrage mit Administratorrechten auszuführen, statt leer zu bleiben. Dabei wird
-nur aufgelistet, nichts installiert. Eine Hintergrundprüfung meldet ein Paket,
-dessen Version sich geändert hat oder das ein Windows-Update entfernt hat, ohne
-gleich zur Neuinstallation aufzufordern: „Abbrechen“ im Hinweis blendet ihn
-vorübergehend aus, oder die Prüfung lässt sich ganz abschalten.
-
 **Farbpipette & Auswahlverlauf**: Pixel als Hex/RGB/HSL kopieren; die letzten
 Auswahlen überstehen einen Neustart. Standardmäßig aus.
 
-**Rotation und Kette:** zwei verschiedene Dinge. Rotation ändert den Text
-EINER Kachel, Kette kopiert MEHRERE verschiedene Kacheln zusammen.
-
-| Ich will... | nutze... |
-| --- | --- |
-| verschiedene Formulierungen desselben Prompts | Rotation |
-| mehrere verschiedene Prompts hintereinander | Kette |
-
-**Rotation**: eine Kachel trägt eine Liste von Texten, jede Kopie
-liefert den nächsten Rotationstext (Reihenfolge oder Zufall). Standardmäßig an; der
-Schalter pro Kachel steht im Editor unter „Erweiterte Optionen“. Ein Badge auf
-Kachel/schwebender Button/Mitglied eines Button-Ordners zählt hoch: im Zufalls-Modus die Ziehungen
-im aktuellen Durchlauf statt einer springenden Position; übersteht Neustart und
-Sicherung, aber keinen CSV/TXT-Import (neue Kachel, neuer Zeiger). Eine geeignete
-Kachel (2+ Einträge, kein Bild/Datei) kann zusätzlich **beim Einfügen
-rotieren**: Button „Beim Einfügen rotieren“ im Editor oder Rechtsklickmenü,
-solange Kachel- und App-Schalter beide an sind. Bei jedem echten Einfügen
-rückt der nächste Eintrag nach, nicht nur beim Kopieren; das Abzeichen zeigt
-eine Akzentfarbe, solange die Sitzung läuft. Platzhalter werden einmal pro
-Sitzung abgefragt, dieselben Werte gelten für jeden Rotationstext. Fünf
-Experteneinstellungen regeln Zeitlimit und Erkennungsfenster; zu schnelles,
-zu häufiges Einfügen pausiert die Sitzung mit einem Hinweis statt zu wiederholen.
-
-**Kacheln auswählen**: Rechtsklick auf eine Kachel (oder Strg+Klick) wählt sie aus;
-solange du auswählst, zeigt jede Kachel ihr Kästchen. Das Kachelmenü öffnet per
-Rechtsklick.
-
-**Kopieren**: Verketten (mehrere verschiedene Kacheln als ein Text, anders als
-Rotation oben; auch direkt über Kette hier starten: Rechtsklick auf eine Textkachel, einzeln
-abschaltbar unter Kette im Expertenmenü). Eine Kette bleibt beim Wechsel in ein
-anderes Programm bestehen. Der Ketten-Button oben startet
-und beendet eine Kette. Auch Strg+V im App-Fenster beendet sie. Was zwischen zwei verketteten
-Kacheln steht, legt das Expertenmenü fest (ab Werk eine Leerzeile). Beim Verketten zeigt
-eine Leiste über dem Raster die gewählten
-Schritte der Reihe nach, mit Marken für die Platzhalter, die jeder Schritt
-braucht und die er selbst füllt; ein Schritt ohne Antwort aus einem früheren
-Schritt wird rot markiert, lässt sich aber trotzdem starten. Die Zeilen lassen
-sich per Ziehen umsortieren und per Rechtsklick entfernen (die Zwischenablage
-folgt), die Leiste selbst ist einzeln abschaltbar.
-Mit eingeschalteter Doppelklick-Dauer-an-Funktion bleibt der Kettenmodus nach dem
-Kopieren an, um mehrere Ketten nacheinander zu bauen.
-Tastenkürzel pro Kachel, Herausziehen (mit oder, per Schalter, ohne
-Modifikatortaste), automatisches Einfügen. Formatiert kopieren (im Rechtsklick
-und im Editor, nur bei Text mit echter Markdown-Syntax): legt zusätzlich zur
-Markdown-Fassung eine gerenderte Fassung in die Zwischenablage, sodass Word,
-Outlook oder ein Browser die Formatierung sehen, ein reines Textfeld aber
-weiterhin genau den Markdown-Text bekommt wie bei einer normalen Kopie.
-
-<p>
-<svg viewBox="0 0 560 130" xmlns="http://www.w3.org/2000/svg" role="img"><rect x="20" y="15" width="110" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="75" y="36" font-size="11" fill="currentColor" text-anchor="middle">Prompt anlegen</text><line x1="130" y1="32" x2="187" y2="32" stroke="currentColor" stroke-width="1.5"/><path d="M 185 28 L 195 32 L 185 36" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><rect x="195" y="15" width="170" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="280" y="36" font-size="11" fill="currentColor" text-anchor="middle">kopieren</text><line x1="365" y1="32" x2="422" y2="32" stroke="currentColor" stroke-width="1.5"/><path d="M 420 28 L 430 32 L 420 36" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><rect x="430" y="15" width="110" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="485" y="36" font-size="11" fill="currentColor" text-anchor="middle">einfügen</text><line x1="280" y1="49" x2="280" y2="70" stroke="currentColor" stroke-width="1" stroke-dasharray="2 2"/><rect x="60" y="78" width="115" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="117" y="99" font-size="10" fill="currentColor" text-anchor="middle">Kachel</text><rect x="190" y="78" width="115" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="247" y="99" font-size="10" fill="currentColor" text-anchor="middle">Tastenkürzel</text><rect x="320" y="78" width="115" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="377" y="99" font-size="10" fill="currentColor" text-anchor="middle">Schwebeknopf</text><rect x="450" y="78" width="115" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="507" y="99" font-size="10" fill="currentColor" text-anchor="middle">Infobereich</text></svg>
-</p>
-
-<p>
-<svg viewBox="0 0 560 90" xmlns="http://www.w3.org/2000/svg" role="img"><rect x="30" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="80" y="41" font-size="11" fill="currentColor" text-anchor="middle">Schritt 1</text><rect x="230" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="280" y="41" font-size="11" fill="currentColor" text-anchor="middle">Schritt 2</text><rect x="430" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="480" y="41" font-size="11" fill="currentColor" text-anchor="middle">Schritt 3</text><line x1="130" y1="37" x2="217" y2="37" stroke="currentColor" stroke-width="1.5"/><path d="M 215 33 L 225 37 L 215 41" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><text x="177" y="25" font-size="10" fill="currentColor" text-anchor="middle">{#{X}#}</text><line x1="330" y1="37" x2="417" y2="37" stroke="currentColor" stroke-width="1.5"/><path d="M 415 33 L 425 37 L 415 41" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><text x="377" y="25" font-size="10" fill="currentColor" text-anchor="middle">{#{Y}#}</text></svg>
-</p>
-
-**Tastenkürzel**: ein globales Tastenkürzel öffnet den Schnellstarter (Standard
-Strg+Alt+P), ein eigener Tastenkürzel pro Kachel kopiert (und fügt optional ein). Bei
-einer Kollision gewinnt der App-Tastenkürzel, sonst die erste Kachel in der Liste.
-„Alle Tastenkürzel“ neben dem globalen Feld öffnet die Tastenkürzel-Übersicht mit jedem Tastenkürzel, durchsuchbar, und
-belegt jede Zeile direkt um, ohne den jeweiligen Editor zu öffnen. Eine Kachel
-mit eigenem Tastenkürzel zeigt ein kleines Tastatursymbol.
-
-**Schwebende Buttons:** kleine, immer sichtbare Kopier-Buttons außerhalb des
-Hauptfensters, über jeder anderen App.
-Ein Button, dessen gespeicherter Bildschirm nicht mehr angeschlossen ist, öffnet sich
-auf dem Hauptbildschirm, als geparkt markiert, und springt von selbst zurück, sobald
-dieser Bildschirm wieder da ist. Eine Aktion im Expertenmenü holt alle schwebenden
-Fenster auf einmal auf den Hauptbildschirm.
-
-**Ordner:** eine Geste an zwei Stellen, ein Ziehen auf ein anderes fasst es zu
-einem Ordner zusammen. Ein schwebender Button auf einen anderen ergibt einen
-Button-Ordner. Eine Kachel auf eine andere ergibt einen Kachelordner, und
-gehört immer nur zu einem Kachelordner gleichzeitig.
-
-<p>
-<svg viewBox="200 0 360 120" xmlns="http://www.w3.org/2000/svg" role="img"><circle cx="255" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="295" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="335" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="295" y="108" font-size="11" fill="currentColor" text-anchor="middle">Button-Ordner</text><rect x="430" y="20" width="100" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="430" y1="55" x2="530" y2="55" stroke="currentColor" stroke-width="1"/><line x1="480" y1="20" x2="480" y2="90" stroke="currentColor" stroke-width="1"/><text x="480" y="108" font-size="11" fill="currentColor" text-anchor="middle">Kachelordner</text></svg>
-</p>
-
-**Infobereich-Menü**: Zuletzt kopiert, Favoriten. Erscheint als abgerundetes,
-zum Thema passendes Fenster statt des einfachen Windows-Menüs; im Expertenmenü
-lässt sich bei Bedarf auf das einfache Systemmenü zurückschalten. Dort auch
-einstellbar: die maximale Länge eines Eintragsnamens. Tippen ins Suchfeld des
-Infobereich-Menüs öffnet den Schnellstarter mit dem Getippten.
-
-**Kopien aus anderen Apps**: aus; eingeschaltet nimmt der Kopierverlauf auch Text
-auf, der in anderen Apps kopiert wurde, filterbar nach Herkunft.
+### Kacheln
 
 **Kachel-Verhalten & -Aussehen**: Menü, Umsortieren, Hover-Anhebung, Optik. Die
 Schrift auf Kacheln, Ordnern, Ansichts-Tabs und Meldungen wählt automatisch
@@ -1418,15 +1485,26 @@ die Helligkeitsschwelle für Schwarz verschieben. Weiße Schrift auf einer helle
 Farbe bekommt einen dunklen Schatten, damit sie lesbar bleibt; im Expertenmenü
 lässt sich der Schatten abschalten oder seine Stärke einstellen.
 
-**Kurzinfos**: Verzögerung, Breite.
+**Medien**: Video-Steuerung, Autoplay und Schleife (beide ab Werk aus), Unschärfe bis zum Überfahren. Bibliothek und Kopierverlauf
+zeigen außerdem die Länge eines Videos auf seinem Vorschaubild sowie Auflösung
+und Dateigröße in der Kurzhilfe; ältere Anhänge holen das im Hintergrund nach,
+sobald sie zum ersten Mal angezeigt werden. Das Hauptraster bleibt unverändert.
 
 **Favoriten**: Stern-Markierung, eigene Favoriten-Ansicht. „Zu Favoriten hinzufügen“ im Rechtsklickmenü einer Kachel oder den Stern in der Bibliothek nutzen; eine Favoriten-Kachel zeigt oben rechts einen kleinen Stern.
+
+**Kurzinfos**: Verzögerung, Breite.
+
+### Aussehen
+
+**Aussehen & Designs**: sieben mitgelieferte Designs, optionaler Design-Editor.
+
+**Design-Editor.** Eigene Farbvarianten bestehender Designs. Geöffnet wird er mit „Eigenes Design…“ am Ende der Design-Auswahl in den Einstellungen.
 
 **Skalierung & Zoom**: UI-, Dialog-, Editor- und Symbolgröße getrennt einstellbar.
 Die Größe der Oberfläche steht in den Einstellungen; die Symbol-, Editor- und
 Hauptknopf-Skalierung im Expertenmenü → Aussehen → Größen (%).
 
-**Aussehen & Designs**: sieben mitgelieferte Designs, optionaler Design-Editor.
+### Bibliothek & Kopierverlauf
 
 **Bibliothek & Suche**: unscharfe Suche, intelligente Sortierung, Filter,
 `tag:`/`var:`-Suchpräfixe (mit `-` auch verneint). Ein Stern neben dem Suchfeld
@@ -1461,10 +1539,17 @@ der Sammelleiste der Bibliothek.
 Installation 30 Tage, einstellbar, 0 behält alles), Einzeleintrag löschen.
 Der Kopierverlauf ist eine Liste; das Sortierfeld wechselt zwischen Zuletzt kopiert und Meistgenutzt (die 20 häufigsten).
 
-**Medien**: Video-Steuerung, Autoplay und Schleife (beide ab Werk aus), Unschärfe bis zum Überfahren. Bibliothek und Kopierverlauf
-zeigen außerdem die Länge eines Videos auf seinem Vorschaubild sowie Auflösung
-und Dateigröße in der Kurzhilfe; ältere Anhänge holen das im Hintergrund nach,
-sobald sie zum ersten Mal angezeigt werden. Das Hauptraster bleibt unverändert.
+**Kopien aus anderen Apps**: aus; eingeschaltet nimmt der Kopierverlauf auch Text
+auf, der in anderen Apps kopiert wurde, filterbar nach Herkunft.
+
+### System & Daten
+
+**System**: Updates, Tastatur-Navigation, Datenordner; mehrere Instanzen stehen in der Gruppe Fehlersuche.
+Lange Vorgänge (Export, Umwandlung, ffmpeg-Download, Sicherung, Import) füllen
+das Taskleistensymbol und zeigen ab einer eingestellten Schwelle „noch etwa …",
+beides abschaltbar.
+Neben „Automatische Updates“ im Einstellungsfenster steht die Intervall-Auswahl, solange der
+Schalter an ist; „Automatische Updates“ auszuschalten schaltet die automatische Prüfung ab.
 
 **Werkzeugleiste**: welche Buttons Kopf- und Composer-Leiste zeigen. Obere Leiste
 ausblenden: Rechtsklick auf Zahnrad oder Kopfzeile.
@@ -1526,208 +1611,6 @@ sagt das genauso: einmal als Hinweis, und als dauerhafte Zeile in dieser
 Datenschutz-Gruppe, solange der letzte Speichervorgang fehlschlägt; sie
 verschwindet von selbst, sobald wieder erfolgreich gespeichert wird.
 
-**Vorführung**: Ein Schalter im Expertenmenü (Tab System, Gruppe Fehlersuche) schaltet das
-ganze Fenster auf einen mitgelieferten Beispielbestand um, der möglichst
-viele Funktionen auf einmal zeigt: Prompts mit und ohne Bild, ein
-Prompt mit Rotation, zwei einfache Prompts für den Anfang einer Kette, ein
-Platzhalter, Tags, ein Favorit, zwei Ansichten, ein Ordner, ein Anhang und
-(wenn vorhanden) ein Video. Das Einschalten baut den Beispielbestand jedes
-Mal frisch auf und startet die App darin neu; der echte Bestand wird dabei
-nie geöffnet, geschrieben oder auch nur gelesen. Eine dauerhafte Marke bleibt
-im Fenster sichtbar, solange die Vorführung läuft, damit niemand den
-Beispielbestand für den eigenen hält. Das Zurückschalten fragt zuerst nach,
-weil alles, was während der Vorführung geändert wurde, dabei verloren geht,
-und startet dann genau in den echten Bestand zurück. Derselbe
-Beispielbestand ist auch die Vorlage für das Bild in diesem Hilfefenster und
-für `docs/screenshot.png`: der genaue Ablauf steht im Abschnitt „Building
-from source" der README.
-
-**System**: Updates, Tastatur-Navigation, Datenordner; mehrere Instanzen stehen in der Gruppe Fehlersuche.
-Lange Vorgänge (Export, Umwandlung, ffmpeg-Download, Sicherung, Import) füllen
-das Taskleistensymbol und zeigen ab einer eingestellten Schwelle „noch etwa …",
-beides abschaltbar.
-Neben „Automatische Updates“ im Einstellungsfenster steht die Intervall-Auswahl, solange der
-Schalter an ist; „Automatische Updates“ auszuschalten schaltet die automatische Prüfung ab.
-
-**Datenwartung**: Papierkorb, Import/Export. Den Duplikatfinder öffnet der
-Button „Duplikate finden“ in der Bibliothek.
-„Letzte Meldungen“ hält eine kurze Liste der Fehlermeldungen fest, die nur kurz als
-Hinweis erschienen, mit Zeit und Ort; die Liste lässt sich in ihrem Fenster kopieren
-oder leeren. Die Einstellungen allein lassen sich in derselben Gruppe in eine Datei
-speichern und wieder laden.
-
-**Papierkorb & Kacheln wiederherstellen**: gelöschte Kacheln landen zuerst im
-Papierkorb (Aufbewahrung in Tagen, 0 = für immer). Löschen geht mit einem Klick,
-eine Meldung mit Rückgängig holt die Kachel zurück. Wiederherstellen legt in die
-erste freie Zelle der aktiven Ansicht, nicht zwingend an den Originalplatz, und
-ohne schwebenden Button, Ordner-Mitgliedschaft oder Tastenkürzel von vorher.
-
-**Rückgängig**: einige Aktionen außerhalb des Kachel-Papierkorbs tragen einen
-eigenen Rückgängig-Button direkt auf der Meldung: einen Prompt oder mehrere löschen,
-eine Ansicht löschen, den Kopierverlauf leeren, Tags löschen oder zusammenführen
-und eine Sammeländerung von Tags. Es wartet
-immer nur eine einzige Rücknahme; eine spätere zerstörende Aktion ersetzt sie,
-und der Button verschwindet mit der Meldung selbst. Im Expertenmenü lässt sich
-das abschalten, dann bleibt die Meldung eine reine Bestätigung.
-
-**Duplikatfinder**: findet textlich sehr ähnliche Kacheln nach
-Ähnlichkeitswert, keine exakte Übereinstimmung nötig, löscht nichts von sich
-aus. Eine Kachel mit Rotation wird nur nach ihrem ersten Text verglichen.
-Derselbe Ähnlichkeitswert steuert auch einen stillen Hinweis nach dem
-Speichern: gibt es einen ähnlichen vorhandenen Prompt, zeigt eine Meldung
-seinen Namen mit einem Button zum Öffnen und einem zum Vergleichen. Sie hält
-das Speichern nie auf und fragt nichts, wer sie ignoriert verliert nichts.
-Beide teilen sich eine Schwelle im Expertenmenü.
-
-**Import & Export**: CSV, TXT oder JSON für den reinen Text, volle Sicherung
-für alles. Ein Export-Button und eine Formatauswahl ersetzen die drei früheren
-Einzelknöpfe; nur JSON trägt die Rotationstexte einer Kachel mit Rotation, Tags,
-Notiz, Tastenkürzel und Farbe vollständig, statt sie wie CSV und TXT in ein
-Feld zu quetschen. JSON ist das Standardformat des Export-Buttons und behält jedes Detail eines Prompts; CSV und TXT bleiben in der Auswahl verfügbar. Bilder reisen in keinem der drei mit, dafür gibt es die
-volle Sicherung. Beim Import entscheidet der Dateiinhalt zwischen CSV und
-JSON, nie die Dateiendung, und zeigt vorher eine Vorschau mit Name und
-Duplikat-Kennzeichnung; eine volle Sicherung stellt direkt wieder her. Ändert
-sich die Datei nach der Vorschau, wird der Import verweigert statt etwas
-anderes zu importieren als angezeigt.
-
-**Importieren** → **Aus Ordner…** in den Einstellungen macht aus einem Ordner voller `.md`/`.txt`-
-Dateien Kacheln, eine je Datei, ohne die Originaldateien anzurühren. Der
-Dateiname wird der Name der Kachel. Eine kurze erste Zeile wird die Notiz, der
-Rest wird der Text. Jeder Unterordner wird ein Tag, einer je Ebene. Eine Datei,
-die den Rotationstrenner schon enthält, wird ein Prompt mit Rotationstexten. Die
-Vorschau listet jede Datei mit ihren Tags, ihrer Größe und einem Häkchen und
-graut aus, was nicht gelesen werden konnte (zu groß oder kein reiner Text),
-mit dem Grund dafür. Wie tief in Unterordner gesucht wird und bei wie vielen
-Dateien Schluss ist, sind beides Einstellungen im Expertenmenü.
-
-**Markdown-Ordner-Sync (Beta)**: spiegelt jede Text-Kachel als lesbare
-`.md`-Datei in einem gewählten Ordner, inklusive Ansicht, Rasterzelle und
-Ordner. Angehängte Dateien, Bilder und PDFs wandern als Verweis mit (Pfad und
-PDF-Seite im Kopf, nie die Datei selbst); ein direkt eingefügter Screenshot hat
-keinen Pfad und bleibt nur in der Datenbank. Eine in einer eingehenden Datei
-genannte Ansicht oder ein Ordner, den es auf diesem Rechner noch nicht gibt,
-wird automatisch angelegt, per Namensabgleich. **Die Dateien sind Klartext**:
-anders als die Datenbank, also kein synchronisierter oder geteilter Ordner für
-Sensibles. Im Expertenmenü lässt sich einstellen, wie oft der Sync-Ordner auf
-außerhalb der App bearbeitete Dateien geprüft wird.
-
-Der Ordner ist `<Datenordner>\prompt-saver-sync`, solange kein eigener gewählt
-ist; wer schon synchronisiert, behält seinen bisherigen Ordner. Eine Datei wird
-erst gelesen, wenn sie sich nicht mehr ändert, eine Änderung von außen kann also
-einen Durchlauf länger brauchen. Was in welche Richtung passiert, steht fest und
-geschieht nie stillschweigend:
-
-- **Eine im Ordner gelöschte Datei löscht die Kachel nicht.** Sie wird im
-  nächsten Durchlauf neu geschrieben. Wer die Kachel in der App löscht, löscht
-  auch die Datei.
-- **Umbenennen erzeugt eine zweite Kachel.** Der Dateiname ist die feste Kennung
-  der Kachel; die umbenannte Datei kommt als neue Kachel an, das Original wird
-  unter seinem eigenen Namen neu geschrieben. Also in der App umbenennen.
-- **Kachel und Datei gleichzeitig geändert?** In diesem Durchlauf gewinnt die
-  Datei, und die ersetzte Fassung landet in der Versionsgeschichte der Kachel.
-  Umgekehrt gewinnt die App die Datei, und der Dateiinhalt bleibt daneben als
-  `<Kennung>.conflict-<Zahl>.md` liegen.
-- **Dateien, die diese App nicht geschrieben hat, werden nie angefasst**, in
-  keiner Richtung, und eine Datei über 8 MB wird ganz übersprungen, nie
-  abgeschnitten. Das Fehlerprotokoll sagt warum.
-- **Ein Ordnerwechsel fragt nach**, was mit dem alten Ordner geschehen soll:
-  löschen oder behalten. Gelöscht werden nur die `.md`-Dateien, die diese App
-  selbst geschrieben hat, nie ein Unterordner, und der Ordner selbst nur, wenn er
-  danach leer ist. Liegt eine fremde Datei darin, wird gar nichts gelöscht und
-  eine Meldung nennt, was im Weg liegt.
-- **Ein nicht erreichbarer Ordner pausiert die Synchronisierung**, statt alle
-  paar Sekunden zu scheitern (nach fünf Fehlversuchen, einstellbar). Die Zeile
-  unter dem Ordner im Expertenmenü nennt den letzten gelesenen Stand, die Zahl
-  der Dateien und den Grund der Pause.
-
-**Das Expertenmenü**: jede Funktion hat einen Schalter mit ihren Parametern
-direkt darunter. Die Suche durchsucht alle Tabs auf einmal; ausgeschaltete
-Funktionen tragen ein kleines Punkt-Abzeichen. Zurücksetzen auf drei Ebenen:
-ein Wert, eine ganze Gruppe, oder alles auf einmal.
-
-**Tastaturbedienung**: Pfeiltasten bewegen einen Fokusring über das Raster
-(an), Enter oder Leertaste kopiert die fokussierte Kachel.
-
-**Wo die Daten liegen**: eine lokale SQLite-Datenbank (plus ihre kleine
-WAL-Datei). Installiert: unter AppData, im Expertenmenü einsehbar und
-änderbar. Portabel: direkt neben der exe. Der Wechsel zwischen beiden wird
-erkannt und als einmalige Migration angeboten.
-
-Ein Ordner, der zwischen zwei Computern synchronisiert wird (OneDrive,
-Dropbox, Google Drive, iCloud Drive, Nextcloud), braucht Vorsicht: Schreiben
-zwei Rechner gleichzeitig in dieselbe Datenbankdatei, kann sie beschädigt
-werden. Wird der Datenordner auf einen solchen gesetzt, erscheint einmalig
-eine Warnung dazu. Eine kleine Sperrdatei neben der Datenbank hält dann fest,
-welcher Computer sie gerade verwendet, alle 30 Sekunden aufgefrischt; findet
-ein zweiter Computer eine frische Sperre eines anderen Rechners, öffnet er
-alles nur lesend und zeigt das dauerhaft in einer Kopfzeile, damit nichts
-still verloren geht, während eine länger nicht aufgefrischte Sperre (der
-andere Rechner ist vermutlich abgestürzt oder geschlossen) automatisch
-übernommen wird. Der zugehörige Schalter, standardmäßig an, liegt im
-Expertenmenü, Reiter System, Gruppe Fehlersuche. Das ist ein Sicherheitsnetz, kein
-Weg, die Bibliothek über Computer hinweg zu teilen: dafür ist die
-Markdown-Ordnersynchronisierung weiter unten der gebaute Weg.
-
-**Befehlszeile:** `prompt-saver.exe <Befehl> ...` nutzt die App als
-Kommandozeilen-Werkzeug statt ihr Fenster zu öffnen: Kacheln auflisten, lesen,
-kopieren, anlegen, ändern, löschen, wiederherstellen, Tags und Ansichten
-verwalten, suchen, exportieren, importieren, Sicherungen anlegen, auflisten oder
-wiederherstellen, dazu eine einzelne Einstellung lesen oder schreiben. Läuft
-die App bereits, geht der Befehl an diese laufende Kopie, und ihre Antwort
-erscheint hier. Sonst arbeitet der Befehl allein, direkt gegen die Datenbank,
-und beendet sich, ohne je ein Fenster zu zeigen. So greift immer nur ein
-Prozess auf die Datenbank zu.
-
-Jeder Befehl kennt `--help`. `--json` liefert die Ausgabe stattdessen
-maschinenlesbar. Ein Befehl, der etwas ändert, braucht `--yes`, sonst zeigt er
-nur, was er täte, und ändert nichts. Ausnahmen sind `copy`, das nur den Text
-einer Kachel in die Zwischenablage liest, `backup create`, das nur je einen
-neuen Schnappschuss hinzufügt, und `export`, das `--yes` nur zum
-Überschreiben einer bereits vorhandenen Datei braucht. Rückgabewerte: 0
-Erfolg, 1 falscher Aufruf, 2 nicht gefunden, 3 Bestand gesperrt oder nicht
-erreichbar, 4 abgelehnt (fehlendes `--yes`, oder ein Wert, der die Prüfung
-nicht bestanden hat). Vollständige Befehlsliste: `prompt-saver.exe --help`.
-
-**Fernzugriff & Links**: zwei Schalter im Expertenmenü, beide
-standardmäßig aus. `promptsaver://open/<id>` holt eine Kachel ins geöffnete
-Fenster, `promptsaver://copy/<id>` kopiert sie, genau wie der Kopieren-Button.
-Ein Link kann nie etwas löschen oder ändern, eine unbekannte id tut einfach
-nichts, und das erste Öffnen sowie das erste Kopieren fragen je einmal nach
-Bestätigung. Der zweite Schalter startet eine lokale Schnittstelle, die
-dieselben Befehle wie die Kommandozeile für ein anderes Programm auf diesem
-Rechner öffnet, und, nur wenn ein dritter Schalter das ausdrücklich erlaubt,
-auch für die dort eingetragenen Adressbereiche. Sie startet nie ohne
-Passwort: eines wird beim Einschalten erzeugt und einmalig angezeigt, danach
-lässt es sich nicht mehr auslesen. Zehn falsche Versuche sperren den Aufrufer
-zehn Minuten. Jede Anfrage braucht das Passwort, ist in ihrer Größe begrenzt,
-zählt gegen ein Limit pro Minute und wird protokolliert, ohne das Passwort
-oder den vollen Inhalt. Eine gesperrte Kachel bleibt auch hier gesperrt. Eine
-Anzeige bleibt sichtbar, solange die Schnittstelle läuft, mit Portnummer und
-eigenem Ausschalter. Ist der Netzwerk-Schalter an, ist die Verbindung
-verschlüsselt (HTTPS), mit einem Zertifikat, das die App selbst erzeugt; eine
-unverschlüsselte `http://`-Anfrage bekommt gar keine Antwort. Der Button
-**Zertifikat...** neben den Adressbereichen zeigt den Fingerabdruck des
-Zertifikats, speichert es, damit ein anderes Gerät ihm vertrauen kann (zum
-Beispiel `curl.exe --ssl-no-revoke --cacert <Datei>
-https://<Computername>:<Port>/api`) und
-erzeugt ein neues; ein neues Zertifikat ersetzt das alte sofort, jedes Gerät
-muss also neu eingerichtet werden. Das Zertifikat nennt außerdem die
-Adressen dieses Rechners, wie sie bei seiner Erzeugung waren: ändert sich die
-Netzwerkadresse, frischt "Neues Zertifikat" es auf. Ohne den Netzwerk-Schalter lauscht die
-Schnittstelle nur auf diesem Rechner und bleibt einfaches HTTP.
-
-Das Zertifikat gilt 10 Jahre, mit „Kurzes Zertifikat für Apple-Geräte“ 825 Tage, was
-iPhone, iPad und Mac verlangen; Geräte brauchen dann etwa alle zwei Jahre das neue
-Zertifikat. Das Umschalten fragt zuerst nach und erzeugt dann ein neues Zertifikat.
-Ein abgelaufenes Zertifikat wird beim Start des Empfängers erneuert, mit einer Meldung.
-
-Für ein Skript oder ein anderes Programm, das eines der beiden steuert, gibt
-`prompt-saver describe` die vollständige Befehlsliste als JSON aus, und
-[docs/automation.md](automation.md) (englisch, wie der Rest des Verzeichnisses)
-ist die vollständige Referenz: jeder Befehl mit seinen Argumenten und der Form
-seiner JSON-Antwort, die Fehlercodes, das Link-Schema und durchgerechnete
-Beispiele, nichts davon muss durch Ausprobieren herausgefunden werden.
-
 **Updates & Sicherheit**: Beim ersten Start fragt das Programm, ob es nach
 Updates suchen darf; bis zur Antwort geht es nie online. Die Update-Prüfung ist
 eines von wenigen Dingen, die überhaupt von sich aus ins Netz gehen: die Update-Prüfung selbst, ein
@@ -1749,15 +1632,27 @@ der zuletzt gesehenen Version geändert hat; die Liste liegt bereits im
 Programm, nur ihr Button „Von GitHub aktualisieren" braucht Netz. Über den
 Über-Dialog jederzeit für die laufende Version erneut aufrufbar.
 
-**Häufige Fragen**: Bildschirmaufnahme dieser App leer? Der
-Datenschutz-Ausschluss wirkt wie vorgesehen, mit "Screenshots von Prompt
-Saver erlauben" im Expertenmenü aufhebbar. App
-startet nicht? Die WebView2-Laufzeit fehlt, der Installer bietet sie an.
-Einstellung nicht gefunden? Die Suche im Expertenmenü durchsucht alle Tabs
-auf einmal. Tastenkürzel tut nichts? Eine andere App hält die Kombination
-vermutlich schon.
+**Wo die Daten liegen**: eine lokale SQLite-Datenbank (plus ihre kleine
+WAL-Datei). Installiert: unter AppData, im Expertenmenü einsehbar und
+änderbar. Portabel: direkt neben der exe. Der Wechsel zwischen beiden wird
+erkannt und als einmalige Migration angeboten.
 
-**Eigenständig: Sicherungen.** Verschlüsselte Sicherungen, Aufbewahrung nach Tag, Woche, Monat und Jahr,
+Ein Ordner, der zwischen zwei Computern synchronisiert wird (OneDrive,
+Dropbox, Google Drive, iCloud Drive, Nextcloud), braucht Vorsicht: Schreiben
+zwei Rechner gleichzeitig in dieselbe Datenbankdatei, kann sie beschädigt
+werden. Wird der Datenordner auf einen solchen gesetzt, erscheint einmalig
+eine Warnung dazu. Eine kleine Sperrdatei neben der Datenbank hält dann fest,
+welcher Computer sie gerade verwendet, alle 30 Sekunden aufgefrischt; findet
+ein zweiter Computer eine frische Sperre eines anderen Rechners, öffnet er
+alles nur lesend und zeigt das dauerhaft in einer Kopfzeile, damit nichts
+still verloren geht, während eine länger nicht aufgefrischte Sperre (der
+andere Rechner ist vermutlich abgestürzt oder geschlossen) automatisch
+übernommen wird. Der zugehörige Schalter, standardmäßig an, liegt im
+Expertenmenü, Reiter System, Gruppe Fehlersuche. Das ist ein Sicherheitsnetz, kein
+Weg, die Bibliothek über Computer hinweg zu teilen: dafür ist die
+Markdown-Ordnersynchronisierung weiter unten der gebaute Weg.
+
+**Sicherungen.** Verschlüsselte Sicherungen, Aufbewahrung nach Tag, Woche, Monat und Jahr,
 gezieltes Wiederherstellen. Mit den zwei Buttons neben „Sicherung erstellen“ lässt
 sich eine Sicherung in eine Datei deiner Wahl speichern oder aus einer Datei
 importieren. Im selben Fenster außerdem ein Speicherbereich, der zeigt,
@@ -1789,8 +1684,130 @@ sammelt der Kopierverlauf. Alles bleibt auf diesem Rechner. Der Export-Button
 speichert die vollständigen Zahlen samt Tageswerten und Werkzeugnutzung als CSV,
 TXT oder JSON.
 
-**Eigenständig: Schnellstarter.** Strg+Alt+P, unscharfe Suche, sofortiges Kopieren. Wie viele Treffer er zeigt, stellt das Expertenmenü ein (ab Werk 8). Eine Zeile unten nennt die Tasten.
+**Import & Export**: CSV, TXT oder JSON für den reinen Text, volle Sicherung
+für alles. Ein Export-Button und eine Formatauswahl ersetzen die drei früheren
+Einzelknöpfe; nur JSON trägt die Rotationstexte einer Kachel mit Rotation, Tags,
+Notiz, Tastenkürzel und Farbe vollständig, statt sie wie CSV und TXT in ein
+Feld zu quetschen. JSON ist das Standardformat des Export-Buttons und behält jedes Detail eines Prompts; CSV und TXT bleiben in der Auswahl verfügbar. Bilder reisen in keinem der drei mit, dafür gibt es die
+volle Sicherung. Beim Import entscheidet der Dateiinhalt zwischen CSV und
+JSON, nie die Dateiendung, und zeigt vorher eine Vorschau mit Name und
+Duplikat-Kennzeichnung; eine volle Sicherung stellt direkt wieder her. Ändert
+sich die Datei nach der Vorschau, wird der Import verweigert statt etwas
+anderes zu importieren als angezeigt.
 
-**Eigenständig: Mehrfachansichten.** Mehrere Rasterseiten.
+**Importieren** → **Aus Ordner…** in den Einstellungen macht aus einem Ordner voller `.md`/`.txt`-
+Dateien Kacheln, eine je Datei, ohne die Originaldateien anzurühren. Der
+Dateiname wird der Name der Kachel. Eine kurze erste Zeile wird die Notiz, der
+Rest wird der Text. Jeder Unterordner wird ein Tag, einer je Ebene. Eine Datei,
+die den Rotationstrenner schon enthält, wird ein Prompt mit Rotationstexten. Die
+Vorschau listet jede Datei mit ihren Tags, ihrer Größe und einem Häkchen und
+graut aus, was nicht gelesen werden konnte (zu groß oder kein reiner Text),
+mit dem Grund dafür. Wie tief in Unterordner gesucht wird und bei wie vielen
+Dateien Schluss ist, sind beides Einstellungen im Expertenmenü.
 
-**Eigenständig: Design-Editor.** Eigene Farbvarianten bestehender Designs. Geöffnet wird er mit „Eigenes Design…“ am Ende der Design-Auswahl in den Einstellungen.
+**Datenwartung**: Papierkorb, Import/Export. Den Duplikatfinder öffnet der
+Button „Duplikate finden“ in der Bibliothek.
+„Letzte Meldungen“ hält eine kurze Liste der Fehlermeldungen fest, die nur kurz als
+Hinweis erschienen, mit Zeit und Ort; die Liste lässt sich in ihrem Fenster kopieren
+oder leeren. Die Einstellungen allein lassen sich in derselben Gruppe in eine Datei
+speichern und wieder laden.
+
+**Papierkorb & Kacheln wiederherstellen**: gelöschte Kacheln landen zuerst im
+Papierkorb (Aufbewahrung in Tagen, 0 = für immer). Löschen geht mit einem Klick,
+eine Meldung mit Rückgängig holt die Kachel zurück. Wiederherstellen legt in die
+erste freie Zelle der aktiven Ansicht, nicht zwingend an den Originalplatz, und
+ohne schwebenden Button, Ordner-Mitgliedschaft oder Tastenkürzel von vorher.
+
+**Rückgängig**: einige Aktionen außerhalb des Kachel-Papierkorbs tragen einen
+eigenen Rückgängig-Button direkt auf der Meldung: einen Prompt oder mehrere löschen,
+eine Ansicht löschen, den Kopierverlauf leeren, Tags löschen oder zusammenführen
+und eine Sammeländerung von Tags. Es wartet
+immer nur eine einzige Rücknahme; eine spätere zerstörende Aktion ersetzt sie,
+und der Button verschwindet mit der Meldung selbst. Im Expertenmenü lässt sich
+das abschalten, dann bleibt die Meldung eine reine Bestätigung.
+
+**Duplikatfinder**: findet textlich sehr ähnliche Kacheln nach
+Ähnlichkeitswert, keine exakte Übereinstimmung nötig, löscht nichts von sich
+aus. Eine Kachel mit Rotation wird nur nach ihrem ersten Text verglichen.
+Derselbe Ähnlichkeitswert steuert auch einen stillen Hinweis nach dem
+Speichern: gibt es einen ähnlichen vorhandenen Prompt, zeigt eine Meldung
+seinen Namen mit einem Button zum Öffnen und einem zum Vergleichen. Sie hält
+das Speichern nie auf und fragt nichts, wer sie ignoriert verliert nichts.
+Beide teilen sich eine Schwelle im Expertenmenü.
+
+**Fernzugriff & Links**: zwei Schalter im Expertenmenü, beide
+standardmäßig aus. `promptsaver://open/<id>` holt eine Kachel ins geöffnete
+Fenster, `promptsaver://copy/<id>` kopiert sie, genau wie der Kopieren-Button.
+Ein Link kann nie etwas löschen oder ändern, eine unbekannte id tut einfach
+nichts, und das erste Öffnen sowie das erste Kopieren fragen je einmal nach
+Bestätigung. Der zweite Schalter startet eine lokale Schnittstelle, die
+dieselben Befehle wie die Kommandozeile für ein anderes Programm auf diesem
+Rechner öffnet, und, nur wenn ein dritter Schalter das ausdrücklich erlaubt,
+auch für die dort eingetragenen Adressbereiche. Sie startet nie ohne
+Passwort: eines wird beim Einschalten erzeugt und einmalig angezeigt, danach
+lässt es sich nicht mehr auslesen. Zehn falsche Versuche sperren den Aufrufer
+zehn Minuten. Jede Anfrage braucht das Passwort, ist in ihrer Größe begrenzt,
+zählt gegen ein Limit pro Minute und wird protokolliert, ohne das Passwort
+oder den vollen Inhalt. Eine gesperrte Kachel bleibt auch hier gesperrt. Eine
+Anzeige bleibt sichtbar, solange die Schnittstelle läuft, mit Portnummer und
+eigenem Ausschalter. Ist der Netzwerk-Schalter an, ist die Verbindung
+verschlüsselt (HTTPS), mit einem Zertifikat, das die App selbst erzeugt; eine
+unverschlüsselte `http://`-Anfrage bekommt gar keine Antwort. Der Button
+
+**Zertifikat...** neben den Adressbereichen zeigt den Fingerabdruck des
+Zertifikats, speichert es, damit ein anderes Gerät ihm vertrauen kann (zum
+Beispiel `curl.exe --ssl-no-revoke --cacert <Datei>
+https://<Computername>:<Port>/api`) und
+erzeugt ein neues; ein neues Zertifikat ersetzt das alte sofort, jedes Gerät
+muss also neu eingerichtet werden. Das Zertifikat nennt außerdem die
+Adressen dieses Rechners, wie sie bei seiner Erzeugung waren: ändert sich die
+Netzwerkadresse, frischt "Neues Zertifikat" es auf. Ohne den Netzwerk-Schalter lauscht die
+Schnittstelle nur auf diesem Rechner und bleibt einfaches HTTP.
+
+Das Zertifikat gilt 10 Jahre, mit „Kurzes Zertifikat für Apple-Geräte“ 825 Tage, was
+iPhone, iPad und Mac verlangen; Geräte brauchen dann etwa alle zwei Jahre das neue
+Zertifikat. Das Umschalten fragt zuerst nach und erzeugt dann ein neues Zertifikat.
+Ein abgelaufenes Zertifikat wird beim Start des Empfängers erneuert, mit einer Meldung.
+
+Für ein Skript oder ein anderes Programm, das eines der beiden steuert, gibt
+`prompt-saver describe` die vollständige Befehlsliste als JSON aus, und
+[docs/automation.md](automation.md) (englisch, wie der Rest des Verzeichnisses)
+ist die vollständige Referenz: jeder Befehl mit seinen Argumenten und der Form
+seiner JSON-Antwort, die Fehlercodes, das Link-Schema und durchgerechnete
+Beispiele, nichts davon muss durch Ausprobieren herausgefunden werden.
+
+**Befehlszeile:** `prompt-saver.exe <Befehl> ...` nutzt die App als
+Kommandozeilen-Werkzeug statt ihr Fenster zu öffnen: Kacheln auflisten, lesen,
+kopieren, anlegen, ändern, löschen, wiederherstellen, Tags und Ansichten
+verwalten, suchen, exportieren, importieren, Sicherungen anlegen, auflisten oder
+wiederherstellen, dazu eine einzelne Einstellung lesen oder schreiben. Läuft
+die App bereits, geht der Befehl an diese laufende Kopie, und ihre Antwort
+erscheint hier. Sonst arbeitet der Befehl allein, direkt gegen die Datenbank,
+und beendet sich, ohne je ein Fenster zu zeigen. So greift immer nur ein
+Prozess auf die Datenbank zu.
+
+Jeder Befehl kennt `--help`. `--json` liefert die Ausgabe stattdessen
+maschinenlesbar. Ein Befehl, der etwas ändert, braucht `--yes`, sonst zeigt er
+nur, was er täte, und ändert nichts. Ausnahmen sind `copy`, das nur den Text
+einer Kachel in die Zwischenablage liest, `backup create`, das nur je einen
+neuen Schnappschuss hinzufügt, und `export`, das `--yes` nur zum
+Überschreiben einer bereits vorhandenen Datei braucht. Rückgabewerte: 0
+Erfolg, 1 falscher Aufruf, 2 nicht gefunden, 3 Bestand gesperrt oder nicht
+erreichbar, 4 abgelehnt (fehlendes `--yes`, oder ein Wert, der die Prüfung
+nicht bestanden hat). Vollständige Befehlsliste: `prompt-saver.exe --help`.
+
+**Vorführung**: Ein Schalter im Expertenmenü (Tab System, Gruppe Fehlersuche) schaltet das
+ganze Fenster auf einen mitgelieferten Beispielbestand um, der möglichst
+viele Funktionen auf einmal zeigt: Prompts mit und ohne Bild, ein
+Prompt mit Rotation, zwei einfache Prompts für den Anfang einer Kette, ein
+Platzhalter, Tags, ein Favorit, zwei Ansichten, ein Ordner, ein Anhang und
+(wenn vorhanden) ein Video. Das Einschalten baut den Beispielbestand jedes
+Mal frisch auf und startet die App darin neu; der echte Bestand wird dabei
+nie geöffnet, geschrieben oder auch nur gelesen. Eine dauerhafte Marke bleibt
+im Fenster sichtbar, solange die Vorführung läuft, damit niemand den
+Beispielbestand für den eigenen hält. Das Zurückschalten fragt zuerst nach,
+weil alles, was während der Vorführung geändert wurde, dabei verloren geht,
+und startet dann genau in den echten Bestand zurück. Derselbe
+Beispielbestand ist auch die Vorlage für das Bild in diesem Hilfefenster und
+für `docs/screenshot.png`: der genaue Ablauf steht im Abschnitt „Building
+from source" der README.
