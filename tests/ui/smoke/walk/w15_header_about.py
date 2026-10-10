@@ -95,8 +95,8 @@ SECTION = """\
         oneRow727('the page language');
         const prev727 = [aboutBtn.textContent, ub.textContent, line1.querySelector('.switch-field > span').textContent];
         aboutBtn.textContent = 'Über';
-        ub.textContent = 'Nach Updates suchen';
-        line1.querySelector('.switch-field > span').textContent = 'Auto-Update';
+        ub.textContent = 'Updates suchen';
+        line1.querySelector('.switch-field > span').textContent = 'Automatische Updates';
         uv.textContent = 'Update v2.10.0';
         oneRow727('German');
         [aboutBtn.textContent, ub.textContent, line1.querySelector('.switch-field > span').textContent] = prev727;

@@ -52,7 +52,7 @@ const NOT_LABELS = {
     ["Mein Screenshot ist leer", "symptom phrase, a question heading"],
     ["Die App startet nicht", "symptom phrase, a question heading"],
     ["Ich finde eine Einstellung nicht", "symptom phrase, a question heading"],
-    ["Ein Hotkey bewirkt nichts", "symptom phrase, a question heading"],
+    ["Ein Tastenkürzel bewirkt nichts", "symptom phrase, a question heading"],
   ],
 };
 

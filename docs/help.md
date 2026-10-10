@@ -1055,11 +1055,11 @@ ersten Start bereits da; ein Button über dem Raster entfernt sie mit einem Klic
 
 **Einstellungen**: Das Zahnrad in der Kopfzeile öffnet das Einstellungsfenster
 mit den alltäglichen Entscheidungen; alles Optionale liegt im Expertenmenü, das
-sich im selben Fenster öffnet. Dort stehen Sprache, Theme, Textgröße und Schriftart
+sich im selben Fenster öffnet. Dort stehen Sprache, Design, Textgröße und Schriftart
 der Kacheln, ob das Fenster im Vordergrund bleibt, mit Windows startet, im
 Hintergrund startet und sich beim Schließen in den Hintergrund legt (bei einer
 neuen Installation ab Werk an; eine portable Kopie beendet sich immer), der globale
-Hotkey, Auto-Einfügen bei Doppelklick und das Speichern von Screenshots im
+Tastenkürzel, Auto-Einfügen bei Doppelklick und das Speichern von Screenshots im
 Screenshots-Ordner (Abschnitt „Aufnehmen“). Jede Änderung gilt sofort, ohne Speichern-Button.
 „Automatisch“ als Sprache folgt Windows und fällt auf Englisch zurück.
 Zurücksetzen stellt jede Einstellung auf die Vorgabe zurück und behält die Kacheln;
@@ -1336,7 +1336,7 @@ liefert den nächsten Rotationstext (Reihenfolge oder Zufall). Standardmäßig a
 Schalter pro Kachel steht im Editor unter „Erweiterte Optionen“. Ein Badge auf
 Kachel/schwebender Button/Mitglied eines Button-Ordners zählt hoch: im Zufalls-Modus die Ziehungen
 im aktuellen Durchlauf statt einer springenden Position; übersteht Neustart und
-Backup, aber keinen CSV/TXT-Import (neue Kachel, neuer Zeiger). Eine geeignete
+Sicherung, aber keinen CSV/TXT-Import (neue Kachel, neuer Zeiger). Eine geeignete
 Kachel (2+ Einträge, kein Bild/Datei) kann zusätzlich **beim Einfügen
 rotieren**: Button „Beim Einfügen rotieren“ im Editor oder Rechtsklickmenü,
 solange Kachel- und App-Schalter beide an sind. Bei jedem echten Einfügen
@@ -1364,7 +1364,7 @@ sich per Ziehen umsortieren und per Rechtsklick entfernen (die Zwischenablage
 folgt), die Leiste selbst ist einzeln abschaltbar.
 Mit eingeschalteter Doppelklick-Dauer-an-Funktion bleibt der Kettenmodus nach dem
 Kopieren an, um mehrere Ketten nacheinander zu bauen.
-Hotkeys pro Kachel, Herausziehen (mit oder, per Schalter, ohne
+Tastenkürzel pro Kachel, Herausziehen (mit oder, per Schalter, ohne
 Modifikatortaste), automatisches Einfügen. Formatiert kopieren (im Rechtsklick
 und im Editor, nur bei Text mit echter Markdown-Syntax): legt zusätzlich zur
 Markdown-Fassung eine gerenderte Fassung in die Zwischenablage, sodass Word,
@@ -1379,12 +1379,12 @@ weiterhin genau den Markdown-Text bekommt wie bei einer normalen Kopie.
 <svg viewBox="0 0 560 90" xmlns="http://www.w3.org/2000/svg" role="img"><rect x="30" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="80" y="41" font-size="11" fill="currentColor" text-anchor="middle">Schritt 1</text><rect x="230" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="280" y="41" font-size="11" fill="currentColor" text-anchor="middle">Schritt 2</text><rect x="430" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="480" y="41" font-size="11" fill="currentColor" text-anchor="middle">Schritt 3</text><line x1="130" y1="37" x2="217" y2="37" stroke="currentColor" stroke-width="1.5"/><path d="M 215 33 L 225 37 L 215 41" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><text x="177" y="25" font-size="10" fill="currentColor" text-anchor="middle">{#{X}#}</text><line x1="330" y1="37" x2="417" y2="37" stroke="currentColor" stroke-width="1.5"/><path d="M 415 33 L 425 37 L 415 41" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><text x="377" y="25" font-size="10" fill="currentColor" text-anchor="middle">{#{Y}#}</text></svg>
 </p>
 
-**Hotkeys**: ein globaler Hotkey öffnet den Schnellstarter (Standard
-Strg+Alt+P), ein eigener Hotkey pro Kachel kopiert (und fügt optional ein). Bei
-einer Kollision gewinnt der App-Hotkey, sonst die erste Kachel in der Liste.
-„Alle Tastenkürzel“ neben dem globalen Feld öffnet die Tastenkürzel-Übersicht mit jedem Hotkey, durchsuchbar, und
+**Tastenkürzel**: ein globales Tastenkürzel öffnet den Schnellstarter (Standard
+Strg+Alt+P), ein eigener Tastenkürzel pro Kachel kopiert (und fügt optional ein). Bei
+einer Kollision gewinnt der App-Tastenkürzel, sonst die erste Kachel in der Liste.
+„Alle Tastenkürzel“ neben dem globalen Feld öffnet die Tastenkürzel-Übersicht mit jedem Tastenkürzel, durchsuchbar, und
 belegt jede Zeile direkt um, ohne den jeweiligen Editor zu öffnen. Eine Kachel
-mit eigenem Hotkey zeigt ein kleines Tastatursymbol.
+mit eigenem Tastenkürzel zeigt ein kleines Tastatursymbol.
 
 **Schwebende Buttons:** kleine, immer sichtbare Kopier-Buttons außerhalb des
 Hauptfensters, über jeder anderen App.
@@ -1418,15 +1418,15 @@ die Helligkeitsschwelle für Schwarz verschieben. Weiße Schrift auf einer helle
 Farbe bekommt einen dunklen Schatten, damit sie lesbar bleibt; im Expertenmenü
 lässt sich der Schatten abschalten oder seine Stärke einstellen.
 
-**Tooltips**: Verzögerung, Breite.
+**Kurzinfos**: Verzögerung, Breite.
 
 **Favoriten**: Stern-Markierung, eigene Favoriten-Ansicht. „Zu Favoriten hinzufügen“ im Rechtsklickmenü einer Kachel oder den Stern in der Bibliothek nutzen; eine Favoriten-Kachel zeigt oben rechts einen kleinen Stern.
 
-**Skalierung & Zoom**: UI-, Dialog-, Editor- und Icon-Größe getrennt einstellbar.
+**Skalierung & Zoom**: UI-, Dialog-, Editor- und Symbolgröße getrennt einstellbar.
 Die Größe der Oberfläche steht in den Einstellungen; die Symbol-, Editor- und
 Hauptknopf-Skalierung im Expertenmenü → Aussehen → Größen (%).
 
-**Aussehen & Themes**: sieben mitgelieferte Themes, optionaler Theme-Editor.
+**Aussehen & Designs**: sieben mitgelieferte Designs, optionaler Design-Editor.
 
 **Bibliothek & Suche**: unscharfe Suche, intelligente Sortierung, Filter,
 `tag:`/`var:`-Suchpräfixe (mit `-` auch verneint). Ein Stern neben dem Suchfeld
@@ -1453,7 +1453,7 @@ die Überlagerung wieder. Ein Schalter im Expertenmenü stellt sie ab.
 
 **Archiv**: Standardmäßig aus. Markiert eine Kachel als archiviert statt sie zu
 löschen; sie verschwindet aus Bibliothek und Raster, bleibt aber über Suche,
-Export und Backup erreichbar. Ein Schalter über der Liste holt archivierte
+Export und Sicherung erreichbar. Ein Schalter über der Liste holt archivierte
 Kacheln zurück; archivieren/entarchivieren geht per Rechtsklickmenü oder aus
 der Sammelleiste der Bibliothek.
 
@@ -1507,16 +1507,16 @@ abgedeckten Balken statt ihres Namens, kopiert nicht und bleibt bei der Suche
 außen vor. Sie bleibt auch bei der Markdown-Synchronisierung außen vor und
 wird bei einem einfachen Export standardmäßig ausgelassen; der Export bietet
 stattdessen die Wahl, sie verschlüsselt zu behalten, und eine vollständige
-Backup behält sie immer verschlüsselt.
+Sicherung behält sie immer verschlüsselt.
 
 Getrennt davon: Sollten die gespeicherten Einstellungen selbst auf der
 Festplatte unlesbar oder beschädigt sein (sehr selten), zeigt die App
 Standardwerte an, statt zu raten, und verweigert jede Einstellungsänderung, bis
 das behoben ist; die ursprünglichen, möglicherweise noch rettbaren Daten
-werden nie überschrieben. Es wird automatisch ein Backup der rohen
+werden nie überschrieben. Es wird automatisch eine Sicherung der rohen
 Datenbank angelegt, und eine dauerhafte Warnzeile (ebenfalls ohne Schalter)
 erscheint in derselben Datenschutz-Gruppe, solange es zutrifft. Ein Werksreset
-oder das Wiederherstellen der Einstellungen aus einem Backup löschen sie
+oder das Wiederherstellen der Einstellungen aus einer Sicherung löschen sie
 beide.
 
 Kann ein Einstellungs-Speichervorgang selbst nicht auf die Festplatte
@@ -1543,11 +1543,11 @@ für `docs/screenshot.png`: der genaue Ablauf steht im Abschnitt „Building
 from source" der README.
 
 **System**: Updates, Tastatur-Navigation, Datenordner; mehrere Instanzen stehen in der Gruppe Fehlersuche.
-Lange Vorgänge (Export, Umwandlung, ffmpeg-Download, Backup, Import) füllen
+Lange Vorgänge (Export, Umwandlung, ffmpeg-Download, Sicherung, Import) füllen
 das Taskleistensymbol und zeigen ab einer eingestellten Schwelle „noch etwa …",
 beides abschaltbar.
-Neben Auto-Update im Einstellungsfenster steht die Intervall-Auswahl, solange der
-Schalter an ist; Auto-Update auszuschalten schaltet die automatische Prüfung ab.
+Neben „Automatische Updates“ im Einstellungsfenster steht die Intervall-Auswahl, solange der
+Schalter an ist; „Automatische Updates“ auszuschalten schaltet die automatische Prüfung ab.
 
 **Datenwartung**: Papierkorb, Import/Export. Den Duplikatfinder öffnet der
 Button „Duplikate finden“ in der Bibliothek.
@@ -1560,7 +1560,7 @@ speichern und wieder laden.
 Papierkorb (Aufbewahrung in Tagen, 0 = für immer). Löschen geht mit einem Klick,
 eine Meldung mit Rückgängig holt die Kachel zurück. Wiederherstellen legt in die
 erste freie Zelle der aktiven Ansicht, nicht zwingend an den Originalplatz, und
-ohne schwebenden Button, Ordner-Mitgliedschaft oder Hotkey von vorher.
+ohne schwebenden Button, Ordner-Mitgliedschaft oder Tastenkürzel von vorher.
 
 **Rückgängig**: einige Aktionen außerhalb des Kachel-Papierkorbs tragen einen
 eigenen Rückgängig-Button direkt auf der Meldung: einen Prompt oder mehrere löschen,
@@ -1579,14 +1579,14 @@ seinen Namen mit einem Button zum Öffnen und einem zum Vergleichen. Sie hält
 das Speichern nie auf und fragt nichts, wer sie ignoriert verliert nichts.
 Beide teilen sich eine Schwelle im Expertenmenü.
 
-**Import & Export**: CSV, TXT oder JSON für den reinen Text, volles Backup
+**Import & Export**: CSV, TXT oder JSON für den reinen Text, volle Sicherung
 für alles. Ein Export-Button und eine Formatauswahl ersetzen die drei früheren
 Einzelknöpfe; nur JSON trägt die Rotationstexte einer Kachel mit Rotation, Tags,
 Notiz, Tastenkürzel und Farbe vollständig, statt sie wie CSV und TXT in ein
 Feld zu quetschen. JSON ist das Standardformat des Export-Buttons und behält jedes Detail eines Prompts; CSV und TXT bleiben in der Auswahl verfügbar. Bilder reisen in keinem der drei mit, dafür gibt es die
-volles Backup. Beim Import entscheidet der Dateiinhalt zwischen CSV und
+volle Sicherung. Beim Import entscheidet der Dateiinhalt zwischen CSV und
 JSON, nie die Dateiendung, und zeigt vorher eine Vorschau mit Name und
-Duplikat-Kennzeichnung; ein volles Backup stellt direkt wieder her. Ändert
+Duplikat-Kennzeichnung; eine volle Sicherung stellt direkt wieder her. Ändert
 sich die Datei nach der Vorschau, wird der Import verweigert statt etwas
 anderes zu importieren als angezeigt.
 
@@ -1671,7 +1671,7 @@ Markdown-Ordnersynchronisierung weiter unten der gebaute Weg.
 **Befehlszeile:** `prompt-saver.exe <Befehl> ...` nutzt die App als
 Kommandozeilen-Werkzeug statt ihr Fenster zu öffnen: Kacheln auflisten, lesen,
 kopieren, anlegen, ändern, löschen, wiederherstellen, Tags und Ansichten
-verwalten, suchen, exportieren, importieren, Backups anlegen, auflisten oder
+verwalten, suchen, exportieren, importieren, Sicherungen anlegen, auflisten oder
 wiederherstellen, dazu eine einzelne Einstellung lesen oder schreiben. Läuft
 die App bereits, geht der Befehl an diese laufende Kopie, und ihre Antwort
 erscheint hier. Sonst arbeitet der Befehl allein, direkt gegen die Datenbank,
@@ -1754,14 +1754,14 @@ Datenschutz-Ausschluss wirkt wie vorgesehen, mit "Screenshots von Prompt
 Saver erlauben" im Expertenmenü aufhebbar. App
 startet nicht? Die WebView2-Laufzeit fehlt, der Installer bietet sie an.
 Einstellung nicht gefunden? Die Suche im Expertenmenü durchsucht alle Tabs
-auf einmal. Hotkey tut nichts? Eine andere App hält die Kombination
+auf einmal. Tastenkürzel tut nichts? Eine andere App hält die Kombination
 vermutlich schon.
 
-**Eigenständig: Backup-Verwaltung.** Verschlüsselte Backups, Aufbewahrung nach Tag, Woche, Monat und Jahr,
-gezieltes Wiederherstellen. Mit den zwei Buttons neben „Backup erstellen“ lässt
-sich ein Backup in eine Datei deiner Wahl speichern oder aus einer Datei
+**Eigenständig: Sicherungen.** Verschlüsselte Sicherungen, Aufbewahrung nach Tag, Woche, Monat und Jahr,
+gezieltes Wiederherstellen. Mit den zwei Buttons neben „Sicherung erstellen“ lässt
+sich eine Sicherung in eine Datei deiner Wahl speichern oder aus einer Datei
 importieren. Im selben Fenster außerdem ein Speicherbereich, der zeigt,
-wie viel Platz Datenbank, Anhänge, Bildschirmfotos, Aufnahmen, Backups,
+wie viel Platz Datenbank, Anhänge, Bildschirmfotos, Aufnahmen, Sicherungen,
 temporäre Dateien und das Fehlerprotokoll jeweils belegen, mit einem Button,
 um einen aufgeführten Ordner zu öffnen. Ein Aufbewahrungsbereich listet eine Zeile je Art
 von Daten, die diese App selbst aufhebt (Papierkorb, Kopierverlauf,
@@ -1771,14 +1771,14 @@ bleibt, einem Button zum sofortigen Aufräumen und einem Button, der direkt zur
 zugehörigen Einstellung im Expertenmenü springt. Die Zahlen werden im
 Hintergrund ermittelt und mit dem Zeitpunkt der Messung beschriftet, genau
 wie beim Speicherbereich darüber, nicht bei jedem Öffnen neu berechnet. Zu
-jedem Backup in der Liste lässt sich auf Wunsch auch der volle Inhalt
+jeder Sicherung in der Liste lässt sich auf Wunsch auch der volle Inhalt
 anzeigen: Anzahl der Einträge, Ansichten und Tags, die jüngste Änderung
 darin, die Programmfassung, die sie erstellt hat, und ob ihre Zeilen normal
 versiegelt sind oder auf Klartext zurückgefallen sind. Darunter jeder
 enthaltene Prompt mit eigenem Änderungsdatum, Größe und Art, durchsuchbar
 nach Namen und nach jeder Spalte sortierbar, mit einem Button, um genau
 diesen einen Prompt direkt aus der Liste wiederherzustellen statt der
-ganzen Backup.
+ganzen Sicherung.
 
 **Nutzungsstatistik** (Einstellungen → Nutzungsstatistik): Ein kleines Fenster mit vier Dingen: der Zahl der
 Prompts, den Kopien der letzten 7 Tage, den meistgenutzten Prompts mit Namen
@@ -1793,4 +1793,4 @@ TXT oder JSON.
 
 **Eigenständig: Mehrfachansichten.** Mehrere Rasterseiten.
 
-**Eigenständig: Theme-Editor.** Eigene Farbvarianten bestehender Themes. Geöffnet wird er mit „Eigenes Design…“ am Ende der Design-Auswahl in den Einstellungen.
+**Eigenständig: Design-Editor.** Eigene Farbvarianten bestehender Designs. Geöffnet wird er mit „Eigenes Design…“ am Ende der Design-Auswahl in den Einstellungen.
