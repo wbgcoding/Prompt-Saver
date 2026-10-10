@@ -2083,4 +2083,5 @@ export default {
     expGroupDiagnostics: "Probleemoplossing",
     flagTileFavBadge: "Ster op favoriete tegels",
     tipTileFavBadge: "Toont een kleine ster rechtsboven op elke favoriete tegel. Het is alleen een markering en reageert niet op klikken.",
+    tileFolderCount: "Tegels in deze map: {n}",
 };

@@ -2083,4 +2083,5 @@ export default {
     expGroupDiagnostics: "Risoluzione dei problemi",
     flagTileFavBadge: "Stella sui riquadri preferiti",
     tipTileFavBadge: "Mostra una piccola stella nell'angolo in alto a destra di ogni riquadro preferito. È solo un segno e non reagisce ai clic.",
+    tileFolderCount: "Riquadri in questa cartella: {n}",
 };

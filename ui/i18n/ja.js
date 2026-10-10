@@ -2083,4 +2083,5 @@ export default {
     expGroupDiagnostics: "トラブルシューティング",
     flagTileFavBadge: "お気に入りのタイルに星を表示",
     tipTileFavBadge: "お気に入りのタイルの右上に小さな星を表示します。目印のみで、クリックには反応しません。",
+    tileFolderCount: "このフォルダーのタイル：{n}",
 };

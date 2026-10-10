@@ -2083,4 +2083,5 @@ export default {
     expGroupDiagnostics: "Solución de problemas",
     flagTileFavBadge: "Estrella en los mosaicos favoritos",
     tipTileFavBadge: "Muestra una pequeña estrella en la esquina superior derecha de cada mosaico favorito. Es solo una marca y no responde a los clics.",
+    tileFolderCount: "Mosaicos en esta carpeta: {n}",
 };

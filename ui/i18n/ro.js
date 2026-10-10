@@ -2083,4 +2083,5 @@ export default {
     expGroupDiagnostics: "Depanare",
     flagTileFavBadge: "Stea pe dalele favorite",
     tipTileFavBadge: "Afișează o mică stea în colțul din dreapta sus al fiecărei dale favorite. Este doar un semn și nu reacționează la clicuri.",
+    tileFolderCount: "Dale în acest dosar: {n}",
 };

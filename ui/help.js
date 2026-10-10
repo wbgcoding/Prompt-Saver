@@ -131,7 +131,7 @@ export const HELP_CONTENT = {
         "Drag a member back out to free it.",
       ],
       whatHappens:
-        "A button folder or tile folder shows up to four member previews and a count, dragging a member out frees it, and it dissolves once one member is left; a tile belongs to only one tile folder at a time.",
+        "A button folder shows up to four member previews and a count; a tile folder shows how many tiles it holds and one colour dot per tile. Dragging a member out frees it, and it dissolves once one member is left; a tile belongs to only one tile folder at a time.",
       settings: ["Button folders, tile folders: Expert menu → Features → Floating buttons & button folders"],
       tip: "Both kinds are on out of the box; switch any of them off in the expert menu if items are never grouped that way.",
       sketches: ["folderTypes"],
@@ -880,7 +880,7 @@ export const HELP_CONTENT = {
         "Ein Mitglied wieder herausziehen, um es freizugeben.",
       ],
       whatHappens:
-        "Ein Button-Ordner oder ein Kachelordner zeigt bis zu vier Vorschauen seiner Mitglieder und eine Anzahl; das Herausziehen eines Mitglieds gibt es frei, und der Ordner löst sich auf, sobald nur noch eines übrig ist. Eine Kachel gehört immer nur zu einem Kachelordner gleichzeitig.",
+        "Ein Button-Ordner zeigt bis zu vier Vorschauen seiner Mitglieder und eine Anzahl; ein Kachelordner zeigt, wie viele Kacheln er enthält, und einen Farbpunkt pro Kachel. Das Herausziehen eines Mitglieds gibt es frei, und der Ordner löst sich auf, sobald nur noch eines übrig ist. Eine Kachel gehört immer nur zu einem Kachelordner gleichzeitig.",
       settings: ["Button-Ordner, Kachelordner: Expertenmenü → Funktionen → Schwebende Buttons & Button-Ordner"],
       tip: "Beide Arten sind ab Werk an; jede einzeln im Expertenmenü abschaltbar, wenn Elemente so nie gruppiert werden sollen.",
       sketches: ["folderTypes"],

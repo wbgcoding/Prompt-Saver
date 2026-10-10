@@ -1274,45 +1274,51 @@ def run(browser, tmp):
 """
     for size_824 in ('880x600', '680x460'):
         failed += ar_probe('bh824-' + size_824, '824: help close button inset matches settings at ' + size_824, 'index', size_824, '', help_close_body)
-    # The folder preview fills the tile and the face count picks the layout.
-    failed += ar_probe('bf826', '826: the folder preview fills the tile and shows the right number of faces', 'index', '880x600', '', r"""
+    # The folder tile shows how many tiles it holds and one colour dot per tile.
+    failed += ar_probe('bf250', '250: the folder tile shows the member count and one dot per tile', 'index', '880x600', '', r"""
     await bootReady();
     const gf = await import('./gridFolders.js');
     const real = document.querySelector('#grid .folder-tile');
-    if (!real) errs.push('826: no folder tile on the grid (fixture)');
+    if (!real) errs.push('250: no folder tile on the grid (fixture)');
     else {
       const mini = real.querySelector('.folder-mini');
       const title = real.querySelector('.folder-title');
       const cs = getComputedStyle(real);
       const tr = real.getBoundingClientRect();
-      const left = tr.left + parseFloat(cs.borderLeftWidth) + parseFloat(cs.paddingLeft);
-      const right = tr.right - parseFloat(cs.borderRightWidth) - parseFloat(cs.paddingRight);
       const top = tr.top + parseFloat(cs.borderTopWidth) + parseFloat(cs.paddingTop);
-      const room = (right - left) * (title.getBoundingClientRect().top - top);
       const mr = mini.getBoundingClientRect();
-      const share = (mr.width * mr.height) / room;
-      if (share < 0.75) errs.push('826: the preview fills only ' + Math.round(share * 100) + ' percent of the room above the caption');
-      if (mini.dataset.n !== '5') errs.push('826: five members should render five faces, got ' + mini.dataset.n);
+      const room = title.getBoundingClientRect().top - top;
+      if (mr.height / room < 0.75) errs.push('250: the preview fills only ' + Math.round(mr.height / room * 100) + ' percent of the room above the caption');
+      if (mini.querySelector('.folder-count').textContent !== '5') errs.push('250: five members should show the count 5');
     }
-    const faces = (n, w, h) => {
+    const build = (n, w, h) => {
       const box = document.createElement('div');
       box.style.cssText = 'position:fixed;left:0;top:0;z-index:99999;width:' + w + 'px;height:' + h + 'px';
-      const ids = ['p1', 'p2', 'p3', 'p5', 'p7', 'p9', 'p4'].slice(0, n);
+      const ids = ['p1', 'p2', 'p3', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10'].slice(0, n);
       const tile = gf.buildFolderTile({ id: 'tfx', name: 'X', color: '', view_id: 'home', cell: [0, 0], members: ids });
       box.appendChild(tile);
       document.body.appendChild(box);
       const mini = tile.querySelector('.folder-mini');
-      const shown = [...mini.children].filter((c) => getComputedStyle(c).display !== 'none').length;
-      const res = [shown, mini.dataset.n];
+      const res = {
+        count: tile.querySelector('.folder-count').textContent,
+        dots: tile.querySelectorAll('.folder-dot').length,
+        parts: mini.children.length,
+        label: mini.getAttribute('aria-label'),
+        inside: mini.getBoundingClientRect().bottom <= tile.querySelector('.folder-title').getBoundingClientRect().top + 1 &&
+          mini.getBoundingClientRect().top >= tile.getBoundingClientRect().top - 1,
+      };
       box.remove();
       return res;
     };
-    for (const [n, narrow, wide] of [[1, 1, 1], [2, 2, 2], [4, 4, 4], [6, 4, 6], [7, 4, 6]]) {
-      const a = faces(n, 207, 148);
-      const b = faces(n, 260, 150);
-      if (a[0] !== narrow) errs.push('826: ' + n + ' members show ' + a[0] + ' faces on a narrow tile, want ' + narrow);
-      if (b[0] !== wide) errs.push('826: ' + n + ' members show ' + b[0] + ' faces on a wide tile, want ' + wide);
-      if (a[1] !== String(Math.min(n, 6))) errs.push('826: ' + n + ' members set data-n ' + a[1]);
+    for (const n of [1, 2, 4, 6, 9]) {
+      for (const [w, h] of [[207, 148], [260, 150]]) {
+        const r = build(n, w, h);
+        if (r.count !== String(n)) errs.push('250: ' + n + ' members show the count ' + r.count);
+        if (r.dots !== Math.min(n, 8)) errs.push('250: ' + n + ' members show ' + r.dots + ' dots, want ' + Math.min(n, 8));
+        if (r.parts !== 2) errs.push('250: the preview holds ' + r.parts + ' parts, want the count and the dots only');
+        if (!r.label || r.label.indexOf(String(n)) < 0) errs.push('250: the preview label does not name the count ' + n + ': ' + r.label);
+        if (!r.inside) errs.push('250: ' + n + ' members: the preview is not inside the tile above the title at ' + w + 'x' + h);
+      }
     }
 """)
     # Screenshot editor probes share one opener: a plain canvas fired as a capture.

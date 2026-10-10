@@ -108,9 +108,6 @@ SECTION = """\
       if (document.querySelector('.tile[data-id="p4"]')) {
         out.errors.push('a prompt inside the folder is still a tile of its own');
       }
-      // No member-count badge on a folder tile: the preview identifies it, a number
-      // on top of it was noise.
-      if (fTile.querySelector('.folder-count')) out.errors.push('the folder tile still carries a count badge');
       // 708: a folder is a normal card: the size of a neighbouring prompt tile, the
       // surface colour, a preview without a plate of its own and the title at the bottom.
       {

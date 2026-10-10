@@ -2083,4 +2083,5 @@ export default {
     expGroupDiagnostics: "Sorun giderme",
     flagTileFavBadge: "Favori kutucuklarda yıldız",
     tipTileFavBadge: "Her favori kutucuğun sağ üst köşesinde küçük bir yıldız gösterir. Yalnızca bir işarettir ve tıklamalara tepki vermez.",
+    tileFolderCount: "Bu klasördeki kutucuklar: {n}",
 };

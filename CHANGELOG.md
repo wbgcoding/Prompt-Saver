@@ -913,6 +913,8 @@ the video editor and the introduction tour ship on).
   pictures.
 - **Favorite tiles show a small star in their top-right corner.** It can be
   switched off in the expert menu under Favorites.
+- **Tile folders show how many tiles they hold and one colour dot per tile**
+  instead of tiny unreadable previews.
 
 ### Fixed
 

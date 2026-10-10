@@ -2083,4 +2083,5 @@ export default {
     expGroupDiagnostics: "Rozwiązywanie problemów",
     flagTileFavBadge: "Gwiazdka na ulubionych kafelkach",
     tipTileFavBadge: "Pokazuje małą gwiazdkę w prawym górnym rogu każdego ulubionego kafelka. To tylko oznaczenie i nie reaguje na kliknięcia.",
+    tileFolderCount: "Kafelki w tym folderze: {n}",
 };

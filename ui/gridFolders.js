@@ -139,7 +139,7 @@ export async function takeOutOfFolder(id, cell) {
   await renderGrid(true);
 }
 
-// A folder cell: up to six member faces (the CSS shows four, or six on a wide tile) and the name.
+// A folder cell: the number of tiles it holds, large, and one colour dot per tile (at most eight).
 export function buildFolderTile(f) {
   const tile = document.createElement("div");
   tile.className = "tile folder-tile";
@@ -154,27 +154,30 @@ export function buildFolderTile(f) {
   const mini = document.createElement("span");
   mini.className = "folder-mini";
   const members = folderMembers(f);
-  const faces = members.slice(0, 6);
-  mini.dataset.n = String(faces.length);
-  for (const p of faces) {
-    const face = document.createElement("span");
-    face.className = "folder-mini-cell";
-    if (p.color) {
-      face.style.background = p.color;
-      face.style.color = readableInk(p.color);
-      face.style.setProperty("--ink-shadow", inkShadow(p.color));
-    } else face.style.setProperty("--ink-shadow", "none");
-    const faceImg = imageOf(p);
-    if (faceImg) {
-      const img = document.createElement("img");
-      img.src = faceImg;
-      img.draggable = false;
-      face.appendChild(img);
-    } else {
-      face.textContent = (p.name || "").slice(0, 2);
+  mini.setAttribute("role", "img");
+  mini.setAttribute("aria-label", t("tileFolderCount").replace("{n}", String(members.length)));
+  const count = document.createElement("span");
+  count.className = "folder-count";
+  count.textContent = String(members.length);
+  mini.appendChild(count);
+  const dots = document.createElement("span");
+  dots.className = "folder-dots";
+  for (const p of members.slice(0, 8)) {
+    const dot = document.createElement("span");
+    dot.className = "folder-dot";
+    if (p.color) dot.style.background = p.color;
+    else {
+      const dotImg = imageOf(p);
+      if (dotImg) {
+        const img = document.createElement("img");
+        img.src = dotImg;
+        img.draggable = false;
+        dot.appendChild(img);
+      } else dot.classList.add("folder-dot-plain");
     }
-    mini.appendChild(face);
+    dots.appendChild(dot);
   }
+  mini.appendChild(dots);
   tile.appendChild(mini);
   const name = document.createElement("span");
   // NOT .tile-name: that class is what the auto-fitter scales, and a folder label
