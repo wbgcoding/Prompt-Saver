@@ -1890,8 +1890,6 @@ export default {
     flagAttachTextPreview: "Textvorschau für Anhänge",
     tipAttachTextPreview: "Zeigt den Anfang eines Text-, Markdown-, JSON- oder CSV-Anhangs direkt im Editor, genau wie geschrieben.",
     valAttachPreviewKb: "Größe der Anhangsvorschau",
-    valWordsApprox: "≈ {n} Wörter",
-    tipAttachPreviewKb: "Wie viel von einem Text-Anhang die Vorschau liest.",
     attachPreviewTruncated: "Gekürzt, die Datei geht über diese Stelle hinaus.",
     attachPreviewUnreadable: "Nicht als Text lesbar.",
     copyFormattedAction: "Formatiert kopieren",
@@ -2016,4 +2014,8 @@ export default {
     flagFolders: "Ordner",
     tipFolders: "Eine Kachel auf die Mitte einer anderen oder einen schwebenden Button auf einen anderen ziehen sammelt beide in einem Ordner. Ein Klick auf den Ordner öffnet den Inhalt; herausziehen löst ihn wieder.",
     showArchiveTagged: "Prompts mit dem Tag „{name}“ anzeigen",
+    optPreviewShort: "Kurz",
+    optPreviewMedium: "Mittel",
+    optPreviewLong: "Lang",
+    tipAttachPreviewSize: "Wie viel von einem Text-Anhang die Vorschau liest: kurz etwa eine Seite, mittel etwa drei Seiten, lang etwa zwölf Seiten.",
 };

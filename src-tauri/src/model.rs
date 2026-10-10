@@ -838,6 +838,7 @@ pub(crate) fn removed_ui_value_keys() -> &'static [&'static str] {
         "snipEditUndoMax",
         "videoEditUndoMax",
         "savedSearchMax",
+        "attachPreviewKb",
     ]
 }
 
@@ -1044,6 +1045,19 @@ impl Settings {
             }
             if s > 0.0 {
                 self.ui_values.insert("hoverDim".into(), (s / 5.0).round() * 5.0);
+            }
+        }
+        // The attachment preview size slider became three steps. A stored size of 4 KB or
+        // less reads as "short", 20 KB or more as "long"; anything between is the old
+        // default's neighbourhood and stays "medium" (no key). A choice already stored
+        // is never overwritten.
+        if !self.ui_texts.contains_key("attachPreviewSize") {
+            if let Some(kb) = self.ui_values.get("attachPreviewKb").copied() {
+                if kb <= 4.0 {
+                    self.ui_texts.insert("attachPreviewSize".into(), "short".into());
+                } else if kb >= 20.0 {
+                    self.ui_texts.insert("attachPreviewSize".into(), "long".into());
+                }
             }
         }
         // Seven look switches for tile text became one choice, "tileStyle". Styles that

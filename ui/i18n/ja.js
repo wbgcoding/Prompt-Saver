@@ -1890,8 +1890,6 @@ export default {
     flagAttachTextPreview: "添付ファイルのテキストプレビュー",
     tipAttachTextPreview: "プレーンテキスト、Markdown、JSON、CSVの添付ファイルの先頭部分を、そのままエディター内に表示します。",
     valAttachPreviewKb: "添付プレビューのサイズ",
-    valWordsApprox: "≈ {n} 語",
-    tipAttachPreviewKb: "プレビューがテキスト添付ファイルをどこまで読み込むかです。",
     attachPreviewTruncated: "短縮されています。ファイルはこの続きがあります。",
     attachPreviewUnreadable: "テキストとして読み込めません。",
     copyFormattedAction: "書式付きでコピー",
@@ -2016,4 +2014,8 @@ export default {
     flagFolders: "フォルダー",
     tipFolders: "タイルを別のタイルの中央に、またはフローティングボタンを別のボタンにドロップすると、両方が1つのフォルダーにまとまります。フォルダーをクリックすると中身が開き、外へドラッグすれば元に戻ります。",
     showArchiveTagged: "タグ「{name}」の付いたプロンプトを表示",
+    optPreviewShort: "短め",
+    optPreviewMedium: "標準",
+    optPreviewLong: "長め",
+    tipAttachPreviewSize: "プレビューがテキスト添付ファイルをどこまで読み込むかです。短めは約1ページ、標準は約3ページ、長めは約12ページ。",
 };

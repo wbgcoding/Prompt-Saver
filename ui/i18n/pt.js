@@ -1890,8 +1890,6 @@ export default {
     flagAttachTextPreview: "Pré-visualização de texto para anexos",
     tipAttachTextPreview: "Mostra o início de um anexo de texto simples, Markdown, JSON ou CSV diretamente no editor, exatamente como foi escrito.",
     valAttachPreviewKb: "Tamanho da pré-visualização do anexo",
-    valWordsApprox: "≈ {n} palavras",
-    tipAttachPreviewKb: "Quanto de um anexo de texto a pré-visualização lê.",
     attachPreviewTruncated: "Encurtado, o arquivo continua além deste ponto.",
     attachPreviewUnreadable: "Não é possível ler como texto.",
     copyFormattedAction: "Copiar formatado",
@@ -2016,4 +2014,8 @@ export default {
     flagFolders: "Pastas",
     tipFolders: "Arraste um bloco para o centro de outro, ou um botão flutuante sobre outro, para juntar os dois numa pasta. Clicar na pasta abre o conteúdo; arrastar um para fora volta a libertá-lo.",
     showArchiveTagged: "Mostrar prompts com a etiqueta «{name}»",
+    optPreviewShort: "Curta",
+    optPreviewMedium: "Média",
+    optPreviewLong: "Longa",
+    tipAttachPreviewSize: "Quanto de um anexo de texto a pré-visualização lê: curta cerca de uma página, média cerca de três páginas, longa cerca de doze páginas.",
 };

@@ -1,6 +1,7 @@
 // Prompt editor modal: drafts, variable helpers, diff and history, file preview and dialogs.
 import { $, assignModalState, autoGrow, closeColorPop, COLORS, convertFileSrc, disarmButton, errToast, flag, HISTORY_PREVIEW_LEN, ICON_DOWN, ICON_FILE, ICON_PDF, ICON_TRASH, ICON_UP, inputEl, invoke, LANG, libraryEl, listen, modal, modalState, openColorPop, optFlag, PDF_EXT, prompts, putIcon, saveBtn, t, toast, txt, val } from "./core.js";
 import { DYN_VARS, dynToken, extractVars, hasEmptyVarToken, readFixedVars, resolveVars, saveFixedVars } from "./promptVars.js";
+import { ATTACH_PREVIEW_KB } from "./expertConfig.js";
 import { EXPERT_DROPDOWNS, renderExpert } from "./expertMenu.js";
 import { normSize } from "./settingsPanel.js";
 import { closeTagPop, closeTagSuggest, renderTagChips } from "./tags.js";
@@ -1164,7 +1165,7 @@ export async function renderAttachTextPreview(path) {
   modal.textAttachUnreadable.classList.add("hidden");
   let result;
   try {
-    result = await invoke("attachment_text_preview", { path, maxKb: Math.round(val("attachPreviewKb")) });
+    result = await invoke("attachment_text_preview", { path, maxKb: ATTACH_PREVIEW_KB[EXPERT_DROPDOWNS.attachPreviewSize.get()] });
   } catch (_) {
     return; // not a text-preview extension after all, or the file vanished mid-read
   }

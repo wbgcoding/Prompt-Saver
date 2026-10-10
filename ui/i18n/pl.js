@@ -1890,8 +1890,6 @@ export default {
     flagAttachTextPreview: "Podgląd tekstu dla załączników",
     tipAttachTextPreview: "Pokazuje początek załącznika tekstowego, Markdown, JSON lub CSV bezpośrednio w edytorze, dokładnie tak jak został napisany.",
     valAttachPreviewKb: "Rozmiar podglądu załącznika",
-    valWordsApprox: "≈ {n} słów",
-    tipAttachPreviewKb: "Ile z załącznika tekstowego odczytuje podgląd.",
     attachPreviewTruncated: "Skrócono, plik ciągnie się dalej poza tym miejscem.",
     attachPreviewUnreadable: "Nie można odczytać jako tekstu.",
     copyFormattedAction: "Kopiuj sformatowane",
@@ -2016,4 +2014,8 @@ export default {
     flagFolders: "Foldery",
     tipFolders: "Przeciągnij kafelek na środek innego albo pływający przycisk na inny, aby zebrać oba w folderze. Kliknięcie folderu otwiera jego zawartość; przeciągnięcie elementu na zewnątrz znów go uwalnia.",
     showArchiveTagged: "Pokaż prompty z tagiem „{name}”",
+    optPreviewShort: "Krótki",
+    optPreviewMedium: "Średni",
+    optPreviewLong: "Długi",
+    tipAttachPreviewSize: "Ile z załącznika tekstowego odczytuje podgląd: krótki około jednej strony, średni około trzech stron, długi około dwunastu stron.",
 };

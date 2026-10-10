@@ -1890,8 +1890,6 @@ export default {
     flagAttachTextPreview: "Previzualizare text pentru atașamente",
     tipAttachTextPreview: "Arată începutul unui atașament text simplu, Markdown, JSON sau CSV direct în editor, exact așa cum a fost scris.",
     valAttachPreviewKb: "Dimensiunea previzualizării atașamentului",
-    valWordsApprox: "≈ {n} cuvinte",
-    tipAttachPreviewKb: "Cât dintr-un atașament text citește previzualizarea.",
     attachPreviewTruncated: "Scurtat, fișierul continuă după acest punct.",
     attachPreviewUnreadable: "Nu poate fi citit ca text.",
     copyFormattedAction: "Copiere formatată",
@@ -2016,4 +2014,8 @@ export default {
     flagFolders: "Foldere",
     tipFolders: "Trage o dală în centrul alteia sau un buton flotant peste altul pentru a le aduna pe amândouă într-un folder. Un clic pe folder îi deschide conținutul; dacă tragi un element afară, redevine liber.",
     showArchiveTagged: "Afișează prompturile cu eticheta „{name}”",
+    optPreviewShort: "Scurtă",
+    optPreviewMedium: "Medie",
+    optPreviewLong: "Lungă",
+    tipAttachPreviewSize: "Cât dintr-un atașament text citește previzualizarea: scurtă circa o pagină, medie circa trei pagini, lungă circa douăsprezece pagini.",
 };

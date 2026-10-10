@@ -38,6 +38,8 @@ export function enumDropdown(key, labelKey, opts, def, gate, norm = (v) => v) {
   };
 }
 
+const normPreviewSize = (v) => (["short", "medium", "long"].includes(v) ? v : "medium");
+
 // Dropdowns like the settings' text-size / font selects.
 export const EXPERT_DROPDOWNS = {
   // Live counter unit selection.
@@ -204,6 +206,9 @@ export const EXPERT_DROPDOWNS = {
   // size that fits the tile or button.
   copySizeLevel: enumDropdown("copySizeLevel", "valCopySize",
     [["small", "optCopySizeSmall"], ["medium", "optCopySizeMedium"], ["large", "optCopySizeLarge"]], "large", "bubbleMs", normCopySizeLevel),
+  // How much of a text attachment the editor preview reads (sizes in ATTACH_PREVIEW_KB).
+  attachPreviewSize: enumDropdown("attachPreviewSize", "valAttachPreviewKb",
+    [["short", "optPreviewShort"], ["medium", "optPreviewMedium"], ["long", "optPreviewLong"]], "medium", "attachTextPreview", normPreviewSize),
 };
 
 // Mirror each disabled flag onto a body class so CSS can hide the matching UI.
@@ -517,13 +522,11 @@ export async function commitValue(key, value) {
 }
 
 // How a number reads on its row. The stored value never changes, only the text:
-// milliseconds show as seconds, the attachment preview size as roughly that many
-// words (about 170 per kilobyte) and the error log size in megabytes.
+// milliseconds show as seconds and the error log size in megabytes.
 // A 0-stop can carry a special label (e.g. auto-advance "unlimited") instead of "0 min".
 export function formatValue(cfg, v) {
   if (v === 0 && cfg.zeroLabel) return t(cfg.zeroLabel);
   const nf = (opts) => new Intl.NumberFormat(LANG, opts);
-  if (cfg.display === "words") return t("valWordsApprox").replace("{n}", nf({}).format(Math.round(v * 170 / 10) * 10));
   if (cfg.display === "mb") return `${nf({ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v / 1024)} MB`;
   if (cfg.unit === "ms") return `${nf({ minimumFractionDigits: 0, maximumFractionDigits: (cfg.step ?? 100) < 100 ? 2 : 1 }).format(v / 1000)} s`;
   // One style for every unit: number, space, unit; percent, the times sign and a per-minute rate hug the number.

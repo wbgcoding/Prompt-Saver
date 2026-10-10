@@ -353,7 +353,6 @@ export const HISTORY_STOPS = (() => {
 export const EXPERT_VALUES = {
   videoVolume: { label: "valVideoVolume", min: 0, max: 100, step: 5, def: 100, unit: "%", gate: "!videoMuted" },
   bubbleMs: { label: "valBubbleMs", min: 0, max: 6000, step: 50, def: 950, unit: "ms", zeroLabel: "valOff", offAtZero: true },
-  attachPreviewKb: { label: "valAttachPreviewKb", min: 1, max: 64, step: 1, def: 8, unit: "KB", display: "words", gate: "attachTextPreview" },
   // Floating-button opacity (%). Floored at 20% so the pill never vanishes.
   floatOpacity: { label: "valFloatOpacity", min: 20, max: 100, step: 5, def: 100, unit: "%", gate: "floating" },
   // Floating pill appearance -- the text size.
@@ -552,7 +551,7 @@ export const REC_QUALITY_BITRATE = { small: 4000, high: 12000 };
 export const EXPERT_TABS = [
   { title: "expTabFeatures", groups: [
     // Everything that puts new content into the app.
-    { title: "expGroupInput", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, { key: "attachTextPreview", gate: "fileAttach" }, "pasteMedia", "dragDrop"], values: ["attachPreviewKb"] },
+    { title: "expGroupInput", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, { key: "attachTextPreview", gate: "fileAttach" }, "pasteMedia", "dragDrop"], dropdowns: ["attachPreviewSize"] },
     { title: "expGroupViews", flags: ["multiView", { key: "multiViewPrompt", gate: "multiView" }, { key: "gridViewBorder", gate: "multiView" }, "quickGrid", { key: "quickGridHoverOnly", gate: "quickGrid" }], values: ["maxViews", "gridMax"] },
     // Placeholders, from the grammar to where the app asks for them. varFixed
     // (a hand-maintained name/value list, empty by default, only ever
@@ -657,6 +656,8 @@ export const EXPERT_BULK_NEVER = ["demoMode", "remoteTlsShortLived"];
 // What an expert reset writes back: the backend clears the certificate lifetime flag
 // itself (the certificate stays), so only the demo session marker survives it.
 export const EXPERT_RESET_KEEP = ["demoMode"];
+// Kilobytes of a text attachment the preview reads, per step of the attachPreviewSize choice.
+export const ATTACH_PREVIEW_KB = { short: 3, medium: 8, long: 32 };
 export const TILE_STYLES = ["bold", "uppercase", "mono", "italic", "shadow", "compact", "gradient"];
 
 // Expert settings whose name alone doesn't explain what they do get a themed
@@ -664,7 +665,7 @@ export const TILE_STYLES = ["bold", "uppercase", "mono", "italic", "shadow", "co
 // convention tip<Key>. Self-explanatory settings are deliberately left out.
 export const EXPERT_TIPS = [
   // General / creating
-  "storeFiles", "attachTextPreview", "attachPreviewKb", "varDefaults", "dynVars", "choiceVars", "choiceRemember", "varFixed",
+  "storeFiles", "attachTextPreview", "attachPreviewSize", "varDefaults", "dynVars", "choiceVars", "choiceRemember", "varFixed",
   "lengthCounter", "promptHistory", "editorMonospace",
   "promptNotes", "notesInTooltip", "notesTipLen",
   "mdPreview", "codeHighlight", "codeAutoDetect", "copyFormatted",

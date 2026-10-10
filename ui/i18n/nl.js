@@ -1890,8 +1890,6 @@ export default {
     flagAttachTextPreview: "Tekstvoorbeeld voor bijlagen",
     tipAttachTextPreview: "Toont het begin van een bijlage met platte tekst, Markdown, JSON of CSV rechtstreeks in de editor, precies zoals geschreven.",
     valAttachPreviewKb: "Grootte van bijlagevoorbeeld",
-    valWordsApprox: "≈ {n} woorden",
-    tipAttachPreviewKb: "Hoeveel van een tekstbijlage het voorbeeld leest.",
     attachPreviewTruncated: "Ingekort, het bestand gaat verder na dit punt.",
     attachPreviewUnreadable: "Niet leesbaar als tekst.",
     copyFormattedAction: "Opgemaakt kopiëren",
@@ -2016,4 +2014,8 @@ export default {
     flagFolders: "Mappen",
     tipFolders: "Sleep een tegel op het midden van een andere, of een zwevende knop op een andere, om beide in een map te verzamelen. Een klik op de map opent de inhoud; sleep je er een uit, dan staat die weer los.",
     showArchiveTagged: "Prompts met de tag “{name}” tonen",
+    optPreviewShort: "Kort",
+    optPreviewMedium: "Middel",
+    optPreviewLong: "Lang",
+    tipAttachPreviewSize: "Hoeveel van een tekstbijlage het voorbeeld leest: kort ongeveer één pagina, middel ongeveer drie pagina's, lang ongeveer twaalf pagina's.",
 };

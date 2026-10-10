@@ -1890,8 +1890,6 @@ export default {
     flagAttachTextPreview: "Text preview for attachments",
     tipAttachTextPreview: "Shows the start of a plain text, Markdown, JSON or CSV attachment right in the editor, exactly as written.",
     valAttachPreviewKb: "Attachment preview size",
-    valWordsApprox: "≈ {n} words",
-    tipAttachPreviewKb: "How much of a text attachment the preview reads.",
     attachPreviewTruncated: "Shortened, the file continues past this point.",
     attachPreviewUnreadable: "Not readable as text.",
     copyFormattedAction: "Copy formatted",
@@ -2016,4 +2014,8 @@ export default {
     flagFolders: "Folders",
     tipFolders: "Drop a tile onto the middle of another one, or a floating button onto another, to collect both in a folder. Clicking a folder opens its contents; dragging one out frees it again.",
     showArchiveTagged: "Show prompts tagged \"{name}\"",
+    optPreviewShort: "Short",
+    optPreviewMedium: "Medium",
+    optPreviewLong: "Long",
+    tipAttachPreviewSize: "How much of a text attachment the preview reads: short about one page, medium about three pages, long about twelve pages.",
 };

@@ -13640,6 +13640,30 @@ fn tile_flags_merge_to_style() {
 }
 
 #[test]
+fn the_attachment_preview_slider_becomes_three_steps() {
+    let run = |kb: f64, stored: Option<&str>| {
+        let mut s = Settings::default();
+        s.ui_values.insert("attachPreviewKb".into(), kb);
+        if let Some(v) = stored {
+            s.ui_texts.insert("attachPreviewSize".into(), v.into());
+        }
+        s.migrate();
+        assert!(!s.ui_values.contains_key("attachPreviewKb"), "the slider value survived migrate");
+        let once = s.ui_texts.get("attachPreviewSize").cloned();
+        s.migrate();
+        assert_eq!(s.ui_texts.get("attachPreviewSize").cloned(), once, "a second migrate changes nothing");
+        once
+    };
+    assert_eq!(run(2.0, None).as_deref(), Some("short"));
+    assert_eq!(run(4.0, None).as_deref(), Some("short"));
+    assert_eq!(run(8.0, None), None, "the default stays medium, no key");
+    assert_eq!(run(19.0, None), None);
+    assert_eq!(run(64.0, None).as_deref(), Some("long"));
+    // A choice already made wins over the old slider.
+    assert_eq!(run(64.0, Some("medium")).as_deref(), Some("medium"));
+}
+
+#[test]
 fn old_snip_sizes_carry_into_the_remembered_sizes() {
     let run = |values: &[(&str, f64)], texts: &[(&str, &str)]| {
         let mut s = Settings::default();

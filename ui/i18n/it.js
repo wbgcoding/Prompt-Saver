@@ -1890,8 +1890,6 @@ export default {
     flagAttachTextPreview: "Anteprima testo per gli allegati",
     tipAttachTextPreview: "Mostra l'inizio di un allegato di testo semplice, Markdown, JSON o CSV direttamente nell'editor, esattamente come scritto.",
     valAttachPreviewKb: "Dimensione dell'anteprima allegato",
-    valWordsApprox: "≈ {n} parole",
-    tipAttachPreviewKb: "Quanto di un allegato di testo legge l'anteprima.",
     attachPreviewTruncated: "Accorciato, il file continua oltre questo punto.",
     attachPreviewUnreadable: "Non leggibile come testo.",
     copyFormattedAction: "Copia formattata",
@@ -2016,4 +2014,8 @@ export default {
     flagFolders: "Cartelle",
     tipFolders: "Trascina un riquadro al centro di un altro, o un pulsante flottante su un altro, per raccogliere entrambi in una cartella. Un clic sulla cartella ne apre il contenuto; trascinandone uno fuori torna libero.",
     showArchiveTagged: "Mostra i prompt con il tag «{name}»",
+    optPreviewShort: "Breve",
+    optPreviewMedium: "Media",
+    optPreviewLong: "Lunga",
+    tipAttachPreviewSize: "Quanto di un allegato di testo legge l'anteprima: breve circa una pagina, media circa tre pagine, lunga circa dodici pagine.",
 };

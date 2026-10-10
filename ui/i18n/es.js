@@ -1890,8 +1890,6 @@ export default {
     flagAttachTextPreview: "Vista previa de texto para adjuntos",
     tipAttachTextPreview: "Muestra el comienzo de un adjunto de texto plano, Markdown, JSON o CSV directamente en el editor, tal como está escrito.",
     valAttachPreviewKb: "Tamaño de la vista previa del adjunto",
-    valWordsApprox: "≈ {n} palabras",
-    tipAttachPreviewKb: "Cuánto de un adjunto de texto lee la vista previa.",
     attachPreviewTruncated: "Acortado, el archivo continúa más allá de este punto.",
     attachPreviewUnreadable: "No se puede leer como texto.",
     copyFormattedAction: "Copiar formateado",
@@ -2016,4 +2014,8 @@ export default {
     flagFolders: "Carpetas",
     tipFolders: "Arrastra un mosaico al centro de otro, o un botón flotante sobre otro, para reunir ambos en una carpeta. Un clic en la carpeta abre su contenido; si sacas uno arrastrándolo, vuelve a quedar suelto.",
     showArchiveTagged: "Mostrar prompts con la etiqueta «{name}»",
+    optPreviewShort: "Corta",
+    optPreviewMedium: "Media",
+    optPreviewLong: "Larga",
+    tipAttachPreviewSize: "Cuánto de un adjunto de texto lee la vista previa: corta una página, media unas tres páginas, larga unas doce páginas.",
 };

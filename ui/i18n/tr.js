@@ -1890,8 +1890,6 @@ export default {
     flagAttachTextPreview: "Eklentiler için metin önizlemesi",
     tipAttachTextPreview: "Düz metin, Markdown, JSON veya CSV eklentisinin başlangıcını, tam olarak yazıldığı gibi doğrudan düzenleyicide gösterir.",
     valAttachPreviewKb: "Eklenti önizleme boyutu",
-    valWordsApprox: "≈ {n} sözcük",
-    tipAttachPreviewKb: "Önizlemenin bir metin eklentisinden ne kadar okuduğu.",
     attachPreviewTruncated: "Kısaltıldı, dosya bu noktadan sonra devam ediyor.",
     attachPreviewUnreadable: "Metin olarak okunamıyor.",
     copyFormattedAction: "Biçimlendirilmiş kopyala",
@@ -2016,4 +2014,8 @@ export default {
     flagFolders: "Klasörler",
     tipFolders: "Bir kutucuğu başka bir kutucuğun ortasına ya da bir yüzen düğmeyi diğerinin üzerine sürükleyerek ikisini bir klasörde toplayın. Klasöre tıklamak içeriğini açar; birini dışarı sürüklerseniz yeniden bağımsız olur.",
     showArchiveTagged: "“{name}” etiketli istemleri göster",
+    optPreviewShort: "Kısa",
+    optPreviewMedium: "Orta",
+    optPreviewLong: "Uzun",
+    tipAttachPreviewSize: "Önizlemenin bir metin eklentisinden ne kadar okuduğu: kısa yaklaşık bir sayfa, orta yaklaşık üç sayfa, uzun yaklaşık on iki sayfa.",
 };

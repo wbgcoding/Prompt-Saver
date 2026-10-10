@@ -1890,8 +1890,6 @@ export default {
     flagAttachTextPreview: "附件文本预览",
     tipAttachTextPreview: "直接在编辑器中显示纯文本、Markdown、JSON 或 CSV 附件的开头内容,与原文完全一致。",
     valAttachPreviewKb: "附件预览大小",
-    valWordsApprox: "≈ {n} 词",
-    tipAttachPreviewKb: "预览读取文本附件的多少内容。",
     attachPreviewTruncated: "已截断,文件内容在此之后还有更多。",
     attachPreviewUnreadable: "无法作为文本读取。",
     copyFormattedAction: "复制为富文本",
@@ -2016,4 +2014,8 @@ export default {
     flagFolders: "文件夹",
     tipFolders: "把一个磁贴拖到另一个磁贴的中心，或把一个悬浮按钮拖到另一个上，即可把两者收进一个文件夹。点击文件夹会展开其内容；把某项拖出去，它就恢复为独立项。",
     showArchiveTagged: "显示带有标签“{name}”的提示词",
+    optPreviewShort: "短",
+    optPreviewMedium: "中",
+    optPreviewLong: "长",
+    tipAttachPreviewSize: "预览读取文本附件的多少内容：短约一页，中约三页，长约十二页。",
 };

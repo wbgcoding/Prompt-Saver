@@ -7,7 +7,6 @@
 pub(crate) const UI_VALUE_RANGES: &[(&str, f64, f64, bool)] = &[
     ("videoVolume", 0.0, 100.0, false),
     ("bubbleMs", 0.0, 6000.0, false),
-    ("attachPreviewKb", 1.0, 64.0, false),
     ("floatOpacity", 20.0, 100.0, false),
     ("pillFontSize", 14.0, 40.0, false),
     ("floatParkCleanupH", 0.0, 168.0, false),

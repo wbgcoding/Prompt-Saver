@@ -326,7 +326,6 @@ VALUE_TEXT_PROBE = """
     const want = {
       copyCooldownMs: '2 s',
       autoPasteDelayMs: '0,08 s',
-      attachPreviewKb: '≈ 1.360 Wörter',
       errorLogKeepKb: '0,25 MB',
       floatParkCleanupH: 'Nie',
     };
@@ -723,7 +722,7 @@ def main():
             errs = run(browser, tmp, "index.html", LAYOUT_PROBE.replace("__WIDE__", wide), {}, size=size)
             problems += [f"[{label}] {e}" for e in errs]
         texts = {"ui_flags": {g: True for g in ("autoPaste", "fileAttach", "attachTextPreview", "errorLog", "floating")},
-                 "ui_values": {"copyCooldownMs": 2000, "autoPasteDelayMs": 80, "attachPreviewKb": 8,
+                 "ui_values": {"copyCooldownMs": 2000, "autoPasteDelayMs": 80,
                                "errorLogKeepKb": 256, "floatParkCleanupH": 0}}
         errs = run(browser, tmp, "index.html", VALUE_TEXT_PROBE, texts)
         problems += [f"[value texts] {e}" for e in errs]

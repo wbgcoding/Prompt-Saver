@@ -2028,6 +2028,7 @@ the video editor and the introduction tour ship on).
 - **The archive shows itself as the tag it is.** The library chip carries the tag's name, and its switch moved next to the tag settings in the expert menu.
 - **The library no longer filters by tile colour.** Colours are for looks only; the type, favorite and tag filters stay.
 - **Placeholders have one short spelling.** {?Name}, {?Name=default}, {?Name|A, B} and {?@date}. Prompts, history, trash and imports with the old {#{…}#} spelling are converted automatically.
+- Attachment preview size is a choice of short, medium or long instead of a slider.
 
 ## 2.6.3 (2026-07-26)
 
