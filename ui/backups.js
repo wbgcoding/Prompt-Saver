@@ -333,11 +333,13 @@ export async function renderBackupPanel(body) {
 
   const nowBtn = document.createElement("button"); nowBtn.type = "button"; nowBtn.className = "ghost-btn backup-now-btn"; nowBtn.textContent = t("backupNow");
   nowBtn.addEventListener("click", async () => {
+    // A second click while the first backup is still being written would start another one.
+    nowBtn.disabled = true;
     try {
       await withTaskbarBusy("backup", () => invoke("create_backup", { keep: Math.round(val("backupKeep")) }));
       recordToolUsage("backup_create");
       toast(t("backupDone"));
-    } catch (e) { errToast(e); }
+    } catch (e) { errToast(e); } finally { nowBtn.disabled = false; }
     await saveUiState("backupListOpen", true); // reveal the fresh backup right away
     renderBackupPanel(body);
   });

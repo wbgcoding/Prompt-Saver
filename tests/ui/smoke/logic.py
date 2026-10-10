@@ -326,6 +326,29 @@ SNIP_HOLD_PROBE = """
     }
 """
 
+# 860: "Back up now" is locked while its backup is being written, so a double click starts one.
+BACKUP_NOW_PROBE = """
+    // 860:
+    {
+      window.__STUB_DELAY_MS__ = { create_backup: 400 };
+      (await import('./backups.js')).openBackups();
+      await until(() => document.querySelector('#backup-panel .backup-now-btn'), 40);
+      const btn = document.querySelector('#backup-panel .backup-now-btn');
+      if (!btn) {
+        errs.push('860: the Back up now button is missing');
+      } else {
+        btn.click();
+        btn.click();
+        await sleep(100);
+        if (!btn.disabled) errs.push('860: the button stays enabled while the backup is written');
+        await sleep(900);
+        const n = argsOf('create_backup').length;
+        if (n !== 1) errs.push('860: two quick clicks made ' + n + ' backups, wanted 1');
+      }
+      window.__STUB_DELAY_MS__ = {};
+    }
+"""
+
 def _boot(browser, tmp, tag, body, budget=45000, seed=""):
     side = tmp / "ui" / f"logic-{tag}.html"
     side.write_text(
@@ -347,7 +370,8 @@ def run(browser, tmp):
             ("search-race", SEARCH_RACE_PROBE, ""),
             ("snip-replace", SNIP_REPLACE_PROBE, SNIP_REPLACE_SEED),
             ("rec-convert", REC_CONVERT_PROBE, REC_CONVERT_SEED),
-            ("snip-hold", SNIP_HOLD_PROBE, SNIP_HOLD_SEED)):
+            ("snip-hold", SNIP_HOLD_PROBE, SNIP_HOLD_SEED),
+            ("backup-now", BACKUP_NOW_PROBE, "")):
         errs = _boot(browser, tmp, tag, body, seed=seed)
         print(f"-- ui logic ({tag})")
         for e in errs:

@@ -914,6 +914,8 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **Back up now no longer starts two backups on a double click.** The button
+  stays greyed out until the backup is written.
 - **The screenshot editor lets go of old image sizes.** Every resize kept the
   picture from before it for as long as the editor stayed open. Only the steps
   Undo can still reach are kept now, and closing the editor frees the whole
