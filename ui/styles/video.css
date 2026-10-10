@@ -286,13 +286,14 @@ body.video-body {
 .ve-tools {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 12px;
   flex-wrap: wrap;
   row-gap: 6px;
   padding: 6px 10px;
   border-top: 1px solid var(--border);
   flex: 0 0 auto;
 }
+.ve-tool-group { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; }
 .ve-tools .ghost-btn { padding: 4px 10px; font-size: 12px; }
 .ve-tools .icon-btn.active { background: var(--accent); color: var(--accent-fg); }
 .ve-zoom-val { min-width: 46px; text-align: center; font-size: 12px; color: var(--muted); }

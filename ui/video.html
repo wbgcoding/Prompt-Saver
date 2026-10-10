@@ -87,6 +87,9 @@
         <span class="ve-time-sep" aria-hidden="true">/</span>
         <span id="ve-duration" class="ve-time ve-muted">00:00.000</span>
         <span id="ve-frame" class="ve-frame ve-muted" data-i18n-title="veFrameTip" title="Frame number at the playhead"></span>
+        <button id="ve-still" class="icon-btn" type="button" data-i18n-title="veStillTip" data-i18n-aria="veStill">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+        </button>
 
         <span class="ve-spacer"></span>
 
@@ -131,28 +134,35 @@
       </div>
 
       <div class="ve-tools">
-        <button id="ve-mark-in" class="ghost-btn" type="button" data-i18n="veMarkIn" data-i18n-title="veMarkInTip" data-shortcut="veMarkIn">Mark in</button>
-        <button id="ve-mark-out" class="ghost-btn" type="button" data-i18n="veMarkOut" data-i18n-title="veMarkOutTip" data-shortcut="veMarkOut">Mark out</button>
-        <button id="ve-trim-set" class="ghost-btn" type="button" data-i18n="veTrimToSel" data-i18n-title="veTrimToSelTip">Trim to selection</button>
-        <button id="ve-cut-add" class="ghost-btn" type="button" data-i18n="veCutSel" data-i18n-title="veCutSelTip" data-shortcut="veCutSel">Cut out selection</button>
-        <button id="ve-sel-clear" class="ghost-btn" type="button" data-i18n="veSelClear" data-i18n-title="veSelClearTip">Clear selection</button>
-        <button id="ve-still" class="ghost-btn" type="button" data-i18n="veStill" data-i18n-title="veStillTip">Export frame</button>
+        <div class="ve-tool-group" role="group" data-i18n-aria="veSelGroup">
+          <button id="ve-mark-in" class="ghost-btn" type="button" data-i18n="veMarkIn" data-i18n-title="veMarkInTip" data-shortcut="veMarkIn">Mark in</button>
+          <button id="ve-mark-out" class="ghost-btn" type="button" data-i18n="veMarkOut" data-i18n-title="veMarkOutTip" data-shortcut="veMarkOut">Mark out</button>
+          <button id="ve-sel-clear" class="ghost-btn" type="button" data-i18n="veSelClear" data-i18n-title="veSelClearTip">Clear selection</button>
+        </div>
+        <div class="ve-tool-group" role="group" data-i18n-aria="veTrimGroup">
+          <button id="ve-trim-set" class="ghost-btn" type="button" data-i18n="veTrimToSel" data-i18n-title="veTrimToSelTip">Trim to selection</button>
+          <button id="ve-cut-add" class="ghost-btn" type="button" data-i18n="veCutSel" data-i18n-title="veCutSelTip" data-shortcut="veCutSel">Cut out selection</button>
+        </div>
 
         <span class="ve-spacer"></span>
 
-        <button id="ve-zoom-out" class="icon-btn" type="button" data-i18n-title="veZoomOut" data-i18n-aria="veZoomOut" data-shortcut="veTimelineZoomOut">
-          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M21 21l-4.3-4.3M8 11h6"/></svg>
-        </button>
-        <span id="ve-zoom-val" class="ve-zoom-val">100%</span>
-        <button id="ve-zoom-in" class="icon-btn" type="button" data-i18n-title="veZoomIn" data-i18n-aria="veZoomIn" data-shortcut="veTimelineZoomIn">
-          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M21 21l-4.3-4.3M11 8v6M8 11h6"/></svg>
-        </button>
-        <button id="ve-zoom-fit" class="ghost-btn" type="button" data-i18n="veZoomFit" data-i18n-title="veZoomFitTip">Fit</button>
-        <span class="ve-sep" aria-hidden="true"></span>
-        <span id="ve-original-badge" class="ve-original-badge hidden" data-i18n="originalBadge"></span>
-        <button id="ve-original" class="icon-btn" type="button" data-i18n-title="showOriginalTip" data-i18n-aria="showOriginal" data-shortcut="veShowOriginal">
-          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
-        </button>
+        <div class="ve-tool-group" role="group" data-i18n-aria="veZoomGroup">
+          <button id="ve-zoom-out" class="icon-btn" type="button" data-i18n-title="veZoomOut" data-i18n-aria="veZoomOut" data-shortcut="veTimelineZoomOut">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M21 21l-4.3-4.3M8 11h6"/></svg>
+          </button>
+          <span id="ve-zoom-val" class="ve-zoom-val">100%</span>
+          <button id="ve-zoom-in" class="icon-btn" type="button" data-i18n-title="veZoomIn" data-i18n-aria="veZoomIn" data-shortcut="veTimelineZoomIn">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M21 21l-4.3-4.3M11 8v6M8 11h6"/></svg>
+          </button>
+          <button id="ve-zoom-fit" class="icon-btn" type="button" data-i18n-title="veZoomFitTip" data-i18n-aria="veZoomFit">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg>
+          </button>
+          <span class="ve-sep" aria-hidden="true"></span>
+          <span id="ve-original-badge" class="ve-original-badge hidden" data-i18n="originalBadge"></span>
+          <button id="ve-original" class="icon-btn" type="button" data-i18n-title="showOriginalTip" data-i18n-aria="showOriginal" data-shortcut="veShowOriginal">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+          </button>
+        </div>
       </div>
     </div>
 

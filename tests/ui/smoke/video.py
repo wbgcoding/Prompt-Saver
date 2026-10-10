@@ -6,6 +6,64 @@ import re
 from .harness import REPO, SIDE_SCAN, unescape, run_chrome
 
 
+# The same editor booted in German (the longest labels) at the two narrow sizes, for the
+# layout probes that depend on label length.
+VIDEO_DE_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const until = async (fn, tries) => {
+    for (let i = 0; i < (tries || 60) && !fn(); i++) await sleep(50);
+    return fn();
+  };
+  try {
+    await until(() => {
+      const opsHint = document.querySelector('#ve-ops-list p');
+      return document.getElementById('ve-stage-msg').classList.contains('hidden') &&
+        document.querySelectorAll('#ve-filmstrip .ve-thumb').length > 0 &&
+        !!opsHint && opsHint.textContent && opsHint.textContent !== 'veOpsEmpty';
+    }, 300);
+    if (document.getElementById('ve-tab-edit').textContent.trim() === 'Edit') {
+      errs.push('the German boot still shows English labels');
+    }
+    // 934: the tool row groups its buttons so none wraps alone, Fit is an icon
+    // and Export frame sits in the transport row beside the frame number.
+    {
+      const tools = document.querySelector('.ve-tools');
+      const groups = [...tools.querySelectorAll('.ve-tool-group')];
+      if (groups.length !== 3) errs.push('934: expected 3 tool groups, found ' + groups.length);
+      if (window.innerWidth >= 880 && tools.getBoundingClientRect().height > 46) {
+        errs.push('934: the tool row wraps onto a second line (' + tools.getBoundingClientRect().height.toFixed(0) + 'px)');
+      }
+      for (const g of groups) {
+        const mids = [...g.children].map((c) => c.getBoundingClientRect()).filter((r) => r.height > 0).map((r) => r.top + r.height / 2);
+        if (Math.max(...mids) - Math.min(...mids) > 2) errs.push('934: a tool group breaks across lines');
+      }
+      if (!document.querySelector('.ve-transport #ve-still')) errs.push('934: Export frame is not in the transport row');
+      const fit = document.getElementById('ve-zoom-fit');
+      if (!fit.classList.contains('icon-btn') || fit.textContent.trim() !== '') errs.push('934: Fit is not an icon-only button');
+      document.getElementById('ve-zoom-in').click();
+      await sleep(60);
+      if (document.getElementById('ve-zoom-val').textContent === '100%') errs.push('934: zooming in did not change the zoom value');
+      fit.click();
+      await sleep(60);
+      if (document.getElementById('ve-zoom-val').textContent !== '100%') {
+        errs.push('934: Fit did not return the zoom to 100% (' + document.getElementById('ve-zoom-val').textContent + ')');
+      }
+    }
+    // DE-PROBES
+  } catch (e) { errs.push('probe: ' + e.message); }
+  errs.push(...(window.__SMOKE_ERRORS__ || []));
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
 # The video editor: the recording is PULLED at boot (video_editor_source), not
 # pushed, so the probe only has to wait -- tauri_stub.js's own fixture is a
 # 10-minute 1080p30 clip with both a system and a mic track, real enough that a
@@ -1884,6 +1942,26 @@ def run(browser, tmp):
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print(f"-- video.html {w}x{h}")
+        for e in errs:
+            print(f"   FAIL JS error: {e}")
+        failed += len(errs)
+        if not errs:
+            print("   ok")
+
+    # The same page in German at the two narrow sizes (label length decides the wrapping).
+    video_de = tmp / "ui" / "video-de.html"
+    video_de.write_text(
+        (REPO / "ui" / "video.html").read_text(encoding="utf-8")
+        .replace("<script",
+                 '<script>window.__SEED_SETTINGS__ = { language: "de" };</script>\n'
+                 '<script src="tauri_stub.js"></script>\n<script', 1)
+        .replace("</body>", VIDEO_DE_PROBE + "</body>"),
+        encoding="utf-8")
+    for w, h in ((880, 600), (760, 520)):
+        proc = run_chrome(browser, tmp / ('profile-video-de-%dx%d' % (w, h)), f"{w + 30},{h + 140}", 30000, video_de.as_uri(), 180)
+        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        print(f"-- video.html German {w}x{h}")
         for e in errs:
             print(f"   FAIL JS error: {e}")
         failed += len(errs)
