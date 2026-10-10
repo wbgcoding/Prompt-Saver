@@ -1807,20 +1807,12 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
    per-element `width` rules (different property) so styled scrollbars hide too. */
 .flag-hideScrollbars, .flag-hideScrollbars * { scrollbar-width: none; }
 .flag-hideScrollbars ::-webkit-scrollbar { display: none !important; }
-.flag-accentScrollbar ::-webkit-scrollbar-thumb { background: var(--accent) !important; }
-.flag-smoothScroll * { scroll-behavior: smooth; }
 /* Privacy extras */
-.flag-blurTilesUntilHover .tile-name { filter: blur(var(--blur-tiles, 4px)); transition: filter var(--transition); }
-.flag-blurTilesUntilHover .tile:hover .tile-name { filter: none; }
 .flag-blurMediaUntilHover .tile-img,
 .flag-blurMediaUntilHover .tile-video { filter: blur(var(--blur-media, 10px)); transition: filter var(--transition); }
 .flag-blurMediaUntilHover .tile:hover .tile-img,
 .flag-blurMediaUntilHover .tile:hover .tile-video { filter: none; }
-.flag-hideTileNames .tile-name { opacity: 0; transition: opacity var(--transition); }
-.flag-hideTileNames .tile:hover .tile-name { opacity: 1; }
 /* Media extras */
-.flag-grayscaleMedia .tile-img,
-.flag-grayscaleMedia .tile-video { filter: grayscale(1); }
 .flag-mediaBorder .tile.has-image { border-color: var(--accent); }
 .flag-roundMedia .tile-img,
 .flag-roundMedia .tile-video { border-radius: var(--media-radius, 8px); }

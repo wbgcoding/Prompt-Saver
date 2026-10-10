@@ -798,6 +798,7 @@ pub(crate) fn removed_ui_value_keys() -> &'static [&'static str] {
         "tagChipPx",
         "tagPopCols",
         "searchDebounceMs",
+        "tileBlur",
     ]
 }
 
@@ -834,6 +835,11 @@ pub(crate) fn removed_ui_flag_keys() -> &'static [&'static str] {
         "varPopupWindow",
         "viewGroups",
         "pausedIcons",
+        "blurTilesUntilHover",
+        "grayscaleMedia",
+        "hideTileNames",
+        "accentScrollbar",
+        "smoothScroll",
     ]
 }
 

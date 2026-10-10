@@ -64,7 +64,6 @@ pub(crate) const UI_VALUE_RANGES: &[(&str, f64, f64, bool)] = &[
     ("frostedBlur", 0.0, 20.0, false),
     ("composerMaxH", 80.0, 400.0, false),
     ("modalMaxVh", 60.0, 95.0, false),
-    ("tileBlur", 1.0, 16.0, false),
     ("mediaBlur", 1.0, 30.0, false),
     ("tileHotkeyBadgeOpacity", 10.0, 100.0, false),
     ("mediaRadius", 0.0, 24.0, false),

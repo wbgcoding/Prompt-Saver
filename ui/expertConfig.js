@@ -258,14 +258,9 @@ export const OPT_FLAG_LABELS = {
   // Appearance extras
   frostedModals: "flagFrostedModals",
   hideScrollbars: "flagHideScrollbars",
-  accentScrollbar: "flagAccentScrollbar",
-  smoothScroll: "flagSmoothScroll",
   // Privacy extras
-  blurTilesUntilHover: "flagBlurTilesUntilHover",
   blurMediaUntilHover: "flagBlurMediaUntilHover",
-  hideTileNames: "flagHideTileNames",
   // Media extras
-  grayscaleMedia: "flagGrayscaleMedia",
   mediaBorder: "flagMediaBorder",
   roundMedia: "flagRoundMedia",
   // New features (default off).
@@ -519,7 +514,6 @@ export const EXPERT_VALUES = {
   composerMaxH: { label: "valComposerMaxH", min: 80, max: 400, step: 10, def: 160, unit: "px" },
   modalMaxVh: { label: "valModalMaxVh", min: 60, max: 95, step: 1, def: 88, unit: "%" },
   // Privacy blur strength (each paired with its "blur until hover" toggle).
-  tileBlur: { label: "valTileBlur", min: 1, max: 16, step: 1, def: 4, unit: "px", gate: "blurTilesUntilHover" },
   mediaBlur: { label: "valMediaBlur", min: 1, max: 30, step: 1, def: 10, unit: "px", gate: "blurMediaUntilHover" },
   // Default matches the type badge's own fixed dim level (0.4) so a hotkey
   // badge reads the same as every other passive tile badge out of the box.
@@ -713,11 +707,11 @@ export const EXPERT_TABS = [
     { title: "expGroupTooltips", values: ["tooltipDelayMs"] },
     { title: "expGroupTileLook", flags: ["tileShadow", "typeBadges", "captions", "gridLines", "autoInk", "inkHalo"], values: ["tileRadius", "tileBorderWidth", "inkThreshold", "inkHaloStrength"], dropdowns: ["tileStyle"] },
     { title: "expGroupFavorites", flags: ["favorites", { key: "favViewReorder", gate: "favViewButton" }], values: ["favStarSize", "favMaxCols"] },
-    { title: "expGroupMedia", flags: ["videoControls", "videoAutoplay", "videoMuted", "videoLoop", "mediaMeta", "mediaMetaBackfill", "grayscaleMedia", "mediaBorder", "roundMedia"], values: ["videoVolume", "mediaRadius"] },
+    { title: "expGroupMedia", flags: ["videoControls", "videoAutoplay", "videoMuted", "videoLoop", "mediaMeta", "mediaMetaBackfill", "mediaBorder", "roundMedia"], values: ["videoVolume", "mediaRadius"] },
   ] },
   { title: "expTabAppearance", groups: [
     { title: "expGroupScales", values: ["composerScale", "primaryScale"] },
-    { title: "expGroupAppearanceDetails", flags: ["animations", "hideScrollbars", { key: "accentScrollbar", gate: "!hideScrollbars" }, "smoothScroll", "frostedModals", "customThemes"], values: ["animSpeed", "gridGap", "gridPad", "overlayDim", "frostedBlur", "composerMaxH", "modalMaxVh", "customThemeMax"], dropdowns: ["toastPos"], palette: true },
+    { title: "expGroupAppearanceDetails", flags: ["animations", "hideScrollbars", "frostedModals", "customThemes"], values: ["animSpeed", "gridGap", "gridPad", "overlayDim", "frostedBlur", "composerMaxH", "modalMaxVh", "customThemeMax"], dropdowns: ["toastPos"], palette: true },
   ] },
   { title: "expTabLibrary", groups: [
     { title: "expGroupLibSearch", flags: ["librarySearch", "globalSearch", "searchSuggest", "savedSearches", "fuzzySearch", "libraryTypeFilter", "colorFilter", "searchAutofocus", "ocrIndex"], values: ["searchListMax", "savedSearchMax", "ocrIndexMaxChars", "libraryCols"], dropdowns: ["fuzzyMaxTypos"],
@@ -730,7 +724,7 @@ export const EXPERT_TABS = [
   { title: "expTabSystem", groups: [
     // Toolbar button visibility (mirrors the header right-click tool list).
     { title: "expGroupToolbar", flags: [{ key: "barToggleBoth", gate: "barToggles" }, "showLibrary"] },
-    { title: "expGroupPrivacy", notices: ["storeUnsealed", "settingsLocked", "settingsWriteFailed"], flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "secretPrompts"], values: ["tileBlur", "mediaBlur", "secretTimeoutMin"] },
+    { title: "expGroupPrivacy", notices: ["storeUnsealed", "settingsLocked", "settingsWriteFailed"], flags: ["allowScreenshot", "blurMediaUntilHover", "secretPrompts"], values: ["mediaBlur", "secretTimeoutMin"] },
     { title: "expGroupSystem", notices: ["dataDirReadOnly"], flags: ["keyboardNav", "allowMultipleInstances", "dataDirLock", "demoMode", "taskbarProgress", "etaShow"], values: ["bgDoneKeepMin"], paths: ["dataDir"],
       actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }] },
     { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "helpSketches", "firstRunTour"],
@@ -816,7 +810,7 @@ export const EXPERT_TIPS = [
   "globalSearch",
   "tags", "tagFilterMode", "tagSort",
   "allowScreenshot", "copyHistory", "historyTimestamps", "historyGrouped",
-  "dedupCopyLog", "cleanupFiles", "blurTilesUntilHover",
+  "dedupCopyLog", "cleanupFiles",
   // Tools / data
   "dupFinder", "clipWatcher", "backupGfs", "backupBeforeReset", "backupBeforeDelete", "disarmMs",
   "recSweepBroken", "recDiscardKeepH", "videoClipTtlMin",

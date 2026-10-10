@@ -13799,6 +13799,28 @@ fn fixed_size_and_timing_values_are_dropped_on_load() {
 }
 
 #[test]
+fn visual_effect_switches_and_their_blur_value_are_dropped_on_load() {
+    // The five effects are gone, and tileBlur only ever belonged to the first one.
+    let flags = ["blurTilesUntilHover", "grayscaleMedia", "hideTileNames", "accentScrollbar", "smoothScroll"];
+    let mut s = Settings::default();
+    for k in flags {
+        s.ui_flags.insert(k.into(), true);
+    }
+    s.ui_flags.insert("blurMediaUntilHover".into(), true);
+    s.ui_values.insert("tileBlur".into(), 9.0);
+    s.ui_values.insert("mediaBlur".into(), 9.0);
+    assert!(s.has_removed_ui_values());
+    s.migrate();
+    for k in flags {
+        assert!(!s.ui_flags.contains_key(k), "{k} survived migrate");
+    }
+    assert!(!s.ui_values.contains_key("tileBlur"), "tileBlur survived migrate");
+    assert_eq!(s.ui_flags.get("blurMediaUntilHover"), Some(&true), "the kept blur switch stays");
+    assert_eq!(s.ui_values.get("mediaBlur"), Some(&9.0), "the kept blur strength stays");
+    assert!(!s.has_removed_ui_values());
+}
+
+#[test]
 fn removed_flags_are_dropped() {
     // Every listed key, whatever the stored value (true or false), is dropped
     // once; a live switch next to it is untouched.

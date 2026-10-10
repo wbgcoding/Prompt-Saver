@@ -283,7 +283,6 @@ export function applyValues() {
   root.setProperty("--frosted-blur", `${val("frostedBlur")}px`);
   root.setProperty("--hover-lift", `${val("hoverLift")}px`);
   root.setProperty("--lib-width", `${val("libraryWidth")}px`);
-  root.setProperty("--blur-tiles", `${val("tileBlur")}px`);
   root.setProperty("--blur-media", `${val("mediaBlur")}px`);
   const dim = val("hoverDim");
   document.body.classList.toggle("hover-dim", dim > 0);

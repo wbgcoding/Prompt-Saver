@@ -592,7 +592,7 @@ shadow off or dial its strength.
 
 ### Media
 
-Video controls, autoplay and loop (both off by default), mute, plus grayscale/dim-until-hovered looks for
+Video controls, autoplay and loop (both off by default), mute, plus a blur-until-hovered look for
 privacy-leaning media tiles. The library and copy history also show a video's
 length on its thumbnail and its resolution and file size in the tooltip; older
 attachments pick this up in the background the first time they are shown. The
@@ -672,8 +672,8 @@ or the top bar.
 
 ### Privacy
 
-Excludes the window from screen capture (on by default), blurs tiles/media until
-hovered, hides tile names, dims unhovered tiles. "Allow screenshots of Prompt
+Excludes the window from screen capture (on by default), blurs media until
+hovered, dims unhovered tiles. "Allow screenshots of Prompt
 Saver" lets every capture program, the app's own screenshot tool included,
 record its windows; the recording bar and the outline around a recorded region
 never appear in a recording either way.
@@ -1447,7 +1447,7 @@ Installation 30 Tage, einstellbar, 0 behält alles), Einzeleintrag löschen,
 Statistik mit 14-Tage-Diagramm.
 Der Kopierverlauf ist eine Liste; das Sortierfeld wechselt zwischen Zuletzt kopiert und Meistgenutzt (die 20 häufigsten).
 
-**Medien**: Video-Steuerung, Autoplay und Schleife (beide ab Werk aus), Graustufen/Abdunkeln. Bibliothek und Kopierverlauf
+**Medien**: Video-Steuerung, Autoplay und Schleife (beide ab Werk aus), Unschärfe bis zum Überfahren. Bibliothek und Kopierverlauf
 zeigen außerdem die Länge eines Videos auf seinem Vorschaubild sowie Auflösung
 und Dateigröße in der Kurzhilfe; ältere Anhänge holen das im Hintergrund nach,
 sobald sie zum ersten Mal angezeigt werden. Das Hauptraster bleibt unverändert.

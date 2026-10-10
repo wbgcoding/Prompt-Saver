@@ -208,7 +208,7 @@ export const HELP_CONTENT = {
       whatItIs: "Eight built-in themes cover system, light, dark, and five accent styles.",
       howTo: ["Pick a theme from Settings.", "Open the theme editor, once enabled, to adjust any theme's colors and save a custom one."],
       whatHappens: "\"System\" follows the OS light or dark setting live. A custom theme is saved separately; the built-in it was based on stays untouched.",
-      settings: ["Theme choice: Settings", "Theme editor: Expert menu → Appearance → Visual", "Accent-colored header, frosted dialogs, hidden or accent-colored scrollbars, smooth scrolling: Expert menu → Appearance → Visual"],
+      settings: ["Theme choice: Settings", "Theme editor: Expert menu → Appearance → Visual", "Accent-colored header, frosted dialogs, hidden scrollbars: Expert menu → Appearance → Visual"],
       tip: "Custom themes are on out of the box; switching them off in the expert menu also hides the editor button {icon:themeEditor}.",
     },
     {
@@ -286,8 +286,8 @@ export const HELP_CONTENT = {
         "Attach a video or image to a tile: file attach, paste, or drag and drop.",
         "Adjust playback and privacy-leaning looks in the expert menu.",
       ],
-      whatHappens: "Video settings (autoplay, mute, loop, volume) apply to every video tile; grayscale or dimming only changes how media looks, never what gets copied. The library and copy history also show a video's length on its thumbnail, and its resolution and file size in the tooltip; the main grid never shows either.",
-      settings: ["Video controls, autoplay and loop (off by default), mute: Expert menu → Tiles → Media", "Grayscale: Expert menu → Tiles → Media", "Accent border and rounded corners around media: Expert menu → Tiles → Media", "Duration/resolution/size in the library and copy history: Expert menu → Tiles → Media", "Fill in media info for older attachments: Expert menu → Tiles → Media"],
+      whatHappens: "Video settings (autoplay, mute, loop, volume) apply to every video tile; blurring only changes how media looks, never what gets copied. The library and copy history also show a video's length on its thumbnail, and its resolution and file size in the tooltip; the main grid never shows either.",
+      settings: ["Video controls, autoplay and loop (off by default), mute: Expert menu → Tiles → Media", "Accent border and rounded corners around media: Expert menu → Tiles → Media", "Duration/resolution/size in the library and copy history: Expert menu → Tiles → Media", "Fill in media info for older attachments: Expert menu → Tiles → Media"],
     },
     {
       section: "look",
@@ -303,11 +303,11 @@ export const HELP_CONTENT = {
       whatItIs: "These settings keep this window's contents out of screenshots, screen shares, and passers-by.",
       howTo: [
         "Screen-capture exclusion is on from the start.",
-        "Turn on tile or media blur or hidden tile names in the expert menu, as needed.",
+        "Turn on media blur in the expert menu, as needed.",
       ],
       whatHappens:
         "Screen-capture exclusion makes the window invisible to screenshot and recording tools, including its own, so if a capture comes out empty, check this setting first. An optional, off-by-default setting reads text out of an attached picture so the library search can find it too; a hit found only there carries a \"found in image\" badge, so it never looks like a random match. That recognized text stays out of the app otherwise: it is never shown, never exported, never synchronized, and its length is capped. Removing or replacing the picture clears it right away, and switching the setting off removes it from every tile, the trash included. A single tile can also be marked confidential; see \"Confidential prompts\" below.",
-      settings: ["Exclude from screen capture, blur tiles or media, hide names: Expert menu → System & data → Privacy", "Index text inside attached pictures for search, image text length limit: Expert menu → Library & copy history → Search", "Mark a tile confidential, vault lock timeout: Expert menu → System & data → Privacy"],
+      settings: ["Exclude from screen capture, blur media: Expert menu → System & data → Privacy", "Index text inside attached pictures for search, image text length limit: Expert menu → Library & copy history → Search", "Mark a tile confidential, vault lock timeout: Expert menu → System & data → Privacy"],
       tip: "Screen-capture exclusion ships on: turn it off for normal screenshots or recordings of this window.",
     },
     {
@@ -958,7 +958,7 @@ export const HELP_CONTENT = {
       whatItIs: "Acht integrierte Themes decken System, Hell, Dunkel und fünf Akzent-Varianten ab.",
       howTo: ["Ein Theme in den Einstellungen wählen.", "Den Theme-Editor, sobald aktiviert, öffnen, um Farben eines Themes anzupassen und ein eigenes zu speichern."],
       whatHappens: "\"System\" folgt live der Hell-/Dunkel-Einstellung des Betriebssystems. Ein benutzerdefiniertes Theme wird separat gespeichert; das integrierte, auf dem es basierte, bleibt unangetastet.",
-      settings: ["Theme-Wahl: Einstellungen", "Theme-Editor: Expertenmenü → Aussehen → Visuell", "Kopfzeile in Akzentfarbe, milchige Dialoge, versteckte oder eingefärbte Scrollbalken, weiches Scrollen: Expertenmenü → Aussehen → Visuell"],
+      settings: ["Theme-Wahl: Einstellungen", "Theme-Editor: Expertenmenü → Aussehen → Visuell", "Kopfzeile in Akzentfarbe, milchige Dialoge, versteckte Scrollbalken: Expertenmenü → Aussehen → Visuell"],
       tip: "Benutzerdefinierte Themes sind ab Werk an; werden sie im Expertenmenü ausgeschaltet, verschwindet auch der Editor-Button {icon:themeEditor}.",
     },
     {
@@ -1036,8 +1036,8 @@ export const HELP_CONTENT = {
         "Ein Video oder Bild an eine Kachel anhängen: Dateianhang, Screenshot, Einfügen oder Ziehen und Ablegen.",
         "Wiedergabe und privatsphärefreundliche Optiken im Expertenmenü anpassen.",
       ],
-      whatHappens: "Video-Einstellungen (Autoplay, Stumm, Schleife, Lautstärke) gelten für jede Video-Kachel; Graustufen oder Abgedunkelt-bis-Hover ändert nur das Aussehen, nie den kopierten Inhalt. Bibliothek und Kopierverlauf zeigen außerdem die Länge eines Videos auf dem Vorschaubild sowie Auflösung und Dateigröße in der Kurzhilfe; das Hauptraster zeigt keins von beidem.",
-      settings: ["Video-Steuerung, Autoplay und Schleife (ab Werk aus), Stumm: Expertenmenü → Kacheln → Medien", "Graustufen: Expertenmenü → Kacheln → Medien", "Akzentrahmen und abgerundete Ecken um Medien: Expertenmenü → Kacheln → Medien", "Dauer/Auflösung/Größe in Bibliothek und Kopierverlauf: Expertenmenü → Kacheln → Medien", "Medienangaben bei älteren Anhängen nachtragen: Expertenmenü → Kacheln → Medien"],
+      whatHappens: "Video-Einstellungen (Autoplay, Stumm, Schleife, Lautstärke) gelten für jede Video-Kachel; Unschärfe ändert nur das Aussehen, nie den kopierten Inhalt. Bibliothek und Kopierverlauf zeigen außerdem die Länge eines Videos auf dem Vorschaubild sowie Auflösung und Dateigröße in der Kurzhilfe; das Hauptraster zeigt keins von beidem.",
+      settings: ["Video-Steuerung, Autoplay und Schleife (ab Werk aus), Stumm: Expertenmenü → Kacheln → Medien", "Akzentrahmen und abgerundete Ecken um Medien: Expertenmenü → Kacheln → Medien", "Dauer/Auflösung/Größe in Bibliothek und Kopierverlauf: Expertenmenü → Kacheln → Medien", "Medienangaben bei älteren Anhängen nachtragen: Expertenmenü → Kacheln → Medien"],
     },
     {
       section: "look",
@@ -1053,11 +1053,11 @@ export const HELP_CONTENT = {
       whatItIs: "Diese Einstellungen halten den Inhalt dieses Fensters aus Screenshots, Screen-Shares und dem Blick von Passanten heraus.",
       howTo: [
         "Der Ausschluss von Bildschirmaufnahmen ist von Anfang an aktiv.",
-        "Bei Bedarf Unschärfe für Kacheln oder Medien, versteckte Namen im Expertenmenü aktivieren.",
+        "Bei Bedarf Unschärfe für Medien im Expertenmenü aktivieren.",
       ],
       whatHappens:
         "Der Ausschluss von Bildschirmaufnahmen macht das Fenster für Screenshot- und Aufnahmeprogramme unsichtbar, auch für die eigenen. Bleibt eine Aufnahme also leer, zuerst diese Einstellung prüfen. Eine optionale, standardmäßig ausgeschaltete Einstellung liest Text aus einem angehängten Bild, damit die Bibliothekssuche ihn auch findet; ein Treffer nur dort trägt die Kennzeichnung „im Bild gefunden“, damit er nie wie ein zufälliger Treffer wirkt. Dieser erkannte Text bleibt sonst außerhalb der App: nirgends angezeigt, nie exportiert, nie synchronisiert, und in der Länge begrenzt. Wird das Bild entfernt oder ersetzt, ist der Text sofort weg, und das Ausschalten der Einstellung entfernt ihn aus jeder Kachel, auch im Papierkorb. Eine einzelne Kachel kann außerdem als vertraulich markiert werden; siehe „Vertrauliche Prompts“ weiter unten.",
-      settings: ["Von Bildschirmaufnahmen ausschließen, Kacheln oder Medien unscharf machen, Namen verbergen: Expertenmenü → System & Daten → Datenschutz", "Text in angehängten Bildern für die Suche erfassen, Bildtext-Grenze: Expertenmenü → Bibliothek & Kopierverlauf → Suche", "Eine Kachel als vertraulich markieren, Sperr-Zeit des Tresors: Expertenmenü → System & Daten → Datenschutz"],
+      settings: ["Von Bildschirmaufnahmen ausschließen, Medien unscharf machen: Expertenmenü → System & Daten → Datenschutz", "Text in angehängten Bildern für die Suche erfassen, Bildtext-Grenze: Expertenmenü → Bibliothek & Kopierverlauf → Suche", "Eine Kachel als vertraulich markieren, Sperr-Zeit des Tresors: Expertenmenü → System & Daten → Datenschutz"],
       tip: "Der Ausschluss von Bildschirmaufnahmen ist standardmäßig an: für normale Screenshots oder Aufnahmen dieses Fensters ausschalten.",
     },
     {

@@ -136,7 +136,6 @@ DEPENDENCIES = {
     "favMaxCols": "favViewButton",
     # Appearance
     "animSpeed": "animations",
-    "accentScrollbar": "!hideScrollbars",
     "frostedBlur": "frostedModals",
     "customThemeMax": "customThemes",
     # Library, history, privacy
@@ -146,7 +145,6 @@ DEPENDENCIES = {
     "tagSort": "tags",
     "historyMax": "copyHistory",
     "historyDays": "copyHistory",
-    "tileBlur": "blurTilesUntilHover",
     "mediaBlur": "blurMediaUntilHover",
     # Media
     "videoVolume": "!videoMuted",
