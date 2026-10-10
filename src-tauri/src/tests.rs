@@ -18399,3 +18399,49 @@ fn a_clipboard_text_block_past_the_character_limit_in_bytes_is_never_read() {
     assert!(!text_block_within_limit(CLIP_INBOX_MAX_UNICODE_BYTES + 1));
     assert!(!text_block_within_limit(300 * 1024 * 1024), "a 300 MB block is refused unread");
 }
+
+// A folder change must not hold the store lock while it writes the library: the write
+// closure here proves another thread can take the store mutex mid-write.
+#[test]
+fn set_sync_dir_core_writes_without_holding_the_store_lock() {
+    let mut settings = Settings::default();
+    settings.ui_flags.insert("promptSync".into(), true);
+    let store = Mutex::new(Store {
+        prompts: vec![sync_test_prompt()],
+        trash: Vec::new(),
+        settings,
+        prompts_locked: false,
+        written: Default::default(),
+    });
+    let saved = std::cell::Cell::new(0usize);
+    let (old, new_dir, failures, enabled) = set_sync_dir_core(
+        &store,
+        "C:/sync-new",
+        &|_| saved.set(saved.get() + 1),
+        &|s| PathBuf::from(s.ui_texts.get("syncDir").cloned().unwrap_or_default()),
+        |prompts, settings| {
+            assert_eq!(prompts.len(), 1);
+            assert!(sync_enabled(settings));
+            let acquired = std::thread::scope(|sc| {
+                sc.spawn(|| {
+                    let start = std::time::Instant::now();
+                    while start.elapsed() < Duration::from_secs(1) {
+                        if store.try_lock().is_ok() {
+                            return true;
+                        }
+                        std::thread::sleep(Duration::from_millis(5));
+                    }
+                    false
+                })
+                .join()
+                .unwrap()
+            });
+            usize::from(!acquired)
+        },
+    );
+    assert_eq!(failures, 0, "the store mutex was free while the folder write ran");
+    assert!(enabled);
+    assert_eq!(saved.get(), 1);
+    assert_eq!(old, PathBuf::new());
+    assert_eq!(new_dir, PathBuf::from("C:/sync-new"));
+}

@@ -1198,6 +1198,16 @@ pub(crate) fn sync_lock_release(md_path: &Path) {
     let _ = fs::remove_file(sync_lock_path(md_path));
 }
 
+// One writer at a time into the sync folder: the background flush, the activation
+// write, a folder change and the inbound poll's file scan all take this around their
+// file I/O, never the store lock. A slow share then only delays the next sync run;
+// it can no longer freeze every window that wants the library.
+pub(crate) static SYNC_RUN: Mutex<()> = Mutex::new(());
+
+pub(crate) fn sync_run_lock() -> std::sync::MutexGuard<'static, ()> {
+    SYNC_RUN.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 // Split from the old sync_write_all(app, store) so the per-prompt file I/O
 // below (a read to compare content, sometimes a write, once per eligible prompt)
 // can run on owned data instead of a &Store borrow - every call site already
@@ -1231,6 +1241,7 @@ pub(crate) fn sync_write_all_impl(app: &AppHandle, prompts: &[Prompt], settings:
         },
         None => true,
     };
+    let _run = sync_run_lock();
     sync_write_dir_checked(&dir, prompts, settings, &live)
 }
 
@@ -1681,6 +1692,7 @@ pub(crate) fn sync_poll_once(app: &AppHandle) {
         }
         sync_dir_path(app, &store.settings)
     };
+    let run = sync_run_lock();
     let (to_read, files, all) = match sync_scan_folder(&dir) {
         Ok(r) => r,
         Err(e) => {
@@ -1778,6 +1790,8 @@ pub(crate) fn sync_poll_once(app: &AppHandle) {
             candidates.push((stem, content, true));
         }
     }
+    // The file reads are done; applying touches only the in-memory library.
+    drop(run);
     if candidates.is_empty() {
         return;
     }
@@ -2001,32 +2015,56 @@ pub(crate) fn sync_same_dir(a: &Path, b: &Path) -> bool {
     ca == cb || ca.starts_with(&cb) || cb.starts_with(&ca)
 }
 
+// The state half of a folder change, free of any window so a test can drive it:
+// under the store lock only the setting is changed and saved and the library is
+// copied; the (possibly slow) file write runs on the copies after the lock is
+// gone. Returns (old folder, new folder, files that failed, feature enabled).
+pub(crate) fn set_sync_dir_core(
+    db: &Mutex<Store>,
+    dir: &str,
+    save: &dyn Fn(&Settings),
+    dir_of: &dyn Fn(&Settings) -> PathBuf,
+    write: impl Fn(&[Prompt], &Settings) -> usize,
+) -> (PathBuf, PathBuf, usize, bool) {
+    let (old, new_dir, enabled, snapshot) = {
+        let mut store = db.lock().unwrap_or_else(|e| e.into_inner());
+        let old = dir_of(&store.settings);
+        store.settings.ui_texts.insert("syncDir".into(), dir.to_string());
+        save(&store.settings);
+        let enabled = sync_enabled(&store.settings);
+        let snapshot = enabled.then(|| (store.prompts.clone(), store.settings.clone()));
+        (old, dir_of(&store.settings), enabled, snapshot)
+    };
+    let failures = match snapshot {
+        Some((prompts, settings)) => write(&prompts, &settings),
+        None => 0,
+    };
+    (old, new_dir, failures, enabled)
+}
+
 // Point the sync at another folder. `delete_old` is an explicit decision the WINDOW
 // made after asking the user. A backend that deleted a folder on its own initiative
 // is exactly the kind of surprise this app does not do. The folder that may be
 // deleted is never passed in: it is the one the app itself was syncing to a moment
-// ago, read from the settings here.
-#[tauri::command]
+// ago, read from the settings here. Async so the one-off full write runs off the
+// main thread, and on a copy of the library so no window waits on it.
+#[tauri::command(async)]
 pub(crate) fn set_sync_dir(app: AppHandle, state: State<Db>, dir: String, delete_old: bool) -> Result<usize, String> {
     let trimmed = dir.trim();
     if !trimmed.is_empty() && !consume_granted_dir(Path::new(trimmed), "sync") {
         return Err("dir-not-picked".to_string());
     }
-    let (old, new_dir, write_failures, enabled) = {
-        let mut store = lock(&state);
-        let old = sync_dir_path(&app, &store.settings);
-        store.settings.ui_texts.insert("syncDir".into(), trimmed.to_string());
-        save_settings(&app, &store.settings);
-        // Same synchronous, one-off treatment activation gets: when this returns, the
-        // files are in the new folder. Deliberately inside the lock, as before.
-        let enabled = sync_enabled(&store.settings);
-        let failures = if enabled {
-            sync_write_all_impl(&app, &store.prompts, &store.settings)
-        } else {
-            0
-        };
-        (old, sync_dir_path(&app, &store.settings), failures, enabled)
-    };
+    // Same one-off treatment activation gets: when this returns, the files are in the
+    // new folder.
+    let (old, new_dir, write_failures, enabled) = set_sync_dir_core(
+        &state,
+        trimmed,
+        &|settings| {
+            save_settings(&app, settings);
+        },
+        &|settings| sync_dir_path(&app, settings),
+        |prompts, settings| sync_write_all_impl(&app, prompts, settings),
+    );
     // Whenever the folder just took a full write (also when the same folder is picked
     // again after its drive came back) it demonstrably works: the pause and its old
     // reason end now, not after up to ten intervals.
