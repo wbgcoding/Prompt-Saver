@@ -363,14 +363,10 @@
           <p id="modal-vars-dyn-hint" class="modal-hint hidden" data-i18n="varsDynHint"></p>
         </div>
       </div>
-      <!-- Only for a text prompt while the expert flag is on; converts the plain
-           textarea above into a list of variants one copy at a time serves through.
-           The on/off switch sits right above the entry list, which is the editing
-           surface while rotation is active. -->
-      <label id="modal-rotate-toggle-row" class="field switch-field modal-rotate-toggle hidden" data-i18n-title="rotateToggleTip">
-        <span data-i18n="rotateToggle">Rotation</span>
-        <input type="checkbox" id="modal-rotate-switch" class="switch" />
-      </label>
+      <!-- Only for a text prompt while the expert flag is on; the on/off switch lives
+           under Advanced options. Switching it on converts the plain textarea above
+           into this list of variants one copy at a time serves through; the list is
+           the editing surface while rotation is active. -->
       <div id="modal-rotate-list" class="modal-rotate-list hidden">
         <div id="modal-rotate-entries" class="modal-rotate-entries"></div>
         <div class="modal-rotate-controls-row">
@@ -403,6 +399,7 @@
         <button type="button" id="modal-advanced-head" class="modal-collapse-head" aria-expanded="false">
           <span data-i18n="advancedOptions">Advanced options</span>
           <span class="modal-collapse-side">
+            <span id="modal-rotate-badge" class="modal-collapse-badge hidden" data-i18n="rotateToggle">Rotation</span>
             <span id="modal-hotkey-badge" class="modal-collapse-badge hidden"></span>
             <svg class="collapse-chevron" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
               <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/>
@@ -425,6 +422,13 @@
                 <select id="modal-size" class="modal-input"></select>
               </label>
             </div>
+          </div>
+          <!-- The per-tile rotation switch (text prompts, feature-gated). -->
+          <div class="modal-advanced-sub">
+            <label id="modal-rotate-toggle-row" class="field switch-field modal-rotate-toggle hidden" data-i18n-title="rotateToggleTip">
+              <span data-i18n="rotateToggle">Rotation</span>
+              <input type="checkbox" id="modal-rotate-switch" class="switch" />
+            </label>
           </div>
           <!-- Tags: assigned chips + type-ahead input (feature-gated via body.flag-tags) -->
           <div id="modal-tags" class="modal-tags modal-advanced-sub">

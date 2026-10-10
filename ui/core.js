@@ -81,6 +81,7 @@ export const modal = {
   hotkey: $("modal-hotkey"),
   hotkeyInput: $("modal-hotkey-input"),
   hotkeyBadge: $("modal-hotkey-badge"),
+  rotateBadge: $("modal-rotate-badge"),
   hotkeyErr: $("modal-hotkey-err"),
   hotkeyAction: $("modal-hotkey-action"),
   hotkeyActionRow: $("modal-hotkey-action-row"),

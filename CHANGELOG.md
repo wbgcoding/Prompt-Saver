@@ -941,6 +941,9 @@ the video editor and the introduction tour ship on).
 - **The placeholder section appears only when the text has a placeholder.** Until
   then a link under the text, "Insert placeholder", reveals it; once shown it
   stays until the editor closes.
+- **The rotation switch is under Advanced options in the editor.** While rotation
+  is on, the collapsed head shows a "Rotation" badge; the entry list still
+  replaces the text field in place.
 
 ### Fixed
 

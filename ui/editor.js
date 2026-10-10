@@ -1018,6 +1018,7 @@ export function renderRotateUi() {
   // (in favour of the plain textarea) while the feature itself is off, even with
   // entries still stored on the prompt.
   const active = rotationUiOn();
+  modal.rotateBadge.classList.toggle("hidden", !active);
   modal.rotateSwitch.checked = active;
   modal.rotateList.classList.toggle("hidden", !active);
   if (!active) return;

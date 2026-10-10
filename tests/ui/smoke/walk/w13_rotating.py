@@ -84,20 +84,18 @@ SECTION = """\
         const advBody = document.getElementById('modal-advanced-body');
         if (!rotRow || rotRow.classList.contains('hidden')) {
           out.errors.push('the rotating-texts switch did not appear in the editor with the flag on');
-        } else if (advBody.contains(rotRow)) {
-          out.errors.push('the rotating-texts switch is still inside Advanced options');
-        } else if (rotRow.nextElementSibling !== document.getElementById('modal-rotate-list')) {
-          out.errors.push('the rotating-texts switch is not the element right above the entry list');
+        } else if (!advBody.contains(rotRow)) {
+          out.errors.push('the rotating-texts switch is not inside Advanced options');
         } else if (!advBody.classList.contains('hidden')) {
           out.errors.push('advanced options does not start collapsed');
-        } else if (!(rotRow.getBoundingClientRect().height > 0)) {
-          out.errors.push('the rotating-texts switch has no height with Advanced collapsed');
-        } else if (rotRow.getBoundingClientRect().bottom > document.getElementById('modal-rotate-list').getBoundingClientRect().top + 1 && !document.getElementById('modal-rotate-list').classList.contains('hidden')) {
-          out.errors.push('the rotating-texts switch sits below the entry list');
+        } else if (rotRow.getBoundingClientRect().height > 0) {
+          out.errors.push('the rotating-texts switch still takes height with Advanced collapsed');
         } else {
           document.getElementById('modal-advanced-head').click();
           await sleep(150);
           if (advBody.classList.contains('hidden')) out.errors.push('advanced options did not expand');
+          if (!(rotRow.getBoundingClientRect().height > 0)) out.errors.push('the rotating-texts switch is not visible after expanding Advanced');
+          if (document.getElementById('modal-rotate-badge').classList.contains('hidden') === false) out.errors.push('the Rotation badge shows while rotation is off');
           document.getElementById('modal-name').value = 'Rotate Test';
           document.getElementById('modal-text').value = 'Entry one';
           const rotSwitch = document.getElementById('modal-rotate-switch');
@@ -108,10 +106,13 @@ SECTION = """\
             out.errors.push('the plain textarea stayed visible after turning rotation on');
           }
           {
-            // Measured with rotation on: the switch row ends where the entry list begins.
+            // With rotation on the head carries a Rotation badge and the entry list
+            // takes the place of the text, above the colour row.
+            const badge = document.getElementById('modal-rotate-badge');
+            if (!badge || badge.classList.contains('hidden')) out.errors.push('the collapsed head shows no Rotation badge while rotation is on');
             const rl = document.getElementById('modal-rotate-list').getBoundingClientRect();
-            const sr = rotRow.getBoundingClientRect();
-            if (!(rl.height > 0) || sr.bottom > rl.top + 1) out.errors.push('the rotating-texts switch is not above the entry list: switch bottom ' + Math.round(sr.bottom) + ', list top ' + Math.round(rl.top));
+            const cr = document.getElementById('color-row').getBoundingClientRect();
+            if (!(rl.height > 0) || rl.bottom > cr.top + 1) out.errors.push('the entry list is not visible above the colour row: list bottom ' + Math.round(rl.bottom) + ', colours top ' + Math.round(cr.top));
           }
           // B4: neither the clear-X wrapper around the textarea nor the rendered
           // Markdown pane may keep a box while the variants list is the editor -

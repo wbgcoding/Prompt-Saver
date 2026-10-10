@@ -655,7 +655,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "A small badge counts up on a grid tile, a floating button, and a button folder member, like \"2/5\"; a tile-folder member shows only its file-type icon, not this badge. In order mode it is the absolute position; in shuffle mode it counts draws within the current cycle and restarts at 1 once every entry has been shown once, so it never jumps to an arbitrary position. The count survives restarts and full backups; a CSV/TXT import creates a new tile with a fresh pointer, so only the list of texts and its order or shuffle mode carry over, not the exact position. Turning rotation off on a tile with several entries keeps them all; only the first one is used until it is turned back on. The optional \"Rotate on paste\" moves a tile with rotation to its next text on every real paste, not only when it is copied.",
-      settings: ["Rotation (on by default), default order or shuffle, badge, maximum rotation texts, rotate on paste: Expert menu → Features → Rotation. The per-tile switch itself sits above the entry area in the editor."],
+      settings: ["Rotation (on by default), default order or shuffle, badge, maximum rotation texts, rotate on paste: Expert menu → Features → Rotation. The per-tile switch itself is in the editor under Advanced options."],
     },
     {
       section: "system",
@@ -1406,7 +1406,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Ein kleines Badge zählt auf einer Raster-Kachel, einem schwebenden Button und einem Mitglied eines Button-Ordners hoch, wie „2/5“; ein Kachelordner-Mitglied zeigt nur sein Dateityp-Icon, nicht dieses Badge. Im Reihenfolge-Modus ist das die absolute Position; im Zufalls-Modus zählt es die Ziehungen im aktuellen Durchlauf und beginnt wieder bei 1, sobald jeder Eintrag einmal drankam, statt auf eine beliebige Position zu springen. Der Zählerstand übersteht Neustarts und vollständige Backups; ein CSV/TXT-Import erstellt eine neue Kachel mit frischem Zeiger, sodass nur die Textliste und ihr Reihenfolge- oder Misch-Modus übernommen werden, nicht die genaue Position. Wird die Rotation bei einer Kachel mit mehreren Einträgen ausgeschaltet, bleiben alle erhalten; nur der erste wird genutzt, bis sie wieder aktiviert wird. Das optionale „Beim Einfügen rotieren“ bringt eine Kachel mit Rotation bei jedem echten Einfügen zum nächsten Text, nicht nur beim Kopieren.",
-      settings: ["Rotation (standardmäßig an), Standard Reihenfolge oder Mischen, Badge, maximale Rotationstexte, beim Einfügen rotieren: Expertenmenü → Funktionen → Rotation. Der Schalter pro Kachel sitzt im Editor über dem Eintragsbereich."],
+      settings: ["Rotation (standardmäßig an), Standard Reihenfolge oder Mischen, Badge, maximale Rotationstexte, beim Einfügen rotieren: Expertenmenü → Funktionen → Rotation. Der Schalter pro Kachel steht im Editor unter „Erweiterte Optionen“."],
     },
     {
       section: "system",

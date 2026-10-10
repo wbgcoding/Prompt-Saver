@@ -6,7 +6,7 @@
 `--lang all` and `--theme all` mean every UI language and every built-in theme.
 
 A surface is `main`, `settings`, `settings_end`, `expert`, `library`, `history`,
-`tilemenu`, `editor`, `editor_long`, `folder`, `help`, `backup`, `snipedit`, `snipdraw`, or another
+`tilemenu`, `editor`, `editor_long`, `editor_adv`, `folder`, `help`, `backup`, `snipedit`, `snipdraw`, or another
 page such as `video.html`.
 A group (`@settings`, `@library`, `@tiles`, `@snip`) shoots its surfaces.
 Without a surface every one is shot. Not a test: it never fails on what it sees.
@@ -65,6 +65,8 @@ ACTS = {
     "editor_long": TILE_MENU + "document.querySelector('#ctx [data-act=\"edit\"]')?.click(); await sleep(500);"
                    "const ta = $('modal-text'); ta.value = Array.from({ length: 60 }, (_, i) => 'Line ' + (i + 1) + ' of a long prompt').join(String.fromCharCode(10));"
                    "ta.dispatchEvent(new Event('input', { bubbles: true })); await sleep(400);",
+    "editor_adv": TILE_MENU + "document.querySelector('#ctx [data-act=\"edit\"]')?.click(); await sleep(500);"
+                  "$('modal-advanced-head').click(); await sleep(400);",
     "folder": ("const t = document.querySelector('#grid .folder-tile');"
                "t.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: 5, clientY: 5 }));"
                "window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, clientX: 5, clientY: 5 }));"
@@ -78,7 +80,7 @@ ACTS = {
 GROUPS = {
     "@settings": ["settings", "settings_end", "expert", "help"],
     "@library": ["library", "history"],
-    "@tiles": ["main", "tilemenu", "editor", "editor_long", "folder"],
+    "@tiles": ["main", "tilemenu", "editor", "editor_long", "editor_adv", "folder"],
     "@snip": ["snipedit", "snipdraw"],
 }
 

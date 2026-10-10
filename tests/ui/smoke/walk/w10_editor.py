@@ -728,7 +728,7 @@ SECTION = """\
         const h3 = await setText262(3);
         // A tall window leaves free height the field takes anyway (flex), so the upper
         // bounds only mean something where the dialog has no room to spare.
-        const snug262 = innerHeight < 700;
+        const snug262 = box262.scrollHeight > box262.clientHeight + 1;
         if (h3 < 110 || (snug262 && h3 > 140)) out.errors.push('fit262: a 3 line prompt field is ' + Math.round(h3) + 'px tall');
         const h60 = await setText262(60);
         if (h60 < 200) out.errors.push('fit262: a 60 line prompt field stays ' + Math.round(h60) + 'px tall (fit ' + box262.style.getPropertyValue('--ta-fit') + ', box ' + box262.clientHeight + ', active ' + (document.activeElement && document.activeElement.id) + ', hidden ' + ta262.classList.contains('hidden') + ', md ' + flag262() + ')');
