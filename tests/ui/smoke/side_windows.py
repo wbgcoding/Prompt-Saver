@@ -998,7 +998,22 @@ TRAY_PROBE = """
     const heads = [...document.querySelectorAll('#card .tray-menu-head')];
     if (heads.length !== 2) errs.push('expected 2 section headers, found ' + heads.length);
     const seps = [...document.querySelectorAll('#card .tray-menu-sep')];
-    if (seps.length !== 2) errs.push('expected 2 separators (one per section), found ' + seps.length);
+    if (seps.length !== 3) errs.push('expected 3 separators (2 section separators plus the one above Quit), found ' + seps.length);
+    // 945-dg: Open and Quit are set apart, Quit last behind its own line, both with
+    // a plain glyph; the content is not clipped by the window.
+    {
+      const all = rows();
+      const last = all[all.length - 1];
+      if (!last || last.dataset.id !== 'quit') errs.push('945-dg: the last row is not Quit');
+      else if (!last.querySelector('.tray-menu-action-icon')) errs.push('945-dg: Quit has no action icon');
+      const lastSep = seps[seps.length - 1];
+      const before = lastSep && lastSep.previousElementSibling;
+      if (!before || before.dataset.id !== 'show') errs.push('945-dg: the row above the last separator is not Open');
+      else if (!before.querySelector('.tray-menu-action-icon')) errs.push('945-dg: Open has no action icon');
+      if (lastSep && lastSep.nextElementSibling !== last) errs.push('945-dg: Quit does not follow the last separator directly');
+      const card = document.getElementById('card');
+      if (card.scrollHeight > card.clientHeight + 1) errs.push('945-dg: the tray content is clipped (' + card.scrollHeight + ' > ' + card.clientHeight + ')');
+    }
     if (!rows()[0].classList.contains('active')) errs.push('the first row is not highlighted on open');
     // Every entry row (not show/quit) carries a colored icon chip, and the one
     // entry with its own tile color must use it instead of the kind's tint.
