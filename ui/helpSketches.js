@@ -29,18 +29,18 @@ function flowToTarget(lang) {
 
 function folderTypes(lang) {
   const words = lang === "de"
-    ? { view: "Ansichtsgruppe", pill: "Button-Ordner", tile: "Kachelordner" }
-    : { view: "View group", pill: "Button folder", tile: "Tile folder" };
+    ? { view: "Ansichtsgruppe", pill: "Desktop-Ordner", tile: "Raster-Ordner" }
+    : { view: "View group", pill: "Desktop folder", tile: "Grid folder" };
   return `<svg viewBox="0 0 560 124" xmlns="http://www.w3.org/2000/svg" role="img">` +
     // View group: a tab strip inside a tab.
     box(20, 10, 150, 76) + box(30, 20, 40, 16) + box(74, 20, 40, 16) + box(30, 44, 130, 32) +
     label(95, 112, words.view, { size: 14 }) +
-    // Button folder: a row of small floating round buttons.
+    // Desktop folder: a row of small floating round buttons.
     `<circle cx="240" cy="48" r="18" fill="none" stroke="currentColor" stroke-width="1.5"/>` +
     `<circle cx="285" cy="48" r="18" fill="none" stroke="currentColor" stroke-width="1.5"/>` +
     `<circle cx="330" cy="48" r="18" fill="none" stroke="currentColor" stroke-width="1.5"/>` +
     label(285, 112, words.pill, { size: 14 }) +
-    // Tile folder: one tile holding a 2x2 preview of its members.
+    // Grid folder: one tile holding a 2x2 preview of its members.
     box(420, 10, 110, 76) +
     box(447, 18, 26, 26) + box(477, 18, 26, 26) + box(447, 48, 26, 26) + box(477, 48, 26, 26) +
     label(475, 112, words.tile, { size: 14 }) +

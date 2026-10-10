@@ -14,7 +14,7 @@ Boots the real index.html against tests/ui/tauri_stub.js in headless Chromium an
   * grid tile names at 880x600 and 680x460: every name of the demo tiles shares one font
     size and "Prompt 10" sits on one line (the one-line size is used when it is at least
     80 % of the wrapping size),
-  * the same rule inside the open tile folder (shared size, "Prompt N" on one line).
+  * the same rule inside the open grid folder (shared size, "Prompt N" on one line).
 
 Run:  python tests/ui/minor_layout_test.py
 Exit: 0 = clean, 1 = problems found. Skips cleanly when no Chromium is installed.
@@ -357,7 +357,7 @@ TILE_NAMES = """
 </script>
 """
 
-# Tile names inside the open tile folder follow the same shared-size rule as the grid.
+# Tile names inside the open grid folder follow the same shared-size rule as the grid.
 FOLDER_NAMES = """
 <script>
 (async () => {""" + COMMON + """

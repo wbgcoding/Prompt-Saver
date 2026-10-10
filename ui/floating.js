@@ -222,7 +222,7 @@ function applyPrefs(s) {
   copyPrefs = readCopyPrefs(s);
   dragOutOn = s.ui_flags?.dragOut === true;
   dragOutMod = DRAG_OUT_MODS[s.ui_texts?.dragOutModifier] || "ctrlKey";
-  foldersOn = s.ui_flags?.pillFolders !== false; // default ON, mirrors folders_on() in floating.rs
+  foldersOn = s.ui_flags?.folders !== false; // default ON, mirrors folders_on() in floating.rs
   // rotateBadge is a sub-toggle of rotatingPrompts: the parent off must freeze
   // the whole feature, not just the badge (gating rule: nothing dependent stays
   // visible/active with its parent off).

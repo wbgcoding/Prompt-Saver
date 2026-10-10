@@ -835,6 +835,8 @@ pub(crate) fn removed_ui_value_keys() -> &'static [&'static str] {
 // Expert switches that no longer exist. A loaded store drops them once, like removed values.
 pub(crate) fn removed_ui_flag_keys() -> &'static [&'static str] {
     &[
+        "tileFolders",
+        "pillFolders",
         "pinButton",
         "favView",
         "libraryCloseToggle",
@@ -1109,6 +1111,16 @@ impl Settings {
         }
         if let Some(h) = self.ui_values.get_mut("updateCheckH") {
             *h = clamp_update_hours(*h);
+        }
+        // Grid folders and floating-button folders had a switch each; they share one
+        // now. Folders stay on unless both old switches were stored off, because
+        // switching them off hides the folders a user kept.
+        if !self.ui_flags.contains_key("folders")
+            && (self.ui_flags.contains_key("tileFolders") || self.ui_flags.contains_key("pillFolders"))
+        {
+            let both_off = self.ui_flags.get("tileFolders") == Some(&false)
+                && self.ui_flags.get("pillFolders") == Some(&false);
+            self.ui_flags.insert("folders".into(), !both_off);
         }
         for k in removed_ui_value_keys() {
             self.ui_values.remove(*k);

@@ -1321,7 +1321,7 @@ def run(browser, tmp):
       }
     }
 """)
-    # The open tile folder dims the grid, has a title row with rename and close, and fits its rows.
+    # The open grid folder dims the grid, has a title row with rename and close, and fits its rows.
     fpop_body = r"""
     await bootReady();
     const folder = document.querySelector('#grid .folder-tile');
@@ -1387,7 +1387,7 @@ def run(browser, tmp):
     }
 """
     for size_251 in ('880x600', '680x460'):
-        failed += ar_probe('fpop251-' + size_251, '251: the open tile folder is dimmed, titled and fits at ' + size_251, 'index', size_251, '', fpop_body)
+        failed += ar_probe('fpop251-' + size_251, '251: the open grid folder is dimmed, titled and fits at ' + size_251, 'index', size_251, '', fpop_body)
     # The tile menu groups hiding and view placement under one "Views..." entry.
     views_menu_body = r"""
     await bootReady();

@@ -120,21 +120,21 @@ export const HELP_CONTENT = {
         "Drag the floating button to move it; right-click it for size, edit, or remove.",
       ],
       whatHappens: "Positions survive app restarts. A button whose saved screen is no longer connected opens on the main screen, marked as parked, and jumps back on its own once that screen returns. An action in the expert menu brings every floating window to the main screen at once.",
-      settings: ["Floating buttons: Expert menu → Features → Floating buttons & button folders", "Hide long-parked buttons, bring all back: Expert menu → Features → Floating buttons & button folders"],
+      settings: ["Floating buttons: Expert menu → Features → Floating buttons & folders", "Hide long-parked buttons, bring all back: Expert menu → Features → Floating buttons & folders"],
     },
     {
       section: "alwaysOnTop",
       title: "Folders",
       whatItIs: "The same gesture groups things in two places: drop one item onto another of its own kind to gather it into a folder.",
       howTo: [
-        "Drag one floating button onto another to make a button folder.",
-        "On the main grid, drag one tile onto another to make a tile folder.",
+        "Drag one floating button onto another to make a folder on the desktop.",
+        "On the main grid, drag one tile onto another to make a folder in the grid.",
         "Drag a member back out to free it.",
       ],
       whatHappens:
-        "A button folder shows up to four member previews and a count; a tile folder shows how many tiles it holds and one colour dot per tile. Dragging a member out frees it, and it dissolves once one member is left; a tile belongs to only one tile folder at a time.",
-      settings: ["Button folders, tile folders: Expert menu → Features → Floating buttons & button folders"],
-      tip: "Both kinds are on out of the box; switch any of them off in the expert menu if items are never grouped that way.",
+        "A folder lives where it was made, in the grid or on the desktop. A desktop folder shows up to four member previews and a count; a grid folder shows how many tiles it holds and one colour dot per tile. Dragging a member out frees it, and the folder dissolves once one member is left; a tile belongs to only one grid folder at a time.",
+      settings: ["Folders: Expert menu → Features → Floating buttons & folders"],
+      tip: "Folders are on out of the box; switch them off in the expert menu if items are never grouped that way.",
       sketches: ["folderTypes"],
     },
     {
@@ -494,7 +494,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Unlike the database, the Markdown files are plain text: anyone with access to that folder can read the content, so a synced or shared folder should be avoided for anything sensitive. A tile with an attached file, image, or PDF syncs as a reference: the header carries the path and the PDF page, never the file itself, so another machine needs the same path for the button to work there. A screenshot pasted straight into a tile has no path at all and stays in the database only. A confidential tile is never written to the folder, and a file never changes a confidential tile. A file whose tile sits in the trash does not bring it back as a second tile. A view or folder named in an incoming file that does not exist yet on this machine is created automatically, matched by name. Deleting a file in the folder does not delete the tile (it is written again on the next round); deleting the tile in the app does take its file with it. The file name is the tile's permanent id, so renaming a file by hand produces a second tile instead of a renamed one. If a tile and its file changed at the same time, the file wins that round and the replaced version is kept as a version of the tile; the other way round the app wins the file and the file's text is kept beside it as a conflict copy. Files this app did not write, or has never seen before, are never changed or deleted, and a file past 8 MB is skipped whole rather than cut short. Picking a different folder asks whether the old one should be deleted, and that delete only ever removes the files this app wrote itself, never a sub-folder, stopping entirely if anything unknown is in there. An unreachable folder pauses the sync after a few failed rounds instead of retrying forever.",
-      settings: ["Folder sync, sync folder: Expert menu → Features → Floating buttons & button folders"],
+      settings: ["Folder sync, sync folder: Expert menu → Features → Floating buttons & folders"],
       tip: "This is a beta feature: keep the sync folder somewhere only trusted eyes can read.",
     },
     {
@@ -654,7 +654,7 @@ export const HELP_CONTENT = {
         "Copy the tile as normal: it always serves the next rotation text, never asks which one.",
       ],
       whatHappens:
-        "A small badge counts up on a grid tile, a floating button, and a button folder member, like \"2/5\"; a tile-folder member shows only its file-type icon, not this badge. In order mode it is the absolute position; in shuffle mode it counts draws within the current cycle and restarts at 1 once every entry has been shown once, so it never jumps to an arbitrary position. The count survives restarts and full backups; a CSV/TXT import creates a new tile with a fresh pointer, so only the list of texts and its order or shuffle mode carry over, not the exact position. Turning rotation off on a tile with several entries keeps them all; only the first one is used until it is turned back on. The optional \"Rotate on paste\" moves a tile with rotation to its next text on every real paste, not only when it is copied.",
+        "A small badge counts up on a grid tile, a floating button, and a desktop folder member, like \"2/5\"; a grid folder member shows only its file-type icon, not this badge. In order mode it is the absolute position; in shuffle mode it counts draws within the current cycle and restarts at 1 once every entry has been shown once, so it never jumps to an arbitrary position. The count survives restarts and full backups; a CSV/TXT import creates a new tile with a fresh pointer, so only the list of texts and its order or shuffle mode carry over, not the exact position. Turning rotation off on a tile with several entries keeps them all; only the first one is used until it is turned back on. The optional \"Rotate on paste\" moves a tile with rotation to its next text on every real paste, not only when it is copied.",
       settings: ["Rotation (on by default), default order or shuffle, badge, maximum rotation texts, rotate on paste: Expert menu → Features → Rotation. The per-tile switch itself is in the editor under Advanced options."],
     },
     {
@@ -870,21 +870,21 @@ export const HELP_CONTENT = {
         "Den schwebenden Button ziehen, um ihn zu bewegen; Rechtsklick für Größe, Bearbeiten oder Entfernen.",
       ],
       whatHappens: "Positionen bleiben nach Neustarts erhalten. Ein Button, dessen gespeicherter Bildschirm nicht mehr angeschlossen ist, öffnet sich auf dem Hauptbildschirm, als geparkt markiert, und springt von selbst zurück, sobald dieser Bildschirm wieder da ist. Eine Aktion im Expertenmenü holt alle schwebenden Fenster auf einmal auf den Hauptbildschirm.",
-      settings: ["Schwebende Buttons: Expertenmenü → Funktionen → Schwebende Buttons & Button-Ordner", "Lange geparkte Buttons ausblenden, alle zurückholen: Expertenmenü → Funktionen → Schwebende Buttons & Button-Ordner"],
+      settings: ["Schwebende Buttons: Expertenmenü → Funktionen → Schwebende Buttons & Ordner", "Lange geparkte Buttons ausblenden, alle zurückholen: Expertenmenü → Funktionen → Schwebende Buttons & Ordner"],
     },
     {
       section: "alwaysOnTop",
       title: "Ordner",
       whatItIs: "Dieselbe Geste gruppiert an zwei Stellen: ein Element auf ein gleichartiges ziehen, um es in einen Ordner aufzunehmen.",
       howTo: [
-        "Einen schwebenden Button auf einen anderen ziehen, um einen Button-Ordner zu bilden.",
-        "Im Hauptfenster eine Kachel auf eine andere ziehen, um einen Kachelordner zu bilden.",
+        "Einen schwebenden Button auf einen anderen ziehen, um einen Ordner auf dem Desktop zu bilden.",
+        "Im Hauptfenster eine Kachel auf eine andere ziehen, um einen Ordner im Raster zu bilden.",
         "Ein Mitglied wieder herausziehen, um es freizugeben.",
       ],
       whatHappens:
-        "Ein Button-Ordner zeigt bis zu vier Vorschauen seiner Mitglieder und eine Anzahl; ein Kachelordner zeigt, wie viele Kacheln er enthält, und einen Farbpunkt pro Kachel. Das Herausziehen eines Mitglieds gibt es frei, und der Ordner löst sich auf, sobald nur noch eines übrig ist. Eine Kachel gehört immer nur zu einem Kachelordner gleichzeitig.",
-      settings: ["Button-Ordner, Kachelordner: Expertenmenü → Funktionen → Schwebende Buttons & Button-Ordner"],
-      tip: "Beide Arten sind ab Werk an; jede einzeln im Expertenmenü abschaltbar, wenn Elemente so nie gruppiert werden sollen.",
+        "Ein Ordner liegt dort, wo er angelegt wurde, im Raster oder auf dem Desktop. Ein Desktop-Ordner zeigt bis zu vier Vorschauen seiner Mitglieder und eine Anzahl; ein Raster-Ordner zeigt, wie viele Kacheln er enthält, und einen Farbpunkt pro Kachel. Das Herausziehen eines Mitglieds gibt es frei, und der Ordner löst sich auf, sobald nur noch eines übrig ist. Eine Kachel gehört immer nur zu einem Raster-Ordner gleichzeitig.",
+      settings: ["Ordner: Expertenmenü → Funktionen → Schwebende Buttons & Ordner"],
+      tip: "Ordner sind ab Werk an; im Expertenmenü abschaltbar, wenn Elemente so nie gruppiert werden sollen.",
       sketches: ["folderTypes"],
     },
     {
@@ -1245,7 +1245,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Anders als die Datenbank sind die Markdown-Dateien Klartext: wer Zugriff auf diesen Ordner hat, kann den Inhalt lesen; ein synchronisierter oder geteilter Ordner sollte deshalb für Sensibles vermieden werden. Eine Kachel mit angehängter Datei, Bild oder PDF wird als Verweis synchronisiert: Der Kopf trägt Pfad und PDF-Seite, nie die Datei selbst; der andere Rechner braucht also denselben Pfad, damit der Button dort funktioniert. Ein direkt eingefügter Screenshot hat gar keinen Pfad und bleibt nur in der Datenbank. Eine vertrauliche Kachel wird nie in den Ordner geschrieben, und eine Datei ändert nie eine vertrauliche Kachel. Eine Datei, deren Kachel im Papierkorb liegt, holt sie nicht als zweite Kachel zurück. Eine in einer eingehenden Datei genannte Ansicht oder ein Ordner, den es hier noch nicht gibt, wird automatisch angelegt, per Namensabgleich. Eine im Ordner gelöschte Datei löscht die Kachel nicht (sie wird im nächsten Durchlauf neu geschrieben); wer die Kachel in der App löscht, löscht auch ihre Datei. Der Dateiname ist die feste Kennung der Kachel, von Hand umbenennen erzeugt deshalb eine zweite Kachel statt einer umbenannten. Wurden Kachel und Datei gleichzeitig geändert, gewinnt in diesem Durchlauf die Datei, und die ersetzte Fassung bleibt als Version der Kachel erhalten; umgekehrt gewinnt die App die Datei, und deren Text bleibt als Konfliktkopie daneben liegen. Dateien, die diese App nicht geschrieben oder noch nie gesehen hat, werden nie geändert oder gelöscht, und eine Datei über 8 MB wird ganz übersprungen statt abgeschnitten. Ein Ordnerwechsel fragt, ob der alte Ordner gelöscht werden soll; gelöscht wird dabei nur, was diese App selbst geschrieben hat, nie ein Unterordner, und gar nichts, wenn etwas Fremdes darin liegt. Ein nicht erreichbarer Ordner pausiert die Synchronisierung nach einigen Fehlversuchen, statt endlos weiterzuversuchen.",
-      settings: ["Ordner-Sync, Synchronisierungsordner: Expertenmenü → Funktionen → Schwebende Buttons & Button-Ordner"],
+      settings: ["Ordner-Sync, Synchronisierungsordner: Expertenmenü → Funktionen → Schwebende Buttons & Ordner"],
       tip: "Dies ist eine Beta-Funktion: den Synchronisierungsordner nur dort ablegen, wo niemand Unbefugtes mitliest.",
     },
     {
@@ -1405,7 +1405,7 @@ export const HELP_CONTENT = {
         "Die Kachel wie gewohnt kopieren: sie liefert immer den nächsten Eintrag, ohne zu fragen, welchen.",
       ],
       whatHappens:
-        "Ein kleines Badge zählt auf einer Raster-Kachel, einem schwebenden Button und einem Mitglied eines Button-Ordners hoch, wie „2/5“; ein Kachelordner-Mitglied zeigt nur sein Dateityp-Icon, nicht dieses Badge. Im Reihenfolge-Modus ist das die absolute Position; im Zufalls-Modus zählt es die Ziehungen im aktuellen Durchlauf und beginnt wieder bei 1, sobald jeder Eintrag einmal drankam, statt auf eine beliebige Position zu springen. Der Zählerstand übersteht Neustarts und vollständige Backups; ein CSV/TXT-Import erstellt eine neue Kachel mit frischem Zeiger, sodass nur die Textliste und ihr Reihenfolge- oder Misch-Modus übernommen werden, nicht die genaue Position. Wird die Rotation bei einer Kachel mit mehreren Einträgen ausgeschaltet, bleiben alle erhalten; nur der erste wird genutzt, bis sie wieder aktiviert wird. Das optionale „Beim Einfügen rotieren“ bringt eine Kachel mit Rotation bei jedem echten Einfügen zum nächsten Text, nicht nur beim Kopieren.",
+        "Ein kleines Badge zählt auf einer Raster-Kachel, einem schwebenden Button und einem Mitglied eines Desktop-Ordners hoch, wie „2/5“; ein Raster-Ordner-Mitglied zeigt nur sein Dateityp-Icon, nicht dieses Badge. Im Reihenfolge-Modus ist das die absolute Position; im Zufalls-Modus zählt es die Ziehungen im aktuellen Durchlauf und beginnt wieder bei 1, sobald jeder Eintrag einmal drankam, statt auf eine beliebige Position zu springen. Der Zählerstand übersteht Neustarts und vollständige Backups; ein CSV/TXT-Import erstellt eine neue Kachel mit frischem Zeiger, sodass nur die Textliste und ihr Reihenfolge- oder Misch-Modus übernommen werden, nicht die genaue Position. Wird die Rotation bei einer Kachel mit mehreren Einträgen ausgeschaltet, bleiben alle erhalten; nur der erste wird genutzt, bis sie wieder aktiviert wird. Das optionale „Beim Einfügen rotieren“ bringt eine Kachel mit Rotation bei jedem echten Einfügen zum nächsten Text, nicht nur beim Kopieren.",
       settings: ["Rotation (standardmäßig an), Standard Reihenfolge oder Mischen, Badge, maximale Rotationstexte, beim Einfügen rotieren: Expertenmenü → Funktionen → Rotation. Der Schalter pro Kachel steht im Editor unter „Erweiterte Optionen“."],
     },
     {

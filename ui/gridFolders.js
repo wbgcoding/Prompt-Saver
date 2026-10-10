@@ -22,7 +22,7 @@ const TILE_FOLDER_HOVER_MS = 300; // dwell time over a folder before a dragged p
 // Ships ON. A member has no layout entry of its own while it sits in a folder, so
 // switching the feature off simply shows every prompt as its own tile again: the
 // folders stay stored and come back with it.
-export const tileFoldersOn = () => flag("tileFolders");
+export const tileFoldersOn = () => flag("folders");
 export const tileFolderList = () => (tileFoldersOn() ? settings.tile_folders || [] : []);
 export const foldersOfView = (viewId) => tileFolderList().filter((f) => f.view_id === viewId);
 export const folderById = (id) => tileFolderList().find((f) => f.id === id);

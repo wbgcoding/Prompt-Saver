@@ -114,9 +114,8 @@ export const FLAG_LABELS = {
   // Ships ON; the button hides itself when Windows has no recognizer at all.
   ocr: "flagOcr",
   customThemes: "flagCustomThemes",     // theme editor + custom entries in the theme list
-  tileFolders: "flagTileFolders",       // drop a tile into another to make a grid folder
+  folders: "flagFolders",               // grid folders and floating-button folders, one switch
   tags: "flagTags",                     // tags + library tag filter
-  pillFolders: "flagPillFolders",       // merge floating buttons into folders
   trayFavs: "flagTrayFavs",             // favourites section in the tray menu
   // Filter row at the top of the custom tray menu, searching every prompt
   // rather than only the shown favourites/recents.
@@ -571,7 +570,7 @@ export const EXPERT_TABS = [
     { title: "expGroupChain", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "chainQuickStart", gate: "chainPrompts" }], dropdowns: ["chainSeparator"] },
     // Floating buttons and the two kinds of folder they can form, plus the
     // Markdown mirror of prompt folders (beta, text-only prompts as .md files).
-    { title: "expGroupFolders", flags: ["floating", { key: "pillFolders", gate: "floating" }, "tileFolders", "promptSync"], values: ["floatOpacity", "pillFontSize", "floatParkCleanupH"], paths: ["syncDir"],
+    { title: "expGroupFolders", flags: ["floating", "folders", "promptSync"], values: ["floatOpacity", "pillFontSize", "floatParkCleanupH"], paths: ["syncDir"],
       actions: [{ id: "float-recall", label: "floatRecallAction", gate: "floating" }] },
     // The quick-copy sections of the tray menu, each with its own entry count.
     { title: "expGroupTray", flags: ["trayCustomMenu", "trayRecent", "trayFavs", "traySearch"], values: ["trayRecentN", "trayFavN"] },
@@ -692,8 +691,7 @@ export const EXPERT_TIPS = [
   "importExport", "hoverDim", "keyboardNav", "allowMultipleInstances",
   "taskbarProgress", "dataDir", "dataDirLock", "demoMode",
   "floating", "floatParkCleanupH",
-  "pillFolders", "pillFontSize",
-  "tileFolders",
+  "folders", "pillFontSize",
   "rotatingPrompts", "rotateDefaultMode", "rotateMaxEntries", "rotateBadge",
   "rotateAuto",
   "firstRunTour",

@@ -428,8 +428,8 @@ A tile can hold a list of texts instead of one: each copy serves the next rotati
 text, in order or shuffled without repeats, instead of always the same text. On by
 default; the per-tile switch is in the editor under Advanced options.
 
-- A small badge counts up (like "2/5") on a tile, floating button, or button folder
-  member; a tile-folder member shows only its file-type icon instead. In order
+- A small badge counts up (like "2/5") on a tile, floating button, or desktop folder
+  member; a grid folder member shows only its file-type icon instead. In order
   mode it is the absolute position; in shuffle mode it counts draws within the
   current cycle and restarts at 1 once every entry has been shown once, rather
   than jumping to an arbitrary position
@@ -612,11 +612,12 @@ in the expert menu brings every floating window to the main screen at once.
 
 One gesture works in two places: drop one onto another to gather it into a
 folder. A floating
-button dropped onto another makes a button folder. A tile dropped onto another
-tile makes a tile folder, and belongs to only one tile folder at a time.
+button dropped onto another makes a folder on the desktop. A tile dropped onto
+another tile makes a folder in the grid, and belongs to only one grid folder at a
+time. A folder lives where it was made.
 
 <p>
-<svg viewBox="200 0 360 120" xmlns="http://www.w3.org/2000/svg" role="img"><circle cx="255" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="295" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="335" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="295" y="108" font-size="11" fill="currentColor" text-anchor="middle">Button folder</text><rect x="430" y="20" width="100" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="430" y1="55" x2="530" y2="55" stroke="currentColor" stroke-width="1"/><line x1="480" y1="20" x2="480" y2="90" stroke="currentColor" stroke-width="1"/><text x="480" y="108" font-size="11" fill="currentColor" text-anchor="middle">Tile folder</text></svg>
+<svg viewBox="200 0 360 120" xmlns="http://www.w3.org/2000/svg" role="img"><circle cx="255" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="295" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="335" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="295" y="108" font-size="11" fill="currentColor" text-anchor="middle">Desktop folder</text><rect x="430" y="20" width="100" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="430" y1="55" x2="530" y2="55" stroke="currentColor" stroke-width="1"/><line x1="480" y1="20" x2="480" y2="90" stroke="currentColor" stroke-width="1"/><text x="480" y="108" font-size="11" fill="currentColor" text-anchor="middle">Grid folder</text></svg>
 </p>
 
 ### Tray
@@ -1319,7 +1320,7 @@ EINER Kachel, Kette kopiert MEHRERE verschiedene Kacheln zusammen.
 **Rotation**: eine Kachel trägt eine Liste von Texten, jede Kopie
 liefert den nächsten Rotationstext (Reihenfolge oder Zufall). Standardmäßig an; der
 Schalter pro Kachel steht im Editor unter „Erweiterte Optionen“. Ein Badge auf
-Kachel/schwebender Button/Mitglied eines Button-Ordners zählt hoch: im Zufalls-Modus die Ziehungen
+Kachel/schwebender Button/Mitglied eines Desktop-Ordners zählt hoch: im Zufalls-Modus die Ziehungen
 im aktuellen Durchlauf statt einer springenden Position; übersteht Neustart und
 Backup, aber keinen CSV/TXT-Import (neue Kachel, neuer Zeiger). Eine geeignete
 Kachel (2+ Einträge, kein Bild/Datei) kann zusätzlich **beim Einfügen
@@ -1380,11 +1381,11 @@ Fenster auf einmal auf den Hauptbildschirm.
 
 **Ordner:** eine Geste an zwei Stellen, ein Ziehen auf ein anderes fasst es zu
 einem Ordner zusammen. Ein schwebender Button auf einen anderen ergibt einen
-Button-Ordner. Eine Kachel auf eine andere ergibt einen Kachelordner, und
-gehört immer nur zu einem Kachelordner gleichzeitig.
+Ordner auf dem Desktop. Eine Kachel auf eine andere ergibt einen Ordner im Raster, und
+gehört immer nur zu einem Raster-Ordner gleichzeitig. Ein Ordner liegt dort, wo er angelegt wurde.
 
 <p>
-<svg viewBox="200 0 360 120" xmlns="http://www.w3.org/2000/svg" role="img"><circle cx="255" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="295" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="335" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="295" y="108" font-size="11" fill="currentColor" text-anchor="middle">Button-Ordner</text><rect x="430" y="20" width="100" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="430" y1="55" x2="530" y2="55" stroke="currentColor" stroke-width="1"/><line x1="480" y1="20" x2="480" y2="90" stroke="currentColor" stroke-width="1"/><text x="480" y="108" font-size="11" fill="currentColor" text-anchor="middle">Kachelordner</text></svg>
+<svg viewBox="200 0 360 120" xmlns="http://www.w3.org/2000/svg" role="img"><circle cx="255" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="295" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="335" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="295" y="108" font-size="11" fill="currentColor" text-anchor="middle">Desktop-Ordner</text><rect x="430" y="20" width="100" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="430" y1="55" x2="530" y2="55" stroke="currentColor" stroke-width="1"/><line x1="480" y1="20" x2="480" y2="90" stroke="currentColor" stroke-width="1"/><text x="480" y="108" font-size="11" fill="currentColor" text-anchor="middle">Raster-Ordner</text></svg>
 </p>
 
 **Infobereich-Menü**: Zuletzt kopiert, Favoriten. Erscheint als abgerundetes,

@@ -223,7 +223,7 @@ const SETTINGS = {
   // the text tool's background became a three-way choice -- its old boolean
   // setting must convert to "none" on read without the user touching anything.
   ui_flags: {
-    tags: true, customThemes: true, promptNotes: true, pillFolders: true,
+    tags: true, customThemes: true, promptNotes: true, folders: true,
     // The statistics checks read a dashboard that is switched on; a fresh install starts
     // with it off (the dedicated probe seeds that case).
     usageStats: true,

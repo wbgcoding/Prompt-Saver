@@ -212,7 +212,7 @@ pub(crate) fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled
     let is_clip = key == "clipWatcher";
     let is_hotkeys = key == "promptHotkeys";
     let is_tray = key == "trayRecent" || key == "trayFavs" || key == TRAY_CUSTOM_MENU_KEY;
-    let is_folders = key == "pillFolders";
+    let is_folders = key == "folders";
     let is_sync_enable = key == "promptSync" && enabled; // Prompt-folders-as-Markdown
     // The receiver's own switch is durable-or-reversible (see remote.rs), so it
     // never takes the generic save-and-ignore path below.

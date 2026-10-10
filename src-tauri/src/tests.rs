@@ -13568,6 +13568,48 @@ fn toggle_pairs_merge_to_zero() {
     assert!(s.ui_values.is_empty());
 }
 
+fn migrated_with_folder_flags(flags: &[(&str, bool)]) -> Settings {
+    let mut s = Settings::default();
+    for (k, v) in flags {
+        s.ui_flags.insert((*k).into(), *v);
+    }
+    s.migrate();
+    s
+}
+
+#[test]
+fn both_folder_switches_off_turn_folders_off() {
+    let s = migrated_with_folder_flags(&[("tileFolders", false), ("pillFolders", false)]);
+    assert_eq!(s.ui_flags.get("folders"), Some(&false));
+    assert!(!s.ui_flags.contains_key("tileFolders") && !s.ui_flags.contains_key("pillFolders"));
+}
+
+#[test]
+fn one_folder_switch_off_keeps_folders_on() {
+    let s = migrated_with_folder_flags(&[("tileFolders", false)]);
+    assert_eq!(s.ui_flags.get("folders"), Some(&true));
+    let s = migrated_with_folder_flags(&[("tileFolders", true), ("pillFolders", false)]);
+    assert_eq!(s.ui_flags.get("folders"), Some(&true));
+    assert!(!s.ui_flags.contains_key("tileFolders") && !s.ui_flags.contains_key("pillFolders"));
+}
+
+#[test]
+fn no_stored_folder_switch_writes_no_folders_key() {
+    let s = migrated_with_folder_flags(&[]);
+    assert!(!s.ui_flags.contains_key("folders"));
+}
+
+#[test]
+fn the_folder_switch_merge_runs_once_and_keeps_a_stored_choice() {
+    let mut s = migrated_with_folder_flags(&[("tileFolders", false), ("pillFolders", false)]);
+    let before = s.ui_flags.clone();
+    s.migrate();
+    assert_eq!(s.ui_flags, before);
+    // An already stored "folders" wins over leftover old keys.
+    let s = migrated_with_folder_flags(&[("folders", true), ("tileFolders", false), ("pillFolders", false)]);
+    assert_eq!(s.ui_flags.get("folders"), Some(&true));
+}
+
 #[test]
 fn tile_flags_merge_to_style() {
     let run = |flags: &[(&str, bool)], texts: &[(&str, &str)]| {
@@ -16255,7 +16297,7 @@ fn a_broken_folder_scale_is_clamped() {
 #[test]
 fn deleting_a_prompt_purges_it_from_its_folder() {
     let mut settings = Settings::default();
-    settings.ui_flags.insert("pillFolders".into(), true);
+    settings.ui_flags.insert("folders".into(), true);
     settings.float_folders = vec![folder_of("f1", &["a", "b", "c"]), folder_of("f2", &["d", "e"])];
     // delete_prompt needs an AppHandle, so exercise the same steps it performs.
     let mut alive = ids(&["a", "b", "c", "d", "e"]);
@@ -16287,11 +16329,11 @@ fn the_window_plan_follows_the_feature_flag() {
 
     // Off: every member is a plain pill again, no folder; switching the feature
     // off must put every pill back.
-    settings.ui_flags.insert("pillFolders".into(), false);
+    settings.ui_flags.insert("folders".into(), false);
     let (pills, folders) = float_window_plan(&settings, &known);
     assert_eq!(pills, ids(&["a", "b", "c"]));
     assert!(folders.is_empty());
-    settings.ui_flags.remove("pillFolders");
+    settings.ui_flags.remove("folders");
 
     // An unpinned prompt never gets a window, folder member or not.
     settings.floating.remove("c");

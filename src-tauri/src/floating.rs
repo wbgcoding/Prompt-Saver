@@ -266,7 +266,7 @@ pub(crate) fn folder_label(id: &str) -> String {
 // Expert settings the backend needs. The feature ships ON; the two parameters use
 // the same defaults and ranges as their sliders in the expert menu.
 pub(crate) fn folders_on(settings: &Settings) -> bool {
-    settings.ui_flags.get("pillFolders") != Some(&false)
+    settings.ui_flags.get("folders") != Some(&false)
 }
 
 // Pill and folder windows read the settings ONCE, when they open. Without this every

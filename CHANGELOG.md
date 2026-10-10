@@ -2024,6 +2024,7 @@ the video editor and the introduction tour ship on).
 - **The quick launcher preview shows plain text.** The one-line preview under each prompt name no longer shows Markdown marks such as # or **.
 - **The quick launcher shows its keys.** A footer lists Enter, the arrow keys and Esc.
 - **Open and Quit are set apart in the tray menu.** They sit below the prompts with a small icon each, and Quit comes last behind its own line.
+- **Tile folders and button folders are now simply folders.** One name and one switch in the expert menu; a tile folder and a button folder still stay separate.
 
 ## 2.6.3 (2026-07-26)
 

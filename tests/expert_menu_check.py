@@ -103,7 +103,6 @@ DEPENDENCIES = {
     "codeAutoDetect": "mdPreview",
     # Workspace
     "floatOpacity": "floating",
-    "pillFolders": "floating",
     "trayRecentN": "trayRecent",
     "trayFavN": "trayFavs",
     # Tiles + copying
