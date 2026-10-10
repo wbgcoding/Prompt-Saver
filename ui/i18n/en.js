@@ -2081,4 +2081,6 @@ export default {
     veAudioSys: "System",
     veAudioMic: "Mic",
     expGroupDiagnostics: "Troubleshooting",
+    flagTileFavBadge: "Star on favorite tiles",
+    tipTileFavBadge: "Shows a small star in the top-right corner of every favorite tile. It is only a mark and does not react to clicks.",
 };

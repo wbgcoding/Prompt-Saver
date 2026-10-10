@@ -2081,4 +2081,6 @@ export default {
     veAudioSys: "Sistema",
     veAudioMic: "Microfone",
     expGroupDiagnostics: "Resolução de problemas",
+    flagTileFavBadge: "Estrela nos blocos favoritos",
+    tipTileFavBadge: "Mostra uma pequena estrela no canto superior direito de cada bloco favorito. É apenas uma marca e não reage a cliques.",
 };

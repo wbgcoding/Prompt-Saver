@@ -2081,4 +2081,6 @@ export default {
     veAudioSys: "System",
     veAudioMic: "Mikrofon",
     expGroupDiagnostics: "Fehlersuche",
+    flagTileFavBadge: "Stern auf Favoriten-Kacheln",
+    tipTileFavBadge: "Zeigt oben rechts auf jeder Favoriten-Kachel einen kleinen Stern. Er ist nur eine Markierung und reagiert nicht auf Klicks.",
 };

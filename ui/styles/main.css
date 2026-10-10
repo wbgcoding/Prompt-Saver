@@ -811,6 +811,22 @@ body.drag-active .cell.drag-over {
   filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.65));
 }
 
+/* Favorite star, top-right: information only, it never takes a click. Gold on
+   plain and picture tiles; on a tinted tile the tile's own ink colour, because
+   gold vanishes on amber and yellow. */
+.tile-fav-badge {
+  position: absolute;
+  top: 5px;
+  right: 7px;
+  z-index: 3;
+  font-size: clamp(11px, 9cqi, 15px);
+  line-height: 1;
+  pointer-events: none;
+  color: #f5b301;
+}
+.tile.tinted .tile-fav-badge { color: currentColor; opacity: 0.9; }
+.tile.has-image .tile-fav-badge { text-shadow: 0 0 2px rgba(0, 0, 0, 0.8); }
+
 /* Rotating-prompt "next entry" pill, bottom-left, free corner on a text tile
    (media caption/bar live bottom-right/full-width, never on a rotating prompt). */
 .tile-rotate-badge {

@@ -20,6 +20,7 @@ export const FLAG_LABELS = {
   tooltipsEnabled: "showTooltips", // the Settings switch; the master for every tooltip
   typeBadges: "flagTypeBadges",
   tileHotkeyBadge: "flagTileHotkeyBadge",
+  tileFavBadge: "flagTileFavBadge",
   captions: "flagCaptions",
   videoControls: "flagVideoControls",
   videoMuted: "flagVideoMuted",
@@ -706,7 +707,7 @@ export const EXPERT_TABS = [
     { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "dragToView", "tilePressScale", "tileHotkeyBadge"], values: ["hoverLift", "hoverDim", "dragThreshold", "tileHotkeyBadgeOpacity"] },
     { title: "expGroupTooltips", values: ["tooltipDelayMs"] },
     { title: "expGroupTileLook", flags: ["tileShadow", "typeBadges", "captions", "gridLines", "autoInk", "inkHalo"], values: ["tileRadius", "tileBorderWidth", "inkThreshold", "inkHaloStrength"], dropdowns: ["tileStyle"] },
-    { title: "expGroupFavorites", flags: ["favorites", { key: "favViewReorder", gate: "favViewButton" }], values: ["favStarSize", "favMaxCols"] },
+    { title: "expGroupFavorites", flags: ["favorites", { key: "tileFavBadge", gate: "favorites" }, { key: "favViewReorder", gate: "favViewButton" }], values: ["favStarSize", "favMaxCols"] },
     { title: "expGroupMedia", flags: ["videoControls", "videoAutoplay", "videoMuted", "videoLoop", "mediaMeta", "mediaBorder", "roundMedia"], values: ["videoVolume", "mediaRadius"] },
   ] },
   { title: "expTabAppearance", groups: [
@@ -799,7 +800,7 @@ export const EXPERT_TIPS = [
   "rotateAuto",
   "helpTips", "helpSketches", "firstRunTour",
   // Tiles / copying
-  "tileMenu", "typeBadges", "tileHotkeyBadge", "bubbleMs", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "chainQuickStart", "chainVarCheck", "autoPasteEnter",
+  "tileMenu", "typeBadges", "tileHotkeyBadge", "tileFavBadge", "bubbleMs", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "chainQuickStart", "chainVarCheck", "autoPasteEnter",
   "promptHotkeys", "promptHotkeyPaste", "dragOut", "dragOutInvert", "dragOutModifier",
   "tooltipDelayMs",
   "dragToView",
@@ -842,7 +843,7 @@ export const normScreenshotFormat = (v) => (SCREENSHOT_FORMATS.includes(v) ? v :
 // rotatingPrompts/rotateBadge gate a tile's own rotate-badge element -- without
 // a full rebuild here, an already-open grid keeps showing (or hiding) it until some
 // unrelated re-render happens to catch up.
-export const TILE_DOM_FLAGS = new Set(["captions", "promptNotes", "notesInTooltip", "rotatingPrompts", "rotateBadge", "tileHotkeyBadge", "autoInk", "inkHalo"]);
+export const TILE_DOM_FLAGS = new Set(["captions", "promptNotes", "notesInTooltip", "rotatingPrompts", "rotateBadge", "tileHotkeyBadge", "tileFavBadge", "autoInk", "inkHalo"]);
 
 // Almost every expert value only drives a CSS variable, so rebuilding the whole grid
 // for it threw away and recreated every tile: visible as a flash through the

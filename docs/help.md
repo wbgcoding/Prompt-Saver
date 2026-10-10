@@ -572,7 +572,8 @@ library's batch bar.
 ### Favorites
 
 A star marks a tile as a favorite; an optional dedicated view lists only
-starred tiles.
+starred tiles. Use "Add to favorites" from a tile's right-click menu, or the
+star in the library. A favorite tile shows a small star in its top-right corner.
 
 ### Standalone: Multiple views
 
@@ -1408,7 +1409,7 @@ lässt sich der Schatten abschalten oder seine Stärke einstellen.
 
 **Tooltips**: Verzögerung, Breite.
 
-**Favoriten**: Stern-Markierung, eigene Favoriten-Ansicht.
+**Favoriten**: Stern-Markierung, eigene Favoriten-Ansicht. „Zu Favoriten hinzufügen“ im Rechtsklickmenü einer Kachel oder den Stern in der Bibliothek nutzen; eine Favoriten-Kachel zeigt oben rechts einen kleinen Stern.
 
 **Skalierung & Zoom**: UI-, Dialog-, Editor- und Icon-Größe getrennt einstellbar.
 

@@ -485,6 +485,17 @@ export function buildTile(p) {
     tile.appendChild(hkBadge);
   }
 
+  // A favorite shows a small star in the top-right corner, like the library row.
+  // Display only: it takes no clicks, so pressing near the corner still copies.
+  // Hidden in the favourites view, where every tile is a favorite.
+  if (p.favorite && flag("favorites") && gateOpen(FLAG_GATES.tileFavBadge) && flag("tileFavBadge") && !favView) {
+    const favBadge = document.createElement("span");
+    favBadge.className = "tile-fav-badge";
+    favBadge.setAttribute("aria-hidden", "true");
+    favBadge.textContent = "★";
+    tile.appendChild(favBadge);
+  }
+
   // Rotating prompt: "next entry" position pill, bottom-left (a rotating
   // prompt is always text-only, so that corner never competes with a media
   // caption/control bar). Text fills in from the cache once primed below.

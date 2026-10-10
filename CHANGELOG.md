@@ -911,6 +911,8 @@ the video editor and the introduction tour ship on).
 - **Finding duplicates copies far less data while the library is locked.**
   Only names, texts, variants and tags are copied for the scan, not the stored
   pictures.
+- **Favorite tiles show a small star in their top-right corner.** It can be
+  switched off in the expert menu under Favorites.
 
 ### Fixed
 

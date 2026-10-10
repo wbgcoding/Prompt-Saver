@@ -2081,4 +2081,6 @@ export default {
     veAudioSys: "系统",
     veAudioMic: "麦克风",
     expGroupDiagnostics: "故障排查",
+    flagTileFavBadge: "收藏的磁贴上显示星标",
+    tipTileFavBadge: "在每个收藏磁贴的右上角显示一颗小星标。它只是标记，不响应点击。",
 };

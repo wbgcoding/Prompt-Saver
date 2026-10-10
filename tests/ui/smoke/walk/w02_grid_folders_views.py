@@ -65,6 +65,40 @@ SECTION = """\
       }
       strip.scrollLeft = 0;
     }
+    // fav249: a favorite tile carries one display-only star in its top-right quarter, a
+    // plain tile none; the expert switch and the favorites master switch both remove it.
+    {
+      const coreF = await import('./core.js');
+      const viewsF = await import('./views.js');
+      const favOf = (id) => ((coreF.prompts.find((x) => x.id === id)) || {}).favorite === true;
+      const tilesF = () => [...document.querySelectorAll('#grid .tile[data-id]:not(.folder-tile)')];
+      const stars249 = () => document.querySelectorAll('#grid .tile-fav-badge').length;
+      const favTile = tilesF().find((x) => favOf(x.dataset.id));
+      const plainTile = tilesF().find((x) => !favOf(x.dataset.id));
+      if (!favTile || !plainTile) out.errors.push('fav249: the grid has no favorite and plain tile to compare');
+      else {
+        const stars = favTile.querySelectorAll('.tile-fav-badge');
+        if (stars.length !== 1) out.errors.push('fav249: a favorite tile has ' + stars.length + ' stars, expected 1');
+        else {
+          const tr = favTile.getBoundingClientRect();
+          const sr = stars[0].getBoundingClientRect();
+          if (sr.left + sr.width / 2 < tr.left + tr.width / 2 || sr.top + sr.height / 2 > tr.top + tr.height / 2) {
+            out.errors.push('fav249: the star is not in the tile top-right quarter');
+          }
+          if (getComputedStyle(stars[0]).pointerEvents !== 'none') out.errors.push('fav249: the star takes clicks');
+        }
+        if (plainTile.querySelector('.tile-fav-badge')) out.errors.push('fav249: a plain tile has a star');
+        const flags0 = coreF.settings.ui_flags;
+        for (const off of ['tileFavBadge', 'favorites']) {
+          coreF.settings.ui_flags = { ...(flags0 || {}), [off]: false };
+          await viewsF.renderGrid(true);
+          if (stars249() !== 0) out.errors.push('fav249: ' + off + ' off still shows ' + stars249() + ' stars');
+        }
+        coreF.settings.ui_flags = flags0;
+        await viewsF.renderGrid(true);
+        if (stars249() < 1) out.errors.push('fav249: the stars did not come back after the switches went on again');
+      }
+    }
     // F27: the grid folder draws its own cell, hides its members as tiles and opens
     // a popover holding them.
     const fTile = document.querySelector('.tile.folder-tile');
