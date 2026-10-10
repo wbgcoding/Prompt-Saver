@@ -914,6 +914,9 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **The camera clock stops while a take is paused.** The running time used to keep
+  counting through a pause and showed more than the recording holds; it now
+  freezes on pause and carries on from there.
 - **The recording dialog locks its actions while it converts.** Save, Save as,
   Copy, Attach and Video editor are greyed out until the conversion is done, so
   none of them can act on a file that is about to be replaced.

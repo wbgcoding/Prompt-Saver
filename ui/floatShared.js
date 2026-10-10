@@ -227,6 +227,13 @@ export function fmtTimeMMSS(ms) {
   return `${String(m).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
 }
 
+// Running time of a take that can be paused: wall clock since the start, minus the
+// pauses already over (pausedTotal) and the one still going (pausedAt, 0 when none),
+// so the readout freezes while paused and matches what MediaRecorder keeps in the file.
+export function takeElapsedMs(now, startWall, pausedAt, pausedTotal) {
+  return Math.max(0, (pausedAt || now) - startWall - pausedTotal);
+}
+
 // Compact whole-KB / one-decimal-MB size readout, empty string below zero
 // bytes. Shared by the recording control bar and the video editor's scale
 // preview; fmtBytes above is a different, more precise format for a size

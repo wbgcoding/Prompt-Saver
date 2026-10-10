@@ -9,7 +9,7 @@
 // answered, which happens in Rust (camera.rs, install_permission_handler) --
 // this file waits for the camera-permission-ready event before ever calling
 // it, closing the race where the page could ask before the handler exists.
-import { fmtTimeMMSS } from "./floatShared.js";
+import { fmtTimeMMSS, takeElapsedMs } from "./floatShared.js";
 import { LANGS, fullTexts } from "./i18n.js";
 import { attachSelectPicker } from "./selectpop.js";
 
@@ -49,6 +49,10 @@ let recPath = null;
 let recExt = "webm";
 let paused = false;
 let recStartWall = 0;
+// When the running pause began (0 when not paused) and the length of the pauses already
+// over, so the clock shows recording time only.
+let pausedAt = 0;
+let pausedTotal = 0;
 // The screen recording's own pause-aware position at the moment this take's
 // recorder reported that it actually started -- read live
 // (camera_screen_elapsed_ms) from the recorder's start event, never
@@ -268,6 +272,8 @@ async function startRecording() {
   recPath = begin.path;
   // Provisional until the recorder's start event stamps the real value.
   recStartWall = Date.now();
+  pausedAt = 0;
+  pausedTotal = 0;
   recScreenElapsedAtStart = null;
   pendingAppends = [];
   appendChain = Promise.resolve();
@@ -305,6 +311,8 @@ async function startRecording() {
   // recording may have moved on, paused again, or stopped by then).
   recorder.onstart = () => {
     recStartWall = Date.now();
+    pausedAt = 0;
+    pausedTotal = 0;
     recScreenElapsedAtStart = invoke("camera_screen_elapsed_ms")
       .catch(() => null)
       .then((v) => {
@@ -410,7 +418,8 @@ async function startRecording() {
   audioSelect.disabled = true;
   resSelect.disabled = true;
   recTimer = setInterval(() => {
-    recTimeEl.textContent = fmtTimeMMSS(Date.now() - recStartWall);
+    if (paused) return;
+    recTimeEl.textContent = fmtTimeMMSS(takeElapsedMs(Date.now(), recStartWall, pausedAt, pausedTotal));
   }, 250);
 }
 
@@ -435,9 +444,12 @@ pauseBtn.addEventListener("click", () => {
   if (paused) {
     recorder.resume();
     paused = false;
+    pausedTotal += Date.now() - pausedAt;
+    pausedAt = 0;
   } else {
     recorder.pause();
     paused = true;
+    pausedAt = Date.now();
   }
   applyPauseState();
   setStatus(paused ? "paused" : "recording");
