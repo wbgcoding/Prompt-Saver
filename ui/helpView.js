@@ -1,8 +1,7 @@
 // The help view: search, tabs, collapsed sections and deep links.
 import { HELP_CONTENT } from "./help.js";
-import { $, ALL_SHORTCUT_SCOPES, debounced, flag, LANG, t, txt } from "./core.js";
+import { $, debounced, flag, LANG, t, txt } from "./core.js";
 import { HELP_SKETCHES } from "./helpSketches.js";
-import { openShortcutsModal } from "./windowChrome.js";
 
 // In-app documentation. EN + DE only (ui/help.js): every other language
 // falls back to English rather than showing untranslated placeholder text.
@@ -298,7 +297,6 @@ export function bindHelpView() {
   const helpEl = $("help");
   $("help-open").addEventListener("click", openHelp);
   $("help-close").addEventListener("click", () => helpEl.classList.add("hidden"));
-  $("help-shortcuts").addEventListener("click", () => openShortcutsModal(ALL_SHORTCUT_SCOPES, { withGlobal: true, allWindows: true }));
   helpEl.addEventListener("pointerdown", (e) => {
     if (e.target === helpEl) helpEl.classList.add("hidden");
   });

@@ -1797,6 +1797,7 @@ the video editor and the introduction tour ship on).
 - **The "Copied!" font choice.** The text of the confirmation always uses the normal font; its size is now Small, Medium or Large (Large fills the tile or button, as before) instead of a pixel list, and a saved size falls back to Large.
 - **The expert menu is shorter.** 11 pure size and timing values are now fixed at their defaults.
 - **Rarely used visual effects are gone.** Blur tiles until hover and its blur strength, grayscale media, hidden tile names, accent-colored scrollbars and smooth scrolling are removed; frosted glass, blurred media and the text shadow stay.
+- **The help window no longer carries a "?" button.** All shortcuts stay one click away under "All shortcuts" in Settings.
 
 ### Changed
 
