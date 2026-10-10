@@ -127,6 +127,101 @@ SECTION = """\
         if (toolBtns.length !== 12) { // 284 added the Hand (pan) tool
           out.errors.push('screenshot editor: expected 12 tool buttons, found ' + toolBtns.length);
         }
+        // 931a-de: the very first open of a fresh profile starts with the hand.
+        const firstPressed = toolBtns.find((b) => b.getAttribute('aria-pressed') === 'true');
+        if (!firstPressed || firstPressed.dataset.tool !== 'hand') {
+          out.errors.push('931a-de: the first open started with ' + (firstPressed ? firstPressed.dataset.tool : 'no tool') + ', expected hand');
+        }
+        // 928-de: every tool icon names itself and its key in the tooltip
+        // ("<label> (<key>)"), and so do the view icons (pattern only, their
+        // tooltip text is not their aria-label).
+        for (const b of toolBtns) {
+          const tip = b.title || b.dataset.tip || '';
+          const lbl = b.getAttribute('aria-label') || '';
+          if (!lbl || !tip.startsWith(lbl) || !/ \\([^()]+\\)$/.test(tip)) {
+            out.errors.push('928-de: tool ' + b.dataset.tool + ' tooltip "' + tip + '" lacks name or key');
+          }
+        }
+        for (const vid of ['snip-edit-undo', 'snip-edit-redo', 'snip-edit-zoom-in', 'snip-edit-zoom-out', 'snip-edit-fit', 'snip-edit-original']) {
+          const vb = document.getElementById(vid);
+          const vtip = vb ? (vb.title || vb.dataset.tip || '') : '';
+          if (!/ \\([^()]+\\)$/.test(vtip)) {
+            out.errors.push('928-de: ' + vid + ' tooltip "' + vtip + '" lacks name or key');
+          }
+        }
+        // 929-de: the finish button is called Done (Fertig in German) and a click
+        // on Copy answers with a short notice.
+        {
+          const doneBtn = document.getElementById('snip-edit-apply');
+          const isDe = document.documentElement.lang === 'de';
+          const doneTxt = (doneBtn.textContent || '').trim();
+          if (isDe && doneTxt !== 'Fertig') {
+            out.errors.push('929-de: finish button reads "' + doneTxt + '", expected "Fertig"');
+          }
+          if (/^(Apply|Übernehmen)$/.test(doneTxt)) {
+            out.errors.push('929-de: finish button still reads "' + doneTxt + '"');
+          }
+          const toastBox = document.getElementById('toast');
+          toastBox.classList.remove('show');
+          toastBox.textContent = '';
+          document.getElementById('snip-edit-copy').click();
+          await sleep(300);
+          const toastTxt = (toastBox.textContent || '').trim();
+          const wantToast = isDe ? 'Kopiert!' : 'Copied!';
+          if (!toastTxt.includes(wantToast)) {
+            out.errors.push('929-de: Copy gave no confirmation, notice reads "' + toastTxt + '"');
+          }
+          // Let the notice run out completely so its delayed hide cannot land on
+          // a toast a later probe expects to see.
+          await sleep(1800);
+        }
+        // 930-de: the stroke width has the three presets and the plain number
+        // field only (no minus, plus or preset list); other number fields keep
+        // their steppers. Wheel and arrow stepping stay on the input itself.
+        {
+          const pickTool = async (id) => {
+            document.querySelector('#snip-edit-tools button[data-tool="' + id + '"]').click();
+            await sleep(120);
+          };
+          const widthField = () => [...document.querySelectorAll('#snip-edit-context .snip-edit-field')]
+            .find((f) => f.querySelector('.snip-edit-width-row'));
+          await pickTool('rect');
+          let wf = widthField();
+          if (!wf) {
+            out.errors.push('930-de: rect tool has no stroke width field');
+          } else {
+            const nPresets = wf.querySelectorAll('.snip-edit-width-btn').length;
+            const nInputs = wf.querySelectorAll('input').length;
+            const nSteppers = wf.querySelectorAll('.numfield-dec, .numfield-inc, .numfield-list').length;
+            if (nPresets !== 3 || nInputs !== 1 || nSteppers !== 0) {
+              out.errors.push('930-de: width field has ' + nPresets + ' presets, ' + nInputs + ' inputs, ' + nSteppers + ' stepper controls (expected 3, 1, 0)');
+            }
+            const wInput = wf.querySelector('input');
+            const before = Number(wInput.value);
+            wInput.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, bubbles: true, cancelable: true }));
+            await sleep(60);
+            wf = widthField();
+            const after = Number(wf.querySelector('input').value);
+            if (after !== before + 1) {
+              out.errors.push('930-de: wheel up on the width input moved ' + before + ' to ' + after + ', expected +1');
+            }
+            wf.querySelector('input').dispatchEvent(new WheelEvent('wheel', { deltaY: 100, bubbles: true, cancelable: true }));
+            await sleep(60);
+          }
+          await pickTool('text');
+          const sizeField = [...document.querySelectorAll('#snip-edit-context .snip-edit-field')]
+            .find((f) => !f.querySelector('.snip-edit-width-row') && f.querySelector('.numfield'));
+          if (!sizeField) {
+            out.errors.push('930-de: text tool has no number field');
+          } else {
+            const nList = sizeField.querySelectorAll('.numfield-list').length;
+            const nStep = sizeField.querySelectorAll('.numfield-dec, .numfield-inc').length;
+            if (nList !== 1 || nStep !== 2) {
+              out.errors.push('930-de: text size field has ' + nList + ' preset lists and ' + nStep + ' steppers (expected 1 and 2)');
+            }
+          }
+          await pickTool('hand');
+        }
         // 178: the toolbar must stay a couple of rows tall no matter which tool
         // is active -- a full inline swatch grid used to collapse into one tall
         // column here and blow the toolbar height up. This is the check that
@@ -317,6 +412,69 @@ SECTION = """\
         if (!document.getElementById('snip-edit').classList.contains('hidden')) {
           out.errors.push('screenshot editor did not close on Cancel');
         }
+      }
+      // 931-de: the editor opens with the tool used last (kept in ui_texts, so it
+      // survives a restart); a fixed default tool from the expert menu wins.
+      {
+        const TINY = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+        const reopen = async () => {
+          window.__FIRE__('snip-captured', { data_url: TINY, path: '', name: 'last.png' });
+          await sleep(300);
+        };
+        const pressedTool = () => {
+          const b = document.querySelector('#snip-edit-tools button[aria-pressed="true"]');
+          return b ? b.dataset.tool : 'none';
+        };
+        const setDefaultTool = async (v) => {
+          document.getElementById('settings').classList.remove('hidden');
+          await click('expert-open');
+          const search = document.getElementById('expert-search');
+          search.value = 'Screenshot editor';
+          search.dispatchEvent(new Event('input'));
+          await sleep(250);
+          const row = document.querySelector('#expert-flags [data-setting-row="snipEditDefaultTool"] select');
+          if (!row) {
+            out.errors.push('931-de: the default tool dropdown row is missing');
+          } else {
+            row.value = v;
+            row.dispatchEvent(new Event('change', { bubbles: true }));
+            await sleep(200);
+          }
+          search.value = '';
+          search.dispatchEvent(new Event('input'));
+          await sleep(150);
+          await click('expert-back');
+          document.getElementById('settings').classList.add('hidden');
+        };
+        await reopen();
+        document.querySelector('#snip-edit-tools button[data-tool="rect"]').click();
+        await sleep(60);
+        document.getElementById('snip-edit-cancel').click();
+        await sleep(500);
+        const stored = (await window.__TAURI__.core.invoke('get_settings')).ui_texts.snipLastTool;
+        if (stored !== 'rect') {
+          out.errors.push('931-de: the last tool was stored as ' + stored + ', expected rect');
+        }
+        await reopen();
+        if (pressedTool() !== 'rect') {
+          out.errors.push('931-de: the editor reopened with ' + pressedTool() + ', expected rect');
+        }
+        document.getElementById('snip-edit-cancel').click();
+        await sleep(200);
+        await setDefaultTool('pen');
+        await reopen();
+        if (pressedTool() !== 'pen') {
+          out.errors.push('931-de: a fixed default tool pen opened with ' + pressedTool());
+        }
+        document.getElementById('snip-edit-cancel').click();
+        await sleep(200);
+        await setDefaultTool('last');
+        await reopen();
+        if (pressedTool() !== 'rect') {
+          out.errors.push('931-de: back on Last used the editor opened with ' + pressedTool() + ', expected rect');
+        }
+        document.getElementById('snip-edit-cancel').click();
+        await sleep(200);
       }
       // 363: an image that fails to decode (truncated data, a broken picked
       // file) must not leave the editor silently never opening -- it shows an

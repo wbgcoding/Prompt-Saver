@@ -538,7 +538,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && activeNumPop) closeActiveNumPop();
 });
 
-export function numberField({ input, value, min, max, step, bigStep, presets, decreaseLabel, increaseLabel, presetsLabel, decreaseAriaKey, increaseAriaKey, presetsAriaKey, onChange, wheelEnabled = true }) {
+export function numberField({ input, value, min, max, step, bigStep, presets, decreaseLabel, increaseLabel, presetsLabel, decreaseAriaKey, increaseAriaKey, presetsAriaKey, onChange, wheelEnabled = true, steppers = true }) {
   const el = input || document.createElement("input");
   el.type = "number";
   if (min != null) el.min = String(min);
@@ -627,8 +627,12 @@ export function numberField({ input, value, min, max, step, bigStep, presets, de
     });
     ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => btn.addEventListener(ev, stop));
   }
-  armHold(minusBtn, -1);
-  armHold(plusBtn, 1);
+  // steppers: false leaves the minus and plus buttons out of the control (wheel and
+  // arrow keys still step the input); refreshButtons then only touches detached nodes.
+  if (steppers) {
+    armHold(minusBtn, -1);
+    armHold(plusBtn, 1);
+  }
 
   const wrap = document.createElement("div");
   wrap.className = "numfield";
@@ -636,7 +640,8 @@ export function numberField({ input, value, min, max, step, bigStep, presets, de
   // The input goes first in the DOM (CSS `order` below puts it back visually
   // between the two buttons) so a <label> wrapping this control forwards a
   // click to the input, not to the minus button sitting first otherwise.
-  wrap.append(el, minusBtn, plusBtn);
+  if (steppers) wrap.append(el, minusBtn, plusBtn);
+  else wrap.append(el);
 
   if (presets && presets.length) {
     const listBtn = document.createElement("button");

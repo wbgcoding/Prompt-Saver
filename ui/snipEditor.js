@@ -40,6 +40,14 @@ export function initSnipEditor() {
       invoke("set_ui_text", { key: "snipToolSizes", value: json }).catch(() => {});
     }, 400);
   }
+  let snipToolTimer = 0;
+  function snipRememberTool(tool) {
+    settings.ui_texts = { ...(settings.ui_texts || {}), snipLastTool: tool };
+    clearTimeout(snipToolTimer);
+    snipToolTimer = setTimeout(() => {
+      invoke("set_ui_text", { key: "snipLastTool", value: tool }).catch(() => {});
+    }, 400);
+  }
   const SNIP_EDIT_UNDO_MAX = () => val("snipEditUndoMax");
   const SNIP_SCALE_FILTER = () => settings.ui_texts?.snipScaleFilter || "high";
   // Refuse a target this large outright rather than risk an out-of-memory
@@ -47,7 +55,15 @@ export function initSnipEditor() {
   const SNIP_SCALE_MAX_AREA = 80_000_000;
   const SNIP_EDIT_SNAP = () => flag("snipEditSnap");
   const SNIP_TEXT_BACK = () => EXPERT_DROPDOWNS.snipTextBack.get();
-  const SNIP_EDIT_DEFAULT_TOOL = () => txt("snipEditDefaultTool") || "hand";
+  // The tool the editor opens with: a fixed choice from the expert menu, or (the
+  // default) the tool picked last, kept in ui_texts "snipLastTool". A first open
+  // or a stale id falls back to the hand.
+  const SNIP_EDIT_DEFAULT_TOOL = () => {
+    const pick = txt("snipEditDefaultTool") || "last";
+    if (pick !== "last") return pick;
+    const last = txt("snipLastTool");
+    return SNIP_TOOLS.some((d) => d.id === last) ? last : "hand";
+  };
   const SNIP_EDIT_SNAP_TOL = 6; // px (screen)
   const SNIP_DUP_OFFSET_PX = 16;
   // Small / medium / large stroke widths per tool; the middle one is the starting size.
@@ -1218,10 +1234,8 @@ export function initSnipEditor() {
     });
     wrap.appendChild(row);
     const control = numberField({
-      value: ts.width, min: 1, max: 80, step: 1, presets: [1, 2, 4, 8, 16],
+      value: ts.width, min: 1, max: 80, step: 1, steppers: false,
       onChange: (v) => { ts.width = v; snipRememberSize(tool, "width", v); snipEditRenderContext(); },
-      decreaseLabel: t("numFieldDecrease"), increaseLabel: t("numFieldIncrease"), presetsLabel: t("numFieldPresets"),
-      decreaseAriaKey: "numFieldDecrease", increaseAriaKey: "numFieldIncrease", presetsAriaKey: "numFieldPresets",
     });
     const num = control.querySelector("input");
     num.title = t("snipEditWidthTip");
@@ -1454,6 +1468,7 @@ export function initSnipEditor() {
     snipEditRenderContext();
     snipEditOpenContext();
     snipEditRedrawBase(); // toggles the crop-dim pass on/off for the new tool
+    snipRememberTool(tool);
   }
 
   // ---- live previews for the currently-dragging tool (top canvas only) ----
@@ -1969,7 +1984,12 @@ export function initSnipEditor() {
   $("snip-edit-apply").addEventListener("click", snipEditApply);
   $("snip-edit-copy").addEventListener("click", async () => {
     const dataUrl = snipEditExportDataUrl();
-    await invoke("copy_image_data", { dataUrl }).catch((err) => errToast(err));
+    try {
+      await invoke("copy_image_data", { dataUrl });
+      toast(t("copied"));
+    } catch (err) {
+      errToast(err);
+    }
   });
   $("snip-edit-undo").addEventListener("click", snipEditUndo);
   $("snip-edit-redo").addEventListener("click", snipEditRedo);

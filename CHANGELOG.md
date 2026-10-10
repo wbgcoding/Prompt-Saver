@@ -947,6 +947,12 @@ the video editor and the introduction tour ship on).
 - **A shorter colour row in the editor.** The rainbow swatch for a free colour moved
   behind the "More colors" button; a prompt that already has a custom colour
   keeps it in the short row.
+- **Screenshot editor: the finish button is now called Done.** It says what
+  it does, and Copy confirms with a short notice.
+- **Screenshot editor: opens with the tool you used last.** The very first
+  time it still starts with the hand.
+- **Screenshot editor: undo and zoom moved to the bottom bar.** The toolbar
+  stays one line and the picture gets more room.
 
 ### Fixed
 

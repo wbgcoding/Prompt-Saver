@@ -70,8 +70,8 @@ export const EXPERT_DROPDOWNS = {
     [["hex", "optFmtHex"], ["rgb", "optFmtRgb"], ["hsl", "optFmtHsl"]], "hex", "colorPicker"),
   // Which tool the screenshot editor opens with.
   snipEditDefaultTool: enumDropdown("snipEditDefaultTool", "valSnipEditDefaultTool",
-    [["hand", "snipToolHand"], ["crop", "snipToolCrop"], ["pen", "snipToolPen"], ["marker", "snipToolMarker"],
-     ["arrow", "snipToolArrow"], ["text", "snipToolText"], ["step", "snipToolStep"]], "hand", "snipEditor"),
+    [["last", "optSnipToolLast"], ["hand", "snipToolHand"], ["crop", "snipToolCrop"], ["pen", "snipToolPen"], ["marker", "snipToolMarker"],
+     ["arrow", "snipToolArrow"], ["text", "snipToolText"], ["step", "snipToolStep"]], "last", "snipEditor"),
   // Resampling quality for the editor's own scale action: smooth for photos,
   // nearest-neighbour ("low") to keep pixel art crisp instead of blurred.
   snipScaleFilter: enumDropdown("snipScaleFilter", "valSnipScaleFilter",
