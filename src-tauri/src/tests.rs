@@ -18445,3 +18445,67 @@ fn set_sync_dir_core_writes_without_holding_the_store_lock() {
     assert_eq!(old, PathBuf::new());
     assert_eq!(new_dir, PathBuf::from("C:/sync-new"));
 }
+
+// ---- a failed recording start stops what it already started ----
+
+fn start_guard_spinner(flag: &Arc<AtomicBool>, done: &Arc<AtomicBool>) -> std::thread::JoinHandle<()> {
+    let (flag, done) = (flag.clone(), done.clone());
+    std::thread::spawn(move || {
+        while !flag.load(std::sync::atomic::Ordering::Relaxed) {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        done.store(true, std::sync::atomic::Ordering::Relaxed);
+    })
+}
+
+#[test]
+fn start_guard_drop_ends_every_thread_it_holds_within_a_second() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let flag = Arc::new(AtomicBool::new(false));
+    let (done_a, done_b, done_c) = (Arc::new(AtomicBool::new(false)), Arc::new(AtomicBool::new(false)), Arc::new(AtomicBool::new(false)));
+    // The third thread blocks on a channel only the wake action closes, the way the
+    // feeder waits on its queue until a stop is requested.
+    let (tx, rx) = std::sync::mpsc::channel::<()>();
+    let blocked = {
+        let done = done_c.clone();
+        std::thread::spawn(move || {
+            let _ = rx.recv();
+            done.store(true, Ordering::Relaxed);
+        })
+    };
+    let mut guard = recording::StartGuard::new(move || drop(tx));
+    guard.add_flag(flag.clone());
+    guard.audio_threads.push(start_guard_spinner(&flag, &done_a));
+    guard.audio_threads.push(start_guard_spinner(&flag, &done_b));
+    guard.feeder = Some(blocked);
+    let began = std::time::Instant::now();
+    drop(guard);
+    assert!(began.elapsed() < Duration::from_secs(1), "dropping the guard waited too long");
+    assert!(done_a.load(Ordering::Relaxed) && done_b.load(Ordering::Relaxed), "the flagged threads ended");
+    assert!(done_c.load(Ordering::Relaxed), "the thread blocked on the channel was woken and ended");
+}
+
+#[test]
+fn start_guard_after_take_joins_and_stops_nothing() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let flag = Arc::new(AtomicBool::new(false));
+    let done = Arc::new(AtomicBool::new(false));
+    let woke = Arc::new(AtomicBool::new(false));
+    let mut guard = recording::StartGuard::new({
+        let woke = woke.clone();
+        move || woke.store(true, Ordering::Relaxed)
+    });
+    guard.add_flag(flag.clone());
+    guard.audio_threads.push(start_guard_spinner(&flag, &done));
+    let (audio, feeder, mic) = guard.take();
+    drop(guard);
+    assert!(!flag.load(Ordering::Relaxed), "a taken guard sets no stop flag");
+    assert!(!woke.load(Ordering::Relaxed), "a taken guard runs no wake action");
+    assert!(!done.load(Ordering::Relaxed), "the thread now belongs to the caller and still runs");
+    assert_eq!((audio.len(), feeder.is_some(), mic.is_some()), (1, false, false));
+    flag.store(true, Ordering::Relaxed);
+    for t in audio {
+        t.join().unwrap();
+    }
+    assert!(done.load(Ordering::Relaxed));
+}

@@ -701,6 +701,76 @@ pub fn start(
     result
 }
 
+// Everything start_inner has started so far. A failure after the first thread is up
+// (the capture item is gone, the capture refuses to start) used to return without
+// stopping any of them: the feeder waited on its queue for good, the audio threads
+// kept capturing and the output file stayed open, so it could not even be deleted.
+// Dropping the guard sets every stop flag, runs the wake action (the same
+// request_stop the normal stop uses, which also ends the feeder's wait) and joins the
+// threads, each for a bounded time. On success `take` hands the threads to the
+// session and the guard is left empty, so its drop does nothing.
+pub(crate) struct StartGuard {
+    flags: Vec<Arc<AtomicBool>>,
+    wake: Option<Box<dyn FnOnce() + Send>>,
+    pub(crate) audio_threads: Vec<thread::JoinHandle<()>>,
+    pub(crate) feeder: Option<thread::JoinHandle<()>>,
+    pub(crate) mic_wav_thread: Option<thread::JoinHandle<()>>,
+}
+
+pub(crate) type StartParts = (Vec<thread::JoinHandle<()>>, Option<thread::JoinHandle<()>>, Option<thread::JoinHandle<()>>);
+
+impl StartGuard {
+    pub(crate) fn new(wake: impl FnOnce() + Send + 'static) -> Self {
+        Self { flags: Vec::new(), wake: Some(Box::new(wake)), audio_threads: Vec::new(), feeder: None, mic_wav_thread: None }
+    }
+
+    pub(crate) fn add_flag(&mut self, flag: Arc<AtomicBool>) {
+        self.flags.push(flag);
+    }
+
+    // Success: the session owns the threads from here on, nothing is left to undo.
+    pub(crate) fn take(&mut self) -> StartParts {
+        self.flags.clear();
+        self.wake = None;
+        (std::mem::take(&mut self.audio_threads), self.feeder.take(), self.mic_wav_thread.take())
+    }
+}
+
+// Waits for a thread to end, but never longer than `limit`: a thread that does not
+// react is left behind rather than hanging the failed start.
+fn join_bounded(handle: thread::JoinHandle<()>, limit: Duration) {
+    let deadline = Instant::now() + limit;
+    while !handle.is_finished() {
+        if Instant::now() >= deadline {
+            append_crash_log("recording: a thread did not end after a failed start");
+            return;
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+    let _ = handle.join();
+}
+
+impl Drop for StartGuard {
+    fn drop(&mut self) {
+        for flag in &self.flags {
+            flag.store(true, Ordering::Relaxed);
+        }
+        if let Some(wake) = self.wake.take() {
+            wake();
+        }
+        let limit = Duration::from_secs(5);
+        for t in self.audio_threads.drain(..) {
+            join_bounded(t, limit);
+        }
+        if let Some(t) = self.mic_wav_thread.take() {
+            join_bounded(t, limit);
+        }
+        if let Some(t) = self.feeder.take() {
+            join_bounded(t, limit);
+        }
+    }
+}
+
 fn start_inner(
     target: RecTarget, output_path: PathBuf, audio: AudioConfig, canvas_mode: &str, opts: RecStartOptions,
 ) -> Result<RecSession, String> {
@@ -748,15 +818,21 @@ fn start_inner(
     let clock = Arc::new(RecordClock::new());
     let shared = Arc::new(RecFeederShared::new());
     spawn_disk_watch(shared.clone(), output_path.clone(), disk_warn_mb, max_min, max_mb, video_kbps, audio_active);
+    let mut guard = StartGuard::new({
+        let shared = shared.clone();
+        move || shared.request_stop()
+    });
 
     let mut audio_queues: Vec<Arc<AudioQueueShared>> = Vec::new();
-    let mut audio_threads = Vec::new();
     let mut mic_queue: Option<Arc<AudioQueueShared>> = None;
     let mut system_queue: Option<Arc<AudioQueueShared>> = None;
     let audio_stop = if audio_active { Some(Arc::new(AtomicBool::new(false))) } else { None };
+    if let Some(stop) = &audio_stop {
+        guard.add_flag(stop.clone());
+    }
     if audio.system {
         let q = Arc::new(AudioQueueShared::new());
-        audio_threads.push(super::audio::spawn_capture(
+        guard.audio_threads.push(super::audio::spawn_capture(
             "system", eRender, true, String::new(), q.clone(), audio_stop.clone().unwrap(),
         ));
         audio_queues.push(q.clone());
@@ -764,7 +840,7 @@ fn start_inner(
     }
     if audio.mic {
         let q = Arc::new(AudioQueueShared::new());
-        audio_threads.push(super::audio::spawn_capture(
+        guard.audio_threads.push(super::audio::spawn_capture(
             "mic", eCapture, false, audio.mic_device_id.clone(), q.clone(), audio_stop.clone().unwrap(),
         ));
         audio_queues.push(q.clone());
@@ -777,7 +853,7 @@ fn start_inner(
     let encoder_queues: Vec<Arc<AudioQueueShared>> =
         if both_active { audio_queues.iter().take(1).cloned().collect() } else { audio_queues.clone() };
 
-    let feeder = if audio_active {
+    guard.feeder = Some(if audio_active {
         let shared2 = shared.clone();
         let clock2 = clock.clone();
         thread::Builder::new()
@@ -790,10 +866,10 @@ fn start_inner(
             .name("rec-feeder".into())
             .spawn(move || feeder_loop(shared2, encoder))
             .map_err(|e| e.to_string())?
-    };
+    });
 
     let mic_wav_path = both_active.then(|| output_path.with_extension("mic.wav"));
-    let mic_wav_thread = if let (Some(path), Some(q)) = (mic_wav_path.clone(), mic_queue.clone()) {
+    guard.mic_wav_thread = if let (Some(path), Some(q)) = (mic_wav_path.clone(), mic_queue.clone()) {
         let stop = audio_stop.clone().unwrap();
         let clock2 = clock.clone();
         let shared2 = shared.clone();
@@ -833,8 +909,9 @@ fn start_inner(
     };
 
     let canvas_origin = canvas.placement.then_some(canvas.origin);
+    let (audio_threads, feeder, mic_wav_thread) = guard.take();
     Ok(RecSession {
-        control, clock, shared, feeder: Some(feeder), audio_stop, audio_threads, mic_queue, system_queue,
+        control, clock, shared, feeder, audio_stop, audio_threads, mic_queue, system_queue,
         audio_queues, mic_wav_thread, mic_wav_path,
         audio_system: audio.system, audio_mic: audio.mic,
         output_path, target, phase: RecPhase::Recording, started_at_ms: now_ms(),
