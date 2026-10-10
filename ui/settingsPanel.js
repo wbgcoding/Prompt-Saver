@@ -3,7 +3,7 @@ import { $, appVersion, armButton, assignSettings, DISARM_MS, disarmButton, errT
 import { confirmSecretExport, renderLibrary } from "./library.js";
 import { favViewEnabled, refreshFavViewUi, renderGrid, seedExamplesIfNeeded } from "./views.js";
 import { applyBars, applyI18n, wireClearButtons } from "./windowChrome.js";
-import { applyTheme, applyTileStyle, fillThemeSelect, loadPalette } from "./theme.js";
+import { applyTheme, applyTileStyle, fillThemeSelect, loadPalette, openThemeEditor, THEME_EDITOR_ENTRY } from "./theme.js";
 import { fmtBytes } from "./floatShared.js";
 import { confirmDialog, infoDialog } from "./dialog.js";
 import { isHistoryTabOpen, renderJournal } from "./journal.js";
@@ -497,6 +497,7 @@ export function bindSettingsPanel() {
 
   const themeSelect = $("theme-select");
   themeSelect.addEventListener("change", async () => {
+    if (themeSelect.value === THEME_EDITOR_ENTRY) { fillThemeSelect(); openThemeEditor(); return; }
     settings.theme = themeSelect.value; // applyTheme reads the custom overrides from it
     applyTheme(await invoke("set_theme", { theme: themeSelect.value }));
   });

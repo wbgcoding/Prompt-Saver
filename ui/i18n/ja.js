@@ -2066,4 +2066,5 @@ export default {
     statTopEmpty: "まだ何もコピーされていません。",
     hotkeyRemove: "ショートカットを削除",
     importFromFile: "ファイルから…",
+    themeEditorEntry: "カスタムテーマ…",
 };

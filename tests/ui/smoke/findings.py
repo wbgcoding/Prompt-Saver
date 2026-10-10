@@ -1110,6 +1110,33 @@ def run(browser, tmp):
     const gap2 = wrap.getBoundingClientRect().left - lab2.right;
     if (gap2 < 0 || gap2 > 16) errs.push('913: after switching on, the interval sits ' + Math.round(gap2) + 'px from the switch');
 """)
+    failed += ar_probe('bm914', 'settings: the last theme entry opens the editor, keeps the theme and stores nothing', 'index', '880x600', '', r"""
+    // 914: "Custom theme..." at the end of the theme list opens the editor.
+    await bootReady();
+    document.getElementById('gear').click();
+    await sleep(300);
+    const sel = document.getElementById('theme-select');
+    if (document.querySelector('.theme-field button')) errs.push('914: a button is still beside the theme select');
+    const last = sel.options[sel.options.length - 1];
+    if (!last || last.value !== '__theme-editor') errs.push('914: the last theme option is not the editor entry');
+    if (!last.textContent.trim()) errs.push('914: the editor entry has no text');
+    const before = sel.value;
+    window.__SMOKE_ARGS__ = [];
+    sel.value = '__theme-editor';
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+    await sleep(400);
+    if (document.getElementById('theme-modal').classList.contains('hidden')) errs.push('914: picking the entry did not open the theme editor');
+    if (sel.value !== before) errs.push('914: the theme select shows "' + sel.value + '" after the entry, expected "' + before + '"');
+    if (callsFor('set_theme').length) errs.push('914: picking the entry stored a theme');
+""")
+    failed += ar_probe('bm914b', 'settings: with custom themes off the theme list has no editor entry', 'index', '880x600', r"""<script>window.__SEED_SETTINGS__ = { ui_flags: { customThemes: false } };</script>
+""", r"""
+    await bootReady();
+    document.getElementById('gear').click();
+    await sleep(300);
+    const sel = document.getElementById('theme-select');
+    if ([...sel.options].some((o) => o.value === '__theme-editor')) errs.push('914: the editor entry shows although custom themes are off');
+""")
     failed += ar_probe('bx717', 'copy history filters: at 680 px they take two rows, the source is a select and only one All chip remains', 'index', '680x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { clipWatcher: true } };</script>\n', r"""
     await bootReady();
     document.getElementById('library-btn').click(); await sleep(400);

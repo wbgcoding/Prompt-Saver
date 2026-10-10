@@ -677,7 +677,12 @@ SECTION = """\
     await sleep(300);
     // Leave the theme editor open so the scans below measure its real layout.
     document.getElementById('settings').classList.remove('hidden');
-    await click('theme-edit-open');
+    {
+      const themeSel914 = document.getElementById('theme-select');
+      themeSel914.value = '__theme-editor';
+      themeSel914.dispatchEvent(new Event('change', { bubbles: true }));
+      await sleep(250);
+    }
     // Every dropdown and swatch in the theme editor is anchored low in the window -
     // exactly where a popover used to open past the bottom edge. Open the LAST of
     // each kind, which is the worst case, and let the popover scan judge it.

@@ -2066,4 +2066,5 @@ export default {
     statTopEmpty: "Todavía no se ha copiado nada.",
     hotkeyRemove: "Quitar atajo",
     importFromFile: "Desde archivo…",
+    themeEditorEntry: "Tema personalizado…",
 };

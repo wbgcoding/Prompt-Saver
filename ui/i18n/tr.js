@@ -2066,4 +2066,5 @@ export default {
     statTopEmpty: "Henüz hiçbir şey kopyalanmadı.",
     hotkeyRemove: "Kısayolu kaldır",
     importFromFile: "Dosyadan…",
+    themeEditorEntry: "Özel tema…",
 };

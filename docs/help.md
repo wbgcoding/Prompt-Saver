@@ -653,7 +653,8 @@ saves the result as a custom theme.
 ### Standalone: Theme editor
 
 Starts from any built-in theme, changes individual colors, and saves the result
-as a new theme; the original stays untouched.
+as a new theme; the original stays untouched. Open it with "Custom theme…" at the
+end of the theme list in Settings.
 
 ### Scaling & zoom
 
@@ -1788,4 +1789,4 @@ TXT oder JSON.
 
 **Eigenständig: Mehrfachansichten.** Mehrere Rasterseiten.
 
-**Eigenständig: Theme-Editor.** Eigene Farbvarianten bestehender Themes.
+**Eigenständig: Theme-Editor.** Eigene Farbvarianten bestehender Themes. Geöffnet wird er mit „Eigenes Design…“ am Ende der Design-Auswahl in den Einstellungen.

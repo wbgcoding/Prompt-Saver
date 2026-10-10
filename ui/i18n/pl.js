@@ -2066,4 +2066,5 @@ export default {
     statTopEmpty: "Jeszcze nic nie skopiowano.",
     hotkeyRemove: "Usuń skrót",
     importFromFile: "Z pliku…",
+    themeEditorEntry: "Motyw własny…",
 };

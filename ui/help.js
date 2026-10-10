@@ -210,7 +210,7 @@ export const HELP_CONTENT = {
       howTo: ["Pick a theme from Settings.", "Open the theme editor, once enabled, to adjust any theme's colors and save a custom one."],
       whatHappens: "\"System\" follows the OS light or dark setting live. A custom theme is saved separately; the built-in it was based on stays untouched.",
       settings: ["Theme choice: Settings", "Theme editor: Expert menu → Appearance → Visual", "Accent-colored header, frosted dialogs, hidden scrollbars: Expert menu → Appearance → Visual"],
-      tip: "Custom themes are on out of the box; switching them off in the expert menu also hides the editor button {icon:themeEditor}.",
+      tip: "Custom themes are on out of the box; switching them off in the expert menu also removes the “Custom theme…” entry from the theme list.",
     },
     {
       section: "organising",
@@ -974,7 +974,7 @@ export const HELP_CONTENT = {
       howTo: ["Ein Theme in den Einstellungen wählen.", "Den Theme-Editor, sobald aktiviert, öffnen, um Farben eines Themes anzupassen und ein eigenes zu speichern."],
       whatHappens: "\"System\" folgt live der Hell-/Dunkel-Einstellung des Betriebssystems. Ein benutzerdefiniertes Theme wird separat gespeichert; das integrierte, auf dem es basierte, bleibt unangetastet.",
       settings: ["Theme-Wahl: Einstellungen", "Theme-Editor: Expertenmenü → Aussehen → Visuell", "Kopfzeile in Akzentfarbe, milchige Dialoge, versteckte Scrollbalken: Expertenmenü → Aussehen → Visuell"],
-      tip: "Benutzerdefinierte Themes sind ab Werk an; werden sie im Expertenmenü ausgeschaltet, verschwindet auch der Editor-Button {icon:themeEditor}.",
+      tip: "Benutzerdefinierte Themes sind ab Werk an; werden sie im Expertenmenü ausgeschaltet, verschwindet auch der Eintrag „Eigenes Design…“ aus der Design-Auswahl.",
     },
     {
       section: "organising",

@@ -2066,4 +2066,5 @@ export default {
     statTopEmpty: "Noch nichts kopiert.",
     hotkeyRemove: "Tastenkürzel entfernen",
     importFromFile: "Aus Datei…",
+    themeEditorEntry: "Eigenes Design…",
 };

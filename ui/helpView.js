@@ -70,7 +70,6 @@ export const HELP_ICON_SOURCES = {
   ocr: () => $("ocr-btn")?.querySelector("svg")?.outerHTML,
   mic: () => $("voice-btn")?.querySelector("svg")?.outerHTML,
   library: () => $("library-btn")?.querySelector("svg")?.outerHTML,
-  themeEditor: () => $("theme-edit-open")?.querySelector("svg")?.outerHTML,
 };
 
 // Builds the inline icon span for one `{icon:key}` placeholder, or null when the

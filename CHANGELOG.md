@@ -2028,6 +2028,7 @@ the video editor and the introduction tour ship on).
 - **Export preselects JSON,** the format that keeps every prompt detail.
 - **The expert menu button has its normal size** and sits at the left edge instead of spanning the whole settings dialog.
 - **The update interval sits right beside the Auto update switch** and only shows while it is on.
+- **The theme editor opens from a “Custom theme…” entry** at the end of the theme list instead of an unlabelled palette button.
 
 ## 2.6.3 (2026-07-26)
 

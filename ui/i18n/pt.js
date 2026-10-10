@@ -2066,4 +2066,5 @@ export default {
     statTopEmpty: "Ainda nada copiado.",
     hotkeyRemove: "Remover atalho",
     importFromFile: "De um arquivo…",
+    themeEditorEntry: "Tema personalizado…",
 };

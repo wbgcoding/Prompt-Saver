@@ -5358,28 +5358,6 @@ button.tag-chip:hover { border-color: var(--accent); }
 .ve-muted { color: var(--muted); }
 
 /* ---- Custom themes ---- */
-/* The editor button sits right of the theme dropdown, which gives up the width. */
-.theme-row { display: flex; align-items: center; gap: 6px; }
-.theme-row .modal-input { flex: 1 1 auto; min-width: 0; }
-/* Square, and exactly as tall as the dropdown beside it: a small icon next to a
-   full-height select reads as an afterthought. `stretch` keeps them equal even
-   when the select grows with the font or the modal scale. */
-.theme-edit-btn {
-  flex: 0 0 auto;
-  align-self: stretch;
-  aspect-ratio: 1;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface-2, var(--surface));
-  /* The button takes its size from the row; the glyph has to be centred in it and
-     scale with it, or it sits off to one corner. */
-  align-items: center;
-  justify-content: center;
-}
-.theme-edit-btn:hover { background: var(--hover); border-color: var(--accent); }
-.theme-edit-btn svg { width: 66%; height: 66%; }
-body.noflag-customThemes .theme-edit-btn { display: none; }
 
 #theme-modal.overlay { z-index: 68; }
 /* The colour list scrolls inside the dialog so Cancel/Save stay reachable at any

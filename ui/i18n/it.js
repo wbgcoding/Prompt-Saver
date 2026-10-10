@@ -2066,4 +2066,5 @@ export default {
     statTopEmpty: "Ancora nulla copiato.",
     hotkeyRemove: "Rimuovi scorciatoia",
     importFromFile: "Da file…",
+    themeEditorEntry: "Tema personalizzato…",
 };

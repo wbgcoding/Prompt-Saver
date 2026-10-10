@@ -2066,4 +2066,5 @@ export default {
     statTopEmpty: "尚未复制任何内容。",
     hotkeyRemove: "移除快捷键",
     importFromFile: "从文件…",
+    themeEditorEntry: "自定义主题…",
 };

@@ -2066,4 +2066,5 @@ export default {
     statTopEmpty: "Nog niets gekopieerd.",
     hotkeyRemove: "Sneltoets verwijderen",
     importFromFile: "Uit bestand…",
+    themeEditorEntry: "Eigen thema…",
 };

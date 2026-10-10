@@ -2066,4 +2066,5 @@ export default {
     statTopEmpty: "Nothing copied yet.",
     hotkeyRemove: "Remove shortcut",
     importFromFile: "From file…",
+    themeEditorEntry: "Custom theme…",
 };

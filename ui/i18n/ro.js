@@ -2066,4 +2066,5 @@ export default {
     statTopEmpty: "Încă nu s-a copiat nimic.",
     hotkeyRemove: "Elimină scurtătura",
     importFromFile: "Din fișier…",
+    themeEditorEntry: "Temă personalizată…",
 };
