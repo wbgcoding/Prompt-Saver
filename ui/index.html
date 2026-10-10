@@ -608,12 +608,6 @@
           </button>
           <button id="journal-clear" type="button" class="head-toggle head-clear lib-history-only" data-i18n="clearHistory">Clear copy history</button>
           <button id="library-dupes" type="button" class="head-toggle lib-prompts-only" data-i18n="dupTitle">Find duplicates</button>
-          <label class="head-sort lib-prompts-only">
-            <span class="cols-label" data-i18n="sortBy">Sort</span>
-            <select id="library-sort" class="lib-sort" data-i18n-aria="sortBy"></select>
-          </label>
-          <button id="library-select-btn" type="button" class="head-toggle lib-prompts-only" aria-pressed="false" data-i18n="selectMode">Select</button>
-          <label class="head-check lib-prompts-only"><input type="checkbox" id="library-close-toggle"><span data-i18n="closeAfterCopy">Close after copy</span></label>
         </div>
         <button id="library-close" class="icon-btn" data-i18n-aria="close">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
@@ -626,27 +620,36 @@
           <!-- Saved searches: one-click chips above the field, only shown once at
                least one search is saved (feature-gated via body.noflag-savedSearches). -->
           <div id="library-saved-searches" class="lib-saved-searches"></div>
-          <div class="lib-q-wrap">
-            <input id="library-q" class="modal-input" type="text" data-i18n-ph="searchPh" data-i18n-aria="searchPh" data-i18n-title="tipSearchExclude" />
-            <button id="library-search-save" type="button" class="icon-btn lib-search-save" data-i18n-title="saveSearchAction" data-i18n-aria="saveSearchAction">☆</button>
-          </div>
-          <!-- Type chips are additive (several at once); the colours sit on the same
-               line, exactly as in the copy history. -->
-          <div class="journal-filters">
-            <div id="library-types" class="lib-types">
-              <button type="button" class="lib-type active" data-type="all" data-i18n="filterAll">All</button>
-              <button type="button" class="lib-type" data-type="image" data-i18n="filterImage">Image</button>
-              <button type="button" class="lib-type" data-type="video" data-i18n="filterVideo">Video</button>
-              <button type="button" class="lib-type" data-type="pdf" data-i18n="filterPdf">PDF</button>
-              <button type="button" class="lib-type" data-type="file" data-i18n="filterFile">File</button>
-              <button id="library-fav" type="button" class="lib-type lib-fav-chip" data-i18n-title="favoritesOnly" data-i18n-aria="favoritesOnly">★</button>
-              <button id="library-archive" type="button" class="lib-type lib-archive-chip" data-i18n-title="showArchiveToggle" data-i18n-aria="showArchiveToggle"><span data-i18n="libArchiveChip">Archive</span></button>
+          <div class="lib-toolbar">
+            <div class="lib-q-wrap">
+              <input id="library-q" class="modal-input" type="text" data-i18n-ph="searchPh" data-i18n-aria="searchPh" data-i18n-title="tipSearchExclude" />
+              <button id="library-search-save" type="button" class="icon-btn lib-search-save" data-i18n-title="saveSearchAction" data-i18n-aria="saveSearchAction">☆</button>
             </div>
-            <div id="library-colors" class="lib-colors" data-i18n-title="filterColor"></div>
+            <label class="head-sort">
+              <span class="cols-label" data-i18n="sortBy">Sort</span>
+              <select id="library-sort" class="lib-sort" data-i18n-aria="sortBy"></select>
+            </label>
             <button id="library-view-toggle" type="button" class="icon-btn lib-view-toggle" data-i18n-title="libraryTilesToggle" data-i18n-aria="libraryTilesToggle">▦</button>
+            <button id="library-select-btn" type="button" class="head-toggle" aria-pressed="false" data-i18n="selectMode">Select</button>
           </div>
-          <!-- Tag filter chips + manager button (feature-gated via body.flag-tags) -->
-          <div id="library-tagbar" class="lib-tagbar"></div>
+          <div id="library-filter-rows" class="lib-filter-rows">
+            <!-- Type chips are additive (several at once); the colours sit on the same
+                 line, exactly as in the copy history. -->
+            <div class="journal-filters">
+              <div id="library-types" class="lib-types">
+                <button type="button" class="lib-type active" data-type="all" data-i18n="filterAll">All</button>
+                <button type="button" class="lib-type" data-type="image" data-i18n="filterImage">Image</button>
+                <button type="button" class="lib-type" data-type="video" data-i18n="filterVideo">Video</button>
+                <button type="button" class="lib-type" data-type="pdf" data-i18n="filterPdf">PDF</button>
+                <button type="button" class="lib-type" data-type="file" data-i18n="filterFile">File</button>
+                <button id="library-fav" type="button" class="lib-type lib-fav-chip" data-i18n-title="favoritesOnly" data-i18n-aria="favoritesOnly">★</button>
+                <button id="library-archive" type="button" class="lib-type lib-archive-chip" data-i18n-title="showArchiveToggle" data-i18n-aria="showArchiveToggle"><span data-i18n="libArchiveChip">Archive</span></button>
+              </div>
+              <div id="library-colors" class="lib-colors" data-i18n-title="filterColor"></div>
+            </div>
+            <!-- Tag filter chips + manager button (feature-gated via body.flag-tags) -->
+            <div id="library-tagbar" class="lib-tagbar"></div>
+          </div>
         </div>
         <div id="library-list" class="library-list"></div>
         <!-- Batch action bar (visible only in selection mode) -->
@@ -677,6 +680,9 @@
                selected, updateBatchBar disables it otherwise. -->
           <button id="lib-batch-compare" type="button" class="ghost-btn" data-i18n="compareBtn">Compare</button>
           <button id="lib-batch-delete" type="button" class="ghost-btn danger-btn" data-i18n="delete">Delete</button>
+        </div>
+        <div id="library-foot" class="lib-foot">
+          <label class="head-check"><input type="checkbox" id="library-close-toggle"><span data-i18n="closeAfterCopy">Close after copy</span></label>
         </div>
       </div>
       <div id="library-panel-history" class="lib-panel hidden" role="tabpanel">

@@ -756,8 +756,8 @@ export function renderLibrary() {
   const colorsUsed = usedColors(prompts);
   if (libColor !== "all" && !colorsUsed.includes(libColor)) setLibColor("all");
   buildColorFilter($("library-colors"), libColor, colorsUsed);
-  const anyLibFilter = flag("librarySearch") || flag("libraryTypeFilter") || flag("colorFilter") || flag("favorites") || tagsOn();
-  $("library-search").classList.toggle("hidden", !prompts.length || !anyLibFilter);
+  $("library-search").classList.toggle("hidden", !prompts.length);
+  $("library-filter-rows").classList.toggle("hidden", !(flag("libraryTypeFilter") || flag("colorFilter") || flag("favorites") || tagsOn()));
   if (!prompts.length) {
     const empty = document.createElement("div");
     empty.className = "hint";

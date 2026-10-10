@@ -1353,6 +1353,10 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
    as a toolbar on the line below, so the X always keeps its corner. */
 #library-close { order: 1; margin-left: auto; }
 #library .modal-head > .modal-head-actions { order: 2; flex: 1 1 100%; justify-content: flex-start; }
+/* The prompts tab has one action left in its head (Find duplicates), which fits beside the
+   title and the tabs, so the head stays on one line; the history tab keeps its own line. */
+#library[data-tab="prompts"] .modal-head > .modal-head-actions { order: 1; flex: 0 1 auto; margin-left: auto; }
+#library[data-tab="prompts"] #library-close { order: 2; margin-left: 8px; }
 .lib-tab {
   padding: 5px 12px;
   border: 1px solid var(--border);
@@ -4511,6 +4515,18 @@ body.drag-over::after {
 .head-toggle.head-clear:hover { border-color: var(--danger); }
 /* Library sort dropdown. */
 .head-sort { display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+/* Search row of the library: the field takes what the sort, tiles and select controls leave. */
+.lib-toolbar { display: flex; align-items: stretch; gap: 8px; }
+.lib-toolbar > .lib-q-wrap { flex: 1 1 auto; min-width: 120px; }
+.lib-toolbar > .head-sort > .lib-sort { align-self: stretch; }
+.lib-filter-rows { display: flex; flex-direction: column; gap: 6px; }
+.lib-filter-rows.hidden { display: none; }
+/* Foot of the prompts tab: the compact options that apply to the whole list. */
+.lib-foot { display: flex; justify-content: flex-end; flex: 0 0 auto; }
+/* The list bleeds into the dialog padding so its scrollbar reaches the corner; with a foot
+   below it the bleed would run under the foot. */
+#library-panel-prompts .library-list { margin-bottom: 0; padding-bottom: 0; }
+#library-search.library-search { margin-bottom: 0; }
 .lib-sort {
   padding: 5px 30px 5px 8px;
   border: 1px solid var(--control-border);

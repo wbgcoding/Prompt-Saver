@@ -90,6 +90,55 @@ SECTION = """\
         }
       }
     }
+    // lay267: sort, tiles and select sit in the search row, "Close after copy" in a foot
+    // under the list, "Find duplicates" in the title line.
+    {
+      const topOf267 = (el) => el.getBoundingClientRect().top;
+      const q267 = document.getElementById('library-q');
+      for (const id of ['library-sort', 'library-select-btn', 'library-view-toggle']) {
+        const el = document.getElementById(id);
+        if (!el || !el.closest('#library-search .lib-toolbar')) {
+          out.errors.push('lay267: #' + id + ' is not inside the search row');
+        } else if (id !== 'library-view-toggle' || getComputedStyle(el).display !== 'none') {
+          if (Math.abs(topOf267(el) - topOf267(q267)) > 4) {
+            out.errors.push('lay267: #' + id + ' does not share the top of the search field (' + topOf267(el) + ' vs ' + topOf267(q267) + ')');
+          }
+        }
+      }
+      const closeBox267 = document.getElementById('library-close-toggle');
+      const list267 = document.getElementById('library-list');
+      if (!closeBox267 || !closeBox267.closest('#library-foot')) {
+        out.errors.push('lay267: the close-after-copy box is not inside the foot');
+      } else if (closeBox267.getBoundingClientRect().top < list267.getBoundingClientRect().bottom - 1) {
+        out.errors.push('lay267: the close-after-copy box is not below the list');
+      }
+      const dup267 = document.getElementById('library-dupes');
+      const tabs267 = document.getElementById('library-tabs');
+      if (Math.abs(dup267.getBoundingClientRect().top - tabs267.getBoundingClientRect().top) > 4) {
+        out.errors.push('lay267: Find duplicates is not on the title line (' + dup267.getBoundingClientRect().top + ' vs ' + tabs267.getBoundingClientRect().top + ')');
+      }
+      // Every filter off, prompts present: the search row stays, the filter rows go.
+      const coreL267 = await import('./core.js');
+      const libMod267 = await import('./library.js');
+      const flags267 = coreL267.settings.ui_flags;
+      coreL267.settings.ui_flags = { ...(flags267 || {}), libraryTypeFilter: false, colorFilter: false, favorites: false, tags: false };
+      libMod267.renderLibrary();
+      await sleep(40);
+      const search267 = document.getElementById('library-search');
+      const tb267 = document.querySelector('#library-search .lib-toolbar');
+      if (search267.classList.contains('hidden') || !tb267 || tb267.getBoundingClientRect().height < 10) {
+        out.errors.push('lay267: with every filter off the search row is gone');
+      }
+      if (!document.getElementById('library-filter-rows').classList.contains('hidden')) {
+        out.errors.push('lay267: with every filter off the filter rows are still shown');
+      }
+      coreL267.settings.ui_flags = flags267;
+      libMod267.renderLibrary();
+      await sleep(40);
+      if (document.getElementById('library-filter-rows').classList.contains('hidden')) {
+        out.errors.push('lay267: the filter rows did not come back with the flags');
+      }
+    }
     // 711: the colour filter offers only the colours the prompts really use, and
     // hides itself below two of them.
     {
