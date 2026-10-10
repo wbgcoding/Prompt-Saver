@@ -1502,6 +1502,7 @@ export default {
     errExportDest: "Miejsce docelowe eksportu jest nieprawidłowe",
     errRecordingUnreadable: "Nie udało się odczytać nagrania",
     errToolStart: "Nie udało się uruchomić narzędzia wideo",
+    errFfmpegTimeout: "ffmpeg nie odpowiedział na czas. Czy plik znajduje się na wolnym lub odłączonym dysku?",
     errMicMux: "Nie udało się dodać ścieżki mikrofonu",
     errNoAudioTrack: "To nagranie nie ma dźwięku na tej ścieżce",
     errThumbFailed: "Nie udało się utworzyć obrazu podglądu",

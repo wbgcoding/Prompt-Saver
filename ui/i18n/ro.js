@@ -1502,6 +1502,7 @@ export default {
     errExportDest: "Destinația exportului nu este validă",
     errRecordingUnreadable: "Înregistrarea nu a putut fi citită",
     errToolStart: "Instrumentul video nu a putut fi pornit",
+    errFfmpegTimeout: "ffmpeg nu a răspuns la timp. Fișierul se află pe o unitate lentă sau deconectată?",
     errMicMux: "Pista microfonului nu a putut fi adăugată",
     errNoAudioTrack: "Această înregistrare nu are sunet pe acea pistă",
     errThumbFailed: "Imaginea de previzualizare nu a putut fi creată",

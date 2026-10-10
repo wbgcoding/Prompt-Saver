@@ -130,6 +130,7 @@ export const ERROR_MSG_KEYS = {
   "ffprobe output: {e}": "errRecordingUnreadable",
   "could not start ffmpeg: {e}": "errToolStart",
   "could not start ffprobe: {e}": "errToolStart",
+  "ffmpeg-timeout": "errFfmpegTimeout",
   "mic track mux failed: {}": "errMicMux",
   "no audio on track {track}": "errNoAudioTrack",
   "still-frame extraction failed": "errThumbFailed",

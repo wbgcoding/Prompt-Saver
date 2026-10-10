@@ -587,16 +587,67 @@ pub(crate) fn spawn_in_job(cmd: &mut std::process::Command, job: Option<&KillOnC
     Ok(child)
 }
 
-// `Command::status()` for a helper that should die with the app.
-pub(crate) fn status_in_job(cmd: &mut std::process::Command) -> std::io::Result<std::process::ExitStatus> {
-    spawn_in_job(cmd, app_job())?.wait()
+// The error text a helper that ran out of time hands to the window (mapped in the
+// window's error table); the io error itself carries `ErrorKind::TimedOut`.
+pub(crate) const FFMPEG_TIMEOUT_ERR: &str = "ffmpeg-timeout";
+
+// Waits for `child` for at most `timeout`, polling every 50 ms. Past the limit the
+// child is killed and reaped and the result is a `TimedOut` error: a stalled network
+// file or a hung drive must not leave a command pending for good.
+pub(crate) fn wait_with_deadline(child: &mut std::process::Child, timeout: Duration) -> std::io::Result<std::process::ExitStatus> {
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        if let Some(status) = child.try_wait()? {
+            return Ok(status);
+        }
+        if std::time::Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(std::io::Error::new(std::io::ErrorKind::TimedOut, FFMPEG_TIMEOUT_ERR));
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
 }
 
-// `Command::output()` for a helper that should die with the app.
-pub(crate) fn output_in_job(cmd: &mut std::process::Command) -> std::io::Result<std::process::Output> {
+// What a failed helper run says: the timeout sentinel as is, anything else as the
+// "could not start" text the window already knows.
+pub(crate) fn tool_run_error(tool: &str, e: &std::io::Error) -> String {
+    if e.kind() == std::io::ErrorKind::TimedOut {
+        FFMPEG_TIMEOUT_ERR.to_string()
+    } else {
+        format!("could not start {tool}: {e}")
+    }
+}
+
+// `Command::status()` for a helper that should die with the app, with a time limit.
+pub(crate) fn status_in_job(cmd: &mut std::process::Command, timeout: Duration) -> std::io::Result<std::process::ExitStatus> {
+    let mut child = spawn_in_job(cmd, app_job())?;
+    wait_with_deadline(&mut child, timeout)
+}
+
+// `Command::output()` for a helper that should die with the app, with a time limit.
+// Both pipes are drained on their own threads while the child runs (a full pipe would
+// stall it); after a timeout those threads are left to end when the killed child's
+// pipes close.
+pub(crate) fn output_in_job(cmd: &mut std::process::Command, timeout: Duration) -> std::io::Result<std::process::Output> {
+    use std::io::Read;
     cmd.stdout(std::process::Stdio::piped());
     cmd.stderr(std::process::Stdio::piped());
-    spawn_in_job(cmd, app_job())?.wait_with_output()
+    let mut child = spawn_in_job(cmd, app_job())?;
+    let drain = |pipe: Option<Box<dyn Read + Send>>| {
+        pipe.map(|mut p| {
+            std::thread::spawn(move || {
+                let mut buf = Vec::new();
+                let _ = p.read_to_end(&mut buf);
+                buf
+            })
+        })
+    };
+    let out_reader = drain(child.stdout.take().map(|p| Box::new(p) as Box<dyn Read + Send>));
+    let err_reader = drain(child.stderr.take().map(|p| Box::new(p) as Box<dyn Read + Send>));
+    let status = wait_with_deadline(&mut child, timeout)?;
+    let collect = |h: Option<std::thread::JoinHandle<Vec<u8>>>| h.map(|h| h.join().unwrap_or_default()).unwrap_or_default();
+    Ok(std::process::Output { status, stdout: collect(out_reader), stderr: collect(err_reader) })
 }
 
 // Where run_ffmpeg_to_staged notes the staged files it has in flight, one path

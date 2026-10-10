@@ -1502,6 +1502,7 @@ export default {
     errExportDest: "Dışa aktarma hedefi geçerli değil",
     errRecordingUnreadable: "Kayıt okunamadı",
     errToolStart: "Video aracı başlatılamadı",
+    errFfmpegTimeout: "ffmpeg zamanında yanıt vermedi. Dosya yavaş veya bağlantısı kesilmiş bir sürücüde mi?",
     errMicMux: "Mikrofon izi eklenemedi",
     errNoAudioTrack: "Bu kaydın o izinde ses yok",
     errThumbFailed: "Önizleme görseli oluşturulamadı",

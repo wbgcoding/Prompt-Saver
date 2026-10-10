@@ -18509,3 +18509,48 @@ fn start_guard_after_take_joins_and_stops_nothing() {
     }
     assert!(done.load(Ordering::Relaxed));
 }
+
+// ---- ffmpeg helpers give up after their time limit ----
+
+fn slow_child_command() -> std::process::Command {
+    use std::os::windows::process::CommandExt;
+    // ping -n 6 waits about five seconds between its replies.
+    let mut cmd = std::process::Command::new("ping");
+    cmd.args(["-n", "6", "127.0.0.1"]).creation_flags(0x0800_0000);
+    cmd.stdin(std::process::Stdio::null());
+    cmd
+}
+
+#[test]
+fn status_in_job_kills_a_stalled_child_after_the_limit() {
+    let began = std::time::Instant::now();
+    let err = status_in_job(&mut slow_child_command(), Duration::from_secs(1)).expect_err("the limit must end the wait");
+    assert_eq!(err.kind(), std::io::ErrorKind::TimedOut);
+    assert!(began.elapsed() < Duration::from_secs(3), "returned late: {:?}", began.elapsed());
+    assert_eq!(tool_run_error("ffmpeg", &err), "ffmpeg-timeout");
+}
+
+#[test]
+fn output_in_job_times_out_and_still_returns_a_quick_childs_output() {
+    let began = std::time::Instant::now();
+    let err = output_in_job(&mut slow_child_command(), Duration::from_secs(1)).expect_err("the limit must end the wait");
+    assert_eq!(err.kind(), std::io::ErrorKind::TimedOut);
+    assert!(began.elapsed() < Duration::from_secs(3), "returned late: {:?}", began.elapsed());
+
+    use std::os::windows::process::CommandExt;
+    let mut quick = std::process::Command::new("cmd");
+    quick.args(["/C", "echo hello"]).creation_flags(0x0800_0000);
+    quick.stdin(std::process::Stdio::null());
+    let out = output_in_job(&mut quick, Duration::from_secs(20)).expect("a quick child finishes");
+    assert!(out.status.success());
+    assert!(String::from_utf8_lossy(&out.stdout).contains("hello"));
+}
+
+#[test]
+fn wait_with_deadline_leaves_no_child_running() {
+    let mut child = slow_child_command().spawn().unwrap();
+    let err = wait_with_deadline(&mut child, Duration::from_millis(300)).unwrap_err();
+    assert_eq!(err.kind(), std::io::ErrorKind::TimedOut);
+    // Killed and reaped: the status is already known.
+    assert!(child.try_wait().unwrap().is_some(), "the child was not reaped");
+}

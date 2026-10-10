@@ -1509,6 +1509,7 @@ export default {
     errExportDest: "Das Exportziel ist ungültig",
     errRecordingUnreadable: "Die Aufnahme konnte nicht gelesen werden",
     errToolStart: "Das Videowerkzeug konnte nicht gestartet werden",
+    errFfmpegTimeout: "ffmpeg hat nicht rechtzeitig geantwortet. Liegt die Datei auf einem langsamen oder getrennten Laufwerk?",
     errMicMux: "Die Mikrofonspur konnte nicht hinzugefügt werden",
     errNoAudioTrack: "Diese Aufnahme hat auf dieser Spur keinen Ton",
     errThumbFailed: "Ein Vorschaubild konnte nicht erstellt werden",

@@ -1502,6 +1502,7 @@ export default {
     errExportDest: "La destinazione dell'esportazione non è valida",
     errRecordingUnreadable: "Non è stato possibile leggere la registrazione",
     errToolStart: "Non è stato possibile avviare lo strumento video",
+    errFfmpegTimeout: "ffmpeg non ha risposto in tempo. Il file si trova su un'unità lenta o scollegata?",
     errMicMux: "Non è stato possibile aggiungere la traccia del microfono",
     errNoAudioTrack: "Questa registrazione non ha audio su quella traccia",
     errThumbFailed: "Non è stato possibile creare un'immagine di anteprima",

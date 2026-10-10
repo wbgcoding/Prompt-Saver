@@ -67,7 +67,13 @@ pub(crate) async fn probe_extra_video_source(app: AppHandle, path: String) -> Re
     }
     let ffprobe = ffprobe_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
     tauri::async_runtime::spawn_blocking(move || {
-        probe_recording_blocking(&ffprobe, &src).map_err(|e| ffmpeg_error_json(FfmpegErrorKey::Unreadable, None, &e))
+        probe_recording_blocking(&ffprobe, &src).map_err(|e| {
+            if e == FFMPEG_TIMEOUT_ERR {
+                e
+            } else {
+                ffmpeg_error_json(FfmpegErrorKey::Unreadable, None, &e)
+            }
+        })
     })
     .await
     .map_err(|e| e.to_string())?
@@ -86,7 +92,7 @@ pub(crate) fn probe_recording_blocking(ffprobe: &Path, src: &Path) -> Result<Rec
     cmd.args(["-v", "quiet", "-print_format", "json", "-show_format", "-show_streams"]).arg(src);
     cmd.creation_flags(CREATE_NO_WINDOW);
     cmd.stdin(std::process::Stdio::null());
-    let output = output_in_job(&mut cmd).map_err(|e| format!("could not start ffprobe: {e}"))?;
+    let output = output_in_job(&mut cmd, Duration::from_secs(30)).map_err(|e| tool_run_error("ffprobe", &e))?;
     if !output.status.success() {
         return Err("ffprobe failed to read the recording".to_string());
     }
@@ -311,7 +317,7 @@ pub(crate) fn mux_mic_track_blocking(ffmpeg: &Path, video: &Path, sidecar: &Path
     cmd.stdin(std::process::Stdio::null());
     cmd.stdout(std::process::Stdio::null());
     cmd.stderr(std::process::Stdio::piped());
-    let output = output_in_job(&mut cmd).map_err(|e| format!("could not start ffmpeg: {e}"))?;
+    let output = output_in_job(&mut cmd, Duration::from_secs(600)).map_err(|e| tool_run_error("ffmpeg", &e))?;
     if !output.status.success() || !staged.is_file() {
         let _ = fs::remove_file(&staged);
         let tail: String =
@@ -396,7 +402,7 @@ pub(crate) fn generate_filmstrip_blocking(ffmpeg: &Path, ffprobe: &Path, src: &P
             cmd.stdin(std::process::Stdio::null());
             cmd.stdout(std::process::Stdio::null());
             cmd.stderr(std::process::Stdio::null());
-            let status = status_in_job(&mut cmd).map_err(|e| format!("could not start ffmpeg: {e}"))?;
+            let status = status_in_job(&mut cmd, Duration::from_secs(20)).map_err(|e| tool_run_error("ffmpeg", &e))?;
             if !status.success() || !p.is_file() {
                 return Err("thumbnail extraction failed".to_string());
             }
@@ -433,7 +439,7 @@ pub(crate) fn generate_waveform_peaks_blocking(ffmpeg: &Path, src: &Path, track:
     cmd.stdin(std::process::Stdio::null());
     cmd.stdout(std::process::Stdio::piped());
     cmd.stderr(std::process::Stdio::null());
-    let output = output_in_job(&mut cmd).map_err(|e| format!("could not start ffmpeg: {e}"))?;
+    let output = output_in_job(&mut cmd, Duration::from_secs(120)).map_err(|e| tool_run_error("ffmpeg", &e))?;
     if !output.status.success() {
         return Err(format!("no audio on track {track}"));
     }
@@ -515,11 +521,11 @@ pub(crate) fn extract_still_frame_blocking(ffmpeg: &Path, src: &Path, at_ms: u64
     cmd.stdin(std::process::Stdio::null());
     cmd.stdout(std::process::Stdio::null());
     cmd.stderr(std::process::Stdio::null());
-    let status = match status_in_job(&mut cmd) {
+    let status = match status_in_job(&mut cmd, Duration::from_secs(60)) {
         Ok(s) => s,
         Err(e) => {
             let _ = take_still_output(&tmp, false);
-            return Err(format!("could not start ffmpeg: {e}"));
+            return Err(tool_run_error("ffmpeg", &e));
         }
     };
     take_still_output(&tmp, status.success())

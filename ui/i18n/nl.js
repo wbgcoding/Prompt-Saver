@@ -1502,6 +1502,7 @@ export default {
     errExportDest: "De exportbestemming is ongeldig",
     errRecordingUnreadable: "De opname kon niet worden gelezen",
     errToolStart: "Het videohulpprogramma kon niet worden gestart",
+    errFfmpegTimeout: "ffmpeg reageerde niet op tijd. Staat het bestand op een trage of losgekoppelde schijf?",
     errMicMux: "Het microfoonspoor kon niet worden toegevoegd",
     errNoAudioTrack: "Deze opname heeft geen geluid op dat spoor",
     errThumbFailed: "Er kon geen voorbeeldafbeelding worden gemaakt",

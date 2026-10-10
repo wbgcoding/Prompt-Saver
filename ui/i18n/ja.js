@@ -1502,6 +1502,7 @@ export default {
     errExportDest: "書き出し先が無効です",
     errRecordingUnreadable: "録画を読み込めませんでした",
     errToolStart: "動画ツールを起動できませんでした",
+    errFfmpegTimeout: "ffmpeg が時間内に応答しませんでした。ファイルが低速なドライブ、または接続が切れたドライブにありませんか？",
     errMicMux: "マイクのトラックを追加できませんでした",
     errNoAudioTrack: "この録画のそのトラックには音声がありません",
     errThumbFailed: "プレビュー画像を作成できませんでした",
