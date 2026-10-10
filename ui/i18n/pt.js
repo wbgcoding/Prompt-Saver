@@ -1599,7 +1599,6 @@ export default {
     tipCodeAutoDetect: "Mostra um prompt que é claramente código-fonte como um único bloco de código colorido, mesmo sem delimitadores ```. É preciso um indício claro da linguagem e linhas com forma de código, por isso o texto normal nunca é tratado como código.",
     tipHlFontPx: "Tamanho do texto dos blocos de código na pré-visualização.",
     varsSection: "Marcadores",
-    notesPh: "Nota privada, nunca é copiada",
     flagPromptNotes: "Notas privadas no prompt",
     flagNotesInTooltip: "Nota na dica do bloco",
     tipLastCopied: "Copiado pela última vez: {time}",
@@ -2091,4 +2090,5 @@ export default {
     recBarDiskLowShort: "Disco quase cheio",
     recBarHotkeyShort: "Atalho bloqueado",
     camChooseFolder: "Escolher a pasta das gravações",
+    notesLabel: "Nota (só para você, nunca é copiada)",
 };

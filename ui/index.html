@@ -386,11 +386,12 @@
           </div>
         </div>
       </div>
-      <!-- Private note, full width, no heading: never copied, gated on promptNotes.
+      <!-- Private note, full width, labelled: never copied, gated on promptNotes.
            The gate's display:none sits on this wrapper, not the textarea, so an
-           empty gap never appears when the flag is off. -->
+           empty gap never appears when the flag is off (the label hides with it). -->
       <div id="modal-notes">
-        <textarea id="modal-notes-text" class="modal-input modal-notes-text" rows="1" data-i18n-ph="notesPh"></textarea>
+        <label for="modal-notes-text" class="modal-field-label" data-i18n="notesLabel">Note (only for you, never copied)</label>
+        <textarea id="modal-notes-text" class="modal-input modal-notes-text" rows="1"></textarea>
       </div>
       <div id="color-row" class="swatches"></div>
       <!-- Tags, hotkey and version history, combined under one

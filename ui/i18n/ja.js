@@ -1599,7 +1599,6 @@ export default {
     tipCodeAutoDetect: "明らかにソースコードであるプロンプトを、``` の囲みがなくても一つの色付きコードブロックとして表示します。はっきりした言語の手掛かりとコードらしい行の並びが必要なので、普通の文章がコード扱いされることはありません。",
     tipHlFontPx: "プレビュー内のコードブロックの文字サイズ。",
     varsSection: "プレースホルダー",
-    notesPh: "非公開のメモ（コピーされません）",
     flagPromptNotes: "プロンプトの個人メモ",
     flagNotesInTooltip: "タイルのツールチップにメモを表示",
     tipLastCopied: "最終コピー: {time}",
@@ -2091,4 +2090,5 @@ export default {
     recBarDiskLowShort: "ディスクの空きが少ない",
     recBarHotkeyShort: "ホットキーがブロック中",
     camChooseFolder: "録画フォルダーを選択",
+    notesLabel: "メモ（自分用、コピーされません）",
 };

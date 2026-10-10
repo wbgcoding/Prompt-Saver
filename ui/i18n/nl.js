@@ -1599,7 +1599,6 @@ export default {
     tipCodeAutoDetect: "Toont een prompt die duidelijk broncode is als één gekleurd codeblok, ook zonder ```-afbakening. Er is een duidelijke taalaanwijzing en codeachtige regels voor nodig, zodat gewone tekst nooit als code wordt behandeld.",
     tipHlFontPx: "Tekstgrootte van de codeblokken in het voorbeeld.",
     varsSection: "Plaatsaanduidingen",
-    notesPh: "Privénotitie, wordt nooit meegekopieerd",
     flagPromptNotes: "Privénotities bij een prompt",
     flagNotesInTooltip: "Notitie in de tegeltooltip",
     tipLastCopied: "Laatst gekopieerd: {time}",
@@ -2091,4 +2090,5 @@ export default {
     recBarDiskLowShort: "Schijf bijna vol",
     recBarHotkeyShort: "Sneltoets geblokkeerd",
     camChooseFolder: "Opnamemap kiezen",
+    notesLabel: "Notitie (alleen voor jou, wordt nooit meegekopieerd)",
 };

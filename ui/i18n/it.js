@@ -1599,7 +1599,6 @@ export default {
     tipCodeAutoDetect: "Mostra un prompt che è chiaramente codice sorgente come un unico blocco di codice colorato, anche senza delimitatori ```. Servono un chiaro indizio di linguaggio e righe con forma di codice, così il testo normale non viene mai trattato come codice.",
     tipHlFontPx: "Dimensione del testo dei blocchi di codice nell'anteprima.",
     varsSection: "Segnaposto",
-    notesPh: "Nota privata, non viene mai copiata",
     flagPromptNotes: "Note private sul prompt",
     flagNotesInTooltip: "Nota nel suggerimento della piastrella",
     tipLastCopied: "Ultima copia: {time}",
@@ -2091,4 +2090,5 @@ export default {
     recBarDiskLowShort: "Disco quasi pieno",
     recBarHotkeyShort: "Scelta rapida bloccata",
     camChooseFolder: "Scegli la cartella delle registrazioni",
+    notesLabel: "Nota (solo per te, non viene mai copiata)",
 };

@@ -1599,7 +1599,6 @@ export default {
     tipCodeAutoDetect: "Pokazuje prompt, który jest wyraźnie kodem źródłowym, jako jeden pokolorowany blok kodu, nawet bez ograniczników ```. Potrzebna jest wyraźna wskazówka języka i wiersze o kształcie kodu, więc zwykły tekst nigdy nie jest traktowany jak kod.",
     tipHlFontPx: "Wielkość tekstu bloków kodu w podglądzie.",
     varsSection: "Symbole zastępcze",
-    notesPh: "Notatka prywatna, nigdy nie jest kopiowana",
     flagPromptNotes: "Prywatne notatki przy prompcie",
     flagNotesInTooltip: "Notatka w podpowiedzi kafelka",
     tipLastCopied: "Ostatnio skopiowano: {time}",
@@ -2091,4 +2090,5 @@ export default {
     recBarDiskLowShort: "Dysk prawie pełny",
     recBarHotkeyShort: "Skrót zablokowany",
     camChooseFolder: "Wybierz folder nagrań",
+    notesLabel: "Notatka (tylko dla ciebie, nigdy nie jest kopiowana)",
 };

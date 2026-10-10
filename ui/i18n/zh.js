@@ -1599,7 +1599,6 @@ export default {
     tipCodeAutoDetect: "把明显是源代码的提示词显示为一个着色的代码块，即使没有 ``` 标记。需要明确的语言特征和代码形态的行才会生效，因此普通文字绝不会被当成代码。",
     tipHlFontPx: "预览中代码块的字号。",
     varsSection: "占位符",
-    notesPh: "私人备注，不会被复制",
     flagPromptNotes: "提示词私人备注",
     flagNotesInTooltip: "在磁贴工具提示中显示备注",
     tipLastCopied: "上次复制：{time}",
@@ -2091,4 +2090,5 @@ export default {
     recBarDiskLowShort: "磁盘空间不足",
     recBarHotkeyShort: "快捷键被占用",
     camChooseFolder: "选择录制文件夹",
+    notesLabel: "备注（仅自己可见，不会被复制）",
 };

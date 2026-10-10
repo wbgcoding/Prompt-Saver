@@ -1458,6 +1458,8 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
    so the editor does not grow taller. The negative margin pulls it against the field
    past the dialog's row gap. */
 .modal-field-label { color: var(--muted); font-size: 12px; margin-bottom: -6px; }
+#modal-notes { display: flex; flex-direction: column; gap: 4px; }
+#modal-notes .modal-field-label { margin-bottom: 0; }
 /* Counter left, mic right, one row right under the text field. The row is never
    hidden by script: it takes no room when both children are hidden. */
 .modal-text-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 0; }

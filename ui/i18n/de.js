@@ -1606,7 +1606,6 @@ export default {
     tipCodeAutoDetect: "Zeigt einen Prompt, der eindeutig Quelltext ist, als einen gefärbten Code-Block, auch ohne ```-Markierung. Dafür braucht es ein klares Sprachmerkmal und codeartige Zeilen, damit normaler Fließtext nie als Code behandelt wird.",
     tipHlFontPx: "Schriftgröße der Code-Blöcke in der Vorschau.",
     varsSection: "Platzhalter",
-    notesPh: "Private Notiz, wird nie mitkopiert",
     flagPromptNotes: "Private Notizen am Prompt",
     flagNotesInTooltip: "Notiz im Kachel-Tooltip",
     tipLastCopied: "Zuletzt kopiert: {time}",
@@ -2091,4 +2090,5 @@ export default {
     recBarDiskLowShort: "Laufwerk fast voll",
     recBarHotkeyShort: "Tastenkürzel blockiert",
     camChooseFolder: "Aufnahme-Ordner wählen",
+    notesLabel: "Notiz (nur für dich, wird nicht kopiert)",
 };

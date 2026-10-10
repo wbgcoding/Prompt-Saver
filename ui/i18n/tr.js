@@ -1599,7 +1599,6 @@ export default {
     tipCodeAutoDetect: "Açıkça kaynak kodu olan bir istemi, ``` sınırlayıcıları olmadan da tek bir renkli kod bloğu olarak gösterir. Bunun için belirgin bir dil ipucu ve kod biçimli satırlar gerekir, böylece sıradan metin asla kod sayılmaz.",
     tipHlFontPx: "Önizlemedeki kod bloklarının yazı boyutu.",
     varsSection: "Yer tutucular",
-    notesPh: "Özel not, asla kopyalanmaz",
     flagPromptNotes: "İstemde özel notlar",
     flagNotesInTooltip: "Not, kutucuk araç ipucunda",
     tipLastCopied: "Son kopyalama: {time}",
@@ -2091,4 +2090,5 @@ export default {
     recBarDiskLowShort: "Disk neredeyse dolu",
     recBarHotkeyShort: "Kısayol engellendi",
     camChooseFolder: "Kayıt klasörünü seç",
+    notesLabel: "Not (sadece senin için, asla kopyalanmaz)",
 };

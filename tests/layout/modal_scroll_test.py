@@ -245,7 +245,7 @@ def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html", vars_op
       <button type="button" class="clear-btn show">x</button></span>
     <div id="modal-md-preview" class="md-preview hidden"></div></div>
   <div id="modal-length" class="modal-length">26 {L('lenChars')}</div>
-  <div id="modal-notes"><textarea id="modal-notes-text" class="modal-input modal-notes-text" rows="1"></textarea></div>
+  <div id="modal-notes"><label for="modal-notes-text" class="modal-field-label">{L('notesLabel')}</label><textarea id="modal-notes-text" class="modal-input modal-notes-text" rows="1"></textarea></div>
   <div id="color-row" class="swatches">{swatches}</div>
   <div id="modal-tags" class="modal-tags"><span class="modal-tags-label">{L('tagsLabel')}</span>
     <div id="modal-tag-chips" class="tag-chips">{tag_chips}</div>

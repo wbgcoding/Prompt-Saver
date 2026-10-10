@@ -796,6 +796,14 @@ SECTION = """\
         const notesBg = getComputedStyle(nText).backgroundColor;
         const promptBg = getComputedStyle(document.getElementById('modal-text')).backgroundColor;
         if (notesBg === promptBg) out.errors.push('the notes field looks identical to the prompt field');
+        // The field carries a visible label inside its wrapper that points at the textarea.
+        const nLabel = nRow.querySelector('label');
+        if (!nLabel) out.errors.push('456: the notes field has no label');
+        else {
+          if (nLabel.getAttribute('for') !== 'modal-notes-text') out.errors.push('456: the notes label does not point at the notes field');
+          if (nLabel.getBoundingClientRect().height < 4 || getComputedStyle(nLabel).visibility === 'hidden') out.errors.push('456: the notes label is not visible');
+          if (nLabel.getBoundingClientRect().bottom > nText.getBoundingClientRect().top + 1) out.errors.push('456: the notes label is not above the notes field');
+        }
         // 456: with the feature off, the gate hides the wrapper itself (not just
         // the textarea), so no empty gap is left where the field used to be.
         document.body.classList.add('noflag-promptNotes');

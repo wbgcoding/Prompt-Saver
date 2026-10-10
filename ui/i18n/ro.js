@@ -1599,7 +1599,6 @@ export default {
     tipCodeAutoDetect: "Arată un prompt care este limpede cod sursă ca un singur bloc de cod colorat, chiar și fără delimitatori ```. Sunt necesare un indiciu clar de limbaj și linii în formă de cod, așa că textul obișnuit nu este niciodată tratat drept cod.",
     tipHlFontPx: "Mărimea textului blocurilor de cod din previzualizare.",
     varsSection: "Substituenți",
-    notesPh: "Notiță privată, nu se copiază niciodată",
     flagPromptNotes: "Notițe private la prompt",
     flagNotesInTooltip: "Notița în indiciul plăcii",
     tipLastCopied: "Ultima copiere: {time}",
@@ -2091,4 +2090,5 @@ export default {
     recBarDiskLowShort: "Disc aproape plin",
     recBarHotkeyShort: "Tastă rapidă blocată",
     camChooseFolder: "Alege folderul înregistrărilor",
+    notesLabel: "Notiță (doar pentru tine, nu se copiază niciodată)",
 };
