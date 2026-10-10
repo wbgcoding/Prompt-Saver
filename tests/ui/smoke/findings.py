@@ -1303,5 +1303,25 @@ def run(browser, tmp):
       if (a[1] !== String(Math.min(n, 6))) errs.push('826: ' + n + ' members set data-n ' + a[1]);
     }
 """)
+    # Screenshot editor probes share one opener: a plain canvas fired as a capture.
+    snip_common = r"""
+    await bootReady();
+    const snipOpen = async (w, h, color) => {
+      const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+      const g = cv.getContext('2d'); g.fillStyle = color || '#ffffff'; g.fillRect(0, 0, w, h);
+      window.__FIRE__('snip-captured', { data_url: cv.toDataURL('image/png'), path: '', name: 'x.png' });
+      await until(() => !document.getElementById('snip-edit').classList.contains('hidden'), 100);
+      await sleep(400);
+    };
+"""
+    # The help button sits right beside the close button, not in the middle of the title bar.
+    for size_828 in ('880x600', '680x460'):
+        failed += ar_probe('bq828-' + size_828, '828: the editor help button sits beside the close button at ' + size_828, 'index', size_828, '', snip_common + r"""
+    await snipOpen(300, 200);
+    const help = document.getElementById('snip-edit-shortcuts').getBoundingClientRect();
+    const close = document.getElementById('snip-edit-close').getBoundingClientRect();
+    const gap = close.left - help.right;
+    if (!(gap >= 0 && gap <= 8)) errs.push('828: the help button is ' + gap + ' px left of the close button, want 0 to 8');
+""")
     # ---- main window findings: generated block end ----
     return failed

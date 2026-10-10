@@ -606,6 +606,8 @@ the video editor and the introduction tour ship on).
 
 ### Improved
 
+- **The screenshot editor's help button sits beside the close button.** It
+  used to float in the middle of the title bar.
 - **The expert menu groups are cards.** Each group sits on its own panel, two
   fit side by side at the default window width, and a row lights up under the
   pointer so the label and its control read together.
