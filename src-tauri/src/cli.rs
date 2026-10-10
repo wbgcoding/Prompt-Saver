@@ -1301,6 +1301,12 @@ fn cmd_edit(store: &mut Store, id: &str, name: Option<&str>, text: Option<&str>,
     let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) else {
         return Outcome::err(2, format!("no prompt with id {id}\n"));
     };
+    // A confidential entry stores its text sealed with the vault key, which the
+    // command line never holds: plain text written here would sit on disk as is
+    // and fail to open in the app.
+    if p.secret && text.is_some() {
+        return Outcome::err(1, format!("prompt {id} is confidential and its text can only be changed in the app itself\n"));
+    }
     if let Some(n) = name {
         p.name = n.to_string();
     }
@@ -3228,5 +3234,20 @@ mod tests {
         assert_eq!(out.code, 0);
         let edited = store.prompts.iter().find(|p| p.id == "p1").unwrap();
         assert_eq!(edited.text, "Dear {?who=you}");
+    }
+
+    #[test]
+    fn edit_refuses_new_text_for_a_confidential_prompt() {
+        let mut store = fixture_store();
+        let dir = std::env::temp_dir();
+        store.prompts[0].secret = true;
+        store.prompts[0].text = "CIPHERTEXT".to_string();
+        let id = store.prompts[0].id.clone();
+        let out = run_cmd(&mut store, &dir, &["edit", &id, "--text", "plain", "--yes"]);
+        assert_ne!(out.code, 0);
+        assert_eq!(store.prompts[0].text, "CIPHERTEXT");
+        let out = run_cmd(&mut store, &dir, &["edit", &id, "--name", "Renamed", "--yes"]);
+        assert_eq!(out.code, 0);
+        assert_eq!(store.prompts[0].name, "Renamed");
     }
 }
