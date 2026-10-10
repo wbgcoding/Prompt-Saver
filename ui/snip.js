@@ -202,7 +202,7 @@ async function beginSession() {
 // when the language changes or the old texts would stay until the next restart.
 function loadTexts() {
   Promise.all([invoke("get_settings"), import("./i18n.js"), import("./floatShared.js"), import("./errors.js")])
-    .then(async ([s, { LANGS, fullTexts }, { resolveLang }, { errMessage }]) => {
+    .then(async ([s, { LANGS, fullTexts }, { resolveLang }, { errMessageLogged }]) => {
       const { tx } = await fullTexts(resolveLang(s.language, LANGS));
       T.hint = tx("snipHint");
       T.failed = tx("snipFailed");
@@ -211,7 +211,7 @@ function loadTexts() {
       T.ocrNoLang = tx("snipOcrNoLang");
       T.recHint = tx("recPickHint");
       snipTx = tx;
-      snipErrMessage = errMessage;
+      snipErrMessage = errMessageLogged;
       if (!hint.classList.contains("error")) hint.textContent = pickMode ? T.pick : recordMode ? T.recHint : T.hint;
     })
     .catch(() => {});
@@ -599,7 +599,7 @@ async function pickHere() {
 
 // Text for a failed color pick: translated, never the raw backend string.
 function pickErrorText(err) {
-  return snipTx ? snipErrMessage(err, snipTx) : T.pickFailed;
+  return snipTx ? snipErrMessage(err, snipTx, "snip") : T.pickFailed;
 }
 
 // Text for a failed capture: a specific message for the one cause worth naming (no

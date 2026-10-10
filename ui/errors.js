@@ -179,6 +179,10 @@ const ERROR_TEMPLATES = Object.entries(ERROR_MSG_KEYS)
 // string, the generic errUnexpected text for anything else, never the raw string.
 // `t(key)` is the calling window's own lookup.
 export function errMessage(err, t) {
+  return resolveErrMessage(err, t).msg;
+}
+
+function resolveErrMessage(err, t) {
   const s = String(err);
   let key = ERROR_MSG_KEYS[s];
   let args = [];
@@ -191,5 +195,23 @@ export function errMessage(err, t) {
   let msg = t(key || "errUnexpected");
   if (args.length) msg = msg.replace("{n}", args[0]);
   if (args.length > 1) msg = msg.replace("{m}", args[1]);
+  return { msg, known: !!key };
+}
+
+// Same text as errMessage. When the error is not in the map, the person is told the
+// details are in the error log, so the raw string is written there too (the same
+// log_error payload the main window's errText sends). For the satellite windows that
+// show a message without going through the main window's errToast. Fire-and-forget: a
+// failure to log must never raise another error.
+export function errMessageLogged(err, t, origin) {
+  const { msg, known } = resolveErrMessage(err, t);
+  if (!known) {
+    try {
+      const invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+      if (invoke) invoke("log_error", { text: msg, origin: origin || "main", raw: String(err) }).catch(() => {});
+    } catch {
+      // logging is best effort
+    }
+  }
   return msg;
 }

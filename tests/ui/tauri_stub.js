@@ -507,6 +507,7 @@ const RESULTS = {
     if (window.__EXTRA_VIDEO_FAIL__) {
       throw JSON.stringify({ key: "ffErrUnreadable", code: null, raw: "" });
     }
+    if (window.__EXTRA_VIDEO_FAIL_RAW__) throw window.__EXTRA_VIDEO_FAIL_RAW__;
     return window.__EXTRA_VIDEO_PROBE__ || {
       duration_ms: 4000, fps: 30, width: 640, height: 360,
       has_audio: true, has_mic_track: false, mic_sidecar: "",

@@ -3,7 +3,7 @@
 // helpers that had drifted into near-duplicate copies. Values are unchanged from
 // what each window already used on its own -- this is drift prevention.
 import { placePopover } from "./popover.js";
-import { errMessage } from "./errors.js";
+import { errMessageLogged } from "./errors.js";
 
 export const COPIED_MS = 900; // "copied!" tile/pill flash duration
 export const RING_MIN = 8;    // smallest resize-ring thickness (px)
@@ -212,7 +212,7 @@ export function a11yProgressText(t, pct, estimate) {
 // an unrelated command's own error string) is returned unparsed with no raw
 // detail, so an existing `.includes("cancel")`/`.includes("ffmpeg-missing")`
 // check elsewhere keeps seeing exactly what it always did.
-export function parseFfmpegError(err, t) {
+export function parseFfmpegError(err, t, origin = "video") {
   const text = String(err);
   let payload = null;
   try {
@@ -221,7 +221,7 @@ export function parseFfmpegError(err, t) {
   } catch {
     payload = null;
   }
-  if (!payload) return { message: errMessage(text, t), details: text };
+  if (!payload) return { message: errMessageLogged(text, t, origin), details: text };
   const message = payload.key === "ffErrOther"
     ? t("ffErrOther").replace("{code}", payload.code != null ? String(payload.code) : "?")
     : t(payload.key);

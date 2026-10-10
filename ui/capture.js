@@ -430,7 +430,7 @@ export function bindCapture() {
       } else if (raw.includes("ffmpeg-missing")) {
         recStatus.textContent = `${t("recFfmpegMissingHint")} ${t("recConvertFailedKeepRaw")}`;
       } else {
-        const { message, details } = parseFfmpegError(err, t);
+        const { message, details } = parseFfmpegError(err, t, "main");
         recStatus.textContent = `${message} ${t("recConvertFailedKeepRaw")}`;
         showRecErrorDetails(details);
       }

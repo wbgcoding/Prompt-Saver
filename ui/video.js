@@ -10,7 +10,7 @@ import { resolveLang, fillVideoFormatSelect, normRecFormat, ffmpegDownloadPct, n
 import { withShortcut as withShortcutRaw, rowsForScope as rowsForScopeRaw } from "./shortcuts.js";
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
-import { errMessage } from "./errors.js";
+import { errMessageLogged } from "./errors.js";
 import { LANGS, fullTexts, loadLang } from "./i18n.js";
 import { createColorPop } from "./colorpop.js";
 import { attachSelectPicker } from "./selectpop.js";
@@ -3380,7 +3380,7 @@ async function startExport(toClipboard) {
   const lossless = isLosslessCopy();
   const format = exportFormat();
   let dest = toClipboard
-    ? await invoke("clip_export_path", { ext: formatExt(format) }).catch((err) => { toast(errMessage(err, t)); return null; })
+    ? await invoke("clip_export_path", { ext: formatExt(format) }).catch((err) => { toast(errMessageLogged(err, t, "video")); return null; })
     : destPath();
   if (!dest) return;
   // Another recording can be opened while this export still runs; its result
@@ -3556,7 +3556,7 @@ $("ve-ffmpeg-get").addEventListener("click", async (e) => {
     toast(t("ffmpegDownloadDone"));
     await loadRecording(VE.src);
   } catch (err) {
-    toast(errMessage(err, t));
+    toast(errMessageLogged(err, t, "video"));
   } finally {
     btn.disabled = false;
     btn.removeAttribute("role");
@@ -3636,7 +3636,7 @@ $("ve-still").addEventListener("click", async () => {
     toast(saved ? t("veStillSaved").replace("{path}", String(saved)) : t("veStillSaved").replace("{path}", ""));
   } catch (err) {
     noteFfmpeg(err);
-    toast(errMessage(err, t));
+    toast(errMessageLogged(err, t, "video"));
   }
 });
 
@@ -3940,7 +3940,7 @@ $("ve-export-cancel").addEventListener("click", () => {
 });
 $("ve-export-saveas").addEventListener("click", async () => {
   if (!VE.lastExport) return;
-  const moved = await invoke("save_recording_as", { srcPath: VE.lastExport }).catch((err) => { toast(String(err).includes("source-not-allowed") ? t("veMoveNotAllowed") : errMessage(err, t)); return null; });
+  const moved = await invoke("save_recording_as", { srcPath: VE.lastExport }).catch((err) => { toast(String(err).includes("source-not-allowed") ? t("veMoveNotAllowed") : errMessageLogged(err, t, "video")); return null; });
   if (moved) {
     VE.lastExport = moved;
     $("ve-export-status").textContent = t("veExportDone").replace("{path}", moved);

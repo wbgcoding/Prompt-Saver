@@ -1035,6 +1035,26 @@ VIDEO_PROBE = """
       }
     }
 
+    // ---- 834: an error string the map does not know shows the generic text and
+    // writes exactly one log_error entry carrying the raw text ----
+    {
+      window.__EXTRA_VIDEO_FAIL_RAW__ = 'weird backend failure 834';
+      const before = (window.__SMOKE_ARGS__ || []).length;
+      document.getElementById('ve-add-video').click();
+      await sleep(60);
+      window.__EXTRA_VIDEO_FAIL_RAW__ = null;
+      const logged = (window.__SMOKE_ARGS__ || []).slice(before).filter(([c, a]) => c === 'log_error');
+      if (logged.length !== 1) {
+        errs.push('834: an unmapped backend error wrote ' + logged.length + ' log_error entries, expected 1');
+      } else if (!logged[0][1] || logged[0][1].raw !== 'weird backend failure 834') {
+        errs.push('834: the log_error entry lost the raw text: ' + JSON.stringify(logged[0][1]));
+      }
+      const toastEl = document.getElementById('ve-toast');
+      if (!toastEl || toastEl.textContent.includes('weird backend failure')) {
+        errs.push('834: the raw backend text reached the person');
+      }
+    }
+
     // ---- 392: the last colour picked for a text overlay is remembered as the
     // starting colour for the next text overlay, and veOvRemember off falls
     // back to the fixed default again ----
