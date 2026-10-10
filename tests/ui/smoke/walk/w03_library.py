@@ -432,8 +432,15 @@ SECTION = """\
           const stillOffered = [...document.querySelectorAll('#modal-tag-quickadd .tag-chip-label')].map(s => s.textContent);
           if (stillOffered.includes('Work')) out.errors.push('an already-added tag is still offered in quick-add');
         }
+        // The tag makes the editor dirty, so closing asks first: discard, or the
+        // pending question and the open editor would leak into the next checks.
         document.getElementById('modal-close-x').click();
         await sleep(200);
+        const discardAsk = document.getElementById('confirm-modal');
+        if (discardAsk && !discardAsk.classList.contains('hidden')) {
+          document.getElementById('confirm-ok').click();
+          await sleep(200);
+        }
       }
     }
     // 339: library batch bar's export control -- same select+button pattern

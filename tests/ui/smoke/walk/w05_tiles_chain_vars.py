@@ -603,6 +603,7 @@ SECTION = """\
     }
     // The chosen option must come back preselected on the next copy.
     window.__VAR_PAYLOAD__ = undefined;
+    await sleep(2400); // past the per-prompt copy cooldown, which now comes before the dialog
     if (await clickTile('p5')) {
       const sel2 = (varReq() || { rows: [] }).rows.find(r => r.options.length);
       if (!sel2 || sel2.value !== 'witty') out.errors.push('the last choice was not remembered');
