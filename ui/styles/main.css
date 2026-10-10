@@ -4451,8 +4451,10 @@ body.drag-over::after {
   overflow-wrap: break-word;
   text-align: center;
 }
+.library-list.lib-tiles-view .lib-item .lib-name-row { justify-content: center; }
 .library-list.lib-tiles-view .lib-item .lib-text,
 .library-list.lib-tiles-view .lib-item .lib-tags,
+.library-list.lib-tiles-view .lib-item .lib-tag-marks,
 .library-list.lib-tiles-view .lib-item .lib-rotate-tag,
 .library-list.lib-tiles-view .lib-item .lib-image-hit-tag,
 .library-list.lib-tiles-view .lib-item .lib-add,
@@ -4556,6 +4558,12 @@ body.drag-over::after {
 }
 .batch-view-select:hover { background-color: var(--surface-2); border-color: var(--accent); }
 .lib-name { font-weight: 600; overflow-wrap: anywhere; }
+/* Tags beside the name: flat labels without a frame, never clickable. */
+.lib-name-row { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.lib-name-row > .lib-name { flex: 0 1 auto; min-width: 0; }
+.lib-tag-marks { display: inline-flex; gap: 4px; flex: 0 0 auto; pointer-events: none; }
+.tag-mark { padding: 0 6px; border-radius: 4px; font-size: 10.5px; font-weight: 500; line-height: 1.6; color: var(--muted); background: var(--surface); white-space: nowrap; max-width: 14ch; overflow: hidden; text-overflow: ellipsis; }
+.tag-mark.tag-colored { background: color-mix(in srgb, var(--chip-color) 22%, transparent); color: var(--fg); }
 .lib-sub { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
 .lib-subrow { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
 .lib-sub-right { flex: 0 0 auto; font-weight: 600; }

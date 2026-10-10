@@ -9,7 +9,7 @@ import { confirmDialog } from "./dialog.js";
 import { activeView, firstFree, layoutOf, renderGrid, renderViews } from "./views.js";
 import { copyOnCooldown, recordCopy } from "./copyFlow.js";
 import { attachSelectPicker } from "./selectpop.js";
-import { allTags, renderTagFilter, tagChipEl, tagKey, tagsOn } from "./tags.js";
+import { allTags, renderTagFilter, tagColor, tagKey, tagsOn } from "./tags.js";
 import { refreshClipInbox, setLibraryTab, tileTimeLines } from "./journal.js";
 import { openCompareView, recordToolUsage, renderStatsPanel } from "./management.js";
 import { closeBackups } from "./backups.js";
@@ -828,7 +828,10 @@ export function renderLibrary() {
     const text = document.createElement("span");
     text.className = "lib-text";
     text.textContent = p.file_path || varPreview(hitVariant ?? p.text);
-    body.appendChild(name);
+    const nameRow = document.createElement("span");
+    nameRow.className = "lib-name-row";
+    nameRow.appendChild(name);
+    body.appendChild(nameRow);
     if (hitVariant != null) {
       const tag = document.createElement("span");
       tag.className = "lib-rotate-tag";
@@ -844,11 +847,24 @@ export function renderLibrary() {
       body.appendChild(imgTag);
     }
     body.appendChild(text);
+    // Tags are small flat labels beside the name, not controls: at most three, then "+N".
     if (tagsOn() && (p.tags || []).length) {
-      const row2 = document.createElement("span");
-      row2.className = "lib-tags";
-      for (const tn of p.tags) row2.appendChild(tagChipEl(tn));
-      body.appendChild(row2);
+      const marks = document.createElement("span");
+      marks.className = "lib-tag-marks";
+      const mark = (label, colorOf) => {
+        const m = document.createElement("span");
+        m.className = "tag-mark";
+        m.textContent = label;
+        const c = colorOf ? tagColor(colorOf) : "";
+        if (c) {
+          m.style.setProperty("--chip-color", c);
+          m.classList.add("tag-colored");
+        }
+        marks.appendChild(m);
+      };
+      for (const tn of p.tags.slice(0, 3)) mark(tn, tn);
+      if (p.tags.length > 3) mark(`+${p.tags.length - 3}`, "");
+      nameRow.appendChild(marks);
     }
 
     // Per-type preview: video plays inline, image/gif as a thumbnail, else a dot.

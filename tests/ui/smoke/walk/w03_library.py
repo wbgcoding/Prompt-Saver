@@ -302,6 +302,35 @@ SECTION = """\
       if (!save268 || !save268.querySelector('svg')) out.errors.push('268: the save-search button has no drawing');
       else if (save268.textContent.trim() !== '') out.errors.push('268: the save-search button still carries text: ' + save268.textContent.trim());
     }
+    // tag269: tags in a library row are flat, non-clickable marks beside the name, so a
+    // tagged row is no taller than an untagged one with the same text.
+    {
+      const rows269 = [...document.querySelectorAll('#library-list .lib-item')];
+      if (document.querySelector('#library-list .tag-chip')) out.errors.push('tag269: a library row still carries a tag chip');
+      const tagged269 = rows269.filter((r) => r.querySelector('.lib-name-row .tag-mark'));
+      if (!tagged269.length) out.errors.push('tag269: no row shows a tag mark');
+      else {
+        const first269 = tagged269[0];
+        const marks269 = [...first269.querySelectorAll('.lib-name-row .tag-mark')];
+        if (marks269.length > 4) out.errors.push('tag269: a row shows ' + marks269.length + ' marks, at most 4 expected');
+        if (marks269.some((x) => getComputedStyle(x.parentElement).pointerEvents !== 'none' || getComputedStyle(x).pointerEvents !== 'none')) {
+          out.errors.push('tag269: a tag mark takes clicks');
+        }
+        const nameTop269 = first269.querySelector('.lib-name').getBoundingClientRect().top;
+        const markTop269 = marks269[0].getBoundingClientRect().top;
+        if (Math.abs(markTop269 - nameTop269) > 6) out.errors.push('tag269: the first mark is not on the name line (' + markTop269 + ' vs ' + nameTop269 + ')');
+        const media269 = (r) => !!r.querySelector('img, video, canvas');
+        const textH269 = (r) => Math.round((r.querySelector('.lib-text') || { getBoundingClientRect: () => ({ height: -1 }) }).getBoundingClientRect().height);
+        const plain269 = (r) => !r.querySelector('.lib-rotate-tag, .lib-image-hit-tag') && !media269(r);
+        const pair269 = tagged269.filter(plain269).map((a) => [a, rows269.find((b) => !b.querySelector('.tag-mark') && plain269(b) && textH269(b) === textH269(a))]).find((x) => x[1]);
+        if (!pair269) out.errors.push('tag269: no tagged and untagged text row of equal text height to compare');
+        else {
+          const hA = pair269[0].getBoundingClientRect().height;
+          const hB = pair269[1].getBoundingClientRect().height;
+          if (Math.abs(hA - hB) > 1) out.errors.push('tag269: a tagged row is ' + hA + ' px tall, an untagged one ' + hB + ' px');
+        }
+      }
+    }
     // 436: saved searches keep a query, its active tag filters and the current
     // sort together as one chip. Saving, applying, the cap, renaming and
     // deleting are all self-contained here and end with the list empty again.

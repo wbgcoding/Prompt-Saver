@@ -595,7 +595,7 @@ SECTION = """\
             await runMerge();
             if (rowFor('MergeSrcTmp')) out.errors.push('676: merging again after an undo left the source tag listed');
           }
-          const stillShown = [...document.querySelectorAll('#library-list .tag-chip')].some((c) => c.textContent === 'MergeSrcTmp');
+          const stillShown = [...document.querySelectorAll('#library-list .tag-mark')].some((c) => c.textContent === 'MergeSrcTmp');
           if (stillShown) out.errors.push('423: a library row still shows the merged-away tag');
         }
         // 434: deleting a tag offers an Undo button, and clicking it re-adds the
@@ -619,7 +619,7 @@ SECTION = """\
             tagUndoBtn.click();
             await sleep(300);
             if (!rowFor('MergeDstTmp')) out.errors.push('434: undoing a deleted tag did not bring it back');
-            const chipBack = [...document.querySelectorAll('#library-list .tag-chip')].some((c) => c.textContent === 'MergeDstTmp');
+            const chipBack = [...document.querySelectorAll('#library-list .tag-mark')].some((c) => c.textContent === 'MergeDstTmp');
             if (!chipBack) out.errors.push('434: undoing a deleted tag did not restore it on the prompt row');
             if (tagUndoToast.classList.contains('show')) {
               out.errors.push('434: the tag-undo toast is still showing after being clicked');
