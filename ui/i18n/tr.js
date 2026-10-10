@@ -38,7 +38,7 @@ export default {
     themeCyberpunk: "Siberpunk",
     language: "Dil",
     langAuto: "Otomatik",
-    tileFont: "Yazı tipi",
+    tileFont: "Kutucuk yazı tipi",
     tileSize: "Kutucuk metin boyutu",
     styleDefault: "Ayarlardaki gibi",
     fontSystem: "Sistem",

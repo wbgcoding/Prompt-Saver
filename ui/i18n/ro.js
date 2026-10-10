@@ -38,7 +38,7 @@ export default {
     themeCyberpunk: "Cyberpunk",
     language: "Limbă",
     langAuto: "Automat",
-    tileFont: "Font",
+    tileFont: "Fontul dalelor",
     tileSize: "Dimensiunea textului dalelor",
     styleDefault: "Ca în setări",
     fontSystem: "Sistem",

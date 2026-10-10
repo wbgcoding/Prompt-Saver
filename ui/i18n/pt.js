@@ -38,7 +38,7 @@ export default {
     themeCyberpunk: "Cyberpunk",
     language: "Idioma",
     langAuto: "Automático",
-    tileFont: "Fonte",
+    tileFont: "Fonte dos blocos",
     tileSize: "Tamanho do texto dos blocos",
     styleDefault: "Como nas configurações",
     fontSystem: "Sistema",

@@ -11,7 +11,7 @@ export default {
     themeCyberpunk: "Cyberpunk",
     language: "Sprache",
     langAuto: "Automatisch",
-    tileFont: "Schriftart",
+    tileFont: "Kachelschrift",
     tileSize: "Kachel-Textgröße",
     styleDefault: "Wie Einstellungen",
     fontSystem: "System",

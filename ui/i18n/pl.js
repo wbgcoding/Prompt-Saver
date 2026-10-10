@@ -38,7 +38,7 @@ export default {
     themeCyberpunk: "Cyberpunk",
     language: "Język",
     langAuto: "Automatycznie",
-    tileFont: "Czcionka",
+    tileFont: "Czcionka kafelków",
     tileSize: "Rozmiar tekstu kafelków",
     styleDefault: "Jak w ustawieniach",
     fontSystem: "Systemowa",

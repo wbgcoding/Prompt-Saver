@@ -38,7 +38,7 @@ export default {
     themeCyberpunk: "Cyberpunk",
     language: "Taal",
     langAuto: "Automatisch",
-    tileFont: "Lettertype",
+    tileFont: "Lettertype van tegels",
     tileSize: "Tekstgrootte van tegels",
     styleDefault: "Zoals instellingen",
     fontSystem: "Systeem",

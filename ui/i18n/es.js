@@ -38,7 +38,7 @@ export default {
     themeCyberpunk: "Ciberpunk",
     language: "Idioma",
     langAuto: "Automático",
-    tileFont: "Fuente",
+    tileFont: "Fuente del mosaico",
     tileSize: "Tamaño del texto del mosaico",
     styleDefault: "Como en ajustes",
     fontSystem: "Sistema",

@@ -38,7 +38,7 @@ export default {
     themeCyberpunk: "サイバーパンク",
     language: "言語",
     langAuto: "自動",
-    tileFont: "フォント",
+    tileFont: "タイルのフォント",
     tileSize: "タイルの文字サイズ",
     styleDefault: "設定に従う",
     fontSystem: "システム",

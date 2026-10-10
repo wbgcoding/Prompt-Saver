@@ -38,7 +38,7 @@ export default {
     themeCyberpunk: "赛博朋克",
     language: "语言",
     langAuto: "自动",
-    tileFont: "字体",
+    tileFont: "磁贴字体",
     tileSize: "磁贴文字大小",
     styleDefault: "跟随设置",
     fontSystem: "系统",
