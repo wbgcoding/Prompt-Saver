@@ -863,7 +863,7 @@ export default {
     updateEvery12h: "12 saatte bir",
     updateEvery6h: "6 saatte bir",
     updateNever: "Asla",
-    autoUpdateHint: "Yanında seçilen sıklıkta arka planda yeni sürüm arar. Asla, otomatik denetim yok demektir; başka hiçbir şey gönderilmez.",
+    autoUpdateHint: "Yanında seçilen sıklıkta arka planda yeni sürüm arar. Başka hiçbir şey gönderilmez.",
     hideBarBottom: "Giriş çubuğunu gizle",
     showBarBottom: "Giriş çubuğunu göster",
     showBarTop: "Üst çubuğu göster",

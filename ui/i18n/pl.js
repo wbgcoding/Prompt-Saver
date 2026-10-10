@@ -863,7 +863,7 @@ export default {
     updateEvery12h: "Co 12 godzin",
     updateEvery6h: "Co 6 godzin",
     updateNever: "Nigdy",
-    autoUpdateHint: "Szuka nowej wersji w tle tak często, jak wybrano obok. Nigdy oznacza brak automatycznego sprawdzania; nic więcej nie jest wysyłane.",
+    autoUpdateHint: "Szuka nowej wersji w tle tak często, jak wybrano obok. Nic więcej nie jest wysyłane.",
     hideBarBottom: "Ukryj pasek wprowadzania",
     showBarBottom: "Pokaż pasek wprowadzania",
     showBarTop: "Pokaż górny pasek",

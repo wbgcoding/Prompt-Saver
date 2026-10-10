@@ -863,7 +863,7 @@ export default {
     updateEvery12h: "La fiecare 12 ore",
     updateEvery6h: "La fiecare 6 ore",
     updateNever: "Niciodată",
-    autoUpdateHint: "Caută în fundal o versiune nouă cât de des este ales alături. Niciodată înseamnă nicio verificare automată; nu se trimite nimic altceva.",
+    autoUpdateHint: "Caută în fundal o versiune nouă cât de des este ales alături. Nu se trimite nimic altceva.",
     hideBarBottom: "Ascunde bara de introducere",
     showBarBottom: "Afișează bara de introducere",
     showBarTop: "Afișează bara de sus",

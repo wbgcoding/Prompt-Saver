@@ -755,7 +755,7 @@ export const HELP_CONTENT = {
       whatItIs: "An optional update check looks for a newer version and only talks to the update server.",
       howTo: [
         "Answer Yes when the app asks on first launch whether it may check for updates, to be notified of a new version.",
-        "Pick Never beside Auto update in Settings to stop automatic checks.",
+        "Switch off Auto update in Settings to stop automatic checks; while it is on, the list beside it sets how often.",
         "Accept an offered update to download and install it with one click.",
       ],
       whatHappens:
@@ -1519,7 +1519,7 @@ export const HELP_CONTENT = {
       whatItIs: "Eine optionale Prüfung sucht nach einer neueren Version und kommuniziert nur mit dem Update-Server.",
       howTo: [
         "Beim ersten Start auf die Frage nach Updates mit Ja antworten, für eine Benachrichtigung bei neuer Version.",
-        "Im Einstellungsfenster neben Auto-Update Nie wählen, um automatische Prüfungen zu beenden.",
+        "„Auto-Update“ in den Einstellungen ausschalten, um automatische Prüfungen zu beenden; solange der Schalter an ist, legt die Auswahl daneben fest, wie oft.",
         "Ein angebotenes Update annehmen, um es mit einem Klick herunterzuladen und zu installieren.",
       ],
       whatHappens:

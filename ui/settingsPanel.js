@@ -571,14 +571,14 @@ export function fillScaleSelect(id, key) {
   sel.value = String(cur);
 }
 
-// Interval select beside the Auto update switch. "Never" is the same state as the
-// switch being off; a stored interval that is not on the list gets its own option.
-export const UPDATE_INTERVALS = [[0, "updateNever"], [6, "updateEvery6h"], [12, "updateEvery12h"], [24, "updateDaily"], [48, "updateEvery2d"], [168, "updateWeekly"]];
+// Interval select beside the Auto update switch. It only shows while the switch is on
+// (the switch is the one way to turn checks off); a stored interval that is not on the
+// list gets its own option.
+export const UPDATE_INTERVALS = [[6, "updateEvery6h"], [12, "updateEvery12h"], [24, "updateDaily"], [48, "updateEvery2d"], [168, "updateWeekly"]];
 export function fillUpdateIntervalSelect() {
   const sel = $("opt-update-interval");
   if (!sel) return;
-  // Never comes from the Auto update switch alone; a stored 0 or an out-of-range
-  // number shows as the interval the backend actually uses.
+  // A stored 0 or an out-of-range number shows as the interval the backend actually uses.
   const raw = Number(val("updateCheckH"));
   const cur = Number.isFinite(raw) ? Math.min(168, Math.max(1, raw)) : 24;
   const rows = UPDATE_INTERVALS.map(([h, key]) => [h, t(key)]);
@@ -591,7 +591,8 @@ export function fillUpdateIntervalSelect() {
     o.textContent = label;
     sel.appendChild(o);
   }
-  sel.value = String(settings.auto_update !== false ? cur : 0);
+  sel.value = String(cur);
+  sel.closest(".update-interval").classList.toggle("hidden", settings.auto_update === false);
 }
 
 // Fill both text-size selects: special options + 10..40 in steps of 2.

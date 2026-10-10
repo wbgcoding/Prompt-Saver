@@ -863,7 +863,7 @@ export default {
     updateEvery12h: "A cada 12 horas",
     updateEvery6h: "A cada 6 horas",
     updateNever: "Nunca",
-    autoUpdateHint: "Procura uma nova versão em segundo plano com a frequência escolhida ao lado. Nunca significa nenhuma verificação automática; nada mais é enviado.",
+    autoUpdateHint: "Procura uma nova versão em segundo plano com a frequência escolhida ao lado. Nada mais é enviado.",
     hideBarBottom: "Ocultar barra de entrada",
     showBarBottom: "Mostrar barra de entrada",
     showBarTop: "Mostrar barra superior",

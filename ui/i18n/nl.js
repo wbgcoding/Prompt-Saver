@@ -863,7 +863,7 @@ export default {
     updateEvery12h: "Elke 12 uur",
     updateEvery6h: "Elke 6 uur",
     updateNever: "Nooit",
-    autoUpdateHint: "Zoekt op de achtergrond zo vaak als ernaast gekozen naar een nieuwe versie. Nooit betekent geen automatische controle; er wordt verder nooit iets verzonden.",
+    autoUpdateHint: "Zoekt op de achtergrond zo vaak als ernaast gekozen naar een nieuwe versie. Er wordt verder nooit iets verzonden.",
     hideBarBottom: "Invoerbalk verbergen",
     showBarBottom: "Invoerbalk tonen",
     showBarTop: "Bovenbalk tonen",

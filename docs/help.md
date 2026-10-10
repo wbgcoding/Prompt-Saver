@@ -752,8 +752,8 @@ Troubleshooting group. A long export,
 conversion, ffmpeg download, backup or import fills the app's taskbar icon
 with its progress, and shows a plain "about X left" estimate once enough of
 it has run for the guess to mean something, both switchable off.
-Auto update in Settings has an interval beside it; Never turns the automatic
-check off.
+Auto update in Settings has an interval list beside it that shows while the switch
+is on; switching Auto update off turns the automatic check off.
 
 ### Data maintenance
 
@@ -1541,8 +1541,8 @@ from source" der README.
 Lange Vorgänge (Export, Umwandlung, ffmpeg-Download, Backup, Import) füllen
 das Taskleistensymbol und zeigen ab einer eingestellten Schwelle „noch etwa …",
 beides abschaltbar.
-Neben Auto-Update im Einstellungsfenster steht das Intervall; Nie schaltet die
-automatische Prüfung ab.
+Neben Auto-Update im Einstellungsfenster steht die Intervall-Auswahl, solange der
+Schalter an ist; Auto-Update auszuschalten schaltet die automatische Prüfung ab.
 
 **Datenwartung**: Papierkorb, Import/Export. Den Duplikatfinder öffnet der
 Button „Duplikate finden“ in der Bibliothek.

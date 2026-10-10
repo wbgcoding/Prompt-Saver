@@ -919,7 +919,7 @@ export default {
     updateEvery12h: "Every 12 hours",
     updateEvery6h: "Every 6 hours",
     updateNever: "Never",
-    autoUpdateHint: "Looks for a new version in the background as often as chosen beside it. Never means no automatic check; nothing else is ever sent.",
+    autoUpdateHint: "Looks for a new version in the background as often as chosen beside it. Nothing else is ever sent.",
     hideBarBottom: "Hide input bar",
     showBarBottom: "Show input bar",
     showBarTop: "Show top bar",

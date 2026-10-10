@@ -1083,6 +1083,33 @@ def run(browser, tmp):
     if (r.left - row.left > 4) errs.push('912: the expert menu button is not at the left edge of its row');
     if (eo.scrollWidth > eo.clientWidth + 1) errs.push('912: the expert menu label is cut');
 """)
+    failed += ar_probe('bm913', 'settings: the update interval sits beside the Auto update switch and shows only while it is on', 'index', '880x600', '', r"""
+    // 913: the interval list is hidden while Auto update is off and hugs the switch while on.
+    await bootReady();
+    document.getElementById('gear').click();
+    await sleep(300);
+    const sw = document.getElementById('opt-autoupdate');
+    const sel = document.getElementById('opt-update-interval');
+    const wrap = sel.closest('.update-interval');
+    const isShown = () => wrap.getBoundingClientRect().width > 0 && !wrap.classList.contains('hidden');
+    if (!sw.checked) errs.push('913: fixture: Auto update should start on');
+    if (!isShown()) errs.push('913: the interval is not visible while Auto update is on');
+    if ([...sel.options].some((o) => o.value === '0')) errs.push('913: the interval list still has a 0 entry');
+    const lab = sw.closest('label').getBoundingClientRect();
+    const gap = wrap.getBoundingClientRect().left - lab.right;
+    if (gap < 0 || gap > 16) errs.push('913: the interval sits ' + Math.round(gap) + 'px from the switch, expected within 16');
+    sw.checked = false;
+    sw.dispatchEvent(new Event('change', { bubbles: true }));
+    await sleep(200);
+    if (!wrap.classList.contains('hidden')) errs.push('913: the interval stays visible while Auto update is off');
+    sw.checked = true;
+    sw.dispatchEvent(new Event('change', { bubbles: true }));
+    await sleep(200);
+    if (wrap.classList.contains('hidden')) errs.push('913: the interval stays hidden after switching Auto update on');
+    const lab2 = sw.closest('label').getBoundingClientRect();
+    const gap2 = wrap.getBoundingClientRect().left - lab2.right;
+    if (gap2 < 0 || gap2 > 16) errs.push('913: after switching on, the interval sits ' + Math.round(gap2) + 'px from the switch');
+""")
     failed += ar_probe('bx717', 'copy history filters: at 680 px they take two rows, the source is a select and only one All chip remains', 'index', '680x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { clipWatcher: true } };</script>\n', r"""
     await bootReady();
     document.getElementById('library-btn').click(); await sleep(400);

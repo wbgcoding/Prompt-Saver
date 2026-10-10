@@ -863,7 +863,7 @@ export default {
     updateEvery12h: "12時間ごと",
     updateEvery6h: "6時間ごと",
     updateNever: "しない",
-    autoUpdateHint: "横で選んだ頻度でバックグラウンドで新しいバージョンを確認します。「しない」は自動確認なしを意味し、それ以外は何も送信されません。",
+    autoUpdateHint: "横で選んだ頻度でバックグラウンドで新しいバージョンを確認します。それ以外は何も送信されません。",
     hideBarBottom: "入力バーを隠す",
     showBarBottom: "入力バーを表示",
     showBarTop: "上部バーを表示",

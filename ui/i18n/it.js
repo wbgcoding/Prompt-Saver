@@ -863,7 +863,7 @@ export default {
     updateEvery12h: "Ogni 12 ore",
     updateEvery6h: "Ogni 6 ore",
     updateNever: "Mai",
-    autoUpdateHint: "Cerca una nuova versione in background con la frequenza scelta accanto. Mai significa nessun controllo automatico; non viene mai inviato nient'altro.",
+    autoUpdateHint: "Cerca una nuova versione in background con la frequenza scelta accanto. Non viene mai inviato nient'altro.",
     hideBarBottom: "Nascondi barra di input",
     showBarBottom: "Mostra barra di input",
     showBarTop: "Mostra barra superiore",

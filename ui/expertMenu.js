@@ -1634,7 +1634,7 @@ export const SETTINGS_DIRECTORY = [
   { key: "opt-hotkey", area: "normal", label: "hotkeyLabel" },
   { key: "opt-voice-hotkey", area: "normal", label: "voiceHotkeyLabel", gate: "voiceHotkey" },
   { key: "opt-autoupdate", area: "normal", label: "autoUpdate", tip: "autoUpdateHint" },
-  { key: "opt-update-interval", area: "normal", label: "valUpdateCheckH" },
+  { key: "opt-update-interval", area: "normal", label: "valUpdateCheckH", when: () => settings.auto_update !== false },
   { key: "quick-grid", area: "toolbar", label: "gridSize", gate: "quickGrid" },
   { key: "library-sort", area: "library", label: "sortBy" },
   { key: "library-close-toggle", area: "library", label: "flagCloseAfterCopy" },

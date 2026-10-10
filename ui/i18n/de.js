@@ -919,7 +919,7 @@ export default {
     updateEvery12h: "Alle 12 Stunden",
     updateEvery6h: "Alle 6 Stunden",
     updateNever: "Nie",
-    autoUpdateHint: "Sucht im Hintergrund so oft wie daneben gewählt nach einer neuen Version. Nie heißt keine automatische Prüfung; sonst wird nie etwas gesendet.",
+    autoUpdateHint: "Sucht im Hintergrund so oft wie daneben gewählt nach einer neuen Version. Sonst wird nie etwas gesendet.",
     hideBarBottom: "Eingabeleiste ausblenden",
     showBarBottom: "Eingabeleiste einblenden",
     showBarTop: "Obere Leiste einblenden",

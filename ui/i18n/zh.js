@@ -863,7 +863,7 @@ export default {
     updateEvery12h: "每 12 小时",
     updateEvery6h: "每 6 小时",
     updateNever: "从不",
-    autoUpdateHint: "按旁边选择的频率在后台查找新版本。选择“从不”表示不自动检查；不会发送任何其他内容。",
+    autoUpdateHint: "按旁边选择的频率在后台查找新版本。不会发送任何其他内容。",
     hideBarBottom: "隐藏输入栏",
     showBarBottom: "显示输入栏",
     showBarTop: "显示顶栏",
