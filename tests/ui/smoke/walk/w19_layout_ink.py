@@ -27,4 +27,26 @@ SECTION = """\
         await sleep(100);
       }
     }
+    // 864: a light tile colour gets dark text, a darker one keeps white text with its shadow
+    // (the default ink threshold, read from the rendered tile name).
+    {
+      const nameStyle = (rgb) => {
+        for (const tile of document.querySelectorAll('#grid .tile.tinted')) {
+          if (tile.style.background.replace(/\\s/g, '') === rgb) {
+            const n = tile.querySelector('.tile-name');
+            return n ? getComputedStyle(n) : null;
+          }
+        }
+        return null;
+      };
+      const amber = nameStyle('rgb(245,158,11)');
+      const blue = nameStyle('rgb(59,130,246)');
+      if (!amber || !blue) {
+        out.errors.push('864: the fixture has no amber or blue tile in the grid');
+      } else {
+        if (amber.color !== 'rgb(0, 0, 0)') out.errors.push('864: the name on an amber tile is ' + amber.color + ', expected black');
+        if (blue.color !== 'rgb(255, 255, 255)') out.errors.push('864: the name on a blue tile is ' + blue.color + ', expected white');
+        if (blue.textShadow === 'none') out.errors.push('864: white text on a blue tile lost its shadow');
+      }
+    }
 """

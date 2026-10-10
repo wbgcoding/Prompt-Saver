@@ -121,7 +121,7 @@ pub(crate) struct InkPrefs {
 pub(crate) fn ink_prefs_of(settings: &Settings) -> InkPrefs {
     InkPrefs {
         auto: settings.ui_flags.get("autoInk") != Some(&false), // on by default
-        threshold: settings.ui_values.get("inkThreshold").copied().unwrap_or(60.0).clamp(20.0, 90.0),
+        threshold: settings.ui_values.get("inkThreshold").copied().unwrap_or(25.0).clamp(20.0, 90.0),
         halo: settings.ui_flags.get("inkHalo") != Some(&false), // on by default
         halo_strength: settings.ui_values.get("inkHaloStrength").copied().unwrap_or(75.0).clamp(10.0, 100.0),
     }

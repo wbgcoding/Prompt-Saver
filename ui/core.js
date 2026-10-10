@@ -3,7 +3,7 @@
 // Imports no feature module.
 
 import { DRAG_THRESHOLD_DEFAULT } from "./copyDefaults.js";
-import { hexLuminance, orderedInvoke, resolveLang, serialInvoke } from "./floatShared.js";
+import { hexLuminance, inkFor, orderedInvoke, resolveLang, serialInvoke } from "./floatShared.js";
 import { LANGS, loadLang } from "./i18n.js";
 import { applyTerms } from "./terms.js";
 import { APP_NAME, FLAG_DEFAULTS } from "./brand.js";
@@ -318,13 +318,14 @@ export const TOAST_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" aria-
 
 // Relative luminance -> the ink that stays readable on `hex`. Switched off
 // (autoInk), the text is always white; switched on, black only above the
-// expert-tunable inkThreshold (a plain WCAG 0.179 split flipped black text
-// onto medium colors that read as too dark for black text).
+// expert-tunable inkThreshold (a relative luminance in percent). Its default
+// sits just above the point where black and white reach the same contrast, so
+// the better one wins and a colour that white text only reaches with a shadow
+// gets black text instead.
 export function readableInk(hex) {
-  const l = hexLuminance(hex);
-  if (l === null) return "#fff";
+  if (hexLuminance(hex) === null) return "#fff";
   if (!flag("autoInk")) return "#fff";
-  return l > val("inkThreshold") / 100 ? "#000" : "#fff";
+  return inkFor(hex, val("inkThreshold") / 100) === "#000000" ? "#000" : "#fff";
 }
 
 // White ink stays white up to the user's threshold (a deliberate look), but

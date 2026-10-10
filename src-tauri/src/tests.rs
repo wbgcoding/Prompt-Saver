@@ -15937,6 +15937,13 @@ fn a_menu_icon_is_a_full_opaque_16x16_chip() {
     let ink = |px: &[u8], x: usize, y: usize| px[(y * 16 + x) * 4];
     assert_eq!(ink(&white, 5, 4), 24, "dark glyph on a light chip");
     assert_eq!(ink(&black, 5, 4), 255, "light glyph on a dark chip");
+    // The same crossover as the web tray and the tiles: the ink with the higher contrast wins.
+    for light in ["#f59e0b", "#eab308", "#22c55e"] {
+        assert_eq!(ink(&tray_icon_pixels(TrayKind::Text, light), 5, 4), 24, "dark glyph on {light}");
+    }
+    for dark in ["#64748b", "#7c3aed", "#1e3a8a"] {
+        assert_eq!(ink(&tray_icon_pixels(TrayKind::Text, dark), 5, 4), 255, "light glyph on {dark}");
+    }
     // A junk colour must not blank the icon; it falls back to the kind tint.
     assert_eq!(tray_icon_pixels(TrayKind::Text, "not a colour"), tray_icon_pixels(TrayKind::Text, ""));
 }
@@ -15984,7 +15991,7 @@ fn ink_prefs_default_on_with_a_clamped_threshold() {
     let s = Settings::default();
     let prefs = ink_prefs_of(&s);
     assert!(prefs.auto, "the automatic ink rule ships on");
-    assert_eq!(prefs.threshold, 60.0);
+    assert_eq!(prefs.threshold, 25.0);
 
     let mut off = Settings::default();
     off.ui_flags.insert("autoInk".into(), false);

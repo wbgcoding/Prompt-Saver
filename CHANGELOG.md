@@ -1950,6 +1950,7 @@ the video editor and the introduction tour ship on).
 - **Clearer recording hotkey rows.** The two switches now read "Stop recording with a hotkey" and "Pause recording with a hotkey", and the capture field under each is labelled "Key combination".
 - **The tile menu fits small windows.** Right-clicking a tile near the bottom of a small window now moves the menu up so every entry, down to Delete, is in view, instead of cutting the list off behind a scroll bar.
 - **Help names the right way to create a tile.** The first help article no longer points at the plus button, which creates a view; it says to double-click an empty cell or type into the box at the bottom and press Save.
+- **Light tile colours get dark text.** Orange, yellow, green, teal and light blue tiles (and the same colours on view tabs, folders and floating buttons) now show dark text by default, which reads better than white there; darker colours keep white text with its shadow. The same rule picks the glyph colour in the tray menu. A threshold you set yourself in the expert menu is kept.
 
 ## 2.6.3 (2026-07-26)
 

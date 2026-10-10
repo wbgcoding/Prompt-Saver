@@ -58,16 +58,57 @@ const pillInkShadow = () => document.documentElement.style.getPropertyValue("--p
 // before the next assertion reads its effect.
 const tick = () => new Promise((r) => setImmediate(r));
 
+// The shipped palette, read from the source of ui/core.js (which needs the main window to load).
+const paletteHexes = () => {
+  const src = require("fs").readFileSync(path.join(__dirname, "..", "ui", "core.js"), "utf8");
+  const body = /export const DEFAULT_COLORS = \[([^\]]*)\]/.exec(src)[1];
+  return [...body.matchAll(/"(#[0-9a-fA-F]{6})"/g)].map((m) => m[1]);
+};
+const lum = (hex) => {
+  const n = parseInt(hex.slice(1), 16);
+  const lin = (c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * lin(((n >> 16) & 255) / 255) + 0.7152 * lin(((n >> 8) & 255) / 255) + 0.0722 * lin((n & 255) / 255);
+};
+const HALO = "0 0 2px rgba(0, 0, 0, 0.75), 0 1px 3px rgba(0, 0, 0, 0.62)";
+
 async function run() {
-  // The module's own shipped default (on, 60) applies before ink_prefs() answers.
+  // Palette table under the module default, before any theme payload or ink_prefs() answer:
+  // black ink wherever it reads better than white (L above 0.25 with the default threshold of
+  // 25 %), white ink with the halo between the 0.179 crossover and the threshold, white without
+  // a halo on a dark colour.
+  const palette = paletteHexes();
+  check("palette: 18 swatches read from core.js", palette.length, 18);
+  const WHITE_WITH_HALO = ["#ef4444", "#3b82f6", "#6366f1", "#8b5cf6", "#a855f7", "#ec4899", "#f43f5e"];
+  for (const hex of palette) {
+    const l = lum(hex);
+    const own = inkForColor(hex);
+    if (l > 0.25) {
+      check(`default threshold: ${hex} (L ${l.toFixed(3)}) gets black text`, own.fg, "#000");
+      check(`default threshold: ${hex} gets no halo on black text`, own.shadow, "none");
+    } else if (l > 0.179) {
+      check(`default threshold: ${hex} (L ${l.toFixed(3)}) keeps white text`, own.fg, "#fff");
+      check(`default threshold: ${hex} keeps its halo`, own.shadow, HALO);
+    } else {
+      check(`default threshold: ${hex} (L ${l.toFixed(3)}) keeps white text`, own.fg, "#fff");
+      check(`default threshold: ${hex} needs no halo`, own.shadow, "none");
+    }
+  }
+  for (const hex of WHITE_WITH_HALO) check(`default threshold: ${hex} is white with a halo`, [inkForColor(hex).fg, inkForColor(hex).shadow].join("|"), "#fff|" + HALO);
+  check("default threshold: #d946ef (L 0.254) is black", inkForColor("#d946ef").fg, "#000");
+  check("default threshold: #f59e0b (orange) is black", inkForColor("#f59e0b").fg, "#000");
+  check("default threshold: #64748b is white without a halo", [inkForColor("#64748b").fg, inkForColor("#64748b").shadow].join("|"), "#fff|none");
+
+  // The module's own shipped default (on, 25) applies before ink_prefs() answers.
   applyFloatTheme("dark", { accent: "#4a7dd8" });
   check("pre-fetch default: #4a7dd8 (medium blue) stays white", pillFg(), "#fff");
 
-  // ink_prefs() resolves with the shipped default explicitly.
+  // ink_prefs() resolves with an explicit threshold of 60 (a stored value is kept).
   resolveInkPrefs({ auto: true, threshold: 60, halo: true, haloStrength: 75 });
   await tick();
   applyFloatTheme("dark", { accent: "#4a7dd8" });
   check("threshold 60: #4a7dd8 stays white (red under the old fixed 0.179 split)", pillFg(), "#fff");
+  applyFloatTheme("dark", { accent: "#f59e0b" });
+  check("threshold 60: #f59e0b stays white", pillFg(), "#fff");
   applyFloatTheme("dark", { accent: "#ffd54f" });
   check("threshold 60: #ffd54f (light amber) turns black", pillFg(), "#000");
 

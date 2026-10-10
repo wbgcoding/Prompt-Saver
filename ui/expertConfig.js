@@ -581,7 +581,7 @@ export const EXPERT_VALUES = {
   customThemeMax: { label: "valCustomThemeMax", min: 1, max: 20, step: 1, def: 8, unit: "", gate: "customThemes" },
   // How many views a group popover lists before it starts scrolling.
   // Relative-luminance cutoff (/100) above which readableInk() picks black text.
-  inkThreshold: { label: "valInkThreshold", min: 20, max: 90, step: 5, def: 60, unit: "%", gate: "autoInk" },
+  inkThreshold: { label: "valInkThreshold", min: 20, max: 90, step: 5, def: 25, unit: "%", gate: "autoInk" },
   // How dark the halo behind white text gets, in percent.
   inkHaloStrength: { label: "valInkHaloStrength", min: 10, max: 100, step: 5, def: 75, unit: "%", gate: "inkHalo" },
   // How much of a tab's outer edge counts as "drop here to reorder" rather than

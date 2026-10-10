@@ -6,7 +6,7 @@
 // comes pre-translated from the backend -- this file draws rows, nothing else.
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
-import { hexToRgb } from "./floatShared.js";
+import { hexToRgb, inkFor } from "./floatShared.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
 // switcher, so it comes from the brand rather than a hardcoded English word.
@@ -37,10 +37,6 @@ function activate(id) {
 
 // Same four kinds, same fallback tint as the native menu's tray_kind_tint.
 const KIND_TINT = { text: [90, 100, 114], image: [47, 111, 237], media: [139, 92, 246], file: [224, 138, 30] };
-
-function luma([r, g, b]) {
-  return (r * 299 + g * 587 + b * 114) / 1000;
-}
 
 // Same four glyphs as the native menu's hand-drawn 16x16 icon chips (tray_icon_pixels
 // in tray.rs), redrawn as vectors: a colored chip -- the prompt's own tile color, or
@@ -77,7 +73,7 @@ const ATTR_NAME = { strokeWidth: "stroke-width", strokeLinecap: "stroke-linecap"
 
 function iconEl(kind, color) {
   const fill = hexToRgb(color) || KIND_TINT[kind] || KIND_TINT.text;
-  const ink = luma(fill) < 150 ? "#fff" : "#181a1f";
+  const ink = inkFor("#" + fill.map((c) => c.toString(16).padStart(2, "0")).join("")) === "#000000" ? "#181a1f" : "#fff";
   const chip = document.createElement("span");
   chip.className = "tray-menu-icon";
   chip.style.background = `rgb(${fill[0]}, ${fill[1]}, ${fill[2]})`;

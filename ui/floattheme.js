@@ -2,7 +2,7 @@
 // They carry their OWN tokens (floating.css), so a custom theme's colours are mapped
 // onto them; a floating button follows the same palette as the main window instead
 // of falling back to the base theme's colours.
-import { hexLuminance, themeColorScheme } from "./floatShared.js";
+import { hexLuminance, inkFor, themeColorScheme } from "./floatShared.js";
 
 const FLOAT_THEME_MAP = {
   accent: "--pill-bg",
@@ -19,7 +19,7 @@ const FLOAT_HEX = /^#[0-9a-fA-F]{6}$/;
 // "Shadow strength"), kept fresh from two sources: the theme-changed event's
 // payload and one ink_prefs() fetch at module load (covers the window before
 // the first event arrives). Defaults match the backend's own shipped default.
-let INK = { auto: true, threshold: 60, halo: true, haloStrength: 75 };
+let INK = { auto: true, threshold: 25, halo: true, haloStrength: 75 };
 let lastTheme = null;
 let lastVars = null;
 let applied = false; // true once applyFloatTheme has run at least once
@@ -29,7 +29,7 @@ let applied = false; // true once applyFloatTheme has run at least once
 // readableInk on the same luminance helper).
 function readableInk(hex) {
   if (!INK.auto) return "#fff";
-  return hexLuminance(hex) > INK.threshold / 100 ? "#000" : "#fff";
+  return inkFor(hex, INK.threshold / 100) === "#000000" ? "#000" : "#fff";
 }
 
 // White ink stays white up to the user's threshold (a deliberate look), but
@@ -90,7 +90,7 @@ function setInk(ink) {
   if (!ink) return;
   INK = {
     auto: ink.auto !== false,
-    threshold: Number.isFinite(ink.threshold) ? ink.threshold : 60,
+    threshold: Number.isFinite(ink.threshold) ? ink.threshold : 25,
     halo: ink.halo !== false,
     haloStrength: Number.isFinite(ink.haloStrength) ? ink.haloStrength : 75,
   };

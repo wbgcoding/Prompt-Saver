@@ -189,9 +189,13 @@ pub(crate) fn hex_rgb(hex: &str) -> Option<[u8; 3]> {
     Some([c.0, c.1, c.2])
 }
 
-// Perceived brightness, 0..255: decides whether the glyph is drawn light or dark.
-pub(crate) fn tray_luma(c: [u8; 3]) -> u32 {
-    (c[0] as u32 * 299 + c[1] as u32 * 587 + c[2] as u32 * 114) / 1000
+// WCAG relative luminance, 0..1: decides whether the glyph is drawn light or dark.
+pub(crate) fn tray_relative_luminance(c: [u8; 3]) -> f64 {
+    let lin = |v: u8| {
+        let v = v as f64 / 255.0;
+        if v <= 0.04045 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) }
+    };
+    0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2])
 }
 
 // Blend `c` toward `to` by `amount` percent.
@@ -258,7 +262,8 @@ impl TrayChip {
 // unparseable falls back to the kind's own tint.
 pub(crate) fn tray_icon_pixels(kind: TrayKind, color: &str) -> Vec<u8> {
     let fill = hex_rgb(color).unwrap_or_else(|| tray_kind_tint(kind));
-    let dark = tray_luma(fill) < 150;
+    // White ink below the luminance where black and white text reach the same contrast.
+    let dark = tray_relative_luminance(fill) <= 0.179;
     let ink = if dark { [255, 255, 255] } else { [24, 26, 31] };
     let edge = tray_mix(fill, if dark { [255, 255, 255] } else { [0, 0, 0] }, 28);
     let mut chip = TrayChip::new(fill);
