@@ -1202,7 +1202,7 @@ export function pathRow(key) {
     info.className = "path-video-stats";
     const text = document.createElement("span");
     text.textContent = videoFolderInfo
-      ? t("videoFolderStatsLine").replace("{n}", videoFolderInfo.count).replace("{size}", fmtBytes(videoFolderInfo.bytes))
+      ? t("videoFolderStatsLine").replace("{n}", videoFolderInfo.count).replace("{size}", fmtBytes(videoFolderInfo.bytes, LANG))
       : t("videoFolderStatsLoading");
     const cleanBtn = document.createElement("button");
     cleanBtn.type = "button";
@@ -1257,7 +1257,7 @@ export async function openVideoCleanup(dir) {
     const files = await invoke("video_folder_cleanup_preview", { dir, ageDays }).catch((e) => { errToast(e); return []; });
     const totalBytes = files.reduce((s, f) => s + f.size, 0);
     summary.textContent = files.length
-      ? t("videoCleanupSummary").replace("{n}", files.length).replace("{size}", fmtBytes(totalBytes))
+      ? t("videoCleanupSummary").replace("{n}", files.length).replace("{size}", fmtBytes(totalBytes, LANG))
       : t("videoCleanupNone");
     confirmBtn.disabled = files.length === 0;
     list.innerHTML = "";
@@ -1275,7 +1275,7 @@ export async function openVideoCleanup(dir) {
       name.textContent = f.name;
       const size = document.createElement("span");
       size.className = "import-preview-badge";
-      size.textContent = fmtBytes(f.size);
+      size.textContent = fmtBytes(f.size, LANG);
       row.append(name, size);
       list.appendChild(row);
     }
@@ -1299,7 +1299,7 @@ export async function openVideoCleanup(dir) {
       name.textContent = f.name;
       const size = document.createElement("span");
       size.className = "import-preview-badge";
-      size.textContent = fmtBytes(f.size);
+      size.textContent = fmtBytes(f.size, LANG);
       const restoreBtn = document.createElement("button");
       restoreBtn.type = "button";
       restoreBtn.className = "ghost-btn";
@@ -1418,8 +1418,8 @@ export async function runBatchExportRecordings(dir, names) {
   if (diskWarn) {
     const msg = t("recDiskWarnExportMsg")
       .replace("{drive}", diskWarn.drive)
-      .replace("{free}", fmtBytes(diskWarn.free_mb * 1024 * 1024))
-      .replace("{needed}", fmtBytes(diskWarn.needed_mb * 1024 * 1024));
+      .replace("{free}", fmtBytes(diskWarn.free_mb * 1024 * 1024, LANG))
+      .replace("{needed}", fmtBytes(diskWarn.needed_mb * 1024 * 1024, LANG));
     const proceed = await confirmDialog({ title: t("recDiskWarnTitle"), message: msg, confirmLabel: t("recDiskWarnExportAnyway"), cancelLabel: t("cancel") });
     if (!proceed) return;
   }

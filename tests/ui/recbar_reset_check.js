@@ -11,7 +11,7 @@ const { pathToFileURL } = require("url");
 const uiDir = path.join(__dirname, "..", "..", "ui");
 const src = fs.readFileSync(path.join(uiDir, "recbar.js"), "utf8").replace(/\r\n/g, "\n");
 const code = src
-  .replace(/^import \{[^}]*\} from "\.\/floatShared\.js";$/m, "const { fmtTimeMMSS, fmtSizeCompact } = __shared;")
+  .replace(/^import \{[^}]*\} from "\.\/floatShared\.js";$/m, "const { fmtTimeMMSS, fmtSizeCompact, fmtNum } = __shared;")
   .replace(/import\("\.\/([\w.]+)"\)/g, "__imp(\"$1\")");
 
 function fakeEl() {

@@ -186,7 +186,7 @@ export function mediaTipLine(p) {
   if (!flag("mediaMeta")) return "";
   const parts = [];
   if (p.media_width && p.media_height) parts.push(`${p.media_width}×${p.media_height}`);
-  if (p.media_size_bytes) parts.push(fmtBytes(p.media_size_bytes));
+  if (p.media_size_bytes) parts.push(fmtBytes(p.media_size_bytes, LANG));
   return parts.join(" · ");
 }
 

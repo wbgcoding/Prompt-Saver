@@ -1,5 +1,5 @@
 // Screen capture, recording, OCR and the editor hand-off.
-import { $, convertFileSrc, errToast, flag, invoke, listen, OCR_LANG_NOTICE_MS, optFlag, settings, t, toast, txt, val, VOICE_LANG_NOTICE_MS } from "./core.js";
+import { $, convertFileSrc, errToast, flag, invoke, LANG, listen, OCR_LANG_NOTICE_MS, optFlag, settings, t, toast, txt, val, VOICE_LANG_NOTICE_MS } from "./core.js";
 import { openFileCreate, openModal, startFileCreate, startFileFromClipboard, withDialog } from "./editor.js";
 import { placePopover } from "./popover.js";
 import { recordToolUsage } from "./management.js";
@@ -216,7 +216,7 @@ export function bindCapture() {
         title: t("recDiskWarnTitle"),
         message: t("recDiskWarnMsg")
           .replace("{drive}", diskWarn.drive)
-          .replace("{free}", fmtBytes(diskWarn.free_mb * 1024 * 1024))
+          .replace("{free}", fmtBytes(diskWarn.free_mb * 1024 * 1024, LANG))
           .replace("{minutes}", String(minutes)),
         confirmLabel: t("recDiskWarnRecordAnyway"),
       });
@@ -483,7 +483,7 @@ export function bindCapture() {
   // something, per "a toast... when the total is worth mentioning".
   listen("recording-sweep-done", (e) => {
     const { count, bytes } = e.payload || {};
-    if (count > 0) toast(t("recSweepDone").replace("{n}", String(count)).replace("{v}", fmtBytes(bytes)));
+    if (count > 0) toast(t("recSweepDone").replace("{n}", String(count)).replace("{v}", fmtBytes(bytes, LANG)));
   });
   // The control bar's own target-switch button lives in a separate
   // window with no toast of its own -- a failed switch always leaves the

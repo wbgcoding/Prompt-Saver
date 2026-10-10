@@ -918,7 +918,7 @@ export function wireManagement() {
   EXPERT_ACTIONS["rec-sweep-now"] = async () => {
     try {
       const [count, bytes] = await invoke("sweep_recordings_now");
-      toast(count > 0 ? t("recSweepDone").replace("{n}", String(count)).replace("{v}", fmtBytes(bytes)) : t("recSweepNothing"));
+      toast(count > 0 ? t("recSweepDone").replace("{n}", String(count)).replace("{v}", fmtBytes(bytes, LANG)) : t("recSweepNothing"));
     } catch (e) {
       errToast(e);
     }

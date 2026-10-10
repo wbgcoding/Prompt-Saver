@@ -1898,7 +1898,7 @@ function updateScaleCurrent() {
     const kbps = videoKbps();
     const durS = totalOutMs() / 1000;
     let text = kbps != null && durS > 0
-      ? t("veScaleCurrent").replace("{size}", fmtSizeCompact(Math.round(((kbps + AUDIO_KBPS_ESTIMATE) * 1000 / 8) * durS)))
+      ? t("veScaleCurrent").replace("{size}", fmtSizeCompact(Math.round(((kbps + AUDIO_KBPS_ESTIMATE) * 1000 / 8) * durS), LANG))
       : t("veScaleCurrentNoSize");
     text = text.replace("{sw}", VE.w).replace("{sh}", VE.h).replace("{tw}", scale.w).replace("{th}", scale.h);
     if (scale.w > VE.w || scale.h > VE.h) text += " " + t("veScaleUpscaleNote");
@@ -3270,9 +3270,9 @@ function buildExportNoteBase(format) {
 function formatExportSizeNote(est) {
   if (!est) return "";
   if (est.low_bytes != null && est.high_bytes != null) {
-    return t("veSizeRange").replace("{low}", fmtBytes(est.low_bytes)).replace("{high}", fmtBytes(est.high_bytes));
+    return t("veSizeRange").replace("{low}", fmtBytes(est.low_bytes, LANG)).replace("{high}", fmtBytes(est.high_bytes, LANG));
   }
-  if (est.bytes != null) return t("veSizeAbout").replace("{size}", fmtBytes(est.bytes));
+  if (est.bytes != null) return t("veSizeAbout").replace("{size}", fmtBytes(est.bytes, LANG));
   return "";
 }
 
@@ -3419,8 +3419,8 @@ async function startExport(toClipboard) {
         if (diskWarn) {
           const msg = t("recDiskWarnExportMsg")
             .replace("{drive}", diskWarn.drive)
-            .replace("{free}", fmtBytes(diskWarn.free_mb * 1024 * 1024))
-            .replace("{needed}", fmtBytes(diskWarn.needed_mb * 1024 * 1024));
+            .replace("{free}", fmtBytes(diskWarn.free_mb * 1024 * 1024, LANG))
+            .replace("{needed}", fmtBytes(diskWarn.needed_mb * 1024 * 1024, LANG));
           const proceed = await confirmDialog({ title: t("recDiskWarnTitle"), message: msg, confirmLabel: t("recDiskWarnExportAnyway"), danger: false });
           if (!proceed) { clearExportStatus(); return; }
         }

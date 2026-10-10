@@ -112,7 +112,7 @@ export async function renderStoragePanel(root, force) {
   totalWrap.className = "storage-total-wrap";
   const totalEl = document.createElement("span");
   totalEl.className = "storage-total";
-  totalEl.textContent = `${t("storageTotal")}: ${fmtBytes(data.total_bytes)}`;
+  totalEl.textContent = `${t("storageTotal")}: ${fmtBytes(data.total_bytes, LANG)}`;
   const measuredEl = document.createElement("span");
   measuredEl.className = "storage-measured";
   measuredEl.textContent = t("storageMeasured").replace("{when}", new Date(data.measured_at * 1000).toLocaleString(LANG));
@@ -140,7 +140,7 @@ export async function renderStoragePanel(root, force) {
     if (item.denied) {
       size.textContent = t("storageDenied");
     } else {
-      size.textContent = item.capped ? `${fmtBytes(item.bytes)} (${t("storageCapped")})` : fmtBytes(item.bytes);
+      size.textContent = item.capped ? `${fmtBytes(item.bytes, LANG)} (${t("storageCapped")})` : fmtBytes(item.bytes, LANG);
     }
     row.append(name, size);
     if (item.path) {
@@ -189,7 +189,7 @@ export function retentionKeepText(row) {
 export async function retentionCleanupResult(promise, nothingKey) {
   try {
     const [n, bytes] = await promise;
-    toast(n > 0 ? t("retentionCleanupDone").replace("{n}", String(n)).replace("{v}", fmtBytes(bytes)) : t(nothingKey));
+    toast(n > 0 ? t("retentionCleanupDone").replace("{n}", String(n)).replace("{v}", fmtBytes(bytes, LANG)) : t(nothingKey));
   } catch (e) {
     errToast(e);
   }
@@ -256,7 +256,7 @@ export async function renderRetentionPanel(root, force) {
     name.textContent = t(row.nameKey);
     const amount = document.createElement("span");
     amount.className = "storage-size";
-    amount.textContent = t("retentionAmount").replace("{n}", String(item.count)).replace("{size}", fmtBytes(item.bytes));
+    amount.textContent = t("retentionAmount").replace("{n}", String(item.count)).replace("{size}", fmtBytes(item.bytes, LANG));
     top.append(name, amount);
 
     const bottom = document.createElement("div");
@@ -544,9 +544,9 @@ export async function renderBackupPanel(body) {
   // Row 2: the time axis; how far back they reach and when the next one is due.
   cards.append(
     statCard(nf(backups.length), t("backupCount")),
-    statCard(fmtBytes(total), t("backupTotalSize")),
-    statCard(backups.length ? fmtBytes(Math.max(...sizes)) : "\u2014", t("backupLargest")),
-    statCard(backups.length ? fmtBytes(Math.min(...sizes)) : "\u2014", t("backupSmallest")),
+    statCard(fmtBytes(total, LANG), t("backupTotalSize")),
+    statCard(backups.length ? fmtBytes(Math.max(...sizes), LANG) : "\u2014", t("backupLargest")),
+    statCard(backups.length ? fmtBytes(Math.min(...sizes), LANG) : "\u2014", t("backupSmallest")),
     statCard(newest && oldest
       ? `${nf(Math.max(0, Math.round((newest - oldest) / 86400000)))} d`
       : "\u2014", t("backupSpan")),
@@ -600,7 +600,7 @@ export async function renderBackupPanel(body) {
           if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); }
         });
       }
-      const size = document.createElement("span"); size.className = "backup-size"; size.textContent = fmtBytes(b.size);
+      const size = document.createElement("span"); size.className = "backup-size"; size.textContent = fmtBytes(b.size, LANG);
       // Opens the same read rail restoring already uses (stage, validate, read),
       // just without ever writing the result anywhere -- see backup_contents.
       const contentBox = document.createElement("div");

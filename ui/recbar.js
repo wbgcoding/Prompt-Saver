@@ -2,7 +2,7 @@
 // elapsed time, live file size, Pause/Resume, Stop and Cancel. The window
 // itself carries WDA_EXCLUDEFROMCAPTURE (set on the Rust side, unconditionally
 // -- it must never appear in the recording it controls).
-import { fmtTimeMMSS, fmtSizeCompact } from "./floatShared.js";
+import { fmtTimeMMSS, fmtSizeCompact, fmtNum } from "./floatShared.js";
 
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
@@ -33,7 +33,7 @@ const diskWarnEl = document.getElementById("disk-warn");
 // recMaxMb, where the text turns into a warm color and gets a tooltip with
 // the estimated time left at the recording's own observed rate so far.
 function applySize(bytes, etaSecs) {
-  sizeEl.textContent = fmtSizeCompact(bytes);
+  sizeEl.textContent = fmtSizeCompact(bytes, LANG);
   sizeEl.classList.toggle("rec-size-warn", etaSecs != null);
   sizeEl.title = etaSecs != null && tx ? tx("recBarSizeEta").replace("{time}", fmtTimeMMSS(etaSecs * 1000)) : "";
 }
@@ -70,13 +70,14 @@ function applyContinueEnabled(elapsedMs) {
 let gapHideTimer = 0;
 function showContinueGap(gapMs) {
   clearTimeout(gapHideTimer);
-  continueGapEl.textContent = gapMs >= 1000 ? `+${(gapMs / 1000).toFixed(1)}s` : `+${gapMs}ms`;
+  continueGapEl.textContent = gapMs >= 1000 ? `+${fmtNum(gapMs / 1000, 1, LANG)}s` : `+${gapMs}ms`;
   continueGapEl.classList.remove("hidden");
   gapHideTimer = setTimeout(() => continueGapEl.classList.add("hidden"), 4000);
 }
 
 let paused = false;
 let tx = null; // the text lookup, set once the language has loaded
+let LANG = "en"; // the window's own language, for the way numbers are written
 function pauseBtnLabel() {
   if (!tx) return null;
   const key = paused ? "recBarResume" : "recBarPause";
@@ -394,7 +395,8 @@ import("./floattheme.js").then(({ applyFloatTheme }) => {
 function loadTexts() {
   Promise.all([invoke("get_settings"), import("./i18n.js"), import("./floatShared.js")])
     .then(async ([s, { LANGS, fullTexts }, { resolveLang }]) => {
-      ({ tx } = await fullTexts(resolveLang(s.language, LANGS)));
+      LANG = resolveLang(s.language, LANGS);
+      ({ tx } = await fullTexts(LANG));
       for (const el of document.querySelectorAll("[data-i18n-title]")) {
         const text = tx(el.getAttribute("data-i18n-title"));
         el.title = text;

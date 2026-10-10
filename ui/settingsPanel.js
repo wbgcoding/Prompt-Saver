@@ -209,7 +209,7 @@ export async function runImportFolder() {
     }
     const sizeBadge = document.createElement("span");
     sizeBadge.className = "import-preview-badge";
-    sizeBadge.textContent = fmtBytes(item.size);
+    sizeBadge.textContent = fmtBytes(item.size, LANG);
     row.appendChild(sizeBadge);
     if (!item.readable) {
       const reasonBadge = document.createElement("span");
@@ -328,7 +328,7 @@ export async function offerTakeover() {
   const offer = await invoke("takeover_offer").catch(() => null);
   if (!offer) return false;
   const countText = offer.prompts != null ? t("takeoverPromptCount").replace("{n}", offer.prompts) : t("takeoverCountUnknown");
-  const details = `${fmtBytes(offer.size)}, ${countText}`;
+  const details = `${fmtBytes(offer.size, LANG)}, ${countText}`;
   const adopt = await confirmDialog({
     title: t("takeoverTitle"),
     message: t("takeoverBody").replace("{path}", offer.path).replace("{details}", details).replace("{skip}", t("takeoverSkip")),

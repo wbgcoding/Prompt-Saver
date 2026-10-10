@@ -215,7 +215,7 @@ export function langRow(kind, cap) {
   const sizeEl = document.createElement("div");
   sizeEl.className = "lang-row-size";
   // Windows does not always report a size -- never guess one, show the dash instead.
-  sizeEl.textContent = size == null ? "\u2014" : fmtBytes(size);
+  sizeEl.textContent = size == null ? "\u2014" : fmtBytes(size, LANG);
   const chip = document.createElement("span");
   chip.className = installed ? "lang-row-chip installed" : "lang-row-chip";
   chip.textContent = installed ? t("ocrLangsInstalled") : t("ocrLangsNotInstalled");
@@ -251,7 +251,7 @@ export function langRow(kind, cap) {
   // download blind.
   btn.textContent = busy
     ? t("ocrLangsInstalling")
-    : t("ocrLangsDownloadBtn").replace("{size}", cap.download_size == null ? "\u2014" : fmtBytes(cap.download_size));
+    : t("ocrLangsDownloadBtn").replace("{size}", cap.download_size == null ? "\u2014" : fmtBytes(cap.download_size, LANG));
   btn.addEventListener("click", () => startLangInstall(kind, cap));
   actions.appendChild(btn);
   return row;
@@ -261,7 +261,7 @@ export function langRow(kind, cap) {
 // once, BEFORE that prompt ever appears. No exceptions.
 export async function startLangInstall(kind, cap) {
   const st = LANG_DIALOG[kind];
-  const size = cap.download_size == null ? "\u2014" : fmtBytes(cap.download_size);
+  const size = cap.download_size == null ? "\u2014" : fmtBytes(cap.download_size, LANG);
   const ok = await confirmDialog({
     title: t("ocrElevateTitle"),
     message: t("ocrElevateInfo").replace("{lang}", cap.label).replace("{size}", size),

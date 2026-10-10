@@ -269,10 +269,26 @@ export function makeEtaEstimator() {
 // Shared by the backups list and the video editor's export size note --
 // same rounding, same thresholds, so a number never reads differently in
 // one place than the other.
-export function fmtBytes(n) {
+export function fmtBytes(n, lang = "en") {
   if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  if (n < 1024 * 1024) return `${fmtNum(n / 1024, 1, lang)} KB`;
+  return `${fmtNum(n / 1024 / 1024, 1, lang)} MB`;
+}
+
+// A number with a fixed count of decimals the way the UI language writes it
+// (decimal comma in German, and so on). One formatter per language and digit
+// count; an unknown language code falls back to English. Only for text a person
+// reads: a CSS value, a file name or an argument for ffmpeg keeps toFixed.
+const numFormats = new Map();
+export function fmtNum(n, digits = 0, lang = "en") {
+  const key = `${lang}|${digits}`;
+  let f = numFormats.get(key);
+  if (!f) {
+    const opts = { minimumFractionDigits: digits, maximumFractionDigits: digits };
+    try { f = new Intl.NumberFormat(lang, opts); } catch { f = new Intl.NumberFormat("en", opts); }
+    numFormats.set(key, f);
+  }
+  return f.format(n);
 }
 
 // mm:ss for an elapsed-time readout. Shared by the camera bar and the
@@ -296,10 +312,10 @@ export function takeElapsedMs(now, startWall, pausedAt, pausedTotal) {
 // bytes. Shared by the recording control bar and the video editor's scale
 // preview; fmtBytes above is a different, more precise format for a size
 // estimate range and is not interchangeable with this one.
-export function fmtSizeCompact(bytes) {
+export function fmtSizeCompact(bytes, lang = "en") {
   if (!bytes) return "";
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024 * 1024) return `${fmtNum(bytes / 1024, 0, lang)} KB`;
+  return `${fmtNum(bytes / (1024 * 1024), 1, lang)} MB`;
 }
 
 // Turns an estimate() result into the localized display string, or "" once
