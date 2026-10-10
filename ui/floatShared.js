@@ -68,6 +68,34 @@ export function varPreview(text) {
   });
 }
 
+// Prompt text with its Markdown marks removed, for one-line previews (the quick
+// launcher). Works line by line: fences, rules and table separator rows disappear,
+// heading, quote and list marks lose their prefix, then inline marks go. A lone
+// underscore or a star between spaces is left alone, so code-like prompts and
+// snake_case names stay readable.
+export function mdPlain(text) {
+  const out = [];
+  for (const line of String(text ?? "").split(/\r?\n/)) {
+    if (/^\s*(```|~~~)/.test(line)) continue;
+    if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) continue;
+    if (/^\s*\|?\s*:?-{3,}/.test(line)) continue;
+    out.push(
+      line
+        .replace(/^\s{0,3}#{1,6}\s+/, "")
+        .replace(/^\s*>\s?/, "")
+        .replace(/^\s*([-*+]|\d+[.)])\s+(\[[ xX]\]\s+)?/, "")
+        .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+        .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+        .replace(/\*\*(?=\S)(.+?)(?<=\S)\*\*/g, "$1")
+        .replace(/(?<!\w)__(?=\S)(.+?)(?<=\S)__(?!\w)/g, "$1")
+        .replace(/~~(?=\S)(.+?)(?<=\S)~~/g, "$1")
+        .replace(/(?<![\w*])\*(?=\S)([^*]*?\S)\*(?![\w*])/g, "$1")
+        .replace(/`([^`]*)`/g, "$1")
+    );
+  }
+  return out.join("\n");
+}
+
 // The copy behaviour a pill or a folder reads from the stored settings; one parser for
 // both windows, defaults from copyDefaults.js.
 export function readCopyPrefs(s) {

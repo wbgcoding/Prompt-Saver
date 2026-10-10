@@ -1657,7 +1657,7 @@ export default {
     pickHint: "Klik om de kleur te kopiëren · scroll of gebruik +/- om te zoomen · pijltoetsen verplaatsen één pixel · Esc om te annuleren",
     recPickHint: "Sleep om een gebied te selecteren · klik op een venster om dit op te nemen · Esc om te annuleren",
     recCountdownToast: "Opname begint over {n} s…",
-    recBarContinue: "Voltooien en opname voortzetten",
+    recBarContinue: "Splitsen: dit deel opslaan en doorgaan met opnemen in een nieuw bestand",
     recBarPause: "Opname onderbreken",
     recBarResume: "Opname hervatten",
     recBarStop: "Stoppen en opslaan",
@@ -2088,4 +2088,7 @@ export default {
     moveToView: "Verplaatsen naar",
     movedToView: "Verplaatst naar {view}",
     composerTip: "Typ een prompt en druk op {keys} om op te slaan",
+    recBarDiskLowShort: "Schijf bijna vol",
+    recBarHotkeyShort: "Sneltoets geblokkeerd",
+    camChooseFolder: "Opnamemap kiezen",
 };

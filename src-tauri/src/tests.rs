@@ -15898,9 +15898,10 @@ fn tray_kind_str_round_trips_every_kind_to_a_distinct_lowercase_word() {
 #[test]
 fn tray_window_height_accounts_for_every_row_header_and_separator() {
     let entry = |id: &str| TrayWinEntry { id: id.into(), label: id.into(), kind: "text".into(), color: String::new() };
-    // No sections at all: just the two terminal rows, plus the card's own padding.
+    // No sections at all: just the two terminal rows with the separator between
+    // them, plus the card's own padding.
     let empty = TrayWinPlan { rec_entries: Vec::new(), sections: Vec::new(), show_label: "Show".into(), quit_label: "Quit".into(), search_on: false, search_ph: String::new() };
-    assert_eq!(tray_window_logical_height(&empty), TRAY_WIN_CHROME + 2.0 * TRAY_WIN_ROW_H);
+    assert_eq!(tray_window_logical_height(&empty), TRAY_WIN_CHROME + 2.0 * TRAY_WIN_ROW_H + TRAY_WIN_SEP_H);
 
     // One section, two entries: its own header, both rows, and the one separator
     // that always follows a section (matching push_tray_section's native shape).
@@ -15912,7 +15913,7 @@ fn tray_window_height_accounts_for_every_row_header_and_separator() {
         search_on: false,
         search_ph: String::new(),
     };
-    let want_one = TRAY_WIN_CHROME + 2.0 * TRAY_WIN_ROW_H + TRAY_WIN_HEAD_H + 2.0 * TRAY_WIN_ROW_H + TRAY_WIN_SEP_H;
+    let want_one = TRAY_WIN_CHROME + 2.0 * TRAY_WIN_ROW_H + TRAY_WIN_SEP_H + TRAY_WIN_HEAD_H + 2.0 * TRAY_WIN_ROW_H + TRAY_WIN_SEP_H;
     assert_eq!(tray_window_logical_height(&one_section), want_one);
 
     // Two sections must each add their own header, rows and separator -- never
@@ -15929,7 +15930,7 @@ fn tray_window_height_accounts_for_every_row_header_and_separator() {
         search_ph: String::new(),
     };
     let want_two = TRAY_WIN_CHROME
-        + 2.0 * TRAY_WIN_ROW_H // show + quit
+        + 2.0 * TRAY_WIN_ROW_H + TRAY_WIN_SEP_H // show + quit and the line between them
         + (TRAY_WIN_HEAD_H + 1.0 * TRAY_WIN_ROW_H + TRAY_WIN_SEP_H) // 1-entry section
         + (TRAY_WIN_HEAD_H + 3.0 * TRAY_WIN_ROW_H + TRAY_WIN_SEP_H); // 3-entry section
     assert_eq!(tray_window_logical_height(&two_sections), want_two);

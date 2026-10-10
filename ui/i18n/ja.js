@@ -1657,7 +1657,7 @@ export default {
     pickHint: "クリックで色をコピー · ホイールまたは +/- で拡大縮小 · 矢印キーで1ピクセル移動 · Esc でキャンセル",
     recPickHint: "ドラッグして範囲を選択 · ウィンドウをクリックして録画 · Esc でキャンセル",
     recCountdownToast: "{n}秒後に録画を開始します…",
-    recBarContinue: "終了して録画を続ける",
+    recBarContinue: "分割：この部分を保存して、新しいファイルで録画を続ける",
     recBarPause: "録画を一時停止",
     recBarResume: "録画を再開",
     recBarStop: "停止して保存",
@@ -2088,4 +2088,7 @@ export default {
     moveToView: "移動先",
     movedToView: "{view} に移動しました",
     composerTip: "プロンプトを入力して {keys} で保存",
+    recBarDiskLowShort: "ディスクの空きが少ない",
+    recBarHotkeyShort: "ホットキーがブロック中",
+    camChooseFolder: "録画フォルダーを選択",
 };

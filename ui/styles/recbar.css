@@ -70,7 +70,14 @@
    all -- there is no dim "off" state like the audio icons have, since a
    registration conflict is not a normal condition to sit and look muted. */
 .rec-hotkey-warn { opacity: 1; color: var(--danger); }
+/* The triangle names what it warns about, so it grows to fit its word. */
+.rec-audio.rec-hotkey-warn { width: auto; align-items: center; gap: 4px; }
+.rec-audio.rec-hotkey-warn:not(.hidden) { display: inline-flex; }
+.rec-warn-text { font-size: 11px; font-weight: 600; white-space: nowrap; }
 
+
+/* Sets the destructive Discard button apart from the actions that keep the take. */
+.rec-sep { flex: none; width: 1px; height: 18px; background: var(--menu-line); margin: 0 5px; }
 
 .rec-btn {
   display: flex;

@@ -1657,7 +1657,7 @@ export default {
     pickHint: "Clic pentru a copia culoarea · rotița sau +/- mărește · săgețile mută cu un pixel · Esc anulează",
     recPickHint: "Trage pentru a selecta o zonă · dă clic pe o fereastră pentru a o înregistra · Esc pentru anulare",
     recCountdownToast: "Înregistrarea începe în {n} s…",
-    recBarContinue: "Finalizează și continuă înregistrarea",
+    recBarContinue: "Împarte: salvează această parte și continuă înregistrarea într-un fișier nou",
     recBarPause: "Pune înregistrarea pe pauză",
     recBarResume: "Reia înregistrarea",
     recBarStop: "Oprește și salvează",
@@ -2088,4 +2088,7 @@ export default {
     moveToView: "Mută în",
     movedToView: "Mutat în {view}",
     composerTip: "Scrie un prompt și apasă {keys} pentru a-l salva",
+    recBarDiskLowShort: "Disc aproape plin",
+    recBarHotkeyShort: "Tastă rapidă blocată",
+    camChooseFolder: "Alege folderul înregistrărilor",
 };

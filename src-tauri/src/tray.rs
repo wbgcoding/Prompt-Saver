@@ -410,6 +410,9 @@ pub(crate) fn apply_tray_menu(app: &AppHandle) {
         return;
     };
     items.push(Box::new(show));
+    if let Ok(sep) = PredefinedMenuItem::separator(app) {
+        items.push(Box::new(sep));
+    }
     items.push(Box::new(quit));
     let refs: Vec<&dyn IsMenuItem<tauri::Wry>> = items.iter().map(|b| b.as_ref()).collect();
     if let (Some(tray), Ok(menu)) = (app.tray_by_id("tray"), Menu::with_items(app, &refs)) {
@@ -477,7 +480,7 @@ pub(crate) const TRAY_WIN_LABEL: &str = "tray-menu";
 pub(crate) const TRAY_WIN_W: f64 = 240.0; // logical px; keep in sync with .tray-menu-card in floating.css
 pub(crate) const TRAY_WIN_ROW_H: f64 = 30.0;
 pub(crate) const TRAY_WIN_HEAD_H: f64 = 22.0;
-pub(crate) const TRAY_WIN_SEP_H: f64 = 9.0; // 1px line + 4px margin top/bottom, one per section
+pub(crate) const TRAY_WIN_SEP_H: f64 = 9.0; // 1px line + 4px margin top/bottom, one per section, plus the one above Quit
 pub(crate) const TRAY_WIN_CHROME: f64 = 20.0; // card padding, independent of row count
 
 #[derive(Serialize, Clone)]
@@ -597,7 +600,8 @@ pub(crate) fn tray_open_prep_from_store(store: &Store, phase: Option<RecPhase>) 
 // Pure, so the row/header/separator arithmetic stays testable without an app
 // handle -- mirrors tray_plan's own reasoning for why it takes plain data.
 pub(crate) fn tray_window_logical_height(plan: &TrayWinPlan) -> f64 {
-    let mut logical_h = TRAY_WIN_CHROME + 2.0 * TRAY_WIN_ROW_H; // show + quit always present
+    // show + quit always present, with the separator between them
+    let mut logical_h = TRAY_WIN_CHROME + 2.0 * TRAY_WIN_ROW_H + TRAY_WIN_SEP_H;
     if plan.search_on {
         logical_h += TRAY_WIN_ROW_H; // the filter row at the very top
     }

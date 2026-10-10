@@ -30,6 +30,7 @@
         <rect x="11" y="10.2" width="2" height="5" fill="currentColor"/>
         <rect x="11" y="16" width="2" height="2" fill="currentColor"/>
       </svg>
+      <span class="rec-warn-text" data-i18n="recBarHotkeyShort">Hotkey blocked</span>
     </span>
     <span id="disk-warn" class="rec-audio rec-hotkey-warn hidden">
       <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
@@ -37,6 +38,7 @@
         <rect x="11" y="10.2" width="2" height="5" fill="currentColor"/>
         <rect x="11" y="16" width="2" height="2" fill="currentColor"/>
       </svg>
+      <span class="rec-warn-text" data-i18n="recBarDiskLowShort">Disk almost full</span>
     </span>
 
     <button id="switch-btn" class="rec-btn" type="button">
@@ -59,11 +61,13 @@
     </button>
     <button id="continue-btn" class="rec-btn" type="button" data-i18n-title="recBarContinue" data-i18n-aria="recBarContinue">
       <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-        <rect x="3" y="8" width="8" height="8" rx="1.2" fill="currentColor"/>
-        <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M13 12h7m-3-3 3 3-3 3"/>
+        <circle cx="6" cy="7" r="2.6" fill="none" stroke="currentColor" stroke-width="2"/>
+        <circle cx="6" cy="17" r="2.6" fill="none" stroke="currentColor" stroke-width="2"/>
+        <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M8.2 8.6 20 18M8.2 15.4 20 6"/>
       </svg>
     </button>
     <span id="continue-gap" class="rec-size hidden"></span>
+    <span class="rec-sep" aria-hidden="true"></span>
     <button id="cancel-btn" class="rec-btn rec-btn-danger" type="button" data-i18n-title="recBarCancel" data-i18n-aria="recBarCancel">
       <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
         <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>

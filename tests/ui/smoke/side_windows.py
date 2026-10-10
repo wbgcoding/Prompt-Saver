@@ -856,6 +856,21 @@ LAUNCHER_PROBE = """
     const rows = () => [...document.querySelectorAll('#results .launcher-row')];
     if (!rows().length) errs.push('the empty-query default list shows nothing');
     if (rows().length > 8) errs.push('the default list is not capped at 8');
+    // 944-dg: a footer names the launcher's keys, built from the shortcut table,
+    // and it sits fully inside the card at the launcher's own size.
+    {
+      const keys = document.getElementById('keys');
+      const kbds = keys ? [...keys.querySelectorAll('kbd')].map((k) => k.textContent) : [];
+      const arrows = String.fromCharCode(0x2191, 0x2193);
+      if (kbds.join('|') !== 'Enter|' + arrows + '|Esc') errs.push('944-dg: the footer keys read ' + JSON.stringify(kbds));
+      if (keys) {
+        const kr = keys.getBoundingClientRect();
+        const cr = document.getElementById('card').getBoundingClientRect();
+        if (kr.height <= 0 || kr.left < cr.left || kr.right > cr.right || kr.bottom > cr.bottom + 0.5) errs.push('944-dg: the footer is not fully inside the card');
+        const items = [...keys.children];
+        if (items.length !== 3 || items.some((s) => s.textContent.trim().length <= s.querySelector('kbd').textContent.length)) errs.push('944-dg: a footer key has no word next to it');
+      }
+    }
     // A query nothing matches shows the empty-state text, not a stale row.
     search.value = 'zzzznomatch';
     search.dispatchEvent(new Event('input', { bubbles: true }));
@@ -922,6 +937,51 @@ window.__LAUNCHER_PREFILL__ = 'Translate';
 """
 
 
+# A prompt written in Markdown shows its words, not its marks, in the launcher's
+# one-line preview.
+LAUNCHER_MD_STUB = """
+<script>
+const mdInvoke = window.__TAURI__.core.invoke;
+window.__TAURI__.core.invoke = async (cmd, args) => {
+  const r = await mdInvoke(cmd, args);
+  if (cmd === 'launcher_items') {
+    const nl = String.fromCharCode(10);
+    r.prompts = [{ id: 'pmd', name: 'Markdown prompt', text: ['# Heading one', '## Heading two with **bold** text'].join(nl), color: '' }].concat(r.prompts);
+  }
+  return r;
+};
+</script>
+"""
+
+
+LAUNCHER_MD_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  try {
+    await sleep(500);
+    const search = document.getElementById('search');
+    search.value = 'Markdown prompt';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    await sleep(60);
+    // 943-dg: the preview line carries no Markdown marks.
+    const prev = document.querySelector('#results .launcher-row[data-id="pmd"] .launcher-row-preview');
+    if (!prev) errs.push('943-dg: the Markdown prompt has no preview line');
+    else {
+      if (/#|[*][*]/.test(prev.textContent)) errs.push('943-dg: the preview still shows Markdown marks: ' + prev.textContent);
+      if (prev.textContent !== 'Heading one Heading two with bold text') errs.push('943-dg: unexpected preview text: ' + prev.textContent);
+    }
+  } catch (e) { errs.push('probe: ' + e.message); }
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
 # The custom Windows-11-style tray menu: rendering, keyboard nav and
 # activation. The Rust-side content (favorites/recent selection, ordering, caps)
 # has its own unit tests -- this only proves the window draws what it is given
@@ -938,7 +998,22 @@ TRAY_PROBE = """
     const heads = [...document.querySelectorAll('#card .tray-menu-head')];
     if (heads.length !== 2) errs.push('expected 2 section headers, found ' + heads.length);
     const seps = [...document.querySelectorAll('#card .tray-menu-sep')];
-    if (seps.length !== 2) errs.push('expected 2 separators (one per section), found ' + seps.length);
+    if (seps.length !== 3) errs.push('expected 3 separators (2 section separators plus the one above Quit), found ' + seps.length);
+    // 945-dg: Open and Quit are set apart, Quit last behind its own line, both with
+    // a plain glyph; the content is not clipped by the window.
+    {
+      const all = rows();
+      const last = all[all.length - 1];
+      if (!last || last.dataset.id !== 'quit') errs.push('945-dg: the last row is not Quit');
+      else if (!last.querySelector('.tray-menu-action-icon')) errs.push('945-dg: Quit has no action icon');
+      const lastSep = seps[seps.length - 1];
+      const before = lastSep && lastSep.previousElementSibling;
+      if (!before || before.dataset.id !== 'show') errs.push('945-dg: the row above the last separator is not Open');
+      else if (!before.querySelector('.tray-menu-action-icon')) errs.push('945-dg: Open has no action icon');
+      if (lastSep && lastSep.nextElementSibling !== last) errs.push('945-dg: Quit does not follow the last separator directly');
+      const card = document.getElementById('card');
+      if (card.scrollHeight > card.clientHeight + 1) errs.push('945-dg: the tray content is clipped (' + card.scrollHeight + ' > ' + card.clientHeight + ')');
+    }
     if (!rows()[0].classList.contains('active')) errs.push('the first row is not highlighted on open');
     // Every entry row (not show/quit) carries a colored icon chip, and the one
     // entry with its own tile color must use it instead of the kind's tint.
@@ -1045,6 +1120,34 @@ RECBAR_PROBE = """
       const cancelRight = document.getElementById('cancel-btn').getBoundingClientRect().right - barLeft;
       if (stopRight > lastFit.width) errs.push('stop-btn falls outside the fitted width: ' + stopRight + ' > ' + lastFit.width);
       if (cancelRight > lastFit.width) errs.push('cancel-btn falls outside the fitted width: ' + cancelRight + ' > ' + lastFit.width);
+    }
+    // 940-dg: Discard sits apart from the other actions, which stay close together,
+    // and the split button is a scissors icon.
+    {
+      const rc = (id) => document.getElementById(id).getBoundingClientRect();
+      const gapShown = !document.getElementById('continue-gap').classList.contains('hidden');
+      const actionsRight = gapShown ? rc('continue-gap').right : rc('continue-btn').right;
+      const apart = rc('cancel-btn').left - actionsRight;
+      if (apart < 30) errs.push('940-dg: Discard is only ' + apart.toFixed(1) + 'px from the other actions');
+      const tight = rc('stop-btn').left - rc('pause-btn').right;
+      if (tight > 12) errs.push('940-dg: Pause and Stop drifted apart (' + tight.toFixed(1) + 'px)');
+      if (document.querySelectorAll('#bar .rec-sep').length !== 1) errs.push('940-dg: the separator before Discard is missing');
+      if (document.querySelectorAll('#continue-btn svg circle').length !== 2) errs.push('940-dg: the split button has no scissors icon');
+    }
+    // 941-dg: the hotkey triangle carries a visible word and the bar still fits it;
+    // the hidden disk warning leaves no box behind.
+    {
+      const hotText = document.querySelector('#hotkey-warn .rec-warn-text');
+      const diskText = document.querySelector('#disk-warn .rec-warn-text');
+      const lastFit = fitCalls()[fitCalls().length - 1];
+      if (!hotText) errs.push('941-dg: the hotkey warning has no text');
+      else {
+        const hr = hotText.getBoundingClientRect();
+        if (hr.width <= 20) errs.push('941-dg: the hotkey warning text is only ' + hr.width.toFixed(1) + 'px wide');
+        if (lastFit && hr.right - bar.getBoundingClientRect().left > lastFit[1].width) errs.push('941-dg: the hotkey warning text falls outside the fitted width');
+      }
+      if (!diskText) errs.push('941-dg: the disk warning has no text');
+      else if (diskText.getClientRects().length !== 0) errs.push('941-dg: the hidden disk warning text still has a box');
     }
     // Under the show threshold: the readout should go blank on the next poll.
     window.__REC_STATUS_OVERRIDE__ = { bytes: 50 * 1024 * 1024, show_size: false, size_eta_secs: null };
@@ -1188,7 +1291,54 @@ CAMERA_PROBE = """
       if (priorTheme) document.documentElement.setAttribute('data-theme', priorTheme);
       else document.documentElement.removeAttribute('data-theme');
     }
+    // 942-dg: the folder row shows the path (also as its title) and the folder
+    // button is an icon with an accessible name.
+    {
+      const pathEl = document.getElementById('cam-folder-path');
+      const folderBtn = document.getElementById('cam-folder-btn');
+      await until(() => pathEl.textContent.trim() !== '' && folderBtn.getAttribute('aria-label'));
+      if (pathEl.textContent !== 'C:/fake/Videos/Recordings') errs.push('942-dg: the folder path reads "' + pathEl.textContent + '"');
+      if (pathEl.title !== pathEl.textContent) errs.push('942-dg: the folder path has no matching title');
+      if (!(folderBtn.getAttribute('aria-label') || '').trim()) errs.push('942-dg: the folder button has no accessible name');
+      if (!folderBtn.querySelector('svg')) errs.push('942-dg: the folder button has no icon');
+    }
     errs.push(...(window.__SMOKE_ERRORS__ || []));
+  } catch (e) { errs.push('probe: ' + e.message); }
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
+# Second boot of the camera window: the default recording folder lookup fails
+# (the stub reads window.__CAM_DIR_FAIL__) while a resolution is saved. The
+# other saved settings must still load.
+CAMERA_DIRFAIL_STUB = """
+<script>
+window.__CAM_DIR_FAIL__ = true;
+const dirFailInvoke = window.__TAURI__.core.invoke;
+window.__TAURI__.core.invoke = async (cmd, args) => {
+  const r = await dirFailInvoke(cmd, args);
+  if (cmd === "get_settings") r.ui_texts = Object.assign({}, r.ui_texts, { cameraResolution: "1080" });
+  return r;
+};
+</script>
+"""
+
+
+CAMERA_DIRFAIL_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  try {
+    const res = document.getElementById('cam-res-select');
+    for (let i = 0; i < 60 && res.value !== '1080'; i++) await sleep(50);
+    // 942-dg-b: a failing default folder lookup no longer drops the other settings.
+    if (res.value !== '1080') errs.push('942-dg: the saved resolution was lost when the default folder lookup failed (' + res.value + ')');
   } catch (e) { errs.push('probe: ' + e.message); }
   const pre = document.createElement('pre');
   pre.id = 'SMOKE';
@@ -1446,11 +1596,13 @@ def run(browser, tmp):
             ("vars.html", (340, 250), VARS_PROBE, 15000),
             ("launcher.html", (560, 420), LAUNCHER_PROBE, 15000),
             ("launcher_prefill.html", (560, 420), LAUNCHER_PREFILL_PROBE, 15000),
+            ("launcher_md.html", (560, 420), LAUNCHER_MD_STUB + LAUNCHER_MD_PROBE, 15000),
             ("tray.html", (240, 360), TRAY_PROBE, 15000),
             ("recbar.html", (320, 56), RECBAR_PROBE, 15000),
             ("camera.html", (420, 620), CAMERA_STUB + CAMERA_PROBE, 15000),
+            ("camera_dirfail.html", (420, 620), CAMERA_STUB + CAMERA_DIRFAIL_STUB + CAMERA_DIRFAIL_PROBE, 15000),
             ("camera_rec.html", (420, 620), CAMERA_REC_STUB + CAMERA_REC_PROBE, 30000)):
-        if name == "camera_rec.html":
+        if name in ("camera_rec.html", "camera_dirfail.html"):
             shutil.copyfile(REPO / "ui" / "camera.html", tmp / "ui" / name)
         if name in ("floating_vars.html", "floating_plain.html"):
             pid = "p1" if name == "floating_vars.html" else "p0"
@@ -1458,7 +1610,7 @@ def run(browser, tmp):
                 (REPO / "ui" / "floating.html").read_text(encoding="utf-8")
                 .replace("<script", '<script>window.__FLOAT_PROMPT_ID__ = "%s";</script>\n<script' % pid, 1),
                 encoding="utf-8")
-        if name == "launcher_prefill.html":
+        if name in ("launcher_prefill.html", "launcher_md.html"):
             shutil.copyfile(REPO / "ui" / "launcher.html", tmp / "ui" / name)
         side = tmp / "ui" / name
         side.write_text(

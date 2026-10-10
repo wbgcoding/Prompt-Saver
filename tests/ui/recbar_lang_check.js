@@ -50,13 +50,19 @@ async function main() {
     el.getAttribute = ((orig) => (k) => (k === "data-i18n-title" ? key : orig(k)))(el.getAttribute);
     return el;
   });
+  // The short warning words inside the two triangles, refreshed by the same loader.
+  const warnTexts = [["disk-warn", "recBarDiskLowShort"], ["hotkey-warn", "recBarHotkeyShort"]].map(([id, key]) => {
+    const el = fakeEl();
+    el.getAttribute = ((orig) => (k) => (k === "data-i18n" ? key : orig(k)))(el.getAttribute);
+    return [id, el, key];
+  });
   const sandbox = {
     console, navigator: { language: "en-US" },
     setTimeout, clearTimeout, setInterval, clearInterval,
     ResizeObserver: class { observe() {} },
     document: {
       getElementById: (id) => (els[id] ||= fakeEl()),
-      querySelectorAll: (sel) => (sel === "[data-i18n-title]" ? titledEls : []),
+      querySelectorAll: (sel) => (sel === "[data-i18n-title]" ? titledEls : sel === "[data-i18n]" ? warnTexts.map(([, el]) => el) : []),
       addEventListener() {},
     },
     __shared: shared,
@@ -106,12 +112,14 @@ async function main() {
   expect("after the switch (de): mute system title", els["audio-sys"].title, I18N.de.recBarMuteSystemAudio);
   expect("after the switch (de): mute mic title", els["audio-mic"].title, I18N.de.recBarMuteMic);
   expect("after the switch (de): target switch title", els["switch-btn"].title, I18N.de.recBarSwitchTarget);
+  for (const [id, el, key] of warnTexts) expect(`after the switch (de): ${id} text`, el.textContent, I18N.de[key]);
 
   // And back again.
   settings.language = "en";
   if (listeners["language-changed"]) listeners["language-changed"]("en");
   await tick(700);
   expect("switched back (en): stop title", els["stop-btn"].title, I18N.en.recBarStop);
+  for (const [id, el, key] of warnTexts) expect(`switched back (en): ${id} text`, el.textContent, I18N.en[key]);
 
   if (problems.length) {
     console.error("recbar_lang_check: FAILED\n  " + problems.join("\n  "));

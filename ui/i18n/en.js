@@ -1664,7 +1664,7 @@ export default {
     pickHint: "Click to copy the color · scroll or +/- to zoom · arrow keys move one pixel · Esc to cancel",
     recPickHint: "Drag a region · click a window to record · Esc to cancel",
     recCountdownToast: "Recording starts in {n}s…",
-    recBarContinue: "Finish and continue recording",
+    recBarContinue: "Split: save this part and keep recording into a new file",
     recBarPause: "Pause recording",
     recBarResume: "Resume recording",
     recBarStop: "Stop and save",
@@ -2088,4 +2088,7 @@ export default {
     moveToView: "Move to",
     movedToView: "Moved to {view}",
     composerTip: "Type a prompt and press {keys} to save it",
+    recBarDiskLowShort: "Disk almost full",
+    recBarHotkeyShort: "Hotkey blocked",
+    camChooseFolder: "Choose the recording folder",
 };

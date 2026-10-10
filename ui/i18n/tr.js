@@ -1657,7 +1657,7 @@ export default {
     pickHint: "Rengi kopyalamak için tıklayın · tekerlek veya +/- yakınlaştırır · ok tuşları bir piksel kaydırır · İptal için Esc",
     recPickHint: "Bir alan seçmek için sürükleyin · kaydetmek için bir pencereye tıklayın · İptal için Esc",
     recCountdownToast: "Kayıt {n} sn içinde başlıyor…",
-    recBarContinue: "Bitir ve kayda devam et",
+    recBarContinue: "Böl: bu bölümü kaydet ve yeni bir dosyada kayda devam et",
     recBarPause: "Kaydı duraklat",
     recBarResume: "Kayda devam et",
     recBarStop: "Durdur ve kaydet",
@@ -2088,4 +2088,7 @@ export default {
     moveToView: "Şuraya taşı",
     movedToView: "{view} görünümüne taşındı",
     composerTip: "Bir istem yaz ve kaydetmek için {keys} tuşlarına bas",
+    recBarDiskLowShort: "Disk neredeyse dolu",
+    recBarHotkeyShort: "Kısayol engellendi",
+    camChooseFolder: "Kayıt klasörünü seç",
 };

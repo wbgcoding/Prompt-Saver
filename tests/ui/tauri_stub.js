@@ -762,6 +762,7 @@ const RESULTS = {
     return null;
   },
   default_screenshot_dir: () => "C:\\Pictures",
+  default_recording_dir: () => { if (window.__CAM_DIR_FAIL__) throw new Error("x"); return "C:/fake/Videos/Recordings"; },
   default_sync_dir: () => "C:\\Data\\prompt-saver-sync",
   // The old sync folder holds three files this app wrote and nothing else, so
   // switching folders asks its three-way question instead of going straight

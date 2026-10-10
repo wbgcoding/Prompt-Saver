@@ -10,7 +10,8 @@ import { APP_NAME } from "./brand.js";
 // press) and unlike floating.js's pill, it needs the translated placeholder/empty
 // text from the very first frame, not after a lazy follow-up load.
 import { LANGS, compactTexts } from "./i18n.js";
-import { resolveLang, varPreview } from "./floatShared.js";
+import { mdPlain, resolveLang, varPreview } from "./floatShared.js";
+import { keysLabel } from "./shortcuts.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
 // switcher, so it comes from the brand rather than a hardcoded English word.
@@ -86,7 +87,7 @@ function renderRow(p, i) {
   name.className = "launcher-row-name";
   name.textContent = p.name || "";
   row.appendChild(name);
-  const preview = varPreview(p.text).replace(/\s+/g, " ").trim();
+  const preview = varPreview(mdPlain(p.text)).replace(/\s+/g, " ").trim();
   if (preview) {
     const prev = document.createElement("span");
     prev.className = "launcher-row-preview";
@@ -166,6 +167,26 @@ function applyPrefill(text) {
   searchEl.setSelectionRange(searchEl.value.length, searchEl.value.length);
 }
 
+// The footer lists the keys the launcher reacts to; the key names come from the shortcut
+// table, so a changed binding changes the hint too.
+function buildKeysHint(lang) {
+  const keysEl = document.getElementById("keys");
+  if (!keysEl) return;
+  const items = [
+    [keysLabel("launcherCopy", lang), TXT.keyCopy],
+    [String.fromCharCode(0x2191, 0x2193), TXT.keyChoose],
+    [keysLabel("launcherClose", lang), TXT.keyClose],
+  ];
+  keysEl.replaceChildren();
+  for (const [key, word] of items) {
+    const item = document.createElement("span");
+    const kbd = document.createElement("kbd");
+    kbd.textContent = key;
+    item.append(kbd, word || "");
+    keysEl.appendChild(item);
+  }
+}
+
 async function boot() {
   await listen("launcher-prefill", (e) => {
     if (bootDone) applyPrefill(e.payload);
@@ -180,8 +201,10 @@ async function boot() {
   applyFloatTheme(await invoke("current_theme").catch(() => null), await invoke("theme_vars").catch(() => ({})));
   listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars));
 
-  TXT = compactTexts(resolveLang(state.language, LANGS));
+  const lang = resolveLang(state.language, LANGS);
+  TXT = compactTexts(lang);
   searchEl.placeholder = TXT.searchPh;
+  buildKeysHint(lang);
 
   prompts = state.prompts || [];
   for (const p of prompts) { p.lname = (p.name || "").toLowerCase(); p.ltext = (p.text || "").toLowerCase(); }

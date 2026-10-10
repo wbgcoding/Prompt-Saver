@@ -95,6 +95,28 @@ function iconEl(kind, color) {
   return chip;
 }
 
+// The two app actions (open, quit) carry a plain monochrome glyph instead of a coloured
+// chip, so they read as commands and not as prompts. Same 20px slot as the chip.
+const ACTION_PATH = { open: "M3 4.5h12v9H3zM3 7h12", quit: "M9 2.5v6M5.2 5a5.5 5.5 0 1 0 7.6 0" };
+function actionIcon(kind) {
+  const slot = document.createElement("span");
+  slot.className = "tray-menu-action-icon";
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", "0 0 18 18");
+  svg.setAttribute("width", "14");
+  svg.setAttribute("height", "14");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "1.4");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  const path = document.createElementNS(SVG_NS, "path");
+  path.setAttribute("d", ACTION_PATH[kind]);
+  svg.appendChild(path);
+  slot.appendChild(svg);
+  return slot;
+}
+
 function setActive(i) {
   rows[active]?.el.classList.remove("active");
   active = i;
@@ -102,9 +124,9 @@ function setActive(i) {
   rows[active]?.el.scrollIntoView({ block: "nearest" });
 }
 
-function addRow(id, label, icon) {
+function addRow(id, label, icon, cls) {
   const row = document.createElement("div");
-  row.className = "tray-menu-row";
+  row.className = "tray-menu-row" + (cls ? " " + cls : "");
   row.dataset.id = id;
   if (icon) row.appendChild(icon);
   const name = document.createElement("span");
@@ -147,8 +169,9 @@ function renderRows(recEntries, sections, showLabel, quitLabel) {
     for (const entry of entries) addRow(entry.id, entry.label, iconEl(entry.kind, entry.color));
     addSeparator();
   }
-  addRow("show", showLabel || "", null);
-  addRow("quit", quitLabel || "", null);
+  addRow("show", showLabel || "", actionIcon("open"), "tray-menu-action");
+  addSeparator();
+  addRow("quit", quitLabel || "", actionIcon("quit"), "tray-menu-action");
   setActive(rows.length ? 0 : -1);
 }
 

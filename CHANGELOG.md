@@ -1979,6 +1979,12 @@ the video editor and the introduction tour ship on).
 - **The video editor frame counter reads "Frame 1".** The counter says the word and counts from 1 instead of showing "#0".
 - **Labelled volume sliders in the video editor.** The two sliders are named System and Mic, and a muted track shows a struck-through icon, so muted and missing no longer look alike.
 - **A Troubleshooting group in the expert menu.** Switches and caps meant for finding a fault (multiple instances, data folder lock, demo mode, automatic clean-up of broken recordings with its clean up now button, filling in media info, error log size, how long finished jobs stay listed) moved to the last group of the System tab, which starts folded.
+- **Recording bar: Discard sits apart at the end.** The split button has a scissors icon and a clearer tooltip.
+- **The recording bar's warning says what it warns about.** The red triangle now carries a short text, such as "Hotkey blocked" or "Disk almost full".
+- **The camera window always shows its recording folder.** A folder button next to the path changes it, and a failing lookup of the default folder no longer drops the other saved settings.
+- **The quick launcher preview shows plain text.** The one-line preview under each prompt name no longer shows Markdown marks such as # or **.
+- **The quick launcher shows its keys.** A footer lists Enter, the arrow keys and Esc.
+- **Open and Quit are set apart in the tray menu.** They sit below the prompts with a small icon each, and Quit comes last behind its own line.
 
 ## 2.6.3 (2026-07-26)
 
