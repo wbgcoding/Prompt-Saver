@@ -2097,4 +2097,8 @@ export default {
     libraryTilesLabel: "Tegels",
     libFoundInNote: "gevonden in notitie",
     journalRowHint: "Klik: kopiëren",
+    journalNewestFirst: "Nieuwste eerst",
+    journalOldestFirst: "Oudste eerst",
+    journalMostFirst: "Meest gebruikt eerst",
+    journalLeastFirst: "Minst gebruikt eerst",
 };

@@ -2097,4 +2097,8 @@ export default {
     libraryTilesLabel: "Blocos",
     libFoundInNote: "encontrado na nota",
     journalRowHint: "Clique: copiar",
+    journalNewestFirst: "Mais recentes primeiro",
+    journalOldestFirst: "Mais antigos primeiro",
+    journalMostFirst: "Mais usados primeiro",
+    journalLeastFirst: "Menos usados primeiro",
 };

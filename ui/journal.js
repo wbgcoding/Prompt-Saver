@@ -324,12 +324,13 @@ export function renderJournal() {
       await loadJournal();
     }
   };
-  // Reverse-sort arrow beside the sort field (▼ newest/most first, ▲ reversed).
-  const sortBtn = (rev, onClick) => {
+  // Reverse-order button beside the sort field: an arrow and the words for the order the list
+  // is in now (▼ newest/most first, ▲ reversed); the tooltip says what a click does.
+  const sortBtn = (rev, onClick, labels) => {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "journal-sort" + (rev ? " rev" : "");
-    b.textContent = rev ? "▲" : "▼";
+    b.textContent = (rev ? "▲ " : "▼ ") + t(rev ? labels[1] : labels[0]);
     b.title = t("sortToggle");
     b.setAttribute("aria-label", t("sortToggle"));
     b.addEventListener("click", onClick);
@@ -368,21 +369,24 @@ export function renderJournal() {
   extras.className = "journal-head-extras";
   if (mode === "recent") {
     // Toggle beside the sort field: group repeats vs show every copy.
-    const groupBtn = document.createElement("button");
-    groupBtn.type = "button";
-    groupBtn.className = "journal-toggle" + (grouped ? " active" : "");
-    groupBtn.textContent = t("journalGrouped");
-    groupBtn.title = t("journalGrouped");
-    groupBtn.setAttribute("aria-pressed", String(grouped));
-    groupBtn.addEventListener("click", async () => {
-      const next = !grouped;
+    const groupLbl = document.createElement("label");
+    groupLbl.className = "head-check";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.id = "journal-grouped";
+    cb.checked = grouped;
+    const sp = document.createElement("span");
+    sp.textContent = t("journalGrouped");
+    groupLbl.append(cb, sp);
+    cb.addEventListener("change", async () => {
+      const next = cb.checked;
       settings.ui_flags = { ...(settings.ui_flags || {}), historyGrouped: next };
       try { await invoke("set_ui_flag", { key: "historyGrouped", enabled: next }); } catch (err) { errToast(err); }
       await loadJournal(); // grouping changes the query → refetch
     });
-    extras.append(groupBtn, sortBtn(journalRecentRev, () => { journalRecentRev = !journalRecentRev; renderJournal(); }));
+    extras.append(groupLbl, sortBtn(journalRecentRev, () => { journalRecentRev = !journalRecentRev; renderJournal(); }, ["journalNewestFirst", "journalOldestFirst"]));
   } else {
-    extras.append(sortBtn(journalUsedRev, () => { journalUsedRev = !journalUsedRev; renderJournal(); }));
+    extras.append(sortBtn(journalUsedRev, () => { journalUsedRev = !journalUsedRev; renderJournal(); }, ["journalMostFirst", "journalLeastFirst"]));
   }
   head.append(extras);
   const col = document.createElement("div");

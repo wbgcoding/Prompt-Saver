@@ -2097,4 +2097,8 @@ export default {
     libraryTilesLabel: "Tiles",
     libFoundInNote: "found in note",
     journalRowHint: "Click: copy",
+    journalNewestFirst: "Newest first",
+    journalOldestFirst: "Oldest first",
+    journalMostFirst: "Most first",
+    journalLeastFirst: "Least first",
 };

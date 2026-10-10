@@ -217,6 +217,50 @@ SECTION = """\
         }
       }
     }
+    // hd276: "Grouped" is a checkbox that follows the flag, and the order button names the order.
+    {
+      const core276 = await import('./core.js');
+      const cb276 = document.getElementById('journal-grouped');
+      const sortBtn276 = () => document.querySelector('#journal-body .journal-sort');
+      const sortSel276 = document.getElementById('journal-sort');
+      if (!cb276 || cb276.type !== 'checkbox' || !cb276.closest('label.head-check')) {
+        out.errors.push('hd276: Grouped is not a checkbox inside a head-check label');
+      } else {
+        const flagOn276 = () => (core276.settings.ui_flags || {}).historyGrouped !== false;
+        if (cb276.checked !== flagOn276()) out.errors.push('hd276: the Grouped box does not show the flag');
+        const before276 = flagOn276();
+        window.__SMOKE_ARGS__ = [];
+        cb276.click();
+        await sleep(300);
+        if (!window.__SMOKE_ARGS__.some(([cmd, a]) => cmd === 'set_ui_flag' && a.key === 'historyGrouped' && a.enabled === !before276)) {
+          out.errors.push('hd276: ticking Grouped did not store historyGrouped');
+        }
+        const cbAfter276 = document.getElementById('journal-grouped');
+        if (!cbAfter276 || cbAfter276.checked !== !before276) out.errors.push('hd276: the Grouped box did not follow the click');
+        if (cbAfter276) { cbAfter276.click(); await sleep(300); }
+        if (flagOn276() !== before276) out.errors.push('hd276: Grouped did not come back to its first state');
+      }
+      if (!sortBtn276() || !sortBtn276().textContent.includes(core276.t('journalNewestFirst'))) {
+        out.errors.push('hd276: the order button does not say ' + core276.t('journalNewestFirst') + ': ' + (sortBtn276() ? sortBtn276().textContent : 'missing'));
+      } else {
+        sortBtn276().click();
+        await sleep(200);
+        if (!sortBtn276() || !sortBtn276().textContent.includes(core276.t('journalOldestFirst'))) out.errors.push('hd276: after a click the order button does not say ' + core276.t('journalOldestFirst'));
+        else { sortBtn276().click(); await sleep(200); }
+        const headKids276 = [...document.querySelectorAll('#journal-body .journal-head > *, #journal-body .journal-head-extras > *')].map((e) => e.getBoundingClientRect().top);
+        if (Math.max(...headKids276) - Math.min(...headKids276) > 4) out.errors.push('hd276: the history head is not one line (tops ' + headKids276.map(Math.round).join(', ') + ')');
+      }
+      if (sortSel276) {
+        sortSel276.value = 'used';
+        sortSel276.dispatchEvent(new Event('change'));
+        await sleep(200);
+        if (!sortBtn276() || !sortBtn276().textContent.includes(core276.t('journalMostFirst'))) out.errors.push('hd276: in most-used mode the order button does not say ' + core276.t('journalMostFirst'));
+        const sel2 = document.getElementById('journal-sort');
+        sel2.value = 'recent';
+        sel2.dispatchEvent(new Event('change'));
+        await sleep(200);
+      }
+    }
     // 716: the copy history is one column; the sort field switches to "most used", the
     // pick is stored and survives closing and reopening the library.
     {

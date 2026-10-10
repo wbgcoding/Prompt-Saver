@@ -2097,4 +2097,8 @@ export default {
     libraryTilesLabel: "磁贴",
     libFoundInNote: "在备注中找到",
     journalRowHint: "点击：复制",
+    journalNewestFirst: "最新优先",
+    journalOldestFirst: "最早优先",
+    journalMostFirst: "最多优先",
+    journalLeastFirst: "最少优先",
 };

@@ -2097,4 +2097,8 @@ export default {
     libraryTilesLabel: "Kacheln",
     libFoundInNote: "in der Notiz gefunden",
     journalRowHint: "Klick: kopieren",
+    journalNewestFirst: "Neueste zuerst",
+    journalOldestFirst: "Älteste zuerst",
+    journalMostFirst: "Häufigste zuerst",
+    journalLeastFirst: "Seltenste zuerst",
 };

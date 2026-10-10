@@ -2097,4 +2097,8 @@ export default {
     libraryTilesLabel: "Kafelki",
     libFoundInNote: "znaleziono w notatce",
     journalRowHint: "Klik: kopiuj",
+    journalNewestFirst: "Najnowsze najpierw",
+    journalOldestFirst: "Najstarsze najpierw",
+    journalMostFirst: "Najczęstsze najpierw",
+    journalLeastFirst: "Najrzadsze najpierw",
 };

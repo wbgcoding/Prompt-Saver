@@ -3997,11 +3997,9 @@ input[type="password"]::-ms-clear { display: none; }
 /* Column titles stay pinned while the list scrolls. */
 .journal-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--surface); border-bottom: 1px solid var(--border); }
 .journal-head > span:first-child { font-size: 14px; font-weight: 600; }
-.journal-toggle { flex: 0 0 auto; font-size: 13px; font-weight: 500; line-height: 1.2; padding: 4px 12px; border: 1px solid var(--border); border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
-.journal-toggle:hover { border-color: var(--accent); color: var(--fg); }
-.journal-toggle.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
-.journal-head-extras { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; }
-.journal-sort { font-size: 14px; line-height: 1; padding: 4px 9px; border: 1px solid var(--border); border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
+.journal-head .head-check { text-transform: none; letter-spacing: normal; font-weight: 400; }
+.journal-head-extras { display: inline-flex; align-items: stretch; gap: 8px; flex: 0 0 auto; }
+.journal-sort { font-size: 12px; white-space: nowrap; line-height: 1; padding: 4px 10px; border: 1px solid var(--border); border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
 .journal-sort:hover { border-color: var(--accent); color: var(--fg); }
 .journal-sort.rev { color: var(--accent); border-color: var(--accent); }
 

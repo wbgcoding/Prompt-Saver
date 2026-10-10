@@ -2097,4 +2097,8 @@ export default {
     libraryTilesLabel: "Mosaicos",
     libFoundInNote: "encontrado en la nota",
     journalRowHint: "Clic: copiar",
+    journalNewestFirst: "Más recientes primero",
+    journalOldestFirst: "Más antiguos primero",
+    journalMostFirst: "Más usados primero",
+    journalLeastFirst: "Menos usados primero",
 };

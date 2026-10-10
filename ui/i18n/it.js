@@ -2097,4 +2097,8 @@ export default {
     libraryTilesLabel: "Riquadri",
     libFoundInNote: "trovato nella nota",
     journalRowHint: "Clic: copia",
+    journalNewestFirst: "Più recenti prima",
+    journalOldestFirst: "Più vecchi prima",
+    journalMostFirst: "Più usati prima",
+    journalLeastFirst: "Meno usati prima",
 };

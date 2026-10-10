@@ -2097,4 +2097,8 @@ export default {
     libraryTilesLabel: "Dale",
     libFoundInNote: "găsit în notiță",
     journalRowHint: "Clic: copiază",
+    journalNewestFirst: "Cele mai noi primele",
+    journalOldestFirst: "Cele mai vechi primele",
+    journalMostFirst: "Cele mai folosite primele",
+    journalLeastFirst: "Cele mai puțin folosite primele",
 };

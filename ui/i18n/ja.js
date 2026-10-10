@@ -2097,4 +2097,8 @@ export default {
     libraryTilesLabel: "タイル",
     libFoundInNote: "メモ内で発見",
     journalRowHint: "クリック：コピー",
+    journalNewestFirst: "新しい順",
+    journalOldestFirst: "古い順",
+    journalMostFirst: "多い順",
+    journalLeastFirst: "少ない順",
 };

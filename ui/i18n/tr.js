@@ -2097,4 +2097,8 @@ export default {
     libraryTilesLabel: "Kutucuklar",
     libFoundInNote: "notta bulundu",
     journalRowHint: "Tık: kopyala",
+    journalNewestFirst: "En yeni önce",
+    journalOldestFirst: "En eski önce",
+    journalMostFirst: "En çok önce",
+    journalLeastFirst: "En az önce",
 };
