@@ -650,11 +650,19 @@ impl AudioQueueShared {
 // before, and the second source goes to this plain PCM sidecar instead; the
 // editor muxes the two into one two-track mp4 the first time it opens the
 // recording (see video_editor::mux_mic_track's contract).
-// A hand-rolled 44-byte RIFF/WAVE header rather than a new crate dependency --
-// the format is small and fixed (mono/stereo 16-bit PCM), not worth a dep.
+// A hand-rolled RIFF/WAVE header rather than a new crate dependency -- the format
+// is small and fixed (mono/stereo 16-bit PCM), not worth a dep. The header is 80
+// bytes: RIFF, WAVE, a 28-byte JUNK chunk that is the room a 64-bit size table
+// needs, fmt, data. Up to 4 GiB the file is an ordinary WAV (every reader skips the
+// JUNK); past that finish() turns the same bytes into an RF64 file whose JUNK chunk
+// becomes the ds64 size table, so a long mic track stays readable.
+pub(crate) const REC_WAV_HEADER_BYTES: u64 = 80;
+const REC_WAV_DATA_SIZE_OFFSET: u64 = 76;
+
 pub(crate) struct RecWavWriter {
     pub(crate) file: fs::File,
-    pub(crate) data_bytes: u32,
+    pub(crate) data_bytes: u64,
+    block_align: u16,
 }
 impl RecWavWriter {
     pub(crate) fn create(path: &Path, sample_rate: u32, channels: u16) -> std::io::Result<Self> {
@@ -666,6 +674,9 @@ impl RecWavWriter {
         file.write_all(b"RIFF")?;
         file.write_all(&0u32.to_le_bytes())?; // patched by finish()
         file.write_all(b"WAVE")?;
+        file.write_all(b"JUNK")?;
+        file.write_all(&28u32.to_le_bytes())?;
+        file.write_all(&[0u8; 28])?; // becomes the ds64 table past 4 GiB
         file.write_all(b"fmt ")?;
         file.write_all(&16u32.to_le_bytes())?;
         file.write_all(&1u16.to_le_bytes())?; // PCM
@@ -676,26 +687,43 @@ impl RecWavWriter {
         file.write_all(&bits_per_sample.to_le_bytes())?;
         file.write_all(b"data")?;
         file.write_all(&0u32.to_le_bytes())?; // patched by finish()
-        Ok(Self { file, data_bytes: 0 })
+        Ok(Self { file, data_bytes: 0, block_align })
     }
     pub(crate) fn write_samples(&mut self, samples: &[i16]) -> std::io::Result<()> {
         use std::io::Write;
         for s in samples {
             self.file.write_all(&s.to_le_bytes())?;
         }
-        self.data_bytes = self.data_bytes.saturating_add((samples.len() * 2) as u32);
+        self.data_bytes = self.data_bytes.saturating_add(samples.len() as u64 * 2);
         Ok(())
     }
-    // Seeks back to patch the two placeholder sizes now that the real total is
+    // Seeks back to patch the placeholder sizes now that the real total is
     // known -- streamed formats (WAV included) put their length in the header,
     // so it cannot be written until the last sample has landed.
     pub(crate) fn finish(mut self) -> std::io::Result<()> {
         use std::io::{Seek, SeekFrom, Write};
-        let riff_size = 36u32.saturating_add(self.data_bytes);
-        self.file.seek(SeekFrom::Start(4))?;
-        self.file.write_all(&riff_size.to_le_bytes())?;
-        self.file.seek(SeekFrom::Start(40))?;
-        self.file.write_all(&self.data_bytes.to_le_bytes())?;
+        // Everything after the first 8 bytes: the header minus RIFF and its size, plus the data.
+        let riff_size = (REC_WAV_HEADER_BYTES - 8).saturating_add(self.data_bytes);
+        if riff_size <= u32::MAX as u64 {
+            self.file.seek(SeekFrom::Start(4))?;
+            self.file.write_all(&(riff_size as u32).to_le_bytes())?;
+            self.file.seek(SeekFrom::Start(REC_WAV_DATA_SIZE_OFFSET))?;
+            self.file.write_all(&(self.data_bytes as u32).to_le_bytes())?;
+        } else {
+            let samples = self.data_bytes / self.block_align.max(1) as u64;
+            self.file.seek(SeekFrom::Start(0))?;
+            self.file.write_all(b"RF64")?;
+            self.file.write_all(&u32::MAX.to_le_bytes())?; // the real size lives in ds64
+            self.file.seek(SeekFrom::Start(12))?;
+            self.file.write_all(b"ds64")?;
+            self.file.seek(SeekFrom::Start(20))?;
+            self.file.write_all(&riff_size.to_le_bytes())?;
+            self.file.write_all(&self.data_bytes.to_le_bytes())?;
+            self.file.write_all(&samples.to_le_bytes())?;
+            self.file.write_all(&0u32.to_le_bytes())?; // no extra size table entries
+            self.file.seek(SeekFrom::Start(REC_WAV_DATA_SIZE_OFFSET))?;
+            self.file.write_all(&u32::MAX.to_le_bytes())?;
+        }
         Ok(())
     }
 }

@@ -7376,16 +7376,51 @@ fn rec_wav_writer_roundtrips_a_valid_header_and_sample_data() {
     let bytes = fs::read(&path).unwrap();
     assert_eq!(&bytes[0..4], b"RIFF");
     assert_eq!(&bytes[8..12], b"WAVE");
-    assert_eq!(&bytes[12..16], b"fmt ");
-    assert_eq!(u16::from_le_bytes([bytes[20], bytes[21]]), 1, "PCM format tag");
-    assert_eq!(u16::from_le_bytes([bytes[22], bytes[23]]), 2, "channel count");
-    assert_eq!(u32::from_le_bytes([bytes[24], bytes[25], bytes[26], bytes[27]]), 48_000, "sample rate");
-    assert_eq!(&bytes[36..40], b"data");
-    let data_size = u32::from_le_bytes([bytes[40], bytes[41], bytes[42], bytes[43]]);
+    assert_eq!(&bytes[12..16], b"JUNK", "room for the 64-bit size table");
+    assert_eq!(u32::from_le_bytes([bytes[16], bytes[17], bytes[18], bytes[19]]), 28);
+    assert_eq!(&bytes[48..52], b"fmt ");
+    assert_eq!(u16::from_le_bytes([bytes[56], bytes[57]]), 1, "PCM format tag");
+    assert_eq!(u16::from_le_bytes([bytes[58], bytes[59]]), 2, "channel count");
+    assert_eq!(u32::from_le_bytes([bytes[60], bytes[61], bytes[62], bytes[63]]), 48_000, "sample rate");
+    assert_eq!(&bytes[72..76], b"data");
+    let data_size = u32::from_le_bytes([bytes[76], bytes[77], bytes[78], bytes[79]]);
     assert_eq!(data_size, (samples.len() as u32 + 1) * 2, "data chunk size must cover every written sample");
     let riff_size = u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
-    assert_eq!(riff_size, 36 + data_size, "RIFF size is the fixed 36-byte header plus the data chunk");
-    assert_eq!(bytes.len() as u32, 44 + data_size, "file length must match header + data exactly");
+    assert_eq!(riff_size, 72 + data_size, "RIFF size is the fixed 72-byte remainder of the header plus the data chunk");
+    assert_eq!(bytes.len() as u32, 80 + data_size, "file length must match header + data exactly");
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+// Past 4 GiB the header turns into RF64: the ds64 table carries the 64-bit sizes and
+// the 32-bit size fields hold the all-ones marker.
+#[test]
+fn rec_wav_writer_writes_an_rf64_header_past_four_gib() {
+    let dir = std::env::temp_dir().join(format!("ps-test-wav-rf64-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("mic.wav");
+
+    let mut w = RecWavWriter::create(&path, 48_000, 2).expect("create");
+    w.write_samples(&[1, 2]).expect("write");
+    let data: u64 = u32::MAX as u64 + 1_000;
+    w.data_bytes = data;
+    w.finish().expect("finish");
+
+    let bytes = fs::read(&path).unwrap();
+    let u64_at = |at: usize| u64::from_le_bytes(bytes[at..at + 8].try_into().unwrap());
+    assert_eq!(&bytes[0..4], b"RF64");
+    assert_eq!(u32::from_le_bytes(bytes[4..8].try_into().unwrap()), u32::MAX);
+    assert_eq!(&bytes[8..12], b"WAVE");
+    assert_eq!(&bytes[12..16], b"ds64");
+    assert_eq!(u32::from_le_bytes(bytes[16..20].try_into().unwrap()), 28);
+    assert_eq!(u64_at(20), 72 + data, "riff size");
+    assert_eq!(u64_at(28), data, "data size");
+    assert_eq!(u64_at(36), data / 4, "sample count (4 bytes per stereo frame)");
+    assert_eq!(u32::from_le_bytes(bytes[44..48].try_into().unwrap()), 0, "no table entries");
+    assert_eq!(&bytes[48..52], b"fmt ");
+    assert_eq!(&bytes[72..76], b"data");
+    assert_eq!(u32::from_le_bytes(bytes[76..80].try_into().unwrap()), u32::MAX);
 
     let _ = fs::remove_dir_all(&dir);
 }
