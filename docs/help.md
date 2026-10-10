@@ -532,7 +532,7 @@ The copy history is one list; the sort field switches between Recently copied an
 The library lists every tile as a searchable, filterable list: fuzzy search,
 smart sort (most-used / most-recent), and type/color filters. Type -word to
 exclude matches, or tag:word / var:word to search only tags or placeholder
-names. A star next to the search field saves the current query, tag filters
+names. A bookmark button inside the search field saves the current query, tag filters
 and sort as a chip shown above the field; click it to bring the whole search
 back. Right-click a saved search to rename or delete it, or drag it to
 reorder the row. Up to five can be saved at once by default, adjustable in

@@ -4411,7 +4411,8 @@ body.drag-over::after {
   height: 24px;
   color: var(--muted);
 }
-.lib-search-save:hover { color: #f5b301; }
+.lib-search-save:hover { color: var(--accent); }
+.lib-search-save svg { display: block; margin: auto; }
 .lib-saved-searches { display: flex; flex-wrap: wrap; gap: 6px; }
 .lib-saved-searches:empty { display: none; }
 .lib-saved-search-chip { cursor: pointer; }

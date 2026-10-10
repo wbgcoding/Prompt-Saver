@@ -296,6 +296,12 @@ SECTION = """\
         }
       }
     }
+    // 268: the save-search button is a bookmark drawing, not a text glyph.
+    {
+      const save268 = document.getElementById('library-search-save');
+      if (!save268 || !save268.querySelector('svg')) out.errors.push('268: the save-search button has no drawing');
+      else if (save268.textContent.trim() !== '') out.errors.push('268: the save-search button still carries text: ' + save268.textContent.trim());
+    }
     // 436: saved searches keep a query, its active tag filters and the current
     // sort together as one chip. Saving, applying, the cap, renaming and
     // deleting are all self-contained here and end with the list empty again.
