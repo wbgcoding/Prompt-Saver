@@ -253,6 +253,7 @@ export function journalClipRow(it) {
 // recorder is on or entries are still stored.
 export function syncJournalSourceBar(on) {
   $("journal-source").classList.toggle("hidden", !on);
+  $("journal-source-field").classList.toggle("hidden", !on);
   $("clip-toggle").classList.toggle("hidden", !on);
   const watching = optFlag("clipWatcher");
   $("clip-toggle").classList.toggle("active", watching);

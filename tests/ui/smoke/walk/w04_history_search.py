@@ -93,6 +93,27 @@ SECTION = """\
       if (!srcBar || srcBar.classList.contains('hidden')) {
         out.errors.push('434: the source select is hidden although copies from other apps are stored');
       } else {
+        // 900-label: the source select carries a visible label to its left; off, both are hidden.
+        {
+          const core277 = await import('./core.js');
+          const jr277 = await import('./journal.js');
+          const field277 = document.getElementById('journal-source-field');
+          const lbl277 = field277 && field277.querySelector('.cols-label');
+          if (!field277 || field277.classList.contains('hidden') || !lbl277) {
+            out.errors.push('900-label: the source field with its label is missing or hidden while sources are on');
+          } else {
+            if (lbl277.textContent.trim() !== core277.t('filterSourceLabel')) out.errors.push('900-label: the source label reads ' + JSON.stringify(lbl277.textContent) + ' instead of ' + JSON.stringify(core277.t('filterSourceLabel')));
+            const lr277 = lbl277.getBoundingClientRect();
+            const sr277 = srcBar.getBoundingClientRect();
+            if (!(lr277.right <= sr277.left + 1) || Math.abs((lr277.top + lr277.bottom) / 2 - (sr277.top + sr277.bottom) / 2) > 6) {
+              out.errors.push('900-label: the source label does not sit left of the select on one line');
+            }
+          }
+          jr277.syncJournalSourceBar(false);
+          if (!srcBar.classList.contains('hidden') || !field277.classList.contains('hidden')) out.errors.push('900-label: with sources off the select or its label stays visible');
+          jr277.syncJournalSourceBar(true);
+          if (srcBar.classList.contains('hidden') || field277.classList.contains('hidden')) out.errors.push('900-label: with sources back on the select or its label stays hidden');
+        }
         if (document.querySelectorAll('#journal-body .journal-item').length === 0 || clipRows().length !== 2) {
           out.errors.push('434: the unfiltered history does not mix app copies and the two stored entries (' +
             document.querySelectorAll('#journal-body .journal-item').length + ' app rows, ' + clipRows().length + ' elsewhere rows)');
