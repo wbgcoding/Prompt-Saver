@@ -635,4 +635,33 @@ SECTION = """\
         await sleep(120);
       }
     }
+    // diag1: the Troubleshooting group starts folded. A folded list stored before the
+    // group existed gets it added once (guarded by diagGroupSeeded); unfolding it later
+    // is not undone by the next render.
+    {
+      const coreD = await import('./core.js');
+      const diagSec = () => {
+        for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+          tb.click();
+          const hit = [...document.querySelectorAll('#expert-flags .expert-group')]
+            .find((g) => (g.querySelector('.expert-group-title span') || {}).textContent === 'Troubleshooting');
+          if (hit) return hit;
+        }
+        return null;
+      };
+      coreD.settings.ui_texts = { ...(coreD.settings.ui_texts || {}), expertCollapsed: JSON.stringify(['expGroupHelp']) };
+      coreD.settings.ui_flags = { ...(coreD.settings.ui_flags || {}), diagGroupSeeded: false };
+      let secD = diagSec();
+      if (!secD) out.errors.push('diag1: the Troubleshooting group is not in the System tab');
+      else {
+        if (!secD.classList.contains('collapsed')) out.errors.push('diag1: the Troubleshooting group is open although the stored folded list lacked it');
+        const listD = JSON.parse(coreD.settings.ui_texts.expertCollapsed);
+        if (!listD.includes('expGroupDiagnostics') || !listD.includes('expGroupHelp')) out.errors.push('diag1: the stored folded list is ' + JSON.stringify(listD));
+        if (!coreD.settings.ui_flags.diagGroupSeeded) out.errors.push('diag1: the seeded flag was not set');
+        secD.querySelector('.expert-group-title').click();
+        await sleep(100);
+        secD = diagSec();
+        if (secD && secD.classList.contains('collapsed')) out.errors.push('diag1: the group folded itself again after the user opened it');
+      }
+    }
 """

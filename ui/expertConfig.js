@@ -692,8 +692,8 @@ export const EXPERT_TABS = [
     // instead of a button that jumps to a settings field -- see actionRow()'s
     // "hotkey" branch.
     { title: "expGroupRecording", flags: ["screenRecord"], values: ["recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "recDiskWarnMb", "recMaxMin", "recMaxMb", "recDiscardKeepH"], selects: ["recordingRetentionDays"], dropdowns: ["recQuality", "recFormat", "recCanvasMode"], paths: ["recordingDir"] },
-    { title: "expGroupRecWhile", flags: [{ key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, { key: "recCropNotice", gate: "screenRecord" }, { key: "recBarSize", gate: "screenRecord" }, { key: "recTargetSwitch", gate: "screenRecord" }, { key: "recAutoCrop", gate: "screenRecord" }, { key: "recSweepBroken", gate: "screenRecord" }, { key: "recOutline", gate: "screenRecord" }, { key: "keyOverlay", gate: "screenRecord" }, { key: "keyOverlayShortcutsOnly", gate: "keyOverlay" }], values: ["keyOverlayHoldMs"], dropdowns: ["recMicDevice"], colors: ["recOutlineColor"],
-      actions: [{ id: "rec-sweep-now", label: "recSweepNowAction", gate: "recSweepBroken" }, { id: "rec-stop-hotkey-row", type: "hotkey", hotkeyKey: "recStopHotkey", label: "recHotkeyFieldLabel", gate: "recStopHotkey" }, { id: "rec-pause-hotkey-row", type: "hotkey", hotkeyKey: "recPauseHotkey", label: "recHotkeyFieldLabel", gate: "recPauseHotkey" }] },
+    { title: "expGroupRecWhile", flags: [{ key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, { key: "recCropNotice", gate: "screenRecord" }, { key: "recBarSize", gate: "screenRecord" }, { key: "recTargetSwitch", gate: "screenRecord" }, { key: "recAutoCrop", gate: "screenRecord" }, { key: "recOutline", gate: "screenRecord" }, { key: "keyOverlay", gate: "screenRecord" }, { key: "keyOverlayShortcutsOnly", gate: "keyOverlay" }], values: ["keyOverlayHoldMs"], dropdowns: ["recMicDevice"], colors: ["recOutlineColor"],
+      actions: [{ id: "rec-stop-hotkey-row", type: "hotkey", hotkeyKey: "recStopHotkey", label: "recHotkeyFieldLabel", gate: "recStopHotkey" }, { id: "rec-pause-hotkey-row", type: "hotkey", hotkeyKey: "recPauseHotkey", label: "recHotkeyFieldLabel", gate: "recPauseHotkey" }] },
     { title: "expGroupCamera", flags: ["cameraRecord"], values: ["cameraFramerate"], dropdowns: ["cameraDevice", "cameraResolution"] },
     { title: "expGroupVideoEditor", flags: ["videoEditor", { key: "veOvRemember", gate: "videoEditor" }, { key: "videoEditSnap", gate: "videoEditor" }], values: ["videoEditUndoMax", "videoClipTtlMin"], paths: ["videoExportDir"] },
     // What the screenshot editor and the video editor share -- created here so
@@ -707,7 +707,7 @@ export const EXPERT_TABS = [
     { title: "expGroupTooltips", values: ["tooltipDelayMs"] },
     { title: "expGroupTileLook", flags: ["tileShadow", "typeBadges", "captions", "gridLines", "autoInk", "inkHalo"], values: ["tileRadius", "tileBorderWidth", "inkThreshold", "inkHaloStrength"], dropdowns: ["tileStyle"] },
     { title: "expGroupFavorites", flags: ["favorites", { key: "favViewReorder", gate: "favViewButton" }], values: ["favStarSize", "favMaxCols"] },
-    { title: "expGroupMedia", flags: ["videoControls", "videoAutoplay", "videoMuted", "videoLoop", "mediaMeta", "mediaMetaBackfill", "mediaBorder", "roundMedia"], values: ["videoVolume", "mediaRadius"] },
+    { title: "expGroupMedia", flags: ["videoControls", "videoAutoplay", "videoMuted", "videoLoop", "mediaMeta", "mediaBorder", "roundMedia"], values: ["videoVolume", "mediaRadius"] },
   ] },
   { title: "expTabAppearance", groups: [
     { title: "expGroupScales", values: ["composerScale", "primaryScale"] },
@@ -725,17 +725,20 @@ export const EXPERT_TABS = [
     // Toolbar button visibility (mirrors the header right-click tool list).
     { title: "expGroupToolbar", flags: [{ key: "barToggleBoth", gate: "barToggles" }, "showLibrary"] },
     { title: "expGroupPrivacy", notices: ["storeUnsealed", "settingsLocked", "settingsWriteFailed"], flags: ["allowScreenshot", "blurMediaUntilHover", "secretPrompts"], values: ["mediaBlur", "secretTimeoutMin"] },
-    { title: "expGroupSystem", notices: ["dataDirReadOnly"], flags: ["keyboardNav", "allowMultipleInstances", "dataDirLock", "demoMode", "taskbarProgress", "etaShow"], values: ["bgDoneKeepMin"], paths: ["dataDir"],
+    { title: "expGroupSystem", notices: ["dataDirReadOnly"], flags: ["keyboardNav", "taskbarProgress", "etaShow"], paths: ["dataDir"],
       actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }] },
     { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "helpSketches", "firstRunTour"],
       actions: [{ id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
-    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "similarHint", "backupBeforeReset", "backupBeforeDelete", "importExport", "errorLog"], values: ["similarThreshold", "importFolderDepth", "importFolderMax", "disarmMs", "errorLogKeepKb", "undoToastMs"], selects: ["trashRetentionDays"],
+    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "similarHint", "backupBeforeReset", "backupBeforeDelete", "importExport", "errorLog"], values: ["similarThreshold", "importFolderDepth", "importFolderMax", "disarmMs", "undoToastMs"], selects: ["trashRetentionDays"],
       actions: [{ id: "trash-open", label: "trashTitle" }, { id: "settings-export", label: "settingsExportAction" }, { id: "settings-import", label: "settingsImportAction" }, { id: "error-log-open", label: "errorLogAction", gate: "errorLog" }] },
     // The only new network surface in the app, off by default.
     // A link can only open or copy an entry; the receiver can do everything
     // the command line can, gated by its own password and network switch.
     { title: "expGroupRemote", flags: ["remoteApi", { key: "remoteNetworkFilter", gate: "remoteApi" }, { key: "remoteTlsShortLived", gate: "remoteNetworkFilter" }, "urlScheme"], values: ["remotePort", "remoteRateLimit"],
       actions: [{ id: "remote-password-open", label: "remotePasswordAction", gate: "remoteApi" }, { id: "remote-ranges-open", label: "remoteRangesAction", gate: "remoteNetworkFilter" }, { id: "remote-tls-open", label: "remoteTlsAction", tip: "remoteTlsActionTip", gate: "remoteNetworkFilter" }] },
+    // Switches and caps for finding a fault, not for everyday use: folded until opened.
+    { title: "expGroupDiagnostics", flags: ["allowMultipleInstances", "dataDirLock", "demoMode", "mediaMetaBackfill", { key: "recSweepBroken", gate: "screenRecord" }], values: ["errorLogKeepKb", "bgDoneKeepMin"],
+      actions: [{ id: "rec-sweep-now", label: "recSweepNowAction", gate: "recSweepBroken" }] },
   ] },
 ];
 

@@ -2080,4 +2080,5 @@ export default {
     veFrameNo: "フレーム {n}",
     veAudioSys: "システム",
     veAudioMic: "マイク",
+    expGroupDiagnostics: "トラブルシューティング",
 };

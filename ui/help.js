@@ -287,7 +287,7 @@ export const HELP_CONTENT = {
         "Adjust playback and privacy-leaning looks in the expert menu.",
       ],
       whatHappens: "Video settings (autoplay, mute, loop, volume) apply to every video tile; blurring only changes how media looks, never what gets copied. The library and copy history also show a video's length on its thumbnail, and its resolution and file size in the tooltip; the main grid never shows either.",
-      settings: ["Video controls, autoplay and loop (off by default), mute: Expert menu → Tiles → Media", "Accent border and rounded corners around media: Expert menu → Tiles → Media", "Duration/resolution/size in the library and copy history: Expert menu → Tiles → Media", "Fill in media info for older attachments: Expert menu → Tiles → Media"],
+      settings: ["Video controls, autoplay and loop (off by default), mute: Expert menu → Tiles → Media", "Accent border and rounded corners around media: Expert menu → Tiles → Media", "Duration/resolution/size in the library and copy history: Expert menu → Tiles → Media", "Fill in media info for older attachments: Expert menu → System & data → Troubleshooting"],
     },
     {
       section: "look",
@@ -332,7 +332,7 @@ export const HELP_CONTENT = {
       howTo: ["Open the expert menu's System group for updates, navigation, instances, and the data folder."],
       whatHappens:
         "Update checks are on by default and never install anything without asking first. Changing the data folder migrates the existing database there. Allowing multiple instances takes a restart to apply. Pointing the data folder at a cloud-synced folder shows a one-time warning. A small lock file then tracks which computer uses the database: a second computer that finds a fresh lock from another one opens everything read-only and says so in a banner, while a lock nobody refreshed for a while is taken over. Long jobs can fill the taskbar icon as a progress bar and show an estimate of the time left.",
-      settings: ["Keyboard navigation, allow multiple instances, data folder, data folder lock, taskbar progress, remaining time, video tools download: Expert menu → System & data → System"],
+      settings: ["Keyboard navigation, data folder, taskbar progress, remaining time, video tools download: Expert menu → System & data → System", "Allow multiple instances, data folder lock: Expert menu → System & data → Troubleshooting"],
     },
     {
       section: "system",
@@ -553,7 +553,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "MP4 (H.264) is always what gets written while recording; three quality steps (Small/High/Lossless) trade file size for detail, and a format setting can turn the result into WebM, GIF or AVI afterward (WebM and AVI are converted from the MP4; GIF is capped at 30 seconds and has no sound). Anything other than plain MP4, or the Lossless step, needs ffmpeg (a separate download, offered inline when missing); a failed or cancelled conversion always falls back to the untouched original recording. System audio and microphone audio both record on by default, each into its own track: the microphone track is captured but not mixed in audibly until you bring it in yourself from the video editor; unplugging the microphone mid-recording keeps picture and system audio going and just marks that track as lost. The control bar's two audio buttons can mute either source instantly while recording without dropping its track: a muted source keeps recording silence and can be unmuted again in the same recording. Save and Copy share one recording folder; Edit opens the clip in the video editor without deciding its fate, so closing the dialog afterward without saving or copying still discards the file. Dragging the bar itself (not its buttons) moves it anywhere, including onto another monitor, and stops it following the recorded window for the rest of that one recording; the next recording starts following again, and the bar is otherwise never part of the recording. If the recorded window closes on its own, the recording stops automatically and keeps what was captured so far. A recording that never reached its own stop path (a crash, a forced shutdown) is removed automatically once it clears a grace period, so a just-stopped recording that is still finalising is never touched. The recording folder's row in the expert menu shows how many videos are in it and how much space they use, with a \"Clean up…\" button that lists files older than 7, 30 or 90 days and the space they would free before deleting anything; nothing is removed without that confirmation. An optional keys overlay records which keys are pressed while a recording runs, as key identifiers and timestamps only, never any text; it shows every key by default, including typed text, and skips a password field when Windows reports it as such, though this is not guaranteed. A \"Shortcuts only\" switch restricts capture to combinations with Ctrl, Alt or Win plus Enter, Tab, Esc, Backspace, Delete, Insert, arrows, Home, End, Page Up, Page Down and F keys, for a recording with confidential input. The same cleanup dialog has a checkbox per file: \"Export selected\" converts every checked recording in one go, to a chosen format, quality and folder, and reports how many finished. A new install deletes unused recordings after 90 days (expert menu, 0 = keep forever).",
-      settings: ["Screen recording, countdown, bitrate, quality, format, recording folder and cleanup: Expert menu → Capture → Screen recording", "Cursor, audio sources and device, stop/pause hotkeys, tray entries, auto-remove broken recordings, keys overlay, frame around a recorded region and its color: Expert menu → Capture → While recording"],
+      settings: ["Screen recording, countdown, bitrate, quality, format, recording folder and cleanup: Expert menu → Capture → Screen recording", "Cursor, audio sources and device, stop/pause hotkeys, tray entries, keys overlay, frame around a recorded region and its color: Expert menu → Capture → While recording", "Auto-remove broken recordings, clean up now: Expert menu → System & data → Troubleshooting"],
     },
     {
       section: "basics",
@@ -733,7 +733,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "The sample library is built fresh each time and covers most features: tiles with and without a picture, a tile with rotation, a placeholder, tags, a favorite, two views, a folder, an attachment and a video. Your own data is never opened or changed while it runs. Anything changed during the demo is discarded when it ends.",
-      settings: ["Demo mode: Expert menu → System & data → System"],
+      settings: ["Demo mode: Expert menu → System & data → Troubleshooting"],
     },
     {
       section: "system",
@@ -1037,7 +1037,7 @@ export const HELP_CONTENT = {
         "Wiedergabe und privatsphärefreundliche Optiken im Expertenmenü anpassen.",
       ],
       whatHappens: "Video-Einstellungen (Autoplay, Stumm, Schleife, Lautstärke) gelten für jede Video-Kachel; Unschärfe ändert nur das Aussehen, nie den kopierten Inhalt. Bibliothek und Kopierverlauf zeigen außerdem die Länge eines Videos auf dem Vorschaubild sowie Auflösung und Dateigröße in der Kurzhilfe; das Hauptraster zeigt keins von beidem.",
-      settings: ["Video-Steuerung, Autoplay und Schleife (ab Werk aus), Stumm: Expertenmenü → Kacheln → Medien", "Akzentrahmen und abgerundete Ecken um Medien: Expertenmenü → Kacheln → Medien", "Dauer/Auflösung/Größe in Bibliothek und Kopierverlauf: Expertenmenü → Kacheln → Medien", "Medienangaben bei älteren Anhängen nachtragen: Expertenmenü → Kacheln → Medien"],
+      settings: ["Video-Steuerung, Autoplay und Schleife (ab Werk aus), Stumm: Expertenmenü → Kacheln → Medien", "Akzentrahmen und abgerundete Ecken um Medien: Expertenmenü → Kacheln → Medien", "Dauer/Auflösung/Größe in Bibliothek und Kopierverlauf: Expertenmenü → Kacheln → Medien", "Medienangaben bei älteren Anhängen nachtragen: Expertenmenü → System & Daten → Fehlersuche"],
     },
     {
       section: "look",
@@ -1082,7 +1082,7 @@ export const HELP_CONTENT = {
       howTo: ["Die System-Gruppe des Expertenmenüs für Update-Checks, Tastaturnavigation, mehrere Instanzen und den Daten-Ordner öffnen."],
       whatHappens:
         "Update-Checks sind standardmäßig aktiv und installieren nie etwas, ohne vorher zu fragen. Ein Wechsel des Daten-Ordners migriert die bestehende Datenbank dorthin. Mehrere Instanzen zuzulassen erfordert einen Neustart. Zeigt der Daten-Ordner auf einen Cloud-synchronisierten Ordner, erscheint einmal eine Warnung. Eine kleine Sperrdatei hält dann fest, welcher Rechner die Datenbank nutzt: Ein zweiter Rechner, der eine frische Sperre eines anderen findet, öffnet alles nur lesend und sagt das mit einem Banner; eine Sperre, die länger niemand erneuert hat, wird übernommen. Lange Aufgaben können das Taskleistensymbol als Fortschrittsbalken füllen und die Restzeit schätzen.",
-      settings: ["Tastaturnavigation, mehrere Instanzen erlauben, Daten-Ordner, Sperre des Daten-Ordners, Fortschritt am Taskleistensymbol, Restzeit, Download der Video-Werkzeuge: Expertenmenü → System & Daten → System"],
+      settings: ["Tastaturnavigation, Daten-Ordner, Fortschritt am Taskleistensymbol, Restzeit, Download der Video-Werkzeuge: Expertenmenü → System & Daten → System", "Mehrere Instanzen erlauben, Sperre des Daten-Ordners: Expertenmenü → System & Daten → Fehlersuche"],
     },
     {
       section: "system",
@@ -1303,7 +1303,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Aufgenommen wird immer MP4 (H.264); drei Qualitätsstufen (Klein/Hoch/Verlustfrei) tauschen Dateigröße gegen Bildschärfe, ein Format-Feld kann das Ergebnis danach in WebM, GIF oder AVI umwandeln (WebM und AVI entstehen aus dem MP4; GIF ist auf 30 Sekunden begrenzt und hat keinen Ton). Alles außer reinem MP4 sowie die Stufe Verlustfrei braucht ffmpeg (ein separater Download, direkt angeboten, wenn es fehlt); eine fehlgeschlagene oder abgebrochene Umwandlung fällt immer auf die unangetastete Originalaufnahme zurück. Systemton und Mikrofon werden beide standardmäßig aufgenommen, je als eigene Spur: die Mikrofonspur wird zwar aufgezeichnet, aber erst hörbar, wenn man sie später selbst im Video-Editor dazumischt; zieht man das Mikrofon während der Aufnahme ab, laufen Bild und Systemton weiter, nur diese Spur gilt als verloren. Die beiden Ton-Buttons in der Bedienleiste schalten Systemton oder Mikrofon sofort stumm, ohne die Spur zu beenden: eine stumme Quelle nimmt weiter Stille auf und lässt sich in derselben Aufnahme wieder zuschalten. Speichern und Kopieren teilen sich einen Aufnahme-Ordner; Bearbeiten öffnet den Clip im Video-Editor, ohne über sein Schicksal zu entscheiden; schließt man den Dialog danach, ohne gespeichert oder kopiert zu haben, wird die Datei trotzdem verworfen. Zieht man die Bedienleiste selbst (nicht ihre Buttons), folgt sie für den Rest dieser einen Aufnahme nicht mehr dem Aufnahmefenster, sondern bleibt frei beweglich stehen, auch auf einem anderen Monitor; die nächste Aufnahme folgt wieder von vorn, und die Leiste ist ansonsten nie Teil der Aufnahme. Schließt sich das aufgenommene Fenster von selbst, stoppt die Aufnahme automatisch und behält, was bis dahin aufgenommen wurde. Eine Aufnahme, die nie ordnungsgemäß gestoppt wurde (Absturz, erzwungenes Beenden), wird automatisch entfernt, sobald sie eine Schonfrist überschreitet; eine gerade gestoppte Aufnahme, die noch abgeschlossen wird, bleibt dabei unangetastet. Die Aufnahme-Ordner-Zeile im Expertenmenü zeigt Anzahl und Größe der enthaltenen Videos, mit einem „Aufräumen…“-Button, der Dateien älter als 7, 30 oder 90 Tage samt der frei werdenden Größe zur Bestätigung auflistet, bevor irgendetwas gelöscht wird. Eine optionale Tastenanzeige zeichnet auf, welche Tasten während einer Aufnahme gedrückt werden, nur als Tastenkennungen mit Zeitstempeln, nie als Textinhalt; sie zeigt ab Werk jede Taste, auch getippten Text, und lässt ein Passwortfeld aus, wenn Windows es als solches meldet, ohne dass das garantiert ist. Ein Schalter „Nur Tastenkürzel“ beschränkt die Aufzeichnung auf Kombinationen mit Strg, Alt oder Win sowie Enter, Tab, Esc, Rücktaste, Entf, Einfg, Pfeile, Pos1, Ende, Bild auf, Bild ab und F-Tasten, für Aufnahmen mit vertraulichen Eingaben. Derselbe Aufräum-Dialog hat ein Häkchen pro Datei: „Auswahl exportieren“ wandelt alle angehakten Aufnahmen in einem Rutsch in Format, Qualität und Ordner der Wahl um und meldet, wie viele fertig wurden. Eine neue Installation löscht nicht verwendete Aufnahmen nach 90 Tagen (Expertenmenü, 0 = für immer).",
-      settings: ["Bildschirmaufnahme, Countdown, Bitrate, Qualität, Format, Aufnahme-Ordner: Expertenmenü → Aufnehmen → Bildschirmaufnahme", "Mauszeiger, Tonquellen und -gerät, Stopp-/Pause-Hotkeys, Tray-Einträge, defekte Aufnahmen automatisch entfernen, Tastenanzeige, Rahmen um einen aufgenommenen Bereich und seine Farbe: Expertenmenü → Aufnehmen → Während der Aufnahme"],
+      settings: ["Bildschirmaufnahme, Countdown, Bitrate, Qualität, Format, Aufnahme-Ordner: Expertenmenü → Aufnehmen → Bildschirmaufnahme", "Mauszeiger, Tonquellen und -gerät, Stopp-/Pause-Hotkeys, Tray-Einträge, Tastenanzeige, Rahmen um einen aufgenommenen Bereich und seine Farbe: Expertenmenü → Aufnehmen → Während der Aufnahme", "Defekte Aufnahmen automatisch entfernen, jetzt aufräumen: Expertenmenü → System & Daten → Fehlersuche"],
     },
     {
       section: "basics",
@@ -1483,7 +1483,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Die Beispiel-Bibliothek wird jedes Mal frisch erzeugt und deckt die meisten Funktionen ab: Kacheln mit und ohne Bild, eine Kachel mit Rotation, einen Platzhalter, Tags, einen Favoriten, zwei Ansichten, einen Ordner, einen Anhang und ein Video. Die eigenen Daten werden währenddessen nie geöffnet oder geändert. Was während der Vorführung geändert wurde, wird beim Beenden verworfen.",
-      settings: ["Vorführung: Expertenmenü → System & Daten → System"],
+      settings: ["Vorführung: Expertenmenü → System & Daten → Fehlersuche"],
     },
     {
       section: "system",

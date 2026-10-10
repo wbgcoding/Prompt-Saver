@@ -2080,4 +2080,5 @@ export default {
     veFrameNo: "Klatka {n}",
     veAudioSys: "System",
     veAudioMic: "Mikrofon",
+    expGroupDiagnostics: "Rozwiązywanie problemów",
 };

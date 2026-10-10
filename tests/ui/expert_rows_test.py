@@ -41,17 +41,22 @@ EXPECTED = [
     ("flag", "gridViewBorder", "expTabFeatures", "expGroupViews", 1),
     ("value", "maxViews", "expTabFeatures", "expGroupViews", 1),
     ("value", "gridMax", "expTabFeatures", "expGroupViews", 0),
-    ("flag", "recSweepBroken", "expTabCapture", "expGroupRecWhile", 0),
+    ("flag", "recSweepBroken", "expTabSystem", "expGroupDiagnostics", 0),
     ("value", "recDiscardKeepH", "expTabCapture", "expGroupRecording", 1),
     ("select", "recordingRetentionDays", "expTabCapture", "expGroupRecording", 1),
-    ("action", "rec-sweep-now", "expTabCapture", "expGroupRecWhile", 1),
+    ("action", "rec-sweep-now", "expTabSystem", "expGroupDiagnostics", 1),
     ("value", "videoClipTtlMin", "expTabCapture", "expGroupVideoEditor", 1),
     ("action", "ocr-index-backfill", "expTabLibrary", "expGroupLibSearch", 1),
     ("action", "float-recall", "expTabFeatures", "expGroupFolders", 1),
     ("dropdown", "dateStyle", "expTabFeatures", "expGroupVars", 1),
     ("dropdown", "timeStyle", "expTabFeatures", "expGroupVars", 1),
     ("varFixedList", "", "expTabFeatures", "expGroupVars", 2),
-    ("value", "errorLogKeepKb", "expTabSystem", "expGroupData", 1),
+    ("value", "errorLogKeepKb", "expTabSystem", "expGroupDiagnostics", 0),
+    ("flag", "allowMultipleInstances", "expTabSystem", "expGroupDiagnostics", 0),
+    ("flag", "dataDirLock", "expTabSystem", "expGroupDiagnostics", 0),
+    ("flag", "demoMode", "expTabSystem", "expGroupDiagnostics", 0),
+    ("flag", "mediaMetaBackfill", "expTabSystem", "expGroupDiagnostics", 0),
+    ("value", "bgDoneKeepMin", "expTabSystem", "expGroupDiagnostics", 0),
     ("action", "error-log-open", "expTabSystem", "expGroupData", 1),
     ("color", "snipDefaultColor", "expTabCapture", "expGroupSnipEditor", 1),
     ("flag", "recOutline", "expTabCapture", "expGroupRecWhile", 0),
@@ -63,7 +68,8 @@ EXPECTED = [
 
 # Rows that stay on screen with every gate off (they have no parent switch that
 # is in the GATES list below).
-STAYS = ["flag:chainPrompts", "value:gridMax", "value:searchListMax"]
+STAYS = ["flag:chainPrompts", "value:gridMax", "value:searchListMax", "flag:allowMultipleInstances", "flag:dataDirLock",
+         "flag:demoMode", "flag:mediaMetaBackfill", "value:bgDoneKeepMin"]
 
 # The parent switches the rows above hang off.
 GATES = ["chainQuickStart", "multiView", "screenRecord", "recSweepBroken", "videoEditor",

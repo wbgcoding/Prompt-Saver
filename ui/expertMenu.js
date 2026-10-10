@@ -1736,8 +1736,26 @@ export function foreignHitRow(entry) {
   return row;
 }
 
-// The "off by default" extras groups start folded (kept tidy until wanted).
-export const DEFAULT_COLLAPSED_GROUPS = [];
+// Groups that start folded (kept tidy until wanted): troubleshooting is not for everyday use.
+export const DIAGNOSTICS_GROUP = "expGroupDiagnostics";
+export const DEFAULT_COLLAPSED_GROUPS = [DIAGNOSTICS_GROUP];
+// Once per profile: a collapsed list stored before the Troubleshooting group existed
+// gets it added, so the group starts folded for existing users too. A profile that
+// never stored a list gets it from DEFAULT_COLLAPSED_GROUPS. The flag keeps this from
+// folding the group again after the user has opened it.
+export function seedDiagnosticsCollapsed() {
+  if (settings.ui_flags?.diagGroupSeeded) return;
+  settings.ui_flags = { ...(settings.ui_flags || {}), diagGroupSeeded: true };
+  invoke("set_ui_flag", { key: "diagGroupSeeded", enabled: true }).catch(() => {});
+  const stored = settings.ui_texts?.expertCollapsed;
+  if (stored == null) return;
+  let list = null;
+  try { list = JSON.parse(stored); } catch (_) { return; }
+  if (!Array.isArray(list) || list.includes(DIAGNOSTICS_GROUP)) return;
+  const value = JSON.stringify([...list, DIAGNOSTICS_GROUP]);
+  settings.ui_texts = { ...(settings.ui_texts || {}), expertCollapsed: value };
+  invoke("set_ui_text", { key: "expertCollapsed", value }).catch(() => {});
+}
 // Collapsed expert categories, persisted as a JSON title list in ui_texts. Unset
 // (first ever open) → everything expanded; after that the stored list wins.
 export function expertCollapsedSet() {
@@ -1961,6 +1979,7 @@ function showActiveTab(bar) {
 let tabBarObserver = null;
 
 export function renderExpert() {
+  seedDiagnosticsCollapsed();
   const box = $("expert-flags");
   const tabBar = $("expert-tabs-bar");
   const keepScroll = box.scrollTop; // survive live re-renders (e.g. a toggled gate)

@@ -215,7 +215,7 @@ shutdown) leaves behind a file with no usable video track. The app checks
 for these in the background and removes them once they clear a short grace
 period, so a just-stopped recording that is still finalising is never
 touched; both the grace period and the check interval are adjustable in the
-expert menu, alongside a manual "clean up now" action. A new install deletes
+expert menu (System tab, Troubleshooting group), alongside a manual "clean up now" action. A new install deletes
 unused recordings after 90 days (expert menu, 0 = keep forever).
 
 The same cleanup dialog can also export several finished recordings at once.
@@ -728,7 +728,7 @@ failing; it clears itself the moment a save reaches disk again.
 
 ### Demo mode
 
-An expert-menu switch (System tab) swaps the whole window to a bundled sample
+An expert-menu switch (System tab, Troubleshooting group) swaps the whole window to a bundled sample
 library covering most features at once: prompts with and without an image, a
 prompt with rotation, a couple of plain prompts to start a chain with, a
 placeholder, tags, a favorite, two views, a folder, an attachment and (when
@@ -744,8 +744,9 @@ README's "Building from source" section for the exact steps.
 
 ### System
 
-Update checks (never installs without asking), keyboard navigation, allowing
-multiple instances at once, and where the data folder lives. A long export,
+Update checks (never installs without asking), keyboard navigation, and where
+the data folder lives; allowing multiple instances at once sits in the
+Troubleshooting group. A long export,
 conversion, ffmpeg download, backup or import fills the app's taskbar icon
 with its progress, and shows a plain "about X left" estimate once enough of
 it has run for the guess to mean something, both switchable off.
@@ -888,7 +889,7 @@ computer that finds a fresh lock from another machine opens everything
 read-only instead and says so with a permanent banner, so nothing is silently
 lost, while a lock nobody has refreshed for a while (the other computer likely
 crashed or closed) is taken over automatically. The switch for this, on by
-default, sits in the expert menu next to the data folder field. This is a
+default, sits in the Troubleshooting group of the expert menu's System tab. This is a
 safety net, not a way to share the library across computers: for that,
 Markdown folder sync below is the built path.
 
@@ -1512,7 +1513,7 @@ sagt das genauso: einmal als Hinweis, und als dauerhafte Zeile in dieser
 Datenschutz-Gruppe, solange der letzte Speichervorgang fehlschlägt; sie
 verschwindet von selbst, sobald wieder erfolgreich gespeichert wird.
 
-**Vorführung**: Ein Schalter im Expertenmenü (Tab System) schaltet das
+**Vorführung**: Ein Schalter im Expertenmenü (Tab System, Gruppe Fehlersuche) schaltet das
 ganze Fenster auf einen mitgelieferten Beispielbestand um, der möglichst
 viele Funktionen auf einmal zeigt: Prompts mit und ohne Bild, ein
 Prompt mit Rotation, zwei einfache Prompts für den Anfang einer Kette, ein
@@ -1528,7 +1529,7 @@ Beispielbestand ist auch die Vorlage für das Bild in diesem Hilfefenster und
 für `docs/screenshot.png`: der genaue Ablauf steht im Abschnitt „Building
 from source" der README.
 
-**System**: Updates, Tastatur-Navigation, mehrere Instanzen, Datenordner.
+**System**: Updates, Tastatur-Navigation, Datenordner; mehrere Instanzen stehen in der Gruppe Fehlersuche.
 Lange Vorgänge (Export, Umwandlung, ffmpeg-Download, Backup, Import) füllen
 das Taskleistensymbol und zeigen ab einer eingestellten Schwelle „noch etwa …",
 beides abschaltbar.
@@ -1650,7 +1651,7 @@ alles nur lesend und zeigt das dauerhaft in einer Kopfzeile, damit nichts
 still verloren geht, während eine länger nicht aufgefrischte Sperre (der
 andere Rechner ist vermutlich abgestürzt oder geschlossen) automatisch
 übernommen wird. Der zugehörige Schalter, standardmäßig an, liegt im
-Expertenmenü neben dem Datenordner-Feld. Das ist ein Sicherheitsnetz, kein
+Expertenmenü, Reiter System, Gruppe Fehlersuche. Das ist ein Sicherheitsnetz, kein
 Weg, die Bibliothek über Computer hinweg zu teilen: dafür ist die
 Markdown-Ordnersynchronisierung weiter unten der gebaute Weg.
 

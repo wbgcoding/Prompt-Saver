@@ -1965,6 +1965,7 @@ the video editor and the introduction tour ship on).
 - **The video editor timeline shows the whole recording when it opens.** This also holds for long videos, and the ruler labels stay readable at the lower zoom.
 - **The video editor frame counter reads "Frame 1".** The counter says the word and counts from 1 instead of showing "#0".
 - **Labelled volume sliders in the video editor.** The two sliders are named System and Mic, and a muted track shows a struck-through icon, so muted and missing no longer look alike.
+- **A Troubleshooting group in the expert menu.** Switches and caps meant for finding a fault (multiple instances, data folder lock, demo mode, automatic clean-up of broken recordings with its clean up now button, filling in media info, error log size, how long finished jobs stay listed) moved to the last group of the System tab, which starts folded.
 
 ## 2.6.3 (2026-07-26)
 

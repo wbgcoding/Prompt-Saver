@@ -349,7 +349,10 @@ for key, gate in sorted(declared.items()):
     if parent not in all_flags | off_at_zero:
         problems.append(f"gate: '{gate}' (on '{key}') points at an unknown flag")
     elif (key in group_of and parent in group_of and group_of[key] != group_of[parent]
-          and parent not in subsystem_toggles):
+          and parent not in subsystem_toggles
+          # The Troubleshooting group gathers diagnostics from every area on purpose;
+          # their gates stay where they were.
+          and group_of[key] != "expGroupDiagnostics"):
         problems.append(f"gate: '{key}' sits in {group_of[key]} but its parent "
                         f"'{parent}' is in {group_of[parent]} — keep them together")
     if key == parent:

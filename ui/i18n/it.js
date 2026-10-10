@@ -2080,4 +2080,5 @@ export default {
     veFrameNo: "Fotogramma {n}",
     veAudioSys: "Sistema",
     veAudioMic: "Microfono",
+    expGroupDiagnostics: "Risoluzione dei problemi",
 };

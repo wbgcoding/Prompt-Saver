@@ -2080,4 +2080,5 @@ export default {
     veFrameNo: "第 {n} 帧",
     veAudioSys: "系统",
     veAudioMic: "麦克风",
+    expGroupDiagnostics: "故障排查",
 };

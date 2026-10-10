@@ -199,7 +199,7 @@ npm run build              # portable exe + NSIS installer
 
 `docs/screenshot.png` (shown at the top of this file) and the in-app help's
 own picture both come from the bundled sample library, never a real one. To
-refresh either: turn on Demo mode in the expert menu (System tab), resize the
+refresh either: turn on Demo mode in the expert menu (System tab, Troubleshooting group), resize the
 window to a fixed size, then take the screenshot the normal way.
 
 ### Running the tests

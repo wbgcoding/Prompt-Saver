@@ -2080,4 +2080,5 @@ export default {
     veFrameNo: "Cadrul {n}",
     veAudioSys: "Sistem",
     veAudioMic: "Microfon",
+    expGroupDiagnostics: "Depanare",
 };

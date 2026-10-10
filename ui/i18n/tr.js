@@ -2080,4 +2080,5 @@ export default {
     veFrameNo: "Kare {n}",
     veAudioSys: "Sistem",
     veAudioMic: "Mikrofon",
+    expGroupDiagnostics: "Sorun giderme",
 };
