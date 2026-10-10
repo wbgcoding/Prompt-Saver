@@ -1,6 +1,7 @@
 // Prompt editor modal: drafts, variable helpers, diff and history, file preview and dialogs.
 import { $, assignModalState, autoGrow, closeColorPop, COLORS, convertFileSrc, disarmButton, errToast, flag, HISTORY_PREVIEW_LEN, ICON_DOWN, ICON_FILE, ICON_PDF, ICON_TRASH, ICON_UP, inputEl, invoke, LANG, libraryEl, listen, modal, modalState, openColorPop, optFlag, PDF_EXT, prompts, putIcon, saveBtn, t, toast, txt, val } from "./core.js";
 import { DYN_VARS, dynToken, extractVars, hasEmptyVarToken, readFixedVars, resolveVars, saveFixedVars } from "./promptVars.js";
+import { ATTACH_PREVIEW_KB } from "./expertConfig.js";
 import { EXPERT_DROPDOWNS, renderExpert } from "./expertMenu.js";
 import { normSize } from "./settingsPanel.js";
 import { closeTagPop, closeTagSuggest, renderTagChips } from "./tags.js";
@@ -93,7 +94,7 @@ export function buildSwatches(container, selected, onPick, onCustom, opts = {}) 
 let colorsExpanded = false;
 // Up to eight palette colours in use, most used first, ties in palette order; with
 // none in use the first eight of the palette.
-function usedColors() {
+function colorsInUse() {
   const hues = COLORS.slice(1);
   const count = new Map();
   for (const p of prompts) if (hues.includes(p.color)) count.set(p.color, (count.get(p.color) || 0) + 1);
@@ -113,7 +114,7 @@ export function renderSwatches(selected) {
     }),
     {
       compact: !colorsExpanded,
-      used: usedColors(),
+      used: colorsInUse(),
       onMore: () => { colorsExpanded = true; renderSwatches(selected); },
     }
   );
@@ -164,7 +165,7 @@ export function insertVarToken(body) {
   const ta = modal.text;
   const start = ta.selectionStart ?? ta.value.length;
   const end = ta.selectionEnd ?? start;
-  const token = `{#{${body}}#}`;
+  const token = `{?${body}}`;
   ta.value = ta.value.slice(0, start) + token + ta.value.slice(end);
   ta.focus();
   ta.setSelectionRange(start + token.length, start + token.length);
@@ -868,8 +869,6 @@ export async function loadHistory(id) {
             span.className = "diff-add";
             span.textContent = newerEntries[i];
             content.appendChild(span);
-          } else if (!flag("historyDiff")) {
-            content.textContent = olderEntries[i]; // word diff switched off, show the plain old text
           } else {
             const tokens = diffWords(olderEntries[i], newerEntries[i]);
             if (tokens) renderDiffInto(content, tokens);
@@ -1166,7 +1165,7 @@ export async function renderAttachTextPreview(path) {
   modal.textAttachUnreadable.classList.add("hidden");
   let result;
   try {
-    result = await invoke("attachment_text_preview", { path, maxKb: Math.round(val("attachPreviewKb")) });
+    result = await invoke("attachment_text_preview", { path, maxKb: ATTACH_PREVIEW_KB[EXPERT_DROPDOWNS.attachPreviewSize.get()] });
   } catch (_) {
     return; // not a text-preview extension after all, or the file vanished mid-read
   }
@@ -1294,7 +1293,7 @@ export async function confirmModal() {
     : hasVariants
       ? [modal.text.value, ...modalState.rotateEntries.slice(1)]
       : [modal.text.value];
-  // A {#{ }#} with no name inside never becomes a fillable variable: warn now,
+  // A {?} with no name inside never becomes a fillable variable: warn now,
   // while it is still one click away from being fixed, instead of after it is saved.
   if (rawTexts.some(hasEmptyVarToken)) {
     const proceed = await confirmDialog({

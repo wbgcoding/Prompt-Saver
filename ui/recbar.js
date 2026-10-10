@@ -163,7 +163,7 @@ function applyHotkeyWarn(stopOk, pauseOk) {
   if (label) { hotkeyWarnEl.title = label; hotkeyWarnEl.setAttribute("aria-label", label); }
 }
 
-// recDiskWarnMb's mid-recording half -- fires at most once (the backend
+// The mid-recording half of the low-disk warning -- fires at most once (the backend
 // already only reports it once), never hides again: a quiet standing
 // reminder rather than a toast this narrow bar has no room for, and free
 // space recovering mid-recording does not make the earlier warning untrue.

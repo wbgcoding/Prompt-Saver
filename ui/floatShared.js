@@ -4,7 +4,7 @@
 // what each window already used on its own -- this is drift prevention.
 import { placePopover } from "./popover.js";
 import { errMessageLogged } from "./errors.js";
-import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT, COPY_SOUND_VOLUME_DEFAULT } from "./copyDefaults.js";
+import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, COPY_SOUND_VOLUME_DEFAULT } from "./copyDefaults.js";
 
 export const COPIED_MS = 900; // "copied!" tile/pill flash duration
 export const RING_MIN = 8;    // smallest resize-ring thickness (px)
@@ -46,9 +46,11 @@ export function fillVideoFormatSelect(select) {
 // "ungroup" menu entries, and the "group into a folder" entry.
 export const FOLDER_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.2l2 2.4h8.8A1.5 1.5 0 0 1 21 8.9v9.6a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5Z"/></svg>';
 
-// The placeholder pattern, the one copy: promptVars.js imports it. A literal `{{` is
-// not a placeholder; the self-filling reserved names (slash fence) match it too.
-export const VAR_RE = /\{#\{\s*([^}\n]{1,200}?)\s*\}#\}/g;
+// The placeholder pattern, the one copy: promptVars.js imports it. A token is `{?` plus
+// a body that starts with a letter, digit, `_` or `@` and holds no `}` or newline; the
+// self-filling reserved names (written with an `@`) match it too. A bare `{?}`, `{? x}`
+// or `{?>` is not a placeholder, and neither is a JSON or code brace.
+export const VAR_RE = /\{\?([\p{L}\p{N}_@][^}\n]{0,199})\}/gu;
 
 // True when copying this text has to go through the main window, which asks for the
 // placeholders and fills the reserved names: the text (or any rotation entry passed
@@ -59,11 +61,11 @@ export const needsMainWindowCopy = (text, variants = []) =>
 
 // A prompt placeholder reads as [name] wherever raw prompt text is previewed (library
 // and history rows, search hits, the quick launcher). The label is the part before an
-// equals sign or a bar, a reserved name loses its slash fence. A fence with no usable
+// equals sign or a bar, a reserved name loses its leading @. A token with no usable
 // name stays as typed.
 export function varPreview(text) {
   return String(text ?? "").replace(VAR_RE, (whole, body) => {
-    const label = body.split(/[=|]/)[0].trim().replace(/^\//, "").replace(/[\/\\]$/, "").trim();
+    const label = body.split(/[=|]/)[0].trim().replace(/^@(?=.)/, "").trim();
     return label ? `[${label}]` : whole;
   });
 }
@@ -104,7 +106,6 @@ export function readCopyPrefs(s) {
   const f = s?.ui_flags || {};
   return {
     cooldownMs: num(v.copyCooldownMs, COOLDOWN_MS_DEFAULT),
-    dragThreshold: num(v.dragThreshold, DRAG_THRESHOLD_DEFAULT),
     apOn: f.autoPaste !== false, // default on
     apEnter: f.autoPasteEnter === true,
     apDelay: num(v.autoPasteDelayMs, AUTO_PASTE_DELAY_MS_DEFAULT),
@@ -199,13 +200,12 @@ export function ffmpegDownloadPct(payload) {
 
 // The ffmpeg download button of the expert menu and of the video editor. While a download
 // runs the button shows its progress and a click on it cancels; a cancel is not an error.
-// `etaShow` is a boolean or a function read at every progress step, `onDone` runs after a
-// finished download, `onError` gets any other failure.
+// `onDone` runs after a finished download, `onError` gets any other failure.
 const ETA_MIN_PCT = 10; // remaining time stays hidden below this percent ...
 const ETA_MIN_SECS = 20; // ... and for this many seconds
 let ffmpegDownloadRunning = false;
 export const ffmpegDownloadActive = () => ffmpegDownloadRunning;
-export async function runFfmpegDownload(btn, { etaShow, onDone, onError, t }) {
+export async function runFfmpegDownload(btn, { onDone, onError, t }) {
   const { invoke } = window.__TAURI__.core;
   if (ffmpegDownloadRunning) {
     invoke("cancel_ffmpeg_download").catch(() => {});
@@ -225,7 +225,7 @@ export async function runFfmpegDownload(btn, { etaShow, onDone, onError, t }) {
       const pct = ffmpegDownloadPct(e.payload);
       dlEta.feed(pct);
       const estimate = dlEta.estimate(ETA_MIN_PCT, ETA_MIN_SECS);
-      const eta = (typeof etaShow === "function" ? etaShow() : etaShow) ? formatEta(estimate, t) : "";
+      const eta = formatEta(estimate, t);
       btn.textContent = t("ffmpegDownloading").replace("{pct}", String(pct)) + (eta ? ` (${eta})` : "");
       btn.setAttribute("aria-valuenow", String(pct));
       btn.setAttribute("aria-valuetext", a11yProgressText(t, pct, estimate));

@@ -173,8 +173,8 @@ SECTION = """\
       if (empty && empty.textContent.trim()) {
         out.errors.push('the tooltip shows a note for a prompt that has none');
       }
-      // 6/14: the length readout and the {#{variable}#} highlight, on a prompt that
-      // actually has placeholders (p1: "Translate {#{Text=Hello}#} into {#{Language}#}.").
+      // 6/14: the length readout and the {?variable} highlight, on a prompt that
+      // actually has placeholders (p1: "Translate {?Text=Hello} into {?Language}.").
       const varHoverTile = byId('p1');
       if (varHoverTile) {
         await hover(varHoverTile, 90);
@@ -301,7 +301,7 @@ SECTION = """\
     };
     const varsHidden = () => !varReq();
     // F12: a prompt whose placeholders all resolve themselves must never ask, and
-    // the copied text must carry no leftover {#{ }#} fence.
+    // the copied text must carry no leftover {?} fence.
     window.__LAST_COPY__ = undefined;
     window.__VAR_PAYLOAD__ = undefined;
     if (!await clickTile('p3')) {
@@ -433,27 +433,6 @@ SECTION = """\
             }
           }
         }
-        // The switch turns the whole strip off, even mid-chain.
-        document.getElementById('settings').classList.remove('hidden');
-        await click('expert-open');
-        const varCheckRow = await findExpertRow('Show what each chain step needs');
-        if (!varCheckRow) {
-          out.errors.push('445: the chain overview switch is missing from the expert menu');
-        } else {
-          const sw = varCheckRow.querySelector('input.switch');
-          sw.click();
-          await sleep(200);
-          if (getComputedStyle(bar).display !== 'none') {
-            out.errors.push('445: turning the switch off left the strip visible');
-          }
-          sw.click();
-          await sleep(200);
-          if (getComputedStyle(bar).display === 'none') {
-            out.errors.push('445: turning the switch back on did not restore the strip');
-          }
-        }
-        await click('expert-back');
-        document.getElementById('settings').classList.add('hidden');
       }
       for (let i = 0; i < 3 && document.body.classList.contains('chain-mode'); i++) await click('chain-btn');
       await sleep(150);
@@ -757,9 +736,9 @@ SECTION = """\
       } else if (chips.some(c => !c.title.trim())) {
         out.errors.push('an automatic placeholder chip has no explanation');
       }
-      // Every placeholder chip looks the same: singling /clipboard\\ out read as
+      // Every placeholder chip looks the same: singling @clipboard out read as
       // "this one is selected", which it never is.
-      const clipChip = chips.find(c => c.textContent === '/clipboard\\\\');
+      const clipChip = chips.find(c => c.textContent === '@clipboard');
       if (!clipChip) out.errors.push('the clipboard placeholder chip is missing');
       if (chips.some(c => c.classList.contains('vars-chip-highlight'))) {
         out.errors.push('a placeholder chip is still highlighted');
@@ -768,9 +747,9 @@ SECTION = """\
       const before = ta.value;
       chips[0] && chips[0].click();
       await sleep(150);
-      // A reserved name is written with its slash fence, so the plain word stays
+      // A reserved name is written with an @ in front, so the plain word stays
       // available as a variable of the user's own.
-      if (ta.value === before || !ta.value.includes('{#{/date\\\\}#}')) {
+      if (ta.value === before || !ta.value.includes('{?@date}')) {
         out.errors.push('clicking a placeholder chip did not insert it: ' + ta.value);
       }
       // P33: a chip inserts at the CURSOR, not appended to the end of the text.
@@ -779,14 +758,14 @@ SECTION = """\
       ta.setSelectionRange(8, 8); // right after "Say AAA "
       chips[1] && chips[1].click();
       await sleep(150);
-      if (!ta.value.startsWith('Say AAA {#{') || !ta.value.includes('then BBB.')) {
+      if (!ta.value.startsWith('Say AAA {?') || !ta.value.includes('then BBB.')) {
         out.errors.push('a chip did not insert at the cursor position: ' + ta.value);
       }
       document.getElementById('modal-var-name').value = 'tone';
       document.getElementById('modal-var-opts').value = ' formal , casual ,, ';
       document.getElementById('modal-var-add').click();
       await sleep(150);
-      if (!ta.value.includes('{#{tone|formal,casual}#}')) {
+      if (!ta.value.includes('{?tone|formal,casual}')) {
         out.errors.push('the helper did not insert a choice variable: ' + ta.value);
       }
       // 456: the notes field sits directly above the colour row, full width, no

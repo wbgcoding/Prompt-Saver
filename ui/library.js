@@ -1,5 +1,5 @@
 // The prompt library: search, filters, batch selection, list and tile rendering.
-import { $, assignDrag, assignPrompts, assignSettings, cellKey, COLORS, convertFileSrc, debounced, errToast, favView, flag, GRID_PLUS, gridEl, gridSelected, ICON_EDIT, ICON_TRASH, IMG_WAIT, invoke, LANG, libraryEl, libraryTab, libThumbCache, makeKeyboardActivatable, openColorPop, optFlag, PDF_EXT, prompts, putIcon, settings, settingsEl, t, toast, txt, undoToast, val } from "./core.js";
+import { $, assignDrag, assignPrompts, assignSettings, cellKey, convertFileSrc, debounced, errToast, favView, flag, GRID_PLUS, gridEl, gridSelected, ICON_EDIT, ICON_TRASH, IMG_WAIT, invoke, LANG, libraryEl, libraryTab, libThumbCache, makeKeyboardActivatable, openColorPop, optFlag, PDF_EXT, prompts, putIcon, settings, settingsEl, t, toast, txt, undoToast, val } from "./core.js";
 import { mediaKind } from "./media.js";
 import { armDragOut, autoPasteDouble, autoPasteNow, fitAllTiles, hasImage, imageOf, notesOn, placeTile } from "./tiles.js";
 import { openLightbox, wireSearchSuggest } from "./windowChrome.js";
@@ -28,7 +28,6 @@ export let imageHitQuery = "";
 // Type filters are ADDITIVE and identical in both windows: an empty set means every
 // type, each chip toggles its own, and the pick is stored per window.
 export const libTypes = new Set();
-export let libColor = "all"; // prompt library color filter
 export let libFav = false; // prompt library "favorites only" filter
 export let libShowArchive = false; // show archived prompts even while browsing (not persisted)
 export let libViewMode = "list"; // "list" or "tiles" -- kept in sync with the type filter by syncLibViewMode()
@@ -239,10 +238,7 @@ export const typeAllowed = (set, p) => set.size === 0 || set.has(promptType(p));
 // fields the plain search used. Fuzzy only kicks in when no substring hit exists,
 // so the common case short-circuits and stays cheap on 1000+ prompts.
 export function fuzzyMaxTyposFor(term) {
-  const raw = settings.ui_texts?.fuzzyMaxTypos || "auto";
-  if (raw === "1") return 1;
-  if (raw === "2") return 2;
-  return term.length <= 5 ? 1 : 2; // auto
+  return term.length <= 5 ? 1 : 2;
 }
 // Bounded Levenshtein: returns max+1 as soon as every cell exceeds max (early out).
 export function editDistWithin(a, b, max) {
@@ -446,7 +442,6 @@ function archiveHidden() {
 export function libMatches(p) {
   if (libFav && !p.favorite) return false;
   if (!typeAllowed(libTypes, p)) return false;
-  if (libColor !== "all" && (p.color || "") !== libColor) return false;
   if (!tagMatches(p)) return false;
   // Browsing without a search query hides an archived prompt unless the show-archive
   // toggle is on; typing an actual query still finds it, the list is only quieter.
@@ -457,6 +452,7 @@ export function libMatches(p) {
 // Saved searches: query text, active tag filters and sort, kept together as one
 // JSON blob in a single settings slot -- no new backend concept needed, the
 // generic set_ui_text command already persists any string.
+const SAVED_SEARCH_MAX = 5; // saved searches kept
 export function loadSavedSearches() {
   try {
     const list = JSON.parse(txt("savedSearches") || "[]");
@@ -533,7 +529,7 @@ export function applySavedSearch(entry) {
 }
 export async function saveSavedSearch() {
   const list = loadSavedSearches();
-  const max = val("savedSearchMax");
+  const max = SAVED_SEARCH_MAX;
   if (list.length >= max) {
     const oldest = list[0];
     toast(t("savedSearchLimitToast").replace("{max}", String(max)).replace("{name}", oldest ? oldest.name : ""));
@@ -585,50 +581,6 @@ export function tagMatches(p, tagSet = libTags) {
   return (txt("tagFilterMode") || "and") === "or"
     ? wanted.some((k) => own.has(k))
     : wanted.every((k) => own.has(k));
-}
-
-// The palette colours some prompt really carries, in palette order.
-export function usedColors(list) {
-  const seen = new Set(list.map((p) => p.color || "").filter(Boolean));
-  return COLORS.filter((c) => c && seen.has(c));
-}
-
-// Color-filter dots: "All" + the used colours (every palette colour when `used` is
-// left out). Rebuilt only when that set changes (its signature rides on the wrap) and
-// hidden below two colours, where a filter has nothing to choose. Shared by the
-// library and the copy-history journal; refreshColorUI clears the signature.
-export function buildColorFilter(wrap, current, used) {
-  if (!wrap) return;
-  const shown = used || COLORS.filter(Boolean);
-  wrap.classList.toggle("hidden", shown.length < 2);
-  const sig = shown.join(",");
-  if (wrap.childElementCount && wrap.dataset.sig === sig) return;
-  wrap.dataset.sig = sig;
-  wrap.innerHTML = "";
-  const mk = (color, cls) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = `lib-color ${cls}`.trim();
-    b.dataset.color = color;
-    if (color && color !== "all") {
-      b.style.background = color;
-      b.title = color;
-      b.setAttribute("aria-label", color);
-    }
-    if (color === current) b.classList.add("active");
-    return b;
-  };
-  wrap.appendChild(mk("all", "lib-color-all"));
-  for (const c of shown) wrap.appendChild(mk(c, ""));
-}
-export function setActiveFilter(wrap, selector, attr, value) {
-  for (const b of wrap.querySelectorAll(selector)) {
-    b.classList.toggle("active", b.dataset[attr] === value);
-  }
-}
-export function setLibColor(color) {
-  libColor = color;
-  setActiveFilter($("library-colors"), ".lib-color", "color", color);
 }
 
 // "last edited" per prompt: from prompt_versions (a version row is only
@@ -754,6 +706,12 @@ export function makeTileImgObserver(root) {
 }
 
 export function renderLibrary() {
+  // The archive chip names the tag it filters by, so a renamed archive tag shows where it is used.
+  const archiveChip = $("library-archive");
+  $("library-archive-label").textContent = archiveTagName();
+  const archiveTip = t("showArchiveTagged").replace("{name}", archiveTagName());
+  archiveChip.title = archiveTip;
+  archiveChip.setAttribute("aria-label", archiveTip);
   const list = $("library-list");
   list.innerHTML = "";
   libScoreCache.clear(); // fresh scores each render (query / prompt content may have changed)
@@ -774,11 +732,8 @@ export function renderLibrary() {
   }
   renderTagFilter();
   renderSavedSearches();
-  const colorsUsed = usedColors(prompts);
-  if (libColor !== "all" && !colorsUsed.includes(libColor)) setLibColor("all");
-  buildColorFilter($("library-colors"), libColor, colorsUsed);
   $("library-search").classList.toggle("hidden", !prompts.length);
-  $("library-filter-rows").classList.toggle("hidden", !(flag("libraryTypeFilter") || flag("colorFilter") || flag("favorites") || tagsOn()));
+  $("library-filter-rows").classList.toggle("hidden", !(flag("libraryTypeFilter") || flag("favorites") || tagsOn()));
   if (!prompts.length) {
     const empty = document.createElement("div");
     empty.className = "hint";
@@ -1387,7 +1342,7 @@ export async function batchExport(format, ids) {
   }
 }
 
-// Copy a prompt, filling {#{variables}#} first when applicable: reserved names
+// Copy a prompt, filling {?variables} first when applicable: reserved names
 // resolve silently, the rest go through the dialog. Returns false if the copy
 // failed or the user cancelled. The single copy entry point for every path that
 // does not run the dialog's own double-click handling (grid, library, journal).
@@ -1404,7 +1359,7 @@ export async function copyResolved(p) {
     p = fresh;
   }
   // Rotating prompt: peek the entry copy_prompt would use, resolve variables
-  // on THAT text (fixes {#{...}#} tokens, if any, in it), then commit only once the
+  // on THAT text (fixes {?...} tokens, if any, in it), then commit only once the
   // copy actually reaches the clipboard, so a cancelled variable dialog never
   // burns an entry.
   if ((p.variants || []).length) {
@@ -1474,7 +1429,6 @@ export function bindLibrary() {
     for (const type of typeFilterOf("libTypeFilter")) libTypes.add(type);
     paintTypeChips($("library-types"), libTypes);
     syncLibViewMode();
-    setLibColor("all");
     libFav = false;
     $("library-fav").classList.remove("active");
     libShowArchive = false;
@@ -1540,10 +1494,6 @@ export function bindLibrary() {
     }
   });
   $("library-view-toggle").addEventListener("click", () => toggleLibViewMode());
-  $("library-colors").addEventListener("click", (e) => {
-    const btn = e.target.closest(".lib-color");
-    if (btn) { setLibColor(btn.dataset.color); renderLibrary(); }
-  });
   // Batch operations wiring.
   $("library-select-btn").addEventListener("click", () => setLibSelectMode(!libSelectMode));
   $("lib-batch-all").addEventListener("click", () => { for (const id of libDisplayOrder) libSelected.add(id); applyLibSelectionDom(); updateBatchBar(); });

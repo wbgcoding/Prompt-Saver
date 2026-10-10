@@ -107,12 +107,8 @@ export function loadPalette() {
   assignCOLORS(custom ? ["", ...custom] : [...DEFAULT_COLORS]);
 }
 
-// Drop the filter dots (built again by the next render) after a palette change, and
-// refresh any open list.
+// Refresh any open list after a palette change.
 export function refreshColorUI() {
-  for (const wrap of [$("library-colors")]) {
-    if (wrap) { wrap.innerHTML = ""; delete wrap.dataset.sig; }
-  }
   if (!libraryEl.classList.contains("hidden")) renderLibrary();
   if (isHistoryTabOpen()) renderJournal();
 }

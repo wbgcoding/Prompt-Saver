@@ -599,7 +599,7 @@ pub(crate) async fn copy_file_to_clipboard(path: String) -> bool {
 }
 
 // recDiscardKeepH has no expert-menu row yet (same "future menu writes it
-// directly" state as recCanvasMode/recDiskWarnMb above) -- 0 disables the
+// directly" state as recCanvasMode above) -- 0 disables the
 // whole discard-trash cleanup, keeping everything in "verworfen" forever.
 pub(crate) fn discard_keep_hours(state: &State<'_, Db>) -> f64 {
     lock(state).settings.ui_values.get("recDiscardKeepH").copied().unwrap_or(24.0)

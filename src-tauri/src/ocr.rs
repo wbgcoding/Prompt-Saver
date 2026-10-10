@@ -22,9 +22,8 @@ use windows::Win32::UI::WindowsAndMessaging::SW_HIDE;
 // A very small crop is upscaled 2x before recognition -- the actual trick that
 // makes small on-screen text (button labels, tooltips) recognizable. An image
 // can only ever be too big (downscaled to MaxImageDimension) or too small
-// (upscaled here), never both. The threshold is the ocrUpscaleUnderPx expert
-// setting, threaded down as a parameter (100-800, default 300 -- see
-// EXPERT_VALUES in ui/expertConfig.js).
+// (upscaled here), never both. The threshold is threaded down as a parameter
+// (300 px, see OCR_UPSCALE_UNDER_PX).
 
 // COM must be initialized once per thread that calls into WinRT, and never on
 // the UI thread. Every OCR call runs inside spawn_blocking; those pool threads
@@ -82,7 +81,7 @@ fn create_auto_engine() -> Result<OcrEngine, String> {
 // Resolve (and cache) the OcrEngine for `lang` ("auto" or an explicit BCP-47
 // tag). Never recreates an engine that is already cached. When `lang` is
 // an explicit tag whose recognition pack is not actually installed,
-// `auto_pick` (the ocrAutoPickLang expert setting, default on) decides
+// `auto_pick` (always on in the app) decides
 // whether to fall back to whatever IS installed (use whatever language
 // packs are already present) or to fail with ocr-no-language. The
 // cache key stays the ORIGINAL requested `lang`, matching how "auto" already
@@ -263,7 +262,7 @@ impl CapKind {
     }
     // Temp-file name segment AND the ui_flags/ui_values/ui_texts setting-key
     // prefix -- "voice", not "speech", to match the expert-menu keys (126's
-    // table: voiceLangAutoUpdate, ...).
+    // table of language-pack settings).
     pub(super) fn slug(self) -> &'static str {
         match self {
             CapKind::Ocr => "ocr",

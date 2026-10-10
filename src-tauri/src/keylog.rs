@@ -67,7 +67,7 @@ pub struct Gap {
 pub struct KeySidecar {
     pub events: Vec<KeyEvent>,
     pub gaps: Vec<Gap>,
-    // The `keyOverlayHoldMs` setting as it stood when this recording
+    // The hold time as it stood when this recording
     // started, carried along so the editor's default preset render
     // matches what was configured at capture time without a second
     // settings lookup. `#[serde(default)]` so an older sidecar (before
@@ -77,7 +77,7 @@ pub struct KeySidecar {
 }
 
 fn default_hold_ms() -> u32 {
-    400
+    HOLD_MS
 }
 
 // A hard ceiling on how many events one sidecar part can hold. Without
@@ -1712,9 +1712,8 @@ pub fn enabled(flags: &std::collections::HashMap<String, bool>) -> bool {
     flags.get("keyOverlay") == Some(&true)
 }
 
-pub fn hold_ms(values: &std::collections::HashMap<String, f64>) -> u32 {
-    values.get("keyOverlayHoldMs").copied().unwrap_or(400.0).clamp(100.0, 2000.0) as u32
-}
+// How long the key overlay shows a key press, in milliseconds.
+pub const HOLD_MS: u32 = 400;
 
 // Ships off, like keyOverlay itself: absent means the plain default
 // policy (everything but a password field recorded in full). Read once
@@ -1863,16 +1862,6 @@ mod tests {
         assert!(!enabled(&flags)); // absent -- "aus" is the shipped default
         maybe_start(enabled(&flags), 400, mono_ms(), shortcuts_only(&flags));
         assert!(slot().lock().unwrap().is_none());
-    }
-
-    #[test]
-    fn hold_ms_clamps_into_the_documented_range() {
-        let mut values = std::collections::HashMap::new();
-        values.insert("keyOverlayHoldMs".to_string(), 5000.0);
-        assert_eq!(hold_ms(&values), 2000);
-        values.insert("keyOverlayHoldMs".to_string(), 1.0);
-        assert_eq!(hold_ms(&values), 100);
-        assert_eq!(hold_ms(&std::collections::HashMap::new()), 400);
     }
 
     #[test]

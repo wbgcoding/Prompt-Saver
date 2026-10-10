@@ -1594,7 +1594,6 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
 /* Explains the small dot that marks a feature shipping switched off. */
 .expert-legend { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; white-space: nowrap; }
 /* The reset button sits at the right end of the filter row. */
-.expert-filter-row #expert-reset { flex: 0 0 auto; white-space: nowrap; }
 /* A state a group is currently in, sitting above that group's settings. It exists
    only while the state holds, so it never leaves a gap behind when it is gone. */
 .expert-notice {
@@ -1801,7 +1800,6 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 
 /* Expert toggles that hide whole sections / controls. */
 .noflag-chainPrompts #chain-btn { display: none; }
-.noflag-chainVarCheck #chain-overview { display: none; }
 .noflag-importExport #settings-sec-data { display: none; }
 /* Opt-in visual toggles (off by default; `flag-<key>` present only when on). */
 .flag-gridLines .cell { border-color: var(--border); }
@@ -1893,7 +1891,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .tile-tip.show { opacity: 1; transform: translateY(0); }
 .tile-tip-name { font-weight: 700; }
 .tile-tip-body { margin-top: 5px; opacity: 0.9; }
-/* A {#{variable}#} token stands out in the preview instead of reading like the
+/* A {?variable} token stands out in the preview instead of reading like the
    rest of the prompt; the only hint, short of copying, that one is asked for. */
 .var-token { color: var(--accent); font-weight: 600; }
 /* Length readout: same weight as the hint line below it, not the prompt text. */
@@ -2495,7 +2493,8 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
 /* Padding, not a taller swatch, closes the gap to a dropdown row's own height
    (its select control carries that height on its own). */
 .color-field .value-head { padding-block: 6px; }
-.expert-reset { margin-top: 8px; align-self: flex-start; }
+.expert-end { grid-column: 1 / -1; display: flex; justify-content: flex-end; padding: 12px 0 4px; }
+.expert-end .expert-reset { padding: 4px 10px; font-size: 12px; white-space: nowrap; }
 
 /* Expert menu tabs (the menu grew large; tabs keep it tidy). */
 .expert-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
@@ -3871,7 +3870,7 @@ input[type="password"]::-ms-clear { display: none; }
 }
 .lib-section:first-child { padding-top: 0; }
 
-/* Library color filter */
+/* Color dots of the batch color bars */
 .lib-colors { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .lib-color {
   width: 18px;
@@ -4033,7 +4032,6 @@ option:checked { background-color: var(--accent); color: var(--accent-fg); }
 
 /* Header icons hidden when their feature flag is off */
 /* Hidden when copy history is off, unless the user keeps paused buttons around. */
-.noflag-colorFilter #library-colors { display: none; }
 
 /* Drag & drop highlight while a file/text hovers the window */
 body.drag-over::after {
@@ -4361,6 +4359,8 @@ body.drag-over::after {
 .lib-fav-chip.active { background: #f5b301; border-color: #f5b301; color: #1a1a1a; }
 /* Show-archive filter chip: same idea, its own neutral accent. */
 .lib-archive-chip { color: var(--muted); }
+/* The tag glyph in front of the name; a pseudo-element keeps the chip text to the name alone. */
+#library-archive-label::before { content: "#"; opacity: 0.7; margin-inline-end: 1px; }
 .lib-archive-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 /* Saved searches: a star inside the search field saves the current query, tag
    filters and sort; the row of chips above only exists while at least one is

@@ -285,6 +285,10 @@ pub(crate) struct Settings {
     // Yes or No from its `auto_update` value by `migrate`.
     #[serde(default = "legacy_update_consent")]
     pub(crate) update_consent: UpdateConsent,
+    // How far the one-time rewrites of stored content have run (see DATA_VERSION).
+    // A stored settings blob without the key is at step 0.
+    #[serde(default)]
+    pub(crate) data_version: u32,
     // Update versions the user chose to skip: never offered again.
     #[serde(default)]
     pub(crate) skipped_versions: Vec<String>,
@@ -453,6 +457,7 @@ impl Default for Settings {
             rec_pause_hotkey: default_rec_pause_hotkey(),
             auto_update: true,
             update_consent: UpdateConsent::Unasked,
+            data_version: 0,
             skipped_versions: Vec::new(),
             last_seen_version: String::new(),
             ui_flags: HashMap::new(),
@@ -484,6 +489,10 @@ impl Default for Settings {
     }
 }
 
+// Current step of the one-time stored-content rewrites; load_store runs every step
+// above `Settings::data_version` once. Step 1: placeholders in the old {#{...}#}
+// spelling in the version history and the trash.
+pub(crate) const DATA_VERSION: u32 = 1;
 pub(crate) const GRID_MIN: u32 = 1;
 // Hard safety ceilings. The default-facing limits are 20 (enforced in the UI via
 // the expert values gridMax / maxViews); these only cap how far those expert
@@ -799,12 +808,46 @@ pub(crate) fn removed_ui_value_keys() -> &'static [&'static str] {
         "tagPopCols",
         "searchDebounceMs",
         "tileBlur",
+        "gridPad",
+        "gridGap",
+        "overlayDim",
+        "animSpeed",
+        "dragThreshold",
+        "disarmMs",
+        "composerMaxH",
+        "modalMaxVh",
+        "composerScale",
+        "primaryScale",
+        "snipPreviewVh",
+        "ocrUpscaleUnderPx",
+        "ocrIndexMaxChars",
+        "recDiskWarnMb",
+        "recAudioKbps",
+        "keyOverlayHoldMs",
+        "videoClipTtlMin",
+        "syncPollSecs",
+        "hlFontPx",
+        "historyPreviewLen",
+        "rotateTipLen",
+        "trayLabelMax",
+        "favStarSize",
+        "viewBorder",
+        "tileHotkeyBadgeOpacity",
+        "mediaRadius",
+        "mediaBlur",
+        "snipEditUndoMax",
+        "videoEditUndoMax",
+        "savedSearchMax",
+        "attachPreviewKb",
     ]
 }
 
 // Expert switches that no longer exist. A loaded store drops them once, like removed values.
 pub(crate) fn removed_ui_flag_keys() -> &'static [&'static str] {
     &[
+        "tileFolders",
+        "pillFolders",
+        "colorFilter",
         "pinButton",
         "favView",
         "libraryCloseToggle",
@@ -840,7 +883,24 @@ pub(crate) fn removed_ui_flag_keys() -> &'static [&'static str] {
         "hideTileNames",
         "accentScrollbar",
         "smoothScroll",
+        "floatPark",
+        "etaShow",
+        "chainVarCheck",
+        "ocrAutoPickLang",
+        "voiceAutoPickLang",
+        "ocrLangAutoUpdate",
+        "voiceLangAutoUpdate",
+        "helpTips",
+        "helpHighlight",
+        "helpSketches",
+        "historyDiff",
+        "veOvRemember",
     ]
+}
+
+// Expert dropdown choices (stored as text) that no longer exist; dropped like removed values.
+pub(crate) fn removed_ui_text_keys() -> &'static [&'static str] {
+    &["snipScaleFilter", "fuzzyMaxTypos"]
 }
 
 // Holds every numeric expert value to the range its slider enforces (the table
@@ -897,6 +957,7 @@ impl Settings {
     pub(crate) fn has_removed_ui_values(&self) -> bool {
         removed_ui_value_keys().iter().any(|k| self.ui_values.contains_key(*k))
             || removed_ui_flag_keys().iter().any(|k| self.ui_flags.contains_key(*k))
+            || removed_ui_text_keys().iter().any(|k| self.ui_texts.contains_key(*k))
     }
 
     // Ensure at least one view exists; migrate legacy single-grid data.
@@ -986,6 +1047,19 @@ impl Settings {
                 self.ui_values.insert("hoverDim".into(), (s / 5.0).round() * 5.0);
             }
         }
+        // The attachment preview size slider became three steps. A stored size of 4 KB or
+        // less reads as "short", 20 KB or more as "long"; anything between is the old
+        // default's neighbourhood and stays "medium" (no key). A choice already stored
+        // is never overwritten.
+        if !self.ui_texts.contains_key("attachPreviewSize") {
+            if let Some(kb) = self.ui_values.get("attachPreviewKb").copied() {
+                if kb <= 4.0 {
+                    self.ui_texts.insert("attachPreviewSize".into(), "short".into());
+                } else if kb >= 20.0 {
+                    self.ui_texts.insert("attachPreviewSize".into(), "long".into());
+                }
+            }
+        }
         // Seven look switches for tile text became one choice, "tileStyle". Styles that
         // were combined cannot be kept by a single choice: the first one in this order
         // wins. A choice already stored is never overwritten.
@@ -1062,11 +1136,24 @@ impl Settings {
         if let Some(h) = self.ui_values.get_mut("updateCheckH") {
             *h = clamp_update_hours(*h);
         }
+        // Grid folders and floating-button folders had a switch each; they share one
+        // now. Folders stay on unless both old switches were stored off, because
+        // switching them off hides the folders a user kept.
+        if !self.ui_flags.contains_key("folders")
+            && (self.ui_flags.contains_key("tileFolders") || self.ui_flags.contains_key("pillFolders"))
+        {
+            let both_off = self.ui_flags.get("tileFolders") == Some(&false)
+                && self.ui_flags.get("pillFolders") == Some(&false);
+            self.ui_flags.insert("folders".into(), !both_off);
+        }
         for k in removed_ui_value_keys() {
             self.ui_values.remove(*k);
         }
         for k in removed_ui_flag_keys() {
             self.ui_flags.remove(*k);
+        }
+        for k in removed_ui_text_keys() {
+            self.ui_texts.remove(*k);
         }
         // The privacy switch used to be "hide from screen capture" (on unless stored
         // false); it is now "allow screenshots" (off unless stored true). Anyone who

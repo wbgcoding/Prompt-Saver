@@ -8,7 +8,7 @@
 // prompt variables (VAR_RE, DYN_VARS, DYN_SET), but stays free of flag() and
 // every other piece of app state, so it can be handed a plain list of step
 // texts and always give the same answer back.
-const CHAIN_VAR_RE = /\{#\{\s*([^}\n]{1,200}?)\s*\}#\}/g;
+const CHAIN_VAR_RE = /\{\?([\p{L}\p{N}_@][^}\n]{0,199})\}/gu;
 const CHAIN_DYN_VARS = [
   "date", "time", "datetime", "weekday", "yesterday", "tomorrow",
   "week", "month", "year", "timestamp", "epoch",
@@ -27,14 +27,14 @@ function chainVarName(token) {
   return name || raw;
 }
 
-// A reserved name is written with the slash fence ("/date\") and listed in
+// A reserved name is written with an @ in front ("@date") and listed in
 // CHAIN_DYN_SET -- it fills itself in, no earlier step required.
 function chainIsReserved(name) {
-  return name.length > 2 && name.startsWith("/") && name.endsWith("\\") && CHAIN_DYN_SET.has(name.slice(1, -1));
+  return name.startsWith("@") && CHAIN_DYN_SET.has(name.slice(1));
 }
-// The bare reserved name behind a fence ("/date\" -> "date"), for display and
+// The bare reserved name behind the @ ("@date" -> "date"), for display and
 // for the `fills` list -- callers already know it is reserved when they use this.
-const chainDynName = (name) => name.slice(1, -1);
+const chainDynName = (name) => name.slice(1);
 
 // The distinct placeholder names a step's own text carries, in first-seen order.
 function chainStepNames(text) {

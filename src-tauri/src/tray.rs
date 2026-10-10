@@ -35,15 +35,8 @@ pub(crate) fn tray_cfg(settings: &Settings) -> TrayCfg {
         recent_n: count("trayRecentN", 5.0),
         favs: settings.ui_flags.get("trayFavs") != Some(&false), // on by default
         fav_n: count("trayFavN", 10.0),
-        label_max: tray_label_max(settings),
+        label_max: TRAY_LABEL_MAX,
     }
-}
-
-// Expert-tunable cap for tray_label, clamped the same way every other
-// ui_values-backed expert row is: an absent/out-of-range stored value falls
-// back to the shipped default rather than reaching tray_label unclamped.
-pub(crate) fn tray_label_max(settings: &Settings) -> usize {
-    settings.ui_values.get("trayLabelMax").copied().unwrap_or(TRAY_LABEL_MAX as f64).clamp(20.0, 80.0) as usize
 }
 
 // Whether the tray menu's filter row is drawn at all.

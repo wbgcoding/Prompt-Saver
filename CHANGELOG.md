@@ -1798,6 +1798,7 @@ the video editor and the introduction tour ship on).
 - **The expert menu is shorter.** 11 pure size and timing values are now fixed at their defaults.
 - **Rarely used visual effects are gone.** Blur tiles until hover and its blur strength, grayscale media, hidden tile names, accent-colored scrollbars and smooth scrolling are removed; frosted glass, blurred media and the text shadow stay.
 - **The help window no longer carries a "?" button.** All shortcuts stay one click away under "All shortcuts" in Settings.
+- **The expert menu is shorter again.** 44 fine-tuning values and safety-net switches are now fixed at their defaults.
 
 ### Changed
 
@@ -2037,6 +2038,12 @@ the video editor and the introduction tour ship on).
 - **German: one German word per thing throughout** (Tastenkürzel, Sicherung, Kurzinfo, Symbol, Design).
 - **The help is organised like the expert menu:** Basics, Features, Capture, Tiles, Appearance, Library & copy history, System & data.
 - **Help texts are shorter:** one sentence per step, special cases on their own line.
+- **Tile folders and button folders are now simply folders.** One name and one switch in the expert menu; a tile folder and a button folder still stay separate.
+- **The archive shows itself as the tag it is.** The library chip carries the tag's name, and its switch moved next to the tag settings in the expert menu.
+- **The library no longer filters by tile colour.** Colours are for looks only; the type, favorite and tag filters stay.
+- **Placeholders have one short spelling.** {?Name}, {?Name=default}, {?Name|A, B} and {?@date}. Prompts, history, trash and imports with the old {#{…}#} spelling are converted automatically.
+- Attachment preview size is a choice of short, medium or long instead of a slider.
+- The reset button of the expert menu sits at the end of the list.
 
 ## 2.6.3 (2026-07-26)
 

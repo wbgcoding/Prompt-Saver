@@ -220,10 +220,13 @@ pub(crate) fn reveal_secret_text(p: &Prompt, key: Option<[u8; 32]>) -> Result<(S
     let Some(key) = key else {
         return Err("secret-locked".to_string());
     };
-    let text = secret_decrypt(&p.text, &key)?;
+    // Ciphertext cannot be rewritten at load, so the old placeholder spelling inside
+    // a confidential entry is upgraded here, where it is read back; the next save
+    // stores it that way.
+    let text = upgrade_placeholders(&secret_decrypt(&p.text, &key)?);
     let mut variants = Vec::with_capacity(p.variants.len());
     for v in &p.variants {
-        variants.push(secret_decrypt(v, &key)?);
+        variants.push(upgrade_placeholders(&secret_decrypt(v, &key)?));
     }
     Ok((text, variants))
 }

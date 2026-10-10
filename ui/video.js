@@ -53,7 +53,7 @@ const ETA_MIN_PCT = 10;
 const ETA_MIN_SECS = 20;
 // Arrow-key overlay nudge step while Shift is held.
 const NUM_FIELD_BIG_STEP = 10;
-const UNDO_MAX_DEFAULT = 40;      // expert value videoEditUndoMax
+const UNDO_MAX_DEFAULT = 40;      // undo steps kept
 const MIN_CLIP_MS = 100;          // shortest trim/cut range that still means something
 const RECT_MIN_PX = 16;           // smallest draggable rectangle, in source pixels
 // Colour choices offered for text and frame overlays. Same palette the rest of
@@ -150,7 +150,6 @@ const VE = {
   stripCount: 0,
   peaks: { 0: null, 1: null },
   exporting: false,
-  etaShow: true,        // "Show remaining time" -- settings-driven, see applySettings
   dirty: false,         // ops changed since the last successful export
   lastExport: "",       // path of the file the last export produced
   destOverride: null,   // a full path picked via "Save as…" or typed by hand
@@ -2360,7 +2359,6 @@ function commitOverlay(op, changes) {
 // windows (see notify_float_settings in the backend), never to this one, so
 // waiting for that event would leave the very same session one overlay behind.
 function rememberOverlayValues(kind, changes) {
-  if (!VE.ovRemember) return;
   if (kind === "text") {
     if (changes.color !== undefined) {
       VE.ovTextColorDefault = changes.color;
@@ -3350,7 +3348,7 @@ function setProgress(pct) {
   exportEta.feed(clamped);
   const estimate = exportEta.estimate(ETA_MIN_PCT, ETA_MIN_SECS);
   const etaSpan = $("ve-export-eta");
-  etaSpan.textContent = VE.etaShow ? formatEta(estimate, t) : "";
+  etaSpan.textContent = formatEta(estimate, t);
   $("ve-export-progress").setAttribute("aria-valuetext", a11yProgressText(t, clamped, estimate));
 }
 
@@ -3520,7 +3518,6 @@ function noteFfmpeg(err) {
 
 $("ve-ffmpeg-get").addEventListener("click", (e) => {
   runFfmpegDownload(e.currentTarget, {
-    etaShow: () => VE.etaShow,
     t,
     onDone: async () => {
       VE.ffmpeg = true;
@@ -4406,10 +4403,7 @@ listen(EXPORT_PROGRESS_EVENT, (e) => {
 });
 
 function applySettings(settings) {
-  const undoMax = Number(settings?.ui_values?.videoEditUndoMax);
-  VE.undoMax = Number.isFinite(undoMax) && undoMax > 0 ? Math.round(undoMax) : UNDO_MAX_DEFAULT;
   const values = settings?.ui_values || {};
-  VE.etaShow = settings?.ui_flags?.etaShow !== false;
   VE.editStateKeepOn = settings?.ui_flags?.editStateKeep !== false;
   armEditStateAutosave();
   const texts = settings?.ui_texts || {};
@@ -4437,31 +4431,29 @@ function applySettings(settings) {
     $("ve-fade-out").numFieldRefresh?.();
   }
   // Shared with the screenshot editor's own snapping (see snap.js); the switch
-  // to turn it off is per editor, same reasoning as veOvRemember above.
+  // to turn it off is per editor.
   VE.snapOn = settings?.ui_flags?.videoEditSnap !== false;
   // Each overlay kind starts from its own last-used colour/thickness/opacity/font
   // size instead of the fixed default above, kept in the ordinary settings store
   // (not the per-file edit state) because it belongs to the user, not the file.
-  // Off, every new overlay always starts from the fixed defaults, unchanged.
-  VE.ovRemember = settings?.ui_flags?.veOvRemember !== false;
-  VE.ovTextColorDefault = VE.ovRemember && HEX_RE.test(texts.veOvLastTextColor || "") ? texts.veOvLastTextColor : VE.ovColorDefault;
-  VE.ovFrameColorDefault = VE.ovRemember && HEX_RE.test(texts.veOvLastFrameColor || "") ? texts.veOvLastFrameColor : VE.ovColorDefault;
+  VE.ovTextColorDefault = HEX_RE.test(texts.veOvLastTextColor || "") ? texts.veOvLastTextColor : VE.ovColorDefault;
+  VE.ovFrameColorDefault = HEX_RE.test(texts.veOvLastFrameColor || "") ? texts.veOvLastFrameColor : VE.ovColorDefault;
   // Kept as the raw remembered number (or null), resolved against VE.h only
   // once a new overlay is actually created -- VE.h is still 0 the first time
   // this function runs, before applyProbe() lands.
   const lastTextFontPx = Number(values.veOvLastTextFontPx);
-  VE.ovLastTextFontPx = VE.ovRemember && Number.isFinite(lastTextFontPx) && lastTextFontPx > 0 ? Math.round(lastTextFontPx) : null;
+  VE.ovLastTextFontPx = Number.isFinite(lastTextFontPx) && lastTextFontPx > 0 ? Math.round(lastTextFontPx) : null;
   const lastThickness = Number(values.veOvLastFrameThickness);
-  VE.ovLastFrameThickness = VE.ovRemember && Number.isFinite(lastThickness) && lastThickness > 0 ? Math.round(lastThickness) : null;
+  VE.ovLastFrameThickness = Number.isFinite(lastThickness) && lastThickness > 0 ? Math.round(lastThickness) : null;
   const lastPixelateBlock = Number(values.veOvLastPixelateBlock);
-  if (VE.ovRemember && Number.isFinite(lastPixelateBlock) && lastPixelateBlock > 0) VE.ovPixelateBlockDefault = Math.round(lastPixelateBlock);
+  if (Number.isFinite(lastPixelateBlock) && lastPixelateBlock > 0) VE.ovPixelateBlockDefault = Math.round(lastPixelateBlock);
   const lastSpotlightDim = Number(values.veOvLastSpotlightDim);
-  if (VE.ovRemember && Number.isFinite(lastSpotlightDim) && lastSpotlightDim > 0) VE.ovSpotlightDimDefault = lastSpotlightDim / 100;
+  if (Number.isFinite(lastSpotlightDim) && lastSpotlightDim > 0) VE.ovSpotlightDimDefault = lastSpotlightDim / 100;
   const lastImageOpacity = Number(values.veOvLastImageOpacity);
-  if (VE.ovRemember && Number.isFinite(lastImageOpacity) && lastImageOpacity > 0) VE.ovImageOpacityDefault = Math.round(lastImageOpacity);
+  if (Number.isFinite(lastImageOpacity) && lastImageOpacity > 0) VE.ovImageOpacityDefault = Math.round(lastImageOpacity);
   VE.ovFrameOpacityDefault = 100;
   const lastFrameOpacity = Number(values.veOvLastFrameOpacity);
-  if (VE.ovRemember && Number.isFinite(lastFrameOpacity) && lastFrameOpacity > 0) VE.ovFrameOpacityDefault = Math.round(lastFrameOpacity);
+  if (Number.isFinite(lastFrameOpacity) && lastFrameOpacity > 0) VE.ovFrameOpacityDefault = Math.round(lastFrameOpacity);
   updateExportNote();
 }
 

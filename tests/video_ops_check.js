@@ -343,7 +343,7 @@ async function exportLoadRaceCheck() {
   const held = new Promise((r) => { release = r; });
   const calls = [];
   const sb = {
-    VE: { exporting: false, ffmpeg: true, src: "C:/a.mp4", etaShow: false, dirty: false, editStateKeepOn: true, loadGen: 1, lastExport: "" },
+    VE: { exporting: false, ffmpeg: true, src: "C:/a.mp4", dirty: false, editStateKeepOn: true, loadGen: 1, lastExport: "" },
     $: el, t: (k) => k, toast: () => {},
     invoke: (cmd, args) => { calls.push([cmd, args]); return cmd === "export_video" ? held : Promise.resolve(null); },
     totalOutMs: () => 5000, isLosslessCopy: () => true, exportFormat: () => "mp4", exportQuality: () => "high",
@@ -392,7 +392,7 @@ async function exportIdleCheck() {
   for (const [name, invokeStub, lossless] of scenarios) {
     for (const k of Object.keys(els)) delete els[k];
     const sb = {
-      VE: { exporting: false, ffmpeg: true, src: "C:/a.mp4", etaShow: false },
+      VE: { exporting: false, ffmpeg: true, src: "C:/a.mp4" },
       $: el, t: (k) => k, toast: () => {}, invoke: invokeStub,
       totalOutMs: () => 5000, isLosslessCopy: () => lossless, exportFormat: () => "mp4", exportQuality: () => "high",
       formatExt: () => "mp4", destPath: () => "C:/out/a.mp4", showExportErrorDetails: () => {},

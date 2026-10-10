@@ -212,7 +212,7 @@ pub(crate) fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled
     let is_clip = key == "clipWatcher";
     let is_hotkeys = key == "promptHotkeys";
     let is_tray = key == "trayRecent" || key == "trayFavs" || key == TRAY_CUSTOM_MENU_KEY;
-    let is_folders = key == "pillFolders";
+    let is_folders = key == "folders";
     let is_sync_enable = key == "promptSync" && enabled; // Prompt-folders-as-Markdown
     // The receiver's own switch is durable-or-reversible (see remote.rs), so it
     // never takes the generic save-and-ignore path below.
@@ -359,7 +359,7 @@ pub(crate) fn checked_ui_value(key: &str, value: f64) -> Result<f64, String> {
 // Set an expert numeric value (CSS var / behaviour tweak).
 #[tauri::command(async)]
 pub(crate) fn set_ui_value(app: AppHandle, state: State<Db>, key: String, value: f64) -> Result<(), String> {
-    let is_tray = key == "trayRecentN" || key == "trayFavN" || key == "trayLabelMax";
+    let is_tray = key == "trayRecentN" || key == "trayFavN";
     let is_error_log_cap = key == "errorLogKeepKb";
     // A stored interval outside what the setting offers would show as one thing and
     // run as another.

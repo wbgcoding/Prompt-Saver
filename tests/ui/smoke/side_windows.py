@@ -68,11 +68,11 @@ FLOAT_PROBE = """
     await sleep(50);
     if (pill.classList.contains('resizing')) errs.push('the resize did not end on mouseup');
 
-    // 41: pillFolders must default ON even with pillFolders ABSENT from ui_flags
+    // 41: folders must default ON even with folders ABSENT from ui_flags
     // (a fresh install) -- the stub otherwise ships it pre-set true, which cannot
     // tell an inverted default-off check apart from the correct default-on one
     // (both read true). undefined is the one value where they disagree.
-    await window.__TAURI__.core.invoke('set_ui_flag', { key: 'pillFolders', enabled: undefined });
+    await window.__TAURI__.core.invoke('set_ui_flag', { key: 'folders', enabled: undefined });
     window.__FIRE__('settings-changed');
     await sleep(50);
     calls().length = 0;

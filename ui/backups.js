@@ -155,6 +155,10 @@ export async function renderStoragePanel(root, force) {
   body.appendChild(list);
 }
 
+// How long a throwaway video clip export survives before the background sweep
+// removes it; fixed, so its row has a number but no setting to jump to.
+const VIDEO_CLIP_TTL_MIN = 60;
+
 // One row per kept-data category, in the fixed order the spec names
 // them. Each entry names its own value/select key (for the retention wording
 // AND the jump-to-setting button, which needs to know which EXPERT_TABS list
@@ -170,15 +174,15 @@ export const RETENTION_ROWS = [
   { key: "clipInbox", nameKey: "flagClipWatcher", settingKey: "clipInboxMax", settingKind: "values", wording: "count" },
   { key: "recordings", nameKey: "storageKeyRecordings", settingKey: "recordingRetentionDays", settingKind: "selects", wording: "days" },
   { key: "discardedRecordings", nameKey: "storageKeyDiscardedRecordings", settingKey: "recDiscardKeepH", settingKind: "values", wording: "hours" },
-  { key: "tempExports", nameKey: "retentionCatTempExports", settingKey: "videoClipTtlMin", settingKind: "values", wording: "minutes" },
+  { key: "tempExports", nameKey: "retentionCatTempExports", fixed: VIDEO_CLIP_TTL_MIN, wording: "minutes" },
   { key: "editStates", nameKey: "storageKeyEditStates", settingKey: "editStateKeepDays", settingKind: "values", wording: "days" },
 ];
 
 // "0 means unlimited" always says so in words (retentionForever), never a
-// bare "0d" -- the one exception is temporary exports, whose minutes value
-// has no off state (min 5) so it never needs the zero case at all.
+// bare "0d" -- the one exception is temporary exports, whose fixed minutes
+// value has no off state so it never needs the zero case at all.
 export function retentionKeepText(row) {
-  const n = val(row.settingKey);
+  const n = row.fixed ?? val(row.settingKey);
   if (row.wording === "count") return t("retentionKeepsCount").replace("{n}", n);
   if (row.wording === "minutes") return t("retentionKeepsMinutes").replace("{n}", n);
   if (n <= 0) return t("retentionForever");
@@ -278,7 +282,8 @@ export async function renderRetentionPanel(root, force) {
       await RETENTION_CLEANUP[row.key]();
       if (row.key !== "recordings") renderRetentionPanel(root, true);
     });
-    btns.append(jumpBtn, cleanBtn);
+    if (row.settingKey) btns.append(jumpBtn);
+    btns.append(cleanBtn);
     bottom.append(keep, btns);
 
     wrap.append(top, bottom);

@@ -774,6 +774,10 @@ pub(crate) async fn add_prompt(
     rotate_mode: Option<String>,
     rotate_auto: Option<bool>,
 ) -> Result<Prompt, String> {
+    // Text from outside (a pasted prompt, an old client) may still use the retired
+    // placeholder spelling; the stored prompt never does.
+    let text = upgrade_placeholders(&text);
+    let variants = variants.map(|v| v.iter().map(|s| upgrade_placeholders(s)).collect::<Vec<String>>());
     // The slow steps (copying a large attachment, ffprobe, OCR) run before the
     // store lock is taken, so every other window keeps working meanwhile. The
     // lock is taken again only to validate and insert.
@@ -782,7 +786,7 @@ pub(crate) async fn add_prompt(
         (
             store_files_enabled(&store),
             store.settings.ui_flags.get("ocrIndex").copied().unwrap_or(false),
-            ocr_index_max_chars(&store.settings),
+            OCR_INDEX_MAX_CHARS,
         )
     };
     let mut fp = file_path.unwrap_or_default();
@@ -1099,7 +1103,9 @@ pub(crate) async fn update_prompt(
     // reset an unrelated field, so a missing value keeps the prompt's own.
     rotate_auto: Option<bool>,
 ) -> Result<Option<Prompt>, String> {
-    let variants = sanitize_variants(variants);
+    // Upgraded before anything below (the version snapshot included) sees the text.
+    let text = upgrade_placeholders(&text);
+    let variants = sanitize_variants(variants.iter().map(|s| upgrade_placeholders(s)).collect());
     let rotate_mode = sanitize_rotate_mode(rotate_mode, &variants);
     // Copying an attachment, probing it and OCR-ing a new picture all happen
     // before the store lock is taken, against a short snapshot of what the
@@ -1112,7 +1118,7 @@ pub(crate) async fn update_prompt(
         (
             store_files_enabled(&store),
             store.settings.ui_flags.get("ocrIndex").copied().unwrap_or(false),
-            ocr_index_max_chars(&store.settings),
+            OCR_INDEX_MAX_CHARS,
             cur,
         )
     };
@@ -1162,7 +1168,7 @@ pub(crate) async fn update_prompt(
         // split into disjoint field borrows) -- only actually run if the
         // attachment turns out to have changed.
         let ocr_index_on = store.settings.ui_flags.get("ocrIndex").copied().unwrap_or(false);
-        let ocr_max_chars = ocr_index_max_chars(&store.settings);
+        let ocr_max_chars = OCR_INDEX_MAX_CHARS;
         // Read history settings before the mutable prompt borrow (a MutexGuard
         // can't be split into disjoint field borrows).
         let hist_on = history_enabled(&store.settings);
@@ -1424,14 +1430,14 @@ pub(crate) async fn restore_version(app: AppHandle, state: State<'_, Db>, versio
 // same as any other new entry, so this stays a small addition next to add_prompt
 // rather than a second copy of its whole field list.
 pub(crate) fn build_restored_prompt(source: &Prompt, version_name: &str, version_text: String, version_variants: Vec<String>, suffix: &str) -> Prompt {
-    let variants = sanitize_variants(version_variants);
+    let variants = sanitize_variants(version_variants.iter().map(|s| upgrade_placeholders(s)).collect());
     let rotate_mode = sanitize_rotate_mode(String::new(), &variants);
     let name = if suffix.is_empty() { version_name.to_string() } else { format!("{version_name} {suffix}") };
     Prompt {
         id: gen_id(),
         trashed_at: 0,
         name,
-        text: version_text,
+        text: upgrade_placeholders(&version_text),
         color: source.color.clone(),
         image: source.image.clone(),
         show_image: source.show_image,

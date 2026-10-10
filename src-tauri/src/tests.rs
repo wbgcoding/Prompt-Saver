@@ -3937,14 +3937,6 @@ fn data_url_within_limit_rejects_one_byte_over_and_accepts_exactly_at() {
 // ---- Image search text ----
 
 #[test]
-fn ocr_index_max_chars_reads_the_expert_value_and_falls_back_to_the_spec_default() {
-    let mut settings: Settings = serde_json::from_str(r#"{"theme":"dark"}"#).unwrap();
-    assert_eq!(ocr_index_max_chars(&settings), 20000);
-    settings.ui_values.insert("ocrIndexMaxChars".into(), 5.0);
-    assert_eq!(ocr_index_max_chars(&settings), 5);
-}
-
-#[test]
 fn cap_ocr_text_cuts_by_character_not_by_byte() {
     // "café" is 4 chars but 5 bytes in UTF-8 -- a byte-based cut would
     // split the "é" and produce invalid UTF-8 (or panic).
@@ -4859,26 +4851,6 @@ fn main_window_js() -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
-}
-
-// The timer lives in Rust, the number shown in the expert menu lives in JS. If
-// they drift apart the menu claims one interval while the app runs another.
-#[test]
-fn sync_poll_and_fail_defaults_match_the_expert_menus_own_defaults() {
-    let js = main_window_js();
-    let js = js.as_str();
-    let js_def = |key: &str| -> f64 {
-        let at = js.find(&format!("{key}: {{ label:")).unwrap_or_else(|| panic!("{key} row missing from the expert menu"));
-        let row = &js[at..js[at..].find('\n').map(|e| at + e).unwrap_or(js.len())];
-        let d = row.find("def: ").expect("row has a default");
-        row[d + 5..]
-            .split([',', ' '])
-            .next()
-            .expect("default value")
-            .parse()
-            .expect("default is a number")
-    };
-    assert_eq!(js_def("syncPollSecs"), SYNC_POLL_SECS as f64);
 }
 
 #[test]
@@ -5828,7 +5800,7 @@ fn asset_scope_denies_every_store_file() {
 
 #[test]
 fn store_crypt_roundtrip() {
-    let secret = "prompt with sécret 🔐 {#{x}#}";
+    let secret = "prompt with sécret 🔐 {?x}";
     assert_eq!(dec_str(&enc_str(secret)), secret);
     // Legacy plaintext (no prefix) passes through unchanged for migration.
     assert_eq!(dec_str("legacy plaintext"), "legacy plaintext");
@@ -6403,15 +6375,10 @@ fn clip_export_path_impl_lands_in_temp_dir_with_a_safe_extension() {
 }
 
 #[test]
-fn clip_export_ttl_from_defaults_to_one_hour_and_honours_the_setting() {
-    let mut settings = Settings::default();
-    assert_eq!(clip_export_ttl_from(&settings), Duration::from_secs(3600));
-    settings.ui_values.insert("videoClipTtlMin".to_string(), 5.0);
-    assert_eq!(clip_export_ttl_from(&settings), Duration::from_secs(300));
-    // Never zero/negative -- a sweep with a zero age would delete a file
-    // the instant it is written, mid-export.
-    settings.ui_values.insert("videoClipTtlMin".to_string(), 0.0);
-    assert_eq!(clip_export_ttl_from(&settings), Duration::from_secs(60));
+fn clip_export_ttl_is_one_hour() {
+    // Never zero -- a sweep with a zero age would delete a file the instant
+    // it is written, mid-export.
+    assert_eq!(clip_export_ttl(), Duration::from_secs(3600));
 }
 
 #[test]
@@ -7804,12 +7771,12 @@ fn retention_keeps_the_right_backups_and_never_all_of_them() {
     assert_eq!(dropped.len(), names.len() - 1);
     assert!(!dropped.contains(&names[4]));
 
-    // Reserved placeholders gain their slash fence exactly once.
-    assert_eq!(fence_dyn_vars("Hi {#{date}#} and {#{name}#}"), "Hi {#{/date\\}#} and {#{name}#}");
-    assert_eq!(fence_dyn_vars("{#{/date\\}#}"), "{#{/date\\}#}", "already fenced stays put");
-    assert_eq!(fence_dyn_vars("plain text"), "plain text");
-    // A choice variable that happens to start with a reserved word is untouched.
-    assert_eq!(fence_dyn_vars("{#{date|a,b}#}"), "{#{date|a,b}#}");
+    // Reserved placeholders are written with an @ after the upgrade, exactly once.
+    assert_eq!(upgrade_placeholders("Hi {#{date}#} and {#{name}#}"), "Hi {?@date} and {?name}");
+    assert_eq!(upgrade_placeholders("{?@date}"), "{?@date}", "already upgraded stays put");
+    assert_eq!(upgrade_placeholders("plain text"), "plain text");
+    // A choice variable that happens to start with a reserved word stays an ordinary variable.
+    assert_eq!(upgrade_placeholders("{#{date|a,b}#}"), "{?date|a,b}");
 
     // The schedule reads the folder name, not a modification time.
     let a = stamp_secs("2026-07-29_08-00-00").unwrap();
@@ -8198,11 +8165,11 @@ fn placement_fixture() -> Store {
     settings.migrate();
     settings.views = serde_json::from_value(serde_json::json!([
         {"id": "a", "name": "A", "cols": 4, "rows": 3,
-         "members": ["p1", "p2", "p3", "p4", "p5"],
-         "layouts": {"4x3": {"p3": [0, 0], "p4": [1, 0], "p5": [3, 0]}}},
+        "members": ["p1", "p2", "p3", "p4", "p5"],
+        "layouts": {"4x3": {"p3": [0, 0], "p4": [1, 0], "p5": [3, 0]}}},
         {"id": "b", "name": "B", "cols": 4, "rows": 3,
-         "members": ["p3", "p6"],
-         "layouts": {"4x3": {"p3": [1, 1], "p6": [0, 0]}}}
+        "members": ["p3", "p6"],
+        "layouts": {"4x3": {"p3": [1, 1], "p6": [0, 0]}}}
     ]))
     .unwrap();
     settings.active_view = "a".into();
@@ -10277,7 +10244,7 @@ fn demo_text_is_complete_dash_free_and_keeps_the_placeholder_in_every_language()
             assert!(!t.contains('\u{2014}') && !t.contains('\u{2013}'), "{lang}: dash in {t:?}");
             assert!(!t.contains("_name") && !t.contains("_text") && !t.contains("demo."), "{lang}: raw key in {t:?}");
         }
-        assert!(d.placeholder_text.contains("{#{") && d.placeholder_text.contains("}#}"), "{lang}: placeholder syntax");
+        assert!(d.placeholder_text.contains("{?") && d.placeholder_text.contains("}"), "{lang}: placeholder syntax");
         for f in [d.attach_file, d.video_file] {
             assert!(!f.contains(['/', '\\', ':', '*', '?', '"', '<', '>', '|']), "{lang}: {f:?} is not a file name");
         }
@@ -10316,7 +10283,7 @@ fn demo_german_content_is_what_it_was_before_the_table() {
     assert_eq!(by("demo-welcome").text, "Das hier ist ein Beispieleintrag im Vorführmodus. Ein Klick kopiert ihn wie jeden anderen.");
     assert_eq!(by("demo-image").name, "Bild-Kachel");
     assert_eq!(by("demo-rotating").variants, vec!["Guten Tag!".to_string(), "Guten Abend!".to_string()]);
-    assert_eq!(by("demo-placeholder").text, "Hallo {#{Name}#}, vielen Dank für deine Nachricht.");
+    assert_eq!(by("demo-placeholder").text, "Hallo {?Name}, vielen Dank für deine Nachricht.");
     assert_eq!(by("demo-favorite").tags, vec!["Demo".to_string(), "Favorit".to_string()]);
     assert_eq!(by("demo-attachment").file_path, "Anhang.txt");
     assert_eq!(std::fs::read_to_string(dir.join("Anhang.txt")).unwrap(), "Eine harmlose Beispieldatei für den Vorführmodus.\n");
@@ -10357,7 +10324,7 @@ fn demo_store_contains_every_sample_kind() {
     assert!(by_id.get("demo-image").is_some_and(|p| !p.image.is_empty()), "an image tile");
     assert!(by_id.get("demo-welcome").unwrap().image.is_empty(), "a tile without an image");
     assert!(!by_id.get("demo-rotating").unwrap().variants.is_empty(), "a rotating prompt");
-    assert!(by_id.get("demo-placeholder").unwrap().text.contains("{#{"), "a self-fill placeholder");
+    assert!(by_id.get("demo-placeholder").unwrap().text.contains("{?"), "a self-fill placeholder");
     assert!(by_id.get("demo-favorite").unwrap().favorite, "a favorite");
     assert!(!by_id.get("demo-attachment").unwrap().file_path.is_empty(), "an attachment");
     assert!(!by_id.get("demo-welcome").unwrap().tags.is_empty(), "a tagged prompt");
@@ -13601,6 +13568,48 @@ fn toggle_pairs_merge_to_zero() {
     assert!(s.ui_values.is_empty());
 }
 
+fn migrated_with_folder_flags(flags: &[(&str, bool)]) -> Settings {
+    let mut s = Settings::default();
+    for (k, v) in flags {
+        s.ui_flags.insert((*k).into(), *v);
+    }
+    s.migrate();
+    s
+}
+
+#[test]
+fn both_folder_switches_off_turn_folders_off() {
+    let s = migrated_with_folder_flags(&[("tileFolders", false), ("pillFolders", false)]);
+    assert_eq!(s.ui_flags.get("folders"), Some(&false));
+    assert!(!s.ui_flags.contains_key("tileFolders") && !s.ui_flags.contains_key("pillFolders"));
+}
+
+#[test]
+fn one_folder_switch_off_keeps_folders_on() {
+    let s = migrated_with_folder_flags(&[("tileFolders", false)]);
+    assert_eq!(s.ui_flags.get("folders"), Some(&true));
+    let s = migrated_with_folder_flags(&[("tileFolders", true), ("pillFolders", false)]);
+    assert_eq!(s.ui_flags.get("folders"), Some(&true));
+    assert!(!s.ui_flags.contains_key("tileFolders") && !s.ui_flags.contains_key("pillFolders"));
+}
+
+#[test]
+fn no_stored_folder_switch_writes_no_folders_key() {
+    let s = migrated_with_folder_flags(&[]);
+    assert!(!s.ui_flags.contains_key("folders"));
+}
+
+#[test]
+fn the_folder_switch_merge_runs_once_and_keeps_a_stored_choice() {
+    let mut s = migrated_with_folder_flags(&[("tileFolders", false), ("pillFolders", false)]);
+    let before = s.ui_flags.clone();
+    s.migrate();
+    assert_eq!(s.ui_flags, before);
+    // An already stored "folders" wins over leftover old keys.
+    let s = migrated_with_folder_flags(&[("folders", true), ("tileFolders", false), ("pillFolders", false)]);
+    assert_eq!(s.ui_flags.get("folders"), Some(&true));
+}
+
 #[test]
 fn tile_flags_merge_to_style() {
     let run = |flags: &[(&str, bool)], texts: &[(&str, &str)]| {
@@ -13628,6 +13637,30 @@ fn tile_flags_merge_to_style() {
     assert_eq!(run(&[("boldTileNames", false)], &[]), None);
     // A stored choice is never overwritten.
     assert_eq!(run(&[("boldTileNames", true)], &[("tileStyle", "mono")]).as_deref(), Some("mono"));
+}
+
+#[test]
+fn the_attachment_preview_slider_becomes_three_steps() {
+    let run = |kb: f64, stored: Option<&str>| {
+        let mut s = Settings::default();
+        s.ui_values.insert("attachPreviewKb".into(), kb);
+        if let Some(v) = stored {
+            s.ui_texts.insert("attachPreviewSize".into(), v.into());
+        }
+        s.migrate();
+        assert!(!s.ui_values.contains_key("attachPreviewKb"), "the slider value survived migrate");
+        let once = s.ui_texts.get("attachPreviewSize").cloned();
+        s.migrate();
+        assert_eq!(s.ui_texts.get("attachPreviewSize").cloned(), once, "a second migrate changes nothing");
+        once
+    };
+    assert_eq!(run(2.0, None).as_deref(), Some("short"));
+    assert_eq!(run(4.0, None).as_deref(), Some("short"));
+    assert_eq!(run(8.0, None), None, "the default stays medium, no key");
+    assert_eq!(run(19.0, None), None);
+    assert_eq!(run(64.0, None).as_deref(), Some("long"));
+    // A choice already made wins over the old slider.
+    assert_eq!(run(64.0, Some("medium")).as_deref(), Some("medium"));
 }
 
 #[test]
@@ -13749,7 +13782,7 @@ fn hover_settings_merge() {
 
 #[test]
 fn removed_key_lists_have_no_duplicates() {
-    for list in [removed_ui_value_keys(), removed_ui_flag_keys()] {
+    for list in [removed_ui_value_keys(), removed_ui_flag_keys(), removed_ui_text_keys()] {
         let mut seen = std::collections::HashSet::new();
         for k in list {
             assert!(seen.insert(*k), "{k} is listed twice");
@@ -13799,6 +13832,18 @@ fn fixed_size_and_timing_values_are_dropped_on_load() {
 }
 
 #[test]
+fn the_library_colour_filter_switch_is_dropped_on_load() {
+    let mut s = Settings::default();
+    s.ui_flags.insert("colorFilter".into(), false);
+    s.ui_flags.insert("libraryTypeFilter".into(), false);
+    assert!(s.has_removed_ui_values());
+    s.migrate();
+    assert!(!s.ui_flags.contains_key("colorFilter"), "colorFilter survived migrate");
+    assert_eq!(s.ui_flags.get("libraryTypeFilter"), Some(&false), "the neighbouring switch stays");
+    assert!(!s.has_removed_ui_values());
+}
+
+#[test]
 fn visual_effect_switches_and_their_blur_value_are_dropped_on_load() {
     // The five effects are gone, and tileBlur only ever belonged to the first one.
     let flags = ["blurTilesUntilHover", "grayscaleMedia", "hideTileNames", "accentScrollbar", "smoothScroll"];
@@ -13808,7 +13853,7 @@ fn visual_effect_switches_and_their_blur_value_are_dropped_on_load() {
     }
     s.ui_flags.insert("blurMediaUntilHover".into(), true);
     s.ui_values.insert("tileBlur".into(), 9.0);
-    s.ui_values.insert("mediaBlur".into(), 9.0);
+    s.ui_values.insert("frostedBlur".into(), 9.0);
     assert!(s.has_removed_ui_values());
     s.migrate();
     for k in flags {
@@ -13816,8 +13861,59 @@ fn visual_effect_switches_and_their_blur_value_are_dropped_on_load() {
     }
     assert!(!s.ui_values.contains_key("tileBlur"), "tileBlur survived migrate");
     assert_eq!(s.ui_flags.get("blurMediaUntilHover"), Some(&true), "the kept blur switch stays");
-    assert_eq!(s.ui_values.get("mediaBlur"), Some(&9.0), "the kept blur strength stays");
+    assert_eq!(s.ui_values.get("frostedBlur"), Some(&9.0), "the kept blur strength stays");
     assert!(!s.has_removed_ui_values());
+}
+
+#[test]
+fn fine_tuning_values_and_safety_net_switches_are_dropped_on_load() {
+    // These rows became constants and the sub-switches ship on for good; a stored
+    // value must not linger, and a second pass must change nothing.
+    let values = [
+        "gridPad", "gridGap", "overlayDim", "animSpeed", "dragThreshold", "disarmMs", "composerMaxH",
+        "modalMaxVh", "composerScale", "primaryScale", "snipPreviewVh", "ocrUpscaleUnderPx",
+        "ocrIndexMaxChars", "recDiskWarnMb", "recAudioKbps", "keyOverlayHoldMs", "videoClipTtlMin",
+        "syncPollSecs", "hlFontPx", "historyPreviewLen", "rotateTipLen", "trayLabelMax", "favStarSize",
+        "viewBorder", "tileHotkeyBadgeOpacity", "mediaRadius", "mediaBlur", "snipEditUndoMax",
+        "videoEditUndoMax", "savedSearchMax",
+    ];
+    let flags = [
+        "floatPark", "etaShow", "chainVarCheck", "ocrAutoPickLang", "voiceAutoPickLang", "ocrLangAutoUpdate",
+        "voiceLangAutoUpdate", "helpTips", "helpHighlight", "helpSketches", "historyDiff", "veOvRemember",
+    ];
+    let texts = ["snipScaleFilter", "fuzzyMaxTypos"];
+    let mut s = Settings::default();
+    for k in values {
+         s.ui_values.insert(k.into(), 7.0);
+    }
+    for k in flags {
+         s.ui_flags.insert(k.into(), false);
+    }
+    for k in texts {
+         s.ui_texts.insert(k.into(), "x".into());
+    }
+    // Neighbours that stay: a value, a switch and a dropdown of the same screens.
+    s.ui_values.insert("libraryWidth".into(), 700.0);
+    s.ui_flags.insert("copyFlash".into(), false);
+    s.ui_texts.insert("tileStyle".into(), "bold".into());
+    assert!(s.has_removed_ui_values());
+    s.migrate();
+    for k in values {
+         assert!(!s.ui_values.contains_key(k), "{k} survived migrate");
+    }
+    for k in flags {
+         assert!(!s.ui_flags.contains_key(k), "{k} survived migrate");
+    }
+    for k in texts {
+         assert!(!s.ui_texts.contains_key(k), "{k} survived migrate");
+    }
+    assert_eq!(s.ui_values.get("libraryWidth"), Some(&700.0));
+    assert_eq!(s.ui_flags.get("copyFlash"), Some(&false));
+    assert_eq!(s.ui_texts.get("tileStyle").map(String::as_str), Some("bold"));
+    assert!(!s.has_removed_ui_values());
+    let once = serde_json::to_string(&s).unwrap();
+    s.migrate();
+    assert_eq!(serde_json::to_string(&s).unwrap(), once, "a second migrate changes nothing");
 }
 
 #[test]
@@ -13876,6 +13972,14 @@ fn removed_fine_tuning_values_keep_their_former_defaults() {
     assert_eq!(REC_BROKEN_GRACE_MIN, 5.0);
     assert_eq!(REC_SWEEP_EVERY_MIN, 60.0);
     assert_eq!(CLIP_SECRET_MIN_LEN, 8);
+    assert_eq!(OCR_UPSCALE_UNDER_PX, 300);
+    assert_eq!(OCR_INDEX_MAX_CHARS, 20000);
+    assert_eq!(crate::rec_cmds::REC_DISK_WARN_MB, 500.0);
+    assert_eq!(crate::rec_cmds::REC_AUDIO_KBPS, 192);
+    assert_eq!(crate::keylog::HOLD_MS, 400);
+    assert_eq!(TRAY_LABEL_MAX, 40);
+    assert_eq!(SYNC_POLL_SECS, 5);
+    assert_eq!(CLIP_EXPORT_TTL_SECS, 3600);
 }
 
 #[test]
@@ -13962,7 +14066,7 @@ fn csv_roundtrip_keeps_every_field() {
 // its `|` or its commas: a mangled token would silently lose the options.
 #[test]
 fn choice_variable_survives_txt_and_csv_export() {
-    const BODY: &str = "Write a {#{tone|formal,casual,witty}#} note about {#{Topic}#}.";
+    const BODY: &str = "Write a {?tone|formal,casual,witty} note about {?Topic}.";
     let mut prompts = sample_prompts();
     prompts[0].text = BODY.into();
     prompts[0].image = String::new(); // a text prompt, not the media sample
@@ -14488,7 +14592,7 @@ fn export_prompts_unsupported_format_uses_a_stable_error_code() {
 
 #[test]
 fn find_var_tokens_finds_a_plain_a_default_and_a_choice_token() {
-    let text = "Hi {#{name}#}, order {#{item=widget}#} in {#{size|S,M,L}#} please.";
+    let text = "Hi {?name}, order {?item=widget} in {?size|S,M,L} please.";
     let tokens = find_var_tokens(text);
     let bodies: Vec<&str> = tokens.iter().map(|(_, _, b)| b.as_str()).collect();
     assert_eq!(bodies, vec!["name", "item=widget", "size|S,M,L"]);
@@ -14520,24 +14624,24 @@ fn resolve_static_vars_priority_is_remembered_then_fixed_then_default_then_blank
     let fixed: HashMap<String, String> =
         [("a".to_string(), "from-fixed".to_string()), ("b".to_string(), "from-fixed".to_string())].into_iter().collect();
     // a: remembered AND fixed AND a default -- remembered wins.
-    assert_eq!(resolve_static_vars("{#{a=from-default}#}", &remembered, &fixed), "from-remembered");
+    assert_eq!(resolve_static_vars("{?a=from-default}", &remembered, &fixed), "from-remembered");
     // b: fixed AND a default, no remembered value -- fixed wins.
-    assert_eq!(resolve_static_vars("{#{b=from-default}#}", &remembered, &fixed), "from-fixed");
+    assert_eq!(resolve_static_vars("{?b=from-default}", &remembered, &fixed), "from-fixed");
     // c: only a default, no remembered or fixed value -- the default wins.
-    assert_eq!(resolve_static_vars("{#{c=from-default}#}", &remembered, &fixed), "from-default");
+    assert_eq!(resolve_static_vars("{?c=from-default}", &remembered, &fixed), "from-default");
     // d: nothing anywhere -- blank, never the raw placeholder.
-    assert_eq!(resolve_static_vars("{#{d}#}", &remembered, &fixed), "");
+    assert_eq!(resolve_static_vars("{?d}", &remembered, &fixed), "");
 }
 
 #[test]
 fn resolve_static_vars_choice_variable_follows_the_same_priority_chain() {
     let remembered: HashMap<String, String> = [("size".to_string(), "M".to_string())].into_iter().collect();
     let fixed: HashMap<String, String> = [("size".to_string(), "L".to_string())].into_iter().collect();
-    assert_eq!(resolve_static_vars("{#{size|S,M,L}#}", &remembered, &fixed), "M", "a remembered pick wins when it is a real option");
+    assert_eq!(resolve_static_vars("{?size|S,M,L}", &remembered, &fixed), "M", "a remembered pick wins when it is a real option");
     let fixed_only: HashMap<String, String> = fixed.clone();
-    assert_eq!(resolve_static_vars("{#{size|S,M,L}#}", &HashMap::new(), &fixed_only), "L", "falls to the fixed value next");
-    assert_eq!(resolve_static_vars("{#{size=S|S,M,L}#}", &HashMap::new(), &HashMap::new()), "S", "then the text's own default");
-    assert_eq!(resolve_static_vars("{#{size|S,M,L}#}", &HashMap::new(), &HashMap::new()), "S", "and finally the first option");
+    assert_eq!(resolve_static_vars("{?size|S,M,L}", &HashMap::new(), &fixed_only), "L", "falls to the fixed value next");
+    assert_eq!(resolve_static_vars("{?size=S|S,M,L}", &HashMap::new(), &HashMap::new()), "S", "then the text's own default");
+    assert_eq!(resolve_static_vars("{?size|S,M,L}", &HashMap::new(), &HashMap::new()), "S", "and finally the first option");
 }
 
 #[test]
@@ -14546,7 +14650,7 @@ fn resolve_static_vars_leaves_a_dynamic_name_and_an_unresolved_gap_untouched() {
     let fixed: HashMap<String, String> = HashMap::new();
     // A reserved dynamic name only means something at the moment of copy --
     // a background write has no such moment, so it is left exactly as written.
-    assert_eq!(resolve_static_vars("Today is {#{/date\\}#}.", &remembered, &fixed), "Today is {#{/date\\}#}.");
+    assert_eq!(resolve_static_vars("Today is {?@date}.", &remembered, &fixed), "Today is {?@date}.");
 }
 
 #[test]
@@ -14554,13 +14658,13 @@ fn resolved_for_export_resolves_the_text_and_every_rotating_variant() {
     let remembered: HashMap<String, String> = [("name".to_string(), "Alex".to_string())].into_iter().collect();
     let fixed: HashMap<String, String> = HashMap::new();
     let mut p = test_prompt("p1");
-    p.text = "Hi {#{name}#}".to_string();
-    p.variants = vec!["Bye {#{name}#}".to_string(), "no placeholder here".to_string()];
+    p.text = "Hi {?name}".to_string();
+    p.variants = vec!["Bye {?name}".to_string(), "no placeholder here".to_string()];
     let resolved = resolved_for_export(&p, &remembered, &fixed);
     assert_eq!(resolved.text, "Hi Alex");
     assert_eq!(resolved.variants, vec!["Bye Alex".to_string(), "no placeholder here".to_string()]);
     // The live prompt itself must never be mutated by an export/sync pass.
-    assert_eq!(p.text, "Hi {#{name}#}");
+    assert_eq!(p.text, "Hi {?name}");
 }
 
 // An exported theme file never carries the internal id, so importing it on
@@ -16069,30 +16173,6 @@ fn ink_halo_default_on_with_a_clamped_strength() {
 }
 
 #[test]
-fn tray_label_max_clamps_the_stored_expert_value() {
-    let mut s = Settings::default();
-    assert_eq!(tray_label_max(&s), TRAY_LABEL_MAX); // absent -> shipped default
-    s.ui_values.insert("trayLabelMax".into(), 5.0);
-    assert_eq!(tray_label_max(&s), 20); // below floor -> clamped up
-    s.ui_values.insert("trayLabelMax".into(), 500.0);
-    assert_eq!(tray_label_max(&s), 80); // above ceiling -> clamped down
-    s.ui_values.insert("trayLabelMax".into(), 60.0);
-    assert_eq!(tray_label_max(&s), 60); // in range -> passed through
-}
-
-#[test]
-fn sync_poll_secs_clamps_the_stored_expert_value() {
-    let mut s = Settings::default();
-    assert_eq!(sync_poll_secs(&s), SYNC_POLL_SECS); // absent -> shipped default
-    s.ui_values.insert("syncPollSecs".into(), 0.0);
-    assert_eq!(sync_poll_secs(&s), 2); // below floor -> clamped up
-    s.ui_values.insert("syncPollSecs".into(), 100.0);
-    assert_eq!(sync_poll_secs(&s), 30); // above ceiling -> clamped down
-    s.ui_values.insert("syncPollSecs".into(), 10.0);
-    assert_eq!(sync_poll_secs(&s), 10); // in range -> passed through
-}
-
-#[test]
 fn tray_menu_ids_round_trip_and_reject_junk() {
     assert_eq!(tray_copy_target(&tray_item_id("abc123")), Some("abc123"));
     // A prompt id is opaque, so the parser must not stop at the first separator.
@@ -16222,7 +16302,7 @@ fn a_broken_folder_scale_is_clamped() {
 #[test]
 fn deleting_a_prompt_purges_it_from_its_folder() {
     let mut settings = Settings::default();
-    settings.ui_flags.insert("pillFolders".into(), true);
+    settings.ui_flags.insert("folders".into(), true);
     settings.float_folders = vec![folder_of("f1", &["a", "b", "c"]), folder_of("f2", &["d", "e"])];
     // delete_prompt needs an AppHandle, so exercise the same steps it performs.
     let mut alive = ids(&["a", "b", "c", "d", "e"]);
@@ -16254,11 +16334,11 @@ fn the_window_plan_follows_the_feature_flag() {
 
     // Off: every member is a plain pill again, no folder; switching the feature
     // off must put every pill back.
-    settings.ui_flags.insert("pillFolders".into(), false);
+    settings.ui_flags.insert("folders".into(), false);
     let (pills, folders) = float_window_plan(&settings, &known);
     assert_eq!(pills, ids(&["a", "b", "c"]));
     assert!(folders.is_empty());
-    settings.ui_flags.remove("pillFolders");
+    settings.ui_flags.remove("folders");
 
     // An unpinned prompt never gets a window, folder member or not.
     settings.floating.remove("c");
@@ -18234,23 +18314,23 @@ fn a_stored_number_outside_its_slider_range_is_clamped_on_load() {
         ("importFolderMax", 1e18),
         ("remoteRateLimit", 0.0),
         ("remotePort", -5.0),
-        ("overlayDim", 5000.0),
+        ("uiScale", 5000.0),
         ("historyMax", 5e9),
     ]);
     assert_eq!(v["importFolderMax"], 2000.0);
     assert_eq!(v["remoteRateLimit"], 0.0, "the unlimited sentinel stays");
     assert_eq!(v["remotePort"], 1024.0);
-    assert_eq!(v["overlayDim"], 80.0);
+    assert_eq!(v["uiScale"], 300.0);
     assert_eq!(v["historyMax"], 1_000_000.0, "a stops entry is held to its last stop");
-    let v = clamped_values(&[("remoteRateLimit", 1e9), ("gridGap", 7.0)]);
+    let v = clamped_values(&[("remoteRateLimit", 1e9), ("hoverLift", 7.0)]);
     assert_eq!(v["remoteRateLimit"], 300.0);
-    assert_eq!(v["gridGap"], 7.0, "an in-range value is untouched");
+    assert_eq!(v["hoverLift"], 7.0, "an in-range value is untouched");
 }
 
 #[test]
 fn a_value_that_is_not_a_finite_number_is_dropped() {
-    let v = clamped_values(&[("gridGap", f64::NAN), ("gridPad", f64::INFINITY), ("overlayDim", f64::NEG_INFINITY)]);
-    for k in ["gridGap", "gridPad", "overlayDim"] {
+    let v = clamped_values(&[("hoverLift", f64::NAN), ("tileRadius", f64::INFINITY), ("uiScale", f64::NEG_INFINITY)]);
+    for k in ["hoverLift", "tileRadius", "uiScale"] {
         assert!(!v.contains_key(k), "{k} falls back to its default");
     }
 }
@@ -18263,14 +18343,14 @@ fn a_settings_import_clamps_the_numbers_it_brings() {
         ui_values: HashMap::from([
             ("importFolderMax".to_string(), 1e18),
             ("remoteRateLimit".to_string(), 0.0),
-            ("gridGap".to_string(), f64::NAN),
+            ("hoverLift".to_string(), f64::NAN),
         ]),
         ui_texts: HashMap::new(),
     };
     merge_settings_only(&mut live, file, |_| true).unwrap();
     assert_eq!(live.ui_values["importFolderMax"], 2000.0);
     assert_eq!(live.ui_values["remoteRateLimit"], 0.0);
-    assert!(!live.ui_values.contains_key("gridGap"));
+    assert!(!live.ui_values.contains_key("hoverLift"));
 }
 
 #[test]
@@ -18422,13 +18502,13 @@ fn retention_arithmetic_cannot_overflow() {
 #[test]
 fn the_ui_value_setter_refuses_non_finite_numbers_and_clamps_the_rest() {
     for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
-        assert!(update::checked_ui_value("gridGap", bad).is_err());
+        assert!(update::checked_ui_value("hoverLift", bad).is_err());
         assert!(update::checked_ui_value("someKeyWithoutARange", bad).is_err());
     }
     assert_eq!(update::checked_ui_value("importFolderMax", 1e18), Ok(2000.0));
     assert_eq!(update::checked_ui_value("trashRetentionDays", 0.5), Ok(0.0));
     assert_eq!(update::checked_ui_value("updateCheckH", 1e9), Ok(168.0));
-    assert_eq!(update::checked_ui_value("gridGap", 7.0), Ok(7.0));
+    assert_eq!(update::checked_ui_value("hoverLift", 7.0), Ok(7.0));
     assert_eq!(update::checked_ui_value("someKeyWithoutARange", 12345.5), Ok(12345.5));
 }
 
@@ -18796,4 +18876,227 @@ fn sidecar_path_sits_next_to_the_recording_as_its_own_extension() {
         sidecar_path(Path::new("C:/data/recordings/rec-cam-1.webm"), CAM_SIDECAR_EXT),
         PathBuf::from("C:/data/recordings/rec-cam-1.cam.json")
     );
+}
+
+// ---- Placeholder spelling {?Name}: scanner, upgrade of the retired {#{Name}#} ----
+
+#[test]
+fn find_var_tokens_reads_the_short_spelling_and_ignores_look_alikes() {
+    assert_eq!(find_var_tokens("a {?Größe} b"), vec![(2, 10, "Größe".to_string())]);
+    assert_eq!(find_var_tokens("{?who  } and {?tone|a, b}"), vec![(0, 8, "who".to_string()), (13, 25, "tone|a, b".to_string())]);
+    assert_eq!(find_var_tokens("{?@date}")[0].2, "@date");
+    // Nothing that is not a name right after the brace and the question mark.
+    for text in ["{?}", "{? x}", "{?>", "{?> x}", "{\"a\": 1}", "{x}", "{{x}}", "{?-x}", "{?x\ny}"] {
+        assert!(find_var_tokens(text).is_empty(), "{text:?} must not be a placeholder");
+    }
+    // The old spelling is no placeholder any more.
+    assert!(find_var_tokens("{#{name}#}").is_empty());
+    // Body limit: 200 characters fit, 201 do not.
+    assert_eq!(find_var_tokens(&format!("{{?{}}}", "a".repeat(200))).len(), 1);
+    assert!(find_var_tokens(&format!("{{?{}}}", "a".repeat(201))).is_empty());
+}
+
+#[test]
+fn a_self_filling_name_is_written_with_an_at_sign() {
+    assert!(is_dyn_var_name("@date"));
+    assert!(!is_dyn_var_name("@"));
+    assert!(!is_dyn_var_name("date"));
+    let none = HashMap::new();
+    assert_eq!(resolve_static_vars("On {?@date}: {?who=you}", &none, &none), "On {?@date}: you");
+}
+
+#[test]
+fn upgrade_placeholders_rewrites_every_old_kind() {
+    assert_eq!(upgrade_placeholders("Hi {#{name}#}!"), "Hi {?name}!");
+    assert_eq!(upgrade_placeholders("{#{city=Berlin}#}"), "{?city=Berlin}");
+    assert_eq!(upgrade_placeholders("{#{tone|formal,casual}#}"), "{?tone|formal,casual}");
+    assert_eq!(upgrade_placeholders("{#{tone=casual|formal,casual}#}"), "{?tone=casual|formal,casual}");
+    assert_eq!(upgrade_placeholders("{#{  spaced  }#}"), "{?spaced}");
+    // Self-filling: the slash fence and the bare pre-fence spelling both become @name.
+    assert_eq!(upgrade_placeholders("On {#{/date\\}#} at {#{/time\\}#}"), "On {?@date} at {?@time}");
+    assert_eq!(upgrade_placeholders("{#{date}#} {#{uuid}#}"), "{?@date} {?@uuid}");
+    // A fenced name that is not a reserved one stays an ordinary variable, spelled safely.
+    assert_eq!(upgrade_placeholders("{#{/foo\\}#}"), "{?_/foo\\}");
+    // Unnamed token kept as typed; a body that cannot start a name gets an underscore.
+    assert_eq!(upgrade_placeholders("a {#{ }#} b"), "a {#{ }#} b");
+    assert_eq!(upgrade_placeholders("{#{-x}#}"), "{?_-x}");
+    assert_eq!(upgrade_placeholders("{#{@foo}#}"), "{?@foo}");
+    // Text without an old token is returned untouched, new tokens included.
+    assert_eq!(upgrade_placeholders("plain {?name} text {x}"), "plain {?name} text {x}");
+    assert_eq!(upgrade_placeholders("unclosed {#{name"), "unclosed {#{name");
+}
+
+#[test]
+fn upgrade_placeholders_is_idempotent_and_leaves_no_old_token() {
+    let src = "A {#{a}#} B {#{/date\\}#} C {#{ }#} D {#{b=1|x,y}#}";
+    let once = upgrade_placeholders(src);
+    assert_eq!(once, "A {?a} B {?@date} C {#{ }#} D {?b=1|x,y}");
+    assert_eq!(upgrade_placeholders(&once), once);
+    // Whatever the old scanner still sees afterwards is only the kept empty one.
+    assert_eq!(find_old_var_tokens(&once).len(), 1);
+    // Rewritten tokens are found by the new scanner.
+    let names: Vec<String> = find_var_tokens(&once).into_iter().map(|t| t.2).collect();
+    assert_eq!(names, vec!["a", "@date", "b=1|x,y"]);
+}
+
+#[test]
+fn migrate_prompts_upgrades_the_text_and_every_rotation_entry() {
+    let mut p = test_prompt("a");
+    p.text = "Hi {#{name}#}".into();
+    p.variants = vec!["Bye {#{name}#}".into(), "plain".into()];
+    let mut list = vec![p];
+    migrate_prompts(&mut list);
+    assert_eq!(list[0].text, "Hi {?name}");
+    assert_eq!(list[0].variants, vec!["Bye {?name}".to_string(), "plain".to_string()]);
+    let snapshot = (list[0].text.clone(), list[0].variants.clone());
+    migrate_prompts(&mut list);
+    assert_eq!((list[0].text.clone(), list[0].variants.clone()), snapshot, "a second pass changes nothing");
+}
+
+#[test]
+fn every_inbound_path_upgrades_the_old_spelling() {
+    // Markdown sync: a file an older version wrote.
+    let base = sync_test_prompt();
+    let mut old = base.clone();
+    old.text = "Dear {#{name}#}".into();
+    let content = prompt_to_md(&old, &SyncPlacement::default());
+    let updated = apply_md_to_prompt(&base, &content).expect("valid frontmatter");
+    assert_eq!(updated.text, "Dear {?name}");
+    // Import file: preview and import both read through the same parse.
+    let data = parse_import_bytes("### Greeting\nHello {#{tone|a,b}#}".as_bytes(), std::path::Path::new("x.txt")).expect("parse");
+    assert_eq!(data.prompts[0].text, "Hello {?tone|a,b}");
+    // Trash: the entry comes back in the new spelling.
+    let mut settings = Settings::default();
+    settings.migrate();
+    let mut store = Store { prompts: Vec::new(), trash: Vec::new(), settings, prompts_locked: false, written: Default::default() };
+    let mut t = test_prompt("t");
+    t.id = "t1".into();
+    t.text = "Old {#{x}#}".into();
+    t.variants = vec!["Old two {#{/date\\}#}".into()];
+    t.trashed_at = 5;
+    store.trash.push(t);
+    restore_trashed_core(&mut store, "t1", |_| true).expect("restore");
+    assert_eq!(store.prompts[0].text, "Old {?x}");
+    assert_eq!(store.prompts[0].variants, vec!["Old two {?@date}".to_string()]);
+    // A restored version snapshot, shown or restored as a new entry.
+    let source = test_prompt("s");
+    let restored = build_restored_prompt(&source, "Name", "Snap {#{y}#}".into(), vec!["V {#{y}#}".into()], "");
+    assert_eq!(restored.text, "Snap {?y}");
+    assert_eq!(restored.variants, vec!["V {?y}".to_string()]);
+}
+
+#[test]
+fn a_confidential_entry_is_upgraded_where_it_is_read_back() {
+    let key = secret_derive_key("pw", b"0123456789abcdef").expect("derive");
+    let mut p = test_prompt("a");
+    p.secret = true;
+    p.text = secret_encrypt("Hi {#{name}#}", &key);
+    p.variants = vec![secret_encrypt("Two {#{/date\\}#}", &key)];
+    let (text, variants) = reveal_secret_text(&p, Some(key)).expect("decrypt");
+    assert_eq!(text, "Hi {?name}");
+    assert_eq!(variants, vec!["Two {?@date}".to_string()]);
+}
+
+#[test]
+fn the_stored_history_upgrade_runs_once_and_then_leaves_everything_alone() {
+    assert_eq!(DATA_VERSION, 1);
+    // A settings blob from before the field existed is at step 0.
+    let mut v = serde_json::to_value(Settings::default()).unwrap();
+    v.as_object_mut().unwrap().remove("data_version");
+    let old: Settings = serde_json::from_value(v).unwrap();
+    assert_eq!(old.data_version, 0);
+
+    let mut conn = Connection::open_in_memory().unwrap();
+    assert!(db_conn_init_schema(&conn));
+    db_add_version(&conn, "p1", 10, "Name", "Old {#{a}#}", &["Entry {#{/date\\}#}".to_string()], 20).unwrap();
+    db_add_version(&conn, "p1", 11, "Name", "Already {?b}", &[], 20).unwrap();
+    let mut trash = vec![test_prompt("t1")];
+    trash[0].text = "Trashed {#{c=1}#}".into();
+    trash[0].variants = vec!["Two {#{c}#}".into()];
+
+    // Two version rows are not both old: one rewritten row plus one trash entry.
+    let changed = upgrade_history_placeholders(&mut conn, &mut trash).unwrap();
+    assert_eq!(changed, 2);
+    assert_eq!(trash[0].text, "Trashed {?c=1}");
+    assert_eq!(trash[0].variants, vec!["Two {?c}".to_string()]);
+    // The stored rows themselves hold the new spelling now, not only their display.
+    let raw: Vec<(String, String)> = conn
+        .prepare("SELECT text, variants FROM prompt_versions ORDER BY id")
+        .unwrap()
+        .query_map([], |r| Ok((dec_str(&r.get::<_, String>(0)?), dec_str(&r.get::<_, String>(1)?))))
+        .unwrap()
+        .flatten()
+        .collect();
+    assert_eq!(raw[0].0, "Old {?a}");
+    assert_eq!(decode_variants(&raw[0].1), vec!["Entry {?@date}".to_string()]);
+    assert_eq!(raw[1].0, "Already {?b}");
+    // Listing a version shows the new spelling.
+    assert_eq!(db_list_versions(&conn, "p1")[1].text, "Old {?a}");
+    // A second start finds nothing to rewrite.
+    assert_eq!(upgrade_history_placeholders(&mut conn, &mut trash).unwrap(), 0);
+}
+
+#[test]
+fn an_old_snapshot_reads_in_the_new_spelling_before_the_upgrade_has_run() {
+    let conn = Connection::open_in_memory().unwrap();
+    assert!(db_conn_init_schema(&conn));
+    db_add_version(&conn, "p1", 10, "Name", "Old {#{a}#}", &["E {#{b}#}".to_string()], 20).unwrap();
+    let listed = db_list_versions(&conn, "p1");
+    assert_eq!(listed[0].text, "Old {?a}");
+    assert_eq!(listed[0].variants, vec!["E {?b}".to_string()]);
+    let (_, _, text, variants) = db_get_version(&conn, listed[0].id).expect("version");
+    assert_eq!(text, "Old {?a}");
+    assert_eq!(variants, vec!["E {?b}".to_string()]);
+}
+
+// ---- review fixes: confidential read path, @name list, version-row safety ----
+
+#[test]
+fn a_confidential_prompt_reaches_the_window_in_the_new_spelling() {
+    let key = secret_derive_key("pw", b"0123456789abcdef").expect("derive");
+    let mut p = test_prompt("a");
+    p.secret = true;
+    p.text = secret_encrypt("Hallo {#{Kunde}#} am {#{/date\\}#}", &key);
+    p.variants = vec![secret_encrypt("Hi {#{Kunde}#}", &key)];
+    let slim = slim_prompts(&[p], Some(key));
+    assert_eq!(slim[0].text, "Hallo {?Kunde} am {?@date}");
+    assert_eq!(slim[0].variants, vec!["Hi {?Kunde}".to_string()]);
+    assert!(!find_var_tokens(&slim[0].text).is_empty(), "the window must see a placeholder it can resolve");
+}
+
+#[test]
+fn only_the_reserved_names_are_self_filling() {
+    assert!(is_dyn_var_name("@date"));
+    assert!(is_dyn_var_name("@uuid"));
+    assert!(!is_dyn_var_name("@kunde"), "@ plus an unreserved word is an ordinary variable");
+    assert!(!is_dyn_var_name("date"));
+    assert!(!is_dyn_var_name("@"));
+    let none = HashMap::new();
+    assert_eq!(resolve_static_vars("{?@kunde=Meier} {?@date}", &none, &none), "Meier {?@date}");
+    // The list the frontend uses must be the one used here.
+    let js = include_str!("../../ui/promptVars.js");
+    let start = js.find("export const DYN_VARS = [").expect("DYN_VARS in promptVars.js");
+    let body = &js[start..js[start..].find("];").map(|i| start + i).unwrap()];
+    let mut js_names: Vec<String> = body.split('"').skip(1).step_by(2).map(|s| s.to_string()).collect();
+    js_names.sort();
+    let mut rust_names: Vec<String> = DYN_NAMES.iter().map(|s| s.to_string()).collect();
+    rust_names.sort();
+    assert_eq!(js_names, rust_names, "DYN_VARS (ui/promptVars.js) and DYN_NAMES (store.rs) must list the same names");
+}
+
+#[test]
+fn a_version_row_with_an_unreadable_column_is_left_untouched() {
+    let mut conn = Connection::open_in_memory().unwrap();
+    assert!(db_conn_init_schema(&conn));
+    db_add_version(&conn, "p1", 10, "Name", "Old {#{a}#}", &["Entry".to_string()], 20).unwrap();
+    // The variants column becomes something that looks encrypted but cannot be read here.
+    conn.execute("UPDATE prompt_versions SET variants = ?1", params![format!("{ENC_PREFIX}AAAA")]).unwrap();
+    let before: (String, String) = conn
+        .query_row("SELECT text, variants FROM prompt_versions", [], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap();
+    assert_eq!(db_upgrade_version_rows(&mut conn).unwrap(), 0);
+    let after: (String, String) = conn
+        .query_row("SELECT text, variants FROM prompt_versions", [], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap();
+    assert_eq!(before, after, "a row with an unreadable column is never rewritten");
 }

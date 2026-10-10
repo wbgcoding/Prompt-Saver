@@ -29,18 +29,18 @@ function flowToTarget(lang) {
 
 function folderTypes(lang) {
   const words = lang === "de"
-    ? { view: "Ansichtsgruppe", pill: "Button-Ordner", tile: "Kachelordner" }
-    : { view: "View group", pill: "Button folder", tile: "Tile folder" };
+    ? { view: "Ansichtsgruppe", pill: "Desktop-Ordner", tile: "Raster-Ordner" }
+    : { view: "View group", pill: "Desktop folder", tile: "Grid folder" };
   return `<svg viewBox="0 0 560 124" xmlns="http://www.w3.org/2000/svg" role="img">` +
     // View group: a tab strip inside a tab.
     box(20, 10, 150, 76) + box(30, 20, 40, 16) + box(74, 20, 40, 16) + box(30, 44, 130, 32) +
     label(95, 112, words.view, { size: 14 }) +
-    // Button folder: a row of small floating round buttons.
+    // Desktop folder: a row of small floating round buttons.
     `<circle cx="240" cy="48" r="18" fill="none" stroke="currentColor" stroke-width="1.5"/>` +
     `<circle cx="285" cy="48" r="18" fill="none" stroke="currentColor" stroke-width="1.5"/>` +
     `<circle cx="330" cy="48" r="18" fill="none" stroke="currentColor" stroke-width="1.5"/>` +
     label(285, 112, words.pill, { size: 14 }) +
-    // Tile folder: one tile holding a 2x2 preview of its members.
+    // Grid folder: one tile holding a 2x2 preview of its members.
     box(420, 10, 110, 76) +
     box(447, 18, 26, 26) + box(477, 18, 26, 26) + box(447, 48, 26, 26) + box(477, 48, 26, 26) +
     label(475, 112, words.tile, { size: 14 }) +
@@ -54,7 +54,7 @@ function placeholderAnatomy(lang) {
   // Every piece of the markup is its own monospace run, stretched to exactly CH px per
   // character (textLength), so the bracket under each part sits on it in any font.
   const CH = 11;
-  const parts = [["{#{"], ["Kunde", words.name], ["="], ["Meier", words.def], ["|"], ["Meier,Schulz", words.choices], ["}#}"]];
+  const parts = [["{?"], ["Kunde", words.name], ["="], ["Meier", words.def], ["|"], ["Meier, Schulz", words.choices], ["}"]];
   let x = 20;
   let out = "";
   for (const [text, name] of parts) {
@@ -93,8 +93,8 @@ function chainSteps(lang) {
   const stepX = [20, 220, 420];
   return `<svg viewBox="0 0 560 70" xmlns="http://www.w3.org/2000/svg" role="img">` +
     stepX.map((x, i) => box(x, 26, 120, 36) + label(x + 60, 49, `${words.step} ${i + 1}`, { size: 14 })).join("") +
-    arrow(140, 44, 220) + label(180, 20, "{#{X}#}", { size: 13 }) +
-    arrow(340, 44, 420) + label(380, 20, "{#{Y}#}", { size: 13 }) +
+    arrow(140, 44, 220) + label(180, 20, "{?X}", { size: 13 }) +
+    arrow(340, 44, 420) + label(380, 20, "{?Y}", { size: 13 }) +
     `</svg>`;
 }
 

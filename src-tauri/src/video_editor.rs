@@ -275,19 +275,7 @@ pub(crate) async fn mux_mic_track(app: AppHandle, state: State<'_, Db>, video_pa
         return Err("source-not-allowed".to_string());
     }
     let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
-    let audio_kbps = app
-        .try_state::<Db>()
-        .map(|s| {
-            s.lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .settings
-                .ui_values
-                .get("recAudioKbps")
-                .copied()
-                .unwrap_or(192.0)
-                .clamp(64.0, 320.0) as u32
-        })
-        .unwrap_or(192);
+    let audio_kbps = crate::rec_cmds::REC_AUDIO_KBPS;
     tauri::async_runtime::spawn_blocking(move || mux_mic_track_blocking(&ffmpeg, &video, &sidecar, audio_kbps))
         .await
         .map_err(|e| e.to_string())?

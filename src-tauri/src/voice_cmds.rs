@@ -81,15 +81,9 @@ pub(crate) async fn voice_start(
     }
     #[cfg(windows)]
     {
-        let (online_ok, auto_pick) = {
-            let store = lock(&state);
-            (
-                store.settings.ui_flags.get("voiceOnlineOk").copied().unwrap_or(false),
-                store.settings.ui_flags.get("voiceAutoPickLang").copied().unwrap_or(true),
-            )
-        };
+        let online_ok = lock(&state).settings.ui_flags.get("voiceOnlineOk").copied().unwrap_or(false);
         let prepared =
-            tauri::async_runtime::spawn_blocking(move || voice::prepare(lang, auto_pick)).await.map_err(|e| e.to_string());
+            tauri::async_runtime::spawn_blocking(move || voice::prepare(lang, true)).await.map_err(|e| e.to_string());
         let (resolved_lang, needs_online) = match prepared.and_then(|r| r) {
             Ok(v) => v,
             Err(e) => {

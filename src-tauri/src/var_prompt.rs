@@ -199,7 +199,7 @@ pub(crate) fn var_window_fit(app: AppHandle, height: f64) -> Result<(), String> 
     Ok(())
 }
 
-// The {#{username}#} placeholder. The account name never reaches a log: it is
+// The {?@username} placeholder. The account name never reaches a log: it is
 // resolved straight into the copied text.
 #[tauri::command]
 pub(crate) fn os_user_name() -> String {

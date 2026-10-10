@@ -441,7 +441,7 @@ pub(crate) async fn copy_formatted(text: String, html: String) -> Result<bool, S
     Ok(ok)
 }
 
-// `{#{clipboard}#}`: the clipboard's current text for the placeholder resolver.
+// `{?@clipboard}`: the clipboard's current text for the placeholder resolver.
 // Empty when the clipboard holds no text at all (an image or file payload).
 #[tauri::command]
 pub(crate) async fn clipboard_text() -> String {

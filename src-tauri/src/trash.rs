@@ -53,6 +53,8 @@ pub(crate) fn restore_trashed_core(store: &mut Store, id: &str, save: impl FnOnc
     let mut p = store.trash.remove(pos);
     let original_trashed_at = p.trashed_at;
     p.trashed_at = 0;
+    // A trash entry from before the placeholder spelling changed comes back readable.
+    upgrade_prompt_placeholders(&mut p);
     let folder_cells = active_view_folder_cells(&store.settings);
     let view = store.settings.active_view_mut();
     if let Some(cell) = first_free_cell_excluding(view, &folder_cells) {
@@ -190,6 +192,7 @@ pub(crate) fn restore_placed_core(store: &mut Store, placements: &[PromptPlaceme
         let Some(pos) = store.trash.iter().position(|p| p.id == pl.id) else { continue };
         let mut p = store.trash.remove(pos);
         p.trashed_at = 0;
+        upgrade_prompt_placeholders(&mut p);
         store.prompts.push(p);
         restored.push(pl);
     }

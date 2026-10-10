@@ -1,5 +1,5 @@
 // Expert menu: the renderer, its rows and the live-state parts of the setting registry.
-import { $, armButton, assignBUBBLE_MS, assignDISARM_MS, assignDRAG_THRESHOLD, assignHISTORY_PREVIEW_LEN, assignINPUT_MAX, assignLibraryTab, assignPrompts, assignROTATE_SHORT_MAX, assignSettings, COLORS, debounced, DEFAULT_COLORS, DICT, DISARM_MS, disarmButton, errText, errToast, EXPERT_ACTIONS, flag, flagState, gateOpen, HEADER_PAD_Y, HEX_RE, ICON_UNDO, ICON_WARN, invoke, LANG, modal, openColorPop, optFlag, PALETTE_LEN, prompts, putIcon, setStatusText, settings, settingsEl, shipsOn, syncEdgeFade, t, toast, txt, val } from "./core.js";
+import { $, armButton, assignBUBBLE_MS, assignLibraryTab, assignPrompts, assignSettings, COLORS, debounced, DEFAULT_COLORS, DICT, DISARM_MS, disarmButton, errText, errToast, EXPERT_ACTIONS, flag, flagState, gateOpen, HEADER_PAD_Y, HEX_RE, ICON_UNDO, ICON_WARN, invoke, LANG, modal, openColorPop, optFlag, PALETTE_LEN, prompts, putIcon, setStatusText, settings, settingsEl, shipsOn, syncEdgeFade, t, toast, txt, val } from "./core.js";
 import { ALL_FLAG_KEYS, normScreenshotFormat, EXPERT_BULK_NEVER, EXPERT_RESET_KEEP, EXPERT_SELECTS, EXPERT_TABS, EXPERT_TIP_SET, EXPERT_VALUES, FLAG_GATES, flagLabelKey, GRID_DOM_VALUES, groupFlags, OPT_FLAG_KEYS, REC_QUALITY_BITRATE, SELECT_CUSTOM_MAX, SELECT_CUSTOM_MIN, SETTINGS_AREA_LABEL, STYLE_OPTS, TILE_DOM_FLAGS, TILE_STYLES } from "./expertConfig.js";
 import { confirmDialog, infoDialog } from "./dialog.js";
 import { refreshFavViewUi, renderGrid, renderViews } from "./views.js";
@@ -38,6 +38,8 @@ export function enumDropdown(key, labelKey, opts, def, gate, norm = (v) => v) {
   };
 }
 
+const normPreviewSize = (v) => (["short", "medium", "long"].includes(v) ? v : "medium");
+
 // Dropdowns like the settings' text-size / font selects.
 export const EXPERT_DROPDOWNS = {
   // Live counter unit selection.
@@ -47,9 +49,6 @@ export const EXPERT_DROPDOWNS = {
   // styles combined cannot be kept by a single choice (see Settings::migrate).
   tileStyle: enumDropdown("tileStyle", "valTileStyle",
     [["plain", "optTileStylePlain"], ["bold", "optTileStyleBold"], ["uppercase", "optTileStyleUpper"], ["mono", "optTileStyleMono"], ["italic", "optTileStyleItalic"], ["shadow", "optTileStyleShadow"], ["compact", "optTileStyleCompact"], ["gradient", "optTileStyleGradient"]], "plain"),
-  // Fuzzy-search typo tolerance.
-  fuzzyMaxTypos: enumDropdown("fuzzyMaxTypos", "valFuzzyTypos",
-    [["auto", "optAuto"], ["1", "opt1"], ["2", "opt2"]], "auto", "fuzzySearch"),
   // How several selected tag filters combine.
   tagFilterMode: enumDropdown("tagFilterMode", "valTagFilterMode",
     [["and", "optTagAnd"], ["or", "optTagOr"]], "and", "tags"),
@@ -72,10 +71,6 @@ export const EXPERT_DROPDOWNS = {
   snipEditDefaultTool: enumDropdown("snipEditDefaultTool", "valSnipEditDefaultTool",
     [["last", "optSnipToolLast"], ["hand", "snipToolHand"], ["crop", "snipToolCrop"], ["pen", "snipToolPen"], ["marker", "snipToolMarker"],
      ["arrow", "snipToolArrow"], ["text", "snipToolText"], ["step", "snipToolStep"]], "last", "snipEditor"),
-  // Resampling quality for the editor's own scale action: smooth for photos,
-  // nearest-neighbour ("low") to keep pixel art crisp instead of blurred.
-  snipScaleFilter: enumDropdown("snipScaleFilter", "valSnipScaleFilter",
-    [["high", "optSnipScaleFilterHigh"], ["low", "optSnipScaleFilterLow"]], "high", "snipEditor"),
   // What the text tool draws behind its letters. Replaces the old boolean
   // snipTextPlate flag; a stored true/false there converts once on read
   // (below) since the program has no released version to stay compatible with.
@@ -211,6 +206,9 @@ export const EXPERT_DROPDOWNS = {
   // size that fits the tile or button.
   copySizeLevel: enumDropdown("copySizeLevel", "valCopySize",
     [["small", "optCopySizeSmall"], ["medium", "optCopySizeMedium"], ["large", "optCopySizeLarge"]], "large", "bubbleMs", normCopySizeLevel),
+  // How much of a text attachment the editor preview reads (sizes in ATTACH_PREVIEW_KB).
+  attachPreviewSize: enumDropdown("attachPreviewSize", "valAttachPreviewKb",
+    [["short", "optPreviewShort"], ["medium", "optPreviewMedium"], ["long", "optPreviewLong"]], "medium", "attachTextPreview", normPreviewSize),
 };
 
 // Mirror each disabled flag onto a body class so CSS can hide the matching UI.
@@ -255,13 +253,7 @@ export function applyValues() {
     fitBox.key = "";
     fitAllTiles();
   }
-  root.setProperty("--transition", `${val("animSpeed")}ms cubic-bezier(0.4, 0, 0.2, 1)`);
-  root.setProperty("--transition-ms", `${val("animSpeed")}ms`); // bare duration for effects that scale it (e.g. a slower fade)
-  root.setProperty("--gap", `${val("gridGap")}px`);
   root.setProperty("--lib-preview-lines", String(Math.round(val("libPreviewLines"))));
-  root.setProperty("--grid-pad", `${val("gridPad")}px`);
-  root.setProperty("--overlay-dim", String(val("overlayDim") / 100));
-  root.setProperty("--view-border", `${val("viewBorder")}px`);
   // Appearance scales. UI scale drives the WebView's native zoom (robust); the rest
   // stay CSS `zoom` on their own elements (1 = unchanged). Only push the native zoom
   // when it actually changed: applyValues runs on every slider tick, and a redundant
@@ -271,33 +263,17 @@ export function applyValues() {
     _lastUiZoom = uiZoomFactor;
     invoke("set_ui_zoom", { factor: uiZoomFactor }).catch(() => {});
   }
-  root.setProperty("--composer-zoom", val("composerScale") / 100);
   root.setProperty("--icon-zoom", val("iconScale") / 100);
-  root.setProperty("--primary-zoom", val("primaryScale") / 100);
   // Sizes exposed to CSS (favorites star, chain badge, tile geometry, header, snip).
-  root.setProperty("--fav-star-size", `${val("favStarSize")}px`);
   root.setProperty("--tile-radius", `${val("tileRadius")}px`);
   root.setProperty("--tile-border-w", `${val("tileBorderWidth")}px`);
   root.setProperty("--header-pad-y", `${HEADER_PAD_Y}px`);
-  root.setProperty("--snip-preview-vh", `${val("snipPreviewVh")}vh`);
   root.setProperty("--frosted-blur", `${val("frostedBlur")}px`);
   root.setProperty("--hover-lift", `${val("hoverLift")}px`);
   root.setProperty("--lib-width", `${val("libraryWidth")}px`);
-  root.setProperty("--blur-media", `${val("mediaBlur")}px`);
   const dim = val("hoverDim");
   document.body.classList.toggle("hover-dim", dim > 0);
   root.setProperty("--hover-dim-opacity", String((100 - dim) / 100));
-  root.setProperty("--hotkey-badge-opacity", val("tileHotkeyBadgeOpacity") / 100);
-  root.setProperty("--media-radius", `${val("mediaRadius")}px`);
-  root.setProperty("--hl-font-px", `${val("hlFontPx")}px`);
-  root.setProperty("--composer-max-h", `${val("composerMaxH")}px`);
-  root.setProperty("--modal-max-vh", `${val("modalMaxVh")}vh`);
-  // Caps/lengths that were fixed constants, now expert-tunable.
-  assignROTATE_SHORT_MAX(Math.round(val("rotateTipLen")));
-  assignHISTORY_PREVIEW_LEN(Math.round(val("historyPreviewLen")));
-  assignDRAG_THRESHOLD(val("dragThreshold"));
-  assignINPUT_MAX(Math.round(val("composerMaxH")));
-  assignDISARM_MS(Math.round(val("disarmMs")));
   document.body.classList.toggle("toast-top", settings.ui_texts?.toastPos === "top");
   assignBUBBLE_MS(val("bubbleMs"));
   const nameMax = val("nameMaxLen");
@@ -546,13 +522,11 @@ export async function commitValue(key, value) {
 }
 
 // How a number reads on its row. The stored value never changes, only the text:
-// milliseconds show as seconds, the attachment preview size as roughly that many
-// words (about 170 per kilobyte) and the error log size in megabytes.
+// milliseconds show as seconds and the error log size in megabytes.
 // A 0-stop can carry a special label (e.g. auto-advance "unlimited") instead of "0 min".
 export function formatValue(cfg, v) {
   if (v === 0 && cfg.zeroLabel) return t(cfg.zeroLabel);
   const nf = (opts) => new Intl.NumberFormat(LANG, opts);
-  if (cfg.display === "words") return t("valWordsApprox").replace("{n}", nf({}).format(Math.round(v * 170 / 10) * 10));
   if (cfg.display === "mb") return `${nf({ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v / 1024)} MB`;
   if (cfg.unit === "ms") return `${nf({ minimumFractionDigits: 0, maximumFractionDigits: (cfg.step ?? 100) < 100 ? 2 : 1 }).format(v / 1000)} s`;
   // One style for every unit: number, space, unit; percent, the times sign and a per-minute rate hug the number.
@@ -1975,10 +1949,14 @@ function showActiveTab(bar) {
 
 // The tab bar is rebuilt on every render; one observer follows the current bar.
 let tabBarObserver = null;
+// The reset button's wrapper lives in the page once; every render re-appends this same
+// node (clearing the list detaches it), so the click listener and the armed state stay.
+let expertEndEl = null;
 
 export function renderExpert() {
   seedDiagnosticsCollapsed();
   const box = $("expert-flags");
+  expertEndEl ??= $("expert-end");
   const tabBar = $("expert-tabs-bar");
   const keepScroll = box.scrollTop; // survive live re-renders (e.g. a toggled gate)
   const keepTabScroll = tabBar.querySelector(".expert-tabs")?.scrollLeft || 0;
@@ -2177,6 +2155,7 @@ export function renderExpert() {
     empty.textContent = t(!searching && expertOnlyChanged ? "expertNothingChanged" : searching ? "expertSearchNoHits" : "libraryNoResults");
     box.appendChild(empty);
   }
+  box.appendChild(expertEndEl);
   box.scrollTop = keepScroll;
 }
 
@@ -2329,7 +2308,6 @@ export function bindExpertMenu() {
   // download_ffmpeg / cancel_ffmpeg_download) from wherever it first needs
   // ffmpeg and finds it missing.
   const ffmpegRun = (btn) => runFfmpegDownload(btn, {
-    etaShow: () => flag("etaShow"),
     t,
     onDone: () => {
       ffmpegAvailable = true;

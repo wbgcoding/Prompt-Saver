@@ -84,13 +84,13 @@ const PROMPTS = Array.from({ length: 12 }, (_, i) => ({
   // Text has a default (Hello) so the fill-in dialog's prefill can be checked;
   // Language has none, so the same check also covers the plain, empty case.
   text: i === 1
-    ? "Translate {#{Text=Hello}#} into {#{Language}#}."
+    ? "Translate {?Text=Hello} into {?Language}."
     : i === 3
-      ? "Meeting on {#{/date\\}#} at {#{/time\\}#}, {#{/weekday\\}#} (week {#{/week\\}#} of {#{/month\\}#} {#{/year\\}#}), " +
-        "yesterday {#{/yesterday\\}#}, tomorrow {#{/tomorrow\\}#}, stamp {#{/timestamp\\}#}, epoch {#{/epoch\\}#}, " +
-        "by {#{/username\\}#} ref {#{/random\\}#} no {#{/counter\\}#}: {#{/clipboard\\}#}"
+      ? "Meeting on {?@date} at {?@time}, {?@weekday} (week {?@week} of {?@month} {?@year}), " +
+        "yesterday {?@yesterday}, tomorrow {?@tomorrow}, stamp {?@timestamp}, epoch {?@epoch}, " +
+        "by {?@username} ref {?@random} no {?@counter}: {?@clipboard}"
       : i === 5
-        ? "Write a {#{tone=casual|formal,casual,witty}#} note about {#{Topic}#}."
+        ? "Write a {?tone=casual|formal,casual,witty} note about {?Topic}."
         : i === 7
           ? MD_SAMPLE
           : "Example prompt body number " + (i + 1) + ".",
@@ -223,7 +223,7 @@ const SETTINGS = {
   // the text tool's background became a three-way choice -- its old boolean
   // setting must convert to "none" on read without the user touching anything.
   ui_flags: {
-    tags: true, customThemes: true, promptNotes: true, pillFolders: true,
+    tags: true, customThemes: true, promptNotes: true, folders: true,
     // The statistics checks read a dashboard that is switched on; a fresh install starts
     // with it off (the dedicated probe seeds that case).
     usageStats: true,

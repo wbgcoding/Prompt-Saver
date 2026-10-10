@@ -38,7 +38,7 @@ const GAP = 8; // gap between tiles
 const PAD = 10; // padding inside the popover
 const POP_GAP = 6; // gap between icon and popover
 const PREVIEW_MAX = 4; // mini previews on the closed folder (2x2)
-let DRAG_THRESHOLD = DRAG_THRESHOLD_DEFAULT; // expert-tunable
+const DRAG_THRESHOLD = DRAG_THRESHOLD_DEFAULT;
 const MENU_W = 230; // matches .menu in floating.css
 
 let state = { id: folderId, name: "", scale: 1, cols: 3, members: [] };
@@ -401,7 +401,6 @@ async function applyTexts(s) {
 function applyPrefs(s) {
   document.body.style.fontFamily = FONTS[s.tile_font] || FONTS.system;
   copyPrefs = readCopyPrefs(s);
-  DRAG_THRESHOLD = copyPrefs.dragThreshold;
   dragOutOn = s.ui_flags?.dragOut === true;
   dragOutMod = DRAG_OUT_MODS[s.ui_texts?.dragOutModifier] || "ctrlKey";
   // rotateBadge is a sub-toggle of rotatingPrompts: the parent off must freeze
@@ -409,8 +408,7 @@ function applyPrefs(s) {
   // off), same fix as floating.js and the main window.
   rotateBadgeOn = s.ui_flags?.rotateBadge !== false && s.ui_flags?.rotatingPrompts !== false;
   // The folder animation reuses the global animation setting.
-  const speed = Number(s.ui_values?.animSpeed);
-  animMs = s.ui_flags?.animations === false ? 0 : Number.isFinite(speed) ? Math.max(0, speed) : 150;
+  animMs = s.ui_flags?.animations === false ? 0 : 150;
   document.documentElement.style.setProperty("--transition", `${animMs}ms cubic-bezier(0.4, 0, 0.2, 1)`);
   const op = Number(s.ui_values?.floatOpacity);
   iconEl.style.opacity = Number.isFinite(op) ? `${Math.max(0.2, op / 100)}` : "";

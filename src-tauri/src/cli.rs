@@ -19,8 +19,8 @@ use crate::{
     gfs_from_settings, list_backups_impl_at, lock, migrate_prompts, parse_import_bytes,
     parse_ui_text_map, read_file_capped, resolved_for_export, restore_selective, sanitize_notes,
     sanitize_tags, show_main, stage_and_validate_backup, tag_key, to_csv, to_json, to_txt,
-    valid_backup_name, valid_scope, valid_tag_color, valid_tag_name, Db, Prompt, Store,
-    WrittenRows, MAX_IMPORT_BYTES,
+    upgrade_placeholders, upgrade_prompt_placeholders, valid_backup_name, valid_scope, valid_tag_color, valid_tag_name, Db, Prompt,
+    Store, WrittenRows, MAX_IMPORT_BYTES,
 };
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
@@ -1247,7 +1247,7 @@ fn cmd_add(store: &mut Store, name: &str, text: &str, tags: &[String], favorite:
     let prompt = Prompt {
         id: gen_id(),
         name: name.to_string(),
-        text: text.to_string(),
+        text: upgrade_placeholders(text),
         color,
         image: String::new(),
         show_image: false,
@@ -1305,7 +1305,7 @@ fn cmd_edit(store: &mut Store, id: &str, name: Option<&str>, text: Option<&str>,
         p.name = n.to_string();
     }
     if let Some(t) = text {
-        p.text = t.to_string();
+        p.text = upgrade_placeholders(t);
     }
     if let Some(t) = tags {
         p.tags = t;
@@ -1349,6 +1349,7 @@ fn cmd_restore(store: &mut Store, id: &str, json: bool) -> Outcome {
     };
     let mut p = store.trash.remove(pos);
     p.trashed_at = 0;
+    upgrade_prompt_placeholders(&mut p);
     store.prompts.push(p);
     let body = if json { "{\"ok\":true}\n".to_string() } else { String::new() };
     Outcome::ok(body).mutating_trash()
@@ -2726,10 +2727,10 @@ mod tests {
         let mut store = fixture_store();
         let dir = std::env::temp_dir();
         for value in ["NaN", "nan", "inf", "-inf", "infinity", "1e999"] {
-            let set = run_cmd(&mut store, &dir, &["settings", "set", "gridGap", value, "--yes"]);
+            let set = run_cmd(&mut store, &dir, &["settings", "set", "hoverLift", value, "--yes"]);
             assert_ne!(set.code, 0, "{value} must be refused");
             assert!(!set.mutated_settings);
-            assert!(!store.settings.ui_values.contains_key("gridGap"), "{value} was stored");
+            assert!(!store.settings.ui_values.contains_key("hoverLift"), "{value} was stored");
         }
         let set = run_cmd(&mut store, &dir, &["settings", "set", "importFolderMax", "1e18", "--yes"]);
         assert_eq!(set.code, 0);
@@ -3212,5 +3213,20 @@ mod tests {
         assert!(take_flag(&mut a, "--json"));
         assert_eq!(take_flag_value(&mut a, "--tag").unwrap().as_deref(), Some("x"));
         assert_eq!(a.items, vec!["rest".to_string()]);
+    }
+    // ---- an old placeholder spelling is upgraded on write ----
+
+    #[test]
+    fn add_and_edit_store_the_new_placeholder_spelling() {
+        let mut store = fixture_store();
+        let dir = std::env::temp_dir();
+        let out = run_cmd(&mut store, &dir, &["add", "--name", "Old", "--text", "Hi {#{name}#} on {#{/date\\}#}", "--yes", "--json"]);
+        assert_eq!(out.code, 0);
+        let added = store.prompts.last().unwrap();
+        assert_eq!(added.text, "Hi {?name} on {?@date}");
+        let out = run_cmd(&mut store, &dir, &["edit", "p1", "--text", "Dear {#{who=you}#}", "--yes"]);
+        assert_eq!(out.code, 0);
+        let edited = store.prompts.iter().find(|p| p.id == "p1").unwrap();
+        assert_eq!(edited.text, "Dear {?who=you}");
     }
 }

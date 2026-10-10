@@ -477,7 +477,7 @@ body.menu-open .pill { flex: 0 0 auto; }
 }
 
 /* Popover: the member grid or the folder menu. The window is already the right size
-   when this appears, so only the content fades and scales in (animSpeed). */
+   when this appears, so only the content fades and scales in. */
 .folder-pop,
 .folder-menu {
   position: absolute;

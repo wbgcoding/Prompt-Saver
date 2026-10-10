@@ -1949,7 +1949,7 @@ VAR_FIXED_PROBE = """
     const idsBefore = new Set([...document.querySelectorAll('#grid .tile')].map(el => el.dataset.id));
     const inputEl = document.getElementById('input');
     const saveBtn = document.getElementById('save');
-    inputEl.value = 'Say hi to {#{topic}#}.';
+    inputEl.value = 'Say hi to {?topic}.';
     inputEl.dispatchEvent(new Event('input', { bubbles: true }));
     saveBtn.click();
     await sleep(200);

@@ -144,18 +144,21 @@ tile is focused. The ring fades out a short while after the window loses focus.
 </p>
 
 <p>
-<svg viewBox="0 0 560 90" xmlns="http://www.w3.org/2000/svg" role="img"><rect x="30" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="80" y="41" font-size="11" fill="currentColor" text-anchor="middle">Step 1</text><rect x="230" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="280" y="41" font-size="11" fill="currentColor" text-anchor="middle">Step 2</text><rect x="430" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="480" y="41" font-size="11" fill="currentColor" text-anchor="middle">Step 3</text><line x1="130" y1="37" x2="217" y2="37" stroke="currentColor" stroke-width="1.5"/><path d="M 215 33 L 225 37 L 215 41" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><text x="177" y="25" font-size="10" fill="currentColor" text-anchor="middle">{#{X}#}</text><line x1="330" y1="37" x2="417" y2="37" stroke="currentColor" stroke-width="1.5"/><path d="M 415 33 L 425 37 L 415 41" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><text x="377" y="25" font-size="10" fill="currentColor" text-anchor="middle">{#{Y}#}</text></svg>
+<svg viewBox="0 0 560 90" xmlns="http://www.w3.org/2000/svg" role="img"><rect x="30" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="80" y="41" font-size="11" fill="currentColor" text-anchor="middle">Step 1</text><rect x="230" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="280" y="41" font-size="11" fill="currentColor" text-anchor="middle">Step 2</text><rect x="430" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="480" y="41" font-size="11" fill="currentColor" text-anchor="middle">Step 3</text><line x1="130" y1="37" x2="217" y2="37" stroke="currentColor" stroke-width="1.5"/><path d="M 215 33 L 225 37 L 215 41" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><text x="177" y="25" font-size="10" fill="currentColor" text-anchor="middle">{?X}</text><line x1="330" y1="37" x2="417" y2="37" stroke="currentColor" stroke-width="1.5"/><path d="M 415 33 L 425 37 L 415 41" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><text x="377" y="25" font-size="10" fill="currentColor" text-anchor="middle">{?Y}</text></svg>
 </p>
 
 ### Placeholders
 
 Placeholder markup inside a tile's text opens a small popup asking for each value
-before the finished text reaches the clipboard.
+before the finished text reaches the clipboard. A placeholder is written
+`{?Name}`; `{?Name=default}` prefills a value and `{?Name|A, B}` offers a
+dropdown. Prompts written with the older {#{Name}#} spelling are converted
+automatically.
 
-- Dynamic placeholders: `{#{/date\}#}`, `{#{/time\}#}`, `{#{/clipboard\}#}`
-  fill themselves in, no popup; their own slash-fenced syntax (not the plain
-  `{#{date}#}` form) is what triggers it; insert them from the chip buttons
-  under the editor's text box rather than typing them by hand
+- Dynamic placeholders: `{?@date}`, `{?@time}`, `{?@clipboard}` fill
+  themselves in, no popup; the `@` in front (not the plain `{?date}` form,
+  which stays a placeholder of your own) is what triggers it; insert them from
+  the chip buttons under the editor's text box rather than typing them by hand
 - Choice placeholders: a dropdown of preset values instead of free text
 - Remember choices: the popup pre-fills the last answer for that tile
 - Fixed values (off by default, expert menu): a maintained list of name and
@@ -165,7 +168,7 @@ before the finished text reaches the clipboard.
   is typed or picked.
 
 <p>
-<svg viewBox="0 0 560 130" xmlns="http://www.w3.org/2000/svg" role="img"><text x="30" y="45" font-size="15" fill="currentColor" text-anchor="start">{#{Kunde=Meier|Meier,Schulz}#}</text><line x1="65" y1="55" x2="65" y2="80" stroke="currentColor" stroke-width="1"/><text x="65" y="95" font-size="11" fill="currentColor" text-anchor="middle">Name</text><line x1="118" y1="55" x2="150" y2="80" stroke="currentColor" stroke-width="1"/><text x="150" y="95" font-size="11" fill="currentColor" text-anchor="middle">Default</text><line x1="240" y1="55" x2="260" y2="80" stroke="currentColor" stroke-width="1"/><text x="260" y="95" font-size="11" fill="currentColor" text-anchor="middle">Choice list</text></svg>
+<svg viewBox="0 0 560 130" xmlns="http://www.w3.org/2000/svg" role="img"><text x="30" y="45" font-size="15" fill="currentColor" text-anchor="start">{?Kunde=Meier|Meier, Schulz}</text><line x1="57" y1="55" x2="57" y2="80" stroke="currentColor" stroke-width="1"/><text x="57" y="95" font-size="11" fill="currentColor" text-anchor="middle">Name</text><line x1="110" y1="55" x2="142" y2="80" stroke="currentColor" stroke-width="1"/><text x="142" y="95" font-size="11" fill="currentColor" text-anchor="middle">Default</text><line x1="232" y1="55" x2="252" y2="80" stroke="currentColor" stroke-width="1"/><text x="252" y="95" font-size="11" fill="currentColor" text-anchor="middle">Choice list</text></svg>
 </p>
 
 ### Hotkeys
@@ -198,8 +201,8 @@ A tile can hold a list of texts instead of one: each copy serves the next rotati
 text, in order or shuffled without repeats, instead of always the same text. On by
 default; the per-tile switch is in the editor under Advanced options.
 
-- A small badge counts up (like "2/5") on a tile, floating button, or button folder
-  member; a tile-folder member shows only its file-type icon instead. In order
+- A small badge counts up (like "2/5") on a tile, floating button, or desktop folder
+  member; a grid folder member shows only its file-type icon instead. In order
   mode it is the absolute position; in shuffle mode it counts draws within the
   current cycle and restarts at 1 once every entry has been shown once, rather
   than jumping to an arbitrary position
@@ -230,11 +233,12 @@ in the expert menu brings every floating window to the main screen at once.
 
 One gesture works in two places: drop one onto another to gather it into a
 folder. A floating
-button dropped onto another makes a button folder. A tile dropped onto another
-tile makes a tile folder, and belongs to only one tile folder at a time.
+button dropped onto another makes a folder on the desktop. A tile dropped onto
+another tile makes a folder in the grid, and belongs to only one grid folder at a
+time. A folder lives where it was made.
 
 <p>
-<svg viewBox="200 0 360 120" xmlns="http://www.w3.org/2000/svg" role="img"><circle cx="255" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="295" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="335" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="295" y="108" font-size="11" fill="currentColor" text-anchor="middle">Button folder</text><rect x="430" y="20" width="100" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="430" y1="55" x2="530" y2="55" stroke="currentColor" stroke-width="1"/><line x1="480" y1="20" x2="480" y2="90" stroke="currentColor" stroke-width="1"/><text x="480" y="108" font-size="11" fill="currentColor" text-anchor="middle">Tile folder</text></svg>
+<svg viewBox="200 0 360 120" xmlns="http://www.w3.org/2000/svg" role="img"><circle cx="255" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="295" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="335" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="295" y="108" font-size="11" fill="currentColor" text-anchor="middle">Desktop folder</text><rect x="430" y="20" width="100" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="430" y1="55" x2="530" y2="55" stroke="currentColor" stroke-width="1"/><line x1="480" y1="20" x2="480" y2="90" stroke="currentColor" stroke-width="1"/><text x="480" y="108" font-size="11" fill="currentColor" text-anchor="middle">Grid folder</text></svg>
 </p>
 
 ### Tray
@@ -243,8 +247,7 @@ The system tray icon's right-click menu offers a "recently copied" and a
 "favorites" section for quick access without opening the main window. It draws
 as a rounded, themed window matching the rest of the app rather than the plain
 Windows popup; the expert menu can switch back to the plain system menu if the
-custom one ever misbehaves on your setup. The expert menu also caps how long a
-prompt name may get before it is cut off with an ellipsis in that menu.
+custom one ever misbehaves on your setup.
 
 Typing in the tray menu's search field opens the quick launcher with what you
 typed. Arrow keys and Enter on the menu's own entries work as before. The field
@@ -321,8 +324,6 @@ that folder can read the content, so a synced or shared folder should be avoided
 for anything sensitive. A tile with an attached file, image, or PDF syncs as a
 reference: the header carries the path and the PDF page, never the file itself. A
 screenshot pasted straight into a tile has no path and stays in the database only.
-The expert menu controls how often the sync folder is re-checked for files
-edited outside the app.
 
 The folder is `<data folder>\prompt-saver-sync` unless you pick another one; an
 installation that was already syncing keeps the folder it has. A file is read
@@ -347,7 +348,7 @@ to arrive. What happens in either direction is fixed and never silent:
   file in there that the app did not write and nothing at all is deleted, with a
   message naming what is in the way.
 - **An unreachable folder pauses the sync** instead of failing every few seconds
-  (after five failed rounds, adjustable). The line under the folder in the expert
+  (after five failed rounds). The line under the folder in the expert
   menu says when the folder was last read, how many files were in it, and why it
   is paused.
 
@@ -489,8 +490,7 @@ field as a password field. A "Shortcuts only" switch (in the expert menu,
 next to the keys overlay itself) restricts capture to combinations with
 Ctrl, Alt or Win plus Enter, Tab, Esc, Backspace, Delete, Insert, arrows,
 Home, End, Page Up, Page Down and F keys, letters and digits never included,
-for a recording with confidential input. How long a released
-key stays visible is adjustable in the expert menu.
+for a recording with confidential input.
 
 An optional camera recording (off by default, in the expert menu) adds a
 "Record camera" entry to the record button's right-click menu. It opens its
@@ -535,10 +535,10 @@ file name and only choose a different folder; once an export has finished,
 rewrites the extension, never a folder or name you already typed. The chosen folder is remembered as
 the default for next time. The "Copy" button next to it skips naming anything
 at all: it exports into a copy that cleans itself up on its own (after an hour,
-and again on the next launch, both adjustable in the expert menu) and puts the
+and again on the next launch) and puts the
 finished file straight on the clipboard for pasting into another app, the way
 the recording dialog's own Copy button does. Undo/redo covers every editing
-step, with an adjustable limit in the expert menu. A failed export shows the
+step. A failed export shows the
 actual reason in plain language, with the raw ffmpeg log reachable underneath
 in a closed "Technical details" row, never the log itself as the message. A
 second video can be added too: "Add
@@ -567,8 +567,7 @@ values and time range and is offset a little so it sits next to the
 original instead of exactly on top of it. In the video editor, the color, thickness, opacity
 and font size a new overlay starts with also follow whatever was last used
 for that same kind (image, frame, text, pixelation or focus area), across
-restarts too; an expert switch turns that off again in favor of the fixed
-starting values.
+restarts too.
 
 Dragging a shape (screenshot editor) or a crop box or overlay (video editor)
 snaps to the image or frame edges, its centre in both directions, and the
@@ -670,8 +669,8 @@ end of the theme list in Settings.
 
 ### Scaling & zoom
 
-Independent size sliders for the overall UI, dialogs, the composer, and icons.
-Interface size is in Settings; icon, composer and main-button scale are in
+Independent size sliders for the overall UI and the icons.
+Interface size is in Settings; icon size is in
 Expert menu → Appearance → Sizes (%).
 
 ## Library & copy history
@@ -679,13 +678,12 @@ Expert menu → Appearance → Sizes (%).
 ### Library & search
 
 The library lists every tile as a searchable, filterable list: fuzzy search,
-smart sort (most-used / most-recent), and type/color filters. Type -word to
+smart sort (most-used / most-recent), and the type filter. Type -word to
 exclude matches, or tag:word / var:word to search only tags or placeholder
 names. A bookmark button inside the search field saves the current query, tag filters
 and sort as a chip shown above the field; click it to bring the whole search
 back. Right-click a saved search to rename or delete it, or drag it to
-reorder the row. Up to five can be saved at once by default, adjustable in
-the expert menu. The Tiles button next to the sort order switches the list to
+reorder the row. Up to five can be saved at once. The Tiles button next to the sort order switches the list to
 tiles: a big preview picture with the name below, nothing else. Click,
 double-click, the right-click menu and multi-select all work the same as in
 the list, it is the same selection drawn differently. The toggle remembers
@@ -708,16 +706,12 @@ all close it. A flag in the expert menu turns it off.
 ### Tags
 
 Free-form labels assigned to tiles; filter the library or the grid down to a set
-of tags, matching any or all of them.
-
-### Archive
-
-Off by default in the expert menu. Marks a tile as archived instead of deleting
-it: it disappears from the library list and the grid, but export, backup and
-search still treat it like any other tile; a query still finds it. A toggle
-above the library list brings archived tiles back into view. Archive or
-unarchive a tile from its right-click menu, or several at once from the
-library's batch bar.
+of tags, matching any or all of them. The archive is one of them, an ordinary
+tag with a reserved name: "Archive" in a tile's right-click menu (or the
+library's batch bar) gives a tile that tag, and it disappears from the library
+list and the grid until the archive chip above the list shows it again. Export,
+backup and search still treat it like any other tile. "Unarchive" removes the
+tag again.
 
 ### Copy history
 
@@ -1151,18 +1145,19 @@ weiterhin genau den Markdown-Text bekommt wie bei einer normalen Kopie.
 </p>
 
 <p>
-<svg viewBox="0 0 560 90" xmlns="http://www.w3.org/2000/svg" role="img"><rect x="30" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="80" y="41" font-size="11" fill="currentColor" text-anchor="middle">Schritt 1</text><rect x="230" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="280" y="41" font-size="11" fill="currentColor" text-anchor="middle">Schritt 2</text><rect x="430" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="480" y="41" font-size="11" fill="currentColor" text-anchor="middle">Schritt 3</text><line x1="130" y1="37" x2="217" y2="37" stroke="currentColor" stroke-width="1.5"/><path d="M 215 33 L 225 37 L 215 41" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><text x="177" y="25" font-size="10" fill="currentColor" text-anchor="middle">{#{X}#}</text><line x1="330" y1="37" x2="417" y2="37" stroke="currentColor" stroke-width="1.5"/><path d="M 415 33 L 425 37 L 415 41" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><text x="377" y="25" font-size="10" fill="currentColor" text-anchor="middle">{#{Y}#}</text></svg>
+<svg viewBox="0 0 560 90" xmlns="http://www.w3.org/2000/svg" role="img"><rect x="30" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="80" y="41" font-size="11" fill="currentColor" text-anchor="middle">Schritt 1</text><rect x="230" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="280" y="41" font-size="11" fill="currentColor" text-anchor="middle">Schritt 2</text><rect x="430" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="480" y="41" font-size="11" fill="currentColor" text-anchor="middle">Schritt 3</text><line x1="130" y1="37" x2="217" y2="37" stroke="currentColor" stroke-width="1.5"/><path d="M 215 33 L 225 37 L 215 41" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><text x="177" y="25" font-size="10" fill="currentColor" text-anchor="middle">{?X}</text><line x1="330" y1="37" x2="417" y2="37" stroke="currentColor" stroke-width="1.5"/><path d="M 415 33 L 425 37 L 415 41" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><text x="377" y="25" font-size="10" fill="currentColor" text-anchor="middle">{?Y}</text></svg>
 </p>
 
-**Platzhalter**: `{#{Name}#}` im Text öffnet beim Kopieren ein Popup
-für jeden Wert. Dynamische Platzhalter (`{#{date}#}`, `{#{time}#}`,
-`{#{clipboard}#}`) füllen sich selbst. Feste Werte (im Expertenmenü, aus)
+**Platzhalter**: `{?Name}` im Text öffnet beim Kopieren ein Popup
+für jeden Wert. Prompts mit der älteren Schreibweise {#{Name}#} werden
+automatisch umgeschrieben. Dynamische Platzhalter (`{?@date}`, `{?@time}`,
+`{?@clipboard}`) füllen sich selbst. Feste Werte (im Expertenmenü, aus)
 schlagen für einen passenden Namen eine gepflegte Liste von Werten vor, nur
 als Platzhaltertext im Feld, mit einer kleinen Stecknadel markiert, nie
 eingesetzt, bevor er getippt oder übernommen wird.
 
 <p>
-<svg viewBox="0 0 560 130" xmlns="http://www.w3.org/2000/svg" role="img"><text x="30" y="45" font-size="15" fill="currentColor" text-anchor="start">{#{Kunde=Meier|Meier,Schulz}#}</text><line x1="65" y1="55" x2="65" y2="80" stroke="currentColor" stroke-width="1"/><text x="65" y="95" font-size="11" fill="currentColor" text-anchor="middle">Name</text><line x1="118" y1="55" x2="150" y2="80" stroke="currentColor" stroke-width="1"/><text x="150" y="95" font-size="11" fill="currentColor" text-anchor="middle">Vorgabe</text><line x1="240" y1="55" x2="260" y2="80" stroke="currentColor" stroke-width="1"/><text x="260" y="95" font-size="11" fill="currentColor" text-anchor="middle">Auswahlliste</text></svg>
+<svg viewBox="0 0 560 130" xmlns="http://www.w3.org/2000/svg" role="img"><text x="30" y="45" font-size="15" fill="currentColor" text-anchor="start">{?Kunde=Meier|Meier, Schulz}</text><line x1="57" y1="55" x2="57" y2="80" stroke="currentColor" stroke-width="1"/><text x="57" y="95" font-size="11" fill="currentColor" text-anchor="middle">Name</text><line x1="110" y1="55" x2="142" y2="80" stroke="currentColor" stroke-width="1"/><text x="142" y="95" font-size="11" fill="currentColor" text-anchor="middle">Vorgabe</text><line x1="232" y1="55" x2="252" y2="80" stroke="currentColor" stroke-width="1"/><text x="252" y="95" font-size="11" fill="currentColor" text-anchor="middle">Auswahlliste</text></svg>
 </p>
 
 **Tastenkürzel**: ein globales Tastenkürzel öffnet den Schnellstarter (Standard
@@ -1183,7 +1178,7 @@ EINER Kachel, Kette kopiert MEHRERE verschiedene Kacheln zusammen.
 **Rotation**: eine Kachel trägt eine Liste von Texten, jede Kopie
 liefert den nächsten Rotationstext (Reihenfolge oder Zufall). Standardmäßig an; der
 Schalter pro Kachel steht im Editor unter „Erweiterte Optionen“. Ein Badge auf
-Kachel/schwebender Button/Mitglied eines Button-Ordners zählt hoch: im Zufalls-Modus die Ziehungen
+Kachel/schwebender Button/Mitglied eines Desktop-Ordners zählt hoch: im Zufalls-Modus die Ziehungen
 im aktuellen Durchlauf statt einer springenden Position; übersteht Neustart und
 Sicherung, aber keinen CSV/TXT-Import (neue Kachel, neuer Zeiger). Eine geeignete
 Kachel (2+ Einträge, kein Bild/Datei) kann zusätzlich **beim Einfügen
@@ -1204,17 +1199,16 @@ Fenster auf einmal auf den Hauptbildschirm.
 
 **Ordner:** eine Geste an zwei Stellen, ein Ziehen auf ein anderes fasst es zu
 einem Ordner zusammen. Ein schwebender Button auf einen anderen ergibt einen
-Button-Ordner. Eine Kachel auf eine andere ergibt einen Kachelordner, und
-gehört immer nur zu einem Kachelordner gleichzeitig.
+Ordner auf dem Desktop. Eine Kachel auf eine andere ergibt einen Ordner im Raster, und
+gehört immer nur zu einem Raster-Ordner gleichzeitig. Ein Ordner liegt dort, wo er angelegt wurde.
 
 <p>
-<svg viewBox="200 0 360 120" xmlns="http://www.w3.org/2000/svg" role="img"><circle cx="255" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="295" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="335" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="295" y="108" font-size="11" fill="currentColor" text-anchor="middle">Button-Ordner</text><rect x="430" y="20" width="100" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="430" y1="55" x2="530" y2="55" stroke="currentColor" stroke-width="1"/><line x1="480" y1="20" x2="480" y2="90" stroke="currentColor" stroke-width="1"/><text x="480" y="108" font-size="11" fill="currentColor" text-anchor="middle">Kachelordner</text></svg>
+<svg viewBox="200 0 360 120" xmlns="http://www.w3.org/2000/svg" role="img"><circle cx="255" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="295" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="335" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="295" y="108" font-size="11" fill="currentColor" text-anchor="middle">Desktop-Ordner</text><rect x="430" y="20" width="100" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="430" y1="55" x2="530" y2="55" stroke="currentColor" stroke-width="1"/><line x1="480" y1="20" x2="480" y2="90" stroke="currentColor" stroke-width="1"/><text x="480" y="108" font-size="11" fill="currentColor" text-anchor="middle">Raster-Ordner</text></svg>
 </p>
 
 **Infobereich-Menü**: Zuletzt kopiert, Favoriten. Erscheint als abgerundetes,
 zum Thema passendes Fenster statt des einfachen Windows-Menüs; im Expertenmenü
-lässt sich bei Bedarf auf das einfache Systemmenü zurückschalten. Dort auch
-einstellbar: die maximale Länge eines Eintragsnamens. Tippen ins Suchfeld des
+lässt sich bei Bedarf auf das einfache Systemmenü zurückschalten. Tippen ins Suchfeld des
 Infobereich-Menüs öffnet den Schnellstarter mit dem Getippten.
 
 **Schneller Launcher.** Strg+Alt+P, unscharfe Suche, sofortiges Kopieren. Wie viele Treffer er zeigt, stellt das Expertenmenü ein (ab Werk 8). Eine Zeile unten nennt die Tasten.
@@ -1251,8 +1245,7 @@ keinen Pfad und bleibt nur in der Datenbank. Eine in einer eingehenden Datei
 genannte Ansicht oder ein Ordner, den es auf diesem Rechner noch nicht gibt,
 wird automatisch angelegt, per Namensabgleich. **Die Dateien sind Klartext**:
 anders als die Datenbank, also kein synchronisierter oder geteilter Ordner für
-Sensibles. Im Expertenmenü lässt sich einstellen, wie oft der Sync-Ordner auf
-außerhalb der App bearbeitete Dateien geprüft wird.
+Sensibles.
 
 Der Ordner ist `<Datenordner>\prompt-saver-sync`, solange kein eigener gewählt
 ist; wer schon synchronisiert, behält seinen bisherigen Ordner. Eine Datei wird
@@ -1279,7 +1272,7 @@ geschieht nie stillschweigend:
   danach leer ist. Liegt eine fremde Datei darin, wird gar nichts gelöscht und
   eine Meldung nennt, was im Weg liegt.
 - **Ein nicht erreichbarer Ordner pausiert die Synchronisierung**, statt alle
-  paar Sekunden zu scheitern (nach fünf Fehlversuchen, einstellbar). Die Zeile
+  paar Sekunden zu scheitern (nach fünf Fehlversuchen). Die Zeile
   unter dem Ordner im Expertenmenü nennt den letzten gelesenen Stand, die Zahl
   der Dateien und den Grund der Pause.
 
@@ -1365,8 +1358,7 @@ Ein Schalter „Nur Tastenkürzel" (im Expertenmenü, direkt neben der
 Tastenanzeige) beschränkt die Aufzeichnung auf Kombinationen mit Strg, Alt
 oder Win sowie Enter, Tab, Esc, Rücktaste, Entf, Einfg, Pfeile, Pos1, Ende,
 Bild auf, Bild ab und F-Tasten, Buchstaben und Ziffern nie eingeschlossen,
-für Aufnahmen mit vertraulichen Eingaben. Wie lange eine
-losgelassene Taste sichtbar bleibt, ist im Expertenmenü einstellbar.
+für Aufnahmen mit vertraulichen Eingaben.
 
 Eine optionale Kameraaufnahme (Standard aus, im Expertenmenü) fügt dem
 Rechtsklickmenü des Aufnahme-Buttons den Eintrag „Kamera aufnehmen“ hinzu. Sie
@@ -1411,7 +1403,7 @@ Export verschiebt „Speichern unter…" das fertige Video an einen anderen Ort.
 Ein Formatwechsel ändert nur die Endung, nie Ordner oder Namen, die man selbst eingetippt hat.
 Die Schaltfläche „Kopieren“ daneben verzichtet ganz auf einen Namen: es
 exportiert in eine Kopie, die sich selbst aufräumt (nach einer Stunde, und
-erneut beim nächsten Start, beides im Expertenmenü einstellbar), und legt die
+erneut beim nächsten Start), und legt die
 fertige Datei direkt in die Zwischenablage zum Einfügen in eine andere App,
 genauso wie der Kopieren-Button im Aufnahme-Dialog.
 
@@ -1426,7 +1418,7 @@ verschoben, damit es neben dem Original liegt statt genau darauf. Im Video-Edito
 richten sich Farbe, Stärke, Deckkraft und Schriftgröße einer neuen
 Überlagerung außerdem nach dem, was für dieselbe Art (Bild, Rahmen, Text,
 Verpixeln oder Fokusbereich) zuletzt benutzt wurde, auch über einen Neustart
-hinweg; ein Expertenschalter stellt stattdessen wieder feste Vorgabewerte ein.
+hinweg.
 
 Beim Ziehen einer Form (Screenshot-Editor) oder eines Zuschnitts bzw. einer
 Überlagerung (Video-Editor) rastet die Bewegung an den Kanten der Leinwand
@@ -1500,17 +1492,17 @@ sobald sie zum ersten Mal angezeigt werden. Das Hauptraster bleibt unverändert.
 
 **Design-Editor.** Eigene Farbvarianten bestehender Designs. Geöffnet wird er mit „Eigenes Design…“ am Ende der Design-Auswahl in den Einstellungen.
 
-**Skalierung & Zoom**: UI-, Dialog-, Editor- und Symbolgröße getrennt einstellbar.
-Die Größe der Oberfläche steht in den Einstellungen; die Symbol-, Editor- und
-Hauptknopf-Skalierung im Expertenmenü → Aussehen → Größen (%).
+**Skalierung & Zoom**: UI- und Symbolgröße getrennt einstellbar.
+Die Größe der Oberfläche steht in den Einstellungen; die Symbolgröße
+im Expertenmenü → Aussehen → Größen (%).
 
 ### Bibliothek & Kopierverlauf
 
-**Bibliothek & Suche**: unscharfe Suche, intelligente Sortierung, Filter,
+**Bibliothek & Suche**: unscharfe Suche, intelligente Sortierung, Typfilter,
 `tag:`/`var:`-Suchpräfixe (mit `-` auch verneint). Ein Stern neben dem Suchfeld
 speichert Anfrage, Tag-Filter und Sortierung als Kachel darüber; Rechtsklick
 bietet Umbenennen und Löschen, Ziehen sortiert die Zeile um. Standardmäßig
-höchstens fünf, im Expertenmenü einstellbar. Ein Umschalter neben dem
+höchstens fünf. Ein Umschalter neben dem
 Typfilter stellt die Liste als Kacheln dar: großes Vorschaubild, Name
 darunter, sonst nichts. Klick, Doppelklick, Rechtsklickmenü und
 Mehrfachauswahl verhalten sich genau wie in der Liste. Der Umschalter merkt
@@ -1527,13 +1519,12 @@ passende Hilfethema. Das Feld merkt sich die letzten Suchen (acht ab Werk; das
 Expertenmenü stellt eine Zahl für alle Suchlisten ein) und zeigt sie, wenn es leer ist. Escape, ein Klick daneben oder das Symbol schließen
 die Überlagerung wieder. Ein Schalter im Expertenmenü stellt sie ab.
 
-**Tags**: freie Schlagwörter, UND/ODER-Filter.
-
-**Archiv**: Standardmäßig aus. Markiert eine Kachel als archiviert statt sie zu
-löschen; sie verschwindet aus Bibliothek und Raster, bleibt aber über Suche,
-Export und Sicherung erreichbar. Ein Schalter über der Liste holt archivierte
-Kacheln zurück; archivieren/entarchivieren geht per Rechtsklickmenü oder aus
-der Sammelleiste der Bibliothek.
+**Tags**: freie Schlagwörter, UND/ODER-Filter. Das Archiv ist ein gewöhnlicher Tag mit
+reserviertem Namen: „Archivieren“ im Rechtsklickmenü einer Kachel (oder in der
+Sammelleiste der Bibliothek) gibt ihr diesen Tag, sie verschwindet aus
+Bibliothek und Raster, bis der Archiv-Chip über der Liste sie wieder anzeigt.
+Export, Sicherung und Suche behandeln sie wie jede andere Kachel; „Aus dem Archiv
+holen“ entfernt den Tag wieder.
 
 **Kopierverlauf** (Bibliothek → Reiter Kopierverlauf): Protokoll, Gruppierung, Aufbewahrung (bei einer neuen
 Installation 30 Tage, einstellbar, 0 behält alles), Einzeleintrag löschen.

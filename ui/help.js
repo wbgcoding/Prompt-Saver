@@ -52,7 +52,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "The last step offers to switch on the screenshot editor, color picker, or text recognition right there, showing each one's shipped default. Nothing is written until the tour is actually finished, and only the switches actually changed. A first-launch data-folder or WebView2 prompt always takes priority; the tour just waits for its turn.",
-      settings: ["Open automatically on first launch: Expert menu → System & data → Help"],
+      settings: ["Open automatically on first launch: Expert menu → System & data → System"],
     },
     {
       section: "basics",
@@ -93,7 +93,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Versions keep every saved change so an earlier version can be restored. Markdown preview renders next to, or instead of, the text box without altering what is actually stored. Private notes are never copied or exported with the text. The open text is saved as a draft every few seconds; if the window or the app closes before saving, the next start offers the draft back once. A confidential tile never gets a draft. Saving a new tile that closely matches an existing one shows a quiet hint instead of blocking the save. For a text with Markdown in it, \"Copy formatted\" in the editor and the tile menu puts the rendered version on the clipboard as well, so Word or a mail program shows the formatting. In the list of versions, a second button next to Restore keeps the chosen version as a new tile and leaves the current one untouched.",
-      settings: ["Markdown preview, syntax highlighting, versions, private notes: Expert menu → Features → Editor", "Monospace text box: Expert menu → Features → Editor", "Formatted copy, live length counter, word-by-word comparison of versions, confirm discarding changes, draft autosave and its interval: Expert menu → Features → Editor", "Similar-prompt hint on save: Expert menu → System & data → Data & maintenance"],
+      settings: ["Markdown preview, syntax highlighting, versions, private notes: Expert menu → Features → Editor", "Monospace text box: Expert menu → Features → Editor", "Formatted copy, live length counter, confirm discarding changes, draft autosave and its interval: Expert menu → Features → Editor", "Similar-prompt hint on save: Expert menu → System & data → Data & maintenance"],
       tip: "Markdown preview and private notes both ship on.",
     },
     {
@@ -107,7 +107,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "A feature that ships switched off carries a small dot badge on its label, with a tooltip explaining what it does. Reset works at three levels: one value's own undo icon, a whole group's reset icon in its header, or every setting at once from the general reset action. A profile first shows how many settings would change and is never remembered as a mode; All on leaves out anything destructive or anything that sends data out. The search also finds settings outside the expert menu, such as the settings window or the backup manager, marked with where they live; a click opens that place.",
-      settings: ["Tip line, highlighted search hits and diagrams in this help window: Expert menu → System & data → Help"],
+      settings: [],
     },
     {
       section: "basics",
@@ -144,7 +144,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "A short confirmation bubble or flash confirms the copy; the text size of that bubble has three levels (small, medium, large) in the expert menu. Chaining, clicking several tiles in a row, combines them into one clipboard entry instead of overwriting each other; Start chain here: right-click a text tile to start a chain with that tile first. A chain stays when you switch to another program. The chain button in the top bar starts and ends a chain. Pasting with Ctrl+V in the app window ends it too. While chaining, drag a step in the strip above the grid to reorder it, or right-click it to remove it. Chaining is not the same as rotation: chaining combines several different tiles, rotation changes what a single tile holds from copy to copy (see Rotation). With the double-click latch on, chain mode stays on after copying, for building several chains in a row. The strip can also mark a step red when it needs a placeholder that no earlier step fills; the chain still runs.",
-      settings: ["Chaining, and starting a chain from the tile menu: Expert menu → Features → Chain", "What goes between two chained steps: Expert menu → Features → Chain", "Keep chain mode on after copying, show what each chain step needs: Expert menu → Features → Chain", "Auto-paste on double-click: Settings", "Per-tile hotkeys, press Enter after auto-paste, drag-out, hide the window after copying: Expert menu → Features → Copying", "Which key drags a tile out, and whether that key drags out or moves it: Expert menu → Features → Copying"],
+      settings: ["Chaining, and starting a chain from the tile menu: Expert menu → Features → Chain", "What goes between two chained steps: Expert menu → Features → Chain", "Keep chain mode on after copying: Expert menu → Features → Chain", "Auto-paste on double-click: Settings", "Per-tile hotkeys, press Enter after auto-paste, drag-out, hide the window after copying: Expert menu → Features → Copying", "Which key drags a tile out, and whether that key drags out or moves it: Expert menu → Features → Copying"],
       sketches: ["flowToTarget", "chainSteps"],
     },
     {
@@ -153,14 +153,14 @@ export const HELP_CONTENT = {
       whatItIs:
         "Placeholder markup inside a tile's text opens a fill-in popup before the finished text reaches the clipboard.",
       howTo: [
-        "Type {#{PlaceholderName}#} inside the text.",
+        "Type {?PlaceholderName} inside the text.",
         "Or click Insert placeholder under the text box: it opens the placeholder section.",
         "For a self-filling value, click a dynamic-placeholder chip under the text box instead of typing it.",
         "Click the tile to copy: the fill-in popup opens automatically.",
         "Enter a value per placeholder, or pick one for choice placeholders, and confirm.",
       ],
       whatHappens:
-        "Only the filled-in text reaches the clipboard; the raw {#{...}#} markup is never copied. A dynamic placeholder (date, time, clipboard, UUID) uses its own syntax, {#{/date\\}#}, and fills itself in with no popup at all. The popup can remember the value last typed for a placeholder and offer it again. A list of fixed values, kept in the expert menu, is suggested for a placeholder of the same name; it is only ever suggested, never filled in on its own.",
+        "Only the filled-in text reaches the clipboard; the raw {?...} markup is never copied. A dynamic placeholder (date, time, clipboard, UUID) is written with an @ in front, {?@date}, and fills itself in with no popup at all. The popup can remember the value last typed for a placeholder and offer it again. A list of fixed values, kept in the expert menu, is suggested for a placeholder of the same name; it is only ever suggested, never filled in on its own. Prompts written with the older {#{Name}#} spelling are converted automatically.",
       settings: ["Dynamic placeholders, choice placeholders, remember choices, remember typed values, fixed values list, date and time style: Expert menu → Features → Placeholders"],
       sketches: ["placeholderAnatomy"],
     },
@@ -182,7 +182,7 @@ export const HELP_CONTENT = {
       settings: [
         "Global hotkey, all shortcuts: Settings",
         "Per-tile hotkeys, paste-after-copy: Expert menu → Features → Copying",
-        "Hotkey badge, badge opacity: Expert menu → Tiles → Tiles",
+        "Hotkey badge: Expert menu → Tiles → Tiles",
       ],
     },
     {
@@ -198,7 +198,7 @@ export const HELP_CONTENT = {
         "Copy the tile as normal: it always serves the next rotation text, never asks which one.",
       ],
       whatHappens:
-        "A small badge counts up on a grid tile, a floating button, and a button folder member, like \"2/5\"; a tile-folder member shows only its file-type icon, not this badge. In order mode it is the absolute position; in shuffle mode it counts draws within the current cycle and restarts at 1 once every entry has been shown once, so it never jumps to an arbitrary position. The count survives restarts and full backups; a CSV/TXT import creates a new tile with a fresh pointer, so only the list of texts and its order or shuffle mode carry over, not the exact position. Turning rotation off on a tile with several entries keeps them all; only the first one is used until it is turned back on. The optional \"Rotate on paste\" moves a tile with rotation to its next text on every real paste, not only when it is copied.",
+        "A small badge counts up on a grid tile, a floating button, and a desktop folder member, like \"2/5\"; a grid folder member shows only its file-type icon, not this badge. In order mode it is the absolute position; in shuffle mode it counts draws within the current cycle and restarts at 1 once every entry has been shown once, so it never jumps to an arbitrary position. The count survives restarts and full backups; a CSV/TXT import creates a new tile with a fresh pointer, so only the list of texts and its order or shuffle mode carry over, not the exact position. Turning rotation off on a tile with several entries keeps them all; only the first one is used until it is turned back on. The optional \"Rotate on paste\" moves a tile with rotation to its next text on every real paste, not only when it is copied.",
       settings: ["Rotation (on by default), default order or shuffle, badge, maximum rotation texts, rotate on paste: Expert menu → Features → Rotation. The per-tile switch itself is in the editor under Advanced options."],
     },
     {
@@ -210,21 +210,21 @@ export const HELP_CONTENT = {
         "Drag the floating button to move it; right-click it for size, edit, or remove.",
       ],
       whatHappens: "Positions survive app restarts. A button whose saved screen is no longer connected opens on the main screen, marked as parked, and jumps back on its own once that screen returns. An action in the expert menu brings every floating window to the main screen at once.",
-      settings: ["Floating buttons: Expert menu → Features → Floating buttons & button folders", "Park buttons whose screen is gone, hide long-parked ones, bring all back: Expert menu → Features → Floating buttons & button folders"],
+      settings: ["Floating buttons: Expert menu → Features → Floating buttons & folders", "Hide long-parked buttons, bring all back: Expert menu → Features → Floating buttons & folders"],
     },
     {
       section: "features",
       title: "Folders",
       whatItIs: "The same gesture groups things in two places: drop one item onto another of its own kind to gather it into a folder.",
       howTo: [
-        "Drag one floating button onto another to make a button folder.",
-        "On the main grid, drag one tile onto another to make a tile folder.",
+        "Drag one floating button onto another to make a folder on the desktop.",
+        "On the main grid, drag one tile onto another to make a folder in the grid.",
         "Drag a member back out to free it.",
       ],
       whatHappens:
-        "A button folder shows up to four member previews and a count; a tile folder shows how many tiles it holds and one colour dot per tile. Dragging a member out frees it, and it dissolves once one member is left; a tile belongs to only one tile folder at a time.",
-      settings: ["Button folders, tile folders: Expert menu → Features → Floating buttons & button folders"],
-      tip: "Both kinds are on out of the box; switch any of them off in the expert menu if items are never grouped that way.",
+        "A folder lives where it was made, in the grid or on the desktop. A desktop folder shows up to four member previews and a count; a grid folder shows how many tiles it holds and one colour dot per tile. Dragging a member out frees it, and the folder dissolves once one member is left; a tile belongs to only one grid folder at a time.",
+      settings: ["Folders: Expert menu → Features → Floating buttons & folders"],
+      tip: "Folders are on out of the box; switch them off in the expert menu if items are never grouped that way.",
       sketches: ["folderTypes"],
     },
     {
@@ -233,7 +233,7 @@ export const HELP_CONTENT = {
       whatItIs: "The tray icon's right-click menu offers quick access without opening the main window.",
       howTo: ["Right-click the tray icon.", "Pick an item from \"Recently copied\" or \"Favorites\" to copy it immediately."],
       whatHappens: "The menu copies straight from the tray; the main window never has to open for this. The menu is drawn as a rounded window in the app's own theme; switch that off for the plain Windows menu. Typing in the tray menu's search field opens the quick launcher with what you typed.",
-      settings: ["Windows 11-style menu, search field, recently copied section, favorites section, entry counts, label length: Expert menu → Features → Tray menu"],
+      settings: ["Windows 11-style menu, search field, recently copied section, favorites section, entry counts: Expert menu → Features → Tray menu"],
     },
     {
       section: "features",
@@ -282,7 +282,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "On some Windows builds even listing what is installed needs administrator rights; if so, a button re-runs that check through the same elevation prompt. A background watcher notices when an installed pack's version changed or a Windows update silently removed it, and flags it without reinstalling right away. Dismiss it for a while with the notice's \"Cancel\" button, or turn the watcher off entirely.",
-      settings: ["Auto-pick the recognition language, background watcher for missing or changed packs: Expert menu → Capture → Text recognition, and again under Expert menu → Features → Dictation"],
+      settings: [],
     },
     {
       section: "features",
@@ -295,7 +295,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Unlike the database, the Markdown files are plain text: anyone with access to that folder can read the content, so a synced or shared folder should be avoided for anything sensitive. A tile with an attached file, image, or PDF syncs as a reference: the header carries the path and the PDF page, never the file itself, so another machine needs the same path for the button to work there. A screenshot pasted straight into a tile has no path at all and stays in the database only. A confidential tile is never written to the folder, and a file never changes a confidential tile. A file whose tile sits in the trash does not bring it back as a second tile. A view or folder named in an incoming file that does not exist yet on this machine is created automatically, matched by name. Deleting a file in the folder does not delete the tile (it is written again on the next round); deleting the tile in the app does take its file with it. The file name is the tile's permanent id, so renaming a file by hand produces a second tile instead of a renamed one. If a tile and its file changed at the same time, the file wins that round and the replaced version is kept as a version of the tile. The other way round, the app wins the file and the file's text is kept beside it as a conflict copy. Files this app did not write, or has never seen before, are never changed or deleted, and a file past 8 MB is skipped whole rather than cut short. Picking a different folder asks whether the old one should be deleted, and that delete only ever removes the files this app wrote itself, never a sub-folder, stopping entirely if anything unknown is in there. An unreachable folder pauses the sync after a few failed rounds instead of retrying forever.",
-      settings: ["Folder sync, sync folder, poll interval, pause after failed rounds: Expert menu → Features → Prompt sync"],
+      settings: ["Folder sync, sync folder: Expert menu → Features → Floating buttons & folders"],
       tip: "This is a beta feature: keep the sync folder somewhere only trusted eyes can read.",
     },
     {
@@ -309,7 +309,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "The app's own windows are hidden for the moment of capture so they never end up in the shot. The result reaches the clipboard immediately; saving it as a tile or file is a separate, optional step. Saving into the screenshots folder never replaces an existing file; it takes the next free name.",
-      settings: ["Screenshot tool, save location, format and quality, preview size, capture delay: Expert menu → Capture → Screenshot", "Always save screenshots: Settings"],
+      settings: ["Screenshot tool, save location, format and quality, capture delay: Expert menu → Capture → Screenshot", "Always save screenshots: Settings"],
     },
     {
       section: "capture",
@@ -327,7 +327,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Every edit is one step in an undo/redo list capped by its own setting; pixelate always samples the original screenshot, never an already-edited layer, so blurring a spot never smears earlier marks. Snap-to-edges lines a shape up with the image border, its center and the other shapes while dragging, with a thin guide line; hold Alt to drag freely. A text label can get a background plate or an outline, so light text stays readable on a light background. Undo covers every step, including a duplicate, a delete, a resize and a run of arrow-key moves, which counts as one step. Once zoomed in, the hand tool, Space held down or the middle mouse button drags the view around for pixel-precise work. The crop tool shows a resize cursor at each handle and a move cursor inside the current selection. Switching the editor off (below) skips straight to the confirmation dialog instead.",
-      settings: ["Screenshot editor, default tool, snap to edges, text background, default color, undo limit: Expert menu → Capture → Screenshot editor. The editor remembers the last size you used for each tool. It also opens with the tool you used last, unless a fixed default tool is set.", "Mouse wheel on number fields: Expert menu → Capture → Both editors"],
+      settings: ["Screenshot editor, default tool, snap to edges, text background, default color: Expert menu → Capture → Screenshot editor. The editor remembers the last size you used for each tool. It also opens with the tool you used last, unless a fixed default tool is set.", "Mouse wheel on number fields: Expert menu → Capture → Both editors"],
     },
     {
       section: "capture",
@@ -387,7 +387,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Nothing is processed until you export: the live preview plays your edits directly. A filmstrip and waveform give a zoomable overview of the whole clip for frame-exact navigation. The preview itself also zooms with the scroll wheel (up to 8×) and pans by dragging (the middle mouse button always, the left button once zoomed in) for placing a small overlay precisely on a large recording. The export destination is an editable field: type a path directly, or use \"Export to…\" to keep the file name and change only the folder; once an export has finished, \"Save as…\" moves that finished video to another place. Switching format only rewrites the extension. The \"Copy\" button next to the export field skips naming entirely. It exports into a temporary copy that cleans itself up after an hour and on the next launch, and places the finished file straight on the clipboard. A few ready-made export presets (unchanged quality, a smaller size for chat, an animated GIF) remember your last choice. The export format list offers MP4, WebM, GIF and AVI, each with a short note on what it is for. GIF never carries audio, warns once the clip runs past ten seconds, and is capped to a maximum resolution since it grows large fast. Undo/redo covers every editing step, capped by an adjustable limit. \"Add a video\" lays another clip on top as an overlay, and the Keys overlay turns the keys pressed during a recording into a keyboard picture. Right-click an overlay's row to duplicate or delete it. Dragging a crop box or overlay snaps to the frame edges, its center and other overlays; hold Alt to drag freely. A new overlay starts from the color, thickness and size last used for its kind. Unfinished cuts and overlays are remembered, so reopening the same recording offers to continue. The export file name has its own field; an existing file is never replaced, the export takes the next free name.",
-      settings: ["Video editor, undo limit, remember overlay values, snap to edges: Expert menu → Capture → Video editor", "Remember unfinished video edits, and for how many days: Expert menu → Capture → Both editors"],
+      settings: ["Video editor, snap to edges: Expert menu → Capture → Video editor", "Remember unfinished video edits, and for how many days: Expert menu → Capture → Both editors"],
       sketches: ["editorTimeline"],
     },
     {
@@ -402,7 +402,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Recognition runs entirely on the device through Windows' own engine. The result dialog can auto-copy the text and join broken lines back into paragraphs, both switchable. A missing language pack opens the same dialog voice dictation uses; see \"Language packs\" below.",
-      settings: ["Text recognition, auto-copy the result, join lines, enlarge small images, recognition language: Expert menu → Capture → Text recognition"],
+      settings: ["Text recognition, auto-copy the result, join lines, recognition language: Expert menu → Capture → Text recognition"],
     },
     {
       section: "capture",
@@ -492,9 +492,9 @@ export const HELP_CONTENT = {
       section: "appearance",
       title: "Scaling & zoom",
       whatItIs: "Independent size sliders adjust different parts of the window separately.",
-      howTo: ["Open Settings and find the scaling sliders.", "Adjust overall UI, dialog, composer, or icon scale independently."],
+      howTo: ["Open Settings and find the scaling sliders.", "Adjust the overall UI scale or the icon scale independently."],
       whatHappens: "Each slider only affects its own part of the window: raising icon scale, for example, does not resize dialogs.",
-      settings: ["Interface size: Settings", "Icon, composer and main-button scale: Expert menu → Appearance → Sizes (%)"],
+      settings: ["Interface size: Settings", "Icon size: Expert menu → Appearance → Sizes (%)"],
     },
     {
       section: "library",
@@ -502,7 +502,7 @@ export const HELP_CONTENT = {
       whatItIs: "The library lists every tile as a searchable, filterable list, unlike the grid, which shows only what fits.",
       howTo: [
         "Click the library button {icon:library} in the toolbar to open it.",
-        "Type to search, or use the type and color filters to narrow the list.",
+        "Type to search, or use the type filter to narrow the list.",
         "Click a row to copy.",
         "The Close after copy box at the bottom of the library decides whether copying closes the library; it remembers your choice.",
         "Use its menu to edit, drag onto the grid, tag, or delete.",
@@ -511,7 +511,7 @@ export const HELP_CONTENT = {
         "Pick two rows and click \"Compare\" in the selection bar to see both side by side with the differences marked.",
       ],
       whatHappens: "Search is typo-tolerant by default and, unless turned off, sorts by most-used or most-recently-used. In the comparison, either side's text can be taken over into the other. Tiles view behaves exactly like the list for clicks, menus and multi-select.",
-      settings: ["Fuzzy search, type and color filters, saved searches: Expert menu → Library & copy history → Search", "Focus the search field on opening: Expert menu → Library & copy history → Search", "Entries per search list (library, Search everything, quick launcher): Expert menu → Library & copy history → Search", "Smart sort, multi-select for batch actions, image and video previews in the rows, tiles view: Expert menu → Library & copy history → Display"],
+      settings: ["Fuzzy search, type filter, saved searches: Expert menu → Library & copy history → Search", "Focus the search field on opening: Expert menu → Library & copy history → Search", "Entries per search list (library, Search everything, quick launcher): Expert menu → Library & copy history → Search", "Smart sort, multi-select for batch actions, image and video previews in the rows, tiles view: Expert menu → Library & copy history → Display"],
     },
     {
       section: "library",
@@ -533,23 +533,10 @@ export const HELP_CONTENT = {
       howTo: [
         "Type a tag name in a tile's editor to add it, or pick an existing one.",
         "Use the tag filter row in the library to narrow the list.",
+        "To archive a tile, choose \"Archive\" in its menu: it gets the archive tag and leaves the grid and the list until you show it again.",
       ],
-      whatHappens: "Renaming, recoloring, or deleting a tag from the tag manager applies everywhere it is used, in one step.",
-      settings: ["Tag filter mode (match any selected tag, or all of them): Expert menu → Library & copy history → Tags"],
-    },
-    {
-      section: "library",
-      title: "Archive",
-      whatItIs: "The archive sets a tile aside without deleting it.",
-      howTo: [
-        "Turn the archive on in the expert menu.",
-        "Choose \"Archive\" from a tile's menu, or archive several at once from the library's selection bar.",
-        "Use the toggle above the library list to show archived tiles again.",
-      ],
-      whatHappens:
-        "An archived tile leaves the grid and the library list, but search still finds it, and exports and backups keep it like any other tile. \"Unarchive\" in the same menu brings it back.",
-      settings: ["Archive: Expert menu → Library & copy history → Display"],
-      tip: "Off by default.",
+      whatHappens: "Renaming, recoloring, or deleting a tag from the tag manager applies everywhere it is used, in one step. The archive is an ordinary tag with a reserved name: an archived tile still turns up in search and stays in exports and backups, and \"Unarchive\" in the same menu brings it back.",
+      settings: ["Tag filter mode (match any selected tag, or all of them): Expert menu → Library & copy history → Tags", "Archive tag: Expert menu → Library & copy history → Tags"],
     },
     {
       section: "library",
@@ -585,7 +572,7 @@ export const HELP_CONTENT = {
       howTo: ["Open the expert menu's System group for updates, navigation, instances, and the data folder."],
       whatHappens:
         "Update checks are on by default and never install anything without asking first. Changing the data folder migrates the existing database there. Allowing multiple instances takes a restart to apply. Pointing the data folder at a cloud-synced folder shows a one-time warning. A small lock file then tracks which computer uses the database. A second computer that finds a fresh lock from another one opens everything read-only and says so in a banner. A lock nobody refreshed for a while is taken over. Long jobs can fill the taskbar icon as a progress bar and show an estimate of the time left.",
-      settings: ["Keyboard navigation, data folder, taskbar progress, remaining time, video tools download: Expert menu → System & data → System", "Allow multiple instances, data folder lock: Expert menu → System & data → Troubleshooting"],
+      settings: ["Keyboard navigation, data folder, taskbar progress, video tools download: Expert menu → System & data → System", "Allow multiple instances, data folder lock: Expert menu → System & data → Troubleshooting"],
     },
     {
       section: "system",
@@ -605,7 +592,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Screen-capture exclusion makes the window invisible to screenshot and recording tools, including its own, so if a capture comes out empty, check this setting first. An optional, off-by-default setting reads text out of an attached picture so the library search can find it too; a hit found only there carries a \"found in image\" badge, so it never looks like a random match. That recognized text stays out of the app otherwise: it is never shown, never exported, never synchronized, and its length is capped. Removing or replacing the picture clears it right away, and switching the setting off removes it from every tile, the trash included. A single tile can also be marked confidential; see \"Confidential prompts\" below.",
-      settings: ["Exclude from screen capture, blur media: Expert menu → System & data → Privacy", "Index text inside attached pictures for search, image text length limit: Expert menu → Library & copy history → Search", "Mark a tile confidential, vault lock timeout: Expert menu → System & data → Privacy"],
+      settings: ["Exclude from screen capture, blur media: Expert menu → System & data → Privacy", "Index text inside attached pictures for search: Expert menu → Library & copy history → Search", "Mark a tile confidential, vault lock timeout: Expert menu → System & data → Privacy"],
       tip: "Screen-capture exclusion ships on: turn it off for normal screenshots or recordings of this window.",
     },
     {
@@ -823,7 +810,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Im letzten Schritt lassen sich der Screenshot-Editor, die Farbauswahl oder die Texterkennung direkt aktivieren; dabei wird jeweils die ausgelieferte Standardeinstellung angezeigt. Gespeichert wird erst, wenn die Einführung tatsächlich abgeschlossen ist, und nur für Schalter, die wirklich geändert wurden. Ein beim ersten Start erscheinender Hinweis zum Datenordner oder zu WebView2 hat immer Vorrang; die Einführung wartet einfach, bis sie an der Reihe ist.",
-      settings: ["Beim ersten Start automatisch öffnen: Expertenmenü → System & Daten → Hilfe"],
+      settings: ["Beim ersten Start automatisch öffnen: Expertenmenü → System & Daten → System"],
     },
     {
       section: "basics",
@@ -864,7 +851,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Die Versionen speichern jede Änderung, sodass eine frühere wiederhergestellt werden kann. Die Markdown-Vorschau erscheint neben oder anstelle des Textfelds, ohne den gespeicherten Inhalt zu verändern. Private Notizen werden nie mit dem Text kopiert oder exportiert. Der offene Text wird alle paar Sekunden als Entwurf gesichert; schließt sich das Fenster oder die App vor dem Speichern, bietet der nächste Start den Entwurf einmal wieder an. Eine vertrauliche Kachel bekommt nie einen Entwurf. Wer eine neue Kachel speichert, die einer vorhandenen sehr ähnelt, sieht einen leisen Hinweis, das Speichern wird nicht aufgehalten. Bei einem Text mit Markdown legt „Formatiert kopieren“ im Editor und im Kachel-Menü zusätzlich die gerenderte Fassung in die Zwischenablage, sodass Word oder ein Mailprogramm die Formatierung zeigt. In der Liste der Versionen behält ein zweiter Button neben Wiederherstellen die gewählte Fassung als neue Kachel und lässt die aktuelle unverändert.",
-      settings: ["Markdown-Vorschau, Syntax-Hervorhebung, Versionen, private Notizen: Expertenmenü → Funktionen → Editor", "Textfeld in dicktengleicher Schrift: Expertenmenü → Funktionen → Editor", "Formatiert kopieren, Live-Längenzähler, wortweiser Vergleich der Versionen, Verwerfen bestätigen, Entwurf automatisch sichern und wie oft: Expertenmenü → Funktionen → Editor", "Hinweis auf ähnliche Prompts beim Speichern: Expertenmenü → System & Daten → Daten & Wartung"],
+      settings: ["Markdown-Vorschau, Syntax-Hervorhebung, Versionen, private Notizen: Expertenmenü → Funktionen → Editor", "Textfeld in dicktengleicher Schrift: Expertenmenü → Funktionen → Editor", "Formatiert kopieren, Live-Längenzähler, Verwerfen bestätigen, Entwurf automatisch sichern und wie oft: Expertenmenü → Funktionen → Editor", "Hinweis auf ähnliche Prompts beim Speichern: Expertenmenü → System & Daten → Daten & Wartung"],
       tip: "Markdown-Vorschau und private Notizen sind ab Werk aktiviert.",
     },
     {
@@ -878,7 +865,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Eine standardmäßig deaktivierte Funktion trägt ein kleines Punkt-Badge an ihrer Beschriftung, mit einer erklärenden Kurzinfo. Zurücksetzen funktioniert auf drei Ebenen: das eigene Rückgängig-Symbol eines Werts, das Zurücksetzen-Symbol einer ganzen Gruppe in ihrer Kopfzeile, oder alles auf einmal über die allgemeine Zurücksetzen-Aktion. Ein Profil zeigt zuerst, wie viele Einstellungen sich ändern würden, und bleibt nie als Modus gemerkt; Alles an lässt alles Zerstörerische und alles, was Daten nach außen schickt, aus. Die Suche findet auch Einstellungen außerhalb des Expertenmenüs, etwa im Einstellungsfenster oder im Fenster der Sicherungen, mit einem Hinweis, wo sie liegen; ein Klick öffnet diese Stelle.",
-      settings: ["Tipp-Zeile, hervorgehobene Suchtreffer und Skizzen in diesem Hilfefenster: Expertenmenü → System & Daten → Hilfe"],
+      settings: [],
     },
     {
       section: "basics",
@@ -915,7 +902,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Eine kurze Bestätigungsblase oder ein Aufblinken bestätigt den Kopiervorgang; die Textgröße dieser Blase hat im Expertenmenü drei Stufen (klein, mittel, groß). Verketten fasst mehrere nacheinander angeklickte Kacheln zu einem Eintrag in der Zwischenablage zusammen, statt sie zu überschreiben. „Kette hier starten“ im Rechtsklickmenü einer Textkachel beginnt direkt eine Kette mit dieser Kachel. Eine Kette bleibt beim Wechsel in ein anderes Programm bestehen. Der Ketten-Button oben startet und beendet eine Kette. Auch Strg+V im App-Fenster beendet sie. Beim Verketten lässt sich ein Schritt in der Leiste über dem Raster ziehen, um ihn umzusortieren, oder per Rechtsklick entfernen. Verketten ist nicht dasselbe wie Rotation: Verketten fasst mehrere verschiedene Kacheln zusammen, Rotation ändert, was eine einzelne Kachel von Kopie zu Kopie enthält (siehe Rotation). Ist die Doppelklick-Dauer-an-Funktion eingeschaltet, bleibt der Kettenmodus nach dem Kopieren an, um mehrere Ketten nacheinander zu bauen. Der Streifen kann außerdem einen Schritt rot markieren, wenn er einen Platzhalter braucht, den kein früherer Schritt füllt; die Kette läuft trotzdem.",
-      settings: ["Verketten und der Kettenstart im Kachelmenü: Expertenmenü → Funktionen → Kette", "Was zwischen zwei verketteten Schritten steht: Expertenmenü → Funktionen → Kette", "Kettenmodus nach dem Kopieren eingeschaltet lassen, zeigen, was jeder Kettenschritt braucht: Expertenmenü → Funktionen → Kette", "Auto-Einfügen bei Doppelklick: Einstellungen", "Eigene Tastenkürzel pro Kachel, Enter nach Auto-Einfügen, Drag-out, Fenster nach dem Kopieren ausblenden: Expertenmenü → Funktionen → Kopieren", "Welche Taste eine Kachel herauszieht und ob diese Taste herauszieht oder sie verschiebt: Expertenmenü → Funktionen → Kopieren"],
+      settings: ["Verketten und der Kettenstart im Kachelmenü: Expertenmenü → Funktionen → Kette", "Was zwischen zwei verketteten Schritten steht: Expertenmenü → Funktionen → Kette", "Kettenmodus nach dem Kopieren eingeschaltet lassen: Expertenmenü → Funktionen → Kette", "Auto-Einfügen bei Doppelklick: Einstellungen", "Eigene Tastenkürzel pro Kachel, Enter nach Auto-Einfügen, Drag-out, Fenster nach dem Kopieren ausblenden: Expertenmenü → Funktionen → Kopieren", "Welche Taste eine Kachel herauszieht und ob diese Taste herauszieht oder sie verschiebt: Expertenmenü → Funktionen → Kopieren"],
       sketches: ["flowToTarget", "chainSteps"],
     },
     {
@@ -924,14 +911,14 @@ export const HELP_CONTENT = {
       whatItIs:
         "Platzhalter-Markup im Text einer Kachel öffnet ein Ausfüll-Popup, bevor der fertige Text die Zwischenablage erreicht.",
       howTo: [
-        "{#{PlatzhalterName}#} irgendwo in den Text eintippen.",
+        "{?PlatzhalterName} irgendwo in den Text eintippen.",
         "Oder unter dem Textfeld auf „Platzhalter einfügen“ klicken: das öffnet den Platzhalterbereich.",
         "Für einen sich selbst ausfüllenden Wert einen dynamischen Chip unter dem Textfeld anklicken statt zu tippen.",
         "Klick auf die Kachel zum Kopieren: das Ausfüll-Popup öffnet sich automatisch.",
         "Pro Platzhalter einen Wert eingeben, bei Auswahl-Platzhaltern einen wählen, dann bestätigen.",
       ],
       whatHappens:
-        "Nur der ausgefüllte Text erreicht die Zwischenablage; das rohe {#{...}#}-Markup wird nie kopiert. Ein dynamischer Platzhalter (Datum, Uhrzeit, Zwischenablage, UUID) nutzt eine eigene Schreibweise, {#{/date\\}#}, und füllt sich ganz ohne Popup selbst aus. Das Popup kann sich den zuletzt eingetippten Wert eines Platzhalters merken und ihn wieder anbieten. Eine Liste fester Werte im Expertenmenü wird für einen gleichnamigen Platzhalter vorgeschlagen; sie wird immer nur vorgeschlagen, nie von selbst eingesetzt.",
+        "Nur der ausgefüllte Text erreicht die Zwischenablage; das rohe {?...}-Markup wird nie kopiert. Ein dynamischer Platzhalter (Datum, Uhrzeit, Zwischenablage, UUID) wird mit einem @ davor geschrieben, {?@date}, und füllt sich ganz ohne Popup selbst aus. Das Popup kann sich den zuletzt eingetippten Wert eines Platzhalters merken und ihn wieder anbieten. Eine Liste fester Werte im Expertenmenü wird für einen gleichnamigen Platzhalter vorgeschlagen; sie wird immer nur vorgeschlagen, nie von selbst eingesetzt. Prompts mit der älteren Schreibweise {#{Name}#} werden automatisch umgeschrieben.",
       settings: ["Dynamische Platzhalter, Auswahl-Platzhalter, Auswahl merken, eingetippte Werte merken, Liste fester Werte, Datums- und Zeitformat: Expertenmenü → Funktionen → Platzhalter"],
       sketches: ["placeholderAnatomy"],
     },
@@ -954,7 +941,7 @@ export const HELP_CONTENT = {
       settings: [
         "Globales Tastenkürzel, alle Tastenkürzel: Einstellungen",
         "Eigene Tastenkürzel pro Kachel, Einfügen nach Kopieren: Expertenmenü → Funktionen → Kopieren",
-        "Tastenkürzel-Abzeichen, Deckkraft des Abzeichens: Expertenmenü → Kacheln → Kacheln",
+        "Tastenkürzel-Abzeichen: Expertenmenü → Kacheln → Kacheln",
       ],
     },
     {
@@ -970,7 +957,7 @@ export const HELP_CONTENT = {
         "Die Kachel wie gewohnt kopieren: sie liefert immer den nächsten Eintrag, ohne zu fragen, welchen.",
       ],
       whatHappens:
-        "Ein kleines Badge zählt auf einer Raster-Kachel, einem schwebenden Button und einem Mitglied eines Button-Ordners hoch, wie „2/5“; ein Kachelordner-Mitglied zeigt nur sein Dateityp-Symbol, nicht dieses Badge. Im Reihenfolge-Modus ist das die absolute Position. Im Zufalls-Modus zählt es die Ziehungen im aktuellen Durchlauf und beginnt wieder bei 1, sobald jeder Eintrag einmal drankam. Der Zählerstand übersteht Neustarts und vollständige Sicherungen. Ein CSV/TXT-Import erstellt eine neue Kachel mit frischem Zeiger; übernommen werden nur die Textliste und ihr Reihenfolge- oder Misch-Modus, nicht die genaue Position. Wird die Rotation bei einer Kachel mit mehreren Einträgen ausgeschaltet, bleiben alle erhalten; nur der erste wird genutzt, bis sie wieder aktiviert wird. Das optionale „Beim Einfügen rotieren“ bringt eine Kachel mit Rotation bei jedem echten Einfügen zum nächsten Text, nicht nur beim Kopieren.",
+        "Ein kleines Badge zählt auf einer Raster-Kachel, einem schwebenden Button und einem Mitglied eines Desktop-Ordners hoch, wie „2/5“; ein Raster-Ordner-Mitglied zeigt nur sein Dateityp-Symbol, nicht dieses Badge. Im Reihenfolge-Modus ist das die absolute Position. Im Zufalls-Modus zählt es die Ziehungen im aktuellen Durchlauf und beginnt wieder bei 1, sobald jeder Eintrag einmal drankam. Der Zählerstand übersteht Neustarts und vollständige Sicherungen. Ein CSV/TXT-Import erstellt eine neue Kachel mit frischem Zeiger; übernommen werden nur die Textliste und ihr Reihenfolge- oder Misch-Modus, nicht die genaue Position. Wird die Rotation bei einer Kachel mit mehreren Einträgen ausgeschaltet, bleiben alle erhalten; nur der erste wird genutzt, bis sie wieder aktiviert wird. Das optionale „Beim Einfügen rotieren“ bringt eine Kachel mit Rotation bei jedem echten Einfügen zum nächsten Text, nicht nur beim Kopieren.",
       settings: ["Rotation (standardmäßig an), Standard Reihenfolge oder Mischen, Badge, maximale Rotationstexte, beim Einfügen rotieren: Expertenmenü → Funktionen → Rotation. Der Schalter pro Kachel steht im Editor unter „Erweiterte Optionen“."],
     },
     {
@@ -982,21 +969,21 @@ export const HELP_CONTENT = {
         "Den schwebenden Button ziehen, um ihn zu bewegen; Rechtsklick für Größe, Bearbeiten oder Entfernen.",
       ],
       whatHappens: "Positionen bleiben nach Neustarts erhalten. Ein Button, dessen gespeicherter Bildschirm nicht mehr angeschlossen ist, öffnet sich auf dem Hauptbildschirm, als geparkt markiert, und springt von selbst zurück, sobald dieser Bildschirm wieder da ist. Eine Aktion im Expertenmenü holt alle schwebenden Fenster auf einmal auf den Hauptbildschirm.",
-      settings: ["Schwebende Buttons: Expertenmenü → Funktionen → Schwebende Buttons & Button-Ordner", "Buttons parken, wenn ihr Bildschirm fehlt, lange geparkte ausblenden, alle zurückholen: Expertenmenü → Funktionen → Schwebende Buttons & Button-Ordner"],
+      settings: ["Schwebende Buttons: Expertenmenü → Funktionen → Schwebende Buttons & Ordner", "Lange geparkte Buttons ausblenden, alle zurückholen: Expertenmenü → Funktionen → Schwebende Buttons & Ordner"],
     },
     {
       section: "features",
       title: "Ordner",
       whatItIs: "Dieselbe Geste gruppiert an zwei Stellen: ein Element auf ein gleichartiges ziehen, um es in einen Ordner aufzunehmen.",
       howTo: [
-        "Einen schwebenden Button auf einen anderen ziehen, um einen Button-Ordner zu bilden.",
-        "Im Hauptfenster eine Kachel auf eine andere ziehen, um einen Kachelordner zu bilden.",
+        "Einen schwebenden Button auf einen anderen ziehen, um einen Ordner auf dem Desktop zu bilden.",
+        "Im Hauptfenster eine Kachel auf eine andere ziehen, um einen Ordner im Raster zu bilden.",
         "Ein Mitglied wieder herausziehen, um es freizugeben.",
       ],
       whatHappens:
-        "Ein Button-Ordner zeigt bis zu vier Vorschauen seiner Mitglieder und eine Anzahl; ein Kachelordner zeigt, wie viele Kacheln er enthält, und einen Farbpunkt pro Kachel. Das Herausziehen eines Mitglieds gibt es frei, und der Ordner löst sich auf, sobald nur noch eines übrig ist. Eine Kachel gehört immer nur zu einem Kachelordner gleichzeitig.",
-      settings: ["Button-Ordner, Kachelordner: Expertenmenü → Funktionen → Schwebende Buttons & Button-Ordner"],
-      tip: "Beide Arten sind ab Werk an; jede einzeln im Expertenmenü abschaltbar, wenn Elemente so nie gruppiert werden sollen.",
+        "Ein Ordner liegt dort, wo er angelegt wurde, im Raster oder auf dem Desktop. Ein Desktop-Ordner zeigt bis zu vier Vorschauen seiner Mitglieder und eine Anzahl; ein Raster-Ordner zeigt, wie viele Kacheln er enthält, und einen Farbpunkt pro Kachel. Das Herausziehen eines Mitglieds gibt es frei, und der Ordner löst sich auf, sobald nur noch eines übrig ist. Eine Kachel gehört immer nur zu einem Raster-Ordner gleichzeitig.",
+      settings: ["Ordner: Expertenmenü → Funktionen → Schwebende Buttons & Ordner"],
+      tip: "Ordner sind ab Werk an; im Expertenmenü abschaltbar, wenn Elemente so nie gruppiert werden sollen.",
       sketches: ["folderTypes"],
     },
     {
@@ -1005,7 +992,7 @@ export const HELP_CONTENT = {
       whatItIs: "Das Rechtsklick-Menü des Infobereich-Symbols bietet schnellen Zugriff, ohne das Hauptfenster zu öffnen.",
       howTo: ["Rechtsklick auf das Infobereich-Symbol.", "Einen Eintrag aus „Zuletzt kopiert“ oder „Favoriten“ wählen, um ihn sofort zu kopieren."],
       whatHappens: "Das Menü kopiert direkt aus dem Infobereich; das Hauptfenster muss dafür nicht geöffnet werden. Das Menü erscheint als abgerundetes Fenster im Design der App; ausgeschaltet kommt das schlichte Windows-Menü. Tippen ins Suchfeld des Infobereich-Menüs öffnet den Schnellstarter mit dem Getippten.",
-      settings: ["Infobereich-Menü im Windows-11-Stil, Suchfeld, Bereich für zuletzt Kopiertes, Bereich für Favoriten, Anzahl der Einträge, Länge der Beschriftung: Expertenmenü → Funktionen → Infobereich-Menü"],
+      settings: ["Infobereich-Menü im Windows-11-Stil, Suchfeld, Bereich für zuletzt Kopiertes, Bereich für Favoriten, Anzahl der Einträge: Expertenmenü → Funktionen → Infobereich-Menü"],
     },
     {
       section: "features",
@@ -1055,7 +1042,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Bei manchen Windows-Versionen sind selbst zum Auflisten der installierten Pakete Administratorrechte erforderlich. In diesem Fall führt ein Button die Prüfung über dieselbe Administratorabfrage erneut aus. Eine Hintergrundüberwachung erkennt, wenn sich die Version eines installierten Pakets geändert hat oder ein Windows-Update es unbemerkt entfernt hat, und kennzeichnet es, ohne sofort zur Neuinstallation aufzufordern. Mit „Abbrechen“ im Hinweis lässt sich der Hinweis vorübergehend ausblenden; die Überwachung kann auch vollständig deaktiviert werden.",
-      settings: ["Erkennungssprache automatisch wählen, Hintergrundüberwachung für fehlende oder geänderte Pakete: Expertenmenü → Aufnehmen → Texterkennung, und noch einmal unter Expertenmenü → Funktionen → Diktat"],
+      settings: [],
     },
     {
       section: "features",
@@ -1068,7 +1055,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Anders als die Datenbank sind die Markdown-Dateien Klartext: wer Zugriff auf diesen Ordner hat, kann den Inhalt lesen; ein synchronisierter oder geteilter Ordner sollte deshalb für Sensibles vermieden werden. Eine Kachel mit angehängter Datei, Bild oder PDF wird als Verweis synchronisiert: Der Kopf trägt Pfad und PDF-Seite, nie die Datei selbst. Der andere Rechner braucht also denselben Pfad, damit der Button dort funktioniert. Ein direkt eingefügter Screenshot hat gar keinen Pfad und bleibt nur in der Datenbank. Eine vertrauliche Kachel wird nie in den Ordner geschrieben, und eine Datei ändert nie eine vertrauliche Kachel. Eine Datei, deren Kachel im Papierkorb liegt, holt sie nicht als zweite Kachel zurück. Eine in einer eingehenden Datei genannte Ansicht oder ein Ordner, den es hier noch nicht gibt, wird automatisch angelegt, per Namensabgleich. Eine im Ordner gelöschte Datei löscht die Kachel nicht (sie wird im nächsten Durchlauf neu geschrieben); wer die Kachel in der App löscht, löscht auch ihre Datei. Der Dateiname ist die feste Kennung der Kachel, von Hand umbenennen erzeugt deshalb eine zweite Kachel statt einer umbenannten. Wurden Kachel und Datei gleichzeitig geändert, gewinnt in diesem Durchlauf die Datei, und die ersetzte Fassung bleibt als Version der Kachel erhalten. Umgekehrt gewinnt die App die Datei, und deren Text bleibt als Konfliktkopie daneben liegen. Dateien, die diese App nicht geschrieben oder noch nie gesehen hat, werden nie geändert oder gelöscht, und eine Datei über 8 MB wird ganz übersprungen statt abgeschnitten. Ein Ordnerwechsel fragt, ob der alte Ordner gelöscht werden soll; gelöscht wird dabei nur, was diese App selbst geschrieben hat, nie ein Unterordner, und gar nichts, wenn etwas Fremdes darin liegt. Ein nicht erreichbarer Ordner pausiert die Synchronisierung nach einigen Fehlversuchen, statt endlos weiterzuversuchen.",
-      settings: ["Ordner-Sync, Synchronisierungsordner, Abfragetakt, Pause nach Fehlversuchen: Expertenmenü → Funktionen → Prompt-Synchronisierung"],
+      settings: ["Ordner-Sync, Synchronisierungsordner: Expertenmenü → Funktionen → Schwebende Buttons & Ordner"],
       tip: "Dies ist eine Beta-Funktion: den Synchronisierungsordner nur dort ablegen, wo niemand Unbefugtes mitliest.",
     },
     {
@@ -1082,7 +1069,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Die eigenen Fenster der App werden für den Moment der Aufnahme ausgeblendet, sodass sie nie im Bild landen. Das Ergebnis erreicht sofort die Zwischenablage; das Speichern als Kachel oder Datei ist ein separater, optionaler Schritt. Beim Speichern im Screenshots-Ordner wird nie eine vorhandene Datei ersetzt; die Aufnahme bekommt den nächsten freien Namen.",
-      settings: ["Screenshot-Tool, Speicherort, Format und Qualität, Vorschaugröße, Aufnahmeverzögerung: Expertenmenü → Aufnehmen → Screenshot", "Screenshots immer speichern: Einstellungen"],
+      settings: ["Screenshot-Tool, Speicherort, Format und Qualität, Aufnahmeverzögerung: Expertenmenü → Aufnehmen → Screenshot", "Screenshots immer speichern: Einstellungen"],
     },
     {
       section: "capture",
@@ -1101,7 +1088,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Jede Bearbeitung ist ein Schritt in einer Rückgängig/Wiederholen-Liste, deren Höchstzahl separat einstellbar ist. Beim Verpixeln wird immer der ursprüngliche Screenshot verwendet, nie eine bereits bearbeitete Ebene; dadurch werden frühere Markierungen beim Unkenntlichmachen einer Stelle nicht verschmiert. Das Einrasten an Kanten richtet eine Form beim Ziehen am Bildrand, an der Mitte und an den anderen Formen aus, mit einer dünnen Hilfslinie; mit gehaltener Alt-Taste wird frei gezogen. Eine Textbeschriftung kann eine Hintergrundfläche oder einen Umriss bekommen, damit heller Text auch auf hellem Grund lesbar bleibt. Rückgängig deckt jeden Schritt ab, auch Duplizieren, Löschen, Größe ändern und eine Folge von Pfeiltasten-Schritten, die als ein Schritt zählt. Beim Hineinzoomen verschiebt das Hand-Werkzeug, die gehaltene Leertaste oder die mittlere Maustaste die Ansicht für pixelgenaues Arbeiten. Das Zuschneide-Werkzeug zeigt an jedem Anfasser einen Richtungspfeil und innerhalb des Ausschnitts einen Verschieben-Zeiger. Ist der Editor unten deaktiviert, erscheint stattdessen direkt der Bestätigungsdialog.",
-      settings: ["Screenshot-Editor, Standardwerkzeug, Einrasten an Kanten, Hintergrund für Text, Standardfarbe, Rückgängig-Limit: Expertenmenü → Aufnehmen → Screenshot-Editor. Der Editor merkt sich die zuletzt benutzte Größe jedes Werkzeugs. Er öffnet auch mit dem zuletzt benutzten Werkzeug, außer es ist ein festes Standardwerkzeug eingestellt.", "Mausrad in Zahlenfeldern: Expertenmenü → Aufnehmen → Beide Editoren"],
+      settings: ["Screenshot-Editor, Standardwerkzeug, Einrasten an Kanten, Hintergrund für Text, Standardfarbe: Expertenmenü → Aufnehmen → Screenshot-Editor. Der Editor merkt sich die zuletzt benutzte Größe jedes Werkzeugs. Er öffnet auch mit dem zuletzt benutzten Werkzeug, außer es ist ein festes Standardwerkzeug eingestellt.", "Mausrad in Zahlenfeldern: Expertenmenü → Aufnehmen → Beide Editoren"],
     },
     {
       section: "capture",
@@ -1161,7 +1148,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Bis zum Export wird nichts verarbeitet: Die Live-Vorschau spielt die Bearbeitungen direkt ab. Filmstreifen und Wellenform geben eine zoombare Übersicht über den ganzen Clip für bildgenaue Navigation. Die Vorschau zoomt außerdem mit dem Mausrad bis 8× und lässt sich durch Ziehen verschieben, mit der mittleren Maustaste immer und mit der linken, sobald hineingezoomt ist. So lässt sich ein kleines Overlay bei einer großen Aufnahme genau platzieren. Das Exportziel ist ein Eingabefeld: den Pfad direkt eintippen, oder „Exportieren nach…“ wählen, um nur den Ordner zu wechseln und den Dateinamen zu behalten. Nach einem fertigen Export verschiebt „Speichern unter…“ das Video an einen anderen Ort. Ein Formatwechsel ändert nur die Endung. Der Button „Kopieren“ daneben verzichtet ganz auf einen Namen. Er exportiert in eine temporäre Kopie, die nach einer Stunde und beim nächsten Start wieder entfernt wird, und legt sie direkt in die Zwischenablage. Ein paar fertige Export-Voreinstellungen (unveränderte Qualität, kleiner für Chat, animiertes GIF) merken sich die letzte Wahl. Die Formatauswahl beim Export bietet MP4, WebM, GIF und AVI, jeweils mit einem kurzen Hinweis, wofür es gedacht ist. GIF hat nie Ton, warnt ab zehn Sekunden Länge und ist auf eine Höchstauflösung begrenzt, da es schnell groß wird. Rückgängig/Wiederholen deckt jeden Bearbeitungsschritt ab, begrenzt durch ein einstellbares Limit. „Video hinzufügen“ legt einen weiteren Clip als Überlagerung darüber, und die Überlagerung „Tasten“ macht aus den während einer Aufnahme gedrückten Tasten ein Tastaturbild. Rechtsklick auf die Zeile einer Überlagerung dupliziert oder löscht sie. Ein Zuschnitt oder eine Überlagerung rastet beim Ziehen an den Bildkanten, an der Mitte und an anderen Überlagerungen ein; mit gehaltener Alt-Taste wird frei gezogen. Eine neue Überlagerung startet mit der zuletzt für ihre Art benutzten Farbe, Stärke und Größe. Unfertige Schnitte und Überlagerungen werden gemerkt, sodass das erneute Öffnen derselben Aufnahme das Weitermachen anbietet. Der Name der Exportdatei hat ein eigenes Feld; eine vorhandene Datei wird nie ersetzt, der Export nimmt den nächsten freien Namen.",
-      settings: ["Video-Editor, Rückgängig-Limit, Überlagerungswerte merken, Einrasten an Kanten: Expertenmenü → Aufnehmen → Video-Editor", "Unfertige Video-Bearbeitungen merken, und wie viele Tage: Expertenmenü → Aufnehmen → Beide Editoren"],
+      settings: ["Video-Editor, Einrasten an Kanten: Expertenmenü → Aufnehmen → Video-Editor", "Unfertige Video-Bearbeitungen merken, und wie viele Tage: Expertenmenü → Aufnehmen → Beide Editoren"],
       sketches: ["editorTimeline"],
     },
     {
@@ -1176,7 +1163,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Die Erkennung läuft vollständig auf dem Gerät über die eigene Erkennungs-Engine von Windows. Der Ergebnisdialog kann den Text automatisch kopieren und getrennte Zeilen wieder zu Absätzen verbinden; beides lässt sich separat ein- und ausschalten. Fehlt ein Sprachpaket, öffnet sich derselbe Dialog wie bei der Spracheingabe; siehe „Sprachpakete“ unten.",
-      settings: ["Texterkennung, Ergebnis automatisch kopieren, Zeilen verbinden, kleine Bilder vergrößern, Erkennungssprache: Expertenmenü → Aufnehmen → Texterkennung"],
+      settings: ["Texterkennung, Ergebnis automatisch kopieren, Zeilen verbinden, Erkennungssprache: Expertenmenü → Aufnehmen → Texterkennung"],
     },
     {
       section: "capture",
@@ -1266,9 +1253,9 @@ export const HELP_CONTENT = {
       section: "appearance",
       title: "Skalierung & Zoom",
       whatItIs: "Unabhängige Größenregler passen verschiedene Teile des Fensters getrennt voneinander an.",
-      howTo: ["Einstellungen öffnen und die Skalierungs-Regler finden.", "UI-, Dialog-, Editor- oder Symbol-Skalierung unabhängig voneinander anpassen."],
+      howTo: ["Einstellungen öffnen und die Skalierungs-Regler finden.", "UI- oder Symbol-Skalierung unabhängig voneinander anpassen."],
       whatHappens: "Jeder Regler beeinflusst nur seinen eigenen Teil des Fensters: eine höhere Symbol-Skalierung vergrößert zum Beispiel keine Dialoge.",
-      settings: ["Größe der Oberfläche: Einstellungen", "Symbol-, Editor- und Hauptknopf-Skalierung: Expertenmenü → Aussehen → Größen (%)"],
+      settings: ["Größe der Oberfläche: Einstellungen", "Symbolgröße: Expertenmenü → Aussehen → Größen (%)"],
     },
     {
       section: "library",
@@ -1276,7 +1263,7 @@ export const HELP_CONTENT = {
       whatItIs: "Die Bibliothek listet jede Kachel als durchsuchbare, filterbare Liste, anders als das Raster, das nur zeigt, was passt.",
       howTo: [
         "Klick auf den Bibliothek-Button {icon:library} in der Werkzeugleiste öffnet sie.",
-        "Tippen zum Suchen, oder Typ- und Farb-Filter zum Eingrenzen der Liste nutzen.",
+        "Tippen zum Suchen, oder die Liste mit dem Typfilter eingrenzen.",
         "Klick auf eine Zeile zum Kopieren.",
         "Das Häkchen „Nach dem Kopieren schließen“ unten in der Bibliothek entscheidet, ob Kopieren die Bibliothek schließt, und merkt sich die Wahl.",
         "Das Menü zum Bearbeiten, auf das Raster Ziehen, Taggen oder Löschen nutzen.",
@@ -1285,7 +1272,7 @@ export const HELP_CONTENT = {
         "Zwei Zeilen auswählen und in der Auswahlleiste „Vergleichen“ klicken, um beide nebeneinander mit markierten Unterschieden zu sehen.",
       ],
       whatHappens: "Die Suche ist standardmäßig fehlertolerant und sortiert, falls nicht deaktiviert, nach am häufigsten oder zuletzt Verwendetem. Im Vergleich lässt sich der Text einer Seite in die andere übernehmen. Die Kachelansicht verhält sich bei Klicks, Menüs und Mehrfachauswahl genau wie die Liste.",
-      settings: ["Fuzzy-Suche, Typ- und Farb-Filter, gespeicherte Suchen: Expertenmenü → Bibliothek & Kopierverlauf → Suche", "Suchfeld beim Öffnen fokussieren: Expertenmenü → Bibliothek & Kopierverlauf → Suche", "Einträge je Suchliste (Bibliothek, Alles durchsuchen, Schnellstarter): Expertenmenü → Bibliothek & Kopierverlauf → Suche", "Clevere Sortierung, Mehrfachauswahl für Stapelaktionen, Bild- und Video-Vorschau in den Zeilen, Kachelansicht: Expertenmenü → Bibliothek & Kopierverlauf → Anzeige"],
+      settings: ["Unscharfe Suche, Typfilter, gespeicherte Suchen: Expertenmenü → Bibliothek & Kopierverlauf → Suche", "Suchfeld beim Öffnen fokussieren: Expertenmenü → Bibliothek & Kopierverlauf → Suche", "Einträge je Suchliste (Bibliothek, Alles durchsuchen, Schnellstarter): Expertenmenü → Bibliothek & Kopierverlauf → Suche", "Clevere Sortierung, Mehrfachauswahl für Stapelaktionen, Bild- und Video-Vorschau in den Zeilen, Kachelansicht: Expertenmenü → Bibliothek & Kopierverlauf → Anzeige"],
     },
     {
       section: "library",
@@ -1307,23 +1294,10 @@ export const HELP_CONTENT = {
       howTo: [
         "Editor einer Kachel öffnen und einen Tag-Namen eintippen, um ihn hinzuzufügen, oder einen vorhandenen wählen.",
         "Die Tag-Filterleiste in der Bibliothek nutzen, um die Liste auf ein oder mehrere Tags einzugrenzen.",
+        "Zum Archivieren im Menü einer Kachel „Archivieren“ wählen: sie bekommt den Archiv-Tag und verschwindet aus Raster und Liste, bis du sie wieder anzeigst.",
       ],
-      whatHappens: "Umbenennen, Umfärben oder Löschen eines Tags im Tag-Manager wirkt überall dort, wo er genutzt wird, in einem Schritt.",
-      settings: ["Tag-Filter-Modus (irgendeinen der ausgewählten Tags treffen oder alle): Expertenmenü → Bibliothek & Kopierverlauf → Tags"],
-    },
-    {
-      section: "library",
-      title: "Archiv",
-      whatItIs: "Das Archiv legt eine Kachel beiseite, ohne sie zu löschen.",
-      howTo: [
-        "Das Archiv im Expertenmenü einschalten.",
-        "„Archivieren“ im Menü einer Kachel wählen, oder mehrere auf einmal über die Auswahlleiste der Bibliothek archivieren.",
-        "Mit dem Schalter über der Bibliotheksliste archivierte Kacheln wieder anzeigen.",
-      ],
-      whatHappens:
-        "Eine archivierte Kachel verschwindet aus dem Raster und der Bibliotheksliste, die Suche findet sie aber weiterhin, und Exporte und Sicherungen behalten sie wie jede andere Kachel. „Aus dem Archiv holen“ im selben Menü holt sie zurück.",
-      settings: ["Archiv: Expertenmenü → Bibliothek & Kopierverlauf → Anzeige"],
-      tip: "Ab Werk aus.",
+      whatHappens: "Umbenennen, Umfärben oder Löschen eines Tags im Tag-Manager wirkt überall dort, wo er genutzt wird, in einem Schritt. Das Archiv ist ein gewöhnlicher Tag mit reserviertem Namen: Eine archivierte Kachel taucht weiterhin in der Suche auf und bleibt in Exporten und Sicherungen, und „Aus dem Archiv holen“ im selben Menü holt sie zurück.",
+      settings: ["Tag-Filter-Modus (irgendeinen der ausgewählten Tags treffen oder alle): Expertenmenü → Bibliothek & Kopierverlauf → Tags", "Archiv-Tag: Expertenmenü → Bibliothek & Kopierverlauf → Tags"],
     },
     {
       section: "library",
@@ -1360,7 +1334,7 @@ export const HELP_CONTENT = {
       howTo: ["Die System-Gruppe des Expertenmenüs für Update-Checks, Tastaturnavigation, mehrere Instanzen und den Daten-Ordner öffnen."],
       whatHappens:
         "Update-Checks sind standardmäßig aktiv und installieren nie etwas, ohne vorher zu fragen. Ein Wechsel des Daten-Ordners migriert die bestehende Datenbank dorthin. Mehrere Instanzen zuzulassen erfordert einen Neustart. Zeigt der Daten-Ordner auf einen Cloud-synchronisierten Ordner, erscheint einmal eine Warnung. Eine kleine Sperrdatei hält dann fest, welcher Rechner die Datenbank nutzt. Ein zweiter Rechner, der eine frische Sperre eines anderen findet, öffnet alles nur lesend und sagt das mit einem Banner. Eine Sperre, die länger niemand erneuert hat, wird übernommen. Lange Aufgaben können das Taskleistensymbol als Fortschrittsbalken füllen und die Restzeit schätzen.",
-      settings: ["Tastaturnavigation, Daten-Ordner, Fortschritt am Taskleistensymbol, Restzeit, Download der Video-Werkzeuge: Expertenmenü → System & Daten → System", "Mehrere Instanzen erlauben, Sperre des Daten-Ordners: Expertenmenü → System & Daten → Fehlersuche"],
+      settings: ["Tastaturnavigation, Daten-Ordner, Fortschritt am Taskleistensymbol, Download der Video-Werkzeuge: Expertenmenü → System & Daten → System", "Mehrere Instanzen erlauben, Sperre des Daten-Ordners: Expertenmenü → System & Daten → Fehlersuche"],
     },
     {
       section: "system",
@@ -1380,7 +1354,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Der Ausschluss von Bildschirmaufnahmen macht das Fenster für Screenshot- und Aufnahmeprogramme unsichtbar, auch für die eigenen. Bleibt eine Aufnahme also leer, zuerst diese Einstellung prüfen. Eine optionale, ab Werk ausgeschaltete Einstellung liest Text aus einem angehängten Bild, damit die Bibliothekssuche ihn auch findet. Ein Treffer nur dort trägt die Kennzeichnung „im Bild gefunden“, damit er nie wie ein zufälliger Treffer wirkt. Dieser erkannte Text bleibt sonst außerhalb der App: nirgends angezeigt, nie exportiert, nie synchronisiert, und in der Länge begrenzt. Wird das Bild entfernt oder ersetzt, ist der Text sofort weg, und das Ausschalten der Einstellung entfernt ihn aus jeder Kachel, auch im Papierkorb. Eine einzelne Kachel kann außerdem als vertraulich markiert werden; siehe „Vertrauliche Prompts“ weiter unten.",
-      settings: ["Von Bildschirmaufnahmen ausschließen, Medien unscharf machen: Expertenmenü → System & Daten → Datenschutz", "Text in angehängten Bildern für die Suche erfassen, Bildtext-Grenze: Expertenmenü → Bibliothek & Kopierverlauf → Suche", "Eine Kachel als vertraulich markieren, Sperr-Zeit des Tresors: Expertenmenü → System & Daten → Datenschutz"],
+      settings: ["Von Bildschirmaufnahmen ausschließen, Medien unscharf machen: Expertenmenü → System & Daten → Datenschutz", "Text in angehängten Bildern für die Suche erfassen: Expertenmenü → Bibliothek & Kopierverlauf → Suche", "Eine Kachel als vertraulich markieren, Sperr-Zeit des Tresors: Expertenmenü → System & Daten → Datenschutz"],
       tip: "Der Ausschluss von Bildschirmaufnahmen ist standardmäßig an: für normale Screenshots oder Aufnahmen dieses Fensters ausschalten.",
     },
     {

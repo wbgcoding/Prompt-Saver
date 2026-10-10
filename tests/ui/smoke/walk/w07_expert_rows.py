@@ -1,6 +1,6 @@
 SECTION = """\
-    // 511: the filter row (search, only changed, reset) is the first child of
-    // the expert page.
+    // 511: the filter row (search, only changed) is the first child of the expert page;
+    // the reset button is the last thing of the list, small, also while searching.
     {
       document.getElementById('settings').classList.remove('hidden');
       await click('expert-open');
@@ -8,8 +8,20 @@ SECTION = """\
       const filterRow551 = expertBox.querySelector('.expert-filter-row');
       if (!filterRow551 || expertBox.firstElementChild !== filterRow551) {
         out.errors.push('511: the filter row is not the first child of the expert page');
-      } else if (!filterRow551.querySelector('#expert-reset') || filterRow551.lastElementChild !== filterRow551.querySelector('#expert-reset')) {
-        out.errors.push('511: the reset button is not the last thing in the filter row');
+      } else if (filterRow551.querySelector('#expert-reset')) {
+        out.errors.push('511: the reset button is still in the filter row');
+      }
+      const flagsBox551 = document.getElementById('expert-flags');
+      const resetBtn551 = document.getElementById('expert-reset');
+      if (!flagsBox551.lastElementChild || flagsBox551.lastElementChild.id !== 'expert-end' || !resetBtn551 || resetBtn551.parentElement !== flagsBox551.lastElementChild) {
+        out.errors.push('511: the reset button is not at the end of the expert list');
+      } else if (resetBtn551.getBoundingClientRect().height >= document.getElementById('expert-search').getBoundingClientRect().height) {
+        out.errors.push('511: the reset button is not smaller than the search field');
+      }
+      for (const tab of document.querySelectorAll('#expert-tabs-bar .expert-tab')) {
+        tab.click();
+        await sleep(100);
+        if (flagsBox551.lastElementChild.id !== 'expert-end') out.errors.push('511: the reset button is not last on tab ' + tab.textContent);
       }
       if (expertBox.querySelector('.expert-top-row, .expert-presets')) {
         out.errors.push('511: the removed top row or quick profiles are still in the expert page');
@@ -18,6 +30,7 @@ SECTION = """\
       expertSearch551.value = 'shadow';
       expertSearch551.dispatchEvent(new Event('input'));
       await sleep(250);
+      if (flagsBox551.lastElementChild.id !== 'expert-end') out.errors.push('511: the reset button is not last while searching');
       expertSearch551.value = '';
       expertSearch551.dispatchEvent(new Event('input'));
       await sleep(250);

@@ -1110,7 +1110,7 @@ pub fn encode_error(session: &RecSession) -> Option<String> {
     session.shared.peek_encode_error()
 }
 
-// Same live-poll shape as encode_error above, but consuming: recDiskWarnMb's
+// Same live-poll shape as encode_error above, but consuming: the low-disk
 // mid-recording notice fires exactly once, never stops the recording.
 pub fn take_disk_low(session: &RecSession) -> Option<(u64, u64)> {
     session.shared.take_disk_low()

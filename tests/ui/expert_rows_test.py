@@ -37,7 +37,6 @@ EXPECTED = [
     ("flag", "chainPrompts", "expTabFeatures", "expGroupChain", 0),
     ("flag", "chainLock", "expTabFeatures", "expGroupChain", 1),
     ("flag", "chainQuickStart", "expTabFeatures", "expGroupChain", 1),
-    ("flag", "chainVarCheck", "expTabFeatures", "expGroupChain", 1),
     ("flag", "gridViewBorder", "expTabFeatures", "expGroupViews", 1),
     ("value", "maxViews", "expTabFeatures", "expGroupViews", 1),
     ("value", "gridMax", "expTabFeatures", "expGroupViews", 0),
@@ -45,7 +44,7 @@ EXPECTED = [
     ("value", "recDiscardKeepH", "expTabCapture", "expGroupRecording", 1),
     ("select", "recordingRetentionDays", "expTabCapture", "expGroupRecording", 1),
     ("action", "rec-sweep-now", "expTabSystem", "expGroupDiagnostics", 1),
-    ("value", "videoClipTtlMin", "expTabCapture", "expGroupVideoEditor", 1),
+    ("flag", "videoEditSnap", "expTabCapture", "expGroupVideoEditor", 1),
     ("action", "ocr-index-backfill", "expTabLibrary", "expGroupLibSearch", 1),
     ("action", "float-recall", "expTabFeatures", "expGroupFolders", 1),
     ("dropdown", "dateStyle", "expTabFeatures", "expGroupVars", 1),
@@ -327,7 +326,6 @@ VALUE_TEXT_PROBE = """
     const want = {
       copyCooldownMs: '2 s',
       autoPasteDelayMs: '0,08 s',
-      attachPreviewKb: '≈ 1.360 Wörter',
       errorLogKeepKb: '0,25 MB',
       floatParkCleanupH: 'Nie',
     };
@@ -724,7 +722,7 @@ def main():
             errs = run(browser, tmp, "index.html", LAYOUT_PROBE.replace("__WIDE__", wide), {}, size=size)
             problems += [f"[{label}] {e}" for e in errs]
         texts = {"ui_flags": {g: True for g in ("autoPaste", "fileAttach", "attachTextPreview", "errorLog", "floating")},
-                 "ui_values": {"copyCooldownMs": 2000, "autoPasteDelayMs": 80, "attachPreviewKb": 8,
+                 "ui_values": {"copyCooldownMs": 2000, "autoPasteDelayMs": 80,
                                "errorLogKeepKb": 256, "floatParkCleanupH": 0}}
         errs = run(browser, tmp, "index.html", VALUE_TEXT_PROBE, texts)
         problems += [f"[value texts] {e}" for e in errs]

@@ -98,7 +98,7 @@ COOLDOWN_DIALOG_PROBE = """
     {
       const inv = window.__TAURI__.core.invoke;
       await inv('set_ui_value', { key: 'copyCooldownMs', value: 2000 });
-      await inv('update_prompt', { id: 'p4', text: 'Folder note for {#{who}#}' });
+      await inv('update_prompt', { id: 'p4', text: 'Folder note for {?who}' });
       window.__FIRE__('store-synced');
       await sleep(500);
       const asks = () => argsOf('open_var_window').length;
@@ -269,7 +269,7 @@ REC_CONVERT_PROBE = """
 
 # 859: a resize keeps the earlier image for undo, but only as far back as the undo limit
 # reaches; what lies behind it is released, and closing the editor releases the whole session.
-SNIP_HOLD_SEED = '<script>window.__SEED_SETTINGS__ = { ui_values: { snipEditUndoMax: 10 } };</script>'
+SNIP_HOLD_SEED = ''
 SNIP_HOLD_PROBE = """
     // 859:
     {
@@ -290,15 +290,15 @@ SNIP_HOLD_PROBE = """
           pop.querySelector('.primary-btn').click();
           await sleep(120);
         };
-        for (let i = 0; i < 12; i++) await resize(i % 2 === 0 ? '50%' : '200%');
+        for (let i = 0; i < 52; i++) await resize(i % 2 === 0 ? '50%' : '200%');
         const held = window.__snipEditHeld().resizes;
-        if (held !== 10) errs.push('859: after 12 resizes with an undo limit of 10, ' + held + ' resizes still hold their earlier image, wanted 10');
+        if (held !== 50) errs.push('859: after 52 resizes with an undo limit of 50, ' + held + ' resizes still hold their earlier image, wanted 50');
         let steps = 0;
-        while (!undo.disabled && steps < 40) { undo.click(); steps++; await sleep(20); }
-        if (steps !== 10) errs.push('859: undo walked ' + steps + ' resizes, wanted 10');
+        while (!undo.disabled && steps < 80) { undo.click(); steps++; await sleep(20); }
+        if (steps !== 50) errs.push('859: undo walked ' + steps + ' resizes, wanted 50');
         let redos = 0;
-        while (!redo.disabled && redos < 40) { redo.click(); redos++; await sleep(20); }
-        if (redos !== 10) errs.push('859: redo walked ' + redos + ' resizes, wanted 10');
+        while (!redo.disabled && redos < 80) { redo.click(); redos++; await sleep(20); }
+        if (redos !== 50) errs.push('859: redo walked ' + redos + ' resizes, wanted 50');
         $('snip-edit-cancel').click();
         await sleep(200);
         const after = window.__snipEditHeld();
@@ -312,8 +312,8 @@ SNIP_HOLD_PROBE = """
         await sleep(50);
         const live = $('snip-edit-live');
         const r = live.getBoundingClientRect();
-        for (let i = 0; i < 12; i++) {
-          const x = r.left + 4 + i * 3, y = r.top + 4 + i * 3;
+        for (let i = 0; i < 52; i++) {
+          const x = r.left + 4 + (i % 20) * 3, y = r.top + 4 + (i % 20) * 3;
           live.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 1, clientX: x, clientY: y }));
           live.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 1, clientX: x + 5, clientY: y + 5 }));
           window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1, clientX: x + 5, clientY: y + 5 }));

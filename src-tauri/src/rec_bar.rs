@@ -433,7 +433,7 @@ pub(crate) struct RecordingStatus {
     // picked, so a false here already means the button itself is disabled;
     // a true here does not yet guarantee any given pick will succeed.
     pub(crate) target_switch_enabled: bool,
-    // recDiskWarnMb's mid-recording half (the before-start check is
+    // The mid-recording half of the low-disk warning (the before-start check is
     // check_recording_disk_space) -- Some at most once per recording, the
     // instant free space first drops below the threshold. Never causes a stop.
     pub(crate) disk_low: Option<(u64, u64)>,
