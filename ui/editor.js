@@ -35,8 +35,9 @@ export let draftLastSaved = null; // fingerprint of the last written draft, so a
 // ---- Modal ----
 // Reusable palette: "no color" + free picker + presets, into any container.
 // onPick(hex) for none/preset; onCustom(anchor, current) opens the free picker.
-// opts.compact (editor only) shortens the row to none, custom, the colours in use
-// (opts.used, already ordered) and a "More colors" button that shows the full set.
+// opts.compact (editor only) shortens the row to none, the colours in use (opts.used,
+// already ordered), the custom swatch only while a custom colour is selected, and a
+// More colors button that shows the full set incl. the free picker.
 export function buildSwatches(container, selected, onPick, onCustom, opts = {}) {
   const compact = !!opts.compact;
   container.innerHTML = "";
@@ -57,10 +58,12 @@ export function buildSwatches(container, selected, onPick, onCustom, opts = {}) 
   none.setAttribute("aria-label", t("colorNone"));
   none.addEventListener("click", () => onPick(""));
 
-  const custom = mkSwatch("custom" + (isCustom ? " sel" : ""), isCustom ? selected : "");
-  custom.title = t("colorCustom");
-  custom.setAttribute("aria-label", t("colorCustom"));
-  custom.addEventListener("click", () => onCustom(custom, isCustom ? selected : ""));
+  if (!compact || isCustom) {
+    const custom = mkSwatch("custom" + (isCustom ? " sel" : ""), isCustom ? selected : "");
+    custom.title = t("colorCustom");
+    custom.setAttribute("aria-label", t("colorCustom"));
+    custom.addEventListener("click", () => onCustom(custom, isCustom ? selected : ""));
+  }
 
   let hues = COLORS.slice(1);
   if (compact) {

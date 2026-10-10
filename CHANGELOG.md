@@ -944,6 +944,9 @@ the video editor and the introduction tour ship on).
 - **The rotation switch is under Advanced options in the editor.** While rotation
   is on, the collapsed head shows a "Rotation" badge; the entry list still
   replaces the text field in place.
+- **A shorter colour row in the editor.** The rainbow swatch for a free colour moved
+  behind the "More colors" button; a prompt that already has a custom colour
+  keeps it in the short row.
 
 ### Fixed
 

@@ -541,8 +541,31 @@ SECTION = """\
       // 66: every colour swatch is icon-only (a coloured square, no text) and
       // needs a real name for screen readers, not just a visible colour.
       const noneSwatch = document.querySelector('#color-row .swatch.none');
-      const custom = document.querySelector('#color-row .swatch.custom');
       if (!noneSwatch || !noneSwatch.title) out.errors.push('66: the none-colour swatch has no accessible name');
+      // 265: the short row of a prompt without a custom colour has no rainbow swatch; More has it.
+      if (document.querySelector('#color-row .swatch.custom')) out.errors.push('265: the short colour row still shows the custom swatch');
+      if (!document.querySelector('#color-row .swatch.more')) out.errors.push('265: the short colour row has no More colors button');
+      // 753: the colour row is one line before More, and More shows all 20 swatches.
+      {
+        const sw753 = [...document.querySelectorAll('#color-row .swatch')];
+        const more753 = document.querySelector('#color-row .swatch.more');
+        if (!more753) {
+          out.errors.push('753: the colour row has no More colors button');
+        } else {
+          // offsetTop ignores the grow-on-select transform of the chosen swatch.
+          const tops753 = new Set(sw753.map(e => e.offsetTop));
+          if (tops753.size !== 1) out.errors.push('753: the short colour row wraps onto ' + tops753.size + ' lines');
+          if (sw753.length > 12) out.errors.push('753: the short colour row has ' + sw753.length + ' swatches');
+          more753.click();
+          await sleep(150);
+          const all753 = document.querySelectorAll('#color-row .swatch').length;
+          if (all753 !== 20) out.errors.push('753: More colors shows ' + all753 + ' swatches instead of 20');
+          if (document.querySelector('#color-row .swatch.more')) out.errors.push('753: the More button stays after expanding');
+        }
+      }
+      document.querySelector('#color-row .swatch.more')?.click();
+      await sleep(100);
+      const custom = document.querySelector('#color-row .swatch.custom');
       if (!custom) {
         out.errors.push('the editor colour row has no custom-colour swatch');
       } else if (!custom.title) {
@@ -565,24 +588,6 @@ SECTION = """\
         }
         document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
         await sleep(150);
-      }
-      // 753: the colour row is one line before More, and More shows all 20 swatches.
-      {
-        const sw753 = [...document.querySelectorAll('#color-row .swatch')];
-        const more753 = document.querySelector('#color-row .swatch.more');
-        if (!more753) {
-          out.errors.push('753: the colour row has no More colors button');
-        } else {
-          // offsetTop ignores the grow-on-select transform of the chosen swatch.
-          const tops753 = new Set(sw753.map(e => e.offsetTop));
-          if (tops753.size !== 1) out.errors.push('753: the short colour row wraps onto ' + tops753.size + ' lines');
-          if (sw753.length > 12) out.errors.push('753: the short colour row has ' + sw753.length + ' swatches');
-          more753.click();
-          await sleep(150);
-          const all753 = document.querySelectorAll('#color-row .swatch').length;
-          if (all753 !== 20) out.errors.push('753: More colors shows ' + all753 + ' swatches instead of 20');
-          if (document.querySelector('#color-row .swatch.more')) out.errors.push('753: the More button stays after expanding');
-        }
       }
       await click('modal-close-x');
       await sleep(250);
