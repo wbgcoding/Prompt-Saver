@@ -1218,10 +1218,8 @@ export function initSnipEditor() {
     });
     wrap.appendChild(row);
     const control = numberField({
-      value: ts.width, min: 1, max: 80, step: 1, presets: [1, 2, 4, 8, 16],
+      value: ts.width, min: 1, max: 80, step: 1, steppers: false,
       onChange: (v) => { ts.width = v; snipRememberSize(tool, "width", v); snipEditRenderContext(); },
-      decreaseLabel: t("numFieldDecrease"), increaseLabel: t("numFieldIncrease"), presetsLabel: t("numFieldPresets"),
-      decreaseAriaKey: "numFieldDecrease", increaseAriaKey: "numFieldIncrease", presetsAriaKey: "numFieldPresets",
     });
     const num = control.querySelector("input");
     num.title = t("snipEditWidthTip");

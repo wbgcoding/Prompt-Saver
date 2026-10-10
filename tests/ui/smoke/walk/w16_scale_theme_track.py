@@ -170,6 +170,53 @@ SECTION = """\
           // a toast a later probe expects to see.
           await sleep(1800);
         }
+        // 930-de: the stroke width has the three presets and the plain number
+        // field only (no minus, plus or preset list); other number fields keep
+        // their steppers. Wheel and arrow stepping stay on the input itself.
+        {
+          const pickTool = async (id) => {
+            document.querySelector('#snip-edit-tools button[data-tool="' + id + '"]').click();
+            await sleep(120);
+          };
+          const widthField = () => [...document.querySelectorAll('#snip-edit-context .snip-edit-field')]
+            .find((f) => f.querySelector('.snip-edit-width-row'));
+          await pickTool('rect');
+          let wf = widthField();
+          if (!wf) {
+            out.errors.push('930-de: rect tool has no stroke width field');
+          } else {
+            const nPresets = wf.querySelectorAll('.snip-edit-width-btn').length;
+            const nInputs = wf.querySelectorAll('input').length;
+            const nSteppers = wf.querySelectorAll('.numfield-dec, .numfield-inc, .numfield-list').length;
+            if (nPresets !== 3 || nInputs !== 1 || nSteppers !== 0) {
+              out.errors.push('930-de: width field has ' + nPresets + ' presets, ' + nInputs + ' inputs, ' + nSteppers + ' stepper controls (expected 3, 1, 0)');
+            }
+            const wInput = wf.querySelector('input');
+            const before = Number(wInput.value);
+            wInput.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, bubbles: true, cancelable: true }));
+            await sleep(60);
+            wf = widthField();
+            const after = Number(wf.querySelector('input').value);
+            if (after !== before + 1) {
+              out.errors.push('930-de: wheel up on the width input moved ' + before + ' to ' + after + ', expected +1');
+            }
+            wf.querySelector('input').dispatchEvent(new WheelEvent('wheel', { deltaY: 100, bubbles: true, cancelable: true }));
+            await sleep(60);
+          }
+          await pickTool('text');
+          const sizeField = [...document.querySelectorAll('#snip-edit-context .snip-edit-field')]
+            .find((f) => !f.querySelector('.snip-edit-width-row') && f.querySelector('.numfield'));
+          if (!sizeField) {
+            out.errors.push('930-de: text tool has no number field');
+          } else {
+            const nList = sizeField.querySelectorAll('.numfield-list').length;
+            const nStep = sizeField.querySelectorAll('.numfield-dec, .numfield-inc').length;
+            if (nList !== 1 || nStep !== 2) {
+              out.errors.push('930-de: text size field has ' + nList + ' preset lists and ' + nStep + ' steppers (expected 1 and 2)');
+            }
+          }
+          await pickTool('hand');
+        }
         // 178: the toolbar must stay a couple of rows tall no matter which tool
         // is active -- a full inline swatch grid used to collapse into one tall
         // column here and blow the toolbar height up. This is the check that
