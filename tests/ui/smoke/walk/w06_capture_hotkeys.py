@@ -117,11 +117,20 @@ SECTION = """\
         }
       }
     }
+    // rec254: with no recording session the main window starts idle, as the real backend
+    // answers: one resync leaves the record button without a recording or paused ring.
+    window.__REC_ACTIVE__ = undefined;
+    document.dispatchEvent(new Event('visibilitychange'));
+    await sleep(150);
+    if (recordBtnEl.classList.contains('is-recording') || recordBtnEl.classList.contains('is-paused')) {
+      out.errors.push('rec254: the record button shows a recording state with no recording session');
+    }
     // 506: a record-btn click while a recording is already running must stop
-    // it instead of trying to open a second one -- recording_status's own
-    // fixture always reports an active recording, so forcing one resync
+    // it instead of trying to open a second one -- the stub reports an active
+    // recording while __REC_ACTIVE__ is set, so forcing one resync
     // through the same visibilitychange path the real app uses (rather than
     // waiting out the real 5-second poll) is enough to reach that state.
+    window.__REC_ACTIVE__ = true;
     window.__SMOKE_CALLS__ = [];
     document.dispatchEvent(new Event('visibilitychange'));
     await sleep(150);
@@ -138,6 +147,7 @@ SECTION = """\
         out.errors.push('506: clicking the record button during an active recording also called open_recorder');
       }
     }
+    window.__REC_ACTIVE__ = false;
     // 835: the bar failing to open after a good start must not reset a live
     // recording to idle. The countdown runs first, so wait for the bar call.
     window.__FIRE__('recording-cancelled');

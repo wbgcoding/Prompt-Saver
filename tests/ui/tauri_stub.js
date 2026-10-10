@@ -415,10 +415,13 @@ const RESULTS = {
   // show_size/size_eta_secs mirror what rec_bar_size_state would compute
   // server side; __REC_STATUS_OVERRIDE__ lets a probe swap in a different
   // reading (e.g. past the size ceiling) between polls.
-  recording_status: () => Object.assign(
+  // The main window starts idle like the real backend (no session, no status), so shots
+  // never show a glowing record button; a probe turns the session on with
+  // window.__REC_ACTIVE__. The recording bar page always gets the fixture.
+  recording_status: () => (/[/]index[.]html$/.test(location.pathname) && window.__REC_ACTIVE__ !== true ? null : Object.assign(
     { paused: false, elapsed_ms: 65000, bytes: 600000000, show_size: true, size_eta_secs: null, target_switch_enabled: false },
     window.__REC_STATUS_OVERRIDE__ || {},
-  ),
+  )),
   pause_recording: () => { window.__REC_PAUSED__ = true; return null; },
   resume_recording: () => { window.__REC_PAUSED__ = false; return null; },
   stop_recording: () => { window.__REC_STOPPED__ = true; return null; },
