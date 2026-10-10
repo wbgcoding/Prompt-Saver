@@ -19115,3 +19115,19 @@ fn only_the_reserved_names_are_self_filling() {
     assert_eq!(js_names, rust_names, "DYN_VARS (ui/promptVars.js) and DYN_NAMES (store.rs) must list the same names");
 }
 
+#[test]
+fn a_version_row_with_an_unreadable_column_is_left_untouched() {
+    let mut conn = Connection::open_in_memory().unwrap();
+    assert!(db_conn_init_schema(&conn));
+    db_add_version(&conn, "p1", 10, "Name", "Old {#{a}#}", &["Entry".to_string()], 20).unwrap();
+    // The variants column becomes something that looks encrypted but cannot be read here.
+    conn.execute("UPDATE prompt_versions SET variants = ?1", params![format!("{ENC_PREFIX}AAAA")]).unwrap();
+    let before: (String, String) = conn
+        .query_row("SELECT text, variants FROM prompt_versions", [], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap();
+    assert_eq!(db_upgrade_version_rows(&mut conn).unwrap(), 0);
+    let after: (String, String) = conn
+        .query_row("SELECT text, variants FROM prompt_versions", [], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap();
+    assert_eq!(before, after, "a row with an unreadable column is never rewritten");
+}

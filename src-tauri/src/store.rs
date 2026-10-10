@@ -1691,7 +1691,13 @@ pub(crate) fn db_upgrade_version_rows(conn: &mut Connection) -> rusqlite::Result
         };
         for (id, text_enc, variants_enc) in rows {
             let text = dec_str(&text_enc);
-            let variants = decode_variants(&dec_str(&variants_enc));
+            let variants_raw = dec_str(&variants_enc);
+            // dec_str answers "" for what it cannot read; a stored value that is not
+            // empty but reads back empty is left alone, never overwritten with "".
+            if (text.is_empty() && !text_enc.is_empty()) || (variants_raw.is_empty() && !variants_enc.is_empty()) {
+                continue;
+            }
+            let variants = decode_variants(&variants_raw);
             let new_text = upgrade_placeholders(&text);
             let new_variants: Vec<String> = variants.iter().map(|v| upgrade_placeholders(v)).collect();
             if new_text == text && new_variants == variants {
