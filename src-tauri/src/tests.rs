@@ -19080,3 +19080,19 @@ fn an_old_snapshot_reads_in_the_new_spelling_before_the_upgrade_has_run() {
     assert_eq!(text, "Old {?a}");
     assert_eq!(variants, vec!["E {?b}".to_string()]);
 }
+
+// ---- review fixes: confidential read path, @name list, version-row safety ----
+
+#[test]
+fn a_confidential_prompt_reaches_the_window_in_the_new_spelling() {
+    let key = secret_derive_key("pw", b"0123456789abcdef").expect("derive");
+    let mut p = test_prompt("a");
+    p.secret = true;
+    p.text = secret_encrypt("Hallo {#{Kunde}#} am {#{/date\\}#}", &key);
+    p.variants = vec![secret_encrypt("Hi {#{Kunde}#}", &key)];
+    let slim = slim_prompts(&[p], Some(key));
+    assert_eq!(slim[0].text, "Hallo {?Kunde} am {?@date}");
+    assert_eq!(slim[0].variants, vec!["Hi {?Kunde}".to_string()]);
+    assert!(!find_var_tokens(&slim[0].text).is_empty(), "the window must see a placeholder it can resolve");
+}
+

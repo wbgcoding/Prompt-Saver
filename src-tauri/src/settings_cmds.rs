@@ -129,11 +129,13 @@ pub(crate) fn slim_prompts(prompts: &[Prompt], secret_key: Option<[u8; 32]>) -> 
             if p.secret {
                 match secret_key {
                     Some(key) => {
-                        s.text = secret_decrypt(&p.text, &key).unwrap_or_default();
+                        // Same upgrade as reveal_secret_text: the window must see the
+                        // spelling it can resolve, whatever the sealed text still holds.
+                        s.text = upgrade_placeholders(&secret_decrypt(&p.text, &key).unwrap_or_default());
                         s.variants = p
                             .variants
                             .iter()
-                            .map(|v| secret_decrypt(v, &key).unwrap_or_default())
+                            .map(|v| upgrade_placeholders(&secret_decrypt(v, &key).unwrap_or_default()))
                             .collect();
                         s.locked = false;
                     }
