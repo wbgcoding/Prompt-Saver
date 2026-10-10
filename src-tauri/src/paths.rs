@@ -269,6 +269,40 @@ pub(crate) fn write_bytes_atomic(path: &Path, content: &[u8]) -> std::io::Result
     result
 }
 
+// Whether a file name is one of the temp files write_bytes_atomic names:
+// "<file>.tmp-" followed by gen_id's "p<nanos>_<count>". Nothing else matches, so a
+// sweep never touches a file somebody else made.
+pub(crate) fn is_atomic_temp_name(name: &str) -> bool {
+    let Some((stem, id)) = name.rsplit_once(".tmp-") else { return false };
+    let Some(rest) = id.strip_prefix('p') else { return false };
+    let Some((nanos, seq)) = rest.split_once('_') else { return false };
+    let digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
+    !stem.is_empty() && digits(nanos) && digits(seq)
+}
+
+// Removes the atomic-write temp files a crash left in `dir` (not below it) that are
+// older than `min_age`; a write in flight is younger and is left alone. Returns how
+// many were removed.
+pub(crate) fn sweep_atomic_temps(dir: &Path, min_age: Duration) -> usize {
+    let mut removed = 0;
+    for entry in fs::read_dir(dir).into_iter().flatten().flatten() {
+        if !is_atomic_temp_name(&entry.file_name().to_string_lossy()) {
+            continue;
+        }
+        let old_enough = entry
+            .metadata()
+            .ok()
+            .filter(|m| m.is_file())
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.elapsed().ok())
+            .is_some_and(|age| age >= min_age);
+        if old_enough && fs::remove_file(entry.path()).is_ok() {
+            removed += 1;
+        }
+    }
+    removed
+}
+
 // Capitalise a brand word for a dialog title ("prompts" -> "Prompts").
 pub(crate) fn title_case(w: &str) -> String {
     let mut c = w.chars();

@@ -5746,14 +5746,20 @@ fn install_update_rejects_a_release_older_than_the_installed_version() {
 fn asset_scope_denies_every_store_file() {
     // A narrow glob match good enough for this fixed pattern shape: "**/name",
     // "**/prefix*" and "**/dir/**" -- not a general glob engine.
+    fn wild(pat: &str, name: &str) -> bool {
+        match pat.split_once('*') {
+            None => pat == name,
+            Some((head, tail)) => {
+                name.strip_prefix(head).is_some_and(|rest| (0..=rest.len()).any(|i| rest.is_char_boundary(i) && wild(tail, &rest[i..])))
+            }
+        }
+    }
     fn covers(pattern: &str, path: &str) -> bool {
         let Some(rest) = pattern.strip_prefix("**/") else { return false };
         if let Some(dir) = rest.strip_suffix("/**") {
             path.split('/').any(|seg| seg == dir)
-        } else if let Some(prefix) = rest.strip_suffix('*') {
-            path.rsplit('/').next().is_some_and(|name| name.starts_with(prefix))
         } else {
-            path.rsplit('/').next() == Some(rest)
+            path.rsplit('/').next().is_some_and(|name| wild(rest, name))
         }
     }
 
@@ -5778,6 +5784,9 @@ fn asset_scope_denies_every_store_file() {
         // The atomic writer names its temp file "<file>.tmp-<id>" next to the target.
         "C:/Users/x/AppData/Roaming/Prompt-Saver/settings.json.tmp-1f3a9c",
         "C:/Users/x/AppData/Roaming/Prompt-Saver/prompts.json.tmp-1f3a9c",
+        // An export_all leftover beside a user-picked backup file.
+        "D:/Backups/mine.psb.tmp-p1760000000000000000_3",
+        "D:/Backups/mine.psb",
         "C:/Users/x/AppData/Roaming/Prompt-Saver/backups/2026-08-19.psb",
         "C:/Users/x/AppData/Roaming/Prompt-Saver/backups/subdir/2026-08-19.psb",
         "C:/Users/x/AppData/Roaming/Prompt-Saver/error.log",
@@ -18299,4 +18308,41 @@ fn the_ui_value_setter_refuses_non_finite_numbers_and_clamps_the_rest() {
     assert_eq!(update::checked_ui_value("updateCheckH", 1e9), Ok(168.0));
     assert_eq!(update::checked_ui_value("gridGap", 7.0), Ok(7.0));
     assert_eq!(update::checked_ui_value("someKeyWithoutARange", 12345.5), Ok(12345.5));
+}
+
+// ---- leftovers of an interrupted atomic write are swept ----
+
+#[test]
+fn only_our_own_temp_names_are_recognised() {
+    assert!(is_atomic_temp_name("settings.json.tmp-p1760000000000000000_12"));
+    assert!(is_atomic_temp_name("a.md.tmp-p1_0"));
+    for other in ["notes.tmp", "x.tmp-abc", "x.tmp-p12", "x.tmp-p_3", "x.tmp-p1_", ".tmp-p1_2", "settings.json", "a.tmp-p1_2.bak", "a.tmp-q1_2"] {
+        assert!(!is_atomic_temp_name(other), "{other} is not ours");
+    }
+}
+
+#[test]
+fn the_startup_sweep_removes_only_old_temp_leftovers() {
+    let dir = std::env::temp_dir().join(format!("ps-tmpsweep-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let old_time = SystemTime::now() - Duration::from_secs(7200);
+    let make = |name: &str, old: bool| {
+        let f = fs::File::create(dir.join(name)).unwrap();
+        if old {
+            f.set_modified(old_time).unwrap();
+        }
+    };
+    make("settings.json.tmp-p1760000000000000000_1", true);
+    make("a.md.tmp-p1760000000000000000_2", true);
+    make("fresh.json.tmp-p1760000000000000000_3", false);
+    make("notes.tmp", true);
+    make("export.psb", true);
+    make("mine.tmp-abc", true);
+    fs::create_dir(dir.join("sub.tmp-p1_1")).unwrap();
+    assert_eq!(sweep_atomic_temps(&dir, Duration::from_secs(3600)), 2);
+    let mut left: Vec<String> = fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+    left.sort();
+    assert_eq!(left, ["export.psb", "fresh.json.tmp-p1760000000000000000_3", "mine.tmp-abc", "notes.tmp", "sub.tmp-p1_1"]);
+    let _ = fs::remove_dir_all(&dir);
 }

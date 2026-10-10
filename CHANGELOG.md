@@ -914,6 +914,10 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **Leftovers of an interrupted save are cleaned up.** A crash in the middle of
+  writing a settings, library, backup or sync file could leave a temporary copy
+  behind; copies older than an hour are now removed at start in the data folder
+  and the markdown sync folder.
 - **A setting can no longer be set to "not a number".** `settings set` on the
   command line and over remote access refuses NaN and infinite values, which
   would have made the whole settings file unreadable on the next start, and a

@@ -726,6 +726,13 @@ pub fn run() {
             // A read-only instance never writes into the folder another machine owns.
             if !DATA_DIR_READONLY.load(Ordering::Relaxed) {
                 remove_stale_staged_restores(&data_dir(&handle), Duration::from_secs(60));
+                // Temp files of an interrupted atomic write, in the data folder and in
+                // the markdown sync folder (which other computers would otherwise get).
+                sweep_atomic_temps(&data_dir(&handle), Duration::from_secs(3600));
+                if let Some(state) = handle.try_state::<Db>() {
+                    let sync_dir = sync_dir_path(&handle, &lock(&state).settings);
+                    sweep_atomic_temps(&sync_dir, Duration::from_secs(3600));
+                }
                 // Staged exports a killed run left in the user's folders.
                 let journal = data_dir(&handle).join("export-staging.txt");
                 sweep_stale_exports(&journal, &local_host_name(), pid_is_alive);
