@@ -6,15 +6,15 @@ import { mediaKind, buildMediaBar, applyVideoPrefs, setMediaDefaults } from "./m
 import { applyFloatTheme, inkForColor, onInkChange } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
 import { LANGS, compactTexts } from "./i18n.js";
-import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT, COPY_SOUND_VOLUME_DEFAULT } from "./copyDefaults.js";
-import { COPIED_MS, RING_MIN, RING_MAX, DRAG_OUT_MODS, resolveLang, fileUri, playCopySound, applyCopySizeLevel, markSelectedSize } from "./floatShared.js";
+import { DRAG_THRESHOLD_DEFAULT } from "./copyDefaults.js";
+import { COPIED_MS, RING_MIN, RING_MAX, DRAG_OUT_MODS, resolveLang, fileUri, playCopySound, applyCopySizeLevel, markSelectedSize, readCopyPrefs, copyGate, needsMainWindowCopy } from "./floatShared.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
 // switcher, so it comes from the brand rather than a hardcoded English word.
 document.title = APP_NAME;
 
 const { invoke, convertFileSrc } = window.__TAURI__.core;
-const { listen } = window.__TAURI__.event;
+const { listen, emit } = window.__TAURI__.event;
 const { getCurrentWebviewWindow } = window.__TAURI__.webviewWindow;
 
 const appWin = getCurrentWebviewWindow();
@@ -33,14 +33,9 @@ let tileSize = 0; // global text size setting (0 = auto)
 let globalFontKey = "system";
 let copySizeLevel = "large"; // "Copied!" text size level: small, medium or large (large fills the pill)
 let pFont = ""; // per-prompt overrides ("" / 0 = follow settings)
-let cooldownMs = COOLDOWN_MS_DEFAULT; // re-copy throttle for this pill (expert value)
+let copyPrefs = readCopyPrefs({}); // cooldown, double-click paste and copy sound (expert values)
 let videoControlsOn = true; // gates the hover media bar, mirrors flag("videoControls") in core.js
 let videoAutoplayOn = false; // gates the initial auto-start, mirrors optFlag("videoAutoplay") in core.js
-let lastCopyTs = 0;
-// Auto-paste on this pill (autoPaste itself defaults on; the rest default off;
-// a fast second click pastes).
-let apOn = false, apEnter = false, apDelay = AUTO_PASTE_DELAY_MS_DEFAULT, apDblMs = DBL_CLICK_MS_DEFAULT, lastPillTs = 0;
-let copySoundOn = false, copySoundVolume = COPY_SOUND_VOLUME_DEFAULT;
 let pSize = 0;
 let pCaptionSize = 0; // per-prompt caption size (0 = default, 1 = auto)
 let menuOpen = false;
@@ -48,7 +43,7 @@ let menuOpen = false;
 // app" from the plain drag, which moves this window.
 let dragOutOn = false, dragOutMod = "ctrlKey";
 let foldersOn = false; // pill folders (default off)
-let pText = "", pFile = "";
+let pText = "", pFile = "", pVariants = [];
 const dragOutHeld = (e) => dragOutOn && e[dragOutMod] === true;
 
 // Rotating prompt: "next entry" badge. Only ever one prompt per pill window,
@@ -224,19 +219,8 @@ function applyPrefs(s) {
   tileSize = Number(s.tile_size) || 0;
   globalFontKey = s.tile_font || "system";
   copySizeLevel = s.ui_texts?.copySizeLevel;
-  const cd = Number(s.ui_values?.copyCooldownMs);
-  cooldownMs = Number.isFinite(cd) ? cd : COOLDOWN_MS_DEFAULT;
-  const dt = Number(s.ui_values?.dragThreshold);
-  DRAG_THRESHOLD = Number.isFinite(dt) ? dt : DRAG_THRESHOLD_DEFAULT;
-  apOn = s.ui_flags?.autoPaste !== false; // default on
-  apEnter = s.ui_flags?.autoPasteEnter === true;
-  copySoundOn = s.ui_flags?.copySound === true; // default off
-  const csv = Number(s.ui_values?.copySoundVolume);
-  copySoundVolume = Number.isFinite(csv) ? csv : COPY_SOUND_VOLUME_DEFAULT;
-  const apd = Number(s.ui_values?.autoPasteDelayMs);
-  apDelay = Number.isFinite(apd) ? apd : AUTO_PASTE_DELAY_MS_DEFAULT;
-  const adb = Number(s.ui_values?.dblClickMs);
-  apDblMs = Number.isFinite(adb) ? adb : DBL_CLICK_MS_DEFAULT;
+  copyPrefs = readCopyPrefs(s);
+  DRAG_THRESHOLD = copyPrefs.dragThreshold;
   dragOutOn = s.ui_flags?.dragOut === true;
   dragOutMod = DRAG_OUT_MODS[s.ui_texts?.dragOutModifier] || "ctrlKey";
   foldersOn = s.ui_flags?.pillFolders !== false; // default ON, mirrors folders_on() in floating.rs
@@ -469,6 +453,7 @@ function applyPrompt(p) {
   hasFile = !!(p.file_path || p.icon_path);
   pText = p.text || "";
   pFile = p.file_path || "";
+  pVariants = p.variants || [];
   rotateVariants = (p.variants || []).length;
   primeRotateBadge();
   pFont = p.font || "";
@@ -519,7 +504,7 @@ function showCopied() {
   pill.classList.add("copied");
   clearTimeout(copiedTimer);
   copiedTimer = setTimeout(() => pill.classList.remove("copied"), COPIED_MS);
-  if (copySoundOn) playCopySound(copySoundVolume);
+  if (copyPrefs.copySoundOn) playCopySound(copyPrefs.copySoundVolume);
 }
 
 // ---- Right-click menu ----
@@ -779,25 +764,23 @@ window.addEventListener("mouseup", async () => {
     mergeAfterDrop();
   } else if (menuOpen) {
     closeMenu(); // a click on the pill closes the open menu
-  } else if (apOn && lastPillTs && Date.now() - lastPillTs <= apDblMs) {
-    // Fast second click pastes the just-copied text into the last app.
-    lastPillTs = 0;
-    invoke("paste_into_previous", { delayMs: apDelay, enter: apEnter }).catch(() => {});
-  } else if (cooldownMs && Date.now() - lastCopyTs < cooldownMs) {
-    // Same pill copied moments ago: throttle to avoid accidental repeats.
   } else {
-    // Stamp BEFORE the await, not after -- a fast second click while
-    // copy_prompt's IPC is still in flight must see the fresh timestamps right
-    // away (both were 0 until the call resolved, so the double-click/cooldown
-    // checks above missed it and a fast click issued a duplicate copy).
-    lastCopyTs = Date.now();
-    lastPillTs = Date.now(); // arm the double-click paste window
-    if (await invoke("copy_prompt", { id: promptId }).catch(() => false)) {
+    // The gate (cooldown, double-click paste window, stamp before the await,
+    // rollback) is shared with the folder window. A prompt with a placeholder is
+    // handed to the main window, which asks for it and copies; that route never
+    // pastes on its own.
+    const r = await copyGate(promptId, async () => {
+      if (needsMainWindowCopy(pText, pVariants)) {
+        return emit("prompt-tray-copy", promptId).then(() => "handoff", () => false);
+      }
+      return invoke("copy_prompt", { id: promptId }).catch(() => false);
+    }, copyPrefs);
+    if (r === "paste") {
+      // Fast second click pastes the just-copied text into the last app.
+      invoke("paste_into_previous", { delayMs: copyPrefs.apDelay, enter: copyPrefs.apEnter }).catch(() => {});
+    } else if (r === "copied") {
       showCopied();
       invoke("record_copy", { id: promptId }).catch(() => {});
-    } else {
-      lastCopyTs = 0;
-      lastPillTs = 0; // roll back -- the copy never actually happened
     }
   }
 });

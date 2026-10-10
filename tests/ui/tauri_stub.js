@@ -1506,7 +1506,10 @@ const VAR_REQUEST = {
 
 const noopWindow = {
   // floating.js derives the prompt id from the window label, folder.js the folder id.
-  label: location.pathname.endsWith("folder.html") ? "folder-f1" : "float-p0",
+  // A probe page may name another pill prompt through window.__FLOAT_PROMPT_ID__.
+  get label() {
+    return location.pathname.endsWith("folder.html") ? "folder-f1" : "float-" + (window.__FLOAT_PROMPT_ID__ || "p0");
+  },
   listen: async () => () => {}, onCloseRequested: async () => () => {},
   onFocusChanged: async () => () => {}, onResized: async () => () => {},
   onMoved: async () => () => {}, onScaleChanged: async () => () => {},
@@ -1562,7 +1565,10 @@ window.__TAURI__ = {
       (LISTENERS[event] = LISTENERS[event] || []).push(fn);
       return () => {};
     },
-    emit: async () => {},
+    // Every emitted event is kept so a probe can see what a window handed to another.
+    emit: async (event, payload) => {
+      (window.__SMOKE_EMITS__ = window.__SMOKE_EMITS__ || []).push([event, payload]);
+    },
   },
   // 179: real Tauri v2 exports this alongside startResizeDragging() -- the
   // screenshot editor's resize grip reads window.__TAURI__.window.ResizeDirection.

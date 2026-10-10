@@ -914,6 +914,10 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **Floating buttons and folder members fill in placeholders.** Clicking a
+  button or a folder member whose prompt has a placeholder used to copy the raw
+  text; it now asks for the values like every other way of copying, and copies
+  without pasting.
 - **The first update check runs right after you answer yes.** Answering the
   first-launch update question with yes now checks at once instead of at the
   next start.

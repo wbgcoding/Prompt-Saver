@@ -1,12 +1,12 @@
 import { flag, invoke, LANG, settings, t, toast, TOOLTIP_PREVIEW_CHARS, txt } from "./core.js";
 import { activeThemeVars } from "./theme.js";
-import { varPreview } from "./floatShared.js";
+import { varPreview, VAR_RE } from "./floatShared.js";
 
 // ---- Prompt variables ({#{placeholder}#}) ----
 // The {#{ ... }#} fence is deliberately uncommon so a literal "{{" pasted from a
 // code block is never mistaken for a variable. The 200-char body leaves room for
-// a choice variable's option list, not just a name.
-export const VAR_RE = /\{#\{\s*([^}\n]{1,200}?)\s*\}#\}/g;
+// a choice variable's option list, not just a name. The pattern itself (VAR_RE) lives
+// in floatShared.js so the pill and folder windows test the very same one.
 export function extractVars(text) {
   const seen = [];
   for (const m of (text || "").matchAll(VAR_RE)) {

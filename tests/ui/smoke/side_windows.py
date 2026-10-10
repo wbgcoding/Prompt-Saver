@@ -167,6 +167,46 @@ FLOAT_PROBE = """
 """
 
 
+# 851: a pill whose prompt carries a placeholder hands the copy to the main window
+# (event "prompt-tray-copy") instead of copying the raw text itself; a plain pill still
+# calls copy_prompt. The page names its prompt through __FLOAT_PROMPT_ID__.
+FLOAT_VARS_PROBE = """
+<script>
+(async () => {
+  // 851:
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const calls = () => (window.__SMOKE_CALLS__ = window.__SMOKE_CALLS__ || []);
+  const args = () => (window.__SMOKE_ARGS__ = window.__SMOKE_ARGS__ || []);
+  const until = async (fn) => { for (let i = 0; i < 80 && !fn(); i++) await sleep(50); return fn(); };
+  const id = window.__FLOAT_PROMPT_ID__;
+  const pill = document.getElementById('pill');
+  try {
+    await until(() => calls().includes('resize_float_pill') && calls().includes('get_prompt'));
+    await sleep(150);
+    pill.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, buttons: 1, screenX: 100, screenY: 100 }));
+    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0, buttons: 0 }));
+    await sleep(300);
+    const emits = (window.__SMOKE_EMITS__ || []).filter((e) => e[0] === 'prompt-tray-copy');
+    const copies = args().filter((c) => c[0] === 'copy_prompt');
+    if (id === 'p1') {
+      if (emits.length !== 1 || emits[0][1] !== 'p1') errs.push('851: a placeholder pill did not hand the copy to the main window: ' + JSON.stringify(window.__SMOKE_EMITS__));
+      if (copies.length) errs.push('851: a placeholder pill copied the raw text itself: ' + JSON.stringify(copies));
+    } else {
+      if (copies.length !== 1 || copies[0][1].id !== id) errs.push('851: a plain pill did not call copy_prompt once: ' + JSON.stringify(copies));
+      if (emits.length) errs.push('851: a plain pill handed its copy to the main window: ' + JSON.stringify(emits));
+    }
+  } catch (e) { errs.push('851: probe: ' + e.message); }
+  errs.push(...(window.__SMOKE_ERRORS__ || []));
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
 # F26: the colour picker runs inside the snip overlay, so this is the only place it
 # is observable. A tiny frozen desktop of known pixels is handed to the overlay, then
 # the loupe readout is checked against it in all three notations, plus the arrow-key
@@ -663,6 +703,22 @@ FOLDER_PROBE = """
       await sleep(150);
       if (window.__BEEP_COUNT__ !== 1) errs.push('427: copySound off still played a beep in a folder: ' + window.__BEEP_COUNT__);
     }
+    // 851-folder: a member whose prompt carries a placeholder hands the copy to the main
+    // window; no raw-text copy_prompt for it. (p1 is such a member, p0 stayed plain above.)
+    { const t1 = document.querySelector('#grid .folder-member[data-id="p1"]');
+      if (!t1) {
+        errs.push('851-folder: the placeholder member is missing');
+      } else {
+        const before = (window.__SMOKE_ARGS__ || []).filter((c) => c[0] === 'copy_prompt' && c[1].id === 'p1').length;
+        window.__SMOKE_EMITS__ = [];
+        t1.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+        window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0, clientX: 10, clientY: 10 }));
+        await sleep(300);
+        const after = (window.__SMOKE_ARGS__ || []).filter((c) => c[0] === 'copy_prompt' && c[1].id === 'p1').length;
+        const em = (window.__SMOKE_EMITS__ || []).filter((e) => e[0] === 'prompt-tray-copy');
+        if (after !== before) errs.push('851-folder: a placeholder member copied the raw text itself');
+        if (em.length !== 1 || em[0][1] !== 'p1') errs.push('851-folder: a placeholder member did not hand the copy to the main window: ' + JSON.stringify(window.__SMOKE_EMITS__));
+      } }
     // 43: "hide for now" - a distinct action from Dissolve, must never touch the
     // permanent dissolve_float_folder command.
     window.__SMOKE_CALLS__.length = 0;
@@ -1383,6 +1439,8 @@ def run(browser, tmp):
     # and nowhere else.
     for name, size, probe, budget in (
             ("floating.html", (240, 60), FLOAT_PROBE, 15000),
+            ("floating_vars.html", (240, 60), FLOAT_VARS_PROBE, 15000),
+            ("floating_plain.html", (240, 60), FLOAT_VARS_PROBE, 15000),
             ("snip.html", (1280, 800), PICK_PROBE + REGION_PROBE, 28000),
             ("folder.html", (520, 420), FOLDER_PROBE, 15000),
             ("vars.html", (340, 250), VARS_PROBE, 15000),
@@ -1394,6 +1452,12 @@ def run(browser, tmp):
             ("camera_rec.html", (420, 620), CAMERA_REC_STUB + CAMERA_REC_PROBE, 30000)):
         if name == "camera_rec.html":
             shutil.copyfile(REPO / "ui" / "camera.html", tmp / "ui" / name)
+        if name in ("floating_vars.html", "floating_plain.html"):
+            pid = "p1" if name == "floating_vars.html" else "p0"
+            (tmp / "ui" / name).write_text(
+                (REPO / "ui" / "floating.html").read_text(encoding="utf-8")
+                .replace("<script", '<script>window.__FLOAT_PROMPT_ID__ = "%s";</script>\n<script' % pid, 1),
+                encoding="utf-8")
         if name == "launcher_prefill.html":
             shutil.copyfile(REPO / "ui" / "launcher.html", tmp / "ui" / name)
         side = tmp / "ui" / name

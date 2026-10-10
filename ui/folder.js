@@ -8,15 +8,15 @@ import { applyFloatTheme, inkForColor, onInkChange } from "./floattheme.js";
 import { mediaKind } from "./media.js";
 import { APP_NAME } from "./brand.js";
 import { LANGS, compactTexts } from "./i18n.js";
-import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT, COPY_SOUND_VOLUME_DEFAULT } from "./copyDefaults.js";
-import { COPIED_MS, RING_MIN, RING_MAX, DRAG_OUT_MODS, FOLDER_SVG, resolveLang, fileUri, playCopySound, markSelectedSize, rotateBadgeLabel } from "./floatShared.js";
+import { DRAG_THRESHOLD_DEFAULT } from "./copyDefaults.js";
+import { COPIED_MS, RING_MIN, RING_MAX, DRAG_OUT_MODS, FOLDER_SVG, resolveLang, fileUri, playCopySound, markSelectedSize, rotateBadgeLabel, readCopyPrefs, copyGate, needsMainWindowCopy } from "./floatShared.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
 // switcher, so it comes from the brand rather than a hardcoded English word.
 document.title = APP_NAME;
 
 const { invoke, convertFileSrc } = window.__TAURI__.core;
-const { listen } = window.__TAURI__.event;
+const { listen, emit } = window.__TAURI__.event;
 const { getCurrentWebviewWindow } = window.__TAURI__.webviewWindow;
 
 const appWin = getCurrentWebviewWindow();
@@ -56,11 +56,7 @@ let openReq = 0;
 let TXT = { copied: "Copied!", size: "Size", edit: "", close: "Close", rename: "Rename", dissolve: "Ungroup", takeOut: "Take out of folder" };
 
 // Copy behaviour, mirrored from the pill window.
-let cooldownMs = COOLDOWN_MS_DEFAULT;
-let apOn = false, apEnter = false, apDelay = AUTO_PASTE_DELAY_MS_DEFAULT, apDblMs = DBL_CLICK_MS_DEFAULT;
-let copySoundOn = false, copySoundVolume = COPY_SOUND_VOLUME_DEFAULT;
-const lastCopy = {};
-const lastClick = {};
+let copyPrefs = readCopyPrefs({});
 let animMs = 150;
 // Drag-out: the modifier hands a member to the OS instead of pulling it out of
 // the folder, so the two gestures never fight over the same drag.
@@ -319,32 +315,30 @@ function flash(id) {
     tile.classList.add("copied");
     setTimeout(() => tile.classList.remove("copied"), COPIED_MS);
   }
-  if (copySoundOn) playCopySound(copySoundVolume);
+  if (copyPrefs.copySoundOn) playCopySound(copyPrefs.copySoundVolume);
   const live = document.getElementById("live");
   live.textContent = "";
   live.textContent = TXT.copied;
 }
 
 async function copyMember(id) {
-  const now = Date.now();
-  // A fast second click pastes the just-copied text into the last app.
-  if (apOn && lastClick[id] && now - lastClick[id] <= apDblMs) {
-    lastClick[id] = 0;
-    invoke("paste_into_previous", { delayMs: apDelay, enter: apEnter }).catch(() => {});
-    return;
-  }
-  if (cooldownMs && lastCopy[id] && now - lastCopy[id] < cooldownMs) return;
-  // Stamp BEFORE the await -- a fast second click while copy_prompt's IPC is
-  // still in flight must see the fresh timestamps right away, or the double-click/
-  // cooldown checks above miss it and a fast click issues a duplicate copy.
-  lastCopy[id] = Date.now();
-  lastClick[id] = Date.now();
-  if (await invoke("copy_prompt", { id }).catch(() => false)) {
+  // The gate (cooldown, double-click paste window, stamp before the await,
+  // rollback) is shared with the pill window. A member with a placeholder is
+  // handed to the main window, which asks for it and copies; that route never
+  // pastes on its own.
+  const p = member(id);
+  const r = await copyGate(id, async () => {
+    if (p && needsMainWindowCopy(p.text, p.variants)) {
+      return emit("prompt-tray-copy", id).then(() => "handoff", () => false);
+    }
+    return invoke("copy_prompt", { id }).catch(() => false);
+  }, copyPrefs);
+  if (r === "paste") {
+    // A fast second click pastes the just-copied text into the last app.
+    invoke("paste_into_previous", { delayMs: copyPrefs.apDelay, enter: copyPrefs.apEnter }).catch(() => {});
+  } else if (r === "copied") {
     flash(id);
     invoke("record_copy", { id }).catch(() => {});
-  } else {
-    lastCopy[id] = 0;
-    lastClick[id] = 0; // roll back -- the copy never actually happened
   }
 }
 
@@ -406,19 +400,8 @@ async function applyTexts(s) {
 
 function applyPrefs(s) {
   document.body.style.fontFamily = FONTS[s.tile_font] || FONTS.system;
-  const cd = Number(s.ui_values?.copyCooldownMs);
-  cooldownMs = Number.isFinite(cd) ? cd : COOLDOWN_MS_DEFAULT;
-  const dt = Number(s.ui_values?.dragThreshold);
-  DRAG_THRESHOLD = Number.isFinite(dt) ? dt : DRAG_THRESHOLD_DEFAULT;
-  apOn = s.ui_flags?.autoPaste !== false; // default on
-  apEnter = s.ui_flags?.autoPasteEnter === true;
-  const apd = Number(s.ui_values?.autoPasteDelayMs);
-  apDelay = Number.isFinite(apd) ? apd : AUTO_PASTE_DELAY_MS_DEFAULT;
-  const adb = Number(s.ui_values?.dblClickMs);
-  apDblMs = Number.isFinite(adb) ? adb : DBL_CLICK_MS_DEFAULT;
-  copySoundOn = s.ui_flags?.copySound === true; // default off
-  const csv = Number(s.ui_values?.copySoundVolume);
-  copySoundVolume = Number.isFinite(csv) ? csv : COPY_SOUND_VOLUME_DEFAULT;
+  copyPrefs = readCopyPrefs(s);
+  DRAG_THRESHOLD = copyPrefs.dragThreshold;
   dragOutOn = s.ui_flags?.dragOut === true;
   dragOutMod = DRAG_OUT_MODS[s.ui_texts?.dragOutModifier] || "ctrlKey";
   // rotateBadge is a sub-toggle of rotatingPrompts: the parent off must freeze

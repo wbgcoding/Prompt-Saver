@@ -4,6 +4,7 @@
 // what each window already used on its own -- this is drift prevention.
 import { placePopover } from "./popover.js";
 import { errMessageLogged } from "./errors.js";
+import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT, COPY_SOUND_VOLUME_DEFAULT } from "./copyDefaults.js";
 
 export const COPIED_MS = 900; // "copied!" tile/pill flash duration
 export const RING_MIN = 8;    // smallest resize-ring thickness (px)
@@ -45,17 +46,72 @@ export function fillVideoFormatSelect(select) {
 // "ungroup" menu entries, and the "group into a folder" entry.
 export const FOLDER_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.2l2 2.4h8.8A1.5 1.5 0 0 1 21 8.9v9.6a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5Z"/></svg>';
 
+// The placeholder pattern, the one copy: promptVars.js imports it. A literal `{{` is
+// not a placeholder; the self-filling reserved names (slash fence) match it too.
+export const VAR_RE = /\{#\{\s*([^}\n]{1,200}?)\s*\}#\}/g;
+
+// True when copying this text has to go through the main window, which asks for the
+// placeholders and fills the reserved names: the text (or any rotation entry passed
+// in `variants`) carries a placeholder token. search() ignores the global flag's
+// lastIndex, so the shared pattern can be tested over and over.
+export const needsMainWindowCopy = (text, variants = []) =>
+  [text, ...(variants || [])].some((s) => typeof s === "string" && s.search(VAR_RE) >= 0);
+
 // A prompt placeholder reads as [name] wherever raw prompt text is previewed (library
-// and history rows, search hits, the quick launcher). Same pattern as VAR_RE in
-// promptVars.js (a test keeps the two identical); the label is the part before an
+// and history rows, search hits, the quick launcher). The label is the part before an
 // equals sign or a bar, a reserved name loses its slash fence. A fence with no usable
 // name stays as typed.
-const VAR_PATTERN = /\{#\{\s*([^}\n]{1,200}?)\s*\}#\}/g;
 export function varPreview(text) {
-  return String(text ?? "").replace(VAR_PATTERN, (whole, body) => {
+  return String(text ?? "").replace(VAR_RE, (whole, body) => {
     const label = body.split(/[=|]/)[0].trim().replace(/^\//, "").replace(/[\/\\]$/, "").trim();
     return label ? `[${label}]` : whole;
   });
+}
+
+// The copy behaviour a pill or a folder reads from the stored settings; one parser for
+// both windows, defaults from copyDefaults.js.
+export function readCopyPrefs(s) {
+  const num = (v, d) => (v !== null && v !== "" && Number.isFinite(Number(v)) ? Number(v) : d);
+  const v = s?.ui_values || {};
+  const f = s?.ui_flags || {};
+  return {
+    cooldownMs: num(v.copyCooldownMs, COOLDOWN_MS_DEFAULT),
+    dragThreshold: num(v.dragThreshold, DRAG_THRESHOLD_DEFAULT),
+    apOn: f.autoPaste !== false, // default on
+    apEnter: f.autoPasteEnter === true,
+    apDelay: num(v.autoPasteDelayMs, AUTO_PASTE_DELAY_MS_DEFAULT),
+    apDblMs: num(v.dblClickMs, DBL_CLICK_MS_DEFAULT),
+    copySoundOn: f.copySound === true, // default off
+    copySoundVolume: num(v.copySoundVolume, COPY_SOUND_VOLUME_DEFAULT),
+  };
+}
+
+// The click gate of a pill and of a folder member: the double-click paste window, the
+// copy cooldown, the stamps taken BEFORE the await (a fast second click while the first
+// copy is still in flight must already see them) and the rollback when the copy fails.
+// `copyFn()` does the copy and answers true (copied), false (failed) or "handoff" (the
+// main window will copy; the cooldown stands, a fast second click must not paste).
+// Resolves to "paste", "throttled", "copied", "handoff" or "failed".
+const gateCopied = {};
+const gateClicked = {};
+export async function copyGate(id, copyFn, prefs) {
+  const now = Date.now();
+  if (prefs.apOn && gateClicked[id] && now - gateClicked[id] <= prefs.apDblMs) {
+    gateClicked[id] = 0;
+    return "paste";
+  }
+  if (prefs.cooldownMs && gateCopied[id] && now - gateCopied[id] < prefs.cooldownMs) return "throttled";
+  gateCopied[id] = Date.now();
+  gateClicked[id] = Date.now(); // arm the double-click paste window
+  const r = await copyFn();
+  if (r === "handoff") {
+    gateClicked[id] = 0;
+    return "handoff";
+  }
+  if (r) return "copied";
+  gateCopied[id] = 0;
+  gateClicked[id] = 0; // roll back: the copy never actually happened
+  return "failed";
 }
 
 // Resolve the active UI language: the explicit setting first, the browser locale
