@@ -244,6 +244,28 @@ SNIP_REPLACE_PROBE = """
       }
     }
 """
+# 857: while a recording is being converted the dialog's Save, Save as, Copy, Attach and
+# Video editor actions are locked, and enabled again once it is done.
+REC_CONVERT_SEED = '<script>window.__SEED_SETTINGS__ = { ui_texts: { recFormat: "webm" } };</script>'
+REC_CONVERT_PROBE = """
+    // 857:
+    {
+      const ids = ['rec-modal-save', 'rec-modal-saveas', 'rec-modal-copy', 'rec-modal-yes', 'rec-modal-edit'];
+      window.__STUB_DELAY_MS__ = { convert_recording: 600 };
+      window.__FIRE__('recording-captured', { path: 'C:/fake/raw.mp4' });
+      await until(() => visible($('rec-modal')), 40);
+      await sleep(200);
+      if (!visible($('rec-modal'))) errs.push('857: the recording dialog did not open');
+      const open = ids.filter((id) => !$(id).disabled);
+      if (open.length) errs.push('857: still enabled while converting: ' + open.join(', '));
+      await until(() => argsOf('convert_recording').length > 0, 20);
+      await sleep(900);
+      const stuck = ids.filter((id) => $(id).disabled);
+      if (stuck.length) errs.push('857: still disabled after the conversion: ' + stuck.join(', '));
+      // Discard ends the dialog; the next one must start with the actions unlocked or locked by its own conversion.
+      window.__STUB_DELAY_MS__ = {};
+    }
+"""
 
 def _boot(browser, tmp, tag, body, budget=45000, seed=""):
     side = tmp / "ui" / f"logic-{tag}.html"
@@ -264,7 +286,8 @@ def run(browser, tmp):
             ("archive-overflow", ARCHIVE_OVERFLOW_PROBE, ""),
             ("cooldown-dialog", COOLDOWN_DIALOG_PROBE, ""),
             ("search-race", SEARCH_RACE_PROBE, ""),
-            ("snip-replace", SNIP_REPLACE_PROBE, SNIP_REPLACE_SEED)):
+            ("snip-replace", SNIP_REPLACE_PROBE, SNIP_REPLACE_SEED),
+            ("rec-convert", REC_CONVERT_PROBE, REC_CONVERT_SEED)):
         errs = _boot(browser, tmp, tag, body, seed=seed)
         print(f"-- ui logic ({tag})")
         for e in errs:

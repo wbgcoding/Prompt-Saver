@@ -914,6 +914,9 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **The recording dialog locks its actions while it converts.** Save, Save as,
+  Copy, Attach and Video editor are greyed out until the conversion is done, so
+  none of them can act on a file that is about to be replaced.
 - **A new screenshot no longer replaces unsaved editor work silently.** While
   the screenshot editor holds edits, a new capture asks whether to replace
   them or keep editing; the new shot is on the clipboard either way.

@@ -366,27 +366,51 @@ export function bindCapture() {
     recStatus.onclick = null;
     recStatus.textContent = "";
   }
+  // Save, Save as, Copy, Attach and the video editor all act on pendingRecPath. While the
+  // crop or the conversion still rewrites that file they must not run: one of them
+  // would adopt another path just before the conversion answers and overwrites it.
+  const REC_ACTION_IDS = ["rec-modal-save", "rec-modal-saveas", "rec-modal-copy", "rec-modal-yes", "rec-modal-edit"];
+  function setRecActionsBusy(busy) {
+    for (const id of REC_ACTION_IDS) $(id).disabled = busy;
+  }
   async function openRecModal(rawPath, needsCrop) {
     pendingRecPath = rawPath;
     recSavedOrAttached = false;
     recCopiedNotSaved = false;
     recGen += 1;
     const gen = recGen;
+    setRecActionsBusy(false);
     renderRecFolder();
     $("rec-modal-edit").classList.toggle("hidden", !flag("videoEditor"));
     recModal.classList.remove("hidden");
     // recAutoCrop off means the user chose to keep the border -- skip the whole
     // cropping step (and its status line) silently, same as a canvas that
     // never needed cropping in the first place.
-    if (needsCrop && flag("recAutoCrop")) {
-      recPreview.classList.add("hidden");
-      showRecErrorDetails("");
-      await runRecCrop(rawPath, gen);
-      if (gen !== recGen) return;
+    const outputChoice = () => {
+      const format = normRecFormat(settings.ui_texts?.recFormat);
+      const lossless = (settings.ui_texts?.recQuality || "high") === "lossless";
+      return { format, lossless, converting: !(format === "mp4" && !lossless) };
+    };
+    const cropping = needsCrop && flag("recAutoCrop");
+    if (cropping || outputChoice().converting) setRecActionsBusy(true);
+    try {
+      if (cropping) {
+        recPreview.classList.add("hidden");
+        showRecErrorDetails("");
+        await runRecCrop(rawPath, gen);
+        if (gen !== recGen) return;
+      }
+      // Read after the crop: the choice may have changed while it ran.
+      const { format, lossless, converting } = outputChoice();
+      await convertRecording(rawPath, gen, format, lossless, converting);
+    } finally {
+      // Only the dialog still on screen is unlocked: a superseded call must not
+      // undo the lock of the newer one.
+      if (gen === recGen) setRecActionsBusy(false);
     }
-    const format = normRecFormat(settings.ui_texts?.recFormat);
-    const lossless = (settings.ui_texts?.recQuality || "high") === "lossless";
-    if (format === "mp4" && !lossless) {
+  }
+  async function convertRecording(rawPath, gen, format, lossless, converting) {
+    if (!converting) {
       recPreview.classList.remove("hidden");
       recPreview.src = convertFileSrc(rawPath);
       recStatus.textContent = "";
@@ -417,10 +441,13 @@ export function bindCapture() {
     try {
       const outPath = await invoke("convert_recording", { srcPath: rawPath, format, lossless });
       if (gen !== recGen) return;
-      pendingRecPath = outPath;
       recStatus.classList.remove("rec-status-cancellable");
       recStatus.onclick = null;
       recStatus.textContent = "";
+      // Another action already moved the working file elsewhere: its path stands, the
+      // converted copy must not overwrite it.
+      if (pendingRecPath !== rawPath) return;
+      pendingRecPath = outPath;
       recPreview.classList.remove("hidden");
       recPreview.src = convertFileSrc(outPath);
     } catch (err) {
