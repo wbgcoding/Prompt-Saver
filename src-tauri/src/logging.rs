@@ -64,12 +64,17 @@ const CRASH_LOCK_UNPARSABLE_AFTER: Duration = Duration::from_secs(2);
 
 fn process_is_running(pid: u32) -> bool {
     use windows::Win32::Foundation::{CloseHandle, GetLastError, ERROR_ACCESS_DENIED};
-    use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+    use windows::Win32::System::Threading::{GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+    // GetExitCodeProcess reports this while the process still runs.
+    const STILL_ACTIVE: u32 = 259;
     unsafe {
         match OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) {
             Ok(handle) => {
+                // An exited process stays openable while anyone holds a handle to it.
+                let mut code = 0u32;
+                let alive = GetExitCodeProcess(handle, &mut code).is_err() || code == STILL_ACTIVE;
                 let _ = CloseHandle(handle);
-                true
+                alive
             }
             // A process this one may not open is still a process.
             Err(_) => GetLastError() == ERROR_ACCESS_DENIED,
