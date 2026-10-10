@@ -2091,4 +2091,5 @@ export default {
     recBarHotkeyShort: "Tastenkürzel blockiert",
     camChooseFolder: "Aufnahme-Ordner wählen",
     notesLabel: "Notiz (nur für dich, wird nicht kopiert)",
+    varsInsertLink: "Platzhalter einfügen",
 };

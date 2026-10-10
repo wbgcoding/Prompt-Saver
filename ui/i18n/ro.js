@@ -2091,4 +2091,5 @@ export default {
     recBarHotkeyShort: "Tastă rapidă blocată",
     camChooseFolder: "Alege folderul înregistrărilor",
     notesLabel: "Notiță (doar pentru tine, nu se copiază niciodată)",
+    varsInsertLink: "Inserează substituent",
 };

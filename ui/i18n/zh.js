@@ -2091,4 +2091,5 @@ export default {
     recBarHotkeyShort: "快捷键被占用",
     camChooseFolder: "选择录制文件夹",
     notesLabel: "备注（仅自己可见，不会被复制）",
+    varsInsertLink: "插入占位符",
 };

@@ -938,6 +938,9 @@ the video editor and the introduction tour ship on).
 - **The prompt field in the editor grows with its text.** It starts at its usual
   size, grows as you type up to the height of the dialog, and scrolls inside
   itself beyond that; with the history open it keeps its smaller cap.
+- **The placeholder section appears only when the text has a placeholder.** Until
+  then a link under the text, "Insert placeholder", reveals it; once shown it
+  stays until the editor closes.
 
 ### Fixed
 

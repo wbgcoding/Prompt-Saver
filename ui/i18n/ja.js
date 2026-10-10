@@ -2091,4 +2091,5 @@ export default {
     recBarHotkeyShort: "ホットキーがブロック中",
     camChooseFolder: "録画フォルダーを選択",
     notesLabel: "メモ（自分用、コピーされません）",
+    varsInsertLink: "プレースホルダーを挿入",
 };

@@ -712,8 +712,20 @@ SECTION = """\
         if (!varsBody.classList.contains('hidden')) {
           out.errors.push('the variable helper did not open collapsed');
         }
-        varsHead.click();
-        await sleep(150);
+        // var263: a prompt without placeholders shows no bar, only a link in the foot row
+        // under the text; the link reveals the bar, opens it and focuses the name field.
+        const vBar263 = document.getElementById('modal-text-bar');
+        const vLink263 = document.getElementById('modal-vars-link');
+        if (!vBar263.classList.contains('hidden')) out.errors.push('var263: the placeholder bar shows for a prompt without placeholders');
+        if (!vLink263 || vLink263.classList.contains('hidden') || getComputedStyle(vLink263).display === 'none' || !vLink263.closest('.modal-text-foot')) {
+          out.errors.push('var263: no Insert placeholder link in the foot row of the prompt field');
+        } else {
+          vLink263.click();
+          await sleep(150);
+          if (vBar263.classList.contains('hidden')) out.errors.push('var263: the placeholder bar stays hidden after the link was clicked');
+          if (!vLink263.classList.contains('hidden')) out.errors.push('var263: the link stays after the bar appeared');
+          if (document.activeElement !== document.getElementById('modal-var-name')) out.errors.push('var263: the placeholder name field is not focused after the link');
+        }
         if (varsBody.classList.contains('hidden')) {
           out.errors.push('the variable helper did not expand when its head was clicked');
         }

@@ -74,6 +74,7 @@ export const HELP_CONTENT = {
         "Placeholder markup inside a tile's text opens a fill-in popup before the finished text reaches the clipboard.",
       howTo: [
         "Type {#{PlaceholderName}#} inside the text.",
+        "Or click Insert placeholder under the text box: it opens the placeholder section.",
         "For a self-filling value, click a dynamic-placeholder chip under the text box instead of typing it.",
         "Click the tile to copy: the fill-in popup opens automatically.",
         "Enter a value per placeholder, or pick one for choice placeholders, and confirm.",
@@ -823,6 +824,7 @@ export const HELP_CONTENT = {
         "Platzhalter-Markup im Text einer Kachel öffnet ein Ausfüll-Popup, bevor der fertige Text die Zwischenablage erreicht.",
       howTo: [
         "{#{PlatzhalterName}#} irgendwo in den Text eintippen.",
+        "Oder unter dem Textfeld auf „Platzhalter einfügen“ klicken: das öffnet den Platzhalterbereich.",
         "Für einen sich selbst ausfüllenden Wert einen dynamischen Chip unter dem Textfeld anklicken statt zu tippen.",
         "Klick auf die Kachel zum Kopieren: das Ausfüll-Popup öffnet sich automatisch.",
         "Pro Platzhalter einen Wert eingeben, bei Auswahl-Platzhaltern einen wählen, dann bestätigen.",

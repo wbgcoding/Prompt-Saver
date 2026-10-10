@@ -339,6 +339,7 @@ export function disarmDraftAutosave() {
 export function openModal({ mode, id, name = "", text = "", color = "", image = "", showImage = false, copyImage = false, filePath = "", pdfPage = 0, iconPath = "", caption = "", captionSize = 0, font = "", fontSize = 0, favorite = false, tags = [], notes = "", hotkey = "", hotkeyPaste = "", variants = [], rotateMode = "", rotateAuto = false, secret = false, locked = false, title, targetCell }) {
   modalSession++;
   modalOpener = document.activeElement;
+  varsRevealed = false;
   assignModalState({
     mode, id, color, image, showImage, copyImage, filePath, pdfPage, iconPath, tags: [...tags], hotkey, hotkeyPaste, targetCell,
     // What the editor opened with. Save compares against it and only sends an
@@ -592,6 +593,21 @@ export function syncMdUi(textVisible, rotating = false) {
     const cfShow = textVisible && !rotating && flag("copyFormatted") && hasMarkdownSyntax(modal.text.value);
     modal.copyFormattedBtn.classList.toggle("hidden", !cfShow);
   }
+}
+
+// The placeholder bar shows when the text holds a placeholder, or once the user asked for
+// it with the link under the text. Once shown it stays until the editor closes, so it
+// never jumps away while a token is being typed.
+let varsRevealed = false;
+function syncVarsUi(textVisible, rotating) {
+  const varsUi = textVisible && !rotating && flag("promptVars");
+  const hasVars = extractVars(modal.text.value).length > 0;
+  const showBar = varsUi && (hasVars || varsRevealed);
+  if (showBar) varsRevealed = true;
+  modal.textBar.classList.toggle("hidden", !showBar);
+  modal.varsHint.classList.toggle("hidden", !showBar);
+  $("modal-vars-link").classList.toggle("hidden", !varsUi || showBar);
+  if (showBar) renderVarHelper(); // chips + insert row follow their flags
 }
 
 // The prompt field grows with its content up to the visible dialog height; past
@@ -899,10 +915,7 @@ export function syncModalImageUi(mode) {
   modal.text.classList.toggle("hidden", !textVisible || rotating);
   modal.voiceRow.classList.toggle("hidden", !textVisible || rotating);
   $("modal-text-label").classList.toggle("hidden", !textVisible || rotating);
-  const varsUi = textVisible && !rotating && flag("promptVars");
-  modal.textBar.classList.toggle("hidden", !varsUi);
-  modal.varsHint.classList.toggle("hidden", !varsUi);
-  if (varsUi) renderVarHelper(); // chips + insert row follow their flags
+  syncVarsUi(textVisible, rotating); // placeholder bar, or the link that reveals it
   syncMdUi(textVisible, rotating); // preview toolbar + rendered pane
   updateLenCounter();
   // The variable helper is a reference, so it reopens collapsed too.
@@ -1567,10 +1580,7 @@ export function bindEditor() {
     modal.text.classList.toggle("hidden", rotating);
     modal.voiceRow.classList.toggle("hidden", rotating);
     $("modal-text-label").classList.toggle("hidden", rotating);
-    const varsUi = !rotating && flag("promptVars");
-    modal.textBar.classList.toggle("hidden", !varsUi);
-    modal.varsHint.classList.toggle("hidden", !varsUi);
-    if (varsUi) renderVarHelper();
+    syncVarsUi(true, rotating);
     syncMdUi(true, rotating);
     scheduleFitText();
     if (!modal.rotateSwitch.checked) modal.text.focus();
@@ -1622,6 +1632,15 @@ export function bindEditor() {
   modal.text.addEventListener("input", scheduleLenCounter); // live length readout
   modal.text.addEventListener("input", scheduleMdPreview);  // live preview (rAF-throttled)
   modal.text.addEventListener("input", scheduleFitText);    // the field follows its content
+  modal.text.addEventListener("input", () => syncVarsUi(modal.root.classList.contains("tall"), rotationUiOn()));
+  $("modal-vars-link").addEventListener("click", () => {
+    varsRevealed = true;
+    syncVarsUi(true, false);
+    modal.varsBody.classList.remove("hidden");
+    modal.varsHead.setAttribute("aria-expanded", "true");
+    modal.textBar.classList.add("open");
+    $("modal-var-name").focus();
+  });
   window.addEventListener("resize", scheduleFitText);
   // Replace layout: the rendered pane IS the resting state, so it has to hand the
   // textarea over on a click and take back over once the user is done typing.

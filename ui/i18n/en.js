@@ -2091,4 +2091,5 @@ export default {
     recBarHotkeyShort: "Hotkey blocked",
     camChooseFolder: "Choose the recording folder",
     notesLabel: "Note (only for you, never copied)",
+    varsInsertLink: "Insert placeholder",
 };

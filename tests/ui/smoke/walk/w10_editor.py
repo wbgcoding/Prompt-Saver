@@ -751,6 +751,28 @@ SECTION = """\
         await closeEd262();
       } else out.errors.push('fit262: the history prompt did not open');
     }
+    // var263-reopen: a prompt that already holds a placeholder opens with the bar and no
+    // link; with the placeholder feature off neither is there.
+    {
+      const closeEd263 = async () => {
+        await click('modal-close-x');
+        await sleep(250);
+        if (!document.getElementById('confirm-modal').classList.contains('hidden')) { await click('confirm-ok'); await sleep(250); }
+      };
+      const shown263 = (id) => { const el = document.getElementById(id); return !!el && !el.classList.contains('hidden') && getComputedStyle(el).display !== 'none'; };
+      if (await openEditor('p1')) {
+        if (!shown263('modal-text-bar')) out.errors.push('var263-reopen: the bar is hidden for a prompt with a placeholder');
+        if (shown263('modal-vars-link')) out.errors.push('var263-reopen: the link shows although the bar is there');
+        await closeEd263();
+      } else out.errors.push('var263-reopen: the placeholder prompt did not open');
+      if (await setExpertFlag('Placeholders ({#{Name}#})', false)) {
+        if (await openEditor('p0')) {
+          if (shown263('modal-text-bar') || shown263('modal-vars-link')) out.errors.push('var263-reopen: the placeholder UI shows with the feature off');
+          await closeEd263();
+        } else out.errors.push('var263-reopen: the editor did not open with the feature off');
+        await setExpertFlag('Placeholders ({#{Name}#})', true);
+      } else out.errors.push('var263-reopen: the placeholder switch is missing from the expert menu');
+    }
     // Gating: a row whose feature is off must disappear the moment that toggle is
     // flipped - no reopening the menu - and a whole branch goes with its parent.
     const rowFor = (label) => [...document.querySelectorAll('#expert-flags .field')]

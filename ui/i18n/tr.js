@@ -2091,4 +2091,5 @@ export default {
     recBarHotkeyShort: "Kısayol engellendi",
     camChooseFolder: "Kayıt klasörünü seç",
     notesLabel: "Not (sadece senin için, asla kopyalanmaz)",
+    varsInsertLink: "Yer tutucu ekle",
 };

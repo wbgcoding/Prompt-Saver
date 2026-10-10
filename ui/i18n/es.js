@@ -2091,4 +2091,5 @@ export default {
     recBarHotkeyShort: "Atajo bloqueado",
     camChooseFolder: "Elegir la carpeta de grabaciones",
     notesLabel: "Nota (solo para ti, nunca se copia)",
+    varsInsertLink: "Insertar marcador",
 };

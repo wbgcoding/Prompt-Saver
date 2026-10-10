@@ -2091,4 +2091,5 @@ export default {
     recBarHotkeyShort: "Sneltoets geblokkeerd",
     camChooseFolder: "Opnamemap kiezen",
     notesLabel: "Notitie (alleen voor jou, wordt nooit meegekopieerd)",
+    varsInsertLink: "Plaatsaanduiding invoegen",
 };

@@ -2091,4 +2091,5 @@ export default {
     recBarHotkeyShort: "Scelta rapida bloccata",
     camChooseFolder: "Scegli la cartella delle registrazioni",
     notesLabel: "Nota (solo per te, non viene mai copiata)",
+    varsInsertLink: "Inserisci segnaposto",
 };

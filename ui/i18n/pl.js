@@ -2091,4 +2091,5 @@ export default {
     recBarHotkeyShort: "Skrót zablokowany",
     camChooseFolder: "Wybierz folder nagrań",
     notesLabel: "Notatka (tylko dla ciebie, nigdy nie jest kopiowana)",
+    varsInsertLink: "Wstaw symbol zastępczy",
 };

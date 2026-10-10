@@ -1465,6 +1465,9 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
 .modal-text-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 0; }
 .modal-text-foot:not(:has(> :not(.hidden))) { display: none; }
 .modal-voice-row { display: flex; justify-content: flex-end; margin-left: auto; }
+.modal-vars-link { background: none; border: 0; padding: 2px 0; color: var(--accent); font: inherit; font-size: 12px; cursor: pointer; }
+.modal-vars-link:hover { text-decoration: underline; }
+.modal-vars-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .modal-rotate-mode-group { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
 .modal-rotate-mode { flex: 0 0 auto; width: auto; }
 .modal-rotate-next { font-size: 12px; color: var(--muted); }
