@@ -2102,4 +2102,5 @@ export default {
     veZoomGroup: "タイムライン表示",
     veExportOpen: "書き出し…",
     veExportOpenTip: "形式、サイズ、保存先を選んでから書き出します",
+    veFrameNo: "フレーム {n}",
 };

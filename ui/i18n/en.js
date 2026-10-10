@@ -2102,4 +2102,5 @@ export default {
     veZoomGroup: "Timeline view",
     veExportOpen: "Export…",
     veExportOpenTip: "Choose format, size and destination, then export",
+    veFrameNo: "Frame {n}",
 };

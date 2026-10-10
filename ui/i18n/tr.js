@@ -2102,4 +2102,5 @@ export default {
     veZoomGroup: "Zaman çizelgesi görünümü",
     veExportOpen: "Dışa aktar…",
     veExportOpenTip: "Biçimi, boyutu ve hedefi seçin, sonra dışa aktarın",
+    veFrameNo: "Kare {n}",
 };

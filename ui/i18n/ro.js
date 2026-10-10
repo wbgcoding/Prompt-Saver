@@ -2102,4 +2102,5 @@ export default {
     veZoomGroup: "Vizualizare cronologie",
     veExportOpen: "Exportă…",
     veExportOpenTip: "Alege formatul, dimensiunea și destinația, apoi exportă",
+    veFrameNo: "Cadrul {n}",
 };

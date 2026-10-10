@@ -228,6 +228,7 @@ function applyI18n() {
   updateExportNote();
   updatePlayButton();
   updateAudioLabels();
+  renderPlayhead();
 }
 
 async function loadTexts(settings) {
@@ -826,7 +827,7 @@ function setTimeValue(el, ms, durMs) {
 function renderPlayhead() {
   $("ve-playhead").style.left = `${msToPx(VE.playhead)}px`;
   $("ve-time").textContent = fmtTime(VE.playhead);
-  $("ve-frame").textContent = `#${frameOf(VE.playhead)}`;
+  $("ve-frame").textContent = t("veFrameNo").replace("{n}", String(frameOf(VE.playhead) + 1));
   setTimeValue($("ve-timeline"), VE.playhead, VE.dur);
 }
 

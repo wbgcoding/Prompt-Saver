@@ -2102,4 +2102,5 @@ export default {
     veZoomGroup: "Vista della sequenza temporale",
     veExportOpen: "Esporta…",
     veExportOpenTip: "Scegli formato, dimensione e destinazione, poi esporta",
+    veFrameNo: "Fotogramma {n}",
 };

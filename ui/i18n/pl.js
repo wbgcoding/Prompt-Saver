@@ -2102,4 +2102,5 @@ export default {
     veZoomGroup: "Widok osi czasu",
     veExportOpen: "Eksportuj…",
     veExportOpenTip: "Wybierz format, rozmiar i miejsce docelowe, a potem wyeksportuj",
+    veFrameNo: "Klatka {n}",
 };

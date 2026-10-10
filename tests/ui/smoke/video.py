@@ -259,6 +259,20 @@ VIDEO_PROBE = """
       }
     }
 
+    // 938: the frame counter reads the word and a 1-based number, compared
+    // against the translated string so the probe holds in any boot language.
+    {
+      const { tx } = await (await import('./i18n.js')).fullTexts('en');
+      const frameText = () => document.getElementById('ve-frame').textContent;
+      const want = (n) => tx('veFrameNo').replace('{n}', String(n));
+      if (frameText() !== want(1)) errs.push('938: the frame counter at the start reads "' + frameText() + '" instead of "' + want(1) + '"');
+      document.getElementById('ve-next-frame').click();
+      await sleep(60);
+      if (frameText() !== want(2)) errs.push('938: one frame on, the counter reads "' + frameText() + '" instead of "' + want(2) + '"');
+      document.getElementById('ve-prev-frame').click();
+      await sleep(60);
+    }
+
     // ---- tabs actually switch panels ----
     document.getElementById('ve-tab-overlays').click();
     await sleep(80);

@@ -2102,4 +2102,5 @@ export default {
     veZoomGroup: "时间线视图",
     veExportOpen: "导出…",
     veExportOpenTip: "选择格式、尺寸和保存位置，然后导出",
+    veFrameNo: "第 {n} 帧",
 };

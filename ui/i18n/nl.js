@@ -2102,4 +2102,5 @@ export default {
     veZoomGroup: "Tijdlijnweergave",
     veExportOpen: "Exporteren…",
     veExportOpenTip: "Kies formaat, grootte en bestemming en exporteer dan",
+    veFrameNo: "Frame {n}",
 };

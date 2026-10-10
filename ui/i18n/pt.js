@@ -2102,4 +2102,5 @@ export default {
     veZoomGroup: "Visualização da linha do tempo",
     veExportOpen: "Exportar…",
     veExportOpenTip: "Escolha formato, tamanho e destino e depois exporte",
+    veFrameNo: "Quadro {n}",
 };

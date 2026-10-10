@@ -2102,4 +2102,5 @@ export default {
     veZoomGroup: "Zeitleistenansicht",
     veExportOpen: "Exportieren…",
     veExportOpenTip: "Format, Größe und Ziel wählen, dann exportieren",
+    veFrameNo: "Bild {n}",
 };
