@@ -34,7 +34,11 @@ export function placePopover(el, rect, gap = 4) {
   // the unshrunk height would drag a tall popover to the top of the window and over
   // the very thing it belongs to.
   let shown = h;
-  if (h > room) {
+  // A menu opened at a point (a right-click) has no anchor to keep uncovered, so one that
+  // fits the window at all is moved up to fit, the way every system menu is, instead of
+  // being squeezed into a scroller with its last entries out of sight.
+  const atPoint = rect.top === rect.bottom;
+  if (h > room && !(atPoint && h <= vh - 2 * POP_PAD)) {
     shown = Math.max(80, Math.min(room, vh - 2 * POP_PAD));
     el.style.maxHeight = `${shown}px`;
     el.classList.add("pop-clamped");

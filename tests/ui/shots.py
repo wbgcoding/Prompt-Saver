@@ -89,6 +89,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         q = dict(p.split("=", 1) for p in query.split("&") if "=" in p)
         if path == "/tauri_stub.js":
             return self._send(STUB.read_bytes(), "text/javascript")
+        if path == "/__frame.html":
+            # The page runs in an iframe of exactly the shot size. A headless window is
+            # smaller than its screenshot while the page loads, so a script that measures
+            # the viewport (a menu placed at a point, a text fitted to its box) would
+            # otherwise work on the wrong size.
+            w, h = int(q.get("w", 880)), int(q.get("h", 600))
+            src = q.get("src", "index.html").replace("%3F", "?").replace("%26", "&").replace("%3D", "=")
+            page = (f'<!doctype html><meta charset="utf-8"><style>html,body{{margin:0;overflow:hidden;background:#000}}'
+                    f'iframe{{border:0;display:block;width:{w}px;height:{h}px}}</style><iframe src="/{src}"></iframe>')
+            return self._send(page.encode("utf-8"), "text/html; charset=utf-8")
         page = UI / path.lstrip("/")
         if path.endswith(".html") and page.exists():
             lang = q.get("lang", "")
@@ -149,7 +159,7 @@ def main():
         subprocess.run([chrome, "--headless=new", "--disable-gpu", "--hide-scrollbars",
                         f"--force-device-scale-factor={scale}", f"--user-data-dir={out / 'profile'}",
                         f"--window-size={w},{h}", "--virtual-time-budget=6000", f"--screenshot={png}",
-                        f"http://127.0.0.1:{port}/{page}?lang={lang}&theme={theme}&act={act}"],
+                        f"http://127.0.0.1:{port}/__frame.html?w={w}&h={h}&src={page}%3Flang%3D{lang}%26theme%3D{theme}%26act%3D{act}"],
                        capture_output=True, timeout=90)
         print(png)
     server.shutdown()

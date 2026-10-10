@@ -18,6 +18,7 @@ from . import (
     w16_scale_theme_track,
     w17_recording_result,
     w18_voice,
+    w19_layout_ink,
 )
 
 SECTIONS = [
@@ -39,4 +40,5 @@ SECTIONS = [
     w16_scale_theme_track.SECTION,
     w17_recording_result.SECTION,
     w18_voice.SECTION,
+    w19_layout_ink.SECTION,
 ]
