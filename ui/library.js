@@ -1447,8 +1447,8 @@ export function bindLibrary() {
     try { await invoke("set_ui_flag", { key: "closeAfterCopy", enabled }); } catch (err) { errToast(err); }
     syncLibraryToggle();
   });
-  const renderLibraryDebounced = debounced(renderLibrary, () => val("searchDebounceMs"));
-  const refreshImageHitsDebounced = debounced(() => refreshImageHits(libQuery.trim().toLowerCase()), () => val("searchDebounceMs"));
+  const renderLibraryDebounced = debounced(renderLibrary);
+  const refreshImageHitsDebounced = debounced(() => refreshImageHits(libQuery.trim().toLowerCase()));
   $("library-q").addEventListener("input", (e) => {
     libQuery = e.target.value;
     // With picture text search on and a query typed, the lookup renders once its

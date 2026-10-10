@@ -674,11 +674,14 @@ pub(crate) fn color_format(raw: &str) -> &'static str {
     }
 }
 
+// Cells across the picker loupe: odd, so one cell is exactly the picked pixel.
+pub(crate) const PICK_LOUPE_CELLS: u32 = 15;
+
 pub(crate) fn pick_cfg(settings: &Settings) -> PickCfg {
     PickCfg {
         zoom: settings.ui_values.get("loupeZoom").copied().unwrap_or(4.0).clamp(4.0, 16.0) as u32,
         format: color_format(settings.ui_texts.get("pickerFormat").map(String::as_str).unwrap_or("hex")).to_string(),
-        cells: settings.ui_values.get("loupeCells").copied().unwrap_or(15.0).clamp(7.0, 25.0) as u32,
+        cells: PICK_LOUPE_CELLS,
     }
 }
 
@@ -1123,11 +1126,11 @@ pub(crate) async fn begin_capture(
             let guard = s.lock().unwrap_or_else(|e| e.into_inner());
             let settings = &guard.settings;
             let snip_delay = settings.ui_values.get("snipDelayMs").copied().unwrap_or(0.0).clamp(0.0, 5000.0) as u64;
-            let cfg = if pick { pick_cfg(settings) } else { PickCfg { zoom: 8, format: "hex".to_string(), cells: 15 } };
+            let cfg = if pick { pick_cfg(settings) } else { PickCfg { zoom: 8, format: "hex".to_string(), cells: PICK_LOUPE_CELLS } };
             let hist_max = if pick { pick_history_max(settings) } else { PICK_HISTORY_DEFAULT };
             (cfg, hist_max, snip_delay, capture_hides_app_windows(capture_excluded(settings)))
         })
-        .unwrap_or((PickCfg { zoom: 8, format: "hex".to_string(), cells: 15 }, PICK_HISTORY_DEFAULT, 0, true));
+        .unwrap_or((PickCfg { zoom: 8, format: "hex".to_string(), cells: PICK_LOUPE_CELLS }, PICK_HISTORY_DEFAULT, 0, true));
     // Wake the overlay's WebView2 NOW (off-screen) so a long-idle, background-throttled
     // webview un-throttles DURING the freeze+encode below. Without this head start the
     // icon path (overlay idle a while) lags behind a retry (whose webview was just

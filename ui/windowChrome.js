@@ -157,7 +157,7 @@ export function wireTooltips() {
     if (y + r.height + PAD > innerHeight) y = cy - OFF - r.height;
     const z = uiZoom(); // fixed popup lives inside the zoomed body
     // The flip above only guards the edge it checked: near a corner, with a
-    // wide tooltip (expert tooltipWidth), the flipped side can itself run off the
+    // wide tooltip, the flipped side can itself run off the
     // FAR edge. Clamp both bounds, same as placePopover does for every other popup.
     tipEl.style.left = `${Math.max(PAD, Math.min(x, innerWidth - r.width - PAD)) / z}px`;
     tipEl.style.top = `${Math.max(PAD, Math.min(y, innerHeight - r.height - PAD)) / z}px`;

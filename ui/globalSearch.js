@@ -354,7 +354,7 @@ export function gsRender() {
   if (!any) empty.textContent = t("globalSearchNoResults");
   gsSetActive(gsFlatRows.length ? 0 : -1);
 }
-export const gsRenderDebounced = debounced(() => gsRender(), () => val("searchDebounceMs"));
+export const gsRenderDebounced = debounced(() => gsRender());
 
 export async function openGlobalSearch() {
   if (gsOpen) return;

@@ -104,8 +104,7 @@ export function assignINPUT_MAX(v) { INPUT_MAX = v; }
 export const TOOLTIP_PREVIEW_CHARS = 600; // how much of a prompt a tile tooltip shows
 export let BUBBLE_MS = 950; // "Copied!" bubble lifetime (expert-tunable)
 export function assignBUBBLE_MS(v) { BUBBLE_MS = v; }
-export let TOAST_MS = 1400; // toast lifetime for plain messages (expert-tunable)
-export function assignTOAST_MS(v) { TOAST_MS = v; }
+export const TOAST_MS = 1400; // toast lifetime for plain messages
 export const SIZE_MIN = 10; // text size range, steps of 2 (keep in sync with backend)
 export const SIZE_MAX = 40;
 export const SIZE_STEP = 2;
@@ -431,9 +430,7 @@ export function toast(msg, action = null, tint = "", chips = null, duration = nu
   toastEl.classList.add("show");
   clearTimeout(toastTimer);
   // A toast carrying an action button or chips needs longer to read/click than a
-  // plain message, but was a flat 12000ms regardless of the toastMs expert
-  // setting -- longer than that setting's own 10000ms max. Scale it off the same
-  // knob instead (same 12000ms result at the 1400ms default).
+  // plain message. It is the plain duration plus a fixed bonus (12000ms in all).
   toastTimer = setTimeout(hideToast, duration ?? ((action || hasChips) ? TOAST_MS + 10600 : TOAST_MS));
 }
 
@@ -640,9 +637,8 @@ export const TB_CHECK = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hi
 // keystroke. The field itself stays live; only the list waits for a short pause in
 // typing. Short enough to feel immediate, long enough that a fast typist renders once.
 export const SEARCH_DEBOUNCE_MS = 120;
-// ms may be a getter, so a caller can stay live-tunable (library search reads
-// the searchDebounceMs expert value on every keystroke instead of a value baked
-// in when the debounced wrapper was created).
+// ms may be a getter, so a caller can read a live value on every keystroke instead
+// of one baked in when the debounced wrapper was created.
 export function debounced(fn, ms = SEARCH_DEBOUNCE_MS) {
   let timer = 0;
   const run = () => {

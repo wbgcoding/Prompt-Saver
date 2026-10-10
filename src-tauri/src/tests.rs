@@ -13777,6 +13777,28 @@ fn keys_of_removed_controls_are_dropped() {
 }
 
 #[test]
+fn fixed_size_and_timing_values_are_dropped_on_load() {
+    // These expert rows became constants; a stored number must not linger or
+    // come back if a row of the same name is ever added again.
+    let keys = [
+        "tooltipWidth", "scrollbarWidth", "toastWidth", "toastMs", "modalRadius", "modalScale",
+        "loupeCells", "pickSwatchPx", "tagChipPx", "tagPopCols", "searchDebounceMs",
+    ];
+    let mut s = Settings::default();
+    for k in keys {
+        s.ui_values.insert(k.into(), 7.0);
+    }
+    s.ui_values.insert("tooltipDelayMs".into(), 0.0);
+    assert!(s.has_removed_ui_values());
+    s.migrate();
+    for k in keys {
+        assert!(!s.ui_values.contains_key(k), "{k} survived migrate");
+    }
+    assert_eq!(s.ui_values.get("tooltipDelayMs"), Some(&0.0), "a live value next to them stays");
+    assert!(!s.has_removed_ui_values());
+}
+
+#[test]
 fn removed_flags_are_dropped() {
     // Every listed key, whatever the stored value (true or false), is dropped
     // once; a live switch next to it is untouched.
@@ -18220,13 +18242,13 @@ fn a_stored_number_outside_its_slider_range_is_clamped_on_load() {
         ("importFolderMax", 1e18),
         ("remoteRateLimit", 0.0),
         ("remotePort", -5.0),
-        ("toastMs", 5.0),
+        ("overlayDim", 5000.0),
         ("historyMax", 5e9),
     ]);
     assert_eq!(v["importFolderMax"], 2000.0);
     assert_eq!(v["remoteRateLimit"], 0.0, "the unlimited sentinel stays");
     assert_eq!(v["remotePort"], 1024.0);
-    assert_eq!(v["toastMs"], 800.0);
+    assert_eq!(v["overlayDim"], 80.0);
     assert_eq!(v["historyMax"], 1_000_000.0, "a stops entry is held to its last stop");
     let v = clamped_values(&[("remoteRateLimit", 1e9), ("gridGap", 7.0)]);
     assert_eq!(v["remoteRateLimit"], 300.0);
@@ -18235,8 +18257,8 @@ fn a_stored_number_outside_its_slider_range_is_clamped_on_load() {
 
 #[test]
 fn a_value_that_is_not_a_finite_number_is_dropped() {
-    let v = clamped_values(&[("gridGap", f64::NAN), ("gridPad", f64::INFINITY), ("modalRadius", f64::NEG_INFINITY)]);
-    for k in ["gridGap", "gridPad", "modalRadius"] {
+    let v = clamped_values(&[("gridGap", f64::NAN), ("gridPad", f64::INFINITY), ("overlayDim", f64::NEG_INFINITY)]);
+    for k in ["gridGap", "gridPad", "overlayDim"] {
         assert!(!v.contains_key(k), "{k} falls back to its default");
     }
 }

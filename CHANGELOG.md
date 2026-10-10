@@ -1744,6 +1744,7 @@ the video editor and the introduction tour ship on).
 - **Fewer video formats.** MOV, MKV, animated WebP and APNG are gone from recording and export; a saved choice falls back to MP4.
 - **TIFF screenshots.** TIFF is gone from the screenshot format choice and the save dialog; a saved choice falls back to PNG.
 - **The "Copied!" font choice.** The text of the confirmation always uses the normal font; its size is now Small, Medium or Large (Large fills the tile or button, as before) instead of a pixel list, and a saved size falls back to Large.
+- **The expert menu is shorter.** 11 pure size and timing values are now fixed at their defaults.
 
 ### Changed
 

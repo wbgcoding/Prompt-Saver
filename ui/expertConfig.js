@@ -383,10 +383,8 @@ export const EXPERT_VALUES = {
   animSpeed: { label: "valAnimSpeed", min: 0, max: 1000, step: 10, def: 150, unit: "ms", gate: "animations" },
   gridGap: { label: "valGridGap", min: 0, max: 60, step: 1, def: 8, unit: "px" },
   gridPad: { label: "valGridPad", min: 0, max: 40, step: 1, def: 10, unit: "px" },
-  modalRadius: { label: "valModalRadius", min: 0, max: 28, step: 1, def: 14, unit: "px" },
   overlayDim: { label: "valOverlayDim", min: 0, max: 80, step: 5, def: 40, unit: "%" },
   bubbleMs: { label: "valBubbleMs", min: 0, max: 6000, step: 50, def: 950, unit: "ms", zeroLabel: "valOff", offAtZero: true },
-  toastMs: { label: "valToastMs", min: 800, max: 10000, step: 100, def: 1400, unit: "ms" },
   viewBorder: { label: "valViewBorder", min: 1, max: 12, step: 1, def: 3, unit: "px", gate: "multiView" },
   attachPreviewKb: { label: "valAttachPreviewKb", min: 1, max: 64, step: 1, def: 8, unit: "KB", display: "words", gate: "attachTextPreview" },
   // Floating-button opacity (%). Floored at 20% so the pill never vanishes.
@@ -400,13 +398,11 @@ export const EXPERT_VALUES = {
   // Pill folders: how much a pill grows for the merge-target hint, and the open
   // folder popover's own tile size / gap / padding.
   // Custom tile tooltip max width (it wraps + grows taller instead of widening).
-  tooltipWidth: { label: "valTooltipWidth", min: 180, max: 640, step: 10, def: 340, unit: "px", gate: "tooltipsEnabled" },
   // How long the pointer must rest on an element before its tooltip appears, so a
   // casual sweep across the window shows nothing. 0 shows it at once.
   tooltipDelayMs: { label: "valTooltipDelay", min: 0, max: 2000, step: 50, def: 500, unit: "ms", zeroLabel: "valOff", offAtZero: true, gate: "tooltipsEnabled" },
   // Appearance scales (percent, 100 = unchanged). Applied as CSS zoom.
   uiScale: { label: "valUiScale", min: 75, max: 300, step: 5, def: 100, unit: "%" },
-  modalScale: { label: "valModalScale", min: 75, max: 300, step: 5, def: 100, unit: "%" },
   composerScale: { label: "valComposerScale", min: 60, max: 300, step: 5, def: 100, unit: "%" },
   iconScale: { label: "valIconScale", min: 50, max: 300, step: 5, def: 100, unit: "%" },
   primaryScale: { label: "valPrimaryScale", min: 60, max: 300, step: 5, def: 100, unit: "%" },
@@ -438,7 +434,6 @@ export const EXPERT_VALUES = {
   savedSearchMax: { label: "valSavedSearchMax", min: 3, max: 10, step: 1, def: 5, unit: "", gate: "savedSearches" },
   libraryTileSize: { label: "valLibraryTileSize", min: 80, max: 240, step: 10, def: 140, unit: "px", gate: "libraryTiles" },
   // How long the library search waits after the last keystroke before it re-filters.
-  searchDebounceMs: { label: "valSearchDebounceMs", min: 0, max: 600, step: 10, def: 120, unit: "ms", gate: "librarySearch" },
   // Caps the recognized text kept per picture, so a screenshot of a wall of
   // text cannot inflate the database.
   ocrIndexMaxChars: { label: "valOcrIndexMaxChars", min: 500, max: 100000, step: 500, def: 20000, unit: "", gate: "ocrIndex" },
@@ -518,12 +513,10 @@ export const EXPERT_VALUES = {
   // PowerShell. Gated on "ocr" alone, not ocrLangAutoUpdate -- manual "Check now"
   // uses this cache too, even with automatic updates switched off.
   // Scrollbar thickness across every dialog (thumb keeps its 3px inset border).
-  scrollbarWidth: { label: "valScrollbarWidth", min: 8, max: 20, step: 1, def: 12, unit: "px", gate: "!hideScrollbars" },
   // Frosted-glass dialog background blur (paired with the frostedModals toggle).
   frostedBlur: { label: "valFrostedBlur", min: 0, max: 20, step: 1, def: 4, unit: "px", gate: "frostedModals" },
   // Composer textarea auto-grow cap, popover edge padding, toast width, modal max height.
   composerMaxH: { label: "valComposerMaxH", min: 80, max: 400, step: 10, def: 160, unit: "px" },
-  toastWidth: { label: "valToastWidth", min: 260, max: 700, step: 20, def: 440, unit: "px" },
   modalMaxVh: { label: "valModalMaxVh", min: 60, max: 95, step: 1, def: 88, unit: "%" },
   // Privacy blur strength (each paired with its "blur until hover" toggle).
   tileBlur: { label: "valTileBlur", min: 1, max: 16, step: 1, def: 4, unit: "px", gate: "blurTilesUntilHover" },
@@ -574,9 +567,7 @@ export const EXPERT_VALUES = {
   secretTimeoutMin: { label: "valSecretTimeoutMin", min: 0, max: 240, step: 5, def: 15, unit: "min", zeroLabel: "secretTimeoutNever", gate: "secretPrompts" },
   // Keyboard grid focus fades this long after the window loses focus.
   // Tag chip text size (editor, library filter row, manager).
-  tagChipPx: { label: "valTagChipPx", min: 10, max: 20, step: 1, def: 12, unit: "px", gate: "tags" },
   // Column count for the grid tag-filter popover.
-  tagPopCols: { label: "valTagPopCols", min: 1, max: 3, step: 1, def: 2, unit: "", gate: "tags" },
   // How many custom themes may be stored (keeps the settings blob bounded).
   customThemeMax: { label: "valCustomThemeMax", min: 1, max: 20, step: 1, def: 8, unit: "", gate: "customThemes" },
   // How many views a group popover lists before it starts scrolling.
@@ -608,11 +599,9 @@ export const EXPERT_VALUES = {
   // How far the picker's loupe magnifies the pixels around the cursor.
   loupeZoom: { label: "valLoupeZoom", min: 4, max: 16, step: 1, def: 4, unit: "×", gate: "colorPicker" },
   // Loupe grid size (odd numbers only: the centre cell must be the exact picked pixel).
-  loupeCells: { label: "valLoupeCells", min: 7, max: 25, step: 2, def: 15, unit: "", gate: "colorPicker" },
   // How many recent picks the right-click popover (and the overlay strip) keep. 0 = off.
   pickHistoryN: { label: "valPickHistoryN", min: 0, max: 20, step: 1, def: 5, unit: "", gate: "colorPicker" },
   // Swatch diameter in the right-click colour-history popover.
-  pickSwatchPx: { label: "valPickSwatchPx", min: 12, max: 40, step: 1, def: 22, unit: "px", gate: "colorPicker" },
   // Cap on how many variants one rotating prompt may hold.
   rotateMaxEntries: { label: "valRotateMaxEntries", min: 2, max: 50, step: 1, def: 20, unit: "", gate: "rotatingPrompts" },
   // Tile tooltip preview length for a rotating prompt's short text.
@@ -704,7 +693,7 @@ export const EXPERT_TABS = [
     // Opens #ocr-langs-modal -- same gate as the rest of the feature.
     { title: "expGroupOcr", flags: ["ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }, { key: "ocrAutoPickLang", gate: "ocr" }, { key: "ocrLangAutoUpdate", gate: "ocr" }], values: ["ocrUpscaleUnderPx"], dropdowns: ["ocrLang"],
       actions: [{ id: "ocr-langs-open", label: "ocrLangsManage", gate: "ocr" }] },
-    { title: "expGroupPicker", flags: ["colorPicker"], values: ["loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx"], dropdowns: ["pickerFormat"] },
+    { title: "expGroupPicker", flags: ["colorPicker"], values: ["loupeZoom", "pickHistoryN"], dropdowns: ["pickerFormat"] },
     // The recording hotkeys render their own capture row directly (hotkeyRow())
     // instead of a button that jumps to a settings field -- see actionRow()'s
     // "hotkey" branch.
@@ -721,20 +710,20 @@ export const EXPERT_TABS = [
     // Split by what a setting actually does: acting on a tile, the hover tooltip,
     // and pure looks. One 26-entry blob made everything hard to find.
     { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "dragToView", "tilePressScale", "tileHotkeyBadge"], values: ["hoverLift", "hoverDim", "dragThreshold", "tileHotkeyBadgeOpacity"] },
-    { title: "expGroupTooltips", values: ["tooltipWidth", "tooltipDelayMs"] },
+    { title: "expGroupTooltips", values: ["tooltipDelayMs"] },
     { title: "expGroupTileLook", flags: ["tileShadow", "typeBadges", "captions", "gridLines", "autoInk", "inkHalo"], values: ["tileRadius", "tileBorderWidth", "inkThreshold", "inkHaloStrength"], dropdowns: ["tileStyle"] },
     { title: "expGroupFavorites", flags: ["favorites", { key: "favViewReorder", gate: "favViewButton" }], values: ["favStarSize", "favMaxCols"] },
     { title: "expGroupMedia", flags: ["videoControls", "videoAutoplay", "videoMuted", "videoLoop", "mediaMeta", "mediaMetaBackfill", "grayscaleMedia", "mediaBorder", "roundMedia"], values: ["videoVolume", "mediaRadius"] },
   ] },
   { title: "expTabAppearance", groups: [
-    { title: "expGroupScales", values: ["modalScale", "composerScale", "primaryScale"] },
-    { title: "expGroupAppearanceDetails", flags: ["animations", "hideScrollbars", { key: "accentScrollbar", gate: "!hideScrollbars" }, "smoothScroll", "frostedModals", "customThemes"], values: ["animSpeed", "gridGap", "gridPad", "modalRadius", "overlayDim", "scrollbarWidth", "frostedBlur", "composerMaxH", "toastWidth", "toastMs", "modalMaxVh", "customThemeMax"], dropdowns: ["toastPos"], palette: true },
+    { title: "expGroupScales", values: ["composerScale", "primaryScale"] },
+    { title: "expGroupAppearanceDetails", flags: ["animations", "hideScrollbars", { key: "accentScrollbar", gate: "!hideScrollbars" }, "smoothScroll", "frostedModals", "customThemes"], values: ["animSpeed", "gridGap", "gridPad", "overlayDim", "frostedBlur", "composerMaxH", "modalMaxVh", "customThemeMax"], dropdowns: ["toastPos"], palette: true },
   ] },
   { title: "expTabLibrary", groups: [
-    { title: "expGroupLibSearch", flags: ["librarySearch", "globalSearch", "searchSuggest", "savedSearches", "fuzzySearch", "libraryTypeFilter", "colorFilter", "searchAutofocus", "ocrIndex"], values: ["searchListMax", "savedSearchMax", "searchDebounceMs", "ocrIndexMaxChars", "libraryCols"], dropdowns: ["fuzzyMaxTypos"],
+    { title: "expGroupLibSearch", flags: ["librarySearch", "globalSearch", "searchSuggest", "savedSearches", "fuzzySearch", "libraryTypeFilter", "colorFilter", "searchAutofocus", "ocrIndex"], values: ["searchListMax", "savedSearchMax", "ocrIndexMaxChars", "libraryCols"], dropdowns: ["fuzzyMaxTypos"],
       actions: [{ id: "ocr-index-backfill", label: "ocrIndexBackfillAction", gate: "ocrIndex" }] },
     { title: "expGroupLibrary", flags: ["smartSort", "batchOps", "imagePreview", "libraryVideoPreview", "archiveTag", "libraryTiles"], values: ["libraryWidth", "libPreviewLines", "libraryTileSize"] },
-    { title: "expGroupTags", flags: ["tags"], values: ["tagChipPx", "tagPopCols"], dropdowns: ["tagFilterMode", "tagSort"] },
+    { title: "expGroupTags", flags: ["tags"], dropdowns: ["tagFilterMode", "tagSort"] },
     // Everything that records or shows copy history lives with the history view.
     { title: "expGroupJournal", flags: ["copyHistory", "historyTimestamps", "historyGrouped", "dedupCopyLog", "confirmClearHistory", "clipWatcher", { key: "clipSkipSecrets", gate: "clipWatcher" }], values: ["historyMax", "clipMinChars", "clipInboxMax"], selects: ["historyDays"] },
   ] },
@@ -784,7 +773,7 @@ export const EXPERT_TIPS = [
   "lengthCounter", "promptHistory", "historyDiff", "historyPreviewLen", "editorMonospace",
   "promptNotes", "notesInTooltip", "notesTipLen",
   "mdPreview", "codeHighlight", "codeAutoDetect", "hlFontPx", "copyFormatted",
-  "colorPicker", "pickerFormat", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx",
+  "colorPicker", "pickerFormat", "loupeZoom", "pickHistoryN",
   "screenRecord", "recCursor", "recCountdownS", "recFps", "recAudioSystem", "recAudioMic", "recAudioKbps", "recMicDevice",
   "recQuality", "recBitrateKbps", "recFormat", "recordingDir",
   "recStopHotkey", "recPauseHotkey", "recTrayEntries", "recCropNotice", "recBarSize", "recTargetSwitch",
@@ -820,12 +809,12 @@ export const EXPERT_TIPS = [
   // Appearance
   "hideScrollbars", "gridLines", "autoInk", "inkThreshold", "inkHalo", "inkHaloStrength",
   "customThemes", "customThemeMax",
-  "dragThreshold", "composerMaxH", "toastWidth", "toastPos", "modalMaxVh", "tileStyle",
+  "dragThreshold", "composerMaxH", "toastPos", "modalMaxVh", "tileStyle",
   // Library / privacy
   "mediaMeta", "mediaMetaBackfill", "ocrIndex", "ocrIndexMaxChars",
-  "smartSort", "fuzzySearch", "batchOps", "searchSuggest", "searchAutofocus", "searchDebounceMs",
+  "smartSort", "fuzzySearch", "batchOps", "searchSuggest", "searchAutofocus",
   "globalSearch",
-  "tags", "tagChipPx", "tagFilterMode", "tagPopCols", "tagSort",
+  "tags", "tagFilterMode", "tagSort",
   "allowScreenshot", "copyHistory", "historyTimestamps", "historyGrouped",
   "dedupCopyLog", "cleanupFiles", "blurTilesUntilHover",
   // Tools / data

@@ -1,5 +1,5 @@
 // Expert menu: the renderer, its rows and the live-state parts of the setting registry.
-import { $, armButton, assignBUBBLE_MS, assignDISARM_MS, assignDRAG_THRESHOLD, assignHISTORY_PREVIEW_LEN, assignINPUT_MAX, assignLibraryTab, assignPrompts, assignROTATE_SHORT_MAX, assignSettings, assignTOAST_MS, COLORS, debounced, DEFAULT_COLORS, DICT, DISARM_MS, disarmButton, errText, errToast, EXPERT_ACTIONS, flag, flagState, gateOpen, HEADER_PAD_Y, HEX_RE, ICON_UNDO, ICON_WARN, invoke, LANG, modal, openColorPop, optFlag, PALETTE_LEN, prompts, putIcon, setStatusText, settings, settingsEl, shipsOn, syncEdgeFade, t, toast, txt, val } from "./core.js";
+import { $, armButton, assignBUBBLE_MS, assignDISARM_MS, assignDRAG_THRESHOLD, assignHISTORY_PREVIEW_LEN, assignINPUT_MAX, assignLibraryTab, assignPrompts, assignROTATE_SHORT_MAX, assignSettings, COLORS, debounced, DEFAULT_COLORS, DICT, DISARM_MS, disarmButton, errText, errToast, EXPERT_ACTIONS, flag, flagState, gateOpen, HEADER_PAD_Y, HEX_RE, ICON_UNDO, ICON_WARN, invoke, LANG, modal, openColorPop, optFlag, PALETTE_LEN, prompts, putIcon, setStatusText, settings, settingsEl, shipsOn, syncEdgeFade, t, toast, txt, val } from "./core.js";
 import { ALL_FLAG_KEYS, normScreenshotFormat, EXPERT_BULK_NEVER, EXPERT_RESET_KEEP, EXPERT_SELECTS, EXPERT_TABS, EXPERT_TIP_SET, EXPERT_VALUES, FLAG_GATES, flagLabelKey, GRID_DOM_VALUES, groupFlags, OPT_FLAG_KEYS, REC_QUALITY_BITRATE, SELECT_CUSTOM_MAX, SELECT_CUSTOM_MIN, SETTINGS_AREA_LABEL, STYLE_OPTS, TILE_DOM_FLAGS, TILE_STYLES } from "./expertConfig.js";
 import { confirmDialog, infoDialog } from "./dialog.js";
 import { refreshFavViewUi, renderGrid, renderViews } from "./views.js";
@@ -260,7 +260,6 @@ export function applyValues() {
   root.setProperty("--gap", `${val("gridGap")}px`);
   root.setProperty("--lib-preview-lines", String(Math.round(val("libPreviewLines"))));
   root.setProperty("--grid-pad", `${val("gridPad")}px`);
-  root.setProperty("--modal-radius", `${val("modalRadius")}px`);
   root.setProperty("--overlay-dim", String(val("overlayDim") / 100));
   root.setProperty("--view-border", `${val("viewBorder")}px`);
   // Appearance scales. UI scale drives the WebView's native zoom (robust); the rest
@@ -272,7 +271,6 @@ export function applyValues() {
     _lastUiZoom = uiZoomFactor;
     invoke("set_ui_zoom", { factor: uiZoomFactor }).catch(() => {});
   }
-  root.setProperty("--modal-zoom", val("modalScale") / 100);
   root.setProperty("--composer-zoom", val("composerScale") / 100);
   root.setProperty("--icon-zoom", val("iconScale") / 100);
   root.setProperty("--primary-zoom", val("primaryScale") / 100);
@@ -285,8 +283,6 @@ export function applyValues() {
   root.setProperty("--frosted-blur", `${val("frostedBlur")}px`);
   root.setProperty("--hover-lift", `${val("hoverLift")}px`);
   root.setProperty("--lib-width", `${val("libraryWidth")}px`);
-  root.setProperty("--sb-width", `${val("scrollbarWidth")}px`);
-  root.setProperty("--tooltip-width", `${val("tooltipWidth")}px`);
   root.setProperty("--blur-tiles", `${val("tileBlur")}px`);
   root.setProperty("--blur-media", `${val("mediaBlur")}px`);
   const dim = val("hoverDim");
@@ -294,13 +290,9 @@ export function applyValues() {
   root.setProperty("--hover-dim-opacity", String((100 - dim) / 100));
   root.setProperty("--hotkey-badge-opacity", val("tileHotkeyBadgeOpacity") / 100);
   root.setProperty("--media-radius", `${val("mediaRadius")}px`);
-  root.setProperty("--tag-chip-px", `${val("tagChipPx")}px`);
   root.setProperty("--hl-font-px", `${val("hlFontPx")}px`);
-  root.setProperty("--pick-swatch", `${val("pickSwatchPx")}px`);
   root.setProperty("--composer-max-h", `${val("composerMaxH")}px`);
-  root.setProperty("--toast-width", `${val("toastWidth")}px`);
   root.setProperty("--modal-max-vh", `${val("modalMaxVh")}vh`);
-  root.setProperty("--tag-pop-cols", String(Math.round(val("tagPopCols"))));
   // Caps/lengths that were fixed constants, now expert-tunable.
   assignROTATE_SHORT_MAX(Math.round(val("rotateTipLen")));
   assignHISTORY_PREVIEW_LEN(Math.round(val("historyPreviewLen")));
@@ -309,7 +301,6 @@ export function applyValues() {
   assignDISARM_MS(Math.round(val("disarmMs")));
   document.body.classList.toggle("toast-top", settings.ui_texts?.toastPos === "top");
   assignBUBBLE_MS(val("bubbleMs"));
-  assignTOAST_MS(val("toastMs"));
   const nameMax = val("nameMaxLen");
   for (const id of ["modal-name", "modal-caption", "view-modal-name"]) {
     const el = $(id);
@@ -2289,7 +2280,7 @@ export function bindExpertMenu() {
     showExpertPage(true);
   });
   $("expert-back").addEventListener("click", () => showExpertPage(false));
-  const renderExpertDebounced = debounced(renderExpert, () => val("searchDebounceMs"));
+  const renderExpertDebounced = debounced(renderExpert);
   $("expert-search").addEventListener("input", (e) => { expertQuery = e.target.value; renderExpertDebounced(); });
   $("expert-only-changed").addEventListener("change", (e) => {
     expertOnlyChanged = e.target.checked;

@@ -787,6 +787,17 @@ pub(crate) fn removed_ui_value_keys() -> &'static [&'static str] {
         "viewDropHoverMs",
         "viewGroupMaxRows",
         "clipSeenId",
+        "tooltipWidth",
+        "scrollbarWidth",
+        "toastWidth",
+        "toastMs",
+        "modalRadius",
+        "modalScale",
+        "loupeCells",
+        "pickSwatchPx",
+        "tagChipPx",
+        "tagPopCols",
+        "searchDebounceMs",
     ]
 }
 

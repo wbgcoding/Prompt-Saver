@@ -184,7 +184,7 @@ export const HELP_CONTENT = {
         "Adjust delay or width in the expert menu if needed.",
       ],
       whatHappens: "The tooltip auto-hides after its timeout even if the mouse stays put.",
-      settings: ["Delay before showing, tooltip width: Expert menu → Tiles → Tooltips"],
+      settings: ["Delay before showing: Expert menu → Tiles → Tooltips"],
     },
     {
       section: "organising",
@@ -934,7 +934,7 @@ export const HELP_CONTENT = {
         "Verzögerung oder Breite im Expertenmenü anpassen, falls der Standard nicht passt.",
       ],
       whatHappens: "Der Tooltip blendet sich nach seinem Timeout automatisch aus, selbst wenn die Maus stehen bleibt.",
-      settings: ["Verzögerung vor Anzeige, Tooltip-Breite: Expertenmenü → Kacheln → Tooltips"],
+      settings: ["Verzögerung vor Anzeige: Expertenmenü → Kacheln → Tooltips"],
     },
     {
       section: "organising",
