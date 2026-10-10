@@ -273,7 +273,7 @@ export const HELP_CONTENT = {
       whatItIs: "Copy history logs what was copied and when, in the app and, if switched on, in other apps.",
       howTo: [
         "Open the Library and choose the Copy history tab.",
-        "Search, filter by type or color, or star a favorite from the list.",
+        "Search, or filter by type and, while copies from other apps are recorded, by source.",
         "Delete a single row, or clear the whole copy history.",
       ],
       whatHappens: "Grouped view shows one row per tile (its most recent copy) instead of every event. Copy history older than the retention setting is dropped automatically (30 days for a new install, adjustable, 0 keeps everything). The copy history is one list; the sort field switches between Recently copied and Most used (top 20).",
@@ -1024,7 +1024,7 @@ export const HELP_CONTENT = {
       whatItIs: "Der Kopierverlauf protokolliert, was wann kopiert wurde, in der App und, wenn eingeschaltet, in anderen Apps.",
       howTo: [
         "Bibliothek öffnen und den Reiter Kopierverlauf wählen.",
-        "Suchen, nach Typ oder Farbe filtern, oder einen Favoriten aus der Liste markieren.",
+        "Suchen oder nach Typ filtern, und solange Kopien aus anderen Apps aufgezeichnet werden, auch nach Quelle.",
         "Eine einzelne Zeile löschen oder den gesamten Kopierverlauf leeren.",
       ],
       whatHappens: "Die gruppierte Ansicht zeigt eine Zeile pro Kachel (ihre letzte Kopie) statt jedes einzelnen Ereignisses. Älterer Kopierverlauf als die Aufbewahrungs-Einstellung wird automatisch gelöscht (bei einer neuen Installation 30 Tage, einstellbar, 0 behält alles). Der Kopierverlauf ist eine Liste; das Sortierfeld wechselt zwischen Zuletzt kopiert und Meistgenutzt (die 20 häufigsten).",

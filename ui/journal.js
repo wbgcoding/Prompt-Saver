@@ -2,8 +2,8 @@
 import { $, assignLibraryTab, assignSettings, debounced, errToast, errUndoToast, flag, ICON_ADD_SQUARE, ICON_EDIT, ICON_TRASH, invoke, journalThumbCache, LANG, libraryEl, libraryTab, listen, makeKeyboardActivatable, optFlag, prompts, putIcon, settings, t, toast, undoToast, val } from "./core.js";
 import { confirmDialog } from "./dialog.js";
 import { attachSelectPicker } from "./selectpop.js";
-import { _journalObs, assignActiveVidObs, assignJournalObs, buildColorFilter, copyResolved, hideLibrary, lastEdited, libLabel, libSelectMode, makeVideoObserver, maybeBackfillMediaMeta, mediaThumb, mediaTipLine, paintTypeChips, promptType, renderLibrary, setActiveFilter, setLibSelectMode, tagMatches, thumbEl, toastCopied, toggleTypeFilter, typeAllowed, typeFilterOf, usedColors } from "./library.js";
-import { allTags, renderTagBar, tagChipEl, tagKey, tagsOn } from "./tags.js";
+import { _journalObs, assignActiveVidObs, assignJournalObs, copyResolved, hideLibrary, lastEdited, libLabel, libSelectMode, makeVideoObserver, maybeBackfillMediaMeta, mediaThumb, mediaTipLine, paintTypeChips, promptType, renderLibrary, setLibSelectMode, thumbEl, toastCopied, toggleTypeFilter, typeAllowed, typeFilterOf } from "./library.js";
+import { tagChipEl, tagsOn } from "./tags.js";
 import { JOURNAL_ROWS_MAX } from "./expertConfig.js";
 import { copyOnCooldown, recordCopy } from "./copyFlow.js";
 import { wireSearchSuggest } from "./windowChrome.js";
@@ -14,9 +14,6 @@ import { editPrompt, openModal } from "./editor.js";
 
 export let journalQuery = ""; // copy-history search text
 export const journalTypes = new Set(); // additive, like the library's
-export let journalColor = "all"; // copy-history color filter
-export let journalFav = false; // copy-history "favorites only" filter
-export const journalTags = new Set(); // same idea as libTags/gridTags, own selection
 
 // ---- Copies from other apps (the stored clipboard entries, listed in the copy history) ----
 // Undo for clearing the copies from other apps: re-inserts the rows clip_inbox_clear
@@ -177,17 +174,9 @@ export function tileTimeLines(id) {
 
 export function journalMatches(p) {
   if (!typeAllowed(journalTypes, p)) return false;
-  if (journalFav && flag("favorites") && !p.favorite) return false;
-  if (journalColor !== "all" && (p.color || "") !== journalColor) return false;
-  if (tagsOn() && !tagMatches(p, journalTags)) return false;
   const q = journalQuery.trim().toLowerCase();
   if (!q) return true;
   return [p.name, p.text, p.file_path].some((s) => (s || "").toLowerCase().includes(q));
-}
-
-export function setJournalColor(color) {
-  journalColor = color;
-  setActiveFilter($("journal-colors"), ".lib-color", "color", color);
 }
 
 export let journalLog = []; // cached newest copy events; refetched only on open/group/copy
@@ -219,30 +208,6 @@ export async function restoreCopyHistory(rows, usage, lastUsed) {
   settings.usage = usage;
   settings.last_used = lastUsed;
   await loadJournal();
-}
-
-// Same bar as the library's (renderTagBar), with the journal's own selection.
-export let _lastJournalTagFilterSig = null;
-export function renderJournalTagFilter() {
-  const bar = $("journal-tags");
-  if (!bar) return;
-  if (!tagsOn()) {
-    bar.innerHTML = "";
-    bar.classList.add("hidden");
-    _lastJournalTagFilterSig = null;
-    journalTags.clear();
-    return;
-  }
-  const names = allTags();
-  const live = new Set(names.map(tagKey));
-  for (const key of [...journalTags]) if (!live.has(key)) journalTags.delete(key);
-  // Same as the library's own bar: "manage tags" stays reachable even with
-  // zero tags, so this no longer hides on an empty tag set.
-  bar.classList.remove("hidden");
-  const sig = LANG + "|" + names.join("") + "" + [...journalTags].sort().join("");
-  if (sig === _lastJournalTagFilterSig) return;
-  _lastJournalTagFilterSig = sig;
-  renderTagBar(bar, journalTags, renderJournal);
 }
 
 // One entry copied in another app: time, a two-line text preview and two icons (save as a
@@ -306,15 +271,11 @@ export function syncJournalSourceBar(on) {
 // Render from the cached log. Filters run client-side, so typing in the search
 // box re-renders instantly without an IPC roundtrip (and without a render race).
 export function renderJournal() {
-  renderJournalTagFilter();
   const body = $("journal-body");
   if (_journalObs) _journalObs.disconnect();
   assignJournalObs(makeVideoObserver());
   assignActiveVidObs(_journalObs);
   const byId = new Map(prompts.map((p) => [p.id, p]));
-  const colorsUsed = usedColors(journalLog.map((e) => byId.get(e.id)).filter(Boolean));
-  if (journalColor !== "all" && !colorsUsed.includes(journalColor)) setJournalColor("all");
-  buildColorFilter($("journal-colors"), journalColor, colorsUsed);
   const grouped = flag("historyGrouped");
   const showTime = flag("historyTimestamps");
   // Copies from other apps share the list when the recorder is on or entries are still
@@ -330,9 +291,8 @@ export function renderJournal() {
       .filter(([p]) => p && journalMatches(p))
       .map(([p, ts, rowid]) => ({ p, ts, rowid }))
     : [];
-  // An entry copied elsewhere has no type, colour, tag or favourite, so any of
-  // those filters being narrowed leaves it out; the search matches its text.
-  const narrowed = journalTypes.size > 0 || journalColor !== "all" || journalFav || journalTags.size > 0;
+  // An entry copied elsewhere has no type, so a type filter leaves it out; the search matches its text.
+  const narrowed = journalTypes.size > 0;
   const clipQuery = journalQuery.trim().toLowerCase();
   if (showElsewhere && !narrowed) {
     for (const it of journalInbox) {
@@ -495,9 +455,6 @@ export async function resetAndLoadJournal() {
   journalTypes.clear();
   for (const type of typeFilterOf("journalTypeFilterPick")) journalTypes.add(type);
   paintTypeChips($("journal-types"), journalTypes);
-  journalFav = false;
-  $("journal-fav").classList.remove("active");
-  setJournalColor("all");
   journalSource = "all";
   // renderJournal decides what the filter bar shows, so it also follows the source field.
   await loadJournal();
@@ -529,18 +486,8 @@ export function bindJournal() {
   $("journal-q").addEventListener("input", (e) => { journalQuery = e.target.value; renderJournalDebounced(); });
   wireSearchSuggest($("journal-q"), "recentSearchJournal");
   $("journal-types").addEventListener("click", (e) => {
-    if (e.target.closest("#journal-fav")) {
-      journalFav = !journalFav;
-      $("journal-fav").classList.toggle("active", journalFav);
-      renderJournal();
-      return;
-    }
     const btn = e.target.closest(".lib-type");
     if (btn) { toggleTypeFilter(journalTypes, btn.dataset.type, $("journal-types"), "journalTypeFilterPick"); renderJournal(); }
-  });
-  $("journal-colors").addEventListener("click", (e) => {
-    const btn = e.target.closest(".lib-color");
-    if (btn) { setJournalColor(btn.dataset.color); renderJournal(); }
   });
   // Clears exactly what the source filter shows: "all" the copy log and the copies from
   // other apps, "app" the copy log only, "elsewhere" the stored entries from other apps

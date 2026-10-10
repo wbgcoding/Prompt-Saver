@@ -165,53 +165,19 @@ SECTION = """\
       window.__resetClipInbox();
       await window.__TAURI__.core.invoke('clip_inbox_list');
     }
-    // 105: the copy-history tag filter -- same picking logic as the library's own
-    // tag bar (tagMatches/tagFilterMode), narrows both journal columns.
-    {
-      const tagBar = document.getElementById('journal-tags');
-      if (!tagBar || tagBar.classList.contains('hidden')) {
-        out.errors.push('105: the journal tag filter bar is missing or hidden');
-      } else {
-        const findChip = () => [...document.querySelectorAll('#journal-tags .tag-chip')].find((c) => c.textContent.trim() === 'Work');
-        const countRecent = () => document.querySelectorAll('#journal-body .journal-col-recent .journal-item').length;
-        if (!findChip()) {
-          out.errors.push('105: the journal tag filter has no Work chip');
-        } else {
-          const before = countRecent();
-          findChip().click();
-          await sleep(150);
-          const activeChip = findChip();
-          if (!activeChip || !activeChip.classList.contains('active')) {
-            out.errors.push('105: clicking a journal tag chip did not mark it active');
-          }
-          const after = countRecent();
-          if (after >= before) {
-            out.errors.push('105: filtering the journal by tag Work did not narrow the list (' + before + ' vs ' + after + ')');
-          }
-          findChip().click(); // deselect again
-          await sleep(150);
-          const clearedChip = findChip();
-          if (clearedChip && clearedChip.classList.contains('active')) {
-            out.errors.push('105: clicking the journal tag chip again did not deselect it');
-          }
-          if (countRecent() !== before) {
-            out.errors.push('105: clearing the journal tag filter did not restore the full list');
-          }
-        }
-      }
-    }
-    // 198: the journal header now matches the library's -- a count in the head,
-    // and the tag row sits BELOW the filter row instead of squeezed into it.
+    // 198: the journal header carries a count in the head.
     {
       const jCount = document.getElementById('journal-count');
       if (!jCount || !jCount.textContent.trim()) {
         out.errors.push('198: the journal header is missing its entry count');
       }
-      const filtersBox = document.querySelector('#journal-search .journal-filters').getBoundingClientRect();
-      const tagsBox = document.getElementById('journal-tags').getBoundingClientRect();
-      if (tagsBox.top < filtersBox.bottom) {
-        out.errors.push('198: the journal tag row overlaps the filter row instead of sitting below it');
+    }
+    // 274: the copy history has no prompt filters: no favourite chip, colour dots or tag row.
+    {
+      for (const id of ['journal-fav', 'journal-colors', 'journal-tags']) {
+        if (document.getElementById(id)) out.errors.push('274: #' + id + ' still exists in the copy history');
       }
+      if (document.querySelector('#journal-types .lib-fav-chip')) out.errors.push('274: the type filter still carries a favourite chip');
     }
     // 716: the copy history is one column; the sort field switches to "most used", the
     // pick is stored and survives closing and reopening the library.

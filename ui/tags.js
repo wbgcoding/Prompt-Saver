@@ -264,8 +264,8 @@ export function renderTagFilter() {
   renderTagBar(bar, libTags, renderLibrary);
 }
 
-// Shared markup for both filter bars (library's #library-tagbar and the copy
-// history's #journal-tags) -- label + chips + "manage tags" button.
+// Shared markup for the library's tag filter bar (#library-tagbar): label + chips +
+// manage tags button.
 // Only the container, the active set and what to re-render differ per caller.
 // "Manage tags" stays reachable even before the first tag exists -- the bar
 // used to disappear entirely with nothing to filter by, hiding the only way

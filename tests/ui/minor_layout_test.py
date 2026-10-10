@@ -142,43 +142,6 @@ COUNTS = """
 </script>
 """
 
-# Copy history tag row: one line, sideways scroll, no visible bar.
-HISTORY_TAGS = """
-<script>
-(async () => {""" + COMMON + """
-  try {
-    if (innerWidth !== %d) errs.push('history-tags: the page is ' + innerWidth + 'px wide, expected %d');
-    await openLibrary();
-    $('library-tab-history').click();
-    await sleep(500);
-    const bar = $('journal-tags');
-    if (!bar || bar.classList.contains('hidden')) { errs.push('history-tags: the tag row is not shown'); }
-    else {
-      for (let i = 0; i < 24; i++) {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'tag-chip tag-filter';
-        b.textContent = 'ExtraTag' + i;
-        bar.appendChild(b);
-      }
-      await sleep(200);
-      // Items of one line sit on one centre line whatever their own heights are.
-      const mids = [...bar.children].filter((c) => c.getClientRects().length).map((c) => { const r = c.getBoundingClientRect(); return (r.top + r.bottom) / 2; });
-      const rows = Math.max(...mids) - Math.min(...mids) > 4 ? 2 : 1;
-      info.push('history-tags rows=' + rows + ' h=' + bar.clientHeight + ' scrollW=' + bar.scrollWidth + ' clientW=' + bar.clientWidth);
-      if (rows !== 1) errs.push('history-tags: the tag chips wrap into more than one row');
-      const cs = getComputedStyle(bar);
-      if (!/auto|scroll/.test(cs.overflowX)) errs.push('history-tags: the tag row does not scroll sideways (overflow-x ' + cs.overflowX + ')');
-      if (cs.scrollbarWidth !== 'none') errs.push('history-tags: the tag row shows a scrollbar (scrollbar-width ' + cs.scrollbarWidth + ')');
-      if (!(bar.scrollWidth > bar.clientWidth)) errs.push('history-tags: the many tags do not overflow the row');
-      if (bar.offsetHeight !== bar.clientHeight) errs.push('history-tags: the tag row has a bar of ' + (bar.offsetHeight - bar.clientHeight) + 'px');
-    }
-  } catch (e) { errs.push('probe: ' + e.message); }
-  finish();
-})();
-</script>
-""" % (MIN_W, MIN_W)
-
 # Expert menu tab strip: scroll without a bar, fade on the open edge, active tab in view.
 EXPERT_STRIP = """
 <script>
@@ -432,7 +395,6 @@ FOLDER_NAMES = """
 CASES = (
     ("tag-manager", TAG_MANAGER, MIN_W, 800, "de"),
     ("counts", COUNTS, 1000, 800, "en"),
-    ("history-tags", HISTORY_TAGS, MIN_W, 800, "en"),
     ("expert-strip", EXPERT_STRIP, MIN_W, 800, "de"),
     ("expert-search", EXPERT_SEARCH, MIN_W, 800, "de"),
     ("about", ABOUT, MIN_W, 800, "en"),
