@@ -4,6 +4,8 @@
 //
 // Coordinates are mapped by RATIO against the displayed frozen image, never via
 // the window scale factor: so the mapping is pixel-exact on any DPI mix.
+import { hexToRgb } from "./floatShared.js";
+
 const { invoke, convertFileSrc } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
 
@@ -360,12 +362,6 @@ function pixelAt(x, y) {
 
 const hex2 = (n) => n.toString(16).toUpperCase().padStart(2, "0");
 const rgbToHex = (r, g, b) => `#${hex2(r)}${hex2(g)}${hex2(b)}`;
-// The history arrives as #rrggbb; the swatch still needs the channels to render
-// the value in whatever notation the expert menu is set to.
-const hexToRgb = (s) => {
-  const n = parseInt(String(s).replace("#", ""), 16) || 0;
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-};
 
 // Mirror of the backend's rgb_to_hsl (rounded ints; grey has no hue, red is 0°).
 // The readout has to be identical to what the click will copy, and it cannot ask
@@ -546,7 +542,9 @@ function renderHistory() {
   historyEl.innerHTML = "";
   historyEl.classList.toggle("hidden", !pickMode || pickHistory.length === 0);
   for (const hex of pickHistory) {
-    const [r, g, b] = hexToRgb(hex);
+    // The history arrives as #rrggbb; the swatch still needs the channels to render the
+    // value in whatever notation the expert menu is set to. Anything else reads as black.
+    const [r, g, b] = hexToRgb(hex) || [0, 0, 0];
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "pick-history-item";

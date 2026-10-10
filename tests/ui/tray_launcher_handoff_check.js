@@ -150,7 +150,9 @@ async function run({ text, keyMs, loadMs, ipcMs }) {
   traySandbox.window = { addEventListener: (t, fn) => { (trayWinH[t] ||= []).push(fn); }, __TAURI__: traySandbox.__TAURI__ };
   const trayCode = read("tray.js")
     .replace(/^import \{ applyFloatTheme \} from "\.\/floattheme\.js";$/m, "const applyFloatTheme = () => {};")
-    .replace(/^import \{ APP_NAME \} from "\.\/brand\.js";$/m, 'const APP_NAME = "App";');
+    .replace(/^import \{ APP_NAME \} from "\.\/brand\.js";$/m, 'const APP_NAME = "App";')
+    .replace(/^import \{ hexToRgb \} from "\.\/floatShared\.js";$/m, "const { hexToRgb } = __shared;");
+  traySandbox.__shared = shared;
   vm.createContext(traySandbox);
   vm.runInContext(trayCode, traySandbox, { filename: "tray.js" });
   await sleep(ipcMs * 4 + 20); // boot: plan, theme calls, search field armed

@@ -914,6 +914,9 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **Cancelling the ffmpeg download in the video editor is quiet.** The download
+  button there now behaves like the one in the expert menu: a click while it runs
+  cancels it, and a cancel no longer shows an error.
 - **Recordings with a microphone open cleanly in the video editor.** The editor
   now merges the microphone track into the recording before it opens the file for
   playback, so Windows no longer refuses to replace the file while it is in use.

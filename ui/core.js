@@ -362,8 +362,6 @@ export const CHIP_COPIED_MS = 400;
 export const HEADER_PAD_Y = 10; // px, vertical padding of the header bar
 export const TILE_FOLDER_ZONE = 55; // % of a tile that means "drop into a folder"
 export const KB_FOCUS_FADE_MS = 2000; // delay before the keyboard focus ring fades
-export const ETA_MIN_PCT = 10; // remaining time stays hidden below this percent ...
-export const ETA_MIN_SECS = 20; // ... and for this many seconds
 // How long the background language-pack update notices stay up (ms).
 export const OCR_LANG_NOTICE_MS = 8000;
 export const VOICE_LANG_NOTICE_MS = 8000;

@@ -5,7 +5,7 @@ import { uiZoom, updateExamplesBanner } from "./views.js";
 import { fitAllTiles } from "./tiles.js";
 import { fillVarHighlighted } from "./promptVars.js";
 import { placePopover } from "./popover.js";
-import { keysLabel, SCOPE_TITLE_KEYS } from "./shortcuts.js";
+import { buildShortcutRows, closeShortcutsOverlay, keysLabel, openShortcutsOverlay, SCOPE_TITLE_KEYS } from "./shortcuts.js";
 import { renderHotkeysList } from "./hotkeys.js";
 
 export function applyI18n() {
@@ -428,12 +428,11 @@ export function wireLightbox() {
 
 // The "?" overview both editors open -- same modal/modal-narrow/modal-titlebar
 // shell as every other list modal, filled straight from SHORTCUTS.
-export let shortcutsModalOpener = null;
 // `withGlobal` adds the rebindable global/per-tile hotkey list on top (and gives the
 // dialog the width it needs); the editors' "?" buttons open the plain key list.
 // `allWindows` lists one titled section per window instead of one flat table.
 export function openShortcutsModal(scope, { withGlobal = false, allWindows = false } = {}) {
-  shortcutsModalOpener = document.activeElement;
+  openShortcutsOverlay($("shortcuts-modal"));
   $("shortcuts-global").classList.toggle("hidden", !withGlobal);
   $("shortcuts-modal").querySelector(".modal").classList.toggle("modal-narrow", !withGlobal);
   if (withGlobal) {
@@ -442,20 +441,7 @@ export function openShortcutsModal(scope, { withGlobal = false, allWindows = fal
   }
   const list = $("shortcuts-modal-list");
   list.innerHTML = "";
-  const addRows = (rows) => {
-    for (const row of rows) {
-      const r = document.createElement("div");
-      r.className = "shortcuts-row";
-      const desc = document.createElement("span");
-      desc.className = "shortcuts-row-desc";
-      desc.textContent = row.desc;
-      const keys = document.createElement("span");
-      keys.className = "shortcuts-row-keys";
-      keys.textContent = row.keys;
-      r.append(desc, keys);
-      list.appendChild(r);
-    }
-  };
+  const addRows = (rows) => buildShortcutRows(list, rows);
   if (allWindows) {
     // The library has no keys of its own: its rows (if any) belong to the main window.
     const sections = [];
@@ -476,7 +462,6 @@ export function openShortcutsModal(scope, { withGlobal = false, allWindows = fal
   } else {
     addRows(shortcutRows(scope));
   }
-  $("shortcuts-modal").classList.remove("hidden");
 }
 // Every shortcut in one dialog: global hotkeys on top, the keys of each window below.
 export function openAllShortcuts() {
@@ -484,15 +469,7 @@ export function openAllShortcuts() {
   $("hotkeys-search").focus();
 }
 export function closeShortcutsModal() {
-  $("shortcuts-modal").classList.add("hidden");
-  // Mirrors the video editor's own shortcuts overlay: the opener button is
-  // usually still there, but it can be gone by the time this runs (a right
-  // click that removed its own row, for example) -- focus falls back to the
-  // body rather than calling focus on a detached element or leaving the page
-  // with no focus at all.
-  const target = (shortcutsModalOpener?.isConnected && shortcutsModalOpener) || document.body;
-  if (typeof target.focus === "function") target.focus();
-  shortcutsModalOpener = null;
+  closeShortcutsOverlay($("shortcuts-modal"));
 }
 
 // A second click close to the first one folds or unfolds both bars together, target

@@ -169,6 +169,64 @@ export function ffmpegDownloadPct(payload) {
   return total ? Math.min(100, Math.round((downloaded / total) * 100)) : 0;
 }
 
+// The ffmpeg download button of the expert menu and of the video editor. While a download
+// runs the button shows its progress and a click on it cancels; a cancel is not an error.
+// `etaShow` is a boolean or a function read at every progress step, `onDone` runs after a
+// finished download, `onError` gets any other failure.
+const ETA_MIN_PCT = 10; // remaining time stays hidden below this percent ...
+const ETA_MIN_SECS = 20; // ... and for this many seconds
+let ffmpegDownloadRunning = false;
+export const ffmpegDownloadActive = () => ffmpegDownloadRunning;
+export async function runFfmpegDownload(btn, { etaShow, onDone, onError, t }) {
+  const { invoke } = window.__TAURI__.core;
+  if (ffmpegDownloadRunning) {
+    invoke("cancel_ffmpeg_download").catch(() => {});
+    return;
+  }
+  ffmpegDownloadRunning = true;
+  const label = btn.textContent;
+  const origTitle = btn.title;
+  btn.title = t("ffmpegCancelHint");
+  btn.setAttribute("role", "progressbar");
+  btn.setAttribute("aria-valuemin", "0");
+  btn.setAttribute("aria-valuemax", "100");
+  const dlEta = makeEtaEstimator();
+  let unlisten = () => {};
+  try {
+    unlisten = await window.__TAURI__.event.listen("ffmpeg-download-progress", (e) => {
+      const pct = ffmpegDownloadPct(e.payload);
+      dlEta.feed(pct);
+      const estimate = dlEta.estimate(ETA_MIN_PCT, ETA_MIN_SECS);
+      const eta = (typeof etaShow === "function" ? etaShow() : etaShow) ? formatEta(estimate, t) : "";
+      btn.textContent = t("ffmpegDownloading").replace("{pct}", String(pct)) + (eta ? ` (${eta})` : "");
+      btn.setAttribute("aria-valuenow", String(pct));
+      btn.setAttribute("aria-valuetext", a11yProgressText(t, pct, estimate));
+    });
+    await invoke("download_ffmpeg");
+    await onDone?.();
+  } catch (err) {
+    if (String(err) !== "cancelled") onError?.(err);
+  } finally {
+    unlisten();
+    ffmpegDownloadRunning = false;
+    btn.textContent = label;
+    btn.title = origTitle || "";
+    btn.removeAttribute("role");
+    btn.removeAttribute("aria-valuemin");
+    btn.removeAttribute("aria-valuemax");
+    btn.removeAttribute("aria-valuenow");
+    btn.removeAttribute("aria-valuetext");
+  }
+}
+
+// "#rrggbb" (the # is optional) as [r, g, b], or null for anything else.
+export function hexToRgb(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec((hex || "").trim());
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
 // A rough "how much longer" estimate for a progress bar, shared by export,
 // recording conversion and the ffmpeg download. Feed it every progress update;
 // it keeps a short rolling window of percent/time pairs and turns the average

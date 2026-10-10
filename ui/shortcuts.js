@@ -174,6 +174,37 @@ export function rowsForScope(scope, t, lang) {
   return rows;
 }
 
+// Fills an overview list with one row per { desc, keys } entry.
+export function buildShortcutRows(container, rows) {
+  for (const row of rows) {
+    const r = document.createElement("div");
+    r.className = "shortcuts-row";
+    const desc = document.createElement("span");
+    desc.className = "shortcuts-row-desc";
+    desc.textContent = row.desc;
+    const keys = document.createElement("span");
+    keys.className = "shortcuts-row-keys";
+    keys.textContent = row.keys;
+    r.append(desc, keys);
+    container.appendChild(r);
+  }
+}
+
+// Shows and hides the overview dialog. Closing puts the focus back on the control that
+// opened it; when that one is gone by then (a row removed by its own click) the body
+// takes it, so the page never ends up with no focus owner at all.
+let shortcutsOverlayOpener = null;
+export function openShortcutsOverlay(modal) {
+  shortcutsOverlayOpener = document.activeElement;
+  modal.classList.remove("hidden");
+}
+export function closeShortcutsOverlay(modal) {
+  modal.classList.add("hidden");
+  const target = (shortcutsOverlayOpener?.isConnected && shortcutsOverlayOpener) || document.body;
+  if (typeof target.focus === "function") target.focus();
+  shortcutsOverlayOpener = null;
+}
+
 // Which heading each list-only window gets in the all-windows overview.
 export const SCOPE_TITLE_KEYS = {
   mainWindow: "shortcutsScopeMain",

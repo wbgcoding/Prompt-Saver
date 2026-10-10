@@ -6,8 +6,8 @@
 // an ordered operation list (VE.ops), exactly like the screenshot editor's own
 // list, and the export compiles that list into ONE ffmpeg filter graph. That is
 // what makes undo/redo cheap, the preview honest and the export a single pass.
-import { orderedInvoke, resolveLang, fillVideoFormatSelect, normRecFormat, ffmpegDownloadPct, numberField, makeEtaEstimator, formatEta, a11yProgressText, parseFfmpegError, fmtBytes, fmtSizeCompact, makeHoldOrTapToggle, trapTabWithin, contrastTextColor } from "./floatShared.js";
-import { withShortcut as withShortcutRaw, rowsForScope as rowsForScopeRaw } from "./shortcuts.js";
+import { orderedInvoke, resolveLang, fillVideoFormatSelect, normRecFormat, runFfmpegDownload, numberField, makeEtaEstimator, formatEta, a11yProgressText, parseFfmpegError, fmtBytes, fmtSizeCompact, makeHoldOrTapToggle, trapTabWithin, contrastTextColor } from "./floatShared.js";
+import { withShortcut as withShortcutRaw, rowsForScope as rowsForScopeRaw, buildShortcutRows, openShortcutsOverlay, closeShortcutsOverlay } from "./shortcuts.js";
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
 import { errMessageLogged } from "./errors.js";
@@ -310,29 +310,14 @@ function toast(message) {
 
 // The "?" overview -- same modal/modal-narrow/modal-titlebar shell as
 // the shared confirm dialog, filled straight from SHORTCUTS.
-let shortcutsModalOpener = null;
 function openShortcutsModal(scope) {
-  shortcutsModalOpener = document.activeElement;
   const list = $("shortcuts-modal-list");
   list.innerHTML = "";
-  for (const row of shortcutRows(scope)) {
-    const r = document.createElement("div");
-    r.className = "shortcuts-row";
-    const desc = document.createElement("span");
-    desc.className = "shortcuts-row-desc";
-    desc.textContent = row.desc;
-    const keys = document.createElement("span");
-    keys.className = "shortcuts-row-keys";
-    keys.textContent = row.keys;
-    r.append(desc, keys);
-    list.appendChild(r);
-  }
-  $("shortcuts-modal").classList.remove("hidden");
+  buildShortcutRows(list, shortcutRows(scope));
+  openShortcutsOverlay($("shortcuts-modal"));
 }
 function closeShortcutsModal() {
-  $("shortcuts-modal").classList.add("hidden");
-  if (shortcutsModalOpener?.isConnected && typeof shortcutsModalOpener.focus === "function") shortcutsModalOpener.focus();
-  shortcutsModalOpener = null;
+  closeShortcutsOverlay($("shortcuts-modal"));
 }
 
 // ---------------------------------------------------------------- operation list
@@ -3532,42 +3517,20 @@ function noteFfmpeg(err) {
   $("ve-still").disabled = true;
 }
 
-$("ve-ffmpeg-get").addEventListener("click", async (e) => {
-  const btn = e.currentTarget;
-  btn.disabled = true;
-  btn.setAttribute("role", "progressbar");
-  btn.setAttribute("aria-valuemin", "0");
-  btn.setAttribute("aria-valuemax", "100");
-  const dlEta = makeEtaEstimator();
-  const unlisten = await listen("ffmpeg-download-progress", (ev) => {
-    const pct = ffmpegDownloadPct(ev.payload);
-    dlEta.feed(pct);
-    const estimate = dlEta.estimate(ETA_MIN_PCT, ETA_MIN_SECS);
-    const eta = VE.etaShow ? formatEta(estimate, t) : "";
-    btn.textContent = t("ffmpegDownloading").replace("{pct}", String(pct)) + (eta ? ` (${eta})` : "");
-    btn.setAttribute("aria-valuenow", String(pct));
-    btn.setAttribute("aria-valuetext", a11yProgressText(t, pct, estimate));
+$("ve-ffmpeg-get").addEventListener("click", (e) => {
+  runFfmpegDownload(e.currentTarget, {
+    etaShow: () => VE.etaShow,
+    t,
+    onDone: async () => {
+      VE.ffmpeg = true;
+      $("ve-ffmpeg-warn").classList.add("hidden");
+      applyExportGate();
+      $("ve-still").disabled = false;
+      toast(t("ffmpegDownloadDone"));
+      await loadRecording(VE.src);
+    },
+    onError: (err) => toast(errMessageLogged(err, t, "video")),
   });
-  try {
-    await invoke("download_ffmpeg");
-    VE.ffmpeg = true;
-    $("ve-ffmpeg-warn").classList.add("hidden");
-    applyExportGate();
-    $("ve-still").disabled = false;
-    toast(t("ffmpegDownloadDone"));
-    await loadRecording(VE.src);
-  } catch (err) {
-    toast(errMessageLogged(err, t, "video"));
-  } finally {
-    btn.disabled = false;
-    btn.removeAttribute("role");
-    btn.removeAttribute("aria-valuemin");
-    btn.removeAttribute("aria-valuemax");
-    btn.removeAttribute("aria-valuenow");
-    btn.removeAttribute("aria-valuetext");
-    btn.textContent = t("ffmpegOfferConfirm");
-    unlisten();
-  }
 });
 
 // ---------------------------------------------------------------- panels + wiring

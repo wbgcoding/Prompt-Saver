@@ -6,6 +6,7 @@
 // comes pre-translated from the backend -- this file draws rows, nothing else.
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
+import { hexToRgb } from "./floatShared.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
 // switcher, so it comes from the brand rather than a hardcoded English word.
@@ -36,13 +37,6 @@ function activate(id) {
 
 // Same four kinds, same fallback tint as the native menu's tray_kind_tint.
 const KIND_TINT = { text: [90, 100, 114], image: [47, 111, 237], media: [139, 92, 246], file: [224, 138, 30] };
-
-function hexToRgb(hex) {
-  const m = /^#?([0-9a-f]{6})$/i.exec((hex || "").trim());
-  if (!m) return null;
-  const n = parseInt(m[1], 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
 
 function luma([r, g, b]) {
   return (r * 299 + g * 587 + b * 114) / 1000;

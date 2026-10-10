@@ -13,7 +13,9 @@ const { pathToFileURL } = require("url");
 
 const uiDir = path.join(__dirname, "..", "..", "ui");
 const src = fs.readFileSync(path.join(uiDir, "snip.js"), "utf8").replace(/\r\n/g, "\n");
-const code = src.replace(/import\("\.\/([\w.]+)"\)/g, "__imp(\"$1\")");
+const code = src
+  .replace(/^import \{ hexToRgb \} from "\.\/floatShared\.js";$/m, "const { hexToRgb } = __shared;")
+  .replace(/import\("\.\/([\w.]+)"\)/g, "__imp(\"$1\")");
 
 function fakeEl() {
   const cls = new Set();
@@ -70,6 +72,7 @@ async function main() {
   };
   // The shared window helpers register document listeners when they load.
   globalThis.document = globalThis.document || { addEventListener() {}, removeEventListener() {} };
+  sandbox.__shared = await import(pathToFileURL(path.join(uiDir, "floatShared.js")).href);
   vm.createContext(sandbox);
   vm.runInContext(code, sandbox, { filename: "snip.js" });
 

@@ -1,5 +1,5 @@
 // Expert menu: the renderer, its rows and the live-state parts of the setting registry.
-import { $, armButton, assignBUBBLE_MS, assignDISARM_MS, assignDRAG_THRESHOLD, assignHISTORY_PREVIEW_LEN, assignINPUT_MAX, assignLibraryTab, assignPrompts, assignROTATE_SHORT_MAX, assignSettings, assignTOAST_MS, COLORS, debounced, DEFAULT_COLORS, DICT, DISARM_MS, disarmButton, errText, errToast, ETA_MIN_PCT, ETA_MIN_SECS, EXPERT_ACTIONS, flag, flagState, gateOpen, HEADER_PAD_Y, HEX_RE, ICON_UNDO, ICON_WARN, invoke, LANG, listen, modal, openColorPop, optFlag, PALETTE_LEN, prompts, putIcon, setStatusText, settings, settingsEl, shipsOn, syncEdgeFade, t, toast, txt, val } from "./core.js";
+import { $, armButton, assignBUBBLE_MS, assignDISARM_MS, assignDRAG_THRESHOLD, assignHISTORY_PREVIEW_LEN, assignINPUT_MAX, assignLibraryTab, assignPrompts, assignROTATE_SHORT_MAX, assignSettings, assignTOAST_MS, COLORS, debounced, DEFAULT_COLORS, DICT, DISARM_MS, disarmButton, errText, errToast, EXPERT_ACTIONS, flag, flagState, gateOpen, HEADER_PAD_Y, HEX_RE, ICON_UNDO, ICON_WARN, invoke, LANG, modal, openColorPop, optFlag, PALETTE_LEN, prompts, putIcon, setStatusText, settings, settingsEl, shipsOn, syncEdgeFade, t, toast, txt, val } from "./core.js";
 import { ALL_FLAG_KEYS, normScreenshotFormat, EXPERT_BULK_NEVER, EXPERT_RESET_KEEP, EXPERT_SELECTS, EXPERT_TABS, EXPERT_TIP_SET, EXPERT_VALUES, FLAG_GATES, flagLabelKey, GRID_DOM_VALUES, groupFlags, OPT_FLAG_KEYS, REC_QUALITY_BITRATE, SELECT_CUSTOM_MAX, SELECT_CUSTOM_MIN, SETTINGS_AREA_LABEL, STYLE_OPTS, TILE_DOM_FLAGS, TILE_STYLES } from "./expertConfig.js";
 import { confirmDialog, infoDialog } from "./dialog.js";
 import { refreshFavViewUi, renderGrid, renderViews } from "./views.js";
@@ -11,7 +11,7 @@ import { offerClipInboxCleanup, refreshClipInbox } from "./journal.js";
 import { applyBarToggleTips } from "./windowChrome.js";
 import { setMediaDefaults } from "./media.js";
 import { attachSelectPicker } from "./selectpop.js";
-import { a11yProgressText, ffmpegDownloadPct, fmtBytes, formatEta, makeEtaEstimator, normCopySizeLevel, normRecFormat, VIDEO_FORMATS, videoFormatLabelKey } from "./floatShared.js";
+import { ffmpegDownloadActive, fmtBytes, normCopySizeLevel, normRecFormat, runFfmpegDownload, VIDEO_FORMATS, videoFormatLabelKey } from "./floatShared.js";
 import { hideSettings, syncSettingsControls } from "./settingsPanel.js";
 import { bindHotkeyField, commitRecPauseHotkey, commitRecStopHotkey, prettyAccel } from "./hotkeys.js";
 import EN from "./i18n/en.js";
@@ -2321,10 +2321,19 @@ export function bindExpertMenu() {
   // to ffmpeg should call the same three commands (ffmpeg_status /
   // download_ffmpeg / cancel_ffmpeg_download) from wherever it first needs
   // ffmpeg and finds it missing.
-  let ffmpegBusy = false;
+  const ffmpegRun = (btn) => runFfmpegDownload(btn, {
+    etaShow: () => flag("etaShow"),
+    t,
+    onDone: () => {
+      ffmpegAvailable = true;
+      toast(t("ffmpegDownloadDone"));
+      renderExpert();
+    },
+    onError: errToast,
+  });
   EXPERT_ACTIONS["ffmpeg-download"] = async (btn) => {
-    if (ffmpegBusy) {
-      invoke("cancel_ffmpeg_download").catch(() => {});
+    if (ffmpegDownloadActive()) {
+      ffmpegRun(btn); // a click on the running download cancels it
       return;
     }
     const found = await invoke("ffmpeg_status").catch(() => null);
@@ -2342,40 +2351,6 @@ export function bindExpertMenu() {
       danger: false,
     });
     if (!ok) return;
-    ffmpegBusy = true;
-    const label = btn.textContent;
-    const origTitle = btn.title;
-    btn.title = t("ffmpegCancelHint");
-    btn.setAttribute("role", "progressbar");
-    btn.setAttribute("aria-valuemin", "0");
-    btn.setAttribute("aria-valuemax", "100");
-    const dlEta = makeEtaEstimator();
-    const unlisten = await listen("ffmpeg-download-progress", (e) => {
-      const pct = ffmpegDownloadPct(e.payload);
-      dlEta.feed(pct);
-      const estimate = dlEta.estimate(ETA_MIN_PCT, ETA_MIN_SECS);
-      const eta = flag("etaShow") ? formatEta(estimate, t) : "";
-      btn.textContent = t("ffmpegDownloading").replace("{pct}", String(pct)) + (eta ? ` (${eta})` : "");
-      btn.setAttribute("aria-valuenow", String(pct));
-      btn.setAttribute("aria-valuetext", a11yProgressText(t, pct, estimate));
-    });
-    try {
-      await invoke("download_ffmpeg");
-      ffmpegAvailable = true;
-      toast(t("ffmpegDownloadDone"));
-      renderExpert();
-    } catch (err) {
-      if (String(err) !== "cancelled") errToast(err);
-    } finally {
-      unlisten();
-      ffmpegBusy = false;
-      btn.textContent = label;
-      btn.title = origTitle || "";
-      btn.removeAttribute("role");
-      btn.removeAttribute("aria-valuemin");
-      btn.removeAttribute("aria-valuemax");
-      btn.removeAttribute("aria-valuenow");
-      btn.removeAttribute("aria-valuetext");
-    }
+    await ffmpegRun(btn);
   };
 }
