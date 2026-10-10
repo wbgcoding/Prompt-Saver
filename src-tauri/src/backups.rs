@@ -467,6 +467,10 @@ pub(crate) fn vacuum_and_check_size(src: &std::path::Path, tmp: &std::path::Path
     Ok(())
 }
 
+// The one error for a snapshot past MAX_INFLATED, whether it was a gzip that
+// inflates that far or a plain file that already is that big.
+const BACKUP_TOO_LARGE_MSG: &str = "backup expands to more than 512 MB";
+
 pub(crate) fn gunzip_to(src: &std::path::Path, dest: &std::path::Path) -> Result<(), String> {
     gunzip_to_capped(src, dest, MAX_INFLATED)
 }
@@ -487,7 +491,7 @@ pub(crate) fn gunzip_to_capped(src: &std::path::Path, dest: &std::path::Path, ca
         let n = std::io::copy(&mut GzDecoder::new(input).take(cap.saturating_add(1)), &mut out)
             .map_err(|_| "corrupt backup".to_string())?;
         if n > cap {
-            return Err("backup expands to more than 512 MB".to_string());
+            return Err(BACKUP_TOO_LARGE_MSG.to_string());
         }
         out.sync_all().map_err(|e| e.to_string())
     })();
@@ -730,7 +734,13 @@ pub(crate) fn stage_and_validate_backup(backup_db: &std::path::Path, dir: &std::
     let unpack = if backup_db.extension().is_some_and(|e| e == "gz") {
         gunzip_to(backup_db, &staged)
     } else {
-        fs::copy(backup_db, &staged).map(|_| ()).map_err(|e| e.to_string()) // pre-2.6 snapshot
+        // Pre-2.6 snapshot: copied as it is, so it gets the same ceiling an
+        // inflated one does, checked before a single byte is copied.
+        match fs::metadata(backup_db) {
+            Ok(meta) if meta.len() > MAX_INFLATED => Err(BACKUP_TOO_LARGE_MSG.to_string()),
+            Ok(_) => fs::copy(backup_db, &staged).map(|_| ()).map_err(|e| e.to_string()),
+            Err(e) => Err(e.to_string()),
+        }
     };
     if let Err(e) = unpack {
         let _ = fs::remove_file(&staged);

@@ -914,6 +914,10 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **Restoring an old uncompressed backup checks its size first.** A plain
+  snapshot from before the compressed format now has the same 512 MB ceiling
+  as a compressed one, so an oversized file is refused instead of being copied
+  beside your data.
 - **Numeric settings are held to their slider range when they load.** A
   hand-edited settings file or a settings import with an absurd number (a
   folder import limit of a quintillion, a negative port) is now brought back

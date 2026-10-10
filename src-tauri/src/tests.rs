@@ -18032,3 +18032,25 @@ fn the_import_folder_scan_survives_an_unbounded_limit() {
     assert!(!truncated);
     let _ = fs::remove_dir_all(&dir);
 }
+
+// ---- a plain snapshot has the same size ceiling as an inflated one ----
+
+#[test]
+fn an_oversized_plain_snapshot_is_refused_before_any_copy() {
+    let dir = std::env::temp_dir().join(format!("ps-bigplain-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let fake = dir.join("data.db");
+    let f = fs::File::create(&fake).unwrap();
+    f.set_len(MAX_INFLATED + 1).unwrap();
+    drop(f);
+    let err = stage_and_validate_backup(&fake, &dir).unwrap_err();
+    assert_eq!(err, "backup expands to more than 512 MB");
+    let leftovers: Vec<String> = fs::read_dir(&dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .filter(|n| n.starts_with(STAGED_RESTORE_PREFIX))
+        .collect();
+    assert!(leftovers.is_empty(), "no staged file remains: {leftovers:?}");
+    let _ = fs::remove_dir_all(&dir);
+}
