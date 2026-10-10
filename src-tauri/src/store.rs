@@ -104,15 +104,6 @@ pub(crate) fn store_sealed() -> bool {
     STORE_SEALED.load(Ordering::Relaxed)
 }
 
-// Set at load_store() when the settings row was PRESENT but could not be read back
-// or parsed (query error, decrypt failure, corrupt JSON) -- as opposed to genuinely
-// absent, which is just a fresh install and never sets this. While true,
-// write_settings_now refuses to rewrite the row: the in-memory settings are already
-// Settings::default() at that point, and writing them would permanently overwrite
-// whatever is actually sitting in the corrupt row with defaults. Mirrors
-// Store.prompts_locked, but process-global rather than a Store field because
-// save_settings/write_settings_now are the one choke point every settings mutation
-// already funnels through, without a &Store to read a field from.
 // Copy of `settings.minimize_to_tray` for the window-close handler, which runs
 // on the event-loop thread and must never wait for the store lock (a backup
 // holds it for a while). Refreshed whenever settings are loaded or written.
@@ -122,6 +113,15 @@ pub(crate) fn mirror_minimize_to_tray(settings: &Settings) {
     MINIMIZE_TO_TRAY.store(settings.minimize_to_tray, Ordering::Relaxed);
 }
 
+// Set at load_store() when the settings row was PRESENT but could not be read back
+// or parsed (query error, decrypt failure, corrupt JSON) -- as opposed to genuinely
+// absent, which is just a fresh install and never sets this. While true,
+// write_settings_now refuses to rewrite the row: the in-memory settings are already
+// Settings::default() at that point, and writing them would permanently overwrite
+// whatever is actually sitting in the corrupt row with defaults. Mirrors
+// Store.prompts_locked, but process-global rather than a Store field because
+// save_settings/write_settings_now are the one choke point every settings mutation
+// already funnels through, without a &Store to read a field from.
 pub(crate) static SETTINGS_LOCKED: AtomicBool = AtomicBool::new(false);
 
 #[tauri::command]
