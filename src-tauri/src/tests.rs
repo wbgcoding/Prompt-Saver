@@ -17884,3 +17884,83 @@ fn user_picked_exports_never_write_in_place() {
         assert!(!src.contains("fs::write(&path"), "{name} writes a user-picked file in place instead of through write_bytes_atomic");
     }
 }
+
+// ---- the data-folder lock is claimed in one step ----
+
+#[test]
+fn two_starters_on_one_folder_never_both_own_it() {
+    use std::sync::{Arc, Barrier};
+    for round in 0..20 {
+        let dir = std::env::temp_dir().join(format!("ps-lockrace-{}-{round}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = data_dir_lock_path(&dir);
+        let gate = Arc::new(Barrier::new(2));
+        let spawn = |host: &'static str, pid: u32| {
+            let (gate, path) = (gate.clone(), path.clone());
+            std::thread::spawn(move || {
+                gate.wait();
+                claim_data_dir_lock(&path, host, pid)
+            })
+        };
+        let (a, b) = (spawn("A", 1), spawn("B", 2));
+        let (a, b) = (a.join().unwrap(), b.join().unwrap());
+        let owners = [&a, &b].iter().filter(|o| matches!(o, LockOutcome::Owned)).count();
+        assert_eq!(owners, 1, "exactly one starter owns the folder (round {round})");
+        let loser = if matches!(a, LockOutcome::Owned) { b } else { a };
+        let winner_host = read_data_dir_lock(&path).expect("the winner's lock parses").host;
+        assert!(matches!(&loser, LockOutcome::ReadOnly(h) if *h == winner_host), "the loser names the winner's host");
+        let _ = fs::remove_dir_all(&dir);
+    }
+}
+
+#[test]
+fn claiming_takes_over_a_stale_own_or_unparsable_lock_and_respects_a_fresh_foreign_one() {
+    let dir = std::env::temp_dir().join(format!("ps-lockclaim-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let path = data_dir_lock_path(&dir);
+    let stale = unix_now().saturating_sub(DATA_DIR_LOCK_STALE_SECS + 10);
+    write_data_dir_lock(&path, &DataDirLockInfo { host: "B".into(), pid: 9, seen: stale });
+    assert!(matches!(claim_data_dir_lock(&path, "A", 1), LockOutcome::Owned), "a stale foreign lock is taken over");
+    assert_eq!(read_data_dir_lock(&path).unwrap().host, "A");
+    assert!(matches!(claim_data_dir_lock(&path, "A", 2), LockOutcome::Owned), "an own lock is refreshed");
+    assert!(matches!(claim_data_dir_lock(&path, "B", 3), LockOutcome::ReadOnly(h) if h == "A"), "a fresh foreign lock wins");
+    fs::write(&path, b"{ not json").unwrap();
+    assert!(matches!(claim_data_dir_lock(&path, "B", 3), LockOutcome::Owned), "a lock that stays unparsable counts as stale");
+    assert_eq!(read_data_dir_lock(&path).unwrap().host, "B");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn refreshing_the_lock_never_shows_a_reader_a_broken_file() {
+    use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
+    use std::sync::Arc;
+    let dir = std::env::temp_dir().join(format!("ps-lockrefresh-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let path = data_dir_lock_path(&dir);
+    assert!(write_data_dir_lock(&path, &DataDirLockInfo { host: "A".into(), pid: 1, seen: unix_now() }));
+    let done = Arc::new(AtomicBool::new(false));
+    let reader = {
+        let (path, done) = (path.clone(), done.clone());
+        std::thread::spawn(move || {
+            let (mut reads, mut broken) = (0u32, 0u32);
+            while !done.load(AtomicOrdering::Relaxed) {
+                reads += 1;
+                if read_data_dir_lock(&path).is_none() {
+                    broken += 1;
+                }
+            }
+            (reads, broken)
+        })
+    };
+    for n in 0..1000u64 {
+        assert!(write_data_dir_lock(&path, &DataDirLockInfo { host: "A".into(), pid: 1, seen: unix_now() + n }));
+    }
+    done.store(true, AtomicOrdering::Relaxed);
+    let (reads, broken) = reader.join().unwrap();
+    assert!(reads > 0);
+    assert_eq!(broken, 0, "{broken} of {reads} reads found no parsable lock");
+    let _ = fs::remove_dir_all(&dir);
+}

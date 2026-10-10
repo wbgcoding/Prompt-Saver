@@ -914,6 +914,9 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **Two computers starting on one shared data folder can no longer both take
+  ownership.** The folder lock is now claimed in one step and rewritten
+  atomically, so a refresh no longer leaves it briefly unreadable.
 - **Exports and backup files you overwrite are replaced safely.** Saving a prompt
   export, a backup file, a settings export or a statistics export now writes
   to a temporary file first and swaps it in, so a full disk or a crash in the

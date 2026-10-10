@@ -200,15 +200,7 @@ pub(crate) fn read_data_dir_lock(path: &Path) -> Option<DataDirLockInfo> {
 }
 
 pub(crate) fn write_data_dir_lock(path: &Path, info: &DataDirLockInfo) -> bool {
-    serde_json::to_string(info).is_ok_and(|json| fs::write(path, json).is_ok())
-}
-
-// A lock naming THIS machine is never "foreign", whatever its pid or age -- a
-// crash-and-restart on the same computer is not the two-machine case this
-// guards against, and the single-instance plugin already rules out a genuine
-// second process here.
-pub(crate) fn lock_is_ours(existing: &DataDirLockInfo) -> bool {
-    existing.host == local_host_name()
+    serde_json::to_string(info).is_ok_and(|json| write_bytes_atomic(path, json.as_bytes()).is_ok())
 }
 
 pub(crate) fn lock_is_stale(existing: &DataDirLockInfo) -> bool {
@@ -234,6 +226,53 @@ pub(crate) static DATA_DIR_LOCK_HOST: Mutex<Option<String>> = Mutex::new(None);
 // app.restart(), and the fresh process starts with the default `false` again.
 pub(crate) static DEMO_TRANSITION_LOCKED: AtomicBool = AtomicBool::new(false);
 
+pub(crate) enum LockOutcome {
+    Owned,
+    ReadOnly(String),
+}
+
+// The claim itself, free of statics so two callers can race on one folder. With
+// no lock file the claim is `create_new`, which only one of any number of
+// simultaneous starters can win; the loser reads what the winner wrote and goes
+// read-only. A lock that exists but does not parse is most likely a write in
+// progress, so it is read once more after a short wait and only then treated as
+// stale. Taking over a stale or own lock writes through the atomic helper, so a
+// reader never sees half a file.
+pub(crate) fn claim_data_dir_lock(path: &Path, host: &str, pid: u32) -> LockOutcome {
+    use std::io::Write;
+    let info = DataDirLockInfo { host: host.to_string(), pid, seen: unix_now() };
+    let Ok(json) = serde_json::to_string(&info) else { return LockOutcome::Owned };
+    match fs::OpenOptions::new().write(true).create_new(true).open(path) {
+        Ok(mut f) => {
+            if f.write_all(json.as_bytes()).and_then(|_| f.sync_all()).is_err() {
+                drop(f);
+                let _ = fs::remove_file(path);
+            }
+            return LockOutcome::Owned;
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+        // A folder that cannot hold the file (read-only media, no rights) was
+        // never lockable: the store opens normally, as it always did there.
+        Err(_) => return LockOutcome::Owned,
+    }
+    let mut existing = read_data_dir_lock(path);
+    if existing.is_none() {
+        std::thread::sleep(Duration::from_millis(200));
+        existing = read_data_dir_lock(path);
+    }
+    // A lock naming THIS machine is never foreign, whatever its pid or age: a
+    // crash-and-restart on the same computer is not the two-machine case this
+    // guards against, and the single-instance plugin already rules out a genuine
+    // second process here.
+    if let Some(e) = existing {
+        if e.host != host && !lock_is_stale(&e) {
+            return LockOutcome::ReadOnly(e.host);
+        }
+    }
+    let _ = write_bytes_atomic(path, json.as_bytes());
+    LockOutcome::Owned
+}
+
 // Decides read-only vs. owned for `dir` and, if owned, claims it. Called once at
 // load_store() and again after set_data_dir() points the app at a different
 // folder. The `dataDirLock` toggle (default on) skips all of this when off,
@@ -244,17 +283,16 @@ pub(crate) fn acquire_data_dir_lock(dir: &Path, enabled: bool) {
         *DATA_DIR_LOCK_HOST.lock().unwrap_or_else(|e| e.into_inner()) = None;
         return;
     }
-    let path = data_dir_lock_path(dir);
-    let existing = read_data_dir_lock(&path);
-    let foreign_and_fresh = existing.as_ref().is_some_and(|e| !lock_is_ours(e) && !lock_is_stale(e));
-    if foreign_and_fresh {
-        DATA_DIR_READONLY.store(true, Ordering::Relaxed);
-        *DATA_DIR_LOCK_HOST.lock().unwrap_or_else(|e| e.into_inner()) = existing.map(|e| e.host);
-        return;
+    match claim_data_dir_lock(&data_dir_lock_path(dir), &local_host_name(), std::process::id()) {
+        LockOutcome::ReadOnly(host) => {
+            DATA_DIR_READONLY.store(true, Ordering::Relaxed);
+            *DATA_DIR_LOCK_HOST.lock().unwrap_or_else(|e| e.into_inner()) = Some(host);
+        }
+        LockOutcome::Owned => {
+            DATA_DIR_READONLY.store(false, Ordering::Relaxed);
+            *DATA_DIR_LOCK_HOST.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        }
     }
-    DATA_DIR_READONLY.store(false, Ordering::Relaxed);
-    *DATA_DIR_LOCK_HOST.lock().unwrap_or_else(|e| e.into_inner()) = None;
-    write_data_dir_lock(&path, &DataDirLockInfo { host: local_host_name(), pid: std::process::id(), seen: unix_now() });
 }
 
 // The scheduler tick (see "data-dir-lock" in run()). A read-only process must
