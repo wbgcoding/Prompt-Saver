@@ -2095,4 +2095,5 @@ export default {
     snipEditDone: "Gotowe",
     optSnipToolLast: "Ostatnio użyte",
     libraryTilesLabel: "Kafelki",
+    libFoundInNote: "znaleziono w notatce",
 };

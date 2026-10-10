@@ -2095,4 +2095,5 @@ export default {
     snipEditDone: "Gata",
     optSnipToolLast: "Ultimul folosit",
     libraryTilesLabel: "Dale",
+    libFoundInNote: "găsit în notiță",
 };

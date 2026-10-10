@@ -2095,4 +2095,5 @@ export default {
     snipEditDone: "Fertig",
     optSnipToolLast: "Zuletzt benutztes",
     libraryTilesLabel: "Kacheln",
+    libFoundInNote: "in der Notiz gefunden",
 };

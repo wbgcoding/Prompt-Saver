@@ -310,12 +310,13 @@ export function computeLibSearchScore(p) {
   // library row's default preview; 1+ = variants[entryIndex-1]): a rotating
   // prompt is findable by ANY entry, and the row can then show the one that
   // actually matched instead of always entry 1 regardless of why it appeared.
-  const fields = [[(p.name || "").toLowerCase(), 3, -1], [(p.text || "").toLowerCase(), 1, 0], [(p.file_path || "").toLowerCase(), 1, -1]];
-  (p.variants || []).forEach((v, i) => fields.push([(v || "").toLowerCase(), 1, i + 1]));
+  // The fourth element names the field, so a row can say where its hit came from.
+  const fields = [[(p.name || "").toLowerCase(), 3, -1, "name"], [(p.text || "").toLowerCase(), 1, 0, "text"], [(p.file_path || "").toLowerCase(), 1, -1, "file"]];
+  (p.variants || []).forEach((v, i) => fields.push([(v || "").toLowerCase(), 1, i + 1, "variant"]));
   // A tag is a deliberate label, so it ranks between the name and the body.
-  if (tagsOn() && (p.tags || []).length) fields.push([p.tags.join(" ").toLowerCase(), 2, -1]);
+  if (tagsOn() && (p.tags || []).length) fields.push([p.tags.join(" ").toLowerCase(), 2, -1, "tags"]);
   // A note is private context, so it matches but ranks below the prompt body.
-  if (notesOn() && p.notes) fields.push([p.notes.toLowerCase(), 0.5, -1]);
+  if (notesOn() && p.notes) fields.push([p.notes.toLowerCase(), 0.5, -1, "notes"]);
   // A "-word" term excludes any prompt whose searchable text contains it,
   // checked across every field before anything else runs.
   const terms = raw.split(/\s+/).filter(Boolean);
@@ -324,20 +325,20 @@ export function computeLibSearchScore(p) {
   if (excludes.some((ex) => fields.some(([val]) => val.includes(ex)))) return { score: 0, fuzzy: false, entryIndex: 0 };
   const q = terms.filter((t) => !isExclude(t)).join(" ");
   if (!q) return { score: 1, fuzzy: false, entryIndex: 0 }; // exclusion-only query matches everything not excluded
-  let best = 0, bestEntry = 0;
-  for (const [val, w, entry] of fields) {
+  let best = 0, bestEntry = 0, bestKind = "";
+  for (const [val, w, entry, kind] of fields) {
     if (val && val.includes(q)) {
       const s = (val.startsWith(q) ? 120 : 100) * w;
-      if (s > best) { best = s; bestEntry = entry >= 0 ? entry : 0; }
+      if (s > best) { best = s; bestEntry = entry >= 0 ? entry : 0; bestKind = kind; }
     }
   }
-  if (best) return { score: best, fuzzy: false, entryIndex: bestEntry };
+  if (best) return { score: best, fuzzy: false, entryIndex: bestEntry, field: bestKind, q };
   if (!flag("fuzzySearch")) return { score: 0, fuzzy: false, entryIndex: 0 };
   // Tokenize on any non-alphanumeric so "code," / "code." / code blocks split into
   // clean words (scripts without spaces, e.g. CJK, stay one token: substring wins).
   const qWords = fuzzyTokens(q);
   if (!qWords.length) return { score: 0, fuzzy: false, entryIndex: 0 };
-  for (const [val, w, entry] of fields) {
+  for (const [val, w, entry, kind] of fields) {
     if (!val) continue;
     const words = fuzzyTokens(val);
     let matched = 0;
@@ -347,10 +348,10 @@ export function computeLibSearchScore(p) {
     }
     if (matched === qWords.length) {
       const s = 40 * w;
-      if (s > best) { best = s; bestEntry = entry >= 0 ? entry : 0; }
+      if (s > best) { best = s; bestEntry = entry >= 0 ? entry : 0; bestKind = kind; }
     }
   }
-  if (best) return { score: best, fuzzy: true, entryIndex: bestEntry };
+  if (best) return { score: best, fuzzy: true, entryIndex: bestEntry, field: bestKind, q };
   // Last resort: text recognized inside an attached picture. Only reached
   // when nothing else -- not even a typo-tolerant match -- found this prompt,
   // so it never outranks a real match on the name, the body, a tag or a note.
@@ -358,6 +359,22 @@ export function computeLibSearchScore(p) {
     return { score: 90, fuzzy: false, entryIndex: 0, fromImage: true };
   }
   return { score: 0, fuzzy: false, entryIndex: 0 };
+}
+// Fills `el` with `str`, every case-insensitive occurrence of `q` wrapped in a mark.
+// Text nodes only, never markup, so a name or preview can not inject anything.
+function markHits(el, str, q) {
+  el.textContent = "";
+  const low = str.toLowerCase();
+  let at = 0;
+  for (let i = low.indexOf(q); q && i >= 0; i = low.indexOf(q, at)) {
+    if (i > at) el.appendChild(document.createTextNode(str.slice(at, i)));
+    const m = document.createElement("mark");
+    m.className = "lib-hit";
+    m.textContent = str.slice(i, i + q.length);
+    el.appendChild(m);
+    at = i + q.length;
+  }
+  if (at < str.length) el.appendChild(document.createTextNode(str.slice(at)));
 }
 // The only place image_text is ever read back: a backend lookup, since the
 // state payload never carries it. Fired once per query change (never inside
@@ -831,6 +848,14 @@ export function renderLibrary() {
     const text = document.createElement("span");
     text.className = "lib-text";
     text.textContent = p.file_path || varPreview(hitVariant ?? p.text);
+    // Literal hits are marked in the name and the preview; a typo-tolerant or picture hit has
+    // no substring to mark. A hit that only lives in the private note gets a label instead.
+    const scoreHit = libQuery.trim() ? libSearchScore(p) : null;
+    const markQ = scoreHit && !scoreHit.fuzzy && !scoreHit.fromImage ? scoreHit.q : "";
+    if (markQ) {
+      markHits(name, libLabel(p), markQ);
+      markHits(text, text.textContent, markQ);
+    }
     const nameRow = document.createElement("span");
     nameRow.className = "lib-name-row";
     nameRow.appendChild(name);
@@ -848,6 +873,12 @@ export function renderLibrary() {
       imgTag.className = "lib-image-hit-tag";
       imgTag.textContent = t("libFoundInImage");
       body.appendChild(imgTag);
+    }
+    if (scoreHit && scoreHit.field === "notes" && !scoreHit.fuzzy) {
+      const noteTag = document.createElement("span");
+      noteTag.className = "lib-note-hit-tag";
+      noteTag.textContent = t("libFoundInNote");
+      body.appendChild(noteTag);
     }
     body.appendChild(text);
     // Tags are small flat labels beside the name, not controls: at most three, then "+N".

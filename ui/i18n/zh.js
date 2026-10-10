@@ -2095,4 +2095,5 @@ export default {
     snipEditDone: "完成",
     optSnipToolLast: "上次使用的",
     libraryTilesLabel: "磁贴",
+    libFoundInNote: "在备注中找到",
 };

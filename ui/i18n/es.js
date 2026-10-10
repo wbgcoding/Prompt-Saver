@@ -2095,4 +2095,5 @@ export default {
     snipEditDone: "Listo",
     optSnipToolLast: "Última usada",
     libraryTilesLabel: "Mosaicos",
+    libFoundInNote: "encontrado en la nota",
 };

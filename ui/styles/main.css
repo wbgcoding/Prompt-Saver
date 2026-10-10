@@ -4458,6 +4458,7 @@ body.drag-over::after {
 .library-list.lib-tiles-view .lib-item .lib-tag-marks,
 .library-list.lib-tiles-view .lib-item .lib-rotate-tag,
 .library-list.lib-tiles-view .lib-item .lib-image-hit-tag,
+.library-list.lib-tiles-view .lib-item .lib-note-hit-tag,
 .library-list.lib-tiles-view .lib-item .lib-add,
 .library-list.lib-tiles-view .lib-item .lib-edit,
 .library-list.lib-tiles-view .lib-item .lib-fav,
@@ -4591,7 +4592,8 @@ body.drag-over::after {
 /* Names a search hit that only came from the picture's recognized text.
    Nothing in the visible name/body itself contains the query, so this is the
    only thing telling the user why the row showed up. */
-.lib-image-hit-tag {
+.lib-image-hit-tag,
+.lib-note-hit-tag {
   align-self: flex-start;
   padding: 0 6px;
   border: 1px solid var(--border);
@@ -4600,6 +4602,9 @@ body.drag-over::after {
   font-size: 10px;
   line-height: 1.5;
 }
+
+/* A literal search hit inside a row's name or preview. */
+.lib-hit { background: color-mix(in srgb, var(--accent) 30%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
 
 /* Library search box + type filter chips */
 .library-search { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }

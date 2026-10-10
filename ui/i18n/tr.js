@@ -2095,4 +2095,5 @@ export default {
     snipEditDone: "Bitti",
     optSnipToolLast: "Son kullanılan",
     libraryTilesLabel: "Kutucuklar",
+    libFoundInNote: "notta bulundu",
 };

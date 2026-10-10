@@ -10,6 +10,35 @@ SECTION = """\
       await sleep(300);
       const hits = document.querySelectorAll('#library-list .lib-item').length;
       if (hits !== 1) out.errors.push('searching a note matched ' + hits + ' prompts instead of 1');
+      // 272: a note-only hit says so and marks nothing; a literal hit in the preview is marked.
+      {
+        const core272 = await import('./core.js');
+        const noteRow272 = document.querySelector('#library-list .lib-item');
+        const noteTag272 = noteRow272 && noteRow272.querySelector('.lib-note-hit-tag');
+        if (!noteTag272 || noteTag272.textContent !== core272.t('libFoundInNote')) {
+          out.errors.push('272: a note-only hit shows no note label: ' + (noteTag272 ? noteTag272.textContent : 'tag missing'));
+        }
+        if (noteRow272 && noteRow272.querySelector('mark.lib-hit')) out.errors.push('272: a note-only hit marks text in the row');
+        const nameBefore272 = new Map([...document.querySelectorAll('#library-list .lib-item')].map((r) => [r.dataset.id, r.querySelector('.lib-name').textContent]));
+        q.value = 'Number 3';
+        q.dispatchEvent(new Event('input', { bubbles: true }));
+        await sleep(300);
+        const markRow272 = [...document.querySelectorAll('#library-list .lib-item')].find((r) => {
+          const mk = r.querySelector('.lib-text mark.lib-hit');
+          return mk && mk.textContent.toLowerCase() === 'number 3';
+        });
+        if (!markRow272) out.errors.push('272: searching "Number 3" marked no hit in a preview');
+        else {
+          const id272 = markRow272.dataset.id;
+          const label272 = markRow272.querySelector('.lib-name').textContent;
+          if (nameBefore272.has(id272) && nameBefore272.get(id272) !== label272) out.errors.push('272: marking a hit changed the name text');
+          if (markRow272.querySelector('.lib-name img, .lib-name script')) out.errors.push('272: a marked name holds markup');
+        }
+        if (document.querySelector('#library-list .lib-note-hit-tag')) out.errors.push('272: a preview hit also shows the note label');
+        q.value = 'moonshot';
+        q.dispatchEvent(new Event('input', { bubbles: true }));
+        await sleep(300);
+      }
       q.value = '';
       q.dispatchEvent(new Event('input', { bubbles: true }));
       await sleep(250);

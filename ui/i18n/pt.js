@@ -2095,4 +2095,5 @@ export default {
     snipEditDone: "Concluído",
     optSnipToolLast: "Última usada",
     libraryTilesLabel: "Blocos",
+    libFoundInNote: "encontrado na nota",
 };

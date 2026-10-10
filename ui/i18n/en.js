@@ -2095,4 +2095,5 @@ export default {
     snipEditDone: "Done",
     optSnipToolLast: "Last used",
     libraryTilesLabel: "Tiles",
+    libFoundInNote: "found in note",
 };

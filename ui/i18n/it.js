@@ -2095,4 +2095,5 @@ export default {
     snipEditDone: "Fine",
     optSnipToolLast: "Ultimo usato",
     libraryTilesLabel: "Riquadri",
+    libFoundInNote: "trovato nella nota",
 };

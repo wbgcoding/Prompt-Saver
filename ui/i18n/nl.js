@@ -2095,4 +2095,5 @@ export default {
     snipEditDone: "Klaar",
     optSnipToolLast: "Laatst gebruikt",
     libraryTilesLabel: "Tegels",
+    libFoundInNote: "gevonden in notitie",
 };
