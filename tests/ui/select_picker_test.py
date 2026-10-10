@@ -56,6 +56,11 @@ COMMON = """
   };
   const key = (el, k, opts) => el.dispatchEvent(new KeyboardEvent('keydown', Object.assign({ key: k, bubbles: true, cancelable: true }, opts || {})));
   const popOpen = () => document.querySelector('.select-pop:not(.hidden)');
+  // Focusing a select can scroll its panel, and the scroll event reaches the page
+  // a frame later (the list closes on a foreign scroll). Let the queued events
+  // drain before a key press, so a slow machine cannot close the list under it.
+  const frame = () => new Promise((r) => { requestAnimationFrame(() => r()); setTimeout(r, 120); });
+  const settle = async () => { await frame(); await frame(); await sleep(100); };
   // Keyboard contract on one select: opens with Enter / Space / Alt+Down,
   // arrows move, Enter picks, Escape closes, focus stays on the select.
   const keyboardCheck = async (sel, label) => {
@@ -64,23 +69,25 @@ COMMON = """
     sel.addEventListener('change', () => changes++);
     sel.selectedIndex = 0;
     sel.focus();
+    await settle();
     for (const [k, o] of [['Enter', {}], [' ', {}], ['ArrowDown', { altKey: true }]]) {
       key(sel, k, o);
-      await sleep(30);
+      await until(popOpen, 100);
       if (!popOpen()) { errs.push(label + ': ' + k + ' did not open the list'); continue; }
       key(sel, 'Escape');
-      await sleep(30);
+      await until(() => !popOpen(), 100);
       if (popOpen()) errs.push(label + ': Escape did not close the list');
       if (document.activeElement !== sel) errs.push(label + ': focus left the select after Escape');
     }
+    await settle();
     key(sel, 'Enter');
-    await sleep(30);
+    await until(popOpen, 100);
     key(sel, 'ArrowDown');
     key(sel, 'ArrowDown');
     const lit = popOpen() && popOpen().querySelector('button.kb');
     if (!lit) errs.push(label + ': arrows did not highlight a row');
     key(sel, 'Enter');
-    await sleep(30);
+    await until(() => !popOpen(), 100);
     if (popOpen()) errs.push(label + ': Enter did not close the list after picking');
     if (sel.selectedIndex !== 2) errs.push(label + ': two ArrowDown + Enter picked index ' + sel.selectedIndex + ' instead of 2');
     if (changes !== 1) errs.push(label + ': change fired ' + changes + ' times instead of once');
@@ -202,10 +209,10 @@ CAMERA_PROBE = """
     const res = document.getElementById('cam-res-select');
     res.disabled = true;
     res.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
-    await sleep(30);
+    await settle();
     if (popOpen()) errs.push('a disabled select opened the list');
     key(res, 'Enter');
-    await sleep(30);
+    await settle();
     if (popOpen()) errs.push('a disabled select opened the list on Enter');
     res.disabled = false;
     audit('final');
