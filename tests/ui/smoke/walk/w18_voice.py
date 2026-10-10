@@ -415,7 +415,7 @@ SECTION = """\
         if (!badge || badge.textContent.trim() !== '1:15') {
           out.errors.push('MediaMeta: library duration badge missing or wrong (' + (badge && badge.textContent) + ')');
         }
-        if (mmRow.dataset.tipMedia !== '1280×720 · 5.0 MB') {
+        if (!/^1280×720 · 5[.,]0 MB$/.test(mmRow.dataset.tipMedia || '')) {
           out.errors.push('MediaMeta: library tooltip is missing the resolution/size line (' + mmRow.dataset.tipMedia + ')');
         }
       }

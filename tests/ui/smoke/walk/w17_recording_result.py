@@ -459,7 +459,7 @@ SECTION = """\
           for (const b of buttons) {
             if (!b.textContent.trim()) out.errors.push('OCR langs modal: a download button has no label');
           }
-          if (!buttons.some((b) => b.textContent.includes('12.4 MB'))) {
+          if (!buttons.some((b) => /12[.,]4 MB/.test(b.textContent))) {
             out.errors.push('OCR langs modal: download button does not show the size in its own label');
           }
           if (!buttons.some((b) => b.textContent.includes('\u2014'))) {
