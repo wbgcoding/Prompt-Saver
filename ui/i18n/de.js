@@ -2094,4 +2094,5 @@ export default {
     varsInsertLink: "Platzhalter einfügen",
     snipEditDone: "Fertig",
     optSnipToolLast: "Zuletzt benutztes",
+    libraryTilesLabel: "Kacheln",
 };

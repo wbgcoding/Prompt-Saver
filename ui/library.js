@@ -750,7 +750,10 @@ export function renderLibrary() {
   list.classList.toggle("lib-tiles-view", tilesMode);
   list.style.setProperty("--lib-tile-size", `${val("libraryTileSize")}px`);
   const viewToggle = $("library-view-toggle");
-  if (viewToggle) viewToggle.classList.toggle("active", tilesMode);
+  if (viewToggle) {
+    viewToggle.classList.toggle("active", tilesMode);
+    viewToggle.setAttribute("aria-pressed", String(tilesMode));
+  }
   renderTagFilter();
   renderSavedSearches();
   const colorsUsed = usedColors(prompts);

@@ -2094,4 +2094,5 @@ export default {
     varsInsertLink: "Inserează substituent",
     snipEditDone: "Gata",
     optSnipToolLast: "Ultimul folosit",
+    libraryTilesLabel: "Dale",
 };

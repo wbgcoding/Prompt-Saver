@@ -2094,4 +2094,5 @@ export default {
     varsInsertLink: "Plaatsaanduiding invoegen",
     snipEditDone: "Klaar",
     optSnipToolLast: "Laatst gebruikt",
+    libraryTilesLabel: "Tegels",
 };

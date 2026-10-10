@@ -2094,4 +2094,5 @@ export default {
     varsInsertLink: "Inserisci segnaposto",
     snipEditDone: "Fine",
     optSnipToolLast: "Ultimo usato",
+    libraryTilesLabel: "Riquadri",
 };

@@ -2094,4 +2094,5 @@ export default {
     varsInsertLink: "プレースホルダーを挿入",
     snipEditDone: "完了",
     optSnipToolLast: "前回使用したもの",
+    libraryTilesLabel: "タイル",
 };

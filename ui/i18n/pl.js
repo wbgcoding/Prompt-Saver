@@ -2094,4 +2094,5 @@ export default {
     varsInsertLink: "Wstaw symbol zastępczy",
     snipEditDone: "Gotowe",
     optSnipToolLast: "Ostatnio użyte",
+    libraryTilesLabel: "Kafelki",
 };

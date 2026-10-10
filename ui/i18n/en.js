@@ -2094,4 +2094,5 @@ export default {
     varsInsertLink: "Insert placeholder",
     snipEditDone: "Done",
     optSnipToolLast: "Last used",
+    libraryTilesLabel: "Tiles",
 };

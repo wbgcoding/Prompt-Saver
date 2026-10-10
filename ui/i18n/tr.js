@@ -2094,4 +2094,5 @@ export default {
     varsInsertLink: "Yer tutucu ekle",
     snipEditDone: "Bitti",
     optSnipToolLast: "Son kullanılan",
+    libraryTilesLabel: "Kutucuklar",
 };

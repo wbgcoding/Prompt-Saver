@@ -342,6 +342,26 @@ SECTION = """\
         if (cs270.color !== 'rgb(245, 179, 1)') out.errors.push('270: the favourite star is not gold: ' + cs270.color);
       }
     }
+    // 271: the tiles toggle is a labelled button whose pressed state follows the mode.
+    {
+      const tg271 = document.getElementById('library-view-toggle');
+      const core271 = await import('./core.js');
+      if (!tg271) out.errors.push('271: the tiles toggle is missing');
+      else {
+        const label271 = tg271.querySelector('[data-i18n="libraryTilesLabel"]');
+        if (!label271 || label271.textContent.trim() !== core271.t('libraryTilesLabel')) {
+          out.errors.push('271: the tiles toggle shows no visible label: ' + tg271.textContent.trim());
+        }
+        if (tg271.textContent.includes(String.fromCharCode(9638))) out.errors.push('271: the tiles toggle still carries the old glyph');
+        if (tg271.getAttribute('aria-pressed') !== 'false') out.errors.push('271: the tiles toggle is not unpressed in list mode');
+        tg271.click();
+        await sleep(300);
+        if (tg271.getAttribute('aria-pressed') !== 'true') out.errors.push('271: aria-pressed did not turn true after a click');
+        tg271.click();
+        await sleep(300);
+        if (tg271.getAttribute('aria-pressed') !== 'false') out.errors.push('271: aria-pressed did not turn false after the second click');
+      }
+    }
     // 436: saved searches keep a query, its active tag filters and the current
     // sort together as one chip. Saving, applying, the cap, renaming and
     // deleting are all self-contained here and end with the list empty again.

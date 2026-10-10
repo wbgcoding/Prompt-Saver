@@ -2094,4 +2094,5 @@ export default {
     varsInsertLink: "插入占位符",
     snipEditDone: "完成",
     optSnipToolLast: "上次使用的",
+    libraryTilesLabel: "磁贴",
 };

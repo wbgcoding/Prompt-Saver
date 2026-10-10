@@ -2094,4 +2094,5 @@ export default {
     varsInsertLink: "Insertar marcador",
     snipEditDone: "Listo",
     optSnipToolLast: "Última usada",
+    libraryTilesLabel: "Mosaicos",
 };

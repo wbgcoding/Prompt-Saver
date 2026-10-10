@@ -536,7 +536,7 @@ names. A bookmark button inside the search field saves the current query, tag fi
 and sort as a chip shown above the field; click it to bring the whole search
 back. Right-click a saved search to rename or delete it, or drag it to
 reorder the row. Up to five can be saved at once by default, adjustable in
-the expert menu. A toggle next to the type filter switches the list to
+the expert menu. The Tiles button next to the sort order switches the list to
 tiles: a big preview picture with the name below, nothing else. Click,
 double-click, the right-click menu and multi-select all work the same as in
 the list, it is the same selection drawn differently. The toggle remembers

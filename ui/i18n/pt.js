@@ -2094,4 +2094,5 @@ export default {
     varsInsertLink: "Inserir marcador",
     snipEditDone: "Concluído",
     optSnipToolLast: "Última usada",
+    libraryTilesLabel: "Blocos",
 };
