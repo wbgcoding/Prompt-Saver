@@ -1948,6 +1948,7 @@ the video editor and the introduction tour ship on).
 - **Help is a question-mark button in the settings head.** It sits beside the close button and is reachable from the expert menu page too; the Expert menu button now has its row to itself.
 - **A shorter label for the screenshot switch.** The setting now reads "Always save screenshots"; its tooltip still explains the Screenshots folder.
 - **Clearer recording hotkey rows.** The two switches now read "Stop recording with a hotkey" and "Pause recording with a hotkey", and the capture field under each is labelled "Key combination".
+- **The preview keeps its size in a narrow video editor window.** The preview takes at least 40 % of the height and stays on top while the controls scroll below it.
 
 ## 2.6.3 (2026-07-26)
 

@@ -136,10 +136,40 @@ VIDEO_PROBE = """
     const controls = [...document.querySelectorAll(
       '.ve-transport button, .ve-tools button, .ve-tabs button, .ve-titlebar button, ' +
       '.ve-audio-group button, .ve-ops-head button')];
-    const untestable = controls.filter((b) => !hitTestable(b));
+    // In the narrow layout the controls scroll under the sticky preview by
+    // design, so each one is scrolled into view before it is hit-tested.
+    const untestable = [];
+    for (const b of controls) {
+      b.scrollIntoView({ block: 'nearest' });
+      await sleep(30);
+      if (!hitTestable(b)) untestable.push(b);
+    }
     if (untestable.length) {
       errs.push(untestable.length + ' toolbar control(s) cannot be hit-tested: ' +
         untestable.map((b) => b.id || b.className).join(', '));
+    }
+    document.querySelector('.ve-main').scrollTop = 0;
+
+    // 933: the narrow layout keeps the preview at 40 % of the height, sticky
+    // on top while the controls scroll under it, and the side panel (with the
+    // undo/redo row) fits the room below the preview.
+    {
+      const stage = document.getElementById('ve-stage');
+      const stageH = stage.getBoundingClientRect().height;
+      if (stageH < 0.4 * window.innerHeight - 1) {
+        errs.push('933: the preview is only ' + stageH.toFixed(0) + 'px of a ' + window.innerHeight + 'px window');
+      }
+      if (window.innerWidth <= 900) {
+        const main = document.querySelector('.ve-main');
+        main.scrollTop = 1e6;
+        await sleep(60);
+        const dTop = Math.abs(stage.getBoundingClientRect().top - main.getBoundingClientRect().top);
+        if (dTop > 1) errs.push('933: the preview did not stay on top while the controls scrolled (off by ' + dTop.toFixed(1) + 'px)');
+        const undo = document.getElementById('ve-undo');
+        if (!hitTestable(undo)) errs.push('933: undo is not reachable when the narrow layout is scrolled to the end');
+        main.scrollTop = 0;
+        await sleep(30);
+      }
     }
 
     // ---- tabs actually switch panels ----
@@ -1844,7 +1874,7 @@ def run(browser, tmp):
         .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
         .replace("</body>", VIDEO_PROBE + "</body>"),
         encoding="utf-8")
-    for w, h in ((1100, 720), (760, 520)):
+    for w, h in ((1100, 720), (880, 600), (760, 520)):
         # Same "headless Chrome eats part of the requested window" offset
         # the main sweep already compensates for (see WRAPPER above) --
         # without it "760x520" never actually delivers that innerWidth/

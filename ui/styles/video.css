@@ -419,17 +419,14 @@ body.video-body {
   pointer-events: none;
 }
 
-/* Narrow window: the side panel drops under the preview instead of squeezing
-   both into unusable widths. */
+/* Narrow window: the side panel drops under the preview. The preview keeps
+   40 % of the height and stays on top while the controls scroll under it; the
+   side panel is exactly as tall as the room below the preview, so scrolled to
+   the end it shows whole, with its own panel scroll and the undo/redo row. */
 @media (max-width: 900px) {
-  .ve-main { flex-direction: column; }
-  /* Neither panel scrolled at this width -- content taller than what's left
-     over just painted past its own box into the panel below it. The preview
-     gives ground first (it is the one element that can shrink and stay
-     useful); transport/timeline/tools keep their normal size so every
-     toolbar control stays reachable without scrolling at the window's own
-     declared minimum height. */
-  .ve-left { overflow-y: auto; }
-  .ve-side { flex: 0 0 auto; max-width: none; max-height: 36vh; overflow-y: auto; border-left: none; border-top: 1px solid var(--border); }
-  .ve-stage { min-height: 70px; }
+  .ve-main { flex-direction: column; overflow-y: auto; container-type: size; scroll-padding-top: 40vh; }
+  .ve-left { display: contents; }
+  .ve-left > * { flex: 0 0 auto; }
+  .ve-stage { position: sticky; top: 0; z-index: 3; flex: 0 0 40vh; height: 40vh; min-height: 0; }
+  .ve-side { flex: 0 0 auto; height: calc(100cqh - 40vh); max-height: none; max-width: none; overflow: hidden; border-left: none; border-top: 1px solid var(--border); }
 }
