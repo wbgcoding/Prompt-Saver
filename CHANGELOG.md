@@ -928,6 +928,8 @@ the video editor and the introduction tour ship on).
   it does, and Copy confirms with a short notice.
 - **Screenshot editor: opens with the tool you used last.** The very first
   time it still starts with the hand.
+- **Screenshot editor: undo and zoom moved to the bottom bar.** The toolbar
+  stays one line and the picture gets more room.
 
 ### Fixed
 

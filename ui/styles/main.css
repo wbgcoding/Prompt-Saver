@@ -2011,11 +2011,11 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
    one row down to the minimum window width. */
 @media (max-width: 820px) {
   .snip-edit-toolbar { gap: 6px; padding-inline: 8px; }
-  .snip-edit-toolbar .icon-btn { padding: 4px 3px; }
+  .snip-edit-toolbar .icon-btn, .snip-edit-status .icon-btn { padding: 4px 3px; }
   .snip-edit-tools { gap: 2px; }
   .snip-edit-view { gap: 0; }
-  .snip-edit-toolbar .snip-edit-sep { margin: 0 2px; }
-  .snip-edit-toolbar .snip-edit-zoom-val { min-width: 36px; }
+  .snip-edit-toolbar .snip-edit-sep, .snip-edit-status .snip-edit-sep { margin: 0 2px; }
+  .snip-edit-status .snip-edit-zoom-val { min-width: 36px; }
   .snip-edit-view .ghost-btn { padding: 4px 8px; }
 }
 .snip-edit-tools { display: flex; gap: 4px; flex: 0 0 auto; }
@@ -2041,7 +2041,7 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
 .snip-edit-sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
 .snip-edit-zoom-val { min-width: 42px; text-align: center; font-size: 12px; color: var(--muted); }
 .snip-edit-view .ghost-btn { padding: 4px 10px; font-size: 12px; }
-/* Fit and Resize are words in a wide window and icons in a narrow one. */
+/* Resize is a word in a wide window and an icon in a narrow one. */
 .snip-edit-btn-icon { display: none; }
 @media (max-width: 759px) {
   .snip-edit-view .ghost-btn { display: inline-flex; padding: 3px 4px; }
@@ -2227,13 +2227,18 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
   flex: 0 0 auto;
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
-  padding: 10px 14px;
+  row-gap: 6px;
+  padding: 8px 14px;
   border-top: 1px solid var(--border);
   background: var(--surface-2);
 }
-.snip-edit-toolbar .icon-btn:disabled,
-.snip-edit-toolbar .icon-btn:disabled:hover { opacity: 0.35; cursor: default; background: transparent; color: var(--muted); }
+/* Undo, redo and zoom sit at the left end of the bottom row. */
+.snip-edit-status { display: flex; align-items: center; gap: 2px; margin-right: auto; }
+#snip-edit .icon-btn:disabled,
+#snip-edit .icon-btn:disabled:hover { opacity: 0.35; cursor: default; background: transparent; color: var(--muted); }
 .snip-question span:last-child { color: var(--muted); font-size: 13px; }
 .noflag-barToggles .bar-toggle,
 .noflag-barToggles .bar-restore { display: none !important; }

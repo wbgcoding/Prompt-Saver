@@ -304,7 +304,8 @@ editor keeps selecting its overlays from its own list instead, since it only
 draws an overlay's handles once that overlay is already selected; the two
 toolbars stay where they are too, a bar on top for the screenshot editor and
 a side column next to the timeline for the video editor, because the
-timeline needs the room the screenshot editor doesn't.
+timeline needs the room the screenshot editor doesn't. In the screenshot
+editor, undo, redo and zoom sit at the left end of the bottom bar.
 
 Right-clicking a shape (screenshot editor) or an overlay's row (video editor)
 opens a small menu to duplicate or delete it. A duplicate keeps the same
@@ -1211,7 +1212,9 @@ eigene Liste, weil er die Anfasser einer Überlagerung erst zeichnet, sobald
 sie schon ausgewählt ist; die Werkzeugleisten selbst bleiben ebenfalls an
 ihrem Platz, oben beim Screenshot-Editor, seitlich neben der Zeitleiste beim
 Video-Editor, weil die Zeitleiste den Platz braucht, den der
-Screenshot-Editor nicht hat. Im Video-Editor lässt sich außerdem ein zweites
+Screenshot-Editor nicht hat. Im Screenshot-Editor stehen Rückgängig,
+Wiederholen und Zoom links in der unteren Leiste. Im Video-Editor lässt sich
+außerdem ein zweites
 Video einfügen: „Video hinzufügen" bietet es entweder als weitere
 Überlagerung (eigenes Rechteck, eigener Zeitbereich, eigene Lautstärke,
 standardmäßig stumm) oder als ganzen zusätzlichen Abschnitt am Anfang, am

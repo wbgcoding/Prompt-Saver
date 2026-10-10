@@ -1727,5 +1727,55 @@ def run(browser, tmp):
       if (!b.title) errs.push('829: ' + id + ' has no title');
     }
 """)
+    # Undo and zoom live in the bottom bar; the toolbar stays one line and the bottom row stays one line in German.
+    for size_932 in ('880x600', '680x460'):
+        failed += ar_probe('bq932a-' + size_932, '932-de: undo and zoom sit in the bottom bar, both bars stay one line at ' + size_932, 'index', size_932, '<script>window.__SEED_SETTINGS__ = { language: "de" };</script>\n', snip_common + r"""
+    // 932-de: the status group (undo, redo, zoom) moved from the toolbar into the bottom row.
+    await snipOpen(300, 200);
+    const bar = document.querySelector('.snip-edit-toolbar');
+    const actions = document.querySelector('.snip-edit-actions');
+    const checkBars = (when) => {
+      const bh = bar.getBoundingClientRect().height;
+      if (bh > 52) errs.push('932-de: the toolbar is ' + bh + ' px tall ' + when + ', want at most 52');
+      if (bar.scrollWidth > bar.clientWidth + 1) errs.push('932-de: the toolbar overflows sideways ' + when + ' (' + bar.scrollWidth + ' > ' + bar.clientWidth + ')');
+      const ah = actions.getBoundingClientRect().height;
+      if (ah > 56) errs.push('932-de: the bottom row is ' + ah + ' px tall ' + when + ', want one line (at most 56)');
+    };
+    checkBars('on open');
+    const ar = actions.getBoundingClientRect();
+    for (const id of ['snip-edit-undo', 'snip-edit-redo', 'snip-edit-zoom-out', 'snip-edit-zoom-in', 'snip-edit-fit']) {
+      const r = document.getElementById(id).getBoundingClientRect();
+      if (r.left < ar.left - 0.5 || r.right > ar.right + 0.5 || r.top < ar.top - 0.5 || r.bottom > ar.bottom + 0.5) {
+        errs.push('932-de: ' + id + ' lies outside the bottom row');
+      }
+    }
+    const undo = document.getElementById('snip-edit-undo');
+    if (!undo.disabled) errs.push('932-de: undo is enabled on open');
+    const op = getComputedStyle(undo).opacity;
+    if (Math.abs(Number(op) - 0.35) > 0.01) errs.push('932-de: the disabled undo button has opacity ' + op + ', want 0.35');
+    const eye = document.getElementById('snip-edit-original');
+    const tap = async () => {
+      const [x, y] = centre(eye);
+      ptr('pointerdown', x, y, eye);
+      ptr('pointerup', x, y, eye);
+      await sleep(150);
+    };
+    await tap();
+    if (document.getElementById('snip-edit-original-badge').classList.contains('hidden')) errs.push('932-de: a tap on the eye did not show the badge');
+    checkBars('with the original badge shown');
+    await tap();
+    if (!document.getElementById('snip-edit-original-badge').classList.contains('hidden')) errs.push('932-de: a second tap on the eye did not release the badge');
+""")
+    # A long translation may wrap the bottom row but nothing may leave the window.
+    for lang_932 in ('it', 'pl'):
+        failed += ar_probe('bq932b-' + lang_932, '932-de: the bottom row stays inside the window at 680x460 (' + lang_932 + ')', 'index', '680x460', '<script>window.__SEED_SETTINGS__ = { language: "' + lang_932 + '" };</script>\n', snip_common + r"""
+    await snipOpen(300, 200);
+    const actions = document.querySelector('.snip-edit-actions');
+    for (const el of actions.querySelectorAll('button, .snip-edit-status, .snip-edit-zoom-val')) {
+      const r = el.getBoundingClientRect();
+      if (r.width === 0) continue;
+      if (r.left < -0.5 || r.right > window.innerWidth + 0.5) errs.push('932-de: ' + (el.id || el.className) + ' leaves the window (' + Math.round(r.left) + ' to ' + Math.round(r.right) + ' of ' + window.innerWidth + ')');
+    }
+""")
     # ---- main window findings: generated block end ----
     return failed
