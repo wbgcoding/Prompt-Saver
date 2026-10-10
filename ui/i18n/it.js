@@ -401,7 +401,7 @@ export default {
     namePh: "Nome del prompt",
     promptPh: "Scrivi un prompt…",
     promptTextLabel: "Testo del prompt",
-    promptPhComposer: "Scrivi un prompt… ({keys} lo salva)",
+    promptPhComposer: "Nuovo prompt…",
     addToLayout: "Aggiungi alla griglia",
     gridFull: "Griglia piena: trascina su un riquadro per scambiare",
     gridEmptyHint: "Scrivi qualcosa qui sotto e premi Salva per iniziare.",
@@ -2087,4 +2087,5 @@ export default {
     ctxViewsMenu: "Viste…",
     moveToView: "Sposta in",
     movedToView: "Spostato in {view}",
+    composerTip: "Scrivi un prompt e premi {keys} per salvarlo",
 };

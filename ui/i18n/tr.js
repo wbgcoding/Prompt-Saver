@@ -401,7 +401,7 @@ export default {
     namePh: "İstem adı",
     promptPh: "Bir istem yaz…",
     promptTextLabel: "İstem metni",
-    promptPhComposer: "Bir istem yaz… ({keys} kaydeder)",
+    promptPhComposer: "Yeni istem…",
     addToLayout: "Düzene ekle",
     gridFull: "Izgara dolu, değiştirmek için bir kutucuğa sürükle",
     gridEmptyHint: "Aşağıya bir şeyler yazıp Kaydet'e basarak başlayın.",
@@ -2087,4 +2087,5 @@ export default {
     ctxViewsMenu: "Görünümler…",
     moveToView: "Şuraya taşı",
     movedToView: "{view} görünümüne taşındı",
+    composerTip: "Bir istem yaz ve kaydetmek için {keys} tuşlarına bas",
 };

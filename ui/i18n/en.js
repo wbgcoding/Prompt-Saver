@@ -375,7 +375,7 @@ export default {
     namePh: "Prompt name",
     promptPh: "Type a prompt…",
     promptTextLabel: "Prompt text",
-    promptPhComposer: "Type a prompt… ({keys} saves it)",
+    promptPhComposer: "New prompt…",
     addToLayout: "Add to layout",
     gridFull: "Grid is full. Drag onto a tile to swap",
     gridEmptyHint: "Type something below and hit Save to get started.",
@@ -2087,4 +2087,5 @@ export default {
     ctxViewsMenu: "Views…",
     moveToView: "Move to",
     movedToView: "Moved to {view}",
+    composerTip: "Type a prompt and press {keys} to save it",
 };

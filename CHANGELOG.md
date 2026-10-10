@@ -919,6 +919,9 @@ the video editor and the introduction tour ship on).
   rename and close buttons.** It sizes itself so every tile fits.
 - **The tile menu groups hiding and view placement under one "Views..."
   entry.** It can also move a tile to another view.
+- **The input field at the bottom is short, "New prompt...".** The save
+  shortcut moved into its tooltip, so the field stays on one line in a small
+  window.
 
 ### Fixed
 

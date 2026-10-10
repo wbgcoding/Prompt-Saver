@@ -401,7 +401,7 @@ export default {
     namePh: "Nome do prompt",
     promptPh: "Digite um prompt…",
     promptTextLabel: "Texto do prompt",
-    promptPhComposer: "Digite um prompt… ({keys} salva)",
+    promptPhComposer: "Novo prompt…",
     addToLayout: "Adicionar à grade",
     gridFull: "Grade cheia. Arraste sobre um bloco para trocar.",
     gridEmptyHint: "Escreva algo abaixo e clique em Salvar para começar.",
@@ -2087,4 +2087,5 @@ export default {
     ctxViewsMenu: "Vistas…",
     moveToView: "Mover para",
     movedToView: "Movido para {view}",
+    composerTip: "Digite um prompt e pressione {keys} para salvar",
 };

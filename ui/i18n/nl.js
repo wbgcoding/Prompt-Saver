@@ -401,7 +401,7 @@ export default {
     namePh: "Promptnaam",
     promptPh: "Typ een prompt…",
     promptTextLabel: "Prompttekst",
-    promptPhComposer: "Typ een prompt… ({keys} slaat het op)",
+    promptPhComposer: "Nieuwe prompt…",
     addToLayout: "Aan lay-out toevoegen",
     gridFull: "Raster is vol, sleep op een tegel om te wisselen",
     gridEmptyHint: "Typ hieronder iets en klik op Opslaan om te beginnen.",
@@ -2087,4 +2087,5 @@ export default {
     ctxViewsMenu: "Weergaven…",
     moveToView: "Verplaatsen naar",
     movedToView: "Verplaatst naar {view}",
+    composerTip: "Typ een prompt en druk op {keys} om op te slaan",
 };

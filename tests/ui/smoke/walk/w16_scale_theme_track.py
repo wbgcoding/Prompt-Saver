@@ -56,16 +56,24 @@ SECTION = """\
         }
         window.__PREV_VER__ = avEl.textContent;
       }
-      // 706: the composer placeholder names the save shortcut, the editor field keeps the plain one.
+      // 706: the composer placeholder is short and names no shortcut; the accessible name and
+      // tooltip carry it. The editor field keeps the plain one.
       {
-        const ph706 = document.getElementById('input').placeholder;
+        const inp706 = document.getElementById('input');
+        const ph706 = inp706.placeholder;
+        const aria706 = inp706.getAttribute('aria-label') || '';
         const edPh706 = document.getElementById('modal-text').placeholder;
-        if (ph706.includes('{keys}') || !/(Ctrl|Strg)\\+Enter/.test(ph706)) out.errors.push('706: the composer placeholder in ' + lang + ' reads "' + ph706 + '"');
+        if (ph706.includes('{keys}') || ph706.includes('Enter')) out.errors.push('706: the composer placeholder in ' + lang + ' reads "' + ph706 + '"');
+        if (!/(Ctrl|Strg)\\+Enter/.test(aria706) || aria706.includes('{keys}')) out.errors.push('706: the composer accessible name in ' + lang + ' reads "' + aria706 + '"');
+        if (inp706.title !== aria706) out.errors.push('706: the composer tooltip differs from its accessible name in ' + lang);
         if (edPh706.includes('Enter')) out.errors.push('706: the editor text field placeholder in ' + lang + ' names a shortcut: ' + edPh706);
-        if (document.getElementById('input').getAttribute('aria-label') !== ph706) out.errors.push('706: the composer accessible name differs from its placeholder in ' + lang);
         if (lang === 'de') {
-          if (ph706 !== 'Prompt eingeben… (Strg+Enter speichert ihn)') out.errors.push('706: the German composer placeholder reads "' + ph706 + '"');
+          if (ph706 !== 'Neuer Prompt…') out.errors.push('706: the German composer placeholder reads "' + ph706 + '"');
           if (edPh706 !== 'Prompt eingeben…') out.errors.push('706: the German editor placeholder reads "' + edPh706 + '"');
+        }
+        // ph253: an empty composer stays one line in a small window.
+        if (window.innerWidth <= 700 && !inp706.value && inp706.getBoundingClientRect().height > 44) {
+          out.errors.push('ph253: the empty composer is ' + Math.round(inp706.getBoundingClientRect().height) + 'px tall at ' + window.innerWidth + 'px width in ' + lang);
         }
       }
       await click('library-close');

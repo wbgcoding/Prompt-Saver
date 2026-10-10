@@ -13,11 +13,12 @@ export function applyI18n() {
   applyBrand();
   document.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = t(el.dataset.i18n); });
   document.querySelectorAll("[data-i18n-ph]").forEach((el) => { el.placeholder = t(el.dataset.i18nPh); });
-  // The composer placeholder names the save shortcut, so it is built from the
-  // shortcut table instead of a plain translation.
-  const composerPh = t("promptPhComposer").replace("{keys}", keysLabel("mainCreate", LANG));
-  inputEl.placeholder = composerPh;
-  inputEl.setAttribute("aria-label", composerPh);
+  // The placeholder stays short so the field keeps one line in a small window; the save
+  // shortcut is built from the shortcut table and lives in the tooltip and accessible name.
+  inputEl.placeholder = t("promptPhComposer");
+  const composerTip = t("composerTip").replace("{keys}", keysLabel("mainCreate", LANG));
+  inputEl.title = composerTip;
+  inputEl.setAttribute("aria-label", composerTip);
   // A shortcut-bearing element gets its tooltip built from SHORTCUTS (base
   // description + key combo) instead of the plain translation.
   document.querySelectorAll("[data-i18n-title]").forEach((el) => {

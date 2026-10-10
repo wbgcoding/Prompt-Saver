@@ -401,7 +401,7 @@ export default {
     namePh: "Nazwa promptu",
     promptPh: "Wpisz prompt…",
     promptTextLabel: "Treść promptu",
-    promptPhComposer: "Wpisz prompt… ({keys} zapisuje)",
+    promptPhComposer: "Nowy prompt…",
     addToLayout: "Dodaj do siatki",
     gridFull: "Siatka pełna, przeciągnij na kafelek, aby zamienić",
     gridEmptyHint: "Wpisz coś poniżej i kliknij Zapisz, aby zacząć.",
@@ -2087,4 +2087,5 @@ export default {
     ctxViewsMenu: "Widoki…",
     moveToView: "Przenieś do",
     movedToView: "Przeniesiono do {view}",
+    composerTip: "Wpisz prompt i naciśnij {keys}, aby go zapisać",
 };

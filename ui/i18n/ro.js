@@ -401,7 +401,7 @@ export default {
     namePh: "Numele promptului",
     promptPh: "Scrie un prompt…",
     promptTextLabel: "Textul promptului",
-    promptPhComposer: "Scrie un prompt… ({keys} îl salvează)",
+    promptPhComposer: "Prompt nou…",
     addToLayout: "Adaugă în aranjament",
     gridFull: "Grila este plină. Trage peste o dală pentru a le schimba între ele.",
     gridEmptyHint: "Scrie ceva mai jos și apasă Salvează pentru a începe.",
@@ -2087,4 +2087,5 @@ export default {
     ctxViewsMenu: "Vizualizări…",
     moveToView: "Mută în",
     movedToView: "Mutat în {view}",
+    composerTip: "Scrie un prompt și apasă {keys} pentru a-l salva",
 };

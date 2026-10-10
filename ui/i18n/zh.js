@@ -401,7 +401,7 @@ export default {
     namePh: "提示词名称",
     promptPh: "输入提示词…",
     promptTextLabel: "提示词文本",
-    promptPhComposer: "输入提示词…（{keys} 保存）",
+    promptPhComposer: "新提示词…",
     addToLayout: "添加到网格",
     gridFull: "网格已满，拖到磁贴上交换",
     gridEmptyHint: "在下方输入内容，点击保存即可开始。",
@@ -2087,4 +2087,5 @@ export default {
     ctxViewsMenu: "视图…",
     moveToView: "移动到",
     movedToView: "已移动到 {view}",
+    composerTip: "输入提示词，按 {keys} 保存",
 };

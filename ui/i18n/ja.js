@@ -401,7 +401,7 @@ export default {
     namePh: "プロンプト名",
     promptPh: "プロンプトを入力…",
     promptTextLabel: "プロンプトのテキスト",
-    promptPhComposer: "プロンプトを入力…（{keys} で保存）",
+    promptPhComposer: "新しいプロンプト…",
     addToLayout: "グリッドに追加",
     gridFull: "グリッドが満杯なので、タイルにドラッグして入替",
     gridEmptyHint: "下に入力して保存を押すと始められます。",
@@ -2087,4 +2087,5 @@ export default {
     ctxViewsMenu: "ビュー…",
     moveToView: "移動先",
     movedToView: "{view} に移動しました",
+    composerTip: "プロンプトを入力して {keys} で保存",
 };

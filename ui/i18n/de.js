@@ -375,7 +375,7 @@ export default {
     namePh: "Prompt-Name",
     promptPh: "Prompt eingeben…",
     promptTextLabel: "Prompt-Text",
-    promptPhComposer: "Prompt eingeben… ({keys} speichert ihn)",
+    promptPhComposer: "Neuer Prompt…",
     addToLayout: "Zum Layout hinzufügen",
     gridFull: "Raster ist voll. Zum Tauschen auf eine Kachel ziehen",
     gridEmptyHint: "Schreib unten etwas und drücke Speichern.",
@@ -2087,4 +2087,5 @@ export default {
     ctxViewsMenu: "Ansichten…",
     moveToView: "Verschieben nach",
     movedToView: "Nach {view} verschoben",
+    composerTip: "Prompt eingeben und mit {keys} speichern",
 };
