@@ -914,6 +914,12 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **The first update check runs right after you answer yes.** Answering the
+  first-launch update question with yes now checks at once instead of at the
+  next start.
+- **The data folder lock is never written in place.** Another running copy
+  reads that file while it is refreshed; a refused swap now keeps the old lock
+  and the next refresh tries again.
 - **Safe overwrites follow links and give way where they cannot work.** Replacing
   an export through a shortcut-like link changes the file behind the link, and a
   folder or file that does not allow the swap is written in place as before.
