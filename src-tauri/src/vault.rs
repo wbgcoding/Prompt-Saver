@@ -974,10 +974,16 @@ pub(crate) fn run_import(
         store.settings = original_settings;
         store.prompts_locked = original_prompts_locked;
         SETTINGS_LOCKED.store(original_settings_locked, Ordering::Relaxed);
+        mirror_minimize_to_tray(&store.settings);
         // Put back a set the disk was never told about, so nothing may be
         // skipped as "already written" on the next save either.
         store.forget_written_rows();
         return Err("save-failed".into());
+    }
+    // An import replaces the settings without going through the settings writer,
+    // so the window-close handler's copy of the tray setting is refreshed here.
+    if want_settings {
+        mirror_minimize_to_tray(&store.settings);
     }
     // The session key belongs to the salt it was derived from: once the import
     // installed another salt, the old key would decrypt nothing and would seal

@@ -11232,6 +11232,7 @@ fn outside_settings_that_switch_ocr_index_off_erase_the_picture_text() {
 
 #[test]
 fn a_full_import_that_switches_ocr_index_off_erases_prompt_and_trash_text() {
+    let _serial = SETTINGS_LOCK_TEST.lock().unwrap_or_else(|e| e.into_inner());
     let mut store = Store { prompts: vec![sync_test_prompt()], trash: vec![sync_test_prompt()], settings: Settings::default(), prompts_locked: false, written: Default::default() };
     store.prompts[0].image_text = "live".into();
     store.trash[0].image_text = "trashed".into();
@@ -17713,6 +17714,7 @@ fn snip_overlay_preview_keeps_full_chroma_for_coloured_text() {
 
 #[test]
 fn close_decision_returns_while_the_store_is_locked() {
+    let _serial = SETTINGS_LOCK_TEST.lock().unwrap_or_else(|e| e.into_inner());
     let store = Arc::new(Mutex::new(Store {
         prompts: Vec::new(),
         trash: Vec::new(),
@@ -18075,4 +18077,34 @@ fn the_clipboard_inbox_takes_up_to_the_character_limit_and_no_more() {
     assert!(!should_store(&"a".repeat(CLIP_INBOX_MAX_CHARS * 4 + 1), 3, false));
     assert!(!should_store("ab", 3, false), "the minimum length still applies");
     assert!(should_store("abc", 3, false));
+}
+
+#[test]
+fn an_import_refreshes_the_close_handlers_tray_setting() {
+    let _serial = SETTINGS_LOCK_TEST.lock().unwrap_or_else(|e| e.into_inner());
+    for (before, after) in [(true, false), (false, true)] {
+        let mut store = Store {
+            prompts: vec![sync_test_prompt()],
+            trash: Vec::new(),
+            settings: Settings { minimize_to_tray: before, ..Settings::default() },
+            prompts_locked: false,
+            written: Default::default(),
+        };
+        mirror_minimize_to_tray(&store.settings);
+        let mut incoming = import_test_backup();
+        incoming.settings.minimize_to_tray = after;
+        // A failed write rolls everything back, the mirror included.
+        run_import(&mut store, import_test_backup_with(after), false, true, |_, _, _| false).unwrap_err();
+        assert_eq!(close_minimizes(false), before, "a rolled back import leaves the mirror alone");
+        run_import(&mut store, incoming, false, true, |_, _, _| true).unwrap();
+        assert_eq!(close_minimizes(false), after, "the imported setting must reach the close handler");
+        assert_eq!(store.settings.minimize_to_tray, after);
+    }
+    mirror_minimize_to_tray(&Settings::default());
+}
+
+fn import_test_backup_with(minimize: bool) -> Backup {
+    let mut b = import_test_backup();
+    b.settings.minimize_to_tray = minimize;
+    b
 }
