@@ -14,6 +14,10 @@ Two further checks cover shipped text: a pseudo dash (space, two hyphens,
 space) inside a Rust or UI string literal, and any dash character anywhere in
 the NSIS installer script and its language files (strings and comments alike).
 
+Shipped release text is checked too, with no exceptions: docs/release-notes.md
+in full, and CHANGELOG.md above its first dated version heading (the unreleased
+section; published sections are history and stay as they are).
+
 Range display keeps a plain ASCII hyphen with no spaces (e.g. `00:12-00:34`,
 `{low}-{high}`, `(A-Z)`) -- that is not a dash character this guard looks
 for, so it needs no exception.
@@ -306,6 +310,24 @@ def check_nsis(rel_path, text):
     return out
 
 
+# Shipped release text: the whole release-notes page, and the part of the
+# changelog above the first dated version heading (the unreleased section).
+# Published sections are history and are never touched, so they are not scanned.
+RELEASE_TEXT_FILES = ("docs/release-notes.md", "CHANGELOG.md")
+DATED_HEADING = re.compile(r"^## \d+\.\d+\.\d+ \(\d{4}-\d{2}-\d{2}\)\s*$")
+
+
+def check_release_text(rel_path, text):
+    out = []
+    for lineno, raw in enumerate(text.split("\n"), start=1):
+        if rel_path == "CHANGELOG.md" and DATED_HEADING.match(raw):
+            break
+        m = DASH_RE.search(raw)
+        if m:
+            out.append((lineno, "dash character %r" % m.group(0), raw.strip()))
+    return out
+
+
 def main():
     global ROOT
     ROOT = subprocess.run(
@@ -332,6 +354,18 @@ def main():
         for lineno, kind, snippet in violations:
             print(f"{rel_path}:{lineno}: {kind}: {snippet}")
         total += len(violations)
+
+    for rel_path in RELEASE_TEXT_FILES:
+        try:
+            with open(f"{ROOT}/{rel_path}", "r", encoding="utf-8") as f:
+                text = f.read()
+        except FileNotFoundError:
+            print(f"no_emdash: {rel_path} is missing")
+            total += 1
+            continue
+        for lineno, kind, snippet in check_release_text(rel_path, text):
+            print(f"{rel_path}:{lineno}: {kind}: {snippet}")
+            total += 1
 
     if total:
         print(f"\nno_emdash: {total} violation(s)")

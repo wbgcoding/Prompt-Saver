@@ -62,7 +62,7 @@ the video editor and the introduction tour ship on).
   command's arguments and JSON response shape, the error codes, the link
   scheme, and worked examples. `prompt-saver.exe describe` prints the same
   command list as JSON.
-- **Tags** — label prompts with free-form, colored tags. The editor gets a chip
+- **Tags**: label prompts with free-form, colored tags. The editor gets a chip
   row with type-ahead over existing tags and a per-chip color popover; the
   library gets a filter row above the results (multi-select, switchable between
   matching all or any of the picked tags) that combines with search and the
@@ -70,100 +70,100 @@ the video editor and the introduction tour ship on).
   everywhere at once, with a usage count per tag. Tags travel with TXT and CSV
   exports. The copy history gets its own tag filter alongside its type and
   color filters, same picking logic as the library's.
-- **Custom themes** — build your own theme on top of any of the 7 built-in
+- **Custom themes**: build your own theme on top of any of the 7 built-in
   ones: a palette button beside the theme dropdown opens an editor with a color
   input per themable value, grouped by background, surfaces, text and accent,
   with a live preview while you edit. Saved themes appear in the dropdown under
   a separator, and the floating buttons follow them too.
-- **Drag a tile onto a view tab** — files it into that view; hold Ctrl while
+- **Drag a tile onto a view tab**: files it into that view; hold Ctrl while
   dropping to copy it there instead, so it stays in both. A target with no room left refuses the whole drop and says how many cells
   are missing.
-- **Self-filling placeholders** — `date`, `time`, `datetime`, `weekday`,
+- **Self-filling placeholders**: `date`, `time`, `datetime`, `weekday`,
   `clipboard` and `uuid` fill themselves in on copy, with no dialog; a prompt
   mixing them with your own placeholders only asks for yours. Date and time follow
   the app language, with the format switchable in the expert menu. The editor
   lists all six as insertable chips with a one-line explanation each.
-- **Choice placeholders** — write `{#{tone|formal,casual,witty}#}` and the copy
+- **Choice placeholders**: write `{#{tone|formal,casual,witty}#}` and the copy
   dialog offers a dropdown instead of a text field, remembering your last pick.
-- **Markdown preview** — the editor shows the prompt rendered: headings, lists,
+- **Markdown preview**: the editor shows the prompt rendered: headings, lists,
   quotes, rules, emphasis and fenced code blocks. It is ONE field, not two: the
   rendered view stands where the text field was and hands it back the moment you
   click into it, in the same box, at the same size. Code blocks are syntax-colored
   for JavaScript, TypeScript, Python, HTML, CSS, JSON, SQL, Bash and Rust.
-- **Private notes** — a collapsible notes row on every prompt for context you
+- **Private notes**: a collapsible notes row on every prompt for context you
   want to keep but never copy. Notes show as a dimmed section in the tile
   tooltip, are found by the library search, and travel with TXT and CSV
-  exports — but never reach the clipboard through any copy path.
-- **Per-prompt hotkeys** — give a prompt its own global key combination that
+  exports, but never reach the clipboard through any copy path.
+- **Per-prompt hotkeys**: give a prompt its own global key combination that
   copies it from anywhere, even with the app in the tray, and optionally pastes
   it straight away. Conflicts with the app hotkey or another prompt are refused
   in the editor. A tile with its own hotkey carries a small keyboard badge, on
   by default.
-- **Drag-out** — hold Ctrl and drag a tile, a library row or a floating button
+- **Drag-out**: hold Ctrl and drag a tile, a library row or a floating button
   into any other app to drop its text there. The key is switchable, and a second
   switch swaps the two gestures so a plain drag leaves the app and the key moves
   the tile instead.
-- **Tray quick menu** — the tray icon's menu can list your recently used and
+- **Tray quick menu**: the tray icon's menu can list your recently used and
   your favorite prompts; clicking one copies it without opening the window. It
   draws as a rounded, themed window in the Windows 11 style instead of the
   plain system popup; an expert-menu switch falls back to the plain menu. How
   many characters a prompt name may use before it is cut off is also tunable.
-- **Floating-button folders** — drag one floating button onto another and they
+- **Floating-button folders**: drag one floating button onto another and they
   merge into a folder button showing up to four mini previews and a count. Click
   it and it opens in place into a small grid; drag a member out to free it
   again, and the folder dissolves when one is left.
-- **Color picker** — a pipette next to the screenshot button freezes the screen
+- **Color picker**: a pipette next to the screenshot button freezes the screen
   and shows a magnified pixel grid with a live readout; click to copy the color
-  as hex, rgb or hsl. Nothing is saved — the value only goes to the clipboard.
-- **Grid folders** — drop one tile onto another and both move into a folder in
+  as hex, rgb or hsl. Nothing is saved; the value only goes to the clipboard.
+- **Grid folders**: drop one tile onto another and both move into a folder in
   that cell. The folder shows a preview of what is inside, opens its contents in
   a small grid, and hands a prompt back to the layout when you drag it out.
-- **Allow multiple instances** (expert menu, off by default) — opens the door to
+- **Allow multiple instances** (expert menu, off by default): opens the door to
   running the app more than once at the same time, for example against two
   different data folders side by side. Off keeps the usual behaviour: a second
   launch just brings the first window forward. Takes effect after a restart.
-- **Quick launcher** — the global hotkey (**Ctrl+Alt+P** by default) now opens a
+- **Quick launcher**: the global hotkey (**Ctrl+Alt+P** by default) now opens a
   small standalone search window instead of the main library: type to fuzzy-find
   a prompt by name or text, press Enter or click to copy it instantly. A fresh
   install starts with the hotkey already bound; an existing one keeps whatever
   you already had, including turned off.
-- **Multi-select in the grid** — point at a tile to reveal a checkbox in the
+- **Multi-select in the grid**: point at a tile to reveal a checkbox in the
   corner; once anything is checked, every tile shows one. A toolbar appears
   above the grid to recolor, move to another view, or delete everything you
   picked at once.
-- **Trash** — deleting a prompt now moves it to a trash instead of removing it
+- **Trash**: deleting a prompt now moves it to a trash instead of removing it
   right away. Restore it or delete it forever from a dialog in the expert
   menu's Data group, or let it clear itself automatically after a retention
   period you choose (30 days by default, or never).
-- **Prompt in multiple views** (expert menu, off by default) — right-click a
+- **Prompt in multiple views** (expert menu, off by default): right-click a
   tile and pick which other views should also show it. It stays the same
   prompt everywhere: editing it in one view updates it in all of them.
-- **Restore data and settings separately** — restoring a backup now offers two
+- **Restore data and settings separately**: restoring a backup now offers two
   checkboxes instead of an all-or-nothing swap: bring back your prompts
   without touching your current setup, or the other way around. Importing a
   `.psb`/`.json` backup file gets the same choice.
-- **Rotation** — a text prompt can hold a list of texts instead of one;
+- **Rotation**: a text prompt can hold a list of texts instead of one;
   each copy serves the next rotation text, in order or shuffled, and a small badge on
   the tile shows the position. The editor turns the text field into a numbered
   list with a mode switch and a "from the start" reset. Entries survive
   export/import, backups, Markdown-sync and version history, and the library
   search finds a match inside any entry, not just the first. An eligible entry
   (2+ items, no image/file) can also rotate on every real paste instead
-  of only on copy — a per-tile switch in the editor or a tile's right-click
+  of only on copy: a per-tile switch in the editor or a tile's right-click
   menu, tunable session timeout and timing window in the expert menu, and a
   toast instead of a loop if pasting happens too fast too often.
-- **Markdown folder sync** (expert menu, off by default, beta) — mirrors every
+- **Markdown folder sync** (expert menu, off by default, beta): mirrors every
   prompt as its own readable `.md` file in a folder you pick: a short header
   with name, color, tags and notes, then the text. Edit a file by hand or with
   another tool and the change comes back a few seconds later (the poll interval
   is tunable in the expert menu). The header also
-  carries where the prompt sits — view, grid cell, grid folder and pill folder —
+  carries where the prompt sits (view, grid cell, grid folder and pill folder),
   so a second machine reading the same folder reproduces the arrangement,
   creating a view or folder it does not know yet by name. An attached file, icon
   or PDF page travels as a path reference, never as data; a screenshot pasted
   straight into a prompt has no path and stays in the database. Switching the
   feature on takes a backup first, and the folder is written the moment you pick
-  it. **The files are plain text** — the database is not — so keep anything
+  it. **The files are plain text** (the database is not), so keep anything
   sensitive out of a folder other people or other services can read. The folder
   is `prompt-saver-sync` next to your data unless you pick another one, and
   picking another one asks whether the old folder should be deleted: that delete
@@ -175,9 +175,9 @@ the video editor and the introduction tour ship on).
   and why it is paused. When a prompt and its file changed at the same time,
   neither version is lost: the one that is replaced is kept, in the prompt's
   version history or as a conflict copy beside the file.
-- **An About dialog** — a button beside Check for updates opens the current
+- **An About dialog**: a button beside Check for updates opens the current
   version and a link to the project page.
-- **A real help search** — searching now matches several words in any order,
+- **A real help search**: searching now matches several words in any order,
   ranks title hits above body hits, highlights the matching words, shows which
   chapter each result belongs to, and collapses results down to one line each
   so a broad search stays scannable instead of a wall of expanded text.
@@ -200,7 +200,7 @@ the video editor and the introduction tour ship on).
   and position, dialog max height, the library search delay, the copy-history
   window width, the tag-filter popover's column count and sort order, how long
   a confirm button stays armed, and the background update-check interval.
-- **A screenshot editor** (on by default) — every capture opens for editing before
+- **A screenshot editor** (on by default): every capture opens for editing before
   it reaches a tile, the clipboard or a folder. Thirteen tools: crop, pen, marker,
   highlighter-style multiply blend, line, arrow, rectangle, ellipse, text, a
   self-numbering step marker for annotating instructions, pixelation, a
@@ -218,7 +218,7 @@ the video editor and the introduction tour ship on).
   Cancel leaves the original capture untouched; Apply re-copies
   the edited image and re-saves it to the screenshot
   folder if that setting is on.
-- **Text recognition (OCR)** (expert menu, on by default) — pull editable text
+- **Text recognition (OCR)** (expert menu, on by default): pull editable text
   out of a screenshot or an image file, fully offline through Windows' own
   recognizer. A composer button opens a small menu to pick an image file or grab
   a new screenshot; the screenshot dialog also gets a "Recognize text" button that
@@ -226,17 +226,17 @@ the video editor and the introduction tour ship on).
   with the detected language and character count, ready to copy or create as a
   new prompt. Small on-screen text is enlarged before recognition so it reads
   reliably, wrapped lines can be joined back into paragraphs, and the result can
-  copy itself to the clipboard automatically — all three tunable in the expert
+  copy itself to the clipboard automatically, all three tunable in the expert
   menu, along with which installed language to use. Missing a language pack? A
   "Manage text recognition languages" dialog lists everything Windows can recognize, installed or
   not, with the download size right on the button so nothing downloads blind;
   picking one walks through Windows' own installer, asking for administrator
   rights exactly once and explaining why beforehand. On systems where Windows
   demands administrator rights even to list the packs, the dialog says so and
-  offers to run that listing elevated — it only lists, it installs nothing.
+  offers to run that listing elevated; it only lists, it installs nothing.
   Installed packs can also be kept current automatically, with a quiet,
   cancelable notice when one needs an update.
-- **Voice dictation** (expert menu, on by default) — a microphone button next
+- **Voice dictation** (expert menu, on by default): a microphone button next
   to the composer and in the editor turns speech into text through Windows'
   own on-device recognizer, fully offline unless online recognition is
   explicitly allowed. Text streams in as it's recognized; click the button
@@ -244,7 +244,7 @@ the video editor and the introduction tour ship on).
   of punctuation and formatting commands ("comma", "new line", "new
   paragraph", …) turns into real characters, capitalization follows
   automatically after a sentence or paragraph break, and saying "literal"
-  before a word types it instead of triggering it as a command — all
+  before a word types it instead of triggering it as a command, all
   tunable, and all localized to each of the 11 UI languages. Interim
   results, auto-capitalization, a silence auto-stop and a hard time cap are
   each their own switch; insertion position (cursor or end), the recognition
@@ -252,42 +252,42 @@ the video editor and the introduction tour ship on).
   clipboard, or pasted directly) round it out. Missing a language pack opens
   the same language dialog OCR uses (opened by "Manage dictation languages"), shared install and elevation
   flow included.
-- **Introduction tour** (expert menu, on by default) — a five-step walkthrough
+- **Introduction tour** (expert menu, on by default): a five-step walkthrough
   on first launch, opened right after the example prompts are seeded so step
   two already has a tile to point at: what the app is and that everything
   stays offline, how to save and use a tile, organizing tiles and views,
   the library and search, then a table of the three optional features
   (screenshot, color picker, OCR) with the shipped default shown next to
-  each and a one-click reset back to it — nothing is written until you
+  each and a one-click reset back to it; nothing is written until you
   finish, and only the switches you actually changed. Step-by-step dots,
-  ←/→ and Enter to navigate, Esc or "Skip" to leave any time — either asks to
+  ←/→ and Enter to navigate, Esc or "Skip" to leave any time; either asks to
   confirm first. Reopen it later from the settings dialog or the expert menu;
   a data-folder or WebView2 prompt on first launch always wins, and the tour
   just waits for the next one.
-- **Start a chain directly from a tile** — hovering a text prompt now shows a
+- **Start a chain directly from a tile**: hovering a text prompt now shows a
   small chain icon next to its selection checkbox; clicking it starts a chain
   with that tile as the first entry, skipping the header button. Switchable
   off on its own in the expert menu (on by default). The icon can also be
   switched to stay dimly visible all the time instead of appearing only on
   hover, brightening on hover or keyboard focus either way.
-- **Screen recording** — a record button next to the screenshot button opens the
+- **Screen recording**: a record button next to the screenshot button opens the
   same picker overlay: click a window, drag a region, or click empty desktop
   for the whole screen. An optional countdown precedes capture, and a small
   floating control bar (elapsed time, live file size, Pause/Resume, Stop,
   Discard) follows a moved window and is itself never part of the recording;
   two optional global hotkeys and the tray menu can also stop or pause/resume
   it, live only while a recording is actually running. System audio and
-  microphone audio both record on by default, each as their own track — the
+  microphone audio both record on by default, each as their own track; the
   microphone track is captured but not mixed in audibly until you bring it in
   yourself, from the video editor below (turn microphone capture off in the
   expert menu if you would rather it never record at all); unplugging the
   microphone mid-recording keeps picture and system audio going and just marks
-  that track as lost. Stopping offers Save, Save as…, Copy, Edit or Discard —
+  that track as lost. Stopping offers Save, Save as…, Copy, Edit or Discard;
   Save and Copy share one recording folder (changeable in the expert menu or
   right from the dialog). MP4 (H.264) is what gets written while recording;
   three quality steps (Small/High/Lossless) and an optional WebM, AVI, MOV,
   MKV, animated WebP or APNG format convert it afterward through ffmpeg
-  (offered as an inline download when missing) — GIF, WebP and APNG are
+  (offered as an inline download when missing); GIF, WebP and APNG are
   capped at 30 seconds and carry no audio. A failed or canceled conversion
   always falls back to the untouched original recording, and a write error (for example a full disk)
   stops the recording cleanly and keeps whatever was captured so far. If the
@@ -295,16 +295,16 @@ the video editor and the introduction tour ship on).
   recording that never reached its own stop path (a crash, a forced shutdown)
   is removed automatically once it clears a grace period, both adjustable in
   the expert menu alongside a manual clean-up action.
-- **Video editor** — opens from a recording's own result dialog or from any
+- **Video editor**: opens from a recording's own result dialog or from any
   video prompt's right-click menu, in its own window with a live preview and
   no processing until you export. Trim and cut (a lossless fast path applies
   when nothing else changes), crop, change speed, fade in/out, resize (width/
   height/percent fields, an aspect-ratio lock, and presets from 4K down to
-  25% — a preset never enlarges past the source, but the percent field and
+  25%; a preset never enlarges past the source, but the percent field and
   free typing can), and overlay images, freeze-frames, text, pixelation or a
   focus area anywhere on a zoomable filmstrip-and-waveform timeline. The preview itself zooms with the
-  scroll wheel (up to 8×) and pans by dragging — the middle mouse button
-  always, the left button once zoomed in — for placing a small overlay
+  scroll wheel (up to 8×) and pans by dragging (the middle mouse button
+  always, the left button once zoomed in), for placing a small overlay
   precisely on a large recording. A few export presets (unchanged quality, a
   smaller size for chat, an animated GIF) remember your last choice. Export
   format also reaches beyond MP4, WebM and GIF to AVI, MOV, MKV, animated
@@ -313,8 +313,8 @@ the video editor and the introduction tour ship on).
   capped, since all three grow large fast. Undo/redo covers every edit,
   capped by an adjustable limit.
 - **Every value a screenshot or video editor sets automatically when it opens**
-  — stroke width and color per drawing tool, the video editor's start tool,
-  starting tab and default font, and more — now has its own expert-menu row
+  (stroke width and color per drawing tool, the video editor's start tool,
+  starting tab and default font, and more) now has its own expert-menu row
   for the default, alongside a new row for the video export folder (which
   already remembered your last choice; it just had no row of its own before).
 - **The video editor now remembers unfinished cuts and overlays.** Closing it
@@ -340,7 +340,7 @@ the video editor and the introduction tour ship on).
   works on a copy, never the original, and saving asks where to put the
   result, starting in the original file's own folder. A file past a
   configurable size is rejected before it loads.
-- **The expert-menu search now also finds a hit outside the expert menu** —
+- **The expert-menu search now also finds a hit outside the expert menu**:
   the normal settings page, the toolbar's grid-size control, the library's
   sort order, or a setting in the backup manager. A match appears in its own
   section with a small badge saying where it lives; clicking it opens the
@@ -361,7 +361,7 @@ the video editor and the introduction tour ship on).
   since anything changed during the session is discarded. The same sample
   library is also the source for the help window's picture and for
   `docs/screenshot.png`.
-- **Duplicate a shape or overlay** — right-click a rectangle, ellipse, line,
+- **Duplicate a shape or overlay**: right-click a rectangle, ellipse, line,
   arrow, focus area or pixelation in the screenshot editor, or an overlay's row
   in the video editor, for a menu to duplicate or delete it. A duplicate keeps
   the same values and time range and is offset slightly so it is easy to spot
@@ -567,7 +567,7 @@ the video editor and the introduction tour ship on).
   entry on the record button's right-click menu opens its own small window
   with a live preview and its own Start/Pause/Stop, audio source, resolution
   and target folder. The window itself, or its status dot in the recording
-  bar, is always visible while the camera runs — no silent camera. It
+  bar, is always visible while the camera runs: no silent camera. It
   records to its own file, never burned into a screen recording, so either
   can be repositioned later. Running alongside a screen recording, both
   share the same start point, and the video editor opens the screen
@@ -657,12 +657,12 @@ the video editor and the introduction tour ship on).
   once and copied per row. With 500 prompts the list is built in 45 ms instead of
   71 ms, and the rows look exactly the same.
 - Resizing a floating folder by its edge is smoother. The folder was completely
-  redrawn — every member preview included — for each report the mouse sent, which
+  redrawn (every member preview included) for each report the mouse sent, which
   is several times per screen refresh. It now redraws at most once per frame while
   you drag, and once more when you let go, so the size you release is always the
   size you keep.
 - A library full of images redraws far faster. The window no longer receives every
-  stored picture each time the grid is rebuilt — it is told which prompts have one
+  stored picture each time the grid is rebuilt; it is told which prompts have one
   and asks for the ones it is about to show, keeping the last 80 in memory. With
   500 prompts, 60 of them carrying a screenshot, one redraw moved 24 MB before and
   moves 0.3 MB now, and takes 26 ms instead of 67 ms. A picture that is still on
@@ -675,13 +675,13 @@ the video editor and the introduction tour ship on).
   a single rename takes 36 ms instead of 1900 ms.
 - Copying no longer writes to the disk on every single copy. Which text a prompt with
   rotation serves next, how often a prompt has been used and the date of its last use
-  were saved the instant any of them changed — with rotate on paste switched on, that
+  were saved the instant any of them changed: with rotate on paste switched on, that
   meant a full save on every Ctrl+V. They are now collected and written once the
   copying has been quiet for a second: 100 pastes in quick succession cost 100 disk
   writes before and one or two now. Closing the app, logging off Windows, a backup,
   an export, an import, a reset and moving the data folder all write immediately, so
   nothing is left behind; only an outright kill of the program (task manager, a power
-  cut) can cost the last second of counters — never a prompt, never any text, and
+  cut) can cost the last second of counters, never a prompt, never any text, and
   never a setting you just changed.
 - Saving a prompt can no longer clear its image by accident: the editor only sends
   a picture along when you actually changed it, and the only thing that removes one
@@ -709,23 +709,23 @@ the video editor and the introduction tour ship on).
   tooltip, where the rest of its description already was.
 - Tag chips, the update button's width and the prompt count beside the library
   title were all tidied up.
-- Backup retention is now a quick pick — Light (5), Normal (10), Heavy (20) or
-  Advanced — instead of a switch plus a number field. Advanced still opens the
+- Backup retention is now a quick pick: Light (5), Normal (10), Heavy (20) or
+  Advanced, instead of a switch plus a number field. Advanced still opens the
   same day/week/month/year settings as before.
 - The editor's tags, hotkey and version history now share one collapsible
   "Advanced options" section instead of three separate controls.
-- The grid can now be filtered by tag too, from a new button in the header —
+- The grid can now be filtered by tag too, from a new button in the header;
   tiles that do not match dim instead of disappearing, so the layout never
   shifts underneath you.
 - The backup list now shows what is actually in each snapshot: click the
   prompt count to reveal the names.
 - The library can now be sorted by "last edited", alongside the existing name/
   most-used/recently-used options.
-- Import now shows a preview — what's new and what's already in your library —
+- Import now shows a preview (what's new and what's already in your library)
   before anything is actually imported.
 - Floating pills and folders now have a "Hide until restart" option in their
   right-click menu, alongside the existing permanent Remove/Dissolve.
-- A PDF attachment can now show a page other than the first — a page number
+- A PDF attachment can now show a page other than the first: a page number
   field appears next to it in the editor.
 - The changelog in the update dialog is laid out instead of dumped: headings,
   bullets, tables and highlighted terms, in a box that takes the height of the
@@ -734,18 +734,18 @@ the video editor and the introduction tour ship on).
   target dims behind a folder mark in the accent colour, the same gesture in all
   three places and readable on any tile colour and in every theme.
 - Tags are findable and look like the rest of the app: the editor's tag field has a
-  handle that opens the list of tags you already have — as a proper dropdown, with
-  a line inside it when there is nothing to offer instead of an error message — and
+  handle that opens the list of tags you already have (as a proper dropdown, with
+  a line inside it when there is nothing to offer instead of an error message) and
   the library's tag filter is a labelled row of chips built like the type filter
   above it, with clearing and managing set apart as actions.
-- The copy history reads like the library — same rows, same tags, a type chip
+- The copy history reads like the library: same rows, same tags, a type chip
   where it is not plain text, and the timestamp as a quiet second line.
 - Dropdowns, colour popovers and context menus flip above their anchor when there
   is no room below, and never open past the edge of the window.
 - The favourites section of the tray menu is on out of the box.
 - The privacy switch that keeps the window out of screenshots is now phrased from
   your side and named **Allow screenshots of Prompt Saver**. It ships off, so the
-  window still stays out of screen captures by default — but anyone whose screenshots
+  window still stays out of screen captures by default, but anyone whose screenshots
   come out empty now finds the reason under privacy in the expert menu. An
   installation that had the old hiding turned off keeps its screenshots.
 - The editor's font and size dropdowns moved up to sit right under the name row,
@@ -759,23 +759,23 @@ the video editor and the introduction tour ship on).
   Undo button, so a mis-drop can be reversed with one click instead of
   dragging it back by hand.
 - The theme editor has a **Revert changes** button that undoes everything
-  done since it was opened without closing it — Cancel still discards
+  done since it was opened without closing it; Cancel still discards
   everything and closes the editor.
-- Custom themes can be **exported to a file and imported back** — handy for
+- Custom themes can be **exported to a file and imported back**: handy for
   sharing a theme or carrying it to another install. An imported theme is
   validated the same way a hand-typed one would be.
 - Version history now highlights **what actually changed** between two
-  versions — words added or removed — instead of just showing the raw old
+  versions (words added or removed) instead of just showing the raw old
   text for you to compare by eye.
 - A backup is now either whole or absent: the snapshot is written under a
   temporary name and only then renamed, and a failed one leaves nothing behind.
 - "Duplicate" on a prompt's context menu now opens the same dialog as creating a
-  new one, prefilled with everything from the original — so you can change
+  new one, prefilled with everything from the original, so you can change
   something before it exists, or cancel and leave nothing behind, instead of a
   silent copy landing in the grid.
 - The placeholder fill-in dialog gets a "Clear all" button, so starting over on a
   prompt with several placeholders is one click instead of one per field.
-- Saving a prompt with an empty `{#{ }#}` placeholder now warns first — it would
+- Saving a prompt with an empty `{#{ }#}` placeholder now warns first: it would
   otherwise sit in the copied text exactly like that, since it never becomes an
   actual placeholder.
 - The backups window can open its snapshot folder in Explorer directly.
@@ -785,12 +785,12 @@ the video editor and the introduction tour ship on).
   left" once enough has run for the guess to be worth showing. Both switchable
   off in the expert menu.
 - A video export or recording conversion that fails now names the actual
-  reason in plain language — file incomplete, no space left, no access, and
-  so on — instead of a raw ffmpeg log line. The exact log line stays
+  reason in plain language (file incomplete, no space left, no access, and
+  so on) instead of a raw ffmpeg log line. The exact log line stays
   reachable underneath in a closed "Technical details" row with a copy
   button; a cancel was never treated as a failure to begin with.
-- Closing to the tray for the very first time now explains what just happened —
-  right-click the tray icon to copy a prompt without reopening the window —
+- Closing to the tray for the very first time now explains what just happened
+  (right-click the tray icon to copy a prompt without reopening the window)
   before the window disappears. Every later close is instant again.
 - The editor's automatic-placeholder chips call out `clipboard`: it is the only
   one that reads live data instead of a fixed value, so it now stands apart from
@@ -804,12 +804,12 @@ the video editor and the introduction tour ship on).
   with the same name, color and grid size, ready to build a variant of it from
   scratch.
 - The backup password field now says plainly, right where you set it, that a
-  forgotten password can never be recovered — previously that only showed up
+  forgotten password can never be recovered; previously that only showed up
   in a toast after saving.
 - The theme editor's per-color reset button is a crisp icon now instead of a
   small, pixelated "×" character.
 - The expert menu's search box now also matches a word that only appears in a
-  setting's tooltip, not its label — three settings (hide scrollbars, grid
+  setting's tooltip, not its label; three settings (hide scrollbars, grid
   lines, paused toolbar icons) get their tooltip shown at all again in the
   process; it had quietly stopped reaching them.
 - Restoring a backup now takes the same safety backup first that resetting or
@@ -822,7 +822,7 @@ the video editor and the introduction tour ship on).
 - Every copy-history row gets an edit icon, same as the library, so you can
   open a prompt from its history without going to find it in the grid or
   library first.
-- The editor now offers your 3 most-used tags right below the tag field —
+- The editor now offers your 3 most-used tags right below the tag field:
   one click to add instead of typing them out every time.
 - The tag manager gets a **Colorize** button: one click gives every tag
   without a color one from the palette, round-robin. Tags you've already
@@ -830,7 +830,7 @@ the video editor and the introduction tour ship on).
 - The library preview's line count (2, until now fixed) is an expert value,
   adjustable from 1 to 4.
 - A grid click swallowed by the copy cooldown now shakes the tile briefly
-  instead of doing nothing at all — the cooldown itself was already
+  instead of doing nothing at all; the cooldown itself was already
   adjustable (down to 0 to turn it off) in the expert menu.
 - The "Backup created" toast now shows for automatic backups too, not just
   the manual button.
@@ -844,7 +844,7 @@ the video editor and the introduction tour ship on).
   database layout first; that now happens once when the app starts. A copy
   went through it twice per click and no longer does.
 - **Text recognition no longer decodes the same image three times** on its way
-  through resizing — one pass now, which shows on large screenshots.
+  through resizing: one pass now, which shows on large screenshots.
 - **Taking a screenshot no longer blocks** while the image is compressed and
   written; the work moved off the thread that keeps the app responsive.
 - Typing in the expert menu's search box no longer rebuilds all five tabs on
@@ -857,12 +857,12 @@ the video editor and the introduction tour ship on).
   on a chore that was parked for the next few hours. The temp-file cleanup runs
   every few hours now instead of only at startup, so an instance left running
   for days keeps tidying up after itself.
-- **Keyboard navigation reaches every dialog and popover now** — Tab no
+- **Keyboard navigation reaches every dialog and popover now**: Tab no
   longer leaks past whichever one is open into the dimmed page behind it, and
   closing the prompt editor, a confirmation dialog or the settings panel
   returns keyboard focus to whatever you had focused before you opened it.
-- Six previously mouse-only row icons — favorite, edit, delete and
-  add-to-layout, in both the library and the copy history — are now reachable
+- Six previously mouse-only row icons (favorite, edit, delete and
+  add-to-layout, in both the library and the copy history) are now reachable
   and operable by keyboard.
 - Eight error messages (failed save, import, export, dictation, update
   download or turning on the color picker) now say what you can do about it,
@@ -1142,8 +1142,8 @@ the video editor and the introduction tour ship on).
 - The outline around a region recording now matches the drawn region on
   monitors with different scaling.
 - **A start that could not open the database could cost every prompt.** If the
-  emergency copy of the prompts was missing at that moment — the state an
-  earlier failed save can leave behind — the app came up empty and the next
+  emergency copy of the prompts was missing at that moment (the state an
+  earlier failed save can leave behind), the app came up empty and the next
   save wrote that emptiness over the real data. Such a start now refuses to
   save prompts at all, so everything survives until the database can be read
   again.
@@ -1170,14 +1170,14 @@ the video editor and the introduction tour ship on).
   Every version's word-by-word comparison was computed up front even though
   the rows start collapsed; it is now done when you actually open a row.
 - **The screenshot editor silently erased old drawings.** Once you passed the
-  undo limit, the oldest step vanished from the picture — a crop or a
+  undo limit, the oldest step vanished from the picture, a crop or a
   pixelated area included. Everything you draw now stays; only how far back
   undo can walk is limited.
 - **The screenshot editor's language, and two more strings, were still
   English** in German and Dutch.
 - **Switching off the video controls left the hover bar on the floating
   buttons**, and those buttons ignored the volume, mute, loop and autoplay
-  settings entirely — they now follow the same settings as the grid.
+  settings entirely; they now follow the same settings as the grid.
 - **A failed view switch, edit or duplicate did nothing at all.** The click
   now reports what went wrong instead of quietly leaving the old screen up.
 - **A language pack could be installed twice.** The download row stayed
@@ -1210,13 +1210,13 @@ the video editor and the introduction tour ship on).
   updates resolve both.
 - **The bar-hide buttons sat far from the row they collapse.** They now sit
   directly left of Minimize (top) and Save (bottom), lined up with each
-  other; Save is now exactly as wide as the Minimize–Maximize–Close row
+  other; Save is now exactly as wide as the Minimize, Maximize and Close row
   above it.
 - **"Reset settings" and "Delete all data" wrapped to a second line** in
   several languages, making the button row taller than the rest of the
   dialog. Both buttons now show a single short word, with the full
   description as a tooltip.
-- **The theme editor's export and import icons were swapped** — export drew
+- **The theme editor's export and import icons were swapped**: export drew
   a download arrow, import an upload arrow.
 - **The installer appeared to close by itself when updating over an existing
   install.** Upgrading or reinstalling silently removes the previous version
@@ -1242,37 +1242,37 @@ the video editor and the introduction tour ship on).
   prompt-name list cached beside each backup. Both are now encrypted like the
   rest, and a failure of the Windows encryption service is written to the log
   instead of silently downgrading storage.
-- **Typing in the library search no longer stutters** on large libraries — the
+- **Typing in the library search no longer stutters** on large libraries; the
   result list is rebuilt once you pause, not on every keystroke.
 - **Window titles in the Alt-Tab switcher were always English.** The floating
   pill, folder, placeholder and quick-launcher windows now carry the app name.
 - Importing a file far too large to be a prompt export (a video, a disk image)
   now fails with a clear message instead of trying to load all of it into memory.
 - **The tag manager was unreachable until you'd already tagged something.**
-  The library's tag bar — the only place "Manage tags" lives — disappeared
+  The library's tag bar (the only place "Manage tags" lives) disappeared
   entirely with nothing yet to filter by, so there was no way to discover
   tags exist at all before creating the first one by hand in the editor. The
   button now stays put regardless.
 - **Dissolving a grid folder could leave a member invisible or bump another
   folder off its spot.** The cell handed to each returning member never
   accounted for a second folder sharing the same view, since a folder's own
-  cell lives outside the normal layout — it could land exactly there.
+  cell lives outside the normal layout; it could land exactly there.
 - **Exporting to CSV could hand Excel or LibreOffice a live formula.** A prompt
   name, text or note starting with `=`, `+`, `-`, `@` or a tab is read as a
   formula the moment the file is reopened there, even though the value was
-  correctly CSV-quoted — quoting only protects the CSV syntax, not what the
+  correctly CSV-quoted: quoting only protects the CSV syntax, not what the
   spreadsheet does with the cell afterwards. Such a value is now prefixed with
   a single quote on export (the standard fix) and the prefix is removed again
   on the next import into Prompt Saver, so nothing changes for data that never
   leaves this app.
 - **A save could look successful and then quietly revert after a restart.** If
   the database write failed (locked or full disk) the change fell back to a
-  recovery file that was only ever read back on a completely empty database —
+  recovery file that was only ever read back on a completely empty database;
   a normal restart always preferred the older database state instead, silently
   undoing the change. The recovery file is now always checked and retried on
-  the next launch. A related case — replacing an attachment could delete the
+  the next launch. A related case (replacing an attachment could delete the
   old file even though the change that replaced it failed to save, breaking
-  the attachment for good — is fixed alongside it.
+  the attachment for good) is fixed alongside it.
 - **Double-clicking Save (or pressing Enter twice) while saving a prompt could
   create a duplicate.** The Save button had no protection against a second
   click while the first save was still in flight.
@@ -1283,7 +1283,7 @@ the video editor and the introduction tour ship on).
 - **The Markdown sync folder could delete your own documents.** If you pointed it
   at a folder that already held Markdown files of your own, they were removed the
   moment sync was switched on. It now only ever touches files it wrote itself, and
-  leaves any other Markdown — including notes with their own frontmatter — alone,
+  leaves any other Markdown (including notes with their own frontmatter) alone,
   in both directions.
 - **A prompt edited through the sync folder gained a blank line** at the end every
   time it was saved.
@@ -1298,7 +1298,7 @@ the video editor and the introduction tour ship on).
   location and was then deleted with the old folder.
 - **The colour picker's history never appeared.** The last five picked colours now
   live in a strip of their own above the hint line, where they can actually be
-  clicked — inside the loupe they moved away with the cursor.
+  clicked; inside the loupe they moved away with the cursor.
 - **The editor's text box could be drawn over the colour swatches** once the
   placeholder helper above it was expanded.
 - **An unreadable recovery file could silently empty your whole library or
@@ -1308,7 +1308,7 @@ the video editor and the introduction tour ship on).
   failed to save**, and several other actions (import, restoring a version,
   favoriting, batch edits, renaming or deleting a tag, recoloring, seeding the
   example prompts) could report success while the write to disk had actually
-  failed — each now rolls back cleanly and reports the real error.
+  failed; each now rolls back cleanly and reports the real error.
 - **The prompt-sync folder could save a half-written file** if the app lost
   power mid-write; it now writes through a temp file and an atomic rename.
 - **A hand-edited or imported folder position at the far edge of the grid
@@ -1369,7 +1369,7 @@ the video editor and the introduction tour ship on).
 - The help text had the screen-capture-protection default backwards, and
   documented the wrong syntax for self-filling placeholders.
 - **The version-history diff never showed a change if only a prompt's later
-  rotation texts changed** — only entry 1 was ever compared, and
+  rotation texts changed**: only entry 1 was ever compared, and
   restoring a version left the editor's still-open rotation entries in place,
   so the next save quietly overwrote what had just been restored. Prompts
   with no visible text (images, files, colours) never showed version history
@@ -1382,7 +1382,7 @@ the video editor and the introduction tour ship on).
   arrow at all**, unlike every other expert setting, and the color palette's
   reset button showed even when every colour was still the default.
 - **Two expert-menu dropdowns paired side by side could look inconsistent**
-  when one's label wrapped to a second line and the other's did not — the
+  when one's label wrapped to a second line and the other's did not; the
   label now always sits above the field in that two-column layout instead.
 - **The "Create backup" button was noticeably narrower than "Open in
   Explorer" right below it** in the backup dialog's left column; both now
@@ -1398,7 +1398,7 @@ the video editor and the introduction tour ship on).
   even on themes where that made it hard to read; it now follows the theme's
   own text colour like the rest of the menu.
 - **Placing a prompt on the grid could silently do nothing** for a prompt that
-  was already a member of a grid folder — the library's "add to layout" icon
+  was already a member of a grid folder: the library's "add to layout" icon
   still offered it, since a folder member has no layout entry of its own.
 - **Turning off the Favorites feature left its filter reachable in two
   places**: the copy history's star filter and the library's batch
@@ -1430,7 +1430,7 @@ the video editor and the introduction tour ship on).
   menu unaware: it kept offering "Remove floating button" for a prompt that no
   longer had one, and clicking it brought the pill back instead.
 - Copying a prompt from a floating pill, the folder window or the tray did not
-  update the library's "most used"/"recently used" sort in the main window —
+  update the library's "most used"/"recently used" sort in the main window;
   it stayed frozen at whatever it last saw until the next full reload.
 - A fast double click on the same prompt with rotation while picking a chain could
   leave the tile visibly selected with its text silently missing from the
@@ -1439,7 +1439,7 @@ the video editor and the introduction tour ship on).
   and shown as a toast, the same way a successful one already was.
 - Dictation could silently record without ever delivering text, or never
   report that it had stopped, if one of its Windows event hookups failed to
-  register — that failure now ends the session with a proper error instead.
+  register; that failure now ends the session with a proper error instead.
 - If Windows itself refused a dictation stop request, the app could still show
   "stopped" while the microphone kept recording; it now reports the truth in
   that case.
@@ -1473,7 +1473,7 @@ the video editor and the introduction tour ship on).
   same prompt when the list was grouped.
 - **The minus, plus and preset buttons on every number field (crop, speed,
   fade, resize and more) announced their accessibility label in whatever
-  language the app started in, never the current one** — a screen reader kept
+  language the app started in, never the current one**: a screen reader kept
   reading the old language after switching, and in the video editor read a raw
   internal name instead of a translation from the very first launch.
 - **The warning that the store is being written unencrypted now offers a way
@@ -1621,14 +1621,14 @@ the video editor and the introduction tour ship on).
 - **You are now told when your data cannot be encrypted.** Windows seals the
   database with per-account encryption; on the rare machine where it refuses
   (a damaged user profile), the app keeps saving in readable form rather than
-  losing the data — but that used to be noted in the error log and nowhere the
+  losing the data, but that used to be noted in the error log and nowhere the
   user would see it. It now says so in a dialog at startup and keeps a
   permanent warning row at the top of the privacy settings for as long as it
   is true, with no switch to silence it. The next save that succeeds seals
   everything again by itself.
 - **Backups are now off-limits to the app's own page.** Attached pictures, videos
   and PDFs may live in any folder you pick, so the window is allowed to read
-  files by path — with the database and its settings files excluded by name.
+  files by path, with the database and its settings files excluded by name.
   Backup snapshots and exported `.psb` files hold the same data and were not on
   that list; they are now. Nothing about attachments changes.
 - **The script behind an elevated language-pack install is now protected
@@ -1655,8 +1655,8 @@ the video editor and the introduction tour ship on).
   settings for as long as it is true, with no switch to silence it, and a
   factory reset or restoring a backup's settings clears it.
 - **A hung background task (a stuck language-pack check, for example) could
-  delay every other periodic task behind it** — settings saves, automatic
-  backups, the update check — for as long as it stayed stuck. Each now runs on
+  delay every other periodic task behind it** (settings saves, automatic
+  backups, the update check) for as long as it stayed stuck. Each now runs on
   its own thread, so one stuck task can no longer hold up the others.
 - **Dictation started right after a previous one no longer picks up the
   earlier session's last sentence or gets stuck on listening.**
@@ -1670,7 +1670,7 @@ the video editor and the introduction tour ship on).
   (a full data folder, missing write permission). The change still applies for
   the rest of the session, but a dialog says it will be lost on restart, and a
   permanent warning row stays in the privacy settings for as long as the next
-  save keeps failing — clearing itself the moment one succeeds again.
+  save keeps failing, clearing itself the moment one succeeds again.
 - **A single prompt can now be marked confidential.** Its text and any
   variants are then encrypted with a vault password, asked once per session
   the first time a confidential prompt is opened or copied, and forgotten
@@ -1739,8 +1739,8 @@ the video editor and the introduction tour ship on).
 - **The three-dot button on tiles.** Tiles no longer show the three-dot button;
   right-click opens the tile menu.
 - **Eight themes are gone**: Gradient, Sunset, Forest, Midnight, Retro, Lavender,
-  Candy and Coffee. Eight remain — System, Light, Dark, Programmer, Neon Violet,
-  Ocean, Cyberpunk and Black & White — each covering something the others do not.
+  Candy and Coffee. Eight remain: System, Light, Dark, Programmer, Neon Violet,
+  Ocean, Cyberpunk and Black & White, each covering something the others do not.
   An installation set to one of the removed themes (or a custom theme built on
   one) falls back to System; the theme editor still reproduces any of the old
   looks from a kept base.
@@ -1748,9 +1748,9 @@ the video editor and the introduction tour ship on).
   icon. The preview identifies the folder and the tooltip names its members, so
   the number only covered a preview cell.
 - **Nine UI languages are gone**: French, Hindi, Indonesian, Vietnamese, Czech,
-  Ukrainian, Swedish, Russian and Korean. Eleven remain — English, German,
+  Ukrainian, Swedish, Russian and Korean. Eleven remain: English, German,
   Spanish, Italian, Portuguese, Polish, Chinese, Japanese, Dutch, Turkish and
-  Romanian — along with their installer translations. An installation still set
+  Romanian, along with their installer translations. An installation still set
   to one of the removed languages falls back to English and shows "Automatic" in
   the language picker; nothing else about it changes.
 - **The floating-button entry in a tile's menu could name the wrong action.**
@@ -1761,7 +1761,7 @@ the video editor and the introduction tour ship on).
   what a click really does.
 - **Dragging a file-backed prompt out of a floating button or a floating folder**
   handed the receiving app a broken path when the file name contained a `?` or a
-  `#` — most apps cut the path off at that character. Dragging from the main
+  `#`: most apps cut the path off at that character. Dragging from the main
   window was already correct; all three now build the reference the same way.
 - **Installing a language pack briefly flashed a PowerShell console.** The
   elevated install now runs fully hidden; only the admin-rights prompt itself
