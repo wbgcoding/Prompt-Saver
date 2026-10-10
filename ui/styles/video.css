@@ -222,6 +222,10 @@ body.video-body {
 .ve-audio-group { display: flex; align-items: center; gap: 4px; }
 .ve-vol { width: 78px; accent-color: var(--accent); }
 .ve-audio-group .icon-btn.ve-muted-btn { color: var(--danger); }
+.ve-audio-label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.ve-audio-group:has(.ve-vol:disabled) .ve-audio-label { opacity: 0.35; }
+.ve-mute-slash { display: none; }
+.ve-muted-btn .ve-mute-slash { display: inline; }
 .ve-audio-group .icon-btn:disabled,
 .ve-vol:disabled { opacity: 0.35; cursor: not-allowed; }
 

@@ -144,6 +144,24 @@ VIDEO_PROBE = """
     if (document.getElementById('ve-mute-sys').classList.contains('ve-muted-btn')) {
       errs.push('the system track must not start muted in the video editor');
     }
+    // 939: each volume slider carries a short label, and a muted track shows
+    // a struck-through icon (so muted and missing no longer look alike).
+    {
+      const { tx } = await (await import('./i18n.js')).fullTexts('en');
+      const labels = [...document.querySelectorAll('.ve-audio-label')].map((l) => l.textContent);
+      if (labels.length !== 2 || labels[0] !== tx('veAudioSys') || labels[1] !== tx('veAudioMic')) {
+        errs.push('939: the volume labels read ' + JSON.stringify(labels) + ' instead of the system and mic names');
+      }
+      const shown = (id) => { const e = document.querySelector('#' + id + ' .ve-mute-slash'); return !!e && getComputedStyle(e).display !== 'none'; };
+      if (!shown('ve-mute-mic')) errs.push('939: the muted mic shows no strike-through');
+      if (shown('ve-mute-sys')) errs.push('939: the live system track shows a strike-through');
+      document.getElementById('ve-mute-sys').click();
+      await sleep(30);
+      if (!shown('ve-mute-sys')) errs.push('939: muting the system track shows no strike-through');
+      document.getElementById('ve-mute-sys').click();
+      await sleep(30);
+      if (shown('ve-mute-sys')) errs.push('939: unmuting the system track left the strike-through');
+    }
     document.getElementById('ve-mute-mic').click();
     await sleep(30);
     if (document.getElementById('ve-mute-mic').classList.contains('ve-muted-btn')) {

@@ -2103,4 +2103,6 @@ export default {
     veExportOpen: "Exporteren…",
     veExportOpenTip: "Kies formaat, grootte en bestemming en exporteer dan",
     veFrameNo: "Frame {n}",
+    veAudioSys: "Systeem",
+    veAudioMic: "Microfoon",
 };

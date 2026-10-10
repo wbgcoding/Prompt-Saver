@@ -2103,4 +2103,6 @@ export default {
     veExportOpen: "Exportă…",
     veExportOpenTip: "Alege formatul, dimensiunea și destinația, apoi exportă",
     veFrameNo: "Cadrul {n}",
+    veAudioSys: "Sistem",
+    veAudioMic: "Microfon",
 };

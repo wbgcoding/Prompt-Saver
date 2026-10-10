@@ -2103,4 +2103,6 @@ export default {
     veExportOpen: "Export…",
     veExportOpenTip: "Choose format, size and destination, then export",
     veFrameNo: "Frame {n}",
+    veAudioSys: "System",
+    veAudioMic: "Mic",
 };

@@ -2103,4 +2103,6 @@ export default {
     veExportOpen: "Dışa aktar…",
     veExportOpenTip: "Biçimi, boyutu ve hedefi seçin, sonra dışa aktarın",
     veFrameNo: "Kare {n}",
+    veAudioSys: "Sistem",
+    veAudioMic: "Mikrofon",
 };

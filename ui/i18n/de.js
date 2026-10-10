@@ -2103,4 +2103,6 @@ export default {
     veExportOpen: "Exportieren…",
     veExportOpenTip: "Format, Größe und Ziel wählen, dann exportieren",
     veFrameNo: "Bild {n}",
+    veAudioSys: "System",
+    veAudioMic: "Mikrofon",
 };
