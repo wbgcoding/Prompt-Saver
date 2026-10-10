@@ -739,6 +739,8 @@ pub(crate) fn drop_machine_rows(incoming: &mut Settings) {
     incoming.ui_flags.retain(|k, _| !is_import_denied_flag(k));
     incoming.ui_values.retain(|k, _| !is_import_denied_value(k));
     incoming.ui_texts.retain(|k, _| !is_machine_text_key(k));
+    // A settings block from another machine never carries its update consent.
+    incoming.update_consent = UpdateConsent::Unasked;
 }
 
 // After a whole Settings block was replaced by an imported one: every denied
@@ -765,6 +767,7 @@ pub(crate) fn keep_machine_settings(local: &Settings, incoming: &mut Settings) {
     // entry and the update choices made on this computer.
     incoming.autostart = local.autostart;
     incoming.auto_update = local.auto_update;
+    incoming.update_consent = local.update_consent;
     incoming.skipped_versions = local.skipped_versions.clone();
 }
 

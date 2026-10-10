@@ -731,6 +731,79 @@ DRAG_VIEW_PROBE = """
 """
 
 
+# 838: the first-launch update question. A fresh profile (stub flag
+# __UPDATE_CONSENT_TEST__) is asked before anything else; "No" stores a refusal,
+# Escape stores nothing so the question comes back on the next launch. Its own
+# boot per answer because the question only opens during startup.
+UPDATE_CONSENT_PROBE = """
+<script>
+(async () => {
+  // 838:
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const mode = window.__UPDATE_CONSENT_MODE__;
+  const beat = setInterval(() => {
+    document.documentElement.style.setProperty('--uc-tick', String(Date.now()));
+    document.body.getBoundingClientRect();
+  }, 40);
+  const visible = (el) => !!el && !el.classList.contains('hidden');
+  const consentCalls = () => (window.__SMOKE_ARGS__ || []).filter((c) => c[0] === 'set_update_consent');
+  try {
+    const cm = document.getElementById('confirm-modal');
+    // Earlier startup dialogs (the data takeover offer) are closed with Cancel
+    // until the update question itself is on screen.
+    for (let i = 0; i < 100; i++) {
+      if (visible(cm)) {
+        if (document.getElementById('confirm-title').textContent.trim() === 'Check for updates?') break;
+        document.getElementById('confirm-cancel').click();
+        await sleep(300);
+      } else {
+        await sleep(100);
+      }
+    }
+    if (!visible(cm)) {
+      errs.push('838: ' + mode + ': an unanswered profile was not asked about updates');
+    } else {
+      const title = document.getElementById('confirm-title').textContent.trim();
+      if (!title || /updConsent/.test(title)) errs.push('838: ' + mode + ': the question title is missing or a raw key: ' + title);
+      const msg = document.getElementById('confirm-msg').textContent;
+      if (/updConsent/.test(msg) || msg.indexOf('{app}') >= 0 || !msg.trim()) errs.push('838: ' + mode + ': the question text is missing or unfilled: ' + msg);
+      const alt = document.getElementById('confirm-alt');
+      if (!visible(alt) || alt.textContent.trim() !== 'No') errs.push('838: ' + mode + ': the No button is missing: ' + (alt && alt.textContent) + ' title=' + title);
+      if (consentCalls().length) errs.push('838: ' + mode + ': an answer was stored before the user chose');
+      if (mode === 'no') {
+        alt.click();
+      } else if (mode === 'yes') {
+        document.getElementById('confirm-ok').click();
+      } else {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      }
+      await sleep(400);
+      const calls = consentCalls();
+      if (mode === 'no') {
+        if (calls.length !== 1 || !calls[0][1] || calls[0][1].enabled !== false) {
+          errs.push('838: no: expected one set_update_consent {enabled:false}, got ' + JSON.stringify(calls));
+        }
+      } else if (mode === 'yes') {
+        if (calls.length !== 1 || !calls[0][1] || calls[0][1].enabled !== true) {
+          errs.push('838: yes: expected one set_update_consent {enabled:true}, got ' + JSON.stringify(calls));
+        }
+      } else if (calls.length) {
+        errs.push('838: escape: Escape stored an answer: ' + JSON.stringify(calls));
+      }
+      if (visible(cm)) errs.push('838: ' + mode + ': the question stayed open after the answer');
+    }
+  } catch (e) { errs.push('838: probe: ' + e.message); }
+  clearInterval(beat);
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
 # 276: same idea as SEAL_PROBE just above, for the settings-write-failure notice.
 # A failed disk write is backend-only, so the probe cannot trigger a real one --
 # it only proves the two states the window itself can show: the startup dialog
@@ -2192,6 +2265,26 @@ def run(browser, tmp):
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print(f"-- settings write ({tag})")
+        for e in errs:
+            print(f"   FAIL: {e}")
+        failed += len(errs)
+        if not errs:
+            print("   ok")
+
+    # 838: the first-launch update question, one boot per answer (No, Yes, Escape).
+    for mode in ("no", "yes", "escape"):
+        side = tmp / "ui" / f"update-consent-{mode}.html"
+        side.write_text(
+            (REPO / "ui" / "index.html").read_text(encoding="utf-8")
+            .replace("<script",
+                     f'<script>window.__UPDATE_CONSENT_TEST__ = true; window.__UPDATE_CONSENT_MODE__ = "{mode}";</script>\n'
+                     '<script src="tauri_stub.js"></script>\n<script', 1)
+            .replace("</body>", UPDATE_CONSENT_PROBE + "</body>"),
+            encoding="utf-8")
+        proc = run_chrome(browser, tmp / ('profile-update-consent-%s' % mode), "1000,780", 45000, side.as_uri(), 180)
+        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        print(f"-- update consent question ({mode})")
         for e in errs:
             print(f"   FAIL: {e}")
         failed += len(errs)

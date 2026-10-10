@@ -981,6 +981,7 @@ pub fn run() {
             bg_ops::open_bg_op_folder,
             bg_ops::confirm_quit_with_running_ops,
             update::set_auto_update,
+            update::set_update_consent,
             shortcuts::set_hotkey,
             shortcuts::check_hotkey,
             shortcuts::set_hotkey_capture,

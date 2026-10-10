@@ -405,6 +405,27 @@ async function maybeOpenFirstRunTour(sealWarned) {
   await openTour({ firstRun: true });
 }
 
+// The update check never goes online before the user said yes. Asked once per
+// launch until answered: Cancel, Escape and a click outside leave the question
+// open for the next start. The unencrypted-store warning goes first, same as for
+// the tour, and demo mode never asks (it has no real settings to keep).
+async function maybeAskUpdateConsent(sealWarned) {
+  if (sealWarned || flag("demoMode")) return;
+  if (settings.update_consent !== "unasked") return;
+  const r = await confirmDialog({
+    title: t("updConsentTitle"),
+    message: t("updConsentMsg"),
+    confirmLabel: t("updConsentYes"),
+    altLabel: t("updConsentNo"),
+    danger: false,
+  });
+  if (r !== true && r !== "alt") return;
+  const enabled = r === true;
+  await invoke("set_update_consent", { enabled });
+  settings.update_consent = enabled ? "yes" : "no";
+  settings.auto_update = enabled;
+}
+
 // A crash draft from a previous session, asked about exactly once at the next
 // start (never again on later editor opens this same session). "No" removes
 // it right away rather than leaving it to resurface on the next launch too.
@@ -535,6 +556,7 @@ async function init() {
         const sealWarned = await warnStoreUnsealed();
         await warnSettingsWriteFailed();
         await warnDataDirSyncFolder();
+        await maybeAskUpdateConsent(sealWarned);
         await maybeOpenFirstRunTour(sealWarned);
         await maybeOfferEditorDraftRecovery();
         // A promptsaver:// link that started this process waits in the backend

@@ -964,8 +964,9 @@ error.
 
 ### Updates & security
 
-On by default, and one of a short, fixed list of things that ever reach the
-network on their own: the update check itself, a first-run download of the
+On first launch the app asks whether it may check for updates; until you
+answer, it never goes online. The update check is one of a short, fixed list of
+things that ever reach the network on their own: the update check itself, a first-run download of the
 Microsoft WebView2 installer if that runtime is missing, and the update
 download that follows once you choose to install one. A downloaded update is
 verified against a published checksum before it runs; a missing or
@@ -1712,8 +1713,9 @@ ist die vollständige Referenz: jeder Befehl mit seinen Argumenten und der Form
 seiner JSON-Antwort, die Fehlercodes, das Link-Schema und durchgerechnete
 Beispiele, nichts davon muss durch Ausprobieren herausgefunden werden.
 
-**Updates & Sicherheit**: standardmäßig an, und eines von wenigen Dingen, die
-überhaupt von sich aus ins Netz gehen: die Update-Prüfung selbst, ein
+**Updates & Sicherheit**: Beim ersten Start fragt das Programm, ob es nach
+Updates suchen darf; bis zur Antwort geht es nie online. Die Update-Prüfung ist
+eines von wenigen Dingen, die überhaupt von sich aus ins Netz gehen: die Update-Prüfung selbst, ein
 einmaliger WebView2-Installer-Download, falls die Laufzeit fehlt, und der
 eigentliche Update-Download, sobald eine gefundene Version installiert wird.
 Ein heruntergeladenes Update wird vor der Installation gegen eine

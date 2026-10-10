@@ -206,6 +206,9 @@ const SETTINGS = {
   // and format for both of the moved expert-menu rows.
   rec_stop_hotkey: "CommandOrControl+Shift+8", rec_pause_hotkey: "CommandOrControl+Shift+7",
   auto_update: true, skipped_versions: [],
+  // The first-launch update question: existing walks see no dialog, the consent
+  // boot sets the flag to start from an unanswered profile.
+  update_consent: window.__UPDATE_CONSENT_TEST__ ? "unasked" : "yes",
   // Tags, custom themes, view groups and private notes ship off; the stub turns them
   // on so the smoke run covers that UI too. The Markdown preview is deliberately NOT
   // listed; it ships on, and the run proves that.
@@ -352,6 +355,13 @@ const RESULTS = {
   set_video_export_dir: (a) => { SETTINGS.ui_texts.videoExportDir = a.dir; return null; },
   set_recording_dir: (a) => { SETTINGS.ui_texts.recordingDir = a.dir; return null; },
   get_settings: () => JSON.parse(JSON.stringify(SETTINGS)),
+  // The invoke wrapper already logs the args to __SMOKE_ARGS__; this keeps the
+  // stored answer in step so a later get_settings reads it back.
+  set_update_consent: (a) => {
+    SETTINGS.auto_update = !!(a && a.enabled);
+    SETTINGS.update_consent = SETTINGS.auto_update ? "yes" : "no";
+    return null;
+  },
   get_state: () => ({ prompts: PROMPTS.map(presentPrompt), settings: JSON.parse(JSON.stringify(SETTINGS)) }),
   // 458: the single in-memory session key model -- unlock/lock/status only,
   // never a real Argon2/AES round trip (that is the Rust unit tests' job).

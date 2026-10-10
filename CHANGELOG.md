@@ -1440,6 +1440,9 @@ the video editor and the introduction tour ship on).
 
 ### Security
 
+- **The update check now asks for permission on first launch; nothing goes
+  online before you answer.** Installs that already had the update check on or
+  off keep their choice.
 - **Imports and restores can no longer grant consent or lift locks.** A
   settings file, a full import or a backup restore (in the app and on the
   command line) keeps this computer's own value for the online speech

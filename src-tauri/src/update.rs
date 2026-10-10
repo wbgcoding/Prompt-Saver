@@ -109,12 +109,18 @@ pub(crate) fn update_check_interval(app: &AppHandle) -> Duration {
     Duration::from_secs((clamp_update_hours(hours) * 3600.0) as u64)
 }
 
+// The automatic check goes online only with the switch on AND an explicit yes
+// (or an existing install's migrated choice). An unanswered question counts as no.
+pub(crate) fn update_check_allowed(s: &Settings) -> bool {
+    s.auto_update && s.update_consent == UpdateConsent::Yes
+}
+
 // One round of the automatic update check.
 pub(crate) fn update_check_tick(app: &AppHandle) {
     let enabled = app
         .try_state::<Db>()
-        .map(|s| s.lock().unwrap_or_else(|e| e.into_inner()).settings.auto_update)
-        .unwrap_or(true);
+        .map(|s| update_check_allowed(&s.lock().unwrap_or_else(|e| e.into_inner()).settings))
+        .unwrap_or(false);
     if !enabled {
         return;
     }
@@ -148,6 +154,16 @@ pub(crate) fn set_bars(app: AppHandle, state: State<Db>, header: bool, composer:
 pub(crate) fn set_auto_update(app: AppHandle, state: State<Db>, enabled: bool) {
     let mut store = lock(&state);
     store.settings.auto_update = enabled;
+    store.settings.update_consent = if enabled { UpdateConsent::Yes } else { UpdateConsent::No };
+    save_settings(&app, &store.settings);
+}
+
+// The first-launch question: remembers the answer and the switch together.
+#[tauri::command(async)]
+pub(crate) fn set_update_consent(app: AppHandle, state: State<Db>, enabled: bool) {
+    let mut store = lock(&state);
+    store.settings.auto_update = enabled;
+    store.settings.update_consent = if enabled { UpdateConsent::Yes } else { UpdateConsent::No };
     save_settings(&app, &store.settings);
 }
 

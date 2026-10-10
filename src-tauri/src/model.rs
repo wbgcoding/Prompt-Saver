@@ -279,6 +279,12 @@ pub(crate) struct Settings {
     pub(crate) rec_pause_hotkey: String,
     #[serde(default = "default_on")]
     pub(crate) auto_update: bool,
+    // Whether the user allowed the automatic update check. A fresh profile
+    // starts Unasked and never goes online until answered; a stored settings
+    // blob without the key is an existing install (Legacy) and is turned into
+    // Yes or No from its `auto_update` value by `migrate`.
+    #[serde(default = "legacy_update_consent")]
+    pub(crate) update_consent: UpdateConsent,
     // Update versions the user chose to skip: never offered again.
     #[serde(default)]
     pub(crate) skipped_versions: Vec<String>,
@@ -408,6 +414,19 @@ pub(crate) fn default_rec_pause_hotkey() -> String {
     "Ctrl+Alt+O".to_string()
 }
 
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum UpdateConsent {
+    Unasked,
+    Yes,
+    No,
+    Legacy,
+}
+
+pub(crate) fn legacy_update_consent() -> UpdateConsent {
+    UpdateConsent::Legacy
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Settings {
@@ -433,6 +452,7 @@ impl Default for Settings {
             rec_stop_hotkey: default_rec_stop_hotkey(),
             rec_pause_hotkey: default_rec_pause_hotkey(),
             auto_update: true,
+            update_consent: UpdateConsent::Unasked,
             skipped_versions: Vec::new(),
             last_seen_version: String::new(),
             ui_flags: HashMap::new(),
@@ -814,6 +834,11 @@ impl Settings {
 
     // Ensure at least one view exists; migrate legacy single-grid data.
     pub(crate) fn migrate(&mut self) {
+        // An install that stored settings before the consent question existed
+        // keeps exactly the update behaviour it had.
+        if self.update_consent == UpdateConsent::Legacy {
+            self.update_consent = if self.auto_update { UpdateConsent::Yes } else { UpdateConsent::No };
+        }
         // Merges that read an old key run first, before the removal loops below.
         //
         // Four on/off switches each had a duration beside them. The duration is the

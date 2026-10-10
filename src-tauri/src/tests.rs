@@ -17790,3 +17790,43 @@ fn taskbar_throttle_applies_a_repeated_percent_once() {
     t.reset();
     assert!(t.should_apply(8, "off", None), "a reset retries the same pair");
 }
+
+// ---- the update check waits for an answer ----
+
+#[test]
+fn a_fresh_profile_never_checks_for_updates() {
+    let s = Settings::default();
+    assert_eq!(s.update_consent, UpdateConsent::Unasked);
+    assert!(!update::update_check_allowed(&s));
+    let mut yes = Settings { update_consent: UpdateConsent::Yes, ..Settings::default() };
+    assert!(update::update_check_allowed(&yes));
+    yes.auto_update = false;
+    assert!(!update::update_check_allowed(&yes), "the switch still wins");
+}
+
+#[test]
+fn stored_settings_without_the_consent_key_keep_their_update_choice() {
+    let mut on: Settings = serde_json::from_str(r#"{"auto_update":true}"#).unwrap();
+    assert_eq!(on.update_consent, UpdateConsent::Legacy);
+    on.migrate();
+    assert_eq!(on.update_consent, UpdateConsent::Yes);
+    let mut off: Settings = serde_json::from_str(r#"{"auto_update":false}"#).unwrap();
+    off.migrate();
+    assert_eq!(off.update_consent, UpdateConsent::No);
+    let mut fresh = Settings::default();
+    fresh.migrate();
+    assert_eq!(fresh.update_consent, UpdateConsent::Unasked, "migrate leaves an unanswered profile alone");
+    let again: Settings = serde_json::from_str(&serde_json::to_string(&fresh).unwrap()).unwrap();
+    assert_eq!(again.update_consent, UpdateConsent::Unasked, "the unanswered state survives a save");
+}
+
+#[test]
+fn a_restore_keeps_the_local_update_consent_and_a_foreign_block_asks_again() {
+    let local = Settings { update_consent: UpdateConsent::Yes, ..Settings::default() };
+    let mut incoming = Settings { update_consent: UpdateConsent::No, ..Settings::default() };
+    keep_machine_settings(&local, &mut incoming);
+    assert_eq!(incoming.update_consent, UpdateConsent::Yes);
+    let mut other = Settings { update_consent: UpdateConsent::Yes, ..Settings::default() };
+    drop_machine_rows(&mut other);
+    assert_eq!(other.update_consent, UpdateConsent::Unasked);
+}
