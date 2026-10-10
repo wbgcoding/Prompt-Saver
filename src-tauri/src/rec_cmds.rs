@@ -69,7 +69,7 @@ pub(crate) fn recording_disk_warning(drive: String, free_bytes: u64, warn_mb: f6
 // it directly, same as recCanvasMode above) -- the 500 MB default lives here
 // until then.
 #[cfg(windows)]
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn check_recording_disk_space(app: AppHandle, db: State<Db>) -> Option<RecDiskWarning> {
     let dir = data_dir(&app).join("recordings");
     let free = free_space_bytes(&dir).ok()?;
@@ -84,7 +84,7 @@ pub(crate) fn check_recording_disk_space(app: AppHandle, db: State<Db>) -> Optio
     recording_disk_warning(drive_label(&dir), free, warn_mb, video_kbps, audio_active)
 }
 #[cfg(not(windows))]
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn check_recording_disk_space(app: AppHandle, db: State<Db>) -> Option<RecDiskWarning> {
     let _ = (app, db);
     None

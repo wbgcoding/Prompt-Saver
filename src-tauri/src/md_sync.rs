@@ -1975,7 +1975,7 @@ pub(crate) struct SyncStatus {
     pub(crate) reason: String,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn sync_status(state: State<Db>) -> SyncStatus {
     let enabled = sync_enabled(&lock(&state).settings);
     let h = sync_health_lock().clone();

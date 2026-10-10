@@ -124,15 +124,7 @@ pub(crate) fn build_main_window(app: &AppHandle) -> tauri::Result<tauri::Webview
         }
         WindowEvent::CloseRequested { api, .. } => {
             // Portable always closes fully; installed honours the tray setting.
-            let minimize = !is_portable()
-                && handle2
-                    .try_state::<Db>()
-                    .map(|s| {
-                        s.lock().unwrap_or_else(|e| e.into_inner())
-                            .settings
-                            .minimize_to_tray
-                    })
-                    .unwrap_or(false);
+            let minimize = close_minimizes(is_portable());
             if minimize {
                 api.prevent_close();
                 // Hide instead of quitting; a hidden window never keeps listening.
@@ -183,6 +175,12 @@ pub(crate) fn build_main_window(app: &AppHandle) -> tauri::Result<tauri::Webview
         _ => {}
     });
     Ok(win)
+}
+
+// The close handler's decision, read from the mirrored flag so the event-loop
+// thread never waits on the store lock.
+pub(crate) fn close_minimizes(portable: bool) -> bool {
+    !portable && crate::store::MINIMIZE_TO_TRAY.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 // How long the Destroyed-event watchdog gives handle.exit(0) to actually end

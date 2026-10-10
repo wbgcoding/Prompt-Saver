@@ -196,26 +196,26 @@ pub(crate) fn effective_theme(app: &AppHandle, pref: &str) -> String {
         .to_string()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn current_theme(app: AppHandle, state: State<Db>) -> String {
     let settings = lock(&state).settings.clone();
     effective_theme(&app, &theme_base_of(&settings, &settings.theme))
 }
 
 // Colour overrides of the active theme; empty for every built-in one.
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn theme_vars(state: State<Db>) -> HashMap<String, String> {
     theme_vars_of(&lock(&state).settings)
 }
 
 // The ink rule a satellite window fetches once at load, before the first
 // theme-changed event arrives.
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn ink_prefs(state: State<Db>) -> InkPrefs {
     ink_prefs_of(&lock(&state).settings)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn set_theme(app: AppHandle, state: State<Db>, theme: String) -> String {
     let settings = {
         let mut store = lock(&state);

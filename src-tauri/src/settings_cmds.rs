@@ -12,7 +12,7 @@ pub(crate) fn webview_settings(settings: &Settings) -> Settings {
     copy
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn get_settings(state: State<Db>) -> Settings {
     webview_settings(&lock(&state).settings)
 }

@@ -17705,3 +17705,55 @@ fn snip_overlay_preview_keeps_full_chroma_for_coloured_text() {
         snip::SNIP_PREVIEW_Q
     );
 }
+
+// ---- the window-close decision never waits for the store ----
+
+#[test]
+fn close_decision_returns_while_the_store_is_locked() {
+    let store = Arc::new(Mutex::new(Store {
+        prompts: Vec::new(),
+        trash: Vec::new(),
+        settings: Settings::default(),
+        prompts_locked: false,
+        written: Default::default(),
+    }));
+    let held = store.lock().unwrap();
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let mut s = Settings { minimize_to_tray: false, ..Settings::default() };
+        mirror_minimize_to_tray(&s);
+        let off = close_minimizes(false);
+        s.minimize_to_tray = true;
+        mirror_minimize_to_tray(&s);
+        let on = close_minimizes(false);
+        let portable = close_minimizes(true);
+        let _ = tx.send((off, on, portable));
+    });
+    let got = rx
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .expect("the close decision must not wait for the store lock");
+    drop(held);
+    assert_eq!(got, (false, true, false));
+}
+
+#[test]
+fn hot_path_commands_run_off_the_main_thread() {
+    // Contrast: a sync command runs on the event-loop thread and freezes the
+    // window while a backup holds the store. No red test exists for this (it
+    // needs a live event loop), so the attribute itself is asserted.
+    for (src, name) in [
+        (include_str!("logging.rs"), "log_error"),
+        (include_str!("settings_cmds.rs"), "get_settings"),
+        (include_str!("autostart.rs"), "set_always_on_top"),
+        (include_str!("theme.rs"), "current_theme"),
+        (include_str!("update.rs"), "set_ui_value"),
+    ] {
+        let at = src.find(&format!("fn {name}(")).expect(name);
+        let head = &src[..at];
+        let attr = head.rfind("#[tauri::command").expect(name);
+        assert!(
+            head[attr..].starts_with("#[tauri::command(async)]"),
+            "{name} must be an async command"
+        );
+    }
+}

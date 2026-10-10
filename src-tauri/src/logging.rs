@@ -467,7 +467,7 @@ pub(crate) fn record_error_log(text: &str, origin: &str, raw: Option<&str>, max:
 // no-op while the switch is off -- the buffer is also cleared the moment it is
 // switched off (see `set_ui_flag`), so "off" always means an empty list, not
 // just a paused one.
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn log_error(state: State<'_, Db>, text: String, origin: String, raw: Option<String>) {
     let settings = lock(&state).settings.clone();
     if !error_log_enabled(&settings) {

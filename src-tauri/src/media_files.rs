@@ -254,7 +254,7 @@ pub(crate) fn video_folder_stats_impl(dir: &str, configured: &Path) -> (u64, u64
     (c1 + c2, b1 + b2)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn video_folder_stats(state: State<'_, Db>, dir: String) -> (u64, u64) {
     video_folder_stats_impl(&dir, &configured_recording_dir(&state))
 }
@@ -738,7 +738,7 @@ pub(crate) fn list_discarded_recordings_impl(dir: &str, configured: &Path) -> Ve
     out
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn list_discarded_recordings(state: State<'_, Db>, dir: String) -> Vec<VideoFolderFile> {
     list_discarded_recordings_impl(&dir, &configured_recording_dir(&state))
 }

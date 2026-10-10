@@ -284,7 +284,7 @@ pub(crate) struct SecretVaultStatus {
     pub(crate) unlocked: bool,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn secret_vault_status(state: State<Db>) -> SecretVaultStatus {
     let store = lock(&state);
     let configured = !store

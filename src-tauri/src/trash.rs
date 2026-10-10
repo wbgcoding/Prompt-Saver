@@ -778,7 +778,7 @@ pub(crate) fn takeover_apply(app: AppHandle, state: State<'_, Db>, adopt: bool, 
 }
 
 // UI language preference: "auto" or one of LANG_CODES.
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn set_language(app: AppHandle, state: State<Db>, lang: String) {
     let resolved = {
         let mut store = lock(&state);
@@ -800,7 +800,7 @@ pub(crate) fn set_language(app: AppHandle, state: State<Db>, lang: String) {
 }
 
 // Font family + size for the saved prompt tiles only. size 0 = auto-fit.
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn set_tile_style(app: AppHandle, state: State<Db>, font: String, size: u32) {
     let mut store = lock(&state);
     store.settings.tile_font = font;

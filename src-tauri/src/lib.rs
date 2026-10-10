@@ -403,6 +403,7 @@ pub fn run() {
                 .unwrap_or(20.0)
                 .clamp(0.0, 300.0) as u64;
 
+            mirror_minimize_to_tray(&store.settings);
             app.manage(Mutex::new(store));
             app.manage(SnipState(Mutex::new(Vec::new())));
             app.manage(SnipPreview(Arc::new(Mutex::new(None))));

@@ -89,7 +89,7 @@ pub(crate) fn rebuild_view_layout(
 // size (if any) is restored automatically because layouts are keyed per size;
 // membership itself (`members`) never changes here, so no entry can appear or
 // disappear from the view just because its grid did.
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn set_view_grid(app: AppHandle, state: State<Db>, id: String, cols: u32, rows: u32) -> Settings {
     let mut store = lock(&state);
     let cols = cols.clamp(GRID_MIN, GRID_MAX);
@@ -504,7 +504,7 @@ pub(crate) fn apply_tag_colors(settings: &mut Settings, entries: Vec<TagColor>) 
 // "Colour every tag at once": one lock and one settings write for the whole set.
 // Doing it tag by tag through set_tag_color meant a full immediate write per tag,
 // which on a large library is that many disk writes back to back.
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn set_tag_colors(app: AppHandle, state: State<Db>, entries: Vec<TagColor>) -> Result<Settings, String> {
     let mut store = lock(&state);
     apply_tag_colors(&mut store.settings, entries)?;
@@ -512,7 +512,7 @@ pub(crate) fn set_tag_colors(app: AppHandle, state: State<Db>, entries: Vec<TagC
     Ok(webview_settings(&store.settings))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn set_tag_color(app: AppHandle, state: State<Db>, name: String, color: String) -> Result<Settings, String> {
     let key = tag_key(&valid_tag_name(&name)?);
     let color = valid_tag_color(&color)?;
@@ -554,7 +554,7 @@ pub(crate) fn add_view(app: AppHandle, state: State<Db>, name: String, color: St
     Ok(webview_settings(&store.settings))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn rename_view(app: AppHandle, state: State<Db>, id: String, name: String) -> Settings {
     let mut store = lock(&state);
     if let Some(view) = store.settings.views.iter_mut().find(|v| v.id == id) {
@@ -568,7 +568,7 @@ pub(crate) fn rename_view(app: AppHandle, state: State<Db>, id: String, name: St
 }
 
 // Set a view's tab color (hex); empty string clears it back to default.
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn set_view_color(app: AppHandle, state: State<Db>, id: String, color: String) -> Settings {
     let mut store = lock(&state);
     if let Some(view) = store.settings.views.iter_mut().find(|v| v.id == id) {
@@ -600,7 +600,7 @@ pub(crate) fn reorder_views_by_id(mut views: Vec<View>, order: &[String]) -> Vec
     reordered
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn reorder_views(app: AppHandle, state: State<Db>, order: Vec<String>) -> Settings {
     let mut store = lock(&state);
     store.settings.views = reorder_views_by_id(std::mem::take(&mut store.settings.views), &order);
@@ -722,7 +722,7 @@ pub(crate) fn delete_view(app: AppHandle, state: State<Db>, id: String) -> Resul
     Ok(webview_settings(&store.settings))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn set_active_view(app: AppHandle, state: State<Db>, id: String) -> Settings {
     let mut store = lock(&state);
     if store.settings.views.iter().any(|v| v.id == id) {

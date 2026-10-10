@@ -37,14 +37,14 @@ pub(crate) fn apply_autostart(_enabled: bool, _minimized: bool) -> Result<(), St
     Err("autostart is only supported on Windows".to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn set_minimize_on_close(app: AppHandle, state: State<Db>, enabled: bool) {
     let mut store = lock(&state);
     store.settings.minimize_to_tray = enabled;
     save_settings(&app, &store.settings);
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn set_always_on_top(app: AppHandle, state: State<Db>, enabled: bool) {
     {
         let mut store = lock(&state);
@@ -223,7 +223,7 @@ pub(crate) fn reconcile_windows_state(autostart_on: bool, start_min: bool, url_s
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn set_autostart(app: AppHandle, state: State<Db>, enabled: bool) -> Result<bool, String> {
     // The store lock stays held across both steps so no other change slips in
     // between the save and the registry write.
@@ -249,7 +249,7 @@ pub(crate) fn set_autostart(app: AppHandle, state: State<Db>, enabled: bool) -> 
     Ok(enabled)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn set_start_minimized(app: AppHandle, state: State<Db>, enabled: bool) -> Result<bool, String> {
     let mut store = lock(&state);
     let prior = store.settings.start_minimized;

@@ -541,7 +541,7 @@ pub(crate) fn image_text_matches(prompts: &[Prompt], ocr_index_on: bool, query: 
         .collect()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn search_image_text(state: State<Db>, query: String) -> Vec<String> {
     let store = lock(&state);
     let ocr_index_on = store.settings.ui_flags.get("ocrIndex").copied().unwrap_or(false);
@@ -795,7 +795,7 @@ pub(crate) fn ocr_install_result(name: String) -> Option<OcrInstallResult> {
 // automatic notice by OCR_LANG_SNOOZE_H hours, so the user is not re-nagged on
 // every restart. Does not touch the check cadence itself; a
 // manual "Jetzt prüfen" (ocr_capabilities(force: true)) is unaffected by this.
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn ocr_lang_snooze(app: AppHandle, state: State<Db>) {
     #[cfg(windows)]
     lang_snooze(&app, &state, ocr::CapKind::Ocr);
@@ -885,7 +885,7 @@ pub(crate) fn speech_install_result(name: String) -> Option<OcrInstallResult> {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn voice_lang_snooze(app: AppHandle, state: State<Db>) {
     #[cfg(windows)]
     lang_snooze(&app, &state, ocr::CapKind::Speech);

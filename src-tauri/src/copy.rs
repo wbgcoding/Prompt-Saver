@@ -241,7 +241,7 @@ pub(crate) struct RotationPeek {
     pub(crate) text: String,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn rotation_peek(state: State<Db>, id: String) -> Option<RotationPeek> {
     let store = lock(&state);
     let p = store.prompts.iter().find(|p| p.id == id)?;
@@ -289,7 +289,7 @@ pub(crate) fn emit_rotation_changed(app: &AppHandle, p: &Prompt, settings: &Sett
     );
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn rotation_commit(app: AppHandle, state: State<Db>, id: String) {
     let mut store = lock(&state);
     if let Some(pos) = store.prompts.iter().position(|p| p.id == id) {
@@ -316,7 +316,7 @@ pub(crate) fn auto_eligible(p: &Prompt, s: &Settings) -> bool {
 
 // Editor's "From the start" button: back to entry 1, same as a freshly
 // created rotating prompt, without touching the entries themselves.
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn rotation_reset(app: AppHandle, state: State<Db>, id: String) {
     let mut store = lock(&state);
     rotation_forget(&mut store.settings, std::slice::from_ref(&id));
@@ -329,7 +329,7 @@ pub(crate) fn rotation_reset(app: AppHandle, state: State<Db>, id: String) {
 // rotation_next() currently points at and advances the pointer: replacing what
 // copy_prompt would otherwise have done for this one copy, so it must never be
 // called together with copy_prompt for the same click.
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn rotation_arm_session(app: AppHandle, state: State<Db>, id: String, resolved: Vec<String>) -> bool {
     let mut store = lock(&state);
     let Some(p) = store.prompts.iter().find(|p| p.id == id).cloned() else {
@@ -511,7 +511,7 @@ pub(crate) fn prune_history(settings: &mut Settings) {
 // next copy, so this exists to apply whatever the settings say right now.
 // Row count before/after (never a byte estimate stored nowhere -- copy_log
 // only ever holds a prompt id and a timestamp) is the honest "size" figure.
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn trim_copy_history_now(app: AppHandle, state: State<'_, Db>) -> (u32, u64) {
     let Some(conn) = db_conn(&app) else { return (0, 0) };
     let (cap, cutoff) = { history_cap_and_cutoff(&lock(&state).settings) };

@@ -1044,7 +1044,7 @@ pub(crate) async fn dismiss_example_prompts(app: AppHandle, state: State<'_, Db>
 
 // Count for the "Remove examples (n)" button label: how many seeded examples would
 // actually be deleted right now, same rule dismiss_example_prompts itself applies.
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn example_prompts_pending(state: State<Db>) -> usize {
     let store = lock(&state);
     examples_still_pristine(&store.settings.example_prompt_ids, &store.settings.example_prompt_seeds, &store.prompts).len()
@@ -1509,7 +1509,7 @@ pub(crate) async fn restore_version_as_new(app: AppHandle, state: State<'_, Db>,
 }
 
 // Star / unstar a prompt in the library.
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn set_favorite(app: AppHandle, state: State<Db>, id: String, favorite: bool) -> Result<(), String> {
     let ok = {
         let mut store = lock(&state);

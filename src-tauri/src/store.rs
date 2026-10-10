@@ -113,6 +113,15 @@ pub(crate) fn store_sealed() -> bool {
 // Store.prompts_locked, but process-global rather than a Store field because
 // save_settings/write_settings_now are the one choke point every settings mutation
 // already funnels through, without a &Store to read a field from.
+// Copy of `settings.minimize_to_tray` for the window-close handler, which runs
+// on the event-loop thread and must never wait for the store lock (a backup
+// holds it for a while). Refreshed whenever settings are loaded or written.
+pub(crate) static MINIMIZE_TO_TRAY: AtomicBool = AtomicBool::new(true);
+
+pub(crate) fn mirror_minimize_to_tray(settings: &Settings) {
+    MINIMIZE_TO_TRAY.store(settings.minimize_to_tray, Ordering::Relaxed);
+}
+
 pub(crate) static SETTINGS_LOCKED: AtomicBool = AtomicBool::new(false);
 
 #[tauri::command]
@@ -1227,6 +1236,7 @@ pub(crate) fn save_settings(app: &AppHandle, settings: &Settings) -> bool {
 // The write itself, without the "cancel a collected write" step: the collecting
 // path below calls this one so it does not clear its own mark twice.
 pub(crate) fn write_settings_now(app: &AppHandle, settings: &Settings) -> bool {
+    mirror_minimize_to_tray(settings);
     if data_dir_write_blocked(app) {
         return false;
     }

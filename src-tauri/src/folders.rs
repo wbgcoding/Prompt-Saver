@@ -231,7 +231,7 @@ pub(crate) struct FolderView {
     pub(crate) members: Vec<Prompt>,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn float_folder_state(state: State<Db>, id: String) -> Option<FolderView> {
     let store = lock(&state);
     let folder = store.settings.float_folders.iter().find(|f| f.id == id)?;
@@ -373,7 +373,7 @@ pub(crate) async fn set_float_folder_scale(
 
 // The optional label under the folder icon. Control characters are stripped: the name
 // also ends up as the window title.
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn rename_float_folder(app: AppHandle, state: State<Db>, id: String, name: String) -> Result<(), String> {
     let name = folder_name_of(&name)?;
     {

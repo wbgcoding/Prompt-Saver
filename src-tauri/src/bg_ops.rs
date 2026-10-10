@@ -287,7 +287,7 @@ pub(crate) fn push_bg_op(app: &AppHandle, id: &str, kind: &str, state: &str, val
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn list_bg_ops(state_db: State<Db>) -> Vec<BgOpInfo> {
     list_bg_ops_impl(bg_done_keep_min(&state_db))
 }

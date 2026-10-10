@@ -136,7 +136,7 @@ pub(crate) fn update_check_tick(app: &AppHandle) {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn set_bars(app: AppHandle, state: State<Db>, header: bool, composer: bool) {
     let mut store = lock(&state);
     store.settings.show_header = header;
@@ -144,7 +144,7 @@ pub(crate) fn set_bars(app: AppHandle, state: State<Db>, header: bool, composer:
     save_settings(&app, &store.settings);
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn set_auto_update(app: AppHandle, state: State<Db>, enabled: bool) {
     let mut store = lock(&state);
     store.settings.auto_update = enabled;
@@ -326,7 +326,7 @@ pub(crate) fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled
 }
 
 // Set an expert numeric value (CSS var / behaviour tweak).
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn set_ui_value(app: AppHandle, state: State<Db>, key: String, value: f64) -> Result<(), String> {
     let is_tray = key == "trayRecentN" || key == "trayFavN" || key == "trayLabelMax";
     let is_error_log_cap = key == "errorLogKeepKb";
@@ -387,7 +387,7 @@ pub(crate) fn is_generic_text_write_denied(key: &str) -> bool {
 }
 
 // Set an expert string option (e.g. the copy-feedback font key).
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn set_ui_text(app: AppHandle, state: State<Db>, key: String, value: String) {
     if is_generic_text_write_denied(&key) {
         return;
@@ -478,7 +478,7 @@ pub(crate) fn reset_expert(app: AppHandle, state: State<Db>) {
 }
 
 // Add a version to the skip list: it will not be offered again.
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn skip_version(app: AppHandle, state: State<Db>, version: String) {
     let mut store = lock(&state);
     if !store.settings.skipped_versions.contains(&version) {
@@ -572,7 +572,7 @@ pub(crate) fn whats_new_check_impl(all: &[WhatsNewSection], last_seen: &str, cur
 // Marks the current version as seen immediately, regardless of whether the
 // caller ever displays the result, matching the toast, which never returns
 // once its version is marked seen.
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn whats_new_check(app: AppHandle, state: State<Db>) -> WhatsNewResult {
     let all = parse_release_notes(EMBEDDED_RELEASE_NOTES);
     let mut store = lock(&state);
