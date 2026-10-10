@@ -398,7 +398,7 @@ const RESULTS = {
     prefill: window.__LAUNCHER_PREFILL__ || "",
   }),
   current_theme: () => window.__SHOT_THEME__ || "dark",
-  theme_vars: () => ({ accent: "#ff00aa" }),
+  theme_vars: () => themeVarsOf(),
   // A probe sets window.__ATTACH_TEXT_FIXTURES__[path] to {text, truncated,
   // readable} before opening the attachment; an unlisted path reads as
   // unreadable, same as a real missing/binary file would.
@@ -619,21 +619,21 @@ const RESULTS = {
   // four entry kinds and a custom tile color is enough to exercise rendering
   // and keyboard/mouse handling; the real section/ordering logic is Rust-side
   // and already covered by its own unit tests (tray_plan and friends).
-  tray_window_plan: () => ({
+  tray_window_plan: () => { const L = TRAY_TEXT[stubLang()] || TRAY_TEXT.en; return {
     sections: [
-      { title: "Favorites", entries: [
+      { title: L.favs, entries: [
         { id: "tray-copy-p1", label: "First prompt", kind: "text", color: "" },
-        { id: "tray-copy-p2", label: "Image prompt", kind: "image", color: "#ff00aa" },
+        { id: "tray-copy-p2", label: "Image prompt", kind: "image", color: "#3b82f6" },
       ] },
-      { title: "Recent", entries: [
+      { title: L.recent, entries: [
         { id: "tray-copy-p3", label: "File prompt", kind: "file", color: "" },
       ] },
     ],
-    showLabel: "Open Prompt Saver",
-    quitLabel: "Quit",
+    showLabel: L.open,
+    quitLabel: L.quit,
     searchOn: true,
-    searchPh: "Search",
-  }),
+    searchPh: L.search,
+  }; },
   tray_window_activate: (a) => { window.__TRAY_ACTIVATED__ = a && a.id; return null; },
   tray_window_close: () => { window.__TRAY_CLOSED__ = true; return null; },
   // The filter row hands what was typed to the launcher; the probe reads it back.
@@ -1407,7 +1407,7 @@ const RESULTS = {
   // F12: the standalone fill-in window. The main window hands over a request here;
   // the small window (vars.html) pulls it and answers.
   open_var_window: (a) => { window.__VAR_PAYLOAD__ = a && a.payload; return null; },
-  var_window_payload: () => JSON.stringify(VAR_REQUEST),
+  var_window_payload: () => JSON.stringify(varRequest()),
   var_window_result: (a) => { window.__VAR_RESULT__ = (a && a.values) ?? null; return null; },
   var_window_fit: () => null,
   // F25 pill folders: one folder with five members, so the closed icon has more
@@ -1504,15 +1504,42 @@ const RESULTS = {
 
 // What the main window sends to vars.html: one free-text row with the remember switch and
 // one choice row, so the small window renders both shapes.
-const VAR_REQUEST = {
-  theme: "dark",
-  vars: { accent: "#ff00aa" },
-  lang: "en",
-  askRemember: true,
-  rows: [
-    { name: "Topic", options: [], value: "roadmap", remember: true },
-    { name: "tone", options: ["formal", "casual", "witty"], value: "casual", remember: false },
-  ],
+function varRequest() {
+  return {
+    theme: window.__SHOT_THEME__ || "dark",
+    vars: themeVarsOf(),
+    lang: stubLang(),
+    askRemember: true,
+    rows: [
+      { name: "Topic", options: [], value: "roadmap", remember: true },
+      { name: "tone", options: ["formal", "casual", "witty"], value: "casual", remember: false },
+    ],
+  };
+}
+
+// Mirrors theme_vars_of in theme.rs: overrides only for an active custom theme.
+function themeVarsOf() {
+  if (!SETTINGS.ui_flags || SETTINGS.ui_flags.customThemes !== true) return {};
+  const id = String(SETTINGS.theme || "").startsWith("custom:") ? SETTINGS.theme.slice(7) : "";
+  const ct = (SETTINGS.custom_themes || []).find((c) => c.id === id);
+  return ct ? { ...ct.vars } : {};
+}
+function stubLang() {
+  return SETTINGS.language && SETTINGS.language !== "auto" ? SETTINGS.language : "en";
+}
+// Copied from the tray label tables in model.rs; tests/ui/stub_tray_text_check.js keeps them equal.
+const TRAY_TEXT = {
+  en: { open: "Open", quit: "Quit", recent: "Recently used", favs: "Favorites", search: "Search…" },
+  de: { open: "Öffnen", quit: "Beenden", recent: "Zuletzt benutzt", favs: "Favoriten", search: "Suchen…" },
+  es: { open: "Abrir", quit: "Salir", recent: "Usados recientemente", favs: "Favoritos", search: "Buscar…" },
+  it: { open: "Apri", quit: "Esci", recent: "Usati di recente", favs: "Preferiti", search: "Cerca…" },
+  pt: { open: "Abrir", quit: "Sair", recent: "Usados recentemente", favs: "Favoritos", search: "Pesquisar…" },
+  pl: { open: "Otwórz", quit: "Zakończ", recent: "Ostatnio używane", favs: "Ulubione", search: "Szukaj…" },
+  zh: { open: "打开", quit: "退出", recent: "最近使用", favs: "收藏", search: "搜索…" },
+  ja: { open: "開く", quit: "終了", recent: "最近使ったもの", favs: "お気に入り", search: "検索…" },
+  nl: { open: "Openen", quit: "Afsluiten", recent: "Onlangs gebruikt", favs: "Favorieten", search: "Zoeken…" },
+  tr: { open: "Aç", quit: "Çıkış", recent: "Son kullanılanlar", favs: "Favoriler", search: "Ara…" },
+  ro: { open: "Deschide", quit: "Ieșire", recent: "Utilizate recent", favs: "Favorite", search: "Caută…" },
 };
 
 const noopWindow = {

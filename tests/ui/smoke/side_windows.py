@@ -944,7 +944,7 @@ TRAY_PROBE = """
     // entry with its own tile color must use it instead of the kind's tint.
     const icons = rows().slice(0, 3).map((r) => r.querySelector('.tray-menu-icon'));
     if (icons.some((i) => !i)) errs.push('an entry row has no icon chip');
-    else if (!/255,\\s*0,\\s*170/.test(icons[1].style.background)) {
+    else if (!/59,\\s*130,\\s*246/.test(icons[1].style.background)) {
       errs.push('the entry with a custom color did not use it: ' + icons[1].style.background);
     }
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
