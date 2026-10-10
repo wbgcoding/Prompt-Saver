@@ -1536,6 +1536,9 @@ the video editor and the introduction tour ship on).
 - **Tile names no longer wrap while their neighbours stay on one line.** When
   one shared size keeps every name on a single line at no less than 80 % of the
   largest size, all names use it; otherwise long names wrap as before.
+- **Tile names in an open folder follow the grid rule.** Members of a tile
+  folder share one name size and stay on one line when that costs little,
+  instead of some names wrapping while others do not.
 
 ### Security
 

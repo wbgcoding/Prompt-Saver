@@ -13,7 +13,8 @@ Boots the real index.html against tests/ui/tauri_stub.js in headless Chromium an
   * expert menu cards: two grid tracks at 880 px, one at 680 px, groups drawn as cards,
   * grid tile names at 880x600 and 680x460: every name of the demo tiles shares one font
     size and "Prompt 10" sits on one line (the one-line size is used when it is at least
-    80 % of the wrapping size).
+    80 % of the wrapping size),
+  * the same rule inside the open tile folder (shared size, "Prompt N" on one line).
 
 Run:  python tests/ui/minor_layout_test.py
 Exit: 0 = clean, 1 = problems found. Skips cleanly when no Chromium is installed.
@@ -393,6 +394,40 @@ TILE_NAMES = """
 </script>
 """
 
+# Tile names inside the open tile folder follow the same shared-size rule as the grid.
+FOLDER_NAMES = """
+<script>
+(async () => {""" + COMMON + """
+  try {
+    await until(() => document.querySelector('#grid .folder-tile'));
+    await sleep(800);
+    const t = document.querySelector('#grid .folder-tile');
+    t.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: 5, clientY: 5 }));
+    window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, clientX: 5, clientY: 5 }));
+    await sleep(600);
+    const rows = [];
+    for (const m of document.querySelectorAll('.tile-folder-pop .folder-member-tile')) {
+      const n = m.querySelector('.tile-name');
+      if (!n || !n.classList.contains('fit')) continue;
+      const rg = document.createRange();
+      rg.selectNodeContents(n);
+      const lines = new Set([...rg.getClientRects()].map((q) => Math.round(q.top))).size;
+      rows.push({ name: n.textContent.trim(), fs: parseFloat(n.style.fontSize), lines, sw: n.scrollWidth, cw: n.clientWidth });
+    }
+    info.push('folder ' + innerWidth + 'x' + innerHeight + ' ' + JSON.stringify(rows));
+    if (rows.length < 4) errs.push('folder names: only ' + rows.length + ' auto-fit members found');
+    const sizes = new Set(rows.map((r) => r.fs));
+    if (sizes.size !== 1) errs.push('folder names: the members do not share one font size: ' + [...sizes].join(','));
+    for (const r of rows) {
+      if (r.name.startsWith('Prompt ') && r.lines !== 1) errs.push('folder names: "' + r.name + '" wraps onto ' + r.lines + ' lines at ' + innerWidth + 'x' + innerHeight);
+      if (r.sw > r.cw) errs.push('folder names: "' + r.name + '" overflows its box (' + r.sw + ' > ' + r.cw + ')');
+    }
+  } catch (e) { errs.push('probe: ' + e.message); }
+  finish();
+})();
+</script>
+"""
+
 # (name, probe, width, height, UI language)
 CASES = (
     ("tag-manager", TAG_MANAGER, MIN_W, 800, "de"),
@@ -405,6 +440,8 @@ CASES = (
     ("expert-cards-narrow", EXPERT_CARDS.replace("__TRACKS__", "1"), 680, 460, "en"),
     ("tile-names-wide", TILE_NAMES, 880, 600, "en"),
     ("tile-names-narrow", TILE_NAMES, 680, 460, "en"),
+    ("folder-names-wide", FOLDER_NAMES, 880, 600, "de"),
+    ("folder-names-narrow", FOLDER_NAMES, 680, 460, "de"),
 )
 
 LANGS = ("en", "de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro")

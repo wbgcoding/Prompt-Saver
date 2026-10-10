@@ -3,7 +3,7 @@ import { assignDrag, assignFolderArm, assignMemberDrag, assignSettings, convertF
 import { confirmDialog } from "./dialog.js";
 import { activeView, openMiniMenu, renderGrid } from "./views.js";
 import { recordToolUsage } from "./management.js";
-import { autoPasteDouble, autoPasteNow, cellAt, endDragVisuals, fitTileText, hasImage, imageOf, missingFiles, setHoverCell, showCopied } from "./tiles.js";
+import { autoPasteDouble, autoPasteNow, cellAt, endDragVisuals, fitTilesShared, hasImage, imageOf, missingFiles, setHoverCell, showCopied } from "./tiles.js";
 import { FOLDER_SVG } from "./floatShared.js";
 import { mediaKind } from "./media.js";
 import { FONTS } from "./fonts.js";
@@ -300,7 +300,7 @@ export function openTileFolderPop(f, anchor) {
     label.className = "tile-name";
     label.textContent = p.name;
     // Same per-prompt font overrides as the grid tile (0 = follow settings,
-    // 1 = auto-fit, else a fixed size that fitTileText leaves alone).
+    // 1 = auto-fit, else a fixed size that fitTilesShared leaves alone).
     if (p.font) label.style.fontFamily = FONTS[p.font] || "";
     if (p.font_size === 1) {
       btn.dataset.fitMode = "auto";
@@ -353,14 +353,21 @@ export function openTileFolderPop(f, anchor) {
   // The same air around the text as on a grid tile (fitAllTiles in tiles.js).
   const airX = 2 * Math.round(memberW * 0.04);
   const airY = memberH >= 80 ? 2 * 16 : 2 * 4;
+  // One shared box for all members (they have the same size): the grid rule of
+  // fitTilesShared then applies here too (one shared size, one line when it is cheap).
+  const fitTiles = [];
+  let boxW = Infinity;
+  let boxH = Infinity;
   for (const btn of grid.children) {
     if (!globalAuto && btn.dataset.fitMode !== "auto") continue;
     const cs = getComputedStyle(btn);
     // clientWidth/Height already leave out the border; floor because scrollWidth/Height
     // are integers and a fractional box can fail its own <= check.
-    fitTileText(btn, Math.floor(btn.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - airX),
-      Math.floor(btn.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - airY));
+    boxW = Math.min(boxW, Math.floor(btn.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - airX));
+    boxH = Math.min(boxH, Math.floor(btn.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - airY));
+    fitTiles.push(btn);
   }
+  if (fitTiles.length && boxW > 0 && boxH > 0) fitTilesShared(fitTiles, boxW, boxH);
 }
 
 export function disarmFolder() {
