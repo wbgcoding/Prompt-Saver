@@ -79,7 +79,7 @@ def rust_errors():
     out = {}
     for path in sorted(glob.glob(os.path.join(SRC, "*.rs"))):
         name = os.path.basename(path)
-        if name in ("tests.rs", "test_env.rs"):
+        if name in ("tests.rs", "cli_tests.rs", "test_env.rs"):
             continue
         with open(path, encoding="utf8") as fh:
             text = fh.read()

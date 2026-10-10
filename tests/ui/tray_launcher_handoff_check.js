@@ -29,7 +29,7 @@ const MODEL = process.env.HANDOFF_MODEL === "old" ? "old" : "new";
 const rustDir = path.join(__dirname, "..", "..", "src-tauri", "src");
 const rustSrc = fs
   .readdirSync(rustDir)
-  .filter((n) => n.endsWith(".rs") && n !== "tests.rs")
+  .filter((n) => n.endsWith(".rs") && n !== "tests.rs" && n !== "cli_tests.rs")
   .sort()
   .map((n) => fs.readFileSync(path.join(rustDir, n), "utf8"))
   .join("\n");

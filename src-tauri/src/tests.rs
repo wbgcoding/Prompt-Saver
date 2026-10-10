@@ -6019,7 +6019,7 @@ fn production_sources() -> String {
         .expect("read the src dir")
         .map(|e| e.expect("src dir entry").path())
         .filter(|p| p.extension().is_some_and(|x| x == "rs"))
-        .filter(|p| p.file_name().is_some_and(|n| n != "tests.rs"))
+        .filter(|p| p.file_name().is_some_and(|n| n != "tests.rs" && n != "cli_tests.rs"))
         .collect();
     files.sort();
     let mut out = String::new();
