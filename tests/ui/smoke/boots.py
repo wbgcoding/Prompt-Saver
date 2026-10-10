@@ -748,6 +748,7 @@ UPDATE_CONSENT_PROBE = """
   }, 40);
   const visible = (el) => !!el && !el.classList.contains('hidden');
   const consentCalls = () => (window.__SMOKE_ARGS__ || []).filter((c) => c[0] === 'set_update_consent');
+  const checkCalls = () => (window.__SMOKE_ARGS__ || []).filter((c) => c[0] === 'run_update_check');
   try {
     const cm = document.getElementById('confirm-modal');
     // Earlier startup dialogs (the data takeover offer) are closed with Cancel
@@ -792,6 +793,10 @@ UPDATE_CONSENT_PROBE = """
         errs.push('838: escape: Escape stored an answer: ' + JSON.stringify(calls));
       }
       if (visible(cm)) errs.push('838: ' + mode + ': the question stayed open after the answer');
+      // Yes starts the first check right away, exactly once; No and Escape never go online.
+      const nChecks = checkCalls().length;
+      if (mode === 'yes' && nChecks !== 1) errs.push('838: yes: expected exactly one run_update_check, got ' + nChecks);
+      if (mode !== 'yes' && nChecks) errs.push('838: ' + mode + ': an update check ran without a yes: ' + nChecks);
     }
   } catch (e) { errs.push('838: probe: ' + e.message); }
   clearInterval(beat);

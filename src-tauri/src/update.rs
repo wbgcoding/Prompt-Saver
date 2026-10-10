@@ -194,6 +194,14 @@ pub(crate) async fn check_update(state: State<'_, Db>) -> Result<UpdateInfo, Str
     }
 }
 
+// Runs one automatic check right now, e.g. straight after the first-launch
+// question was answered with yes, instead of waiting for the next launch. It
+// still honours the stored consent and the switch like the scheduled round.
+#[tauri::command(async)]
+pub(crate) fn run_update_check(app: AppHandle) {
+    update_check_tick(&app);
+}
+
 // Toggle an expert feature flag (enabled = feature on).
 // Returns Err only where switching the feature ON has a hard precondition that
 // failed (today: the safety backup prompt-sync takes before it first writes); the

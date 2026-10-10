@@ -424,6 +424,8 @@ async function maybeAskUpdateConsent(sealWarned) {
   await invoke("set_update_consent", { enabled });
   settings.update_consent = enabled ? "yes" : "no";
   settings.auto_update = enabled;
+  // A yes starts the first check now, not at the next launch.
+  if (enabled) invoke("run_update_check").catch(() => {});
 }
 
 // A crash draft from a previous session, asked about exactly once at the next

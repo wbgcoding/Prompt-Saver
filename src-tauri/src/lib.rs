@@ -992,6 +992,7 @@ pub fn run() {
             bg_ops::confirm_quit_with_running_ops,
             update::set_auto_update,
             update::set_update_consent,
+            update::run_update_check,
             shortcuts::set_hotkey,
             shortcuts::check_hotkey,
             shortcuts::set_hotkey_capture,
