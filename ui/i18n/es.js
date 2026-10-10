@@ -1671,7 +1671,7 @@ export default {
     pickHint: "Haz clic para copiar el color · la rueda o +/- hace zoom · las flechas mueven un píxel · Esc para cancelar",
     recPickHint: "Arrastra para seleccionar una zona · haz clic en una ventana para grabarla · Esc para cancelar",
     recCountdownToast: "La grabación empieza en {n} s…",
-    recBarContinue: "Finalizar y continuar grabando",
+    recBarContinue: "Dividir: guardar esta parte y seguir grabando en un archivo nuevo",
     recBarPause: "Pausar grabación",
     recBarResume: "Reanudar grabación",
     recBarStop: "Detener y guardar",

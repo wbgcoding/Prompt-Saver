@@ -1671,7 +1671,7 @@ export default {
     pickHint: "Fai clic per copiare il colore · la rotellina o +/- ingrandisce · le frecce spostano di un pixel · Esc per annullare",
     recPickHint: "Trascina per selezionare un'area · fai clic su una finestra per registrarla · Esc per annullare",
     recCountdownToast: "La registrazione inizia tra {n} s…",
-    recBarContinue: "Termina e continua a registrare",
+    recBarContinue: "Dividi: salva questa parte e continua a registrare in un nuovo file",
     recBarPause: "Metti in pausa la registrazione",
     recBarResume: "Riprendi la registrazione",
     recBarStop: "Ferma e salva",

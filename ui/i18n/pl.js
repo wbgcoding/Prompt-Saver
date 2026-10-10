@@ -1671,7 +1671,7 @@ export default {
     pickHint: "Kliknij, aby skopiować kolor · kółko lub +/- przybliża · strzałki przesuwają o jeden piksel · Esc anuluje",
     recPickHint: "Przeciągnij, aby zaznaczyć obszar · kliknij okno, aby je nagrać · Esc, aby anulować",
     recCountdownToast: "Nagrywanie zacznie się za {n} s…",
-    recBarContinue: "Zakończ i kontynuuj nagrywanie",
+    recBarContinue: "Podziel: zapisz tę część i nagrywaj dalej do nowego pliku",
     recBarPause: "Wstrzymaj nagrywanie",
     recBarResume: "Wznów nagrywanie",
     recBarStop: "Zatrzymaj i zapisz",

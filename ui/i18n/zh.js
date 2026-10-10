@@ -1671,7 +1671,7 @@ export default {
     pickHint: "点击复制颜色 · 滚轮或 +/- 缩放 · 方向键移动一个像素 · Esc 取消",
     recPickHint: "拖动以选择区域 · 点击窗口以录制该窗口 · Esc 取消",
     recCountdownToast: "{n} 秒后开始录制…",
-    recBarContinue: "结束并继续录制",
+    recBarContinue: "分割：保存这一段，并继续录制到新文件",
     recBarPause: "暂停录制",
     recBarResume: "继续录制",
     recBarStop: "停止并保存",

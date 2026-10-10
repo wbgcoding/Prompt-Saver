@@ -1678,7 +1678,7 @@ export default {
     pickHint: "Klicken kopiert die Farbe · Scrollen oder +/- zoomt · Pfeiltasten bewegen ein Pixel · Esc zum Abbrechen",
     recPickHint: "Bereich ziehen · Fenster zum Aufnehmen anklicken · Esc zum Abbrechen",
     recCountdownToast: "Aufnahme startet in {n} s…",
-    recBarContinue: "Aufnahme abschließen und weiter",
+    recBarContinue: "Teilen: diesen Teil speichern und in einer neuen Datei weiter aufnehmen",
     recBarPause: "Aufnahme pausieren",
     recBarResume: "Aufnahme fortsetzen",
     recBarStop: "Stoppen und speichern",

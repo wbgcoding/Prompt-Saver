@@ -1046,6 +1046,19 @@ RECBAR_PROBE = """
       if (stopRight > lastFit.width) errs.push('stop-btn falls outside the fitted width: ' + stopRight + ' > ' + lastFit.width);
       if (cancelRight > lastFit.width) errs.push('cancel-btn falls outside the fitted width: ' + cancelRight + ' > ' + lastFit.width);
     }
+    // 940-dg: Discard sits apart from the other actions, which stay close together,
+    // and the split button is a scissors icon.
+    {
+      const rc = (id) => document.getElementById(id).getBoundingClientRect();
+      const gapShown = !document.getElementById('continue-gap').classList.contains('hidden');
+      const actionsRight = gapShown ? rc('continue-gap').right : rc('continue-btn').right;
+      const apart = rc('cancel-btn').left - actionsRight;
+      if (apart < 30) errs.push('940-dg: Discard is only ' + apart.toFixed(1) + 'px from the other actions');
+      const tight = rc('stop-btn').left - rc('pause-btn').right;
+      if (tight > 12) errs.push('940-dg: Pause and Stop drifted apart (' + tight.toFixed(1) + 'px)');
+      if (document.querySelectorAll('#bar .rec-sep').length !== 1) errs.push('940-dg: the separator before Discard is missing');
+      if (document.querySelectorAll('#continue-btn svg circle').length !== 2) errs.push('940-dg: the split button has no scissors icon');
+    }
     // Under the show threshold: the readout should go blank on the next poll.
     window.__REC_STATUS_OVERRIDE__ = { bytes: 50 * 1024 * 1024, show_size: false, size_eta_secs: null };
     if (!await until(() => sizeEl.textContent === '')) errs.push('size stayed visible under the show threshold: ' + sizeEl.textContent);

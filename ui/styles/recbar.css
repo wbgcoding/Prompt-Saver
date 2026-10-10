@@ -72,6 +72,9 @@
 .rec-hotkey-warn { opacity: 1; color: var(--danger); }
 
 
+/* Sets the destructive Discard button apart from the actions that keep the take. */
+.rec-sep { flex: none; width: 1px; height: 18px; background: var(--menu-line); margin: 0 5px; }
+
 .rec-btn {
   display: flex;
   align-items: center;
