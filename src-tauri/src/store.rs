@@ -1118,8 +1118,9 @@ pub(crate) fn db_list_versions(conn: &Connection, prompt_id: &str) -> Vec<Prompt
                 id: r.get::<_, i64>(0)?,
                 ts: r.get::<_, i64>(1)? as u64,
                 name: dec_str(&r.get::<_, String>(2)?),
-                text: dec_str(&r.get::<_, String>(3)?),
-                variants: decode_variants(&dec_str(&r.get::<_, String>(4)?)),
+                // Display only: an old snapshot reads in the new spelling without a write.
+                text: upgrade_placeholders(&dec_str(&r.get::<_, String>(3)?)),
+                variants: decode_variants(&dec_str(&r.get::<_, String>(4)?)).iter().map(|v| upgrade_placeholders(v)).collect(),
             })
         }) {
             out.extend(rows.flatten());
@@ -1148,8 +1149,8 @@ pub(crate) fn db_get_version(conn: &Connection, id: i64) -> Option<(String, Stri
         |r| Ok((
             r.get::<_, String>(0)?,
             dec_str(&r.get::<_, String>(1)?),
-            dec_str(&r.get::<_, String>(2)?),
-            decode_variants(&dec_str(&r.get::<_, String>(3)?)),
+            upgrade_placeholders(&dec_str(&r.get::<_, String>(2)?)),
+            decode_variants(&dec_str(&r.get::<_, String>(3)?)).iter().map(|v| upgrade_placeholders(v)).collect(),
         )),
     )
     .ok()
@@ -1569,21 +1570,56 @@ pub(crate) const DYN_NAMES: [&str; 16] = [
     "year", "timestamp", "epoch", "clipboard", "username", "uuid", "random", "counter",
 ];
 
-// Reserved names are now written {#{/date\}#} instead of {#{date}#}, which frees the
-// plain word for a variable of the user's own. Rewrite the old spelling so an existing
-// prompt keeps filling itself in. Idempotent: the new form no longer matches.
-pub(crate) fn fence_dyn_vars(text: &str) -> String {
+// Placeholders are written {?Name}, {?Name=default}, {?Name|A, B} and {?@date}. The
+// retired spelling was {#{Name}#}, with {#{/date\}#} (and, before that, the bare
+// {#{date}#}) for the self-filling names. Rewrites every old token of `text`, in
+// source order; text without one comes back untouched. Idempotent: the result holds
+// no complete old token. A token whose body is empty, or would grow past the body
+// limit of the new spelling, stays exactly as typed.
+pub(crate) fn upgrade_placeholders(text: &str) -> String {
     if !text.contains("{#{") {
         return text.to_string();
     }
-    let mut out = text.to_string();
-    for n in DYN_NAMES {
-        let old = ["{#{", n, "}#}"].concat();
-        if out.contains(&old) {
-            out = out.replace(&old, &["{#{/", n, "\\}#}"].concat());
+    let tokens = find_old_var_tokens(text);
+    if tokens.is_empty() {
+        return text.to_string();
+    }
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = String::with_capacity(text.len());
+    let mut cursor = 0usize;
+    for (start, end, body) in tokens {
+        out.extend(chars[cursor..start].iter().copied());
+        cursor = end;
+        let fenced_dyn = body
+            .strip_prefix('/')
+            .and_then(|b| b.strip_suffix('\\'))
+            .filter(|b| DYN_NAMES.contains(b));
+        let rewritten = if body.is_empty() {
+            None
+        } else if let Some(name) = fenced_dyn {
+            Some(format!("{{?@{name}}}"))
+        } else if DYN_NAMES.contains(&body.as_str()) {
+            Some(format!("{{?@{body}}}"))
+        } else if body.chars().next().is_some_and(|c| c.is_alphanumeric() || c == '_' || c == '@') {
+            Some(format!("{{?{body}}}"))
+        } else {
+            Some(format!("{{?_{body}}}"))
+        };
+        match rewritten {
+            Some(token) if token.chars().count() <= 203 => out.push_str(&token),
+            _ => out.extend(chars[start..end].iter().copied()),
         }
     }
+    out.extend(chars[cursor..].iter().copied());
     out
+}
+
+// The same rewrite for one prompt's text and every rotation entry.
+pub(crate) fn upgrade_prompt_placeholders(p: &mut Prompt) {
+    p.text = upgrade_placeholders(&p.text);
+    for v in &mut p.variants {
+        *v = upgrade_placeholders(v);
+    }
 }
 
 pub(crate) fn migrate_prompts(prompts: &mut [Prompt]) {
@@ -1603,11 +1639,73 @@ pub(crate) fn migrate_prompts(prompts: &mut [Prompt]) {
         if !p.image.is_empty() && !p.copy_image && (p.text.is_empty() || p.text == p.name) {
             p.copy_image = true;
         }
-        let fenced = fence_dyn_vars(&p.text);
-        if fenced != p.text {
-            p.text = fenced;
+        upgrade_prompt_placeholders(p);
+    }
+}
+
+// The one-time data upgrade for the stored history: every version row and every
+// trash entry still holding the old placeholder spelling is rewritten, so an old
+// snapshot restored later already reads right. Returns whether it all landed;
+// the caller only records the new data version then, and a failed run simply
+// repeats at the next start (the rewrite is idempotent).
+pub(crate) fn upgrade_stored_placeholders(app: &AppHandle, store: &mut Store) -> bool {
+    let Some(mut conn) = db_conn(app) else {
+        return false;
+    };
+    if upgrade_history_placeholders(&mut conn, &mut store.trash).is_err() {
+        return false;
+    }
+    // The prompts themselves were upgraded in memory by migrate_prompts; they are
+    // written here together with the trash, so the database stops holding the old
+    // spelling. A locked store (rows that failed to decrypt) is never written.
+    if store.prompts_locked {
+        return false;
+    }
+    save_prompts_and_trash(app, store)
+}
+
+// The version rows (in one transaction) and the in-memory trash entries through
+// upgrade_placeholders; returns how many of them changed, so a second run is 0.
+pub(crate) fn upgrade_history_placeholders(conn: &mut Connection, trash: &mut [Prompt]) -> rusqlite::Result<usize> {
+    let mut changed = db_upgrade_version_rows(conn)?;
+    for p in trash {
+        let before = (p.text.clone(), p.variants.clone());
+        upgrade_prompt_placeholders(p);
+        if before != (p.text.clone(), p.variants.clone()) {
+            changed += 1;
         }
     }
+    Ok(changed)
+}
+
+// Every prompt_versions row (text and rotation entries) through upgrade_placeholders,
+// in one transaction; a row that needs no change is not written.
+pub(crate) fn db_upgrade_version_rows(conn: &mut Connection) -> rusqlite::Result<usize> {
+    let tx = conn.transaction()?;
+    let mut rewritten = 0usize;
+    {
+        let rows: Vec<(i64, String, String)> = {
+            let mut stmt = tx.prepare("SELECT id, text, variants FROM prompt_versions")?;
+            let mapped = stmt.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?)))?;
+            mapped.flatten().collect()
+        };
+        for (id, text_enc, variants_enc) in rows {
+            let text = dec_str(&text_enc);
+            let variants = decode_variants(&dec_str(&variants_enc));
+            let new_text = upgrade_placeholders(&text);
+            let new_variants: Vec<String> = variants.iter().map(|v| upgrade_placeholders(v)).collect();
+            if new_text == text && new_variants == variants {
+                continue;
+            }
+            tx.execute(
+                "UPDATE prompt_versions SET text = ?1, variants = ?2 WHERE id = ?3",
+                params![enc_str(&new_text), enc_str(&encode_variants(&new_variants)), id],
+            )?;
+            rewritten += 1;
+        }
+    }
+    tx.commit()?;
+    Ok(rewritten)
 }
 
 pub(crate) fn load_store(app: &AppHandle) -> Store {
@@ -1831,11 +1929,19 @@ pub(crate) fn load_store(app: &AppHandle) -> Store {
         }
         store.normalize_folders(); // Drop members whose prompt is gone
         sweep_trash(app, &mut store); // drop anything past the retention window
+        // Data upgrades that rewrite stored content, once per step. Each later step
+        // adds its own `data_version < N` block under this one.
+        let mut data_upgraded = false;
+        let may_upgrade = !DATA_DIR_READONLY.load(Ordering::Relaxed);
+        if may_upgrade && store.settings.data_version < 1 && upgrade_stored_placeholders(app, &mut store) {
+            store.settings.data_version = DATA_VERSION;
+            data_upgraded = true;
+        }
         if needs_mig || migrated_log {
             // One-time: re-encrypt legacy plaintext rows / drop the migrated log from the blob.
             save_prompts(app, &store);
             save_settings(app, &store.settings);
-        } else if theme_ai_before || pruned_removed_values || pin_retention {
+        } else if theme_ai_before || pruned_removed_values || pin_retention || data_upgraded {
             save_settings(app, &store.settings);
         }
         return store;

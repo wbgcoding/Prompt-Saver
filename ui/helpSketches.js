@@ -54,7 +54,7 @@ function placeholderAnatomy(lang) {
   // Every piece of the markup is its own monospace run, stretched to exactly CH px per
   // character (textLength), so the bracket under each part sits on it in any font.
   const CH = 11;
-  const parts = [["{#{"], ["Kunde", words.name], ["="], ["Meier", words.def], ["|"], ["Meier,Schulz", words.choices], ["}#}"]];
+  const parts = [["{?"], ["Kunde", words.name], ["="], ["Meier", words.def], ["|"], ["Meier, Schulz", words.choices], ["}"]];
   let x = 20;
   let out = "";
   for (const [text, name] of parts) {
@@ -93,8 +93,8 @@ function chainSteps(lang) {
   const stepX = [20, 220, 420];
   return `<svg viewBox="0 0 560 70" xmlns="http://www.w3.org/2000/svg" role="img">` +
     stepX.map((x, i) => box(x, 26, 120, 36) + label(x + 60, 49, `${words.step} ${i + 1}`, { size: 14 })).join("") +
-    arrow(140, 44, 220) + label(180, 20, "{#{X}#}", { size: 13 }) +
-    arrow(340, 44, 420) + label(380, 20, "{#{Y}#}", { size: 13 }) +
+    arrow(140, 44, 220) + label(180, 20, "{?X}", { size: 13 }) +
+    arrow(340, 44, 420) + label(380, 20, "{?Y}", { size: 13 }) +
     `</svg>`;
 }
 

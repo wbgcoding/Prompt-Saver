@@ -73,14 +73,14 @@ export const HELP_CONTENT = {
       whatItIs:
         "Placeholder markup inside a tile's text opens a fill-in popup before the finished text reaches the clipboard.",
       howTo: [
-        "Type {#{PlaceholderName}#} inside the text.",
+        "Type {?PlaceholderName} inside the text.",
         "Or click Insert placeholder under the text box: it opens the placeholder section.",
         "For a self-filling value, click a dynamic-placeholder chip under the text box instead of typing it.",
         "Click the tile to copy: the fill-in popup opens automatically.",
         "Enter a value per placeholder, or pick one for choice placeholders, and confirm.",
       ],
       whatHappens:
-        "Only the filled-in text reaches the clipboard; the raw {#{...}#} markup is never copied. A dynamic placeholder (date, time, clipboard, UUID) uses its own syntax, {#{/date\\}#}, and fills itself in with no popup at all. The popup can remember the value last typed for a placeholder and offer it again. A list of fixed values, kept in the expert menu, is suggested for a placeholder of the same name; it is only ever suggested, never filled in on its own.",
+        "Only the filled-in text reaches the clipboard; the raw {?...} markup is never copied. A dynamic placeholder (date, time, clipboard, UUID) is written with an @ in front, {?@date}, and fills itself in with no popup at all. The popup can remember the value last typed for a placeholder and offer it again. A list of fixed values, kept in the expert menu, is suggested for a placeholder of the same name; it is only ever suggested, never filled in on its own. Prompts written with the older {#{Name}#} spelling are converted automatically.",
       settings: ["Dynamic placeholders, choice placeholders, remember choices, remember typed values, fixed values list, date and time style: Expert menu → Features → Placeholders"],
       sketches: ["placeholderAnatomy"],
     },
@@ -810,14 +810,14 @@ export const HELP_CONTENT = {
       whatItIs:
         "Platzhalter-Markup im Text einer Kachel öffnet ein Ausfüll-Popup, bevor der fertige Text die Zwischenablage erreicht.",
       howTo: [
-        "{#{PlatzhalterName}#} irgendwo in den Text eintippen.",
+        "{?PlatzhalterName} irgendwo in den Text eintippen.",
         "Oder unter dem Textfeld auf „Platzhalter einfügen“ klicken: das öffnet den Platzhalterbereich.",
         "Für einen sich selbst ausfüllenden Wert einen dynamischen Chip unter dem Textfeld anklicken statt zu tippen.",
         "Klick auf die Kachel zum Kopieren: das Ausfüll-Popup öffnet sich automatisch.",
         "Pro Platzhalter einen Wert eingeben, bei Auswahl-Platzhaltern einen wählen, dann bestätigen.",
       ],
       whatHappens:
-        "Nur der ausgefüllte Text erreicht die Zwischenablage; das rohe {#{...}#}-Markup wird nie kopiert. Ein dynamischer Platzhalter (Datum, Uhrzeit, Zwischenablage, UUID) nutzt eine eigene Schreibweise, {#{/date\\}#}, und füllt sich ganz ohne Popup selbst aus. Das Popup kann sich den zuletzt eingetippten Wert eines Platzhalters merken und ihn wieder anbieten. Eine Liste fester Werte im Expertenmenü wird für einen gleichnamigen Platzhalter vorgeschlagen; sie wird immer nur vorgeschlagen, nie von selbst eingesetzt.",
+        "Nur der ausgefüllte Text erreicht die Zwischenablage; das rohe {?...}-Markup wird nie kopiert. Ein dynamischer Platzhalter (Datum, Uhrzeit, Zwischenablage, UUID) wird mit einem @ davor geschrieben, {?@date}, und füllt sich ganz ohne Popup selbst aus. Das Popup kann sich den zuletzt eingetippten Wert eines Platzhalters merken und ihn wieder anbieten. Eine Liste fester Werte im Expertenmenü wird für einen gleichnamigen Platzhalter vorgeschlagen; sie wird immer nur vorgeschlagen, nie von selbst eingesetzt. Prompts mit der älteren Schreibweise {#{Name}#} werden automatisch umgeschrieben.",
       settings: ["Dynamische Platzhalter, Auswahl-Platzhalter, Auswahl merken, eingetippte Werte merken, Liste fester Werte, Datums- und Zeitformat: Expertenmenü → Funktionen → Platzhalter"],
       sketches: ["placeholderAnatomy"],
     },

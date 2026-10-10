@@ -94,7 +94,7 @@ export const FLAG_LABELS = {
   autoBackup: "flagAutoBackup",
   autoPaste: "flagAutoPaste",           // a normal setting now (default on)
   dynVars: "flagDynVars",               // self-filling placeholder names
-  choiceVars: "flagChoiceVars",         // {#{name|a,b}#} dropdown variables
+  choiceVars: "flagChoiceVars",         // {?name|a,b} dropdown variables
   choiceRemember: "flagChoiceRemember", // reopen a choice on its last pick
   codeHighlight: "flagCodeHighlight",   // syntax colours in the preview's code blocks
   codeAutoDetect: "flagCodeAutoDetect", // render an unfenced code prompt as code
@@ -291,7 +291,7 @@ export const OPT_FLAG_LABELS = {
   archiveTag: "flagArchiveTag",
   // A maintained list of name/value pairs (expert menu, empty by default) that
   // the fill-in dialog SUGGESTS for a matching placeholder name, one tier below
-  // a remembered last input and above the text's own {#{name=default}#}. Kept
+  // a remembered last input and above the text's own {?name=default}. Kept
   // apart from varDefaults on purpose -- a deliberately maintained value must
   // never be mistaken for whatever happened to be typed in last.
   varFixed: "flagVarFixed",

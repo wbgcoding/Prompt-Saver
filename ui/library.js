@@ -1341,7 +1341,7 @@ export async function batchExport(format, ids) {
   }
 }
 
-// Copy a prompt, filling {#{variables}#} first when applicable: reserved names
+// Copy a prompt, filling {?variables} first when applicable: reserved names
 // resolve silently, the rest go through the dialog. Returns false if the copy
 // failed or the user cancelled. The single copy entry point for every path that
 // does not run the dialog's own double-click handling (grid, library, journal).
@@ -1358,7 +1358,7 @@ export async function copyResolved(p) {
     p = fresh;
   }
   // Rotating prompt: peek the entry copy_prompt would use, resolve variables
-  // on THAT text (fixes {#{...}#} tokens, if any, in it), then commit only once the
+  // on THAT text (fixes {?...} tokens, if any, in it), then commit only once the
   // copy actually reaches the clipboard, so a cancelled variable dialog never
   // burns an entry.
   if ((p.variants || []).length) {

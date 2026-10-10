@@ -774,6 +774,10 @@ pub(crate) async fn add_prompt(
     rotate_mode: Option<String>,
     rotate_auto: Option<bool>,
 ) -> Result<Prompt, String> {
+    // Text from outside (a pasted prompt, an old client) may still use the retired
+    // placeholder spelling; the stored prompt never does.
+    let text = upgrade_placeholders(&text);
+    let variants = variants.map(|v| v.iter().map(|s| upgrade_placeholders(s)).collect::<Vec<String>>());
     // The slow steps (copying a large attachment, ffprobe, OCR) run before the
     // store lock is taken, so every other window keeps working meanwhile. The
     // lock is taken again only to validate and insert.
@@ -1099,7 +1103,9 @@ pub(crate) async fn update_prompt(
     // reset an unrelated field, so a missing value keeps the prompt's own.
     rotate_auto: Option<bool>,
 ) -> Result<Option<Prompt>, String> {
-    let variants = sanitize_variants(variants);
+    // Upgraded before anything below (the version snapshot included) sees the text.
+    let text = upgrade_placeholders(&text);
+    let variants = sanitize_variants(variants.iter().map(|s| upgrade_placeholders(s)).collect());
     let rotate_mode = sanitize_rotate_mode(rotate_mode, &variants);
     // Copying an attachment, probing it and OCR-ing a new picture all happen
     // before the store lock is taken, against a short snapshot of what the
@@ -1424,14 +1430,14 @@ pub(crate) async fn restore_version(app: AppHandle, state: State<'_, Db>, versio
 // same as any other new entry, so this stays a small addition next to add_prompt
 // rather than a second copy of its whole field list.
 pub(crate) fn build_restored_prompt(source: &Prompt, version_name: &str, version_text: String, version_variants: Vec<String>, suffix: &str) -> Prompt {
-    let variants = sanitize_variants(version_variants);
+    let variants = sanitize_variants(version_variants.iter().map(|s| upgrade_placeholders(s)).collect());
     let rotate_mode = sanitize_rotate_mode(String::new(), &variants);
     let name = if suffix.is_empty() { version_name.to_string() } else { format!("{version_name} {suffix}") };
     Prompt {
         id: gen_id(),
         trashed_at: 0,
         name,
-        text: version_text,
+        text: upgrade_placeholders(&version_text),
         color: source.color.clone(),
         image: source.image.clone(),
         show_image: source.show_image,

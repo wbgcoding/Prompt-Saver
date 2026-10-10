@@ -770,12 +770,12 @@ SECTION = """\
         if (shown263('modal-vars-link')) out.errors.push('var263-reopen: the link shows although the bar is there');
         await closeEd263();
       } else out.errors.push('var263-reopen: the placeholder prompt did not open');
-      if (await setExpertFlag('Placeholders ({#{Name}#})', false)) {
+      if (await setExpertFlag('Placeholders ({?Name})', false)) {
         if (await openEditor('p0')) {
           if (shown263('modal-text-bar') || shown263('modal-vars-link')) out.errors.push('var263-reopen: the placeholder UI shows with the feature off');
           await closeEd263();
         } else out.errors.push('var263-reopen: the editor did not open with the feature off');
-        await setExpertFlag('Placeholders ({#{Name}#})', true);
+        await setExpertFlag('Placeholders ({?Name})', true);
       } else out.errors.push('var263-reopen: the placeholder switch is missing from the expert menu');
     }
     // Gating: a row whose feature is off must disappear the moment that toggle is

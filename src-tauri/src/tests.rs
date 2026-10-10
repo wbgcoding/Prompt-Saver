@@ -5800,7 +5800,7 @@ fn asset_scope_denies_every_store_file() {
 
 #[test]
 fn store_crypt_roundtrip() {
-    let secret = "prompt with sécret 🔐 {#{x}#}";
+    let secret = "prompt with sécret 🔐 {?x}";
     assert_eq!(dec_str(&enc_str(secret)), secret);
     // Legacy plaintext (no prefix) passes through unchanged for migration.
     assert_eq!(dec_str("legacy plaintext"), "legacy plaintext");
@@ -7771,12 +7771,12 @@ fn retention_keeps_the_right_backups_and_never_all_of_them() {
     assert_eq!(dropped.len(), names.len() - 1);
     assert!(!dropped.contains(&names[4]));
 
-    // Reserved placeholders gain their slash fence exactly once.
-    assert_eq!(fence_dyn_vars("Hi {#{date}#} and {#{name}#}"), "Hi {#{/date\\}#} and {#{name}#}");
-    assert_eq!(fence_dyn_vars("{#{/date\\}#}"), "{#{/date\\}#}", "already fenced stays put");
-    assert_eq!(fence_dyn_vars("plain text"), "plain text");
-    // A choice variable that happens to start with a reserved word is untouched.
-    assert_eq!(fence_dyn_vars("{#{date|a,b}#}"), "{#{date|a,b}#}");
+    // Reserved placeholders are written with an @ after the upgrade, exactly once.
+    assert_eq!(upgrade_placeholders("Hi {#{date}#} and {#{name}#}"), "Hi {?@date} and {?name}");
+    assert_eq!(upgrade_placeholders("{?@date}"), "{?@date}", "already upgraded stays put");
+    assert_eq!(upgrade_placeholders("plain text"), "plain text");
+    // A choice variable that happens to start with a reserved word stays an ordinary variable.
+    assert_eq!(upgrade_placeholders("{#{date|a,b}#}"), "{?date|a,b}");
 
     // The schedule reads the folder name, not a modification time.
     let a = stamp_secs("2026-07-29_08-00-00").unwrap();
@@ -10244,7 +10244,7 @@ fn demo_text_is_complete_dash_free_and_keeps_the_placeholder_in_every_language()
             assert!(!t.contains('\u{2014}') && !t.contains('\u{2013}'), "{lang}: dash in {t:?}");
             assert!(!t.contains("_name") && !t.contains("_text") && !t.contains("demo."), "{lang}: raw key in {t:?}");
         }
-        assert!(d.placeholder_text.contains("{#{") && d.placeholder_text.contains("}#}"), "{lang}: placeholder syntax");
+        assert!(d.placeholder_text.contains("{?") && d.placeholder_text.contains("}"), "{lang}: placeholder syntax");
         for f in [d.attach_file, d.video_file] {
             assert!(!f.contains(['/', '\\', ':', '*', '?', '"', '<', '>', '|']), "{lang}: {f:?} is not a file name");
         }
@@ -10283,7 +10283,7 @@ fn demo_german_content_is_what_it_was_before_the_table() {
     assert_eq!(by("demo-welcome").text, "Das hier ist ein Beispieleintrag im Vorführmodus. Ein Klick kopiert ihn wie jeden anderen.");
     assert_eq!(by("demo-image").name, "Bild-Kachel");
     assert_eq!(by("demo-rotating").variants, vec!["Guten Tag!".to_string(), "Guten Abend!".to_string()]);
-    assert_eq!(by("demo-placeholder").text, "Hallo {#{Name}#}, vielen Dank für deine Nachricht.");
+    assert_eq!(by("demo-placeholder").text, "Hallo {?Name}, vielen Dank für deine Nachricht.");
     assert_eq!(by("demo-favorite").tags, vec!["Demo".to_string(), "Favorit".to_string()]);
     assert_eq!(by("demo-attachment").file_path, "Anhang.txt");
     assert_eq!(std::fs::read_to_string(dir.join("Anhang.txt")).unwrap(), "Eine harmlose Beispieldatei für den Vorführmodus.\n");
@@ -10324,7 +10324,7 @@ fn demo_store_contains_every_sample_kind() {
     assert!(by_id.get("demo-image").is_some_and(|p| !p.image.is_empty()), "an image tile");
     assert!(by_id.get("demo-welcome").unwrap().image.is_empty(), "a tile without an image");
     assert!(!by_id.get("demo-rotating").unwrap().variants.is_empty(), "a rotating prompt");
-    assert!(by_id.get("demo-placeholder").unwrap().text.contains("{#{"), "a self-fill placeholder");
+    assert!(by_id.get("demo-placeholder").unwrap().text.contains("{?"), "a self-fill placeholder");
     assert!(by_id.get("demo-favorite").unwrap().favorite, "a favorite");
     assert!(!by_id.get("demo-attachment").unwrap().file_path.is_empty(), "an attachment");
     assert!(!by_id.get("demo-welcome").unwrap().tags.is_empty(), "a tagged prompt");
@@ -14042,7 +14042,7 @@ fn csv_roundtrip_keeps_every_field() {
 // its `|` or its commas: a mangled token would silently lose the options.
 #[test]
 fn choice_variable_survives_txt_and_csv_export() {
-    const BODY: &str = "Write a {#{tone|formal,casual,witty}#} note about {#{Topic}#}.";
+    const BODY: &str = "Write a {?tone|formal,casual,witty} note about {?Topic}.";
     let mut prompts = sample_prompts();
     prompts[0].text = BODY.into();
     prompts[0].image = String::new(); // a text prompt, not the media sample
@@ -14599,7 +14599,7 @@ fn export_prompts_unsupported_format_uses_a_stable_error_code() {
 
 #[test]
 fn find_var_tokens_finds_a_plain_a_default_and_a_choice_token() {
-    let text = "Hi {#{name}#}, order {#{item=widget}#} in {#{size|S,M,L}#} please.";
+    let text = "Hi {?name}, order {?item=widget} in {?size|S,M,L} please.";
     let tokens = find_var_tokens(text);
     let bodies: Vec<&str> = tokens.iter().map(|(_, _, b)| b.as_str()).collect();
     assert_eq!(bodies, vec!["name", "item=widget", "size|S,M,L"]);
@@ -14631,24 +14631,24 @@ fn resolve_static_vars_priority_is_remembered_then_fixed_then_default_then_blank
     let fixed: HashMap<String, String> =
         [("a".to_string(), "from-fixed".to_string()), ("b".to_string(), "from-fixed".to_string())].into_iter().collect();
     // a: remembered AND fixed AND a default -- remembered wins.
-    assert_eq!(resolve_static_vars("{#{a=from-default}#}", &remembered, &fixed), "from-remembered");
+    assert_eq!(resolve_static_vars("{?a=from-default}", &remembered, &fixed), "from-remembered");
     // b: fixed AND a default, no remembered value -- fixed wins.
-    assert_eq!(resolve_static_vars("{#{b=from-default}#}", &remembered, &fixed), "from-fixed");
+    assert_eq!(resolve_static_vars("{?b=from-default}", &remembered, &fixed), "from-fixed");
     // c: only a default, no remembered or fixed value -- the default wins.
-    assert_eq!(resolve_static_vars("{#{c=from-default}#}", &remembered, &fixed), "from-default");
+    assert_eq!(resolve_static_vars("{?c=from-default}", &remembered, &fixed), "from-default");
     // d: nothing anywhere -- blank, never the raw placeholder.
-    assert_eq!(resolve_static_vars("{#{d}#}", &remembered, &fixed), "");
+    assert_eq!(resolve_static_vars("{?d}", &remembered, &fixed), "");
 }
 
 #[test]
 fn resolve_static_vars_choice_variable_follows_the_same_priority_chain() {
     let remembered: HashMap<String, String> = [("size".to_string(), "M".to_string())].into_iter().collect();
     let fixed: HashMap<String, String> = [("size".to_string(), "L".to_string())].into_iter().collect();
-    assert_eq!(resolve_static_vars("{#{size|S,M,L}#}", &remembered, &fixed), "M", "a remembered pick wins when it is a real option");
+    assert_eq!(resolve_static_vars("{?size|S,M,L}", &remembered, &fixed), "M", "a remembered pick wins when it is a real option");
     let fixed_only: HashMap<String, String> = fixed.clone();
-    assert_eq!(resolve_static_vars("{#{size|S,M,L}#}", &HashMap::new(), &fixed_only), "L", "falls to the fixed value next");
-    assert_eq!(resolve_static_vars("{#{size=S|S,M,L}#}", &HashMap::new(), &HashMap::new()), "S", "then the text's own default");
-    assert_eq!(resolve_static_vars("{#{size|S,M,L}#}", &HashMap::new(), &HashMap::new()), "S", "and finally the first option");
+    assert_eq!(resolve_static_vars("{?size|S,M,L}", &HashMap::new(), &fixed_only), "L", "falls to the fixed value next");
+    assert_eq!(resolve_static_vars("{?size=S|S,M,L}", &HashMap::new(), &HashMap::new()), "S", "then the text's own default");
+    assert_eq!(resolve_static_vars("{?size|S,M,L}", &HashMap::new(), &HashMap::new()), "S", "and finally the first option");
 }
 
 #[test]
@@ -14657,7 +14657,7 @@ fn resolve_static_vars_leaves_a_dynamic_name_and_an_unresolved_gap_untouched() {
     let fixed: HashMap<String, String> = HashMap::new();
     // A reserved dynamic name only means something at the moment of copy --
     // a background write has no such moment, so it is left exactly as written.
-    assert_eq!(resolve_static_vars("Today is {#{/date\\}#}.", &remembered, &fixed), "Today is {#{/date\\}#}.");
+    assert_eq!(resolve_static_vars("Today is {?@date}.", &remembered, &fixed), "Today is {?@date}.");
 }
 
 #[test]
@@ -14665,13 +14665,13 @@ fn resolved_for_export_resolves_the_text_and_every_rotating_variant() {
     let remembered: HashMap<String, String> = [("name".to_string(), "Alex".to_string())].into_iter().collect();
     let fixed: HashMap<String, String> = HashMap::new();
     let mut p = test_prompt("p1");
-    p.text = "Hi {#{name}#}".to_string();
-    p.variants = vec!["Bye {#{name}#}".to_string(), "no placeholder here".to_string()];
+    p.text = "Hi {?name}".to_string();
+    p.variants = vec!["Bye {?name}".to_string(), "no placeholder here".to_string()];
     let resolved = resolved_for_export(&p, &remembered, &fixed);
     assert_eq!(resolved.text, "Hi Alex");
     assert_eq!(resolved.variants, vec!["Bye Alex".to_string(), "no placeholder here".to_string()]);
     // The live prompt itself must never be mutated by an export/sync pass.
-    assert_eq!(p.text, "Hi {#{name}#}");
+    assert_eq!(p.text, "Hi {?name}");
 }
 
 // An exported theme file never carries the internal id, so importing it on
@@ -18883,4 +18883,176 @@ fn sidecar_path_sits_next_to_the_recording_as_its_own_extension() {
         sidecar_path(Path::new("C:/data/recordings/rec-cam-1.webm"), CAM_SIDECAR_EXT),
         PathBuf::from("C:/data/recordings/rec-cam-1.cam.json")
     );
+}
+
+// ---- Placeholder spelling {?Name}: scanner, upgrade of the retired {#{Name}#} ----
+
+#[test]
+fn find_var_tokens_reads_the_short_spelling_and_ignores_look_alikes() {
+    assert_eq!(find_var_tokens("a {?Größe} b"), vec![(2, 10, "Größe".to_string())]);
+    assert_eq!(find_var_tokens("{?who  } and {?tone|a, b}"), vec![(0, 8, "who".to_string()), (13, 25, "tone|a, b".to_string())]);
+    assert_eq!(find_var_tokens("{?@date}")[0].2, "@date");
+    // Nothing that is not a name right after the brace and the question mark.
+    for text in ["{?}", "{? x}", "{?>", "{?> x}", "{\"a\": 1}", "{x}", "{{x}}", "{?-x}", "{?x\ny}"] {
+        assert!(find_var_tokens(text).is_empty(), "{text:?} must not be a placeholder");
+    }
+    // The old spelling is no placeholder any more.
+    assert!(find_var_tokens("{#{name}#}").is_empty());
+    // Body limit: 200 characters fit, 201 do not.
+    assert_eq!(find_var_tokens(&format!("{{?{}}}", "a".repeat(200))).len(), 1);
+    assert!(find_var_tokens(&format!("{{?{}}}", "a".repeat(201))).is_empty());
+}
+
+#[test]
+fn a_self_filling_name_is_written_with_an_at_sign() {
+    assert!(is_dyn_var_name("@date"));
+    assert!(is_dyn_var_name("@foo"), "the @ alone marks it; the frontend decides which names fill themselves");
+    assert!(!is_dyn_var_name("@"));
+    assert!(!is_dyn_var_name("date"));
+    let none = HashMap::new();
+    assert_eq!(resolve_static_vars("On {?@date}: {?who=you}", &none, &none), "On {?@date}: you");
+}
+
+#[test]
+fn upgrade_placeholders_rewrites_every_old_kind() {
+    assert_eq!(upgrade_placeholders("Hi {#{name}#}!"), "Hi {?name}!");
+    assert_eq!(upgrade_placeholders("{#{city=Berlin}#}"), "{?city=Berlin}");
+    assert_eq!(upgrade_placeholders("{#{tone|formal,casual}#}"), "{?tone|formal,casual}");
+    assert_eq!(upgrade_placeholders("{#{tone=casual|formal,casual}#}"), "{?tone=casual|formal,casual}");
+    assert_eq!(upgrade_placeholders("{#{  spaced  }#}"), "{?spaced}");
+    // Self-filling: the slash fence and the bare pre-fence spelling both become @name.
+    assert_eq!(upgrade_placeholders("On {#{/date\\}#} at {#{/time\\}#}"), "On {?@date} at {?@time}");
+    assert_eq!(upgrade_placeholders("{#{date}#} {#{uuid}#}"), "{?@date} {?@uuid}");
+    // A fenced name that is not a reserved one stays an ordinary variable, spelled safely.
+    assert_eq!(upgrade_placeholders("{#{/foo\\}#}"), "{?_/foo\\}");
+    // Unnamed token kept as typed; a body that cannot start a name gets an underscore.
+    assert_eq!(upgrade_placeholders("a {#{ }#} b"), "a {#{ }#} b");
+    assert_eq!(upgrade_placeholders("{#{-x}#}"), "{?_-x}");
+    assert_eq!(upgrade_placeholders("{#{@foo}#}"), "{?@foo}");
+    // Text without an old token is returned untouched, new tokens included.
+    assert_eq!(upgrade_placeholders("plain {?name} text {x}"), "plain {?name} text {x}");
+    assert_eq!(upgrade_placeholders("unclosed {#{name"), "unclosed {#{name");
+}
+
+#[test]
+fn upgrade_placeholders_is_idempotent_and_leaves_no_old_token() {
+    let src = "A {#{a}#} B {#{/date\\}#} C {#{ }#} D {#{b=1|x,y}#}";
+    let once = upgrade_placeholders(src);
+    assert_eq!(once, "A {?a} B {?@date} C {#{ }#} D {?b=1|x,y}");
+    assert_eq!(upgrade_placeholders(&once), once);
+    // Whatever the old scanner still sees afterwards is only the kept empty one.
+    assert_eq!(find_old_var_tokens(&once).len(), 1);
+    // Rewritten tokens are found by the new scanner.
+    let names: Vec<String> = find_var_tokens(&once).into_iter().map(|t| t.2).collect();
+    assert_eq!(names, vec!["a", "@date", "b=1|x,y"]);
+}
+
+#[test]
+fn migrate_prompts_upgrades_the_text_and_every_rotation_entry() {
+    let mut p = test_prompt("a");
+    p.text = "Hi {#{name}#}".into();
+    p.variants = vec!["Bye {#{name}#}".into(), "plain".into()];
+    let mut list = vec![p];
+    migrate_prompts(&mut list);
+    assert_eq!(list[0].text, "Hi {?name}");
+    assert_eq!(list[0].variants, vec!["Bye {?name}".to_string(), "plain".to_string()]);
+    let snapshot = (list[0].text.clone(), list[0].variants.clone());
+    migrate_prompts(&mut list);
+    assert_eq!((list[0].text.clone(), list[0].variants.clone()), snapshot, "a second pass changes nothing");
+}
+
+#[test]
+fn every_inbound_path_upgrades_the_old_spelling() {
+    // Markdown sync: a file an older version wrote.
+    let base = sync_test_prompt();
+    let mut old = base.clone();
+    old.text = "Dear {#{name}#}".into();
+    let content = prompt_to_md(&old, &SyncPlacement::default());
+    let updated = apply_md_to_prompt(&base, &content).expect("valid frontmatter");
+    assert_eq!(updated.text, "Dear {?name}");
+    // Import file: preview and import both read through the same parse.
+    let data = parse_import_bytes("### Greeting\nHello {#{tone|a,b}#}".as_bytes(), std::path::Path::new("x.txt")).expect("parse");
+    assert_eq!(data.prompts[0].text, "Hello {?tone|a,b}");
+    // Trash: the entry comes back in the new spelling.
+    let mut settings = Settings::default();
+    settings.migrate();
+    let mut store = Store { prompts: Vec::new(), trash: Vec::new(), settings, prompts_locked: false, written: Default::default() };
+    let mut t = test_prompt("t");
+    t.id = "t1".into();
+    t.text = "Old {#{x}#}".into();
+    t.variants = vec!["Old two {#{/date\\}#}".into()];
+    t.trashed_at = 5;
+    store.trash.push(t);
+    restore_trashed_core(&mut store, "t1", |_| true).expect("restore");
+    assert_eq!(store.prompts[0].text, "Old {?x}");
+    assert_eq!(store.prompts[0].variants, vec!["Old two {?@date}".to_string()]);
+    // A restored version snapshot, shown or restored as a new entry.
+    let source = test_prompt("s");
+    let restored = build_restored_prompt(&source, "Name", "Snap {#{y}#}".into(), vec!["V {#{y}#}".into()], "");
+    assert_eq!(restored.text, "Snap {?y}");
+    assert_eq!(restored.variants, vec!["V {?y}".to_string()]);
+}
+
+#[test]
+fn a_confidential_entry_is_upgraded_where_it_is_read_back() {
+    let key = secret_derive_key("pw", b"0123456789abcdef").expect("derive");
+    let mut p = test_prompt("a");
+    p.secret = true;
+    p.text = secret_encrypt("Hi {#{name}#}", &key);
+    p.variants = vec![secret_encrypt("Two {#{/date\\}#}", &key)];
+    let (text, variants) = reveal_secret_text(&p, Some(key)).expect("decrypt");
+    assert_eq!(text, "Hi {?name}");
+    assert_eq!(variants, vec!["Two {?@date}".to_string()]);
+}
+
+#[test]
+fn the_stored_history_upgrade_runs_once_and_then_leaves_everything_alone() {
+    assert_eq!(DATA_VERSION, 1);
+    // A settings blob from before the field existed is at step 0.
+    let mut v = serde_json::to_value(Settings::default()).unwrap();
+    v.as_object_mut().unwrap().remove("data_version");
+    let old: Settings = serde_json::from_value(v).unwrap();
+    assert_eq!(old.data_version, 0);
+
+    let mut conn = Connection::open_in_memory().unwrap();
+    assert!(db_conn_init_schema(&conn));
+    db_add_version(&conn, "p1", 10, "Name", "Old {#{a}#}", &["Entry {#{/date\\}#}".to_string()], 20).unwrap();
+    db_add_version(&conn, "p1", 11, "Name", "Already {?b}", &[], 20).unwrap();
+    let mut trash = vec![test_prompt("t1")];
+    trash[0].text = "Trashed {#{c=1}#}".into();
+    trash[0].variants = vec!["Two {#{c}#}".into()];
+
+    // Two version rows are not both old: one rewritten row plus one trash entry.
+    let changed = upgrade_history_placeholders(&mut conn, &mut trash).unwrap();
+    assert_eq!(changed, 2);
+    assert_eq!(trash[0].text, "Trashed {?c=1}");
+    assert_eq!(trash[0].variants, vec!["Two {?c}".to_string()]);
+    // The stored rows themselves hold the new spelling now, not only their display.
+    let raw: Vec<(String, String)> = conn
+        .prepare("SELECT text, variants FROM prompt_versions ORDER BY id")
+        .unwrap()
+        .query_map([], |r| Ok((dec_str(&r.get::<_, String>(0)?), dec_str(&r.get::<_, String>(1)?))))
+        .unwrap()
+        .flatten()
+        .collect();
+    assert_eq!(raw[0].0, "Old {?a}");
+    assert_eq!(decode_variants(&raw[0].1), vec!["Entry {?@date}".to_string()]);
+    assert_eq!(raw[1].0, "Already {?b}");
+    // Listing a version shows the new spelling.
+    assert_eq!(db_list_versions(&conn, "p1")[1].text, "Old {?a}");
+    // A second start finds nothing to rewrite.
+    assert_eq!(upgrade_history_placeholders(&mut conn, &mut trash).unwrap(), 0);
+}
+
+#[test]
+fn an_old_snapshot_reads_in_the_new_spelling_before_the_upgrade_has_run() {
+    let conn = Connection::open_in_memory().unwrap();
+    assert!(db_conn_init_schema(&conn));
+    db_add_version(&conn, "p1", 10, "Name", "Old {#{a}#}", &["E {#{b}#}".to_string()], 20).unwrap();
+    let listed = db_list_versions(&conn, "p1");
+    assert_eq!(listed[0].text, "Old {?a}");
+    assert_eq!(listed[0].variants, vec!["E {?b}".to_string()]);
+    let (_, _, text, variants) = db_get_version(&conn, listed[0].id).expect("version");
+    assert_eq!(text, "Old {?a}");
+    assert_eq!(variants, vec!["E {?b}".to_string()]);
 }

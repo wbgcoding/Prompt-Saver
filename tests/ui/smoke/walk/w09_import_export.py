@@ -343,7 +343,7 @@ SECTION = """\
       if (!varTile2.draggable) out.errors.push('the modifier did not arm the drag-out');
       const ev = fireDragStart(varTile2);
       const dropped = ev.dataTransfer.getData('text/plain');
-      if (dropped !== 'Translate {#{Text=Hello}#} into {#{Language}#}.') {
+      if (dropped !== 'Translate {?Text=Hello} into {?Language}.') {
         out.errors.push('the dragged text is wrong: ' + dropped);
       }
       if (document.querySelector('.drag-ghost')) out.errors.push('a drag-out left a reorder ghost behind');

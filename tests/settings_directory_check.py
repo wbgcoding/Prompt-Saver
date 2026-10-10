@@ -52,7 +52,12 @@ NOT_A_SETTING = {
 def balanced(text, start, opener, closer):
     depth, j = 0, start
     while True:
-        if text[j] == opener:
+        if text[j] == '"':
+            # A double-quoted string can hold a lone brace (a placeholder example): skip it whole.
+            j += 1
+            while text[j] != '"' or text[j - 1] == "\\":
+                j += 1
+        elif text[j] == opener:
             depth += 1
         elif text[j] == closer:
             depth -= 1

@@ -16,8 +16,8 @@ check(
   "everything fulfilled",
   chainVarReport([
     "Plain text, no placeholders here.",
-    "Timestamp it: {#{/date\\}#}.",
-    "And an id: {#{/uuid\\}#}.",
+    "Timestamp it: {?@date}.",
+    "And an id: {?@uuid}.",
   ]),
   [
     { needs: [], fills: [], missing: [] },
@@ -31,7 +31,7 @@ check(
   "one gap",
   chainVarReport([
     "Intro, no placeholders.",
-    "Needs {#{name}#}.",
+    "Needs {?name}.",
     "Closing, no placeholders.",
   ]),
   [
@@ -44,7 +44,7 @@ check(
 // Several gaps: one step needs two different names, neither answered earlier.
 check(
   "several gaps",
-  chainVarReport(["Uses {#{a}#} and {#{b}#}."]),
+  chainVarReport(["Uses {?a} and {?b}."]),
   [{ needs: ["a", "b"], fills: [], missing: ["a", "b"] }],
 );
 
@@ -52,7 +52,7 @@ check(
 // missing, no matter where it sits in the chain.
 check(
   "reserved name",
-  chainVarReport(["Needs {#{topic}#}.", "Stamped {#{/timestamp\\}#}."]),
+  chainVarReport(["Needs {?topic}.", "Stamped {?@timestamp}."]),
   [
     { needs: ["topic"], fills: [], missing: ["topic"] },
     { needs: [], fills: ["timestamp"], missing: [] },
@@ -64,8 +64,8 @@ check(
 check(
   "placeholder fulfilled only later",
   chainVarReport([
-    "Needs {#{topic}#} now.",
-    "This later step also mentions {#{topic}#}.",
+    "Needs {?topic} now.",
+    "This later step also mentions {?topic}.",
   ]),
   [
     { needs: ["topic"], fills: [], missing: ["topic"] },

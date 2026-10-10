@@ -48,12 +48,15 @@ screen color.
 ### Placeholders
 
 Placeholder markup inside a tile's text opens a small popup asking for each value
-before the finished text reaches the clipboard.
+before the finished text reaches the clipboard. A placeholder is written
+`{?Name}`; `{?Name=default}` prefills a value and `{?Name|A, B}` offers a
+dropdown. Prompts written with the older {#{Name}#} spelling are converted
+automatically.
 
-- Dynamic placeholders: `{#{/date\}#}`, `{#{/time\}#}`, `{#{/clipboard\}#}`
-  fill themselves in, no popup; their own slash-fenced syntax (not the plain
-  `{#{date}#}` form) is what triggers it; insert them from the chip buttons
-  under the editor's text box rather than typing them by hand
+- Dynamic placeholders: `{?@date}`, `{?@time}`, `{?@clipboard}` fill
+  themselves in, no popup; the `@` in front (not the plain `{?date}` form,
+  which stays a placeholder of your own) is what triggers it; insert them from
+  the chip buttons under the editor's text box rather than typing them by hand
 - Choice placeholders: a dropdown of preset values instead of free text
 - Remember choices: the popup pre-fills the last answer for that tile
 - Fixed values (off by default, expert menu): a maintained list of name and
@@ -63,7 +66,7 @@ before the finished text reaches the clipboard.
   is typed or picked.
 
 <p>
-<svg viewBox="0 0 560 130" xmlns="http://www.w3.org/2000/svg" role="img"><text x="30" y="45" font-size="15" fill="currentColor" text-anchor="start">{#{Kunde=Meier|Meier,Schulz}#}</text><line x1="65" y1="55" x2="65" y2="80" stroke="currentColor" stroke-width="1"/><text x="65" y="95" font-size="11" fill="currentColor" text-anchor="middle">Name</text><line x1="118" y1="55" x2="150" y2="80" stroke="currentColor" stroke-width="1"/><text x="150" y="95" font-size="11" fill="currentColor" text-anchor="middle">Default</text><line x1="240" y1="55" x2="260" y2="80" stroke="currentColor" stroke-width="1"/><text x="260" y="95" font-size="11" fill="currentColor" text-anchor="middle">Choice list</text></svg>
+<svg viewBox="0 0 560 130" xmlns="http://www.w3.org/2000/svg" role="img"><text x="30" y="45" font-size="15" fill="currentColor" text-anchor="start">{?Kunde=Meier|Meier, Schulz}</text><line x1="57" y1="55" x2="57" y2="80" stroke="currentColor" stroke-width="1"/><text x="57" y="95" font-size="11" fill="currentColor" text-anchor="middle">Name</text><line x1="110" y1="55" x2="142" y2="80" stroke="currentColor" stroke-width="1"/><text x="142" y="95" font-size="11" fill="currentColor" text-anchor="middle">Default</text><line x1="232" y1="55" x2="252" y2="80" stroke="currentColor" stroke-width="1"/><text x="252" y="95" font-size="11" fill="currentColor" text-anchor="middle">Choice list</text></svg>
 </p>
 
 ### The editor
@@ -489,7 +492,7 @@ fast too often pauses the session with a toast instead of looping.
 </p>
 
 <p>
-<svg viewBox="0 0 560 90" xmlns="http://www.w3.org/2000/svg" role="img"><rect x="30" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="80" y="41" font-size="11" fill="currentColor" text-anchor="middle">Step 1</text><rect x="230" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="280" y="41" font-size="11" fill="currentColor" text-anchor="middle">Step 2</text><rect x="430" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="480" y="41" font-size="11" fill="currentColor" text-anchor="middle">Step 3</text><line x1="130" y1="37" x2="217" y2="37" stroke="currentColor" stroke-width="1.5"/><path d="M 215 33 L 225 37 L 215 41" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><text x="177" y="25" font-size="10" fill="currentColor" text-anchor="middle">{#{X}#}</text><line x1="330" y1="37" x2="417" y2="37" stroke="currentColor" stroke-width="1.5"/><path d="M 415 33 L 425 37 L 415 41" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><text x="377" y="25" font-size="10" fill="currentColor" text-anchor="middle">{#{Y}#}</text></svg>
+<svg viewBox="0 0 560 90" xmlns="http://www.w3.org/2000/svg" role="img"><rect x="30" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="80" y="41" font-size="11" fill="currentColor" text-anchor="middle">Step 1</text><rect x="230" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="280" y="41" font-size="11" fill="currentColor" text-anchor="middle">Step 2</text><rect x="430" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="480" y="41" font-size="11" fill="currentColor" text-anchor="middle">Step 3</text><line x1="130" y1="37" x2="217" y2="37" stroke="currentColor" stroke-width="1.5"/><path d="M 215 33 L 225 37 L 215 41" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><text x="177" y="25" font-size="10" fill="currentColor" text-anchor="middle">{?X}</text><line x1="330" y1="37" x2="417" y2="37" stroke="currentColor" stroke-width="1.5"/><path d="M 415 33 L 425 37 L 415 41" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><text x="377" y="25" font-size="10" fill="currentColor" text-anchor="middle">{?Y}</text></svg>
 </p>
 
 ### Hotkeys
@@ -1058,15 +1061,16 @@ wirkt ein Schalter auf dem letzten Schritt sofort statt erst bei „Fertig".
 **Kacheln anlegen**: Dateianhang, Screenshot-Werkzeug, Farbpipette (aus),
 Ziehen & Ablegen.
 
-**Platzhalter**: `{#{Name}#}` im Text öffnet beim Kopieren ein Popup
-für jeden Wert. Dynamische Platzhalter (`{#{date}#}`, `{#{time}#}`,
-`{#{clipboard}#}`) füllen sich selbst. Feste Werte (im Expertenmenü, aus)
+**Platzhalter**: `{?Name}` im Text öffnet beim Kopieren ein Popup
+für jeden Wert. Prompts mit der älteren Schreibweise {#{Name}#} werden
+automatisch umgeschrieben. Dynamische Platzhalter (`{?@date}`, `{?@time}`,
+`{?@clipboard}`) füllen sich selbst. Feste Werte (im Expertenmenü, aus)
 schlagen für einen passenden Namen eine gepflegte Liste von Werten vor, nur
 als Platzhaltertext im Feld, mit einer kleinen Stecknadel markiert, nie
 eingesetzt, bevor er getippt oder übernommen wird.
 
 <p>
-<svg viewBox="0 0 560 130" xmlns="http://www.w3.org/2000/svg" role="img"><text x="30" y="45" font-size="15" fill="currentColor" text-anchor="start">{#{Kunde=Meier|Meier,Schulz}#}</text><line x1="65" y1="55" x2="65" y2="80" stroke="currentColor" stroke-width="1"/><text x="65" y="95" font-size="11" fill="currentColor" text-anchor="middle">Name</text><line x1="118" y1="55" x2="150" y2="80" stroke="currentColor" stroke-width="1"/><text x="150" y="95" font-size="11" fill="currentColor" text-anchor="middle">Vorgabe</text><line x1="240" y1="55" x2="260" y2="80" stroke="currentColor" stroke-width="1"/><text x="260" y="95" font-size="11" fill="currentColor" text-anchor="middle">Auswahlliste</text></svg>
+<svg viewBox="0 0 560 130" xmlns="http://www.w3.org/2000/svg" role="img"><text x="30" y="45" font-size="15" fill="currentColor" text-anchor="start">{?Kunde=Meier|Meier, Schulz}</text><line x1="57" y1="55" x2="57" y2="80" stroke="currentColor" stroke-width="1"/><text x="57" y="95" font-size="11" fill="currentColor" text-anchor="middle">Name</text><line x1="110" y1="55" x2="142" y2="80" stroke="currentColor" stroke-width="1"/><text x="142" y="95" font-size="11" fill="currentColor" text-anchor="middle">Vorgabe</text><line x1="232" y1="55" x2="252" y2="80" stroke="currentColor" stroke-width="1"/><text x="252" y="95" font-size="11" fill="currentColor" text-anchor="middle">Auswahlliste</text></svg>
 </p>
 
 **Der Editor**: Markdown-Vorschau, Syntax-Hervorhebung, Versionen, private
@@ -1358,7 +1362,7 @@ weiterhin genau den Markdown-Text bekommt wie bei einer normalen Kopie.
 </p>
 
 <p>
-<svg viewBox="0 0 560 90" xmlns="http://www.w3.org/2000/svg" role="img"><rect x="30" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="80" y="41" font-size="11" fill="currentColor" text-anchor="middle">Schritt 1</text><rect x="230" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="280" y="41" font-size="11" fill="currentColor" text-anchor="middle">Schritt 2</text><rect x="430" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="480" y="41" font-size="11" fill="currentColor" text-anchor="middle">Schritt 3</text><line x1="130" y1="37" x2="217" y2="37" stroke="currentColor" stroke-width="1.5"/><path d="M 215 33 L 225 37 L 215 41" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><text x="177" y="25" font-size="10" fill="currentColor" text-anchor="middle">{#{X}#}</text><line x1="330" y1="37" x2="417" y2="37" stroke="currentColor" stroke-width="1.5"/><path d="M 415 33 L 425 37 L 415 41" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><text x="377" y="25" font-size="10" fill="currentColor" text-anchor="middle">{#{Y}#}</text></svg>
+<svg viewBox="0 0 560 90" xmlns="http://www.w3.org/2000/svg" role="img"><rect x="30" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="80" y="41" font-size="11" fill="currentColor" text-anchor="middle">Schritt 1</text><rect x="230" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="280" y="41" font-size="11" fill="currentColor" text-anchor="middle">Schritt 2</text><rect x="430" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="480" y="41" font-size="11" fill="currentColor" text-anchor="middle">Schritt 3</text><line x1="130" y1="37" x2="217" y2="37" stroke="currentColor" stroke-width="1.5"/><path d="M 215 33 L 225 37 L 215 41" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><text x="177" y="25" font-size="10" fill="currentColor" text-anchor="middle">{?X}</text><line x1="330" y1="37" x2="417" y2="37" stroke="currentColor" stroke-width="1.5"/><path d="M 415 33 L 425 37 L 415 41" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><text x="377" y="25" font-size="10" fill="currentColor" text-anchor="middle">{?Y}</text></svg>
 </p>
 
 **Hotkeys**: ein globaler Hotkey öffnet den Schnellstarter (Standard

@@ -57,9 +57,9 @@ pub(crate) fn split_variants(joined: &str) -> (String, Vec<String>) {
 // fill-in dialog, so it resolves the same priority the dialog itself offers,
 // minus the one interactive step: a remembered value, then a fixed value
 // (the maintained name/value list stored under ui_texts.varFixed), then the text's own
-// {#{name=default}#} default, then blank. Never the raw {#{...}#} syntax --
+// {?name=default} default, then blank. Never the raw {?...} syntax --
 // that would leak the app's own placeholder markup into a plain export or
-// someone else's Markdown folder. A dynamic name (/date\, /uuid\, ...) is
+// someone else's Markdown folder. A dynamic name ({?@date}, {?@uuid}, ...) is
 // left exactly as written: its value only means something at the moment of
 // copy, and a background write has no such moment.
 pub(crate) fn parse_ui_text_map(settings: &Settings, key: &str) -> HashMap<String, String> {
@@ -70,10 +70,51 @@ pub(crate) fn parse_ui_text_map(settings: &Settings, key: &str) -> HashMap<Strin
         .unwrap_or_default()
 }
 
-// Same token shape as the frontend's VAR_RE: `{#{` + a body with no `}` or
-// newline, at most 200 characters, + `}#}`. Returns (start, end, trimmed
-// body) triples in source order, char-indexed and non-overlapping.
+// Same token shape as the frontend's VAR_RE: `{?` + a body that starts with a
+// letter, digit, `_` or `@`, holds no `}` or newline and is at most 200
+// characters, + `}`. Returns (start, end, trimmed body) triples in source
+// order, char-indexed and non-overlapping.
 pub(crate) fn find_var_tokens(text: &str) -> Vec<(usize, usize, String)> {
+    let chars: Vec<char> = text.chars().collect();
+    let n = chars.len();
+    let mut out = Vec::new();
+    let mut i = 0usize;
+    while i + 3 <= n {
+        if chars[i] == '{'
+            && chars.get(i + 1) == Some(&'?')
+            && chars.get(i + 2).is_some_and(|c| c.is_alphanumeric() || *c == '_' || *c == '@')
+        {
+            let body_start = i + 2;
+            let mut j = body_start;
+            let mut found_end = None;
+            while j < n && j - body_start <= 200 {
+                if chars[j] == '}' {
+                    if j > body_start && j - body_start <= 200 {
+                        found_end = Some(j);
+                    }
+                    break;
+                }
+                if chars[j] == '\n' {
+                    break;
+                }
+                j += 1;
+            }
+            if let Some(end) = found_end {
+                let body: String = chars[body_start..end].iter().collect();
+                out.push((i, end + 1, body.trim().to_string()));
+                i = end + 1;
+                continue;
+            }
+        }
+        i += 1;
+    }
+    out
+}
+
+// The retired spelling `{#{` + body + `}#}`: same scan as before, kept only so the
+// one-time upgrade (store.rs `upgrade_placeholders`) can find what to rewrite.
+// Returns (start, end, trimmed body) triples, char-indexed and non-overlapping.
+pub(crate) fn find_old_var_tokens(text: &str) -> Vec<(usize, usize, String)> {
     let chars: Vec<char> = text.chars().collect();
     let n = chars.len();
     let mut out = Vec::new();
@@ -134,10 +175,10 @@ pub(crate) fn parse_var_token(token: &str) -> (String, Vec<String>, String) {
     }
 }
 
-// A name written as /name\ is a reserved dynamic variable (date, uuid, the
+// A name written as @name is a reserved dynamic variable (date, uuid, the
 // clipboard, ...), meaningful only at the moment of copy.
 pub(crate) fn is_dyn_var_name(name: &str) -> bool {
-    name.len() > 2 && name.starts_with('/') && name.ends_with('\\')
+    name.len() > 1 && name.starts_with('@')
 }
 
 pub(crate) fn resolve_static_vars(text: &str, remembered: &HashMap<String, String>, fixed: &HashMap<String, String>) -> String {
@@ -795,11 +836,18 @@ pub(crate) fn import_sig(name: &str, text: &str, file: &str, image: &str, copy: 
 pub(crate) fn parse_import_bytes(bytes: &[u8], path: &std::path::Path) -> Result<ImportData, String> {
     let content = String::from_utf8(bytes.to_vec()).map_err(|_| "the file is not valid UTF-8 text".to_string())?;
     let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
-    let data = match ext.as_str() {
+    let mut data = match ext.as_str() {
         "csv" => parse_csv_data(&content),
         "json" => parse_json_data(&content)?,
         _ => parse_txt(&content),
     };
+    // A file from an older version still spells placeholders the old way.
+    for p in &mut data.prompts {
+        p.text = upgrade_placeholders(&p.text);
+        for v in &mut p.variants {
+            *v = upgrade_placeholders(v);
+        }
+    }
     if data.prompts.is_empty() {
         return Err(format!("no {} found", brand::ITEM_PLURAL));
     }

@@ -401,7 +401,7 @@ SECTION = """\
           }
         }
       }
-      // 34: a {#{ }#} placeholder with no name inside warns before the save goes
+      // 34: a {?} placeholder with no name inside warns before the save goes
       // through, and "save anyway" still lets it through.
       const cell10 = document.querySelector('#grid .cell[data-col="1"][data-row="0"]');
       if (!cell10 || cell10.firstElementChild) {
@@ -410,12 +410,12 @@ SECTION = """\
         cell10.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
         await sleep(200);
         document.getElementById('modal-name').value = 'Empty Var Prompt';
-        document.getElementById('modal-text').value = 'Say {#{ }#} please.';
+        document.getElementById('modal-text').value = 'Say {?} please.';
         document.getElementById('modal-confirm').click();
         await sleep(200);
         const cm = document.getElementById('confirm-modal');
         if (!cm || cm.classList.contains('hidden')) {
-          out.errors.push('saving a prompt with an unnamed {#{ }#} variable did not warn');
+          out.errors.push('saving a prompt with an unnamed {?} variable did not warn');
         } else {
           if (document.getElementById('confirm-title').textContent !== 'Empty placeholder') {
             out.errors.push('the empty-variable warning has the wrong title');

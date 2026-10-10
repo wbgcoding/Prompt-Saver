@@ -32,7 +32,7 @@ for (const lang of langs) {
     for (const k of keys) {
       if (!en.has(k)) continue;
       // Only the tokens t()/the call sites really substitute. The variable-syntax
-      // examples ("{#{Name}#}") are translated on purpose and are not holes.
+      // examples ("{?Name}") are translated on purpose and are not holes.
       const holes = (s) => (String(s).match(/\{(?:app|n|v|f|name|path|mode)\}/g) || []).sort().join(",");
       const want = holes(I18N.en[k]);
       const got = holes(I18N[lang][k]);

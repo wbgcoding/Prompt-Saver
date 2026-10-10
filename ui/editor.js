@@ -164,7 +164,7 @@ export function insertVarToken(body) {
   const ta = modal.text;
   const start = ta.selectionStart ?? ta.value.length;
   const end = ta.selectionEnd ?? start;
-  const token = `{#{${body}}#}`;
+  const token = `{?${body}}`;
   ta.value = ta.value.slice(0, start) + token + ta.value.slice(end);
   ta.focus();
   ta.setSelectionRange(start + token.length, start + token.length);
@@ -1292,7 +1292,7 @@ export async function confirmModal() {
     : hasVariants
       ? [modal.text.value, ...modalState.rotateEntries.slice(1)]
       : [modal.text.value];
-  // A {#{ }#} with no name inside never becomes a fillable variable: warn now,
+  // A {?} with no name inside never becomes a fillable variable: warn now,
   // while it is still one click away from being fixed, instead of after it is saved.
   if (rawTexts.some(hasEmptyVarToken)) {
     const proceed = await confirmDialog({

@@ -90,11 +90,11 @@ SECTION = """\
       await sleep(250);
       // 709: a placeholder reads as [name] in a library row, a reserved one too.
       const toneRow = document.querySelector('#library-list .lib-item[data-id="p5"] .lib-text');
-      if (!toneRow || !toneRow.textContent.includes('[tone]') || toneRow.textContent.includes('{#{')) {
+      if (!toneRow || !toneRow.textContent.includes('[tone]') || toneRow.textContent.includes('{?')) {
         out.errors.push('709: the library row of a prompt with a choice variable does not show [tone]: ' + (toneRow ? toneRow.textContent : 'row missing'));
       }
       const dynRow = document.querySelector('#library-list .lib-item[data-id="p3"] .lib-text');
-      if (!dynRow || !dynRow.textContent.includes('[date]') || dynRow.textContent.includes('{#{')) {
+      if (!dynRow || !dynRow.textContent.includes('[date]') || dynRow.textContent.includes('{?')) {
         out.errors.push('709: the library row of a prompt with reserved names does not show [date]: ' + (dynRow ? dynRow.textContent : 'row missing'));
       }
     }

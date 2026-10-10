@@ -232,7 +232,7 @@ export async function toggleChainPick(p) {
       return;
     }
     // Rotating prompt: peek the entry a copy would use (never consumes), resolve
-    // {#{variables}#} on THAT text, right when the button is picked into the chain.
+    // {?variables} on THAT text, right when the button is picked into the chain.
     let rawText = p.text || p.name || "";
     let peeked = false; // only a successful peek may be followed by a commit below:
                          // a failed peek already fell back to p.text (a stale/wrong

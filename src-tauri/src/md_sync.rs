@@ -413,8 +413,9 @@ pub(crate) fn apply_md_to_prompt(base: &Prompt, content: &str) -> Option<Prompt>
     // `rotate_mode` is deliberately NOT part of this sync (same partial-field
     // philosophy as favorite/hotkey/font, which this function also never touches).
     let (text, variants) = split_variants(body);
-    p.text = text;
-    p.variants = sanitize_variants(variants);
+    // A file written by an older version still holds the old placeholder spelling.
+    p.text = upgrade_placeholders(&text);
+    p.variants = sanitize_variants(variants.iter().map(|v| upgrade_placeholders(v)).collect());
     // A hand-edit that removed every `<!-- next -->` marker must not leave a
     // "random" mode stranded on an empty list: the same invariant
     // sanitize_rotate_mode already enforces for every other entry point.

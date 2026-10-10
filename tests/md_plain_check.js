@@ -24,7 +24,7 @@ check("inline code", mdPlain("`x`"), "x");
 check("underscore bold and strike", mdPlain("__b__ and ~~gone~~"), "b and gone");
 check("horizontal rules", mdPlain("a\n---\nb\n* * *\nc\n___\nd"), "a\nb\nc\nd");
 check("table separator row", mdPlain("| a | b |\n|---|:--:|\n| 1 | 2 |"), "| a | b |\n| 1 | 2 |");
-check("placeholder token survives", mdPlain("Hi {#{my_name=Bob}#}, **go**"), "Hi {#{my_name=Bob}#}, go");
+check("placeholder token survives", mdPlain("Hi {?my_name=Bob}, **go**"), "Hi {?my_name=Bob}, go");
 check("empty input", mdPlain(""), "");
 check("null input", mdPlain(null), "");
 check("plain text unchanged", mdPlain("Just a sentence. Nothing here."), "Just a sentence. Nothing here.");

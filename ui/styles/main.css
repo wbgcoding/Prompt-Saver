@@ -1892,7 +1892,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .tile-tip.show { opacity: 1; transform: translateY(0); }
 .tile-tip-name { font-weight: 700; }
 .tile-tip-body { margin-top: 5px; opacity: 0.9; }
-/* A {#{variable}#} token stands out in the preview instead of reading like the
+/* A {?variable} token stands out in the preview instead of reading like the
    rest of the prompt; the only hint, short of copying, that one is asked for. */
 .var-token { color: var(--accent); font-weight: 600; }
 /* Length readout: same weight as the hint line below it, not the prompt text. */

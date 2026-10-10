@@ -227,7 +227,7 @@ SECTION = """\
               autoBtn2.click();
               if (autoBtn2.getAttribute('aria-pressed') !== 'true') out.errors.push('the Auto toggle did not flip to pressed on click');
               if (!autoBtn2.classList.contains('active')) out.errors.push('the Auto toggle did not gain the active class on click');
-              ta2.value = 'Entry two {#{name}#}';
+              ta2.value = 'Entry two {?name}';
               ta2.dispatchEvent(new Event('input', { bubbles: true }));
               if (autoBtn2.disabled) out.errors.push('the Auto toggle disabled itself for a placeholder entry');
               ta2.value = 'Entry two';

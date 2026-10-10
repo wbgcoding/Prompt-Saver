@@ -46,9 +46,11 @@ export function fillVideoFormatSelect(select) {
 // "ungroup" menu entries, and the "group into a folder" entry.
 export const FOLDER_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.2l2 2.4h8.8A1.5 1.5 0 0 1 21 8.9v9.6a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5Z"/></svg>';
 
-// The placeholder pattern, the one copy: promptVars.js imports it. A literal `{{` is
-// not a placeholder; the self-filling reserved names (slash fence) match it too.
-export const VAR_RE = /\{#\{\s*([^}\n]{1,200}?)\s*\}#\}/g;
+// The placeholder pattern, the one copy: promptVars.js imports it. A token is `{?` plus
+// a body that starts with a letter, digit, `_` or `@` and holds no `}` or newline; the
+// self-filling reserved names (written with an `@`) match it too. A bare `{?}`, `{? x}`
+// or `{?>` is not a placeholder, and neither is a JSON or code brace.
+export const VAR_RE = /\{\?([\p{L}\p{N}_@][^}\n]{0,199})\}/gu;
 
 // True when copying this text has to go through the main window, which asks for the
 // placeholders and fills the reserved names: the text (or any rotation entry passed
@@ -59,11 +61,11 @@ export const needsMainWindowCopy = (text, variants = []) =>
 
 // A prompt placeholder reads as [name] wherever raw prompt text is previewed (library
 // and history rows, search hits, the quick launcher). The label is the part before an
-// equals sign or a bar, a reserved name loses its slash fence. A fence with no usable
+// equals sign or a bar, a reserved name loses its leading @. A token with no usable
 // name stays as typed.
 export function varPreview(text) {
   return String(text ?? "").replace(VAR_RE, (whole, body) => {
-    const label = body.split(/[=|]/)[0].trim().replace(/^\//, "").replace(/[\/\\]$/, "").trim();
+    const label = body.split(/[=|]/)[0].trim().replace(/^@(?=.)/, "").trim();
     return label ? `[${label}]` : whole;
   });
 }

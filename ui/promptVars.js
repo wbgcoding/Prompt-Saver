@@ -2,11 +2,12 @@ import { flag, invoke, LANG, settings, t, toast, TOOLTIP_PREVIEW_CHARS, txt } fr
 import { activeThemeVars } from "./theme.js";
 import { varPreview, VAR_RE } from "./floatShared.js";
 
-// ---- Prompt variables ({#{placeholder}#}) ----
-// The {#{ ... }#} fence is deliberately uncommon so a literal "{{" pasted from a
-// code block is never mistaken for a variable. The 200-char body leaves room for
-// a choice variable's option list, not just a name. The pattern itself (VAR_RE) lives
-// in floatShared.js so the pill and folder windows test the very same one.
+// ---- Prompt variables ({?placeholder}) ----
+// A `{` directly followed by `?` and a letter, digit, `_` or `@` is a placeholder; that
+// start does not occur in JSON or code, so pasted code is never mistaken for one. The
+// 200-char body leaves room for a choice variable's option list, not just a name. The
+// pattern itself (VAR_RE) lives in floatShared.js so the pill and folder windows test
+// the very same one.
 export function extractVars(text) {
   const seen = [];
   for (const m of (text || "").matchAll(VAR_RE)) {
@@ -16,11 +17,11 @@ export function extractVars(text) {
   return seen;
 }
 export const fillVars = (text, values) => text.replace(VAR_RE, (_, k) => values[k.trim()] ?? "");
-// A fence whose body is only whitespace ({#{ }#}) never becomes a real variable:
-// extractVars() silently drops it: so it would sit in the copied text unfilled and
+// A `{?` with no name right after it ({?}, {? x}) never becomes a real variable:
+// extractVars() never sees it, so it would sit in the copied text unfilled and
 // unexplained. Caught before save instead of left a silent trap.
-export const hasEmptyVarToken = (text) =>
-  [...String(text || "").matchAll(VAR_RE)].some((m) => !m[1].trim());
+const EMPTY_TOKEN_RE = /\{\?(?![\p{L}\p{N}_@])[^}\n]{0,200}\}/u;
+export const hasEmptyVarToken = (text) => EMPTY_TOKEN_RE.test(String(text || ""));
 
 // A placeholder gets a visible accent wherever raw prompt text is previewed, so
 // "does this prompt ask for anything" no longer surprises you only at copy time. It
@@ -62,14 +63,12 @@ export const DYN_VARS = [
   "clipboard", "username", "uuid", "random", "counter",
 ];
 export const DYN_SET = new Set(DYN_VARS);
-// A reserved name is WRITTEN with a slash fence: {#{/date\}#}. That keeps every plain
-// word free for a variable of the user's own: "date" only fills itself in when it is
-// spelled /date\. Old prompts are rewritten once by the store migration.
-export const DYN_OPEN = "/";
-export const DYN_CLOSE = "\\";
-export const dynToken = (name) => `${DYN_OPEN}${name}${DYN_CLOSE}`;
-export const dynName = (raw) =>
-  raw.length > 2 && raw.startsWith(DYN_OPEN) && raw.endsWith(DYN_CLOSE) ? raw.slice(1, -1) : "";
+// A reserved name is WRITTEN with an @ in front: {?@date}. That keeps every plain word
+// free for a variable of the user's own: "date" only fills itself in when it is spelled
+// @date. Old prompts are rewritten once by the store migration.
+export const DYN_OPEN = "@";
+export const dynToken = (name) => `${DYN_OPEN}${name}`;
+export const dynName = (raw) => (raw.length > 1 && raw.startsWith(DYN_OPEN) ? raw.slice(1) : "");
 
 // The app language is a bare ISO code, which is already a valid BCP-47 tag; only
 // where the default region would be the wrong one is it spelled out. The app's
@@ -104,7 +103,7 @@ export function isoStamp(d) {
 // Short throwaway id: the same platform RNG as the UUID, just eight characters.
 export const shortId = () =>
   [...crypto.getRandomValues(new Uint8Array(6))].map((b) => b.toString(36).padStart(2, "0")).join("").slice(0, 8);
-// {#{counter}#} counts copies, so its value has to survive a restart. Kept in the
+// {?@counter} counts copies, so its value has to survive a restart. Kept in the
 // same ui_texts store the remembered variable values use.
 export const VAR_COUNTER_MAX = 1e9;
 

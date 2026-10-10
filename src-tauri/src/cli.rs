@@ -19,8 +19,8 @@ use crate::{
     gfs_from_settings, list_backups_impl_at, lock, migrate_prompts, parse_import_bytes,
     parse_ui_text_map, read_file_capped, resolved_for_export, restore_selective, sanitize_notes,
     sanitize_tags, show_main, stage_and_validate_backup, tag_key, to_csv, to_json, to_txt,
-    valid_backup_name, valid_scope, valid_tag_color, valid_tag_name, Db, Prompt, Store,
-    WrittenRows, MAX_IMPORT_BYTES,
+    upgrade_prompt_placeholders, valid_backup_name, valid_scope, valid_tag_color, valid_tag_name, Db, Prompt,
+    Store, WrittenRows, MAX_IMPORT_BYTES,
 };
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
@@ -1349,6 +1349,7 @@ fn cmd_restore(store: &mut Store, id: &str, json: bool) -> Outcome {
     };
     let mut p = store.trash.remove(pos);
     p.trashed_at = 0;
+    upgrade_prompt_placeholders(&mut p);
     store.prompts.push(p);
     let body = if json { "{\"ok\":true}\n".to_string() } else { String::new() };
     Outcome::ok(body).mutating_trash()

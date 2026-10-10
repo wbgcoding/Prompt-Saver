@@ -285,6 +285,10 @@ pub(crate) struct Settings {
     // Yes or No from its `auto_update` value by `migrate`.
     #[serde(default = "legacy_update_consent")]
     pub(crate) update_consent: UpdateConsent,
+    // How far the one-time rewrites of stored content have run (see DATA_VERSION).
+    // A stored settings blob without the key is at step 0.
+    #[serde(default)]
+    pub(crate) data_version: u32,
     // Update versions the user chose to skip: never offered again.
     #[serde(default)]
     pub(crate) skipped_versions: Vec<String>,
@@ -453,6 +457,7 @@ impl Default for Settings {
             rec_pause_hotkey: default_rec_pause_hotkey(),
             auto_update: true,
             update_consent: UpdateConsent::Unasked,
+            data_version: 0,
             skipped_versions: Vec::new(),
             last_seen_version: String::new(),
             ui_flags: HashMap::new(),
@@ -484,6 +489,10 @@ impl Default for Settings {
     }
 }
 
+// Current step of the one-time stored-content rewrites; load_store runs every step
+// above `Settings::data_version` once. Step 1: placeholders in the old {#{...}#}
+// spelling in the version history and the trash.
+pub(crate) const DATA_VERSION: u32 = 1;
 pub(crate) const GRID_MIN: u32 = 1;
 // Hard safety ceilings. The default-facing limits are 20 (enforced in the UI via
 // the expert values gridMax / maxViews); these only cap how far those expert

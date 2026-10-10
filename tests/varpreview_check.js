@@ -11,28 +11,32 @@ const check = (label, actual, expected) => {
   if (a !== e) problems.push(`${label}: got ${a}, expected ${e}`);
 };
 
-check("choice variable and reserved name", varPreview("A {#{tone=casual|formal,casual}#} B {#{/date/}#}"), "A [tone] B [date]");
-check("real slash fence", varPreview("On {#{/date\}#}"), "On [date]");
-check("plain name", varPreview("Hi {#{name}#}!"), "Hi [name]!");
-check("name with default", varPreview("{#{city=Berlin}#}"), "[city]");
-check("name with options only", varPreview("{#{lang|en,de}#}"), "[lang]");
-check("spaces are trimmed", varPreview("{#{  who  }#}"), "[who]");
+check("choice variable and reserved name", varPreview("A {?tone=casual|formal,casual} B {?@date}"), "A [tone] B [date]");
+check("reserved name loses its @", varPreview("On {?@date}"), "On [date]");
+check("the preview label drops any leading @", varPreview("{?@foo}"), "[foo]");
+check("plain name", varPreview("Hi {?name}!"), "Hi [name]!");
+check("name with default", varPreview("{?city=Berlin}"), "[city]");
+check("name with options only", varPreview("{?lang|en,de}"), "[lang]");
+check("trailing spaces are trimmed", varPreview("{?who  }"), "[who]");
+check("a space right after the brace is no placeholder", varPreview("{? who}"), "{? who}");
+check("a closing code brace is no placeholder", varPreview("{?>x}"), "{?>x}");
+check("letters beyond ASCII start a name", varPreview("{?Größe}"), "[Größe]");
 check("no token stays as it is", varPreview("plain {text} here"), "plain {text} here");
 check("empty input", varPreview(""), "");
 check("null input", varPreview(null), "");
-check("empty fence stays raw", varPreview("x {#{ }#} y"), "x {#{ }#} y");
+check("a bare {?} stays raw", varPreview("x {?} y"), "x {?} y");
 
 // A pill or folder member with a placeholder (or a self-filling token) is copied by the
 // main window; everything else, a literal double brace included, copies directly.
-check("placeholder", needsMainWindowCopy("Hello {#{name}#}"), true);
-check("reserved token", needsMainWindowCopy("On {#{/date\}#}"), true);
-check("choice token", needsMainWindowCopy("{#{tone|a,b}#}"), true);
+check("placeholder", needsMainWindowCopy("Hello {?name}"), true);
+check("reserved token", needsMainWindowCopy("On {?@date}"), true);
+check("choice token", needsMainWindowCopy("{?tone|a,b}"), true);
 check("literal double brace", needsMainWindowCopy("x {{name}} y"), false);
 check("plain text", needsMainWindowCopy("hello"), false);
 check("empty and null", [needsMainWindowCopy(""), needsMainWindowCopy(null)], [false, false]);
-check("token only in a rotation entry", needsMainWindowCopy("plain", ["also plain", "now {#{x}#}"]), true);
+check("token only in a rotation entry", needsMainWindowCopy("plain", ["also plain", "now {?x}"]), true);
 check("no variants", needsMainWindowCopy("plain", undefined), false);
-check("repeatable (global flag keeps no state)", [needsMainWindowCopy("{#{a}#}"), needsMainWindowCopy("{#{a}#}"), needsMainWindowCopy("{#{a}#}")], [true, true, true]);
+check("repeatable (global flag keeps no state)", [needsMainWindowCopy("{?a}"), needsMainWindowCopy("{?a}"), needsMainWindowCopy("{?a}")], [true, true, true]);
 
 // One source for the pattern: promptVars.js imports VAR_RE from floatShared.js and
 // keeps no copy of its own.

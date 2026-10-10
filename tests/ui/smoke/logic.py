@@ -98,7 +98,7 @@ COOLDOWN_DIALOG_PROBE = """
     {
       const inv = window.__TAURI__.core.invoke;
       await inv('set_ui_value', { key: 'copyCooldownMs', value: 2000 });
-      await inv('update_prompt', { id: 'p4', text: 'Folder note for {#{who}#}' });
+      await inv('update_prompt', { id: 'p4', text: 'Folder note for {?who}' });
       window.__FIRE__('store-synced');
       await sleep(500);
       const asks = () => argsOf('open_var_window').length;
