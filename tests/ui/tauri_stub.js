@@ -815,6 +815,9 @@ const RESULTS = {
     if (!a || !Array.isArray(a.relPaths)) throw new Error("import_folder_files stub called without relPaths");
     return a.relPaths.length;
   },
+  // Saving an edited screenshot answers with the new path; deleting the unedited file succeeds.
+  save_screenshot_now: () => "C:/shots/saved.png",
+  delete_screenshot_file: () => true,
   // The real command answers with the name of the backup it just made.
   create_backup: () => "2026-07-26_12-00-00",
   list_backups: () => [

@@ -914,6 +914,9 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **A new screenshot no longer replaces unsaved editor work silently.** While
+  the screenshot editor holds edits, a new capture asks whether to replace
+  them or keep editing; the new shot is on the clipboard either way.
 - **The search overlay can no longer get stuck open.** Opening it and closing
   it again within a moment (button or Ctrl+K twice) could leave it on screen
   where Escape and a click outside did nothing.

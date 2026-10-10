@@ -676,7 +676,7 @@ export function bindCapture() {
 
   // Switching to another program never touches a chain, locked or not: it ends
   // only through the chain button or Ctrl+V pressed inside this window.
-  const { snipEditOpen, snipEdit } = initSnipEditor();
+  const { snipEditOpen, snipEdit, snipEditState, snipEditCancel } = initSnipEditor();
 
   const snipModal = $("snip-modal");
   let pendingSnip = null;
@@ -696,8 +696,25 @@ export function bindCapture() {
     pendingSnipName = "";
     pendingSnipOriginDir = "";
   };
-  listen("snip-captured", (e) => {
-    pendingSnip = e.payload?.data_url || "";
+  listen("snip-captured", async (e) => {
+    const shot = e.payload?.data_url || "";
+    // A shot arriving over an open editor must not wipe the open session's state
+    // (pending*) before the user said so: ask first when it holds edits, and only
+    // then run that session's own cancel.
+    if (shot && flag("snipEditor") && snipEditState().active) {
+      if (snipEditState().dirty) {
+        const ok = await confirmDialog({
+          title: t("snipReplaceTitle"),
+          message: t("snipReplaceMsg"),
+          confirmLabel: t("snipReplaceOk"),
+          cancelLabel: t("snipReplaceKeep"),
+          danger: false,
+        });
+        if (!ok) return; // the new shot stays as every capture does (clipboard, folder)
+      }
+      if (snipEditState().active) snipEditCancel();
+    }
+    pendingSnip = shot;
     if (!pendingSnip) return;
     snipCaptureGen++;
     recordToolUsage("screenshot");

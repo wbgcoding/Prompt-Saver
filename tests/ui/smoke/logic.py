@@ -174,12 +174,82 @@ SEARCH_RACE_PROBE = """
       if (visible(gs)) errs.push('855: Escape did not close the search overlay');
     }
 """
+# 856: a new screenshot arriving over an editor with edits asks before it replaces them. Keep
+# editing leaves the session (and the file Apply will clean up) untouched; Replace cancels the
+# old session once and opens the new shot.
+SNIP_REPLACE_SEED = '<script>window.__SEED_SETTINGS__ = { ui_flags: { screenshotSave: true } };</script>'
+SNIP_REPLACE_PROBE = """
+    // 856:
+    {
+      const cm = $('confirm-modal'), edit = $('snip-edit'), undo = $('snip-edit-undo'), live = $('snip-edit-live');
+      const shot = (w, h) => {
+        const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+        const g = cv.getContext('2d'); g.fillStyle = '#88aacc'; g.fillRect(0, 0, w, h);
+        return cv.toDataURL('image/png');
+      };
+      window.__FIRE__('snip-captured', { data_url: shot(200, 120), path: 'C:/shots/first.png', name: 'first.png' });
+      await until(() => visible(edit), 60);
+      if (!visible(edit)) {
+        errs.push('856: the editor did not open for the first shot');
+      } else {
+        const stroke = async () => {
+          document.querySelector('#snip-edit-tools button[data-tool="pen"]').click();
+          await sleep(50);
+          const r = live.getBoundingClientRect();
+          live.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 1, clientX: r.left + 10, clientY: r.top + 10 }));
+          live.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 1, clientX: r.left + 40, clientY: r.top + 30 }));
+          window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1, clientX: r.left + 40, clientY: r.top + 30 }));
+          await sleep(100);
+        };
+        // An editor with no edits is replaced without a question.
+        window.__FIRE__('snip-captured', { data_url: shot(160, 100), path: 'C:/shots/clean.png', name: 'clean.png' });
+        await until(() => live.width === 160, 40);
+        if (visible(cm)) errs.push('856: a clean editor asked before it was replaced');
+        if (live.width !== 160) errs.push('856: a clean editor was not replaced by the new shot: ' + live.width);
+        await stroke();
+        if (undo.disabled) errs.push('856: fixture: the stroke left no operation');
+        window.__FIRE__('snip-captured', { data_url: shot(120, 80), path: 'C:/shots/second.png', name: 'second.png' });
+        await until(() => visible(cm), 40);
+        if (!visible(cm)) {
+          errs.push('856: a new shot over an edited editor did not ask');
+        } else {
+          if ($('confirm-title').textContent.trim() !== 'Replace the open screenshot?') errs.push('856: unexpected dialog: ' + $('confirm-title').textContent);
+          $('confirm-cancel').click();
+        }
+        await sleep(300);
+        if (!visible(edit) || undo.disabled || live.width !== 160) errs.push('856: Keep editing changed the open session: undo ' + undo.disabled + ' width ' + live.width);
+        // Apply cleans up the file the OPEN session belongs to: still the clean shot's.
+        window.__SMOKE_ARGS__.length = 0;
+        $('snip-edit-apply').click();
+        await until(() => argsOf('delete_screenshot_file').length > 0, 40);
+        const del = argsOf('delete_screenshot_file').map((c) => c[1].path);
+        if (del.join() !== 'C:/shots/clean.png') errs.push('856: after Keep editing Apply cleaned up ' + JSON.stringify(del) + ' instead of the open shot');
+        for (const id of ['snip-modal-close', 'snip-modal-close-x']) { const b = $(id); if (b) b.click(); }
+        await sleep(200);
+        // Replace: the old session ends, the new shot opens with a fresh history.
+        window.__FIRE__('snip-captured', { data_url: shot(200, 120), path: 'C:/shots/third.png', name: 'third.png' });
+        await until(() => visible(edit) && live.width === 200, 40);
+        await stroke();
+        window.__FIRE__('snip-captured', { data_url: shot(120, 80), path: 'C:/shots/fourth.png', name: 'fourth.png' });
+        await until(() => visible(cm), 40);
+        if (visible(cm)) $('confirm-ok').click();
+        await until(() => live.width === 120, 40);
+        if (live.width !== 120) errs.push('856: Replace did not open the new shot: ' + live.width);
+        if (!undo.disabled) errs.push('856: the replaced editor kept the old history');
+        window.__SMOKE_ARGS__.length = 0;
+        $('snip-edit-apply').click();
+        await until(() => argsOf('delete_screenshot_file').length > 0, 40);
+        const del2 = argsOf('delete_screenshot_file').map((c) => c[1].path);
+        if (del2.join() !== 'C:/shots/fourth.png') errs.push('856: after Replace Apply cleaned up ' + JSON.stringify(del2) + ' instead of the new shot');
+      }
+    }
+"""
 
-def _boot(browser, tmp, tag, body, budget=45000):
+def _boot(browser, tmp, tag, body, budget=45000, seed=""):
     side = tmp / "ui" / f"logic-{tag}.html"
     side.write_text(
         (REPO / "ui" / "index.html").read_text(encoding="utf-8")
-        .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
+        .replace("<script", seed + '<script src="tauri_stub.js"></script>\n<script', 1)
         .replace("</body>", HEAD + body + TAIL + "</body>"),
         encoding="utf-8")
     proc = run_chrome(browser, tmp / ("profile-logic-%s" % tag), "1000,780", budget, side.as_uri(), 180)
@@ -189,12 +259,13 @@ def _boot(browser, tmp, tag, body, budget=45000):
 
 def run(browser, tmp):
     failed = 0
-    for tag, body in (
-            ("edit-event", EDIT_EVENT_PROBE),
-            ("archive-overflow", ARCHIVE_OVERFLOW_PROBE),
-            ("cooldown-dialog", COOLDOWN_DIALOG_PROBE),
-            ("search-race", SEARCH_RACE_PROBE)):
-        errs = _boot(browser, tmp, tag, body)
+    for tag, body, seed in (
+            ("edit-event", EDIT_EVENT_PROBE, ""),
+            ("archive-overflow", ARCHIVE_OVERFLOW_PROBE, ""),
+            ("cooldown-dialog", COOLDOWN_DIALOG_PROBE, ""),
+            ("search-race", SEARCH_RACE_PROBE, ""),
+            ("snip-replace", SNIP_REPLACE_PROBE, SNIP_REPLACE_SEED)):
+        errs = _boot(browser, tmp, tag, body, seed=seed)
         print(f"-- ui logic ({tag})")
         for e in errs:
             print(f"   FAIL: {e}")

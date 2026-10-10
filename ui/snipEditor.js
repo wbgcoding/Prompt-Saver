@@ -2080,5 +2080,10 @@ export function initSnipEditor() {
     e.preventDefault();
     getCurrentWindow().startResizeDragging(ResizeDirection.SouthEast).catch(() => {});
   });
-  return { snipEditOpen, snipEdit };
+  // What a new capture has to know before it takes the editor over: whether a session is
+  // open and whether it holds edits that would be lost (any operation drawn so far).
+  function snipEditState() {
+    return { active: SE.active, dirty: SE.ops.length > 0 };
+  }
+  return { snipEditOpen, snipEdit, snipEditState, snipEditCancel };
 }
