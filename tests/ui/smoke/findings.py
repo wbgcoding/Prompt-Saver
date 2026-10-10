@@ -1025,6 +1025,26 @@ def run(browser, tmp):
     }
     if (document.querySelector('.hotkey-row button.ghost-btn[id$="-clear"]')) errs.push('908: a text Clear button is still in the markup');
 """)
+    failed += ar_probe('bm909', 'settings: one switch per row, screenshot saving in its own Capture section', 'index', '880x600', '', r"""
+    // 909: one switch per row, the capture switch in a section of its own.
+    await bootReady();
+    document.getElementById('gear').click();
+    await sleep(300);
+    const grids = [...document.querySelectorAll('#settings-main .switch-grid')];
+    if (!grids.length) errs.push('909: fixture: no switch grid in the settings');
+    for (const g of grids) {
+      const tracks = getComputedStyle(g).gridTemplateColumns.split(' ').filter(Boolean).length;
+      if (tracks !== 1) errs.push('909: a switch grid has ' + tracks + ' columns');
+    }
+    const cb = document.getElementById('opt-screenshot-folder');
+    const sec = cb && cb.closest('section');
+    if (!sec || sec.id !== 'settings-sec-capture') errs.push('909: the screenshot switch is not in the Capture section');
+    else {
+      const r = sec.getBoundingClientRect();
+      if (!r.width || !r.height) errs.push('909: the Capture section is not visible');
+      if (!sec.querySelector('.settings-sec-title').textContent.trim()) errs.push('909: the Capture section has no title');
+    }
+""")
     failed += ar_probe('bx717', 'copy history filters: at 680 px they take two rows, the source is a select and only one All chip remains', 'index', '680x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { clipWatcher: true } };</script>\n', r"""
     await bootReady();
     document.getElementById('library-btn').click(); await sleep(400);

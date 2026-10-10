@@ -22,7 +22,7 @@ whether the window stays on top, starts with Windows, starts in the background
 and goes to the background instead of quitting when closed (on by default for a
 new install; a portable copy always quits), the global hotkey,
 auto-paste on double-click, and whether screenshots always go to the screenshots
-folder. Every change applies at once, with no save button. "Automatic" as the
+folder (section Capture). Every change applies at once, with no save button. "Automatic" as the
 language follows Windows and falls back to English. Reset puts every setting
 back to its default and keeps the tiles; Delete removes all data and asks first.
 
@@ -1057,7 +1057,7 @@ der Kacheln, ob das Fenster im Vordergrund bleibt, mit Windows startet, im
 Hintergrund startet und sich beim Schließen in den Hintergrund legt (bei einer
 neuen Installation ab Werk an; eine portable Kopie beendet sich immer), der globale
 Hotkey, Auto-Einfügen bei Doppelklick und das Speichern von Screenshots im
-Screenshots-Ordner. Jede Änderung gilt sofort, ohne Speichern-Button.
+Screenshots-Ordner (Abschnitt „Aufnehmen“). Jede Änderung gilt sofort, ohne Speichern-Button.
 „Automatisch“ als Sprache folgt Windows und fällt auf Englisch zurück.
 Zurücksetzen stellt jede Einstellung auf die Vorgabe zurück und behält die Kacheln;
 Löschen entfernt alle Daten und fragt vorher nach.

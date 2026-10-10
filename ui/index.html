@@ -1089,10 +1089,6 @@
             <span data-i18n="autoPasteSetting">Auto-paste on double-click</span>
             <input id="opt-autopaste" type="checkbox" class="switch" />
           </label>
-          <label class="field switch-field" data-i18n-title="tipScreenshotFolder">
-            <span data-i18n="screenshotToFolder">Always save screenshots</span>
-            <input id="opt-screenshot-folder" type="checkbox" class="switch" />
-          </label>
         </div>
         <!-- Global hotkey: its own full-width row directly under the toggle grid. -->
         <div class="field field-inline" data-i18n-title="tipHotkeyLabel">
@@ -1109,6 +1105,15 @@
           <div class="hotkey-row">
             <input id="opt-voice-hotkey" class="modal-input" type="text" readonly data-i18n-ph="hotkeyPh" data-i18n-aria="voiceHotkeyLabel" />
           </div>
+        </div>
+      </section>
+      <section id="settings-sec-capture" class="settings-sec">
+        <h3 class="settings-sec-title" data-i18n="expTabCapture">Capture</h3>
+        <div class="switch-grid">
+          <label class="field switch-field" data-i18n-title="tipScreenshotFolder">
+            <span data-i18n="screenshotToFolder">Always save screenshots</span>
+            <input id="opt-screenshot-folder" type="checkbox" class="switch" />
+          </label>
         </div>
       </section>
       <section id="settings-sec-data" class="settings-sec">

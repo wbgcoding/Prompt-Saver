@@ -34,7 +34,7 @@ export const HELP_CONTENT = {
         "Click the gear button in the header to open it.",
         "Pick the language, the theme, and the text size and font of the tiles.",
         "Choose whether the window stays on top, starts with Windows, starts in the background, and goes to the background instead of quitting when closed (on by default for a new install; a portable copy always quits).",
-        "Set the global hotkey, auto-paste on double-click, and whether screenshots always go to the screenshots folder.",
+        "Set the global hotkey, auto-paste on double-click, and whether screenshots always go to the screenshots folder (section Capture).",
       ],
       whatHappens:
         "Every change applies at once, with no save button. \"Automatic\" as the language follows Windows and falls back to English. Reset puts every setting back to its default and keeps the tiles; Delete removes all data and asks first.",
@@ -797,7 +797,7 @@ export const HELP_CONTENT = {
         "Auf das Zahnrad in der Kopfzeile klicken, um es zu öffnen.",
         "Sprache, Theme sowie Textgröße und Schriftart der Kacheln wählen.",
         "Festlegen, ob das Fenster im Vordergrund bleibt, mit Windows startet, im Hintergrund startet und sich beim Schließen in den Hintergrund legt, statt zu beenden (bei einer neuen Installation ab Werk an; eine portable Kopie beendet sich immer).",
-        "Den globalen Hotkey, Auto-Einfügen bei Doppelklick und das Speichern von Screenshots im Screenshots-Ordner einstellen.",
+        "Den globalen Hotkey, Auto-Einfügen bei Doppelklick und das Speichern von Screenshots im Screenshots-Ordner (Abschnitt „Aufnehmen“) einstellen.",
       ],
       whatHappens:
         "Jede Änderung gilt sofort, ohne Speichern-Button. „Automatisch“ als Sprache folgt Windows und fällt auf Englisch zurück. Zurücksetzen stellt jede Einstellung auf die Vorgabe zurück und behält die Kacheln; Löschen entfernt alle Daten und fragt vorher nach.",
