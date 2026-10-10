@@ -49,10 +49,12 @@ export function openCtx(id, x, y) {
   archiveBtn.classList.toggle("hidden", !flag("archiveTag"));
   const archivedNow = isArchived(prompts.find((x) => x.id === id) || {});
   archiveBtn.querySelector(".ctx-label").textContent = t(archivedNow ? "unarchiveAction" : "archiveAction");
-  // In the favorites view a prompt can't be hidden/removed: unstar it instead.
-  ctxEl.querySelector('[data-act="hide"]').classList.toggle("hidden", favView);
-  // Nothing to place this prompt into besides the view it is already on.
-  ctxEl.querySelector('[data-act="views"]').classList.toggle("hidden", !optFlag("multiViewPrompt") || settings.views.length < 2);
+  // In the favorites view a prompt can't be hidden/removed: unstar it instead. With
+  // other views to go to, hiding lives in the "Views..." submenu next to placing; with
+  // only this view it stays a direct row.
+  const otherViews = settings.views.filter((v) => v.id !== settings.active_view);
+  ctxEl.querySelector('[data-act="hide"]').classList.toggle("hidden", favView || otherViews.length > 0);
+  ctxEl.querySelector('[data-act="views"]').classList.toggle("hidden", favView || otherViews.length === 0);
   // Keyboard path for the mouse drag-onto-a-folder move: favorites' free-form
   // layout has no grid cell for a folder to occupy, so it stays out of scope
   // there the same way the mouse gesture already is.
@@ -86,16 +88,68 @@ export function closeCtx() {
   ctxId = null;
 }
 
-// ---- "also show in" popover: place/unplace this prompt on other views ----
+// Remove from the active view's grid; the prompt stays available in the library.
+export async function hideInActiveView(id) {
+  const view = activeView();
+  const layout = { ...layoutOf(view) };
+  delete layout[id];
+  view.layouts[gridKeyOf(view)] = layout;
+  invoke("set_layout", { layout }).catch((e) => errToast(e));
+  await renderGrid(true);
+}
+
+// ---- "Views..." popover: hide here, then place the prompt on (or move it to) other views ----
 export const viewsPop = document.createElement("div");
+
+const HIDE_ICON =
+  '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path d="M4 4l16 16"/></svg>';
 
 export function closeViewsPop() {
   viewsPop.classList.add("hidden");
 }
 export function renderViewsPop(id) {
   viewsPop.innerHTML = "";
+  const hide = document.createElement("button");
+  hide.type = "button";
+  hide.className = "has-icon views-pop-hide";
+  hide.setAttribute("role", "menuitem");
+  const hideIcon = document.createElement("span");
+  hideIcon.className = "menu-icon";
+  hideIcon.setAttribute("aria-hidden", "true");
+  hideIcon.innerHTML = HIDE_ICON;
+  const hideLabel = document.createElement("span");
+  hideLabel.className = "ctx-label";
+  hideLabel.textContent = t("hideInView");
+  hide.append(hideIcon, hideLabel);
+  hide.addEventListener("click", () => { closeViewsPop(); hideInActiveView(id); });
+  viewsPop.appendChild(hide);
+  const sep = document.createElement("div");
+  sep.className = "ctx-sep";
+  sep.setAttribute("role", "separator");
+  viewsPop.appendChild(sep);
+  const multi = optFlag("multiViewPrompt");
+  const head = document.createElement("div");
+  head.className = "views-pop-head";
+  head.textContent = t(multi ? "alsoShowIn" : "moveToView");
+  viewsPop.appendChild(head);
   for (const v of settings.views) {
     if (v.id === settings.active_view) continue; // already here: that's why the menu was opened
+    if (!multi) {
+      // One placement per prompt: placing it elsewhere means moving it there.
+      const move = viewRowBase(v, false);
+      move.classList.add("view-move-row");
+      move.setAttribute("role", "menuitem");
+      move.addEventListener("click", async () => {
+        try {
+          assignSettings(await invoke("batch_prompts", { ids: [id], action: "moveView", color: null, favorite: null, viewId: v.id, fromViewId: settings.active_view }));
+        } catch (e) { batchErrorToast(e); return; }
+        closeViewsPop();
+        await renderGrid(true);
+        toast(t("movedToView").replace("{view}", v.name));
+      });
+      viewsPop.appendChild(move);
+      continue;
+    }
     const on = Object.prototype.hasOwnProperty.call(layoutOf(v), id);
     const row = viewRowBase(v, on);
     row.setAttribute("role", "menuitemcheckbox");
@@ -344,13 +398,7 @@ export function bindGridMenus({ openExternalFileInEditor }) {
     } else if (act === "duplicate") {
       await duplicatePrompt(id);
     } else if (act === "hide") {
-      // Remove from the active view's grid; stays available in the library.
-      const view = activeView();
-      const layout = { ...layoutOf(view) };
-      delete layout[id];
-      view.layouts[gridKeyOf(view)] = layout;
-      invoke("set_layout", { layout }).catch((e) => errToast(e));
-      await renderGrid(true);
+      await hideInActiveView(id);
     } else if (act === "pin") {
       // The command answers with the state it actually left the prompt in: take that
       // instead of assuming the click flipped the label that was just on screen.

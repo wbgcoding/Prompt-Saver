@@ -2084,4 +2084,7 @@ export default {
     flagTileFavBadge: "Estrella en los mosaicos favoritos",
     tipTileFavBadge: "Muestra una pequeña estrella en la esquina superior derecha de cada mosaico favorito. Es solo una marca y no responde a los clics.",
     tileFolderCount: "Mosaicos en esta carpeta: {n}",
+    ctxViewsMenu: "Vistas…",
+    moveToView: "Mover a",
+    movedToView: "Movido a {view}",
 };

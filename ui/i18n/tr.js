@@ -2084,4 +2084,7 @@ export default {
     flagTileFavBadge: "Favori kutucuklarda yıldız",
     tipTileFavBadge: "Her favori kutucuğun sağ üst köşesinde küçük bir yıldız gösterir. Yalnızca bir işarettir ve tıklamalara tepki vermez.",
     tileFolderCount: "Bu klasördeki kutucuklar: {n}",
+    ctxViewsMenu: "Görünümler…",
+    moveToView: "Şuraya taşı",
+    movedToView: "{view} görünümüne taşındı",
 };

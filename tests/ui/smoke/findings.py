@@ -1388,6 +1388,52 @@ def run(browser, tmp):
 """
     for size_251 in ('880x600', '680x460'):
         failed += ar_probe('fpop251-' + size_251, '251: the open tile folder is dimmed, titled and fits at ' + size_251, 'index', size_251, '', fpop_body)
+    # The tile menu groups hiding and view placement under one "Views..." entry.
+    views_menu_body = r"""
+    await bootReady();
+    const coreC = await import('./core.js');
+    const menuAt = async (id) => {
+      tileEl(id).dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await sleep(150);
+    };
+    const shownRow = (act) => { const e = document.querySelector('#ctx [data-act="' + act + '"]'); return !!e && !e.classList.contains('hidden'); };
+    const activeId = coreC.settings.active_view;
+    await menuAt('p1');
+    if (!shownRow('views')) errs.push('252: the tile menu has no Views entry with two or more views');
+    if (shownRow('hide')) errs.push('252: the tile menu still shows a direct hide row next to Views');
+    document.querySelector('#ctx [data-act="views"]').click();
+    await sleep(200);
+    const pop = document.querySelector('.views-pop:not(.hidden)');
+    const first = pop && pop.firstElementChild;
+    if (!first || first.getAttribute('role') !== 'menuitem') errs.push('252: the Views popover does not start with the hide row');
+    else {
+      window.__SMOKE_ARGS__.length = 0;
+      first.click();
+      await sleep(300);
+      const sets = callsFor('set_layout');
+      if (sets.length !== 1 || 'p1' in (sets[0].layout || {})) errs.push('252: the first row did not remove p1 from the active view layout');
+      if (tileEl('p1')) errs.push('252: p1 is still on the grid after hiding it');
+    }
+    await menuAt('p2');
+    document.querySelector('#ctx [data-act="views"]').click();
+    await sleep(200);
+    const moveRows = [...document.querySelectorAll('.views-pop .view-move-row')];
+    if (!document.querySelector('.views-pop .views-pop-head')) errs.push('252: the Views popover has no heading');
+    if (!moveRows.length) errs.push('252: with multiViewPrompt off the popover offers no move rows');
+    else {
+      window.__SMOKE_ARGS__.length = 0;
+      moveRows[0].click();
+      await sleep(300);
+      const moves = callsFor('batch_prompts').filter((a) => a && a.action === 'moveView');
+      if (moves.length !== 1 || moves[0].fromViewId !== activeId || moves[0].viewId === activeId) errs.push('252: a Move to row did not call batch_prompts moveView: ' + JSON.stringify(moves));
+      if (tileEl('p2')) errs.push('252: p2 is still on the grid after moving it to another view');
+    }
+    coreC.settings.views = coreC.settings.views.filter((v) => v.id === activeId);
+    await menuAt('p3');
+    if (!shownRow('hide')) errs.push('252: with one view only the hide row must stay a direct entry');
+    if (shownRow('views')) errs.push('252: with one view only the Views entry must be hidden');
+"""
+    failed += ar_probe('ctx252', '252: the tile menu groups hide and move under Views', 'index', '880x600', '', views_menu_body)
     # Screenshot editor probes share one opener: a plain canvas fired as a capture.
     snip_common = r"""
     await bootReady();

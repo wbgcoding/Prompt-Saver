@@ -917,6 +917,8 @@ the video editor and the introduction tour ship on).
   instead of tiny unreadable previews.
 - **An open tile folder dims the grid behind it and has a title row with
   rename and close buttons.** It sizes itself so every tile fits.
+- **The tile menu groups hiding and view placement under one "Views..."
+  entry.** It can also move a tile to another view.
 
 ### Fixed
 

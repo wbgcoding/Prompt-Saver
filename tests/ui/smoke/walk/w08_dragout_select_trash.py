@@ -730,9 +730,9 @@ SECTION = """\
       await click('expert-back');
       document.getElementById('settings').classList.add('hidden');
     }
-    // 51: prompt in multiple views - off by default. On exposes "Also show in…" on
-    // the tile menu, which places/unplaces the SAME prompt (shared data, no copy)
-    // in another view via addView/removeView.
+    // 51: prompt in multiple views - off by default. On, the "Views…" popover lists
+    // "Also show in…" rows, which place/unplace the SAME prompt (shared data, no copy)
+    // in another view via addView/removeView; off, the same popover moves it.
     {
       const gotFlag = await setExpertFlag('in multiple views', true);
       if (!gotFlag) {
@@ -792,10 +792,16 @@ SECTION = """\
           t0b.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
           await sleep(150);
           const viewsBtnOff = document.querySelector('#ctx [data-act="views"]');
-          if (!viewsBtnOff || !viewsBtnOff.classList.contains('hidden')) {
-            out.errors.push('the "Also show in…" tile action stayed visible with the flag off');
+          if (!viewsBtnOff || viewsBtnOff.classList.contains('hidden')) {
+            out.errors.push('the "Views…" tile entry is gone with the flag off, it must offer moving');
+          } else {
+            viewsBtnOff.click();
+            await sleep(150);
+            if (!document.querySelector('.views-pop .views-pop-head')) out.errors.push('the views popover has no heading with the flag off');
+            if (document.querySelectorAll('.views-pop .view-move-row').length < 1) out.errors.push('the views popover offers no "Move to" rows with the flag off');
+            if (document.querySelectorAll('.views-pop .view-row:not(.view-move-row)').length) out.errors.push('the views popover shows checkbox rows with the flag off');
           }
-          document.body.click();
+          document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
           await sleep(100);
         }
       }

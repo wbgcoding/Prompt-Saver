@@ -2084,4 +2084,7 @@ export default {
     flagTileFavBadge: "Estrela nos blocos favoritos",
     tipTileFavBadge: "Mostra uma pequena estrela no canto superior direito de cada bloco favorito. É apenas uma marca e não reage a cliques.",
     tileFolderCount: "Blocos nesta pasta: {n}",
+    ctxViewsMenu: "Vistas…",
+    moveToView: "Mover para",
+    movedToView: "Movido para {view}",
 };

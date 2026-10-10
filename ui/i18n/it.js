@@ -2084,4 +2084,7 @@ export default {
     flagTileFavBadge: "Stella sui riquadri preferiti",
     tipTileFavBadge: "Mostra una piccola stella nell'angolo in alto a destra di ogni riquadro preferito. È solo un segno e non reagisce ai clic.",
     tileFolderCount: "Riquadri in questa cartella: {n}",
+    ctxViewsMenu: "Viste…",
+    moveToView: "Sposta in",
+    movedToView: "Spostato in {view}",
 };

@@ -2084,4 +2084,7 @@ export default {
     flagTileFavBadge: "Gwiazdka na ulubionych kafelkach",
     tipTileFavBadge: "Pokazuje małą gwiazdkę w prawym górnym rogu każdego ulubionego kafelka. To tylko oznaczenie i nie reaguje na kliknięcia.",
     tileFolderCount: "Kafelki w tym folderze: {n}",
+    ctxViewsMenu: "Widoki…",
+    moveToView: "Przenieś do",
+    movedToView: "Przeniesiono do {view}",
 };

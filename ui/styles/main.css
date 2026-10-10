@@ -369,8 +369,9 @@ body.noflag-showLibrary #library-btn { display: none; }
 .view-btn.tab-drop-edge.tab-drop-before::after { left: -1px; }
 .view-btn.tab-drop-edge.tab-drop-after::after { right: -1px; }
 .view-row { display: flex; align-items: center; gap: 8px; }
-/* The "Also show in" list of views, capped at eight rows before it scrolls. */
+/* The "Views..." list: hide, then the other views, capped at eight rows before it scrolls. */
 .views-pop { min-width: 210px; z-index: 90; max-height: calc(8 * 34px + 12px); overflow-y: auto; }
+.views-pop-head { padding: 4px 10px 2px; color: var(--muted); font-size: 11px; }
 .move-to-folder-pop { min-width: 180px; z-index: 90; max-height: 280px; overflow-y: auto; }
 .view-row-name {
   flex: 1 1 auto;

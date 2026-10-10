@@ -2084,4 +2084,7 @@ export default {
     flagTileFavBadge: "收藏的磁贴上显示星标",
     tipTileFavBadge: "在每个收藏磁贴的右上角显示一颗小星标。它只是标记，不响应点击。",
     tileFolderCount: "此文件夹中的磁贴：{n}",
+    ctxViewsMenu: "视图…",
+    moveToView: "移动到",
+    movedToView: "已移动到 {view}",
 };

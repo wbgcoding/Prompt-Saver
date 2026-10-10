@@ -2084,4 +2084,7 @@ export default {
     flagTileFavBadge: "Star on favorite tiles",
     tipTileFavBadge: "Shows a small star in the top-right corner of every favorite tile. It is only a mark and does not react to clicks.",
     tileFolderCount: "Tiles in this folder: {n}",
+    ctxViewsMenu: "Views…",
+    moveToView: "Move to",
+    movedToView: "Moved to {view}",
 };
