@@ -6,7 +6,7 @@
 // an ordered operation list (VE.ops), exactly like the screenshot editor's own
 // list, and the export compiles that list into ONE ffmpeg filter graph. That is
 // what makes undo/redo cheap, the preview honest and the export a single pass.
-import { resolveLang, fillVideoFormatSelect, normRecFormat, ffmpegDownloadPct, numberField, makeEtaEstimator, formatEta, a11yProgressText, parseFfmpegError, fmtBytes, fmtSizeCompact, makeHoldOrTapToggle, trapTabWithin, contrastTextColor } from "./floatShared.js";
+import { orderedInvoke, resolveLang, fillVideoFormatSelect, normRecFormat, ffmpegDownloadPct, numberField, makeEtaEstimator, formatEta, a11yProgressText, parseFfmpegError, fmtBytes, fmtSizeCompact, makeHoldOrTapToggle, trapTabWithin, contrastTextColor } from "./floatShared.js";
 import { withShortcut as withShortcutRaw, rowsForScope as rowsForScopeRaw } from "./shortcuts.js";
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
@@ -23,7 +23,8 @@ import { confirmDialog, dismissConfirm, initDialogs } from "./dialog.js";
 // switcher, so it comes from the brand rather than a hardcoded English word.
 document.title = APP_NAME;
 
-const { invoke, convertFileSrc } = window.__TAURI__.core;
+const { convertFileSrc } = window.__TAURI__.core;
+const invoke = orderedInvoke;
 const { listen } = window.__TAURI__.event;
 const { getCurrentWebviewWindow } = window.__TAURI__.webviewWindow;
 

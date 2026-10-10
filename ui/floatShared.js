@@ -202,6 +202,51 @@ export function a11yProgressText(t, pct, estimate) {
   return t("a11yPctOnly").replace("{pct}", String(Math.round(pct)));
 }
 
+// Calls that share a key run one after the other, in the order they were made.
+// The backend runs these commands on worker threads, so two quick calls could
+// otherwise reach the store out of order (a rotation peek overtaking the commit
+// before it, an older theme or setting landing last). The first call of an idle key
+// starts at once; errors reach the caller but never break the chain.
+const serialTails = new Map();
+export function serialInvoke(key, cmd, args, opts) {
+  const call = () => window.__TAURI__.core.invoke(cmd, args, opts);
+  const tail = serialTails.get(key);
+  const run = tail ? tail.then(call) : call();
+  const settled = run.then(() => {}, () => {});
+  serialTails.set(key, settled);
+  settled.then(() => { if (serialTails.get(key) === settled) serialTails.delete(key); });
+  return run;
+}
+
+// Commands whose order matters, with the key their calls are chained under. A
+// rotation is chained per prompt, so tiles with a rotation badge still load in
+// parallel.
+const ORDERED_KEYS = {
+  rotation_peek: (a) => "rotation:" + (a && a.id),
+  rotation_commit: (a) => "rotation:" + (a && a.id),
+  set_theme: () => "set_theme",
+  set_language: () => "set_language",
+  set_ui_value: () => "set_ui_value",
+  set_ui_text: () => "set_ui_text",
+  set_tile_style: () => "set_tile_style",
+  set_bars: () => "set_bars",
+  set_auto_update: () => "set_auto_update",
+  set_favorite: () => "set_favorite",
+  set_active_view: () => "views",
+  reorder_views: () => "views",
+  set_view_grid: () => "views",
+  rename_view: () => "views",
+  set_view_color: () => "views",
+  set_tag_color: () => "tags",
+  set_tag_colors: () => "tags",
+};
+
+// The window's invoke: ordered commands go through serialInvoke, the rest straight on.
+export function orderedInvoke(cmd, args, opts) {
+  const keyOf = ORDERED_KEYS[cmd];
+  return keyOf ? serialInvoke(keyOf(args), cmd, args, opts) : window.__TAURI__.core.invoke(cmd, args, opts);
+}
+
 // Turns a rejected export_video/convert_recording call into what a person
 // should actually see. The backend wraps a classified ffmpeg (or ffmpeg-
 // adjacent Windows IO) failure as `{"key":..., "code":..., "raw":...}` JSON

@@ -618,6 +618,32 @@ SECTION = """\
     } else if (window.__LAST_COPY_ID__ !== 'p10') {
       out.errors.push('copying the Auto rotating prompt passed no id: ' + window.__LAST_COPY_ID__);
     }
+    // 832: two quick copies of a rotating prompt copy entries N and N+1 even when
+    // the first commit reaches the backend late (they run on worker threads there).
+    {
+      const tileRot = [...document.querySelectorAll('#grid .tile')].find(e => (e.dataset.id || '') === 'p10');
+      if (tileRot) {
+        // The copy cooldown is two seconds; the first commit lands after the second copy
+        // has already asked for its entry.
+        await sleep(2100); // the earlier copy of this tile is out of its cooldown
+        window.__ROTATION_COMMIT_DELAY__ = 2600;
+        const before = (window.__SMOKE_ARGS__ || []).length;
+        for (let n = 0; n < 2; n++) {
+          for (const type of ['pointerdown', 'pointerup', 'click']) {
+            tileRot.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, button: 0, isPrimary: true, pointerId: 1 }));
+          }
+          await sleep(2150);
+        }
+        await sleep(1500);
+        window.__ROTATION_COMMIT_DELAY__ = 0;
+        const copied = (window.__SMOKE_ARGS__ || []).slice(before).filter(([c]) => c === 'copy_text').map(([, a]) => a.text);
+        if (copied.length !== 2) {
+          out.errors.push('832: two quick copies of the rotating prompt made ' + copied.length + ' copies');
+        } else if (copied[0] === copied[1]) {
+          out.errors.push('832: two quick copies of the rotating prompt copied the same entry twice');
+        }
+      }
+    }
     // A prompt whose entries carry placeholders must NOT arm one: the session
     // renders later entries from their raw text, so the next paste would deliver
     // the placeholder instead of the answer.

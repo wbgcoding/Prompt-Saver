@@ -3,7 +3,7 @@
 // Imports no feature module.
 
 import { DRAG_THRESHOLD_DEFAULT } from "./copyDefaults.js";
-import { hexLuminance, resolveLang } from "./floatShared.js";
+import { hexLuminance, orderedInvoke, resolveLang, serialInvoke } from "./floatShared.js";
 import { LANGS, loadLang } from "./i18n.js";
 import { applyTerms } from "./terms.js";
 import { APP_NAME, FLAG_DEFAULTS } from "./brand.js";
@@ -14,7 +14,10 @@ import { EXPERT_SELECTS, EXPERT_VALUES, FLAG_GATES, isOptFlag } from "./expertCo
 import { createColorPop } from "./colorpop.js";
 import EN from "./i18n/en.js";
 
-export const { invoke, convertFileSrc } = window.__TAURI__.core;
+export const { convertFileSrc } = window.__TAURI__.core;
+// Commands whose order matters are chained per key (see serialInvoke); the rest run at once.
+export const invoke = orderedInvoke;
+export { serialInvoke };
 export const { listen, emit } = window.__TAURI__.event;
 // The screenshot editor's resize grip needs the main window's own resize-drag,
 // the same documented v2 API floating.js/folder.js already use for startDragging().

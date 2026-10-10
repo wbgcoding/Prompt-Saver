@@ -1344,8 +1344,13 @@ const RESULTS = {
     const p = PROMPTS.find((x) => x.id === (a && a.id));
     if (!p) return null;
     const total = 1 + (p.variants || []).length;
-    if (total > 1) ROTATE_POS.set(p.id, ((ROTATE_POS.get(p.id) || 0) + 1) % total);
-    return null;
+    const advance = () => { if (total > 1) ROTATE_POS.set(p.id, ((ROTATE_POS.get(p.id) || 0) + 1) % total); return null; };
+    // A probe can make the commit land late, like a backend worker that has to
+    // wait for the store lock while a later peek is already queued.
+    if (window.__ROTATION_COMMIT_DELAY__) {
+      return new Promise((resolve) => setTimeout(() => resolve(advance()), window.__ROTATION_COMMIT_DELAY__));
+    }
+    return advance();
   },
   // The resolved text is kept so the probe can assert what the placeholders became.
   copy_text: (a) => {
