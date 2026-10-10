@@ -2166,6 +2166,8 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
 .snip-edit-canvas-wrap.panning:active { cursor: grabbing; }
 .snip-edit-stage { position: relative; flex: 0 0 auto; margin: auto; box-shadow: var(--shadow); }
 .snip-edit-stage canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
+/* Above 100 % a magnified pixel is a crisp square, not a blur. */
+.snip-edit-stage.pixelated canvas { image-rendering: pixelated; }
 #snip-edit-text-input {
   position: absolute;
   z-index: 5;

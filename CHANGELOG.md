@@ -606,6 +606,11 @@ the video editor and the introduction tour ship on).
 
 ### Improved
 
+- **Screenshots stay sharp on scaled displays.** At 125 or 150 percent
+  Windows scaling the editor's 100 percent view now shows one picture pixel per
+  screen pixel instead of a stretched copy, and magnified pixels stay crisp. The
+  frozen picture behind the capture overlay keeps full colour detail, so
+  coloured text no longer smears.
 - **Cropping a screenshot works by dragging the frame.** The crop tool starts
   with a frame around the whole picture; pull its edges or corners in to crop,
   and the view zooms to the result. Each drag is an undo step, and dragging

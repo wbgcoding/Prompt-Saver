@@ -166,6 +166,11 @@ export function initSnipEditor() {
   // 8x ceiling, the same in this editor and the video editor.
   const snipZoomStepFactor = 1.2;
   const snipZoomMax = 8;
+  // Zoom is image pixels per DEVICE pixel (100 % = one image pixel on one screen
+  // pixel), so a CSS length is zoom / devicePixelRatio per image pixel. Every
+  // conversion between client (CSS) coordinates and image coordinates goes
+  // through this one factor.
+  function snipEditScale() { return SE.zoom / (window.devicePixelRatio || 1); }
   function snipEditDist(a, b) { return Math.hypot(b.x - a.x, b.y - a.y); }
   function snipEditNormRect(r) {
     if (r && "a" in r) {
@@ -175,14 +180,14 @@ export function initSnipEditor() {
     return r;
   }
   // The one place image-pixel coordinates are computed. Canvas backing stores are
-  // always the image's native size (never scaled by devicePixelRatio), and the CSS
-  // display size is scaled independently by zoom -- so DPR cancels out here by
-  // construction; clientX/clientY and getBoundingClientRect are both CSS pixels.
+  // always the image's native size; the CSS display size is SE.w * snipEditScale(),
+  // and clientX/clientY and getBoundingClientRect are both CSS pixels.
   function snipEditToImage(ev) {
     const r = snipEditBaseCv.getBoundingClientRect();
+    const k = snipEditScale();
     return {
-      x: snipEditClamp((ev.clientX - r.left) / SE.zoom, 0, SE.w),
-      y: snipEditClamp((ev.clientY - r.top) / SE.zoom, 0, SE.h),
+      x: snipEditClamp((ev.clientX - r.left) / k, 0, SE.w),
+      y: snipEditClamp((ev.clientY - r.top) / k, 0, SE.h),
     };
   }
   // Bounding rect of an op for snap purposes -- a rect-shaped op already has
@@ -211,7 +216,7 @@ export function initSnipEditor() {
   let snipEditGuide = null;
   function snipEditSnapPoint(pt) {
     if (!SNIP_EDIT_SNAP()) { snipEditGuide = null; return pt; }
-    const tol = SNIP_EDIT_SNAP_TOL / SE.zoom;
+    const tol = SNIP_EDIT_SNAP_TOL / snipEditScale();
     const r = snapMove({ x: pt.x, y: pt.y, w: 0, h: 0 }, snipEditSnapTargets(), tol);
     snipEditGuide = (r.guideX != null || r.guideY != null) ? { x: r.guideX, y: r.guideY } : null;
     return { x: r.x, y: r.y };
@@ -228,8 +233,8 @@ export function initSnipEditor() {
     const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#2563eb";
     ctx.save();
     ctx.strokeStyle = accent;
-    ctx.lineWidth = 1 / SE.zoom;
-    ctx.setLineDash([4 / SE.zoom, 3 / SE.zoom]);
+    ctx.lineWidth = 1 / snipEditScale();
+    ctx.setLineDash([4 / snipEditScale(), 3 / snipEditScale()]);
     if (snipEditGuide.x != null) { ctx.beginPath(); ctx.moveTo(snipEditGuide.x, 0); ctx.lineTo(snipEditGuide.x, SE.h); ctx.stroke(); }
     if (snipEditGuide.y != null) { ctx.beginPath(); ctx.moveTo(0, snipEditGuide.y); ctx.lineTo(SE.w, snipEditGuide.y); ctx.stroke(); }
     ctx.restore();
@@ -791,12 +796,12 @@ export function initSnipEditor() {
     };
   }
   function snipEditHitCropHandle(pt, r) {
-    const tol = 10 / SE.zoom;
+    const tol = 10 / snipEditScale();
     for (const [name, p] of Object.entries(snipEditCropHandlePoints(r))) {
       if (Math.abs(pt.x - p.x) <= tol && Math.abs(pt.y - p.y) <= tol) return name;
     }
     // Past the handles, every edge is grabbable along its whole length.
-    const edge = 8 / SE.zoom;
+    const edge = 8 / snipEditScale();
     const inX = pt.x >= r.x - edge && pt.x <= r.x + r.w + edge;
     const inY = pt.y >= r.y - edge && pt.y <= r.y + r.h + edge;
     if (inX && Math.abs(pt.y - r.y) <= edge) return "n";
@@ -924,10 +929,11 @@ export function initSnipEditor() {
     const r = SE.cropRect;
     if (!r || snipEditCropIsFull(r)) { snipEditFit(); return; }
     const vw = snipEditWrap.clientWidth, vh = snipEditWrap.clientHeight;
-    snipEditSetZoom(Math.min(vw / r.w, vh / r.h));
+    snipEditSetZoom(Math.min(vw / r.w, vh / r.h) * (window.devicePixelRatio || 1));
     const wr = snipEditWrap.getBoundingClientRect(), sr = snipEditStage.getBoundingClientRect();
-    snipEditWrap.scrollLeft += sr.left + (r.x + r.w / 2) * SE.zoom - (wr.left + snipEditWrap.clientLeft + vw / 2);
-    snipEditWrap.scrollTop += sr.top + (r.y + r.h / 2) * SE.zoom - (wr.top + snipEditWrap.clientTop + vh / 2);
+    const k = snipEditScale();
+    snipEditWrap.scrollLeft += sr.left + (r.x + r.w / 2) * k - (wr.left + snipEditWrap.clientLeft + vw / 2);
+    snipEditWrap.scrollTop += sr.top + (r.y + r.h / 2) * k - (wr.top + snipEditWrap.clientTop + vh / 2);
   }
   // Esc while the crop tool is active discards only the crop, not the whole editor.
   function snipEditCropDiscard() {
@@ -965,7 +971,7 @@ export function initSnipEditor() {
   }
   function snipEditHitTestShape(pt) {
     if (!SNIP_SHAPE_TOOLS.includes(SE.tool)) return null;
-    const tol = 8 / SE.zoom;
+    const tol = 8 / snipEditScale();
     for (let i = SE.ops.length - 1; i >= 0; i--) {
       const op = SE.ops[i];
       if (op.tool !== SE.tool) continue;
@@ -988,7 +994,7 @@ export function initSnipEditor() {
     return snipEditCropHandlePoints(op.rect);
   }
   function snipEditHitShapeHandle(pt, op) {
-    const tol = 10 / SE.zoom;
+    const tol = 10 / snipEditScale();
     for (const [name, p] of Object.entries(snipEditShapeHandlePoints(op))) {
       if (Math.abs(pt.x - p.x) <= tol && Math.abs(pt.y - p.y) <= tol) return name;
     }
@@ -1046,7 +1052,7 @@ export function initSnipEditor() {
   // menu works for whatever shape sits under the pointer. ----
   const SNIP_CTX_RECT_KINDS = ["rect", "ellipse", "spotlight", "pixelate"];
   function snipEditHitTestForCtx(pt) {
-    const tol = 8 / SE.zoom;
+    const tol = 8 / snipEditScale();
     for (let i = SE.ops.length - 1; i >= 0; i--) {
       const op = SE.ops[i];
       if (op.tool === "text") {
@@ -1120,9 +1126,9 @@ export function initSnipEditor() {
     const ts = snipEditToolState("text");
     SE.textEdit = { point: pt };
     snipEditTextInput.value = "";
-    snipEditTextInput.style.left = `${pt.x * SE.zoom}px`;
-    snipEditTextInput.style.top = `${pt.y * SE.zoom}px`;
-    snipEditTextInput.style.fontSize = `${ts.fontPx * SE.zoom}px`;
+    snipEditTextInput.style.left = `${pt.x * snipEditScale()}px`;
+    snipEditTextInput.style.top = `${pt.y * snipEditScale()}px`;
+    snipEditTextInput.style.fontSize = `${ts.fontPx * snipEditScale()}px`;
     snipEditTextInput.style.color = ts.color;
     snipEditTextInput.classList.remove("hidden");
     snipEditTextInput.focus();
@@ -1500,7 +1506,9 @@ export function initSnipEditor() {
   // ---- zoom: pure CSS scaling of the native-resolution canvas -- no redraw needed ----
   function snipEditSetZoom(z) {
     SE.zoom = snipEditClamp(z, 0.05, snipZoomMax);
-    const sw = SE.w * SE.zoom, sh = SE.h * SE.zoom;
+    const sw = SE.w * snipEditScale(), sh = SE.h * snipEditScale();
+    // Magnified pixels stay square and sharp instead of being smoothed.
+    snipEditStage.classList.toggle("pixelated", SE.zoom > 1);
     snipEditStage.style.width = `${sw}px`;
     snipEditStage.style.height = `${sh}px`;
     // Once the picture is larger than the view, leave half a view of room on
@@ -1513,19 +1521,22 @@ export function initSnipEditor() {
   // Zooms while the picture point under (clientX, clientY) stays where it is.
   function snipEditZoomAt(z, clientX, clientY) {
     const r0 = snipEditStage.getBoundingClientRect();
-    const ix = (clientX - r0.left) / SE.zoom, iy = (clientY - r0.top) / SE.zoom;
+    const k0 = snipEditScale();
+    const ix = (clientX - r0.left) / k0, iy = (clientY - r0.top) / k0;
     snipEditSetZoom(z);
     const r1 = snipEditStage.getBoundingClientRect();
-    snipEditWrap.scrollLeft += r1.left + ix * SE.zoom - clientX;
-    snipEditWrap.scrollTop += r1.top + iy * SE.zoom - clientY;
+    const k1 = snipEditScale();
+    snipEditWrap.scrollLeft += r1.left + ix * k1 - clientX;
+    snipEditWrap.scrollTop += r1.top + iy * k1 - clientY;
   }
   function snipEditZoomBy(factor) {
     const wr = snipEditWrap.getBoundingClientRect();
     snipEditZoomAt(SE.zoom * factor, wr.left + snipEditWrap.clientWidth / 2, wr.top + snipEditWrap.clientHeight / 2);
   }
   function snipEditFit() {
-    const availW = snipEditWrap.clientWidth - 24;
-    const availH = snipEditWrap.clientHeight - 24;
+    const dpr = window.devicePixelRatio || 1;
+    const availW = (snipEditWrap.clientWidth - 24) * dpr;
+    const availH = (snipEditWrap.clientHeight - 24) * dpr;
     snipEditSetZoom(Math.min(1, availW / SE.w, availH / SE.h));
   }
 
@@ -1753,7 +1764,7 @@ export function initSnipEditor() {
       if (snipColorPopIsOpen()) { closeSnipColorPop(); return; }
       if (snipEditContextIsOpen()) { closeSnipEditContext(); return; }
       if (SE.eyedropArm) { SE.eyedropArm = null; snipEditRenderContext(); return; }
-      if (SE.tool === "crop" && (SE.drag || !snipEditCropIsFull(SE.cropRect) || SE.ops.some((o) => o.tool === "crop"))) { snipEditCropDiscard(); return; }
+      if (SE.tool === "crop" && (SE.drag || (SE.cropRect && !snipEditCropIsFull(SE.cropRect)) || SE.ops.some((o) => o.tool === "crop"))) { snipEditCropDiscard(); return; }
       // A selected/just-drawn shape only gives up the arrow keys, never the
       // whole editor -- closing on Escape here would throw away every edit
       // made so far just because something happened to be selected.

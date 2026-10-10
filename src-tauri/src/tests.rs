@@ -17671,3 +17671,37 @@ fn uia_class_order_prefers_the_eight_class_and_falls_back() {
     // Neither works: None, so the gap-everything path runs.
     assert_eq!(keylog::first_ready_uia::<u8>(&order, |_| None), None);
 }
+
+// Alternating pure red and pure blue pixel columns: the hardest case for subsampled chroma.
+fn red_blue_columns(w: u32, h: u32) -> Vec<u8> {
+    let mut rgba = Vec::with_capacity((w * h * 4) as usize);
+    for _y in 0..h {
+        for x in 0..w {
+            rgba.extend_from_slice(if x % 2 == 0 { &[255, 0, 0, 255] } else { &[0, 0, 255, 255] });
+        }
+    }
+    rgba
+}
+
+// Spread between the red and blue content of the first two decoded pixels (0 = fully smeared).
+fn red_blue_separation(jpeg: &[u8]) -> i32 {
+    let img = image::load_from_memory(jpeg).expect("decode").to_rgba8();
+    let a = img.get_pixel(8, 4).0;
+    let b = img.get_pixel(9, 4).0;
+    (a[0] as i32 - b[0] as i32).abs() + (a[2] as i32 - b[2] as i32).abs()
+}
+
+#[test]
+fn snip_overlay_preview_keeps_full_chroma_for_coloured_text() {
+    // Below quality 90 the encoder halves the colour resolution and one-pixel coloured
+    // strokes smear into each other; the overlay preview must stay above that line.
+    let rgba = red_blue_columns(32, 16);
+    let low = snip::encode_snip_jpeg(&rgba, 32, 16, 80).expect("q80");
+    let used = snip::encode_snip_jpeg(&rgba, 32, 16, snip::SNIP_PREVIEW_Q).expect("preview");
+    assert!(red_blue_separation(&low) < 300, "q80 was expected to smear this pattern");
+    assert!(
+        red_blue_separation(&used) > 500,
+        "the overlay preview quality {} smears coloured one-pixel strokes",
+        snip::SNIP_PREVIEW_Q
+    );
+}

@@ -1398,15 +1398,15 @@ pub(crate) fn snip_windows(state: State<SnipState>, index: usize) -> Vec<SnipWin
     out
 }
 
-// Overlay preview JPEG quality, encoded at native resolution: fixed, it only affects
-// how fast the frozen desktop appears.
-pub(crate) const SNIP_PREVIEW_Q: u8 = 80;
 // The colour picker shows the frozen desktop as the reference for the colour it is
 // about to copy, so its background must not carry JPEG's subsampled chroma: below
 // quality 90 the encoder halves the colour resolution, which is exactly the "washed
-// out" look. 92 keeps full chroma (4:4:4). Measured cost: ~1.6x the q80 encode; paid
-// only when the pipette is opened, never on the screenshot path.
+// out" look. 92 keeps full chroma (4:4:4).
 pub(crate) const PICK_Q: u8 = 92;
+// The screenshot overlay shows the same frozen desktop at native resolution, and
+// coloured text on it smears under subsampled chroma just the same, so it uses the
+// same full-chroma quality. Fixed, not a setting.
+pub(crate) const SNIP_PREVIEW_Q: u8 = PICK_Q;
 // Saved-button JPEG quality: higher (crisp text) but still a fraction of a PNG's
 // size + encode time: a full-res PNG data URL used to stall the whole app on save.
 // Default for the expert-tunable snipSaveQuality (read in finalize_capture) --

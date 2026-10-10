@@ -1543,5 +1543,55 @@ def run(browser, tmp):
     const img = document.getElementById('snip-preview');
     if (img.naturalWidth !== 1200 || img.naturalHeight !== 800) errs.push('830: the applied picture is ' + img.naturalWidth + 'x' + img.naturalHeight + ', expected 1200x800');
 """)
+    # 100 % is one image pixel per device pixel: at a device pixel ratio of 1.5 a 300x200 picture is 200x133 CSS pixels.
+    failed += ar_probe('bq831', '831: 100 percent shows one image pixel per device pixel', 'index', '880x600', '', snip_common + r"""
+    Object.defineProperty(window, 'devicePixelRatio', { get: () => 1.5, configurable: true });
+    await snipOpen(300, 200, '#ffffff');
+    const stage = document.getElementById('snip-edit-stage');
+    const zoomVal = document.getElementById('snip-edit-zoom-val').textContent.trim();
+    if (zoomVal !== '100%') errs.push('831: the zoom label reads ' + zoomVal + ', expected 100%');
+    const sr = stage.getBoundingClientRect();
+    if (Math.abs(sr.width - 200) > 0.6) errs.push('831: the stage is ' + sr.width + ' CSS px wide, expected 200 (300 / 1.5)');
+    if (Math.abs(sr.height - 200 / 1.5) > 0.6) errs.push('831: the stage is ' + sr.height + ' CSS px tall, expected ' + (200 / 1.5));
+    // A rect dragged from the stage top-left to its bottom-right corner covers the whole picture.
+    document.querySelector('#snip-edit-tools button[data-tool="rect"]').click(); await sleep(150);
+    const live = document.getElementById('snip-edit-live');
+    const fire = (type, x, y, target) => (target || window).dispatchEvent(new PointerEvent(type, {
+      bubbles: true, cancelable: true, button: 0, pointerId: 1, isPrimary: true, clientX: x, clientY: y,
+    }));
+    fire('pointerdown', sr.left, sr.top, live);
+    fire('pointermove', (sr.left + sr.right) / 2, (sr.top + sr.bottom) / 2, live);
+    fire('pointermove', sr.right, sr.bottom, live);
+    fire('pointerup', sr.right, sr.bottom, window);
+    await sleep(150);
+    window.__SMOKE_ARGS__.length = 0;
+    document.getElementById('snip-edit-copy').click();
+    await sleep(300);
+    const calls = callsFor('copy_image_data');
+    if (!calls.length) { errs.push('831: the export did not run'); }
+    else {
+      const img = await new Promise((res) => { const i = new Image(); i.onload = () => res(i); i.src = calls[calls.length - 1].dataUrl; });
+      if (img.width !== 300 || img.height !== 200) errs.push('831: the export is ' + img.width + 'x' + img.height + ', expected 300x200');
+      const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+      const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+      const inked = (x, y) => { const d = g.getImageData(x, y, 1, 1).data; return d[0] < 250 || d[1] < 250 || d[2] < 250; };
+      for (const [x, y] of [[1, 100], [298, 100], [150, 1], [150, 198]]) {
+        if (!inked(x, y)) errs.push('831: the rect does not reach the picture edge at ' + x + ',' + y);
+      }
+    }
+""")
+    failed += ar_probe('bq831b', '831: magnified pixels stay sharp and the label keeps showing the zoom', 'index', '880x600', '', snip_common + r"""
+    Object.defineProperty(window, 'devicePixelRatio', { get: () => 1.5, configurable: true });
+    await snipOpen(300, 200, '#ffffff');
+    const base = document.getElementById('snip-edit-base');
+    if (getComputedStyle(base).imageRendering === 'pixelated') errs.push('831: the canvas is pixelated at 100 percent');
+    document.getElementById('snip-edit-zoom-in').click(); await sleep(150);
+    const label = document.getElementById('snip-edit-zoom-val').textContent.trim();
+    if (label !== '120%') errs.push('831: one zoom step reads ' + label + ', expected 120%');
+    if (getComputedStyle(base).imageRendering !== 'pixelated') errs.push('831: the base canvas is not pixelated above 100 percent');
+    if (getComputedStyle(document.getElementById('snip-edit-live')).imageRendering !== 'pixelated') errs.push('831: the live canvas is not pixelated above 100 percent');
+    const w = document.getElementById('snip-edit-stage').getBoundingClientRect().width;
+    if (Math.abs(w - 300 * 1.2 / 1.5) > 0.6) errs.push('831: at 120 percent the stage is ' + w + ' CSS px wide, expected ' + (300 * 1.2 / 1.5));
+""")
     # ---- main window findings: generated block end ----
     return failed
