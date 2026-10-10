@@ -151,7 +151,7 @@ async function run({ text, keyMs, loadMs, ipcMs }) {
   const trayCode = read("tray.js")
     .replace(/^import \{ applyFloatTheme \} from "\.\/floattheme\.js";$/m, "const applyFloatTheme = () => {};")
     .replace(/^import \{ APP_NAME \} from "\.\/brand\.js";$/m, 'const APP_NAME = "App";')
-    .replace(/^import \{ hexToRgb \} from "\.\/floatShared\.js";$/m, "const { hexToRgb } = __shared;");
+    .replace(/^import \{ hexToRgb, inkFor \} from "\.\/floatShared\.js";$/m, "const { hexToRgb, inkFor } = __shared;");
   traySandbox.__shared = shared;
   vm.createContext(traySandbox);
   vm.runInContext(trayCode, traySandbox, { filename: "tray.js" });

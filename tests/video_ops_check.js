@@ -350,7 +350,7 @@ async function exportLoadRaceCheck() {
     formatExt: () => "mp4", destPath: () => "C:/out/a.mp4", showExportErrorDetails: () => {},
     exportEta: { reset() {} }, setProgress: () => {},
     buildVideoChain: () => null, buildAudioChain: () => null, keptSegments: () => [{ a: 0, b: 5000 }],
-    videoKbps: () => 1000, fmtBytes: String, confirmDialog: async () => false, noteFfmpeg: () => {},
+    videoKbps: () => 1000, fmtBytes: String, LANG: "en", confirmDialog: async () => false, noteFfmpeg: () => {},
     parseFfmpegError: () => ({ message: "x", details: "" }), applyExportGate: () => {},
   };
   vm.createContext(sb);
@@ -398,7 +398,7 @@ async function exportIdleCheck() {
       formatExt: () => "mp4", destPath: () => "C:/out/a.mp4", showExportErrorDetails: () => {},
       exportEta: { reset() {} }, setProgress: () => el("ve-export-progress-row").classList.remove("hidden"),
       buildVideoChain: () => null, buildAudioChain: () => null, keptSegments: () => [{ a: 0, b: 5000 }],
-      videoKbps: () => 1000, fmtBytes: String, confirmDialog: async () => false, noteFfmpeg: () => {},
+      videoKbps: () => 1000, fmtBytes: String, LANG: "en", confirmDialog: async () => false, noteFfmpeg: () => {},
       parseFfmpegError: () => ({ message: "x", details: "" }), applyExportGate: () => {},
     };
     vm.createContext(sb);
