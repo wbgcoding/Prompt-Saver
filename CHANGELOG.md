@@ -1520,6 +1520,9 @@ the video editor and the introduction tour ship on).
 - **Usage statistics switch shows its real state.** It showed on while tool use
   was not being counted; it now starts off and counts as soon as you switch it
   on.
+- **Tile names no longer wrap while their neighbours stay on one line.** When
+  one shared size keeps every name on a single line at no less than 80 % of the
+  largest size, all names use it; otherwise long names wrap as before.
 
 ### Security
 

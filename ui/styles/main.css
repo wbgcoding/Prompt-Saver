@@ -716,6 +716,8 @@ body.drag-active .cell.drag-over {
   text-box-trim: trim-both;
   text-box-edge: cap alphabetic;
 }
+/* Every name of the grid fits on one line at the shared size (see fitTilesShared). */
+.tile-name.fit.fit-one-line { white-space: nowrap; }
 
 /* Video tiles: cached wrapper + looping preview + hover control bar. */
 .tile-media {

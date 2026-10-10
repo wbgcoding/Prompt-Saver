@@ -32,21 +32,19 @@ export function getRuler() {
   return ruler;
 }
 
-// Largest font size where the wrapped text fits the shared measurement box;
-// depends only on (text, font, maxW, maxH).
-export function fitTileText(tile, maxW, maxH) {
-  if (tile.classList.contains("has-image") || tile.dataset.fitMode === "fixed") return;
-  const name = tile.querySelector(".tile-name");
-  if (!name) return;
-  name.classList.add("fit");
-  const key = `${name.textContent}|${name.style.fontFamily}|${maxW}x${maxH}`;
+// Largest font size where the text fits the shared measurement box, wrapped or
+// (oneLine) on a single line; depends only on (text, font, maxW, maxH, oneLine).
+function measureFit(name, maxW, maxH, oneLine) {
+  const key = `${oneLine ? "1|" : ""}${name.textContent}|${name.style.fontFamily}|${maxW}x${maxH}`;
   let size = fitCache.get(key);
   if (size == null) {
     const r = getRuler();
     r.style.fontFamily = name.style.fontFamily;
+    r.style.whiteSpace = oneLine ? "nowrap" : "";
     r.textContent = name.textContent;
     r.style.width = `${maxW}px`;
-    // scrollWidth only exceeds maxW when a single unbreakable word overflows.
+    // scrollWidth only exceeds maxW when a single unbreakable word overflows
+    // (or, on one line, when the whole text is wider than the box).
     const fits = (s) => {
       r.style.fontSize = `${s}px`;
       return r.scrollHeight <= maxH && r.scrollWidth <= maxW;
@@ -58,11 +56,52 @@ export function fitTileText(tile, maxW, maxH) {
       if (fits(mid)) lo = mid;
       else hi = mid - 1;
     }
+    r.style.whiteSpace = "";
     size = lo;
     if (fitCache.size > 1000) fitCache.clear();
     fitCache.set(key, size);
   }
-  name.style.fontSize = `${size}px`;
+  return size;
+}
+
+// Largest font size where the wrapped text fits the shared measurement box;
+// depends only on (text, font, maxW, maxH).
+export function fitTileText(tile, maxW, maxH) {
+  if (tile.classList.contains("has-image") || tile.dataset.fitMode === "fixed") return;
+  const name = tile.querySelector(".tile-name");
+  if (!name) return;
+  name.classList.add("fit");
+  name.classList.remove("fit-one-line");
+  name.style.fontSize = `${measureFit(name, maxW, maxH, false)}px`;
+}
+
+// A one-line size must keep at least this share of the wrapping size to win.
+export const ONE_LINE_SHARE = 0.8;
+
+// The tiles of one grid: every name on a single line at one shared size when that
+// size keeps at least ONE_LINE_SHARE of the largest wrapping size, else each name
+// gets its wrapping size (so a name never wraps while its neighbours stay on one line
+// unless shrinking everything would cost more than a fifth of the text size).
+export function fitTilesShared(tiles, maxW, maxH) {
+  const names = [];
+  for (const tile of tiles) {
+    if (tile.classList.contains("has-image") || tile.dataset.fitMode === "fixed") continue;
+    const name = tile.querySelector(".tile-name");
+    if (name) names.push(name);
+  }
+  if (!names.length) return;
+  let wrapMax = 0;
+  let oneLine = Infinity;
+  for (const name of names) {
+    name.classList.add("fit");
+    wrapMax = Math.max(wrapMax, measureFit(name, maxW, maxH, false));
+    oneLine = Math.min(oneLine, measureFit(name, maxW, maxH, true));
+  }
+  const single = oneLine >= ONE_LINE_SHARE * wrapMax;
+  for (const name of names) {
+    name.classList.toggle("fit-one-line", single);
+    name.style.fontSize = `${single ? oneLine : measureFit(name, maxW, maxH, false)}px`;
+  }
 }
 
 // Measurement box cached per grid state: as long as the window and grid
@@ -123,7 +162,7 @@ export function fitAllTiles(boxOnly) {
   }
   if (boxOnly && !boxMoved) return;
   if (fitBox.maxW <= 0 || fitBox.maxH <= 0) return;
-  for (const tile of tiles) fitTileText(tile, fitBox.maxW, fitBox.maxH);
+  fitTilesShared(tiles, fitBox.maxW, fitBox.maxH);
 }
 
 // Re-fit on window resize (cells change size with the window).

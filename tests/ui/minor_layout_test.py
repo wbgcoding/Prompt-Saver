@@ -10,7 +10,10 @@ Boots the real index.html against tests/ui/tauri_stub.js in headless Chromium an
     menu opens and when a tab is chosen,
   * expert menu search field at 680 px (German): the whole placeholder is visible,
   * settings System section at 680 px: one line, every item centred on it,
-  * expert menu cards: two grid tracks at 880 px, one at 680 px, groups drawn as cards.
+  * expert menu cards: two grid tracks at 880 px, one at 680 px, groups drawn as cards,
+  * grid tile names at 880x600 and 680x460: every name of the demo tiles shares one font
+    size and "Prompt 10" sits on one line (the one-line size is used when it is at least
+    80 % of the wrapping size).
 
 Run:  python tests/ui/minor_layout_test.py
 Exit: 0 = clean, 1 = problems found. Skips cleanly when no Chromium is installed.
@@ -339,6 +342,57 @@ EXPERT_CARDS = """
 </script>
 """
 
+# Tile names: one shared size, and one line when that costs at most a fifth of the size.
+TILE_NAMES = """
+<script>
+(async () => {""" + COMMON + """
+  try {
+    await until(() => document.querySelectorAll('#grid .tile[data-id] .tile-name').length > 3);
+    await sleep(800);
+    const rows = [];
+    for (const t of document.querySelectorAll('#grid .tile[data-id]')) {
+      const n = t.querySelector('.tile-name');
+      if (!n || t.classList.contains('has-image') || !n.classList.contains('fit')) continue;
+      const rg = document.createRange();
+      rg.selectNodeContents(n);
+      const lines = new Set([...rg.getClientRects()].map((q) => Math.round(q.top))).size;
+      rows.push({ name: n.textContent.trim(), fs: parseFloat(n.style.fontSize), lines, sw: n.scrollWidth, cw: n.clientWidth });
+    }
+    info.push('tiles ' + innerWidth + 'x' + innerHeight + ' ' + JSON.stringify(rows));
+    if (rows.length < 4) errs.push('tile names: only ' + rows.length + ' auto-fit tiles found');
+    const sizes = new Set(rows.map((r) => r.fs));
+    if (sizes.size !== 1) errs.push('tile names: the tiles do not share one font size: ' + [...sizes].join(','));
+    const p10 = rows.find((r) => r.name === 'Prompt 10');
+    if (!p10) errs.push('tile names: no "Prompt 10" tile');
+    else if (p10.lines !== 1) errs.push('tile names: "Prompt 10" wraps onto ' + p10.lines + ' lines at ' + innerWidth + 'x' + innerHeight + ' (size ' + p10.fs + 'px)');
+    for (const r of rows) if (r.sw > r.cw) errs.push('tile names: "' + r.name + '" overflows its box (' + r.sw + ' > ' + r.cw + ')');
+    // A long name would cost far more than a fifth of the size on one line: wrapping stays.
+    const { fitTilesShared } = await import('./tiles.js');
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:0;top:0;width:200px;visibility:hidden;';
+    document.body.appendChild(host);
+    const mk = (text) => {
+      const tile = document.createElement('div');
+      tile.dataset.fitMode = 'auto';
+      const nm = document.createElement('span');
+      nm.className = 'tile-name';
+      nm.textContent = text;
+      tile.appendChild(nm);
+      host.appendChild(tile);
+      return [tile, nm];
+    };
+    const [ta, na] = mk('Prompt 2');
+    const [tb, nb] = mk('Write a friendly reply to the customer about the delayed order');
+    fitTilesShared([ta, tb], 200, 96);
+    if (na.classList.contains('fit-one-line') || nb.classList.contains('fit-one-line')) errs.push('tile names: a long name was forced onto one line');
+    if (!(parseFloat(na.style.fontSize) > parseFloat(nb.style.fontSize))) errs.push('tile names: the wrapping fallback lost the per-name size');
+    host.remove();
+  } catch (e) { errs.push('probe: ' + e.message); }
+  finish();
+})();
+</script>
+"""
+
 # (name, probe, width, height, UI language)
 CASES = (
     ("tag-manager", TAG_MANAGER, MIN_W, 800, "de"),
@@ -349,6 +403,8 @@ CASES = (
     ("about", ABOUT, MIN_W, 800, "en"),
     ("expert-cards-wide", EXPERT_CARDS.replace("__TRACKS__", "2"), 880, 600, "en"),
     ("expert-cards-narrow", EXPERT_CARDS.replace("__TRACKS__", "1"), 680, 460, "en"),
+    ("tile-names-wide", TILE_NAMES, 880, 600, "en"),
+    ("tile-names-narrow", TILE_NAMES, 680, 460, "en"),
 )
 
 LANGS = ("en", "de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro")
