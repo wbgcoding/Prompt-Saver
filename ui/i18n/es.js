@@ -752,7 +752,7 @@ export default {
     previewAttachHint: "La imagen de arriba es la vista previa propia del mosaico. Todo lo demás que adjuntes es un archivo aparte: al copiar el prompt se copia su ruta al portapapeles, no el archivo en sí.",
     tipPdfPage: "Qué página del PDF se muestra en la vista previa",
     fileMissing: "Archivo no encontrado",
-    addIcon: "Medios como icono",
+    addIcon: "Elegir imagen del mosaico",
     replaceMedia: "Reemplazar medios",
     captionPh: "Subtítulo (opcional)",
     unsupportedFile: "Este tipo de archivo no es compatible",

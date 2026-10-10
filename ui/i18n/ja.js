@@ -752,7 +752,7 @@ export default {
     previewAttachHint: "上の画像はタイル自体のプレビューです。それ以外に添付したものは別のファイルです。プロンプトをコピーするとクリップボードに入るのはそのファイルのパスであり、ファイル自体ではありません。",
     tipPdfPage: "プレビューに表示するPDFのページ",
     fileMissing: "ファイルが見つかりません",
-    addIcon: "メディアをアイコンに",
+    addIcon: "タイルの画像を選択",
     replaceMedia: "メディアを置き換え",
     captionPh: "キャプション（任意）",
     unsupportedFile: "このファイル形式には対応していません",

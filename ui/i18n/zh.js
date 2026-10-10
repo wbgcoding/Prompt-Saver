@@ -752,7 +752,7 @@ export default {
     previewAttachHint: "上方的图片是磁贴自己的预览图。你附加的其他内容都是独立的文件，复制提示词时，剪贴板中放入的是它的路径，而不是文件本身。",
     tipPdfPage: "预览显示 PDF 的哪一页",
     fileMissing: "未找到文件",
-    addIcon: "媒体作为图标",
+    addIcon: "选择磁贴图片",
     replaceMedia: "替换媒体",
     captionPh: "字幕（可选）",
     unsupportedFile: "不支持此文件类型",

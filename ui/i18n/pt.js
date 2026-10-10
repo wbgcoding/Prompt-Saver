@@ -752,7 +752,7 @@ export default {
     previewAttachHint: "A imagem acima é a prévia do próprio bloco. Tudo o mais que você anexar é um arquivo separado, então copiar o prompt coloca o caminho dele na área de transferência, não o arquivo em si.",
     tipPdfPage: "Qual página do PDF é mostrada na pré-visualização",
     fileMissing: "Arquivo não encontrado",
-    addIcon: "Mídia como ícone",
+    addIcon: "Escolher imagem do bloco",
     replaceMedia: "Substituir mídia",
     captionPh: "Legenda (opcional)",
     unsupportedFile: "Este tipo de arquivo não é suportado",

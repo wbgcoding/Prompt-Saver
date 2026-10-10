@@ -752,7 +752,7 @@ export default {
     previewAttachHint: "L'immagine in alto è l'anteprima della piastrella. Tutto ciò che alleghi in più è un file a parte: copiando il prompt viene messo negli appunti il suo percorso, non il file stesso.",
     tipPdfPage: "Quale pagina del PDF viene mostrata nell'anteprima",
     fileMissing: "File non trovato",
-    addIcon: "Media come icona",
+    addIcon: "Scegli l'immagine del riquadro",
     replaceMedia: "Sostituisci media",
     captionPh: "Didascalia (facoltativa)",
     unsupportedFile: "Questo tipo di file non è supportato",

@@ -932,6 +932,9 @@ the video editor and the introduction tour ship on).
 - **The editor footer is Delete, Cancel, Save.** Delete is red text without a
   frame on the left; Cancel closes the editor and asks first when something was
   changed, like the X.
+- **The tile picture is chosen from a well before the name.** The editor's
+  media button is now a dashed slot to the left of the name field, named
+  "Choose a tile picture".
 
 ### Fixed
 

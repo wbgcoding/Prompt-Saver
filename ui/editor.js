@@ -1723,7 +1723,7 @@ export function bindEditor() {
     modalState.showImage = true;
     return true;
   }
-  // "Replace media" (preview exists) and "Media as icon" (no media yet).
+  // "Replace media" (preview exists) and "Choose a tile picture" (no media yet).
   modal.replaceImg.addEventListener("click", async () => {
     if (modalState && (await pickReplacementMedia())) syncModalImageUi(modalState.mode);
   });

@@ -2759,6 +2759,9 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
   padding: 0;
 }
 .modal-name-row .modal-name-icon svg { width: 58%; height: 58%; }
+/* A dashed well reads as a picture slot. */
+.modal-name-row .modal-name-icon { border: 1.5px dashed var(--border); border-radius: 8px; color: var(--muted); background: transparent; }
+.modal-name-row .modal-name-icon:hover { border-color: var(--accent); color: var(--accent); }
 .modal-name-row .modal-fav-star { font-size: 22px; }
 .modal-fav-star {
   flex: 0 0 auto;

@@ -752,7 +752,7 @@ export default {
     previewAttachHint: "Yukarıdaki görsel, kutucuğun kendi önizlemesidir. Eklediğin başka her şey ayrı bir dosyadır: istemi kopyalamak panoya dosyanın kendisini değil, yolunu koyar.",
     tipPdfPage: "Önizlemede PDF'in hangi sayfasının gösterileceği",
     fileMissing: "Dosya bulunamadı",
-    addIcon: "Simge olarak medya",
+    addIcon: "Kutucuk resmi seç",
     replaceMedia: "Medyayı değiştir",
     captionPh: "Altyazı (isteğe bağlı)",
     unsupportedFile: "Bu dosya türü desteklenmiyor",

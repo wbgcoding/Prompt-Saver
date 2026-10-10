@@ -727,7 +727,7 @@ export default {
     tipPdfPage: "Welche Seite des PDFs in der Vorschau gezeigt wird",
     noClipboardFile: "Keine Datei in der Zwischenablage.",
     fileMissing: "Datei nicht gefunden",
-    addIcon: "Medien als Icon",
+    addIcon: "Kachelbild wählen",
     replaceMedia: "Medien ersetzen",
     captionPh: "Beschriftung (optional)",
     unsupportedFile: "Dieser Dateityp wird nicht unterstützt",

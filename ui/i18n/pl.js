@@ -752,7 +752,7 @@ export default {
     previewAttachHint: "Obraz powyżej to własna miniatura kafelka. Wszystko inne, co dołączysz, to osobny plik, więc skopiowanie promptu umieszcza jego ścieżkę w schowku, a nie sam plik.",
     tipPdfPage: "Która strona PDF jest pokazywana w podglądzie",
     fileMissing: "Nie znaleziono pliku",
-    addIcon: "Multimedia jako ikona",
+    addIcon: "Wybierz obraz kafelka",
     replaceMedia: "Zamień multimedia",
     captionPh: "Podpis (opcjonalnie)",
     unsupportedFile: "Ten typ pliku nie jest obsługiwany",

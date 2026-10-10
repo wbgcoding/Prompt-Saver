@@ -752,7 +752,7 @@ export default {
     previewAttachHint: "Imaginea de mai sus este propria previzualizare a dalei. Orice altceva atașezi este un fișier separat: copierea promptului pune în clipboard calea lui, nu fișierul în sine.",
     tipPdfPage: "Ce pagină din PDF este afișată în previzualizare",
     fileMissing: "Fișierul nu a fost găsit",
-    addIcon: "Media ca pictogramă",
+    addIcon: "Alege imaginea dalei",
     replaceMedia: "Înlocuiește media",
     captionPh: "Subtitrare (opțional)",
     unsupportedFile: "Acest tip de fișier nu este acceptat",

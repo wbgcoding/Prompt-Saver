@@ -679,6 +679,33 @@ SECTION = """\
         if (!document.getElementById('confirm-modal').classList.contains('hidden')) { await click('confirm-ok'); await sleep(250); }
       }
     }
+    // ico261: the tile-picture well sits before the name for a prompt without media and
+    // is gone for a prompt that has a picture.
+    {
+      const closeEd261 = async () => {
+        await click('modal-close-x');
+        await sleep(250);
+        if (!document.getElementById('confirm-modal').classList.contains('hidden')) { await click('confirm-ok'); await sleep(250); }
+      };
+      if (await openEditor('p1')) {
+        const well = document.getElementById('modal-add-icon');
+        const nm261 = document.getElementById('modal-name');
+        if (!well || well.classList.contains('hidden') || getComputedStyle(well).display === 'none') out.errors.push('ico261: the tile-picture well is not shown for a prompt without media');
+        else {
+          if (well.getBoundingClientRect().right > nm261.getBoundingClientRect().left + 1) out.errors.push('ico261: the tile-picture well is not left of the name field');
+          const aria261 = well.getAttribute('aria-label') || '';
+          if (!aria261 || aria261 !== well.title) out.errors.push('ico261: the well has no matching accessible name (' + aria261 + ')');
+          if (document.documentElement.lang === 'en' && aria261 !== 'Choose a tile picture') out.errors.push('ico261: the well is named "' + aria261 + '"');
+          if (getComputedStyle(well).borderTopStyle !== 'dashed') out.errors.push('ico261: the well has no dashed frame');
+        }
+        await closeEd261();
+      } else out.errors.push('ico261: the editor did not open for a text prompt');
+      if (await openEditor('p11')) {
+        const well = document.getElementById('modal-add-icon');
+        if (well && !well.classList.contains('hidden') && getComputedStyle(well).display !== 'none') out.errors.push('ico261: the tile-picture well shows for a prompt that already has media');
+        await closeEd261();
+      } else out.errors.push('ico261: the editor did not open for the image prompt');
+    }
     // Gating: a row whose feature is off must disappear the moment that toggle is
     // flipped - no reopening the menu - and a whole branch goes with its parent.
     const rowFor = (label) => [...document.querySelectorAll('#expert-flags .field')]

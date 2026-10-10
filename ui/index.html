@@ -238,9 +238,9 @@
         </button>
       </div>
       <div class="modal-name-row">
-        <input id="modal-name" class="modal-input" type="text" data-i18n-ph="namePh" maxlength="80" />
-        <!-- Attach media as the tile's icon. An icon button rather than a full row:
-             it is a one-off action and the dialog is short on vertical space. -->
+        <!-- The tile-picture well, before the name: attaches media that replaces the tile's
+             text. An icon button rather than a full row: it is a one-off action and the
+             dialog is short on vertical space. -->
         <button type="button" id="modal-add-icon" class="icon-btn modal-name-icon hidden" data-i18n-title="addIcon" data-i18n-aria="addIcon">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
             <path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M3 5.5h18v13H3z"/>
@@ -248,6 +248,7 @@
             <circle cx="8.5" cy="9" r="1.5" fill="currentColor"/>
           </svg>
         </button>
+        <input id="modal-name" class="modal-input" type="text" data-i18n-ph="namePh" maxlength="80" />
         <button type="button" id="modal-fav" class="modal-fav-star" aria-pressed="false" data-i18n-title="favoriteToggle" data-i18n-aria="favoriteToggle">★</button>
         <!-- Marks the saved prompt confidential (its text/variants get encrypted
              with the vault password). Hidden unless the feature flag is on, the

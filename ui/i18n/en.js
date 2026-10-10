@@ -727,7 +727,7 @@ export default {
     tipPdfPage: "Which page of the PDF to preview",
     noClipboardFile: "No file in the clipboard.",
     fileMissing: "File not found",
-    addIcon: "Media as icon",
+    addIcon: "Choose a tile picture",
     replaceMedia: "Replace media",
     captionPh: "Caption (optional)",
     unsupportedFile: "This file type isn't supported",

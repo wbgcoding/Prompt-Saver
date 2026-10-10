@@ -752,7 +752,7 @@ export default {
     previewAttachHint: "De afbeelding hierboven is de eigen voorvertoning van de tegel. Alles wat je verder bijvoegt, is een apart bestand: het kopiëren van de prompt zet het pad ervan op het klembord, niet het bestand zelf.",
     tipPdfPage: "Welke pagina van de PDF in de voorbeeldweergave staat",
     fileMissing: "Bestand niet gevonden",
-    addIcon: "Media als pictogram",
+    addIcon: "Tegelafbeelding kiezen",
     replaceMedia: "Media vervangen",
     captionPh: "Bijschrift (optioneel)",
     unsupportedFile: "Dit bestandstype wordt niet ondersteund",
