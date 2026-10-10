@@ -297,11 +297,11 @@ SECTION = """\
         out.errors.push('343: the expert menu has no capture row for one or both recording hotkeys');
       } else {
         const input = stopRow.querySelector('.hotkey-row .modal-input');
-        const clearBtn = stopRow.querySelector('.hotkey-row .ghost-btn');
+        const clearBtn = stopRow.querySelector('.hotkey-row .clear-btn');
         if (!input || !/8$/.test(input.value)) {
           out.errors.push('343: the stop-recording row does not show its stored hotkey');
         }
-        if (!clearBtn) out.errors.push('343: the stop-recording row has no Clear button');
+        if (!clearBtn) out.errors.push('343: the stop-recording row has no remove X');
         const stopFieldText = (stopRow.querySelector('.value-head span') || {}).textContent;
         if (stopFieldText !== 'Key combination' || input.getAttribute('aria-label') !== 'Key combination') {
           out.errors.push('343: the stop-recording field is not labelled Key combination, got ' + stopFieldText);

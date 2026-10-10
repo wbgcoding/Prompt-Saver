@@ -2023,6 +2023,17 @@ the video editor and the introduction tour ship on).
 - **The quick launcher preview shows plain text.** The one-line preview under each prompt name no longer shows Markdown marks such as # or **.
 - **The quick launcher shows its keys.** A footer lists Enter, the arrow keys and Esc.
 - **Open and Quit are set apart in the tray menu.** They sit below the prompts with a small icon each, and Quit comes last behind its own line.
+- **Usage statistics have their own window.** It opens from Settings and shows the number of prompts, the copies of the last 7 days, the most used prompts by name (a list of 5, 10 or 20) and the never used ones. The backups window opens with the backups first.
+- **Hotkey fields have a small X to remove the shortcut.** It replaces the Clear button next to each hotkey field and shows only while a shortcut is set.
+- **Settings list one switch per row.** Screenshot saving has its own Capture section.
+- **One Import button in the settings.** It opens a small menu with From file and From folder instead of two separate buttons.
+- **Export preselects JSON,** the format that keeps every prompt detail.
+- **The expert menu button has its normal size** and sits at the left edge instead of spanning the whole settings dialog.
+- **The update interval sits right beside the Auto update switch** and only shows while it is on.
+- **The theme editor opens from a “Custom theme…” entry** at the end of the theme list instead of an unlabelled palette button.
+- **The font choice in Settings is now labelled Tile font.**
+- **Icon size moved from Settings to the expert menu** (Appearance, Sizes).
+- **German: one German word per thing throughout** (Tastenkürzel, Sicherung, Kurzinfo, Symbol, Design).
 
 ## 2.6.3 (2026-07-26)
 

@@ -8,14 +8,14 @@ import { loadPalette, refreshColorUI, refreshCustomThemes } from "./theme.js";
 import { assignChainLock, chainLock, chainMode, setChainMode } from "./chain.js";
 import { renderLibrary } from "./library.js";
 import { offerClipInboxCleanup, refreshClipInbox } from "./journal.js";
-import { applyBarToggleTips } from "./windowChrome.js";
+import { applyBarToggleTips, hotkeyClearX } from "./windowChrome.js";
 import { setMediaDefaults } from "./media.js";
 import { attachSelectPicker } from "./selectpop.js";
 import { ffmpegDownloadActive, fmtBytes, normCopySizeLevel, normRecFormat, runFfmpegDownload, VIDEO_FORMATS, videoFormatLabelKey } from "./floatShared.js";
 import { hideSettings, syncSettingsControls } from "./settingsPanel.js";
 import { bindHotkeyField, commitRecPauseHotkey, commitRecStopHotkey, prettyAccel } from "./hotkeys.js";
 import EN from "./i18n/en.js";
-import { renderStatsPanel, toggleShortLivedCert } from "./management.js";
+import { openStats, toggleShortLivedCert } from "./management.js";
 import { closeBackups, renderBackupPanel } from "./backups.js";
 import { varFixedListRow } from "./editor.js";
 
@@ -1621,7 +1621,6 @@ export const SETTINGS_DIRECTORY = [
   { key: "lang-select", area: "normal", label: "language" },
   { key: "tile-font", area: "normal", label: "tileFont" },
   { key: "ui-scale", area: "normal", label: "valUiScale" },
-  { key: "icon-scale", area: "normal", label: "valIconScale" },
   { key: "tile-size", area: "normal", label: "tileSize" },
   { key: "opt-ontop", area: "normal", label: "alwaysOnTop" },
   { key: "opt-minimize", area: "normal", label: "minimizeOnClose" },
@@ -1634,7 +1633,7 @@ export const SETTINGS_DIRECTORY = [
   { key: "opt-hotkey", area: "normal", label: "hotkeyLabel" },
   { key: "opt-voice-hotkey", area: "normal", label: "voiceHotkeyLabel", gate: "voiceHotkey" },
   { key: "opt-autoupdate", area: "normal", label: "autoUpdate", tip: "autoUpdateHint" },
-  { key: "opt-update-interval", area: "normal", label: "valUpdateCheckH" },
+  { key: "opt-update-interval", area: "normal", label: "valUpdateCheckH", when: () => settings.auto_update !== false },
   { key: "quick-grid", area: "toolbar", label: "gridSize", gate: "quickGrid" },
   { key: "library-sort", area: "library", label: "sortBy" },
   { key: "library-close-toggle", area: "library", label: "flagCloseAfterCopy" },
@@ -1648,7 +1647,7 @@ export const SETTINGS_DIRECTORY = [
   { key: "backup-monthly", area: "backup", label: "valBackupMonthly" },
   { key: "backup-yearly", area: "backup", label: "valBackupYearly" },
   { key: "backup-password", area: "backup", label: "backupPasswordLabel" },
-  { key: "usage-stats", area: "backup", label: "statsEnable", tip: "tipUsageStats" },
+  { key: "usage-stats", area: "stats", label: "statsEnable", tip: "tipUsageStats" },
 ];
 
 export function settingsDirectoryHit(entry, q) {
@@ -1661,6 +1660,7 @@ export function settingsDirectoryHit(entry, q) {
 // once that entry's own area is already open (see openSettingsDirectoryEntry).
 export function settingsDirectoryTarget(entry) {
   if (entry.area === "backup") return document.querySelector(`#backup-modal [data-setting-row="${entry.key}"]`);
+  if (entry.area === "stats") return document.querySelector(`#stats-modal [data-setting-row="${entry.key}"]`);
   const el = $(entry.key);
   return el ? (el.closest(".field") || el) : null;
 }
@@ -1689,7 +1689,9 @@ export async function openSettingsDirectoryEntry(entry) {
     hideSettings();
     $("backup-modal").classList.remove("hidden");
     await renderBackupPanel($("backup-panel"));
-    await renderStatsPanel($("stats-panel"));
+  } else if (entry.area === "stats") {
+    hideSettings();
+    await openStats();
   }
   flashSettingsRow(settingsDirectoryTarget(entry));
 }
@@ -1900,16 +1902,12 @@ export function hotkeyRow(key, labelKey) {
   input.placeholder = t("hotkeyPh");
   input.setAttribute("aria-label", t(labelKey));
   input.value = prettyAccel(def.current());
-  const clear = document.createElement("button");
-  clear.type = "button";
-  clear.className = "ghost-btn";
-  clear.textContent = t("hotkeyClear");
-  clear.addEventListener("click", async () => {
+  wrap.append(input);
+  row.append(head, wrap);
+  hotkeyClearX(input, async () => {
     try { await def.onCommit(""); } catch (_) { /* Clear always leaves an empty field regardless */ }
     input.value = "";
   });
-  wrap.append(input, clear);
-  row.append(head, wrap);
   bindHotkeyField(input, { current: def.current, onCommit: def.onCommit });
   return withTip(row, key);
 }

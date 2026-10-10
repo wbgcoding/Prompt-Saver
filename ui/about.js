@@ -202,8 +202,7 @@ export function bindAbout() {
     if (e.target === updateModal.root) closeUpdateModal();
   });
 
-  // The Auto update switch and the interval beside it are one setting: Never is the
-  // switch's off state, and any other interval turns it on.
+  // The interval beside the Auto update switch only shows while the switch is on.
   $("opt-autoupdate").addEventListener("change", (e) => {
     settings.auto_update = e.target.checked;
     fillUpdateIntervalSelect();
@@ -212,17 +211,6 @@ export function bindAbout() {
   attachSelectPicker($("opt-update-interval"));
   $("opt-update-interval").addEventListener("change", async (e) => {
     const hours = Number(e.target.value);
-    if (hours === 0) {
-      settings.auto_update = false;
-      $("opt-autoupdate").checked = false;
-      await invoke("set_auto_update", { enabled: false }).catch((err) => errToast(err));
-      return;
-    }
-    if (settings.auto_update === false) {
-      settings.auto_update = true;
-      $("opt-autoupdate").checked = true;
-      await invoke("set_auto_update", { enabled: true }).catch((err) => errToast(err));
-    }
     settings.ui_values = { ...(settings.ui_values || {}), updateCheckH: hours };
     await invoke("set_ui_value", { key: "updateCheckH", value: hours }).catch((err) => errToast(err));
   });

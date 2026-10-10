@@ -71,34 +71,130 @@ SECTION = """\
       if (rows.length !== 1) out.errors.push('settings: expected one import/export row, found ' + rows.length);
       else {
         const kids = [...rows[0].children];
-        if (kids[kids.length - 1].id !== 'settings-backup-btn') out.errors.push('settings: the backup manager button is not last in the import/export row');
+        if (kids[kids.length - 2].id !== 'settings-backup-btn' || kids[kids.length - 1].id !== 'settings-stats-btn') out.errors.push('settings: the backup manager and statistics buttons do not end the import/export row');
         const eb = document.getElementById('export-btn').getBoundingClientRect(), bb = document.getElementById('settings-backup-btn').getBoundingClientRect();
         if (!bb.width || !bb.height) out.errors.push('settings: the backup manager button has no size');
         else if (!(bb.left > eb.right - 1 || bb.top > eb.bottom - 1)) out.errors.push('settings: the backup manager button does not follow the export button');
       }
-      // 726: the format choice sits right of the Export button, both right of Import folder.
+      // 726: the format choice sits right of the Export button, both right of Import.
       {
-        const ifb = document.getElementById('import-folder-btn').getBoundingClientRect();
+        const ifb = document.getElementById('import-btn').getBoundingClientRect();
         const eb726 = document.getElementById('export-btn').getBoundingClientRect();
         const ef = document.getElementById('export-format');
         const efr = (ef.closest('.select-picker, .select-wrap') || ef).getBoundingClientRect();
         const efShown = efr.width ? efr : ef.getBoundingClientRect();
         if (!document.querySelector('#impexp-field .export-pair #export-btn')) out.errors.push('726: export-btn is not inside the export pair');
         if (!(efShown.left >= eb726.right - 1)) out.errors.push('726: the export format is not right of the Export button: ' + Math.round(efShown.left) + ' vs ' + Math.round(eb726.right));
-        if (!(eb726.left >= ifb.right - 1 || eb726.top >= ifb.bottom - 1)) out.errors.push('726: the Export button is not after Import folder');
+        if (!(eb726.left >= ifb.right - 1 || eb726.top >= ifb.bottom - 1)) out.errors.push('726: the Export button is not after Import');
       }
       if (document.getElementById('export-all') || document.getElementById('import-all')) out.errors.push('settings: the old save/import backup buttons are still in the settings row');
       if (wasHidden) settingsEl.classList.add('hidden');
     }
+    // 903: the usage statistics have their own dialog, opened from the settings. It
+    // shows two figures, the most used prompts by name and the never used ones;
+    // the backups dialog is not involved.
+    {
+      const sm = document.getElementById('stats-modal');
+      const settingsOpen = !document.getElementById('settings').classList.contains('hidden');
+      const waitFor = async (fn) => { for (let i = 0; i < 40 && !fn(); i++) await sleep(50); return fn(); };
+      document.getElementById('settings-stats-btn').click();
+      await sleep(250);
+      if (sm.classList.contains('hidden')) {
+        out.errors.push('903: the statistics dialog did not open from the settings');
+      } else {
+        layoutScan('statistics');
+        mustReach('statistics', '#stats-modal .modal-head > button');
+        if (!document.getElementById('backup-modal').classList.contains('hidden')) out.errors.push('903: the backups dialog is open next to the statistics');
+        if (!document.getElementById('stats-panel').closest('#stats-modal')) out.errors.push('903: the statistics panel is not inside its own dialog');
+        if (Number(getComputedStyle(sm).zIndex) <= Number(getComputedStyle(document.getElementById('settings')).zIndex)) {
+          out.errors.push('903: the statistics dialog sits behind the settings it was opened from');
+        }
+        // 45: toggling the stats switch used to re-render into the inner panel from
+        // the previous render instead of the real container, nesting one deeper each
+        // time. Re-query fresh each click: a re-render replaces the whole subtree.
+        for (let i = 0; i < 2; i++) {
+          const sw = document.querySelector('#stats-panel .stats-head-row .switch');
+          if (!sw) break;
+          sw.click();
+          await sleep(100);
+        }
+        if (!document.querySelector('#stats-panel .stats-head-row .switch')?.checked) out.errors.push('two stats-switch toggles did not end back on');
+        const bodies = document.querySelectorAll('#stats-panel .stats-panel-body');
+        if (bodies.length !== 1) out.errors.push('toggling stats twice left ' + bodies.length + ' stats-panel-body elements instead of 1');
+        const cardEls = document.querySelectorAll('#stats-panel .stat-cards .stat-card');
+        if (cardEls.length !== 2) out.errors.push('903: the statistics show ' + cardEls.length + ' cards instead of 2');
+        const names = [...document.querySelectorAll('#stats-panel .stat-bar-name')].map((n) => n.textContent);
+        if (names.join(',') !== 'Prompt 1,Prompt 2,Prompt 3') out.errors.push('903: the most used list does not show the prompt names: ' + names.join(','));
+        if (document.querySelector('#stats-panel .stat-daily-chart, #stats-panel .stat-tool-views, #stats-panel .stat-overview-split')) {
+          out.errors.push('903: the statistics still carry the chart, tool or overview blocks');
+        }
+        if (!document.querySelector('#stats-panel .stat-local-only')) out.errors.push('903: the statistics lose the stays-on-this-computer note');
+        // 906: the list length is a choice of 5, 10 or 20.
+        const topSel = document.getElementById('stats-topn');
+        if (!topSel) {
+          out.errors.push('906: the most used list has no length choice');
+        } else {
+          const opts = [...topSel.options].map((o) => o.value).join(',');
+          if (opts !== '5,10,20') out.errors.push('906: the list length options are ' + opts + ' instead of 5,10,20');
+          if (document.querySelector('#stats-panel .stats-topn-row')) out.errors.push('906: the old number field is still there');
+          window.__SMOKE_ARGS__ = [];
+          topSel.value = '20';
+          topSel.dispatchEvent(new Event('change', { bubbles: true }));
+          await sleep(150);
+          const setCall = (window.__SMOKE_ARGS__ || []).find((c) => c[0] === 'set_ui_value' && c[1] && c[1].key === 'statsTopN');
+          if (!setCall || setCall[1].value !== 20) out.errors.push('906: picking 20 did not store statsTopN 20');
+          if (document.getElementById('stats-topn')?.value !== '20') out.errors.push('906: the list length choice did not keep 20');
+        }
+        // 407: the export button rides the same switch as the rest of the dashboard.
+        if (!document.getElementById('stats-export-btn')) out.errors.push('407: the statistics export button is missing while statistics are on');
+        const findToggle = () => document.querySelector('#stats-panel .stats-head-row .switch-field input');
+        if (findToggle()) {
+          findToggle().click();
+          await waitFor(() => !document.getElementById('stats-export-btn'));
+          if (document.getElementById('stats-export-btn')) out.errors.push('407: the statistics export button is still there with statistics off');
+          if (document.querySelector('#stats-panel .stat-cards')) out.errors.push('903: the figures stay on screen with statistics off');
+          const t2 = findToggle();
+          if (t2) {
+            t2.click(); // back on: statistics stays on for the rest of the walk
+            await waitFor(() => !!document.getElementById('stats-export-btn'));
+          }
+          if (!document.getElementById('stats-export-btn')) out.errors.push('407: the statistics export button did not come back with statistics re-enabled');
+        }
+        // A never used prompt opens the library IN FRONT of the statistics dialog,
+        // which stays open so it can be returned to.
+        const cand = document.querySelector('#stats-panel .stat-cleanup-item');
+        if (!cand) {
+          out.errors.push('the statistics list no cleanup candidates');
+        } else {
+          cand.click();
+          await sleep(300);
+          const lib = document.getElementById('library');
+          if (lib.classList.contains('hidden')) out.errors.push('a cleanup candidate does not open the library');
+          if (sm.classList.contains('hidden')) out.errors.push('the statistics dialog was closed instead of stepped in front of');
+          if (Number(getComputedStyle(lib).zIndex) <= Number(getComputedStyle(sm).zIndex)) {
+            out.errors.push('the library opens behind the statistics dialog');
+          }
+          document.getElementById('library-close').click();
+          await sleep(150);
+          if (document.body.classList.contains('library-front')) out.errors.push('the raised-library state outlives the library');
+          if (sm.classList.contains('hidden')) out.errors.push('there is no statistics dialog left to jump back to');
+        }
+        // Escape closes the statistics first, the settings underneath stay.
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        await sleep(100);
+        if (!sm.classList.contains('hidden')) out.errors.push('903: Escape did not close the statistics dialog');
+        if (settingsOpen && document.getElementById('settings').classList.contains('hidden')) out.errors.push('903: Escape closed the settings along with the statistics');
+      }
+      if (!sm.classList.contains('hidden')) { document.getElementById('stats-close').click(); await sleep(100); }
+    }
     document.getElementById('settings-backup-btn').click();
     await sleep(400);
     const bm = document.getElementById('backup-modal');
+    document.querySelector('.backup-body').scrollTop = 0; // an earlier visit may have left it scrolled
     if (bm.classList.contains('hidden')) {
       out.errors.push('the backups dialog did not open');
     } else if (!document.getElementById('backup-panel').children.length) {
       out.errors.push('the backups dialog stayed empty');
-    } else if (!document.getElementById('stats-panel').children.length) {
-      out.errors.push('the backups dialog has no usage statistics');
     } else if (!document.getElementById('storage-panel').children.length) {
       // 414: usage, storage and backups are three separate sections of the
       // same window, in that order.
@@ -133,31 +229,7 @@ SECTION = """\
       if (!pwHint || !pwHint.textContent.trim()) {
         out.errors.push('the backup password field has no forget-consequence warning');
       }
-      // The top-list length field used to run past its own row.
-      const row = document.querySelector('#stats-panel .stats-topn-row');
-      const fld = row && row.querySelector('.modal-input');
-      if (fld && fld.getBoundingClientRect().right > row.getBoundingClientRect().right + 1) {
-        out.errors.push('the top-list length field overflows its row');
-      }
-      // 45: toggling the stats switch used to re-render into the inner panel from
-      // the previous render instead of the real container, nesting one deeper each
-      // time. Re-query fresh each click -- a re-render replaces the whole subtree,
-      // so a reference from before the first click is stale for the second.
-      {
-        for (let i = 0; i < 2; i++) {
-          const sw = document.querySelector('#stats-panel .stats-head-row .switch');
-          if (!sw) break;
-          sw.click();
-          await sleep(150);
-        }
-        const stillOn = document.querySelector('#stats-panel .stats-head-row .switch')?.checked;
-        if (!stillOn) out.errors.push('two stats-switch toggles did not end back on');
-        const heads = document.querySelectorAll('#stats-panel .stats-panel-body');
-        if (heads.length !== 1) {
-          out.errors.push('toggling stats twice left ' + heads.length + ' stats-panel-body elements instead of 1');
-        }
-      }
-      // Two-column settings, 8 diagnostic cards, 12 statistic cards, overview split.
+      // Two-column settings and 8 diagnostic cards.
       if (document.querySelectorAll('#backup-panel .backup-col').length !== 2) {
         out.errors.push('the backup settings are not split in two columns');
       }
@@ -198,74 +270,13 @@ SECTION = """\
       if (document.querySelectorAll('#backup-panel .stat-cards .stat-card').length !== 8) {
         out.errors.push('the backup diagnostics do not show 8 cards');
       }
-      if (document.querySelectorAll('#stats-panel .stat-cards .stat-card').length !== 12) {
-        out.errors.push('the usage statistics do not show 12 cards');
-      }
-      // 104: measure before guessing -- the top-list-length field sits in a 2-col
-      // grid row (.stats-head-row) right under the section's own collapsible header
-      // button; check it against every neighbour it could plausibly overlap
-      // (the header above, the toggle beside it, the cards below), stays permanently
-      // as an overlap guard for the whole statistics header. Checked at every tested
-      // width, with the statistics section open (it must be, to reach the row at
-      // all) both before and after a round trip through hiding/showing the row via
-      // the record-statistics toggle.
-      {
-        const overlaps = (a, b) => a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1;
-        const checkTopN = (label) => {
-          const row = document.querySelector('#stats-panel .stats-topn-row');
-          const header = document.querySelector('#stats-panel > .stat-section');
-          const toggle = document.querySelector('#stats-panel .stats-head-row .switch-field');
-          const cards = document.querySelector('#stats-panel .stat-cards');
-          if (!row) { out.errors.push('104 (' + label + '): the top-list-length row is missing'); return; }
-          const rb = row.getBoundingClientRect();
-          for (const [name, el] of [['header', header], ['toggle', toggle], ['cards', cards]]) {
-            if (el && overlaps(rb, el.getBoundingClientRect())) {
-              out.errors.push('104 (' + label + '): the top-list-length row overlaps the ' + name);
-            }
-          }
-        };
-        checkTopN('statistics on');
-        // 407: the "export statistics" button rides the same on/off switch as
-        // the rest of the dashboard: present while statistics are recorded,
-        // gone the moment they are switched off (an export of nothing would
-        // just be a header row).
-        if (!document.getElementById('stats-export-btn')) {
-          out.errors.push('407: the statistics export button is missing while statistics are on');
-        }
-        const findToggle = () => document.querySelector('#stats-panel .stats-head-row .switch-field input');
-        const findRow = () => document.querySelector('#stats-panel .stats-topn-row');
-        const waitFor = async (fn) => { for (let i = 0; i < 40 && !fn(); i++) await sleep(50); return fn(); };
-        if (findToggle()) {
-          findToggle().click();
-          await waitFor(() => !findRow()); // re-render dropped the row while off
-          if (document.getElementById('stats-export-btn')) {
-            out.errors.push('407: the statistics export button is still there with statistics off');
-          }
-          // 414: storage is not usage tracking and must not share its switch --
-          // the storage section stays exactly as it was while only the usage
-          // section re-renders itself off.
-          if (!document.getElementById('storage-panel').children.length) {
-            out.errors.push('414: the storage section disappeared when statistics were switched off');
-          }
-          const t2 = findToggle(); // 104: a fresh node -- the click above rebuilt the panel
-          if (t2) {
-            t2.click(); // back on: statistics stays on for the rest of the walk
-            await waitFor(() => !!findRow());
-          }
-          checkTopN('statistics re-enabled');
-          if (!document.getElementById('stats-export-btn')) {
-            out.errors.push('407: the statistics export button did not come back with statistics re-enabled');
-          }
-        }
-      }
-      // 414: the three sections appear in the fixed order usage, storage,
-      // backups, and the storage section lists every row the backend sent
+      // 414: the three sections appear in the fixed order backups, storage,
+      // retention, and the storage section lists every row the backend sent
       // with a "measure again" button to force a fresh scan.
       {
         const sections = [...document.querySelectorAll('#backup-modal > .modal > .backup-body > div')].map((d) => d.id);
-        const order = sections.filter((id) => ['stats-panel', 'storage-panel', 'backup-panel'].includes(id));
-        if (order.join(',') !== 'stats-panel,storage-panel,backup-panel') {
-          out.errors.push('414: the three sections are not in usage/storage/backups order (' + order.join(',') + ')');
+        if (sections.join(',') !== 'backup-panel,storage-panel,retention-panel') {
+          out.errors.push('903: the sections are not in backups/storage/retention order (' + sections.join(',') + ')');
         }
         const rows = document.querySelectorAll('#storage-panel .storage-row');
         if (rows.length !== 9) {
@@ -273,43 +284,6 @@ SECTION = """\
         }
         if (!document.getElementById('storage-remeasure-btn')) {
           out.errors.push('414: the storage section has no "measure again" button');
-        }
-      }
-      // 415: most-used tools rubric -- one row per counted tool, a short
-      // "never used" list, and the sentence saying none of it leaves the
-      // computer, matching the mocked usage_stats fixture (2 tools, 2 never used).
-      {
-        const toolRows = document.querySelectorAll('#stats-panel .stat-tool-views .stat-view-row');
-        if (toolRows.length !== 2) {
-          out.errors.push('415: the most-used tools list does not show 2 rows (found ' + toolRows.length + ')');
-        }
-        const neverUsed = document.querySelectorAll('#stats-panel .stat-tool-never');
-        if (neverUsed.length !== 2) {
-          out.errors.push('415: the tools never-used list does not show 2 entries (found ' + neverUsed.length + ')');
-        }
-        if (!document.querySelector('#stats-panel .stat-local-only')) {
-          out.errors.push('415: the "stays on this computer" note is missing from the tools rubric');
-        }
-      }
-      if (!document.querySelector('#stats-panel .stat-overview-split')) {
-        out.errors.push('the overview is not split from the per-view list');
-      }
-      // 58: the last-14-days chart - one bar per day, zero days marked distinctly.
-      {
-        const bars = [...document.querySelectorAll('#stats-panel .stat-daily-bar')];
-        if (bars.length !== 14) {
-          out.errors.push('the daily-copies chart does not show 14 bars (found ' + bars.length + ')');
-        } else {
-          if (!bars.some((b) => b.classList.contains('zero'))) {
-            out.errors.push('the daily-copies chart never marks a zero day');
-          }
-          if (bars.some((b) => b.classList.contains('zero') && parseFloat(b.style.height) > 3)) {
-            out.errors.push('a zero-count day has a non-baseline bar height');
-          }
-          const busiest = bars.reduce((a, b) => parseFloat(b.style.height) > parseFloat(a.style.height) ? b : a);
-          if (!busiest.title.includes(': 6')) {
-            out.errors.push('the tallest bar does not report the known busiest day count (6)');
-          }
         }
       }
       // A stored password shows as dots - as a placeholder, never as a value.
@@ -458,25 +432,6 @@ SECTION = """\
         document.getElementById('confirm-cancel').click();
         await sleep(200);
       }
-    }
-    // A cleanup candidate opens the library IN FRONT of the backups dialog, which
-    // stays open so it can be returned to.
-    const cand = document.querySelector('#stats-panel .stat-cleanup-item');
-    if (!cand) {
-      out.errors.push('the statistics list no cleanup candidates');
-    } else {
-      cand.click();
-      await sleep(500);
-      const lib = document.getElementById('library');
-      if (lib.classList.contains('hidden')) out.errors.push('a cleanup candidate does not open the library');
-      if (bm.classList.contains('hidden')) out.errors.push('the backups dialog was closed instead of stepped in front of');
-      if (Number(getComputedStyle(lib).zIndex) <= Number(getComputedStyle(bm).zIndex)) {
-        out.errors.push('the library opens behind the backups dialog');
-      }
-      document.getElementById('library-close').click();
-      await sleep(300);
-      if (document.body.classList.contains('library-front')) out.errors.push('the raised-library state outlives the library');
-      if (bm.classList.contains('hidden')) out.errors.push('there is no backups dialog left to jump back to');
     }
     // P64/85: restoring a managed backup goes through maybeBackupBeforeWipe("delete")
     // - the same safety net used before delete-all, gated by the backupBeforeDelete

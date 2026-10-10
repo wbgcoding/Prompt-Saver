@@ -127,6 +127,29 @@ export function wireClear(el) {
   });
   upd();
 }
+// The small X inside a hotkey field: it removes the shortcut and nothing else. The
+// generic clear X skips read-only inputs, and every hotkey field is read-only, so
+// this one is built by hand. The X shows exactly while the field holds a shortcut
+// (css: input:not(:placeholder-shown) ~ .clear-btn) and, unlike the generic one,
+// can be reached with the keyboard because it is the only way to remove a hotkey.
+export function hotkeyClearX(input, onClear, id) {
+  const wrap = document.createElement("span");
+  wrap.className = "clear-wrap hotkey-clear-wrap";
+  input.parentNode.insertBefore(wrap, input);
+  wrap.appendChild(input);
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "clear-btn";
+  btn.tabIndex = 0;
+  if (id) btn.id = id;
+  btn.dataset.i18nAria = "hotkeyRemove";
+  btn.setAttribute("aria-label", t("hotkeyRemove"));
+  btn.innerHTML = CLEAR_SVG;
+  btn.addEventListener("mousedown", (e) => e.preventDefault());
+  btn.addEventListener("click", () => onClear());
+  wrap.appendChild(btn);
+  return btn;
+}
 // Wire every text/number input + textarea (idempotent): call again after any render
 // that creates new fields (expert menu, dialogs, backups panel).
 export function wireClearButtons(root = document) {

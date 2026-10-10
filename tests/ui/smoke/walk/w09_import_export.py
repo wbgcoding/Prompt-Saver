@@ -9,6 +9,8 @@ SECTION = """\
         out.errors.push('the settings page has no import button');
       } else {
         importBtn.click();
+        await sleep(150);
+        document.getElementById('import-file-btn').click();
         await sleep(300);
         const modal = document.getElementById('import-preview-modal');
         if (!modal || modal.classList.contains('hidden')) {
@@ -37,6 +39,8 @@ SECTION = """\
       if (!folderBtn) {
         out.errors.push('the settings page has no import-from-folder button');
       } else {
+        document.getElementById('import-btn').click();
+        await sleep(150);
         folderBtn.click();
         await sleep(300);
         const modal = document.getElementById('import-folder-modal');
@@ -101,6 +105,8 @@ SECTION = """\
         if (fmtSel.hasAttribute('tabindex') || expBtn.hasAttribute('tabindex')) {
           out.errors.push('an explicit tabindex on the format select or Export button would override document-order tabbing');
         }
+        // 911: a fresh settings open preselects the lossless format.
+        if (fmtSel.value !== 'json') out.errors.push('911: the export format starts on "' + fmtSel.value + '", expected json');
         window.__EXPORT_CALL__ = null;
         fmtSel.value = 'json';
         fmtSel.dispatchEvent(new Event('change', { bubbles: true }));

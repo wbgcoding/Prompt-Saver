@@ -412,7 +412,7 @@
           <div class="modal-advanced-sub">
             <div id="modal-style-row" class="two-col">
               <label class="field">
-                <span data-i18n="tileFont">Font</span>
+                <span data-i18n="tileFont">Tile font</span>
                 <!-- Options filled by JS from the shared font catalog -->
                 <select id="modal-font" class="modal-input"></select>
               </label>
@@ -454,7 +454,6 @@
             <div class="hotkey-row">
               <input id="modal-hotkey-input" class="modal-input" type="text" readonly
                      data-i18n-ph="hotkeyPh" data-i18n-aria="promptHotkeyTitle" />
-              <button type="button" id="modal-hotkey-clear" class="ghost-btn" data-i18n="hotkeyClear">Clear</button>
             </div>
             <p id="modal-hotkey-err" class="modal-hint modal-hotkey-err hidden" role="alert"></p>
             <!-- Whatever the error, the full list is one click away instead of
@@ -574,14 +573,29 @@
         </button>
       </div>
       <div class="backup-body">
-        <!-- Four sections in this fixed order: usage, then storage, then
-             retention, then backups. Each heading is built by its own render
-             function and IS the collapse head for its whole section, switch
-             included where it has one. -->
-        <div id="stats-panel" class="expert-custom"></div>
+        <!-- Three sections in this fixed order: backups, then storage, then
+             retention. Each heading is built by its own render function and IS
+             the collapse head for its whole section. -->
+        <div id="backup-panel" class="expert-custom"></div>
         <div id="storage-panel" class="expert-custom"></div>
         <div id="retention-panel" class="expert-custom"></div>
-        <div id="backup-panel" class="expert-custom"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Usage statistics: opened from settings -->
+  <div id="stats-modal" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 class="modal-title" data-i18n="statsSection">Usage statistics</h2>
+        <button id="stats-close" class="icon-btn" data-i18n-aria="close">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="stats-body">
+        <div id="stats-panel" class="expert-custom"></div>
       </div>
     </div>
   </div>
@@ -992,7 +1006,6 @@
         <div class="three-col">
           <div class="field theme-field">
             <span data-i18n="theme">Theme</span>
-            <div class="theme-row">
             <select id="theme-select" class="modal-input">
               <option value="system" data-i18n="themeSystem">System</option>
               <option value="light" data-i18n="themeLight">Light</option>
@@ -1002,17 +1015,6 @@
               <option value="ocean" data-i18n="themeOcean">Ocean</option>
               <option value="cyberpunk" data-i18n="themeCyberpunk">Cyberpunk</option>
             </select>
-            <button id="theme-edit-open" class="icon-btn theme-edit-btn" type="button" data-i18n-title="themeEditor" data-i18n-aria="themeEditor">
-              <!-- The palette artwork spans y 3.2-18.8 in a 24 box, so it sits 1px above
-                   the centre. The shifted viewBox puts it back, without redrawing it. -->
-              <svg viewBox="0 -1 24 24" width="17" height="17" aria-hidden="true">
-                <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M12 3.2c-4.9 0-8.8 3.6-8.8 8.1 0 4.4 3.5 7.5 7.4 7.5 1.4 0 2.2-.8 2.2-1.8 0-.5-.2-.9-.5-1.2-.3-.3-.4-.6-.4-1 0-.8.7-1.4 1.6-1.4h1.6c3 0 5.1-2 5.1-4.9 0-3-3.5-5.3-8.2-5.3Z"/>
-                <circle cx="7.6" cy="11.4" r="1.25" fill="currentColor"/>
-                <circle cx="11.1" cy="7.9" r="1.25" fill="currentColor"/>
-                <circle cx="15.6" cy="8.6" r="1.25" fill="currentColor"/>
-              </svg>
-            </button>
-            </div>
           </div>
           <label class="field">
             <span data-i18n="language">Language</span>
@@ -1032,20 +1034,16 @@
             </select>
           </label>
           <label class="field">
-            <span data-i18n="tileFont">Font</span>
-            <!-- Options filled by JS from the shared font catalog -->
-            <select id="tile-font" class="modal-input"></select>
-          </label>
-          <label class="field">
             <span data-i18n="valUiScale">Interface size</span>
             <!-- Options filled by JS: scale presets -->
             <select id="ui-scale" class="modal-input"></select>
           </label>
+          <!-- Row 1: theme, language, interface size. Row 2: tile font and tile text size. -->
           <label class="field">
-            <span data-i18n="valIconScale">Icon size</span>
-            <select id="icon-scale" class="modal-input"></select>
+            <span data-i18n="tileFont">Tile font</span>
+            <!-- Options filled by JS from the shared font catalog -->
+            <select id="tile-font" class="modal-input"></select>
           </label>
-          <!-- Text size sits in the third column, directly under Font. -->
           <label class="field">
             <span data-i18n="tileSize">Tile text size</span>
             <!-- Options filled by JS: Automatic + 10..40 in steps of 2 -->
@@ -1087,17 +1085,12 @@
             <span data-i18n="autoPasteSetting">Auto-paste on double-click</span>
             <input id="opt-autopaste" type="checkbox" class="switch" />
           </label>
-          <label class="field switch-field" data-i18n-title="tipScreenshotFolder">
-            <span data-i18n="screenshotToFolder">Always save screenshots</span>
-            <input id="opt-screenshot-folder" type="checkbox" class="switch" />
-          </label>
         </div>
         <!-- Global hotkey: its own full-width row directly under the toggle grid. -->
         <div class="field field-inline" data-i18n-title="tipHotkeyLabel">
           <span data-i18n="hotkeyLabel">Global hotkey</span>
           <div class="hotkey-row">
             <input id="opt-hotkey" class="modal-input" type="text" readonly data-i18n-ph="hotkeyPh" data-i18n-aria="hotkeyLabel" />
-            <button id="hotkey-clear" class="ghost-btn" data-i18n="hotkeyClear">Clear</button>
             <button id="hotkey-list-btn" type="button" class="ghost-btn" data-i18n="hotkeysAllBtn">All shortcuts</button>
           </div>
         </div>
@@ -1107,25 +1100,33 @@
           <span data-i18n="voiceHotkeyLabel">Dictation hotkey</span>
           <div class="hotkey-row">
             <input id="opt-voice-hotkey" class="modal-input" type="text" readonly data-i18n-ph="hotkeyPh" data-i18n-aria="voiceHotkeyLabel" />
-            <button id="voice-hotkey-clear" class="ghost-btn" data-i18n="hotkeyClear">Clear</button>
           </div>
+        </div>
+      </section>
+      <section id="settings-sec-capture" class="settings-sec">
+        <h3 class="settings-sec-title" data-i18n="expTabCapture">Capture</h3>
+        <div class="switch-grid">
+          <label class="field switch-field" data-i18n-title="tipScreenshotFolder">
+            <span data-i18n="screenshotToFolder">Always save screenshots</span>
+            <input id="opt-screenshot-folder" type="checkbox" class="switch" />
+          </label>
         </div>
       </section>
       <section id="settings-sec-data" class="settings-sec">
         <h3 class="settings-sec-title" data-i18n="settingsSecData">Data</h3>
         <div id="impexp-field" class="field">
           <div class="export-row">
-            <button id="import-btn" class="ghost-btn" data-i18n="import">Import prompts</button>
-            <button id="import-folder-btn" class="ghost-btn" data-i18n="importFolderBtn" data-i18n-title="tipImportFolder">Import folder</button>
+            <button id="import-btn" class="ghost-btn" data-i18n="import" aria-haspopup="menu" aria-expanded="false">Import</button>
             <span class="export-pair">
               <button id="export-btn" class="ghost-btn" data-i18n="exportBtn">Export</button>
               <select id="export-format" class="batch-view-select" data-i18n-aria="exportFormatLabel">
+                <option value="json" data-i18n="exportJson">JSON</option>
                 <option value="csv" data-i18n="exportCsv">CSV</option>
                 <option value="txt" data-i18n="exportTxt">TXT</option>
-                <option value="json" data-i18n="exportJson">JSON</option>
               </select>
             </span>
             <button id="settings-backup-btn" class="ghost-btn" data-i18n="settingsBackupBtn" data-i18n-title="tipSettingsBackup">Backup manager</button>
+            <button id="settings-stats-btn" class="ghost-btn" data-i18n="statsSection" data-i18n-title="tipSettingsStats">Usage statistics</button>
           </div>
         </div>
       </section>
@@ -1179,6 +1180,12 @@
         <div id="expert-flags"></div>
       </div>
     </div>
+  </div>
+
+  <!-- The import menu: a file or a folder (opened from the Import button in settings) -->
+  <div id="import-menu-pop" class="ctx hidden" role="menu">
+    <button id="import-file-btn" type="button" role="menuitem" data-i18n="importFromFile">From file…</button>
+    <button id="import-folder-btn" type="button" role="menuitem" data-i18n="importFolderBtn" data-i18n-title="tipImportFolder">From folder…</button>
   </div>
 
   <!-- Add / rename / delete a view -->

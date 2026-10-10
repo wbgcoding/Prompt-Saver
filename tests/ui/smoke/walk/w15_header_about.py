@@ -9,14 +9,14 @@ SECTION = """\
       }
       const titles724 = [...document.querySelectorAll('#settings-main .settings-sec-title')]
         .filter((el) => el.getBoundingClientRect().height > 0).map((el) => el.textContent.trim());
-      const want724 = ['Appearance', 'Behavior', 'Data', 'System', 'Reset and delete'];
+      const want724 = ['Appearance', 'Behavior', 'Capture', 'Data', 'System', 'Reset and delete'];
       if (titles724.join('|') !== want724.join('|')) {
         out.errors.push('724: the visible settings section titles are "' + titles724.join('|') + '", expected "' + want724.join('|') + '"');
       }
     }
     // 729: help is the question-mark button in the settings head, left of the close
     // button, visible on the settings page and on the expert page; the expert menu
-    // button fills its row alone.
+    // button sits alone in its row at normal button size.
     {
       if (document.getElementById('settings').classList.contains('hidden')) await click('gear');
       if (document.getElementById('settings-main').classList.contains('hidden')) {
@@ -36,7 +36,7 @@ SECTION = """\
         const eo729 = document.getElementById('expert-open');
         const row729 = eo729.parentElement;
         if (row729.querySelectorAll('button').length !== 1) out.errors.push('729: the expert menu button shares its row');
-        if (eo729.getBoundingClientRect().width < row729.getBoundingClientRect().width - 2) out.errors.push('729: the expert menu button does not fill its row');
+        if (eo729.getBoundingClientRect().width > 260) out.errors.push('729: the expert menu button is wider than a normal button: ' + Math.round(eo729.getBoundingClientRect().width));
         await click('expert-open');
         const hr2 = help729.getBoundingClientRect();
         if (!hr2.width || !hr2.height) out.errors.push('729: help-open is not visible on the expert page');
@@ -95,8 +95,8 @@ SECTION = """\
         oneRow727('the page language');
         const prev727 = [aboutBtn.textContent, ub.textContent, line1.querySelector('.switch-field > span').textContent];
         aboutBtn.textContent = 'Über';
-        ub.textContent = 'Nach Updates suchen';
-        line1.querySelector('.switch-field > span').textContent = 'Auto-Update';
+        ub.textContent = 'Updates suchen';
+        line1.querySelector('.switch-field > span').textContent = 'Automatische Updates';
         uv.textContent = 'Update v2.10.0';
         oneRow727('German');
         [aboutBtn.textContent, ub.textContent, line1.querySelector('.switch-field > span').textContent] = prev727;
@@ -178,8 +178,8 @@ SECTION = """\
         if (btns725[btns725.length - 1] !== del) out.errors.push('725: delete-data is not the last button of the settings page');
         const titles725 = [...document.querySelectorAll('#settings-main .settings-sec-title')]
           .filter((el) => el.getBoundingClientRect().height > 0).map((el) => el.textContent.trim());
-        if (titles725.length !== 5 || titles725[4] !== 'Reset and delete') {
-          out.errors.push('725: the visible section titles are "' + titles725.join('|') + '", expected five ending in Reset and delete');
+        if (titles725.length !== 6 || titles725[5] !== 'Reset and delete') {
+          out.errors.push('725: the visible section titles are "' + titles725.join('|') + '", expected six ending in Reset and delete');
         }
       }
     }
@@ -677,7 +677,12 @@ SECTION = """\
     await sleep(300);
     // Leave the theme editor open so the scans below measure its real layout.
     document.getElementById('settings').classList.remove('hidden');
-    await click('theme-edit-open');
+    {
+      const themeSel914 = document.getElementById('theme-select');
+      themeSel914.value = '__theme-editor';
+      themeSel914.dispatchEvent(new Event('change', { bubbles: true }));
+      await sleep(250);
+    }
     // Every dropdown and swatch in the theme editor is anchored low in the window -
     // exactly where a popover used to open past the bottom edge. Open the LAST of
     // each kind, which is the worst case, and let the popover scan judge it.

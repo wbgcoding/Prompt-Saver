@@ -14,11 +14,11 @@ import { bindLibrary, hideLibrary, renderLibrary } from "./library.js";
 import { closeTagManager, closeTagPop, tagPop, wireTags } from "./tags.js";
 import { bindJournal } from "./journal.js";
 import { applyTheme, applyTileStyle, bindTheme, wireTheme } from "./theme.js";
-import { applySettingsCore, applySettingsUi, bindSettingsPanel, hideSettings, offerTakeover, runExportAll } from "./settingsPanel.js";
+import { applySettingsCore, applySettingsUi, bindSettingsPanel, closeImportMenu, hideSettings, offerTakeover, runExportAll } from "./settingsPanel.js";
 import { bindHotkeys } from "./hotkeys.js";
 import { bindAbout } from "./about.js";
 import { applyFlags, assignCameraDevicesCache, assignCurrentDataDir, assignDefaultRecordingDir, assignDefaultScreenshotDir, assignDefaultSyncDir, assignMicDevicesCache, assignOcrLangsCache, assignSettingsWriteFailed, assignStoreSealed, assignVoiceLangsCache, assignVoiceSupport, bindExpertMenu, dataDirLockStatus, refreshDataDirLock, refreshSettingsLocked, renderExpert, settingsWriteFailed, storeSealed, syncBannerStack, warnDataDirSyncFolder } from "./expertMenu.js";
-import { bindManagement, closeCompareView, wireManagement } from "./management.js";
+import { bindManagement, bindStats, closeCompareView, closeStats, wireManagement } from "./management.js";
 import { bindBackups, closeBackups } from "./backups.js";
 import { bindDictation, wireDictation } from "./dictation.js";
 import { bindEditor, closeModal, confirmDiscardIfDirty, editPrompt, openModal, promptToModal, setupDragDrop, wireEditor } from "./editor.js";
@@ -98,6 +98,7 @@ function bind() {
   bindGridMenus({ openExternalFileInEditor });
   bindHotkeys();
   bindBackups();
+  bindStats();
   bindTheme();
 
   document.addEventListener("pointerdown", (e) => {
@@ -155,6 +156,7 @@ function bind() {
     if (!gridTagPop.classList.contains("hidden")) { trapTabWithin(gridTagPop, e); return; }
     if (!openEditorPop.classList.contains("hidden")) { trapTabWithin(openEditorPop, e); return; }
     if (!$("rec-modal-more-pop").classList.contains("hidden")) { trapTabWithin($("rec-modal-more-pop"), e); return; }
+    if (!$("import-menu-pop").classList.contains("hidden")) { trapTabWithin($("import-menu-pop"), e); return; }
     if (!$("lightbox").classList.contains("hidden")) { trapTabWithin($("lightbox"), e); return; }
     if (!$("confirm-modal").classList.contains("hidden")) { trapTabWithin($("confirm-modal"), e); return; }
     if (!colorPop.classList.contains("hidden")) { trapTabWithin(colorPop, e); return; }
@@ -171,6 +173,7 @@ function bind() {
     if (!$("dupes-modal").classList.contains("hidden")) { trapTabWithin($("dupes-modal"), e); return; }
     if (!$("trash-modal").classList.contains("hidden")) { trapTabWithin($("trash-modal"), e); return; }
     if (document.body.classList.contains("library-front") && !libraryEl.classList.contains("hidden")) { trapTabWithin(libraryEl, e); return; }
+    if (!$("stats-modal").classList.contains("hidden")) { trapTabWithin($("stats-modal"), e); return; }
     if (!$("backup-modal").classList.contains("hidden")) { trapTabWithin($("backup-modal"), e); return; }
     if (!libraryEl.classList.contains("hidden")) { trapTabWithin(libraryEl, e); return; }
     if (!helpEl.classList.contains("hidden")) { trapTabWithin(helpEl, e); return; }
@@ -188,6 +191,7 @@ function bind() {
     if (!gridTagPop.classList.contains("hidden")) { closeGridTagPop(); return; }
     if (!openEditorPop.classList.contains("hidden")) { closeOpenEditorPop(); return; }
     if (!$("rec-modal-more-pop").classList.contains("hidden")) { closeRecMorePop(); return; }
+    if (!$("import-menu-pop").classList.contains("hidden")) { closeImportMenu(); return; }
     if (!$("lightbox").classList.contains("hidden")) closeLightbox();
     else if (dismissConfirm()) { /* the dialog closed itself */ }
     else if (!colorPop.classList.contains("hidden")) closeColorPop();
@@ -205,6 +209,7 @@ function bind() {
     else if (!$("trash-modal").classList.contains("hidden")) $("trash-modal").classList.add("hidden");
     // A library raised over the backups dialog is the topmost thing: it closes first.
     else if (document.body.classList.contains("library-front") && !libraryEl.classList.contains("hidden")) hideLibrary();
+    else if (!$("stats-modal").classList.contains("hidden")) closeStats();
     else if (!$("backup-modal").classList.contains("hidden")) closeBackups();
     else if (!libraryEl.classList.contains("hidden")) hideLibrary();
     // Help opens over the settings panel (from expGroupHelp): close it before the

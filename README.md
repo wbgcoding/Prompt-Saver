@@ -99,7 +99,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 
 | | |
 |---|---|
-| **Backups** | Rotating local snapshots, compressed and encrypted, on a schedule you can change or switch off. Diagnostics, a restore list, usage statistics (exportable as CSV, TXT or JSON, including which tools get used most) and a storage breakdown (database, attachments, screenshots, recordings, backups, temporary files, error log, each with its own folder) live in their own window. Each snapshot's row can open its full content: entry, view and tag counts, the version that made it, encryption status, and a searchable, sortable list of every prompt it holds with a restore for just that one |
+| **Backups** | Rotating local snapshots, compressed and encrypted, on a schedule you can change or switch off. Diagnostics, a restore list and a storage breakdown (database, attachments, screenshots, recordings, backups, temporary files, error log, each with its own folder) live in their own window. The usage statistics (prompt count, copies of the last 7 days, most used and never used prompts, exportable as CSV, TXT or JSON with the full numbers) have a window of their own in the settings. Each snapshot's row can open its full content: entry, view and tag counts, the version that made it, encryption status, and a searchable, sortable list of every prompt it holds with a restore for just that one |
 | **Smart retention** | Keep a plain number of snapshots, or a number per day, week, month and year |
 | **Backup password** | Optional: protects new backup files with a key derived from your password |
 | **Versions** | Every prompt keeps its earlier versions; preview and restore any of them |
@@ -152,7 +152,7 @@ Full version history: [CHANGELOG.md](CHANGELOG.md)
 | Floating button | "Toggle floating button" in the tile menu; right-click the pill for options |
 | Views | Tabs next to the title: **+** adds one; right-click a tab to rename, resize, recolor or delete |
 | Settings | Gear icon: theme, language, fonts, sizes, autostart, hotkey, import/export, updates, reset |
-| Backups | **Backup manager** in the settings: schedule, retention, password, restore list and statistics |
+| Backups | **Backup manager** in the settings: schedule, retention, password and restore list; **Usage statistics** in their own window |
 | Help | **Help** button in the settings: what every feature and setting does, also readable at [docs/help.md](docs/help.md); a handful of articles add a small diagram next to the text, switchable off in the expert menu |
 
 ## Automation

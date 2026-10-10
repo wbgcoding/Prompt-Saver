@@ -91,7 +91,12 @@ SECTION = """\
       if (priorTheme3) document.documentElement.setAttribute('data-theme', priorTheme3);
       else document.documentElement.removeAttribute('data-theme');
     }
-    await click('theme-edit-open');
+    {
+      const themeSel914 = document.getElementById('theme-select');
+      themeSel914.value = '__theme-editor';
+      themeSel914.dispatchEvent(new Event('change', { bubbles: true }));
+      await sleep(250);
+    }
     const tmodal = document.getElementById('theme-modal');
     if (tmodal.classList.contains('hidden')) {
       out.errors.push('the theme editor did not open');

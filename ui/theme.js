@@ -414,13 +414,17 @@ export async function deleteThemeDraft() {
   closeThemeEditor(false);
 }
 
+// Value of the "Custom theme..." entry at the end of the theme list.
+export const THEME_EDITOR_ENTRY = "__theme-editor";
+
 // Settings dropdown: the built-in themes, then the custom ones under a separator.
 export function fillThemeSelect() {
   const sel = $("theme-select");
   if (!sel) return;
   for (const opt of [...sel.querySelectorAll("option.custom-theme")]) opt.remove();
   const list = customThemes();
-  if (list.length) {
+  const editorEntry = flag("customThemes");
+  if (list.length || editorEntry) {
     const sep = document.createElement("option");
     sep.className = "custom-theme";
     sep.disabled = true;
@@ -432,6 +436,16 @@ export function fillThemeSelect() {
     opt.className = "custom-theme";
     opt.value = `custom:${theme.id}`;
     opt.textContent = theme.name;
+    sel.appendChild(opt);
+  }
+  // The way into the theme editor is the last entry of the list; it is never the
+  // selected value (the settings change handler opens the editor and puts the
+  // current theme back).
+  if (editorEntry) {
+    const opt = document.createElement("option");
+    opt.className = "custom-theme theme-editor-entry";
+    opt.value = THEME_EDITOR_ENTRY;
+    opt.textContent = t("themeEditorEntry");
     sel.appendChild(opt);
   }
   sel.value = settings.theme || "system";
@@ -459,7 +473,6 @@ export function bindTheme() {
 }
 
 export function wireTheme() {
-  $("theme-edit-open")?.addEventListener("click", openThemeEditor);
   $("theme-modal-close")?.addEventListener("click", () => closeThemeEditor());
   $("theme-edit-cancel")?.addEventListener("click", () => closeThemeEditor());
   $("theme-edit-revert")?.addEventListener("click", revertThemeDraft);

@@ -14423,38 +14423,7 @@ fn tool_usage_enabled_defaults_to_off_and_needs_an_explicit_true() {
     assert!(!tool_usage_enabled(&explicit_off));
 }
 
-#[test]
-fn tool_usage_stats_never_used_list_holds_exactly_the_uncounted_keys() {
-    let mut usage: HashMap<String, u32> = HashMap::new();
-    usage.insert(tool_usage_key("screenshot"), 3);
-    usage.insert(tool_usage_key("chain"), 1);
-    let last_used: HashMap<String, u64> = HashMap::new();
-    let (tools, never_used) = tool_usage_stats(&usage, &last_used, 10);
-    assert_eq!(tools.len(), 2);
-    let counted: std::collections::HashSet<&str> = ["screenshot", "chain"].into_iter().collect();
-    for key in TOOL_KEYS {
-        assert_eq!(never_used.contains(&key.to_string()), !counted.contains(key), "key {key} must be in never_used iff it has no counter");
-    }
-    assert_eq!(never_used.len(), TOOL_KEYS.len() - 2);
-}
-
-#[test]
-fn tool_usage_stats_orders_by_count_and_respects_top_n() {
-    let mut usage: HashMap<String, u32> = HashMap::new();
-    usage.insert(tool_usage_key("dictation"), 2);
-    usage.insert(tool_usage_key("backup_create"), 9);
-    usage.insert(tool_usage_key("ocr"), 5);
-    let mut last_used: HashMap<String, u64> = HashMap::new();
-    last_used.insert(tool_usage_key("backup_create"), 1700000500);
-    let (tools, _) = tool_usage_stats(&usage, &last_used, 2);
-    assert_eq!(tools.len(), 2, "top_n must cap the list");
-    assert_eq!(tools[0].name, "backup_create");
-    assert_eq!(tools[0].count, 9);
-    assert_eq!(tools[0].last_used, 1700000500);
-    assert_eq!(tools[1].name, "ocr");
-}
-
-// Checks the count points against the same list the dashboard reads, so a
+// Checks the count points against the same list the export reads, so a
 // tool call site can never quietly go uninstrumented: every TOOL_KEYS
 // entry must appear as a real record_tool_usage call somewhere in the
 // frontend, whether through the main window's helper or a direct call

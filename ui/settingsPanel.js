@@ -3,11 +3,12 @@ import { $, appVersion, armButton, assignSettings, DISARM_MS, disarmButton, errT
 import { confirmSecretExport, renderLibrary } from "./library.js";
 import { favViewEnabled, refreshFavViewUi, renderGrid, seedExamplesIfNeeded } from "./views.js";
 import { applyBars, applyI18n, wireClearButtons } from "./windowChrome.js";
-import { applyTheme, applyTileStyle, fillThemeSelect, loadPalette } from "./theme.js";
+import { applyTheme, applyTileStyle, fillThemeSelect, loadPalette, openThemeEditor, THEME_EDITOR_ENTRY } from "./theme.js";
 import { fmtBytes } from "./floatShared.js";
 import { confirmDialog, infoDialog } from "./dialog.js";
 import { isHistoryTabOpen, renderJournal } from "./journal.js";
 import { attachSelectPicker } from "./selectpop.js";
+import { placePopover } from "./popover.js";
 import { FONT_LABELS, FONTS } from "./fonts.js";
 import { fitAllTiles, fitCache } from "./tiles.js";
 import { prettyAccel } from "./hotkeys.js";
@@ -27,8 +28,18 @@ export function assignSettingsOpener(v) { settingsOpener = v; }
 // Hide the settings modal and reset the Updates status line back to the version
 // number: unless a real update is pending (the "update available" state stays).
 // So a transient "already newest version" message doesn't linger after reopening.
+// The Import button's menu (from a file or from a folder).
+export function closeImportMenu() {
+  const pop = $("import-menu-pop");
+  if (pop.classList.contains("hidden")) return;
+  const hadFocus = pop.contains(document.activeElement);
+  pop.classList.add("hidden");
+  $("import-btn").setAttribute("aria-expanded", "false");
+  if (hadFocus) $("import-btn").focus();
+}
 export function hideSettings() {
   settingsEl.classList.add("hidden");
+  closeImportMenu();
   const uv = $("update-version");
   if (uv && appVersion && !uv.classList.contains("update-avail")) setStatusText(uv, "versionInstalled", "v", appVersion);
   settingsOpener?.focus?.();
@@ -132,7 +143,6 @@ export async function runImport() {
     $("tile-font").value = settings.tile_font || "system";
     $("tile-size").value = String(normSize(Number(settings.tile_size ?? 0)));
     fillScaleSelect("ui-scale", "uiScale");
-    fillScaleSelect("icon-scale", "iconScale");
     $("opt-minimize").checked = settings.minimize_to_tray === true;
     $("opt-screenshot-folder").checked = optFlag("screenshotSave");
     $("opt-tooltips").checked = flag("tooltipsEnabled");
@@ -462,7 +472,22 @@ export function bindSettingsPanel() {
   $("opt-ontop").addEventListener("change", (e) => setOnTop(e.target.checked));
   $("pin-top").addEventListener("click", () => setOnTop(!settings.always_on_top));
 
-  $("import-btn").addEventListener("click", runImport);
+  $("import-btn").addEventListener("click", () => {
+    const pop = $("import-menu-pop");
+    if (!pop.classList.contains("hidden")) { closeImportMenu(); return; }
+    placePopover(pop, $("import-btn").getBoundingClientRect());
+    $("import-btn").setAttribute("aria-expanded", "true");
+    pop.querySelector("button")?.focus();
+  });
+  // Capture phase: any menu item closes the menu first, then runs its own listener.
+  $("import-menu-pop").addEventListener("click", (e) => { if (e.target.closest("button")) closeImportMenu(); }, true);
+  document.addEventListener("pointerdown", (e) => {
+    const pop = $("import-menu-pop");
+    if (pop.classList.contains("hidden")) return;
+    if (pop.contains(e.target) || $("import-btn").contains(e.target)) return;
+    closeImportMenu();
+  });
+  $("import-file-btn").addEventListener("click", runImport);
   $("import-folder-btn").addEventListener("click", runImportFolder);
   $("export-btn").addEventListener("click", () => runExport($("export-format").value));
   $("reset-settings").addEventListener("click", resetSettings);
@@ -471,6 +496,7 @@ export function bindSettingsPanel() {
 
   const themeSelect = $("theme-select");
   themeSelect.addEventListener("change", async () => {
+    if (themeSelect.value === THEME_EDITOR_ENTRY) { fillThemeSelect(); openThemeEditor(); return; }
     settings.theme = themeSelect.value; // applyTheme reads the custom overrides from it
     applyTheme(await invoke("set_theme", { theme: themeSelect.value }));
   });
@@ -513,9 +539,8 @@ export function bindSettingsPanel() {
 
   attachSelectPicker($("export-format"));
 
-  // UI size + icon size: percentage-preset selects mirroring the expert scales.
+  // Interface size: a percentage-preset select mirroring the expert scale.
   fillScaleSelect("ui-scale", "uiScale");
-  fillScaleSelect("icon-scale", "iconScale");
   const scaleChanged = (key) => async (e) => {
     const v = Number(e.target.value);
     settings.ui_values = { ...(settings.ui_values || {}), [key]: v };
@@ -523,9 +548,7 @@ export function bindSettingsPanel() {
     applyValues();
   };
   $("ui-scale").addEventListener("change", scaleChanged("uiScale"));
-  $("icon-scale").addEventListener("change", scaleChanged("iconScale"));
   attachSelectPicker($("ui-scale"));
-  attachSelectPicker($("icon-scale"));
 }
 
 // Fill a UI/icon size select with percentage presets (plus the current value if it
@@ -545,14 +568,14 @@ export function fillScaleSelect(id, key) {
   sel.value = String(cur);
 }
 
-// Interval select beside the Auto update switch. "Never" is the same state as the
-// switch being off; a stored interval that is not on the list gets its own option.
-export const UPDATE_INTERVALS = [[0, "updateNever"], [6, "updateEvery6h"], [12, "updateEvery12h"], [24, "updateDaily"], [48, "updateEvery2d"], [168, "updateWeekly"]];
+// Interval select beside the Auto update switch. It only shows while the switch is on
+// (the switch is the one way to turn checks off); a stored interval that is not on the
+// list gets its own option.
+export const UPDATE_INTERVALS = [[6, "updateEvery6h"], [12, "updateEvery12h"], [24, "updateDaily"], [48, "updateEvery2d"], [168, "updateWeekly"]];
 export function fillUpdateIntervalSelect() {
   const sel = $("opt-update-interval");
   if (!sel) return;
-  // Never comes from the Auto update switch alone; a stored 0 or an out-of-range
-  // number shows as the interval the backend actually uses.
+  // A stored 0 or an out-of-range number shows as the interval the backend actually uses.
   const raw = Number(val("updateCheckH"));
   const cur = Number.isFinite(raw) ? Math.min(168, Math.max(1, raw)) : 24;
   const rows = UPDATE_INTERVALS.map(([h, key]) => [h, t(key)]);
@@ -565,7 +588,8 @@ export function fillUpdateIntervalSelect() {
     o.textContent = label;
     sel.appendChild(o);
   }
-  sel.value = String(settings.auto_update !== false ? cur : 0);
+  sel.value = String(cur);
+  sel.closest(".update-interval").classList.toggle("hidden", settings.auto_update === false);
 }
 
 // Fill both text-size selects: special options + 10..40 in steps of 2.

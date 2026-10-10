@@ -14,7 +14,7 @@ import { stopVoice, voiceState, voiceTargetEl } from "./dictation.js";
 import { applyAutoBadge, applyRotateState, autoActiveIds, placeTile, pollMissingFiles, rotateReqs, rotateState } from "./tiles.js";
 import { refreshLastEdited, renderLibrary, trashPromptWithUndo } from "./library.js";
 import { maybeDupImportToast, maybeShowSimilarHint } from "./management.js";
-import { openAllShortcuts, openLightbox } from "./windowChrome.js";
+import { hotkeyClearX, openAllShortcuts, openLightbox } from "./windowChrome.js";
 import { attachSelectPicker } from "./selectpop.js";
 
 // Bumped by openModal/closeModal. An async pick/preview started for one editor
@@ -1708,7 +1708,7 @@ export function bindEditor() {
       return accel;
     },
   });
-  $("modal-hotkey-clear").addEventListener("click", () => setPromptHotkey(""));
+  hotkeyClearX($("modal-hotkey-input"), () => setPromptHotkey(""), "modal-hotkey-clear");
   $("modal-hotkey-showall").addEventListener("click", () => openAllShortcuts());
   modal.hotkeyAction.addEventListener("change", () => {
     if (modalState) modalState.hotkeyPaste = modal.hotkeyAction.value;

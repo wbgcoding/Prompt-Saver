@@ -2894,16 +2894,16 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
    `.field.` specificity guard so the column default can't stack them. */
 .field.settings-btn-row { flex-direction: row; gap: 10px; }
 .field.settings-btn-row > button { flex: 1; }
-#expert-open { flex: 1 1 100%; }
+#expert-open { flex: 0 0 auto; padding-inline: 16px; }
 /* Help (settings) and Shortcuts (help) sit in the head, right beside the close button;
    the title keeps the left. */
 #settings .modal-head .modal-title,
 #help .modal-head .modal-title { margin-right: auto; }
 /* Settings sections: one titled block each, hairline between them. A section without
-   a single button (the danger section until its buttons live there) stays hidden. */
+   any control stays hidden. */
 .settings-sec { display: flex; flex-direction: column; gap: 10px; }
 .settings-sec + .settings-sec { border-top: 1px solid var(--border); padding-top: 12px; }
-.settings-sec:not(:has(button)) { display: none; }
+.settings-sec:not(:has(button, input, select)) { display: none; }
 /* Red at rest, not only on hover: the two buttons here cannot be undone. The two-click
    confirm stays. */
 .settings-sec-danger .danger-btn {
@@ -3314,6 +3314,10 @@ select.modal-input { padding-right: 30px; }
 .clear-wrap-ta .clear-btn { top: 9px; transform: none; }
 .clear-btn.show { opacity: 0.55; pointer-events: auto; }
 .clear-btn.show:hover { opacity: 1; color: var(--fg); background: var(--surface-2); }
+/* A hotkey field has a placeholder, so the X shows exactly while a shortcut is set,
+   also when the value is filled in from code. */
+.hotkey-clear-wrap > input:not(:placeholder-shown) ~ .clear-btn { opacity: 0.55; pointer-events: auto; }
+.hotkey-clear-wrap > input:not(:placeholder-shown) ~ .clear-btn:hover { opacity: 1; color: var(--fg); background: var(--surface-2); }
 
 /* Shared mouse-only number stepper (numberField() in floatShared.js):
    minus/input/plus, plus a presets popover when the field has one. Narrow
@@ -3457,12 +3461,12 @@ select.modal-input { padding-right: 30px; }
 
 /* Usage statistics dashboard. */
 .stat-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
-/* Fixed column counts inside the backups dialog so both grids come out as full
-   rows (diagnostics 8 = 2x4, statistics 12 = 3x4) instead of a ragged last row.
+/* Fixed column counts so the grids come out as full rows (backup diagnostics 8 =
+   2x4, the two statistics figures side by side) instead of a ragged last row.
    Narrow windows fall back to the auto-fit above. */
 @media (min-width: 640px) {
-  #backup-panel .stat-cards,
-  #stats-panel .stat-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  #backup-panel .stat-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  #stats-panel .stat-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 .stat-card { padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); text-align: center; }
 .stat-val { font-size: 24px; font-weight: 700; color: var(--fg); font-variant-numeric: tabular-nums; }
@@ -3476,26 +3480,6 @@ select.modal-input { padding-right: 30px; }
 .stat-bar-track { flex: 1 1 auto; height: 12px; border-radius: 6px; background: var(--surface-2); overflow: hidden; }
 .stat-bar-fill { height: 100%; border-radius: 6px; background: var(--accent); }
 .stat-bar-count { flex: 0 0 auto; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 32px; text-align: right; }
-/* Last-14-days mini chart: bars grow from a shared baseline, height is the
-   only encoding (exact count + date live in the hover tooltip). */
-.stat-daily-chart {
-  display: flex;
-  align-items: flex-end;
-  gap: 3px;
-  height: 56px;
-  padding: 4px 0 0;
-  border-bottom: 1px solid var(--border);
-}
-.stat-daily-bar {
-  flex: 1 1 0;
-  min-width: 3px;
-  border-radius: 3px 3px 0 0;
-  background: var(--accent);
-  opacity: 0.82;
-  transition: opacity 0.12s;
-}
-.stat-daily-bar:hover { opacity: 1; }
-.stat-daily-bar.zero { background: var(--surface-2); }
 .stat-cleanup { display: flex; flex-wrap: wrap; gap: 6px; }
 .stat-cleanup-item {
   padding: 4px 10px; border: 1px solid var(--border); border-radius: 14px;
@@ -3503,34 +3487,23 @@ select.modal-input { padding-right: 30px; }
   max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .stat-cleanup-item:hover { border-color: var(--accent); color: var(--fg); }
-/* Most-used tools' own "never used" chips are not clickable (there is no
-   prompt to jump to for a tool), unlike the plain stat-cleanup-item they
-   otherwise look identical to. */
-.stat-tool-never { cursor: default; }
-.stat-tool-never:hover { border-color: var(--border); color: var(--muted); }
 .stat-local-only { font-size: 11px; color: var(--muted); margin-top: 4px; }
-.stat-views { display: flex; flex-direction: column; gap: 4px; }
-.stat-view-row { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; padding: 3px 2px; }
-/* Overview keeps two thirds of the width, the per-view breakdown the last third. */
-.stat-overview-split { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; align-items: start; }
-.stat-overview-main, .stat-overview-side { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.stat-overview-split .stat-view-row > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.stat-overview-split.no-side { grid-template-columns: minmax(0, 1fr); }
-@media (max-width: 720px) { .stat-overview-split { grid-template-columns: minmax(0, 1fr); } }
-.stat-view-count { color: var(--muted); font-variant-numeric: tabular-nums; }
 
 /* Duplicate finder. */
 .dupes-body { max-height: 70vh; overflow-y: auto; scrollbar-gutter: stable; display: flex; flex-direction: column; gap: 12px; }
 /* Backups dialog: wider than a plain popup; it holds the backup settings, the
-   diagnostics cards, the restore list and the usage statistics, and it scrolls
-   inside its body so the title row and the close X stay put. Above the settings
-   overlay it was opened from, like the other feature dialogs. */
-#backup-modal.overlay { z-index: 65; }
+   diagnostics cards and the restore list, and it scrolls inside its body so the
+   title row and the close X stay put. Above the settings overlay it was opened
+   from, like the other feature dialogs. The usage statistics dialog is built the
+   same way. */
+#backup-modal.overlay, #stats-modal.overlay { z-index: 65; }
 #backup-modal .modal { width: min(700px, 94vw); overflow: hidden; }
+#stats-modal .modal { width: min(640px, 94vw); overflow: hidden; }
 /* The scroller reaches the modal's right + bottom edge (negative margin, inset
    re-added as padding) so the scrollbar hugs the far edge instead of floating in
    a band of surface: same trick as the settings/expert lists. */
-.backup-body {
+.backup-body,
+.stats-body {
   max-height: 74vh;
   overflow-y: auto;
   overflow-x: hidden;
@@ -3541,28 +3514,33 @@ select.modal-input { padding-right: 30px; }
   flex-direction: column;
   gap: 14px;
 }
-.backup-body::-webkit-scrollbar { width: var(--sb-width, 12px); }
-.backup-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; border: 3px solid var(--surface); }
-.backup-body::-webkit-scrollbar-thumb:hover { background: var(--muted); }
-.backup-body::-webkit-scrollbar-track { background: transparent; }
+.backup-body::-webkit-scrollbar,
+.stats-body::-webkit-scrollbar { width: var(--sb-width, 12px); }
+.backup-body::-webkit-scrollbar-thumb,
+.stats-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; border: 3px solid var(--surface); }
+.backup-body::-webkit-scrollbar-thumb:hover,
+.stats-body::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+.backup-body::-webkit-scrollbar-track,
+.stats-body::-webkit-scrollbar-track { background: transparent; }
 /* One rhythm for both panels: a section head always sits the same distance above
    its content, and the cards below it line up with the rows above. */
-.backup-body .expert-custom { gap: 10px; margin-top: 0; }
-.backup-body .stat-section { margin-top: 2px; }
+.backup-body .expert-custom,
+.stats-body .expert-custom { gap: 10px; margin-top: 0; }
+.backup-body .stat-section,
+.stats-body .stat-section { margin-top: 2px; }
 .backup-body .expert-custom > .stat-section:first-child { margin-top: 0; }
-.backup-body .stat-cards { margin-top: 0; }
-/* The statistics panel stacks its blocks (switch row, export row, cards, chart,
-   overview) with one gap; its own stat-cards margin would only add to it. The storage
+.backup-body .stat-cards,
+.stats-body .stat-cards { margin-top: 0; }
+/* The statistics panel stacks its blocks (switch row, export row, cards, lists)
+   with one gap; its own stat-cards margin would only add to it. The storage
    and retention panels share the stats-panel-body class and stay as they are. */
 #stats-panel > .stats-panel-body { display: flex; flex-direction: column; gap: 12px; }
 #stats-panel .stat-cards { margin-top: 0; }
 #stats-panel > .stats-panel-body > .stat-section { margin-top: 2px; }
-/* Divider between the three sections of the statistics/backups window (usage,
-   storage, backups). Usage is first and needs none; storage's own collapsible
-   head carries this class directly, backups has no single head of its own so
-   the divider sits on its container instead. */
+/* Divider between the sections of the backups window (backups, storage,
+   retention). Backups come first and need none; storage and retention carry
+   their divider on their own collapsible head. */
 .backup-split { margin: 2px 0 0; padding-top: 12px; border-top: 1px solid var(--border); border-bottom: none; }
-.backup-body > #backup-panel { margin: 2px 0 0; padding-top: 12px; border-top: 1px solid var(--border); }
 .dup-group { border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: var(--surface-2); }
 .dup-head { display: flex; justify-content: flex-end; margin-bottom: 6px; }
 .dup-score { font-size: 12px; font-weight: 700; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); padding: 2px 8px; border-radius: 10px; }
@@ -3601,17 +3579,6 @@ select.modal-input { padding-right: 30px; }
 .stat-dt .dt-date { font-size: 17px; font-weight: 700; white-space: nowrap; }
 .stat-dt .dt-time { font-size: 14px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .stat-card .stat-val { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* Characters + tokens of the longest/shortest prompt, on their own line. */
-/* Characters + tokens of the longest/shortest prompt: right-aligned under the value
-   it describes, and pulled tight against it so the two read as one entry. */
-.stat-sub-row {
-  color: var(--muted);
-  font-size: 11.5px;
-  justify-content: flex-end;
-  margin-top: -5px;
-  padding-top: 0;
-  padding-bottom: 5px;
-}
 .backup-settings { display: flex; flex-direction: column; gap: 8px; }
 .backup-set-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 /* The base `.field { flex-direction: column }` sits later in the file at equal
@@ -3688,12 +3655,11 @@ input[type="password"]::-ms-clear { display: none; }
 .confirm-checkbox-row { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
 .confirm-checkbox { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
 .pw-eye { position: absolute; right: 4px; width: 28px; height: 28px; }
-/* One row, two equal columns: the toggle left, the top-list length right. As a
-   flex row the number field ran past the edge while space was left on the left. */
-.stats-head-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: 16px; }
+.stats-head-row { display: flex; align-items: center; }
 .stats-head-row > .switch-field { min-width: 0; }
-.stats-head-row > .stats-topn-row { min-width: 0; justify-content: space-between; gap: 8px; }
-.stats-topn-row .modal-input { min-width: 0; width: 100%; }
+/* "Most used" heading with the list length choice at its right end. */
+.stats-top-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.stats-top-head > .stat-section { flex: 1 1 auto; min-width: 0; }
 
 /* Storage section ("Speicher"): total + measured-at on the left, the
    re-measure button on the right, then one row per storage kind below. */
@@ -3706,7 +3672,6 @@ input[type="password"]::-ms-clear { display: none; }
 .storage-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .storage-size { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; margin-left: auto; }
 .storage-open-btn { flex: 0 0 auto; }
-.stats-topn-row .clear-wrap { flex: 0 1 90px; width: auto; }
 .backup-list-head {
   width: 100%; display: flex; align-items: center; justify-content: space-between;
   background: transparent; border: none; border-bottom: 1px solid var(--border);
@@ -4129,19 +4094,15 @@ body.drag-over::after {
 .export-row .ghost-btn { flex: 1 1 auto; white-space: nowrap; }
 /* Export and its format choice stay together, format on the right. */
 .export-pair { display: inline-flex; flex: 1 1 auto; gap: 6px; margin-left: 12px; }
-/* Its own label never wraps to a second line -- at the narrowest supported
-   width the row above still has room to wrap this button onto its own line
-   instead, unlike letting the text itself break. */
-#import-folder-btn { white-space: nowrap; }
 /* System: one line with the version status, About, the check button, the auto-update
    switch and the interval, which takes the room left over at the right edge. */
 .update-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
 .update-line > .ghost-btn { flex: 0 0 auto; padding-inline: 10px; white-space: nowrap; }
-/* The interval list grows into the room left over, from a narrow start. Only when even
-   that is not enough (the minimum window in a long language) the line wraps instead of
-   cutting a text. */
+/* The interval list sits right beside the switch and shows only while Auto update is on.
+   Only when even that is not enough (the minimum window in a long language) the line
+   wraps instead of cutting a text. */
 .update-line > .switch-field { flex: 0 0 auto; gap: 8px; white-space: nowrap; }
-.update-interval { flex: 1 1 84px; min-width: 84px; max-width: 150px; margin-left: auto; }
+.update-interval { flex: 1 1 84px; min-width: 84px; max-width: 150px; }
 /* Same 8px vertical padding as the buttons beside it, so the whole line is one height. */
 .update-interval > select { width: 100%; padding-block: 8px; }
 /* Clickable version/status label, plain text look → releases page, or the update
@@ -4845,6 +4806,9 @@ body.drag-over::after {
 @media (max-width: 520px) {
   .switch-grid, .three-col { grid-template-columns: minmax(0, 1fr); }
 }
+/* The settings list one switch per row. 520px keeps the switch near its label on
+   the wide dialog instead of drifting to the far right edge. */
+#settings-main .switch-grid { grid-template-columns: minmax(0, 520px); gap: 8px; }
 .switch-grid .switch-field { align-items: center; }
 .switch-grid .switch-field > span { white-space: normal; line-height: 1.3; }
 .switch {
@@ -5423,28 +5387,6 @@ button.tag-chip:hover { border-color: var(--accent); }
 .ve-muted { color: var(--muted); }
 
 /* ---- Custom themes ---- */
-/* The editor button sits right of the theme dropdown, which gives up the width. */
-.theme-row { display: flex; align-items: center; gap: 6px; }
-.theme-row .modal-input { flex: 1 1 auto; min-width: 0; }
-/* Square, and exactly as tall as the dropdown beside it: a small icon next to a
-   full-height select reads as an afterthought. `stretch` keeps them equal even
-   when the select grows with the font or the modal scale. */
-.theme-edit-btn {
-  flex: 0 0 auto;
-  align-self: stretch;
-  aspect-ratio: 1;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface-2, var(--surface));
-  /* The button takes its size from the row; the glyph has to be centred in it and
-     scale with it, or it sits off to one corner. */
-  align-items: center;
-  justify-content: center;
-}
-.theme-edit-btn:hover { background: var(--hover); border-color: var(--accent); }
-.theme-edit-btn svg { width: 66%; height: 66%; }
-body.noflag-customThemes .theme-edit-btn { display: none; }
 
 #theme-modal.overlay { z-index: 68; }
 /* The colour list scrolls inside the dialog so Cancel/Save stay reachable at any

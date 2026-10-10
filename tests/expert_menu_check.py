@@ -40,8 +40,8 @@ NOT_IN_EXPERT = {
     "usageStats", "statsTopN",
     # Screenshot folder save: Settings page and the screenshot dialog.
     "screenshotSave",
-    # Interface and icon size, set by the two selects on the normal settings page.
-    "uiScale", "iconScale",
+    # Interface size, set by the select on the normal settings page.
+    "uiScale",
     # Remembered by the library's own Close-after-copy button.
     "closeAfterCopy",
     # The tooltip switch on the normal settings page.

@@ -1451,24 +1451,9 @@ const RESULTS = {
   snip_windows: () => [],
   snip_present: () => false,
   usage_stats: () => ({
-    total_prompts: 12, total_copies: 40, copies7: 5, copies30: 20, used_count: 8, avg_copies: 3.3, total_chars: 900,
-    recent_name: "Prompt 1", recent_ts: 1750000000,
-    longest_name: "Prompt 2", longest_chars: 120,
-    types: [{ name: "text", count: 12 }],
-    top: [{ name: "Prompt 1", count: 9 }],
+    total_prompts: 12, copies7: 5, history_on: true,
+    top: [{ name: "Prompt 1", count: 9 }, { name: "Prompt 2", count: 6 }, { name: "Prompt 3", count: 2 }],
     never_used: [{ name: "Prompt 9", count: 0 }],
-    per_view: [{ name: "Home", count: 12 }],
-    // 58: 14 days, newest last: a couple of zero days mixed in like a real history.
-    daily: Array.from({ length: 14 }, (_, i) => ({
-      ts: 1750000000 - (13 - i) * 86400,
-      count: [0, 3, 1, 0, 5, 2, 4, 0, 1, 6, 2, 3, 1, 4][i],
-    })),
-    history_on: true,
-    tools: [
-      { name: "screenshot", count: 14, last_used: 1750000000 },
-      { name: "ocr", count: 3, last_used: 1749900000 },
-    ],
-    tools_never_used: ["chain", "duplicate_finder"],
   }),
   export_stats: () => 12,
   storage_breakdown: () => ({

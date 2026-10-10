@@ -974,7 +974,7 @@ def run(browser, tmp):
     await bootReady();
     document.getElementById('gear').click();
     await sleep(200);
-    document.getElementById('settings-backup-btn').click();
+    document.getElementById('settings-stats-btn').click();
     await sleep(600);
     const swi = () => document.querySelector('#stats-panel .stats-head-row .switch');
     if (!swi()) errs.push('654: the statistics switch is missing');
@@ -988,6 +988,182 @@ def run(browser, tmp):
       if (!calls.length || calls[calls.length - 1][1].enabled !== true) errs.push('654: switching statistics on did not store usageStats true');
       if (!swi() || !swi().checked) errs.push('654: the switch is not on after switching it on');
       if (!document.querySelector('#stats-panel .stat-cards')) errs.push('654: no statistics cards after switching on');
+    }
+""")
+    failed += ar_probe('bm908', 'hotkey fields: a small X inside the field removes the shortcut, no Clear button', 'index', '880x600', '', r"""
+    // 908: the X shows while a shortcut is set and removes only the shortcut.
+    await bootReady();
+    document.getElementById('gear').click();
+    await sleep(300);
+    const hk = document.getElementById('opt-hotkey');
+    const x = document.getElementById('hotkey-clear');
+    if (!x || !hk.parentElement.classList.contains('hotkey-clear-wrap') || x.parentElement !== hk.parentElement) {
+      errs.push('908: the global hotkey X is not inside the field wrapper');
+    } else {
+      if (!hk.value) errs.push('908: fixture: the global hotkey field is empty');
+      x.style.transition = 'none'; // headless frames stall, a running fade would read as a half value
+      if (Number(getComputedStyle(x).opacity) <= 0) errs.push('908: the X is invisible while a shortcut is set');
+      if (x.textContent.trim()) errs.push('908: the X carries text instead of an icon');
+      window.__SMOKE_ARGS__ = [];
+      x.click();
+      await sleep(400);
+      const call = callsFor('set_hotkey').pop();
+      if (!call || call.hotkey !== '') errs.push('908: clicking the X did not store an empty hotkey');
+      if (hk.value) errs.push('908: the field still holds a shortcut after the X');
+      if (Number(getComputedStyle(x).opacity) !== 0) errs.push('908: the X stays visible after the shortcut is gone');
+    }
+    const mx = document.getElementById('modal-hotkey-clear');
+    const mi = document.getElementById('modal-hotkey-input');
+    if (!mx || mx.parentElement !== mi.parentElement || !mi.parentElement.classList.contains('hotkey-clear-wrap')) {
+      errs.push('908: the editor hotkey X is not inside the field wrapper');
+    } else {
+      mx.style.transition = 'none';
+      mi.value = '';
+      if (Number(getComputedStyle(mx).opacity) !== 0) errs.push('908: the editor X shows on an empty field');
+      mi.value = 'Ctrl + 9';
+      if (Number(getComputedStyle(mx).opacity) <= 0) errs.push('908: the editor X is hidden while a shortcut is set');
+    }
+    if (document.querySelector('.hotkey-row button.ghost-btn[id$="-clear"]')) errs.push('908: a text Clear button is still in the markup');
+""")
+    failed += ar_probe('bm909', 'settings: one switch per row, screenshot saving in its own Capture section', 'index', '880x600', '', r"""
+    // 909: one switch per row, the capture switch in a section of its own.
+    await bootReady();
+    document.getElementById('gear').click();
+    await sleep(300);
+    const grids = [...document.querySelectorAll('#settings-main .switch-grid')];
+    if (!grids.length) errs.push('909: fixture: no switch grid in the settings');
+    for (const g of grids) {
+      const tracks = getComputedStyle(g).gridTemplateColumns.split(' ').filter(Boolean).length;
+      if (tracks !== 1) errs.push('909: a switch grid has ' + tracks + ' columns');
+    }
+    const cb = document.getElementById('opt-screenshot-folder');
+    const sec = cb && cb.closest('section');
+    if (!sec || sec.id !== 'settings-sec-capture') errs.push('909: the screenshot switch is not in the Capture section');
+    else {
+      const r = sec.getBoundingClientRect();
+      if (!r.width || !r.height) errs.push('909: the Capture section is not visible');
+      if (!sec.querySelector('.settings-sec-title').textContent.trim()) errs.push('909: the Capture section has no title');
+    }
+""")
+    failed += ar_probe('bm910', 'settings: one Import button opens a menu with a file and a folder entry', 'index', '880x600', '', r"""
+    // 910: the Import button opens a small menu instead of two buttons.
+    await bootReady();
+    document.getElementById('gear').click();
+    await sleep(300);
+    const ib = document.getElementById('import-btn');
+    const pop = document.getElementById('import-menu-pop');
+    if (document.getElementById('import-folder-btn').closest('#import-menu-pop') !== pop) errs.push('910: the folder entry is not in the menu');
+    ib.click();
+    await sleep(200);
+    if (pop.classList.contains('hidden')) errs.push('910: the Import button did not open its menu');
+    if (pop.querySelectorAll('[role=menuitem]').length !== 2) errs.push('910: the import menu does not hold 2 entries');
+    if (ib.getAttribute('aria-expanded') !== 'true') errs.push('910: the Import button does not report the open menu');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await sleep(150);
+    if (!pop.classList.contains('hidden')) errs.push('910: Escape did not close the import menu');
+    if (document.getElementById('settings').classList.contains('hidden')) errs.push('910: Escape closed the settings along with the menu');
+    ib.click();
+    await sleep(200);
+    window.__SMOKE_ARGS__ = [];
+    document.getElementById('import-file-btn').click();
+    await sleep(300);
+    if (!callsFor('preview_import').length) errs.push('910: From file did not start the import preview');
+    if (!pop.classList.contains('hidden')) errs.push('910: choosing an entry left the menu open');
+""")
+    failed += ar_probe('bm912', 'settings: the expert menu button has a normal size, not the full dialog width', 'index', '880x600', '', r"""
+    // 912: the button is one short ghost button at the left edge of its row.
+    await bootReady();
+    document.getElementById('gear').click();
+    await sleep(300);
+    const eo = document.getElementById('expert-open');
+    const r = eo.getBoundingClientRect();
+    if (!(r.width > 0)) errs.push('912: the expert menu button is not visible');
+    if (r.width >= 260) errs.push('912: the expert menu button is ' + Math.round(r.width) + 'px wide, expected under 260');
+    const row = eo.parentElement.getBoundingClientRect();
+    if (r.left - row.left > 4) errs.push('912: the expert menu button is not at the left edge of its row');
+    if (eo.scrollWidth > eo.clientWidth + 1) errs.push('912: the expert menu label is cut');
+""")
+    failed += ar_probe('bm913', 'settings: the update interval sits beside the Auto update switch and shows only while it is on', 'index', '880x600', '', r"""
+    // 913: the interval list is hidden while Auto update is off and hugs the switch while on.
+    await bootReady();
+    document.getElementById('gear').click();
+    await sleep(300);
+    const sw = document.getElementById('opt-autoupdate');
+    const sel = document.getElementById('opt-update-interval');
+    const wrap = sel.closest('.update-interval');
+    const isShown = () => wrap.getBoundingClientRect().width > 0 && !wrap.classList.contains('hidden');
+    if (!sw.checked) errs.push('913: fixture: Auto update should start on');
+    if (!isShown()) errs.push('913: the interval is not visible while Auto update is on');
+    if ([...sel.options].some((o) => o.value === '0')) errs.push('913: the interval list still has a 0 entry');
+    const lab = sw.closest('label').getBoundingClientRect();
+    const gap = wrap.getBoundingClientRect().left - lab.right;
+    if (gap < 0 || gap > 16) errs.push('913: the interval sits ' + Math.round(gap) + 'px from the switch, expected within 16');
+    sw.checked = false;
+    sw.dispatchEvent(new Event('change', { bubbles: true }));
+    await sleep(200);
+    if (!wrap.classList.contains('hidden')) errs.push('913: the interval stays visible while Auto update is off');
+    sw.checked = true;
+    sw.dispatchEvent(new Event('change', { bubbles: true }));
+    await sleep(200);
+    if (wrap.classList.contains('hidden')) errs.push('913: the interval stays hidden after switching Auto update on');
+    const lab2 = sw.closest('label').getBoundingClientRect();
+    const gap2 = wrap.getBoundingClientRect().left - lab2.right;
+    if (gap2 < 0 || gap2 > 16) errs.push('913: after switching on, the interval sits ' + Math.round(gap2) + 'px from the switch');
+""")
+    failed += ar_probe('bm914', 'settings: the last theme entry opens the editor, keeps the theme and stores nothing', 'index', '880x600', '', r"""
+    // 914: "Custom theme..." at the end of the theme list opens the editor.
+    await bootReady();
+    document.getElementById('gear').click();
+    await sleep(300);
+    const sel = document.getElementById('theme-select');
+    if (document.querySelector('.theme-field button')) errs.push('914: a button is still beside the theme select');
+    const last = sel.options[sel.options.length - 1];
+    if (!last || last.value !== '__theme-editor') errs.push('914: the last theme option is not the editor entry');
+    if (!last.textContent.trim()) errs.push('914: the editor entry has no text');
+    const before = sel.value;
+    window.__SMOKE_ARGS__ = [];
+    sel.value = '__theme-editor';
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+    await sleep(400);
+    if (document.getElementById('theme-modal').classList.contains('hidden')) errs.push('914: picking the entry did not open the theme editor');
+    if (sel.value !== before) errs.push('914: the theme select shows "' + sel.value + '" after the entry, expected "' + before + '"');
+    if (callsFor('set_theme').length) errs.push('914: picking the entry stored a theme');
+""")
+    failed += ar_probe('bm914b', 'settings: with custom themes off the theme list has no editor entry', 'index', '880x600', r"""<script>window.__SEED_SETTINGS__ = { ui_flags: { customThemes: false } };</script>
+""", r"""
+    await bootReady();
+    document.getElementById('gear').click();
+    await sleep(300);
+    const sel = document.getElementById('theme-select');
+    if ([...sel.options].some((o) => o.value === '__theme-editor')) errs.push('914: the editor entry shows although custom themes are off');
+""")
+    failed += ar_probe('bm916', 'icon size: gone from the settings page, a slider in the expert menu sets the icon zoom', 'index', '880x600', '', r"""
+    // 916: the icon size lives in the expert menu, Appearance tab, group Sizes.
+    await bootReady();
+    document.getElementById('gear').click();
+    await sleep(300);
+    if ([...document.querySelectorAll('#settings-main select')].some((sl) => sl.id.startsWith('icon-'))) errs.push('916: an icon size select is still on the settings page');
+    document.getElementById('expert-open').click();
+    await sleep(300);
+    let row = null;
+    for (const tb of document.querySelectorAll('#expert-tabs-bar .expert-tab')) {
+      tb.click();
+      await sleep(120);
+      row = document.querySelector('#expert-flags [data-setting-row="iconScale"]');
+      if (row) break;
+    }
+    if (!row) errs.push('916: the icon size row is not in the expert menu');
+    else {
+      const slider = row.querySelector('input[type=range]');
+      if (!slider) errs.push('916: the icon size row has no slider');
+      else {
+        slider.value = '150';
+        slider.dispatchEvent(new Event('input', { bubbles: true }));
+        slider.dispatchEvent(new Event('change', { bubbles: true }));
+        await sleep(300);
+        const z = document.documentElement.style.getPropertyValue('--icon-zoom');
+        if (Number(z) !== 1.5) errs.push('916: --icon-zoom is "' + z + '" after moving the slider to 150, expected 1.5');
+      }
     }
 """)
     failed += ar_probe('bx717', 'copy history filters: at 680 px they take two rows, the source is a select and only one All chip remains', 'index', '680x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { clipWatcher: true } };</script>\n', r"""
@@ -1242,7 +1418,7 @@ def run(browser, tmp):
     await bootReady();
     document.getElementById('gear').click();
     await sleep(200);
-    document.getElementById('settings-backup-btn').click();
+    document.getElementById('settings-stats-btn').click();
     await sleep(600);
     const head = document.querySelector('#stats-panel .stats-head-row');
     const exp = document.querySelector('#stats-panel .stats-export-row');

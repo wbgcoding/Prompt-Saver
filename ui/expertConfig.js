@@ -711,7 +711,7 @@ export const EXPERT_TABS = [
     { title: "expGroupMedia", flags: ["videoControls", "videoAutoplay", "videoMuted", "videoLoop", "mediaMeta", "mediaBorder", "roundMedia"], values: ["videoVolume", "mediaRadius"] },
   ] },
   { title: "expTabAppearance", groups: [
-    { title: "expGroupScales", values: ["composerScale", "primaryScale"] },
+    { title: "expGroupScales", values: ["iconScale", "composerScale", "primaryScale"] },
     { title: "expGroupAppearanceDetails", flags: ["animations", "hideScrollbars", "frostedModals", "customThemes"], values: ["animSpeed", "gridGap", "gridPad", "overlayDim", "frostedBlur", "composerMaxH", "modalMaxVh", "customThemeMax"], dropdowns: ["toastPos"], palette: true },
   ] },
   { title: "expTabLibrary", groups: [

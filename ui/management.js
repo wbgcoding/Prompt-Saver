@@ -4,9 +4,6 @@ import { EXPERT_VALUES } from "./expertConfig.js";
 import { applyValues, renderExpert, rowResetBtn, withTip } from "./expertMenu.js";
 import { attachSelectPicker } from "./selectpop.js";
 import { runStatsExport } from "./settingsPanel.js";
-import { hasImage } from "./tiles.js";
-import { extractVars } from "./promptVars.js";
-import { wireClearButtons } from "./windowChrome.js";
 import { assignLibQuery, lastEdited, libLabel, libQuery, refreshImageHits, renderLibrary, restoreBatchDelete } from "./library.js";
 import { renderGrid, renderViews } from "./views.js";
 import { confirmDialog } from "./dialog.js";
@@ -77,23 +74,6 @@ export function numRow(labelKey, key, min, max, onSet, extraClass, after) {
 // worth of i18n keys, not two.
 export const PROMPT_TYPE_LABELS = { text: "statTypeText", image: "filterImage", video: "filterVideo", pdf: "filterPdf", file: "filterFile" };
 
-// Label key per tool-usage counter, in the same order the backend's TOOL_KEYS
-// lists them.
-export const STATS_TOOL_LABELS = {
-  screenshot: "statsToolScreenshot",
-  screenshot_editor: "statsToolScreenshotEditor",
-  ocr: "statsToolOcr",
-  recording_start: "statsToolRecordingStart",
-  video_editor: "statsToolVideoEditor",
-  video_export: "statsToolVideoExport",
-  dictation: "statsToolDictation",
-  color_pick: "statsToolColorPick",
-  chain: "statsToolChain",
-  rotation_advance: "statsToolRotationAdvance",
-  folder_create: "statsToolFolderCreate",
-  duplicate_finder: "statsToolDuplicateFinder",
-  backup_create: "statsToolBackupCreate",
-};
 // Fire-and-forget: a missed count is not worth interrupting or even toasting
 // over, and the backend itself already counts nothing while statistics are
 // off, so there is no client-side gate to duplicate here.
@@ -101,8 +81,10 @@ export function recordToolUsage(tool) {
   invoke("record_tool_usage", { tool }).catch(() => {});
 }
 
+// The usage statistics dialog: the switch, the export row, two figures, the most
+// used prompts by name and the never used ones. The full numbers stay in the export.
+const STATS_TOP_CHOICES = [5, 10, 20];
 export async function renderStatsPanel(body) {
-  // Feature toggle + (when on) the top-N field share one row.
   const on = optFlag("usageStats");
   // Fetch BEFORE clearing: otherwise the panel paints empty during the await,
   // which read as a flash on every re-render.
@@ -112,39 +94,24 @@ export async function renderStatsPanel(body) {
     catch (e) { errToast(e); return; }
   }
   body.innerHTML = "";
-  // ONE collapsible head for the whole section, its own switch included: folding it
-  // away used to leave the "record statistics" row behind as an orphan under a
-  // heading with nothing under it.
+  // Re-render the container the caller handed in, not the inner panel, so a toggle
+  // replaces the content instead of nesting one panel deeper each time.
   const root = body;
   const panel = document.createElement("div");
   panel.className = "stats-panel-body";
-  const head = collapsibleHead(t("statsSection"), panel, "statsPanelOpen");
-  root.append(head, panel);
+  root.appendChild(panel);
   body = panel;
   const headRow = document.createElement("div"); headRow.className = "stats-head-row";
   const sw = document.createElement("label"); sw.className = "field switch-field";
   sw.dataset.settingRow = "usage-stats";
   const swl = document.createElement("span"); swl.textContent = t("statsEnable");
   const swi = document.createElement("input"); swi.type = "checkbox"; swi.className = "switch"; swi.checked = on;
-  // Root, not body: body was reassigned to the INNER panel just above, and
-  // re-rendering with it would build a new stats-panel-body inside the previous
-  // one instead of replacing it, nesting one deeper on every toggle.
   swi.addEventListener("change", async () => { await saveBackupSetting("flag", "usageStats", swi.checked); renderStatsPanel(root); });
   sw.append(swl, swi); headRow.appendChild(withTip(sw, "usageStats"));
-  if (on) {
-    // Top-N param (how many prompts the "most used" chart lists), right of the toggle.
-    headRow.appendChild(numRow("valStatsTopN", "statsTopN", 5, 100, async (v) => {
-      await saveBackupSetting("value", "statsTopN", v);
-      renderStatsPanel(root); // see the toggle handler above
-    }, "stats-topn-row", () => renderStatsPanel(root)));
-  }
   body.appendChild(headRow);
   if (!on) return;
-  // Statistics export: same format select + save-dialog shape as
-  // the settings dialog's prompt export, placed here instead because this is
-  // where the data is actually on screen. Only exists while the switch above
-  // is on: exporting nothing would just be a header row, which confuses more
-  // than it helps.
+  // Statistics export: same format select + save-dialog shape as the settings
+  // dialog's prompt export, placed here because this is where the data is on screen.
   const exportRow = document.createElement("div");
   exportRow.className = "export-row stats-export-row";
   const exportSelect = document.createElement("select");
@@ -167,111 +134,36 @@ export async function renderStatsPanel(body) {
   exportRow.append(exportSelect, exportBtn);
   body.appendChild(exportRow);
   const nf = (n) => Number(n).toLocaleString(LANG);
-  const nf1 = (n) => Number(n).toLocaleString(LANG, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   const cards = document.createElement("div");
   cards.className = "stat-cards";
-  // Three rows of four: what the library holds, how long/heavily used the prompts
-  // are, and the raw copy activity.
   cards.append(
-    // ---- Inventory ----
     statCard(nf(s.total_prompts), t("statTotalPrompts")),
-    statCard(nf(prompts.filter((p) => hasImage(p) || p.file_path || p.copy_image).length), t("statWithMedia")),
-    statCard(nf(prompts.filter((p) => extractVars(p.text || "").length > 0).length), t("statWithVars")),
-    statCard(nf((settings.views || []).length), t("statViews")),
-    // ---- Content + intensity ----
-    statCard(s.top && s.top.length ? nf(s.top[0].count) : "\u2014", t("statTopCopies")),
-    statCard(s.used_count ? nf1(s.avg_copies) : "\u2014", t("statAvg")),
-    statCard(nf(s.total_chars), t("statChars")),
-    statCard(s.total_prompts ? nf(Math.round(s.total_chars / s.total_prompts)) : "\u2014", t("statAvgLen")),
-    // ---- Copy activity ----
-    statCard(nf(s.total_copies), t("statTotalCopies")),
     statCard(s.history_on ? nf(s.copies7) : "\u2014", t("statCopies7")),
-    statCard(s.history_on ? nf(s.copies30) : "\u2014", t("statCopies30")),
-    statCard(s.history_on ? nf1(s.copies30 / 30) : "\u2014", t("statPerDay")),
   );
   body.appendChild(cards);
-  // Last 14 days as a small bar chart: copies7/copies30 above are just two flat
-  // totals, this fills the gap between them without a day/week toggle (deliberately
-  // scoped down from "day or week" to daily only).
-  if (s.history_on && s.daily && s.daily.length) {
-    body.appendChild(statSection(t("statDaily")));
-    const chart = document.createElement("div");
-    chart.className = "stat-daily-chart";
-    const maxD = Math.max(...s.daily.map((d) => d.count), 1);
-    for (const d of s.daily) {
-      const bar = document.createElement("span");
-      bar.className = "stat-daily-bar" + (d.count === 0 ? " zero" : "");
-      bar.style.height = `${Math.max(3, (d.count / maxD) * 100)}%`;
-      const dateLabel = new Date(d.ts * 1000).toLocaleDateString(LANG, { weekday: "short", day: "numeric", month: "short" });
-      bar.title = `${dateLabel}: ${nf(d.count)}`;
-      chart.appendChild(bar);
-    }
-    body.appendChild(chart);
+  // Most used: the heading shares its row with the list length choice.
+  const topHead = document.createElement("div");
+  topHead.className = "stats-top-head";
+  const topSel = document.createElement("select");
+  topSel.id = "stats-topn";
+  topSel.className = "batch-view-select";
+  topSel.setAttribute("aria-label", t("valStatsTopN"));
+  const curN = Math.round(val("statsTopN"));
+  for (const n of [...new Set([...STATS_TOP_CHOICES, curN])].sort((a, b) => a - b)) {
+    const o = document.createElement("option");
+    o.value = String(n);
+    o.textContent = String(n);
+    topSel.appendChild(o);
   }
-  // Overview (2 columns wide) next to the per-view breakdown (1 column).
-  const infoRow = (label, value) => {
-    const r = document.createElement("div"); r.className = "stat-view-row";
-    const l = document.createElement("span"); l.textContent = label;
-    const v = document.createElement("span"); v.className = "stat-view-count"; v.textContent = value;
-    r.append(l, v); return r;
-  };
-  const info = document.createElement("div");
-  info.className = "stat-views";
-  // Only what the cards above do NOT already show: the most-used count is a card
-  // and a bar below it, so it stays out of here.
-  if (s.recent_ts) info.appendChild(infoRow(t("statRecent"), `${s.recent_name} · ${new Date(s.recent_ts * 1000).toLocaleDateString(LANG)}`));
-  // Longest and shortest: the name on the label line, its size on a line of its own;
-  // one row could not hold name, characters and tokens without cutting one off.
-  const sizeRow = (label, name, chars) => {
-    info.appendChild(infoRow(label, name));
-    const r = document.createElement("div");
-    r.className = "stat-view-row stat-sub-row";
-    const l = document.createElement("span");
-    l.textContent = `${nf(chars)} ${t("lenChars")} · ~${nf(Math.ceil(chars / 4))} ${t("lenTokens")}`;
-    r.appendChild(l);
-    info.appendChild(r);
-  };
-  if (s.longest_chars) sizeRow(t("statLongest"), s.longest_name, s.longest_chars);
-  const split = document.createElement("div"); split.className = "stat-overview-split";
-  const ovCol = document.createElement("div"); ovCol.className = "stat-overview-main";
-  ovCol.append(statSection(t("statOverview")), info);
-  split.appendChild(ovCol);
-  if (s.per_view.length) {
-    const pvCol = document.createElement("div"); pvCol.className = "stat-overview-side";
-    const pv = document.createElement("div"); pv.className = "stat-views";
-    for (const v of s.per_view) {
-      const row = document.createElement("div"); row.className = "stat-view-row";
-      const name = document.createElement("span"); name.textContent = v.name;
-      const cnt = document.createElement("span"); cnt.className = "stat-view-count"; cnt.textContent = nf(v.count);
-      row.append(name, cnt);
-      pv.appendChild(row);
-    }
-    pvCol.append(statSection(t("statPerView")), pv);
-    split.appendChild(pvCol);
-  } else {
-    split.classList.add("no-side"); // nothing to put in the right third
-  }
-  body.appendChild(split);
-  // Type breakdown as proportional bars.
-  if (s.types.length) {
-    body.appendChild(statSection(t("statTypes")));
-    const list = document.createElement("div"); list.className = "stat-bars";
-    const maxT = Math.max(...s.types.map((x) => x.count), 1);
-    for (const ty of s.types) {
-      const row = document.createElement("div"); row.className = "stat-bar-row";
-      const name = document.createElement("span"); name.className = "stat-bar-name"; name.textContent = t(PROMPT_TYPE_LABELS[ty.name] || ty.name);
-      const track = document.createElement("div"); track.className = "stat-bar-track";
-      const fill = document.createElement("div"); fill.className = "stat-bar-fill";
-      fill.style.width = `${Math.max(4, (ty.count / maxT) * 100)}%`;
-      track.appendChild(fill);
-      const cnt = document.createElement("span"); cnt.className = "stat-bar-count"; cnt.textContent = nf(ty.count);
-      row.append(name, track, cnt);
-      list.appendChild(row);
-    }
-    body.appendChild(list);
-  }
+  topSel.value = String(curN);
+  attachSelectPicker(topSel);
+  topSel.addEventListener("change", async () => {
+    await saveBackupSetting("value", "statsTopN", Number(topSel.value));
+    renderStatsPanel(root);
+  });
+  topHead.append(statSection(t("statTop")), topSel);
+  body.appendChild(topHead);
   if (s.top.length) {
-    body.appendChild(statSection(t("statTop")));
     const list = document.createElement("div"); list.className = "stat-bars";
     const max = s.top[0].count || 1;
     for (const b of s.top) {
@@ -286,6 +178,9 @@ export async function renderStatsPanel(body) {
       list.appendChild(row);
     }
     body.appendChild(list);
+  } else {
+    const none = document.createElement("div"); none.className = "hint"; none.textContent = t("statTopEmpty");
+    body.appendChild(none);
   }
   if (s.never_used.length) {
     body.appendChild(statSection(t("statCleanup")));
@@ -299,44 +194,28 @@ export async function renderStatsPanel(body) {
     }
     body.appendChild(list);
   }
-  // Most-used tools: same shape as the entries above (list,
-  // count, last used, capped by statsTopN), plus a short "never used" list of
-  // its own. That second list is the actual point of the rubric, since it is
-  // the one place that shows which of the seven expert tabs nobody touches.
-  if (s.tools.length || s.tools_never_used.length) {
-    const note = document.createElement("div");
-    note.className = "stat-local-only";
-    note.textContent = t("statsLocalOnly");
-    body.appendChild(note);
-  }
-  if (s.tools.length) {
-    body.appendChild(statSection(t("statsTools")));
-    const list = document.createElement("div"); list.className = "stat-views stat-tool-views";
-    for (const tool of s.tools) {
-      const row = document.createElement("div"); row.className = "stat-view-row";
-      const name = document.createElement("span"); name.textContent = t(STATS_TOOL_LABELS[tool.name] || tool.name);
-      const info = document.createElement("span"); info.className = "stat-view-count";
-      info.textContent = tool.last_used ? `${nf(tool.count)} · ${new Date(tool.last_used * 1000).toLocaleDateString(LANG)}` : nf(tool.count);
-      row.append(name, info);
-      list.appendChild(row);
-    }
-    body.appendChild(list);
-  }
-  if (s.tools_never_used.length) {
-    body.appendChild(statSection(t("statsToolsNever")));
-    const list = document.createElement("div"); list.className = "stat-cleanup";
-    for (const key of s.tools_never_used) {
-      const item = document.createElement("span");
-      item.className = "stat-cleanup-item stat-tool-never";
-      item.textContent = t(STATS_TOOL_LABELS[key] || key);
-      list.appendChild(item);
-    }
-    body.appendChild(list);
-  }
-  wireClearButtons(root); // clear-X on the top-N field
+  const note = document.createElement("div");
+  note.className = "stat-local-only";
+  note.textContent = t("statsLocalOnly");
+  body.appendChild(note);
+}
+// The statistics get their own dialog, opened from the settings.
+export async function openStats() {
+  $("stats-modal").classList.remove("hidden");
+  await renderStatsPanel($("stats-panel"));
+}
+export function closeStats() {
+  $("stats-modal").classList.add("hidden");
+}
+export function bindStats() {
+  $("stats-close").addEventListener("click", closeStats);
+  $("settings-stats-btn").addEventListener("click", openStats);
+  $("stats-modal").addEventListener("pointerdown", (e) => {
+    if (e.target === $("stats-modal")) closeStats();
+  });
 }
 export function jumpToPrompt(name) {
-  // The settings and the backups dialog stay open underneath: the library is only
+  // The settings and the statistics dialog stay open underneath: the library is only
   // raised above them, so closing it lands back on the statistics it was opened from.
   document.body.classList.add("library-front");
   assignLibraryTab("prompts");
