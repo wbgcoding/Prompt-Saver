@@ -190,7 +190,7 @@ export default {
     tipSnipEditSnap: "Il disegno si aggancia ai bordi e al centro dell'immagine quando è vicino. Tieni premuto Alt per disegnare liberamente.",
     tipVideoEditSnap: "Trascinando, il ritaglio o una sovrapposizione si aggancia ai bordi del fotogramma, al suo centro e alle altre sovrapposizioni quando è vicino. Tieni premuto Alt per trascinare liberamente.",
     tipSnipTextBack: "Se lo strumento testo disegna uno sfondo dietro le lettere: nessuno, un riquadro a tinta unita o un contorno, per mantenerle leggibili su qualsiasi sfondo.",
-    tipSnipEditDefaultTool: "Quale strumento è attivo all'apertura dell'editor.",
+    tipSnipEditDefaultTool: "Quale strumento è attivo all'apertura dell'editor. «Ultimo usato» parte con lo strumento scelto l'ultima volta, con la mano alla primissima apertura.",
     tipSnipScaleFilter: "Come viene ricampionata l'immagine durante il ridimensionamento: morbido per le foto, nitido con l'interpolazione del vicino più prossimo per mantenere nitida la pixel art.",
     optSnipScaleFilterHigh: "Morbido",
     optSnipScaleFilterLow: "Nitido (pixel art)",
@@ -2092,4 +2092,5 @@ export default {
     recBarHotkeyShort: "Scelta rapida bloccata",
     camChooseFolder: "Scegli la cartella delle registrazioni",
     snipEditDone: "Fine",
+    optSnipToolLast: "Ultimo usato",
 };

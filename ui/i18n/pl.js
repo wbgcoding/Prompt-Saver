@@ -190,7 +190,7 @@ export default {
     tipSnipEditSnap: "Rysowanie przyciąga do krawędzi obrazu i środka, gdy znajduje się w pobliżu. Przytrzymaj Alt, aby rysować swobodnie.",
     tipVideoEditSnap: "Podczas przeciągania kadr przycinania lub nakładka przyciąga do krawędzi klatki, jej środka i innych nakładek, gdy znajdują się w pobliżu. Przytrzymaj Alt, aby przeciągać swobodnie.",
     tipSnipTextBack: "Czy narzędzie tekstowe rysuje tło za literami: brak, jednolity blok lub obrys, aby pozostały czytelne na każdym tle.",
-    tipSnipEditDefaultTool: "Narzędzie aktywne po otwarciu edytora.",
+    tipSnipEditDefaultTool: "Narzędzie aktywne po otwarciu edytora. „Ostatnio użyte” zaczyna od narzędzia wybranego ostatnio, a przy pierwszym otwarciu od ręki.",
     tipSnipScaleFilter: "Sposób ponownego próbkowania obrazu podczas skalowania: wygładzony dla zdjęć, ostry/najbliższy sąsiad, aby zachować wyrazisty pixel art.",
     optSnipScaleFilterHigh: "Gładki",
     optSnipScaleFilterLow: "Ostry (pixel art)",
@@ -2092,4 +2092,5 @@ export default {
     recBarHotkeyShort: "Skrót zablokowany",
     camChooseFolder: "Wybierz folder nagrań",
     snipEditDone: "Gotowe",
+    optSnipToolLast: "Ostatnio użyte",
 };

@@ -926,6 +926,8 @@ the video editor and the introduction tour ship on).
   dark themes get a slightly clearer frame too.
 - **Screenshot editor: the finish button is now called Done.** It says what
   it does, and Copy confirms with a short notice.
+- **Screenshot editor: opens with the tool you used last.** The very first
+  time it still starts with the hand.
 
 ### Fixed
 

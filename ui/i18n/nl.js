@@ -190,7 +190,7 @@ export default {
     tipSnipEditSnap: "Tekenen lijnt automatisch uit op de randen en het midden van de afbeelding als je in de buurt bent. Houd Alt ingedrukt om vrij te tekenen.",
     tipVideoEditSnap: "Bij het slepen lijnt het bijsnijdkader of een overlay uit op de randen van het beeld, het midden en andere overlays als je in de buurt bent. Houd Alt ingedrukt om vrij te slepen.",
     tipSnipTextBack: "Of de teksttool een achtergrond achter de letters tekent: geen, een effen vlak of een omtrek, zodat ze op elke achtergrond leesbaar blijven.",
-    tipSnipEditDefaultTool: "Welk gereedschap actief is wanneer de bewerker wordt geopend.",
+    tipSnipEditDefaultTool: "Welk gereedschap actief is wanneer de bewerker wordt geopend. „Laatst gebruikt” start met het gereedschap dat je de vorige keer koos, bij de allereerste keer met de hand.",
     tipSnipScaleFilter: "Hoe de afbeelding opnieuw wordt bemonsterd bij het schalen: vloeiend voor foto's, scherp/dichtstbijzijnde buur om pixelart scherp te houden.",
     optSnipScaleFilterHigh: "Vloeiend",
     optSnipScaleFilterLow: "Scherp (pixelart)",
@@ -2092,4 +2092,5 @@ export default {
     recBarHotkeyShort: "Sneltoets geblokkeerd",
     camChooseFolder: "Opnamemap kiezen",
     snipEditDone: "Klaar",
+    optSnipToolLast: "Laatst gebruikt",
 };

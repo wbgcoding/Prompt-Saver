@@ -190,7 +190,7 @@ export default {
     tipSnipEditSnap: "绘图时靠近图像边缘和中心会自动吸附。按住 Alt 键可自由绘制。",
     tipVideoEditSnap: "拖动裁剪框或叠加层时，靠近画面边缘、中心或其他叠加层会自动吸附。按住 Alt 键可自由拖动。",
     tipSnipTextBack: "文本工具是否在文字后方绘制背景：无、纯色背景板或轮廓，以便在任何背景下都能保持清晰可读。",
-    tipSnipEditDefaultTool: "打开编辑器时默认激活的工具。",
+    tipSnipEditDefaultTool: "打开编辑器时激活的工具。“上次使用的”会从上次选择的工具开始，第一次打开时使用抓手。",
     tipSnipScaleFilter: "缩放时图像的重新采样方式：照片使用平滑，像素画使用清晰/最近邻以保持锐利。",
     optSnipScaleFilterHigh: "平滑",
     optSnipScaleFilterLow: "清晰（像素画）",
@@ -2092,4 +2092,5 @@ export default {
     recBarHotkeyShort: "快捷键被占用",
     camChooseFolder: "选择录制文件夹",
     snipEditDone: "完成",
+    optSnipToolLast: "上次使用的",
 };

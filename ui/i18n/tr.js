@@ -190,7 +190,7 @@ export default {
     tipSnipEditSnap: "Çizim yaparken kenarlara veya merkeze yaklaşıldığında otomatik olarak yaslanır. Serbest çizim yapmak için Alt tuşuna basılı tutun.",
     tipVideoEditSnap: "Sürüklerken kırpma kutusu veya bir katman, yakınında olduğunda kare kenarlarına, merkezine ve diğer katmanlara yaslanır. Serbest sürüklemek için Alt tuşuna basılı tutun.",
     tipSnipTextBack: "Metin aracının harflerin arkasına arka plan çizip çizmediği: yok, düz plaka veya anahat, böylece her türlü arka planda okunabilir kalırlar.",
-    tipSnipEditDefaultTool: "Düzenleyici açıldığında hangi aracın etkin olacağı.",
+    tipSnipEditDefaultTool: "Düzenleyici açıldığında hangi aracın etkin olacağı. “Son kullanılan” en son seçtiğin araçla başlar, ilk açılışta el aracıyla.",
     tipSnipScaleFilter: "Ölçekleme sırasında görüntünün nasıl yeniden örnekleneceği: fotoğraflar için pürüzsüz, piksel sanatını net tutmak için keskin/en yakın komşu.",
     optSnipScaleFilterHigh: "Pürüzsüz",
     optSnipScaleFilterLow: "Keskin (piksel sanatı)",
@@ -2092,4 +2092,5 @@ export default {
     recBarHotkeyShort: "Kısayol engellendi",
     camChooseFolder: "Kayıt klasörünü seç",
     snipEditDone: "Bitti",
+    optSnipToolLast: "Son kullanılan",
 };

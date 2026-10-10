@@ -164,7 +164,7 @@ export default {
     tipSnipEditSnap: "Drawing snaps to the image edges and center when close by. Hold Alt to draw freely.",
     tipVideoEditSnap: "Dragging a crop box or overlay snaps to the frame edges, its center, and other overlays, when close by. Hold Alt to drag freely.",
     tipSnipTextBack: "Whether the text tool draws a background behind its letters: none, a solid plate, or an outline, so they stay readable on any background.",
-    tipSnipEditDefaultTool: "Which tool is active when the editor opens.",
+    tipSnipEditDefaultTool: "Which tool is active when the editor opens. “Last used” starts with the tool you picked last time, the hand on the very first open.",
     tipSnipScaleFilter: "How the image is resampled when scaling: smooth for photos, sharp to keep pixel art crisp.",
     optSnipScaleFilterHigh: "Smooth",
     optSnipScaleFilterLow: "Sharp (pixel art)",
@@ -2092,4 +2092,5 @@ export default {
     recBarHotkeyShort: "Hotkey blocked",
     camChooseFolder: "Choose the recording folder",
     snipEditDone: "Done",
+    optSnipToolLast: "Last used",
 };

@@ -127,6 +127,11 @@ SECTION = """\
         if (toolBtns.length !== 12) { // 284 added the Hand (pan) tool
           out.errors.push('screenshot editor: expected 12 tool buttons, found ' + toolBtns.length);
         }
+        // 931a-de: the very first open of a fresh profile starts with the hand.
+        const firstPressed = toolBtns.find((b) => b.getAttribute('aria-pressed') === 'true');
+        if (!firstPressed || firstPressed.dataset.tool !== 'hand') {
+          out.errors.push('931a-de: the first open started with ' + (firstPressed ? firstPressed.dataset.tool : 'no tool') + ', expected hand');
+        }
         // 928-de: every tool icon names itself and its key in the tooltip
         // ("<label> (<key>)"), and so do the view icons (pattern only, their
         // tooltip text is not their aria-label).
@@ -407,6 +412,69 @@ SECTION = """\
         if (!document.getElementById('snip-edit').classList.contains('hidden')) {
           out.errors.push('screenshot editor did not close on Cancel');
         }
+      }
+      // 931-de: the editor opens with the tool used last (kept in ui_texts, so it
+      // survives a restart); a fixed default tool from the expert menu wins.
+      {
+        const TINY = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+        const reopen = async () => {
+          window.__FIRE__('snip-captured', { data_url: TINY, path: '', name: 'last.png' });
+          await sleep(300);
+        };
+        const pressedTool = () => {
+          const b = document.querySelector('#snip-edit-tools button[aria-pressed="true"]');
+          return b ? b.dataset.tool : 'none';
+        };
+        const setDefaultTool = async (v) => {
+          document.getElementById('settings').classList.remove('hidden');
+          await click('expert-open');
+          const search = document.getElementById('expert-search');
+          search.value = 'Screenshot editor';
+          search.dispatchEvent(new Event('input'));
+          await sleep(250);
+          const row = document.querySelector('#expert-flags [data-setting-row="snipEditDefaultTool"] select');
+          if (!row) {
+            out.errors.push('931-de: the default tool dropdown row is missing');
+          } else {
+            row.value = v;
+            row.dispatchEvent(new Event('change', { bubbles: true }));
+            await sleep(200);
+          }
+          search.value = '';
+          search.dispatchEvent(new Event('input'));
+          await sleep(150);
+          await click('expert-back');
+          document.getElementById('settings').classList.add('hidden');
+        };
+        await reopen();
+        document.querySelector('#snip-edit-tools button[data-tool="rect"]').click();
+        await sleep(60);
+        document.getElementById('snip-edit-cancel').click();
+        await sleep(500);
+        const stored = (await window.__TAURI__.core.invoke('get_settings')).ui_texts.snipLastTool;
+        if (stored !== 'rect') {
+          out.errors.push('931-de: the last tool was stored as ' + stored + ', expected rect');
+        }
+        await reopen();
+        if (pressedTool() !== 'rect') {
+          out.errors.push('931-de: the editor reopened with ' + pressedTool() + ', expected rect');
+        }
+        document.getElementById('snip-edit-cancel').click();
+        await sleep(200);
+        await setDefaultTool('pen');
+        await reopen();
+        if (pressedTool() !== 'pen') {
+          out.errors.push('931-de: a fixed default tool pen opened with ' + pressedTool());
+        }
+        document.getElementById('snip-edit-cancel').click();
+        await sleep(200);
+        await setDefaultTool('last');
+        await reopen();
+        if (pressedTool() !== 'rect') {
+          out.errors.push('931-de: back on Last used the editor opened with ' + pressedTool() + ', expected rect');
+        }
+        document.getElementById('snip-edit-cancel').click();
+        await sleep(200);
       }
       // 363: an image that fails to decode (truncated data, a broken picked
       // file) must not leave the editor silently never opening -- it shows an

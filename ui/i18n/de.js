@@ -164,7 +164,7 @@ export default {
     tipSnipEditSnap: "Das Zeichnen rastet in der Nähe an Bildkanten und der Bildmitte ein. Alt gedrückt halten zeichnet frei.",
     tipVideoEditSnap: "Beim Ziehen rastet der Zuschnitt oder eine Überlagerung in der Nähe an den Rahmenkanten, der Mitte und anderen Überlagerungen ein. Alt gedrückt halten zieht frei.",
     tipSnipTextBack: "Ob das Textwerkzeug einen Hintergrund hinter seinen Buchstaben zeichnet: keinen, eine Platte oder einen Umriss, damit sie auf jedem Untergrund lesbar bleiben.",
-    tipSnipEditDefaultTool: "Welches Werkzeug beim Öffnen des Editors aktiv ist.",
+    tipSnipEditDefaultTool: "Welches Werkzeug beim Öffnen des Editors aktiv ist. „Zuletzt benutztes“ startet mit dem zuletzt gewählten Werkzeug, beim allerersten Öffnen mit der Hand.",
     tipSnipScaleFilter: "Wie das Bild beim Skalieren neu berechnet wird: Weich für Fotos, Scharf für klare Pixel-Art.",
     optSnipScaleFilterHigh: "Weich",
     optSnipScaleFilterLow: "Scharf (Pixel-Art)",
@@ -2092,4 +2092,5 @@ export default {
     recBarHotkeyShort: "Tastenkürzel blockiert",
     camChooseFolder: "Aufnahme-Ordner wählen",
     snipEditDone: "Fertig",
+    optSnipToolLast: "Zuletzt benutztes",
 };

@@ -190,7 +190,7 @@ export default {
     tipSnipEditSnap: "El dibujo se ajusta a los bordes y al centro de la imagen cuando está cerca. Mantenga presionada la tecla Alt para dibujar libremente.",
     tipVideoEditSnap: "Al arrastrar, el recorte o una superposición se ajusta a los bordes del fotograma, su centro y otras superposiciones cuando está cerca. Mantenga presionada la tecla Alt para arrastrar libremente.",
     tipSnipTextBack: "Si la herramienta de texto dibuja un fondo detrás de las letras: ninguno, un bloque sólido o un contorno, para que sigan siendo legibles en cualquier fondo.",
-    tipSnipEditDefaultTool: "Qué herramienta está activa al abrir el editor.",
+    tipSnipEditDefaultTool: "Qué herramienta está activa al abrir el editor. «Última usada» empieza con la herramienta elegida la última vez, y con la mano la primera vez que se abre.",
     tipSnipScaleFilter: "Cómo se remuestrea la imagen al escalar: suave para fotos, nítido/vecino más cercano para mantener nítido el pixel art.",
     optSnipScaleFilterHigh: "Suave",
     optSnipScaleFilterLow: "Nítido (pixel art)",
@@ -2092,4 +2092,5 @@ export default {
     recBarHotkeyShort: "Atajo bloqueado",
     camChooseFolder: "Elegir la carpeta de grabaciones",
     snipEditDone: "Listo",
+    optSnipToolLast: "Última usada",
 };

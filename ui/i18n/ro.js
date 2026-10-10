@@ -190,7 +190,7 @@ export default {
     tipSnipEditSnap: "Desenarea se aliniază la marginile și centrul imaginii când ești aproape. Ține apăsat Alt pentru a desena liber.",
     tipVideoEditSnap: "La tragere, chenarul de decupare sau o suprapunere se aliniază la marginile cadrului, la centrul lui și la alte suprapuneri când sunt aproape. Ține apăsat Alt pentru a trage liber.",
     tipSnipTextBack: "Dacă instrumentul de text desenează un fundal în spatele literelor: niciunul, o placă solidă sau un contur, pentru ca acestea să rămână lizibile pe orice fundal.",
-    tipSnipEditDefaultTool: "Care instrument este activ la deschiderea editorului.",
+    tipSnipEditDefaultTool: "Care instrument este activ la deschiderea editorului. „Ultimul folosit” pornește cu instrumentul ales ultima dată, la prima deschidere cu mâna.",
     tipSnipScaleFilter: "Cum este reeșantionată imaginea la scalare: neted pentru fotografii, clar/cel mai apropiat vecin pentru a păstra pixel art clar.",
     optSnipScaleFilterHigh: "Neted",
     optSnipScaleFilterLow: "Clar (pixel art)",
@@ -2092,4 +2092,5 @@ export default {
     recBarHotkeyShort: "Tastă rapidă blocată",
     camChooseFolder: "Alege folderul înregistrărilor",
     snipEditDone: "Gata",
+    optSnipToolLast: "Ultimul folosit",
 };

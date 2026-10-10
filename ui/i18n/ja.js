@@ -190,7 +190,7 @@ export default {
     tipSnipEditSnap: "描画時に画像のエッジや中心に近づくと自動的にスナップします。Altキーを押しながら描画すると自由に描画できます。",
     tipVideoEditSnap: "ドラッグ中、切り抜き枠やオーバーレイがフレームの端、中心、他のオーバーレイに近づくと自動的にスナップします。Altキーを押しながらドラッグすると自由に動かせます。",
     tipSnipTextBack: "テキストツールが文字の背後に背景を描画するかを設定します。なし、単色の背景板、またはアウトラインから選び、どの背景でも読みやすくします。",
-    tipSnipEditDefaultTool: "エディターを開いたときにアクティブになるツール。",
+    tipSnipEditDefaultTool: "エディターを開いたときにアクティブになるツール。「前回使用したもの」は前回選んだツールで始まり、初回はハンドになります。",
     tipSnipScaleFilter: "拡大縮小時のリサンプリング方法: 写真には滑らか、ドット絵には輪郭をくっきり保つシャープ/最近傍補間。",
     optSnipScaleFilterHigh: "滑らか",
     optSnipScaleFilterLow: "シャープ（ドット絵）",
@@ -2092,4 +2092,5 @@ export default {
     recBarHotkeyShort: "ホットキーがブロック中",
     camChooseFolder: "録画フォルダーを選択",
     snipEditDone: "完了",
+    optSnipToolLast: "前回使用したもの",
 };
