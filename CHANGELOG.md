@@ -2025,6 +2025,7 @@ the video editor and the introduction tour ship on).
 - **Hotkey fields have a small X to remove the shortcut.** It replaces the Clear button next to each hotkey field and shows only while a shortcut is set.
 - **Settings list one switch per row.** Screenshot saving has its own Capture section.
 - **One Import button in the settings.** It opens a small menu with From file and From folder instead of two separate buttons.
+- **Export preselects JSON,** the format that keeps every prompt detail.
 
 ## 2.6.3 (2026-07-26)
 

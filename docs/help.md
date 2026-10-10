@@ -802,7 +802,7 @@ everything: tiles, views, layouts, colors, styles, and language. A single
 "Export" button and a format dropdown replace three separate buttons; JSON is
 the only one of the three that can carry the full rotation texts of a tile
 with rotation, tags, notes, a hotkey, and color, rather than joining them into one
-field the way CSV and TXT have to. Images never travel in any of the three,
+field the way CSV and TXT have to. JSON is the default format of the "Export" button and keeps every detail of a prompt; CSV and TXT stay available in the dropdown. Images never travel in any of the three,
 to keep the file small; use a full backup for those. Importing decides CSV or
 JSON by looking at the file itself, never its extension, and shows a preview
 first: every incoming item's name and whether it would land as a duplicate,
@@ -1578,7 +1578,7 @@ Beide teilen sich eine Schwelle im Expertenmenü.
 für alles. Ein Export-Button und eine Formatauswahl ersetzen die drei früheren
 Einzelknöpfe; nur JSON trägt die Rotationstexte einer Kachel mit Rotation, Tags,
 Notiz, Tastenkürzel und Farbe vollständig, statt sie wie CSV und TXT in ein
-Feld zu quetschen. Bilder reisen in keinem der drei mit, dafür gibt es die
+Feld zu quetschen. JSON ist das Standardformat des Export-Buttons und behält jedes Detail eines Prompts; CSV und TXT bleiben in der Auswahl verfügbar. Bilder reisen in keinem der drei mit, dafür gibt es die
 volles Backup. Beim Import entscheidet der Dateiinhalt zwischen CSV und
 JSON, nie die Dateiendung, und zeigt vorher eine Vorschau mit Name und
 Duplikat-Kennzeichnung; ein volles Backup stellt direkt wieder her. Ändert

@@ -488,7 +488,7 @@ export const HELP_CONTENT = {
       whatItIs: "Plain CSV, TXT or JSON export covers text alone; a full backup file covers everything.",
       howTo: [
         "Export or import from the expert menu's data group.",
-        "Pick a format from the dropdown next to the Export button; a CSV or JSON import shows a name and duplicate status per item first.",
+        "Pick a format from the dropdown next to the Export button (JSON keeps the most); a CSV or JSON import shows a name and duplicate status per item first.",
         "A full backup restores directly, from its own window.",
         "Confirm to actually import, or cancel and nothing changes.",
         "Import → \"From folder…\" in Settings turns a folder of .md or .txt files into tiles, one per file, after a preview with a checkbox per file.",
@@ -1252,7 +1252,7 @@ export const HELP_CONTENT = {
       whatItIs: "Einfacher CSV-, TXT- oder JSON-Export deckt nur den Text ab; eine vollständige Backup-Datei deckt alles ab.",
       howTo: [
         "Aus der Daten-Gruppe des Expertenmenüs exportieren oder importieren.",
-        "Ein Format aus der Auswahl neben dem Export-Button wählen; ein CSV- oder JSON-Import zeigt zuerst Name und Duplikat-Status je Eintrag.",
+        "Ein Format aus der Auswahl neben dem Export-Button wählen (JSON behält am meisten); ein CSV- oder JSON-Import zeigt zuerst Name und Duplikat-Status je Eintrag.",
         "Ein vollständiges Backup stellt direkt wieder her, aus seinem eigenen Fenster.",
         "Zum tatsächlichen Import bestätigen, oder abbrechen, wodurch sich nichts ändert.",
         "„Importieren“ → „Aus Ordner…“ in den Einstellungen macht aus einem Ordner mit .md- oder .txt-Dateien Kacheln, eine pro Datei, nach einer Vorschau mit einem Häkchen pro Datei.",
