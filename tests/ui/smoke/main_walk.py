@@ -269,11 +269,13 @@ def run(browser, tmp):
         # clipboard inbox, batch delete, batch tag add/remove).
         # then to 300s once the settings probes of the combined lanes (copy history,
         # expert menu, editor, settings head) pushed the walk just past 250s.
+        # then to 360s once the walk measured 296 to 300s of virtual time against the 300s
+        # budget (the smallest window ran out before it wrote its result, one run in two).
         # The window has to hold the iframe plus Chrome's own frame.
         # The dumped DOM carries all 20 languages; without an explicit
         # codec Windows decodes it as cp1252 and the reader thread dies,
         # leaving stdout empty.
-        proc = run_chrome(browser, tmp / ('profile-%s' % size_tag), f"{max(w + 30, 520)},{h + 140}", 300000, wrapper.as_uri(), 270)
+        proc = run_chrome(browser, tmp / ('profile-%s' % size_tag), f"{max(w + 30, 520)},{h + 140}", 360000, wrapper.as_uri(), 270)
         m = re.search(r'<pre id="SMOKE">(\{.*?\})</pre>', proc.stdout, re.S)
         if not m:
             print(f"FAIL {w}x{h}: the UI produced no probe result")
@@ -318,7 +320,7 @@ def run(browser, tmp):
         # its own group-survives-the-split probe, itself two full walks.
         # Kept equal to the English sweep's own budget just above, since
         # this runs the exact same probe script and had fallen behind it.
-        proc = run_chrome(browser, tmp / ('profile-%s' % size_tag), f"{max(w + 30, 520)},{h + 140}", 300000, wrapper.as_uri(), 270)
+        proc = run_chrome(browser, tmp / ('profile-%s' % size_tag), f"{max(w + 30, 520)},{h + 140}", 360000, wrapper.as_uri(), 270)
         m = re.search(r'<pre id="SMOKE">(\{.*?\})</pre>', proc.stdout, re.S)
         if not m:
             print(f"FAIL it {w}x{h}: the UI produced no probe result")
