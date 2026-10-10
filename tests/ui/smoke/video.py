@@ -6,6 +6,99 @@ import re
 from .harness import REPO, SIDE_SCAN, unescape, run_chrome
 
 
+# The same editor booted in German (the longest labels) at the two narrow sizes, for the
+# layout probes that depend on label length.
+VIDEO_DE_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const until = async (fn, tries) => {
+    for (let i = 0; i < (tries || 60) && !fn(); i++) await sleep(50);
+    return fn();
+  };
+  try {
+    await until(() => {
+      const opsHint = document.querySelector('#ve-ops-list p');
+      return document.getElementById('ve-stage-msg').classList.contains('hidden') &&
+        document.querySelectorAll('#ve-filmstrip .ve-thumb').length > 0 &&
+        !!opsHint && opsHint.textContent && opsHint.textContent !== 'veOpsEmpty';
+    }, 300);
+    if (document.getElementById('ve-tab-edit').textContent.trim() === 'Edit') {
+      errs.push('the German boot still shows English labels');
+    }
+    // 934: the tool row groups its buttons so none wraps alone, Fit is an icon
+    // and Export frame sits in the transport row beside the frame number.
+    {
+      const tools = document.querySelector('.ve-tools');
+      const groups = [...tools.querySelectorAll('.ve-tool-group')];
+      if (groups.length !== 3) errs.push('934: expected 3 tool groups, found ' + groups.length);
+      if (window.innerWidth >= 880 && tools.getBoundingClientRect().height > 46) {
+        errs.push('934: the tool row wraps onto a second line (' + tools.getBoundingClientRect().height.toFixed(0) + 'px)');
+      }
+      for (const g of groups) {
+        const mids = [...g.children].map((c) => c.getBoundingClientRect()).filter((r) => r.height > 0).map((r) => r.top + r.height / 2);
+        if (Math.max(...mids) - Math.min(...mids) > 2) errs.push('934: a tool group breaks across lines');
+      }
+      if (!document.querySelector('.ve-transport #ve-still')) errs.push('934: Export frame is not in the transport row');
+      const fit = document.getElementById('ve-zoom-fit');
+      if (!fit.classList.contains('icon-btn') || fit.textContent.trim() !== '') errs.push('934: Fit is not an icon-only button');
+      document.getElementById('ve-zoom-in').click();
+      await sleep(60);
+      if (document.getElementById('ve-zoom-val').textContent === '100%') errs.push('934: zooming in did not change the zoom value');
+      fit.click();
+      await sleep(60);
+      if (document.getElementById('ve-zoom-val').textContent !== '100%') {
+        errs.push('934: Fit did not return the zoom to 100% (' + document.getElementById('ve-zoom-val').textContent + ')');
+      }
+    }
+    // 936: the clip start and end fields are compact and sit on one line.
+    {
+      const a = document.getElementById('ve-trim-start-val').getBoundingClientRect();
+      const b = document.getElementById('ve-trim-end-val').getBoundingClientRect();
+      if (a.width > 160) errs.push('936: the clip start field is ' + a.width.toFixed(0) + 'px wide');
+      if (Math.abs(a.top - b.top) > 2) errs.push('936: the clip start and end fields are not on one line');
+    }
+    if (window.innerWidth > 880) errs.push('the German boot did not get its exact window size: ' + window.innerWidth);
+    // 940: once the theme colour transitions are settled, the editor shows its
+    // real theme at the narrow size (no faded surface): the body takes the theme
+    // background and an inactive tab keeps a readable text contrast. A headless
+    // boot freezes those transitions part way, so they are switched off first.
+    {
+      const noFade = document.createElement('style');
+      noFade.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; }';
+      document.head.appendChild(noFade);
+      await sleep(50);
+      const nums = (c) => c.match(/[0-9.]+/g).map(Number);
+      const lum = (rgb) => { const v = rgb.map((x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); }); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
+      const over = (fg, bg) => { const a = fg.length > 3 ? fg[3] : 1; return [0, 1, 2].map((i) => fg[i] * a + bg[i] * (1 - a)); };
+      const probeEl = document.createElement('div');
+      probeEl.style.background = 'var(--bg)';
+      document.body.appendChild(probeEl);
+      const token = getComputedStyle(probeEl).backgroundColor;
+      probeEl.remove();
+      const bodyBg = getComputedStyle(document.body).backgroundColor;
+      if (bodyBg !== token) errs.push('940: the body background ' + bodyBg + ' is not the theme background ' + token);
+      const tab = document.getElementById('ve-tab-overlays');
+      const tcs = getComputedStyle(tab);
+      const bg = over(nums(tcs.backgroundColor), nums(bodyBg));
+      const text = over(nums(tcs.color), bg);
+      const hi = Math.max(lum(bg), lum(text)), lo = Math.min(lum(bg), lum(text));
+      const ratio = (hi + 0.05) / (lo + 0.05);
+      if (ratio < 4.5) errs.push('940: the inactive Overlays tab text has a contrast of only ' + ratio.toFixed(2));
+    }
+    // DE-PROBES
+  } catch (e) { errs.push('probe: ' + e.message); }
+  errs.push(...(window.__SMOKE_ERRORS__ || []));
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
 # The video editor: the recording is PULLED at boot (video_editor_source), not
 # pushed, so the probe only has to wait -- tauri_stub.js's own fixture is a
 # 10-minute 1080p30 clip with both a system and a mic track, real enough that a
@@ -78,6 +171,24 @@ VIDEO_PROBE = """
     if (document.getElementById('ve-mute-sys').classList.contains('ve-muted-btn')) {
       errs.push('the system track must not start muted in the video editor');
     }
+    // 939: each volume slider carries a short label, and a muted track shows
+    // a struck-through icon (so muted and missing no longer look alike).
+    {
+      const { tx } = await (await import('./i18n.js')).fullTexts('en');
+      const labels = [...document.querySelectorAll('.ve-audio-label')].map((l) => l.textContent);
+      if (labels.length !== 2 || labels[0] !== tx('veAudioSys') || labels[1] !== tx('veAudioMic')) {
+        errs.push('939: the volume labels read ' + JSON.stringify(labels) + ' instead of the system and mic names');
+      }
+      const shown = (id) => { const e = document.querySelector('#' + id + ' .ve-mute-slash'); return !!e && getComputedStyle(e).display !== 'none'; };
+      if (!shown('ve-mute-mic')) errs.push('939: the muted mic shows no strike-through');
+      if (shown('ve-mute-sys')) errs.push('939: the live system track shows a strike-through');
+      document.getElementById('ve-mute-sys').click();
+      await sleep(30);
+      if (!shown('ve-mute-sys')) errs.push('939: muting the system track shows no strike-through');
+      document.getElementById('ve-mute-sys').click();
+      await sleep(30);
+      if (shown('ve-mute-sys')) errs.push('939: unmuting the system track left the strike-through');
+    }
     document.getElementById('ve-mute-mic').click();
     await sleep(30);
     if (document.getElementById('ve-mute-mic').classList.contains('ve-muted-btn')) {
@@ -136,10 +247,83 @@ VIDEO_PROBE = """
     const controls = [...document.querySelectorAll(
       '.ve-transport button, .ve-tools button, .ve-tabs button, .ve-titlebar button, ' +
       '.ve-audio-group button, .ve-ops-head button')];
-    const untestable = controls.filter((b) => !hitTestable(b));
+    // In the narrow layout the controls scroll under the sticky preview by
+    // design, so each one is scrolled into view before it is hit-tested.
+    const untestable = [];
+    for (const b of controls) {
+      b.scrollIntoView({ block: 'nearest' });
+      await sleep(30);
+      if (!hitTestable(b)) untestable.push(b);
+    }
     if (untestable.length) {
       errs.push(untestable.length + ' toolbar control(s) cannot be hit-tested: ' +
         untestable.map((b) => b.id || b.className).join(', '));
+    }
+    document.querySelector('.ve-main').scrollTop = 0;
+
+    // 933: the narrow layout keeps the preview at 40 % of the height, sticky
+    // on top while the controls scroll under it, and the side panel (with the
+    // undo/redo row) fits the room below the preview.
+    {
+      const stage = document.getElementById('ve-stage');
+      const stageH = stage.getBoundingClientRect().height;
+      if (stageH < 0.4 * window.innerHeight - 1) {
+        errs.push('933: the preview is only ' + stageH.toFixed(0) + 'px of a ' + window.innerHeight + 'px window');
+      }
+      if (window.innerWidth <= 900) {
+        const main = document.querySelector('.ve-main');
+        main.scrollTop = 1e6;
+        await sleep(60);
+        const dTop = Math.abs(stage.getBoundingClientRect().top - main.getBoundingClientRect().top);
+        if (dTop > 1) errs.push('933: the preview did not stay on top while the controls scrolled (off by ' + dTop.toFixed(1) + 'px)');
+        const undo = document.getElementById('ve-undo');
+        if (!hitTestable(undo)) errs.push('933: undo is not reachable when the narrow layout is scrolled to the end');
+        main.scrollTop = 0;
+        await sleep(30);
+      }
+    }
+
+    // 937: the timeline shows the whole 10-minute recording when it opens
+    // (the track no longer gets a floor that makes it wider than the view),
+    // and the ruler labels stay apart.
+    {
+      const tl = document.getElementById('ve-timeline');
+      const tr = document.getElementById('ve-track');
+      if (tr.getBoundingClientRect().width > tl.clientWidth + 1) {
+        errs.push('937: the track is ' + tr.getBoundingClientRect().width.toFixed(0) + 'px in a ' + tl.clientWidth + 'px timeline');
+      }
+      if (document.getElementById('ve-zoom-val').textContent !== '100%') {
+        errs.push('937: the zoom label does not read 100% on open: ' + document.getElementById('ve-zoom-val').textContent);
+      }
+      const ticks = [...document.querySelectorAll('#ve-ruler .ve-tick')];
+      if (ticks.length >= 2) {
+        const gap = ticks[1].getBoundingClientRect().left - ticks[0].getBoundingClientRect().left;
+        if (gap < 60) errs.push('937: neighbouring ruler labels are only ' + gap.toFixed(0) + 'px apart');
+      } else {
+        errs.push('937: the ruler shows fewer than two labels');
+      }
+    }
+
+    // 938: the frame counter reads the word and a 1-based number, compared
+    // against the translated string so the probe holds in any boot language.
+    {
+      const { tx } = await (await import('./i18n.js')).fullTexts('en');
+      const frameText = () => document.getElementById('ve-frame').textContent;
+      const want = (n) => tx('veFrameNo').replace('{n}', String(n));
+      if (frameText() !== want(1)) errs.push('938: the frame counter at the start reads "' + frameText() + '" instead of "' + want(1) + '"');
+      document.getElementById('ve-next-frame').click();
+      await sleep(60);
+      if (frameText() !== want(2)) errs.push('938: one frame on, the counter reads "' + frameText() + '" instead of "' + want(2) + '"');
+      document.getElementById('ve-prev-frame').click();
+      await sleep(60);
+    }
+
+    // 936-wide: the clip start and end fields share a line in every layout,
+    // also in the 320 px side panel of the wide layout.
+    {
+      const a = document.getElementById('ve-trim-start-val').getBoundingClientRect();
+      const b = document.getElementById('ve-trim-end-val').getBoundingClientRect();
+      if (Math.abs(a.top - b.top) > 2) errs.push('936-wide: the clip start and end fields are on two lines at ' + window.innerWidth + 'px');
     }
 
     // ---- tabs actually switch panels ----
@@ -1102,10 +1286,27 @@ VIDEO_PROBE = """
       }
     }
 
-    document.getElementById('ve-tab-export').click();
+    // 935: Export opens from the title bar button; no tab is selected then,
+    // the start button has the focus, and the Edit tab leads back.
+    document.getElementById('ve-export-open').click();
     await sleep(80);
     if (document.getElementById('ve-panel-export').classList.contains('hidden')) {
-      errs.push('the Export tab did not reveal its panel');
+      errs.push('the export button did not reveal the export panel');
+    }
+    if ([...document.querySelectorAll('.ve-tab')].some((t) => t.getAttribute('aria-selected') !== 'false')) {
+      errs.push('935: a tab stayed selected while the export panel is shown');
+    }
+    if (document.activeElement.id !== 've-export-start') {
+      errs.push('935: the export start button did not take the focus: ' + document.activeElement.id);
+    }
+    if (document.querySelector('.ve-tab[data-panel="ve-panel-export"]')) errs.push('935: the Export tab still exists');
+    {
+      const tabEdit = document.getElementById('ve-tab-edit');
+      tabEdit.click();
+      await sleep(60);
+      if (document.getElementById('ve-panel-edit').classList.contains('hidden')) errs.push('935: the Edit tab did not lead back from the export panel');
+      document.getElementById('ve-export-open').click();
+      await sleep(60);
     }
     rawKeyCheck('export tab');
     sideScan(errs, 'export tab');
@@ -1178,7 +1379,7 @@ VIDEO_PROBE = """
 
       // The Export tab mirrors the same target as a read-only summary, and
       // its "Change..." button jumps back to the Edit tab.
-      document.getElementById('ve-tab-export').click();
+      document.getElementById('ve-export-open').click();
       await sleep(80);
       const summary = document.getElementById('ve-export-scale-summary').textContent;
       if (!summary.includes('480') || !summary.includes('270')) {
@@ -1844,7 +2045,7 @@ def run(browser, tmp):
         .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
         .replace("</body>", VIDEO_PROBE + "</body>"),
         encoding="utf-8")
-    for w, h in ((1100, 720), (760, 520)):
+    for w, h in ((1100, 720), (880, 600), (760, 520)):
         # Same "headless Chrome eats part of the requested window" offset
         # the main sweep already compensates for (see WRAPPER above) --
         # without it "760x520" never actually delivers that innerWidth/
@@ -1854,6 +2055,27 @@ def run(browser, tmp):
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print(f"-- video.html {w}x{h}")
+        for e in errs:
+            print(f"   FAIL JS error: {e}")
+        failed += len(errs)
+        if not errs:
+            print("   ok")
+
+    # The same page in German at the two narrow sizes (label length decides the wrapping).
+    video_de = tmp / "ui" / "video-de.html"
+    video_de.write_text(
+        (REPO / "ui" / "video.html").read_text(encoding="utf-8")
+        .replace("<script",
+                 '<script>window.__SEED_SETTINGS__ = { language: "de" };</script>\n'
+                 '<script src="tauri_stub.js"></script>\n<script', 1)
+        .replace("</body>", VIDEO_DE_PROBE + "</body>"),
+        encoding="utf-8")
+    for w, h in ((880, 600), (760, 520)):
+        # 16 and 95 px are what headless Chrome keeps for its own frame, so the page sees exactly w x h.
+        proc = run_chrome(browser, tmp / ('profile-video-de-%dx%d' % (w, h)), f"{w + 16},{h + 95}", 30000, video_de.as_uri(), 180)
+        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        print(f"-- video.html German {w}x{h}")
         for e in errs:
             print(f"   FAIL JS error: {e}")
         failed += len(errs)

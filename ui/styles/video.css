@@ -39,6 +39,7 @@ body.video-body {
   color: var(--muted);
 }
 .ve-close { flex: 0 0 auto; }
+.ve-export-open { padding: 4px 14px; font-size: 12.5px; flex: 0 0 auto; }
 
 /* ---- ffmpeg banner ---- */
 .ve-banner {
@@ -221,6 +222,10 @@ body.video-body {
 .ve-audio-group { display: flex; align-items: center; gap: 4px; }
 .ve-vol { width: 78px; accent-color: var(--accent); }
 .ve-audio-group .icon-btn.ve-muted-btn { color: var(--danger); }
+.ve-audio-label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.ve-audio-group:has(.ve-vol:disabled) .ve-audio-label { opacity: 0.35; }
+.ve-mute-slash { display: none; }
+.ve-muted-btn .ve-mute-slash { display: inline; }
 .ve-audio-group .icon-btn:disabled,
 .ve-vol:disabled { opacity: 0.35; cursor: not-allowed; }
 
@@ -286,14 +291,15 @@ body.video-body {
 .ve-tools {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 12px;
   flex-wrap: wrap;
   row-gap: 6px;
   padding: 6px 10px;
   border-top: 1px solid var(--border);
   flex: 0 0 auto;
 }
-.ve-tools .ghost-btn { padding: 4px 10px; font-size: 12px; }
+.ve-tool-group { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; }
+.ve-tools .ghost-btn { padding: 4px 6px; font-size: 12px; }
 .ve-tools .icon-btn.active { background: var(--accent); color: var(--accent-fg); }
 .ve-zoom-val { min-width: 46px; text-align: center; font-size: 12px; color: var(--muted); }
 .ve-original-badge {
@@ -335,7 +341,13 @@ body.video-body {
 .ve-wide { width: 100%; }
 .ve-switch-row { flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; }
 .ve-switch-row > span { color: var(--fg); font-size: 13px; }
-.ve-timefield { font-variant-numeric: tabular-nums; }
+.ve-trim-row { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.ve-trim-row .field { flex-direction: row; align-items: center; gap: 6px; }
+/* The wide layout's side panel is only 320 px: label over field keeps both on one line. */
+@media (min-width: 901px) {
+  .ve-trim-row .field { flex-direction: column; align-items: flex-start; gap: 4px; }
+}
+.ve-timefield { font-variant-numeric: tabular-nums; width: 9.5em; flex: 0 0 auto; }
 .ve-steps { display: flex; flex-wrap: wrap; gap: 4px; }
 .ve-step { padding: 4px 8px; font-size: 12px; }
 .ve-step.sel { background: var(--accent-strong); border-color: var(--accent-strong); color: var(--accent-fg); }
@@ -419,17 +431,14 @@ body.video-body {
   pointer-events: none;
 }
 
-/* Narrow window: the side panel drops under the preview instead of squeezing
-   both into unusable widths. */
+/* Narrow window: the side panel drops under the preview. The preview keeps
+   40 % of the height and stays on top while the controls scroll under it; the
+   side panel is exactly as tall as the room below the preview, so scrolled to
+   the end it shows whole, with its own panel scroll and the undo/redo row. */
 @media (max-width: 900px) {
-  .ve-main { flex-direction: column; }
-  /* Neither panel scrolled at this width -- content taller than what's left
-     over just painted past its own box into the panel below it. The preview
-     gives ground first (it is the one element that can shrink and stay
-     useful); transport/timeline/tools keep their normal size so every
-     toolbar control stays reachable without scrolling at the window's own
-     declared minimum height. */
-  .ve-left { overflow-y: auto; }
-  .ve-side { flex: 0 0 auto; max-width: none; max-height: 36vh; overflow-y: auto; border-left: none; border-top: 1px solid var(--border); }
-  .ve-stage { min-height: 70px; }
+  .ve-main { flex-direction: column; overflow-y: auto; container-type: size; scroll-padding-top: 40vh; }
+  .ve-left { display: contents; }
+  .ve-left > * { flex: 0 0 auto; }
+  .ve-stage { position: sticky; top: 0; z-index: 3; flex: 0 0 40vh; height: 40vh; min-height: 0; }
+  .ve-side { flex: 0 0 auto; height: calc(100cqh - 40vh); max-height: none; max-width: none; overflow: hidden; border-left: none; border-top: 1px solid var(--border); }
 }

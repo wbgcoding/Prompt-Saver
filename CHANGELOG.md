@@ -1953,6 +1953,13 @@ the video editor and the introduction tour ship on).
 - **Light tile colours get dark text.** Orange, yellow, green, teal and light blue tiles (and the same colours on view tabs, folders and floating buttons) now show dark text by default, which reads better than white there; darker colours keep white text with its shadow. The same rule picks the glyph colour in the tray menu. A threshold you set yourself in the expert menu is kept.
 - **Sizes use your language's number format.** File sizes in the backup list, the storage figures, the video export estimate and the recording bar now write the decimal separator of the UI language, for example "572,2 MB" in German instead of "572.2 MB".
 - **The Black & White theme is gone.** If you used it, the app switches to Light, and a custom theme built on it keeps its colours on a Light base.
+- **The preview keeps its size in a narrow video editor window.** The preview takes at least 40 % of the height and stays on top while the controls scroll below it.
+- **Grouped buttons in the video editor tool row.** The cut buttons are grouped, Fit is an icon and Export frame sits next to the frame number.
+- **Export is a button at the top of the video editor.** It sits in the title bar instead of being a third tab and opens the export settings.
+- **Clearer clip start and end in the video editor.** The two fields are compact and now read "Clip start" and "Clip end"; the buttons that only mark a selection say "Selection from here" and "Selection to here" in German.
+- **The video editor timeline shows the whole recording when it opens.** This also holds for long videos, and the ruler labels stay readable at the lower zoom.
+- **The video editor frame counter reads "Frame 1".** The counter says the word and counts from 1 instead of showing "#0".
+- **Labelled volume sliders in the video editor.** The two sliders are named System and Mic, and a muted track shows a struck-through icon, so muted and missing no longer look alike.
 
 ## 2.6.3 (2026-07-26)
 

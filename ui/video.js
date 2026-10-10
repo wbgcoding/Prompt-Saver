@@ -43,7 +43,7 @@ const { el: colorPop, open: openColorPop, close: closeColorPop } = createColorPo
 const EXPORT_PROGRESS_EVENT = "recording-convert-progress";
 
 const SPEED_STEPS = [0.25, 0.5, 1, 1.5, 2, 4];
-const ZOOM_MIN_PX_PER_S = 2;      // whole clip visible, however long it is
+const ZOOM_MIN_PX_PER_S = 0.01;   // lets a fit show the whole clip, up to many hours, in any window width
 const ZOOM_MAX_PX_PER_S = 600;    // ~1.7ms per pixel: far past frame accuracy
 const MAX_TRACK_PX = 12000;       // canvas/DOM ceiling for the timeline strip
 const THUMB_PX = 96;              // target width of one filmstrip thumbnail
@@ -228,6 +228,7 @@ function applyI18n() {
   updateExportNote();
   updatePlayButton();
   updateAudioLabels();
+  renderPlayhead();
 }
 
 async function loadTexts(settings) {
@@ -727,7 +728,7 @@ function layoutTrack() {
 
 // Tick spacing is picked so labels never collide: the smallest step from the
 // list that is at least ~70px wide at the current zoom.
-const TICK_STEPS_MS = [100, 250, 500, 1000, 2000, 5000, 10000, 15000, 30000, 60000, 120000, 300000, 600000];
+const TICK_STEPS_MS = [100, 250, 500, 1000, 2000, 5000, 10000, 15000, 30000, 60000, 120000, 300000, 600000, 1200000, 1800000, 3600000, 7200000];
 function renderRuler() {
   const ruler = $("ve-ruler");
   ruler.innerHTML = "";
@@ -826,7 +827,7 @@ function setTimeValue(el, ms, durMs) {
 function renderPlayhead() {
   $("ve-playhead").style.left = `${msToPx(VE.playhead)}px`;
   $("ve-time").textContent = fmtTime(VE.playhead);
-  $("ve-frame").textContent = `#${frameOf(VE.playhead)}`;
+  $("ve-frame").textContent = t("veFrameNo").replace("{n}", String(frameOf(VE.playhead) + 1));
   setTimeValue($("ve-timeline"), VE.playhead, VE.dur);
 }
 
@@ -3547,6 +3548,8 @@ function showPanel(id) {
 for (const tab of document.querySelectorAll(".ve-tab")) {
   tab.addEventListener("click", () => showPanel(tab.dataset.panel));
 }
+
+$("ve-export-open").addEventListener("click", () => { showPanel("ve-panel-export"); $("ve-export-start").focus(); });
 
 $("ve-close").addEventListener("click", () => closeWindow());
 $("ve-shortcuts").addEventListener("click", () => openShortcutsModal("videoEditor"));
