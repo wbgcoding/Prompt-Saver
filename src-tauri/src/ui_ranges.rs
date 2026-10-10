@@ -2,7 +2,7 @@
 // `node tools/gen_ui_ranges.js` after changing ui/expertConfig.js.
 //
 // Each row is key, min, max and whether the top stop means unlimited (0 stays 0).
-// Selects (preset lists) are not listed.
+// Selects (preset lists with a free-entry field) follow below with their options.
 
 pub(crate) const UI_VALUE_RANGES: &[(&str, f64, f64, bool)] = &[
     ("videoVolume", 0.0, 100.0, false),
@@ -116,4 +116,16 @@ pub(crate) const UI_VALUE_RANGES: &[(&str, f64, f64, bool)] = &[
     ("undoToastMs", 0.0, 20000.0, false),
     ("remotePort", 1024.0, 65535.0, false),
     ("remoteRateLimit", 5.0, 300.0, true),
+];
+
+// Preset-or-custom selects: the whole-number range the free-entry field accepts,
+// and for each select its preset options.
+pub(crate) const SELECT_CUSTOM_MIN: f64 = 1.0;
+pub(crate) const SELECT_CUSTOM_MAX: f64 = 3650.0;
+pub(crate) const UI_SELECT_RANGES: &[(&str, &[f64])] = &[
+    ("historyDays", &[0.0, 7.0, 30.0, 90.0, 365.0]),
+    ("backupIntervalH", &[6.0, 12.0, 24.0, 48.0, 168.0]),
+    ("trashRetentionDays", &[0.0, 7.0, 30.0, 90.0, 365.0]),
+    ("recordingRetentionDays", &[0.0, 7.0, 30.0, 90.0, 365.0]),
+    ("updateCheckH", &[6.0, 12.0, 24.0, 48.0, 168.0]),
 ];

@@ -18241,3 +18241,47 @@ fn taskbar_throttle_retries_after_a_failed_apply_or_a_recreated_button() {
     assert!(!t.decide(&retry, 5, "indeterminate", None));
     assert!(!retry.load(Ordering::SeqCst), "the request is consumed");
 }
+
+// ---- retention selects are snapped on load and import ----
+
+#[test]
+fn an_imported_retention_that_would_purge_everything_is_snapped() {
+    let import = |key: &str, v: f64| {
+        let mut live = Settings::default();
+        let file = SettingsOnlyExport {
+            ui_flags: HashMap::new(),
+            ui_values: HashMap::from([(key.to_string(), v)]),
+            ui_texts: HashMap::new(),
+        };
+        merge_settings_only(&mut live, file, |_| true).unwrap();
+        live
+    };
+    // Half a day used to become 0 seconds of retention: the next start purged the whole trash.
+    let s = import("trashRetentionDays", 0.5);
+    assert_eq!(trash_retention_secs(&s), None, "a fraction below one day means keep, not purge");
+    assert_eq!(history_max_age(&import("historyDays", 0.5)), None);
+    // A number that overflowed the day-to-seconds product wrapped to a tiny value.
+    let s = import("trashRetentionDays", 2.14e14);
+    assert_eq!(s.ui_values["trashRetentionDays"], 3650.0);
+    assert_eq!(trash_retention_secs(&s), Some(3650 * 86_400));
+    assert_eq!(import("trashRetentionDays", -3.0).ui_values["trashRetentionDays"], 0.0);
+    // The free-entry field's whole numbers survive; a fraction is rounded.
+    assert_eq!(import("trashRetentionDays", 14.0).ui_values["trashRetentionDays"], 14.0);
+    assert_eq!(import("trashRetentionDays", 13.6).ui_values["trashRetentionDays"], 14.0);
+    // A select with no zero preset never gets one.
+    assert_eq!(import("backupIntervalH", 0.0).ui_values["backupIntervalH"], 1.0);
+    // The same on load.
+    let mut loaded = Settings::default();
+    loaded.ui_values.insert("recordingRetentionDays".into(), 0.25);
+    loaded.migrate();
+    assert_eq!(loaded.ui_values["recordingRetentionDays"], 0.0);
+}
+
+#[test]
+fn retention_arithmetic_cannot_overflow() {
+    let mut s = Settings::default();
+    s.ui_values.insert("trashRetentionDays".into(), 1e300);
+    s.ui_values.insert("historyDays".into(), 1e300);
+    assert_eq!(trash_retention_secs(&s), Some(u64::MAX));
+    assert_eq!(history_max_age(&s), Some(u64::MAX));
+}

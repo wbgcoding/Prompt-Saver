@@ -574,7 +574,7 @@ pub(crate) fn recording_retention_age(app: &AppHandle) -> Option<Duration> {
     if days <= 0.0 {
         None
     } else {
-        Some(Duration::from_secs(days as u64 * 86_400))
+        Some(Duration::from_secs((days as u64).saturating_mul(86_400)))
     }
 }
 

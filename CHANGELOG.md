@@ -925,7 +925,10 @@ the video editor and the introduction tour ship on).
   hand-edited settings file or a settings import with an absurd number (a
   folder import limit of a quintillion, a negative port) is now brought back
   into the range the expert menu offers, and a value that is not a number is
-  dropped in favour of its default.
+  dropped in favour of its default. The retention dropdowns (trash, copy
+  history, recordings) keep their presets and whole numbers from 1 to 3650; a
+  fraction below one day now means keep, and the day arithmetic can no longer
+  overflow into purging everything.
 - **Two computers starting on one shared data folder can no longer both take
   ownership.** The folder lock is now claimed in one step and rewritten
   atomically, a lock is taken over only after it has stood still for the whole

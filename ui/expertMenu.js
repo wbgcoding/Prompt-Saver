@@ -1,6 +1,6 @@
 // Expert menu: the renderer, its rows and the live-state parts of the setting registry.
 import { $, armButton, assignBUBBLE_MS, assignDISARM_MS, assignDRAG_THRESHOLD, assignHISTORY_PREVIEW_LEN, assignINPUT_MAX, assignLibraryTab, assignPrompts, assignROTATE_SHORT_MAX, assignSettings, assignTOAST_MS, COLORS, debounced, DEFAULT_COLORS, DICT, DISARM_MS, disarmButton, errText, errToast, ETA_MIN_PCT, ETA_MIN_SECS, EXPERT_ACTIONS, flag, flagState, gateOpen, HEADER_PAD_Y, HEX_RE, ICON_UNDO, ICON_WARN, invoke, LANG, listen, modal, openColorPop, optFlag, PALETTE_LEN, prompts, putIcon, setStatusText, settings, settingsEl, shipsOn, syncEdgeFade, t, toast, txt, val } from "./core.js";
-import { ALL_FLAG_KEYS, normScreenshotFormat, EXPERT_BULK_NEVER, EXPERT_RESET_KEEP, EXPERT_SELECTS, EXPERT_TABS, EXPERT_TIP_SET, EXPERT_VALUES, FLAG_GATES, flagLabelKey, GRID_DOM_VALUES, groupFlags, OPT_FLAG_KEYS, REC_QUALITY_BITRATE, SETTINGS_AREA_LABEL, STYLE_OPTS, TILE_DOM_FLAGS, TILE_STYLES } from "./expertConfig.js";
+import { ALL_FLAG_KEYS, normScreenshotFormat, EXPERT_BULK_NEVER, EXPERT_RESET_KEEP, EXPERT_SELECTS, EXPERT_TABS, EXPERT_TIP_SET, EXPERT_VALUES, FLAG_GATES, flagLabelKey, GRID_DOM_VALUES, groupFlags, OPT_FLAG_KEYS, REC_QUALITY_BITRATE, SELECT_CUSTOM_MAX, SELECT_CUSTOM_MIN, SETTINGS_AREA_LABEL, STYLE_OPTS, TILE_DOM_FLAGS, TILE_STYLES } from "./expertConfig.js";
 import { confirmDialog, infoDialog } from "./dialog.js";
 import { refreshFavViewUi, renderGrid, renderViews } from "./views.js";
 import { fitAllTiles, fitBox, fitCache } from "./tiles.js";
@@ -696,8 +696,8 @@ export function selectRow(key) {
   sel.appendChild(customOpt);
   const num = document.createElement("input");
   num.type = "number";
-  num.min = 1;
-  num.max = 3650;
+  num.min = SELECT_CUSTOM_MIN;
+  num.max = SELECT_CUSTOM_MAX;
   num.className = "modal-input expert-num";
   // The presets show their unit ("7d", "24h") right on the option: the free-entry
   // field cannot, since it holds only the number. Without this, a value typed here
@@ -734,7 +734,7 @@ export function selectRow(key) {
     }
   });
   num.addEventListener("change", () => {
-    const v = Math.max(1, Math.min(3650, Number(num.value) || cfg.def));
+    const v = Math.max(SELECT_CUSTOM_MIN, Math.min(SELECT_CUSTOM_MAX, Number(num.value) || cfg.def));
     num.value = v;
     persist(v).then(() => syncRowReset("selects", key));
     if (expertOnlyChanged) renderExpert();

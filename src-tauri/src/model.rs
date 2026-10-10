@@ -840,6 +840,26 @@ pub(crate) fn clamp_ui_values(map: &mut HashMap<String, f64>) {
             map.insert(key.to_string(), v.clamp(min, max));
         }
     }
+    for &(key, options) in crate::ui_ranges::UI_SELECT_RANGES {
+        let Some(&v) = map.get(key) else { continue };
+        if v.is_finite() {
+            map.insert(key.to_string(), snap_select_value(v, options));
+        } else {
+            map.remove(key);
+        }
+    }
+}
+
+// A preset-or-custom select holds its presets or a whole number from the free-entry
+// field's range. Anything below one (fractions, negatives) means "never" where the
+// select has a zero preset (the safe reading for a retention that deletes things)
+// and the smallest custom value where it has none; the rest is rounded and capped.
+pub(crate) fn snap_select_value(v: f64, options: &[f64]) -> f64 {
+    let min = crate::ui_ranges::SELECT_CUSTOM_MIN;
+    if v < min {
+        return if options.contains(&0.0) { 0.0 } else { min };
+    }
+    v.round().clamp(min, crate::ui_ranges::SELECT_CUSTOM_MAX)
 }
 
 impl Settings {

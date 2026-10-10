@@ -630,7 +630,11 @@ export const EXPERT_VALUES = {
   remoteRateLimit: { label: "valRemoteRateLimit", min: 5, max: 300, step: 5, def: 60, unit: "/min", gate: "remoteApi", topUnlimited: true },
 };
 
-// Preset-or-custom numeric settings (dropdown with a free-entry option).
+// Preset-or-custom numeric settings (dropdown with a free-entry option). The
+// free-entry field takes a whole number from SELECT_CUSTOM_MIN to SELECT_CUSTOM_MAX;
+// the backend holds a stored value to the same bounds (see tools/gen_ui_ranges.js).
+export const SELECT_CUSTOM_MIN = 1;
+export const SELECT_CUSTOM_MAX = 3650;
 export const EXPERT_SELECTS = {
   historyDays: { label: "valHistoryDays", options: [0, 7, 30, 90, 365], def: 30, unit: "d", zeroLabel: "retentionForever", gate: "copyHistory" },
   // Backup interval (hours): a preset-or-custom select right under backupKeep.

@@ -381,7 +381,7 @@ pub fn run() {
                 let referenced = orphan_referenced_set(&store);
                 let broken_on = store.settings.ui_flags.get("recSweepBroken") != Some(&false);
                 let retention_days = store.settings.ui_values.get("recordingRetentionDays").copied().unwrap_or(RECORDING_RETENTION_DAYS_DEFAULT);
-                let retention_age = (retention_days > 0.0).then(|| Duration::from_secs(retention_days as u64 * 86_400));
+                let retention_age = (retention_days > 0.0).then(|| Duration::from_secs((retention_days as u64).saturating_mul(86_400)));
                 let (count, bytes) = sweep_stale_recordings(&handle, &referenced, broken_on, Duration::from_secs((REC_BROKEN_GRACE_MIN * 60.0) as u64), retention_age);
                 if count > 0 {
                     append_crash_log(&format!("startup recording sweep: removed {count} file(s), {bytes} bytes"));
