@@ -2096,4 +2096,5 @@ export default {
     optSnipToolLast: "Ostatnio użyte",
     libraryTilesLabel: "Kafelki",
     libFoundInNote: "znaleziono w notatce",
+    journalRowHint: "Klik: kopiuj",
 };

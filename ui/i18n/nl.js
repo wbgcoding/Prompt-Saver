@@ -2096,4 +2096,5 @@ export default {
     optSnipToolLast: "Laatst gebruikt",
     libraryTilesLabel: "Tegels",
     libFoundInNote: "gevonden in notitie",
+    journalRowHint: "Klik: kopiëren",
 };

@@ -2096,4 +2096,5 @@ export default {
     optSnipToolLast: "Última usada",
     libraryTilesLabel: "Mosaicos",
     libFoundInNote: "encontrado en la nota",
+    journalRowHint: "Clic: copiar",
 };

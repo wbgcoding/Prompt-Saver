@@ -2096,4 +2096,5 @@ export default {
     optSnipToolLast: "前回使用したもの",
     libraryTilesLabel: "タイル",
     libFoundInNote: "メモ内で発見",
+    journalRowHint: "クリック：コピー",
 };

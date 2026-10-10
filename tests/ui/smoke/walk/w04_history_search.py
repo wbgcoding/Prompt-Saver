@@ -179,6 +179,44 @@ SECTION = """\
       }
       if (document.querySelector('#journal-types .lib-fav-chip')) out.errors.push('274: the type filter still carries a favourite chip');
     }
+    // row275: every history entry is one line; the preview and the full time ride in the tooltip.
+    {
+      const rows275 = [...document.querySelectorAll('#journal-body .journal-item, #journal-body .journal-clip')];
+      if (!rows275.length) out.errors.push('row275: the history lists no entry');
+      else {
+        const hs275 = rows275.map((r) => r.getBoundingClientRect().height);
+        if (Math.max(...hs275) > 48.5) out.errors.push('row275: a history row is ' + Math.max(...hs275) + ' px tall, at most 48 expected');
+        if (Math.max(...hs275) - Math.min(...hs275) > 2) out.errors.push('row275: the history rows differ in height (' + Math.min(...hs275) + ' to ' + Math.max(...hs275) + ')');
+        const prow275 = rows275.find((r) => r.classList.contains('journal-item'));
+        if (!prow275) out.errors.push('row275: no prompt row in the history');
+        else {
+          if (!prow275.dataset.tipName) out.errors.push('row275: a prompt row has no tooltip name');
+          if (prow275.querySelector('.lib-text')) out.errors.push('row275: a prompt row still shows a preview line');
+          if (prow275.querySelector('.lib-tags')) out.errors.push('row275: a prompt row still shows tag chips');
+          const when275 = prow275.querySelector('.journal-when');
+          if (!when275) out.errors.push('row275: a prompt row has no time on the right');
+          else if (prow275.getBoundingClientRect().right - when275.getBoundingClientRect().right > 90) {
+            out.errors.push('row275: the time is not at the right edge (' + (prow275.getBoundingClientRect().right - when275.getBoundingClientRect().right) + ' px from it)');
+          }
+          const core275 = await import('./core.js');
+          const vals275 = core275.settings.ui_values;
+          core275.settings.ui_values = { ...(vals275 || {}), tooltipDelayMs: 0 };
+          prow275.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, clientX: 200, clientY: 200 }));
+          await sleep(100);
+          const tip275 = document.querySelector('.tile-tip.show');
+          if (!tip275) out.errors.push('row275: hovering a history row showed no tooltip');
+          else {
+            const nm275 = tip275.querySelector('.tile-tip-name').textContent;
+            const hint275 = tip275.querySelector('.tile-tip-hint').textContent;
+            if (nm275 !== prow275.dataset.tipName) out.errors.push('row275: the tooltip names ' + JSON.stringify(nm275) + ' instead of the row');
+            if (hint275 !== core275.t('journalRowHint')) out.errors.push('row275: the tooltip hint is ' + JSON.stringify(hint275));
+          }
+          prow275.dispatchEvent(new PointerEvent('pointerout', { bubbles: true, relatedTarget: document.body }));
+          core275.settings.ui_values = vals275;
+          await sleep(50);
+        }
+      }
+    }
     // 716: the copy history is one column; the sort field switches to "most used", the
     // pick is stored and survives closing and reopening the library.
     {

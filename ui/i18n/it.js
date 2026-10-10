@@ -2096,4 +2096,5 @@ export default {
     optSnipToolLast: "Ultimo usato",
     libraryTilesLabel: "Riquadri",
     libFoundInNote: "trovato nella nota",
+    journalRowHint: "Clic: copia",
 };

@@ -2096,4 +2096,5 @@ export default {
     optSnipToolLast: "上次使用的",
     libraryTilesLabel: "磁贴",
     libFoundInNote: "在备注中找到",
+    journalRowHint: "点击：复制",
 };

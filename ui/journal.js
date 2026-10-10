@@ -3,11 +3,9 @@ import { $, assignLibraryTab, assignSettings, debounced, errToast, errUndoToast,
 import { confirmDialog } from "./dialog.js";
 import { attachSelectPicker } from "./selectpop.js";
 import { _journalObs, assignActiveVidObs, assignJournalObs, copyResolved, hideLibrary, lastEdited, libLabel, libSelectMode, makeVideoObserver, maybeBackfillMediaMeta, mediaThumb, mediaTipLine, paintTypeChips, promptType, renderLibrary, setLibSelectMode, thumbEl, toastCopied, toggleTypeFilter, typeAllowed, typeFilterOf } from "./library.js";
-import { tagChipEl, tagsOn } from "./tags.js";
 import { JOURNAL_ROWS_MAX } from "./expertConfig.js";
 import { copyOnCooldown, recordCopy } from "./copyFlow.js";
 import { wireSearchSuggest } from "./windowChrome.js";
-import { varPreview } from "./floatShared.js";
 import { dynLocale } from "./promptVars.js";
 import { applyFlags } from "./expertMenu.js";
 import { editPrompt, openModal } from "./editor.js";
@@ -48,15 +46,19 @@ export async function refreshClipInbox() {
   clipStored = (await invoke("clip_inbox_list").catch(() => [])).length;
 }
 
-// One history entry, built like a library row on purpose: same thumbnail, same name
-// and text lines, same tag chips. What the history adds is the meta line: when it
-// was copied on the left, how often on the right: and a chip naming the type for
-// everything that is not plain text.
+// One history entry on a single line: the same thumbnail as a library row, the name, a
+// chip naming the type for everything that is not plain text, and on the right when it
+// was copied (plus how often in the most-used list). The preview text and the full time
+// ride in the tooltip.
 export function journalRow(p, meta, onClick) {
   const row = document.createElement("button");
   row.type = "button";
   row.className = "lib-item journal-item";
-  row.title = t("copy");
+  row.dataset.tipName = libLabel(p);
+  const preview = p.file_path || p.text || "";
+  if (preview && preview !== row.dataset.tipName) row.dataset.tipBody = preview;
+  if (meta && meta.title) row.dataset.tipTimes = meta.title;
+  row.dataset.tipHint = t("journalRowHint");
   const rowMedia = mediaTipLine(p);
   if (rowMedia) row.dataset.tipMedia = rowMedia;
   const body = document.createElement("span");
@@ -74,32 +76,19 @@ export function journalRow(p, meta, onClick) {
     chip.textContent = t(`filter${kind[0].toUpperCase()}${kind.slice(1)}`);
     head.append(chip);
   }
+  if (meta && meta.left) {
+    const when = document.createElement("span");
+    when.className = "journal-when";
+    when.textContent = meta.left;
+    head.append(when);
+  }
+  if (meta && meta.right) {
+    const count = document.createElement("span");
+    count.className = "lib-sub-right";
+    count.textContent = meta.right;
+    head.append(count);
+  }
   body.append(head);
-  const preview = p.file_path || varPreview(p.text);
-  if (preview) {
-    const text = document.createElement("span");
-    text.className = "lib-text";
-    text.textContent = preview;
-    body.append(text);
-  }
-  if (tagsOn() && (p.tags || []).length) {
-    const tags = document.createElement("span");
-    tags.className = "lib-tags";
-    for (const tn of p.tags) tags.appendChild(tagChipEl(tn));
-    body.append(tags);
-  }
-  if (meta && (meta.left || meta.right)) {
-    const sub = document.createElement("span");
-    sub.className = "lib-sub lib-subrow journal-meta";
-    if (meta.title) sub.title = meta.title;
-    const l = document.createElement("span");
-    l.textContent = meta.left || "";
-    const r = document.createElement("span");
-    r.className = "lib-sub-right";
-    r.textContent = meta.right || "";
-    sub.append(l, r);
-    body.append(sub);
-  }
   row.append(mediaThumb(p, thumbEl(p, journalThumbCache)), body);
   maybeBackfillMediaMeta(p, renderJournal);
   row.addEventListener("click", onClick);
@@ -216,7 +205,10 @@ export async function restoreCopyHistory(rows, usage, lastUsed) {
 export function journalClipRow(it) {
   const row = document.createElement("div");
   row.className = "clip-row journal-clip";
-  row.title = t("copy");
+  row.dataset.tipName = t("sourceElsewhere");
+  row.dataset.tipBody = it.text;
+  row.dataset.tipTimes = fmtFull(it.ts);
+  row.dataset.tipHint = t("journalRowHint");
   const main = document.createElement("div");
   main.className = "clip-main";
   const time = document.createElement("span");
@@ -226,7 +218,7 @@ export function journalClipRow(it) {
   const prev = document.createElement("div");
   prev.className = "clip-preview";
   prev.textContent = it.text;
-  main.append(time, prev);
+  main.append(prev, time);
   row.addEventListener("click", () => { invoke("copy_text", { text: it.text }).then(() => toast(t("copied"))).catch((e) => errToast(e)); });
   makeKeyboardActivatable(row);
   const actions = document.createElement("div");

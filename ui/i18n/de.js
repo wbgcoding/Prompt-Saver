@@ -2096,4 +2096,5 @@ export default {
     optSnipToolLast: "Zuletzt benutztes",
     libraryTilesLabel: "Kacheln",
     libFoundInNote: "in der Notiz gefunden",
+    journalRowHint: "Klick: kopieren",
 };

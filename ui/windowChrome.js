@@ -185,7 +185,7 @@ export function wireTooltips() {
       // textContent, so a note is shown as the literal text the user typed.
       notesEl.textContent = el.dataset.tipNotes || "";
       rotateEl.textContent = el.dataset.tipRotate || "";
-      hintEl.textContent = t("tileTooltip") + (flag("autoPaste") ? " · " + t("autoPasteHint") : "");
+      hintEl.textContent = el.dataset.tipHint ?? (t("tileTooltip") + (flag("autoPaste") ? " · " + t("autoPasteHint") : ""));
     } else {
       // Plain setting/icon tip: break "<lead sentence>. <details>" into two tidy
       // paragraphs (e.g. the "Expert menu: …" clause drops onto its own line).

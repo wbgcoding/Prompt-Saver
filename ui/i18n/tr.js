@@ -2096,4 +2096,5 @@ export default {
     optSnipToolLast: "Son kullanılan",
     libraryTilesLabel: "Kutucuklar",
     libFoundInNote: "notta bulundu",
+    journalRowHint: "Tık: kopyala",
 };

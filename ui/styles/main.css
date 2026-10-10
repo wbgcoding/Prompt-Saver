@@ -3825,7 +3825,9 @@ input[type="password"]::-ms-clear { display: none; }
 .clip-row.journal-clip { flex-direction: row; align-items: center; gap: 10px; cursor: pointer; }
 .clip-row.journal-clip:hover { border-color: var(--accent); }
 .clip-row.journal-clip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.clip-row.journal-clip .clip-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.clip-row.journal-clip .clip-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: row; align-items: center; gap: 8px; }
+.clip-row.journal-clip .clip-preview { -webkit-line-clamp: 1; white-space: nowrap; text-overflow: ellipsis; display: block; flex: 1 1 auto; min-width: 0; }
+.clip-row.journal-clip .clip-time { flex: 0 0 auto; order: 2; }
 .clip-row.journal-clip .clip-actions { flex: 0 0 auto; align-items: center; }
 .clip-row.journal-clip .clip-actions .icon-btn { border: 1px solid var(--border); border-radius: 8px; }
 .clip-row.journal-clip .clip-actions .icon-btn:hover { color: var(--accent); border-color: var(--accent); }
@@ -3970,10 +3972,13 @@ input[type="password"]::-ms-clear { display: none; }
 .journal-body::-webkit-scrollbar-track { background: transparent; margin: 14px 0; }
 /* Every entry the same height; never overlapping. A hairline between rows gives the
    column a grid instead of a float of loose cards. */
-.journal-col .lib-item { min-height: 46px; align-items: flex-start; margin: 0; flex: 0 0 auto; }
+.journal-col .lib-item { min-height: 40px; align-items: center; padding: 8px 10px; margin: 0; flex: 0 0 auto; }
 .journal-col .lib-item + .lib-item { border-top: 1px solid var(--border); border-radius: 0; }
 .journal-name-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.journal-name-row > .lib-name { min-width: 0; }
+.journal-name-row > .lib-name { min-width: 0; flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.journal-when { margin-left: auto; flex: 0 0 auto; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.journal-name-row > .lib-sub-right { flex: 0 0 auto; margin-left: auto; color: var(--muted); font-size: 11px; }
+.journal-when + .lib-sub-right { margin-left: 0; }
 /* Names the type without repeating the thumbnail's job: text rows carry no chip. */
 .journal-kind {
   flex: 0 0 auto;
@@ -3987,8 +3992,6 @@ input[type="password"]::-ms-clear { display: none; }
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
-/* Timestamps read as metadata, not as content: muted, small, digits aligned. */
-.journal-meta { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 .journal-col .lib-thumb { width: 30px; height: 30px; flex: 0 0 auto; object-fit: cover; }
 .journal-col .lib-section { padding: 2px 4px; }
 /* Column titles stay pinned while the list scrolls. */

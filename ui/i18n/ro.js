@@ -2096,4 +2096,5 @@ export default {
     optSnipToolLast: "Ultimul folosit",
     libraryTilesLabel: "Dale",
     libFoundInNote: "găsit în notiță",
+    journalRowHint: "Clic: copiază",
 };
