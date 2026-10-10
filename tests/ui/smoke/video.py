@@ -238,6 +238,27 @@ VIDEO_PROBE = """
       }
     }
 
+    // 937: the timeline shows the whole 10-minute recording when it opens
+    // (the track no longer gets a floor that makes it wider than the view),
+    // and the ruler labels stay apart.
+    {
+      const tl = document.getElementById('ve-timeline');
+      const tr = document.getElementById('ve-track');
+      if (tr.getBoundingClientRect().width > tl.clientWidth + 1) {
+        errs.push('937: the track is ' + tr.getBoundingClientRect().width.toFixed(0) + 'px in a ' + tl.clientWidth + 'px timeline');
+      }
+      if (document.getElementById('ve-zoom-val').textContent !== '100%') {
+        errs.push('937: the zoom label does not read 100% on open: ' + document.getElementById('ve-zoom-val').textContent);
+      }
+      const ticks = [...document.querySelectorAll('#ve-ruler .ve-tick')];
+      if (ticks.length >= 2) {
+        const gap = ticks[1].getBoundingClientRect().left - ticks[0].getBoundingClientRect().left;
+        if (gap < 60) errs.push('937: neighbouring ruler labels are only ' + gap.toFixed(0) + 'px apart');
+      } else {
+        errs.push('937: the ruler shows fewer than two labels');
+      }
+    }
+
     // ---- tabs actually switch panels ----
     document.getElementById('ve-tab-overlays').click();
     await sleep(80);

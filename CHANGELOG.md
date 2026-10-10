@@ -1952,6 +1952,7 @@ the video editor and the introduction tour ship on).
 - **Grouped buttons in the video editor tool row.** The cut buttons are grouped, Fit is an icon and Export frame sits next to the frame number.
 - **Export is a button at the top of the video editor.** It sits in the title bar instead of being a third tab and opens the export settings.
 - **Clearer clip start and end in the video editor.** The two fields are compact and now read "Clip start" and "Clip end"; the buttons that only mark a selection say "Selection from here" and "Selection to here" in German.
+- **The video editor timeline shows the whole recording when it opens.** This also holds for long videos, and the ruler labels stay readable at the lower zoom.
 
 ## 2.6.3 (2026-07-26)
 
