@@ -914,6 +914,10 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **Exports and backup files you overwrite are replaced safely.** Saving a prompt
+  export, a backup file, a settings export or a statistics export now writes
+  to a temporary file first and swaps it in, so a full disk or a crash in the
+  middle can no longer destroy the file you were overwriting.
 - **Double-clicking a bar button now folds both bars.** The shortcut for the
   three bar buttons never fired because the first click hides the button; a
   second click close to the first one now does it.

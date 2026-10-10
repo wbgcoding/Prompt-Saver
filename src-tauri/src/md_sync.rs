@@ -1031,7 +1031,7 @@ pub(crate) fn sync_write_conflict_copy(dir: &Path, id: &str, tag: &str, bytes: &
         let copy = dir.join(format!("{id}.conflict-{secs}{suffix}{tag}.md"));
         match fs::OpenOptions::new().write(true).create_new(true).open(&copy) {
             Ok(_) => {
-                if write_bytes_atomic(&copy, bytes) {
+                if write_bytes_atomic(&copy, bytes).is_ok() {
                     return Some(copy);
                 }
                 let _ = fs::remove_file(&copy);

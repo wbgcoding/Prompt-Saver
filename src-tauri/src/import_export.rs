@@ -458,7 +458,7 @@ pub(crate) async fn export_prompts(
         .save_file();
     match file {
         Some(path) => {
-            fs::write(&path, content).map_err(|e| e.to_string())?;
+            write_bytes_atomic(&path, content.as_bytes()).map_err(|e| e.to_string())?;
             Ok(count)
         }
         None => Err("canceled".to_string()),

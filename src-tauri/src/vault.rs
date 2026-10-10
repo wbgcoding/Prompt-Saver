@@ -539,7 +539,7 @@ pub(crate) async fn export_all(app: AppHandle, state: State<'_, Db>) -> Result<u
         .save_file();
     match file {
         Some(path) => {
-            fs::write(&path, blob).map_err(|e| e.to_string())?;
+            write_bytes_atomic(&path, &blob).map_err(|e| e.to_string())?;
             Ok(count)
         }
         None => Err("canceled".to_string()),
@@ -613,7 +613,7 @@ pub(crate) async fn export_settings_only(app: AppHandle, state: State<'_, Db>) -
         .save_file();
     match file {
         Some(path) => {
-            fs::write(&path, json).map_err(|e| e.to_string())?;
+            write_bytes_atomic(&path, json.as_bytes()).map_err(|e| e.to_string())?;
             Ok(path.display().to_string())
         }
         None => Err("canceled".to_string()),

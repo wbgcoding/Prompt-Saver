@@ -5775,6 +5775,9 @@ fn asset_scope_denies_every_store_file() {
         "C:/Users/x/AppData/Roaming/Prompt-Saver/settings.tmp",
         "C:/Users/x/AppData/Roaming/Prompt-Saver/prompts.json",
         "C:/Users/x/AppData/Roaming/Prompt-Saver/prompts.tmp",
+        // The atomic writer names its temp file "<file>.tmp-<id>" next to the target.
+        "C:/Users/x/AppData/Roaming/Prompt-Saver/settings.json.tmp-1f3a9c",
+        "C:/Users/x/AppData/Roaming/Prompt-Saver/prompts.json.tmp-1f3a9c",
         "C:/Users/x/AppData/Roaming/Prompt-Saver/backups/2026-08-19.psb",
         "C:/Users/x/AppData/Roaming/Prompt-Saver/backups/subdir/2026-08-19.psb",
         "C:/Users/x/AppData/Roaming/Prompt-Saver/error.log",
@@ -17829,4 +17832,55 @@ fn a_restore_keeps_the_local_update_consent_and_a_foreign_block_asks_again() {
     let mut other = Settings { update_consent: UpdateConsent::Yes, ..Settings::default() };
     drop_machine_rows(&mut other);
     assert_eq!(other.update_consent, UpdateConsent::Unasked);
+}
+
+// ---- user-picked export files are replaced atomically ----
+
+#[test]
+fn write_bytes_atomic_replaces_the_target_and_leaves_no_temp_file() {
+    let dir = std::env::temp_dir().join(format!("ps-atomic-ok-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let target = dir.join("export.psb");
+    write_bytes_atomic(&target, b"first").unwrap();
+    write_bytes_atomic(&target, b"second, longer").unwrap();
+    assert_eq!(fs::read(&target).unwrap(), b"second, longer");
+    let names: Vec<String> = fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+    assert_eq!(names, vec!["export.psb".to_string()], "no temp file is left beside the target");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_failed_atomic_write_leaves_the_old_file_untouched() {
+    let dir = std::env::temp_dir().join(format!("ps-atomic-fail-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let target = dir.join("export.psb");
+    fs::write(&target, b"the old backup").unwrap();
+    // A read-only target cannot be replaced, so the rename step fails after the
+    // new bytes were already written to the temp file.
+    let mut perms = fs::metadata(&target).unwrap().permissions();
+    perms.set_readonly(true);
+    fs::set_permissions(&target, perms).unwrap();
+    let result = write_bytes_atomic(&target, b"a much longer replacement that must not appear");
+    let mut perms = fs::metadata(&target).unwrap().permissions();
+    #[allow(clippy::permissions_set_readonly_false)]
+    perms.set_readonly(false);
+    fs::set_permissions(&target, perms).unwrap();
+    assert!(result.is_err(), "replacing a read-only file must fail");
+    assert_eq!(fs::read(&target).unwrap(), b"the old backup", "the old file is byte-identical");
+    let names: Vec<String> = fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+    assert_eq!(names, vec!["export.psb".to_string()], "the failed attempt removed its temp file");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn user_picked_exports_never_write_in_place() {
+    for (name, src) in [
+        ("import_export.rs", include_str!("import_export.rs")),
+        ("vault.rs", include_str!("vault.rs")),
+        ("stats.rs", include_str!("stats.rs")),
+    ] {
+        assert!(!src.contains("fs::write(&path"), "{name} writes a user-picked file in place instead of through write_bytes_atomic");
+    }
 }

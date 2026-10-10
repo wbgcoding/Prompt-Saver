@@ -227,32 +227,46 @@ pub(crate) fn drop_stale_fallback(dir: &Path, file: &str) {
     }
 }
 
-pub(crate) fn write_sealed_json<T: Serialize>(path: &PathBuf, data: &T) -> bool {
-    if let Ok(json) = serde_json::to_string(data).map(|j| enc_str(&j)) {
-        let tmp = path.with_extension("tmp");
-        if fs::write(&tmp, json).is_ok() {
-            return fs::rename(&tmp, path).is_ok();
-        }
+pub(crate) fn write_sealed_json<T: Serialize>(path: &Path, data: &T) -> bool {
+    match serde_json::to_string(data).map(|j| enc_str(&j)) {
+        Ok(json) => write_bytes_atomic(path, json.as_bytes()).is_ok(),
+        Err(_) => false,
     }
-    false
 }
 
 // Never truncate an existing file in place: a crash or a cloud-sync client
 // reading mid-write would otherwise see a valid frontmatter head with a truncated
 // body, and a later poll then imports that as truth. Temp-then-rename next to the
-// target, same pattern write_sealed_json already uses. The temp name deliberately
-// does not carry the caller's own extension (path.md -> path.tmp), so a filter that
-// only touches one specific extension (sync_sweep_orphans' ".md" check) leaves a
-// leftover temp file alone if the rename is ever interrupted.
+// target. The temp name keeps the caller's whole file name and appends
+// ".tmp-<id>", so its extension is never the caller's own (path.md ->
+// path.md.tmp-<id>): a filter that only touches one specific extension
+// (sync_sweep_orphans' ".md" check) leaves a leftover temp file alone if the
+// rename is ever interrupted.
 pub(crate) fn write_file_atomic(path: &Path, content: &str) -> bool {
-    write_bytes_atomic(path, content.as_bytes())
+    write_bytes_atomic(path, content.as_bytes()).is_ok()
 }
 
 // The same, for bytes that are not necessarily text (a conflict copy keeps a file
-// exactly as it was, whatever encoding an editor saved it in).
-pub(crate) fn write_bytes_atomic(path: &Path, content: &[u8]) -> bool {
-    let tmp = path.with_extension("tmp");
-    fs::write(&tmp, content).is_ok() && fs::rename(&tmp, path).is_ok()
+// exactly as it was, whatever encoding an editor saved it in), and with the
+// reason when it fails. The data is flushed to disk before the rename, the
+// rename replaces an existing target in one step, and on any error the temp file
+// is removed and the old target is left exactly as it was.
+pub(crate) fn write_bytes_atomic(path: &Path, content: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    let mut name = path.file_name().unwrap_or_default().to_os_string();
+    name.push(format!(".tmp-{}", gen_id()));
+    let tmp = path.with_file_name(name);
+    let result = (|| {
+        let mut f = fs::File::create(&tmp)?;
+        f.write_all(content)?;
+        f.sync_all()?;
+        drop(f);
+        fs::rename(&tmp, path)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&tmp);
+    }
+    result
 }
 
 // Capitalise a brand word for a dialog title ("prompts" -> "Prompts").
