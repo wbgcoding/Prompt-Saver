@@ -11,7 +11,7 @@ import { copyOnCooldown, recordCopy } from "./copyFlow.js";
 import { attachSelectPicker } from "./selectpop.js";
 import { allTags, renderTagFilter, tagChipEl, tagKey, tagsOn } from "./tags.js";
 import { refreshClipInbox, setLibraryTab, tileTimeLines } from "./journal.js";
-import { openCompareView, recordToolUsage, renderStatsPanel } from "./management.js";
+import { closeStats, openCompareView, recordToolUsage, renderStatsPanel } from "./management.js";
 import { closeBackups } from "./backups.js";
 import { buildSwatches, editPrompt, ensureSecretVaultUnlocked } from "./editor.js";
 import { foldersOfView } from "./gridFolders.js";
@@ -671,7 +671,7 @@ export function fillLibrarySort() {
 }
 
 // Close the library and flush any deferred grid rebuild from batch edits.
-// The library was raised over the backups dialog by jumpToPrompt. Put it back down;
+// The library was raised over the statistics dialog by jumpToPrompt. Put it back down;
 // `closeBehind` also dismisses the dialogs underneath (dragging onto the grid needs
 // the grid). Returns true if the library was raised at all.
 export function dropLibraryFront(closeBehind) {
@@ -679,6 +679,7 @@ export function dropLibraryFront(closeBehind) {
   document.body.classList.remove("library-front");
   if (closeBehind) {
     closeBackups();
+    closeStats();
     settingsEl.classList.add("hidden");
   }
   return true;

@@ -116,13 +116,13 @@ INDEX_PROBE = """
     }
     document.getElementById('expert-back').click();
     await sleep(200);
-    // Statistics export lives in the backup manager.
-    document.getElementById('settings-backup-btn').click();
+    // Statistics export lives in the statistics dialog.
+    document.getElementById('settings-stats-btn').click();
     await until(() => document.getElementById('stats-export-format'), 60);
     await sleep(200);
     if (!document.getElementById('stats-export-format')) errs.push('the statistics export select never appeared');
-    audit('backup manager');
-    document.getElementById('backup-modal').classList.add('hidden');
+    audit('statistics');
+    document.getElementById('stats-modal').classList.add('hidden');
     document.getElementById('settings-close').click();
     await sleep(200);
     // Library: the sort select carries the keyboard check.

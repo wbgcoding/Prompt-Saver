@@ -73,12 +73,13 @@ ACTS = {
                "await sleep(600);"),
     "help": "$('gear').click(); await sleep(300); $('help-open').click(); await sleep(500);",
     "backup": "$('gear').click(); await sleep(300); $('settings-backup-btn').click(); await sleep(600);",
+    "stats": "$('gear').click(); await sleep(300); $('settings-stats-btn').click(); await sleep(600);",
     "snipedit": SNIP_OPEN,
     "snipdraw": SNIP_OPEN + "document.querySelector('#snip-edit-tools [data-tool=\"rect\"]')?.click(); await sleep(300);",
 }
 # Area groups, so a review of one area shoots only its surfaces.
 GROUPS = {
-    "@settings": ["settings", "settings_end", "expert", "help"],
+    "@settings": ["settings", "settings_end", "expert", "help", "stats", "backup"],
     "@library": ["library", "history"],
     "@tiles": ["main", "tilemenu", "editor", "editor_long", "editor_adv", "folder"],
     "@snip": ["snipedit", "snipdraw"],

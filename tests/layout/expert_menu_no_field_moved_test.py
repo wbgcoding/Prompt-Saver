@@ -1,7 +1,8 @@
 """413's own hard rule, made mechanical: no existing settings row may change
 which expert-menu group (and therefore which tab) it lives in, and the
-statistics/backups window's pre-existing sections must keep their relative
-order. New rows are fine; a MOVED or REMOVED one is not.
+backup window's sections must stay in the order backups, storage, retention
+(the usage statistics have their own dialog). New rows are fine; a MOVED or
+REMOVED one is not.
 
 Compares the current `ui/main.js` / `ui/index.html` against the git HEAD
 versions (the tree as it stood before this round's retention-overview work
@@ -12,7 +13,6 @@ Run:  python tests/layout/expert_menu_no_field_moved_test.py
 Exit: 0 = nothing moved, 1 = a field's group changed or disappeared.
 """
 import re
-import subprocess
 import sys
 from pathlib import Path
 
@@ -62,17 +62,8 @@ def group_membership(src):
 
 
 def panel_order(html):
-    ids = re.findall(r'id="(stats-panel|storage-panel|retention-panel|backup-panel)"', html)
+    ids = re.findall(r'id="(storage-panel|retention-panel|backup-panel)"', html)
     return ids
-
-
-def git_show(rel_path):
-    out = subprocess.run(
-        ["git", "show", f"HEAD:{rel_path}"], cwd=REPO,
-        capture_output=True, text=True, encoding="utf-8", errors="replace")
-    if out.returncode != 0:
-        return None
-    return out.stdout
 
 
 def main():
@@ -95,13 +86,11 @@ def main():
             problems.append(f"{kind} '{key}' moved from group {old_group} to {new_group}")
 
     current_html = INDEX.read_text(encoding="utf-8")
-    baseline_html = git_show("ui/index.html")
-    if baseline_html is not None:
-        old_order = [p for p in panel_order(baseline_html) if p != "retention-panel"]
-        new_order = [p for p in panel_order(current_html) if p != "retention-panel"]
-        if old_order != new_order:
-            problems.append(
-                f"the backup window's pre-existing panels changed relative order: {old_order} -> {new_order}")
+    order = panel_order(current_html)
+    if order != ["backup-panel", "storage-panel", "retention-panel"]:
+        problems.append(f"the backup window's panels are not backups, storage, retention: {order}")
+    if 'id="stats-panel"' not in current_html[current_html.index('id="stats-modal"'):]:
+        problems.append("the usage statistics panel is not inside the statistics dialog")
 
     added = sorted(k for k in current if k not in baseline)
     print(f"expert-menu keys at HEAD: {len(baseline)}, now: {len(current)} ({len(added)} added)")

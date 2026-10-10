@@ -81,6 +81,9 @@ SECTION = """\
       document.getElementById('settings-backup-btn').click(); await step(500);
       checkDialog('the backup dialog');
       document.getElementById('backup-close').click(); await step();
+      document.getElementById('settings-stats-btn').click(); await step(500);
+      checkDialog('the statistics dialog');
+      document.getElementById('stats-close').click(); await step();
       document.getElementById('expert-open').click(); await step(400);
       checkDialog('the expert menu');
       document.getElementById('settings-close').click(); await step();

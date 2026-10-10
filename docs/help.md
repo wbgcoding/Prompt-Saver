@@ -522,7 +522,7 @@ growing unbounded.
 A tab of the library (Library → Copy history): a log of what was copied and when, through the app and, if "Record copies from
 other apps" is on, elsewhere. Grouped view, automatic retention
 (30 days for a new install, adjustable, 0 keeps everything),
-per-entry delete, and usage statistics including a 14-day activity chart.
+and per-entry delete.
 The copy history is one list; the sort field switches between Recently copied and Most used (top 20).
 
 ## Organising
@@ -1006,14 +1006,9 @@ Encrypted, compressed snapshots of the entire library and settings, on an
 automatic schedule with daily, weekly, monthly and yearly retention tiers, and a restore that can
 target data only, settings only, or both. Two buttons beside Create backup
 save a backup to a file of your choice or import one from a file. The same
-window also has a usage-statistics section (totals, a 14-day activity chart, most-used tiles),
-unrelated to the backups themselves, with its own button to export the
-statistics as CSV, TXT or JSON, and a storage section that shows how much disk
+window also has a storage section that shows how much disk
 space the database, attachments, screenshots, recordings, backups, temporary
-files and the error log each use, with a button to open a listed folder. The
-usage statistics also list the most-used tools, screenshots through backups,
-with a short list of the ones never used, all counted locally and included in
-the export.
+files and the error log each use, with a button to open a listed folder.
 
 A retention section lists one row per kind of data this app keeps around on
 its own (trash, copy history, copies from other apps, recordings, discarded
@@ -1030,6 +1025,16 @@ plain storage. Below that, every prompt it holds, with its own edit date,
 size and kind, searchable by name and sortable by any column, with a button
 to restore that single prompt right from the list instead of the whole
 snapshot.
+
+### Usage statistics
+
+A small window opened from Settings → Usage statistics, with four things: the
+number of prompts, the copies of the last 7 days, the most used prompts by
+name (a list of 5, 10 or 20, your choice) and the prompts that were never used,
+which you can click to find them in the library. The "Show statistics" switch
+turns the display on; the numbers themselves are collected by the copy
+history. Everything stays on this computer. The export button saves the full
+numbers, including daily counts and tool use, as CSV, TXT or JSON.
 
 ---
 
@@ -1448,8 +1453,7 @@ Kacheln zurück; archivieren/entarchivieren geht per Rechtsklickmenü oder aus
 der Sammelleiste der Bibliothek.
 
 **Kopierverlauf** (Bibliothek → Reiter Kopierverlauf): Protokoll, Gruppierung, Aufbewahrung (bei einer neuen
-Installation 30 Tage, einstellbar, 0 behält alles), Einzeleintrag löschen,
-Statistik mit 14-Tage-Diagramm.
+Installation 30 Tage, einstellbar, 0 behält alles), Einzeleintrag löschen.
 Der Kopierverlauf ist eine Liste; das Sortierfeld wechselt zwischen Zuletzt kopiert und Meistgenutzt (die 20 häufigsten).
 
 **Medien**: Video-Steuerung, Autoplay und Schleife (beide ab Werk aus), Unschärfe bis zum Überfahren. Bibliothek und Kopierverlauf
@@ -1751,16 +1755,10 @@ vermutlich schon.
 **Eigenständig: Backup-Verwaltung.** Verschlüsselte Backups, Aufbewahrung nach Tag, Woche, Monat und Jahr,
 gezieltes Wiederherstellen. Mit den zwei Buttons neben „Backup erstellen“ lässt
 sich ein Backup in eine Datei deiner Wahl speichern oder aus einer Datei
-importieren. Im selben Fenster außerdem eine
-Nutzungsstatistik (Summen, 14-Tage-Diagramm, meistgenutzte Kacheln),
-unabhängig von den Backups selbst, mit einem eigenen Button, um die Statistik
-als CSV, TXT oder JSON zu exportieren, sowie ein Speicherbereich, der zeigt,
+importieren. Im selben Fenster außerdem ein Speicherbereich, der zeigt,
 wie viel Platz Datenbank, Anhänge, Bildschirmfotos, Aufnahmen, Backups,
 temporäre Dateien und das Fehlerprotokoll jeweils belegen, mit einem Button,
-um einen aufgeführten Ordner zu öffnen. Die Nutzungsstatistik listet außerdem
-die meistgenutzten Werkzeuge auf, von Bildschirmfotos bis Backups, mit
-einer kurzen Liste der noch nie benutzten. Alles wird rein lokal gezählt und
-ist im Export enthalten. Ein Aufbewahrungsbereich listet eine Zeile je Art
+um einen aufgeführten Ordner zu öffnen. Ein Aufbewahrungsbereich listet eine Zeile je Art
 von Daten, die diese App selbst aufhebt (Papierkorb, Kopierverlauf,
 Kopien aus anderen Apps, Aufnahmen, verworfene Aufnahmen, temporäre Exporte
 und unfertige Bearbeitungsstände), mit dem aktuellen Stand, wie lange er
@@ -1776,6 +1774,15 @@ enthaltene Prompt mit eigenem Änderungsdatum, Größe und Art, durchsuchbar
 nach Namen und nach jeder Spalte sortierbar, mit einem Button, um genau
 diesen einen Prompt direkt aus der Liste wiederherzustellen statt der
 ganzen Backup.
+
+**Nutzungsstatistik** (Einstellungen → Nutzungsstatistik): Ein kleines Fenster mit vier Dingen: der Zahl der
+Prompts, den Kopien der letzten 7 Tage, den meistgenutzten Prompts mit Namen
+(eine Liste mit 5, 10 oder 20 Einträgen, nach Wahl) und den nie genutzten
+Prompts, die sich anklicken lassen, um sie in der Bibliothek zu finden. Der
+Schalter „Statistik anzeigen“ schaltet die Anzeige ein; die Zahlen selbst
+sammelt der Kopierverlauf. Alles bleibt auf diesem Rechner. Der Export-Button
+speichert die vollständigen Zahlen samt Tageswerten und Werkzeugnutzung als CSV,
+TXT oder JSON.
 
 **Eigenständig: Schnellstarter.** Strg+Alt+P, unscharfe Suche, sofortiges Kopieren. Wie viele Treffer er zeigt, stellt das Expertenmenü ein (ab Werk 8). Eine Zeile unten nennt die Tasten.
 

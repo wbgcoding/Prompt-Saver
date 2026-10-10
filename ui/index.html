@@ -574,14 +574,29 @@
         </button>
       </div>
       <div class="backup-body">
-        <!-- Four sections in this fixed order: usage, then storage, then
-             retention, then backups. Each heading is built by its own render
-             function and IS the collapse head for its whole section, switch
-             included where it has one. -->
-        <div id="stats-panel" class="expert-custom"></div>
+        <!-- Three sections in this fixed order: backups, then storage, then
+             retention. Each heading is built by its own render function and IS
+             the collapse head for its whole section. -->
+        <div id="backup-panel" class="expert-custom"></div>
         <div id="storage-panel" class="expert-custom"></div>
         <div id="retention-panel" class="expert-custom"></div>
-        <div id="backup-panel" class="expert-custom"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Usage statistics: opened from settings -->
+  <div id="stats-modal" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 class="modal-title" data-i18n="statsSection">Usage statistics</h2>
+        <button id="stats-close" class="icon-btn" data-i18n-aria="close">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="stats-body">
+        <div id="stats-panel" class="expert-custom"></div>
       </div>
     </div>
   </div>
@@ -1114,6 +1129,7 @@
               </select>
             </span>
             <button id="settings-backup-btn" class="ghost-btn" data-i18n="settingsBackupBtn" data-i18n-title="tipSettingsBackup">Backup manager</button>
+            <button id="settings-stats-btn" class="ghost-btn" data-i18n="statsSection" data-i18n-title="tipSettingsStats">Usage statistics</button>
           </div>
         </div>
       </section>

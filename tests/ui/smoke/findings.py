@@ -974,7 +974,7 @@ def run(browser, tmp):
     await bootReady();
     document.getElementById('gear').click();
     await sleep(200);
-    document.getElementById('settings-backup-btn').click();
+    document.getElementById('settings-stats-btn').click();
     await sleep(600);
     const swi = () => document.querySelector('#stats-panel .stats-head-row .switch');
     if (!swi()) errs.push('654: the statistics switch is missing');
@@ -1242,7 +1242,7 @@ def run(browser, tmp):
     await bootReady();
     document.getElementById('gear').click();
     await sleep(200);
-    document.getElementById('settings-backup-btn').click();
+    document.getElementById('settings-stats-btn').click();
     await sleep(600);
     const head = document.querySelector('#stats-panel .stats-head-row');
     const exp = document.querySelector('#stats-panel .stats-export-row');

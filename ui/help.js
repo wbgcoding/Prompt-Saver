@@ -355,11 +355,24 @@ export const HELP_CONTENT = {
         "Restore from the snapshot list, choosing data only, settings only, or both.",
       ],
       whatHappens:
-        "Retention tiers (daily, weekly, monthly, yearly) thin out older snapshots automatically instead of keeping every one forever. A backup is either whole or absent; a failed one leaves nothing behind. The same window also has a usage-statistics section (totals, a 14-day activity chart, most-used tiles, most-used tools with a list of the ones never touched), unrelated to the backups themselves, plus a storage breakdown of what is taking up disk space. Each snapshot can open its contents: counts, the newest change inside it, the version that made it, and every tile it holds, searchable and sortable, with a button to restore one tile on its own. The statistics can be saved as CSV, TXT or JSON. One row per kind of kept data (trash, copy history, copies from other apps, recordings, temporary exports, edit states) shows how much it holds and how long it is kept, jumps to its setting and can clean it up on the spot.",
+        "Retention tiers (daily, weekly, monthly, yearly) thin out older snapshots automatically instead of keeping every one forever. A backup is either whole or absent; a failed one leaves nothing behind. The same window also has a storage breakdown of what is taking up disk space. Each snapshot can open its contents: counts, the newest change inside it, the version that made it, and every tile it holds, searchable and sortable, with a button to restore one tile on its own. One row per kind of kept data (trash, copy history, copies from other apps, recordings, temporary exports, edit states) shows how much it holds and how long it is kept, jumps to its setting and can clean it up on the spot.",
       settings: [
         "Interval, retention tiers, password, restore scope: Backup manager (its own window, opened from Settings)",
-        "Usage statistics, how many tiles it lists: same window, below the backups",
       ],
+    },
+    {
+      section: "system",
+      title: "Usage statistics",
+      whatItIs: "A small window with the number of prompts, the copies of the last 7 days, the most used and the never used prompts.",
+      howTo: [
+        "Open Settings and click \"Usage statistics\".",
+        "Switch on \"Show statistics\".",
+        "Pick how many prompts the most used list shows: 5, 10 or 20.",
+        "Click a never used prompt to find it in the library.",
+      ],
+      whatHappens:
+        "Everything stays on this computer. The export button saves the full numbers, including daily counts and tool use, as CSV, TXT or JSON.",
+      settings: [],
     },
     {
       section: "alwaysOnTop",
@@ -1106,11 +1119,24 @@ export const HELP_CONTENT = {
         "Aus der Snapshot-Liste wiederherstellen und dabei nur Daten, nur Einstellungen oder beides wählen.",
       ],
       whatHappens:
-        "Aufbewahrungsstufen (täglich, wöchentlich, monatlich, jährlich) dünnen ältere Snapshots automatisch aus, statt jeden für immer zu behalten. Ein Backup ist entweder vollständig oder gar nicht vorhanden; ein fehlgeschlagenes hinterlässt nichts. Dasselbe Fenster enthält außerdem eine Nutzungsstatistik (Gesamtzahlen, ein 14-Tage-Diagramm, meistgenutzte Kacheln, meistgenutzte Werkzeuge mit einer Liste der nie benutzten), unabhängig von den Backups selbst, dazu einen Speicherüberblick, was auf der Festplatte wie viel Platz belegt. Jeder Snapshot kann seinen Inhalt zeigen: Anzahlen, die jüngste Änderung darin, die Version, die ihn erstellt hat, und jede enthaltene Kachel, durchsuchbar und sortierbar, mit einem Button, der eine einzelne Kachel wiederherstellt. Die Statistik lässt sich als CSV, TXT oder JSON speichern. Je eine Zeile pro Art aufbewahrter Daten (Papierkorb, Kopierverlauf, Kopien aus anderen Apps, Aufnahmen, temporäre Exporte, Bearbeitungsstände) zeigt, wie viel sie enthält und wie lange sie bleibt, springt zu ihrer Einstellung und kann sie sofort aufräumen.",
+        "Aufbewahrungsstufen (täglich, wöchentlich, monatlich, jährlich) dünnen ältere Snapshots automatisch aus, statt jeden für immer zu behalten. Ein Backup ist entweder vollständig oder gar nicht vorhanden; ein fehlgeschlagenes hinterlässt nichts. Dasselbe Fenster enthält außerdem einen Speicherüberblick, was auf der Festplatte wie viel Platz belegt. Jeder Snapshot kann seinen Inhalt zeigen: Anzahlen, die jüngste Änderung darin, die Version, die ihn erstellt hat, und jede enthaltene Kachel, durchsuchbar und sortierbar, mit einem Button, der eine einzelne Kachel wiederherstellt. Je eine Zeile pro Art aufbewahrter Daten (Papierkorb, Kopierverlauf, Kopien aus anderen Apps, Aufnahmen, temporäre Exporte, Bearbeitungsstände) zeigt, wie viel sie enthält und wie lange sie bleibt, springt zu ihrer Einstellung und kann sie sofort aufräumen.",
       settings: [
         "Intervall, Aufbewahrungsstufen, Passwort, Wiederherstellungsumfang: Backup-Verwaltung (eigenes Fenster, geöffnet aus Einstellungen)",
-        "Nutzungsstatistiken, wie viele Kacheln dort gelistet werden: selbes Fenster, unter den Backups",
       ],
+    },
+    {
+      section: "system",
+      title: "Nutzungsstatistik",
+      whatItIs: "Ein kleines Fenster mit der Zahl der Prompts, den Kopien der letzten 7 Tage, den meistgenutzten und den nie genutzten Prompts.",
+      howTo: [
+        "Einstellungen öffnen und „Nutzungsstatistik“ anklicken.",
+        "„Statistik anzeigen“ einschalten.",
+        "Wählen, wie viele Prompts die Liste der meistgenutzten zeigt: 5, 10 oder 20.",
+        "Einen nie genutzten Prompt anklicken, um ihn in der Bibliothek zu finden.",
+      ],
+      whatHappens:
+        "Alles bleibt auf diesem Rechner. Der Export-Button speichert die vollständigen Zahlen samt Tageswerten und Werkzeugnutzung als CSV, TXT oder JSON.",
+      settings: [],
     },
     {
       section: "alwaysOnTop",

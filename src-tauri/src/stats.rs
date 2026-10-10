@@ -7,11 +7,6 @@ pub(crate) struct StatBar {
     pub(crate) name: String,
     pub(crate) count: u32,
 }
-#[derive(Serialize)]
-pub(crate) struct ViewCount {
-    pub(crate) name: String,
-    pub(crate) count: usize,
-}
 // One day's copy count. `ts` is that day's UTC midnight (unix seconds): the
 // frontend already has locale-aware date formatting via Intl, no reason to
 // duplicate it (or pull in a date crate) on the Rust side for a label string.
@@ -20,34 +15,14 @@ pub(crate) struct DayCount {
     pub(crate) ts: u64,
     pub(crate) count: usize,
 }
+// What the statistics dialog shows; the full numbers live in the export.
 #[derive(Serialize)]
 pub(crate) struct UsageStats {
     pub(crate) total_prompts: usize,
-    pub(crate) total_copies: u64,
     pub(crate) copies7: u64,
-    pub(crate) copies30: u64,
-    pub(crate) used_count: usize,
-    pub(crate) avg_copies: f64,
-    pub(crate) total_chars: u64,
-    pub(crate) recent_name: String,
-    pub(crate) recent_ts: u64,
-    pub(crate) longest_name: String,
-    pub(crate) longest_chars: usize,
-    pub(crate) types: Vec<ViewCount>,
     pub(crate) top: Vec<StatBar>,
     pub(crate) never_used: Vec<StatBar>,
-    pub(crate) per_view: Vec<ViewCount>,
-    pub(crate) daily: Vec<DayCount>, // last 14 UTC days, oldest first, zero-filled
     pub(crate) history_on: bool,
-    pub(crate) tools: Vec<ToolBar>,       // most-used tools, name = the bare tool key (frontend translates it)
-    pub(crate) tools_never_used: Vec<String>, // tool keys with a zero counter
-}
-
-#[derive(Serialize)]
-pub(crate) struct ToolBar {
-    pub(crate) name: String,
-    pub(crate) count: u32,
-    pub(crate) last_used: u64,
 }
 
 // ---- Most-used tools ----
@@ -112,37 +87,6 @@ pub(crate) async fn record_tool_usage(state: State<'_, Db>, tool: String) -> Res
     Ok(())
 }
 
-// (top-N ToolBars, never-used tool keys) from the same usage/last_used maps
-// usage_stats already reads for prompts -- top_n mirrors the dashboard's own
-// "how many rows" field, the never-used list is always complete (it is short
-// by definition: at most 13 entries).
-pub(crate) fn tool_usage_stats(usage: &HashMap<String, u32>, last_used: &HashMap<String, u64>, top_n: usize) -> (Vec<ToolBar>, Vec<String>) {
-    let mut used: Vec<(&str, u32, u64)> = TOOL_KEYS
-        .iter()
-        .filter_map(|k| {
-            let n = usage.get(&tool_usage_key(k)).copied().unwrap_or(0);
-            if n > 0 {
-                let lu = last_used.get(&tool_usage_key(k)).copied().unwrap_or(0);
-                Some((*k, n, lu))
-            } else {
-                None
-            }
-        })
-        .collect();
-    used.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(b.0)));
-    let tools: Vec<ToolBar> = used
-        .into_iter()
-        .take(top_n)
-        .map(|(k, n, lu)| ToolBar { name: k.to_string(), count: n, last_used: lu })
-        .collect();
-    let never_used: Vec<String> = TOOL_KEYS
-        .iter()
-        .filter(|k| usage.get(&tool_usage_key(k)).copied().unwrap_or(0) == 0)
-        .map(|k| k.to_string())
-        .collect();
-    (tools, never_used)
-}
-
 // Coarse type of a prompt for the statistics breakdown.
 pub(crate) fn prompt_stat_type(p: &Prompt) -> &'static str {
     if !p.file_path.is_empty() {
@@ -168,26 +112,18 @@ pub(crate) fn prompt_stat_type(p: &Prompt) -> &'static str {
 pub(crate) async fn usage_stats(app: AppHandle, state: State<'_, Db>, top_n: usize) -> Result<UsageStats, String> {
     // The copy journal lives in SQLite and owes nothing to the in-memory store,
     // so it is read BEFORE the store is locked. Opening the database and running
-    // three queries while holding that lock made every copy and every save wait
-    // for the statistics dialog to finish opening.
+    // a query while holding that lock made every copy and every save wait for the
+    // statistics dialog to finish opening.
     let now = now_secs();
-    let cutoff30 = now.saturating_sub(30 * 86400);
-    let (copies7, copies30, daily) = db_conn(&app)
+    let copies7 = db_conn(&app)
         .map(|c| {
-            let c7 = c
-                .query_row("SELECT COUNT(*) FROM copy_log WHERE ts >= ?1", params![now.saturating_sub(7 * 86400) as i64], |r| r.get::<_, i64>(0))
-                .unwrap_or(0) as u64;
-            let c30 = c
-                .query_row("SELECT COUNT(*) FROM copy_log WHERE ts >= ?1", params![cutoff30 as i64], |r| r.get::<_, i64>(0))
-                .unwrap_or(0) as u64;
-            let daily = db_daily_copies(&c, 14);
-            (c7, c30, daily)
+            c.query_row("SELECT COUNT(*) FROM copy_log WHERE ts >= ?1", params![now.saturating_sub(7 * 86400) as i64], |r| r.get::<_, i64>(0))
+                .unwrap_or(0) as u64
         })
-        .unwrap_or((0, 0, Vec::new()));
+        .unwrap_or(0);
 
     let store = lock(&state);
     let usage = &store.settings.usage;
-    let last_used = &store.settings.last_used;
     let name_of = |p: &Prompt| -> String {
         if !p.name.is_empty() {
             p.name.clone()
@@ -198,31 +134,6 @@ pub(crate) async fn usage_stats(app: AppHandle, state: State<'_, Db>, top_n: usi
         }
     };
     let total_prompts = store.prompts.len();
-    let total_copies: u64 = usage.values().map(|v| *v as u64).sum();
-    let used_count = store.prompts.iter().filter(|p| usage.get(&p.id).copied().unwrap_or(0) > 0).count();
-    let avg_copies = if used_count > 0 { total_copies as f64 / used_count as f64 } else { 0.0 };
-    let total_chars: u64 = store.prompts.iter().map(|p| p.text.chars().count() as u64).sum();
-    let (mut recent_name, mut recent_ts) = (String::new(), 0u64);
-    for p in &store.prompts {
-        let lu = last_used.get(&p.id).copied().unwrap_or(0);
-        if lu > recent_ts { recent_ts = lu; recent_name = name_of(p); }
-    }
-    let (mut longest_name, mut longest_chars) = (String::new(), 0usize);
-    for p in &store.prompts {
-        let c = p.text.chars().count();
-        if c > longest_chars { longest_chars = c; longest_name = name_of(p); }
-    }
-    let mut type_counts: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
-    for p in &store.prompts {
-        *type_counts.entry(prompt_stat_type(p)).or_insert(0) += 1;
-    }
-    let types: Vec<ViewCount> = ["text", "image", "video", "pdf", "file"]
-        .iter()
-        .filter_map(|k| {
-            let c = type_counts.get(k).copied().unwrap_or(0);
-            if c > 0 { Some(ViewCount { name: (*k).to_string(), count: c }) } else { None }
-        })
-        .collect();
     let mut used: Vec<&Prompt> = store
         .prompts
         .iter()
@@ -250,44 +161,13 @@ pub(crate) async fn usage_stats(app: AppHandle, state: State<'_, Db>, top_n: usi
         .map(|p| StatBar { id: p.id.clone(), name: name_of(p), count: usage.get(&p.id).copied().unwrap_or(0) })
         .collect();
     never_used.truncate(top_n.max(10) * 2);
-    let per_view: Vec<ViewCount> = store
-        .settings
-        .views
-        .iter()
-        .map(|v| {
-            let key = grid_key(v.cols, v.rows);
-            let count = v.layouts.get(&key).map(|l| l.len()).unwrap_or(0);
-            ViewCount { name: v.name.clone(), count }
-        })
-        .collect();
     let history_on = store.settings.ui_flags.get("copyHistory") != Some(&false);
-    let (tools, tools_never_used) = tool_usage_stats(usage, last_used, top_n);
-    Ok(UsageStats {
-        total_prompts,
-        total_copies,
-        copies7,
-        copies30,
-        used_count,
-        avg_copies,
-        total_chars,
-        recent_name,
-        recent_ts,
-        longest_name,
-        longest_chars,
-        types,
-        top,
-        never_used,
-        per_view,
-        tools,
-        tools_never_used,
-        daily,
-        history_on,
-    })
+    Ok(UsageStats { total_prompts, copies7, top, never_used, history_on })
 }
 
 // ---- Usage statistics export ----
-// One row per prompt (not just the dashboard's top-N) plus the same daily
-// counts the dashboard charts. A name/tag counter is not a substitute for a
+// One row per prompt (not just the dashboard's top-N) plus the daily copy
+// counts of the last 14 days and every tool counter. A name/tag counter is not a substitute for a
 // spreadsheet someone can sort and filter on their own. `last_used`/`ts` stay
 // raw unix seconds: the dashboard already formats them through Intl on the JS
 // side, and duplicating a calendar calculation here for a plain text export

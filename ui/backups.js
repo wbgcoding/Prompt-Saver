@@ -1,7 +1,7 @@
 // Backup dialog: storage and retention panels, restore and selective restore.
 import { $, armButton, DISARM_MS, disarmButton, errText, errToast, flag, invoke, LANG, LOCK_SVG, optFlag, settings, t, toast, undoToast, val, withTaskbarBusy } from "./core.js";
 import { applyFlags, applyValues, EXPERT_PATHS, jumpToExpertSetting, openVideoCleanup, rowResetBtn, withTip } from "./expertMenu.js";
-import { collapsibleHead, numRow, PROMPT_TYPE_LABELS, recordToolUsage, renderStatsPanel, statSection } from "./management.js";
+import { collapsibleHead, numRow, PROMPT_TYPE_LABELS, recordToolUsage, statSection } from "./management.js";
 import { fmtBytes } from "./floatShared.js";
 import { restoreClipInbox } from "./journal.js";
 import { maybeBackupBeforeWipe, runExportAll, runImportAll } from "./settingsPanel.js";
@@ -51,7 +51,6 @@ export async function saveBackupSetting(kind, key, value) {
 export let backupPwDraft = "";
 export function openBackups() {
   $("backup-modal").classList.remove("hidden");
-  renderStatsPanel($("stats-panel"));
   renderStoragePanel($("storage-panel"));
   renderRetentionPanel($("retention-panel"));
   renderBackupPanel($("backup-panel"));
@@ -102,7 +101,7 @@ export async function renderStoragePanel(root, force) {
   const panel = document.createElement("div");
   panel.className = "stats-panel-body";
   const head = collapsibleHead(t("storageTitle"), panel, "storagePanelOpen");
-  head.classList.add("backup-split"); // divider from the usage section above
+  head.classList.add("backup-split"); // divider from the backups section above
   root.append(head, panel);
   const body = panel;
 
