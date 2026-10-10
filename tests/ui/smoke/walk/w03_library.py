@@ -331,6 +331,17 @@ SECTION = """\
         }
       }
     }
+    // 270: the star of a favourite row is gold without a frame.
+    {
+      const fav270 = document.querySelector('#library-list .lib-item .lib-fav.active');
+      if (!fav270) out.errors.push('270: no favourite row to read');
+      else {
+        await sleep(300);
+        const cs270 = getComputedStyle(fav270);
+        if (!(cs270.borderTopColor === 'transparent' || cs270.borderTopColor.endsWith(', 0)'))) out.errors.push('270: the favourite star still has a frame: ' + cs270.borderTopColor);
+        if (cs270.color !== 'rgb(245, 179, 1)') out.errors.push('270: the favourite star is not gold: ' + cs270.color);
+      }
+    }
     // 436: saved searches keep a query, its active tag filters and the current
     // sort together as one chip. Saving, applying, the cap, renaming and
     // deleting are all self-contained here and end with the list empty again.

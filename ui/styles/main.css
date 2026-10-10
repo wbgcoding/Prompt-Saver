@@ -4383,14 +4383,15 @@ body.drag-over::after {
 .lib-item .lib-fav {
   align-self: center;
   flex: 0 0 auto;
-  border: 1px solid var(--border);
+  border: 1px solid transparent;
+  background: none;
   border-radius: 8px;
   color: var(--muted);
   font-size: 15px;
   line-height: 1;
 }
-.lib-item .lib-fav:hover { border-color: #f5b301; color: #f5b301; }
-.lib-item .lib-fav.active { color: #f5b301; border-color: #f5b301; }
+.lib-item .lib-fav:hover { color: #f5b301; border-color: transparent; background: var(--surface-2); }
+.lib-item .lib-fav.active { color: #f5b301; border-color: transparent; }
 /* Favorites filter chip in the search bar. */
 .lib-fav-chip { color: var(--muted); }
 .lib-fav-chip.active { background: #f5b301; border-color: #f5b301; color: #1a1a1a; }
