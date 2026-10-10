@@ -343,6 +343,10 @@ body.video-body {
 .ve-switch-row > span { color: var(--fg); font-size: 13px; }
 .ve-trim-row { display: flex; flex-wrap: wrap; gap: 8px 16px; }
 .ve-trim-row .field { flex-direction: row; align-items: center; gap: 6px; }
+/* The wide layout's side panel is only 320 px: label over field keeps both on one line. */
+@media (min-width: 901px) {
+  .ve-trim-row .field { flex-direction: column; align-items: flex-start; gap: 4px; }
+}
 .ve-timefield { font-variant-numeric: tabular-nums; width: 9.5em; flex: 0 0 auto; }
 .ve-steps { display: flex; flex-wrap: wrap; gap: 4px; }
 .ve-step { padding: 4px 8px; font-size: 12px; }

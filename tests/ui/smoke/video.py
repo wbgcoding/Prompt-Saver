@@ -60,6 +60,33 @@ VIDEO_DE_PROBE = """
       if (Math.abs(a.top - b.top) > 2) errs.push('936: the clip start and end fields are not on one line');
     }
     if (window.innerWidth > 880) errs.push('the German boot did not get its exact window size: ' + window.innerWidth);
+    // 940: once the theme colour transitions are settled, the editor shows its
+    // real theme at the narrow size (no faded surface): the body takes the theme
+    // background and an inactive tab keeps a readable text contrast. A headless
+    // boot freezes those transitions part way, so they are switched off first.
+    {
+      const noFade = document.createElement('style');
+      noFade.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; }';
+      document.head.appendChild(noFade);
+      await sleep(50);
+      const nums = (c) => c.match(/[0-9.]+/g).map(Number);
+      const lum = (rgb) => { const v = rgb.map((x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); }); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
+      const over = (fg, bg) => { const a = fg.length > 3 ? fg[3] : 1; return [0, 1, 2].map((i) => fg[i] * a + bg[i] * (1 - a)); };
+      const probeEl = document.createElement('div');
+      probeEl.style.background = 'var(--bg)';
+      document.body.appendChild(probeEl);
+      const token = getComputedStyle(probeEl).backgroundColor;
+      probeEl.remove();
+      const bodyBg = getComputedStyle(document.body).backgroundColor;
+      if (bodyBg !== token) errs.push('940: the body background ' + bodyBg + ' is not the theme background ' + token);
+      const tab = document.getElementById('ve-tab-overlays');
+      const tcs = getComputedStyle(tab);
+      const bg = over(nums(tcs.backgroundColor), nums(bodyBg));
+      const text = over(nums(tcs.color), bg);
+      const hi = Math.max(lum(bg), lum(text)), lo = Math.min(lum(bg), lum(text));
+      const ratio = (hi + 0.05) / (lo + 0.05);
+      if (ratio < 4.5) errs.push('940: the inactive Overlays tab text has a contrast of only ' + ratio.toFixed(2));
+    }
     // DE-PROBES
   } catch (e) { errs.push('probe: ' + e.message); }
   errs.push(...(window.__SMOKE_ERRORS__ || []));
@@ -289,6 +316,14 @@ VIDEO_PROBE = """
       if (frameText() !== want(2)) errs.push('938: one frame on, the counter reads "' + frameText() + '" instead of "' + want(2) + '"');
       document.getElementById('ve-prev-frame').click();
       await sleep(60);
+    }
+
+    // 936-wide: the clip start and end fields share a line in every layout,
+    // also in the 320 px side panel of the wide layout.
+    {
+      const a = document.getElementById('ve-trim-start-val').getBoundingClientRect();
+      const b = document.getElementById('ve-trim-end-val').getBoundingClientRect();
+      if (Math.abs(a.top - b.top) > 2) errs.push('936-wide: the clip start and end fields are on two lines at ' + window.innerWidth + 'px');
     }
 
     // ---- tabs actually switch panels ----

@@ -98,6 +98,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             theme = q.get("theme", "")
             if theme.isalpha():
                 head += f'<script>SETTINGS.theme = "{theme}"; window.__SHOT_THEME__ = "{theme}";</script>\n'
+            # A headless shot freezes colour transitions part way (the theme fades in from the
+            # light default), which paints the whole page washed out; shoot the settled state.
+            head += '<style>*, *::before, *::after { transition: none !important; animation: none !important; }</style>\n'
             html = page.read_text(encoding="utf-8").replace("<script", head + "<script", 1)
             act = ACTS.get(q.get("act", ""), "")
             html = html.replace("</body>", f"<script type=module>{PRE}{act}</script></body>")
