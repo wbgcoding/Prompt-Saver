@@ -922,6 +922,51 @@ window.__LAUNCHER_PREFILL__ = 'Translate';
 """
 
 
+# A prompt written in Markdown shows its words, not its marks, in the launcher's
+# one-line preview.
+LAUNCHER_MD_STUB = """
+<script>
+const mdInvoke = window.__TAURI__.core.invoke;
+window.__TAURI__.core.invoke = async (cmd, args) => {
+  const r = await mdInvoke(cmd, args);
+  if (cmd === 'launcher_items') {
+    const nl = String.fromCharCode(10);
+    r.prompts = [{ id: 'pmd', name: 'Markdown prompt', text: ['# Heading one', '## Heading two with **bold** text'].join(nl), color: '' }].concat(r.prompts);
+  }
+  return r;
+};
+</script>
+"""
+
+
+LAUNCHER_MD_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  try {
+    await sleep(500);
+    const search = document.getElementById('search');
+    search.value = 'Markdown prompt';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    await sleep(60);
+    // 943-dg: the preview line carries no Markdown marks.
+    const prev = document.querySelector('#results .launcher-row[data-id="pmd"] .launcher-row-preview');
+    if (!prev) errs.push('943-dg: the Markdown prompt has no preview line');
+    else {
+      if (/#|[*][*]/.test(prev.textContent)) errs.push('943-dg: the preview still shows Markdown marks: ' + prev.textContent);
+      if (prev.textContent !== 'Heading one Heading two with bold text') errs.push('943-dg: unexpected preview text: ' + prev.textContent);
+    }
+  } catch (e) { errs.push('probe: ' + e.message); }
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
 # The custom Windows-11-style tray menu: rendering, keyboard nav and
 # activation. The Rust-side content (favorites/recent selection, ordering, caps)
 # has its own unit tests -- this only proves the window draws what it is given
@@ -1521,6 +1566,7 @@ def run(browser, tmp):
             ("vars.html", (340, 250), VARS_PROBE, 15000),
             ("launcher.html", (560, 420), LAUNCHER_PROBE, 15000),
             ("launcher_prefill.html", (560, 420), LAUNCHER_PREFILL_PROBE, 15000),
+            ("launcher_md.html", (560, 420), LAUNCHER_MD_STUB + LAUNCHER_MD_PROBE, 15000),
             ("tray.html", (240, 360), TRAY_PROBE, 15000),
             ("recbar.html", (320, 56), RECBAR_PROBE, 15000),
             ("camera.html", (420, 620), CAMERA_STUB + CAMERA_PROBE, 15000),
@@ -1534,7 +1580,7 @@ def run(browser, tmp):
                 (REPO / "ui" / "floating.html").read_text(encoding="utf-8")
                 .replace("<script", '<script>window.__FLOAT_PROMPT_ID__ = "%s";</script>\n<script' % pid, 1),
                 encoding="utf-8")
-        if name == "launcher_prefill.html":
+        if name in ("launcher_prefill.html", "launcher_md.html"):
             shutil.copyfile(REPO / "ui" / "launcher.html", tmp / "ui" / name)
         side = tmp / "ui" / name
         side.write_text(
