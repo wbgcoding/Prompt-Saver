@@ -815,6 +815,8 @@ const RESULTS = {
     if (!a || !Array.isArray(a.relPaths)) throw new Error("import_folder_files stub called without relPaths");
     return a.relPaths.length;
   },
+  // The real command answers with the name of the backup it just made.
+  create_backup: () => "2026-07-26_12-00-00",
   list_backups: () => [
     { name: "2026-07-25_18-30-00", size: 812345, prompts: 12, items: [
       { name: "Draft reply", chars: 214, kind: "text" },
@@ -1552,6 +1554,10 @@ window.__TAURI__ = {
       if (cmd === "batch_prompts" && Array.isArray(window.__BATCH_PROMPTS_GATE__)) {
         await new Promise((resolve) => window.__BATCH_PROMPTS_GATE__.push(resolve));
       }
+      // A probe can slow one command down (window.__STUB_DELAY_MS__ = { cmd: ms }) to
+      // open a race window; the handler above already ran, only the answer waits.
+      const delay = window.__STUB_DELAY_MS__ && window.__STUB_DELAY_MS__[cmd];
+      if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
       if (!outcome.ok) throw outcome.error;
       return outcome.value;
     },

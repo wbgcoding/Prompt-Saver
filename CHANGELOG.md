@@ -914,6 +914,9 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **The search overlay can no longer get stuck open.** Opening it and closing
+  it again within a moment (button or Ctrl+K twice) could leave it on screen
+  where Escape and a click outside did nothing.
 - **A button with a placeholder respects the copy cooldown.** Clicking it
   again right after a copy asked for the values a second time, on the grid and
   inside a folder; it is now held back like any other button.

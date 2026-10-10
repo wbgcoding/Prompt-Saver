@@ -363,6 +363,9 @@ export async function openGlobalSearch() {
   gsExpanded = new Set();
   $("gs-input").value = "";
   try { gsHistoryLog = await invoke("recent_copies", { limit: 500, grouped: false }); } catch { gsHistoryLog = []; }
+  // A toggle or Escape during the fetch already closed it: showing it now would leave an
+  // overlay on screen that every close path ignores (they all check gsOpen).
+  if (!gsOpen) return;
   gsRender();
   $("global-search").classList.remove("hidden");
   $("gs-input").focus();

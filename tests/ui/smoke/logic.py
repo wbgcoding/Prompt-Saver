@@ -152,6 +152,28 @@ COOLDOWN_DIALOG_PROBE = """
       }
     }
 """
+# 855: opening the global search and closing it again before the history fetch answers
+# must leave the overlay hidden, not stuck open past every close path.
+SEARCH_RACE_PROBE = """
+    // 855:
+    {
+      window.__STUB_DELAY_MS__ = { recent_copies: 300 };
+      const gs = $('global-search');
+      $('global-search-btn').click();
+      await sleep(50);
+      $('global-search-btn').click();
+      await sleep(600);
+      if (visible(gs)) errs.push('855: the search overlay was shown after it had been closed during the history fetch');
+      window.__STUB_DELAY_MS__ = {};
+      // A plain open still works and closes with Escape.
+      $('global-search-btn').click();
+      await until(() => visible(gs), 40);
+      if (!visible(gs)) errs.push('855: the search overlay did not open');
+      $('gs-input').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await sleep(100);
+      if (visible(gs)) errs.push('855: Escape did not close the search overlay');
+    }
+"""
 
 def _boot(browser, tmp, tag, body, budget=45000):
     side = tmp / "ui" / f"logic-{tag}.html"
@@ -170,7 +192,8 @@ def run(browser, tmp):
     for tag, body in (
             ("edit-event", EDIT_EVENT_PROBE),
             ("archive-overflow", ARCHIVE_OVERFLOW_PROBE),
-            ("cooldown-dialog", COOLDOWN_DIALOG_PROBE)):
+            ("cooldown-dialog", COOLDOWN_DIALOG_PROBE),
+            ("search-race", SEARCH_RACE_PROBE)):
         errs = _boot(browser, tmp, tag, body)
         print(f"-- ui logic ({tag})")
         for e in errs:
