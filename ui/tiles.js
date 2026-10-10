@@ -880,18 +880,23 @@ export function wireTiles() {
         // double-click paste shortcut would otherwise fire on the 2nd click and paste
         // stale clipboard without ever asking. A click only copies, never pastes.
         // Check the entry rotation is actually about to copy, not always entry 0.
+        // A click swallowed by the cooldown used to give no feedback at all:
+        // a quick shake says "that didn't do anything" instead of silence.
+        const blockedByCooldown = () => {
+          if (!copyOnCooldown(id)) return false;
+          el.classList.add("cooldown-blocked");
+          setTimeout(() => el.classList.remove("cooldown-blocked"), 250);
+          return true;
+        };
         if (p && dialogTokens(p, await peekRotatedText(p)).length) {
+          // The cooldown comes before the dialog: a copy that just happened must not
+          // ask again (a cancelled dialog starts no cooldown, so it can be reopened).
+          if (blockedByCooldown()) return;
           await copyTextWithVars(p, el);
           return;
         }
         if (autoPasteDouble(id)) { await autoPasteNow(el); return; } // 2nd fast click pastes
-        // A click swallowed by the cooldown used to give no feedback at all:
-        // a quick shake says "that didn't do anything" instead of silence.
-        if (copyOnCooldown(id)) {
-          el.classList.add("cooldown-blocked");
-          setTimeout(() => el.classList.remove("cooldown-blocked"), 250);
-          return;
-        }
+        if (blockedByCooldown()) return;
         if (p && await copyResolved(p)) {
           showCopied(el);
           recordCopy(id);

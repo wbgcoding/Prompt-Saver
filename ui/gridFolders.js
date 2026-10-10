@@ -423,7 +423,12 @@ export function wireGridFolders() {
       // A plain click copies, exactly like the tile it stands for.
       if (!p) return;
       if (chainMode) { await toggleChainPick(p); return; } // pick (asks vars), don't copy
-      if (dialogTokens(p, await peekRotatedText(p)).length) { await copyTextWithVars(p, d.el); return; }
+      if (dialogTokens(p, await peekRotatedText(p)).length) {
+        // Cooldown first, like a plain copy: a copy that just happened must not ask again.
+        if (copyOnCooldown(d.id)) return;
+        await copyTextWithVars(p, d.el);
+        return;
+      }
       if (autoPasteDouble(d.id)) { await autoPasteNow(d.el); return; } // 2nd fast click pastes
       if (copyOnCooldown(d.id)) return;
       if (await copyResolved(p)) {

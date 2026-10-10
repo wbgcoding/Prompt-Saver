@@ -914,6 +914,9 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **A button with a placeholder respects the copy cooldown.** Clicking it
+  again right after a copy asked for the values a second time, on the grid and
+  inside a folder; it is now held back like any other button.
 - **Archived buttons no longer show up as "do not fit".** An archived prompt
   is hidden from the grid, but it still counted toward the "do not fit into
   this grid" notice and the grow step.

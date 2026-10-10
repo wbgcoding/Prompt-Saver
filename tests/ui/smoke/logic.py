@@ -91,6 +91,67 @@ ARCHIVE_OVERFLOW_PROBE = """
       }
     }
 """
+# 854: a tile or folder member with a placeholder starts the copy cooldown like any other
+# copy: once its dialog was answered, an immediate second click asks nothing.
+COOLDOWN_DIALOG_PROBE = """
+    // 854:
+    {
+      const inv = window.__TAURI__.core.invoke;
+      await inv('set_ui_value', { key: 'copyCooldownMs', value: 2000 });
+      await inv('update_prompt', { id: 'p4', text: 'Folder note for {#{who}#}' });
+      window.__FIRE__('store-synced');
+      await sleep(500);
+      const asks = () => argsOf('open_var_window').length;
+      const answer = async (n) => {
+        window.__FIRE__('vars-filled', JSON.stringify({ values: Array.from({ length: n }, () => 'x'), remember: Array.from({ length: n }, () => false) }));
+        await sleep(300);
+      };
+      const press = (el) => {
+        for (const type of ['pointerdown', 'pointerup', 'click']) {
+          el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, button: 0, isPrimary: true, pointerId: 1, clientX: 5, clientY: 5 }));
+        }
+      };
+      const tile = document.querySelector('#grid .tile[data-id="p1"]');
+      if (!tile) {
+        errs.push('854: the placeholder tile is missing');
+      } else {
+        press(tile);
+        await until(() => asks() === 1, 40);
+        if (asks() !== 1) errs.push('854: the first click did not ask: ' + asks());
+        await answer(2);
+        await sleep(300);
+        const before = asks();
+        press(tile);
+        await sleep(500);
+        if (asks() !== before) errs.push('854: a click right after a copy asked again (tile)');
+      }
+      const ftile = document.querySelector('#grid .folder-tile');
+      if (!ftile) {
+        errs.push('854: the folder tile is missing');
+      } else {
+        press(ftile);
+        await until(() => document.querySelector('.tile-folder-pop:not(.hidden) .folder-member-tile[data-id="p4"]'), 40);
+        const member = document.querySelector('.tile-folder-pop .folder-member-tile[data-id="p4"]');
+        if (!member) {
+          errs.push('854: the folder member with a placeholder is missing');
+        } else {
+          const base = asks();
+          const memberClick = async () => {
+            member.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, isPrimary: true, pointerId: 1, clientX: 5, clientY: 5 }));
+            window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, isPrimary: true, pointerId: 1, clientX: 5, clientY: 5 }));
+            await sleep(500);
+          };
+          await memberClick();
+          if (asks() !== base + 1) errs.push('854: the first member click did not ask: ' + (asks() - base));
+          await answer(1);
+          await sleep(300);
+          const before = asks();
+          await memberClick();
+          if (asks() !== before) errs.push('854: a click right after a copy asked again (folder member)');
+        }
+      }
+    }
+"""
 
 def _boot(browser, tmp, tag, body, budget=45000):
     side = tmp / "ui" / f"logic-{tag}.html"
@@ -108,7 +169,8 @@ def run(browser, tmp):
     failed = 0
     for tag, body in (
             ("edit-event", EDIT_EVENT_PROBE),
-            ("archive-overflow", ARCHIVE_OVERFLOW_PROBE)):
+            ("archive-overflow", ARCHIVE_OVERFLOW_PROBE),
+            ("cooldown-dialog", COOLDOWN_DIALOG_PROBE)):
         errs = _boot(browser, tmp, tag, body)
         print(f"-- ui logic ({tag})")
         for e in errs:
