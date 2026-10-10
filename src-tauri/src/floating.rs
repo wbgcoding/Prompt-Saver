@@ -955,21 +955,23 @@ pub(crate) fn sync_float_windows(app: &AppHandle) {
 // screen identity -- there is nothing left to return to after this runs.
 #[tauri::command]
 pub(crate) async fn float_recall(app: AppHandle, state: State<'_, Db>) -> Result<(), String> {
+    // Monitor and window queries wait for the main thread, so they run before
+    // the store lock is taken: the main thread may be waiting on that lock.
+    let screens = screen_snapshot(&app);
+    let (main_id, mx, my, mw, mh) = screens
+        .first()
+        .cloned()
+        .unwrap_or((String::new(), 0, 0, 1920, 1080));
+    let work = Rect { x: mx as f64, y: my as f64, w: mw as f64, h: mh as f64 };
+    // The work area is in physical pixels, the box sizes in logical ones: scale
+    // them by the main screen's own factor, as the folder dissolve does.
+    let dpi = app
+        .get_webview_window("main")
+        .and_then(|w| w.available_monitors().ok())
+        .and_then(|m| m.first().map(|m| m.scale_factor()))
+        .unwrap_or(1.0);
     {
         let mut store = lock(&state);
-        let screens = screen_snapshot(&app);
-        let (main_id, mx, my, mw, mh) = screens
-            .first()
-            .cloned()
-            .unwrap_or((String::new(), 0, 0, 1920, 1080));
-        let work = Rect { x: mx as f64, y: my as f64, w: mw as f64, h: mh as f64 };
-        // The work area is in physical pixels, the box sizes in logical ones: scale
-        // them by the main screen's own factor, as the folder dissolve does.
-        let dpi = app
-            .get_webview_window("main")
-            .and_then(|w| w.available_monitors().ok())
-            .and_then(|m| m.first().map(|m| m.scale_factor()))
-            .unwrap_or(1.0);
         let (pill_ids, wishes) = recall_wishes(&store.settings, &store.prompts, work, dpi);
         let spots = spread_free_positions(&wishes, &[], work);
 

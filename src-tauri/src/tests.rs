@@ -17757,3 +17757,19 @@ fn hot_path_commands_run_off_the_main_thread() {
         );
     }
 }
+
+#[test]
+fn float_recall_queries_monitors_before_taking_the_store_lock() {
+    // Structural fix (call order), so no red test exists: monitor queries wait
+    // for the main thread, which may itself be waiting on the store lock. The
+    // old body queried them after the lock; this pins the order.
+    let src = include_str!("floating.rs");
+    let at = src.find("fn float_recall(").expect("float_recall");
+    let end = src[at..].find("\n}").expect("end") + at;
+    let body = &src[at..end];
+    let lock_at = body.find("lock(&state)").expect("takes the store lock");
+    for q in ["screen_snapshot(", "available_monitors("] {
+        let q_at = body.find(q).unwrap_or_else(|| panic!("{q} missing"));
+        assert!(q_at < lock_at, "{q} must run before the store lock is taken");
+    }
+}
