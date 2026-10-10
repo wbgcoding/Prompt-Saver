@@ -928,7 +928,10 @@ the video editor and the introduction tour ship on).
   dropped in favour of its default.
 - **Two computers starting on one shared data folder can no longer both take
   ownership.** The folder lock is now claimed in one step and rewritten
-  atomically, so a refresh no longer leaves it briefly unreadable.
+  atomically, a lock is taken over only after it has stood still for the whole
+  waiting time on this computer's own clock (not by the other computer's
+  timestamp), and a computer that finds its lock taken goes read-only instead of
+  writing over it.
 - **Exports and backup files you overwrite are replaced safely.** Saving a prompt
   export, a backup file, a settings export or a statistics export now writes
   to a temporary file first and swaps it in, so a full disk or a crash in the

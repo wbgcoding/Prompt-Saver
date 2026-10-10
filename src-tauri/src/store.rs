@@ -1,4 +1,5 @@
 use super::*;
+use std::time::Instant;
 
 // ---------- SQLite store ----------
 // Prompts live one-per-row (ordered); settings are a single JSON row. The DB
@@ -177,7 +178,17 @@ pub(crate) const DATA_DIR_LOCK_STALE_SECS: u64 = DATA_DIR_LOCK_REFRESH_SECS * 3;
 pub(crate) struct DataDirLockInfo {
     pub(crate) host: String,
     pub(crate) pid: u32,
+    // Wall clock of the writer. Never trusted for staleness (a machine with a
+    // skewed clock would take over a live lock); it only makes the content change
+    // with every refresh.
     pub(crate) seen: u64,
+    // Names one claim of the folder, so a process can tell its own lock from one
+    // that someone else wrote over it. Empty in a lock from an older version.
+    #[serde(default)]
+    pub(crate) id: String,
+    // Counts the refreshes of this claim.
+    #[serde(default)]
+    pub(crate) beat: u64,
 }
 
 pub(crate) fn unix_now() -> u64 {
@@ -201,10 +212,6 @@ pub(crate) fn read_data_dir_lock(path: &Path) -> Option<DataDirLockInfo> {
 
 pub(crate) fn write_data_dir_lock(path: &Path, info: &DataDirLockInfo) -> bool {
     serde_json::to_string(info).is_ok_and(|json| write_bytes_atomic(path, json.as_bytes()).is_ok())
-}
-
-pub(crate) fn lock_is_stale(existing: &DataDirLockInfo) -> bool {
-    unix_now().saturating_sub(existing.seen) >= DATA_DIR_LOCK_STALE_SECS
 }
 
 pub(crate) static DATA_DIR_READONLY: AtomicBool = AtomicBool::new(false);
@@ -231,78 +238,197 @@ pub(crate) enum LockOutcome {
     ReadOnly(String),
 }
 
-// The claim itself, free of statics so two callers can race on one folder. With
-// no lock file the claim is `create_new`, which only one of any number of
-// simultaneous starters can win; the loser reads what the winner wrote and goes
-// read-only. A lock that exists but does not parse is most likely a write in
-// progress, so it is read once more after a short wait and only then treated as
-// stale. Taking over a stale or own lock writes through the atomic helper, so a
-// reader never sees half a file.
-pub(crate) fn claim_data_dir_lock(path: &Path, host: &str, pid: u32) -> LockOutcome {
-    use std::io::Write;
-    let info = DataDirLockInfo { host: host.to_string(), pid, seen: unix_now() };
-    let Ok(json) = serde_json::to_string(&info) else { return LockOutcome::Owned };
-    match fs::OpenOptions::new().write(true).create_new(true).open(path) {
-        Ok(mut f) => {
-            if f.write_all(json.as_bytes()).and_then(|_| f.sync_all()).is_err() {
-                drop(f);
-                let _ = fs::remove_file(path);
-            }
-            return LockOutcome::Owned;
-        }
-        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
-        // A folder that cannot hold the file (read-only media, no rights) was
-        // never lockable: the store opens normally, as it always did there.
-        Err(_) => return LockOutcome::Owned,
-    }
-    let mut existing = read_data_dir_lock(path);
-    if existing.is_none() {
-        std::thread::sleep(Duration::from_millis(200));
-        existing = read_data_dir_lock(path);
-    }
-    // A lock naming THIS machine is never foreign, whatever its pid or age: a
-    // crash-and-restart on the same computer is not the two-machine case this
-    // guards against, and the single-instance plugin already rules out a genuine
-    // second process here.
-    if let Some(e) = existing {
-        if e.host != host && !lock_is_stale(&e) {
-            return LockOutcome::ReadOnly(e.host);
-        }
-    }
-    let _ = write_bytes_atomic(path, json.as_bytes());
-    LockOutcome::Owned
+// Who is asking: this machine, this process, and the id of this claim.
+pub(crate) struct LockMe<'a> {
+    pub(crate) host: &'a str,
+    pub(crate) pid: u32,
+    pub(crate) id: &'a str,
 }
 
-// Decides read-only vs. owned for `dir` and, if owned, claims it. Called once at
-// load_store() and again after set_data_dir() points the app at a different
-// folder. The `dataDirLock` toggle (default on) skips all of this when off,
-// restoring today's behaviour with no lock file and no read-only state.
-pub(crate) fn acquire_data_dir_lock(dir: &Path, enabled: bool) {
-    if !enabled {
-        DATA_DIR_READONLY.store(false, Ordering::Relaxed);
-        *DATA_DIR_LOCK_HOST.lock().unwrap_or_else(|e| e.into_inner()) = None;
-        return;
+// Judges a foreign lock dead from what THIS process saw on its own monotonic
+// clock, never from the timestamp the other machine wrote: the lock is dead only
+// when its content has not changed for DATA_DIR_LOCK_STALE_SECS of our own
+// observation. A live owner rewrites it (counter and time) every refresh, a
+// sleeping or crashed one does not.
+pub(crate) struct LockObserver {
+    key: Option<String>,
+    since: Instant,
+}
+
+impl LockObserver {
+    pub(crate) fn new(now: Instant) -> Self {
+        Self { key: None, since: now }
     }
-    match claim_data_dir_lock(&data_dir_lock_path(dir), &local_host_name(), std::process::id()) {
+
+    pub(crate) fn is_dead(&mut self, key: &str, now: Instant) -> bool {
+        if self.key.as_deref() != Some(key) {
+            self.key = Some(key.to_string());
+            self.since = now;
+            return false;
+        }
+        now.saturating_duration_since(self.since) >= Duration::from_secs(DATA_DIR_LOCK_STALE_SECS)
+    }
+}
+
+fn lock_content_key(e: &DataDirLockInfo) -> String {
+    format!("{}|{}|{}|{}|{}", e.host, e.pid, e.id, e.beat, e.seen)
+}
+
+// The claim itself, free of statics so tests can race it on one folder. With no
+// lock file the claim is `create_new`, which only one of any number of
+// simultaneous starters can win. Any other failure of that call is NOT ownership:
+// the lock is read and judged like a foreign one, and a folder that cannot even
+// be read counts as busy until the next try. A foreign lock is taken over only
+// once the observer has seen it unchanged for the stale limit; after a takeover
+// the file is read back and the claim holds only if it still carries our id.
+pub(crate) fn claim_data_dir_lock(path: &Path, me: &LockMe, obs: &mut LockObserver, now: Instant, settle: Duration) -> LockOutcome {
+    use std::io::Write;
+    let unknown = || LockOutcome::ReadOnly("unknown".to_string());
+    let info = DataDirLockInfo { host: me.host.to_string(), pid: me.pid, seen: unix_now(), id: me.id.to_string(), beat: 0 };
+    let Ok(json) = serde_json::to_string(&info) else { return unknown() };
+    if let Ok(mut f) = fs::OpenOptions::new().write(true).create_new(true).open(path) {
+        if f.write_all(json.as_bytes()).and_then(|_| f.sync_all()).is_err() {
+            drop(f);
+            let _ = fs::remove_file(path);
+            return unknown();
+        }
+        return LockOutcome::Owned;
+    }
+    let mut text = fs::read_to_string(path);
+    if text.as_ref().ok().is_some_and(|t| serde_json::from_str::<DataDirLockInfo>(t).is_err()) {
+        // Most likely a write that is still landing.
+        std::thread::sleep(settle);
+        text = fs::read_to_string(path);
+    }
+    let Ok(text) = text else { return unknown() };
+    match serde_json::from_str::<DataDirLockInfo>(&text) {
+        Ok(e) => {
+            if e.id == me.id {
+                return LockOutcome::Owned;
+            }
+            // A lock naming THIS machine is never foreign, whatever its age: a
+            // crash-and-restart on the same computer is not the two-machine case
+            // this guards against.
+            if e.host != me.host && !obs.is_dead(&lock_content_key(&e), now) {
+                return LockOutcome::ReadOnly(e.host);
+            }
+        }
+        Err(_) => {
+            if !obs.is_dead(&format!("raw|{text}"), now) {
+                return unknown();
+            }
+        }
+    }
+    if write_bytes_atomic(path, json.as_bytes()).is_err() {
+        return unknown();
+    }
+    std::thread::sleep(settle);
+    match read_data_dir_lock(path) {
+        Some(e) if e.id == me.id => LockOutcome::Owned,
+        Some(e) => LockOutcome::ReadOnly(e.host),
+        None => unknown(),
+    }
+}
+
+pub(crate) enum RefreshOutcome {
+    Kept,
+    // The file names another claim: ownership is gone.
+    Lost(String),
+    // Unreadable right now; nothing was written.
+    Skipped,
+}
+
+// One refresh of a lock this process owns: read first, rewrite only our own
+// claim, never overwrite someone else's.
+pub(crate) fn refresh_owned_lock(path: &Path, me: &LockMe, beat: u64) -> RefreshOutcome {
+    let fresh = DataDirLockInfo { host: me.host.to_string(), pid: me.pid, seen: unix_now(), id: me.id.to_string(), beat };
+    match fs::read_to_string(path) {
+        Ok(text) => match serde_json::from_str::<DataDirLockInfo>(&text) {
+            Ok(e) if e.id == me.id => {
+                write_data_dir_lock(path, &fresh);
+                RefreshOutcome::Kept
+            }
+            Ok(e) => RefreshOutcome::Lost(e.host),
+            Err(_) => RefreshOutcome::Skipped,
+        },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            write_data_dir_lock(path, &fresh);
+            RefreshOutcome::Kept
+        }
+        Err(_) => RefreshOutcome::Skipped,
+    }
+}
+
+// This process's identity for the lock: the claim id is minted once.
+pub(crate) fn lock_claim_id() -> &'static str {
+    static ID: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    ID.get_or_init(gen_id)
+}
+
+pub(crate) static DATA_DIR_LOCK_OWNED: AtomicBool = AtomicBool::new(false);
+static DATA_DIR_LOCK_BEAT: AtomicU64 = AtomicU64::new(0);
+static DATA_DIR_LOCK_WATCH: Mutex<Option<LockObserver>> = Mutex::new(None);
+const LOCK_SETTLE: Duration = Duration::from_millis(300);
+
+fn apply_lock_outcome(outcome: LockOutcome) {
+    match outcome {
         LockOutcome::ReadOnly(host) => {
+            DATA_DIR_LOCK_OWNED.store(false, Ordering::Relaxed);
             DATA_DIR_READONLY.store(true, Ordering::Relaxed);
             *DATA_DIR_LOCK_HOST.lock().unwrap_or_else(|e| e.into_inner()) = Some(host);
         }
         LockOutcome::Owned => {
+            DATA_DIR_LOCK_OWNED.store(true, Ordering::Relaxed);
             DATA_DIR_READONLY.store(false, Ordering::Relaxed);
             *DATA_DIR_LOCK_HOST.lock().unwrap_or_else(|e| e.into_inner()) = None;
         }
     }
 }
 
-// The scheduler tick (see "data-dir-lock" in run()). A read-only process must
-// never touch this file -- it belongs to the other machine's session, and
-// overwriting it would erase the very lock this process is refusing to ignore.
-pub(crate) fn refresh_data_dir_lock(dir: &Path) {
-    if DATA_DIR_READONLY.load(Ordering::Relaxed) {
+fn claim_with_process_state(dir: &Path) -> LockOutcome {
+    let host = local_host_name();
+    let me = LockMe { host: &host, pid: std::process::id(), id: lock_claim_id() };
+    let now = Instant::now();
+    let mut guard = DATA_DIR_LOCK_WATCH.lock().unwrap_or_else(|e| e.into_inner());
+    let obs = guard.get_or_insert_with(|| LockObserver::new(now));
+    claim_data_dir_lock(&data_dir_lock_path(dir), &me, obs, now, LOCK_SETTLE)
+}
+
+// Decides read-only vs. owned for `dir` and, if owned, claims it. Called once at
+// load_store() and again after set_data_dir() points the app at a different
+// folder. The `dataDirLock` toggle (default on) skips all of this when off,
+// restoring today's behaviour with no lock file and no read-only state. A
+// foreign lock the observer has not yet watched for the whole stale limit keeps
+// the store read-only; the refresh tick keeps watching it.
+pub(crate) fn acquire_data_dir_lock(dir: &Path, enabled: bool) {
+    *DATA_DIR_LOCK_WATCH.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    DATA_DIR_LOCK_OWNED.store(false, Ordering::Relaxed);
+    if !enabled {
+        DATA_DIR_READONLY.store(false, Ordering::Relaxed);
+        *DATA_DIR_LOCK_HOST.lock().unwrap_or_else(|e| e.into_inner()) = None;
         return;
     }
-    write_data_dir_lock(&data_dir_lock_path(dir), &DataDirLockInfo { host: local_host_name(), pid: std::process::id(), seen: unix_now() });
+    apply_lock_outcome(claim_with_process_state(dir));
+}
+
+// The scheduler tick (see "data-dir-lock" in run()). An owner reads the lock
+// first and gives the folder up when it names another claim, so it never erases
+// the lock of the process that took over (a sleep longer than the stale limit, a
+// skewed clock). A read-only process never writes while the owner is alive; it
+// keeps watching, and takes the folder over once the lock has stood still for the
+// whole stale limit.
+pub(crate) fn refresh_data_dir_lock(dir: &Path) {
+    let path = data_dir_lock_path(dir);
+    if DATA_DIR_LOCK_OWNED.load(Ordering::Relaxed) {
+        let host = local_host_name();
+        let me = LockMe { host: &host, pid: std::process::id(), id: lock_claim_id() };
+        let beat = DATA_DIR_LOCK_BEAT.fetch_add(1, Ordering::Relaxed) + 1;
+        if let RefreshOutcome::Lost(other) = refresh_owned_lock(&path, &me, beat) {
+            apply_lock_outcome(LockOutcome::ReadOnly(other));
+        }
+    } else if DATA_DIR_READONLY.load(Ordering::Relaxed) && DATA_DIR_LOCK_WATCH.lock().unwrap_or_else(|e| e.into_inner()).is_some() {
+        apply_lock_outcome(claim_with_process_state(dir));
+    }
 }
 
 #[derive(Serialize)]
@@ -1339,7 +1465,7 @@ pub(crate) const SETTINGS_FLUSH_TICK_MS: u64 = 250;
 // later mark within the quiet window pushes the write further out, so a burst of
 // copies collapses into one write rather than one per copy.
 pub(crate) struct SettingsDelay {
-    pub(crate) marked: Mutex<Option<std::time::Instant>>,
+    pub(crate) marked: Mutex<Option<Instant>>,
     pub(crate) quiet: Mutex<Duration>,
 }
 
@@ -1352,7 +1478,7 @@ impl SettingsDelay {
     }
 
     pub(crate) fn mark(&self) {
-        *self.marked.lock().unwrap_or_else(|e| e.into_inner()) = Some(std::time::Instant::now());
+        *self.marked.lock().unwrap_or_else(|e| e.into_inner()) = Some(Instant::now());
     }
 
     // Is anything owed at all? Cheap enough for the idle tick to ask every round.

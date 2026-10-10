@@ -9627,6 +9627,7 @@ static DDLOCK_TEST_LOCK: Mutex<()> = Mutex::new(());
 struct DdlockGuard {
     _serial: std::sync::MutexGuard<'static, ()>,
     was_readonly: bool,
+    was_owned: bool,
     was_host: Option<String>,
 }
 impl DdlockGuard {
@@ -9634,6 +9635,7 @@ impl DdlockGuard {
         Self {
             _serial: DDLOCK_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner()),
             was_readonly: DATA_DIR_READONLY.load(Ordering::Relaxed),
+            was_owned: DATA_DIR_LOCK_OWNED.load(Ordering::Relaxed),
             was_host: DATA_DIR_LOCK_HOST.lock().unwrap_or_else(|e| e.into_inner()).clone(),
         }
     }
@@ -9641,6 +9643,7 @@ impl DdlockGuard {
 impl Drop for DdlockGuard {
     fn drop(&mut self) {
         DATA_DIR_READONLY.store(self.was_readonly, Ordering::Relaxed);
+        DATA_DIR_LOCK_OWNED.store(self.was_owned, Ordering::Relaxed);
         *DATA_DIR_LOCK_HOST.lock().unwrap_or_else(|e| e.into_inner()) = self.was_host.clone();
     }
 }
@@ -9651,7 +9654,7 @@ fn acquire_data_dir_lock_reads_a_fresh_foreign_lock_as_read_only() {
     let dir = ddlock_test_dir("fresh-foreign");
     write_data_dir_lock(
         &data_dir_lock_path(&dir),
-        &DataDirLockInfo { host: "OTHER-PC".to_string(), pid: 999, seen: unix_now() },
+        &DataDirLockInfo { host: "OTHER-PC".to_string(), pid: 999, seen: unix_now(), id: String::new(), beat: 0 },
     );
     acquire_data_dir_lock(&dir, true);
     assert!(DATA_DIR_READONLY.load(Ordering::Relaxed), "a fresh foreign lock must open the store read-only");
@@ -9664,18 +9667,17 @@ fn acquire_data_dir_lock_reads_a_fresh_foreign_lock_as_read_only() {
 }
 
 #[test]
-fn acquire_data_dir_lock_takes_over_a_stale_foreign_lock_without_asking() {
+fn acquire_data_dir_lock_does_not_trust_the_other_machines_clock() {
     let _g = DdlockGuard::capture();
     let dir = ddlock_test_dir("stale-foreign");
     let path = data_dir_lock_path(&dir);
-    let stale_seen = unix_now().saturating_sub(DATA_DIR_LOCK_STALE_SECS + 10);
-    write_data_dir_lock(&path, &DataDirLockInfo { host: "OTHER-PC".to_string(), pid: 999, seen: stale_seen });
+    // A timestamp far in the past says nothing: this process has not watched the
+    // lock stand still for the stale limit, so it is read-only for now.
+    let old_seen = unix_now().saturating_sub(DATA_DIR_LOCK_STALE_SECS + 10);
+    write_data_dir_lock(&path, &DataDirLockInfo { host: "OTHER-PC".to_string(), pid: 999, seen: old_seen, id: "x".into(), beat: 3 });
     acquire_data_dir_lock(&dir, true);
-    assert!(!DATA_DIR_READONLY.load(Ordering::Relaxed), "a lock nobody has refreshed in three rounds must be reclaimed, not obeyed");
-    assert!(DATA_DIR_LOCK_HOST.lock().unwrap_or_else(|e| e.into_inner()).is_none());
-    let claimed = read_data_dir_lock(&path).expect("acquiring the lock must write a fresh one");
-    assert_eq!(claimed.host, local_host_name(), "the reclaimed lock must now name this machine");
-    assert!(unix_now().saturating_sub(claimed.seen) < 5, "the reclaimed lock must carry a current timestamp");
+    assert!(DATA_DIR_READONLY.load(Ordering::Relaxed));
+    assert_eq!(read_data_dir_lock(&path).unwrap().host, "OTHER-PC", "the foreign lock is left alone");
     let _ = fs::remove_dir_all(&dir);
 }
 
@@ -9689,7 +9691,7 @@ fn acquire_data_dir_lock_never_treats_its_own_hostname_as_foreign() {
     // already rules out a second live process here.
     write_data_dir_lock(
         &data_dir_lock_path(&dir),
-        &DataDirLockInfo { host: local_host_name(), pid: 424_242, seen: unix_now().saturating_sub(DATA_DIR_LOCK_STALE_SECS + 999) },
+        &DataDirLockInfo { host: local_host_name(), pid: 424_242, seen: unix_now().saturating_sub(DATA_DIR_LOCK_STALE_SECS + 999), id: String::new(), beat: 0 },
     );
     acquire_data_dir_lock(&dir, true);
     assert!(!DATA_DIR_READONLY.load(Ordering::Relaxed), "this machine's own old lock must never lock this machine out");
@@ -9702,7 +9704,7 @@ fn acquire_data_dir_lock_does_nothing_while_the_toggle_is_off() {
     let dir = ddlock_test_dir("toggle-off");
     write_data_dir_lock(
         &data_dir_lock_path(&dir),
-        &DataDirLockInfo { host: "OTHER-PC".to_string(), pid: 1, seen: unix_now() },
+        &DataDirLockInfo { host: "OTHER-PC".to_string(), pid: 1, seen: unix_now(), id: String::new(), beat: 0 },
     );
     acquire_data_dir_lock(&dir, false);
     assert!(!DATA_DIR_READONLY.load(Ordering::Relaxed), "dataDirLock off must restore today's behaviour: no read-only state");
@@ -9719,7 +9721,7 @@ fn refresh_data_dir_lock_keeps_an_owned_lock_fresh() {
     let path = data_dir_lock_path(&dir);
     // Back-date the file the way a real clock tick would leave it just before
     // the next scheduler round is due.
-    write_data_dir_lock(&path, &DataDirLockInfo { host: local_host_name(), pid: std::process::id(), seen: unix_now() - 25 });
+    write_data_dir_lock(&path, &DataDirLockInfo { host: local_host_name(), pid: std::process::id(), seen: unix_now() - 25, id: lock_claim_id().to_string(), beat: 0 });
     refresh_data_dir_lock(&dir);
     let refreshed = read_data_dir_lock(&path).expect("refresh must not delete the lock file");
     assert!(unix_now().saturating_sub(refreshed.seen) < 5, "a round while owned must bring the timestamp back to now");
@@ -9732,7 +9734,7 @@ fn refresh_data_dir_lock_never_touches_a_foreign_lock_while_read_only() {
     let dir = ddlock_test_dir("readonly-refresh");
     let path = data_dir_lock_path(&dir);
     let foreign_seen = unix_now();
-    write_data_dir_lock(&path, &DataDirLockInfo { host: "OTHER-PC".to_string(), pid: 1, seen: foreign_seen });
+    write_data_dir_lock(&path, &DataDirLockInfo { host: "OTHER-PC".to_string(), pid: 1, seen: foreign_seen, id: String::new(), beat: 0 });
     acquire_data_dir_lock(&dir, true); // becomes read-only against the fresh foreign lock
     assert!(DATA_DIR_READONLY.load(Ordering::Relaxed));
     refresh_data_dir_lock(&dir); // must be a no-op: this file is not ours to touch
@@ -17256,7 +17258,7 @@ fn a_standalone_restore_is_refused_while_another_machine_holds_the_folder() {
     let (dir, name) = restore_fixture("restore-locked");
     write_data_dir_lock(
         &data_dir_lock_path(&dir),
-        &DataDirLockInfo { host: "OTHER-PC".to_string(), pid: 999, seen: unix_now() },
+        &DataDirLockInfo { host: "OTHER-PC".to_string(), pid: 999, seen: unix_now(), id: String::new(), beat: 0 },
     );
     let argv: Vec<String> = ["backup", "restore", &name, "--yes"].iter().map(|s| s.to_string()).collect();
     let code = cli::run_standalone_with(|| dir.clone(), &argv, &dir);
@@ -17891,48 +17893,163 @@ fn user_picked_exports_never_write_in_place() {
 
 // ---- the data-folder lock is claimed in one step ----
 
+fn lock_test_dir(tag: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("ps-lock-{tag}-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+fn lock_info(host: &str, id: &str, beat: u64, seen: u64) -> DataDirLockInfo {
+    DataDirLockInfo { host: host.into(), pid: 1, seen, id: id.into(), beat }
+}
+
 #[test]
 fn two_starters_on_one_folder_never_both_own_it() {
     use std::sync::{Arc, Barrier};
     for round in 0..20 {
-        let dir = std::env::temp_dir().join(format!("ps-lockrace-{}-{round}", std::process::id()));
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
+        let dir = lock_test_dir(&format!("race{round}"));
         let path = data_dir_lock_path(&dir);
         let gate = Arc::new(Barrier::new(2));
-        let spawn = |host: &'static str, pid: u32| {
+        let spawn = |host: &'static str, id: &'static str| {
             let (gate, path) = (gate.clone(), path.clone());
             std::thread::spawn(move || {
+                let mut obs = LockObserver::new(Instant::now());
                 gate.wait();
-                claim_data_dir_lock(&path, host, pid)
+                claim_data_dir_lock(&path, &LockMe { host, pid: 1, id }, &mut obs, Instant::now(), Duration::from_millis(50))
             })
         };
-        let (a, b) = (spawn("A", 1), spawn("B", 2));
+        let (a, b) = (spawn("A", "ida"), spawn("B", "idb"));
         let (a, b) = (a.join().unwrap(), b.join().unwrap());
         let owners = [&a, &b].iter().filter(|o| matches!(o, LockOutcome::Owned)).count();
         assert_eq!(owners, 1, "exactly one starter owns the folder (round {round})");
-        let loser = if matches!(a, LockOutcome::Owned) { b } else { a };
-        let winner_host = read_data_dir_lock(&path).expect("the winner's lock parses").host;
-        assert!(matches!(&loser, LockOutcome::ReadOnly(h) if *h == winner_host), "the loser names the winner's host");
         let _ = fs::remove_dir_all(&dir);
     }
 }
 
 #[test]
-fn claiming_takes_over_a_stale_own_or_unparsable_lock_and_respects_a_fresh_foreign_one() {
-    let dir = std::env::temp_dir().join(format!("ps-lockclaim-{}", std::process::id()));
-    let _ = fs::remove_dir_all(&dir);
-    fs::create_dir_all(&dir).unwrap();
+fn two_takeovers_of_one_dead_lock_leave_one_owner() {
+    use std::sync::{Arc, Barrier};
+    for round in 0..10 {
+        let dir = lock_test_dir(&format!("takeover{round}"));
+        let path = data_dir_lock_path(&dir);
+        write_data_dir_lock(&path, &lock_info("OLD", "old", 7, 1));
+        let t0 = Instant::now();
+        let gate = Arc::new(Barrier::new(2));
+        let spawn = |host: &'static str, id: &'static str| {
+            let (gate, path) = (gate.clone(), path.clone());
+            std::thread::spawn(move || {
+                let mut obs = LockObserver::new(t0);
+                let me = LockMe { host, pid: 1, id };
+                // Watch the lock stand still for the whole limit, then race for it.
+                assert!(matches!(claim_data_dir_lock(&path, &me, &mut obs, t0, Duration::ZERO), LockOutcome::ReadOnly(_)));
+                gate.wait();
+                let later = t0 + Duration::from_secs(DATA_DIR_LOCK_STALE_SECS + 1);
+                claim_data_dir_lock(&path, &me, &mut obs, later, Duration::from_millis(150))
+            })
+        };
+        let (a, b) = (spawn("A", "ida"), spawn("B", "idb"));
+        let (a, b) = (a.join().unwrap(), b.join().unwrap());
+        let owners = [&a, &b].iter().filter(|o| matches!(o, LockOutcome::Owned)).count();
+        assert_eq!(owners, 1, "the read-back after the takeover settles it (round {round})");
+        let _ = fs::remove_dir_all(&dir);
+    }
+}
+
+#[test]
+fn a_live_lock_with_a_changing_heartbeat_is_never_taken_over() {
+    let dir = lock_test_dir("heartbeat");
     let path = data_dir_lock_path(&dir);
-    let stale = unix_now().saturating_sub(DATA_DIR_LOCK_STALE_SECS + 10);
-    write_data_dir_lock(&path, &DataDirLockInfo { host: "B".into(), pid: 9, seen: stale });
-    assert!(matches!(claim_data_dir_lock(&path, "A", 1), LockOutcome::Owned), "a stale foreign lock is taken over");
-    assert_eq!(read_data_dir_lock(&path).unwrap().host, "A");
-    assert!(matches!(claim_data_dir_lock(&path, "A", 2), LockOutcome::Owned), "an own lock is refreshed");
-    assert!(matches!(claim_data_dir_lock(&path, "B", 3), LockOutcome::ReadOnly(h) if h == "A"), "a fresh foreign lock wins");
+    let me = LockMe { host: "A", pid: 2, id: "ida" };
+    let t0 = Instant::now();
+    let mut obs = LockObserver::new(t0);
+    // The owner's clock is 2 minutes ahead, then years behind; its beat moves on.
+    for i in 0..12u64 {
+        let seen = if i % 2 == 0 { unix_now() + 7200 } else { 5 };
+        write_data_dir_lock(&path, &lock_info("B", "idb", i, seen));
+        let now = t0 + Duration::from_secs(i * 40);
+        assert!(
+            matches!(claim_data_dir_lock(&path, &me, &mut obs, now, Duration::ZERO), LockOutcome::ReadOnly(h) if h == "B"),
+            "round {i}: a lock that keeps changing is alive, whatever its timestamp says"
+        );
+    }
+    assert_eq!(read_data_dir_lock(&path).unwrap().id, "idb", "the live owner's file was never rewritten");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_lock_that_stands_still_for_the_whole_limit_is_taken_over() {
+    let dir = lock_test_dir("standstill");
+    let path = data_dir_lock_path(&dir);
+    let me = LockMe { host: "A", pid: 2, id: "ida" };
+    let t0 = Instant::now();
+    let mut obs = LockObserver::new(t0);
+    write_data_dir_lock(&path, &lock_info("B", "idb", 4, unix_now()));
+    let settle = Duration::ZERO;
+    assert!(matches!(claim_data_dir_lock(&path, &me, &mut obs, t0, settle), LockOutcome::ReadOnly(_)));
+    let almost = t0 + Duration::from_secs(DATA_DIR_LOCK_STALE_SECS - 1);
+    assert!(matches!(claim_data_dir_lock(&path, &me, &mut obs, almost, settle), LockOutcome::ReadOnly(_)));
+    let enough = t0 + Duration::from_secs(DATA_DIR_LOCK_STALE_SECS);
+    assert!(matches!(claim_data_dir_lock(&path, &me, &mut obs, enough, settle), LockOutcome::Owned));
+    assert_eq!(read_data_dir_lock(&path).unwrap().id, "ida");
+    // A lock naming this machine is taken at once; an unparsable one waits like a foreign one.
+    write_data_dir_lock(&path, &lock_info("A", "older-run", 1, 1));
+    let mut obs = LockObserver::new(t0);
+    assert!(matches!(claim_data_dir_lock(&path, &me, &mut obs, t0, settle), LockOutcome::Owned));
     fs::write(&path, b"{ not json").unwrap();
-    assert!(matches!(claim_data_dir_lock(&path, "B", 3), LockOutcome::Owned), "a lock that stays unparsable counts as stale");
-    assert_eq!(read_data_dir_lock(&path).unwrap().host, "B");
+    let mut obs = LockObserver::new(t0);
+    assert!(matches!(claim_data_dir_lock(&path, &me, &mut obs, t0, settle), LockOutcome::ReadOnly(_)));
+    assert!(matches!(claim_data_dir_lock(&path, &me, &mut obs, enough, settle), LockOutcome::Owned));
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_create_error_other_than_already_exists_is_not_ownership() {
+    let dir = lock_test_dir("createerr");
+    // The folder is gone, so create_new fails with NotFound: nothing is known about
+    // the lock, and that must never read as "free".
+    let path = dir.join("missing").join(DATA_DIR_LOCK_FILE);
+    let me = LockMe { host: "A", pid: 2, id: "ida" };
+    let mut obs = LockObserver::new(Instant::now());
+    let r = claim_data_dir_lock(&path, &me, &mut obs, Instant::now(), Duration::ZERO);
+    assert!(matches!(r, LockOutcome::ReadOnly(_)), "an unreadable folder is busy, not owned");
+    assert!(!path.exists());
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn an_owner_refresh_never_overwrites_another_claim() {
+    let dir = lock_test_dir("refresh-foreign");
+    let path = data_dir_lock_path(&dir);
+    let me = LockMe { host: "A", pid: 2, id: "ida" };
+    write_data_dir_lock(&path, &lock_info("A", "ida", 1, 1));
+    assert!(matches!(refresh_owned_lock(&path, &me, 2), RefreshOutcome::Kept));
+    assert_eq!(read_data_dir_lock(&path).unwrap().beat, 2);
+    write_data_dir_lock(&path, &lock_info("B", "idb", 9, 9));
+    assert!(matches!(refresh_owned_lock(&path, &me, 3), RefreshOutcome::Lost(h) if h == "B"));
+    let kept = read_data_dir_lock(&path).unwrap();
+    assert_eq!((kept.id.as_str(), kept.beat), ("idb", 9), "the other claim is untouched");
+    fs::write(&path, b"{ half").unwrap();
+    assert!(matches!(refresh_owned_lock(&path, &me, 4), RefreshOutcome::Skipped));
+    assert_eq!(fs::read(&path).unwrap(), b"{ half");
+    fs::remove_file(&path).unwrap();
+    assert!(matches!(refresh_owned_lock(&path, &me, 5), RefreshOutcome::Kept), "a vanished lock is put back");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_refresh_tick_drops_ownership_when_someone_else_took_the_lock() {
+    let _g = DdlockGuard::capture();
+    let dir = ddlock_test_dir("tick-drop");
+    acquire_data_dir_lock(&dir, true);
+    assert!(DATA_DIR_LOCK_OWNED.load(Ordering::Relaxed) && !DATA_DIR_READONLY.load(Ordering::Relaxed));
+    let path = data_dir_lock_path(&dir);
+    write_data_dir_lock(&path, &lock_info("OTHER-PC", "someone-else", 1, unix_now()));
+    refresh_data_dir_lock(&dir);
+    assert!(DATA_DIR_READONLY.load(Ordering::Relaxed), "the folder is no longer ours");
+    assert!(!DATA_DIR_LOCK_OWNED.load(Ordering::Relaxed));
+    assert_eq!(DATA_DIR_LOCK_HOST.lock().unwrap_or_else(|e| e.into_inner()).as_deref(), Some("OTHER-PC"));
+    assert_eq!(read_data_dir_lock(&path).unwrap().id, "someone-else", "their lock was not overwritten");
     let _ = fs::remove_dir_all(&dir);
 }
 
@@ -17944,7 +18061,7 @@ fn refreshing_the_lock_never_shows_a_reader_a_broken_file() {
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
     let path = data_dir_lock_path(&dir);
-    assert!(write_data_dir_lock(&path, &DataDirLockInfo { host: "A".into(), pid: 1, seen: unix_now() }));
+    assert!(write_data_dir_lock(&path, &DataDirLockInfo { host: "A".into(), pid: 1, seen: unix_now(), id: String::new(), beat: 0 }));
     let done = Arc::new(AtomicBool::new(false));
     let reader = {
         let (path, done) = (path.clone(), done.clone());
@@ -17960,7 +18077,7 @@ fn refreshing_the_lock_never_shows_a_reader_a_broken_file() {
         })
     };
     for n in 0..1000u64 {
-        assert!(write_data_dir_lock(&path, &DataDirLockInfo { host: "A".into(), pid: 1, seen: unix_now() + n }));
+        assert!(write_data_dir_lock(&path, &DataDirLockInfo { host: "A".into(), pid: 1, seen: unix_now() + n, id: String::new(), beat: 0 }));
     }
     done.store(true, AtomicOrdering::Relaxed);
     let (reads, broken) = reader.join().unwrap();
