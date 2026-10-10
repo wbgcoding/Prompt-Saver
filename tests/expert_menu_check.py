@@ -66,7 +66,6 @@ DEPENDENCIES = {
     "storeFiles": "fileAttach",
     "cleanupFiles": "storeFiles",
     "screenshotDir": "screenshot",
-    "snipPreviewVh": "screenshot",
     "varDefaults": "promptVars",
     "dynVars": "promptVars",
     "choiceVars": "promptVars",
@@ -76,8 +75,6 @@ DEPENDENCIES = {
     "timeStyle": "dynVars",
     "counterUnits": "lengthCounter",
     "historyPerPrompt": "promptHistory",
-    "historyDiff": "promptHistory",
-    "historyPreviewLen": "promptHistory",
     "notesInTooltip": "promptNotes",
     "notesTipLen": "notesInTooltip",
     "pickerFormat": "colorPicker",
@@ -89,29 +86,21 @@ DEPENDENCIES = {
     "snipEditor": "screenshot",
     "snipEditSnap": "snipEditor",
     "snipTextBack": "snipEditor",
-    "snipEditUndoMax": "snipEditor",
     "snipEditDefaultTool": "snipEditor",
     # 121: OCR -- "ocr" itself stands alone (no parent flag; its group placement
     # right after the screenshot block is list order, not a gating relationship).
     "ocrAutoCopy": "ocr",
     "ocrJoinLines": "ocr",
-    "ocrUpscaleUnderPx": "ocr",
     "ocrLang": "ocr",
-    # 122: OCR language packs -- ocrAutoPickLang gates on "ocr" alone (it matters
-    # regardless of the auto-update setting).
-    "ocrAutoPickLang": "ocr",
-    "ocrLangAutoUpdate": "ocr",
     # 32: rotating prompts
     "rotateDefaultMode": "rotatingPrompts",
     "rotateMaxEntries": "rotatingPrompts",
     "rotateBadge": "rotatingPrompts",
-    "rotateTipLen": "rotatingPrompts",
     # 90-94: auto-advance
     "rotateAuto": "rotatingPrompts",
     # Markdown preview
     "codeHighlight": "mdPreview",
     "codeAutoDetect": "mdPreview",
-    "hlFontPx": "codeHighlight",
     # Workspace
     "floatOpacity": "floating",
     "pillFolders": "floating",
@@ -120,37 +109,29 @@ DEPENDENCIES = {
     # Tiles + copying
     "chainLock": "chainPrompts",
     "chainQuickStart": "chainPrompts",
-    "chainVarCheck": "chainPrompts",
     "autoPasteEnter": "autoPaste",
     "autoPasteDelayMs": "autoPaste",
     "dblClickMs": "autoPaste",
     "promptHotkeyPaste": "promptHotkeys",
     "dragOutModifier": "dragOut",
     "dragOutInvert": "dragOut",
-    "tileHotkeyBadgeOpacity": "tileHotkeyBadge",
     "copySizeLevel": "bubbleMs",
     "tooltipDelayMs": "tooltipsEnabled",
     "favViewButton": "favorites",
     "favViewReorder": "favViewButton",
-    "favStarSize": "favViewButton",
     "favMaxCols": "favViewButton",
     # Appearance
-    "animSpeed": "animations",
     "frostedBlur": "frostedModals",
     "customThemeMax": "customThemes",
     # Library, history, privacy
-    "fuzzyMaxTypos": "fuzzySearch",
     "libraryCols": "librarySearch",
     "tagFilterMode": "tags",
     "tagSort": "tags",
     "historyMax": "copyHistory",
     "historyDays": "copyHistory",
-    "mediaBlur": "blurMediaUntilHover",
     # Media
     "videoVolume": "!videoMuted",
-    "mediaRadius": "roundMedia",
     # Tools + data
-    "viewBorder": "multiView",
     "maxViews": "multiView",
     "gridViewBorder": "multiView",
     # Recording upkeep lives with the recording switch, the video editor's temp
@@ -158,7 +139,6 @@ DEPENDENCIES = {
     "recSweepBroken": "screenRecord",
     "recDiscardKeepH": "screenRecord",
     "recordingRetentionDays": "screenRecord",
-    "videoClipTtlMin": "videoEditor",
     "errorLogKeepKb": "errorLog",
     # Starting values and choices added with their feature's own switch
     "recOutline": "screenRecord",

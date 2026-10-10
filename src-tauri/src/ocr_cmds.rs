@@ -417,10 +417,9 @@ pub(crate) async fn ocr_languages() -> Result<Vec<OcrLang>, String> {
     }
 }
 
-// Upscale_under_px/join_lines/lang/auto_pick_lang are the
-// ocrUpscaleUnderPx/ocrJoinLines/ocrLang/ocrAutoPickLang expert settings, sent by
-// the frontend on every call (it already holds the live values via val()/flag()/
-// txt()) instead of the backend hardcoding or re-reading them from Db state.
+// Upscale_under_px/join_lines/lang/auto_pick_lang are sent by the frontend on every
+// call (it already holds the live values via val()/flag()/txt()) instead of the
+// backend re-reading them from Db state.
 #[tauri::command]
 pub(crate) async fn ocr_image(path: String, upscale_under_px: u32, join_lines: bool, lang: String, auto_pick_lang: bool) -> Result<OcrResult, String> {
     let validated = ocr_validate_path(&path)?;
@@ -473,9 +472,7 @@ pub(crate) async fn ocr_image_data(data_url: String, upscale_under_px: u32, join
 // Default matches the spec's own default (20000): long enough for a real
 // screenshot of text, short enough that a photo of a wall of text cannot
 // inflate the database.
-pub(crate) fn ocr_index_max_chars(settings: &Settings) -> usize {
-    settings.ui_values.get("ocrIndexMaxChars").copied().unwrap_or(20000.0).max(0.0) as usize
-}
+pub(crate) const OCR_INDEX_MAX_CHARS: usize = 20000;
 
 // The cap itself, split out from ocr_index_text below so it is testable
 // without a real OCR engine: char-safe (never splits a multi-byte character),
@@ -634,7 +631,7 @@ pub(crate) async fn ocr_index_backfill(app: AppHandle, state: State<'_, Db>) -> 
             .filter(|p| !p.image.is_empty() && p.image_text.is_empty())
             .map(|p| p.id.clone())
             .collect();
-        (ids, ocr_index_max_chars(&store.settings), ocr_epoch())
+        (ids, OCR_INDEX_MAX_CHARS, ocr_epoch())
     };
     let total = ids.len();
     push_bg_op(&app, "ocr-index", "ocr-index", if total == 0 { "done" } else { "running" }, Some(0), None);
@@ -977,11 +974,9 @@ pub(crate) fn start_lang_update_watcher(app: AppHandle, kind: ocr::CapKind) {
 // whether anything happens, so a restart neither skips nor duplicates a check.
 #[cfg(windows)]
 pub(crate) fn lang_update_tick(app: &AppHandle, kind: ocr::CapKind) {
-    let auto_update_key = format!("{}LangAutoUpdate", kind.slug());
     let snapshot = app.try_state::<Db>().map(|s| {
         let store = s.lock().unwrap_or_else(|e| e.into_inner());
         (
-            store.settings.ui_flags.get(&auto_update_key).copied().unwrap_or(true),
             lang_cache_hours(kind),
             store
                 .settings
@@ -992,9 +987,9 @@ pub(crate) fn lang_update_tick(app: &AppHandle, kind: ocr::CapKind) {
             lang_load_snapshots(&store.settings, kind),
         )
     });
-    let Some((auto_update, cache_hours, next_check, snapshots)) = snapshot else { return };
+    let Some((cache_hours, next_check, snapshots)) = snapshot else { return };
     let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-    if !auto_update || now < next_check {
+    if now < next_check {
         return;
     }
     let Ok(caps) = ocr::capabilities(kind, false, cache_hours) else { return };

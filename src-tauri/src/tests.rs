@@ -3937,14 +3937,6 @@ fn data_url_within_limit_rejects_one_byte_over_and_accepts_exactly_at() {
 // ---- Image search text ----
 
 #[test]
-fn ocr_index_max_chars_reads_the_expert_value_and_falls_back_to_the_spec_default() {
-    let mut settings: Settings = serde_json::from_str(r#"{"theme":"dark"}"#).unwrap();
-    assert_eq!(ocr_index_max_chars(&settings), 20000);
-    settings.ui_values.insert("ocrIndexMaxChars".into(), 5.0);
-    assert_eq!(ocr_index_max_chars(&settings), 5);
-}
-
-#[test]
 fn cap_ocr_text_cuts_by_character_not_by_byte() {
     // "café" is 4 chars but 5 bytes in UTF-8 -- a byte-based cut would
     // split the "é" and produce invalid UTF-8 (or panic).
@@ -4859,26 +4851,6 @@ fn main_window_js() -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
-}
-
-// The timer lives in Rust, the number shown in the expert menu lives in JS. If
-// they drift apart the menu claims one interval while the app runs another.
-#[test]
-fn sync_poll_and_fail_defaults_match_the_expert_menus_own_defaults() {
-    let js = main_window_js();
-    let js = js.as_str();
-    let js_def = |key: &str| -> f64 {
-        let at = js.find(&format!("{key}: {{ label:")).unwrap_or_else(|| panic!("{key} row missing from the expert menu"));
-        let row = &js[at..js[at..].find('\n').map(|e| at + e).unwrap_or(js.len())];
-        let d = row.find("def: ").expect("row has a default");
-        row[d + 5..]
-            .split([',', ' '])
-            .next()
-            .expect("default value")
-            .parse()
-            .expect("default is a number")
-    };
-    assert_eq!(js_def("syncPollSecs"), SYNC_POLL_SECS as f64);
 }
 
 #[test]
@@ -6403,15 +6375,10 @@ fn clip_export_path_impl_lands_in_temp_dir_with_a_safe_extension() {
 }
 
 #[test]
-fn clip_export_ttl_from_defaults_to_one_hour_and_honours_the_setting() {
-    let mut settings = Settings::default();
-    assert_eq!(clip_export_ttl_from(&settings), Duration::from_secs(3600));
-    settings.ui_values.insert("videoClipTtlMin".to_string(), 5.0);
-    assert_eq!(clip_export_ttl_from(&settings), Duration::from_secs(300));
-    // Never zero/negative -- a sweep with a zero age would delete a file
-    // the instant it is written, mid-export.
-    settings.ui_values.insert("videoClipTtlMin".to_string(), 0.0);
-    assert_eq!(clip_export_ttl_from(&settings), Duration::from_secs(60));
+fn clip_export_ttl_is_one_hour() {
+    // Never zero -- a sweep with a zero age would delete a file the instant
+    // it is written, mid-export.
+    assert_eq!(clip_export_ttl(), Duration::from_secs(3600));
 }
 
 #[test]
@@ -8198,11 +8165,11 @@ fn placement_fixture() -> Store {
     settings.migrate();
     settings.views = serde_json::from_value(serde_json::json!([
         {"id": "a", "name": "A", "cols": 4, "rows": 3,
-         "members": ["p1", "p2", "p3", "p4", "p5"],
-         "layouts": {"4x3": {"p3": [0, 0], "p4": [1, 0], "p5": [3, 0]}}},
+        "members": ["p1", "p2", "p3", "p4", "p5"],
+        "layouts": {"4x3": {"p3": [0, 0], "p4": [1, 0], "p5": [3, 0]}}},
         {"id": "b", "name": "B", "cols": 4, "rows": 3,
-         "members": ["p3", "p6"],
-         "layouts": {"4x3": {"p3": [1, 1], "p6": [0, 0]}}}
+        "members": ["p3", "p6"],
+        "layouts": {"4x3": {"p3": [1, 1], "p6": [0, 0]}}}
     ]))
     .unwrap();
     settings.active_view = "a".into();
@@ -13749,7 +13716,7 @@ fn hover_settings_merge() {
 
 #[test]
 fn removed_key_lists_have_no_duplicates() {
-    for list in [removed_ui_value_keys(), removed_ui_flag_keys()] {
+    for list in [removed_ui_value_keys(), removed_ui_flag_keys(), removed_ui_text_keys()] {
         let mut seen = std::collections::HashSet::new();
         for k in list {
             assert!(seen.insert(*k), "{k} is listed twice");
@@ -13808,7 +13775,7 @@ fn visual_effect_switches_and_their_blur_value_are_dropped_on_load() {
     }
     s.ui_flags.insert("blurMediaUntilHover".into(), true);
     s.ui_values.insert("tileBlur".into(), 9.0);
-    s.ui_values.insert("mediaBlur".into(), 9.0);
+    s.ui_values.insert("frostedBlur".into(), 9.0);
     assert!(s.has_removed_ui_values());
     s.migrate();
     for k in flags {
@@ -13816,8 +13783,59 @@ fn visual_effect_switches_and_their_blur_value_are_dropped_on_load() {
     }
     assert!(!s.ui_values.contains_key("tileBlur"), "tileBlur survived migrate");
     assert_eq!(s.ui_flags.get("blurMediaUntilHover"), Some(&true), "the kept blur switch stays");
-    assert_eq!(s.ui_values.get("mediaBlur"), Some(&9.0), "the kept blur strength stays");
+    assert_eq!(s.ui_values.get("frostedBlur"), Some(&9.0), "the kept blur strength stays");
     assert!(!s.has_removed_ui_values());
+}
+
+#[test]
+fn fine_tuning_values_and_safety_net_switches_are_dropped_on_load() {
+    // These rows became constants and the sub-switches ship on for good; a stored
+    // value must not linger, and a second pass must change nothing.
+    let values = [
+        "gridPad", "gridGap", "overlayDim", "animSpeed", "dragThreshold", "disarmMs", "composerMaxH",
+        "modalMaxVh", "composerScale", "primaryScale", "snipPreviewVh", "ocrUpscaleUnderPx",
+        "ocrIndexMaxChars", "recDiskWarnMb", "recAudioKbps", "keyOverlayHoldMs", "videoClipTtlMin",
+        "syncPollSecs", "hlFontPx", "historyPreviewLen", "rotateTipLen", "trayLabelMax", "favStarSize",
+        "viewBorder", "tileHotkeyBadgeOpacity", "mediaRadius", "mediaBlur", "snipEditUndoMax",
+        "videoEditUndoMax", "savedSearchMax",
+    ];
+    let flags = [
+        "floatPark", "etaShow", "chainVarCheck", "ocrAutoPickLang", "voiceAutoPickLang", "ocrLangAutoUpdate",
+        "voiceLangAutoUpdate", "helpTips", "helpHighlight", "helpSketches", "historyDiff", "veOvRemember",
+    ];
+    let texts = ["snipScaleFilter", "fuzzyMaxTypos"];
+    let mut s = Settings::default();
+    for k in values {
+         s.ui_values.insert(k.into(), 7.0);
+    }
+    for k in flags {
+         s.ui_flags.insert(k.into(), false);
+    }
+    for k in texts {
+         s.ui_texts.insert(k.into(), "x".into());
+    }
+    // Neighbours that stay: a value, a switch and a dropdown of the same screens.
+    s.ui_values.insert("libraryWidth".into(), 700.0);
+    s.ui_flags.insert("copyFlash".into(), false);
+    s.ui_texts.insert("tileStyle".into(), "bold".into());
+    assert!(s.has_removed_ui_values());
+    s.migrate();
+    for k in values {
+         assert!(!s.ui_values.contains_key(k), "{k} survived migrate");
+    }
+    for k in flags {
+         assert!(!s.ui_flags.contains_key(k), "{k} survived migrate");
+    }
+    for k in texts {
+         assert!(!s.ui_texts.contains_key(k), "{k} survived migrate");
+    }
+    assert_eq!(s.ui_values.get("libraryWidth"), Some(&700.0));
+    assert_eq!(s.ui_flags.get("copyFlash"), Some(&false));
+    assert_eq!(s.ui_texts.get("tileStyle").map(String::as_str), Some("bold"));
+    assert!(!s.has_removed_ui_values());
+    let once = serde_json::to_string(&s).unwrap();
+    s.migrate();
+    assert_eq!(serde_json::to_string(&s).unwrap(), once, "a second migrate changes nothing");
 }
 
 #[test]
@@ -13876,6 +13894,14 @@ fn removed_fine_tuning_values_keep_their_former_defaults() {
     assert_eq!(REC_BROKEN_GRACE_MIN, 5.0);
     assert_eq!(REC_SWEEP_EVERY_MIN, 60.0);
     assert_eq!(CLIP_SECRET_MIN_LEN, 8);
+    assert_eq!(OCR_UPSCALE_UNDER_PX, 300);
+    assert_eq!(OCR_INDEX_MAX_CHARS, 20000);
+    assert_eq!(crate::rec_cmds::REC_DISK_WARN_MB, 500.0);
+    assert_eq!(crate::rec_cmds::REC_AUDIO_KBPS, 192);
+    assert_eq!(crate::keylog::HOLD_MS, 400);
+    assert_eq!(TRAY_LABEL_MAX, 40);
+    assert_eq!(SYNC_POLL_SECS, 5);
+    assert_eq!(CLIP_EXPORT_TTL_SECS, 3600);
 }
 
 #[test]
@@ -16100,30 +16126,6 @@ fn ink_halo_default_on_with_a_clamped_strength() {
 }
 
 #[test]
-fn tray_label_max_clamps_the_stored_expert_value() {
-    let mut s = Settings::default();
-    assert_eq!(tray_label_max(&s), TRAY_LABEL_MAX); // absent -> shipped default
-    s.ui_values.insert("trayLabelMax".into(), 5.0);
-    assert_eq!(tray_label_max(&s), 20); // below floor -> clamped up
-    s.ui_values.insert("trayLabelMax".into(), 500.0);
-    assert_eq!(tray_label_max(&s), 80); // above ceiling -> clamped down
-    s.ui_values.insert("trayLabelMax".into(), 60.0);
-    assert_eq!(tray_label_max(&s), 60); // in range -> passed through
-}
-
-#[test]
-fn sync_poll_secs_clamps_the_stored_expert_value() {
-    let mut s = Settings::default();
-    assert_eq!(sync_poll_secs(&s), SYNC_POLL_SECS); // absent -> shipped default
-    s.ui_values.insert("syncPollSecs".into(), 0.0);
-    assert_eq!(sync_poll_secs(&s), 2); // below floor -> clamped up
-    s.ui_values.insert("syncPollSecs".into(), 100.0);
-    assert_eq!(sync_poll_secs(&s), 30); // above ceiling -> clamped down
-    s.ui_values.insert("syncPollSecs".into(), 10.0);
-    assert_eq!(sync_poll_secs(&s), 10); // in range -> passed through
-}
-
-#[test]
 fn tray_menu_ids_round_trip_and_reject_junk() {
     assert_eq!(tray_copy_target(&tray_item_id("abc123")), Some("abc123"));
     // A prompt id is opaque, so the parser must not stop at the first separator.
@@ -18265,23 +18267,23 @@ fn a_stored_number_outside_its_slider_range_is_clamped_on_load() {
         ("importFolderMax", 1e18),
         ("remoteRateLimit", 0.0),
         ("remotePort", -5.0),
-        ("overlayDim", 5000.0),
+        ("uiScale", 5000.0),
         ("historyMax", 5e9),
     ]);
     assert_eq!(v["importFolderMax"], 2000.0);
     assert_eq!(v["remoteRateLimit"], 0.0, "the unlimited sentinel stays");
     assert_eq!(v["remotePort"], 1024.0);
-    assert_eq!(v["overlayDim"], 80.0);
+    assert_eq!(v["uiScale"], 300.0);
     assert_eq!(v["historyMax"], 1_000_000.0, "a stops entry is held to its last stop");
-    let v = clamped_values(&[("remoteRateLimit", 1e9), ("gridGap", 7.0)]);
+    let v = clamped_values(&[("remoteRateLimit", 1e9), ("hoverLift", 7.0)]);
     assert_eq!(v["remoteRateLimit"], 300.0);
-    assert_eq!(v["gridGap"], 7.0, "an in-range value is untouched");
+    assert_eq!(v["hoverLift"], 7.0, "an in-range value is untouched");
 }
 
 #[test]
 fn a_value_that_is_not_a_finite_number_is_dropped() {
-    let v = clamped_values(&[("gridGap", f64::NAN), ("gridPad", f64::INFINITY), ("overlayDim", f64::NEG_INFINITY)]);
-    for k in ["gridGap", "gridPad", "overlayDim"] {
+    let v = clamped_values(&[("hoverLift", f64::NAN), ("tileRadius", f64::INFINITY), ("uiScale", f64::NEG_INFINITY)]);
+    for k in ["hoverLift", "tileRadius", "uiScale"] {
         assert!(!v.contains_key(k), "{k} falls back to its default");
     }
 }
@@ -18294,14 +18296,14 @@ fn a_settings_import_clamps_the_numbers_it_brings() {
         ui_values: HashMap::from([
             ("importFolderMax".to_string(), 1e18),
             ("remoteRateLimit".to_string(), 0.0),
-            ("gridGap".to_string(), f64::NAN),
+            ("hoverLift".to_string(), f64::NAN),
         ]),
         ui_texts: HashMap::new(),
     };
     merge_settings_only(&mut live, file, |_| true).unwrap();
     assert_eq!(live.ui_values["importFolderMax"], 2000.0);
     assert_eq!(live.ui_values["remoteRateLimit"], 0.0);
-    assert!(!live.ui_values.contains_key("gridGap"));
+    assert!(!live.ui_values.contains_key("hoverLift"));
 }
 
 #[test]
@@ -18453,13 +18455,13 @@ fn retention_arithmetic_cannot_overflow() {
 #[test]
 fn the_ui_value_setter_refuses_non_finite_numbers_and_clamps_the_rest() {
     for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
-        assert!(update::checked_ui_value("gridGap", bad).is_err());
+        assert!(update::checked_ui_value("hoverLift", bad).is_err());
         assert!(update::checked_ui_value("someKeyWithoutARange", bad).is_err());
     }
     assert_eq!(update::checked_ui_value("importFolderMax", 1e18), Ok(2000.0));
     assert_eq!(update::checked_ui_value("trashRetentionDays", 0.5), Ok(0.0));
     assert_eq!(update::checked_ui_value("updateCheckH", 1e9), Ok(168.0));
-    assert_eq!(update::checked_ui_value("gridGap", 7.0), Ok(7.0));
+    assert_eq!(update::checked_ui_value("hoverLift", 7.0), Ok(7.0));
     assert_eq!(update::checked_ui_value("someKeyWithoutARange", 12345.5), Ok(12345.5));
 }
 

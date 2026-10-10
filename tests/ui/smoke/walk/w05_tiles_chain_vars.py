@@ -433,27 +433,6 @@ SECTION = """\
             }
           }
         }
-        // The switch turns the whole strip off, even mid-chain.
-        document.getElementById('settings').classList.remove('hidden');
-        await click('expert-open');
-        const varCheckRow = await findExpertRow('Show what each chain step needs');
-        if (!varCheckRow) {
-          out.errors.push('445: the chain overview switch is missing from the expert menu');
-        } else {
-          const sw = varCheckRow.querySelector('input.switch');
-          sw.click();
-          await sleep(200);
-          if (getComputedStyle(bar).display !== 'none') {
-            out.errors.push('445: turning the switch off left the strip visible');
-          }
-          sw.click();
-          await sleep(200);
-          if (getComputedStyle(bar).display === 'none') {
-            out.errors.push('445: turning the switch back on did not restore the strip');
-          }
-        }
-        await click('expert-back');
-        document.getElementById('settings').classList.add('hidden');
       }
       for (let i = 0; i < 3 && document.body.classList.contains('chain-mode'); i++) await click('chain-btn');
       await sleep(150);

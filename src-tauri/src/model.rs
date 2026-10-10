@@ -799,6 +799,36 @@ pub(crate) fn removed_ui_value_keys() -> &'static [&'static str] {
         "tagPopCols",
         "searchDebounceMs",
         "tileBlur",
+        "gridPad",
+        "gridGap",
+        "overlayDim",
+        "animSpeed",
+        "dragThreshold",
+        "disarmMs",
+        "composerMaxH",
+        "modalMaxVh",
+        "composerScale",
+        "primaryScale",
+        "snipPreviewVh",
+        "ocrUpscaleUnderPx",
+        "ocrIndexMaxChars",
+        "recDiskWarnMb",
+        "recAudioKbps",
+        "keyOverlayHoldMs",
+        "videoClipTtlMin",
+        "syncPollSecs",
+        "hlFontPx",
+        "historyPreviewLen",
+        "rotateTipLen",
+        "trayLabelMax",
+        "favStarSize",
+        "viewBorder",
+        "tileHotkeyBadgeOpacity",
+        "mediaRadius",
+        "mediaBlur",
+        "snipEditUndoMax",
+        "videoEditUndoMax",
+        "savedSearchMax",
     ]
 }
 
@@ -840,7 +870,24 @@ pub(crate) fn removed_ui_flag_keys() -> &'static [&'static str] {
         "hideTileNames",
         "accentScrollbar",
         "smoothScroll",
+        "floatPark",
+        "etaShow",
+        "chainVarCheck",
+        "ocrAutoPickLang",
+        "voiceAutoPickLang",
+        "ocrLangAutoUpdate",
+        "voiceLangAutoUpdate",
+        "helpTips",
+        "helpHighlight",
+        "helpSketches",
+        "historyDiff",
+        "veOvRemember",
     ]
+}
+
+// Expert dropdown choices (stored as text) that no longer exist; dropped like removed values.
+pub(crate) fn removed_ui_text_keys() -> &'static [&'static str] {
+    &["snipScaleFilter", "fuzzyMaxTypos"]
 }
 
 // Holds every numeric expert value to the range its slider enforces (the table
@@ -897,6 +944,7 @@ impl Settings {
     pub(crate) fn has_removed_ui_values(&self) -> bool {
         removed_ui_value_keys().iter().any(|k| self.ui_values.contains_key(*k))
             || removed_ui_flag_keys().iter().any(|k| self.ui_flags.contains_key(*k))
+            || removed_ui_text_keys().iter().any(|k| self.ui_texts.contains_key(*k))
     }
 
     // Ensure at least one view exists; migrate legacy single-grid data.
@@ -1067,6 +1115,9 @@ impl Settings {
         }
         for k in removed_ui_flag_keys() {
             self.ui_flags.remove(*k);
+        }
+        for k in removed_ui_text_keys() {
+            self.ui_texts.remove(*k);
         }
         // The privacy switch used to be "hide from screen capture" (on unless stored
         // false); it is now "allow screenshots" (off unless stored true). Anyone who

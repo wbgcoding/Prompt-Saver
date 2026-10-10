@@ -782,7 +782,7 @@ pub(crate) async fn add_prompt(
         (
             store_files_enabled(&store),
             store.settings.ui_flags.get("ocrIndex").copied().unwrap_or(false),
-            ocr_index_max_chars(&store.settings),
+            OCR_INDEX_MAX_CHARS,
         )
     };
     let mut fp = file_path.unwrap_or_default();
@@ -1112,7 +1112,7 @@ pub(crate) async fn update_prompt(
         (
             store_files_enabled(&store),
             store.settings.ui_flags.get("ocrIndex").copied().unwrap_or(false),
-            ocr_index_max_chars(&store.settings),
+            OCR_INDEX_MAX_CHARS,
             cur,
         )
     };
@@ -1162,7 +1162,7 @@ pub(crate) async fn update_prompt(
         // split into disjoint field borrows) -- only actually run if the
         // attachment turns out to have changed.
         let ocr_index_on = store.settings.ui_flags.get("ocrIndex").copied().unwrap_or(false);
-        let ocr_max_chars = ocr_index_max_chars(&store.settings);
+        let ocr_max_chars = OCR_INDEX_MAX_CHARS;
         // Read history settings before the mutable prompt borrow (a MutexGuard
         // can't be split into disjoint field borrows).
         let hist_on = history_enabled(&store.settings);

@@ -389,10 +389,8 @@ pub fn run() {
                 }
             }
 
-            // Same "Db not managed yet" situation as the recording sweep
-            // above -- read the TTL straight off `store` for this one startup
-            // pass; the periodic job below re-reads it live via app state.
-            sweep_clip_export_temp(clip_export_ttl_from(&store.settings));
+            // One startup pass; the periodic job below keeps it up afterwards.
+            sweep_clip_export_temp(clip_export_ttl());
 
             let saved_geom = store.settings.window;
             let autostart = store.settings.autostart;
@@ -817,17 +815,13 @@ pub fn run() {
                 sweep_stale_temp_files,
             );
 
-            // The clip-export sweep needs its own finer-grained cadence since
-            // videoClipTtlMin can be as low as 5 minutes -- re-reads the live
-            // setting every round rather than a value captured once at
-            // registration time.
+            // The clip-export sweep runs on its own, finer-grained cadence.
             {
-                let h = handle.clone();
                 scheduler::register_periodic(
                     "clip-export-sweep",
                     Duration::from_secs(CLIP_EXPORT_SWEEP_SECS),
                     Duration::from_secs(CLIP_EXPORT_SWEEP_SECS),
-                    move || { sweep_clip_export_temp(clip_export_ttl(&h)); },
+                    move || { sweep_clip_export_temp(clip_export_ttl()); },
                 );
             }
 

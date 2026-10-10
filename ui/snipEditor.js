@@ -2,7 +2,7 @@ import { attachSelectPicker } from "./selectpop.js";
 import { contrastTextColor, makeHoldOrTapToggle, numberField, trapTabWithin } from "./floatShared.js";
 import { placePopover, placePopoverAt } from "./popover.js";
 import { snapMove } from "./snap.js";
-import { $, colorPop, COLORS, drag, errToast, flag, getCurrentWindow, invoke, NUM_FIELD_BIG_STEP, openColorPop, ResizeDirection, settings, t, toast, txt, val, withShortcut } from "./core.js";
+import { $, colorPop, COLORS, drag, errToast, flag, getCurrentWindow, invoke, NUM_FIELD_BIG_STEP, openColorPop, ResizeDirection, settings, t, toast, txt, withShortcut } from "./core.js";
 import { closeShortcutsModal, openShortcutsModal } from "./windowChrome.js";
 import { EXPERT_DROPDOWNS } from "./expertMenu.js";
 import { recordToolUsage } from "./management.js";
@@ -48,8 +48,7 @@ export function initSnipEditor() {
       invoke("set_ui_text", { key: "snipLastTool", value: tool }).catch(() => {});
     }, 400);
   }
-  const SNIP_EDIT_UNDO_MAX = () => val("snipEditUndoMax");
-  const SNIP_SCALE_FILTER = () => settings.ui_texts?.snipScaleFilter || "high";
+  const SNIP_EDIT_UNDO_MAX = 50; // undo steps kept per edit
   // Refuse a target this large outright rather than risk an out-of-memory
   // canvas allocation -- comfortably above any real screen resolution.
   const SNIP_SCALE_MAX_AREA = 80_000_000;
@@ -557,7 +556,7 @@ export function initSnipEditor() {
       const older = cur.prevOps.find((o) => o.tool === "scale");
       if (!older) return;
       depth++;
-      if (depth > SNIP_EDIT_UNDO_MAX()) {
+      if (depth > SNIP_EDIT_UNDO_MAX) {
         if (!older.prevImg) return; // this one and everything behind it was released already
         cur.prevFloor = Math.max(cur.prevFloor, cur.prevOps.indexOf(older) + 1);
         snipEditReleaseResize(older);
@@ -573,7 +572,7 @@ export function initSnipEditor() {
     // window is exceeded, advance the floor instead of shifting the oldest op out;
     // it stays drawn (snipEditRedrawBase still walks every op) but becomes
     // permanent, undo just can no longer walk back past it.
-    if (SE.ops.length - SE.floor > SNIP_EDIT_UNDO_MAX()) SE.floor = SE.ops.length - SNIP_EDIT_UNDO_MAX();
+    if (SE.ops.length - SE.floor > SNIP_EDIT_UNDO_MAX) SE.floor = SE.ops.length - SNIP_EDIT_UNDO_MAX;
     snipEditReleaseBelowFloor();
     SE.redo.length = 0;
     SE.lastNudged = nudge === undefined ? op : nudge;
@@ -645,33 +644,29 @@ export function initSnipEditor() {
   // Halving-step resample: a single drawImage straight down to a much smaller
   // canvas blurs/aliases badly (the classic "shrunk screenshot text turns to
   // mush" problem), so downscaling by more than 2x repeatedly halves first and
-  // only does the final, non-halved step at the end. Upscaling and the "low"
-  // (nearest-neighbour, for pixel art) filter always run in one step.
+  // only does the final, non-halved step at the end. Upscaling runs in one step.
   function snipEditScaleCanvas(src, targetW, targetH) {
-    const filter = SNIP_SCALE_FILTER();
     let cur = src, curW = src.width, curH = src.height;
-    if (filter === "high") {
-      while (curW > targetW * 2 && curH > targetH * 2) {
-        const nextW = Math.max(targetW, Math.round(curW / 2));
-        const nextH = Math.max(targetH, Math.round(curH / 2));
-        const step = document.createElement("canvas");
-        step.width = nextW;
-        step.height = nextH;
-        const sctx = step.getContext("2d");
-        sctx.imageSmoothingEnabled = true;
-        sctx.imageSmoothingQuality = "high";
-        sctx.drawImage(cur, 0, 0, curW, curH, 0, 0, nextW, nextH);
-        cur = step;
-        curW = nextW;
-        curH = nextH;
-      }
+    while (curW > targetW * 2 && curH > targetH * 2) {
+      const nextW = Math.max(targetW, Math.round(curW / 2));
+      const nextH = Math.max(targetH, Math.round(curH / 2));
+      const step = document.createElement("canvas");
+      step.width = nextW;
+      step.height = nextH;
+      const sctx = step.getContext("2d");
+      sctx.imageSmoothingEnabled = true;
+      sctx.imageSmoothingQuality = "high";
+      sctx.drawImage(cur, 0, 0, curW, curH, 0, 0, nextW, nextH);
+      cur = step;
+      curW = nextW;
+      curH = nextH;
     }
     const out = document.createElement("canvas");
     out.width = targetW;
     out.height = targetH;
     const octx = out.getContext("2d");
-    octx.imageSmoothingEnabled = filter !== "low";
-    if (filter !== "low") octx.imageSmoothingQuality = "high";
+    octx.imageSmoothingEnabled = true;
+    octx.imageSmoothingQuality = "high";
     octx.drawImage(cur, 0, 0, curW, curH, 0, 0, targetW, targetH);
     return out;
   }
@@ -772,7 +767,7 @@ export function initSnipEditor() {
       snipEditRestoreScaleState(op.w, op.h, op.img, op.rawCanvas, [...op.keptOps, op]);
       // The floor the resize itself produced, worked out the same way it was then.
       SE.floor = Math.max(0, op.prevFloor - (op.prevOps.length - op.keptOps.length));
-      if (SE.ops.length - SE.floor > SNIP_EDIT_UNDO_MAX()) SE.floor = SE.ops.length - SNIP_EDIT_UNDO_MAX();
+      if (SE.ops.length - SE.floor > SNIP_EDIT_UNDO_MAX) SE.floor = SE.ops.length - SNIP_EDIT_UNDO_MAX;
       snipEditReleaseBelowFloor();
     } else if (op.tool === "edit") {
       snipEditRedoEdit(op);
@@ -1188,11 +1183,11 @@ export function initSnipEditor() {
     if (!SE.textEdit) return;
     const { point } = SE.textEdit;
     SE.textEdit = null;
-    const val = snipEditTextInput.value;
+    const typed = snipEditTextInput.value;
     snipEditTextInput.classList.add("hidden");
-    if (!val.trim()) return; // empty input -> discard the operation
+    if (!typed.trim()) return; // empty input -> discard the operation
     const ts = snipEditToolState("text");
-    snipEditPushOp({ tool: "text", point, text: val, color: ts.color, fontPx: ts.fontPx, back: ts.back, outlinePx: ts.outlinePx });
+    snipEditPushOp({ tool: "text", point, text: typed, color: ts.color, fontPx: ts.fontPx, back: ts.back, outlinePx: ts.outlinePx });
   }
   function snipEditCancelTextInput() {
     SE.textEdit = null;

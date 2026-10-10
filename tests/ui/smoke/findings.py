@@ -497,7 +497,7 @@ def run(browser, tmp):
     document.getElementById('library-btn').click(); await sleep(500);
     if (!tabsHidden()) errs.push('564-l3: the history tab is offered with nothing to show and nothing recording');
 """)
-    failed += ar_probe('s1', 'screenshot editor: undoing a resize does not unlock operations behind the undo limit', 'index', '1000x780', '<script>window.__SEED_SETTINGS__ = { ui_values: { snipEditUndoMax: 10 } };</script>\n', r"""
+    failed += ar_probe('s1', 'screenshot editor: undoing a resize does not unlock operations behind the undo limit', 'index', '1000x780', '', r"""
     await bootReady();
     const cv = document.createElement('canvas'); cv.width = 200; cv.height = 120;
     const g = cv.getContext('2d'); g.fillStyle = '#88aacc'; g.fillRect(0, 0, 200, 120);
@@ -510,8 +510,8 @@ def run(browser, tmp):
       const live = document.getElementById('snip-edit-live');
       const undo = document.getElementById('snip-edit-undo');
       const r = live.getBoundingClientRect();
-      for (let i = 0; i < 12; i++) {
-        const x = r.left + 10 + i * 3, y = r.top + 10 + i * 4;
+      for (let i = 0; i < 52; i++) {
+        const x = r.left + 10 + (i % 20) * 3, y = r.top + 10 + (i % 20) * 4;
         live.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 1, clientX: x, clientY: y }));
         live.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 1, clientX: x + 6, clientY: y + 6 }));
         window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1, clientX: x + 6, clientY: y + 6 }));
@@ -525,13 +525,13 @@ def run(browser, tmp):
       half.click(); await sleep(50);
       pop.querySelector('.primary-btn').click(); await sleep(250);
       let steps = 0;
-      while (!undo.disabled && steps < 40) { undo.click(); steps++; await sleep(15); }
-      // 12 strokes, limit 10: the scale itself plus the 10 newest strokes can be undone
-      if (steps !== 11) errs.push('564-s1: undo walked ' + steps + ' steps after a resize, expected 11 (the resize and ten strokes)');
+      while (!undo.disabled && steps < 80) { undo.click(); steps++; await sleep(15); }
+      // 52 strokes, limit 50: the scale itself plus the 50 newest strokes can be undone
+      if (steps !== 51) errs.push('564-s1: undo walked ' + steps + ' steps after a resize, expected 51 (the resize and fifty strokes)');
       const redo = document.getElementById('snip-edit-redo');
       let redos = 0;
-      while (!redo.disabled && redos < 40) { redo.click(); redos++; await sleep(15); }
-      if (redos !== 11) errs.push('564-s1: redo walked ' + redos + ' steps, expected 11');
+      while (!redo.disabled && redos < 80) { redo.click(); redos++; await sleep(15); }
+      if (redos !== 51) errs.push('564-s1: redo walked ' + redos + ' steps, expected 51');
       if (undo.disabled) errs.push('564-s1: Undo stayed disabled after redoing the resize');
     }
 """)

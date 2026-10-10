@@ -795,16 +795,16 @@ SECTION = """\
       out.errors.push('the multiple-views toggle is missing from the expert menu');
     } else {
       // The parent of a branch takes its children with it and gives them back.
-      for (const kept of ['Prompt in multiple views', 'View tab border width']) {
+      for (const kept of ['Prompt in multiple views', 'Grid border in view color']) {
         if (!rowFor(kept)) out.errors.push('"' + kept + '" is missing although multiple views are on');
       }
       await flip('Multiple views');
-      for (const gone of ['Prompt in multiple views', 'View tab border width']) {
+      for (const gone of ['Prompt in multiple views', 'Grid border in view color']) {
         if (rowFor(gone)) out.errors.push('"' + gone + '" survived switching multiple views off');
       }
       if (!rowFor('Multiple views')) out.errors.push('switching multiple views off also hid its own toggle');
       await flip('Multiple views');
-      for (const back of ['Prompt in multiple views', 'View tab border width']) {
+      for (const back of ['Prompt in multiple views', 'Grid border in view color']) {
         if (!rowFor(back)) out.errors.push('"' + back + '" did not come back');
       }
     }

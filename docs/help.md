@@ -235,8 +235,7 @@ field as a password field. A "Shortcuts only" switch (in the expert menu,
 next to the keys overlay itself) restricts capture to combinations with
 Ctrl, Alt or Win plus Enter, Tab, Esc, Backspace, Delete, Insert, arrows,
 Home, End, Page Up, Page Down and F keys, letters and digits never included,
-for a recording with confidential input. How long a released
-key stays visible is adjustable in the expert menu.
+for a recording with confidential input.
 
 An optional camera recording (off by default, in the expert menu) adds a
 "Record camera" entry to the record button's right-click menu. It opens its
@@ -281,10 +280,10 @@ file name and only choose a different folder; once an export has finished,
 rewrites the extension, never a folder or name you already typed. The chosen folder is remembered as
 the default for next time. The "Copy" button next to it skips naming anything
 at all: it exports into a copy that cleans itself up on its own (after an hour,
-and again on the next launch, both adjustable in the expert menu) and puts the
+and again on the next launch) and puts the
 finished file straight on the clipboard for pasting into another app, the way
 the recording dialog's own Copy button does. Undo/redo covers every editing
-step, with an adjustable limit in the expert menu. A failed export shows the
+step. A failed export shows the
 actual reason in plain language, with the raw ffmpeg log reachable underneath
 in a closed "Technical details" row, never the log itself as the message. A
 second video can be added too: "Add
@@ -313,8 +312,7 @@ values and time range and is offset a little so it sits next to the
 original instead of exactly on top of it. In the video editor, the color, thickness, opacity
 and font size a new overlay starts with also follow whatever was last used
 for that same kind (image, frame, text, pixelation or focus area), across
-restarts too; an expert switch turns that off again in favor of the fixed
-starting values.
+restarts too.
 
 Dragging a shape (screenshot editor) or a crop box or overlay (video editor)
 snaps to the image or frame edges, its centre in both directions, and the
@@ -535,8 +533,7 @@ exclude matches, or tag:word / var:word to search only tags or placeholder
 names. A bookmark button inside the search field saves the current query, tag filters
 and sort as a chip shown above the field; click it to bring the whole search
 back. Right-click a saved search to rename or delete it, or drag it to
-reorder the row. Up to five can be saved at once by default, adjustable in
-the expert menu. The Tiles button next to the sort order switches the list to
+reorder the row. Up to five can be saved at once. The Tiles button next to the sort order switches the list to
 tiles: a big preview picture with the name below, nothing else. Click,
 double-click, the right-click menu and multi-select all work the same as in
 the list, it is the same selection drawn differently. The toggle remembers
@@ -628,8 +625,7 @@ The system tray icon's right-click menu offers a "recently copied" and a
 "favorites" section for quick access without opening the main window. It draws
 as a rounded, themed window matching the rest of the app rather than the plain
 Windows popup; the expert menu can switch back to the plain system menu if the
-custom one ever misbehaves on your setup. The expert menu also caps how long a
-prompt name may get before it is cut off with an ellipsis in that menu.
+custom one ever misbehaves on your setup.
 
 Typing in the tray menu's search field opens the quick launcher with what you
 typed. Arrow keys and Enter on the menu's own entries work as before. The field
@@ -657,7 +653,7 @@ as a new theme; the original stays untouched.
 
 ### Scaling & zoom
 
-Independent size sliders for the overall UI, dialogs, the composer, and icons.
+Independent size sliders for the overall UI and the icons.
 
 ### Tooltips
 
@@ -832,8 +828,6 @@ that folder can read the content, so a synced or shared folder should be avoided
 for anything sensitive. A tile with an attached file, image, or PDF syncs as a
 reference: the header carries the path and the PDF page, never the file itself. A
 screenshot pasted straight into a tile has no path and stays in the database only.
-The expert menu controls how often the sync folder is re-checked for files
-edited outside the app.
 
 The folder is `<data folder>\prompt-saver-sync` unless you pick another one; an
 installation that was already syncing keeps the folder it has. A file is read
@@ -858,7 +852,7 @@ to arrive. What happens in either direction is fixed and never silent:
   file in there that the app did not write and nothing at all is deleted, with a
   message naming what is in the way.
 - **An unreachable folder pauses the sync** instead of failing every few seconds
-  (after five failed rounds, adjustable). The line under the folder in the expert
+  (after five failed rounds). The line under the folder in the expert
   menu says when the folder was last read, how many files were in it, and why it
   is paused.
 
@@ -1182,8 +1176,7 @@ Ein Schalter „Nur Tastenkürzel" (im Expertenmenü, direkt neben der
 Tastenanzeige) beschränkt die Aufzeichnung auf Kombinationen mit Strg, Alt
 oder Win sowie Enter, Tab, Esc, Rücktaste, Entf, Einfg, Pfeile, Pos1, Ende,
 Bild auf, Bild ab und F-Tasten, Buchstaben und Ziffern nie eingeschlossen,
-für Aufnahmen mit vertraulichen Eingaben. Wie lange eine
-losgelassene Taste sichtbar bleibt, ist im Expertenmenü einstellbar.
+für Aufnahmen mit vertraulichen Eingaben.
 
 Eine optionale Kameraaufnahme (Standard aus, im Expertenmenü) fügt dem
 Rechtsklickmenü des Aufnahme-Buttons den Eintrag „Kamera aufnehmen“ hinzu. Sie
@@ -1228,7 +1221,7 @@ Export verschiebt „Speichern unter…" das fertige Video an einen anderen Ort.
 Ein Formatwechsel ändert nur die Endung, nie Ordner oder Namen, die man selbst eingetippt hat.
 Die Schaltfläche „Kopieren“ daneben verzichtet ganz auf einen Namen: es
 exportiert in eine Kopie, die sich selbst aufräumt (nach einer Stunde, und
-erneut beim nächsten Start, beides im Expertenmenü einstellbar), und legt die
+erneut beim nächsten Start), und legt die
 fertige Datei direkt in die Zwischenablage zum Einfügen in eine andere App,
 genauso wie der Kopieren-Button im Aufnahme-Dialog.
 
@@ -1243,7 +1236,7 @@ verschoben, damit es neben dem Original liegt statt genau darauf. Im Video-Edito
 richten sich Farbe, Stärke, Deckkraft und Schriftgröße einer neuen
 Überlagerung außerdem nach dem, was für dieselbe Art (Bild, Rahmen, Text,
 Verpixeln oder Fokusbereich) zuletzt benutzt wurde, auch über einen Neustart
-hinweg; ein Expertenschalter stellt stattdessen wieder feste Vorgabewerte ein.
+hinweg.
 
 Beim Ziehen einer Form (Screenshot-Editor) oder eines Zuschnitts bzw. einer
 Überlagerung (Video-Editor) rastet die Bewegung an den Kanten der Leinwand
@@ -1396,8 +1389,7 @@ gehört immer nur zu einem Kachelordner gleichzeitig.
 
 **Infobereich-Menü**: Zuletzt kopiert, Favoriten. Erscheint als abgerundetes,
 zum Thema passendes Fenster statt des einfachen Windows-Menüs; im Expertenmenü
-lässt sich bei Bedarf auf das einfache Systemmenü zurückschalten. Dort auch
-einstellbar: die maximale Länge eines Eintragsnamens. Tippen ins Suchfeld des
+lässt sich bei Bedarf auf das einfache Systemmenü zurückschalten. Tippen ins Suchfeld des
 Infobereich-Menüs öffnet den Schnellstarter mit dem Getippten.
 
 **Kopien aus anderen Apps**: aus; eingeschaltet nimmt der Kopierverlauf auch Text
@@ -1414,7 +1406,7 @@ lässt sich der Schatten abschalten oder seine Stärke einstellen.
 
 **Favoriten**: Stern-Markierung, eigene Favoriten-Ansicht. „Zu Favoriten hinzufügen“ im Rechtsklickmenü einer Kachel oder den Stern in der Bibliothek nutzen; eine Favoriten-Kachel zeigt oben rechts einen kleinen Stern.
 
-**Skalierung & Zoom**: UI-, Dialog-, Editor- und Icon-Größe getrennt einstellbar.
+**Skalierung & Zoom**: UI- und Icon-Größe getrennt einstellbar.
 
 **Aussehen & Themes**: sieben mitgelieferte Themes, optionaler Theme-Editor.
 
@@ -1422,7 +1414,7 @@ lässt sich der Schatten abschalten oder seine Stärke einstellen.
 `tag:`/`var:`-Suchpräfixe (mit `-` auch verneint). Ein Stern neben dem Suchfeld
 speichert Anfrage, Tag-Filter und Sortierung als Kachel darüber; Rechtsklick
 bietet Umbenennen und Löschen, Ziehen sortiert die Zeile um. Standardmäßig
-höchstens fünf, im Expertenmenü einstellbar. Ein Umschalter neben dem
+höchstens fünf. Ein Umschalter neben dem
 Typfilter stellt die Liste als Kacheln dar: großes Vorschaubild, Name
 darunter, sonst nichts. Klick, Doppelklick, Rechtsklickmenü und
 Mehrfachauswahl verhalten sich genau wie in der Liste. Der Umschalter merkt
@@ -1599,8 +1591,7 @@ keinen Pfad und bleibt nur in der Datenbank. Eine in einer eingehenden Datei
 genannte Ansicht oder ein Ordner, den es auf diesem Rechner noch nicht gibt,
 wird automatisch angelegt, per Namensabgleich. **Die Dateien sind Klartext**:
 anders als die Datenbank, also kein synchronisierter oder geteilter Ordner für
-Sensibles. Im Expertenmenü lässt sich einstellen, wie oft der Sync-Ordner auf
-außerhalb der App bearbeitete Dateien geprüft wird.
+Sensibles.
 
 Der Ordner ist `<Datenordner>\prompt-saver-sync`, solange kein eigener gewählt
 ist; wer schon synchronisiert, behält seinen bisherigen Ordner. Eine Datei wird
@@ -1627,7 +1618,7 @@ geschieht nie stillschweigend:
   danach leer ist. Liegt eine fremde Datei darin, wird gar nichts gelöscht und
   eine Meldung nennt, was im Weg liegt.
 - **Ein nicht erreichbarer Ordner pausiert die Synchronisierung**, statt alle
-  paar Sekunden zu scheitern (nach fünf Fehlversuchen, einstellbar). Die Zeile
+  paar Sekunden zu scheitern (nach fünf Fehlversuchen). Die Zeile
   unter dem Ordner im Expertenmenü nennt den letzten gelesenen Stand, die Zahl
   der Dateien und den Grund der Pause.
 

@@ -2726,10 +2726,10 @@ mod tests {
         let mut store = fixture_store();
         let dir = std::env::temp_dir();
         for value in ["NaN", "nan", "inf", "-inf", "infinity", "1e999"] {
-            let set = run_cmd(&mut store, &dir, &["settings", "set", "gridGap", value, "--yes"]);
+            let set = run_cmd(&mut store, &dir, &["settings", "set", "hoverLift", value, "--yes"]);
             assert_ne!(set.code, 0, "{value} must be refused");
             assert!(!set.mutated_settings);
-            assert!(!store.settings.ui_values.contains_key("gridGap"), "{value} was stored");
+            assert!(!store.settings.ui_values.contains_key("hoverLift"), "{value} was stored");
         }
         let set = run_cmd(&mut store, &dir, &["settings", "set", "importFolderMax", "1e18", "--yes"]);
         assert_eq!(set.code, 0);

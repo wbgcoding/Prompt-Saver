@@ -1240,8 +1240,7 @@ VIDEO_PROBE = """
     }
 
     // ---- 392: the last colour picked for a text overlay is remembered as the
-    // starting colour for the next text overlay, and veOvRemember off falls
-    // back to the fixed default again ----
+    // starting colour for the next text overlay ----
     {
       const rowsRem = [...document.querySelectorAll('#ve-ov-list .ve-ov-row')];
       const textRowRem = rowsRem.find((r) => r.textContent.startsWith('Text'));
@@ -1270,18 +1269,6 @@ VIDEO_PROBE = """
             errs.push('392: a new text overlay did not start with the remembered colour, got ' +
               (selSwatch && selSwatch.title));
           }
-          await window.__TAURI__.core.invoke('set_ui_flag', { key: 'veOvRemember', enabled: false });
-          window.__FIRE__('settings-changed');
-          await sleep(50);
-          document.getElementById('ve-ov-add-text').click();
-          await sleep(30);
-          const selSwatchOff = document.querySelector('#ve-ov-editor .swatch.sel');
-          if (selSwatchOff && selSwatchOff.title === '#ef4444') {
-            errs.push('392: veOvRemember off still started a new text overlay from the remembered colour');
-          }
-          await window.__TAURI__.core.invoke('set_ui_flag', { key: 'veOvRemember', enabled: true });
-          window.__FIRE__('settings-changed');
-          await sleep(30);
         }
       }
     }

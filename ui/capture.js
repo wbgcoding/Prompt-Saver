@@ -895,10 +895,10 @@ export function bindCapture() {
   // ---- OCR (text recognition, on by default -- flag "ocr") ----
   const ocrModal = $("ocr-modal");
   const ocrSettings = () => ({
-    upscaleUnderPx: Math.round(val("ocrUpscaleUnderPx")),
+    upscaleUnderPx: 300, // crops under this size are upscaled before recognition
     joinLines: flag("ocrJoinLines"),
     lang: txt("ocrLang") || "auto",
-    autoPickLang: flag("ocrAutoPickLang"),
+    autoPickLang: true,
   });
   const closeOcrModal = () => ocrModal.classList.add("hidden");
   // Shared by all three entry points (snip-modal, composer screenshot, composer

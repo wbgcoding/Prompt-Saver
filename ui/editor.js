@@ -868,8 +868,6 @@ export async function loadHistory(id) {
             span.className = "diff-add";
             span.textContent = newerEntries[i];
             content.appendChild(span);
-          } else if (!flag("historyDiff")) {
-            content.textContent = olderEntries[i]; // word diff switched off, show the plain old text
           } else {
             const tokens = diffWords(olderEntries[i], newerEntries[i]);
             if (tokens) renderDiffInto(content, tokens);

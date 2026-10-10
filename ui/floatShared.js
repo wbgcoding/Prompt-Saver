@@ -4,7 +4,7 @@
 // what each window already used on its own -- this is drift prevention.
 import { placePopover } from "./popover.js";
 import { errMessageLogged } from "./errors.js";
-import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT, COPY_SOUND_VOLUME_DEFAULT } from "./copyDefaults.js";
+import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, COPY_SOUND_VOLUME_DEFAULT } from "./copyDefaults.js";
 
 export const COPIED_MS = 900; // "copied!" tile/pill flash duration
 export const RING_MIN = 8;    // smallest resize-ring thickness (px)
@@ -104,7 +104,6 @@ export function readCopyPrefs(s) {
   const f = s?.ui_flags || {};
   return {
     cooldownMs: num(v.copyCooldownMs, COOLDOWN_MS_DEFAULT),
-    dragThreshold: num(v.dragThreshold, DRAG_THRESHOLD_DEFAULT),
     apOn: f.autoPaste !== false, // default on
     apEnter: f.autoPasteEnter === true,
     apDelay: num(v.autoPasteDelayMs, AUTO_PASTE_DELAY_MS_DEFAULT),
@@ -199,13 +198,12 @@ export function ffmpegDownloadPct(payload) {
 
 // The ffmpeg download button of the expert menu and of the video editor. While a download
 // runs the button shows its progress and a click on it cancels; a cancel is not an error.
-// `etaShow` is a boolean or a function read at every progress step, `onDone` runs after a
-// finished download, `onError` gets any other failure.
+// `onDone` runs after a finished download, `onError` gets any other failure.
 const ETA_MIN_PCT = 10; // remaining time stays hidden below this percent ...
 const ETA_MIN_SECS = 20; // ... and for this many seconds
 let ffmpegDownloadRunning = false;
 export const ffmpegDownloadActive = () => ffmpegDownloadRunning;
-export async function runFfmpegDownload(btn, { etaShow, onDone, onError, t }) {
+export async function runFfmpegDownload(btn, { onDone, onError, t }) {
   const { invoke } = window.__TAURI__.core;
   if (ffmpegDownloadRunning) {
     invoke("cancel_ffmpeg_download").catch(() => {});
@@ -225,7 +223,7 @@ export async function runFfmpegDownload(btn, { etaShow, onDone, onError, t }) {
       const pct = ffmpegDownloadPct(e.payload);
       dlEta.feed(pct);
       const estimate = dlEta.estimate(ETA_MIN_PCT, ETA_MIN_SECS);
-      const eta = (typeof etaShow === "function" ? etaShow() : etaShow) ? formatEta(estimate, t) : "";
+      const eta = formatEta(estimate, t);
       btn.textContent = t("ffmpegDownloading").replace("{pct}", String(pct)) + (eta ? ` (${eta})` : "");
       btn.setAttribute("aria-valuenow", String(pct));
       btn.setAttribute("aria-valuetext", a11yProgressText(t, pct, estimate));

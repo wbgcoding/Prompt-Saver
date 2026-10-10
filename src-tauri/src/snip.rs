@@ -359,8 +359,8 @@ pub(crate) fn remove_own_temp_leftovers() {
 
 // The "Copy to clipboard" export's own throwaway files, in the same
 // TEMP_DIR subfolder the OCR/voice leftovers above use. Kept separate from
-// sweep_stale_temp_files because its max age is user-configurable
-// (videoClipTtlMin, default one hour) rather than the fixed
+// sweep_stale_temp_files because its max age (CLIP_EXPORT_TTL_SECS, one
+// hour) differs from the fixed
 // STALE_TEMP_FILE_AGE every other class above uses.
 // (count, bytes) removed -- the temporary-exports row's cleanup button
 // reports what this actually did, same reasoning as sweep_recordings_now's
@@ -422,28 +422,20 @@ pub(crate) fn clip_export_temp_stats_in(dir: &Path) -> (u64, u64) {
     (count, bytes)
 }
 
-pub(crate) fn clip_export_ttl_from(settings: &Settings) -> Duration {
-    let min = settings.ui_values.get("videoClipTtlMin").copied().unwrap_or(60.0).max(1.0);
-    Duration::from_secs((min * 60.0) as u64)
-}
+// How long a throwaway clip-export file survives before the sweep removes it.
+pub(crate) const CLIP_EXPORT_TTL_SECS: u64 = 60 * 60;
 
 // The temporary-exports row's on-demand trigger.
 #[tauri::command]
-pub(crate) fn sweep_clip_export_temp_now(app: AppHandle) -> (u32, u64) {
-    sweep_clip_export_temp(clip_export_ttl(&app))
+pub(crate) fn sweep_clip_export_temp_now() -> (u32, u64) {
+    sweep_clip_export_temp(clip_export_ttl())
 }
 
-// Reads the live expert setting so the periodic sweep always uses whatever
-// the user has it set to right now, the same way update_check_interval does
-// for its own re-timed job.
-pub(crate) fn clip_export_ttl(app: &AppHandle) -> Duration {
-    app.try_state::<Db>()
-        .map(|s| clip_export_ttl_from(&s.lock().unwrap_or_else(|e| e.into_inner()).settings))
-        .unwrap_or(Duration::from_secs(3600))
+pub(crate) fn clip_export_ttl() -> Duration {
+    Duration::from_secs(CLIP_EXPORT_TTL_SECS)
 }
 
-// How often the clip-export sweep re-checks -- finer than STALE_TEMP_SWEEP_SECS
-// since videoClipTtlMin can be set as low as 5 minutes.
+// How often the clip-export sweep re-checks -- finer than STALE_TEMP_SWEEP_SECS.
 pub(crate) const CLIP_EXPORT_SWEEP_SECS: u64 = 5 * 60;
 
 pub(crate) fn remove_snip_preview() {

@@ -359,7 +359,7 @@ pub(crate) fn checked_ui_value(key: &str, value: f64) -> Result<f64, String> {
 // Set an expert numeric value (CSS var / behaviour tweak).
 #[tauri::command(async)]
 pub(crate) fn set_ui_value(app: AppHandle, state: State<Db>, key: String, value: f64) -> Result<(), String> {
-    let is_tray = key == "trayRecentN" || key == "trayFavN" || key == "trayLabelMax";
+    let is_tray = key == "trayRecentN" || key == "trayFavN";
     let is_error_log_cap = key == "errorLogKeepKb";
     // A stored interval outside what the setting offers would show as one thing and
     // run as another.

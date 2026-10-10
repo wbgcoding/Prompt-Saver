@@ -1,4 +1,4 @@
-import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT, COPY_SOUND_VOLUME_DEFAULT } from "./copyDefaults.js";
+import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, COPY_SOUND_VOLUME_DEFAULT } from "./copyDefaults.js";
 
 // ---- Expert feature flags & values ----
 // Every feature ships enabled; the expert menu lets the user switch single
@@ -10,10 +10,6 @@ export const FLAG_LABELS = {
   snipEditSnap: "flagSnipEditSnap",
   multiView: "flagMultiView",
   floating: "flagFloating",
-  // A saved position whose screen is gone gets parked on the main screen
-  // instead of dropped into the void; off falls back to the old plain
-  // clamp-to-work-area behaviour.
-  floatPark: "flagFloatPark",
   barToggles: "flagBarToggles",
   barToggleBoth: "flagBarToggleBoth",
   tileMenu: "flagTileMenu",
@@ -57,7 +53,6 @@ export const FLAG_LABELS = {
   // and the ffmpeg download; and the shared "about how long is left" estimate
   // shown on every progress bar in the app.
   taskbarProgress: "flagTaskbarProgress",
-  etaShow: "flagEtaShow",
   importExport: "flagImportExport",
   tileReorder: "flagTileReorder",
   dragToView: "flagDragToView",
@@ -65,7 +60,6 @@ export const FLAG_LABELS = {
   confirmClearHistory: "flagConfirmClearHistory",
   chainLock: "flagChainLock",
   chainQuickStart: "flagChainQuickStart",
-  chainVarCheck: "flagChainVarCheck",
   favorites: "flagFavorites",
   keyboardNav: "flagKeyboardNav",
   varDefaults: "flagVarDefaults",
@@ -131,19 +125,9 @@ export const FLAG_LABELS = {
   // switched off on its own. Both ship default on.
   backupBeforeReset: "flagBackupBeforeReset",
   backupBeforeDelete: "flagBackupBeforeDelete",
-  // Help panel: the tip line under each article, search-hit highlighting, and
-  // the diagrams next to a handful of articles.
-  helpTips: "flagHelpTips",
-  helpHighlight: "flagHelpHighlight",
-  helpSketches: "flagHelpSketches",
-  // Word-level diff in the version-history expanded view.
-  historyDiff: "flagHistoryDiff",
   // Sub-toggles of ocr (OPT_FLAG_LABELS, default off), themselves default on.
   ocrAutoCopy: "flagOcrAutoCopy",
   ocrJoinLines: "flagOcrJoinLines",
-  // Sub-toggles of ocr, themselves default on.
-  ocrAutoPickLang: "flagOcrAutoPickLang",
-  ocrLangAutoUpdate: "flagOcrLangAutoUpdate",
   // Auto-opens the five-step first-run tour once, right after the example
   // prompts are seeded. Off only stops the AUTOMATIC open: the Help-menu entry
   // that reopens the tour manually stays available either way.
@@ -155,8 +139,6 @@ export const FLAG_LABELS = {
   voicePunct: "flagVoicePunct",
   voiceAutoCaps: "flagVoiceAutoCaps",
   voiceAutoStop: "flagVoiceAutoStop",
-  voiceAutoPickLang: "flagVoiceAutoPickLang",
-  voiceLangAutoUpdate: "flagVoiceLangAutoUpdate",
   // Screen recording. Ships ON, like ocr/voice.
   screenRecord: "flagScreenRecord",
   // Sub-toggle of screenRecord: whether the mouse pointer appears in the
@@ -199,10 +181,6 @@ export const FLAG_LABELS = {
   // result modal and from any video prompt's context menu. Ships ON, like the
   // rest of the media-editing features (snipEditor, ocr, voice).
   videoEditor: "flagVideoEditor",
-  // Keeps the last colour/thickness/opacity/font size used per overlay kind as the
-  // starting point for the next one of that kind, saved across sessions. Off falls
-  // back to the fixed defaults.
-  veOvRemember: "flagVeOvRemember",
   // The screenshot editor has had edge/center snapping for a while
   // (snipEditSnap); this is the same behaviour for the video editor's crop box
   // and overlays, kept as its own switch since the two editors want it
@@ -376,12 +354,7 @@ export const HISTORY_STOPS = (() => {
 // Numeric value tweaks. `def` is the shipped default; a missing value uses it.
 export const EXPERT_VALUES = {
   videoVolume: { label: "valVideoVolume", min: 0, max: 100, step: 5, def: 100, unit: "%", gate: "!videoMuted" },
-  animSpeed: { label: "valAnimSpeed", min: 0, max: 1000, step: 10, def: 150, unit: "ms", gate: "animations" },
-  gridGap: { label: "valGridGap", min: 0, max: 60, step: 1, def: 8, unit: "px" },
-  gridPad: { label: "valGridPad", min: 0, max: 40, step: 1, def: 10, unit: "px" },
-  overlayDim: { label: "valOverlayDim", min: 0, max: 80, step: 5, def: 40, unit: "%" },
   bubbleMs: { label: "valBubbleMs", min: 0, max: 6000, step: 50, def: 950, unit: "ms", zeroLabel: "valOff", offAtZero: true },
-  viewBorder: { label: "valViewBorder", min: 1, max: 12, step: 1, def: 3, unit: "px", gate: "multiView" },
   attachPreviewKb: { label: "valAttachPreviewKb", min: 1, max: 64, step: 1, def: 8, unit: "KB", display: "words", gate: "attachTextPreview" },
   // Floating-button opacity (%). Floored at 20% so the pill never vanishes.
   floatOpacity: { label: "valFloatOpacity", min: 20, max: 100, step: 5, def: 100, unit: "%", gate: "floating" },
@@ -399,9 +372,7 @@ export const EXPERT_VALUES = {
   tooltipDelayMs: { label: "valTooltipDelay", min: 0, max: 2000, step: 50, def: 500, unit: "ms", zeroLabel: "valOff", offAtZero: true, gate: "tooltipsEnabled" },
   // Appearance scales (percent, 100 = unchanged). Applied as CSS zoom.
   uiScale: { label: "valUiScale", min: 75, max: 300, step: 5, def: 100, unit: "%" },
-  composerScale: { label: "valComposerScale", min: 60, max: 300, step: 5, def: 100, unit: "%" },
   iconScale: { label: "valIconScale", min: 50, max: 300, step: 5, def: 100, unit: "%" },
-  primaryScale: { label: "valPrimaryScale", min: 60, max: 300, step: 5, def: 100, unit: "%" },
   // Max length for prompt names + captions (raise it for long labels).
   nameMaxLen: { label: "valNameMaxLen", min: 20, max: 1000, step: 10, def: 80, unit: "" },
   // Limit overrides (defaults match the classic 20; backend ceiling is 200).
@@ -414,8 +385,6 @@ export const EXPERT_VALUES = {
   // Block re-copying the SAME prompt within this window (0 = off). Never blocks others.
   copyCooldownMs: { label: "valCopyCooldown", min: 0, max: 10000, step: 100, def: COOLDOWN_MS_DEFAULT, unit: "ms" },
   copySoundVolume: { label: "valCopySoundVolume", min: 0, max: 100, step: 5, def: COPY_SOUND_VOLUME_DEFAULT, unit: "%", gate: "copySound" },
-  // Header favorites-star size.
-  favStarSize: { label: "valFavStarSize", min: 14, max: 48, step: 1, def: 22, unit: "px", gate: "favViewButton" },
   // Favorites grid: cap the column count (0 = auto-size to the count).
   favMaxCols: { label: "valFavMaxCols", min: 0, max: 20, step: 1, def: 0, unit: "", gate: "favViewButton" },
   // Prompt-list (library) column options: how many columns the header toggle offers.
@@ -427,12 +396,7 @@ export const EXPERT_VALUES = {
   // searches, Search everything (hits per group and recent searches), the quick
   // launcher and the tray menu's filter row. It serves several features, so it has no gate.
   searchListMax: { label: "valSearchListMax", min: 3, max: 20, step: 1, def: 8, unit: "" },
-  savedSearchMax: { label: "valSavedSearchMax", min: 3, max: 10, step: 1, def: 5, unit: "", gate: "savedSearches" },
   libraryTileSize: { label: "valLibraryTileSize", min: 80, max: 240, step: 10, def: 140, unit: "px", gate: "libraryTiles" },
-  // How long the library search waits after the last keystroke before it re-filters.
-  // Caps the recognized text kept per picture, so a screenshot of a wall of
-  // text cannot inflate the database.
-  ocrIndexMaxChars: { label: "valOcrIndexMaxChars", min: 500, max: 100000, step: 500, def: 20000, unit: "", gate: "ocrIndex" },
   // Tile geometry.
   tileRadius: { label: "valTileRadius", min: 0, max: 30, step: 1, def: 10, unit: "px" },
   tileBorderWidth: { label: "valTileBorderWidth", min: 0, max: 6, step: 1, def: 1, unit: "px" },
@@ -441,45 +405,25 @@ export const EXPERT_VALUES = {
   // How strongly everything but the hovered item fades (tiles, media, the top bar
   // together); 0 is off.
   hoverDim: { label: "valHoverDim", min: 0, max: 90, step: 5, def: 0, unit: "%", zeroLabel: "valOff", offAtZero: true },
-  // Drag-vs-click distance before a pointer-down turns into a drag (tiles, tabs, folders).
-  dragThreshold: { label: "valDragThreshold", min: 2, max: 20, step: 1, def: DRAG_THRESHOLD_DEFAULT, unit: "px" },
-  // Dragging a tile onto a collapsed view group's tab: how long it has to rest
-  // there before the group opens so the drop can target a view inside it.
-  // Header vertical padding + screenshot-preview max height.
-  snipPreviewVh: { label: "valSnipPreviewVh", min: 30, max: 92, step: 1, def: 74, unit: "%", gate: "screenshot" },
   // A delay before the capture (lets a menu stay open in the shot).
   snipDelayMs: { label: "valSnipDelayMs", min: 0, max: 5000, step: 100, def: 0, unit: "ms", gate: "screenshot" },
   // The actual saved/copied/exported JPEG quality -- every save/copy path, edited
   // or not, shares this one value (see SNIP_SAVE_Q in snip.rs).
   snipSaveQuality: { label: "valSnipSaveQuality", min: 50, max: 100, step: 5, def: 90, unit: "%", gate: "screenshot" },
-  // Screenshot-editor undo depth. Tool sizes are remembered per tool, not set here.
-  snipEditUndoMax: { label: "valSnipEditUndoMax", min: 10, max: 200, step: 10, def: 50, unit: "", gate: "snipEditor" },
-  videoEditUndoMax: { label: "valVideoEditUndoMax", min: 10, max: 200, step: 10, def: 40, unit: "", gate: "videoEditor" },
   // A file past this size is rejected before it loads when opening one for
   // editing -- open_file_in_editor reads the very same key.
   // 0 means forever, same convention as trashRetentionDays.
   editStateKeepDays: { label: "valEditStateKeepDays", min: 0, max: 365, step: 1, def: 30, unit: "", gate: "editStateKeep" },
-  // A crop smaller than this (either side) is upscaled 2x before recognition --
-  // the trick that makes small on-screen text readable to the OCR engine.
-  ocrUpscaleUnderPx: { label: "valOcrUpscaleUnderPx", min: 100, max: 800, step: 50, def: 300, unit: "px", gate: "ocr" },
   // Delay between picking a recording target and the capture actually starting -- 0 disables it.
   recCountdownS: { label: "valRecCountdownS", min: 0, max: 10, step: 1, def: 3, unit: "s", gate: "screenRecord" },
   // The encoder always recorded at a fixed 30fps regardless of the source
   // monitor's real refresh rate until this was added -- a 60/144Hz screen can
   // now be captured at its own rate instead of being silently capped.
   recFps: { label: "valRecFps", min: 10, max: 60, step: 5, def: 30, unit: "fps", gate: "screenRecord" },
-  recAudioKbps: { label: "valRecAudioKbps", min: 64, max: 320, step: 32, def: 192, unit: "kbps", gate: "screenRecord" },
   // Native H.264 bitrate. Has no effect once recQuality is "lossless" -- that
   // step is produced by a separate ffmpeg CRF-0 re-encode after the recording
   // stops, not by this slider (see the recQuality/recBitrateKbps tooltips).
   recBitrateKbps: { label: "valRecBitrateKbps", min: 1000, max: 50000, step: 500, def: 12000, unit: "kbps", gate: "screenRecord" },
-  // Replaces the two separate width/height ceiling constants resolve_recording_settings
-  // used to read (8192/4320) -- there was never a settings row for either, so unifying
-  // them into one value is not a behaviour change for anyone who never set them.
-  // Matches resolve_recording_settings' own existing default of 500 -- adding
-  // this row must not change what already happens today.
-  recDiskWarnMb: { label: "valRecDiskWarnMb", min: 200, max: 20000, step: 100, def: 500, unit: "MB", gate: "screenRecord" },
-  keyOverlayHoldMs: { label: "valKeyOverlayHoldMs", min: 100, max: 2000, step: 50, def: 400, unit: "ms", gate: "keyOverlay" },
   cameraFramerate: { label: "valCameraFramerate", min: 10, max: 60, step: 5, def: 30, unit: "fps", gate: "cameraRecord" },
   recMaxMin: { label: "valRecMaxMin", min: 0, max: 600, step: 5, def: 0, unit: "min", zeroLabel: "valUnlimited", gate: "screenRecord" },
   recMaxMb: { label: "valRecMaxMb", min: 0, max: 100000, step: 500, def: 0, unit: "MB", zeroLabel: "valUnlimited", gate: "screenRecord" },
@@ -494,33 +438,10 @@ export const EXPERT_VALUES = {
   // only; it is not tied to recSweepBroken because the backend runs this
   // sweep whether or not the broken-recording sweep is on.
   recDiscardKeepH: { label: "valRecDiscardKeepH", min: 0, max: 720, step: 1, def: 24, unit: "h", zeroLabel: "retentionForever", gate: "screenRecord" },
-  // How long a video editor "Copy to clipboard" export's throwaway temp
-  // file survives before the background sweep deletes it (also cleared at
-  // the next app start regardless).
-  videoClipTtlMin: { label: "valVideoClipTtl", min: 5, max: 240, step: 5, def: 60, unit: "min", gate: "videoEditor" },
-  // How often the background thread checks installed language packs for an
-  // update, how long the "update available" toast stays before it counts as a
-  // silent no-op, and how long a click on its Cancel button postpones the next
-  // check. All three only matter while ocrLangAutoUpdate itself is on.
   voiceAutoStopSec: { label: "valVoiceAutoStopSec", min: 1, max: 60, step: 1, def: 10, unit: "s", gate: "voiceAutoStop" },
   voiceMaxMin: { label: "valVoiceMaxMin", min: 1, max: 60, step: 1, def: 10, unit: "min", gate: "voice" },
-  // How long ocr_capabilities()'s own result is cached backend-side, so opening
-  // the management dialog (or a manual "Check now") does not always wait on
-  // PowerShell. Gated on "ocr" alone, not ocrLangAutoUpdate -- manual "Check now"
-  // uses this cache too, even with automatic updates switched off.
-  // Scrollbar thickness across every dialog (thumb keeps its 3px inset border).
   // Frosted-glass dialog background blur (paired with the frostedModals toggle).
   frostedBlur: { label: "valFrostedBlur", min: 0, max: 20, step: 1, def: 4, unit: "px", gate: "frostedModals" },
-  // Composer textarea auto-grow cap, popover edge padding, toast width, modal max height.
-  composerMaxH: { label: "valComposerMaxH", min: 80, max: 400, step: 10, def: 160, unit: "px" },
-  modalMaxVh: { label: "valModalMaxVh", min: 60, max: 95, step: 1, def: 88, unit: "%" },
-  // Privacy blur strength (each paired with its "blur until hover" toggle).
-  mediaBlur: { label: "valMediaBlur", min: 1, max: 30, step: 1, def: 10, unit: "px", gate: "blurMediaUntilHover" },
-  // Default matches the type badge's own fixed dim level (0.4) so a hotkey
-  // badge reads the same as every other passive tile badge out of the box.
-  tileHotkeyBadgeOpacity: { label: "valTileHotkeyBadgeOpacity", min: 10, max: 100, step: 5, def: 40, unit: "%", gate: "tileHotkeyBadge" },
-  // Rounded-media corner radius (paired with the roundMedia toggle).
-  mediaRadius: { label: "valMediaRadius", min: 0, max: 24, step: 1, def: 8, unit: "px", gate: "roundMedia" },
   // Prompt version history: versions kept per prompt.
   historyPerPrompt: { label: "valHistoryPerPrompt", min: 5, max: 100, step: 5, def: 20, unit: "", gate: "promptHistory" },
   // Usage statistics: how many rows the top-N lists show.
@@ -537,8 +458,6 @@ export const EXPERT_VALUES = {
   importFolderMax: { label: "valImportFolderMax", min: 10, max: 2000, step: 10, def: 500, unit: "", gate: "importExport" },
   // How often the open editor writes its autosave draft.
   editorDraftSecs: { label: "valEditorDraftSecs", min: 0, max: 30, step: 1, def: 5, unit: "s", zeroLabel: "valOff", offAtZero: true },
-  // How long a confirm button (delete etc.) stays armed before it auto-resets.
-  disarmMs: { label: "valDisarmMs", min: 1000, max: 10000, step: 500, def: 3000, unit: "ms" },
   // Matches append_crash_log's own pre-existing hardcoded rotation cap (256 KB).
   errorLogKeepKb: { label: "valErrorLogKeepKb", min: 64, max: 4096, step: 64, def: 256, unit: "KB", display: "mb", gate: "errorLog" },
   // Automatic backups: how many rotating snapshots to keep.
@@ -575,20 +494,6 @@ export const EXPERT_VALUES = {
   // How many entries each tray quick-copy section lists.
   trayRecentN: { label: "valTrayRecentN", min: 1, max: 10, step: 1, def: 5, unit: "", gate: "trayRecent" },
   trayFavN: { label: "valTrayFavN", min: 1, max: 10, step: 1, def: 10, unit: "", gate: "trayFavs" },
-  // Character cap for a tray menu entry's name before it is cut with an ellipsis.
-  // Shared by both sections, so it gates on trayRecent (the first/default one) --
-  // no OR-gate exists, and gating a shared row on either lone sub-flag is an
-  // approximation either way.
-  trayLabelMax: { label: "valTrayLabelMax", min: 20, max: 80, step: 5, def: 40, unit: "", gate: "trayRecent" },
-  // How often the Markdown-sync folder is re-scanned for outside edits.
-  syncPollSecs: { label: "valSyncPollSecs", min: 2, max: 30, step: 1, def: 5, unit: "s", gate: "promptSync" },
-  // Failed rounds in a row (an unreachable folder) before the sync pauses itself.
-  // Code text size inside the Markdown preview.
-  hlFontPx: { label: "valHlFontPx", min: 10, max: 18, step: 1, def: 13, unit: "px", gate: "codeHighlight" },
-  // Markdown preview + syntax-highlight size caps, past which they fall back to plain text.
-  // Word-diff cap in version history (500: minimum where a diff is still worth it).
-  // Version-history preview line length.
-  historyPreviewLen: { label: "valHistoryPreviewLen", min: 20, max: 300, step: 10, def: 80, unit: "", gate: "promptHistory" },
   // How much of a private note the tile tooltip shows (0 = the whole note).
   notesTipLen: { label: "valNotesTipLen", min: 0, max: 2000, step: 20, def: 300, unit: "", gate: "notesInTooltip" },
   // How far the picker's loupe magnifies the pixels around the cursor.
@@ -599,8 +504,6 @@ export const EXPERT_VALUES = {
   // Swatch diameter in the right-click colour-history popover.
   // Cap on how many variants one rotating prompt may hold.
   rotateMaxEntries: { label: "valRotateMaxEntries", min: 2, max: 50, step: 1, def: 20, unit: "", gate: "rotatingPrompts" },
-  // Tile tooltip preview length for a rotating prompt's short text.
-  rotateTipLen: { label: "valRotateTipLen", min: 0, max: 300, step: 10, def: 60, unit: "", gate: "rotatingPrompts" },
   // Auto-advance session tuning: mirrors the backend's auto_cfg() defaults.
   // A remaining-time estimate only shows once a progress bar has moved this
   // far, and only if what's left is still worth naming a number for.
@@ -652,7 +555,7 @@ export const EXPERT_TABS = [
   { title: "expTabFeatures", groups: [
     // Everything that puts new content into the app.
     { title: "expGroupInput", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, { key: "attachTextPreview", gate: "fileAttach" }, "pasteMedia", "dragDrop"], values: ["attachPreviewKb"] },
-    { title: "expGroupViews", flags: ["multiView", { key: "multiViewPrompt", gate: "multiView" }, { key: "gridViewBorder", gate: "multiView" }, "quickGrid", { key: "quickGridHoverOnly", gate: "quickGrid" }], values: ["viewBorder", "maxViews", "gridMax"] },
+    { title: "expGroupViews", flags: ["multiView", { key: "multiViewPrompt", gate: "multiView" }, { key: "gridViewBorder", gate: "multiView" }, "quickGrid", { key: "quickGridHoverOnly", gate: "quickGrid" }], values: ["maxViews", "gridMax"] },
     // Placeholders, from the grammar to where the app asks for them. varFixed
     // (a hand-maintained name/value list, empty by default, only ever
     // SUGGESTED in the fill-in dialog) stays in this same group rather than
@@ -661,42 +564,41 @@ export const EXPERT_TABS = [
     { title: "expGroupVars", flags: ["promptVars", { key: "varDefaults", gate: "promptVars" }, { key: "dynVars", gate: "promptVars" }, { key: "choiceVars", gate: "promptVars" }, { key: "choiceRemember", gate: "choiceVars" }, { key: "varFixed", gate: "promptVars" }], dropdowns: ["dateStyle", "timeStyle"], varFixedList: true },
     // The editor: what it shows beside the text box. Preview and highlighter belong together; the
     // highlighter only ever paints inside the preview.
-    { title: "expGroupEditor", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }, { key: "copyFormatted", gate: "mdPreview" }, "lengthCounter", "promptHistory", { key: "historyDiff", gate: "promptHistory" }, "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace", "confirmDiscard"], values: ["hlFontPx", "historyPerPrompt", "notesTipLen", "historyPreviewLen", "editorDraftSecs", "nameMaxLen"], dropdowns: ["counterUnits"] },
+    { title: "expGroupEditor", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }, { key: "copyFormatted", gate: "mdPreview" }, "lengthCounter", "promptHistory", "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace", "confirmDiscard"], values: ["historyPerPrompt", "notesTipLen", "editorDraftSecs", "nameMaxLen"], dropdowns: ["counterUnits"] },
     // Everything that happens between a click and the clipboard.
     { title: "expGroupCopy", flags: ["promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, { key: "autoPasteEnter", gate: "autoPaste" }, "hideWindowOnCopy", "copyFlash", "copySound"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs", "bubbleMs", "copySoundVolume"], dropdowns: ["dragOutModifier", "copySizeLevel"] },
     // Copying several different prompts as one text.
-    { title: "expGroupChain", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "chainQuickStart", gate: "chainPrompts" }, { key: "chainVarCheck", gate: "chainPrompts" }], dropdowns: ["chainSeparator"] },
-    // Floating buttons and the two kinds of folder they can form.
-    { title: "expGroupFolders", flags: ["floating", { key: "floatPark", gate: "floating" }, { key: "pillFolders", gate: "floating" }, "tileFolders"], values: ["floatOpacity", "pillFontSize", "floatParkCleanupH"],
+    { title: "expGroupChain", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "chainQuickStart", gate: "chainPrompts" }], dropdowns: ["chainSeparator"] },
+    // Floating buttons and the two kinds of folder they can form, plus the
+    // Markdown mirror of prompt folders (beta, text-only prompts as .md files).
+    { title: "expGroupFolders", flags: ["floating", { key: "pillFolders", gate: "floating" }, "tileFolders", "promptSync"], values: ["floatOpacity", "pillFontSize", "floatParkCleanupH"], paths: ["syncDir"],
       actions: [{ id: "float-recall", label: "floatRecallAction", gate: "floating" }] },
     // The quick-copy sections of the tray menu, each with its own entry count.
-    { title: "expGroupTray", flags: ["trayCustomMenu", "trayRecent", "trayFavs", "traySearch"], values: ["trayRecentN", "trayFavN", "trayLabelMax"] },
-    // Prompt folders as Markdown (beta): mirrors text-only prompts as .md files.
-    { title: "expGroupSync", flags: ["promptSync"], values: ["syncPollSecs"], paths: ["syncDir"] },
+    { title: "expGroupTray", flags: ["trayCustomMenu", "trayRecent", "trayFavs", "traySearch"], values: ["trayRecentN", "trayFavN"] },
     // Auto-advancing through a rotation -- not a capture tool, stays in tab 1.
-    { title: "expGroupRotation", flags: ["rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }, { key: "rotateAuto", gate: "rotatingPrompts" }], values: ["rotateMaxEntries", "rotateTipLen"], dropdowns: ["rotateDefaultMode"] },
+    { title: "expGroupRotation", flags: ["rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }, { key: "rotateAuto", gate: "rotatingPrompts" }], values: ["rotateMaxEntries"], dropdowns: ["rotateDefaultMode"] },
     // Voice dictation -- not a capture tool either (it puts text into the composer,
     // the same way typing does), stays in tab 1.
-    { title: "expGroupVoice", flags: ["voice", { key: "voiceInterim", gate: "voice" }, { key: "voicePunct", gate: "voice" }, { key: "voiceAutoCaps", gate: "voicePunct" }, { key: "voiceAutoStop", gate: "voice" }, { key: "voiceOnlineOk", gate: "voice" }, { key: "voiceAutoPickLang", gate: "voice" }, { key: "voiceLangAutoUpdate", gate: "voice" }, { key: "voiceHotkey", gate: "voice" }], values: ["voiceAutoStopSec", "voiceMaxMin"], dropdowns: ["voiceLang", "voiceInsert", "voiceHotkeyTarget"],
+    { title: "expGroupVoice", flags: ["voice", { key: "voiceInterim", gate: "voice" }, { key: "voicePunct", gate: "voice" }, { key: "voiceAutoCaps", gate: "voicePunct" }, { key: "voiceAutoStop", gate: "voice" }, { key: "voiceOnlineOk", gate: "voice" }, { key: "voiceHotkey", gate: "voice" }], values: ["voiceAutoStopSec", "voiceMaxMin"], dropdowns: ["voiceLang", "voiceInsert", "voiceHotkeyTarget"],
       actions: [{ id: "voice-langs-open", label: "voiceLangsManage", gate: "voice" }, { id: "voice-hotkey-set", label: "voiceHotkeySet", gate: "voiceHotkey" }] },
   ] },
   { title: "expTabCapture", groups: [
     // Everything below is a capture tool: it reads something off the screen or the
     // microphone rather than putting typed content into the app.
-    { title: "expGroupScreenshot", flags: ["screenshot"], values: ["snipPreviewVh", "snipSaveQuality", "snipDelayMs"], dropdowns: ["screenshotFormat"], paths: ["screenshotDir"] },
-    { title: "expGroupSnipEditor", flags: [{ key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }], values: ["snipEditUndoMax"], dropdowns: ["snipEditDefaultTool", "snipScaleFilter", "snipTextBack"], colors: ["snipDefaultColor"] },
+    { title: "expGroupScreenshot", flags: ["screenshot"], values: ["snipSaveQuality", "snipDelayMs"], dropdowns: ["screenshotFormat"], paths: ["screenshotDir"] },
+    { title: "expGroupSnipEditor", flags: [{ key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }], dropdowns: ["snipEditDefaultTool", "snipTextBack"], colors: ["snipDefaultColor"] },
     // Opens #ocr-langs-modal -- same gate as the rest of the feature.
-    { title: "expGroupOcr", flags: ["ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }, { key: "ocrAutoPickLang", gate: "ocr" }, { key: "ocrLangAutoUpdate", gate: "ocr" }], values: ["ocrUpscaleUnderPx"], dropdowns: ["ocrLang"],
+    { title: "expGroupOcr", flags: ["ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }], dropdowns: ["ocrLang"],
       actions: [{ id: "ocr-langs-open", label: "ocrLangsManage", gate: "ocr" }] },
     { title: "expGroupPicker", flags: ["colorPicker"], values: ["loupeZoom", "pickHistoryN"], dropdowns: ["pickerFormat"] },
     // The recording hotkeys render their own capture row directly (hotkeyRow())
     // instead of a button that jumps to a settings field -- see actionRow()'s
     // "hotkey" branch.
-    { title: "expGroupRecording", flags: ["screenRecord"], values: ["recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "recDiskWarnMb", "recMaxMin", "recMaxMb", "recDiscardKeepH"], selects: ["recordingRetentionDays"], dropdowns: ["recQuality", "recFormat", "recCanvasMode"], paths: ["recordingDir"] },
-    { title: "expGroupRecWhile", flags: [{ key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, { key: "recCropNotice", gate: "screenRecord" }, { key: "recBarSize", gate: "screenRecord" }, { key: "recTargetSwitch", gate: "screenRecord" }, { key: "recAutoCrop", gate: "screenRecord" }, { key: "recOutline", gate: "screenRecord" }, { key: "keyOverlay", gate: "screenRecord" }, { key: "keyOverlayShortcutsOnly", gate: "keyOverlay" }], values: ["keyOverlayHoldMs"], dropdowns: ["recMicDevice"], colors: ["recOutlineColor"],
+    { title: "expGroupRecording", flags: ["screenRecord"], values: ["recCountdownS", "recFps", "recBitrateKbps", "recMaxMin", "recMaxMb", "recDiscardKeepH"], selects: ["recordingRetentionDays"], dropdowns: ["recQuality", "recFormat", "recCanvasMode"], paths: ["recordingDir"] },
+    { title: "expGroupRecWhile", flags: [{ key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, { key: "recCropNotice", gate: "screenRecord" }, { key: "recBarSize", gate: "screenRecord" }, { key: "recTargetSwitch", gate: "screenRecord" }, { key: "recAutoCrop", gate: "screenRecord" }, { key: "recOutline", gate: "screenRecord" }, { key: "keyOverlay", gate: "screenRecord" }, { key: "keyOverlayShortcutsOnly", gate: "keyOverlay" }], dropdowns: ["recMicDevice"], colors: ["recOutlineColor"],
       actions: [{ id: "rec-stop-hotkey-row", type: "hotkey", hotkeyKey: "recStopHotkey", label: "recHotkeyFieldLabel", gate: "recStopHotkey" }, { id: "rec-pause-hotkey-row", type: "hotkey", hotkeyKey: "recPauseHotkey", label: "recHotkeyFieldLabel", gate: "recPauseHotkey" }] },
     { title: "expGroupCamera", flags: ["cameraRecord"], values: ["cameraFramerate"], dropdowns: ["cameraDevice", "cameraResolution"] },
-    { title: "expGroupVideoEditor", flags: ["videoEditor", { key: "veOvRemember", gate: "videoEditor" }, { key: "videoEditSnap", gate: "videoEditor" }], values: ["videoEditUndoMax", "videoClipTtlMin"], paths: ["videoExportDir"] },
+    { title: "expGroupVideoEditor", flags: ["videoEditor", { key: "videoEditSnap", gate: "videoEditor" }], paths: ["videoExportDir"] },
     // What the screenshot editor and the video editor share -- created here so
     // no setting key is ever declared in two groups (expert_menu_check.py).
     { title: "expGroupEditors", flags: ["numFieldWheel", "editStateKeep"], values: ["editStateKeepDays"] },
@@ -704,18 +606,17 @@ export const EXPERT_TABS = [
   { title: "expTabTiles", groups: [
     // Split by what a setting actually does: acting on a tile, the hover tooltip,
     // and pure looks. One 26-entry blob made everything hard to find.
-    { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "dragToView", "tilePressScale", "tileHotkeyBadge"], values: ["hoverLift", "hoverDim", "dragThreshold", "tileHotkeyBadgeOpacity"] },
+    { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "dragToView", "tilePressScale", "tileHotkeyBadge"], values: ["hoverLift", "hoverDim"] },
     { title: "expGroupTooltips", values: ["tooltipDelayMs"] },
     { title: "expGroupTileLook", flags: ["tileShadow", "typeBadges", "captions", "gridLines", "autoInk", "inkHalo"], values: ["tileRadius", "tileBorderWidth", "inkThreshold", "inkHaloStrength"], dropdowns: ["tileStyle"] },
-    { title: "expGroupFavorites", flags: ["favorites", { key: "tileFavBadge", gate: "favorites" }, { key: "favViewReorder", gate: "favViewButton" }], values: ["favStarSize", "favMaxCols"] },
-    { title: "expGroupMedia", flags: ["videoControls", "videoAutoplay", "videoMuted", "videoLoop", "mediaMeta", "mediaBorder", "roundMedia"], values: ["videoVolume", "mediaRadius"] },
+    { title: "expGroupFavorites", flags: ["favorites", { key: "tileFavBadge", gate: "favorites" }, { key: "favViewReorder", gate: "favViewButton" }], values: ["favMaxCols"] },
+    { title: "expGroupMedia", flags: ["videoControls", "videoAutoplay", "videoMuted", "videoLoop", "mediaMeta", "mediaBorder", "roundMedia"], values: ["videoVolume"] },
   ] },
   { title: "expTabAppearance", groups: [
-    { title: "expGroupScales", values: ["composerScale", "primaryScale"] },
-    { title: "expGroupAppearanceDetails", flags: ["animations", "hideScrollbars", "frostedModals", "customThemes"], values: ["animSpeed", "gridGap", "gridPad", "overlayDim", "frostedBlur", "composerMaxH", "modalMaxVh", "customThemeMax"], dropdowns: ["toastPos"], palette: true },
+    { title: "expGroupAppearanceDetails", flags: ["animations", "hideScrollbars", "frostedModals", "customThemes"], values: ["frostedBlur", "customThemeMax"], dropdowns: ["toastPos"], palette: true },
   ] },
   { title: "expTabLibrary", groups: [
-    { title: "expGroupLibSearch", flags: ["librarySearch", "globalSearch", "searchSuggest", "savedSearches", "fuzzySearch", "libraryTypeFilter", "colorFilter", "searchAutofocus", "ocrIndex"], values: ["searchListMax", "savedSearchMax", "ocrIndexMaxChars", "libraryCols"], dropdowns: ["fuzzyMaxTypos"],
+    { title: "expGroupLibSearch", flags: ["librarySearch", "globalSearch", "searchSuggest", "savedSearches", "fuzzySearch", "libraryTypeFilter", "colorFilter", "searchAutofocus", "ocrIndex"], values: ["searchListMax", "libraryCols"],
       actions: [{ id: "ocr-index-backfill", label: "ocrIndexBackfillAction", gate: "ocrIndex" }] },
     { title: "expGroupLibrary", flags: ["smartSort", "batchOps", "imagePreview", "libraryVideoPreview", "archiveTag", "libraryTiles"], values: ["libraryWidth", "libPreviewLines", "libraryTileSize"] },
     { title: "expGroupTags", flags: ["tags"], dropdowns: ["tagFilterMode", "tagSort"] },
@@ -725,12 +626,10 @@ export const EXPERT_TABS = [
   { title: "expTabSystem", groups: [
     // Toolbar button visibility (mirrors the header right-click tool list).
     { title: "expGroupToolbar", flags: [{ key: "barToggleBoth", gate: "barToggles" }, "showLibrary"] },
-    { title: "expGroupPrivacy", notices: ["storeUnsealed", "settingsLocked", "settingsWriteFailed"], flags: ["allowScreenshot", "blurMediaUntilHover", "secretPrompts"], values: ["mediaBlur", "secretTimeoutMin"] },
-    { title: "expGroupSystem", notices: ["dataDirReadOnly"], flags: ["keyboardNav", "taskbarProgress", "etaShow"], paths: ["dataDir"],
-      actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }] },
-    { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "helpSketches", "firstRunTour"],
-      actions: [{ id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
-    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "similarHint", "backupBeforeReset", "backupBeforeDelete", "importExport", "errorLog"], values: ["similarThreshold", "importFolderDepth", "importFolderMax", "disarmMs", "undoToastMs"], selects: ["trashRetentionDays"],
+    { title: "expGroupPrivacy", notices: ["storeUnsealed", "settingsLocked", "settingsWriteFailed"], flags: ["allowScreenshot", "blurMediaUntilHover", "secretPrompts"], values: ["secretTimeoutMin"] },
+    { title: "expGroupSystem", notices: ["dataDirReadOnly"], flags: ["keyboardNav", "taskbarProgress", "firstRunTour"], paths: ["dataDir"],
+      actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }, { id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
+    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "similarHint", "backupBeforeReset", "backupBeforeDelete", "importExport", "errorLog"], values: ["similarThreshold", "importFolderDepth", "importFolderMax", "undoToastMs"], selects: ["trashRetentionDays"],
       actions: [{ id: "trash-open", label: "trashTitle" }, { id: "settings-export", label: "settingsExportAction" }, { id: "settings-import", label: "settingsImportAction" }, { id: "error-log-open", label: "errorLogAction", gate: "errorLog" }] },
     // The only new network surface in the app, off by default.
     // A link can only open or copy an entry; the receiver can do everything
@@ -768,67 +667,66 @@ export const TILE_STYLES = ["bold", "uppercase", "mono", "italic", "shadow", "co
 export const EXPERT_TIPS = [
   // General / creating
   "storeFiles", "attachTextPreview", "attachPreviewKb", "varDefaults", "dynVars", "choiceVars", "choiceRemember", "varFixed",
-  "lengthCounter", "promptHistory", "historyDiff", "historyPreviewLen", "editorMonospace",
+  "lengthCounter", "promptHistory", "editorMonospace",
   "promptNotes", "notesInTooltip", "notesTipLen",
-  "mdPreview", "codeHighlight", "codeAutoDetect", "hlFontPx", "copyFormatted",
+  "mdPreview", "codeHighlight", "codeAutoDetect", "copyFormatted",
   "colorPicker", "pickerFormat", "loupeZoom", "pickHistoryN",
-  "screenRecord", "recCursor", "recCountdownS", "recFps", "recAudioSystem", "recAudioMic", "recAudioKbps", "recMicDevice",
+  "screenRecord", "recCursor", "recCountdownS", "recFps", "recAudioSystem", "recAudioMic", "recMicDevice",
   "recQuality", "recBitrateKbps", "recFormat", "recordingDir",
   "recStopHotkey", "recPauseHotkey", "recTrayEntries", "recCropNotice", "recBarSize", "recTargetSwitch",
-  "recAutoCrop", "recCanvasMode", "recMaxMin", "recMaxMb", "recDiskWarnMb",
-  "keyOverlay", "keyOverlayHoldMs", "keyOverlayShortcutsOnly",
+  "recAutoCrop", "recCanvasMode", "recMaxMin", "recMaxMb",
+  "keyOverlay", "keyOverlayShortcutsOnly",
   "cameraRecord", "cameraDevice", "cameraResolution", "cameraFramerate",
-  "videoEditor", "videoEditUndoMax", "veOvRemember", "videoEditSnap",
+  "videoEditor", "videoEditSnap",
   "videoExportDir",
   "numFieldWheel", "errorLogKeepKb",
   "editStateKeep", "editStateKeepDays", "editorDraftSecs",
   "snipSaveQuality", "snipDelayMs",
   "snipDefaultColor",
-  "snipEditUndoMax", "snipEditSnap", "snipTextBack", "snipEditDefaultTool", "snipScaleFilter",
-  "ocr", "ocrUpscaleUnderPx", "ocrLang",
-  "ocrAutoPickLang", "ocrLangAutoUpdate",
+  "snipEditSnap", "snipTextBack", "snipEditDefaultTool",
+  "ocr", "ocrLang",
   "voice", "voiceInterim", "voicePunct", "voiceAutoCaps", "voiceAutoStop", "voiceAutoStopSec", "voiceMaxMin",
-  "voiceLang", "voiceInsert", "voiceOnlineOk", "voiceAutoPickLang", "voiceLangAutoUpdate",
+  "voiceLang", "voiceInsert", "voiceOnlineOk",
   "voiceHotkey", "voiceHotkeyTarget",
-  "trayCustomMenu", "trayRecent", "trayFavs", "trayRecentN", "trayFavN", "trayLabelMax", "traySearch",
+  "trayCustomMenu", "trayRecent", "trayFavs", "trayRecentN", "trayFavN", "traySearch",
   "importExport", "hoverDim", "keyboardNav", "allowMultipleInstances",
-  "taskbarProgress", "etaShow", "dataDir", "dataDirLock", "demoMode",
-  "floating", "floatPark", "floatParkCleanupH",
+  "taskbarProgress", "dataDir", "dataDirLock", "demoMode",
+  "floating", "floatParkCleanupH",
   "pillFolders", "pillFontSize",
   "tileFolders",
-  "rotatingPrompts", "rotateDefaultMode", "rotateMaxEntries", "rotateBadge", "rotateTipLen",
+  "rotatingPrompts", "rotateDefaultMode", "rotateMaxEntries", "rotateBadge",
   "rotateAuto",
-  "helpTips", "helpSketches", "firstRunTour",
+  "firstRunTour",
   // Tiles / copying
-  "tileMenu", "typeBadges", "tileHotkeyBadge", "tileFavBadge", "bubbleMs", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "chainQuickStart", "chainVarCheck", "autoPasteEnter",
+  "tileMenu", "typeBadges", "tileHotkeyBadge", "tileFavBadge", "bubbleMs", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "chainQuickStart", "autoPasteEnter",
   "promptHotkeys", "promptHotkeyPaste", "dragOut", "dragOutInvert", "dragOutModifier",
   "tooltipDelayMs",
   "dragToView",
   // Appearance
   "hideScrollbars", "gridLines", "autoInk", "inkThreshold", "inkHalo", "inkHaloStrength",
   "customThemes", "customThemeMax",
-  "dragThreshold", "composerMaxH", "toastPos", "modalMaxVh", "tileStyle",
+  "toastPos", "tileStyle",
   // Library / privacy
-  "mediaMeta", "mediaMetaBackfill", "ocrIndex", "ocrIndexMaxChars",
+  "mediaMeta", "mediaMetaBackfill", "ocrIndex",
   "smartSort", "fuzzySearch", "batchOps", "searchSuggest", "searchAutofocus",
   "globalSearch",
   "tags", "tagFilterMode", "tagSort",
   "allowScreenshot", "copyHistory", "historyTimestamps", "historyGrouped",
   "dedupCopyLog", "cleanupFiles",
   // Tools / data
-  "dupFinder", "clipWatcher", "backupGfs", "backupBeforeReset", "backupBeforeDelete", "disarmMs",
-  "recSweepBroken", "recDiscardKeepH", "videoClipTtlMin",
-  "usageStats", "promptSync", "syncDir", "syncPollSecs", "clipSkipSecrets",
+  "dupFinder", "clipWatcher", "backupGfs", "backupBeforeReset", "backupBeforeDelete",
+  "recSweepBroken", "recDiscardKeepH",
+  "usageStats", "promptSync", "syncDir", "clipSkipSecrets",
   "secretPrompts", "secretTimeoutMin",
   "undoToastMs",
   "errorLog",
   "archiveTag",
   // Values that need a unit/behaviour explanation
-  "copyCooldownMs", "dblClickMs", "autoPasteDelayMs", "snipPreviewVh",
+  "copyCooldownMs", "dblClickMs", "autoPasteDelayMs",
   "similarThreshold", "importFolderDepth", "similarHint", "clipMinChars", "clipInboxMax", "historyMax",
-  "nameMaxLen", "searchListMax", "savedSearchMax", "maxViews", "gridMax",
-  "viewBorder", "statsTopN", "multiViewPrompt",
-  "barToggles", "barToggleBoth", "quickGrid", "quickGridHoverOnly", "multiView", "libraryCols", "copySizeLevel", "showLibrary", "composerScale", "primaryScale",
+  "nameMaxLen", "searchListMax", "maxViews", "gridMax",
+  "statsTopN", "multiViewPrompt",
+  "barToggles", "barToggleBoth", "quickGrid", "quickGridHoverOnly", "multiView", "libraryCols", "copySizeLevel", "showLibrary",
   "remoteApi", "remoteNetworkFilter", "remoteTlsShortLived", "urlScheme", "remotePort", "remoteRateLimit",
   "recOutline", "recOutlineColor", "chainSeparator",
 ];

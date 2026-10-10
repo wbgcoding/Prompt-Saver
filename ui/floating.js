@@ -220,7 +220,6 @@ function applyPrefs(s) {
   globalFontKey = s.tile_font || "system";
   copySizeLevel = s.ui_texts?.copySizeLevel;
   copyPrefs = readCopyPrefs(s);
-  DRAG_THRESHOLD = copyPrefs.dragThreshold;
   dragOutOn = s.ui_flags?.dragOut === true;
   dragOutMod = DRAG_OUT_MODS[s.ui_texts?.dragOutModifier] || "ctrlKey";
   foldersOn = s.ui_flags?.pillFolders !== false; // default ON, mirrors folders_on() in floating.rs
@@ -271,7 +270,7 @@ window.addEventListener("resize", () => {
 });
 updateResizeRing();
 
-let DRAG_THRESHOLD = DRAG_THRESHOLD_DEFAULT; // expert-tunable
+const DRAG_THRESHOLD = DRAG_THRESHOLD_DEFAULT;
 let drag = null; // {x, y, moved}
 let copiedTimer = null;
 

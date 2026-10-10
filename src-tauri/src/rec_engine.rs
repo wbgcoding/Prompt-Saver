@@ -792,7 +792,7 @@ pub(crate) struct RecFeederShared {
     pub(crate) resize_crop_max_h: std::sync::atomic::AtomicU32,
     pub(crate) resize_crop_first_ms_plus_one: std::sync::atomic::AtomicU64,
     // Set at most once per recording, by the disk-space watch thread, the
-    // first time free space drops below recDiskWarnMb -- read (and cleared)
+    // first time free space drops below the warning threshold -- read (and cleared)
     // by the live recording_status poll so the control bar can show it
     // exactly once, never stopping the recording (that is the hard, separate
     // "low-disk-space" threshold at warn_mb/4 below).

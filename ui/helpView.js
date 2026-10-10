@@ -1,6 +1,6 @@
 // The help view: search, tabs, collapsed sections and deep links.
 import { HELP_CONTENT } from "./help.js";
-import { $, ALL_SHORTCUT_SCOPES, debounced, flag, LANG, t, txt } from "./core.js";
+import { $, ALL_SHORTCUT_SCOPES, debounced, LANG, t, txt } from "./core.js";
 import { HELP_SKETCHES } from "./helpSketches.js";
 import { openShortcutsModal } from "./windowChrome.js";
 
@@ -116,7 +116,6 @@ export function renderHelp() {
   const tabBar = $("help-tabs-bar");
   box.innerHTML = "";
   tabBar.innerHTML = "";
-  const highlight = flag("helpHighlight");
   const terms = helpNorm(helpQuery).trim().split(/\s+/).filter(Boolean);
   const searching = terms.length > 0;
   const cats = helpCategories();
@@ -188,7 +187,7 @@ export function renderHelp() {
     head.className = "expert-group-title collapsible";
     const titleSpan = document.createElement("span");
     titleSpan.className = "help-group-title-text";
-    setHelpText(titleSpan, cat.title, terms, searching && highlight);
+    setHelpText(titleSpan, cat.title, terms, searching);
     head.appendChild(titleSpan);
     if (searching) {
       const badge = document.createElement("span");
@@ -209,19 +208,19 @@ export function renderHelp() {
     // entry (e.g. the quick launcher) doesn't have to force a step list.
     const ov = document.createElement("p");
     ov.className = "help-overview";
-    setHelpText(ov, cat.whatItIs, terms, searching && highlight);
+    setHelpText(ov, cat.whatItIs, terms, searching);
     body.appendChild(ov);
     if (cat.howTo && cat.howTo.length) {
       const ol = document.createElement("ol");
       ol.className = "help-steps";
       for (const step of cat.howTo) {
         const li = document.createElement("li");
-        setHelpText(li, step, terms, searching && highlight);
+        setHelpText(li, step, terms, searching);
         ol.appendChild(li);
       }
       body.appendChild(ol);
     }
-    if (cat.sketches && cat.sketches.length && flag("helpSketches")) {
+    if (cat.sketches && cat.sketches.length) {
       // Sketches only ship English/German labels, matching help.js's own EN/DE
       // scope -- every other language falls back to the English drawing.
       const sketchLang = LANG === "de" ? "de" : "en";
@@ -250,7 +249,7 @@ export function renderHelp() {
       }
       body.appendChild(ul);
     }
-    if (cat.tip && flag("helpTips")) {
+    if (cat.tip) {
       const tip = document.createElement("p");
       tip.className = "help-tip";
       const ico = document.createElement("span");

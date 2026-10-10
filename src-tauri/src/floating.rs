@@ -176,7 +176,7 @@ pub(crate) fn open_floating(app: &AppHandle, prompt: &Prompt, taken: &mut Vec<Re
     }
 
     // Never call Tauri window APIs while holding the Db lock (deadlock risk).
-    let (saved, scale, count, excluded, park_on) = {
+    let (saved, scale, count, excluded) = {
         let state: State<Db> = app.state();
         let store = lock(&state);
         (
@@ -184,7 +184,6 @@ pub(crate) fn open_floating(app: &AppHandle, prompt: &Prompt, taken: &mut Vec<Re
             float_scale_of(&store.settings, &prompt.id),
             store.settings.floating.len(),
             capture_excluded(&store.settings),
-            store.settings.ui_flags.get("floatPark") != Some(&false),
         )
     };
     let is_new = saved.is_none();
@@ -197,13 +196,7 @@ pub(crate) fn open_floating(app: &AppHandle, prompt: &Prompt, taken: &mut Vec<Re
     }
 
     let (pw, ph) = pill_dims(is_image_prompt(prompt), scale);
-    let (x, y, parked) = if park_on {
-        resolve_float_spot(&pos, pw, ph, &screen_snapshot(app), taken)
-    } else {
-        let work = work_rect_at(app, pos.x as f64, pos.y as f64);
-        let (x, y) = clamp_to_work(work, pw, ph, pos.x as f64, pos.y as f64);
-        (x, y, false)
-    };
+    let (x, y, parked) = resolve_float_spot(&pos, pw, ph, &screen_snapshot(app), taken);
     taken.push(Rect { x, y, w: pw, h: ph });
     mark_parked(app, &prompt.id, parked);
 
@@ -820,19 +813,13 @@ pub(crate) fn open_folder_window(app: &AppHandle, folder: &FloatFolder, taken: &
         return;
     }
     // Never call Tauri window APIs while holding the Db lock (deadlock risk).
-    let (excluded, park_on) = {
+    let excluded = {
         let state: State<Db> = app.state();
         let store = lock(&state);
-        (capture_excluded(&store.settings), store.settings.ui_flags.get("floatPark") != Some(&false))
+        capture_excluded(&store.settings)
     };
     let side = folder_box(folder.scale);
-    let (x, y, parked) = if park_on {
-        resolve_float_spot(&folder.pos, side, side, &screen_snapshot(app), taken)
-    } else {
-        let work = work_rect_at(app, folder.pos.x as f64, folder.pos.y as f64);
-        let (x, y) = clamp_to_work(work, side, side, folder.pos.x as f64, folder.pos.y as f64);
-        (x, y, false)
-    };
+    let (x, y, parked) = resolve_float_spot(&folder.pos, side, side, &screen_snapshot(app), taken);
     taken.push(Rect { x, y, w: side, h: side });
     mark_parked(app, &folder.id, parked);
 

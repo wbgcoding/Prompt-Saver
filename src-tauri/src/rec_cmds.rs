@@ -37,7 +37,7 @@ pub(crate) fn drive_label(path: &std::path::Path) -> String {
 }
 
 // Bitrate times time, with a flat surcharge for whichever audio track(s) are
-// active (matches recAudioKbps's own default) -- good enough for a warning
+// active (matches REC_AUDIO_KBPS) -- good enough for a warning
 // message, not a byte-exact prediction.
 pub(crate) fn estimate_recording_seconds_remaining(free_bytes: u64, video_kbps: u32, audio_active: bool) -> u64 {
     let total_kbps = video_kbps as u64 + if audio_active { 192 } else { 0 };
@@ -65,9 +65,11 @@ pub(crate) fn recording_disk_warning(drive: String, free_bytes: u64, warn_mb: f6
     Some(RecDiskWarning { drive, free_mb, est_seconds: estimate_recording_seconds_remaining(free_bytes, video_kbps, audio_active) })
 }
 
-// recDiskWarnMb has no expert-menu row yet (a future settings catch-up writes
-// it directly, same as recCanvasMode above) -- the 500 MB default lives here
-// until then.
+// Free space below this many MB triggers the low-disk warning.
+pub(crate) const REC_DISK_WARN_MB: f64 = 500.0;
+// Bitrate of the recorded audio tracks.
+pub(crate) const REC_AUDIO_KBPS: u32 = 192;
+
 #[cfg(windows)]
 #[tauri::command(async)]
 pub(crate) fn check_recording_disk_space(app: AppHandle, db: State<Db>) -> Option<RecDiskWarning> {
@@ -76,7 +78,7 @@ pub(crate) fn check_recording_disk_space(app: AppHandle, db: State<Db>) -> Optio
     let (warn_mb, video_kbps, audio_active) = {
         let g = db.lock().unwrap_or_else(|e| e.into_inner());
         (
-            g.settings.ui_values.get("recDiskWarnMb").copied().unwrap_or(500.0),
+            REC_DISK_WARN_MB,
             g.settings.ui_values.get("recBitrateKbps").copied().unwrap_or(12000.0).clamp(1000.0, 50000.0) as u32,
             g.settings.ui_flags.get("recAudioSystem") != Some(&false) || g.settings.ui_flags.get("recAudioMic") != Some(&false),
         )
@@ -195,7 +197,7 @@ pub(crate) fn resolve_recording_settings(db: &State<Db>) -> (bool, recording::Au
             system: g.settings.ui_flags.get("recAudioSystem") != Some(&false),
             mic: g.settings.ui_flags.get("recAudioMic") != Some(&false),
             mic_device_id: g.settings.ui_texts.get("recMicDevice").cloned().unwrap_or_default(),
-            kbps: g.settings.ui_values.get("recAudioKbps").copied().unwrap_or(192.0).clamp(64.0, 320.0) as u32,
+            kbps: REC_AUDIO_KBPS,
         }
     };
     let show_cursor = db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_flags.get("recCursor") != Some(&false);
@@ -223,7 +225,7 @@ pub(crate) fn resolve_recording_settings(db: &State<Db>) -> (bool, recording::Au
     let canvas_ceiling = (REC_CANVAS_MAX_PX, REC_CANVAS_MAX_PX);
     // The mid-recording disk-space watch's own threshold -- see
     // check_recording_disk_space for the same value used before the start.
-    let disk_warn_mb = db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("recDiskWarnMb").copied().unwrap_or(500.0);
+    let disk_warn_mb = REC_DISK_WARN_MB;
     // Optional safety nets, both off (0) unless the user sets them -- unrelated
     // to recMaxMb's own older, display-only ETA threshold (see rec_size_eta),
     // which keeps its own separate 8000 default so adding these rows changes
@@ -285,7 +287,7 @@ pub(crate) async fn start_recording(
     // default is off, so the common case installs no hook at all.
     let (key_overlay_on, key_overlay_hold_ms, key_overlay_shortcuts_only) = {
         let g = db.lock().unwrap_or_else(|e| e.into_inner());
-        (keylog::enabled(&g.settings.ui_flags), keylog::hold_ms(&g.settings.ui_values), keylog::shortcuts_only(&g.settings.ui_flags))
+        (keylog::enabled(&g.settings.ui_flags), keylog::HOLD_MS, keylog::shortcuts_only(&g.settings.ui_flags))
     };
     let dir = data_dir(&app).join("recordings");
     let session = tauri::async_runtime::spawn_blocking(move || {
@@ -444,7 +446,7 @@ pub(crate) async fn finish_and_continue_recording(
     // restarting capture for the continuation part needs it.
     let (key_overlay_on, key_overlay_hold_ms, key_overlay_shortcuts_only) = {
         let g = db.lock().unwrap_or_else(|e| e.into_inner());
-        (keylog::enabled(&g.settings.ui_flags), keylog::hold_ms(&g.settings.ui_values), keylog::shortcuts_only(&g.settings.ui_flags))
+        (keylog::enabled(&g.settings.ui_flags), keylog::HOLD_MS, keylog::shortcuts_only(&g.settings.ui_flags))
     };
     let session = {
         let mut guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());

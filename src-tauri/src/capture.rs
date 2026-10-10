@@ -117,23 +117,18 @@ pub(crate) async fn finalize_capture(app: &AppHandle, gen: u64, crop: image::Rgb
 // but capture_region's OCR branch has no such call site of its own -- it reads them
 // here instead, the same way finalize_capture just above reads screenshotSave and
 // screenshotDir off the Db state rather than needing them passed in.
+// A crop smaller than this (either side) is upscaled before recognition.
+pub(crate) const OCR_UPSCALE_UNDER_PX: u32 = 300;
+
 pub(crate) fn ocr_settings_from(app: &AppHandle) -> (u32, bool, String, bool) {
     app.try_state::<Db>()
         .map(|s| {
             let g = s.lock().unwrap_or_else(|e| e.into_inner());
-            let upscale = g
-                .settings
-                .ui_values
-                .get("ocrUpscaleUnderPx")
-                .copied()
-                .unwrap_or(300.0)
-                .clamp(100.0, 800.0) as u32;
             let join = g.settings.ui_flags.get("ocrJoinLines").copied().unwrap_or(true);
             let lang = g.settings.ui_texts.get("ocrLang").cloned().unwrap_or_else(|| "auto".to_string());
-            let auto_pick = g.settings.ui_flags.get("ocrAutoPickLang").copied().unwrap_or(true);
-            (upscale, join, lang, auto_pick)
+            (OCR_UPSCALE_UNDER_PX, join, lang, true)
         })
-        .unwrap_or((300, true, "auto".to_string(), true))
+        .unwrap_or((OCR_UPSCALE_UNDER_PX, true, "auto".to_string(), true))
 }
 
 // The OCR counterpart to finalize_capture, taken when set_snip_mode armed the

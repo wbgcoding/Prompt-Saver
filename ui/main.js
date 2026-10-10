@@ -207,7 +207,7 @@ function bind() {
     else if (document.body.classList.contains("library-front") && !libraryEl.classList.contains("hidden")) hideLibrary();
     else if (!$("backup-modal").classList.contains("hidden")) closeBackups();
     else if (!libraryEl.classList.contains("hidden")) hideLibrary();
-    // Help opens over the settings panel (from expGroupHelp): close it before the
+    // Help opens over the settings panel: close it before the
     // settings underneath, same pattern as library-front/journal above.
     else if (!helpEl.classList.contains("hidden")) helpEl.classList.add("hidden");
     else if (!settingsEl.classList.contains("hidden")) hideSettings();

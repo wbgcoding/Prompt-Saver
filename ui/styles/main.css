@@ -1801,7 +1801,6 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 
 /* Expert toggles that hide whole sections / controls. */
 .noflag-chainPrompts #chain-btn { display: none; }
-.noflag-chainVarCheck #chain-overview { display: none; }
 .noflag-importExport #settings-sec-data { display: none; }
 /* Opt-in visual toggles (off by default; `flag-<key>` present only when on). */
 .flag-gridLines .cell { border-color: var(--border); }

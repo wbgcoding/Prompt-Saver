@@ -97,10 +97,8 @@ export const modal = {
   rotateAuto: $("modal-rotate-auto"),
 };
 
-export let DRAG_THRESHOLD = DRAG_THRESHOLD_DEFAULT; // expert-tunable
-export function assignDRAG_THRESHOLD(v) { DRAG_THRESHOLD = v; }
-export let INPUT_MAX = 160; // keep in sync with .input max-height, expert-tunable via composerMaxH
-export function assignINPUT_MAX(v) { INPUT_MAX = v; }
+export const DRAG_THRESHOLD = DRAG_THRESHOLD_DEFAULT;
+export const INPUT_MAX = 160; // keep in sync with .input max-height
 // Grid-dimension and view-count limits are expert values: val("gridMax") /
 // val("maxViews"). The backend keeps a hard ceiling of 100 for both.
 export const TOOLTIP_PREVIEW_CHARS = 600; // how much of a prompt a tile tooltip shows
@@ -110,8 +108,7 @@ export const TOAST_MS = 1400; // toast lifetime for plain messages
 export const SIZE_MIN = 10; // text size range, steps of 2 (keep in sync with backend)
 export const SIZE_MAX = 40;
 export const SIZE_STEP = 2;
-export let DISARM_MS = 3000; // confirm-button auto-disarm delay, expert-tunable
-export function assignDISARM_MS(v) { DISARM_MS = v; }
+export const DISARM_MS = 3000; // confirm-button auto-disarm delay
 
 export const clampGrid = (n, fallback) =>
   Math.min(val("gridMax"), Math.max(1, Math.round(Number(n) || fallback)));
@@ -594,8 +591,7 @@ export const CLEAR_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" aria-h
 export const TAKEOVER_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5.5" rx="7.5" ry="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M4.5 5.5v13c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3v-13M4.5 12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3"/></svg>';
 export const LOCK_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M8 10V7a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15.5" r="1.6" fill="currentColor"/></svg>';
 
-export let ROTATE_SHORT_MAX = 60; // tooltip preview length, independent of the notes cap, expert-tunable
-export function assignROTATE_SHORT_MAX(v) { ROTATE_SHORT_MAX = v; }
+export const ROTATE_SHORT_MAX = 60; // tooltip preview length, independent of the notes cap
 
 // Anything drawn while its picture was still loading tags itself with the id it is
 // waiting for, and only those elements are rebuilt when the bytes land. Re-rendering
@@ -652,8 +648,7 @@ export function debounced(fn, ms = SEARCH_DEBOUNCE_MS) {
 }
 
 // ---- Version history: render the collapsible list in the editor ----
-export let HISTORY_PREVIEW_LEN = 80; // expert-tunable
-export function assignHISTORY_PREVIEW_LEN(v) { HISTORY_PREVIEW_LEN = v; }
+export const HISTORY_PREVIEW_LEN = 80;
 
 export const PDF_EXT = /\.pdf$/i;
 

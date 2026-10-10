@@ -64,7 +64,7 @@ async function main() {
   // a finished download: progress text, cancel hint while running, restored afterwards
   let btn = fakeButton("Get ffmpeg");
   let done = 0, failed = [];
-  const opts = { etaShow: false, t, onDone: () => { done++; }, onError: (e) => failed.push(String(e)) };
+  const opts = { t, onDone: () => { done++; }, onError: (e) => failed.push(String(e)) };
   const run1 = shared.runFfmpegDownload(btn, opts);
   await wait();
   expect("running: in-flight flag", shared.ffmpegDownloadActive(), true);
@@ -107,16 +107,6 @@ async function main() {
   await run3;
   expect("failure: reported once", failed, ["disk full"]);
   expect("failure: label restored", btn.textContent, "Get ffmpeg");
-
-  // the ETA switch can be a function read at every step
-  downloadOutcome = { ok: true };
-  let eta = false;
-  const run4 = shared.runFfmpegDownload(btn, { ...opts, etaShow: () => eta });
-  await wait();
-  listener({ payload: { downloaded: 10, total: 100 } });
-  expect("etaShow function: no eta suffix", btn.textContent, "Downloading 10%");
-  release();
-  await run4;
 
   // ---- the shortcuts overlay: rows and the focus hand-back
   const made = [];

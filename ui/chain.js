@@ -70,10 +70,7 @@ export function refreshChainUi() {
 
 // The chain overview strip: one row per picked step, in pick order, with the
 // placeholders it needs and the reserved names it fills, from chainVarReport()
-// (ui/chainvars.js). Visibility beyond "at least one pick" is a CSS gate on
-// the chainVarCheck flag (.noflag-chainVarCheck below), same as #chain-btn
-// itself is gated on chainPrompts, so a live flag flip needs no extra wiring
-// here -- applyFlags() already redraws the body classes on every change.
+// (ui/chainvars.js).
 export function renderChainOverview() {
   const bar = $("chain-overview");
   if (!bar) return;

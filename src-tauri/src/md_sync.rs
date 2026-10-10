@@ -25,11 +25,6 @@ use super::*;
 // the original spec calls for as a "done" gate. Treat it as a beta feature.
 pub(crate) const SYNC_POLL_SECS: u64 = 5;
 
-// Expert-tunable poll interval, clamped the same way as tray_label_max: an
-// absent or out-of-range stored value falls back to the shipped default.
-pub(crate) fn sync_poll_secs(settings: &Settings) -> u64 {
-    settings.ui_values.get("syncPollSecs").copied().unwrap_or(SYNC_POLL_SECS as f64).clamp(2.0, 30.0) as u64
-}
 // A lock is only ever held around one small file write, so 15 s is already far
 // past any real one. The age is deliberately NOT tied to the poll interval: the
 // second half of the staleness check is whether the process that wrote the lock
@@ -2153,12 +2148,11 @@ pub(crate) fn start_sync_poll(app: AppHandle) {
                 sync_poll_release();
                 return;
             };
-            // Read fresh each round (not once at spawn time) so a changed
-            // syncPollSecs expert value takes effect on the very next wait,
-            // no scheduler restart needed.
+            // Read fresh each round (not once at spawn time) so the switch is
+            // honoured on the very next wait, no scheduler restart needed.
             let (enabled, secs) = {
                 let s = lock(&state);
-                (sync_enabled(&s.settings), sync_poll_secs(&s.settings))
+                (sync_enabled(&s.settings), SYNC_POLL_SECS)
             };
             // The feature is off: end the task instead of waking up forever for
             // nothing. Whoever switches it back on (set_ui_flag) starts a fresh

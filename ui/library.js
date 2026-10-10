@@ -239,10 +239,7 @@ export const typeAllowed = (set, p) => set.size === 0 || set.has(promptType(p));
 // fields the plain search used. Fuzzy only kicks in when no substring hit exists,
 // so the common case short-circuits and stays cheap on 1000+ prompts.
 export function fuzzyMaxTyposFor(term) {
-  const raw = settings.ui_texts?.fuzzyMaxTypos || "auto";
-  if (raw === "1") return 1;
-  if (raw === "2") return 2;
-  return term.length <= 5 ? 1 : 2; // auto
+  return term.length <= 5 ? 1 : 2;
 }
 // Bounded Levenshtein: returns max+1 as soon as every cell exceeds max (early out).
 export function editDistWithin(a, b, max) {
@@ -457,6 +454,7 @@ export function libMatches(p) {
 // Saved searches: query text, active tag filters and sort, kept together as one
 // JSON blob in a single settings slot -- no new backend concept needed, the
 // generic set_ui_text command already persists any string.
+const SAVED_SEARCH_MAX = 5; // saved searches kept
 export function loadSavedSearches() {
   try {
     const list = JSON.parse(txt("savedSearches") || "[]");
@@ -533,7 +531,7 @@ export function applySavedSearch(entry) {
 }
 export async function saveSavedSearch() {
   const list = loadSavedSearches();
-  const max = val("savedSearchMax");
+  const max = SAVED_SEARCH_MAX;
   if (list.length >= max) {
     const oldest = list[0];
     toast(t("savedSearchLimitToast").replace("{max}", String(max)).replace("{name}", oldest ? oldest.name : ""));
