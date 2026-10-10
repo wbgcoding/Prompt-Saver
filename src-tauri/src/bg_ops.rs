@@ -195,19 +195,94 @@ pub(crate) fn list_bg_ops_impl(keep_min: f64) -> Vec<BgOpInfo> {
     list
 }
 
+// Remembers what the taskbar icon was last told, so a progress tick that would
+// change nothing never reaches the UI thread. The window handle is part of the
+// key: a rebuilt main window starts with a clean icon.
+#[derive(Default)]
+pub(crate) struct TaskbarThrottle {
+    last: Option<(isize, String, Option<u8>)>,
+}
+
+impl TaskbarThrottle {
+    // True when (state, percent) differs from the last applied pair. Only a
+    // running state carries a percent; the other states ignore it.
+    pub(crate) fn should_apply(&mut self, hwnd: isize, state: &str, value: Option<u8>) -> bool {
+        let value = if matches!(state, "off" | "indeterminate" | "error") { None } else { value };
+        let key = (hwnd, state.to_string(), value);
+        if self.last.as_ref() == Some(&key) {
+            return false;
+        }
+        self.last = Some(key);
+        true
+    }
+
+    // Forgets the last pair so the next tick is applied again (after a failed apply).
+    pub(crate) fn reset(&mut self) {
+        self.last = None;
+    }
+}
+
+static TASKBAR_THROTTLE: Mutex<TaskbarThrottle> = Mutex::new(TaskbarThrottle { last: None });
+// Set by the main thread when an apply failed; the next call forgets its last pair.
+// A flag instead of locking the throttle there: when the caller already is the
+// main thread the closure runs inline while the throttle is still held.
+static TASKBAR_RETRY: AtomicBool = AtomicBool::new(false);
+
+#[cfg(windows)]
+thread_local! {
+    // The one taskbar object, created on the main thread (it is apartment
+    // threaded, so every call has to run there anyway) and initialised once.
+    static TASKBAR: std::cell::RefCell<Option<windows::Win32::UI::Shell::ITaskbarList3>> =
+        const { std::cell::RefCell::new(None) };
+}
+
 #[cfg(windows)]
 pub(crate) fn apply_taskbar_state(app: &AppHandle, state: &str, value: Option<u8>) {
-    use windows::Win32::Foundation::HWND;
-    use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED};
-    use windows::Win32::UI::Shell::{ITaskbarList3, TaskbarList, TBPF_ERROR, TBPF_INDETERMINATE, TBPF_NOPROGRESS, TBPF_NORMAL};
     let Some(win) = app.get_webview_window("main") else { return };
     let Ok(hwnd) = win.hwnd() else { return };
-    let hwnd = HWND(hwnd.0);
-    unsafe {
-        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
-        let Ok(taskbar): windows::core::Result<ITaskbarList3> = CoCreateInstance(&TaskbarList, None, CLSCTX_INPROC_SERVER) else {
-            return;
-        };
+    let key = hwnd.0 as isize;
+    let state = state.to_string();
+    // Decide and queue under one lock so two workers cannot reach the UI thread
+    // in a different order than their decisions.
+    let mut throttle = TASKBAR_THROTTLE.lock().unwrap_or_else(|e| e.into_inner());
+    if TASKBAR_RETRY.swap(false, Ordering::SeqCst) {
+        throttle.reset();
+    }
+    if !throttle.should_apply(key, &state, value) {
+        return;
+    }
+    let queued = app.run_on_main_thread(move || {
+        if !apply_taskbar_on_main(key, &state, value) {
+            TASKBAR_RETRY.store(true, Ordering::SeqCst);
+        }
+    });
+    if queued.is_err() {
+        throttle.reset();
+    }
+}
+
+// Runs on the main thread only. False when the taskbar object is unavailable.
+#[cfg(windows)]
+fn apply_taskbar_on_main(hwnd: isize, state: &str, value: Option<u8>) -> bool {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED};
+    use windows::Win32::UI::Shell::{ITaskbarList3, TaskbarList, TBPF_ERROR, TBPF_INDETERMINATE, TBPF_NOPROGRESS, TBPF_NORMAL};
+    let hwnd = HWND(hwnd as *mut core::ffi::c_void);
+    TASKBAR.with(|cell| unsafe {
+        let mut slot = cell.borrow_mut();
+        if slot.is_none() {
+            // The event loop thread is normally initialised already; a refusal
+            // for a different mode is harmless.
+            let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+            let Ok(taskbar): windows::core::Result<ITaskbarList3> = CoCreateInstance(&TaskbarList, None, CLSCTX_INPROC_SERVER) else {
+                return false;
+            };
+            if taskbar.HrInit().is_err() {
+                return false;
+            }
+            *slot = Some(taskbar);
+        }
+        let Some(taskbar) = slot.as_ref() else { return false };
         match state {
             "off" => {
                 let _ = taskbar.SetProgressState(hwnd, TBPF_NOPROGRESS);
@@ -223,7 +298,8 @@ pub(crate) fn apply_taskbar_state(app: &AppHandle, state: &str, value: Option<u8
                 let _ = taskbar.SetProgressState(hwnd, TBPF_NORMAL);
             }
         }
-    }
+        true
+    })
 }
 
 #[cfg(not(windows))]

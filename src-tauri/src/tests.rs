@@ -17773,3 +17773,20 @@ fn float_recall_queries_monitors_before_taking_the_store_lock() {
         assert!(q_at < lock_at, "{q} must run before the store lock is taken");
     }
 }
+
+// ---- the taskbar icon is only touched when its state changes ----
+
+#[test]
+fn taskbar_throttle_applies_a_repeated_percent_once() {
+    let mut t = bg_ops::TaskbarThrottle::default();
+    assert!(t.should_apply(7, "running", Some(40)), "the first tick is applied");
+    assert!(!t.should_apply(7, "running", Some(40)), "the same percent again is skipped");
+    assert!(t.should_apply(7, "running", Some(41)), "a new percent is applied");
+    assert!(t.should_apply(7, "indeterminate", Some(41)), "a new state is applied");
+    assert!(!t.should_apply(7, "indeterminate", Some(90)), "a state without a percent ignores it");
+    assert!(t.should_apply(7, "off", None));
+    assert!(!t.should_apply(7, "off", None), "off twice is one apply");
+    assert!(t.should_apply(8, "off", None), "a rebuilt window handle is applied again");
+    t.reset();
+    assert!(t.should_apply(8, "off", None), "a reset retries the same pair");
+}
