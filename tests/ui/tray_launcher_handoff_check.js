@@ -59,7 +59,7 @@ function fakeEl() {
     removeEventListener() {},
     fire(t, ev) { for (const fn of h[t] || []) fn(ev || {}); },
     appendChild(c) { el.children.push(c); return c; },
-    append() {}, setAttribute() {}, focus() {}, scrollIntoView() {}, contains: () => false,
+    append() {}, replaceChildren() { el.children = []; }, setAttribute() {}, focus() {}, scrollIntoView() {}, contains: () => false,
     setSelectionRange(a) { el.selection = a; },
   };
   Object.defineProperty(el, "innerHTML", { get: () => "", set: () => { el.children = []; } });
@@ -83,7 +83,8 @@ async function run({ text, keyMs, loadMs, ipcMs }) {
       .replace(/^import \{ applyFloatTheme \} from "\.\/floattheme\.js";$/m, "const applyFloatTheme = () => {};")
       .replace(/^import \{ APP_NAME \} from "\.\/brand\.js";$/m, 'const APP_NAME = "App";')
       .replace(/^import \{ LANGS, compactTexts \} from "\.\/i18n\.js";$/m, "const { LANGS, compactTexts } = __i18n;")
-      .replace(/^import \{ resolveLang, varPreview \} from "\.\/floatShared\.js";$/m, "const { resolveLang, varPreview } = __shared;");
+      .replace(/^import \{ mdPlain, resolveLang, varPreview \} from "\.\/floatShared\.js";$/m, "const { mdPlain, resolveLang, varPreview } = __shared;")
+      .replace(/^import \{ keysLabel \} from "\.\/shortcuts\.js";$/m, "const keysLabel = () => \"\";");
     const sandbox = {
       console, setTimeout, clearTimeout, Date, __i18n: i18n, __shared: shared,
       document: {
