@@ -8,8 +8,8 @@ version follows the same rule and falls back to English in every other language.
 
 ### Getting started
 
-A tile is a saved item on the grid. Double-click an empty grid cell (or the plus
-button) to create one, click any tile to copy it. Three sample tiles (an email with
+A tile is a saved item on the grid. Double-click an empty grid cell (or type into
+the box at the bottom and press Save) to create one, click any tile to copy it. Three sample tiles (an email with
 placeholders, an image, and a Markdown template) are already there on first launch;
 a button above the grid removes them with one click once they're no longer needed.
 
@@ -1037,7 +1037,8 @@ Hilfe). Nur Englisch und Deutsch. Jede andere Sprache in der App fällt auf
 Englisch zurück.
 
 **Erste Schritte**: Eine Kachel ist ein gespeicherter Eintrag im Raster. Doppelklick
-auf eine leere Rasterzelle (oder den Plus-Button) legt eine an, ein Klick kopiert sie.
+auf eine leere Rasterzelle (oder Text ins Feld unten tippen und „Speichern“ drücken)
+legt eine an, ein Klick kopiert sie.
 Drei Beispielkacheln (E-Mail mit Platzhaltern, Bild, Markdown-Vorlage) sind beim
 ersten Start bereits da; ein Button über dem Raster entfernt sie mit einem Klick.
 

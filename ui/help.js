@@ -18,7 +18,7 @@ export const HELP_CONTENT = {
       title: "Getting started",
       whatItIs: "A tile is a saved item on the grid; clicking it copies its text to the clipboard.",
       howTo: [
-        "Double-click an empty grid cell, or the plus button, to create one.",
+        "Double-click an empty grid cell, or type into the box at the bottom and press Save, to create one.",
         "Type or paste the text, then save.",
         "Click any tile to copy it.",
       ],
@@ -767,7 +767,7 @@ export const HELP_CONTENT = {
       title: "Erste Schritte",
       whatItIs: "Eine Kachel ist ein gespeicherter Eintrag im Raster; ein Klick darauf kopiert ihren Text in die Zwischenablage.",
       howTo: [
-        "Doppelklick auf eine leere Rasterzelle oder den Plus-Button erstellt eine Kachel.",
+        "Doppelklick auf eine leere Rasterzelle oder Text ins Feld unten tippen und „Speichern“ drücken erstellt eine Kachel.",
         "Text eingeben oder einfügen, dann Speichern.",
         "Klick auf eine beliebige Kachel kopiert sie.",
       ],
