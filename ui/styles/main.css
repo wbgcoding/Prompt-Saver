@@ -1594,7 +1594,6 @@ body.library-front #dupes-modal.overlay { z-index: 68; }
 /* Explains the small dot that marks a feature shipping switched off. */
 .expert-legend { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; white-space: nowrap; }
 /* The reset button sits at the right end of the filter row. */
-.expert-filter-row #expert-reset { flex: 0 0 auto; white-space: nowrap; }
 /* A state a group is currently in, sitting above that group's settings. It exists
    only while the state holds, so it never leaves a gap behind when it is gone. */
 .expert-notice {
@@ -2494,7 +2493,8 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
 /* Padding, not a taller swatch, closes the gap to a dropdown row's own height
    (its select control carries that height on its own). */
 .color-field .value-head { padding-block: 6px; }
-.expert-reset { margin-top: 8px; align-self: flex-start; }
+.expert-end { grid-column: 1 / -1; display: flex; justify-content: flex-end; padding: 12px 0 4px; }
+.expert-end .expert-reset { padding: 4px 10px; font-size: 12px; white-space: nowrap; }
 
 /* Expert menu tabs (the menu grew large; tabs keep it tidy). */
 .expert-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }

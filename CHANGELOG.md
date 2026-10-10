@@ -2029,6 +2029,7 @@ the video editor and the introduction tour ship on).
 - **The library no longer filters by tile colour.** Colours are for looks only; the type, favorite and tag filters stay.
 - **Placeholders have one short spelling.** {?Name}, {?Name=default}, {?Name|A, B} and {?@date}. Prompts, history, trash and imports with the old {#{…}#} spelling are converted automatically.
 - Attachment preview size is a choice of short, medium or long instead of a slider.
+- The reset button of the expert menu sits at the end of the list.
 
 ## 2.6.3 (2026-07-26)
 

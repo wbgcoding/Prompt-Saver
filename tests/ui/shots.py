@@ -58,6 +58,7 @@ ACTS = {
     "settings": "$('gear').click(); await sleep(300);",
     "settings_end": "$('gear').click(); await sleep(300); $('settings-main').lastElementChild.scrollIntoView(); await sleep(100);",
     "expert": "$('gear').click(); await sleep(300); $('expert-open').click(); await sleep(400);",
+    "expert_end": "$('gear').click(); await sleep(300); $('expert-open').click(); await sleep(400); $('expert-flags').scrollTop = 1e6; await sleep(200);",
     "library": "$('library-btn').click(); await sleep(400);",
     "history": "$('library-btn').click(); await sleep(400); $('library-tab-history').click(); await sleep(400);",
     "tilemenu": TILE_MENU,
@@ -78,7 +79,7 @@ ACTS = {
 }
 # Area groups, so a review of one area shoots only its surfaces.
 GROUPS = {
-    "@settings": ["settings", "settings_end", "expert", "help"],
+    "@settings": ["settings", "settings_end", "expert", "expert_end", "help"],
     "@library": ["library", "history"],
     "@tiles": ["main", "tilemenu", "editor", "editor_long", "editor_adv", "folder"],
     "@snip": ["snipedit", "snipdraw"],
