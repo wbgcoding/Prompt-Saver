@@ -2104,4 +2104,6 @@ export default {
     veFrameNo: "第 {n} 帧",
     veAudioSys: "系统",
     veAudioMic: "麦克风",
+    recBarDiskLowShort: "磁盘空间不足",
+    recBarHotkeyShort: "快捷键被占用",
 };

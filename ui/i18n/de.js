@@ -2104,4 +2104,6 @@ export default {
     veFrameNo: "Bild {n}",
     veAudioSys: "System",
     veAudioMic: "Mikrofon",
+    recBarDiskLowShort: "Laufwerk fast voll",
+    recBarHotkeyShort: "Tastenkürzel blockiert",
 };

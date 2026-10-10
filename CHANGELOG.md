@@ -1961,6 +1961,7 @@ the video editor and the introduction tour ship on).
 - **The video editor frame counter reads "Frame 1".** The counter says the word and counts from 1 instead of showing "#0".
 - **Labelled volume sliders in the video editor.** The two sliders are named System and Mic, and a muted track shows a struck-through icon, so muted and missing no longer look alike.
 - **Recording bar: Discard sits apart at the end.** The split button has a scissors icon and a clearer tooltip.
+- **The recording bar's warning says what it warns about.** The red triangle now carries a short text, such as "Hotkey blocked" or "Disk almost full".
 
 ## 2.6.3 (2026-07-26)
 

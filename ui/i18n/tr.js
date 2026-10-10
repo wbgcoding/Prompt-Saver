@@ -2104,4 +2104,6 @@ export default {
     veFrameNo: "Kare {n}",
     veAudioSys: "Sistem",
     veAudioMic: "Mikrofon",
+    recBarDiskLowShort: "Disk neredeyse dolu",
+    recBarHotkeyShort: "Kısayol engellendi",
 };

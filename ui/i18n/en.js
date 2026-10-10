@@ -2104,4 +2104,6 @@ export default {
     veFrameNo: "Frame {n}",
     veAudioSys: "System",
     veAudioMic: "Mic",
+    recBarDiskLowShort: "Disk almost full",
+    recBarHotkeyShort: "Hotkey blocked",
 };

@@ -2104,4 +2104,6 @@ export default {
     veFrameNo: "Quadro {n}",
     veAudioSys: "Sistema",
     veAudioMic: "Microfone",
+    recBarDiskLowShort: "Disco quase cheio",
+    recBarHotkeyShort: "Atalho bloqueado",
 };

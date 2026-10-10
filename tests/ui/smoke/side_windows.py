@@ -1059,6 +1059,21 @@ RECBAR_PROBE = """
       if (document.querySelectorAll('#bar .rec-sep').length !== 1) errs.push('940-dg: the separator before Discard is missing');
       if (document.querySelectorAll('#continue-btn svg circle').length !== 2) errs.push('940-dg: the split button has no scissors icon');
     }
+    // 941-dg: the hotkey triangle carries a visible word and the bar still fits it;
+    // the hidden disk warning leaves no box behind.
+    {
+      const hotText = document.querySelector('#hotkey-warn .rec-warn-text');
+      const diskText = document.querySelector('#disk-warn .rec-warn-text');
+      const lastFit = fitCalls()[fitCalls().length - 1];
+      if (!hotText) errs.push('941-dg: the hotkey warning has no text');
+      else {
+        const hr = hotText.getBoundingClientRect();
+        if (hr.width <= 20) errs.push('941-dg: the hotkey warning text is only ' + hr.width.toFixed(1) + 'px wide');
+        if (lastFit && hr.right - bar.getBoundingClientRect().left > lastFit[1].width) errs.push('941-dg: the hotkey warning text falls outside the fitted width');
+      }
+      if (!diskText) errs.push('941-dg: the disk warning has no text');
+      else if (diskText.getClientRects().length !== 0) errs.push('941-dg: the hidden disk warning text still has a box');
+    }
     // Under the show threshold: the readout should go blank on the next poll.
     window.__REC_STATUS_OVERRIDE__ = { bytes: 50 * 1024 * 1024, show_size: false, size_eta_secs: null };
     if (!await until(() => sizeEl.textContent === '')) errs.push('size stayed visible under the show threshold: ' + sizeEl.textContent);

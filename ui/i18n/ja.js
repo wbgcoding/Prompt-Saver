@@ -2104,4 +2104,6 @@ export default {
     veFrameNo: "フレーム {n}",
     veAudioSys: "システム",
     veAudioMic: "マイク",
+    recBarDiskLowShort: "ディスクの空きが少ない",
+    recBarHotkeyShort: "ホットキーがブロック中",
 };

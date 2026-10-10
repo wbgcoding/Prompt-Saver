@@ -2104,4 +2104,6 @@ export default {
     veFrameNo: "Cadrul {n}",
     veAudioSys: "Sistem",
     veAudioMic: "Microfon",
+    recBarDiskLowShort: "Disc aproape plin",
+    recBarHotkeyShort: "Tastă rapidă blocată",
 };

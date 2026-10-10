@@ -2104,4 +2104,6 @@ export default {
     veFrameNo: "Klatka {n}",
     veAudioSys: "System",
     veAudioMic: "Mikrofon",
+    recBarDiskLowShort: "Dysk prawie pełny",
+    recBarHotkeyShort: "Skrót zablokowany",
 };

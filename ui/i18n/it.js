@@ -2104,4 +2104,6 @@ export default {
     veFrameNo: "Fotogramma {n}",
     veAudioSys: "Sistema",
     veAudioMic: "Microfono",
+    recBarDiskLowShort: "Disco quasi pieno",
+    recBarHotkeyShort: "Scelta rapida bloccata",
 };

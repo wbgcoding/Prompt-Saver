@@ -2104,4 +2104,6 @@ export default {
     veFrameNo: "Frame {n}",
     veAudioSys: "Systeem",
     veAudioMic: "Microfoon",
+    recBarDiskLowShort: "Schijf bijna vol",
+    recBarHotkeyShort: "Sneltoets geblokkeerd",
 };
