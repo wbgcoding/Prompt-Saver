@@ -832,22 +832,36 @@ pub(crate) fn removed_ui_flag_keys() -> &'static [&'static str] {
 // key falls back to its default, and a key whose top stop means "unlimited"
 // keeps its 0.
 pub(crate) fn clamp_ui_values(map: &mut HashMap<String, f64>) {
-    for &(key, min, max, top_unlimited) in crate::ui_ranges::UI_VALUE_RANGES {
-        let Some(&v) = map.get(key) else { continue };
-        if !v.is_finite() {
-            map.remove(key);
-        } else if !(top_unlimited && v == 0.0) {
-            map.insert(key.to_string(), v.clamp(min, max));
+    // A number that is not finite would be written as null and make the whole
+    // settings block unreadable on the next start, whatever key it sits under.
+    map.retain(|_, v| v.is_finite());
+    let keys = crate::ui_ranges::UI_VALUE_RANGES.iter().map(|r| r.0).chain(crate::ui_ranges::UI_SELECT_RANGES.iter().map(|r| r.0));
+    for key in keys {
+        if let Some(&v) = map.get(key) {
+            if let Some(held) = clamp_ui_value(key, v) {
+                map.insert(key.to_string(), held);
+            }
         }
     }
-    for &(key, options) in crate::ui_ranges::UI_SELECT_RANGES {
-        let Some(&v) = map.get(key) else { continue };
-        if v.is_finite() {
-            map.insert(key.to_string(), snap_select_value(v, options));
-        } else {
-            map.remove(key);
+}
+
+// One value held to the range of its key: None when it is not a finite number,
+// the value unchanged for a key the range tables do not know.
+pub(crate) fn clamp_ui_value(key: &str, v: f64) -> Option<f64> {
+    if !v.is_finite() {
+        return None;
+    }
+    for &(k, min, max, top_unlimited) in crate::ui_ranges::UI_VALUE_RANGES {
+        if k == key {
+            return Some(if top_unlimited && v == 0.0 { v } else { v.clamp(min, max) });
         }
     }
+    for &(k, options) in crate::ui_ranges::UI_SELECT_RANGES {
+        if k == key {
+            return Some(snap_select_value(v, options));
+        }
+    }
+    Some(v)
 }
 
 // A preset-or-custom select holds its presets or a whole number from the free-entry

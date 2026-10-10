@@ -914,6 +914,10 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **A setting can no longer be set to "not a number".** `settings set` on the
+  command line and over remote access refuses NaN and infinite values, which
+  would have made the whole settings file unreadable on the next start, and a
+  number set that way or in the app is held to the range the setting offers.
 - **The clipboard inbox skips huge texts.** A copied text of more than 200,000
   characters is no longer stored in the inbox, so one accidental copy of a
   giant file cannot fill the database.

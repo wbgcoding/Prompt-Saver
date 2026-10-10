@@ -1688,6 +1688,12 @@ fn cmd_settings_set(store: &mut Store, key: &str, value: &str) -> Outcome {
                 }
                 s.ui_flags.insert(key.to_string(), b);
             } else if let Ok(n) = value.parse::<f64>() {
+                // "NaN", "inf" and "1e999" parse as numbers but cannot be stored: they
+                // are written as null and the whole settings block fails to load.
+                let Some(n) = crate::clamp_ui_value(key, n) else {
+                    return Outcome::err(1, format!("{key} needs a finite number
+"));
+                };
                 s.ui_values.insert(key.to_string(), n);
             } else {
                 s.ui_texts.insert(key.to_string(), value.to_string());
@@ -2713,6 +2719,26 @@ mod tests {
         assert!(set.mutated_settings && set.mutated_prompts && set.mutated_trash);
         assert_eq!(store.settings.ui_flags.get("ocrIndex"), Some(&false));
         assert!(store.prompts.iter().all(|p| p.image_text.is_empty()));
+    }
+
+    #[test]
+    fn settings_set_refuses_non_finite_numbers_and_clamps_the_rest() {
+        let mut store = fixture_store();
+        let dir = std::env::temp_dir();
+        for value in ["NaN", "nan", "inf", "-inf", "infinity", "1e999"] {
+            let set = run_cmd(&mut store, &dir, &["settings", "set", "gridGap", value, "--yes"]);
+            assert_ne!(set.code, 0, "{value} must be refused");
+            assert!(!set.mutated_settings);
+            assert!(!store.settings.ui_values.contains_key("gridGap"), "{value} was stored");
+        }
+        let set = run_cmd(&mut store, &dir, &["settings", "set", "importFolderMax", "1e18", "--yes"]);
+        assert_eq!(set.code, 0);
+        assert_eq!(store.settings.ui_values["importFolderMax"], 2000.0);
+        // Stored settings with a non-finite number would not load again; the load path drops it too.
+        let mut s = crate::Settings::default();
+        s.ui_values.insert("keyWithoutARange".into(), f64::NAN);
+        s.migrate();
+        assert!(!s.ui_values.contains_key("keyWithoutARange"));
     }
 
     #[test]

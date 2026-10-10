@@ -18285,3 +18285,18 @@ fn retention_arithmetic_cannot_overflow() {
     assert_eq!(trash_retention_secs(&s), Some(u64::MAX));
     assert_eq!(history_max_age(&s), Some(u64::MAX));
 }
+
+// ---- a non-finite number never reaches the stored settings ----
+
+#[test]
+fn the_ui_value_setter_refuses_non_finite_numbers_and_clamps_the_rest() {
+    for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        assert!(update::checked_ui_value("gridGap", bad).is_err());
+        assert!(update::checked_ui_value("someKeyWithoutARange", bad).is_err());
+    }
+    assert_eq!(update::checked_ui_value("importFolderMax", 1e18), Ok(2000.0));
+    assert_eq!(update::checked_ui_value("trashRetentionDays", 0.5), Ok(0.0));
+    assert_eq!(update::checked_ui_value("updateCheckH", 1e9), Ok(168.0));
+    assert_eq!(update::checked_ui_value("gridGap", 7.0), Ok(7.0));
+    assert_eq!(update::checked_ui_value("someKeyWithoutARange", 12345.5), Ok(12345.5));
+}

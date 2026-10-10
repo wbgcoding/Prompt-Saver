@@ -26,7 +26,7 @@ ALLOW = {
     "an input only this app's own UI builds, never a user-typed value": [
         "bad drop position", "bad height", "bad payload", "bad popover size", "bad values",
         "bad-action", "no window geometry", "invalid recording target", "invalid update source",
-        "invalid OCR capability name", "unknown OCR capability name",
+        "invalid number", "invalid OCR capability name", "unknown OCR capability name",
         "invalid speech capability name", "unknown speech capability name",
         "unknown audio source: {source}", "unknown-tool", "no pick session",
         "point outside the captured desktop", "empty path", "bad pinned hash",

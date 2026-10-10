@@ -341,6 +341,13 @@ pub(crate) fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled
     Ok(())
 }
 
+// The value a numeric setting is stored as: held to the range the setting offers
+// (the same rule as when settings load), and a number that is not finite is refused.
+pub(crate) fn checked_ui_value(key: &str, value: f64) -> Result<f64, String> {
+    let value = if key == "updateCheckH" { clamp_update_hours(value) } else { value };
+    clamp_ui_value(key, value).ok_or_else(|| "invalid number".to_string())
+}
+
 // Set an expert numeric value (CSS var / behaviour tweak).
 #[tauri::command(async)]
 pub(crate) fn set_ui_value(app: AppHandle, state: State<Db>, key: String, value: f64) -> Result<(), String> {
@@ -348,7 +355,7 @@ pub(crate) fn set_ui_value(app: AppHandle, state: State<Db>, key: String, value:
     let is_error_log_cap = key == "errorLogKeepKb";
     // A stored interval outside what the setting offers would show as one thing and
     // run as another.
-    let value = if key == "updateCheckH" { clamp_update_hours(value) } else { value };
+    let value = checked_ui_value(&key, value)?;
     let restart_port_from = {
         let mut store = lock(&state);
         let old = store.settings.ui_values.get(&key).copied();
