@@ -1633,6 +1633,61 @@ EDIT_STATE_PROBE = """
 """
 
 
+# 873: closing the editor and choosing Discard must not write the discarded ops as the
+# recording's remembered edit state (and must drop one an earlier autosave left behind);
+# answering Keep editing instead leaves the remembered state exactly as it is.
+CLOSE_STATE_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const until = async (fn, tries) => { for (let i = 0; i < (tries || 100) && !fn(); i++) await sleep(50); return fn(); };
+  const mode = window.__CLOSE_MODE__;
+  const which = mode + ': ';
+  const overlay = document.getElementById('confirm-modal');
+  const shown = () => !overlay.classList.contains('hidden');
+  try {
+    if (mode === 'kept') {
+      // The planted edit state is offered at load: continue with it, which leaves the editor clean.
+      await until(shown, 300);
+      document.getElementById('confirm-ok').click();
+    }
+    await until(() => document.getElementById('ve-stage-msg').classList.contains('hidden') &&
+      document.querySelectorAll('#ve-filmstrip .ve-thumb').length > 0, 300);
+    await sleep(300);
+    if (mode === 'discard') {
+      const fade = document.getElementById('ve-fade-on');
+      fade.checked = true;
+      fade.dispatchEvent(new Event('change', { bubbles: true }));
+      await sleep(100);
+      if (!document.querySelectorAll('#ve-ops-list .ve-op-row').length) errs.push(which + 'fixture: the fade left no operation');
+    }
+    window.__EDIT_STATE_SAVED__ = undefined;
+    window.__EDIT_STATE_DISCARDED__ = undefined;
+    document.getElementById('ve-close').click();
+    await until(shown, 40);
+    if (!shown()) errs.push(which + 'closing with unsaved edits did not ask');
+    else document.getElementById(mode === 'discard' ? 'confirm-ok' : 'confirm-cancel').click();
+    await sleep(500);
+    const saved = window.__EDIT_STATE_SAVED__;
+    const dropped = window.__EDIT_STATE_DISCARDED__;
+    if (mode === 'discard') {
+      if (saved) errs.push(which + 'the discarded edits were saved as the remembered edit state: ' + String(saved.ops).slice(0, 80));
+      if (!dropped || dropped.kind !== 'video' || !dropped.target) errs.push(which + 'the remembered edit state was not cleared');
+    } else {
+      if (saved) errs.push(which + 'Keep editing saved the edit state on the way');
+      if (dropped) errs.push(which + 'Keep editing cleared the remembered edit state');
+    }
+  } catch (e) { errs.push(which + 'probe: ' + e.message); }
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
 # A 1280x720 source (a small region recording): the fixed-height presets may
 # enlarge. 1080p sets a 1920x1080 scale op and shows the "scaled up" hint, the
 # export filter scales with lanczos; 720p equals the source height, sets no op,
@@ -1795,6 +1850,27 @@ def run(browser, tmp):
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print(f"-- video.html restore dialog ({action})")
+        for e in errs:
+            print(f"   FAIL: {e}")
+        failed += len(errs)
+        if not errs:
+            print("   ok")
+
+    # 873: closing with Discard, and answering Keep editing with restored operations.
+    for mode in ("discard", "kept"):
+        side = tmp / "ui" / f"video-close-{mode}.html"
+        fixture = f'window.__EDIT_STATE_FIXTURE__ = {edit_state_fixture};' if mode == "kept" else ""
+        side.write_text(
+            (REPO / "ui" / "video.html").read_text(encoding="utf-8")
+            .replace("<script",
+                     f'<script>{fixture}window.__CLOSE_MODE__ = "{mode}";</script>\n'
+                     '<script src="tauri_stub.js"></script>\n<script', 1)
+            .replace("</body>", CLOSE_STATE_PROBE + "</body>"),
+            encoding="utf-8")
+        proc = run_chrome(browser, tmp / ('profile-video-close-%s' % mode), "1130,860", 30000, side.as_uri(), 180)
+        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        print(f"-- video.html close ({mode})")
         for e in errs:
             print(f"   FAIL: {e}")
         failed += len(errs)

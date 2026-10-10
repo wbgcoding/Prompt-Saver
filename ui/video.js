@@ -3961,6 +3961,7 @@ function persistExportSettings() {
 // ---------------------------------------------------------------- keyboard
 
 async function closeWindow() {
+  let discarded = false;
   if (VE.exporting) {
     // Three-way choice: keep it running in the background (the export is
     // Rust-driven now, so it survives this window closing), cancel it and
@@ -3982,12 +3983,20 @@ async function closeWindow() {
   } else if (VE.ops.length && VE.dirty) {
     const ok = await confirmDialog({ title: t("veCloseTitle"), message: t("veCloseUnsaved"), confirmLabel: t("veDiscard"), danger: true });
     if (!ok) return;
+    discarded = true;
   }
-  // Best-effort: the periodic autosave (armEditStateAutosave) is the real safety
-  // net for a close this cannot intercept (the native titlebar button skips this
-  // function entirely); this just shaves off the last few seconds for the path
-  // that does go through it.
-  await saveEditStateNow();
+  if (discarded) {
+    // The user threw these edits away: stop the autosave and forget what an earlier tick
+    // may already have stored, or the next open would offer the discarded work back.
+    if (editStateTimer) { clearInterval(editStateTimer); editStateTimer = null; }
+    if (VE.src) await invoke("discard_edit_state", { kind: "video", target: VE.src }).catch(() => {});
+  } else {
+    // Best-effort: the periodic autosave (armEditStateAutosave) is the real safety
+    // net for a close this cannot intercept (the native titlebar button skips this
+    // function entirely); this just shaves off the last few seconds for the path
+    // that does go through it.
+    await saveEditStateNow();
+  }
   appWin.close().catch(() => {});
 }
 

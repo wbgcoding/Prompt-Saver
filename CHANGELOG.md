@@ -914,6 +914,9 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **Discarded video edits stay discarded.** Closing the video editor with Discard
+  still stored the dropped edits, and the next open offered them back. They are
+  now forgotten.
 - **Back up now no longer starts two backups on a double click.** The button
   stays greyed out until the backup is written.
 - **The screenshot editor lets go of old image sizes.** Every resize kept the
