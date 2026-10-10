@@ -47,7 +47,8 @@ export async function refreshClipInbox() {
 }
 
 // One history entry on a single line: the same thumbnail as a library row, the name, a
-// chip naming the type for everything that is not plain text, and on the right when it
+// chip naming the type for everything that is not plain text (except a video whose
+// thumbnail already shows its duration), and on the right when it
 // was copied (plus how often in the most-used list). The preview text and the full time
 // ride in the tooltip.
 export function journalRow(p, meta, onClick) {
@@ -70,7 +71,8 @@ export function journalRow(p, meta, onClick) {
   name.textContent = libLabel(p);
   head.append(name);
   const kind = promptType(p);
-  if (kind !== "text") {
+  const showsDuration = kind === "video" && flag("mediaMeta") && !!p.media_duration_ms;
+  if (kind !== "text" && !showsDuration) {
     const chip = document.createElement("span");
     chip.className = "journal-kind";
     chip.textContent = t(`filter${kind[0].toUpperCase()}${kind.slice(1)}`);

@@ -282,6 +282,17 @@ SECTION = """\
         await sleep(200);
       }
     }
+    // 279: a video whose thumbnail shows its duration needs no VIDEO chip; other types keep theirs.
+    {
+      const jr279 = await import('./journal.js');
+      const videoRow279 = [...document.querySelectorAll('#journal-body .journal-item')].find((r) => r.querySelector('.lib-thumb-duration'));
+      if (!videoRow279) out.errors.push('279: no history row with a duration badge to inspect');
+      else if (videoRow279.querySelector('.journal-kind')) out.errors.push('279: a video row with a duration badge still shows the VIDEO chip');
+      const imgRow279 = jr279.journalRow({ id: 'img279', name: 'Pic', file_path: 'C:/x/pic.png' }, null, () => {});
+      if (!imgRow279.querySelector('.journal-kind')) out.errors.push('279: an image row lost its type chip');
+      const bareVideo279 = jr279.journalRow({ id: 'vid279', name: 'Clip', file_path: 'C:/x/clip.mp4' }, null, () => {});
+      if (!bareVideo279.querySelector('.journal-kind')) out.errors.push('279: a video without a duration lost its type chip');
+    }
     // 716: the copy history is one column; the sort field switches to "most used", the
     // pick is stored and survives closing and reopening the library.
     {
