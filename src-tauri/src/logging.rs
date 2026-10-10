@@ -48,24 +48,80 @@ pub(crate) fn crash_log_path() -> PathBuf {
 // both another thread in this process and a second instance of the app, which
 // is cheaper here than wiring up `LockFileEx`'s `OVERLAPPED` struct for a file
 // that is small and rotated rarely. Best-effort like everything else in this
-// module: a lock nobody will ever release (a stale marker left by a crash) must
-// never hang the app over a log line forever, so acquiring gives up after a
-// short wait and proceeds unlocked rather than freezing the caller.
+// module: the marker holds the owner's process id, so one left behind by a crash
+// is recognised (owner gone, or the file simply too old) and reclaimed at once
+// instead of costing every later log line the full wait; and acquiring still
+// gives up after a short wait and proceeds unlocked rather than freezing the caller.
 pub(crate) struct CrashLogLock {
     pub(crate) lock_path: PathBuf,
     pub(crate) held: bool,
 }
 
+// A marker older than this is stale whoever owns it: no log write takes that long.
+const CRASH_LOCK_STALE_AFTER: Duration = Duration::from_secs(10);
+// A marker without a readable process id gets this long to be filled in by its creator.
+const CRASH_LOCK_UNPARSABLE_AFTER: Duration = Duration::from_secs(2);
+
+fn process_is_running(pid: u32) -> bool {
+    use windows::Win32::Foundation::{CloseHandle, GetLastError, ERROR_ACCESS_DENIED};
+    use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+    unsafe {
+        match OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) {
+            Ok(handle) => {
+                let _ = CloseHandle(handle);
+                true
+            }
+            // A process this one may not open is still a process.
+            Err(_) => GetLastError() == ERROR_ACCESS_DENIED,
+        }
+    }
+}
+
+// True when the marker exists and nothing alive owns it any more.
+fn crash_lock_is_stale(lock_path: &Path) -> bool {
+    let Ok(meta) = fs::metadata(lock_path) else { return false };
+    let age = meta.modified().ok().and_then(|m| m.elapsed().ok()).unwrap_or(Duration::ZERO);
+    if age > CRASH_LOCK_STALE_AFTER {
+        return true;
+    }
+    match fs::read_to_string(lock_path).ok().and_then(|t| t.trim().parse::<u32>().ok()) {
+        Some(pid) => !process_is_running(pid),
+        None => age > CRASH_LOCK_UNPARSABLE_AFTER,
+    }
+}
+
 impl CrashLogLock {
+    fn try_claim(lock_path: &Path) -> bool {
+        use std::io::Write;
+        match fs::OpenOptions::new().write(true).create_new(true).open(lock_path) {
+            Ok(mut f) => {
+                let _ = write!(f, "{}", std::process::id());
+                true
+            }
+            Err(_) => false,
+        }
+    }
+
+    // Removes a stale marker; the next claim is the caller's to try.
+    fn reclaim_if_stale(lock_path: &Path) -> bool {
+        crash_lock_is_stale(lock_path) && fs::remove_file(lock_path).is_ok()
+    }
+
     pub(crate) fn acquire(path: &Path) -> Self {
         let lock_path = path.with_extension("log.lock");
         let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        Self::reclaim_if_stale(&lock_path);
         loop {
-            match fs::OpenOptions::new().write(true).create_new(true).open(&lock_path) {
-                Ok(_) => return Self { lock_path, held: true },
-                Err(_) if std::time::Instant::now() < deadline => std::thread::sleep(Duration::from_millis(5)),
-                Err(_) => return Self { lock_path, held: false },
+            if Self::try_claim(&lock_path) {
+                return Self { lock_path, held: true };
             }
+            if std::time::Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(5));
+                continue;
+            }
+            // Out of time: one last look for a marker that went stale while waiting.
+            let held = Self::reclaim_if_stale(&lock_path) && Self::try_claim(&lock_path);
+            return Self { lock_path, held };
         }
     }
 }
