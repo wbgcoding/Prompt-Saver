@@ -262,6 +262,16 @@ export function normalizeLayout(view) {
   return changed;
 }
 
+// The view members the grid has to find a cell for: an archived prompt is never drawn
+// there (renderGrid skips it), so it must not count as overflow either.
+function gridMemberIds(view) {
+  if (!flag("archiveTag")) return view.members;
+  return view.members.filter((id) => {
+    const p = prompts.find((x) => x.id === id);
+    return !(p && isArchived(p));
+  });
+}
+
 // ---- Render ----
 // skipFetch: caller already updated the local state (drag/hide hot path).
 export async function renderGrid(skipFetch = false) {
@@ -350,7 +360,7 @@ export async function renderGrid(skipFetch = false) {
   // shrunk under them) still belong here: shown as a visible overhang instead
   // of a silent loss.
   const seated = new Set([...byCell.values()].map((p) => p.id));
-  const overflowCount = view.members.filter((id) => !seated.has(id) && !inFolder.has(id)).length;
+  const overflowCount = gridMemberIds(view).filter((id) => !seated.has(id) && !inFolder.has(id)).length;
   $("grid-overflow").classList.toggle("hidden", overflowCount === 0);
   if (overflowCount > 0) {
     $("grid-overflow-text").textContent = t("viewOverflowTitle").replace("{n}", String(overflowCount)) + " " + t("viewOverflowBody");
@@ -814,7 +824,8 @@ export function bindViews() {
     const gm = val("gridMax");
     let cols = view.cols;
     let rows = view.rows;
-    while (cols * rows < view.members.length && (cols < gm || rows < gm)) {
+    const wanted = gridMemberIds(view).length;
+    while (cols * rows < wanted && (cols < gm || rows < gm)) {
       if (cols <= rows && cols < gm) cols++;
       else if (rows < gm) rows++;
       else break;

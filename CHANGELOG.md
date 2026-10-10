@@ -914,6 +914,9 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **Archived buttons no longer show up as "do not fit".** An archived prompt
+  is hidden from the grid, but it still counted toward the "do not fit into
+  this grid" notice and the grow step.
 - **"Edit prompt" no longer overwrites unsaved typing.** Choosing Edit for a
   prompt from outside the window (tray or button) while the editor holds
   changes now asks before replacing them.

@@ -70,6 +70,27 @@ EDIT_EVENT_PROBE = """
     }
 """
 
+# 853: archiving a placed tile takes it off the grid without counting it as overflow.
+ARCHIVE_OVERFLOW_PROBE = """
+    // 853:
+    {
+      const banner = $('grid-overflow');
+      if (visible(banner)) errs.push('853: the overflow banner is up before anything was archived');
+      const tile = document.querySelector('#grid .tile');
+      if (!tile) {
+        errs.push('853: no placed tile to archive');
+      } else {
+        const id = tile.dataset.id;
+        await window.__TAURI__.core.invoke('set_ui_text', { key: 'archiveTag', value: 'Archive' });
+        await window.__TAURI__.core.invoke('batch_prompts', { ids: [id], action: 'tag-add', tag: 'Archive' });
+        window.__FIRE__('store-synced');
+        await until(() => !document.querySelector('#grid .tile[data-id="' + id + '"]'), 40);
+        await sleep(200);
+        if (document.querySelector('#grid .tile[data-id="' + id + '"]')) errs.push('853: the archived tile is still on the grid');
+        if (visible(banner)) errs.push('853: an archived tile counts as overflow: ' + $('grid-overflow-text').textContent);
+      }
+    }
+"""
 
 def _boot(browser, tmp, tag, body, budget=45000):
     side = tmp / "ui" / f"logic-{tag}.html"
@@ -86,7 +107,8 @@ def _boot(browser, tmp, tag, body, budget=45000):
 def run(browser, tmp):
     failed = 0
     for tag, body in (
-            ("edit-event", EDIT_EVENT_PROBE),):
+            ("edit-event", EDIT_EVENT_PROBE),
+            ("archive-overflow", ARCHIVE_OVERFLOW_PROBE)):
         errs = _boot(browser, tmp, tag, body)
         print(f"-- ui logic ({tag})")
         for e in errs:
