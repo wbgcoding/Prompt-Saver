@@ -18930,7 +18930,6 @@ fn find_var_tokens_reads_the_short_spelling_and_ignores_look_alikes() {
 #[test]
 fn a_self_filling_name_is_written_with_an_at_sign() {
     assert!(is_dyn_var_name("@date"));
-    assert!(is_dyn_var_name("@foo"), "the @ alone marks it; the frontend decides which names fill themselves");
     assert!(!is_dyn_var_name("@"));
     assert!(!is_dyn_var_name("date"));
     let none = HashMap::new();
@@ -19094,5 +19093,25 @@ fn a_confidential_prompt_reaches_the_window_in_the_new_spelling() {
     assert_eq!(slim[0].text, "Hallo {?Kunde} am {?@date}");
     assert_eq!(slim[0].variants, vec!["Hi {?Kunde}".to_string()]);
     assert!(!find_var_tokens(&slim[0].text).is_empty(), "the window must see a placeholder it can resolve");
+}
+
+#[test]
+fn only_the_reserved_names_are_self_filling() {
+    assert!(is_dyn_var_name("@date"));
+    assert!(is_dyn_var_name("@uuid"));
+    assert!(!is_dyn_var_name("@kunde"), "@ plus an unreserved word is an ordinary variable");
+    assert!(!is_dyn_var_name("date"));
+    assert!(!is_dyn_var_name("@"));
+    let none = HashMap::new();
+    assert_eq!(resolve_static_vars("{?@kunde=Meier} {?@date}", &none, &none), "Meier {?@date}");
+    // The list the frontend uses must be the one used here.
+    let js = include_str!("../../ui/promptVars.js");
+    let start = js.find("export const DYN_VARS = [").expect("DYN_VARS in promptVars.js");
+    let body = &js[start..js[start..].find("];").map(|i| start + i).unwrap()];
+    let mut js_names: Vec<String> = body.split('"').skip(1).step_by(2).map(|s| s.to_string()).collect();
+    js_names.sort();
+    let mut rust_names: Vec<String> = DYN_NAMES.iter().map(|s| s.to_string()).collect();
+    rust_names.sort();
+    assert_eq!(js_names, rust_names, "DYN_VARS (ui/promptVars.js) and DYN_NAMES (store.rs) must list the same names");
 }
 

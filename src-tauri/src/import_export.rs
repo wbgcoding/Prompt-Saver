@@ -175,10 +175,11 @@ pub(crate) fn parse_var_token(token: &str) -> (String, Vec<String>, String) {
     }
 }
 
-// A name written as @name is a reserved dynamic variable (date, uuid, the
-// clipboard, ...), meaningful only at the moment of copy.
+// A name written as @name, with a name from DYN_NAMES (the list the frontend keeps
+// in step), is a reserved dynamic variable (date, uuid, the clipboard, ...),
+// meaningful only at the moment of copy. Any other @word is an ordinary variable.
 pub(crate) fn is_dyn_var_name(name: &str) -> bool {
-    name.len() > 1 && name.starts_with('@')
+    name.strip_prefix('@').is_some_and(|rest| DYN_NAMES.contains(&rest))
 }
 
 pub(crate) fn resolve_static_vars(text: &str, remembered: &HashMap<String, String>, fixed: &HashMap<String, String>) -> String {
