@@ -2026,6 +2026,7 @@ the video editor and the introduction tour ship on).
 - **Settings list one switch per row.** Screenshot saving has its own Capture section.
 - **One Import button in the settings.** It opens a small menu with From file and From folder instead of two separate buttons.
 - **Export preselects JSON,** the format that keeps every prompt detail.
+- **The expert menu button has its normal size** and sits at the left edge instead of spanning the whole settings dialog.
 
 ## 2.6.3 (2026-07-26)
 

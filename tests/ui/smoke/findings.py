@@ -1070,6 +1070,19 @@ def run(browser, tmp):
     if (!callsFor('preview_import').length) errs.push('910: From file did not start the import preview');
     if (!pop.classList.contains('hidden')) errs.push('910: choosing an entry left the menu open');
 """)
+    failed += ar_probe('bm912', 'settings: the expert menu button has a normal size, not the full dialog width', 'index', '880x600', '', r"""
+    // 912: the button is one short ghost button at the left edge of its row.
+    await bootReady();
+    document.getElementById('gear').click();
+    await sleep(300);
+    const eo = document.getElementById('expert-open');
+    const r = eo.getBoundingClientRect();
+    if (!(r.width > 0)) errs.push('912: the expert menu button is not visible');
+    if (r.width >= 260) errs.push('912: the expert menu button is ' + Math.round(r.width) + 'px wide, expected under 260');
+    const row = eo.parentElement.getBoundingClientRect();
+    if (r.left - row.left > 4) errs.push('912: the expert menu button is not at the left edge of its row');
+    if (eo.scrollWidth > eo.clientWidth + 1) errs.push('912: the expert menu label is cut');
+""")
     failed += ar_probe('bx717', 'copy history filters: at 680 px they take two rows, the source is a select and only one All chip remains', 'index', '680x780', '<script>window.__SEED_SETTINGS__ = { ui_flags: { clipWatcher: true } };</script>\n', r"""
     await bootReady();
     document.getElementById('library-btn').click(); await sleep(400);

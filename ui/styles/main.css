@@ -2891,7 +2891,7 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
    `.field.` specificity guard so the column default can't stack them. */
 .field.settings-btn-row { flex-direction: row; gap: 10px; }
 .field.settings-btn-row > button { flex: 1; }
-#expert-open { flex: 1 1 100%; }
+#expert-open { flex: 0 0 auto; padding-inline: 16px; }
 /* Help (settings) and Shortcuts (help) sit in the head, right beside the close button;
    the title keeps the left. */
 #settings .modal-head .modal-title,

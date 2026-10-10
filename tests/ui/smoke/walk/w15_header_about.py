@@ -16,7 +16,7 @@ SECTION = """\
     }
     // 729: help is the question-mark button in the settings head, left of the close
     // button, visible on the settings page and on the expert page; the expert menu
-    // button fills its row alone.
+    // button sits alone in its row at normal button size.
     {
       if (document.getElementById('settings').classList.contains('hidden')) await click('gear');
       if (document.getElementById('settings-main').classList.contains('hidden')) {
@@ -36,7 +36,7 @@ SECTION = """\
         const eo729 = document.getElementById('expert-open');
         const row729 = eo729.parentElement;
         if (row729.querySelectorAll('button').length !== 1) out.errors.push('729: the expert menu button shares its row');
-        if (eo729.getBoundingClientRect().width < row729.getBoundingClientRect().width - 2) out.errors.push('729: the expert menu button does not fill its row');
+        if (eo729.getBoundingClientRect().width > 260) out.errors.push('729: the expert menu button is wider than a normal button: ' + Math.round(eo729.getBoundingClientRect().width));
         await click('expert-open');
         const hr2 = help729.getBoundingClientRect();
         if (!hr2.width || !hr2.height) out.errors.push('729: help-open is not visible on the expert page');
