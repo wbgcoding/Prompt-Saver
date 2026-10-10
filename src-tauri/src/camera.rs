@@ -11,7 +11,7 @@
 // picture. install_permission_handler below is that answer, camera-only
 // and microphone-only, and only for this one window.
 
-use crate::{lock, recording_dir, Db, RecordingState};
+use crate::{lock, recording_dir, sidecar_path, Db, RecordingState, CAM_SIDECAR_EXT};
 use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -56,13 +56,9 @@ pub struct CamSidecar {
 }
 
 // Sits next to the recording as its own extension, exactly like the
-// key-overlay sidecar (keylog::sidecar_path) -- so a Save/Copy/discard that
+// key-overlay sidecar (the shared sidecar_path) -- so a Save/Copy/discard that
 // already knows how to move or drop a `.keys.json` alongside its video needs
 // the same one-line addition for `.cam.json`, never a parallel code path.
-pub fn sidecar_path(output_path: &Path) -> PathBuf {
-    output_path.with_extension("cam.json")
-}
-
 // The mirror of rec_engine.rs's own mic_sidecar_video_path, for the same reason: a
 // `.cam.json` sitting in the recordings folder next to a video the library
 // still references must count as referenced too, or the background sweep
@@ -279,7 +275,7 @@ pub struct CamFinishResult {
 fn finalize_session(session: &CamSession, cam_start_ms: u64, screen_elapsed_ms: Option<u64>) {
     let sidecar = CamSidecar { start_ms: cam_start_ms, overlay_start_ms: screen_elapsed_ms };
     if let Ok(json) = serde_json::to_string(&sidecar) {
-        let _ = fs::write(sidecar_path(&session.output_path), json);
+        let _ = fs::write(sidecar_path(&session.output_path, CAM_SIDECAR_EXT), json);
     }
 }
 
@@ -367,11 +363,11 @@ pub fn camera_abandon_recording(cam: State<'_, CameraState>, path: String) -> Re
 
 fn discard_session(session: &CamSession) {
     let _ = fs::remove_file(&session.output_path);
-    let _ = fs::remove_file(sidecar_path(&session.output_path));
+    let _ = fs::remove_file(sidecar_path(&session.output_path, CAM_SIDECAR_EXT));
 }
 
 pub fn read_sidecar(path: &Path) -> Option<CamSidecar> {
-    let data = fs::read_to_string(sidecar_path(path)).ok()?;
+    let data = fs::read_to_string(sidecar_path(path, CAM_SIDECAR_EXT)).ok()?;
     serde_json::from_str(&data).ok()
 }
 
@@ -596,12 +592,6 @@ mod tests {
     }
 
     #[test]
-    fn sidecar_path_sits_next_to_the_recording_as_its_own_extension() {
-        let p = sidecar_path(Path::new("C:/data/recordings/rec-cam-1.webm"));
-        assert_eq!(p, PathBuf::from("C:/data/recordings/rec-cam-1.cam.json"));
-    }
-
-    #[test]
     fn sidecar_video_path_finds_the_webm_sibling() {
         let dir = std::env::temp_dir().join(format!("psc-cam-test3-{}", std::process::id()));
         let _ = fs::create_dir_all(&dir);
@@ -680,7 +670,7 @@ mod tests {
         // The two sidecar kinds -- .cam.json here, .keys.json for the key
         // overlay -- must never collide on the same extension, or moving one
         // recording's sidecar would silently clobber the other's.
-        let cam = sidecar_path(Path::new("C:/data/recordings/rec-1.webm"));
+        let cam = sidecar_path(Path::new("C:/data/recordings/rec-1.webm"), CAM_SIDECAR_EXT);
         let keys = cam.with_extension("");
         assert_ne!(cam.extension().unwrap(), keys.extension().unwrap_or_default());
     }
@@ -760,12 +750,12 @@ mod tests {
         let _ = fs::create_dir_all(&dir);
         let video = dir.join("rec-cam-1.webm");
         fs::write(&video, b"x").unwrap();
-        fs::write(sidecar_path(&video), b"{}").unwrap();
+        fs::write(sidecar_path(&video, CAM_SIDECAR_EXT), b"{}").unwrap();
         let mut slot = Some(CamSession { output_path: video.clone(), companion_path: None, finishing: None });
         let taken = take_matching(&mut slot, &video).unwrap();
         discard_session(&taken);
         assert!(!video.exists());
-        assert!(!sidecar_path(&video).exists());
+        assert!(!sidecar_path(&video, CAM_SIDECAR_EXT).exists());
         let _ = fs::remove_dir_all(&dir);
     }
 

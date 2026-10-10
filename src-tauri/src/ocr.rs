@@ -30,7 +30,7 @@ use windows::Win32::UI::WindowsAndMessaging::SW_HIDE;
 // the UI thread. Every OCR call runs inside spawn_blocking; those pool threads
 // are reused across calls, so a thread-local guard keeps this to once per
 // thread rather than once per recognition.
-fn ensure_com() {
+pub(crate) fn ensure_winrt() {
     thread_local! {
         static DONE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     }
@@ -177,7 +177,7 @@ fn resize_for_ocr(path: &Path, max_dim: u32, upscale_below_px: u32) -> Result<(P
 // join_lines picks between the paragraph-joined text (ocr_join_lines) and
 // the raw one-line-per-recognized-line text -- the ocrJoinLines expert setting.
 fn recognize(path: &Path, upscale_below_px: u32, join_lines: bool, lang: &str, auto_pick_lang: bool) -> Result<OcrResult, String> {
-    ensure_com();
+    ensure_winrt();
     let engine = resolve_engine(lang, auto_pick_lang)?;
     let max_dim = OcrEngine::MaxImageDimension().map_err(|e| e.to_string())?;
     let (sized_path, _resize_guard) = resize_for_ocr(path, max_dim, upscale_below_px)?;
@@ -198,7 +198,7 @@ fn recognize(path: &Path, upscale_below_px: u32, join_lines: bool, lang: &str, a
 }
 
 pub(super) fn languages() -> Result<Vec<OcrLang>, String> {
-    ensure_com();
+    ensure_winrt();
     let langs = OcrEngine::AvailableRecognizerLanguages().map_err(|e| e.to_string())?;
     let size = langs.Size().map_err(|e| e.to_string())?;
     let mut out = Vec::with_capacity(size as usize);
@@ -345,7 +345,7 @@ pub(super) fn capabilities(kind: CapKind, force: bool, cache_hours: f64) -> Resu
 // lookup the recognizer itself uses -- so this list is localized without
 // this app keeping its own name table.
 fn fetch_capabilities(kind: CapKind) -> Result<Vec<OcrCap>, String> {
-    ensure_com();
+    ensure_winrt();
     let _ = fs::create_dir_all(dism_temp_dir());
     // The spec (and Microsoft's own docs) says listing needs no elevated rights,
     // and with the log-path redirect above that mostly holds -- but some
@@ -385,7 +385,7 @@ pub(super) fn caps_elevation_error(raw: &str) -> String {
 // (unelevated) query and by the elevated one below, so both produce exactly
 // the same list, localized the same way.
 fn caps_from_json(kind: CapKind, output: &str) -> Result<Vec<OcrCap>, String> {
-    ensure_com();
+    ensure_winrt();
     let raw = ocr_parse_capabilities_json(kind.prefix(), output)?;
     let mut out = Vec::with_capacity(raw.len());
     for r in raw {

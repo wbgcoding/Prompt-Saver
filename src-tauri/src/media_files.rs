@@ -1,5 +1,15 @@
 use super::*;
 
+// The sidecar files that sit beside a recording, each as its own extension of the
+// video's name (`rec.mp4` -> `rec.keys.json`). One builder for all of them, so a
+// Save/Copy/discard that moves or drops one kind handles the others the same way.
+pub(crate) const KEYS_SIDECAR_EXT: &str = "keys.json";
+pub(crate) const CAM_SIDECAR_EXT: &str = "cam.json";
+
+pub(crate) fn sidecar_path(video: &Path, ext: &str) -> PathBuf {
+    video.with_extension(ext)
+}
+
 #[tauri::command]
 pub(crate) fn video_editor_source(pending: State<VideoEditorPending>) -> Option<VideoEditorSource> {
     let (path, origin_dir, overlay_path) = pending.lock().clone();
@@ -86,9 +96,9 @@ pub(crate) fn key_sidecar_is_safe_to_copy(path: &Path) -> bool {
 
 #[cfg(windows)]
 pub(crate) fn copy_keys_sidecar_alongside(src: &Path, dest: &Path) {
-    let src_sidecar = keylog::sidecar_path(src);
+    let src_sidecar = sidecar_path(src, KEYS_SIDECAR_EXT);
     if key_sidecar_is_safe_to_copy(&src_sidecar) {
-        let _ = fs::copy(&src_sidecar, keylog::sidecar_path(dest));
+        let _ = fs::copy(&src_sidecar, sidecar_path(dest, KEYS_SIDECAR_EXT));
     }
 }
 #[cfg(not(windows))]
@@ -406,9 +416,9 @@ pub(crate) fn move_mic_sidecar_alongside(old_video: &std::path::Path, new_video:
     // video file and would otherwise orphan it at the old path.
     #[cfg(windows)]
     {
-        let old_keys = keylog::sidecar_path(old_video);
+        let old_keys = sidecar_path(old_video, KEYS_SIDECAR_EXT);
         if old_keys.is_file() {
-            let new_keys = keylog::sidecar_path(new_video);
+            let new_keys = sidecar_path(new_video, KEYS_SIDECAR_EXT);
             if old_keys != new_keys {
                 if let Err(e) = move_file(&old_keys, &new_keys) {
                     eprintln!("failed to relocate key-overlay sidecar: {e}");
@@ -418,9 +428,9 @@ pub(crate) fn move_mic_sidecar_alongside(old_video: &std::path::Path, new_video:
     }
     // Same again for the camera sidecar, on whichever of the two recordings
     // (screen or camera) is the one actually being relocated here.
-    let old_cam = camera::sidecar_path(old_video);
+    let old_cam = sidecar_path(old_video, CAM_SIDECAR_EXT);
     if old_cam.is_file() {
-        let new_cam = camera::sidecar_path(new_video);
+        let new_cam = sidecar_path(new_video, CAM_SIDECAR_EXT);
         if old_cam != new_cam {
             if let Err(e) = move_file(&old_cam, &new_cam) {
                 eprintln!("failed to relocate camera sidecar: {e}");
@@ -676,9 +686,9 @@ pub(crate) fn discard_recording_file_in(allowed: &[PathBuf], path: &std::path::P
             }
             #[cfg(windows)]
             {
-                let keys = keylog::sidecar_path(path);
+                let keys = sidecar_path(path, KEYS_SIDECAR_EXT);
                 if keys.is_file() {
-                    let _ = move_file(&keys, &keylog::sidecar_path(&dest));
+                    let _ = move_file(&keys, &sidecar_path(&dest, KEYS_SIDECAR_EXT));
                 }
             }
         }
@@ -686,9 +696,9 @@ pub(crate) fn discard_recording_file_in(allowed: &[PathBuf], path: &std::path::P
     // The camera sidecar takes the same trip, regardless of container --
     // camera recordings are webm, not mp4, so this cannot sit inside the
     // ext-gated block above.
-    let cam_sidecar = camera::sidecar_path(path);
+    let cam_sidecar = sidecar_path(path, CAM_SIDECAR_EXT);
     if cam_sidecar.is_file() {
-        let _ = move_file(&cam_sidecar, &camera::sidecar_path(&dest));
+        let _ = move_file(&cam_sidecar, &sidecar_path(&dest, CAM_SIDECAR_EXT));
     }
     Some(dest)
 }
@@ -769,9 +779,9 @@ pub(crate) fn restore_discarded_recording_impl(dir: &str, name: &str, configured
     if keys_src.is_file() {
         let _ = move_file(&keys_src, &dst.with_extension("keys.json"));
     }
-    let cam_sidecar_src = camera::sidecar_path(&src);
+    let cam_sidecar_src = sidecar_path(&src, CAM_SIDECAR_EXT);
     if cam_sidecar_src.is_file() {
-        let _ = move_file(&cam_sidecar_src, &camera::sidecar_path(&dst));
+        let _ = move_file(&cam_sidecar_src, &sidecar_path(&dst, CAM_SIDECAR_EXT));
     }
     true
 }
@@ -797,7 +807,7 @@ pub(crate) fn delete_discarded_recording_now_impl(dir: &str, name: &str, configu
     // A manual "delete for good" used to leave the key-overlay
     // sidecar sitting in the trash forever once its video was gone.
     let _ = fs::remove_file(path.with_extension("keys.json"));
-    let _ = fs::remove_file(camera::sidecar_path(&path));
+    let _ = fs::remove_file(sidecar_path(&path, CAM_SIDECAR_EXT));
     fs::remove_file(&path).is_ok()
 }
 

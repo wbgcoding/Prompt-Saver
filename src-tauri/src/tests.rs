@@ -6913,9 +6913,9 @@ fn copy_keys_sidecar_alongside_brings_the_sidecar_to_the_open_editor_copy() {
     let src = dir.join("rec-x.mp4");
     let dest = dir.join("rec-x-copy.mp4");
     fs::write(&src, b"video").unwrap();
-    fs::write(keylog::sidecar_path(&src), br#"{"events":[],"gaps":[]}"#).unwrap();
+    fs::write(sidecar_path(&src, KEYS_SIDECAR_EXT), br#"{"events":[],"gaps":[]}"#).unwrap();
     copy_keys_sidecar_alongside(&src, &dest);
-    assert!(keylog::sidecar_path(&dest).is_file(), "open_file_in_editor's copy must bring the key-overlay sidecar with it");
+    assert!(sidecar_path(&dest, KEYS_SIDECAR_EXT).is_file(), "open_file_in_editor's copy must bring the key-overlay sidecar with it");
     let _ = fs::remove_dir_all(&dir);
 }
 
@@ -6927,9 +6927,9 @@ fn copy_keys_sidecar_alongside_skips_a_sidecar_that_does_not_parse() {
     let src = dir.join("rec-x.mp4");
     let dest = dir.join("rec-x-copy.mp4");
     fs::write(&src, b"video").unwrap();
-    fs::write(keylog::sidecar_path(&src), b"not json at all").unwrap();
+    fs::write(sidecar_path(&src, KEYS_SIDECAR_EXT), b"not json at all").unwrap();
     copy_keys_sidecar_alongside(&src, &dest);
-    assert!(!keylog::sidecar_path(&dest).exists(), "a sidecar that is not the expected shape must never be carried along");
+    assert!(!sidecar_path(&dest, KEYS_SIDECAR_EXT).exists(), "a sidecar that is not the expected shape must never be carried along");
     let _ = fs::remove_dir_all(&dir);
 }
 
@@ -6944,9 +6944,9 @@ fn copy_keys_sidecar_alongside_skips_a_sidecar_past_the_size_ceiling() {
     // Well past KEY_SIDECAR_MAX_COPY_BYTES, and never actually parsed --
     // the size check must turn it away before the file is even read.
     let oversized = vec![b' '; (KEY_SIDECAR_MAX_COPY_BYTES + 1) as usize];
-    fs::write(keylog::sidecar_path(&src), &oversized).unwrap();
+    fs::write(sidecar_path(&src, KEYS_SIDECAR_EXT), &oversized).unwrap();
     copy_keys_sidecar_alongside(&src, &dest);
-    assert!(!keylog::sidecar_path(&dest).exists(), "an oversized sidecar must never be carried along");
+    assert!(!sidecar_path(&dest, KEYS_SIDECAR_EXT).exists(), "an oversized sidecar must never be carried along");
     let _ = fs::remove_dir_all(&dir);
 }
 
@@ -6959,7 +6959,7 @@ fn copy_keys_sidecar_alongside_is_a_no_op_when_the_source_never_captured_keys() 
     let dest = dir.join("rec-x-copy.mp4");
     fs::write(&src, b"video").unwrap();
     copy_keys_sidecar_alongside(&src, &dest);
-    assert!(!keylog::sidecar_path(&dest).exists(), "no sidecar to begin with must not conjure one for the copy");
+    assert!(!sidecar_path(&dest, KEYS_SIDECAR_EXT).exists(), "no sidecar to begin with must not conjure one for the copy");
     let _ = fs::remove_dir_all(&dir);
 }
 
@@ -18695,4 +18695,18 @@ fn a_fresh_marker_of_a_live_process_is_waited_for_the_full_deadline() {
     drop(lock);
     assert!(lock_path.exists(), "someone else's marker is not removed");
     let _ = fs::remove_file(&lock_path);
+}
+
+// ---- the shared sidecar path builder ----
+
+#[test]
+fn sidecar_path_sits_next_to_the_recording_as_its_own_extension() {
+    assert_eq!(
+        sidecar_path(Path::new("C:/data/recordings/rec-1.mp4"), KEYS_SIDECAR_EXT),
+        PathBuf::from("C:/data/recordings/rec-1.keys.json")
+    );
+    assert_eq!(
+        sidecar_path(Path::new("C:/data/recordings/rec-cam-1.webm"), CAM_SIDECAR_EXT),
+        PathBuf::from("C:/data/recordings/rec-cam-1.cam.json")
+    );
 }

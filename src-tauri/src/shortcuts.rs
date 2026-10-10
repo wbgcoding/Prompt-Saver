@@ -560,135 +560,108 @@ pub(crate) async fn check_hotkey(
     Ok(())
 }
 
-// Register a new global hotkey (empty = disable). Everything is validated BEFORE the
-// setting is written, so a refused combination leaves the previous one live and the
-// UI field in step with what is actually bound.
+// The four global hotkey settings. Each is checked against the other three and every
+// prompt binding before it is stored.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum HotkeySlot {
+    App,
+    Voice,
+    RecStop,
+    RecPause,
+}
+
+const HOTKEY_SLOTS: [HotkeySlot; 4] = [HotkeySlot::App, HotkeySlot::Voice, HotkeySlot::RecStop, HotkeySlot::RecPause];
+
+impl HotkeySlot {
+    fn get(self, s: &Settings) -> &str {
+        match self {
+            HotkeySlot::App => &s.hotkey,
+            HotkeySlot::Voice => &s.voice_hotkey,
+            HotkeySlot::RecStop => &s.rec_stop_hotkey,
+            HotkeySlot::RecPause => &s.rec_pause_hotkey,
+        }
+    }
+
+    fn set(self, s: &mut Settings, hk: &str) {
+        match self {
+            HotkeySlot::App => s.hotkey = hk.to_string(),
+            HotkeySlot::Voice => s.voice_hotkey = hk.to_string(),
+            HotkeySlot::RecStop => s.rec_stop_hotkey = hk.to_string(),
+            HotkeySlot::RecPause => s.rec_pause_hotkey = hk.to_string(),
+        }
+    }
+
+    // The stop/pause keys are only registered while a recording runs, so another
+    // app's claim on them cannot be probed when they are set.
+    fn probes_for_conflicts(self) -> bool {
+        matches!(self, HotkeySlot::App | HotkeySlot::Voice)
+    }
+}
+
+// The shared body of the four set_*hotkey commands: validated BEFORE the setting is
+// written, so a refused combination leaves the previous one live and the UI field in
+// step with what is actually bound; then stored and re-armed together with every
+// prompt accelerator (one place owns the registered set).
+fn apply_hotkey(app: &AppHandle, state: &State<'_, Db>, slot: HotkeySlot, accel: &str) -> Result<(), String> {
+    let hk = accel.trim().to_string();
+    if !hk.is_empty() {
+        let sc = accel_error(&hk).map_err(|e| e.to_string())?;
+        let taken = {
+            let store = lock(state);
+            HOTKEY_SLOTS
+                .iter()
+                .filter(|other| **other != slot)
+                .any(|other| parse_accel(other.get(&store.settings)) == Some(sc))
+                || store.prompts.iter().any(|p| parse_accel(&p.hotkey) == Some(sc))
+        };
+        if taken {
+            return Err(HK_TAKEN.to_string());
+        }
+        if slot.probes_for_conflicts() && !accel_is_free(app, sc) {
+            return Err(HK_CONFLICT.to_string());
+        }
+    }
+    {
+        let mut store = lock(state);
+        slot.set(&mut store.settings, &hk);
+        save_settings(app, &store.settings);
+    }
+    let armed = rearm_hotkeys(app);
+    match slot {
+        // rearm_hotkeys' return value reports the APP hotkey's fate.
+        HotkeySlot::App if !armed => Err(HK_CONFLICT.to_string()),
+        // A refused voice hotkey is cleared from the store by rearm_hotkeys itself, so
+        // re-reading it is what answers "did this one land".
+        HotkeySlot::Voice if !hk.is_empty() && lock(state).settings.voice_hotkey != hk => Err(HK_CONFLICT.to_string()),
+        _ => Ok(()),
+    }
+}
+
+// Register a new global hotkey (empty = disable); see apply_hotkey.
 #[tauri::command]
 pub(crate) async fn set_hotkey(app: AppHandle, state: State<'_, Db>, hotkey: String) -> Result<(), String> {
-    let hk = hotkey.trim().to_string();
-    if !hk.is_empty() {
-        let sc = accel_error(&hk).map_err(|e| e.to_string())?;
-        let taken = {
-            let store = lock(&state);
-            parse_accel(&store.settings.voice_hotkey) == Some(sc)
-                || parse_accel(&store.settings.rec_stop_hotkey) == Some(sc)
-                || parse_accel(&store.settings.rec_pause_hotkey) == Some(sc)
-                || store.prompts.iter().any(|p| parse_accel(&p.hotkey) == Some(sc))
-        };
-        if taken {
-            return Err(HK_TAKEN.to_string());
-        }
-        if !accel_is_free(&app, sc) {
-            return Err(HK_CONFLICT.to_string());
-        }
-    }
-    {
-        let mut store = lock(&state);
-        store.settings.hotkey = hk;
-        save_settings(&app, &store.settings);
-    }
-    // One place owns the registered set, so the app hotkey is re-armed together
-    // with every prompt accelerator instead of wiping them.
-    if rearm_hotkeys(&app) {
-        Ok(())
-    } else {
-        Err(HK_CONFLICT.to_string())
-    }
+    apply_hotkey(&app, &state, HotkeySlot::App, &hotkey)
 }
 
-// 131's counterpart to set_hotkey, same shape: validated before the write, the
-// app hotkey and every prompt binding checked as a collision, nothing new that
-// check_hotkey/rearm_hotkeys does not already do for the other two kinds.
+// The voice-dictation counterpart of set_hotkey.
 #[tauri::command]
 pub(crate) async fn set_voice_hotkey(app: AppHandle, state: State<'_, Db>, hotkey: String) -> Result<(), String> {
-    let hk = hotkey.trim().to_string();
-    if !hk.is_empty() {
-        let sc = accel_error(&hk).map_err(|e| e.to_string())?;
-        let taken = {
-            let store = lock(&state);
-            parse_accel(&store.settings.hotkey) == Some(sc)
-                || parse_accel(&store.settings.rec_stop_hotkey) == Some(sc)
-                || parse_accel(&store.settings.rec_pause_hotkey) == Some(sc)
-                || store.prompts.iter().any(|p| parse_accel(&p.hotkey) == Some(sc))
-        };
-        if taken {
-            return Err(HK_TAKEN.to_string());
-        }
-        if !accel_is_free(&app, sc) {
-            return Err(HK_CONFLICT.to_string());
-        }
-    }
-    {
-        let mut store = lock(&state);
-        store.settings.voice_hotkey.clone_from(&hk);
-        save_settings(&app, &store.settings);
-    }
-    // rearm_hotkeys' own return value only reports the APP hotkey's fate; a
-    // refused voice hotkey is instead cleared from the store by rearm_hotkeys
-    // itself, so re-reading it here is what actually answers "did this one land".
-    rearm_hotkeys(&app);
-    if hk.is_empty() { return Ok(()); }
-    let store = lock(&state);
-    if store.settings.voice_hotkey == hk {
-        Ok(())
-    } else {
-        Err(HK_CONFLICT.to_string())
-    }
+    apply_hotkey(&app, &state, HotkeySlot::Voice, &hotkey)
 }
 
-// Stop/pause counterparts of set_voice_hotkey, same shape -- validated
-// before the write against every OTHER hotkey kind (including each other), then
-// stored. Unlike the app/voice hotkey these are only actually registered while a
-// recording runs (rearm_hotkeys), so a "successful" set here can still show as
-// blocked later if another app claims the combination only once recording starts
-// -- that case is reported through recording_status(), not this call.
+// Stop/pause counterparts of set_voice_hotkey -- validated against every OTHER hotkey
+// kind (including each other) before the write. Unlike the app/voice hotkey these are
+// only actually registered while a recording runs (rearm_hotkeys), so a "successful"
+// set here can still show as blocked later if another app claims the combination only
+// once recording starts -- that case is reported through recording_status(), not this call.
 #[tauri::command]
 pub(crate) async fn set_rec_stop_hotkey(app: AppHandle, state: State<'_, Db>, hotkey: String) -> Result<(), String> {
-    let hk = hotkey.trim().to_string();
-    if !hk.is_empty() {
-        let sc = accel_error(&hk).map_err(|e| e.to_string())?;
-        let taken = {
-            let store = lock(&state);
-            parse_accel(&store.settings.hotkey) == Some(sc)
-                || parse_accel(&store.settings.voice_hotkey) == Some(sc)
-                || parse_accel(&store.settings.rec_pause_hotkey) == Some(sc)
-                || store.prompts.iter().any(|p| parse_accel(&p.hotkey) == Some(sc))
-        };
-        if taken {
-            return Err(HK_TAKEN.to_string());
-        }
-    }
-    {
-        let mut store = lock(&state);
-        store.settings.rec_stop_hotkey.clone_from(&hk);
-        save_settings(&app, &store.settings);
-    }
-    rearm_hotkeys(&app);
-    Ok(())
+    apply_hotkey(&app, &state, HotkeySlot::RecStop, &hotkey)
 }
+
 #[tauri::command]
 pub(crate) async fn set_rec_pause_hotkey(app: AppHandle, state: State<'_, Db>, hotkey: String) -> Result<(), String> {
-    let hk = hotkey.trim().to_string();
-    if !hk.is_empty() {
-        let sc = accel_error(&hk).map_err(|e| e.to_string())?;
-        let taken = {
-            let store = lock(&state);
-            parse_accel(&store.settings.hotkey) == Some(sc)
-                || parse_accel(&store.settings.voice_hotkey) == Some(sc)
-                || parse_accel(&store.settings.rec_stop_hotkey) == Some(sc)
-                || store.prompts.iter().any(|p| parse_accel(&p.hotkey) == Some(sc))
-        };
-        if taken {
-            return Err(HK_TAKEN.to_string());
-        }
-    }
-    {
-        let mut store = lock(&state);
-        store.settings.rec_pause_hotkey.clone_from(&hk);
-        save_settings(&app, &store.settings);
-    }
-    rearm_hotkeys(&app);
-    Ok(())
+    apply_hotkey(&app, &state, HotkeySlot::RecPause, &hotkey)
 }
 
 // A hotkey-triggered prompt that has to go through the grid (chain mode) needs

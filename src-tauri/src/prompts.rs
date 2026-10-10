@@ -670,7 +670,7 @@ pub(crate) fn discarded_stale_in(dir: &Path, age: Duration) -> (u32, u64) {
             // left behind here, orphaned in the trash forever once its video
             // was purged.
             let _ = fs::remove_file(path.with_extension("keys.json"));
-            let _ = fs::remove_file(camera::sidecar_path(&path));
+            let _ = fs::remove_file(sidecar_path(&path, CAM_SIDECAR_EXT));
         }
     }
     (count, bytes)
@@ -696,7 +696,7 @@ pub(crate) fn protected_recording_paths(app: &AppHandle) -> Vec<PathBuf> {
     if let Some(p) = active_recording_path(app) {
         out.push(p.with_extension("mic.wav"));
         #[cfg(windows)]
-        out.push(keylog::sidecar_path(&p)); // the key-overlay sidecar, same lifetime as the mic one
+        out.push(sidecar_path(&p, KEYS_SIDECAR_EXT)); // the key-overlay sidecar, same lifetime as the mic one
         out.push(p);
     }
     if let Some(state) = app.try_state::<VideoEditorPending>() {
@@ -705,12 +705,12 @@ pub(crate) fn protected_recording_paths(app: &AppHandle) -> Vec<PathBuf> {
             let src = PathBuf::from(src);
             out.push(src.with_extension("mic.wav"));
             #[cfg(windows)]
-            out.push(keylog::sidecar_path(&src));
+            out.push(sidecar_path(&src, KEYS_SIDECAR_EXT));
             out.push(src);
         }
         if !overlay.is_empty() {
             let overlay = PathBuf::from(overlay);
-            out.push(camera::sidecar_path(&overlay));
+            out.push(sidecar_path(&overlay, CAM_SIDECAR_EXT));
             out.push(overlay);
         }
     }

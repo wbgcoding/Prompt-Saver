@@ -124,7 +124,7 @@ pub(crate) fn probe_recording_blocking(ffprobe: &Path, src: &Path) -> Result<Rec
         streams.iter().any(|s| s["codec_type"] == "audio" && s["codec_name"].as_str() != Some("aac"));
     let stream_copy_safe = matches!(video_codec, "h264" | "hevc") && !non_aac_audio;
     #[cfg(windows)]
-    let has_keys_sidecar = keylog::sidecar_path(src).is_file();
+    let has_keys_sidecar = sidecar_path(src, KEYS_SIDECAR_EXT).is_file();
     #[cfg(not(windows))]
     let has_keys_sidecar = false;
     Ok(RecordingProbe {
@@ -166,7 +166,7 @@ pub(crate) fn read_key_sidecar_at(sidecar: &Path) -> Option<keylog::KeySidecar> 
 #[cfg(windows)]
 #[tauri::command]
 pub(crate) async fn read_key_sidecar(path: String) -> Option<keylog::KeySidecar> {
-    tauri::async_runtime::spawn_blocking(move || read_key_sidecar_at(&keylog::sidecar_path(Path::new(&path))))
+    tauri::async_runtime::spawn_blocking(move || read_key_sidecar_at(&sidecar_path(Path::new(&path), KEYS_SIDECAR_EXT)))
         .await
         .ok()
         .flatten()

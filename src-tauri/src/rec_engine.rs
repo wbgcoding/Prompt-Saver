@@ -961,7 +961,7 @@ pub(crate) fn remove_recording_part_files(part: &RecordingPartInfo) {
     if let Some(w) = &part.mic_wav_path {
         let _ = std::fs::remove_file(w);
     }
-    let _ = std::fs::remove_file(keylog::sidecar_path(Path::new(&part.path)));
+    let _ = std::fs::remove_file(sidecar_path(Path::new(&part.path), KEYS_SIDECAR_EXT));
 }
 
 #[derive(serde::Serialize, Clone)]

@@ -2,7 +2,7 @@ use super::append_crash_log;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::mpsc::{channel, sync_channel, Receiver, RecvTimeoutError, Sender, SyncSender};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread::{self, JoinHandle};
@@ -1694,15 +1694,11 @@ pub fn cut_off_at(t_ms: u64) {
     }
 }
 
-pub fn sidecar_path(output_path: &Path) -> PathBuf {
-    output_path.with_extension("keys.json")
-}
-
 fn write_sidecar(output_path: &Path, sidecar: &KeySidecar) {
     if let Ok(json) = serde_json::to_string(sidecar) {
         // Sealed like the rest of the local store: the events are the keys
         // typed during the recording. Readers pass old plain files through.
-        let _ = fs::write(sidecar_path(output_path), super::enc_str(&json));
+        let _ = fs::write(super::sidecar_path(output_path, super::KEYS_SIDECAR_EXT), super::enc_str(&json));
     }
 }
 
@@ -1908,7 +1904,7 @@ mod tests {
         let video = dir.join("rec-sealed.mp4");
         let sc = KeySidecar { hold_ms: 777, ..Default::default() };
         write_sidecar(&video, &sc);
-        let raw = fs::read_to_string(sidecar_path(&video)).unwrap();
+        let raw = fs::read_to_string(crate::sidecar_path(&video, crate::KEYS_SIDECAR_EXT)).unwrap();
         assert!(!raw.contains("hold_ms") && !raw.starts_with('{'), "the sidecar must not sit on disk as plain JSON");
         assert_eq!(crate::parse_key_sidecar(&raw), Some(sc));
         let _ = fs::remove_dir_all(&dir);
@@ -1918,12 +1914,6 @@ mod tests {
     fn an_old_plain_sidecar_still_parses() {
         let parsed = crate::parse_key_sidecar(r#"{"events":[],"gaps":[],"hold_ms":500}"#).unwrap();
         assert_eq!(parsed.hold_ms, 500);
-    }
-
-    #[test]
-    fn sidecar_path_sits_next_to_the_recording_as_its_own_extension() {
-        let p = sidecar_path(Path::new("C:/data/recordings/rec-1.mp4"));
-        assert_eq!(p, PathBuf::from("C:/data/recordings/rec-1.keys.json"));
     }
 
     #[test]

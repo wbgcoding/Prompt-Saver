@@ -730,7 +730,7 @@ pub(crate) async fn ocr_capabilities_elevate() -> Result<(), String> {
 // Some(list) once it wrote one. A failure inside the elevated process is
 // reported as an error, never as an empty list. Async + spawn_blocking: this
 // reads a file and, on success, calls into COM (caps_from_json's Language
-// lookups) via ensure_com, which must never run on the UI thread.
+// lookups) via ensure_winrt, which must never run on the UI thread.
 #[tauri::command]
 pub(crate) async fn ocr_capabilities_elevated_result() -> Result<Option<Vec<OcrCap>>, String> {
     #[cfg(windows)]

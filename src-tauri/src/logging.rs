@@ -160,14 +160,7 @@ pub(crate) fn rotate_log_file_locked(path: &Path, cap: usize) {
         .position(|&b| b == b'\n')
         .map(|i| cut_from + i + 1)
         .unwrap_or(contents.len());
-    let tmp = path.with_extension("log.tmp");
-    let Ok(mut f) = fs::File::create(&tmp) else { return };
-    use std::io::Write;
-    let wrote = f.write_all(&contents[start..]).and_then(|_| f.flush()).and_then(|_| f.sync_all());
-    drop(f);
-    if wrote.is_err() || fs::rename(&tmp, path).is_err() {
-        let _ = fs::remove_file(&tmp);
-    }
+    let _ = write_bytes_atomic(path, &contents[start..]);
 }
 
 // Only ever called from a test now: `append_crash_log` goes through
@@ -408,14 +401,7 @@ pub(crate) fn strip_user_path_lines(path: &Path) {
         if !changed {
             return;
         }
-        let tmp = path.with_extension("log.tmp");
-        let Ok(mut f) = fs::File::create(&tmp) else { return };
-        use std::io::Write;
-        let wrote = f.write_all(&out).and_then(|_| f.flush()).and_then(|_| f.sync_all());
-        drop(f);
-        if wrote.is_err() || fs::rename(&tmp, path).is_err() {
-            let _ = fs::remove_file(&tmp);
-        }
+        let _ = write_bytes_atomic(path, &out);
     });
 }
 

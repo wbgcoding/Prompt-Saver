@@ -11,26 +11,7 @@ use windows::Media::SpeechRecognition::{
     SpeechContinuousRecognitionSession, SpeechRecognitionHypothesisGeneratedEventArgs,
     SpeechRecognitionScenario, SpeechRecognitionTopicConstraint, SpeechRecognizer,
 };
-use windows::Win32::System::WinRT::{RoInitialize, RO_INIT_MULTITHREADED};
-
-// Same rule as mod ocr::ensure_com -- COM once per thread, never on the UI
-// thread.
-fn ensure_com() {
-    thread_local! {
-        static DONE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-    }
-    DONE.with(|d| {
-        if !d.get() {
-            // Only remember success. A genuine failure here (rare -- e.g. out of
-            // memory) must not be recorded as done, or a later call on this same
-            // thread would never retry COM init again and every WinRT call after
-            // it would keep failing for a reason nothing here ever surfaces.
-            if unsafe { RoInitialize(RO_INIT_MULTITHREADED) }.is_ok() {
-                d.set(true);
-            }
-        }
-    });
-}
+use super::ocr::ensure_winrt;
 
 // HRESULTs measured against a real machine with a working microphone.
 const HRESULT_NO_LANGUAGE: i32 = 0x800455BCu32 as i32; // "The requested language is not supported"
@@ -94,7 +75,7 @@ pub(super) fn clamp_durations(max_sec: u32, auto_stop_sec: u32) -> (u32, u32) {
 // Language.Speech pack -- so unlike OCR's AvailableRecognizerLanguages there
 // is no separate "installed" flag to compute, it is always true here.
 pub(super) fn languages() -> Result<Vec<VoiceLang>, String> {
-    ensure_com();
+    ensure_winrt();
     let langs = SpeechRecognizer::SupportedTopicLanguages().map_err(|e| e.to_string())?;
     let size = langs.Size().map_err(|e| e.to_string())?;
     let mut out = Vec::with_capacity(size as usize);
@@ -164,7 +145,7 @@ fn resolve_lang(lang: &str, auto_pick: bool) -> Result<String, String> {
 // learn this; actually opening the mic waits for the user's first real
 // voice_start, so the OS mic-access prompt never appears before that).
 pub(super) fn support() -> VoiceSupport {
-    ensure_com();
+    ensure_winrt();
     let langs = match languages() {
         Ok(v) => v,
         Err(e) => {
@@ -185,7 +166,7 @@ pub(super) fn support() -> VoiceSupport {
 // tag to a real installed BCP-47 tag AND reports the current online-consent
 // state together, so the command handler needs only one hop into COM.
 pub(super) fn prepare(lang: String, auto_pick: bool) -> Result<(String, bool), String> {
-    ensure_com();
+    ensure_winrt();
     let resolved = resolve_lang(&lang, auto_pick)?;
     Ok((resolved, !online_speech_accepted()))
 }
@@ -207,7 +188,7 @@ pub(super) fn start_session(
     ended: Arc<AtomicBool>,
     stop_rx: mpsc::Receiver<&'static str>,
 ) {
-    ensure_com();
+    ensure_winrt();
     if let Err(key) = run_session(&app, id, token, &lang, auto_stop_sec, max_sec, interim, &ended, &stop_rx) {
         if !ended.swap(true, Ordering::SeqCst) {
             let _ = app.emit("voice-error", super::VoiceErrorEvent { id, token, code: key.to_string() });
