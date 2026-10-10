@@ -345,7 +345,7 @@ export default {
     resetSettingsTip: "Setzt alle Einstellungen auf den Standard zurück: Design, Ansichten, Schalter und Expertenwerte. Deine Prompts bleiben erhalten.",
     resetSettingsConfirm: "Einstellungen zurücksetzen?",
     deleteData: "Alle Daten löschen",
-    settingsSecAppearance: "Darstellung",
+    settingsSecAppearance: "Aussehen",
     settingsSecBehavior: "Verhalten",
     settingsSecData: "Daten",
     settingsSecUpdates: "System",

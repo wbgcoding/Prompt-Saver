@@ -46,6 +46,10 @@ for (const lang of langs) {
 const files = fs.readdirSync(path.join(UI, "i18n")).filter((f) => f.endsWith(".js") && f !== "float.js").map((f) => f.slice(0, -3));
 for (const f of files) if (!LANGS.includes(f)) problems.push(`ui/i18n/${f}.js has no matching code in LANGS`);
 for (const c of LANGS) if (!files.includes(c)) problems.push(`LANGS lists '${c}' but ui/i18n/${c}.js is missing`);
+// The settings section and the expert tab for the same area carry the same name in every language.
+for (const lang of langs) {
+  if (I18N[lang].settingsSecAppearance !== I18N[lang].expTabAppearance) problems.push(`settings section and expert tab name the same area differently: ${lang}`);
+}
 // The loader's own list must be the same set (it cannot be required from Node: it is
 // an ES module that imports the DOM-side helpers).
 const loaderLangs = (fs.readFileSync(path.join(UI, "i18n.js"), "utf8").match(/export const LANGS = \[([^\]]*)\]/) || [])[1];
