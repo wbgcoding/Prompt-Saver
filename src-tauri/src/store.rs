@@ -353,9 +353,23 @@ pub(crate) fn refresh_owned_lock(path: &Path, me: &LockMe, beat: u64) -> Refresh
             Ok(e) => RefreshOutcome::Lost(e.host),
             Err(_) => RefreshOutcome::Skipped,
         },
+        // A vanished lock is put back the way a first claim is made, so a claim
+        // another machine made in that gap is never overwritten: it simply wins,
+        // and the next refresh reads it and reports the loss.
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            write_data_dir_lock(path, &fresh);
-            RefreshOutcome::Kept
+            use std::io::Write;
+            let Ok(json) = serde_json::to_string(&fresh) else { return RefreshOutcome::Skipped };
+            match fs::OpenOptions::new().write(true).create_new(true).open(path) {
+                Ok(mut f) => {
+                    if f.write_all(json.as_bytes()).and_then(|_| f.sync_all()).is_err() {
+                        drop(f);
+                        let _ = fs::remove_file(path);
+                        return RefreshOutcome::Skipped;
+                    }
+                    RefreshOutcome::Kept
+                }
+                Err(_) => RefreshOutcome::Skipped,
+            }
         }
         Err(_) => RefreshOutcome::Skipped,
     }
