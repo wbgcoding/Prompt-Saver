@@ -2892,15 +2892,26 @@ body:not(.flag-quickGrid) .header-actions > .header-sep:first-of-type { display:
 /* A floor, not 0: on a short window the tab bar + search alone filled the dialog and
    left the option list as a 20px sliver. The modal (overflow-y:auto) scrolls instead. */
 #expert-flags { flex: 1 1 auto; min-height: 140px; }
-/* Groups sit side by side as soon as two 440px columns fit. */
+/* Groups are cards in an auto-fill grid; they sit side by side as soon as two 340px
+   columns fit, and each card keeps its own height. */
 #expert-flags {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(440px, 1fr));
-  gap: 14px 22px;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 14px;
   align-content: start;
   align-items: start;
 }
-#expert-flags > .expert-group { margin-top: 0; }
+#expert-flags > .expert-group {
+  margin-top: 0;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px 12px;
+}
+#expert-flags > .expert-group > .expert-group-title { border-bottom: 0; padding-bottom: 0; }
+/* Rows inside a card: padded, with a hover tint so the eye follows label to control. */
+#expert-flags > .expert-group > .field { padding: 6px 8px; border-radius: 8px; }
+#expert-flags > .expert-group > .field:hover { background: var(--surface); }
 #expert-flags > .expert-foreign-group,
 #expert-flags > .hint { grid-column: 1 / -1; }
 /* The scroll areas reach the modal's right + bottom edges (negative margin, inset

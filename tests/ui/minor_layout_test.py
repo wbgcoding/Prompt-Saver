@@ -9,7 +9,8 @@ Boots the real index.html against tests/ui/tauri_stub.js in headless Chromium an
     fade on the edge that has more content, the active tab scrolled into view when the
     menu opens and when a tab is chosen,
   * expert menu search field at 680 px (German): the whole placeholder is visible,
-  * settings System section at 680 px: one line, every item centred on it.
+  * settings System section at 680 px: one line, every item centred on it,
+  * expert menu cards: two grid tracks at 880 px, one at 680 px, groups drawn as cards.
 
 Run:  python tests/ui/minor_layout_test.py
 Exit: 0 = clean, 1 = problems found. Skips cleanly when no Chromium is installed.
@@ -312,6 +313,32 @@ TAG_MANAGER = """
 </script>
 """
 
+# Expert menu cards: the group grid has two tracks at the default window and one at the
+# 680 px minimum, and each group renders as a card.
+EXPERT_CARDS = """
+<script>
+(async () => {""" + COMMON + """
+  try {
+    await until(() => $('gear'));
+    await sleep(500);
+    await openExpert();
+    const flags = $('expert-flags');
+    const tracks = getComputedStyle(flags).gridTemplateColumns.split(' ').filter(Boolean).length;
+    if (tracks !== __TRACKS__) errs.push('cards: ' + tracks + ' grid tracks at ' + innerWidth + 'px, expected __TRACKS__');
+    const g = flags.querySelector('.expert-group');
+    if (!g) { errs.push('cards: no expert group rendered'); }
+    else {
+      const cs = getComputedStyle(g);
+      if (cs.borderTopWidth !== '1px') errs.push('cards: the group has no border');
+      if (cs.backgroundColor === 'rgba(0, 0, 0, 0)') errs.push('cards: the group has no card background');
+      info.push('cards tracks=' + tracks + ' columns=' + getComputedStyle(flags).gridTemplateColumns);
+    }
+  } catch (e) { errs.push('probe: ' + e.message); }
+  finish();
+})();
+</script>
+"""
+
 # (name, probe, width, height, UI language)
 CASES = (
     ("tag-manager", TAG_MANAGER, MIN_W, 800, "de"),
@@ -320,6 +347,8 @@ CASES = (
     ("expert-strip", EXPERT_STRIP, MIN_W, 800, "de"),
     ("expert-search", EXPERT_SEARCH, MIN_W, 800, "de"),
     ("about", ABOUT, MIN_W, 800, "en"),
+    ("expert-cards-wide", EXPERT_CARDS.replace("__TRACKS__", "2"), 880, 600, "en"),
+    ("expert-cards-narrow", EXPERT_CARDS.replace("__TRACKS__", "1"), 680, 460, "en"),
 )
 
 LANGS = ("en", "de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro")

@@ -606,6 +606,9 @@ the video editor and the introduction tour ship on).
 
 ### Improved
 
+- **The expert menu groups are cards.** Each group sits on its own panel, two
+  fit side by side at the default window width, and a row lights up under the
+  pointer so the label and its control read together.
 - **Folder tiles show a bigger preview.** The preview of a folder on the grid
   now fills the tile above its name and shows up to six members (four on a
   narrow tile), with one or two members shown large.
