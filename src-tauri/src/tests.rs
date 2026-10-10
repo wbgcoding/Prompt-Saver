@@ -8968,6 +8968,8 @@ fn sanitize_error_log_origin_keeps_the_known_set_and_falls_back_to_other() {
     assert_eq!(sanitize_error_log_origin("settings"), "settings");
     assert_eq!(sanitize_error_log_origin("main"), "main");
     assert_eq!(sanitize_error_log_origin("remoteApi"), "remoteApi");
+    assert_eq!(sanitize_error_log_origin("video"), "video", "the video editor reports under its own name");
+    assert_eq!(sanitize_error_log_origin("snip"), "snip", "the screenshot overlay reports under its own name");
     // Ids whose dialogs left the markup are no longer allow-listed.
     for gone in ["clip-modal", "hotkeys-modal", "journal", "licenses-modal", "vars-modal", "ve-confirm", "whats-new-modal"] {
         assert_eq!(sanitize_error_log_origin(gone), "other", "{gone}");

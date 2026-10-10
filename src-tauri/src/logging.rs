@@ -427,13 +427,13 @@ pub(crate) fn scrub_error_log_text(s: &str) -> String {
 // list with a fixed "other" fallback for anything else keeps it from ever
 // becoming a free-text field, the same reasoning `scrub_error_log_text`
 // already applies to `text`/`raw`.
-pub(crate) const ERROR_LOG_ORIGINS: [&str; 31] = [
+pub(crate) const ERROR_LOG_ORIGINS: [&str; 33] = [
     "about-modal", "backup-modal", "batch-export-modal", "compare-modal", "confirm-modal",
     "dupes-modal", "error-log-modal", "global-search", "help", "import-folder-modal",
     "import-preview-modal", "library", "lightbox", "modal", "ocr-langs-modal", "ocr-modal",
     "rec-modal", "settings", "shortcuts-modal", "snip-edit", "snip-modal", "tag-modal",
     "theme-modal", "tour-modal", "trash-modal", "update-modal", "ve-overlay-live",
-    "video-cleanup-modal", "view-modal", "settings-expert", "main",
+    "video-cleanup-modal", "view-modal", "settings-expert", "main", "video", "snip",
 ];
 
 pub(crate) fn sanitize_error_log_origin(origin: &str) -> &'static str {
