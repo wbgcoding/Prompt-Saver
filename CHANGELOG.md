@@ -1964,6 +1964,7 @@ the video editor and the introduction tour ship on).
 - **The recording bar's warning says what it warns about.** The red triangle now carries a short text, such as "Hotkey blocked" or "Disk almost full".
 - **The camera window always shows its recording folder.** A folder button next to the path changes it, and a failing lookup of the default folder no longer drops the other saved settings.
 - **The quick launcher preview shows plain text.** The one-line preview under each prompt name no longer shows Markdown marks such as # or **.
+- **The quick launcher shows its keys.** A footer lists Enter, the arrow keys and Esc.
 
 ## 2.6.3 (2026-07-26)
 

@@ -856,6 +856,21 @@ LAUNCHER_PROBE = """
     const rows = () => [...document.querySelectorAll('#results .launcher-row')];
     if (!rows().length) errs.push('the empty-query default list shows nothing');
     if (rows().length > 8) errs.push('the default list is not capped at 8');
+    // 944-dg: a footer names the launcher's keys, built from the shortcut table,
+    // and it sits fully inside the card at the launcher's own size.
+    {
+      const keys = document.getElementById('keys');
+      const kbds = keys ? [...keys.querySelectorAll('kbd')].map((k) => k.textContent) : [];
+      const arrows = String.fromCharCode(0x2191, 0x2193);
+      if (kbds.join('|') !== 'Enter|' + arrows + '|Esc') errs.push('944-dg: the footer keys read ' + JSON.stringify(kbds));
+      if (keys) {
+        const kr = keys.getBoundingClientRect();
+        const cr = document.getElementById('card').getBoundingClientRect();
+        if (kr.height <= 0 || kr.left < cr.left || kr.right > cr.right || kr.bottom > cr.bottom + 0.5) errs.push('944-dg: the footer is not fully inside the card');
+        const items = [...keys.children];
+        if (items.length !== 3 || items.some((s) => s.textContent.trim().length <= s.querySelector('kbd').textContent.length)) errs.push('944-dg: a footer key has no word next to it');
+      }
+    }
     // A query nothing matches shows the empty-state text, not a stale row.
     search.value = 'zzzznomatch';
     search.dispatchEvent(new Event('input', { bubbles: true }));

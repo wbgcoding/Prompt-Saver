@@ -638,7 +638,7 @@ ships on.
 A small always-on-top popup (default hotkey Ctrl+Alt+P) with fuzzy search across
 every tile's name and text; pick one and it copies immediately, no need to bring
 the main window forward. The expert menu sets how many results it lists (8 by
-default).
+default). A line at the bottom lists its keys.
 
 ## Look and feel
 
@@ -1772,7 +1772,7 @@ nach Namen und nach jeder Spalte sortierbar, mit einem Button, um genau
 diesen einen Prompt direkt aus der Liste wiederherzustellen statt der
 ganzen Backup.
 
-**Eigenständig: Schnellstarter.** Strg+Alt+P, unscharfe Suche, sofortiges Kopieren. Wie viele Treffer er zeigt, stellt das Expertenmenü ein (ab Werk 8).
+**Eigenständig: Schnellstarter.** Strg+Alt+P, unscharfe Suche, sofortiges Kopieren. Wie viele Treffer er zeigt, stellt das Expertenmenü ein (ab Werk 8). Eine Zeile unten nennt die Tasten.
 
 **Eigenständig: Mehrfachansichten.** Mehrere Rasterseiten.
 
