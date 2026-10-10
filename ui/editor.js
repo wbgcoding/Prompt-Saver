@@ -1411,6 +1411,12 @@ export async function duplicatePrompt(id) {
 }
 
 export async function editPrompt(id) {
+  // A request from outside (the tray, a pill menu) can arrive while the editor holds
+  // unsaved work: ask first, and close the open session the way Cancel does.
+  if (modalState) {
+    if (!(await confirmDiscardIfDirty())) return;
+    closeModal();
+  }
   let p;
   try {
     p = await invoke("get_prompt", { id });

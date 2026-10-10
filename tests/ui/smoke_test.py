@@ -26,7 +26,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke import boots, findings, main_walk, side_windows, video
+from smoke import boots, findings, logic, main_walk, side_windows, video
 from smoke.harness import REPO, HERE, CHROME_CANDIDATES, install_manifest_recorder
 
 # Run order: the single boots come before the video expert boot, the generated findings last.
@@ -35,6 +35,7 @@ SUITES = (
     ("side_windows", side_windows.run),
     ("video", video.run),
     ("boots", boots.run),
+    ("logic", logic.run),
     ("video_expert", video.run_expert),
     ("findings", findings.run),
 )

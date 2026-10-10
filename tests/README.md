@@ -107,9 +107,10 @@ Layout: `tests/ui/smoke_test.py` is the entry (browser lookup, temp dir, suite o
 check); the suites live in `tests/ui/smoke/`: `harness.py` (paths, window sizes, the one Chrome
 call helper `run_chrome`, the manifest recorder), `main_walk.py` (size walk and Italian pass; its
 probe is assembled from `walk/w01..w18`, one fragment per surface), `side_windows.py`, `video.py`
-(also the seeded expert boot), `boots.py` (single boots) and `findings.py` (the generated findings
+(also the seeded expert boot), `boots.py` (single boots), `logic.py` (one main-window boot for
+page-logic checks: dialog guards, counters, cooldowns, races) and `findings.py` (the generated findings
 block). `python tests/ui/smoke_test.py --only <suite>` runs one suite (repeatable; `main_walk`,
-`side_windows`, `video`, `boots`, `video_expert`, `findings`); without it everything runs.
+`side_windows`, `video`, `boots`, `logic`, `video_expert`, `findings`); without it everything runs.
 
 Probe rule: a probe block starts with `// <id>:` and every failure it pushes starts with `<id>:`;
 an id is used by one block only (`<item>` or `<item>-<suffix>`). The entry fails a run that reuses an

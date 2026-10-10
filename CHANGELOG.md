@@ -914,6 +914,9 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **"Edit prompt" no longer overwrites unsaved typing.** Choosing Edit for a
+  prompt from outside the window (tray or button) while the editor holds
+  changes now asks before replacing them.
 - **Floating buttons and folder members fill in placeholders.** Clicking a
   button or a folder member whose prompt has a placeholder used to copy the raw
   text; it now asks for the values like every other way of copying, and copies
