@@ -914,6 +914,9 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **Recordings with a microphone open cleanly in the video editor.** The editor
+  now merges the microphone track into the recording before it opens the file for
+  playback, so Windows no longer refuses to replace the file while it is in use.
 - **Discarded video edits stay discarded.** Closing the video editor with Discard
   still stored the dropped edits, and the next open offered them back. They are
   now forgotten.

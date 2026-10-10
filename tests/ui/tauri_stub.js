@@ -442,8 +442,8 @@ const RESULTS = {
   // mic audio track -- real enough to exercise the filmstrip/waveform rendering
   // the same way an actual capture would, and shared by the UI smoke test and
   // the perf hot-path timing (both want the same non-degenerate fixture).
-  // mic_sidecar stays empty so the boot never also has to route through
-  // mux_mic_track, which nothing here stubs.
+  // mic_sidecar stays empty unless a probe sets window.__MIC_SIDECAR__, which makes the
+  // first probe report a sidecar until mux_mic_track (slowed by window.__MUX_MS__) is done.
   video_editor_source: () => ({ path: "C:\\Recordings\\ps-smoke-recording.mp4", origin_dir: "" }),
   windows_fonts_dir: () => "C:/Windows/Fonts",
   // 334: the image-overlay "Add" button picks a file before it can add its
@@ -506,9 +506,15 @@ const RESULTS = {
   // hands back, a plain {hold_ms, events} object shaped like keylog::KeySidecar.
   probe_recording: () => ({
     duration_ms: 600000, fps: 30, width: window.__PROBE_W__ || 1920, height: window.__PROBE_H__ || 1080,
-    has_audio: true, has_mic_track: true, mic_sidecar: "",
+    has_audio: true, has_mic_track: true,
+    mic_sidecar: window.__MIC_SIDECAR__ && !window.__MUX_DONE__ ? "C:\\Recordings\\ps-smoke-recording.wav" : "",
     has_keys_sidecar: !!window.__KEY_SIDECAR__,
   }),
+  mux_mic_track: async () => {
+    await new Promise((resolve) => setTimeout(resolve, window.__MUX_MS__ || 0));
+    window.__MUX_DONE__ = true;
+    return null;
+  },
   read_key_sidecar: () => window.__KEY_SIDECAR__ || null,
   // 416: the "Add a video" flow's own ffprobe check. window.__EXTRA_VIDEO_FAIL__
   // (default: unset) lets one probe step exercise the rejection path -- the

@@ -4307,7 +4307,10 @@ async function loadRecording(path, originDir, overlayPath) {
   $("ve-file").textContent = path.split(/[\\/]/).pop() || "";
   $("ve-file").title = path;
   $("ve-stage-msg").classList.remove("hidden");
-  videoEl.src = convertFileSrc(path);
+  // The element gets the file only after the probe and, for a recording with a mic
+  // sidecar, the mux: the mux replaces the file, which Windows refuses while the element
+  // holds it open without delete sharing.
+  videoEl.removeAttribute("src");
   videoEl.load();
 
   let probe = null;
@@ -4327,13 +4330,13 @@ async function loadRecording(path, originDir, overlayPath) {
       await invoke("mux_mic_track", { videoPath: path, sidecarPath: probe.mic_sidecar });
       if (VE.loadGen !== myGen) return;
       probe = await invoke("probe_recording", { path });
-      if (VE.loadGen !== myGen) return;
-      videoEl.load();
     } catch (err) {
       noteFfmpeg(err);
     }
   }
   if (VE.loadGen !== myGen) return;
+  videoEl.src = convertFileSrc(path);
+  videoEl.load();
 
   applyProbe(probe);
   // The key-overlay sidecar, when this recording captured one -- fetched

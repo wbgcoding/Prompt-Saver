@@ -1688,6 +1688,39 @@ CLOSE_STATE_PROBE = """
 """
 
 
+# 874: a recording with a mic sidecar is muxed BEFORE the video element opens the file (Windows
+# refuses to replace a file another handle holds open), so the element has no source until the
+# mux and the second probe are done.
+MIC_MUX_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const until = async (fn, tries) => { for (let i = 0; i < (tries || 100) && !fn(); i++) await sleep(50); return fn(); };
+  try {
+    const v = document.getElementById('ve-video');
+    let early = 0, samples = 0;
+    const timer = setInterval(() => {
+      samples++;
+      if (!window.__MUX_DONE__ && v.getAttribute('src')) early++;
+    }, 10);
+    await until(() => window.__MUX_DONE__ && v.getAttribute('src'), 200);
+    clearInterval(timer);
+    if (!window.__MUX_DONE__) errs.push('874: the mic track was never muxed');
+    if (!v.getAttribute('src')) errs.push('874: the video element never got its source after the mux');
+    if (early) errs.push('874: the video element had a source while the mux was still running (' + early + ' of ' + samples + ' samples)');
+    await until(() => document.getElementById('ve-stage-msg').classList.contains('hidden'), 100);
+    if (!document.getElementById('ve-stage-msg').classList.contains('hidden')) errs.push('874: the stage never left its loading state');
+  } catch (e) { errs.push('874: probe: ' + e.message); }
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
 # A 1280x720 source (a small region recording): the fixed-height presets may
 # enlarge. 1080p sets a 1920x1080 scale op and shows the "scaled up" hint, the
 # export filter scales with lanczos; 720p equals the source height, sets no op,
@@ -1876,6 +1909,25 @@ def run(browser, tmp):
         failed += len(errs)
         if not errs:
             print("   ok")
+
+    # 874: the mux of a mic sidecar finishes before the video element opens the file.
+    side = tmp / "ui" / "video-mic-mux.html"
+    side.write_text(
+        (REPO / "ui" / "video.html").read_text(encoding="utf-8")
+        .replace("<script",
+                 '<script>window.__MIC_SIDECAR__ = true; window.__MUX_MS__ = 600;</script>\n'
+                 '<script src="tauri_stub.js"></script>\n<script', 1)
+        .replace("</body>", MIC_MUX_PROBE + "</body>"),
+        encoding="utf-8")
+    proc = run_chrome(browser, tmp / 'profile-video-mic-mux', "1130,860", 30000, side.as_uri(), 180)
+    m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+    errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+    print("-- video.html mic sidecar mux order")
+    for e in errs:
+        print(f"   FAIL: {e}")
+    failed += len(errs)
+    if not errs:
+        print("   ok")
 
     # A 1280x720 source: the fixed-height presets may enlarge.
     side = tmp / "ui" / "video-scale-up.html"
