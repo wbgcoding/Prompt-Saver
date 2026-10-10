@@ -18386,3 +18386,16 @@ fn the_atomic_write_replaces_the_file_a_symlink_points_at() {
     assert_eq!(fs::read(&real).unwrap(), b"after", "the file behind the link is what changed");
     let _ = fs::remove_dir_all(&dir);
 }
+
+// ---- the clipboard text block is measured before it is copied ----
+
+#[test]
+fn a_clipboard_text_block_past_the_character_limit_in_bytes_is_never_read() {
+    use clipwatch::{text_block_within_limit, CLIP_INBOX_MAX_CHARS, CLIP_INBOX_MAX_UNICODE_BYTES};
+    assert_eq!(CLIP_INBOX_MAX_UNICODE_BYTES, CLIP_INBOX_MAX_CHARS * 4 + 2);
+    assert!(text_block_within_limit(0));
+    assert!(text_block_within_limit((CLIP_INBOX_MAX_CHARS + 1) * 2), "a limit-size text in UTF-16 plus its NUL fits");
+    assert!(text_block_within_limit(CLIP_INBOX_MAX_UNICODE_BYTES));
+    assert!(!text_block_within_limit(CLIP_INBOX_MAX_UNICODE_BYTES + 1));
+    assert!(!text_block_within_limit(300 * 1024 * 1024), "a 300 MB block is refused unread");
+}

@@ -113,6 +113,7 @@ extern "system" {
     fn GlobalFree(hmem: isize) -> isize;
     fn GlobalLock(hmem: isize) -> *mut core::ffi::c_void;
     fn GlobalUnlock(hmem: isize) -> i32;
+    fn GlobalSize(hmem: isize) -> usize;
     fn GetTickCount() -> u32;
 }
 #[link(name = "user32")]
@@ -170,6 +171,33 @@ fn read_dword_format(fmt: u32) -> Option<u32> {
         };
         CloseClipboard();
         value
+    }
+}
+
+// The most bytes a CF_UNICODETEXT block may take for a text of CLIP_INBOX_MAX_CHARS
+// characters: four bytes for each character that needs a surrogate pair, plus the
+// terminating NUL.
+pub(crate) const CLIP_INBOX_MAX_UNICODE_BYTES: usize = CLIP_INBOX_MAX_CHARS * 4 + 2;
+
+// Whether a clipboard text block of this size may be read at all. A block past the
+// limit holds more characters than the inbox keeps, so it is never copied into a
+// String (the copy of a few hundred megabytes is the cost this avoids).
+pub(crate) fn text_block_within_limit(bytes: usize) -> bool {
+    bytes <= CLIP_INBOX_MAX_UNICODE_BYTES
+}
+
+// The size in bytes of the clipboard's text block, read without copying it, or None
+// when the clipboard could not be opened or holds no text block. Only called after
+// the source has closed the clipboard.
+fn clipboard_text_block_size() -> Option<usize> {
+    unsafe {
+        if OpenClipboard(0) == 0 {
+            return None;
+        }
+        let h = GetClipboardData(CF_UNICODETEXT);
+        let size = if h != 0 { Some(GlobalSize(h)) } else { None };
+        CloseClipboard();
+        size
     }
 }
 
@@ -237,6 +265,13 @@ fn on_clipboard_update() {
     }
     // Text only: image/file clipboard payloads are ignored. Bracketed with
     // SELF_READ in case ownership changed between the guard above and here.
+    // The block is measured first; an unmeasurable one (clipboard busy) is left to
+    // the reader below, which has its own retry and fails on its own.
+    if let Some(bytes) = clipboard_text_block_size() {
+        if !text_block_within_limit(bytes) {
+            return;
+        }
+    }
     SELF_READ.store(true, Ordering::Release);
     let read = arboard::Clipboard::new().and_then(|mut c| c.get_text());
     SELF_READ.store(false, Ordering::Release);
