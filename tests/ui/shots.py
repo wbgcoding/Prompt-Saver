@@ -156,7 +156,7 @@ def main():
         # The default theme and scale keep the short file name the tool always wrote.
         extra = ("" if theme == "dark" else f"_{theme}") + ("" if scale == "1" else f"_x{scale}")
         png = out / f"{Path(page).stem}_{act}_{lang}_{w}x{h}{extra}.png"
-        subprocess.run([chrome, "--headless=new", "--disable-gpu", "--hide-scrollbars",
+        subprocess.run([chrome, "--headless=new", "--disable-gpu",
                         f"--force-device-scale-factor={scale}", f"--user-data-dir={out / 'profile'}",
                         f"--window-size={w},{h}", "--virtual-time-budget=6000", f"--screenshot={png}",
                         f"http://127.0.0.1:{port}/__frame.html?w={w}&h={h}&src={page}%3Flang%3D{lang}%26theme%3D{theme}%26act%3D{act}"],

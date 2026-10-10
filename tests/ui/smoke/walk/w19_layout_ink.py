@@ -49,4 +49,45 @@ SECTION = """\
         if (blue.textShadow === 'none') out.errors.push('864: white text on a blue tile lost its shadow');
       }
     }
+    // 867: on the smallest window every long dialog scrolls with a scrollbar the user can see:
+    // its scrolling element has overflow-y auto or scroll and a scrollbar of real width (the
+    // expert menu switch that hides scrollbars is off).
+    if (innerHeight <= 500 && !document.querySelector('.flag-hideScrollbars')) {
+      const scrollers = () => {
+        const found = [];
+        for (const el of document.querySelectorAll('.overlay:not(.hidden) *')) {
+          const oy = getComputedStyle(el).overflowY;
+          if (el.scrollHeight > el.clientHeight + 2 && el.clientHeight > 40 && (oy === 'auto' || oy === 'scroll' || oy === 'hidden')) {
+            found.push({ el, oy, bar: el.offsetWidth - el.clientWidth });
+          }
+        }
+        return found;
+      };
+      const checkDialog = (name) => {
+        const list = scrollers().filter((s) => s.oy !== 'hidden');
+        if (!list.length) {
+          out.errors.push('867: ' + name + ' has no scrolling element at ' + innerWidth + 'x' + innerHeight);
+          return;
+        }
+        for (const s of list) {
+          if (s.bar <= 0) out.errors.push('867: ' + name + ' scrolls in ' + sig(s.el) + ' without a visible scrollbar');
+        }
+      };
+      const step = async (ms) => { await sleep(ms || 300); };
+      document.getElementById('gear').click(); await step();
+      document.getElementById('help-open').click(); await step(400);
+      checkDialog('the help dialog');
+      document.getElementById('help-close').click(); await step();
+      document.getElementById('settings-backup-btn').click(); await step(500);
+      checkDialog('the backup dialog');
+      document.getElementById('backup-close').click(); await step();
+      document.getElementById('expert-open').click(); await step(400);
+      checkDialog('the expert menu');
+      document.getElementById('settings-close').click(); await step();
+      document.getElementById('library-btn').click(); await step(400);
+      checkDialog('the library');
+      document.getElementById('library-tab-history').click(); await step(400);
+      checkDialog('the copy history');
+      document.getElementById('library-close').click(); await step();
+    }
 """
