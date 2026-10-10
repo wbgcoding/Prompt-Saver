@@ -1015,11 +1015,43 @@ body.chain-mode:not(.grid-selecting) .tile .tile-select { opacity: 0; pointer-ev
    --member-w/--member-h from the folder cell, shrunk only to fit the window). */
 .tile-folder-pop { padding: 8px; max-width: 96vw; overflow: auto; }
 .tile-folder-pop-head {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 36px;
   padding: 0 2px 6px;
-  color: var(--muted);
-  font-size: 12px;
+}
+.tile-folder-pop-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg);
+  font-size: 14px;
   font-weight: 600;
 }
+/* Under .tile-folder-pop so it outranks the generic .ctx button rule. */
+.tile-folder-pop .tile-folder-pop-btn {
+  flex: 0 0 auto;
+  height: 28px;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  color: var(--muted);
+}
+.tile-folder-pop .tile-folder-pop-btn:hover { color: var(--fg); }
+/* The dimmed grid behind an open folder: one layer under the popover (.ctx is 70). */
+.tile-folder-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 69;
+  background: rgba(0, 0, 0, 0.35);
+}
+.tile-folder-backdrop.member-dragging,
+.tile-folder-pop.member-dragging { pointer-events: none; }
 .tile-folder-grid { display: grid; gap: 6px; }
 /* Under .tile-folder-pop so it outranks the generic .ctx button rule (font, padding,
    border), which otherwise turned members into thin, borderless buttons. */

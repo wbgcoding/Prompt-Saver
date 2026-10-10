@@ -915,6 +915,8 @@ the video editor and the introduction tour ship on).
   switched off in the expert menu under Favorites.
 - **Tile folders show how many tiles they hold and one colour dot per tile**
   instead of tiny unreadable previews.
+- **An open tile folder dims the grid behind it and has a title row with
+  rename and close buttons.** It sizes itself so every tile fits.
 
 ### Fixed
 

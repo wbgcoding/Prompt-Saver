@@ -173,11 +173,13 @@ SECTION = """\
         });
         if (overflowing.length) out.errors.push('30: ' + overflowing.length + ' folder member name(s) overflow their cell');
       }
-      // A popover taller than the room below must shrink and scroll, NOT jump to the
-      // top of the window and cover the tile it was opened from.
+      // The popover opens beside its tile when the rows fit there. Where they do not, it
+      // may open over the tile (the grid is dimmed behind it) but then shows every row
+      // inside the window without scrolling.
       if (pop) {
         const r = pop.getBoundingClientRect();
-        const clear = r.top >= anchor.bottom - 1 || r.bottom <= anchor.top + 1;
+        const clear = r.top >= anchor.bottom - 1 || r.bottom <= anchor.top + 1 ||
+          (pop.scrollHeight <= pop.clientHeight + 1 && r.top >= -1 && r.bottom <= window.innerHeight + 1);
         if (!clear) {
           out.errors.push('the folder popover covers the tile it belongs to (' +
             Math.round(r.top) + '..' + Math.round(r.bottom) + ' vs tile ' +

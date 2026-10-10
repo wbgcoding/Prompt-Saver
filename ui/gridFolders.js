@@ -1,5 +1,5 @@
 // Grid folders: folder tiles, the folder popup, drag in and out.
-import { assignDrag, assignFolderArm, assignMemberDrag, assignSettings, convertFileSrc, drag, DRAG_THRESHOLD, errToast, favView, flag, folderArm, gridEl, ICON_FILE, ICON_IMAGE, ICON_PDF, ICON_VIDEO, inkShadow, invoke, memberDrag, openColorPop, PDF_EXT, prompts, readableInk, settings, t, TILE_FOLDER_ZONE } from "./core.js";
+import { assignDrag, assignFolderArm, assignMemberDrag, assignSettings, convertFileSrc, drag, DRAG_THRESHOLD, errToast, favView, flag, folderArm, gridEl, ICON_EDIT, ICON_FILE, ICON_IMAGE, ICON_PDF, ICON_VIDEO, inkShadow, invoke, memberDrag, openColorPop, PDF_EXT, prompts, readableInk, settings, t, TILE_FOLDER_ZONE } from "./core.js";
 import { confirmDialog } from "./dialog.js";
 import { activeView, openMiniMenu, renderGrid } from "./views.js";
 import { recordToolUsage } from "./management.js";
@@ -209,9 +209,29 @@ export const tileFolderPop = document.createElement("div");
 
 export let tileFolderPopId = null;
 
+// Dims the grid behind an open folder. A press on it closes the folder through the
+// outside-press handler in main.js; while a member is being dragged out it lets the
+// pointer through (class member-dragging) so the cell under the cursor is reachable.
+export const tileFolderBackdrop = document.createElement("div");
+
 export function closeTileFolderPop() {
   tileFolderPop.classList.add("hidden");
+  tileFolderBackdrop.classList.add("hidden");
   tileFolderPopId = null;
+}
+
+const CLOSE_ICON =
+  '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/></svg>';
+
+function folderPopButton(icon, label, run) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "icon-btn tile-folder-pop-btn";
+  b.title = label;
+  b.setAttribute("aria-label", label);
+  b.innerHTML = icon;
+  b.addEventListener("click", (ev) => { ev.stopPropagation(); run(); });
+  return b;
 }
 
 export function openTileFolderPop(f, anchor) {
@@ -220,7 +240,12 @@ export function openTileFolderPop(f, anchor) {
   tileFolderPopId = f.id;
   const head = document.createElement("div");
   head.className = "tile-folder-pop-head";
-  head.textContent = folderTitle(f);
+  const title = document.createElement("span");
+  title.className = "tile-folder-pop-title";
+  title.textContent = folderTitle(f);
+  head.appendChild(title);
+  head.appendChild(folderPopButton(ICON_EDIT, t("tileFolderRename"), () => { closeTileFolderPop(); renameTileFolder(f); }));
+  head.appendChild(folderPopButton(CLOSE_ICON, t("close"), closeTileFolderPop));
   tileFolderPop.appendChild(head);
   const grid = document.createElement("div");
   grid.className = "tile-folder-grid";
@@ -229,8 +254,12 @@ export function openTileFolderPop(f, anchor) {
   const members = folderMembers(f);
   const cell = anchor.getBoundingClientRect();
   const cols = Math.max(1, Math.min(TILE_FOLDER_COLS, members.length));
+  const rows = Math.ceil(members.length / cols);
   const room = window.innerWidth * 0.96 - 18 - (cols - 1) * TILE_FOLDER_GAP;
-  const scale = Math.min(1, room / (cols * cell.width));
+  // The title row is 36px, the popover's padding and border 18px; the height budget keeps
+  // every row inside the window so the popover never has to scroll.
+  const roomH = window.innerHeight * 0.92 - 36 - 18 - (rows - 1) * TILE_FOLDER_GAP;
+  const scale = Math.min(1, room / (cols * cell.width), roomH / (rows * cell.height));
   const memberW = Math.max(60, Math.floor(cell.width * scale));
   const memberH = Math.max(40, Math.floor(cell.height * scale));
   grid.style.gridTemplateColumns = `repeat(${cols}, ${memberW}px)`;
@@ -310,7 +339,14 @@ export function openTileFolderPop(f, anchor) {
     grid.appendChild(btn);
   }
   tileFolderPop.appendChild(grid);
-  placePopover(tileFolderPop, anchor.getBoundingClientRect());
+  tileFolderBackdrop.classList.remove("hidden");
+  const anchorRect = anchor.getBoundingClientRect();
+  placePopover(tileFolderPop, anchorRect);
+  // Beside the folder there is not always room for every row. The grid is dimmed behind
+  // the popover anyway, so it may open over its own folder instead of scrolling.
+  if (tileFolderPop.classList.contains("pop-clamped")) {
+    placePopover(tileFolderPop, { left: anchorRect.left, right: anchorRect.left, top: anchorRect.top, bottom: anchorRect.top });
+  }
   // Same text sizing rule as the grid: auto-fit when the grid auto-fits or the
   // prompt asks for it, the box being the member tile minus its border and padding.
   const globalAuto = Number(settings.tile_size) === 0;
@@ -386,6 +422,8 @@ export function cacheFloatingState(id, pinned) {
 }
 
 export function wireGridFolders() {
+  tileFolderBackdrop.className = "tile-folder-backdrop hidden";
+  document.body.appendChild(tileFolderBackdrop);
   tileFolderPop.className = "ctx tile-folder-pop hidden";
   tileFolderPop.setAttribute("role", "menu");
   document.body.appendChild(tileFolderPop);
@@ -395,6 +433,8 @@ export function wireGridFolders() {
       if (Math.abs(e.clientX - memberDrag.startX) < DRAG_THRESHOLD &&
           Math.abs(e.clientY - memberDrag.startY) < DRAG_THRESHOLD) return;
       memberDrag.moved = true;
+      tileFolderBackdrop.classList.add("member-dragging");
+      tileFolderPop.classList.add("member-dragging");
       memberDrag.el.classList.add("dragging");
       document.body.classList.add("drag-active");
       // A live ghost under the cursor, exactly as a tile drag has: pulling a member out
@@ -441,7 +481,10 @@ export function wireGridFolders() {
       }
       return;
     }
+    // Looked up while the layers still let the pointer through, released right after.
     const cell = cellAt(e.clientX, e.clientY);
+    tileFolderBackdrop.classList.remove("member-dragging");
+    tileFolderPop.classList.remove("member-dragging");
     if (!cell) return;
     await takeOutOfFolder(d.id, [Number(cell.dataset.col), Number(cell.dataset.row)]);
   });

@@ -1321,6 +1321,73 @@ def run(browser, tmp):
       }
     }
 """)
+    # The open tile folder dims the grid, has a title row with rename and close, and fits its rows.
+    fpop_body = r"""
+    await bootReady();
+    const folder = document.querySelector('#grid .folder-tile');
+    if (!folder) errs.push('251: no folder tile on the grid (fixture)');
+    else {
+      const openPop = async () => {
+        ptr('pointerdown', 5, 5, folder);
+        ptr('pointerup', 5, 5, window);
+        await sleep(450);
+      };
+      const popEl = () => document.querySelector('.tile-folder-pop:not(.hidden)');
+      const bd = () => document.querySelector('.tile-folder-backdrop');
+      const shown = (el) => !!el && getComputedStyle(el).display !== 'none';
+      await openPop();
+      const pop = popEl();
+      if (!pop) errs.push('251: the folder did not open');
+      else {
+        if (!shown(bd())) errs.push('251: the open folder has no visible backdrop');
+        const pr = pop.getBoundingClientRect();
+        const members = [...pop.querySelectorAll('.folder-member-tile')];
+        if (members.length !== 5) errs.push('251: expected 5 members, found ' + members.length);
+        for (const m of members) {
+          const r = m.getBoundingClientRect();
+          if (r.left < -1 || r.top < -1 || r.right > innerWidth + 1 || r.bottom > innerHeight + 1) errs.push('251: a member leaves the window: ' + JSON.stringify([r.left, r.top, r.right, r.bottom]));
+          if (r.left < pr.left - 1 || r.top < pr.top - 1 || r.right > pr.right + 1 || r.bottom > pr.bottom + 1) errs.push('251: a member leaves the popover');
+        }
+        if (pop.scrollHeight > pop.clientHeight + 1) errs.push('251: the popover scrolls (' + pop.scrollHeight + ' > ' + pop.clientHeight + ')');
+        const btns = [...pop.querySelectorAll('.tile-folder-pop-head button')];
+        if (btns.length !== 2) errs.push('251: the title row has ' + btns.length + ' buttons, want rename and close');
+        else {
+          for (const b of btns) if (!(b.getAttribute('aria-label') || '').trim() || !(b.title || '').trim()) errs.push('251: a title row button has no accessible name');
+          if (!pop.querySelector('.tile-folder-pop-title')) errs.push('251: no title element');
+          btns[1].click();
+          await sleep(150);
+          if (popEl() || shown(bd())) errs.push('251: the close button left the popover or backdrop visible');
+          await openPop();
+          if (!popEl()) errs.push('251: the folder did not reopen');
+          else {
+            ptr('pointerdown', 5, 5, bd());
+            await sleep(150);
+            if (popEl() || shown(bd())) errs.push('251: a press on the backdrop left the popover or backdrop visible');
+          }
+        }
+        await openPop();
+        const member = popEl() && popEl().querySelector('.folder-member-tile[data-id="p6"]');
+        const free = [...document.querySelectorAll('#grid .cell')].filter((c) => !c.querySelector('.tile')).map((c) => ({ c, r: c.getBoundingClientRect() }))
+          .find((x) => x.r.left > 0 && x.r.top > 0 && x.r.right < innerWidth && x.r.bottom < innerHeight);
+        if (!member || !free) errs.push('251: no member or free cell for the drag-out (fixture)');
+        else {
+          window.__SMOKE_ARGS__.length = 0;
+          const [sx, sy] = centre(member);
+          const [tx, ty] = centre(free.c);
+          ptr('pointerdown', sx, sy, member);
+          ptr('pointermove', sx + 8, sy - 8, member);
+          await sleep(60);
+          ptr('pointermove', tx, ty, window);
+          await sleep(60);
+          ptr('pointerup', tx, ty, window);
+          await sleep(300);
+          if (callsFor('take_out_of_tile_folder').length !== 1) errs.push('251: dragging a member over a free cell did not take it out of the folder');
+        }
+      }
+    }
+"""
+    for size_251 in ('880x600', '680x460'):
+        failed += ar_probe('fpop251-' + size_251, '251: the open tile folder is dimmed, titled and fits at ' + size_251, 'index', size_251, '', fpop_body)
     # Screenshot editor probes share one opener: a plain canvas fired as a capture.
     snip_common = r"""
     await bootReady();
