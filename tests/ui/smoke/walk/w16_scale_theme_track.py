@@ -127,6 +127,23 @@ SECTION = """\
         if (toolBtns.length !== 12) { // 284 added the Hand (pan) tool
           out.errors.push('screenshot editor: expected 12 tool buttons, found ' + toolBtns.length);
         }
+        // 928-de: every tool icon names itself and its key in the tooltip
+        // ("<label> (<key>)"), and so do the view icons (pattern only, their
+        // tooltip text is not their aria-label).
+        for (const b of toolBtns) {
+          const tip = b.title || b.dataset.tip || '';
+          const lbl = b.getAttribute('aria-label') || '';
+          if (!lbl || !tip.startsWith(lbl) || !/ \\([^()]+\\)$/.test(tip)) {
+            out.errors.push('928-de: tool ' + b.dataset.tool + ' tooltip "' + tip + '" lacks name or key');
+          }
+        }
+        for (const vid of ['snip-edit-undo', 'snip-edit-redo', 'snip-edit-zoom-in', 'snip-edit-zoom-out', 'snip-edit-fit', 'snip-edit-original']) {
+          const vb = document.getElementById(vid);
+          const vtip = vb ? (vb.title || vb.dataset.tip || '') : '';
+          if (!/ \\([^()]+\\)$/.test(vtip)) {
+            out.errors.push('928-de: ' + vid + ' tooltip "' + vtip + '" lacks name or key');
+          }
+        }
         // 178: the toolbar must stay a couple of rows tall no matter which tool
         // is active -- a full inline swatch grid used to collapse into one tall
         // column here and blow the toolbar height up. This is the check that
