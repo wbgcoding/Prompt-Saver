@@ -922,6 +922,8 @@ the video editor and the introduction tour ship on).
 - **The input field at the bottom is short, "New prompt...".** The save
   shortcut moved into its tooltip, so the field stays on one line in a small
   window.
+- **The tile folder has a clearly visible frame in the light themes.** The
+  dark themes get a slightly clearer frame too.
 
 ### Fixed
 

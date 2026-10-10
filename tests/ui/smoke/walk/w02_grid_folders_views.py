@@ -99,6 +99,39 @@ SECTION = """\
         if (stars249() < 1) out.errors.push('fav249: the stars did not come back after the switches went on again');
       }
     }
+    // fb257: the untinted folder tile has a visible frame in every built-in theme
+    // (border against the page background, WCAG contrast of at least 1.45).
+    {
+      const themeMod = await import('./theme.js');
+      const rootF = document.documentElement;
+      const prevTheme = rootF.getAttribute('data-theme');
+      const noMotion = document.createElement('style');
+      noMotion.textContent = '* { transition: none !important; animation: none !important; }';
+      document.head.appendChild(noMotion);
+      const toRgb = (css) => {
+        const m = /^color[(]srgb ([0-9.e-]+) ([0-9.e-]+) ([0-9.e-]+)/.exec(css);
+        if (m) return [Number(m[1]), Number(m[2]), Number(m[3])];
+        const n = /^rgba?[(]([0-9.]+)[, ]+([0-9.]+)[, ]+([0-9.]+)/.exec(css);
+        return n ? [Number(n[1]) / 255, Number(n[2]) / 255, Number(n[3]) / 255] : null;
+      };
+      const lum = (c) => { const f = (v) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)); return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]); };
+      const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+      const folderF = document.querySelector('#grid .folder-tile:not(.tinted)');
+      if (!folderF) out.errors.push('fb257: no untinted folder tile on the grid (fixture)');
+      else {
+        for (const themeId of themeMod.BUILTIN_THEMES) {
+          rootF.setAttribute('data-theme', themeId);
+          await sleep(60);
+          const border = toRgb(getComputedStyle(folderF).borderTopColor);
+          const page = toRgb(getComputedStyle(document.body).backgroundColor);
+          if (!border || !page) { out.errors.push('fb257: ' + themeId + ': colour not readable: ' + getComputedStyle(folderF).borderTopColor + ' on ' + getComputedStyle(document.body).backgroundColor); continue; }
+          const r257 = ratio(border, page);
+          if (r257 < 1.45) out.errors.push('fb257: the folder frame in ' + themeId + ' has contrast ' + r257.toFixed(2) + ', want 1.45');
+        }
+      }
+      if (prevTheme === null) rootF.removeAttribute('data-theme'); else rootF.setAttribute('data-theme', prevTheme);
+      noMotion.remove();
+    }
     // F27: the grid folder draws its own cell, hides its members as tiles and opens
     // a popover holding them.
     const fTile = document.querySelector('.tile.folder-tile');

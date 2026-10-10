@@ -910,6 +910,11 @@ body.chain-mode:not(.grid-selecting) .tile .tile-select { opacity: 0; pointer-ev
   gap: 4%;
   padding: 4%;
 }
+/* A frame, not a fill tint (a tint would read like a coloured tile): 24 percent of the text
+   colour over the page, the same in every theme and in custom ones. The hover accent
+   of .tile:hover has the same specificity, so it is restated right after. */
+.folder-tile:not(.tinted) { border-color: color-mix(in srgb, var(--fg) 24%, var(--bg)); }
+.folder-tile:not(.tinted):hover { border-color: var(--accent); }
 .folder-tile:hover .folder-mini { filter: brightness(1.08); }
 .folder-mini {
   position: relative;
