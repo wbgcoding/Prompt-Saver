@@ -18054,3 +18054,25 @@ fn an_oversized_plain_snapshot_is_refused_before_any_copy() {
     assert!(leftovers.is_empty(), "no staged file remains: {leftovers:?}");
     let _ = fs::remove_dir_all(&dir);
 }
+
+// ---- the clipboard inbox skips huge texts ----
+
+#[test]
+fn the_clipboard_inbox_takes_up_to_the_character_limit_and_no_more() {
+    use clipwatch::{should_store, CLIP_INBOX_MAX_CHARS};
+    assert_eq!(CLIP_INBOX_MAX_CHARS, 200_000);
+    // Spaces between letters keep the password heuristic out of this test.
+    let exact = format!("{}aa", "a ".repeat(CLIP_INBOX_MAX_CHARS / 2 - 1));
+    assert_eq!(exact.trim().chars().count(), CLIP_INBOX_MAX_CHARS);
+    assert!(should_store(&exact, 3, false), "200 000 characters are kept");
+    let over = format!("{exact}b");
+    assert_eq!(over.trim().chars().count(), CLIP_INBOX_MAX_CHARS + 1);
+    assert!(!should_store(&over, 3, false), "200 001 characters are skipped");
+    // Multi-byte characters count once: 200 000 of them are 600 000 bytes, still in.
+    assert!(should_store(&"€".repeat(CLIP_INBOX_MAX_CHARS), 3, false));
+    assert!(!should_store(&"€".repeat(CLIP_INBOX_MAX_CHARS + 1), 3, false));
+    // The byte shortcut: far past four bytes a character is out without counting.
+    assert!(!should_store(&"a".repeat(CLIP_INBOX_MAX_CHARS * 4 + 1), 3, false));
+    assert!(!should_store("ab", 3, false), "the minimum length still applies");
+    assert!(should_store("abc", 3, false));
+}

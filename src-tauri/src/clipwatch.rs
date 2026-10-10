@@ -45,6 +45,10 @@ const WM_APP_REARM: u32 = 0x8002;
 // off mid-session) and deliver real data instead of leaving a dangling promise.
 const WM_APP_END: u32 = 0x8003;
 const CF_UNICODETEXT: u32 = 13;
+// A copied text past this many characters never reaches the inbox: it would sit
+// in the database for good. UTF-8 needs at most four bytes a character, so a text
+// longer than four times this in bytes is out without counting characters.
+pub(crate) const CLIP_INBOX_MAX_CHARS: usize = 200_000;
 const GMEM_MOVEABLE: u32 = 0x0002;
 const HWND_MESSAGE: isize = -3;
 
@@ -169,6 +173,21 @@ fn read_dword_format(fmt: u32) -> Option<u32> {
     }
 }
 
+// Whether a copied text belongs in the inbox: long enough, not absurdly long,
+// and not shaped like a password while secret skipping is on. The cheap byte
+// check runs before any character counting or scanning.
+pub(crate) fn should_store(text: &str, min: usize, skip_secrets: bool) -> bool {
+    let trimmed = text.trim();
+    if trimmed.len() > CLIP_INBOX_MAX_CHARS * 4 {
+        return false;
+    }
+    let chars = trimmed.chars().count();
+    if chars < min || chars > CLIP_INBOX_MAX_CHARS {
+        return false;
+    }
+    !(skip_secrets && super::looks_like_password(trimmed, super::CLIP_SECRET_MIN_LEN))
+}
+
 fn on_clipboard_update() {
     // Our own delayed-rendering promise is never inbox material, and reading
     // it here would itself trigger WM_RENDERFORMAT: without this the collector
@@ -225,13 +244,10 @@ fn on_clipboard_update() {
         Ok(t) => t,
         Err(_) => return,
     };
+    if !should_store(&text, min, skip_secrets) {
+        return;
+    }
     let trimmed = text.trim();
-    if trimmed.chars().count() < min {
-        return;
-    }
-    if skip_secrets && super::looks_like_password(trimmed, super::CLIP_SECRET_MIN_LEN) {
-        return;
-    }
     let h = text_hash(trimmed);
     if h == LAST_OWN.load(Ordering::Relaxed) || h == LAST_INSERTED.load(Ordering::Relaxed) {
         return;

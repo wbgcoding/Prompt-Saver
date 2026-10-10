@@ -914,6 +914,9 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **The clipboard inbox skips huge texts.** A copied text of more than 200,000
+  characters is no longer stored in the inbox, so one accidental copy of a
+  giant file cannot fill the database.
 - **Restoring an old uncompressed backup checks its size first.** A plain
   snapshot from before the compressed format now has the same 512 MB ceiling
   as a compressed one, so an oversized file is refused instead of being copied
