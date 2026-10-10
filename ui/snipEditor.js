@@ -454,9 +454,9 @@ export function initSnipEditor() {
     ctx.fillRect(x + w, y, SE.w - (x + w), h);
     ctx.restore();
   }
-  function snipEditDrawCropDim(ctx, r) {
+  function snipEditDrawCropDim(ctx, r, alpha = 0.55) {
     ctx.save();
-    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    ctx.fillStyle = `rgba(0,0,0,${alpha})`;
     ctx.fillRect(0, 0, SE.w, r.y);
     ctx.fillRect(0, r.y + r.h, SE.w, SE.h - (r.y + r.h));
     ctx.fillRect(0, r.y, r.x, r.h);
@@ -576,9 +576,9 @@ export function initSnipEditor() {
   function snipEditPushUniqueOp(tool, op) {
     const before = SE.ops.length;
     const at = SE.ops.findIndex((o) => o.tool === tool);
-    // A replaced spotlight is an annotation the user made: Ctrl+Z on its replacement
+    // A replaced spotlight or crop is something the user made: Ctrl+Z on its replacement
     // must bring it back, so the new op remembers it and where it sat.
-    if (tool === "spotlight" && at >= 0) {
+    if ((tool === "spotlight" || tool === "crop") && at >= 0) {
       op.replaced = { op: SE.ops[at], prev: SE.ops[at - 1] || null, next: SE.ops[at + 1] || null, floorShift: at < SE.floor ? 1 : 0 };
     }
     SE.ops = SE.ops.filter((o) => o.tool !== tool);
@@ -696,7 +696,7 @@ export function initSnipEditor() {
       SE.floor = op.prevFloor; // the undo limit as it was before the resize
     } else if (op.tool === "edit") {
       snipEditUndoEdit(op);
-    } else if (op.tool === "spotlight" && op.replaced) {
+    } else if ((op.tool === "spotlight" || op.tool === "crop") && op.replaced) {
       const r = op.replaced;
       snipEditReinsert(r.op, r.prev, r.next);
       SE.floor += r.floorShift;
@@ -706,6 +706,7 @@ export function initSnipEditor() {
     snipEditUpdateNudgeHint();
     snipEditRedrawBase();
     snipEditSyncCropFromOps();
+    if (SE.tool === "crop") snipEditFitToCrop();
     snipEditUpdateUndoRedoButtons();
   }
   function snipEditRedo() {
@@ -719,7 +720,7 @@ export function initSnipEditor() {
       if (SE.ops.length - SE.floor > SNIP_EDIT_UNDO_MAX()) SE.floor = SE.ops.length - SNIP_EDIT_UNDO_MAX();
     } else if (op.tool === "edit") {
       snipEditRedoEdit(op);
-    } else if (op.tool === "spotlight" && op.replaced) {
+    } else if ((op.tool === "spotlight" || op.tool === "crop") && op.replaced) {
       const i = SE.ops.indexOf(op.replaced.op);
       if (i >= 0) SE.ops.splice(i, 1);
       SE.floor = Math.max(0, SE.floor - op.replaced.floorShift);
@@ -729,6 +730,7 @@ export function initSnipEditor() {
     snipEditUpdateNudgeHint();
     snipEditRedrawBase();
     snipEditSyncCropFromOps();
+    if (SE.tool === "crop") snipEditFitToCrop();
     snipEditUpdateUndoRedoButtons();
   }
   // Shown only while something is nudgeable -- the arrow keys have no other
@@ -793,13 +795,23 @@ export function initSnipEditor() {
     for (const [name, p] of Object.entries(snipEditCropHandlePoints(r))) {
       if (Math.abs(pt.x - p.x) <= tol && Math.abs(pt.y - p.y) <= tol) return name;
     }
+    // Past the handles, every edge is grabbable along its whole length.
+    const edge = 8 / SE.zoom;
+    const inX = pt.x >= r.x - edge && pt.x <= r.x + r.w + edge;
+    const inY = pt.y >= r.y - edge && pt.y <= r.y + r.h + edge;
+    if (inX && Math.abs(pt.y - r.y) <= edge) return "n";
+    if (inX && Math.abs(pt.y - (r.y + r.h)) <= edge) return "s";
+    if (inY && Math.abs(pt.x - r.x) <= edge) return "w";
+    if (inY && Math.abs(pt.x - (r.x + r.w)) <= edge) return "e";
     return null;
   }
+  // The crop box always spans the image until the user pulls an edge in; a box equal
+  // to the whole image is no crop at all.
+  function snipEditFullCropRect() { return { x: 0, y: 0, w: SE.w, h: SE.h }; }
+  function snipEditCropIsFull(r) { return !!r && r.x === 0 && r.y === 0 && r.w === SE.w && r.h === SE.h; }
   // Same handle-to-cursor mapping the video editor already uses for its own
   // crop/overlay handles (video.css .ve-h-*): a directional resize cursor at
-  // each corner/edge, a move cursor inside the rect, crosshair everywhere
-  // else -- signalling that a click there starts a brand new crop instead of
-  // dragging the existing one.
+  // each corner/edge and a move cursor inside a box smaller than the image.
   const SNIP_CROP_HANDLE_CURSORS = {
     nw: "nwse-resize", n: "ns-resize", ne: "nesw-resize",
     w: "ew-resize", e: "ew-resize",
@@ -810,14 +822,16 @@ export function initSnipEditor() {
     if (!r) return "crosshair";
     const handle = snipEditHitCropHandle(pt, r);
     if (handle) return SNIP_CROP_HANDLE_CURSORS[handle];
-    if (pt.x >= r.x && pt.x <= r.x + r.w && pt.y >= r.y && pt.y <= r.y + r.h) return "move";
-    return "crosshair";
+    if (!snipEditCropIsFull(r) && pt.x >= r.x && pt.x <= r.x + r.w && pt.y >= r.y && pt.y <= r.y + r.h) return "move";
+    return "default";
   }
   function snipEditDrawCropOverlayLive() {
     snipEditClearLive();
     const r = SE.cropRect;
     if (!r) return;
-    snipEditDrawCropDim(snipEditLiveCtx, r);
+    // Heavier dim once the box is at rest, so the picture reads as cropped; lighter
+    // while an edge is being dragged, so what would come back stays visible.
+    snipEditDrawCropDim(snipEditLiveCtx, r, SE.drag ? 0.55 : 0.85);
     const hs = 8;
     snipEditLiveCtx.save();
     snipEditLiveCtx.fillStyle = "#fff";
@@ -836,7 +850,7 @@ export function initSnipEditor() {
   function snipEditSyncCropFromOps() {
     if (SE.tool !== "crop") return;
     const existing = SE.ops.find((o) => o.tool === "crop");
-    SE.cropRect = existing ? { ...existing.rect } : null;
+    SE.cropRect = existing ? { ...existing.rect } : snipEditFullCropRect();
     snipEditDrawCropOverlayLive();
   }
   function snipEditCropPointerDown(pt) {
@@ -844,13 +858,11 @@ export function initSnipEditor() {
     if (r) {
       const handle = snipEditHitCropHandle(pt, r);
       if (handle) { SE.drag = { kind: "crop-resize", handle, orig: { ...r } }; return; }
-      if (pt.x >= r.x && pt.x <= r.x + r.w && pt.y >= r.y && pt.y <= r.y + r.h) {
+      // A box smaller than the image can be moved; a press anywhere else does nothing.
+      if (!snipEditCropIsFull(r) && pt.x >= r.x && pt.x <= r.x + r.w && pt.y >= r.y && pt.y <= r.y + r.h) {
         SE.drag = { kind: "crop-move", start: pt, orig: { ...r } };
-        return;
       }
     }
-    SE.drag = { kind: "crop-new", start: pt };
-    SE.cropRect = { x: pt.x, y: pt.y, w: 0, h: 0 };
   }
   function snipEditResizeCropRect(orig, handle, pt, shift) {
     let x = orig.x, y = orig.y, x2 = orig.x + orig.w, y2 = orig.y + orig.h;
@@ -870,11 +882,7 @@ export function initSnipEditor() {
   }
   function snipEditCropPointerMove(pt, shift) {
     const d = SE.drag;
-    if (d.kind === "crop-new") {
-      let r = { x: Math.min(d.start.x, pt.x), y: Math.min(d.start.y, pt.y), w: Math.abs(pt.x - d.start.x), h: Math.abs(pt.y - d.start.y) };
-      if (shift) { const s = Math.max(r.w, r.h); r = { ...r, w: s, h: s }; }
-      SE.cropRect = r;
-    } else if (d.kind === "crop-move") {
+    if (d.kind === "crop-move") {
       const dx = pt.x - d.start.x, dy = pt.y - d.start.y;
       SE.cropRect = {
         x: snipEditClamp(d.orig.x + dx, 0, SE.w - d.orig.w),
@@ -889,18 +897,42 @@ export function initSnipEditor() {
   function snipEditCropPointerUp() {
     if (SE.cropRect && (SE.cropRect.w < 8 || SE.cropRect.h < 8)) {
       const committed = SE.ops.find((o) => o.tool === "crop");
-      SE.cropRect = committed ? { ...committed.rect } : null; // "smaller than 8x8 -> ignore"
+      SE.cropRect = committed ? { ...committed.rect } : snipEditFullCropRect(); // "smaller than 8x8 -> ignore"
     }
+    // The drag is the edit: it becomes the (undoable) crop op right away and the view
+    // follows the new box.
+    snipEditCropCommit();
+    snipEditFitToCrop();
     snipEditDrawCropOverlayLive();
   }
   function snipEditCropCommit() {
-    if (!SE.cropRect || SE.cropRect.w < 8 || SE.cropRect.h < 8) return;
-    snipEditPushUniqueOp("crop", { tool: "crop", rect: { ...SE.cropRect } });
+    const r = SE.cropRect;
+    if (!r || r.w < 8 || r.h < 8) return;
+    const existing = SE.ops.find((o) => o.tool === "crop");
+    if (snipEditCropIsFull(r)) {
+      // A box equal to the image is no crop: no op is added, and an earlier crop that the
+      // box was dragged back out of is taken away again (undoable like any removal).
+      if (existing) snipEditRemoveOp(existing);
+      return;
+    }
+    if (existing && JSON.stringify(existing.rect) === JSON.stringify(r)) return;
+    snipEditPushUniqueOp("crop", { tool: "crop", rect: { ...r } });
+  }
+  // Zooms so the crop box fills the view (width or height, whichever limits) and
+  // centres it; a box that spans the whole image is the plain fit.
+  function snipEditFitToCrop() {
+    const r = SE.cropRect;
+    if (!r || snipEditCropIsFull(r)) { snipEditFit(); return; }
+    const vw = snipEditWrap.clientWidth, vh = snipEditWrap.clientHeight;
+    snipEditSetZoom(Math.min(vw / r.w, vh / r.h));
+    const wr = snipEditWrap.getBoundingClientRect(), sr = snipEditStage.getBoundingClientRect();
+    snipEditWrap.scrollLeft += sr.left + (r.x + r.w / 2) * SE.zoom - (wr.left + snipEditWrap.clientLeft + vw / 2);
+    snipEditWrap.scrollTop += sr.top + (r.y + r.h / 2) * SE.zoom - (wr.top + snipEditWrap.clientTop + vh / 2);
   }
   // Esc while the crop tool is active discards only the crop, not the whole editor.
   function snipEditCropDiscard() {
     SE.drag = null;
-    SE.cropRect = null;
+    SE.cropRect = snipEditFullCropRect();
     const before = SE.ops.length;
     SE.ops = SE.ops.filter((o) => o.tool !== "crop");
     // Same floor adjustment as snipEditPushUniqueOp -- removing an entry shifts
@@ -910,6 +942,8 @@ export function initSnipEditor() {
     snipEditUpdateUndoRedoButtons();
     snipEditClearLive();
     snipEditRedrawBase();
+    snipEditFit();
+    snipEditDrawCropOverlayLive();
   }
 
   // ---- shape selection: a click on an existing rect/ellipse/line/arrow, made
@@ -1572,7 +1606,7 @@ export function initSnipEditor() {
       case "rect": case "ellipse": SE.drag.b = pt; snipEditDrawLiveRectEllipse(); snipEditShowMeasure(e, SE.drag); break;
       case "pixelate": SE.drag.b = pt; snipEditDrawLivePixelatePreview(); break;
       case "spotlight": SE.drag.b = pt; snipEditDrawLiveSpotlightPreview(); break;
-      case "crop-new": case "crop-move": case "crop-resize":
+      case "crop-move": case "crop-resize":
         snipEditCropPointerMove(pt, e.shiftKey);
         snipEditShowMeasure(e, SE.cropRect);
         break;
@@ -1641,7 +1675,7 @@ export function initSnipEditor() {
         if (r.w >= 4 && r.h >= 4) snipEditPushUniqueOp("spotlight", { tool: "spotlight", rect: r, dim: ts.dim });
         break;
       }
-      case "crop-new": case "crop-move": case "crop-resize": snipEditCropPointerUp(); break;
+      case "crop-move": case "crop-resize": snipEditCropPointerUp(); break;
       case "text-move": case "shape-move": case "shape-resize": case "shape-endpoint": {
         const before = snipEditGeom(d.op);
         if (d.newPoint) d.op.point = d.newPoint;
@@ -1719,7 +1753,7 @@ export function initSnipEditor() {
       if (snipColorPopIsOpen()) { closeSnipColorPop(); return; }
       if (snipEditContextIsOpen()) { closeSnipEditContext(); return; }
       if (SE.eyedropArm) { SE.eyedropArm = null; snipEditRenderContext(); return; }
-      if (SE.tool === "crop" && (SE.drag || SE.cropRect)) { snipEditCropDiscard(); return; }
+      if (SE.tool === "crop" && (SE.drag || !snipEditCropIsFull(SE.cropRect) || SE.ops.some((o) => o.tool === "crop"))) { snipEditCropDiscard(); return; }
       // A selected/just-drawn shape only gives up the arrow keys, never the
       // whole editor -- closing on Escape here would throw away every edit
       // made so far just because something happened to be selected.
@@ -1730,7 +1764,8 @@ export function initSnipEditor() {
     if (document.activeElement === snipEditTextInput) return; // input owns its own keys
     if (e.key === "Enter") {
       e.preventDefault();
-      if (SE.tool === "crop" && SE.cropRect) { snipEditCropCommit(); return; }
+      // The untouched full-image box is no crop, so Enter then applies the editor.
+      if (SE.tool === "crop" && SE.cropRect && !snipEditCropIsFull(SE.cropRect)) { snipEditCropCommit(); return; }
       snipEditApply();
       return;
     }
@@ -1806,6 +1841,7 @@ export function initSnipEditor() {
       snipEditRenderToolButtons();
       snipEditRenderContext();
       snipEditRedrawBase();
+      snipEditSyncCropFromOps(); // a default tool of crop starts with the full-image box
       snipEditUpdateUndoRedoButtons();
       snipEdit.classList.remove("hidden");
       snipEditFit();

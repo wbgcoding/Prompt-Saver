@@ -517,6 +517,7 @@ export const HELP_CONTENT = {
       howTo: [
         "Take a screenshot; the editor opens automatically over the capture.",
         "Pick a tool from the toolbar: crop, pen, marker, line, arrow, rectangle, ellipse, text, step number, pixelate, focus area, or hand.",
+        "Drag the edges or corners of the frame to crop.",
         "Right-click a rectangle, ellipse, line, arrow or pixelated area to duplicate or delete it; a focus area can only be deleted.",
         "Arrow keys move the selected shape, Ctrl+arrow resizes it, Shift takes bigger steps, Escape deselects.",
         "\"Resize\" changes the image's real pixel size; \"Show original\" (or V) shows the untouched capture while held, a tap locks it.",
@@ -1266,6 +1267,7 @@ export const HELP_CONTENT = {
       howTo: [
         "Einen Screenshot aufnehmen; der Editor öffnet sich automatisch über der Aufnahme.",
         "Ein Werkzeug aus der Symbolleiste wählen: Zuschneiden, Stift, Marker, Linie, Pfeil, Rechteck, Ellipse, Text, Schrittnummer, Verpixeln, Fokusbereich oder Hand.",
+        "Ziehe die Ränder oder Ecken des Rahmens, um zuzuschneiden.",
         "Rechtsklick auf ein Rechteck, eine Ellipse, Linie, einen Pfeil oder eine verpixelte Fläche, um es zu duplizieren oder zu löschen; ein Fokusbereich lässt sich nur löschen.",
         "Pfeiltasten verschieben die gewählte Form, Strg+Pfeil ändert ihre Größe, Umschalt macht größere Schritte, Escape hebt die Auswahl auf.",
         "„Größe ändern“ ändert die echte Pixelgröße des Bildes; „Original zeigen“ (oder V) zeigt die unbearbeitete Aufnahme, solange gedrückt, ein Tippen hält sie fest.",

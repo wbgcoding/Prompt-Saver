@@ -112,7 +112,8 @@ freehand pen and highlighter marker, straight lines and arrows, rectangles and
 ellipses, text labels, numbered step markers, a pixelate tool for blurring out
 sensitive details, and a focus area that dims everything outside a chosen area,
 with undo/redo. Zoom in for pixel-precise work and pan around with the Hand
-tool (or hold Space, or the middle mouse button) while zoomed in. Resize
+tool (or hold Space, or the middle mouse button) while zoomed in. Drag the
+edges or corners of the frame to crop. Resize
 changes the image's actual pixel size (not just the view): set a width,
 height, or percentage, with presets for 25/50/200% and "fit 1920 wide"; it is
 its own undoable step, so scaling back and forth never loses quality beyond
@@ -1102,7 +1103,8 @@ Editor: Zuschneiden, Stift, Marker, Linien, Pfeile, Rechtecke, Ellipsen, Text,
 nummerierte Schritte, Pixelieren und ein Fokusbereich, der alles außerhalb eines
 Bereichs abdunkelt, mit Rückgängig/Wiederholen. Zum Heranzoomen für
 pixelgenaues Arbeiten lässt sich das Bild mit dem Hand-Werkzeug (oder
-gehaltener Leertaste bzw. der mittleren Maustaste) verschieben. Die
+gehaltener Leertaste bzw. der mittleren Maustaste) verschieben. Ziehe die
+Ränder oder Ecken des Rahmens, um zuzuschneiden. Die
 Größenänderung ändert die tatsächliche Pixelgröße des Bildes (nicht nur die
 Ansicht): Breite, Höhe oder Prozentwert einstellbar, mit Voreinstellungen für
 25/50/200 % und "auf 1920 Breite anpassen"; sie ist selbst ein rückgängig

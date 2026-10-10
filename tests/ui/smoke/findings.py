@@ -603,6 +603,17 @@ def run(browser, tmp):
       baPtr('pointerup', a[0], a[1], window);
       await sleep(40);
     };
+    // The crop box starts as the whole image; carving it down is dragging its four edges in.
+    const baCropTo = async (x1, y1, x2, y2) => {
+      let r = { x: 0, y: 0, w: BAW, h: BAH };
+      await baDrag(r.x, r.y + r.h / 2, x1, r.y + r.h / 2);
+      r = { x: x1, y: r.y, w: r.w - x1, h: r.h };
+      await baDrag(r.x + r.w, r.y + r.h / 2, x2, r.y + r.h / 2);
+      r = { x: r.x, y: r.y, w: x2 - r.x, h: r.h };
+      await baDrag(r.x + r.w / 2, r.y, r.x + r.w / 2, y1);
+      r = { x: r.x, y: y1, w: r.w, h: r.h - y1 };
+      await baDrag(r.x + r.w / 2, r.y + r.h, r.x + r.w / 2, y2);
+    };
     const baKey = (key, extra) => document.dispatchEvent(new KeyboardEvent('keydown', Object.assign({ key, bubbles: true, cancelable: true }, extra || {})));
     const baExport = async () => {
       window.__SMOKE_ARGS__.length = 0;
@@ -737,15 +748,16 @@ def run(browser, tmp):
     failed += ar_probe('ba592a', 'screenshot editor: undoing a committed crop clears the crop box, export is the full image', 'index', '1000x780', '', ba_common + r"""
     if (!(await baOpen(''))) { errs.push('592: the editor did not open'); }
     else {
-      await baTool('crop'); await baDrag(60, 30, 140, 90);
+      await baTool('crop'); await baCropTo(60, 30, 140, 90);
       baKey('Enter'); await sleep(80);
       let img = await baExport();
       if (!img || img.w !== 80 || img.h !== 60) errs.push('592: fixture: the crop did not export 80x60, got ' + (img ? img.w + 'x' + img.h : 'nothing'));
-      await baUndo();
+      // each dragged edge is one crop step
+      for (let i = 0; i < 4; i++) await baUndo();
       img = await baExport();
       if (!img || img.w !== BAW || img.h !== BAH) errs.push('592: after undo the export is ' + (img ? img.w + 'x' + img.h : 'nothing') + ', expected the full ' + BAW + 'x' + BAH);
       if (!document.getElementById('snip-edit-undo').disabled) errs.push('592: exporting pushed the undone crop back onto the undo stack');
-      await baRedo();
+      for (let i = 0; i < 4; i++) await baRedo();
       img = await baExport();
       if (!img || img.w !== 80 || img.h !== 60) errs.push('592: redo did not bring the crop back, export is ' + (img ? img.w + 'x' + img.h : 'nothing'));
     }
@@ -753,7 +765,7 @@ def run(browser, tmp):
     failed += ar_probe('ba592b', 'screenshot editor: a resize keeps the crop box and the exported crop in step', 'index', '1000x780', '', ba_common + r"""
     if (!(await baOpen(''))) { errs.push('592: the editor did not open'); }
     else {
-      await baTool('crop'); await baDrag(100, 60, 180, 110);
+      await baTool('crop'); await baCropTo(100, 60, 180, 110);
       await baScale50();
       const img = await baExport();
       if (!img || img.w !== 40 || img.h !== 25) errs.push('592: after a 50 percent resize the crop should export 40x25, got ' + (img ? img.w + 'x' + img.h : 'nothing'));
@@ -781,7 +793,7 @@ def run(browser, tmp):
     failed += ar_probe('ba593', 'screenshot editor: a resize with a crop set does not bake the crop dimming into the image', 'index', '1000x780', '', ba_common + r"""
     if (!(await baOpen(''))) { errs.push('593: the editor did not open'); }
     else {
-      await baTool('crop'); await baDrag(60, 30, 140, 90);
+      await baTool('crop'); await baCropTo(60, 30, 140, 90);
       baKey('Enter'); await sleep(80);
       await baTool('arrow');
       await baScale50();
@@ -876,7 +888,7 @@ def run(browser, tmp):
         ti.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
         await sleep(60);
       };
-      await baTool('crop'); await baDrag(10, 10, 190, 110);
+      await baTool('crop'); await baCropTo(10, 10, 190, 110);
       baKey('Enter'); await sleep(80);
       await baTool('text');
       await baText(30, 90, 'AAA'); await baText(120, 90, 'BBB');
@@ -1432,6 +1444,104 @@ def run(browser, tmp):
         if (!panelOpen()) errs.push('829: choosing a preset closed the panel');
       }
     }
+""")
+    # The crop tool starts with a full-image box; the edges are dragged in, and each drag is an undoable crop.
+    failed += ar_probe('bq830', '830: the crop box starts at the whole image and is dragged in by its edges', 'index', '880x600', '', snip_common + r"""
+    const live = document.getElementById('snip-edit-live');
+    const stage = document.getElementById('snip-edit-stage');
+    const wrap = document.getElementById('snip-edit-canvas-wrap');
+    const undo = document.getElementById('snip-edit-undo');
+    const redo = document.getElementById('snip-edit-redo');
+    const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
+    const alphaAt = (x, y) => live.getContext('2d').getImageData(x, y, 1, 1).data[3];
+    const firePtr = (type, x, y, target) => (target || window).dispatchEvent(new PointerEvent(type, {
+      bubbles: true, cancelable: true, button: 0, pointerId: 1, isPrimary: true, clientX: x, clientY: y,
+    }));
+    const dragEdge = async (side, fromImg, toImg) => {
+      const sr = stage.getBoundingClientRect();
+      const z = sr.width / live.width;
+      const x0 = sr.left + fromImg * z + (side === 'right' ? -2 : 2), x1 = sr.left + toImg * z;
+      const y0 = sr.top + sr.height / 2;
+      firePtr('pointerdown', x0, y0, live);
+      firePtr('pointermove', (x0 + x1) / 2, y0, live);
+      firePtr('pointermove', x1, y0, live);
+      firePtr('pointerup', x1, y0, window);
+      await sleepMs(150);
+    };
+    const filled = () => {
+      const sr = stage.getBoundingClientRect();
+      const z = sr.width / live.width;
+      return Math.min(Math.abs(1200 * z - wrap.clientWidth), Math.abs(800 * z - wrap.clientHeight));
+    };
+    const exportSize = async () => {
+      window.__SMOKE_ARGS__.length = 0;
+      document.getElementById('snip-edit-copy').click();
+      await sleepMs(250);
+      const c = callsFor('copy_image_data');
+      if (!c.length) return null;
+      return await new Promise((res) => { const i = new Image(); i.onload = () => res(i.width + 'x' + i.height); i.src = c[c.length - 1].dataUrl; });
+    };
+    await snipOpen(1400, 800);
+    document.querySelector('#snip-edit-tools button[data-tool="crop"]').click(); await sleepMs(200);
+    if (!undo.disabled) errs.push('830: the undo button is enabled before any crop');
+    for (const [x, y] of [[1, 1], [live.width - 2, 1], [1, live.height - 2], [live.width - 2, live.height - 2]]) {
+      if (alphaAt(x, y) === 0) errs.push('830: no handle is drawn at the image corner ' + x + ',' + y);
+    }
+    await dragEdge('right', 1400, 1200);
+    if (undo.disabled) errs.push('830: dragging an edge in did not create an undoable crop');
+    const f1 = filled();
+    if (f1 > 2) errs.push('830: the crop box misses the view by ' + f1 + ' px after the drag');
+    document.getElementById('snip-edit-undo').click(); await sleepMs(150);
+    if (!undo.disabled) errs.push('830: undo left a crop behind');
+    if (redo.disabled) errs.push('830: undo did not enable redo');
+    if (alphaAt(1, 1) === 0 || alphaAt(live.width - 2, live.height - 2) === 0) errs.push('830: the full-image box is not back after undo');
+    redo.click(); await sleepMs(150);
+    if (undo.disabled) errs.push('830: redo did not bring the crop back');
+    const size = await exportSize();
+    if (size !== '1200x800') errs.push('830: the export is ' + size + ', expected 1200x800');
+    // After an undo the full box is still draggable.
+    document.getElementById('snip-edit-undo').click(); await sleepMs(150);
+    await dragEdge('left', 0, 100);
+    if (undo.disabled) errs.push('830: the full-image box could not be dragged after an undo');
+    if (await exportSize() !== '1300x800') errs.push('830: dragging the left edge in by 100 did not export 1300x800');
+    // Dragging back out to the image bounds removes the crop again.
+    await dragEdge('left', 100, 0);
+    if (await exportSize() !== '1400x800') errs.push('830: dragging the edge back out did not restore the full image');
+    // A press outside the box and inside a full box does nothing.
+    const before = undo.disabled;
+    const sr = stage.getBoundingClientRect();
+    firePtr('pointerdown', sr.left + sr.width / 2, sr.top + sr.height / 2, live);
+    firePtr('pointermove', sr.left + sr.width / 2 + 40, sr.top + sr.height / 2 + 40, live);
+    firePtr('pointerup', sr.left + sr.width / 2 + 40, sr.top + sr.height / 2 + 40, window);
+    await sleepMs(100);
+    if (undo.disabled !== before) errs.push('830: a press inside the full-image box changed the crop');
+""")
+    failed += ar_probe('bq830b', '830: Enter with the untouched full-image box applies the editor without a crop', 'index', '880x600', '', snip_common + r"""
+    await snipOpen(1400, 800);
+    document.querySelector('#snip-edit-tools button[data-tool="crop"]').click(); await sleep(200);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await sleep(500);
+    if (!document.getElementById('snip-edit').classList.contains('hidden')) errs.push('830: Enter with the full-image box did not apply the editor');
+    const img = document.getElementById('snip-preview');
+    if (img.naturalWidth !== 1400 || img.naturalHeight !== 800) errs.push('830: the applied picture is ' + img.naturalWidth + 'x' + img.naturalHeight + ', expected 1400x800');
+""")
+    failed += ar_probe('bq830c', '830: Apply after a dragged crop exports the cropped picture', 'index', '880x600', '', snip_common + r"""
+    await snipOpen(1400, 800);
+    document.querySelector('#snip-edit-tools button[data-tool="crop"]').click(); await sleep(200);
+    const live = document.getElementById('snip-edit-live');
+    const sr = live.getBoundingClientRect();
+    const z = sr.width / live.width;
+    const firePtr = (type, x, y, target) => (target || window).dispatchEvent(new PointerEvent(type, {
+      bubbles: true, cancelable: true, button: 0, pointerId: 1, isPrimary: true, clientX: x, clientY: y,
+    }));
+    firePtr('pointerdown', sr.right - 2, sr.top + sr.height / 2, live);
+    firePtr('pointermove', sr.right - 200 * z, sr.top + sr.height / 2, live);
+    firePtr('pointerup', sr.right - 200 * z, sr.top + sr.height / 2, window);
+    await sleep(150);
+    document.getElementById('snip-edit-apply').click();
+    await sleep(500);
+    const img = document.getElementById('snip-preview');
+    if (img.naturalWidth !== 1200 || img.naturalHeight !== 800) errs.push('830: the applied picture is ' + img.naturalWidth + 'x' + img.naturalHeight + ', expected 1200x800');
 """)
     # ---- main window findings: generated block end ----
     return failed

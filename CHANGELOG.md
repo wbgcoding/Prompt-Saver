@@ -606,6 +606,10 @@ the video editor and the introduction tour ship on).
 
 ### Improved
 
+- **Cropping a screenshot works by dragging the frame.** The crop tool starts
+  with a frame around the whole picture; pull its edges or corners in to crop,
+  and the view zooms to the result. Each drag is an undo step, and dragging
+  the frame back out to the picture edge removes the crop again.
 - **Screenshot editor tool options open under the tool button.** Width, colour,
   fill and the other fields of a tool no longer crowd the toolbar, which stays
   a single row; picking a tool, or clicking the active one again, opens its
