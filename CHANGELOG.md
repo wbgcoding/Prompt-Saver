@@ -2036,6 +2036,7 @@ the video editor and the introduction tour ship on).
 - **Icon size moved from Settings to the expert menu** (Appearance, Sizes).
 - **German: one German word per thing throughout** (Tastenkürzel, Sicherung, Kurzinfo, Symbol, Design).
 - **The help is organised like the expert menu:** Basics, Features, Capture, Tiles, Appearance, Library & copy history, System & data.
+- **Help texts are shorter:** one sentence per step, special cases on their own line.
 
 ## 2.6.3 (2026-07-26)
 

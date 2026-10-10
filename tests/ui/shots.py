@@ -6,7 +6,7 @@
 `--lang all` and `--theme all` mean every UI language and every built-in theme.
 
 A surface is `main`, `settings`, `settings_end`, `expert`, `library`, `history`,
-`tilemenu`, `editor`, `editor_long`, `editor_adv`, `folder`, `help`, `backup`, `snipedit`, `snipdraw`, or another
+`tilemenu`, `editor`, `editor_long`, `editor_adv`, `folder`, `help`, `help_capture`, `backup`, `snipedit`, `snipdraw`, or another
 page such as `video.html`.
 A group (`@settings`, `@library`, `@tiles`, `@snip`) shoots its surfaces.
 Without a surface every one is shot. Not a test: it never fails on what it sees.
@@ -72,6 +72,10 @@ ACTS = {
                "window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, clientX: 5, clientY: 5 }));"
                "await sleep(600);"),
     "help": "$('gear').click(); await sleep(300); $('help-open').click(); await sleep(500);",
+    "help_capture": "$('gear').click(); await sleep(300); $('help-open').click(); await sleep(500);"
+                    "document.querySelectorAll('#help-tabs-bar .expert-tab')[2].click(); await sleep(400);"
+                    "const hb = $('help-body'); const gt = [...hb.querySelectorAll('.expert-group-title')].find((e) => /Screen recording|Bildschirmaufnahme/.test(e.textContent));"
+                    "if (gt) hb.scrollTop = gt.offsetTop - hb.offsetTop; await sleep(300);",
     "backup": "$('gear').click(); await sleep(300); $('settings-backup-btn').click(); await sleep(600);",
     "stats": "$('gear').click(); await sleep(300); $('settings-stats-btn').click(); await sleep(600);",
     "snipedit": SNIP_OPEN,
@@ -79,7 +83,7 @@ ACTS = {
 }
 # Area groups, so a review of one area shoots only its surfaces.
 GROUPS = {
-    "@settings": ["settings", "settings_end", "expert", "help", "stats", "backup"],
+    "@settings": ["settings", "settings_end", "expert", "help", "help_capture", "stats", "backup"],
     "@library": ["library", "history"],
     "@tiles": ["main", "tilemenu", "editor", "editor_long", "editor_adv", "folder"],
     "@snip": ["snipedit", "snipdraw"],

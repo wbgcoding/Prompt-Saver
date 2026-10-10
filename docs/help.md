@@ -845,10 +845,10 @@ A folder that syncs across two computers (OneDrive, Dropbox, Google Drive,
 iCloud Drive, Nextcloud) needs care: two machines saving to the same database
 file at once can corrupt it. Pointing the data folder at one shows a one-time
 warning explaining that risk. A small lock file next to the database then
-tracks which computer is using it, refreshed every 30 seconds; a second
+tracks which computer is using it, refreshed every 30 seconds. A second
 computer that finds a fresh lock from another machine opens everything
 read-only instead and says so with a permanent banner, so nothing is silently
-lost, while a lock nobody has refreshed for a while (the other computer likely
+lost. A lock nobody has refreshed for a while (the other computer likely
 crashed or closed) is taken over automatically. The switch for this, on by
 default, sits in the Troubleshooting group of the expert menu's System tab. This is a
 safety net, not a way to share the library across computers: for that,
@@ -929,7 +929,7 @@ alone can be saved to a file and loaded again from the same group.
 
 A deleted tile goes to the trash first, not straight to permanent deletion.
 Deleting takes one click and shows an Undo notice that brings it back. Retention is in days (0 means keep forever). Restoring places the tile in the
-active view's first free cell, not necessarily its original view or cell, and
+active view's first free cell, not necessarily its original view or cell. It
 does not bring back a floating button, folder membership, or hotkey it had before
 deletion; those need setting up again.
 
