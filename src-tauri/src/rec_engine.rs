@@ -304,6 +304,11 @@ pub(crate) fn sanitize_canvas_mode(raw: &str) -> &'static str {
 // of screens wider than this falls back to the screen the window is on.
 pub(crate) const REC_CANVAS_MAX_PX: u32 = 8192;
 
+// How much of one 1-second watch tick counts as recorded time.
+pub(crate) fn active_tick_secs(paused: bool) -> u64 {
+    if paused { 0 } else { 1 }
+}
+
 // Pure predicate for the two optional recording safety nets (recMaxMin and
 // recMaxMb, both 0 = off) -- kept free of the watch thread's sleep loop so it
 // is unit-testable without spinning up a real recording.

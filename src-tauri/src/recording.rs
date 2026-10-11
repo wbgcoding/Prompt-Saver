@@ -5,7 +5,7 @@ use super::{
     RecFeederShared, RecFrameItem, RecPhase, RecordClock, REC_AUDIO_CHANNELS, REC_AUDIO_SAMPLE_RATE,
     canvas_within_ceiling, external_window_rect, monitor_rect_at, place_frame_in_canvas, visible_canvas_rect,
     scale_bitrate_to_used_area, virtual_screen_bounds, recording_limit_reached,
-    estimate_recording_seconds_remaining, UsedAreaTracker,
+    estimate_recording_seconds_remaining, active_tick_secs, UsedAreaTracker,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -626,7 +626,7 @@ fn resolve_target_size(target: RecTarget) -> Result<(u32, u32), String> {
 // disk-space check below, checked on the same 1s tick since both are just
 // reading an already-cheap number (elapsed time, one fs::metadata call).
 fn spawn_disk_watch(
-    shared: Arc<RecFeederShared>, output_path: PathBuf, warn_mb: f64, max_min: f64, max_mb: f64,
+    shared: Arc<RecFeederShared>, clock: Arc<RecordClock>, output_path: PathBuf, warn_mb: f64, max_min: f64, max_mb: f64,
     video_kbps: u32, audio_active: bool,
 ) {
     let spawned = thread::Builder::new().name("rec-disk-watch".into()).spawn(move || {
@@ -637,7 +637,8 @@ fn spawn_disk_watch(
         let mut elapsed = Duration::ZERO;
         while !shared.is_stopping() {
             thread::sleep(Duration::from_secs(1));
-            elapsed += Duration::from_secs(1);
+            // The minute limit counts recorded time: a pause does not use it up.
+            elapsed += Duration::from_secs(active_tick_secs(clock.is_paused()));
             waited += Duration::from_secs(1);
             if limits_active {
                 let file_len = fs::metadata(&output_path).map(|m| m.len()).unwrap_or(0);
@@ -817,7 +818,7 @@ fn start_inner(
     let canvas_note = if canvas.note.is_empty() { None } else { Some(canvas.note) };
     let clock = Arc::new(RecordClock::new());
     let shared = Arc::new(RecFeederShared::new());
-    spawn_disk_watch(shared.clone(), output_path.clone(), disk_warn_mb, max_min, max_mb, video_kbps, audio_active);
+    spawn_disk_watch(shared.clone(), clock.clone(), output_path.clone(), disk_warn_mb, max_min, max_mb, video_kbps, audio_active);
     let mut guard = StartGuard::new({
         let shared = shared.clone();
         move || shared.request_stop()

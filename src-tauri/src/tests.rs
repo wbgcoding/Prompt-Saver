@@ -19390,3 +19390,13 @@ fn visible_canvas_rect_never_leaves_the_canvas() {
     assert_eq!(visible_canvas_rect(2000, 10, 800, 600, 1920, 1080), None);
     assert_eq!(visible_canvas_rect(-900, 10, 800, 600, 1920, 1080), None);
 }
+
+#[test]
+fn a_paused_tick_does_not_count_toward_the_recording_minute_limit() {
+    let mut elapsed = 0u64;
+    for paused in [false, false, true, true, true, false] {
+        elapsed += active_tick_secs(paused);
+    }
+    assert_eq!(elapsed, 3);
+    assert!(!recording_limit_reached(elapsed, 0, 1.0, 0.0), "a long pause must not reach the limit");
+}
