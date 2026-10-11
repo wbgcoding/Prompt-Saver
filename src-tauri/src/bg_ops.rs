@@ -327,8 +327,10 @@ pub(crate) fn apply_taskbar_state(_app: &AppHandle, _state: &str, _value: Option
 // name to invoke -- the internal Rust progress loops below (export_video,
 // convert_recording, download_ffmpeg) call push_bg_op directly instead of
 // going through this command, so their own reporting survives a closed window.
+// Async on purpose: a sync command runs on the main thread, and push_bg_op takes the
+// store lock, which a backup or import can hold for a long time.
 #[tauri::command]
-pub(crate) fn set_taskbar_progress(app: AppHandle, op: String, state: String, value: Option<u32>, target: Option<String>) {
+pub(crate) async fn set_taskbar_progress(app: AppHandle, op: String, state: String, value: Option<u32>, target: Option<String>) {
     // This command's callers (backup, import, ...) only ever run one instance
     // at a time, so the job's id and its kind are the same string -- unlike
     // export_video's own push_bg_op calls below, which give a batch of exports
