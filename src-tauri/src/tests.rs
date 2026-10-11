@@ -19543,3 +19543,21 @@ fn shrinking_a_grid_never_moves_a_folder_onto_one_that_still_fits() {
     assert_eq!(folders[0].cell, [1, 0], "the moved one takes the first free cell");
     assert_eq!(folders[2].cell, [9, 9], "another view's folder is not touched");
 }
+
+#[test]
+fn a_folder_edit_that_leaves_another_folder_with_one_member_keeps_that_member_on_the_grid() {
+    let mut settings = Settings::default();
+    settings.views = vec![test_view("v1")];
+    // "old" held a, b and c; the edit moved a and b into "new", leaving c alone.
+    settings.tile_folders = vec![
+        test_tile_folder("old", "v1", [1, 0], &["c"]),
+        test_tile_folder("new", "v1", [0, 0], &["a", "b"]),
+    ];
+    let ids: Vec<String> = ["a", "b", "c"].iter().map(|s| s.to_string()).collect();
+    finish_tile_folder_edit(&mut settings, &ids);
+    assert_eq!(settings.tile_folders.len(), 1, "the one-member folder is dissolved");
+    assert_eq!(settings.tile_folders[0].id, "new");
+    let view = &settings.views[0];
+    let key = grid_key(view.cols, view.rows);
+    assert_eq!(view.layouts.get(&key).and_then(|l| l.get("c")).copied(), Some([1, 0]), "c is a tile again, on the old folder's cell");
+}

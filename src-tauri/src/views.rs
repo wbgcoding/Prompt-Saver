@@ -841,24 +841,27 @@ pub(crate) fn save_tile_folder(
             });
         }
     }
-    // A prompt inside a folder is not a tile of its own: drop its layout entries so
-    // the cell it used to sit on is free again.
-    let inside: Vec<String> = store
-        .settings
-        .tile_folders
-        .iter()
-        .flat_map(|f| f.members.iter().cloned())
-        .collect();
-    for view in store.settings.views.iter_mut() {
+    let ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
+    finish_tile_folder_edit(&mut store.settings, &ids);
+    save_settings(&app, &store.settings);
+    Ok(webview_settings(&store.settings))
+}
+
+// The shared tail of a folder edit. A prompt inside a folder is not a tile of its
+// own: its layout entries are dropped so the cell it used to sit on is free again.
+// A folder the edit left with a single member is about to be dropped by the
+// normalize step, so that member is seated on a cell first, the same as when a
+// prompt is taken out of a folder.
+pub(crate) fn finish_tile_folder_edit(settings: &mut Settings, prompt_ids: &[String]) {
+    let inside: Vec<String> = settings.tile_folders.iter().flat_map(|f| f.members.iter().cloned()).collect();
+    for view in settings.views.iter_mut() {
         for layout in view.layouts.values_mut() {
             layout.retain(|pid, _| !inside.contains(pid));
         }
     }
-    let ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
-    let view_ids: Vec<String> = store.settings.views.iter().map(|v| v.id.clone()).collect();
-    normalize_tile_folders(&mut store.settings.tile_folders, &ids, &view_ids);
-    save_settings(&app, &store.settings);
-    Ok(webview_settings(&store.settings))
+    settle_lone_folder_members(&mut settings.views, &settings.tile_folders);
+    let view_ids: Vec<String> = settings.views.iter().map(|v| v.id.clone()).collect();
+    normalize_tile_folders(&mut settings.tile_folders, prompt_ids, &view_ids);
 }
 
 // The layout step of taking a prompt out of a grid folder onto `cell`. Whoever
