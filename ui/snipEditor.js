@@ -627,18 +627,16 @@ export function initSnipEditor() {
   // Spotlight/crop: exactly one may exist -- a new one replaces the old rather than
   // stacking two dimming layers.
   function snipEditPushUniqueOp(tool, op) {
-    const before = SE.ops.length;
     const at = SE.ops.findIndex((o) => o.tool === tool);
     // A replaced spotlight or crop is something the user made: Ctrl+Z on its replacement
     // must bring it back, so the new op remembers it and where it sat.
     if ((tool === "spotlight" || tool === "crop") && at >= 0) {
       op.replaced = { op: SE.ops[at], prev: SE.ops[at - 1] || null, next: SE.ops[at + 1] || null, floorShift: at < SE.floor ? 1 : 0 };
     }
+    // floor is a count-based boundary into SE.ops; only an entry that sat below
+    // it shifts it (an undoable op above the floor leaving must not re-lock one).
+    SE.floor = Math.max(0, SE.floor - SE.ops.slice(0, SE.floor).filter((o) => o.tool === tool).length);
     SE.ops = SE.ops.filter((o) => o.tool !== tool);
-    // floor is a count-based boundary into SE.ops; removing an entry shifts every
-    // later index down by one, so shrink the floor by the same amount to keep
-    // pointing at the same logical (never re-lock an already-undoable op).
-    SE.floor = Math.max(0, SE.floor - (before - SE.ops.length));
     snipEditPushOp(op);
   }
   // Halving-step resample: a single drawImage straight down to a much smaller
@@ -813,6 +811,8 @@ export function initSnipEditor() {
     const last = SE.ops[SE.ops.length - 1];
     if (last && last.tool === "edit" && last.kind === "geom" && last.nudgeOf === op && last.nudgeTool === SE.tool) {
       last.after = snipEditGeom(op);
+      // A new edit ends the redo branch, like every pushed op does.
+      if (SE.redo.length) { SE.redo.length = 0; snipEditUpdateUndoRedoButtons(); }
       snipEditRedrawBase();
     } else {
       const after = snipEditGeom(op);
@@ -985,12 +985,9 @@ export function initSnipEditor() {
   function snipEditCropDiscard() {
     SE.drag = null;
     SE.cropRect = snipEditFullCropRect();
-    const before = SE.ops.length;
+    // Same floor adjustment as snipEditPushUniqueOp: only crops below the floor shift it.
+    SE.floor = Math.max(0, SE.floor - SE.ops.slice(0, SE.floor).filter((o) => o.tool === "crop").length);
     SE.ops = SE.ops.filter((o) => o.tool !== "crop");
-    // Same floor adjustment as snipEditPushUniqueOp -- removing an entry shifts
-    // every later index down by one; without this the undo/redo boundary and
-    // button state can drift out of sync with the actual op list.
-    SE.floor = Math.max(0, SE.floor - (before - SE.ops.length));
     snipEditUpdateUndoRedoButtons();
     snipEditClearLive();
     snipEditRedrawBase();
@@ -1818,6 +1815,10 @@ export function initSnipEditor() {
       return;
     }
     if (document.activeElement === snipEditTextInput) return; // input owns its own keys
+    // Any other field (size, colour hex, select) owns its keys too: a letter
+    // typed there must not switch tools, and arrows must move its caret.
+    const tgt = e.target;
+    if (tgt && (tgt.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(tgt.tagName))) return;
     if (e.key === "Enter") {
       e.preventDefault();
       // The untouched full-image box is no crop, so Enter then applies the editor.
@@ -1957,7 +1958,11 @@ export function initSnipEditor() {
     const out = document.createElement("canvas");
     out.width = sw;
     out.height = sh;
+    // The base canvas carries the crop dimming outside the rect; with a fractional
+    // rect the rounded edge pixels would pick up a dim line, so draw it bare.
+    if (crop) snipEditRedrawBase(true);
     out.getContext("2d").drawImage(snipEditBaseCv, sx, sy, sw, sh, 0, 0, sw, sh);
+    if (crop) snipEditRedrawBase();
     // Always lossless png regardless of the screenshotFormat setting -- the
     // setting's actual target format is applied once, in Rust, at the real
     // save step (save_screenshot_now/_as re-encode from this data URL), so an
