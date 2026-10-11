@@ -1508,6 +1508,7 @@ export default {
     flagQuickGridHoverOnly: "Grilă rapidă: afișează doar la trecere",
     tileFolderNew: "Folder nou",
     tileFolderNameMsg: "Numele acestui dosar (opțional).",
+    tileFolderPickSecond: "Alege un al doilea prompt pentru dosar",
     tileFolderNamePh: "Numele dosarului",
     tileFolderDefaultName: "Dosar",
     tileFolderRename: "Redenumește dosarul",

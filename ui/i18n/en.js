@@ -1515,6 +1515,7 @@ export default {
     flagQuickGridHoverOnly: "Quick grid: hover to reveal",
     tileFolderNew: "New folder",
     tileFolderNameMsg: "Name for this folder (optional).",
+    tileFolderPickSecond: "Pick a second prompt for the folder",
     tileFolderNamePh: "Folder name",
     tileFolderDefaultName: "Folder",
     tileFolderRename: "Rename folder",

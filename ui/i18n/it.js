@@ -1508,6 +1508,7 @@ export default {
     flagQuickGridHoverOnly: "Griglia rapida: mostra solo al passaggio del mouse",
     tileFolderNew: "Nuova cartella",
     tileFolderNameMsg: "Nome per questa cartella (facoltativo).",
+    tileFolderPickSecond: "Scegli un secondo prompt per la cartella",
     tileFolderNamePh: "Nome della cartella",
     tileFolderDefaultName: "Cartella",
     tileFolderRename: "Rinomina cartella",

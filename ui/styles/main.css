@@ -372,7 +372,8 @@ body.noflag-showLibrary #library-btn { display: none; }
 /* The "Views..." list: hide, then the other views, capped at eight rows before it scrolls. */
 .views-pop { min-width: 210px; z-index: 90; max-height: calc(8 * 34px + 12px); overflow-y: auto; }
 .views-pop-head { padding: 4px 10px 2px; color: var(--muted); font-size: 11px; }
-.move-to-folder-pop { min-width: 180px; z-index: 90; max-height: 280px; overflow-y: auto; }
+.move-to-folder-pop { min-width: 180px; max-width: 320px; z-index: 90; max-height: 280px; overflow-y: auto; }
+.move-to-folder-pop button { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: none; }
 .view-row-name {
   flex: 1 1 auto;
   display: flex;

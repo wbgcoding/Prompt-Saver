@@ -1508,6 +1508,7 @@ export default {
     flagQuickGridHoverOnly: "Hızlı ızgara: yalnızca üzerine gelince göster",
     tileFolderNew: "Yeni klasör",
     tileFolderNameMsg: "Bu klasörün adı (isteğe bağlı).",
+    tileFolderPickSecond: "Klasör için ikinci bir istem seç",
     tileFolderNamePh: "Klasör adı",
     tileFolderDefaultName: "Klasör",
     tileFolderRename: "Klasörü yeniden adlandır",

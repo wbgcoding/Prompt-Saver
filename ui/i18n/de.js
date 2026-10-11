@@ -1515,6 +1515,7 @@ export default {
     flagQuickGridHoverOnly: "Schnellraster: erst beim Überfahren zeigen",
     tileFolderNew: "Neuer Ordner",
     tileFolderNameMsg: "Name für diesen Ordner (optional).",
+    tileFolderPickSecond: "Zweiten Prompt für den Ordner wählen",
     tileFolderNamePh: "Ordnername",
     tileFolderDefaultName: "Ordner",
     tileFolderRename: "Ordner umbenennen",

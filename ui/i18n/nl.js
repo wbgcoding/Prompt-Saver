@@ -1508,6 +1508,7 @@ export default {
     flagQuickGridHoverOnly: "Snelraster: alleen tonen bij aanwijzen",
     tileFolderNew: "Nieuwe map",
     tileFolderNameMsg: "Naam voor deze map (optioneel).",
+    tileFolderPickSecond: "Kies een tweede prompt voor de map",
     tileFolderNamePh: "Mapnaam",
     tileFolderDefaultName: "Map",
     tileFolderRename: "Map hernoemen",

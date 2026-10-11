@@ -3,7 +3,7 @@ import { $, assignSettings, ctxEl, errToast, favView, flag, gridTags, invoke, li
 import { chainMode, isTextPrompt, startChainWith } from "./chain.js";
 import { hasMarkdownSyntax } from "./markdown.js";
 import { batchErrorToast, ensureArchiveTagName, isArchived, renderLibrary, toggleFavoritePrompt, toggleGridSelect, trashPromptWithUndo } from "./library.js";
-import { cacheFloatingState, foldersOfView, folderTitle, newTileFolder, saveFolder, tileFoldersOn } from "./gridFolders.js";
+import { cacheFloatingState, folderCandidates, foldersOfView, folderTitle, newTileFolder, saveFolder, tileFoldersOn } from "./gridFolders.js";
 import { mediaKind } from "./media.js";
 import { placePopover, placePopoverAt } from "./popover.js";
 import { activeView, layoutOf, refreshFavViewUi, renderGrid, renderViews, viewRowBase } from "./views.js";
@@ -173,22 +173,58 @@ export function openViewsPop(id, rect) {
 // drag onto an armed cell, see dropIntoFolder above) ----
 export const moveToFolderPop = document.createElement("div");
 
+let secondPicked = null; // resolver of the open "pick a second prompt" list
 export function closeMoveToFolderPop() {
   moveToFolderPop.classList.add("hidden");
+  // Closing the list any way but a pick (outside click, Escape) answers "nobody".
+  const pending = secondPicked;
+  secondPicked = null;
+  if (pending) pending(null);
+}
+// The same popover, refilled with the prompts a new folder can take as its second
+// member. Resolves the chosen id, or null when the list was dismissed.
+function pickSecondPrompt(firstId, rect) {
+  closeMoveToFolderPop();
+  moveToFolderPop.innerHTML = "";
+  const head = document.createElement("div");
+  head.className = "views-pop-head";
+  head.textContent = t("tileFolderPickSecond");
+  moveToFolderPop.appendChild(head);
+  return new Promise((resolve) => {
+    for (const p of folderCandidates(firstId)) {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.setAttribute("role", "menuitem");
+      row.textContent = p.name;
+      row.addEventListener("click", () => {
+        secondPicked = null;
+        closeMoveToFolderPop();
+        resolve(p.id);
+      });
+      moveToFolderPop.appendChild(row);
+    }
+    secondPicked = resolve;
+    placePopover(moveToFolderPop, rect);
+    moveToFolderPop.querySelector("button")?.focus();
+  });
 }
 export function renderMoveToFolderPop(id) {
   moveToFolderPop.innerHTML = "";
-  const newRow = document.createElement("button");
-  newRow.type = "button";
-  newRow.setAttribute("role", "menuitem");
-  newRow.textContent = t("tileFolderNew");
-  newRow.addEventListener("click", async () => {
-    closeMoveToFolderPop();
-    const cell = layoutOf(activeView())[id];
-    if (!cell) return; // favorites' free-form layout has no cell to replace
-    await newTileFolder([id], cell);
-  });
-  moveToFolderPop.appendChild(newRow);
+  const cell = layoutOf(activeView())[id];
+  // A folder needs two prompts: the row is only offered while another one can join
+  // (favorites' free-form layout has no cell to replace, so none there either).
+  if (cell && folderCandidates(id).length) {
+    const newRow = document.createElement("button");
+    newRow.type = "button";
+    newRow.setAttribute("role", "menuitem");
+    newRow.textContent = t("tileFolderNew");
+    newRow.addEventListener("click", async () => {
+      const rect = moveToFolderPop.getBoundingClientRect();
+      closeMoveToFolderPop();
+      await newTileFolder([id], cell, () => pickSecondPrompt(id, rect));
+    });
+    moveToFolderPop.appendChild(newRow);
+  }
   for (const f of foldersOfView(activeView().id)) {
     const row = document.createElement("button");
     row.type = "button";

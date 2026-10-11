@@ -1,7 +1,7 @@
 // Grid folders: folder tiles, the folder popup, drag in and out.
 import { assignDrag, assignFolderArm, assignMemberDrag, assignSettings, convertFileSrc, drag, DRAG_THRESHOLD, errToast, favView, flag, folderArm, gridEl, ICON_EDIT, ICON_FILE, ICON_IMAGE, ICON_PDF, ICON_VIDEO, inkShadow, invoke, memberDrag, openColorPop, PDF_EXT, prompts, readableInk, settings, t, TILE_FOLDER_ZONE } from "./core.js";
 import { confirmDialog } from "./dialog.js";
-import { activeView, openMiniMenu, renderGrid } from "./views.js";
+import { activeView, layoutOf, openMiniMenu, renderGrid } from "./views.js";
 import { recordToolUsage } from "./management.js";
 import { autoPasteDouble, autoPasteNow, cellAt, endDragVisuals, fitTilesShared, hasImage, imageOf, missingFiles, setHoverCell, showCopied } from "./tiles.js";
 import { FOLDER_SVG } from "./floatShared.js";
@@ -11,7 +11,7 @@ import { placePopover } from "./popover.js";
 import { chainMode, toggleChainPick } from "./chain.js";
 import { dialogTokens, peekRotatedText } from "./promptVars.js";
 import { copyOnCooldown, copyTextWithVars, maybeCloseOnCopy, recordCopy } from "./copyFlow.js";
-import { copyResolved } from "./library.js";
+import { copyResolved, isArchived } from "./library.js";
 import { openCtx } from "./gridMenus.js";
 
 const TILE_FOLDER_COLS = 3; // most columns of the open grid-folder popover
@@ -49,8 +49,21 @@ export async function saveFolder(f, patch) {
   return true;
 }
 
-// Two tiles dropped on each other become a folder on the target's cell.
-export async function newTileFolder(memberIds, cell) {
+// Prompts of the open view that can still join a new folder as its second member:
+// placed on the grid (a tile of their own), not archived, not in a folder yet.
+export function folderCandidates(firstId) {
+  const view = activeView();
+  const layout = layoutOf(view);
+  const taken = new Set(foldersOfView(view.id).flatMap((f) => f.members || []));
+  return prompts.filter(
+    (p) => p.id !== firstId && layout[p.id] && !taken.has(p.id) && !(flag("archiveTag") && isArchived(p))
+  );
+}
+
+// Two tiles dropped on each other become a folder on the target's cell. With a single
+// member, `pickSecond` (async, resolves a prompt id or null) supplies the second one
+// after the name was asked; null from it cancels like the name prompt does.
+export async function newTileFolder(memberIds, cell, pickSecond = null) {
   const name = await confirmDialog({
     title: t("tileFolderNew"),
     message: t("tileFolderNameMsg"),
@@ -59,10 +72,16 @@ export async function newTileFolder(memberIds, cell) {
     danger: false,
   });
   if (name === null) return; // cancelled: nothing moves, the tiles stay as they were
+  let members = memberIds;
+  if (members.length < 2) {
+    const second = pickSecond ? await pickSecond() : null;
+    if (!second) return;
+    members = [...members, second];
+  }
   const view = activeView();
   const ok = await saveFolder(
     { id: "", view_id: view.id },
-    { name: String(name).trim(), cell, members: memberIds }
+    { name: String(name).trim(), cell, members }
   );
   if (ok) {
     recordToolUsage("folder_create");

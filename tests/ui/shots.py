@@ -62,6 +62,10 @@ ACTS = {
     "library": "$('library-btn').click(); await sleep(400);",
     "history": "$('library-btn').click(); await sleep(400); $('library-tab-history').click(); await sleep(400);",
     "tilemenu": TILE_MENU,
+    "movefolder": TILE_MENU + "document.querySelector('#ctx [data-act=\"moveToFolder\"]').click(); await sleep(300);",
+    "folderpick": TILE_MENU + "document.querySelector('#ctx [data-act=\"moveToFolder\"]').click(); await sleep(300);"
+                  "document.querySelector('.move-to-folder-pop button').click(); await sleep(300);"
+                  "$('confirm-ok').click(); await sleep(400);",
     "editor": TILE_MENU + "document.querySelector('#ctx [data-act=\"edit\"]')?.click(); await sleep(500);",
     "editor_long": TILE_MENU + "document.querySelector('#ctx [data-act=\"edit\"]')?.click(); await sleep(500);"
                    "const ta = $('modal-text'); ta.value = Array.from({ length: 60 }, (_, i) => 'Line ' + (i + 1) + ' of a long prompt').join(String.fromCharCode(10));"
@@ -86,7 +90,7 @@ ACTS = {
 GROUPS = {
     "@settings": ["settings", "settings_end", "expert", "expert_end", "help", "help_capture", "stats", "backup"],
     "@library": ["library", "history"],
-    "@tiles": ["main", "tilemenu", "editor", "editor_long", "editor_adv", "folder"],
+    "@tiles": ["main", "tilemenu", "movefolder", "folderpick", "editor", "editor_long", "editor_adv", "folder"],
     "@snip": ["snipedit", "snipdraw"],
 }
 

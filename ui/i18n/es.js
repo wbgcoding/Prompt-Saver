@@ -1508,6 +1508,7 @@ export default {
     flagQuickGridHoverOnly: "Cuadrícula rápida: mostrar solo al pasar el cursor",
     tileFolderNew: "Nueva carpeta",
     tileFolderNameMsg: "Nombre para esta carpeta (opcional).",
+    tileFolderPickSecond: "Elige un segundo prompt para la carpeta",
     tileFolderNamePh: "Nombre de la carpeta",
     tileFolderDefaultName: "Carpeta",
     tileFolderRename: "Renombrar carpeta",

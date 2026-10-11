@@ -1508,6 +1508,7 @@ export default {
     flagQuickGridHoverOnly: "クイックグリッド：ホバー時のみ表示",
     tileFolderNew: "新しいフォルダー",
     tileFolderNameMsg: "このフォルダーの名前（省略可）。",
+    tileFolderPickSecond: "フォルダーに入れる2つ目のプロンプトを選択",
     tileFolderNamePh: "フォルダー名",
     tileFolderDefaultName: "フォルダー",
     tileFolderRename: "フォルダー名を変更",

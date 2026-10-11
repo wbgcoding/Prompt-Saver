@@ -287,6 +287,61 @@ REC_EDIT_PROBE = """
     }
 """
 
+# 3002-foldersecond: "Move to folder > New folder" on one prompt asks the name, then lists the
+# prompts that can still join (placed, not in a folder, not itself) and saves the folder with
+# both ids; dismissing that list saves nothing.
+FOLDER_SECOND_PROBE = """
+    // 3002-foldersecond:
+    {
+      const cm = $('confirm-modal'), pop = document.querySelector('.move-to-folder-pop');
+      const tiles = () => [...document.querySelectorAll('#grid .tile:not(.folder-tile)')];
+      const openNew = async (tile) => {
+        const r = tile.getBoundingClientRect();
+        tile.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 10, clientY: r.top + 10 }));
+        await sleep(80);
+        document.querySelector('#ctx [data-act="moveToFolder"], .ctx [data-act="moveToFolder"]').click();
+        await sleep(80);
+        const row = [...pop.querySelectorAll('button')].find((b) => b.textContent === 'New folder');
+        if (!row) { errs.push('3002-foldersecond: no New folder row'); return false; }
+        row.click();
+        await until(() => visible(cm), 20);
+        $('confirm-input').value = 'Pair';
+        $('confirm-ok').click();
+        await until(() => !pop.classList.contains('hidden'), 20);
+        await sleep(80);
+        return true;
+      };
+      const first = tiles()[0];
+      const firstId = first.dataset.id;
+      if (await openNew(first)) {
+        const head = pop.querySelector('.views-pop-head');
+        if (!head || head.textContent !== 'Pick a second prompt for the folder') errs.push('3002-foldersecond: list heading is ' + (head && head.textContent));
+        const rows = [...pop.querySelectorAll('button')];
+        if (!rows.length) errs.push('3002-foldersecond: no candidates listed');
+        if (rows.some((b) => b.textContent === 'New folder')) errs.push('3002-foldersecond: the list still offers New folder');
+        const r = pop.getBoundingClientRect();
+        if (r.left < 0 || r.top < 0 || r.right > window.innerWidth + 1 || r.bottom > window.innerHeight + 1) errs.push('3002-foldersecond: the list leaves the window');
+        // Dismissed: nothing is saved.
+        document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+        await sleep(150);
+        if (argsOf('save_tile_folder').length) errs.push('3002-foldersecond: dismissing the list still saved a folder');
+      }
+      if (await openNew(tiles()[0])) {
+        const rows = [...pop.querySelectorAll('button')];
+        rows[0].click();
+        await until(() => argsOf('save_tile_folder').length > 0, 40);
+        const call = argsOf('save_tile_folder')[0];
+        const a = call && call[1];
+        if (!a) errs.push('3002-foldersecond: picking saved nothing');
+        else {
+          if (a.members.length !== 2 || a.members[0] !== firstId) errs.push('3002-foldersecond: members ' + JSON.stringify(a.members));
+          if (a.members[1] === firstId || ['p4', 'p6', 'p8', 'p10', 'p11'].includes(a.members[1])) errs.push('3002-foldersecond: second member is not a free tile: ' + a.members[1]);
+          if (a.name !== 'Pair') errs.push('3002-foldersecond: name ' + a.name);
+        }
+      }
+    }
+"""
+
 # 859: a resize keeps the earlier image for undo, but only as far back as the undo limit
 # reaches; what lies behind it is released, and closing the editor releases the whole session.
 SNIP_HOLD_SEED = ''
@@ -391,6 +446,7 @@ def run(browser, tmp):
             ("snip-replace", SNIP_REPLACE_PROBE, SNIP_REPLACE_SEED),
             ("rec-convert", REC_CONVERT_PROBE, REC_CONVERT_SEED),
             ("rec-edit", REC_EDIT_PROBE, ""),
+            ("folder-second", FOLDER_SECOND_PROBE, ""),
             ("snip-hold", SNIP_HOLD_PROBE, SNIP_HOLD_SEED),
             ("backup-now", BACKUP_NOW_PROBE, "")):
         errs = _boot(browser, tmp, tag, body, seed=seed)

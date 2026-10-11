@@ -1508,6 +1508,7 @@ export default {
     flagQuickGridHoverOnly: "快速网格：悬停时显示",
     tileFolderNew: "新建文件夹",
     tileFolderNameMsg: "此文件夹的名称（可选）。",
+    tileFolderPickSecond: "为文件夹选择第二个提示词",
     tileFolderNamePh: "文件夹名称",
     tileFolderDefaultName: "文件夹",
     tileFolderRename: "重命名文件夹",

@@ -1508,6 +1508,7 @@ export default {
     flagQuickGridHoverOnly: "Szybka siatka: pokazuj po najechaniu",
     tileFolderNew: "Nowy folder",
     tileFolderNameMsg: "Nazwa tego folderu (opcjonalnie).",
+    tileFolderPickSecond: "Wybierz drugi prompt do folderu",
     tileFolderNamePh: "Nazwa folderu",
     tileFolderDefaultName: "Folder",
     tileFolderRename: "Zmień nazwę folderu",

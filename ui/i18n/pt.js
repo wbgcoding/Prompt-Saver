@@ -1508,6 +1508,7 @@ export default {
     flagQuickGridHoverOnly: "Grade rápida: mostrar só ao passar o mouse",
     tileFolderNew: "Nova pasta",
     tileFolderNameMsg: "Nome para esta pasta (opcional).",
+    tileFolderPickSecond: "Escolha um segundo prompt para a pasta",
     tileFolderNamePh: "Nome da pasta",
     tileFolderDefaultName: "Pasta",
     tileFolderRename: "Mudar o nome da pasta",
