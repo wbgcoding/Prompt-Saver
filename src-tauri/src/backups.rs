@@ -173,7 +173,9 @@ pub(crate) fn backup_prompt_names(folder: &std::path::Path) -> Vec<BackupPrompt>
     };
     let items = read_prompt_names(&path);
     let _ = fs::remove_file(folder.join("names.tmp"));
-    if !items.is_empty() {
+    // An empty list is cached only when the snapshot really holds no prompt: a
+    // failed read looks the same and must not be pinned.
+    if !items.is_empty() || backup_prompt_count(folder) == Some(0) {
         write_prompt_names(&cache, &items);
     }
     items

@@ -19278,3 +19278,26 @@ fn a_version_row_with_an_unreadable_column_is_left_untouched() {
         .unwrap();
     assert_eq!(before, after, "a row with an unreadable column is never rewritten");
 }
+
+#[test]
+fn backup_names_cache_is_written_for_an_empty_snapshot() {
+    let dir = std::env::temp_dir().join(format!("{}-test-empty-names-cache", brand::SLUG));
+    let _ = std::fs::remove_dir_all(&dir);
+    let folder = dir.join("20260101-000000");
+    std::fs::create_dir_all(&folder).unwrap();
+    let raw = dir.join("raw.db");
+    drop(full_schema_db(&raw, "e"));
+    gzip_to(&raw, &folder.join("data.db.gz")).unwrap();
+    let _ = std::fs::remove_file(&raw);
+
+    assert!(backup_prompt_names(&folder).is_empty());
+    assert!(folder.join(BACKUP_NAMES_FILE).exists(), "an empty snapshot is cached too, not unpacked on every listing");
+
+    // A snapshot that cannot be read at all must not get a cached empty list.
+    let bad = dir.join("20260102-000000");
+    std::fs::create_dir_all(&bad).unwrap();
+    std::fs::write(bad.join("data.db.gz"), b"not gzip").unwrap();
+    assert!(backup_prompt_names(&bad).is_empty());
+    assert!(!bad.join(BACKUP_NAMES_FILE).exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}
