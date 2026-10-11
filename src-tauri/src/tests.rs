@@ -19335,3 +19335,20 @@ fn sync_poll_adds_an_unplaced_new_file_to_the_view_members() {
     let key = grid_key(view.cols, view.rows);
     assert!(view.layouts.get(&key).is_some_and(|l| l.contains_key("fresh")));
 }
+
+#[test]
+fn copy_mic_sidecar_alongside_brings_the_microphone_track_to_the_open_editor_copy() {
+    let dir = std::env::temp_dir().join(format!("ps-openedit-mic-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let src = dir.join("rec-x.mp4");
+    let dest = dir.join("rec-x-copy.mp4");
+    fs::write(&src, b"video").unwrap();
+    copy_mic_sidecar_alongside(&src, &dest);
+    assert!(!dest.with_extension("mic.wav").exists(), "no sidecar, nothing to copy");
+    fs::write(src.with_extension("mic.wav"), b"RIFF").unwrap();
+    copy_mic_sidecar_alongside(&src, &dest);
+    assert_eq!(fs::read(dest.with_extension("mic.wav")).unwrap(), b"RIFF");
+    assert!(src.with_extension("mic.wav").is_file(), "the original stays untouched");
+    let _ = fs::remove_dir_all(&dir);
+}

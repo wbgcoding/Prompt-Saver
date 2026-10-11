@@ -104,6 +104,16 @@ pub(crate) fn copy_keys_sidecar_alongside(src: &Path, dest: &Path) {
 #[cfg(not(windows))]
 pub(crate) fn copy_keys_sidecar_alongside(_src: &Path, _dest: &Path) {}
 
+// A dual-audio recording that the editor has not muxed yet keeps its microphone
+// track in "<name>.mic.wav" beside the video. The editor's working copy needs it
+// too, or the export silently drops the microphone.
+pub(crate) fn copy_mic_sidecar_alongside(src: &Path, dest: &Path) {
+    let src_mic = src.with_extension("mic.wav");
+    if src_mic.is_file() {
+        let _ = fs::copy(&src_mic, dest.with_extension("mic.wav"));
+    }
+}
+
 // Right-click "Open a file in the editor" (the screenshot/record buttons, and
 // an image/video attachment in the library) all land here. The original file
 // is never touched: an image is read into a data URL straight into the same
@@ -152,6 +162,7 @@ pub(crate) async fn open_file_in_editor(app: AppHandle, path: String) -> Result<
             let dest = work_dir.join(format!("{base}.{ext}"));
             fs::copy(&p, &dest).map_err(|e| e.to_string())?;
             copy_keys_sidecar_alongside(&p, &dest);
+            copy_mic_sidecar_alongside(&p, &dest);
             Ok(OpenEditResult::Video { copied_path: dest.to_string_lossy().to_string(), origin_dir, name })
         }
         _ => Err("not-media".to_string()),
