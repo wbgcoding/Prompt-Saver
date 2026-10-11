@@ -185,6 +185,9 @@ TOUR_FIRSTRUN_PROBE = """
       window.__SMOKE_ARGS__ = [];
       if (mode === 'finish') {
         document.getElementById('tour-next').click(); // last step's button is Finish
+      } else if (mode === 'help') {
+        // Leaving for a row's help article keeps the choices made so far, like Finish.
+        featureRows[0].querySelector('.tour-help-btn').click();
       } else {
         document.getElementById('tour-skip').click(); // top-right Skip, no confirmation
       }
@@ -199,16 +202,16 @@ TOUR_FIRSTRUN_PROBE = """
       const otherFlagCalls = flagCalls.filter((c) => c[1] && c[1].key !== 'tourSeen');
       const autostartCalls = calls.filter((c) => c[0] === 'set_autostart');
       const autoUpdateCalls = calls.filter((c) => c[0] === 'set_auto_update');
-      if (mode === 'finish') {
+      if (mode === 'finish' || mode === 'help') {
         if (!otherFlagCalls.length) {
-          errs.push('finish: the flipped feature switch was not written');
+          errs.push(mode + ': the flipped feature switch was not written');
         } else {
           const fc = otherFlagCalls[0][1];
-          if (fc.enabled !== !featureWasOn) errs.push('finish: the feature flag was written with the wrong value');
+          if (fc.enabled !== !featureWasOn) errs.push(mode + ': the feature flag was written with the wrong value');
         }
-        if (otherFlagCalls.length > 1) errs.push('finish: an untouched feature flag was written too: ' + JSON.stringify(otherFlagCalls));
+        if (otherFlagCalls.length > 1) errs.push(mode + ': an untouched feature flag was written too: ' + JSON.stringify(otherFlagCalls));
         if (!autostartCalls.length && !autoUpdateCalls.length) {
-          errs.push('finish: the flipped setup switch was not written');
+          errs.push(mode + ': the flipped setup switch was not written');
         }
       } else {
         if (otherFlagCalls.length) errs.push('skip: a feature flag was written even though the tour was skipped: ' + JSON.stringify(otherFlagCalls));
@@ -2208,7 +2211,7 @@ def run(browser, tmp):
     # 390/455: the first-run tour's draft-buffered write path, both ways round
     # (Finish writes only what was touched, Skip writes nothing but tourSeen).
     # Its own boot each time, same reasoning as the store-sealing pair above.
-    for mode in ("finish", "skip"):
+    for mode in ("finish", "skip", "help"):
         side = tmp / "ui" / f"tour-firstrun-{mode}.html"
         side.write_text(
             (REPO / "ui" / "index.html").read_text(encoding="utf-8")

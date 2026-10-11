@@ -90,10 +90,12 @@ export function tourHelpButton(anchor) {
   btn.title = t("tourHelpBtn");
   btn.setAttribute("aria-label", t("tourHelpBtn"));
   btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 1a5 5 0 0 0-1 9.9V12h2v-1.1A5 5 0 0 0 8 1zm0 12.5a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2z"/></svg>';
-  btn.addEventListener("click", (e) => {
+  btn.addEventListener("click", async (e) => {
     e.preventDefault();
     e.stopPropagation();
-    closeTour();
+    // Leaving the tour for the help keeps the choices made so far, like Finish: the
+    // draft is written and the tour is marked seen, or it would reopen on the next launch.
+    await tourFinish();
     openHelpAt(anchor);
   });
   return btn;
@@ -201,8 +203,8 @@ export function renderTourSetupSection() {
   dataChange.type = "button";
   dataChange.className = "ghost-btn tour-setup-change-btn";
   dataChange.textContent = t("tourSetDataDirChange");
-  dataChange.addEventListener("click", () => {
-    closeTour();
+  dataChange.addEventListener("click", async () => {
+    await tourFinish();
     jumpToExpertSetting("dataDir", "paths");
   });
   dataRow.append(dataLabel, dataChange);
