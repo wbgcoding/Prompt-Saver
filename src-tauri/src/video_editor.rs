@@ -1200,6 +1200,14 @@ pub(crate) fn estimate_export_size(format: String, video_kbps: Option<u32>, loss
     estimate_export_bytes(&format, video_kbps, lossless_quality, duration_ms)
 }
 
+// The "-t" length for a trim: from the start (0 when only an end is given) to the
+// end; None when there is no end or nothing is left.
+pub(crate) fn trim_duration_secs(start_ms: Option<u64>, end_ms: Option<u64>) -> Option<f64> {
+    let end = end_ms?;
+    let dur = end.saturating_sub(start_ms.unwrap_or(0)) as f64 / 1000.0;
+    (dur > 0.0).then_some(dur)
+}
+
 pub(crate) fn export_video_blocking(
     ffmpeg: &Path, src: &Path, dst: &Path, req: &ExportRequest, my_gen: u64, mut on_progress: impl FnMut(u32),
 ) -> Result<String, String> {
@@ -1211,12 +1219,9 @@ pub(crate) fn export_video_blocking(
         }
     }
     let mut output_args: Vec<String> = Vec::new();
-    if let (Some(start), Some(end)) = (req.trim_start_ms, req.trim_end_ms) {
-        let dur = end.saturating_sub(start) as f64 / 1000.0;
-        if dur > 0.0 {
-            output_args.push("-t".to_string());
-            output_args.push(format!("{dur:.3}"));
-        }
+    if let Some(dur) = trim_duration_secs(req.trim_start_ms, req.trim_end_ms) {
+        output_args.push("-t".to_string());
+        output_args.push(format!("{dur:.3}"));
     }
     let plain_copy = req.lossless_copy && req.filter_chain.is_none() && req.audio_map.is_none();
     if plain_copy {

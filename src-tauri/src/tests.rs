@@ -19518,3 +19518,13 @@ fn a_data_only_import_writes_the_vault_keys_it_carried_in() {
         assert_eq!(seen, Some((true, expect_settings_written)), "foreign vault keys: {foreign}");
     }
 }
+
+#[test]
+fn a_trim_with_only_an_end_still_limits_the_export_length() {
+    assert_eq!(trim_duration_secs(Some(2000), Some(5000)), Some(3.0));
+    assert_eq!(trim_duration_secs(None, Some(5000)), Some(5.0));
+    assert_eq!(trim_duration_secs(Some(0), Some(5000)), Some(5.0));
+    assert_eq!(trim_duration_secs(Some(2000), None), None);
+    assert_eq!(trim_duration_secs(Some(5000), Some(5000)), None);
+    assert_eq!(trim_duration_secs(Some(6000), Some(5000)), None);
+}
