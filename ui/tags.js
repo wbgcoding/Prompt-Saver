@@ -258,7 +258,7 @@ export function renderTagFilter() {
   // A tag renamed or deleted elsewhere must not keep filtering the list.
   const live = new Set(names.map(tagKey));
   for (const key of [...libTags]) if (!live.has(key)) libTags.delete(key);
-  const sig = LANG + "|" + names.join("") + "" + [...libTags].sort().join("");
+  const sig = LANG + "|" + names.join("") + "" + [...libTags].sort().join("") + JSON.stringify(settings.tag_colors || {});
   if (sig === _lastTagFilterSig) return;
   _lastTagFilterSig = sig;
   renderTagBar(bar, libTags, renderLibrary);
@@ -445,10 +445,10 @@ export function renderTagManager() {
       });
       if (next == null || !next.trim()) return;
       const nextTrimmed = next.trim();
-      if (tagKey(nextTrimmed) === tagKey(name)) return; // unchanged
+      if (nextTrimmed === name) return; // unchanged (a casing change is a rename)
       // Renaming onto an existing tag is really a merge. The name was typed on
       // purpose, so it runs at once and the undo toast covers a slip.
-      const existing = allTags().find((n2) => tagKey(n2) === tagKey(nextTrimmed));
+      const existing = tagKey(nextTrimmed) === tagKey(name) ? null : allTags().find((n2) => tagKey(n2) === tagKey(nextTrimmed));
       if (existing) { await mergeTagWithUndo(name, existing, refresh); return; }
       try { assignSettings(await invoke("rename_tag", { old: name, new: nextTrimmed })); }
       catch (err) { errToast(err); return; }
