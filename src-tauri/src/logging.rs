@@ -489,6 +489,7 @@ pub(crate) fn sanitize_error_log_origin(origin: &str) -> &'static str {
     }
     match origin {
         "remoteApi" => "remoteApi",
+        "urlScheme" => "urlScheme",
         "test" => "test",
         _ => "other",
     }

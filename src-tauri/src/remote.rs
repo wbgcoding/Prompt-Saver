@@ -117,6 +117,16 @@ fn log_remote(settings: &Settings, origin: &str, text: &str) {
     }
 }
 
+// The same, for a spot that only has the app: the switch is read from the live settings.
+fn log_remote_app(app: &AppHandle, origin: &str, text: &str) {
+    let settings = {
+        let db: State<Db> = app.state();
+        let guard = lock(&db);
+        guard.settings.clone()
+    };
+    log_remote(&settings, origin, text);
+}
+
 // ---------- Password: generate, hash, compare ----------
 
 fn to_hex(bytes: &[u8]) -> String {
@@ -541,7 +551,7 @@ pub(crate) async fn remote_tls_save_cert(app: AppHandle, state: State<'_, Db>) -
     // it so the exported CA is the one it offers.
     if restart {
         if let Err(e) = restart_receiver(&app) {
-            record_error_log(&format!("the receiver did not restart after the certificate was renewed: {e}"), "remoteApi", None, 100);
+            log_remote_app(&app, "remoteApi", &format!("the receiver did not restart after the certificate was renewed: {e}"));
         }
         let _ = app.emit("remote-tls-renewed", ());
     }
@@ -943,7 +953,7 @@ pub(crate) fn start(app: AppHandle) -> Result<(), String> {
             Ok(a) => Some(a),
             Err(e) => {
                 log_remote(&settings, "remoteApi", &format!("remote access could not start: {e}"));
-                record_error_log(&format!("remote access could not start: {e}"), "remoteApi", None, 100);
+                log_remote(&settings, "remoteApi", &format!("remote access could not start: {e}"));
                 return Err(e);
             }
         }
@@ -979,7 +989,7 @@ pub(crate) fn start(app: AppHandle) -> Result<(), String> {
                 if current {
                     state.running.store(false, Ordering::SeqCst);
                 }
-                record_error_log(&format!("remote access could not bind its port: {e}"), "remoteApi", None, 100);
+                log_remote_app(&app_failed, "remoteApi", &format!("remote access could not bind its port: {e}"));
             },
             move |stream, peer| {
                 let app3 = app_conn.clone();
@@ -1014,10 +1024,10 @@ fn prepare_acceptor(app: &AppHandle) -> Result<TlsAcceptor, String> {
         crate::remote_tls::ensure_tls_identity(&mut store.settings, &names, |s| save_settings(app, s))?
     };
     if source == crate::remote_tls::IdentitySource::KeyUnreadable {
-        record_error_log("the receiver certificate key could not be read here, a new certificate was made", "remoteApi", None, 100);
+        log_remote_app(app, "remoteApi", "the receiver certificate key could not be read here, a new certificate was made");
     }
     if source == crate::remote_tls::IdentitySource::Expired {
-        record_error_log("the receiver certificate had expired, a new certificate was made", "remoteApi", None, 100);
+        log_remote_app(app, "remoteApi", "the receiver certificate had expired, a new certificate was made");
         announce_tls_renewed(app);
     }
     Ok(TlsAcceptor::from(crate::remote_tls::build_server_config(&id)?))
