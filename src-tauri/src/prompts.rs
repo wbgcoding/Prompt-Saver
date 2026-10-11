@@ -1066,6 +1066,45 @@ pub(crate) fn merge_image(stored: &str, incoming: Option<String>) -> String {
     }
 }
 
+// What an edit does to a prompt's text and rotation entries. `None` keeps what is
+// stored, a confidential entry's ciphertext included (so it needs no key and a
+// caller that never held the real text cannot wipe it); `Some` is new plain
+// content, sealed here for a confidential entry and refused while it is locked.
+pub(crate) fn edited_text_and_variants(
+    p: &Prompt,
+    text: Option<String>,
+    variants: Option<Vec<String>>,
+    secret_key: Option<[u8; 32]>,
+) -> Result<(String, Vec<String>), String> {
+    if text.is_none() && variants.is_none() {
+        return Ok((p.text.clone(), p.variants.clone()));
+    }
+    if !p.secret {
+        return Ok((text.unwrap_or_else(|| p.text.clone()), variants.unwrap_or_else(|| p.variants.clone())));
+    }
+    // The editor's plain value is re-encrypted before it touches the entry; while
+    // locked there is no key, so the whole save is refused rather than silently
+    // discarding the real ciphertext.
+    let Some(key) = secret_key else {
+        return Err("secret-locked".to_string());
+    };
+    Ok((
+        text.map_or_else(|| p.text.clone(), |t| secret_encrypt(&t, &key)),
+        variants.map_or_else(|| p.variants.clone(), |v| v.iter().map(|s| secret_encrypt(s, &key)).collect()),
+    ))
+}
+
+// The one prompt as the window's list holds it (see slim_prompts): a confidential
+// entry arrives decrypted while the vault is open and empty while it is locked,
+// never as the sealed text the store keeps.
+fn slim_one(state: &State<'_, Db>, p: &Prompt) -> SlimPrompt {
+    let key = {
+        let store = lock(state);
+        secret_session_key(secret_timeout_min(&store.settings))
+    };
+    slim_prompts(std::slice::from_ref(p), key).remove(0)
+}
+
 // Async: same reason as add_prompt; the SQLite write stays off the UI thread.
 // Same shape as add_prompt, for the same reason -- one parameter per editable field.
 #[allow(clippy::too_many_arguments)]
@@ -1075,7 +1114,10 @@ pub(crate) async fn update_prompt(
     state: State<'_, Db>,
     id: String,
     name: String,
-    text: String,
+    // Absent text/variants = keep what is stored. A write that only changes one
+    // flag (a hotkey, the auto-rotate switch) sends neither, so it can never
+    // replace a confidential entry's real text with whatever its cache held.
+    text: Option<String>,
     color: String,
     // Absent = keep whatever is stored. The editor only sends this field when the
     // user actually changed the picture, so an image that never finished loading
@@ -1096,17 +1138,15 @@ pub(crate) async fn update_prompt(
     notes: Option<String>,
     hotkey: Option<String>,
     hotkey_paste: Option<String>,
-    variants: Vec<String>,
+    variants: Option<Vec<String>>,
     rotate_mode: String,
-    // Option, unlike variants/rotate_mode: added in 90, the editor UI wiring
-    // (frontend) lands only in 92; an interim caller that omits it must not
-    // reset an unrelated field, so a missing value keeps the prompt's own.
+    // Option, unlike rotate_mode: a caller that omits it must not reset an
+    // unrelated field, so a missing value keeps the prompt's own.
     rotate_auto: Option<bool>,
-) -> Result<Option<Prompt>, String> {
+) -> Result<Option<SlimPrompt>, String> {
     // Upgraded before anything below (the version snapshot included) sees the text.
-    let text = upgrade_placeholders(&text);
-    let variants = sanitize_variants(variants.iter().map(|s| upgrade_placeholders(s)).collect());
-    let rotate_mode = sanitize_rotate_mode(rotate_mode, &variants);
+    let text = text.map(|t| upgrade_placeholders(&t));
+    let variants = variants.map(|v| sanitize_variants(v.iter().map(|s| upgrade_placeholders(s)).collect()));
     // Copying an attachment, probing it and OCR-ing a new picture all happen
     // before the store lock is taken, against a short snapshot of what the
     // prompt holds now. The locked section below uses those results only when
@@ -1189,24 +1229,13 @@ pub(crate) async fn update_prompt(
                 // computed against.
                 let staged_valid = staged_cur.as_ref().is_some_and(|(i, f, c)| *i == p.image && *f == p.file_path && *c == p.icon_path);
                 // A confidential entry's text/variants must never land in storage
-                // as whatever the editor sent -- that is the plain text while
-                // unlocked, so it is re-encrypted here before it touches p; while
-                // locked there is no key to encrypt with, so the whole save is
-                // refused rather than silently discarding the real ciphertext.
-                let (text, variants) = if p.secret {
-                    let Some(key) = secret_key else {
-                        return Err("secret-locked".to_string());
-                    };
-                    let enc_variants = variants.iter().map(|v| secret_encrypt(v, &key)).collect();
-                    (secret_encrypt(&text, &key), enc_variants)
-                } else {
-                    (text, variants)
-                };
+                // as whatever the editor sent (see edited_text_and_variants).
+                let (text, variants) = edited_text_and_variants(p, text, variants, secret_key)?;
                 p.name = name;
                 p.text = text;
                 p.color = color;
                 p.variants = variants;
-                p.rotate_mode = rotate_mode;
+                p.rotate_mode = sanitize_rotate_mode(rotate_mode, &p.variants);
                 if let Some(auto) = rotate_auto { p.rotate_auto = sanitize_rotate_auto(auto, &p.variants); }
                 // Same rule as the attachment path above: only a real change to the
                 // picture re-indexes it. Cleared the moment the picture is gone,
@@ -1325,6 +1354,7 @@ pub(crate) async fn update_prompt(
         }
         other => other,
     };
+    let slim = updated.as_ref().map(|p| slim_one(&state, p));
     if let Some(p) = &updated {
         let _ = app.emit("prompt-updated", p.clone());
         rebuild_tray(&app); // A rename shows up in the tray entries
@@ -1334,7 +1364,7 @@ pub(crate) async fn update_prompt(
             let _ = win.set_size(tauri::LogicalSize::new(w, h));
         }
     }
-    Ok(updated)
+    Ok(slim)
 }
 
 // List a prompt's version snapshots (newest first).

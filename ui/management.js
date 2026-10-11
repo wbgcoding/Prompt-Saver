@@ -490,6 +490,8 @@ export async function takeCompareSide(target, source) {
     errToast(err);
     return;
   }
+  // update_prompt hands back the same shape get_state delivers (a confidential
+  // entry decrypted, never its sealed text), so it can go straight into the cache.
   if (updated) {
     const idx = prompts.findIndex((x) => x.id === updated.id);
     if (idx >= 0) prompts[idx] = updated;

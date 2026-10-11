@@ -6059,6 +6059,50 @@ fn add_and_update_prompt_do_the_slow_work_before_the_insert_lock() {
     }
 }
 
+// A write that sends no text and no entries (a hotkey or the auto-rotate switch
+// set straight from the tile menu) keeps what is stored, whatever the entry is.
+// For a confidential entry that means the ciphertext, with the vault locked too.
+#[test]
+fn an_edit_without_text_keeps_a_confidential_prompts_ciphertext() {
+    let key = [7u8; 32];
+    let mut p = image_text_prompt("s", "");
+    p.secret = true;
+    p.text = secret_encrypt("the real secret", &key);
+    p.variants = vec![secret_encrypt("second", &key)];
+
+    let (text, variants) = edited_text_and_variants(&p, None, None, None).unwrap();
+    assert_eq!((text.as_str(), variants.as_slice()), (p.text.as_str(), p.variants.as_slice()));
+    let (text, variants) = edited_text_and_variants(&p, None, None, Some(key)).unwrap();
+    assert_eq!(secret_decrypt(&text, &key).unwrap(), "the real secret");
+    assert_eq!(secret_decrypt(&variants[0], &key).unwrap(), "second");
+
+    // New plain text is sealed, and refused while there is no key.
+    let (text, _) = edited_text_and_variants(&p, Some("changed".into()), Some(vec![]), Some(key)).unwrap();
+    assert_eq!(secret_decrypt(&text, &key).unwrap(), "changed");
+    assert_eq!(edited_text_and_variants(&p, Some("changed".into()), None, None), Err("secret-locked".to_string()));
+
+    // A plain prompt takes new content as it is and keeps what is not sent.
+    let mut plain = image_text_prompt("p", "");
+    plain.text = "old".into();
+    plain.variants = vec!["v".into()];
+    let (text, variants) = edited_text_and_variants(&plain, Some("new".into()), None, None).unwrap();
+    assert_eq!((text.as_str(), variants.as_slice()), ("new", &["v".to_string()][..]));
+}
+
+// The direct hotkey and auto-rotate writes must not carry the cached text.
+#[test]
+fn the_direct_prompt_writes_never_send_the_cached_text() {
+    let src = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../ui/hotkeys.js"))
+        .unwrap()
+        .replace("\r\n", "\n");
+    for name in ["export async function commitPromptHotkeyDirect", "export async function toggleRotateAutoDirect"] {
+        let a = src.find(name).expect(name);
+        let body = &src[a..a + src[a..].find("\n}\n").unwrap()];
+        let call = &body[body.find("invoke(\"update_prompt\"").unwrap()..];
+        assert!(!call.contains("text: p.text") && !call.contains("variants:"), "{name} must send neither text nor entries");
+    }
+}
+
 // The stat scan alone decides whether anything needs reading; with nothing to
 // read the poll returns before it copies the library.
 #[test]

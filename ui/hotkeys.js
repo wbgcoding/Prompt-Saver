@@ -242,7 +242,10 @@ export async function commitRecPauseHotkey(accel) {
 
 // Unlike the editor (which only stages a hotkey until Save), a popup row has no
 // save step of its own: it writes straight through update_prompt with every OTHER
-// field taken from the prompt's own in-memory copy, unchanged. check_hotkey runs
+// field taken from the prompt's own in-memory copy, unchanged. The text and the
+// rotation entries are deliberately NOT sent: for a confidential prompt the
+// cached copy can be empty (vault locked) or stale, and a missing field means
+// "keep what is stored". check_hotkey runs
 // first so a live OS conflict shows up immediately instead of only being caught by
 // update_prompt's own late rearm (see the "the backend hands back what it
 // really stored" note at the editor's save path).
@@ -251,7 +254,7 @@ export async function commitPromptHotkeyDirect(id, accel) {
   if (!p) throw "save-failed";
   if (accel) await invoke("check_hotkey", { hotkey: accel, id });
   const saved = await invoke("update_prompt", {
-    id: p.id, name: p.name, text: p.text, color: p.color,
+    id: p.id, name: p.name, color: p.color,
     // No image field: the prompt list no longer carries the bytes, and a missing
     // field means "keep the stored picture": exactly what this write wants.
     showImage: p.show_image, copyImage: p.copy_image,
@@ -259,7 +262,7 @@ export async function commitPromptHotkeyDirect(id, accel) {
     caption: p.caption, captionSize: p.caption_size, font: p.font, fontSize: p.font_size,
     favorite: p.favorite, tags: p.tags, notes: p.notes,
     hotkey: accel, hotkeyPaste: accel ? p.hotkey_paste : "",
-    variants: p.variants || [], rotateMode: p.rotate_mode || "", rotateAuto: p.rotate_auto || false,
+    rotateMode: p.rotate_mode || "", rotateAuto: p.rotate_auto || false,
   });
   if (!saved) throw "save-failed";
   p.hotkey = saved.hotkey;
@@ -279,14 +282,14 @@ export async function toggleRotateAutoDirect(id) {
   const nextAuto = !p.rotate_auto;
   try {
     const saved = await invoke("update_prompt", {
-      id: p.id, name: p.name, text: p.text, color: p.color,
-      // Same as commitPromptHotkeyDirect: no image field = keep the stored one.
+      id: p.id, name: p.name, color: p.color,
+      // Same as commitPromptHotkeyDirect: no image, text or entries = keep the stored ones.
       showImage: p.show_image, copyImage: p.copy_image,
       filePath: p.file_path, pdfPage: p.pdf_page, iconPath: p.icon_path,
       caption: p.caption, captionSize: p.caption_size, font: p.font, fontSize: p.font_size,
       favorite: p.favorite, tags: p.tags, notes: p.notes,
       hotkey: p.hotkey || "", hotkeyPaste: p.hotkey_paste || "",
-      variants: p.variants || [], rotateMode: p.rotate_mode || "", rotateAuto: nextAuto,
+      rotateMode: p.rotate_mode || "", rotateAuto: nextAuto,
     });
     if (!saved) throw "save-failed";
     p.rotate_auto = saved.rotate_auto;
