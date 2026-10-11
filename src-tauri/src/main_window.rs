@@ -214,7 +214,25 @@ pub(crate) fn summon_launcher(app: &AppHandle) {
 pub(crate) fn open_launcher_window(app: &AppHandle, deferred: bool) {
     if let Some(win) = app.get_webview_window(LAUNCHER_WIN_LABEL) {
         let _ = win.close();
+        // close() only queues the teardown, and building under the same label before
+        // it ran fails, which would leave no launcher at all. The rebuild waits for
+        // the label off this thread: it may be the event loop that runs the teardown.
+        let app2 = app.clone();
+        tauri::async_runtime::spawn(async move {
+            for _ in 0..50 {
+                if app2.get_webview_window(LAUNCHER_WIN_LABEL).is_none() {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+            build_launcher_window(&app2, deferred);
+        });
+        return;
     }
+    build_launcher_window(app, deferred);
+}
+
+fn build_launcher_window(app: &AppHandle, deferred: bool) {
     let gen = LAUNCHER_GEN.fetch_add(1, Ordering::SeqCst) + 1;
     let excluded = {
         let state: State<Db> = app.state();
