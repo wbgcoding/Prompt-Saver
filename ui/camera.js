@@ -111,12 +111,14 @@ function bestMimeType() {
   return "video/webm";
 }
 
+let audioListGen = 0;
 async function populateAudioDevices() {
-  audioSelect.innerHTML = "";
+  const gen = ++audioListGen;
+  const keep = audioSelect.value;
   const none = document.createElement("option");
   none.value = "";
   none.textContent = t("cameraAudioNone");
-  audioSelect.appendChild(none);
+  const opts = [none];
   try {
     const devices = await navigator.mediaDevices.enumerateDevices();
     for (const d of devices) {
@@ -124,12 +126,15 @@ async function populateAudioDevices() {
       const opt = document.createElement("option");
       opt.value = d.deviceId;
       opt.textContent = d.label || t("cameraAudioSource");
-      audioSelect.appendChild(opt);
+      opts.push(opt);
     }
   } catch {
     // No device enumeration permission yet -- the "no microphone" option
     // alone still lets the camera be used silently.
   }
+  if (gen !== audioListGen) return; // a newer call rebuilds the list
+  audioSelect.replaceChildren(...opts);
+  if (keep && opts.some((o) => o.value === keep)) audioSelect.value = keep;
 }
 
 function stopStream() {
@@ -518,9 +523,19 @@ window.addEventListener("mousemove", async (e) => {
 });
 window.addEventListener("mouseup", () => { dragStart = null; });
 
-listen("camera-permission-ready", () => {
+// The permission event and the saved settings (camera, frame rate, resolution)
+// arrive in either order; the first preview waits for both, so it never opens the
+// default camera at the default size and then stays there.
+let permissionReady = false;
+let settingsReady = false;
+function startPreviewWhenReady() {
+  if (!permissionReady || !settingsReady) return;
   refreshPreview();
   populateAudioDevices();
+}
+listen("camera-permission-ready", () => {
+  permissionReady = true; // a repeated grant re-runs the start
+  startPreviewWhenReady();
 });
 
 // Theme + language, same shared helpers every satellite window uses.
@@ -541,7 +556,8 @@ Promise.all([invoke("get_settings"), import("./floatShared.js"), invoke("default
     if (savedRes && resSelect.querySelector(`option[value="${savedRes}"]`)) resSelect.value = savedRes;
     populateAudioDevices();
   })
-  .catch(() => {});
+  .catch(() => {})
+  .finally(() => { settingsReady = true; startPreviewWhenReady(); });
 
 // Every text this window shows, drawn again from the current language. The window
 // stays open while the language can be switched in the main window, so this runs
