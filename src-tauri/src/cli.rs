@@ -185,13 +185,8 @@ async fn try_forward(argv: &[String], cwd: &Path) -> Option<i32> {
     };
     let req = PipeRequest { argv: argv.to_vec(), cwd: cwd.to_string_lossy().to_string() };
     let bytes = serde_json::to_vec(&req).ok()?;
-    let roundtrip = async {
-        write_frame(&mut client, &bytes).await.ok()?;
-        let resp_bytes = read_frame(&mut client, MAX_FRAME_BYTES).await.ok()?;
-        serde_json::from_slice::<PipeResponse>(&resp_bytes).ok()
-    };
-    match tokio::time::timeout(std::time::Duration::from_secs(5), roundtrip).await {
-        Ok(Some(resp)) => {
+    match exchange(&mut client, &bytes, FORWARD_HANDOFF, FORWARD_RESULT_WAIT).await {
+        Forwarded::Answer(resp) => {
             if !resp.stdout.is_empty() {
                 print!("{}", resp.stdout);
             }
@@ -200,13 +195,55 @@ async fn try_forward(argv: &[String], cwd: &Path) -> Option<i32> {
             }
             Some(resp.code)
         }
-        // Connected, but no readable answer within the time limit -- the store
+        // The running instance never took the request, so nothing ran: the store
         // is effectively unreachable from here right now, same standing as a
         // foreign machine's fresh data-dir lock (exit 3).
-        _ => {
-            eprintln!("prompt-saver: no answer from the running instance within 5 seconds");
+        Forwarded::NotHandedOver => {
+            eprintln!("prompt-saver: the running instance did not accept the command within 5 seconds");
             Some(3)
         }
+        Forwarded::Closed => {
+            eprintln!("prompt-saver: the running instance closed the connection without an answer; the command may or may not have run");
+            Some(3)
+        }
+        Forwarded::TimedOut => {
+            eprintln!("prompt-saver: no result after 10 minutes; the command may still be running in the running instance");
+            Some(3)
+        }
+    }
+}
+
+// How long writing the request into the pipe may take, and how long the finished
+// command is waited for afterwards (a backup, restore or export can run long).
+const FORWARD_HANDOFF: std::time::Duration = std::time::Duration::from_secs(5);
+const FORWARD_RESULT_WAIT: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+
+enum Forwarded {
+    Answer(PipeResponse),
+    NotHandedOver,
+    Closed,
+    TimedOut,
+}
+
+// One request/answer round over a connected pipe: the hand-off is bounded by
+// `handoff`; once the request is written, the answer is awaited for up to `wait`.
+async fn exchange<S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin>(
+    pipe: &mut S,
+    request: &[u8],
+    handoff: std::time::Duration,
+    wait: std::time::Duration,
+) -> Forwarded {
+    match tokio::time::timeout(handoff, write_frame(pipe, request)).await {
+        Ok(Ok(())) => {}
+        _ => return Forwarded::NotHandedOver,
+    }
+    match tokio::time::timeout(wait, read_frame(pipe, MAX_FRAME_BYTES)).await {
+        Ok(Ok(bytes)) => match serde_json::from_slice::<PipeResponse>(&bytes) {
+            Ok(resp) => Forwarded::Answer(resp),
+            Err(_) => Forwarded::Closed,
+        },
+        Ok(Err(_)) => Forwarded::Closed,
+        Err(_) => Forwarded::TimedOut,
     }
 }
 

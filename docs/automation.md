@@ -36,6 +36,11 @@ answers. Either way exactly one process ever touches the database at a time,
 and the caller cannot tell the difference from the outside -- same exit
 codes, same stdout, same stderr, whether or not a window happens to be open.
 
+A launch that hands its command to the running instance waits for the result: up to 5 seconds
+for the instance to take the request, then up to 10 minutes for the answer (a backup, restore or
+export can run long). After that it prints a message to stderr and exits 3; the command may still
+be running in the app, so check before running it again.
+
 Add `--json` to any command that supports it for machine-readable output
 instead of the plain tab-separated lines a person would read.
 
@@ -188,7 +193,7 @@ a caller there gets the same information without a second stream to read.
 | 0 | ok |
 | 1 | bad invocation (missing/unknown argument, wrong flag value) |
 | 2 | not found (unknown id, unknown backup name, unknown setting key) |
-| 3 | store locked or unavailable (another machine holds the data folder, or a row failed to decrypt) |
+| 3 | store locked or unavailable (another machine holds the data folder, or a row failed to decrypt), or a command handed to the running instance gave no result: it did not accept the request within 5 seconds, or returned nothing within 10 minutes (the command may still be running) |
 | 4 | refused (a mutating command run without `--yes`, or a value that fails validation) |
 
 The remote receiver additionally answers with a non-200 HTTP status and a

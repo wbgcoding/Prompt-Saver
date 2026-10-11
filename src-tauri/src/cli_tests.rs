@@ -910,6 +910,88 @@ fn oversized_frame_is_rejected_instead_of_allocated() {
     });
 }
 
+// ---- forwarded request: hand-off versus waiting for the result ----
+
+fn time_rt() -> tokio::runtime::Runtime {
+    tokio::runtime::Builder::new_current_thread().enable_io().enable_time().build().unwrap()
+}
+
+#[test]
+fn forwarded_wait_limits_are_five_seconds_and_ten_minutes() {
+    assert_eq!(FORWARD_HANDOFF, std::time::Duration::from_secs(5));
+    assert_eq!(FORWARD_RESULT_WAIT, std::time::Duration::from_secs(600));
+}
+
+#[test]
+fn forwarded_request_waits_past_the_handoff_limit_for_a_slow_result() {
+    use std::time::Duration;
+    let rt = time_rt();
+    rt.block_on(async {
+        let (mut client, mut server) = tokio::io::duplex(4096);
+        let srv = tokio::spawn(async move {
+            let req = read_frame(&mut server, MAX_FRAME_BYTES).await.unwrap();
+            assert!(!req.is_empty());
+            // Longer than the hand-off limit used below, shorter than the result wait.
+            tokio::time::sleep(Duration::from_millis(400)).await;
+            let resp = PipeResponse { code: 0, stdout: "done
+".into(), stderr: String::new() };
+            write_frame(&mut server, &serde_json::to_vec(&resp).unwrap()).await.unwrap();
+        });
+        match exchange(&mut client, b"{}", Duration::from_millis(100), Duration::from_secs(10)).await {
+            Forwarded::Answer(r) => {
+                assert_eq!(r.code, 0);
+                assert_eq!(r.stdout, "done
+");
+            }
+            _ => panic!("a result slower than the hand-off limit must still be returned"),
+        }
+        srv.await.unwrap();
+    });
+}
+
+#[test]
+fn forwarded_request_gives_up_only_after_the_result_wait() {
+    use std::time::Duration;
+    let rt = time_rt();
+    rt.block_on(async {
+        // The server end stays open and silent: the request is handed over, no answer comes.
+        let (mut client, _server) = tokio::io::duplex(4096);
+        let started = std::time::Instant::now();
+        let out = exchange(&mut client, b"{}", Duration::from_secs(5), Duration::from_millis(300)).await;
+        assert!(matches!(out, Forwarded::TimedOut));
+        assert!(started.elapsed() >= Duration::from_millis(300));
+    });
+}
+
+#[test]
+fn forwarded_request_the_instance_never_reads_is_not_handed_over() {
+    use std::time::Duration;
+    let rt = time_rt();
+    rt.block_on(async {
+        // A pipe buffer far smaller than the request and nobody reading it: the write stalls.
+        let (mut client, _server) = tokio::io::duplex(8);
+        let big = vec![b'x'; 4096];
+        let out = exchange(&mut client, &big, Duration::from_millis(200), Duration::from_secs(10)).await;
+        assert!(matches!(out, Forwarded::NotHandedOver));
+    });
+}
+
+#[test]
+fn forwarded_request_reports_a_dropped_connection() {
+    use std::time::Duration;
+    let rt = time_rt();
+    rt.block_on(async {
+        let (mut client, mut server) = tokio::io::duplex(4096);
+        let srv = tokio::spawn(async move {
+            let _ = read_frame(&mut server, MAX_FRAME_BYTES).await;
+            // dropped here without an answer
+        });
+        let out = exchange(&mut client, b"{}", Duration::from_secs(5), Duration::from_secs(10)).await;
+        assert!(matches!(out, Forwarded::Closed));
+        srv.await.unwrap();
+    });
+}
+
 // ---- remote-caller path confinement ----
 
 #[test]
