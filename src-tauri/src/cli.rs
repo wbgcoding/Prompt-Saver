@@ -2001,11 +2001,46 @@ pub(crate) fn confine_path_arg(argv: &[String], base_dir: &Path) -> Result<(), S
     let canon_base = base_dir
         .canonicalize()
         .map_err(|_| "the data folder could not be resolved".to_string())?;
-    if canon_target.starts_with(&canon_base) {
-        Ok(())
-    } else {
-        Err("refused: the path escapes the data folder".to_string())
+    if !canon_target.starts_with(&canon_base) {
+        return Err("refused: the path escapes the data folder".to_string());
     }
+    // The data folder also holds the live store and the snapshots, which an export
+    // would overwrite with JSON and no safety copy: only the folder's other files
+    // are valid targets.
+    if matches!(cmd, Cmd::Export { .. }) {
+        let target = if resolved.exists() {
+            canon_target
+        } else {
+            match resolved.file_name() {
+                Some(name) => canon_target.join(name),
+                None => return Err("refused: the path has no file name".to_string()),
+            }
+        };
+        if is_store_path(&target, &canon_base) {
+            return Err("refused: that path belongs to the stored data".to_string());
+        }
+    }
+    Ok(())
+}
+
+// True for a path that is part of the stored data inside the data folder: the
+// database with its write-ahead files, the legacy json files, the folder lock,
+// and anything under the snapshots and attachment folders. Both arguments are
+// canonical. File names compare case-insensitively (Windows).
+fn is_store_path(target: &Path, base: &Path) -> bool {
+    let Ok(rel) = target.strip_prefix(base) else {
+        return false;
+    };
+    let mut parts = rel.components().map(|c| c.as_os_str().to_string_lossy().to_lowercase());
+    let Some(first) = parts.next() else {
+        return true; // the folder itself
+    };
+    if parts.next().is_some() {
+        return matches!(first.as_str(), "backups" | "files");
+    }
+    matches!(first.as_str(), "backups" | "files" | "data.db-wal" | "data.db-shm")
+        || crate::STORE_FILES.iter().any(|f| f.eq_ignore_ascii_case(&first))
+        || first.eq_ignore_ascii_case(crate::DATA_DIR_LOCK_FILE)
 }
 
 // ---------- Help text ----------

@@ -920,6 +920,34 @@ fn export_with_an_absolute_path_outside_the_data_folder_is_refused() {
 }
 
 #[test]
+fn export_cannot_overwrite_the_store_or_its_snapshots() {
+    let dir = TempDir::new("confine-store");
+    std::fs::write(dir.path().join("data.db"), "db").unwrap();
+    std::fs::create_dir_all(dir.path().join("backups").join("2026-01-01_10-00-00")).unwrap();
+    for target in [
+        "data.db",
+        "DATA.DB",
+        "data.db-wal",
+        "data.db-shm",
+        "prompts.json",
+        "settings.json",
+        "datadir.lock.json",
+        "backups/2026-01-01_10-00-00/data.db.gz",
+        "backups/new.json",
+        "files/pic.png",
+    ] {
+        let argv = args(&["export", target, "--yes"]);
+        assert!(confine_path_arg(&argv, dir.path()).is_err(), "{target} must be refused as an export target");
+    }
+    // A non-store name stays fine, also in a subfolder of its own.
+    std::fs::create_dir_all(dir.path().join("out")).unwrap();
+    for target in ["export.json", "out/data.json", "mydata.db"] {
+        let argv = args(&["export", target, "--yes"]);
+        assert!(confine_path_arg(&argv, dir.path()).is_ok(), "{target} must stay allowed");
+    }
+}
+
+#[test]
 fn import_from_inside_the_data_folder_is_allowed() {
     let dir = TempDir::new("confine-import-ok");
     let file = dir.path().join("in.json");
