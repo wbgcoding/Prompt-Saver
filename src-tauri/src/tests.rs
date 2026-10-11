@@ -19672,3 +19672,59 @@ fn a_prompt_hotkey_cannot_take_the_active_voice_combination() {
     assert_eq!(drop_colliding_hotkeys("", &reserved, &mut prompts), 1);
     assert!(prompts[0].hotkey.is_empty());
 }
+
+#[test]
+fn prune_history_keeps_entries_stored_without_a_timestamp() {
+    let mut settings = Settings::default();
+    settings.ui_values.insert("historyDays".into(), 1.0);
+    let now = now_secs();
+    settings.copy_log = vec![
+        CopyEntry { id: "undated".into(), ts: 0 },
+        CopyEntry { id: "fresh".into(), ts: now },
+        CopyEntry { id: "old".into(), ts: now - 3 * 86_400 },
+    ];
+    prune_history(&mut settings);
+    let ids: Vec<&str> = settings.copy_log.iter().map(|e| e.id.as_str()).collect();
+    assert_eq!(ids, vec!["undated", "fresh"]);
+}
+
+#[test]
+fn a_locked_confidential_rotation_has_no_plain_prompt() {
+    let key = secret_derive_key("pw", b"0123456789abcdef").expect("derive");
+    let mut p = test_prompt("a");
+    p.secret = true;
+    p.text = secret_encrypt("entry one", &key);
+    p.variants = vec![secret_encrypt("entry two", &key)];
+    assert!(revealed_prompt(&p, None).is_none(), "a locked entry must not yield ciphertext");
+    let plain = revealed_prompt(&p, Some(key)).expect("unlocked");
+    let settings = Settings::default();
+    assert_eq!(rotation_next(&plain, &settings).2, "entry one");
+}
+
+#[test]
+fn the_custom_tray_window_shows_an_ampersand_once() {
+    assert_eq!(tray_plain_label(&tray_label("A & B", TRAY_LABEL_MAX)), "A & B");
+    assert_eq!(tray_plain_label(&tray_label("a && b", TRAY_LABEL_MAX)), "a && b");
+}
+
+#[test]
+fn a_prompt_placed_on_the_grid_becomes_a_view_member() {
+    let mut view: View = serde_json::from_str(r#"{"id":"v","name":"V"}"#).expect("a minimal view");
+    view.members = vec!["a".into()];
+    let layout: HashMap<String, [u32; 2]> =
+        [("a".to_string(), [0, 0]), ("b".to_string(), [1, 0]), ("gone".to_string(), [2, 0])].into_iter().collect();
+    let known: std::collections::HashSet<String> = ["a", "b"].iter().map(|s| s.to_string()).collect();
+    seat_layout_ids_as_members(&mut view, &layout, &known);
+    assert_eq!(view.members, vec!["a".to_string(), "b".to_string()]);
+}
+
+#[test]
+fn renaming_a_tag_to_another_casing_keeps_its_colour() {
+    let mut prompts = vec![test_prompt("a")];
+    prompts[0].tags = vec!["css".to_string()];
+    assert!(rename_tag_in(&mut prompts, "css", "CSS"));
+    assert_eq!(prompts[0].tags, vec!["CSS".to_string()]);
+    let mut colors = HashMap::from([("css".to_string(), "#ff0000".to_string())]);
+    transfer_tag_color(&mut colors, "css", "css");
+    assert_eq!(colors.get("css").map(String::as_str), Some("#ff0000"));
+}

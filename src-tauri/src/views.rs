@@ -7,11 +7,32 @@ use super::*;
 #[tauri::command]
 pub(crate) async fn set_layout(app: AppHandle, state: State<'_, Db>, layout: HashMap<String, [u32; 2]>) -> Result<(), String> {
     let mut store = lock(&state);
+    let known: std::collections::HashSet<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
     let view = store.settings.active_view_mut();
     let key = grid_key(view.cols, view.rows);
+    seat_layout_ids_as_members(view, &layout, &known);
     view.layouts.insert(key, layout);
     save_settings(&app, &store.settings);
     Ok(())
+}
+
+// A prompt placed on the grid (dragged in from the library, or added with its plus)
+// arrives here as a layout entry only; `members` is what decides belonging, and a
+// resize rebuilds the layout from it, so a placed prompt that never became a member
+// would vanish at the next resize. Only prompts that still exist count, so a stale
+// layout sent after a delete cannot bring one back.
+pub(crate) fn seat_layout_ids_as_members(
+    view: &mut View,
+    layout: &HashMap<String, [u32; 2]>,
+    known: &std::collections::HashSet<String>,
+) {
+    let mut ids: Vec<&String> = layout.keys().filter(|id| known.contains(*id)).collect();
+    ids.sort();
+    for id in ids {
+        if !view.members.iter().any(|m| m == id) {
+            view.members.push(id.clone());
+        }
+    }
 }
 
 // Rebuilds one view's layout for its CURRENT grid size from `members`, the

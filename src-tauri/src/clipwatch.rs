@@ -331,10 +331,24 @@ fn emit_active(id: &str, active: bool) {
     }
 }
 
+// The app's own text read (placeholder `{?@clipboard}`): rendering a pending promise
+// for it is not a paste.
+pub(crate) fn read_text_self() -> String {
+    SELF_READ.store(true, Ordering::Release);
+    let read = arboard::Clipboard::new().and_then(|mut c| c.get_text());
+    SELF_READ.store(false, Ordering::Release);
+    read.unwrap_or_default()
+}
+
 // (Re-)claim ownership and promise CF_UNICODETEXT without delivering real
 // data yet: used both for the very first arm (is_first) and every re-arm after
 // a render. Must run on the window thread (posted here, never called directly).
 fn open_and_promise(hwnd: isize, is_first: bool) {
+    // A session that ended while this message was queued (a foreign copy, the
+    // end message, the timeout) must not empty the clipboard it no longer owns.
+    if SESSION.lock().unwrap_or_else(|e| e.into_inner()).is_none() {
+        return;
+    }
     let opened = unsafe { OpenClipboard(hwnd) != 0 };
     if !opened {
         // Another app has the clipboard open right now: do not spin, end the
@@ -411,16 +425,22 @@ fn handle_render_format() {
         if counted {
             match store.prompts.iter().find(|p| p.id == session.id).cloned() {
                 Some(p) if super::auto_eligible(&p, &store.settings) => {
-                    let (idx, _, raw) = super::rotation_next(&p, &store.settings);
-                    let next = session.resolved.get(idx).cloned().unwrap_or(raw);
-                    super::rotation_advance(&p, &mut store.settings);
-                    // Once per paste: collected, never a disk write per Ctrl+V.
-                    super::save_settings_soon();
-                    super::emit_rotation_changed(&app, &p, &store.settings);
-                    session.text = next;
-                    session.last_paste = now;
-                    session.uncounted_rearms = 0;
-                    rearm = true;
+                    // A confidential entry is stored encrypted: decrypt it first, and
+                    // end the session when the vault locked meanwhile, so ciphertext
+                    // never becomes the next paste.
+                    let key = super::secret_session_key(super::secret_timeout_min(&store.settings));
+                    if let Some(plain) = super::revealed_prompt(&p, key) {
+                        let (idx, _, raw) = super::rotation_next(&plain, &store.settings);
+                        let next = session.resolved.get(idx).cloned().unwrap_or(raw);
+                        super::rotation_advance(&p, &mut store.settings);
+                        // Once per paste: collected, never a disk write per Ctrl+V.
+                        super::save_settings_soon();
+                        super::emit_rotation_changed(&app, &p, &store.settings);
+                        session.text = next;
+                        session.last_paste = now;
+                        session.uncounted_rearms = 0;
+                        rearm = true;
+                    }
                 }
                 _ => {} // prompt gone or turned off mid-session: end quietly
             }

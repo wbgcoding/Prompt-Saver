@@ -70,6 +70,12 @@ pub(crate) fn tray_label(name: &str, max: usize) -> String {
     text.replace('&', "&&")
 }
 
+// The custom tray window draws text as it is, so the doubled `&` a Win32 menu needs
+// (see tray_label) goes back to one.
+pub(crate) fn tray_plain_label(label: &str) -> String {
+    label.replace("&&", "&")
+}
+
 pub(crate) fn tray_item_id(prompt_id: &str) -> String {
     format!("{TRAY_COPY_PREFIX}{prompt_id}")
 }
@@ -557,7 +563,7 @@ pub(crate) fn tray_win_plan_from_store(store: &Store, phase: Option<RecPhase>) -
             .to_string(),
             entries: entries
                 .into_iter()
-                .map(|e| TrayWinEntry { id: e.id, label: e.label, kind: tray_kind_str(e.kind).to_string(), color: e.color })
+                .map(|e| TrayWinEntry { id: e.id, label: tray_plain_label(&e.label), kind: tray_kind_str(e.kind).to_string(), color: e.color })
                 .collect(),
         })
         .collect();

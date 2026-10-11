@@ -228,6 +228,16 @@ pub(crate) async fn copy_prompt(app: AppHandle, state: State<'_, Db>, id: String
     Ok(ok)
 }
 
+// The prompt with a confidential entry decrypted, so rotation_next() on it can never
+// hand ciphertext out. None while the vault is locked (or the key is wrong).
+pub(crate) fn revealed_prompt(p: &Prompt, key: Option<[u8; 32]>) -> Option<Prompt> {
+    let (text, variants) = reveal_secret_text(p, key).ok()?;
+    let mut plain = p.clone();
+    plain.text = text;
+    plain.variants = variants;
+    Some(plain)
+}
+
 // What rotation_peek() reports for a "next: n/total" badge or a copy path that
 // needs the resolved text itself (chaining, drag-out, hotkeys, tray, quick-launch)
 // BEFORE it goes through variable resolution: those all peek, resolve, copy_text,
@@ -338,7 +348,11 @@ pub(crate) fn rotation_arm_session(app: AppHandle, state: State<Db>, id: String,
     if !auto_eligible(&p, &store.settings) {
         return false;
     }
-    let (idx, _, raw) = rotation_next(&p, &store.settings);
+    // A locked confidential entry has no session: its stored text is ciphertext.
+    let Some(plain) = revealed_prompt(&p, secret_session_key(secret_timeout_min(&store.settings))) else {
+        return false;
+    };
+    let (idx, _, raw) = rotation_next(&plain, &store.settings);
     let text = resolved.get(idx).cloned().unwrap_or(raw);
     rotation_advance(&p, &mut store.settings);
     save_settings_soon(); // pointer only: collected, see SETTINGS_QUIET_MS
@@ -434,20 +448,23 @@ pub(crate) fn put_formatted(_text: &str, _html: &str) -> bool {
 
 #[tauri::command]
 pub(crate) async fn copy_formatted(text: String, html: String) -> Result<bool, String> {
-    let ok = put_formatted(&text, &html);
-    if ok {
-        note_own_copy(&text);
-    }
-    Ok(ok)
+    // Noted first: the clipboard-update message can arrive before put_formatted returns,
+    // and an own write that is not yet noted would be stored as an outside copy.
+    note_own_copy(&text);
+    Ok(put_formatted(&text, &html))
 }
 
 // `{?@clipboard}`: the clipboard's current text for the placeholder resolver.
 // Empty when the clipboard holds no text at all (an image or file payload).
 #[tauri::command]
 pub(crate) async fn clipboard_text() -> String {
-    arboard::Clipboard::new()
-        .and_then(|mut c| c.get_text())
-        .unwrap_or_default()
+    // Bracketed as our own read: it renders a pending auto-advance promise, and that
+    // render must not be counted as a paste that advances the rotation.
+    #[cfg(windows)]
+    let text = clipwatch::read_text_self();
+    #[cfg(not(windows))]
+    let text = arboard::Clipboard::new().and_then(|mut c| c.get_text()).unwrap_or_default();
+    text
 }
 
 // Safety ceiling for the copy-history length; the live limit is the expert value
@@ -501,7 +518,8 @@ pub(crate) fn history_cap_and_cutoff(settings: &Settings) -> (usize, Option<u64>
 pub(crate) fn prune_history(settings: &mut Settings) {
     if let Some(max_age) = history_max_age(settings) {
         let now = now_secs();
-        settings.copy_log.retain(|e| now.saturating_sub(e.ts) <= max_age);
+        // ts 0 = stored without a timestamp (the privacy toggle): never aged out.
+        settings.copy_log.retain(|e| e.ts == 0 || now.saturating_sub(e.ts) <= max_age);
     }
 }
 
