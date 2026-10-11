@@ -19623,3 +19623,25 @@ fn a_failed_narrowing_restart_does_not_restore_the_wide_flag() {
     assert_eq!(remote::flag_after_failed_restart(true, Some(false)), Some(false));
     assert_eq!(remote::flag_after_failed_restart(true, None), None);
 }
+
+// The WebView2 bootstrapper gate runs only a Microsoft-signed file: a valid
+// signature from anybody else must not pass.
+#[test]
+fn only_a_microsoft_signature_passes_the_bootstrapper_gate() {
+    assert!(is_microsoft_signer("Microsoft Corporation"));
+    assert!(!is_microsoft_signer("Microsoft Corporation Ltd"));
+    assert!(!is_microsoft_signer("Evil Corp"));
+    assert!(!is_microsoft_signer(""));
+    // The unsigned test binary itself is refused.
+    let me = std::env::current_exe().unwrap();
+    assert!(!signed_by_microsoft(&me));
+    // A real Microsoft-signed program, where this machine has one, is accepted.
+    for p in [
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+    ] {
+        if Path::new(p).exists() {
+            assert!(signed_by_microsoft(Path::new(p)), "{p}");
+        }
+    }
+}

@@ -44,15 +44,33 @@ pub(crate) fn ensure_webview2() -> bool {
 // release asset), so an Authenticode check is the equivalent integrity gate here: the
 // size cap + "MZ" header check above are only a corruption/wrong-format guard, not
 // authentication on their own.
+// The one publisher whose bootstrapper may be run: a valid chain alone would admit
+// any signed program served at the download address.
+pub(crate) fn is_microsoft_signer(name: &str) -> bool {
+    name == "Microsoft Corporation"
+}
+
+// True only when the file is validly signed AND the signer is Microsoft.
 #[cfg(windows)]
-pub(crate) fn verify_authenticode_signature(path: &std::path::Path) -> bool {
+pub(crate) fn signed_by_microsoft(path: &std::path::Path) -> bool {
+    match authenticode_check(path) {
+        (true, Some(name)) => is_microsoft_signer(&name),
+        _ => false,
+    }
+}
+
+// (chain-trusted, display name of the signing certificate when it could be read).
+#[cfg(windows)]
+fn authenticode_check(path: &std::path::Path) -> (bool, Option<String>) {
     use std::os::windows::ffi::OsStrExt;
     use windows::core::PCWSTR;
     use windows::Win32::Foundation::HWND;
+    use windows::Win32::Security::Cryptography::{CertGetNameStringW, CERT_NAME_SIMPLE_DISPLAY_TYPE};
     use windows::Win32::Security::WinTrust::{
-        WinVerifyTrust, WINTRUST_ACTION_GENERIC_VERIFY_V2, WINTRUST_DATA, WINTRUST_DATA_0,
-        WINTRUST_FILE_INFO, WTD_CHOICE_FILE, WTD_REVOKE_NONE, WTD_STATEACTION_CLOSE,
-        WTD_STATEACTION_VERIFY, WTD_UICONTEXT_EXECUTE, WTD_UI_NONE,
+        WTHelperGetProvSignerFromChain, WTHelperProvDataFromStateData, WinVerifyTrust,
+        WINTRUST_ACTION_GENERIC_VERIFY_V2, WINTRUST_DATA, WINTRUST_DATA_0, WINTRUST_FILE_INFO,
+        WTD_CHOICE_FILE, WTD_REVOKE_NONE, WTD_STATEACTION_CLOSE, WTD_STATEACTION_VERIFY,
+        WTD_UICONTEXT_EXECUTE, WTD_UI_NONE,
     };
     let wide: Vec<u16> = path.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
     let mut file_info = WINTRUST_FILE_INFO {
@@ -77,13 +95,37 @@ pub(crate) fn verify_authenticode_signature(path: &std::path::Path) -> bool {
     let status = unsafe {
         WinVerifyTrust(HWND(std::ptr::null_mut()), &mut action, &mut data as *mut _ as *mut core::ffi::c_void)
     };
+    // The signing certificate is read while the verify state is still open.
+    let mut signer_name = None;
+    if status == 0 {
+        // SAFETY: after a successful VERIFY the state handle names a provider data
+        // block that stays valid until the CLOSE call below; every pointer is
+        // checked for null before it is followed.
+        unsafe {
+            let prov = WTHelperProvDataFromStateData(data.hWVTStateData);
+            if !prov.is_null() {
+                let signer = WTHelperGetProvSignerFromChain(prov, 0, false, 0);
+                if !signer.is_null() && (*signer).csCertChain > 0 && !(*signer).pasCertChain.is_null() {
+                    let cert = (*(*signer).pasCertChain).pCert;
+                    if !cert.is_null() {
+                        let mut buf = [0u16; 256];
+                        let n = CertGetNameStringW(cert, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, None, Some(&mut buf)) as usize;
+                        if n > 1 {
+                            signer_name = Some(String::from_utf16_lossy(&buf[..n - 1]));
+                        }
+                    }
+                }
+            }
+        }
+    }
     // WTD_STATEACTION_CLOSE releases WinVerifyTrust's own per-call state -- required
     // after a WTD_STATEACTION_VERIFY call regardless of the verify result.
     data.dwStateAction = WTD_STATEACTION_CLOSE;
     unsafe {
         let _ = WinVerifyTrust(HWND(std::ptr::null_mut()), &mut action, &mut data as *mut _ as *mut core::ffi::c_void);
     }
-    status == 0 // ERROR_SUCCESS: a validly (chain-trusted) signed file
+    // ERROR_SUCCESS: a validly (chain-trusted) signed file
+    (status == 0, signer_name)
 }
 
 // Download the Microsoft Evergreen WebView2 bootstrapper to %TEMP% and run it.
@@ -137,8 +179,9 @@ pub(crate) fn install_webview2_runtime() -> bool {
     }
     // Integrity: only Microsoft's own genuinely, chain-trust-signed bootstrapper is ever
     // run. Unlike install_update, there is no separately-published hash to check this
-    // download against -- Authenticode is the equivalent fail-closed gate here.
-    if !verify_authenticode_signature(&path) {
+    // download against -- Authenticode, with the signer pinned to Microsoft, is the
+    // equivalent fail-closed gate here.
+    if !signed_by_microsoft(&path) {
         return false;
     }
     std::process::Command::new(&path)
