@@ -9516,7 +9516,7 @@ fn rotation_ignores_an_incomplete_folder_and_keeps_good_snapshots() {
     let pending = dir.join("2026-01-03_10-00-00");
     std::fs::create_dir_all(&pending).unwrap();
     std::fs::write(pending.join("data.db.tmp"), b"raw").unwrap();
-    rotate_backups_at(&dir, 2, None);
+    rotate_backups_at(&dir, 2, None, None);
     assert!(dir.join("2026-01-01_10-00-00").exists(), "a good snapshot must not be dropped for an incomplete folder");
     assert!(dir.join("2026-01-02_10-00-00").exists());
     assert!(pending.exists(), "the folder being packed is not rotation's to delete");

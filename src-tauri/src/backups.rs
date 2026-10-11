@@ -304,14 +304,10 @@ pub(crate) fn backups_to_drop(names: &[String], keep: usize, gfs: Option<&GfsCon
 }
 // Split out of do_backup() so the command line's headless path can drop old
 // snapshots the same way, working from an already-resolved folder instead of
-// an AppHandle.
-pub(crate) fn rotate_backups_at(dir: &std::path::Path, keep: usize, gfs: Option<GfsConfig>) {
-    rotate_backups_protecting(dir, keep, gfs, None);
-}
-// Same, but a snapshot named in `protect` survives whatever the retention says.
-// A restore takes its safety snapshot before it reads the chosen one: without
-// this the chosen (oldest) snapshot could be the very folder that rotation drops.
-pub(crate) fn rotate_backups_protecting(dir: &std::path::Path, keep: usize, gfs: Option<GfsConfig>, protect: Option<&str>) {
+// an AppHandle. A snapshot named in `protect` survives whatever the retention
+// says: a restore takes its safety snapshot before it reads the chosen one, and
+// without this the chosen (oldest) snapshot could be the folder rotation drops.
+pub(crate) fn rotate_backups_at(dir: &std::path::Path, keep: usize, gfs: Option<GfsConfig>, protect: Option<&str>) {
     // Only folders holding a snapshot count: one still being packed (or left
     // half-made by a quit) must neither use up a slot nor push a good one out.
     let mut names: Vec<String> = fs::read_dir(dir)
@@ -633,7 +629,7 @@ pub(crate) fn backup_pack_protecting(pending: PendingBackup, root: &std::path::P
         let _ = fs::remove_dir_all(&folder);
         return Err(e);
     }
-    rotate_backups_protecting(root, keep.clamp(1, 50), gfs, protect);
+    rotate_backups_at(root, keep.clamp(1, 50), gfs, protect);
     Ok(name)
 }
 
