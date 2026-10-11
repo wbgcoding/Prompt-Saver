@@ -1191,8 +1191,17 @@ fn cmd_copy(store: &Store, id: &str) -> Outcome {
     let Some(p) = store.prompts.iter().find(|p| p.id == id) else {
         return Outcome::err(2, format!("no prompt with id {id}\n"));
     };
+    // Same rule as `get`: a confidential prompt's text is only ever shown in the
+    // app, and what the store holds for it is ciphertext.
+    if p.secret {
+        return Outcome::err(1, format!("prompt {id} is confidential and can only be copied in the app itself\n"));
+    }
     match arboard::Clipboard::new().and_then(|mut c| c.set_text(p.text.clone())) {
-        Ok(()) => Outcome::ok(String::new()),
+        Ok(()) => {
+            // Our own copy: the clipboard watcher must not take it for a foreign one.
+            crate::note_own_copy(&p.text);
+            Outcome::ok(String::new())
+        }
         Err(e) => Outcome::err(3, format!("clipboard unavailable: {e}\n")),
     }
 }

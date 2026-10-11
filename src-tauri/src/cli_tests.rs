@@ -1091,6 +1091,18 @@ fn add_and_edit_store_the_new_placeholder_spelling() {
 }
 
 #[test]
+fn copy_refuses_a_confidential_prompt_like_get() {
+    let mut store = fixture_store();
+    let dir = std::env::temp_dir();
+    store.prompts[0].secret = true;
+    store.prompts[0].text = "CIPHERTEXT".to_string();
+    let id = store.prompts[0].id.clone();
+    let out = run_cmd(&mut store, &dir, &["copy", &id]);
+    assert_eq!(out.code, 1);
+    assert_eq!(run_cmd(&mut store, &dir, &["get", &id]).code, 1);
+}
+
+#[test]
 fn edit_refuses_new_text_for_a_confidential_prompt() {
     let mut store = fixture_store();
     let dir = std::env::temp_dir();
