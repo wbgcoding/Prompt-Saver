@@ -240,15 +240,34 @@ pub(crate) fn open_floating(app: &AppHandle, prompt: &Prompt, taken: &mut Vec<Re
                 }
                 mark_parked(&app2, &pid, false);
             }
-            WindowEvent::Destroyed => {
+            WindowEvent::Destroyed => save_settings_off_event_loop(&app2),
+            _ => {}
+        });
+    }
+}
+
+// Saves the settings from a window-destroyed event. The event loop must not wait on
+// the store: when a backup or import holds it, a worker thread takes the turn instead
+// and every window that closes meanwhile stays responsive.
+pub(crate) fn save_settings_off_event_loop(app: &AppHandle) {
+    let Some(state) = app.try_state::<Db>() else { return };
+    match state.try_lock() {
+        Ok(store) => {
+            save_settings(app, &store.settings);
+        }
+        Err(std::sync::TryLockError::Poisoned(e)) => {
+            save_settings(app, &e.into_inner().settings);
+        }
+        Err(std::sync::TryLockError::WouldBlock) => {
+            let app2 = app.clone();
+            std::thread::spawn(move || {
                 if let Some(state) = app2.try_state::<Db>() {
                     let store = state.lock().unwrap_or_else(|e| e.into_inner());
                     save_settings(&app2, &store.settings);
                 }
-            }
-            _ => {}
-        });
-    }
+            });
+        }
+    };
 }
 
 pub(crate) fn close_floating_window(app: &AppHandle, id: &str) {
@@ -866,10 +885,7 @@ pub(crate) fn open_folder_window(app: &AppHandle, folder: &FloatFolder, taken: &
             }
             WindowEvent::Destroyed => {
                 set_folder_expansion(&app2, &fid, None);
-                if let Some(state) = app2.try_state::<Db>() {
-                    let store = state.lock().unwrap_or_else(|e| e.into_inner());
-                    save_settings(&app2, &store.settings);
-                }
+                save_settings_off_event_loop(&app2);
             }
             _ => {}
         });
