@@ -4404,6 +4404,10 @@ listen("video-editor-load", async (e) => {
   if (VE.ops.length && VE.dirty) {
     const ok = await confirmDialog({ title: t("veCloseTitle"), message: t("veCloseUnsaved"), confirmLabel: t("veDiscard"), danger: true });
     if (!ok) return;
+    // Thrown away on purpose: stop the autosave for the old source and forget what an
+    // earlier tick stored, or reopening that recording would offer the work back.
+    if (editStateTimer) { clearInterval(editStateTimer); editStateTimer = null; }
+    if (VE.src) await invoke("discard_edit_state", { kind: "video", target: VE.src }).catch(() => {});
   }
   loadRecording(path, originDir, overlayPath);
 });
