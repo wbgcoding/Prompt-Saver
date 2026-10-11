@@ -16,6 +16,7 @@ export let chainLock = false; // "always on": stays after a copy until turned of
 export function assignChainLock(v) { chainLock = v; }
 export const chainSel = []; // selected prompt ids, in pick order
 export const chainTexts = new Map(); // id -> resolved copy text (variables already filled)
+const chainRaw = new Map(); // id -> the entry as picked, placeholders still in (for the overview)
 
 export const isTextPrompt = (p) => !!p && !p.copy_image && !p.file_path;
 
@@ -76,7 +77,7 @@ export function renderChainOverview() {
   if (!bar) return;
   bar.classList.toggle("hidden", !(chainMode && chainSel.length > 0));
   if (!(chainMode && chainSel.length > 0)) { bar.innerHTML = ""; return; }
-  const report = chainVarReport(chainSel.map((id) => (prompts.find((x) => x.id === id) || {}).text || ""));
+  const report = chainVarReport(chainSel.map((id) => chainRaw.get(id) ?? (prompts.find((x) => x.id === id) || {}).text ?? ""));
   bar.innerHTML = "";
   const title = document.createElement("div");
   title.className = "chain-ov-title";
@@ -147,6 +148,7 @@ export function removeChainStep(i) {
   if (id === undefined) return;
   chainSel.splice(i, 1);
   chainTexts.delete(id);
+  chainRaw.delete(id);
   refreshChainUi();
   pushChainClipboard();
 }
@@ -227,6 +229,7 @@ export async function toggleChainPick(p) {
     if (i >= 0) {
       chainSel.splice(i, 1); // deselect → the rest renumber
       chainTexts.delete(p.id);
+      chainRaw.delete(p.id);
       refreshChainUi();
       pushChainClipboard();
       return;
@@ -248,8 +251,10 @@ export async function toggleChainPick(p) {
       if (filled === null) return; // cancelled → leave it unselected
       text = filled;
     }
+    if (!chainMode) return; // the chain ended while the entry or its dialog was pending
     chainSel.push(p.id);
     chainTexts.set(p.id, text);
+    chainRaw.set(p.id, rawText);
     refreshChainUi();
     pushChainClipboard(peeked ? p.id : null);
   } finally {
@@ -271,7 +276,7 @@ export async function startChainWith(p) {
 export function setChainMode(on) {
   if (on && !flag("chainPrompts")) return;
   chainMode = on;
-  if (!on) { chainSel.length = 0; chainTexts.clear(); chainLock = false; }
+  if (!on) { chainSel.length = 0; chainTexts.clear(); chainRaw.clear(); chainLock = false; }
   document.body.classList.toggle("chain-mode", on);
   const btn = $("chain-btn");
   if (btn) {
