@@ -1832,6 +1832,15 @@ pub(crate) fn run_standalone_with(resolve_dir: impl FnOnce() -> PathBuf, argv: &
             eprintln!("the write did not reach the database\n");
             return 3;
         }
+        // Nothing is running to do it, so the Run entry is brought in line here.
+        if let Some(("autostart", Ok(on))) = os_backed_toggle(&cmd) {
+            if outcome.code == 0 {
+                if let Err(e) = crate::apply_autostart(on, store.settings.start_minimized) {
+                    eprintln!("the setting was saved but the Windows entry could not be changed: {e}\n");
+                    return 3;
+                }
+            }
+        }
     }
     if !outcome.stdout.is_empty() {
         print!("{}", outcome.stdout);
@@ -1875,6 +1884,17 @@ pub(crate) async fn answer_then_restart(answer: impl std::future::Future<Output 
     }
 }
 
+// A confirmed `settings set autostart|alwaysOnTop` with its value read as a switch.
+fn os_backed_toggle(cmd: &Cmd) -> Option<(&'static str, Result<bool, ()>)> {
+    let Cmd::SettingsSet { key, value, confirmed: true } = cmd else { return None };
+    let key = match key.as_str() {
+        "autostart" => "autostart",
+        "alwaysOnTop" => "alwaysOnTop",
+        _ => return None,
+    };
+    Some((key, value.parse::<bool>().map_err(|_| ())))
+}
+
 async fn run_in_process_inner(app: &AppHandle, argv: Vec<String>, cwd: PathBuf, restart: &mut bool) -> (i32, String, String) {
     let parsed = match parse(&argv) {
         Ok(p) => p,
@@ -1910,6 +1930,31 @@ async fn run_in_process_inner(app: &AppHandle, argv: Vec<String>, cwd: PathBuf, 
                 let code = if e == "missing" { 2 } else { 3 };
                 (code, String::new(), format!("{e}\n"))
             }
+        };
+    }
+
+    // Autostart and always-on-top live partly outside the store (the Run entry, the
+    // window flag): they go through the app's own handlers, which change both.
+    if let Some((key, parsed)) = os_backed_toggle(&cmd) {
+        let Ok(on) = parsed else {
+            return (1, String::new(), format!("{key} takes true or false\n"));
+        };
+        if crate::DATA_DIR_READONLY.load(Ordering::Relaxed) || crate::SETTINGS_LOCKED.load(Ordering::Relaxed) {
+            return (3, String::new(), "the store refused the write (locked or unavailable)\n".to_string());
+        }
+        let state: tauri::State<Db> = app.state();
+        let done = if key == "autostart" {
+            crate::set_autostart(app.clone(), state, on).map(|_| ())
+        } else {
+            crate::set_always_on_top(app.clone(), state, on);
+            Ok(())
+        };
+        return match done {
+            Ok(()) => {
+                let _ = tauri::Emitter::emit_to(app, "main", "store-synced", ());
+                (0, String::new(), String::new())
+            }
+            Err(e) => (3, String::new(), format!("{e}\n")),
         };
     }
 

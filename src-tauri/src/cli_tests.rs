@@ -1162,3 +1162,14 @@ fn edit_refuses_new_text_for_a_confidential_prompt() {
     assert_eq!(out.code, 0);
     assert_eq!(store.prompts[0].name, "Renamed");
 }
+
+#[test]
+fn autostart_and_always_on_top_are_routed_to_the_app_handlers() {
+    let set = |key: &str, value: &str, confirmed: bool| Cmd::SettingsSet { key: key.to_string(), value: value.to_string(), confirmed };
+    assert_eq!(os_backed_toggle(&set("autostart", "false", true)), Some(("autostart", Ok(false))));
+    assert_eq!(os_backed_toggle(&set("alwaysOnTop", "true", true)), Some(("alwaysOnTop", Ok(true))));
+    assert_eq!(os_backed_toggle(&set("autostart", "maybe", true)), Some(("autostart", Err(()))));
+    // A dry run (no --yes) and every other key take the ordinary path.
+    assert_eq!(os_backed_toggle(&set("autostart", "false", false)), None);
+    assert_eq!(os_backed_toggle(&set("theme", "dark", true)), None);
+}
