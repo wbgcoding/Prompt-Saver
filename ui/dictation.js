@@ -533,7 +533,21 @@ export function deliverLateVoiceText(payload) {
     autoCaps: flag("voiceAutoCaps"),
     lang: (prev.lang || LANG).slice(0, 2).toLowerCase(),
   });
-  if (prev.hotkey) { deliverVoiceHotkeyText(processed); return; }
+  if (prev.hotkey) {
+    // The buffer was held back because it still carried the live partial of this
+    // very phrase: the final text takes the partial's place and goes out once.
+    const held = voiceHotkeyHold;
+    const part = prev.interim;
+    if (held && part && held.text.substr(part.start, part.len) === part.text) {
+      clearTimeout(held.timer);
+      voiceHotkeyHold = null;
+      deliverVoiceHotkeyText(held.text.slice(0, part.start) + processed + held.text.slice(part.start + part.len));
+      return;
+    }
+    flushVoiceHotkeyHold();
+    deliverVoiceHotkeyText(processed);
+    return;
+  }
   const el = prev.el;
   if (!el || el.classList.contains("hidden")) return;
   const part = prev.interim;
@@ -647,6 +661,22 @@ export function voiceWatchDiscard(el) {
 // insertVoiceText/voiceJoiner pipeline as the two visible buttons rather than
 // a second copy of it.
 export const voiceHotkeyBuffer = document.createElement("textarea");
+// A hotkey session that stopped while its buffer still held a live partial: the
+// final text for that phrase can arrive just after voice-stopped, so the delivery
+// waits for it (up to VOICE_LATE_GRACE_MS) instead of sending the partial and then
+// the final as a second text.
+let voiceHotkeyHold = null; // {text, timer} | null
+export function flushVoiceHotkeyHold() {
+  const held = voiceHotkeyHold;
+  if (!held) return;
+  voiceHotkeyHold = null;
+  clearTimeout(held.timer);
+  deliverVoiceHotkeyText(held.text);
+}
+export function holdVoiceHotkeyText(text) {
+  flushVoiceHotkeyHold();
+  voiceHotkeyHold = { text, timer: setTimeout(flushVoiceHotkeyHold, VOICE_LATE_GRACE_MS) };
+}
 export async function deliverVoiceHotkeyText(text) {
   if (!text.trim()) return;
   const target = txt("voiceHotkeyTarget") || "clipboard";
@@ -687,8 +717,12 @@ export function bindDictation() {
     if (!voiceEventIsMine(payload)) return;
     const wasHotkey = voiceTargetEl === voiceHotkeyBuffer;
     const finalText = wasHotkey ? voiceHotkeyBuffer.value : "";
+    const hadPartial = wasHotkey && voiceInterim !== null;
     endVoiceUi();
-    if (wasHotkey) deliverVoiceHotkeyText(finalText);
+    if (wasHotkey) {
+      if (hadPartial) holdVoiceHotkeyText(finalText);
+      else deliverVoiceHotkeyText(finalText);
+    }
   });
   listen("voice-error", (e) => {
     const payload = e.payload || {};
@@ -700,6 +734,7 @@ export function bindDictation() {
   // on the Rust side, no event needed for that direction).
   listen("voice-hotkey-toggle", () => {
     if (voiceState !== "idle") return;
+    flushVoiceHotkeyHold();
     voiceHotkeyBuffer.value = "";
     startVoice(voiceHotkeyBuffer, null);
   });
