@@ -110,16 +110,34 @@ pub(crate) fn build_main_window(app: &AppHandle) -> tauri::Result<tauri::Webview
             }
         }
         WindowEvent::ThemeChanged(_) => {
-            if let Some(state) = handle2.try_state::<Db>() {
-                let settings = state
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .settings
-                    .clone();
-                // Only the "system" preference follows the OS; a custom
-                // theme always inherits a fixed built-in base.
+            // Only the "system" preference follows the OS; a custom theme always
+            // inherits a fixed built-in base. The event loop never waits on the store:
+            // when a backup or import holds it, a worker thread takes the turn.
+            let apply = |app: &AppHandle, settings: &Settings| {
                 if settings.theme == "system" {
-                    push_theme(&handle2, &settings);
+                    push_theme(app, settings);
+                }
+            };
+            if let Some(state) = handle2.try_state::<Db>() {
+                match state.try_lock() {
+                    Ok(guard) => {
+                        let settings = guard.settings.clone();
+                        drop(guard);
+                        apply(&handle2, &settings);
+                    }
+                    Err(std::sync::TryLockError::Poisoned(e)) => {
+                        let settings = e.into_inner().settings.clone();
+                        apply(&handle2, &settings);
+                    }
+                    Err(std::sync::TryLockError::WouldBlock) => {
+                        let app3 = handle2.clone();
+                        std::thread::spawn(move || {
+                            if let Some(state) = app3.try_state::<Db>() {
+                                let settings = state.lock().unwrap_or_else(|e| e.into_inner()).settings.clone();
+                                apply(&app3, &settings);
+                            }
+                        });
+                    }
                 }
             }
         }
@@ -144,16 +162,12 @@ pub(crate) fn build_main_window(app: &AppHandle) -> tauri::Result<tauri::Webview
             }
         }
         WindowEvent::Destroyed => {
-            if let Some(state) = handle2.try_state::<Db>() {
-                let store = state.lock().unwrap_or_else(|e| e.into_inner());
-                save_settings(&handle2, &store.settings);
-            }
-            voice_shutdown(&handle2);
             // No process without a main window: end this one right away, and
             // back that up with a watchdog in case exit() itself never
             // completes (a stuck shutdown handler, for instance) -- the same
             // silent-zombie shape the bug this guards against started from.
-            handle2.exit(0);
+            // The watchdog starts before anything that can wait on the store
+            // lock, so a backup or import holding it cannot keep it from running.
             let deadline = SystemTime::now() + WATCHDOG_GRACE;
             let hard_deadline = SystemTime::now() + WATCHDOG_JOB_GRACE;
             std::thread::spawn(move || loop {
@@ -171,6 +185,12 @@ pub(crate) fn build_main_window(app: &AppHandle) -> tauri::Result<tauri::Webview
                 }
                 std::thread::sleep(Duration::from_millis(200));
             });
+            if let Some(state) = handle2.try_state::<Db>() {
+                let store = state.lock().unwrap_or_else(|e| e.into_inner());
+                save_settings(&handle2, &store.settings);
+            }
+            voice_shutdown(&handle2);
+            handle2.exit(0);
         }
         _ => {}
     });
