@@ -50,6 +50,10 @@ let seq = 0;
 // newer openPopover() call that started in the meantime (its close finishes after
 // the newer one already opened something); this catches that case specifically.
 let openReq = 0;
+// openPopover() is awaiting the backend box (`open` is still null then, so a blur
+// has nothing to close); the blur is remembered and applied once the box arrived.
+let opening = false;
+let blurredWhileOpening = false;
 // "edit" starts empty, not a hardcoded English literal -- unlike every other
 // field here it spells the item word, which must only ever reach the screen
 // through the compact strings and their fork-brand substitution.
@@ -264,15 +268,20 @@ async function openPopover(kind) {
   const el = kind === "menu" ? menuEl : popEl;
   if (kind === "grid") renderGrid();
   el.classList.remove("hidden");
+  opening = true;
+  blurredWhileOpening = false;
   try {
     if (!(await layout(kind, el, token))) return;
     open = kind;
+    if (blurredWhileOpening) { blurredWhileOpening = false; await closePopover(true); return; }
     // Let the browser see the start state before the transition runs.
     // Re-check the token -- a blur-driven closePopover() between the await
     // above and this frame must not re-add "shown" onto an el already hidden again.
     requestAnimationFrame(() => { if (token === seq) el.classList.add("shown"); });
   } catch (_) {
     el.classList.add("hidden");
+  } finally {
+    if (req === openReq) opening = false;
   }
 }
 
@@ -555,7 +564,9 @@ window.addEventListener("keydown", async (e) => {
 });
 // A click anywhere else takes the focus away, which is what closes the folder.
 window.addEventListener("blur", () => {
-  if (!iconDrag && !memberDrag && !gripDrag) closePopover();
+  if (iconDrag || memberDrag || gripDrag) return;
+  if (opening && !open) blurredWhileOpening = true;
+  closePopover();
 });
 
 // ---- folder menu ----
