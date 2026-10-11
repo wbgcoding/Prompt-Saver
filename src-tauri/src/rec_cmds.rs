@@ -402,8 +402,24 @@ pub(crate) async fn switch_recording_target(
     })
     .await
     .map_err(|e| e.to_string())?;
-    if let Err(e) = &result {
-        let _ = app.emit("recording-target-switch-failed", e);
+    match &result {
+        Err(e) => {
+            let _ = app.emit("recording-target-switch-failed", e);
+        }
+        Ok(()) => {
+            // The control bar follows (and auto-stops with) the window it was
+            // started for: it has to move on to the new one, or closing the old
+            // window would end a recording that no longer shows it.
+            *REC_BAR_TARGET.lock().unwrap_or_else(|e| e.into_inner()) = ("window".to_string(), new_hwnd);
+            let following = REC_BAR_FOLLOWING.load(Ordering::SeqCst);
+            spawn_rec_bar_follow(app.clone(), new_hwnd);
+            REC_BAR_FOLLOWING.store(following, Ordering::SeqCst);
+            if following {
+                if let Some(win) = app.get_webview_window("rec-bar") {
+                    position_rec_bar(&win, "window", new_hwnd);
+                }
+            }
+        }
     }
     result
 }
