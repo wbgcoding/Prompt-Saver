@@ -206,7 +206,9 @@ pub(crate) fn run_update_check(app: AppHandle) {
 // Returns Err only where switching the feature ON has a hard precondition that
 // failed (today: the safety backup prompt-sync takes before it first writes); the
 // flag is then left OFF, so the UI and the store never disagree.
-#[tauri::command]
+// Runs off the main thread: switching the receiver on or wider waits for its
+// port to bind, and the activation backup takes as long as the library is large.
+#[tauri::command(async)]
 pub(crate) fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> Result<(), String> {
     let is_capture = key == ALLOW_SCREENSHOT_KEY;
     let is_clip = key == "clipWatcher";
@@ -338,9 +340,9 @@ pub(crate) fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled
         apply_tray_menu(&app);
     }
     // Switching folders off puts every member back on screen as its own pill (the
-    // folders themselves are kept, so switching it on again restores them). This is a
-    // SYNC command, so it runs on the main thread: opening and closing windows there
-    // is the documented way to deadlock WebView2, hence the hop onto the runtime.
+    // folders themselves are kept, so switching it on again restores them). Opening
+    // and closing windows inline from a command is the documented way to deadlock
+    // WebView2, hence the hop onto the runtime.
     if is_folders {
         let handle = app.clone();
         tauri::async_runtime::spawn(async move { sync_float_windows(&handle) });
