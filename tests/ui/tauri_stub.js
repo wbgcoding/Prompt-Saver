@@ -1071,11 +1071,13 @@ const RESULTS = {
         const layout = view.layouts[key] || (view.layouts[key] = {});
         if (a.action === "removeView") {
           for (const id of ids) delete layout[id];
+          view.members = (view.members || []).filter((m) => !ids.includes(m));
         } else {
           const need = ids.filter((id) => !(id in layout));
           const free = view.cols * view.rows - Object.keys(layout).length;
           if (need.length > free) throw new Error("view-full:" + (need.length - free));
           for (const id of ids) {
+            if (!(view.members || (view.members = [])).includes(id)) view.members.push(id);
             if (id in layout) continue;
             const { cell } = firstFreeCell(view);
             if (cell) layout[id] = cell;
@@ -1096,6 +1098,7 @@ const RESULTS = {
         const free = to.cols * to.rows - Object.keys(toLayout).length;
         if (need.length > free) throw new Error("view-full:" + (need.length - free));
         for (const id of ids) {
+          if (!(to.members || (to.members = [])).includes(id)) to.members.push(id);
           if (id in toLayout) continue;
           const { cell } = firstFreeCell(to);
           if (cell) toLayout[id] = cell;
@@ -1104,6 +1107,7 @@ const RESULTS = {
           for (const layout of Object.values(from.layouts)) {
             for (const id of ids) delete layout[id];
           }
+          from.members = (from.members || []).filter((m) => !ids.includes(m));
         }
       }
     }
@@ -1159,7 +1163,13 @@ const RESULTS = {
   // backend does; without this every re-fetch snapped a moved tile back.
   set_layout: (a) => {
     const view = SETTINGS.views.find((v) => v.id === SETTINGS.active_view);
-    if (view && a && a.layout) view.layouts[view.cols + "x" + view.rows] = JSON.parse(JSON.stringify(a.layout));
+    if (view && a && a.layout) {
+      view.layouts[view.cols + "x" + view.rows] = JSON.parse(JSON.stringify(a.layout));
+      // Like the backend: a prompt placed on the grid becomes a member.
+      for (const id of Object.keys(a.layout)) {
+        if (PROMPTS.some((p) => p.id === id) && !(view.members || (view.members = [])).includes(id)) view.members.push(id);
+      }
+    }
     return null;
   },
   set_active_view: (a) => {

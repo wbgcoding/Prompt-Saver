@@ -5,7 +5,7 @@ import { placePopover, placePopoverAt } from "./popover.js";
 import { EXAMPLE_IMAGE_DATA_URL } from "./exampleAssets.js";
 import { buildTile, fitAllTiles, pruneVideoCache } from "./tiles.js";
 import { hideTileTip } from "./windowChrome.js";
-import { clearGridSelection, isArchived, renderLibrary } from "./library.js";
+import { batchErrorToast, clearGridSelection, isArchived, renderLibrary } from "./library.js";
 import { applyFlags, syncBannerStack } from "./expertMenu.js";
 import { buildSwatches } from "./editor.js";
 import { buildFolderTile, foldersOfView, saveFolder } from "./gridFolders.js";
@@ -107,7 +107,7 @@ export const layoutOf = (v) => v.layouts?.[gridKeyOf(v)] || {};
 // Every OTHER view currently holding this prompt: a client-side scan, no
 // round trip, since every view's layout is already loaded in `settings`.
 export const viewsContaining = (id, exceptViewId) =>
-  settings.views.filter((v) => v.id !== exceptViewId && Object.prototype.hasOwnProperty.call(layoutOf(v), id));
+  settings.views.filter((v) => v.id !== exceptViewId && (v.members || []).includes(id));
 
 export const favViewEnabled = () => flag("favorites") && optFlag("favViewButton");
 
@@ -772,7 +772,24 @@ export async function restoreDeletedView(deleted, reactivateId) {
   const newId = settings.active_view;
   assignSettings(await invoke("set_view_grid", { id: newId, cols: deleted.cols, rows: deleted.rows }));
   if (deleted.members && deleted.members.length) {
-    assignSettings(await invoke("batch_prompts", { ids: deleted.members, action: "addView", color: null, favorite: null, viewId: newId }));
+    const addAll = async () => assignSettings(await invoke("batch_prompts", { ids: deleted.members, action: "addView", color: null, favorite: null, viewId: newId }));
+    try {
+      await addAll();
+    } catch (e) {
+      // A view that had more members than cells (the overflow row) is all-or-nothing
+      // on the way back in: grow it by the missing rows once, so no member is lost.
+      const m = String(e).match(/view-full:(\d+)/);
+      let restored = false;
+      if (m) {
+        const rows = Math.min(val("gridMax"), deleted.rows + Math.ceil(Number(m[1]) / Math.max(1, deleted.cols)));
+        try {
+          assignSettings(await invoke("set_view_grid", { id: newId, cols: deleted.cols, rows }));
+          await addAll();
+          restored = true;
+        } catch (_) { /* reported below */ }
+      }
+      if (!restored) batchErrorToast(e);
+    }
   }
   if (reactivateId && settings.views.some((v) => v.id === reactivateId)) {
     assignSettings(await invoke("set_active_view", { id: reactivateId }));

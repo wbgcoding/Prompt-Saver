@@ -1586,8 +1586,11 @@ def run(browser, tmp):
       window.__SMOKE_ARGS__.length = 0;
       first.click();
       await sleep(300);
-      const sets = callsFor('set_layout');
-      if (sets.length !== 1 || 'p1' in (sets[0].layout || {})) errs.push('252: the first row did not remove p1 from the active view layout');
+      // Membership and cell leave together: one removeView for the active view (the
+      // backend drops the layout entry too), never a layout-only write.
+      const rm = callsFor('batch_prompts').filter((c) => c.action === 'removeView');
+      if (rm.length !== 1 || rm[0].viewId !== activeId || (rm[0].ids || []).join() !== 'p1') errs.push('252: the first row did not remove p1 from the active view');
+      if (callsFor('set_layout').length) errs.push('252: hiding wrote a layout only, the prompt would stay a view member');
       if (tileEl('p1')) errs.push('252: p1 is still on the grid after hiding it');
     }
     await menuAt('p2');

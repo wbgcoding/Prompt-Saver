@@ -795,6 +795,7 @@ export async function placeTile(id, col, row) {
   if (!optFlag("multiViewPrompt")) {
     for (const other of viewsContaining(id, view.id)) {
       delete layoutOf(other)[id];
+      other.members = (other.members || []).filter((m) => m !== id);
       invoke("batch_prompts", { ids: [id], action: "removeView", color: null, favorite: null, viewId: other.id }).catch(() => {});
     }
   }
@@ -809,6 +810,8 @@ export async function placeTile(id, col, row) {
   }
   layout[id] = [col, row];
   view.layouts[gridKeyOf(view)] = layout;
+  // The backend seats a placed prompt as a member too (set_layout); mirror it here.
+  if (!(view.members || []).includes(id)) (view.members ||= []).push(id);
   invoke("set_layout", { layout }).catch((e) => errToast(e));
   if (!moveTileDom(id, col, row)) await renderGrid(true);
 }

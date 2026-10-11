@@ -6,7 +6,7 @@ import { batchErrorToast, ensureArchiveTagName, isArchived, renderLibrary, toggl
 import { cacheFloatingState, foldersOfView, folderTitle, newTileFolder, saveFolder, tileFoldersOn } from "./gridFolders.js";
 import { mediaKind } from "./media.js";
 import { placePopover, placePopoverAt } from "./popover.js";
-import { activeView, gridKeyOf, layoutOf, refreshFavViewUi, renderGrid, renderViews, viewRowBase } from "./views.js";
+import { activeView, layoutOf, refreshFavViewUi, renderGrid, renderViews, viewRowBase } from "./views.js";
 import { allTags, tagChipEl, tagKey } from "./tags.js";
 import { FLAG_LABELS, OPT_FLAG_KEYS, OPT_FLAG_LABELS } from "./expertConfig.js";
 import { applyFlags } from "./expertMenu.js";
@@ -91,10 +91,11 @@ export function closeCtx() {
 // Remove from the active view's grid; the prompt stays available in the library.
 export async function hideInActiveView(id) {
   const view = activeView();
-  const layout = { ...layoutOf(view) };
-  delete layout[id];
-  view.layouts[gridKeyOf(view)] = layout;
-  invoke("set_layout", { layout }).catch((e) => errToast(e));
+  // Membership and cell leave together: dropping only the cell would keep the
+  // prompt a member, so it would show as overflow and come back on a resize.
+  try {
+    assignSettings(await invoke("batch_prompts", { ids: [id], action: "removeView", color: null, favorite: null, viewId: view.id }));
+  } catch (e) { errToast(e); return; }
   await renderGrid(true);
 }
 
@@ -150,7 +151,7 @@ export function renderViewsPop(id) {
       viewsPop.appendChild(move);
       continue;
     }
-    const on = Object.prototype.hasOwnProperty.call(layoutOf(v), id);
+    const on = (v.members || []).includes(id); // members decide belonging, never the layout
     const row = viewRowBase(v, on);
     row.setAttribute("role", "menuitemcheckbox");
     row.setAttribute("aria-checked", String(on));
