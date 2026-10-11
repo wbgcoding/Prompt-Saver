@@ -654,10 +654,16 @@ pub(crate) fn db_conn_at(dir: &Path) -> Option<Connection> {
 // lets a save skip re-sealing every untouched row.
 //
 // Anything that changes those tables from OUTSIDE write_rows: a restored or
-// swapped data.db, a raw DELETE, a move to a different data folder: must clear
-// the map (Store::forget_written_rows), or the next save trusts an entry that no
-// longer describes the disk and skips a row that really did need writing.
+// swapped data.db, a raw DELETE, a move to a different data folder: must
+// invalidate the map (Store::forget_written_rows), or the next save trusts an entry
+// that no longer describes the disk and skips a row that really did need writing.
+// Invalidating keeps the KEYS and only voids the hashes: a key also records that
+// this process knew the row, which is what lets a save delete it later.
 pub(crate) type WrittenRows = HashMap<String, u64>;
+
+// The hash every invalidated entry carries. row_hash never returns it, so such an
+// entry matches no content and the row is rewritten by the next save.
+pub(crate) const STALE_ROW_HASH: u64 = 0;
 
 pub(crate) fn row_key(table: &str, id: &str) -> String {
     // \u{1} cannot occur in a table name, so the two halves can never run together.
@@ -668,7 +674,8 @@ pub(crate) fn row_hash(json: &str) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
     json.hash(&mut h);
-    h.finish()
+    // 0 is reserved for an invalidated entry (STALE_ROW_HASH).
+    h.finish().max(1)
 }
 
 // Two prompts sharing one id can only ever be a bug in the caller's list: writing

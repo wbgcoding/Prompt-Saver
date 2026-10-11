@@ -1293,13 +1293,17 @@ pub(crate) struct Store {
 }
 
 impl Store {
-    // Forget everything believed to be on disk, so the next save rewrites every row.
+    // Void everything believed to be on disk, so the next save rewrites every row.
+    // The keys stay (only the hashes go): a row this process knew about must still
+    // be deletable by the first save after this call.
     // Mandatory wherever the tables change without going through write_rows: a
     // wholesale replacement of the prompt set, a swapped or restored data.db, a raw
     // DELETE, a move to another data folder. Missing it anywhere leaves the process
     // trusting hashes for content the disk no longer holds.
     pub(crate) fn forget_written_rows(&self) {
-        self.written.borrow_mut().clear();
+        for hash in self.written.borrow_mut().values_mut() {
+            *hash = crate::store::STALE_ROW_HASH;
+        }
     }
 
     // Keep both folder lists valid against the CURRENT prompt list: one call

@@ -9964,6 +9964,38 @@ fn a_replaced_prompt_set_is_written_in_full_once_the_row_map_is_cleared() {
     );
 }
 
+#[test]
+fn the_first_save_after_forgetting_the_row_map_still_deletes_a_removed_prompt() {
+    // forget_written_rows must void the hashes but keep the keys: a prompt moved to
+    // the trash right after e.g. a settings reset is only deleted from `prompts`
+    // when this process still knows it was there.
+    let mut conn = row_test_db();
+    let all = numbered_prompts(3);
+    let mut written = WrittenRows::new();
+    db_write_prompts(&mut conn, &all, &mut written).unwrap();
+    let store = Store {
+        prompts: all.clone(),
+        trash: Vec::new(),
+        settings: Settings::default(),
+        prompts_locked: false,
+        written: std::cell::RefCell::new(written),
+    };
+    store.forget_written_rows();
+
+    let kept: Vec<Prompt> = all[..2].to_vec();
+    let trash = vec![all[2].clone()];
+    {
+        let mut w = store.written.borrow_mut();
+        db_write_prompts_and_trash(&mut conn, &kept, &trash, &mut w).unwrap();
+    }
+    assert_eq!(
+        stored_rows(&conn, "prompts").iter().map(|r| r.0.clone()).collect::<Vec<_>>(),
+        vec!["id000", "id001"],
+        "the removed prompt must leave the prompts table on the first save after a forget"
+    );
+    assert_eq!(stored_rows(&conn, "trash").len(), 1);
+}
+
 // A settings write that once fell back to settings.json leaves that file behind
 // while prompts.json (which nothing wrote) stays absent. If the database is
 // then unopenable for one launch, the prompts are invisible but very much still
