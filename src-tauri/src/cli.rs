@@ -1566,7 +1566,8 @@ fn restore_backup_standalone(dir: &Path, name: &str, keep: usize, scope: &str, s
     let backups_root = dir.join("backups");
     let backup_db = backup_db_file(&backups_root.join(name)).ok_or_else(|| "missing".to_string())?;
     let gfs = gfs_from_settings(settings);
-    do_backup_at(dir, &backups_root, keep, gfs).map_err(|e| format!("safety-snapshot-failed: {e}"))?;
+    crate::do_backup_protecting_at(dir, &backups_root, keep, gfs, name)
+        .map_err(|e| format!("safety-snapshot-failed: {e}"))?;
     let target = dir.join("data.db");
     let staged = stage_and_validate_backup(&backup_db, dir)?;
     if scope == "all" {

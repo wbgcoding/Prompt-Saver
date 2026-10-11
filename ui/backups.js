@@ -4,7 +4,7 @@ import { applyFlags, applyValues, EXPERT_PATHS, jumpToExpertSetting, openVideoCl
 import { collapsibleHead, numRow, PROMPT_TYPE_LABELS, recordToolUsage, statSection } from "./management.js";
 import { fmtBytes } from "./floatShared.js";
 import { restoreClipInbox } from "./journal.js";
-import { maybeBackupBeforeWipe, runExportAll, runImportAll } from "./settingsPanel.js";
+import { runExportAll, runImportAll } from "./settingsPanel.js";
 import { attachSelectPicker } from "./selectpop.js";
 import { confirmDialog, EYE_SVG } from "./dialog.js";
 import { wireClearButtons } from "./windowChrome.js";
@@ -651,9 +651,8 @@ export async function restoreBackup(name) {
   const dataOn = $("confirm-cb-data").checked;
   const settingsOn = $("confirm-cb-settings").checked;
   const scope = dataOn && settingsOn ? "all" : dataOn ? "data" : "settings";
-  // The same safety net as delete: restoring replaces the current
-  // data just as permanently, so it follows the same "before delete" switch.
-  await maybeBackupBeforeWipe("delete");
+  // No extra backup here: the restore itself takes a safety snapshot first, and
+  // one more made with the same keep count would rotate the chosen snapshot away.
   try { await withTaskbarBusy("backup", () => invoke("restore_backup", { name, keep: Math.round(val("backupKeep")), scope })); }
   catch (e) { errToast(e); } // on success the app relaunches
 }

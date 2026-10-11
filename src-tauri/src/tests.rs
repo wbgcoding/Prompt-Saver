@@ -9525,6 +9525,29 @@ fn rotation_ignores_an_incomplete_folder_and_keeps_good_snapshots() {
 }
 
 #[test]
+fn a_restore_safety_snapshot_never_rotates_away_the_chosen_snapshot() {
+    let dir = stream_test_dir("rotate-protect");
+    let root = dir.join("backups");
+    fake_snapshot(&root, "2026-01-01_10-00-00");
+    fake_snapshot(&root, "2026-01-02_10-00-00");
+    fake_snapshot(&root, "2026-01-03_10-00-00");
+    {
+        let conn = Connection::open(dir.join("data.db")).unwrap();
+        conn.execute_batch("CREATE TABLE prompts(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);")
+            .unwrap();
+    }
+    // The list is full: the safety snapshot pushes the oldest out, which is
+    // exactly the one being restored.
+    do_backup_protecting_at(&dir, &root, 2, None, "2026-01-01_10-00-00").unwrap();
+    assert!(root.join("2026-01-01_10-00-00").exists(), "the snapshot being restored must survive the rotation");
+    assert!(!root.join("2026-01-02_10-00-00").exists(), "other old snapshots still rotate out");
+    // Without a protected name the oldest goes, as before.
+    do_backup_at(&dir, &root, 2, None).unwrap();
+    assert!(!root.join("2026-01-01_10-00-00").exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn startup_cleanup_removes_leftovers_and_keeps_complete_snapshots() {
     let dir = stream_test_dir("cleanup");
     fake_snapshot(&dir, "2026-01-01_10-00-00");

@@ -306,6 +306,12 @@ pub(crate) fn backups_to_drop(names: &[String], keep: usize, gfs: Option<&GfsCon
 // snapshots the same way, working from an already-resolved folder instead of
 // an AppHandle.
 pub(crate) fn rotate_backups_at(dir: &std::path::Path, keep: usize, gfs: Option<GfsConfig>) {
+    rotate_backups_protecting(dir, keep, gfs, None);
+}
+// Same, but a snapshot named in `protect` survives whatever the retention says.
+// A restore takes its safety snapshot before it reads the chosen one: without
+// this the chosen (oldest) snapshot could be the very folder that rotation drops.
+pub(crate) fn rotate_backups_protecting(dir: &std::path::Path, keep: usize, gfs: Option<GfsConfig>, protect: Option<&str>) {
     // Only folders holding a snapshot count: one still being packed (or left
     // half-made by a quit) must neither use up a slot nor push a good one out.
     let mut names: Vec<String> = fs::read_dir(dir)
@@ -317,6 +323,9 @@ pub(crate) fn rotate_backups_at(dir: &std::path::Path, keep: usize, gfs: Option<
         .collect();
     names.sort(); // oldest first (names are timestamps → chronological)
     for name in backups_to_drop(&names, keep, gfs.as_ref()) {
+        if protect == Some(name.as_str()) {
+            continue;
+        }
         let _ = fs::remove_dir_all(dir.join(name));
     }
 }
@@ -505,6 +514,17 @@ pub(crate) fn do_backup(app: &AppHandle, keep: usize, gfs: Option<GfsConfig>) ->
     do_backup_at(&data_dir(app), &backups_dir(app), keep, gfs)
 }
 
+// The restore's safety snapshot: rotation never drops `protect`, the snapshot
+// about to be restored.
+pub(crate) fn do_backup_protecting(app: &AppHandle, keep: usize, gfs: Option<GfsConfig>, protect: &str) -> Result<String, String> {
+    do_backup_protecting_at(&data_dir(app), &backups_dir(app), keep, gfs, protect)
+}
+
+pub(crate) fn do_backup_protecting_at(dir: &std::path::Path, root: &std::path::Path, keep: usize, gfs: Option<GfsConfig>, protect: &str) -> Result<String, String> {
+    let pending = backup_snapshot(dir, root)?;
+    backup_pack_protecting(pending, root, keep, gfs, Some(protect))
+}
+
 // Split out of do_backup() for the command line's headless path: identical
 // snapshot, naming and rotation logic, working from two already-resolved
 // folders instead of an AppHandle.
@@ -583,6 +603,10 @@ pub(crate) fn backup_snapshot(dir: &std::path::Path, root: &std::path::Path) -> 
 // Phase two: compress the copy, record count and names, rotate. Works on files
 // only, so it needs no store lock. On any failure the claimed folder is removed.
 pub(crate) fn backup_pack(pending: PendingBackup, root: &std::path::Path, keep: usize, gfs: Option<GfsConfig>) -> Result<String, String> {
+    backup_pack_protecting(pending, root, keep, gfs, None)
+}
+
+pub(crate) fn backup_pack_protecting(pending: PendingBackup, root: &std::path::Path, keep: usize, gfs: Option<GfsConfig>, protect: Option<&str>) -> Result<String, String> {
     let PendingBackup { name, folder, tmp } = pending;
     let dest = folder.join(BACKUP_DB_GZ);
     // Compress the vacuumed copy, then drop the raw one: never leave both behind.
@@ -609,7 +633,7 @@ pub(crate) fn backup_pack(pending: PendingBackup, root: &std::path::Path, keep: 
         let _ = fs::remove_dir_all(&folder);
         return Err(e);
     }
-    rotate_backups_at(root, keep.clamp(1, 50), gfs);
+    rotate_backups_protecting(root, keep.clamp(1, 50), gfs, protect);
     Ok(name)
 }
 
@@ -1024,7 +1048,7 @@ pub(crate) fn restore_backup_core(app: AppHandle, state: State<'_, Db>, name: St
         // snapshot itself could not be written (disk full, permissions, locked
         // file), stop here rather than overwrite the live database with nothing
         // to fall back to.
-        do_backup(&app, keep, gfs).map_err(|e| format!("safety-snapshot-failed: {e}"))?;
+        do_backup_protecting(&app, keep, gfs, &name).map_err(|e| format!("safety-snapshot-failed: {e}"))?;
         let dir = data_dir(&app);
         let target = dir.join("data.db");
         let staged = stage_and_validate_backup(&backup_db, &dir)?;

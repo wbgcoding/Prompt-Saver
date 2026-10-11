@@ -433,12 +433,9 @@ SECTION = """\
         await sleep(200);
       }
     }
-    // P64/85: restoring a managed backup goes through maybeBackupBeforeWipe("delete")
-    // - the same safety net used before delete-all, gated by the backupBeforeDelete
-    // flag. That flag ships default ON (85), so the fixture's default state proves
-    // restoreBackup actually wires the call through, cheap to verify without
-    // walking the expert menu (which a later 130%-zoom layout check turned out to
-    // be sensitive to - not worth touching under this pass's time budget).
+    // Restoring a managed backup relies on the safety snapshot restore_backup takes
+    // itself; a separate create_backup first would rotate the chosen snapshot away
+    // when the list is full, so the UI must not send one.
     {
       const calls = () => (window.__SMOKE_CALLS__ = window.__SMOKE_CALLS__ || []);
       calls().length = 0;
@@ -464,8 +461,8 @@ SECTION = """\
         if (!allArgs || allArgs[1].scope !== 'all') {
           out.errors.push('both checkboxes checked must restore scope "all", got ' + (allArgs && allArgs[1].scope));
         }
-        if (!calls().includes('create_backup')) {
-          out.errors.push('no safety backup ran although backupBeforeDelete is on by default');
+        if (calls().includes('create_backup')) {
+          out.errors.push('restoring must not run its own create_backup (it could rotate the chosen snapshot away)');
         }
       }
     }
