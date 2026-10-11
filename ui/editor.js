@@ -1809,7 +1809,7 @@ export function bindEditor() {
     if (!modalState || session !== modalSession) return;
     modalState.image = data;
     modalState.copyImage = false; // the file itself is what gets copied
-    modalState.showImage = !!kind;
+    modalState.showImage = !!kind || (PDF_EXT.test(path) && !!data); // same rule as openFileCreate
     syncModalImageUi(modalState.mode);
   });
 
