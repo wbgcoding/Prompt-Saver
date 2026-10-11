@@ -19610,3 +19610,14 @@ fn dir_is_writable_probes_with_a_real_file() {
     assert!(!dir_is_writable(&file), "a file is not a usable data folder");
     let _ = fs::remove_dir_all(&dir);
 }
+
+// Switching the network filter off must never leave it on after a failed restart:
+// the receiver would come back bound beyond loopback right after the user closed it.
+#[test]
+fn a_failed_narrowing_restart_does_not_restore_the_wide_flag() {
+    assert_eq!(remote::flag_after_failed_restart(false, Some(true)), Some(false));
+    assert_eq!(remote::flag_after_failed_restart(false, None), Some(false));
+    // A failed widening still goes back to what it was.
+    assert_eq!(remote::flag_after_failed_restart(true, Some(false)), Some(false));
+    assert_eq!(remote::flag_after_failed_restart(true, None), None);
+}

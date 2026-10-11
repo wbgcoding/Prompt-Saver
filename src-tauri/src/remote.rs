@@ -389,6 +389,15 @@ pub(crate) fn apply_network_switch(
     NetworkResult { restart: running, error: None }
 }
 
+// The stored value of `remoteNetworkFilter` once the restart for a switch failed.
+pub(crate) fn flag_after_failed_restart(enabled: bool, old: Option<bool>) -> Option<bool> {
+    if enabled {
+        old
+    } else {
+        Some(false)
+    }
+}
+
 // The `remoteNetworkFilter` branch of set_ui_flag.
 pub(crate) fn set_network_flag(app: &AppHandle, state: &State<Db>, enabled: bool) -> Result<(), String> {
     let names = crate::remote_tls::host_names();
@@ -399,13 +408,19 @@ pub(crate) fn set_network_flag(app: &AppHandle, state: &State<Db>, enabled: bool
     };
     if result.restart {
         if let Err(e) = restart_receiver(app).and_then(|_| wait_bound(app)) {
-            // The new mode could not start: go back to the old one.
+            // Widening that could not start goes back to the old, narrower mode and
+            // runs again in it. Narrowing never goes back: the flag stays off and
+            // the receiver stays down, so a failure cannot open it to the network.
             {
                 let mut store = lock(state);
-                restore_flag(&mut store.settings, "remoteNetworkFilter", old);
+                restore_flag(&mut store.settings, "remoteNetworkFilter", flag_after_failed_restart(enabled, old));
                 let _ = save_settings(app, &store.settings);
             }
-            let _ = start(app.clone());
+            if enabled {
+                let _ = start(app.clone());
+            } else {
+                stop(app);
+            }
             return Err(e);
         }
     }
