@@ -705,6 +705,19 @@ export function makeTileImgObserver(root) {
   }, { root, rootMargin: "300px" });
 }
 
+// How hard the filters are biting, in the header where the filters are.
+function updateLibraryCount(shown) {
+  const count = $("library-count");
+  if (!count) return;
+  // A prompt the archive toggle hides counts neither as shown nor in the total.
+  const all = archiveHidden() ? prompts.filter((p) => !isArchived(p)).length : prompts.length;
+  count.textContent = shown === all
+    ? String(all)
+    : t("libraryCount").replace("{n}", shown).replace("{v}", all);
+  const tabCount = $("library-tab-prompts-count");
+  if (tabCount) tabCount.textContent = `(${count.textContent})`;
+}
+
 export function renderLibrary() {
   // The archive chip names the tag it filters by, so a renamed archive tag shows where it is used.
   const archiveChip = $("library-archive");
@@ -743,17 +756,7 @@ export function renderLibrary() {
   }
   // Hidden filters keep their default state, so this is inert when they are off.
   const items = prompts.filter(libMatches);
-  // How hard the filters are biting, in the header where the filters are.
-  const count = $("library-count");
-  if (count) {
-    // A prompt the archive toggle hides counts neither as shown nor in the total.
-    const all = archiveHidden() ? prompts.filter((p) => !isArchived(p)).length : prompts.length;
-    count.textContent = items.length === all
-      ? String(all)
-      : t("libraryCount").replace("{n}", items.length).replace("{v}", all);
-    const tabCount = $("library-tab-prompts-count");
-    if (tabCount) tabCount.textContent = `(${count.textContent})`;
-  }
+  updateLibraryCount(items.length);
   sortLibraryItems(items); // chosen sort (stable), before the favorites float
   // Favorites float to the top (stable otherwise) when the feature is on.
   if (flag("favorites")) items.sort((a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0));
@@ -1184,6 +1187,9 @@ export async function doBatch(action, extra = {}) {
     for (const id of ids) $("library-list").querySelector(`.lib-item[data-id="${CSS.escape(id)}"]`)?.remove();
     libDisplayOrder = libDisplayOrder.filter((x) => !idset.has(x));
     libSelected.clear(); libLastId = null;
+    // An emptied list needs its hint; otherwise only the counts above it are stale.
+    if (!libDisplayOrder.length) renderLibrary();
+    else updateLibraryCount(prompts.filter(libMatches).length);
   } else {
     // favorite/color/view can reorder or change row content → one rebuild.
     if (action === "addView" || action === "removeView") renderViews();
