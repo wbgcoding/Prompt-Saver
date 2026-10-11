@@ -228,7 +228,8 @@ export function renderMarkdown(text) {
       flushAll();
       const mark = fence[1][0];
       const lang = HL_ALIAS[fence[2].toLowerCase()] || "";
-      const closes = (l) => { const s = l.trim(); return s.length >= 3 && !s.split("").some((c) => c !== mark); };
+      const minLen = fence[1].length; // a longer opening fence is only closed by one as long
+      const closes = (l) => { const s = l.trim(); return s.length >= minLen && !s.split("").some((c) => c !== mark); };
       const body = [];
       i++;
       while (i < lines.length && !closes(lines[i])) body.push(lines[i++]);
