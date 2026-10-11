@@ -19462,3 +19462,19 @@ fn an_unreadable_settings_file_is_reported_to_the_caller_that_locks_settings_wri
     assert!(store.prompts_locked);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_data_wipe_leaves_no_prompt_placed_in_any_view() {
+    let mut s = Settings::default();
+    let mut v = test_view("a");
+    v.members = vec!["p1".into()];
+    v.layouts.entry("3x3".into()).or_default().insert("p1".into(), [0, 0]);
+    s.views = vec![v];
+    s.floating.insert("p1".into(), Pos::default());
+    clear_prompt_placements(&mut s);
+    assert!(s.views[0].members.is_empty());
+    assert!(s.views[0].layouts.is_empty());
+    assert!(s.floating.is_empty());
+    assert_eq!(s.views.len(), 1, "the view itself stays");
+    assert_eq!(first_free_cell_excluding(&s.views[0], &[]), Some([0, 0]), "the first cell is free again");
+}

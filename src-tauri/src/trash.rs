@@ -511,6 +511,17 @@ pub(crate) fn sweep_trash_now(app: AppHandle, state: State<'_, Db>) -> (u32, u64
     (count, bytes)
 }
 
+// With no prompt left, nothing may still be placed: a leftover view member or layout
+// cell would keep a grid cell taken for a prompt that does not exist, so the first
+// new prompt would land behind a hole. The views themselves (names, sizes) stay.
+pub(crate) fn clear_prompt_placements(settings: &mut Settings) {
+    for view in settings.views.iter_mut() {
+        view.members.clear();
+        view.layouts.clear();
+    }
+    settings.floating.clear();
+}
+
 // Factory reset: wipe all prompts AND all settings (views, theme, window,
 // behaviour, fonts) and remove the autostart registry entry.
 // Async: window closes + a full prompts/settings rewrite stay off the UI thread.
@@ -534,6 +545,7 @@ pub(crate) async fn delete_all_data(app: AppHandle, state: State<'_, Db>) -> Res
         store.trash.clear(); // a data wipe must not leave trashed prompts behind
         store.prompts_locked = false; // explicit wipe overrides the decrypt-failure lock
         store.normalize_folders(); // No prompts left, so no folder survives
+        clear_prompt_placements(&mut store.settings);
         if !save_prompts(&app, &store) {
             incomplete = true;
         }
