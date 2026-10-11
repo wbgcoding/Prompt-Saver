@@ -19489,3 +19489,16 @@ fn a_reset_keeps_a_trash_that_never_empties_itself() {
     old.ui_values.insert("trashRetentionDays".into(), 7.0);
     assert_eq!(trash_retention_secs(&settings_after_reset(&old)), Some(30 * 86_400), "a shorter window takes the default");
 }
+
+#[test]
+fn a_damaged_fixed_key_backup_is_corrupt_not_password_protected() {
+    let mut fixed = backup_encrypt(b"some backup body", None).expect("encrypt");
+    let last = fixed.len() - 1;
+    fixed[last] ^= 0xff;
+    assert_eq!(backup_decrypt(&fixed, None).unwrap_err(), "corrupt backup");
+    assert_eq!(backup_decrypt(&fixed, Some("pw")).unwrap_err(), "corrupt backup");
+    let mut locked = backup_encrypt(b"some backup body", Some("pw")).expect("encrypt");
+    let last = locked.len() - 1;
+    locked[last] ^= 0xff;
+    assert!(backup_decrypt(&locked, Some("pw")).unwrap_err().to_lowercase().contains("password"));
+}

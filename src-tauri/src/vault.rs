@@ -133,10 +133,12 @@ pub(crate) fn backup_decrypt(data: &[u8], password: Option<&str>) -> Result<Opti
     let body = cipher
         .decrypt(Nonce::from_slice(nonce), ct)
         .map_err(|_| {
-            if password.is_some() {
-                "wrong password or corrupt backup".to_string()
+            if matches!(data[4], 0 | 2) {
+                // A fixed-key backup has no password to get wrong: asking for one
+                // would send the user after something that cannot help.
+                "corrupt backup".to_string()
             } else {
-                "password-required".to_string()
+                "wrong password or corrupt backup".to_string()
             }
         })?;
     Ok(Some(if packed { inflate(&body)? } else { body }))
