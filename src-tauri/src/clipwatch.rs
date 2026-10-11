@@ -28,6 +28,9 @@ struct AutoSession {
     // placeholder round happened, fall back to the raw rotation_next() text.
     resolved: Vec<String>,
     text: String,
+    // A confidential entry: its decrypted text may only be delivered while the
+    // vault key is still live.
+    secret: bool,
     armed_at: u32,
     session_start: u32,
     last_paste: u32,
@@ -406,6 +409,23 @@ fn handle_render_format() {
         unsafe { set_unicode_text("") };
         return;
     };
+    if session.secret {
+        let live = app.as_ref().is_some_and(|app| {
+            let state = app.state::<Db>();
+            let store = lock(&state);
+            super::secret_session_key(super::secret_timeout_min(&store.settings)).is_some()
+        });
+        if !live {
+            // The vault timed out since this text was decrypted: hand the paste
+            // nothing, and end the session so no later render can leak it either.
+            let id = session.id.clone();
+            *g = None;
+            drop(g);
+            unsafe { set_unicode_text("") };
+            emit_active(&id, false);
+            return;
+        }
+    }
     unsafe { set_unicode_text(&session.text) }; // must answer before anything else
 
     let Some(app) = app else {
@@ -528,7 +548,7 @@ fn handle_app_end() {
 // judged auto-eligible. `resolved` is the frontend's once-per-copy placeholder
 // resolution; empty for a prompt with no placeholders, where every
 // render instead falls back to the raw rotation_next() text.
-pub fn arm(id: &str, text: &str, resolved: Vec<String>) {
+pub fn arm(id: &str, text: &str, resolved: Vec<String>, secret: bool) {
     note_own(text);
     let old_id = {
         let mut g = SESSION.lock().unwrap_or_else(|e| e.into_inner());
@@ -537,6 +557,7 @@ pub fn arm(id: &str, text: &str, resolved: Vec<String>) {
             id: id.to_string(),
             resolved,
             text: text.to_string(),
+            secret,
             armed_at: 0,
             session_start: 0,
             last_paste: 0,

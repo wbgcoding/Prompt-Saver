@@ -147,14 +147,14 @@ pub(crate) fn rotation_forget(settings: &mut Settings, ids: &[String]) {
 #[cfg(windows)]
 pub(crate) fn put_text(state: &State<Db>, id: Option<&str>, text: &str) -> bool {
     if let Some(id) = id {
-        let auto = {
+        let (auto, secret) = {
             let store = lock(state);
             store.prompts.iter().find(|p| p.id == id)
-                .map(|p| auto_eligible(p, &store.settings))
-                .unwrap_or(false)
+                .map(|p| (auto_eligible(p, &store.settings), p.secret))
+                .unwrap_or((false, false))
         };
         if auto {
-            clipwatch::arm(id, text, Vec::new());
+            clipwatch::arm(id, text, Vec::new(), secret);
             return true;
         }
     }
@@ -359,7 +359,7 @@ pub(crate) fn rotation_arm_session(app: AppHandle, state: State<Db>, id: String,
     emit_rotation_changed(&app, &p, &store.settings);
     drop(store);
     #[cfg(windows)]
-    clipwatch::arm(&id, &text, resolved);
+    clipwatch::arm(&id, &text, resolved, p.secret);
     #[cfg(not(windows))]
     {
         let _ = resolved;
