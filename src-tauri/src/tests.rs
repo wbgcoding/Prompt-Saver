@@ -19546,13 +19546,15 @@ fn shrinking_a_grid_never_moves_a_folder_onto_one_that_still_fits() {
 
 #[test]
 fn a_folder_edit_that_leaves_another_folder_with_one_member_keeps_that_member_on_the_grid() {
-    let mut settings = Settings::default();
-    settings.views = vec![test_view("v1")];
     // "old" held a, b and c; the edit moved a and b into "new", leaving c alone.
-    settings.tile_folders = vec![
-        test_tile_folder("old", "v1", [1, 0], &["c"]),
-        test_tile_folder("new", "v1", [0, 0], &["a", "b"]),
-    ];
+    let mut settings = Settings {
+        views: vec![test_view("v1")],
+        tile_folders: vec![
+            test_tile_folder("old", "v1", [1, 0], &["c"]),
+            test_tile_folder("new", "v1", [0, 0], &["a", "b"]),
+        ],
+        ..Settings::default()
+    };
     let ids: Vec<String> = ["a", "b", "c"].iter().map(|s| s.to_string()).collect();
     finish_tile_folder_edit(&mut settings, &ids);
     assert_eq!(settings.tile_folders.len(), 1, "the one-member folder is dissolved");

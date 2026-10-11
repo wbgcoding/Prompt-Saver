@@ -625,6 +625,7 @@ fn resolve_target_size(target: RecTarget) -> Result<(u32, u32), String> {
 // 0 = off): same clean "set an error, request a stop" channel as the
 // disk-space check below, checked on the same 1s tick since both are just
 // reading an already-cheap number (elapsed time, one fs::metadata call).
+#[allow(clippy::too_many_arguments)]
 fn spawn_disk_watch(
     shared: Arc<RecFeederShared>, clock: Arc<RecordClock>, output_path: PathBuf, warn_mb: f64, max_min: f64, max_mb: f64,
     video_kbps: u32, audio_active: bool,

@@ -1547,7 +1547,7 @@ pub(crate) fn sync_poll_apply(
                 // Members is the authoritative list: a prompt with a cell but no
                 // membership is purged by the next grid rebuild, and one without a
                 // free cell still belongs to the view (shown as overflow).
-                if !view.members.iter().any(|m| *m == id) {
+                if !view.members.contains(&id) {
                     view.members.push(id);
                 }
             }
