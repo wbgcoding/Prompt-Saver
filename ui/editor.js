@@ -459,6 +459,9 @@ export async function ensureSecretVaultUnlocked() {
   if (!pw) return false;
   try {
     await invoke("secret_vault_unlock", { password: pw });
+    // Refetch so the tiles drop their lock badges and the cache holds the
+    // readable text, even when the caller's dialog is then cancelled.
+    renderGrid().catch(() => {});
     return true;
   } catch (e) {
     toast(t("secretWrongPassword"));
