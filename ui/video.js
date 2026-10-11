@@ -323,9 +323,9 @@ function closeShortcutsModal() {
 // ---------------------------------------------------------------- operation list
 
 // VE.ops IS the render list, in order. Once the undo window is exceeded the
-// floor advances and entries below it are dropped outright (not just index-
-// locked): they can never be undone back to, so keeping them around forever
-// would grow VE.ops -- and the rendered #ve-ops-list -- without bound.
+// floor advances: entries below it can no longer be undone, but they stay in the
+// list, because the preview, the export and the saved edit state read it (a trim
+// made long ago must not vanish after enough later edits).
 function pushOp(op, opts) {
   // Every overlay gets a stacking number once, at creation. Edits re-push the
   // overlay at the end of VE.ops (see pushReplacing) but keep this number, so
@@ -333,7 +333,6 @@ function pushOp(op, opts) {
   if (op.tool === "overlay" && op.z === undefined) op.z = 1 + Math.max(0, ...VE.ops.map((o) => o.z || 0));
   VE.ops.push(op);
   if (VE.ops.length - VE.floor > VE.undoMax) VE.floor = VE.ops.length - VE.undoMax;
-  if (VE.floor > 0) { VE.ops = VE.ops.slice(VE.floor); VE.floor = 0; }
   VE.redo.length = 0;
   afterOpsChanged(opts);
 }
@@ -348,13 +347,13 @@ function pushOp(op, opts) {
 // half: they walk this chain one link at a time rather than treating a
 // replacing op as an ordinary push/pop.
 function pushReplacing(match, op, opts) {
-  const before = VE.ops.length;
   const prev = VE.ops.find(match) || null;
+  // The floor is a count-based boundary into VE.ops; removing entries below it
+  // shifts every later index down, so it shrinks by that many (and only those) or
+  // it would re-lock operations that were still undoable.
+  const lockedGone = VE.ops.filter((o, i) => i < VE.floor && match(o)).length;
   VE.ops = VE.ops.filter((o) => !match(o));
-  // The floor is a count-based boundary into VE.ops; removing entries shifts
-  // every later index down, so it has to shrink by the same amount or it would
-  // re-lock operations that were still undoable.
-  VE.floor = Math.max(0, VE.floor - (before - VE.ops.length));
+  VE.floor = Math.max(0, VE.floor - lockedGone);
   if (prev && op.tool === "overlay" && op.z === undefined && prev.z !== undefined) op = { ...op, z: prev.z };
   const next = prev ? { ...op, _prev: prev } : op;
   pushOp(next._prev ? capPrevChain(next, VE.undoMax) : next, opts);
@@ -385,7 +384,7 @@ function removeOps(match) {
   VE.ops.forEach((o, at) => { if (o.tool !== "removal" && match(o)) removed.push({ op: o, at }); });
   if (!removed.length) return;
   VE.ops = VE.ops.filter((o) => !removed.some((r) => r.op === o));
-  VE.floor = Math.max(0, VE.floor - removed.length);
+  VE.floor = Math.max(0, VE.floor - removed.filter((r) => r.at < VE.floor).length);
   pushOp({ tool: "removal", removed });
 }
 

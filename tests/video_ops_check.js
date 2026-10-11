@@ -450,6 +450,20 @@ async function exportIdleCheck() {
   expect("the removal marker never reaches the ops list or the saved state", src.includes('op.tool !== "clip" && op.tool !== "removal"') && src.includes('VE.ops.filter((o) => o.tool !== "removal")'));
 }
 
+// The undo cap limits how far back undo reaches, never what the preview and the
+// export render: a trim made before the cap was hit stays in the list.
+{
+  const sb = makeSandbox({ afterOpsChanged() {} });
+  sb.VE = Object.assign(baseState([]), { floor: 0, redo: [], undoMax: 3 });
+  const run = (code) => vm.runInContext(code, sb);
+  run("pushOp")({ tool: "trim", startMs: 500, endMs: 9000 });
+  for (let i = 0; i < 6; i++) run("pushOp")({ tool: "cut", startMs: i * 100, endMs: i * 100 + 50 });
+  expect("a trim older than the undo window is still rendered", sb.VE.ops.some((o) => o.tool === "trim"), JSON.stringify(sb.VE.ops.map((o) => o.tool)));
+  expect("every cut is still in the list", sb.VE.ops.filter((o) => o.tool === "cut").length === 6);
+  for (let i = 0; i < 10; i++) run("undo()");
+  expect("undo reaches back only the cap", sb.VE.ops.length === 4 && sb.VE.ops.some((o) => o.tool === "trim"), JSON.stringify(sb.VE.ops.map((o) => o.tool)));
+}
+
 // An explicit height preset may enlarge (with its hint); the "small for chat"
 // and GIF presets only ever shrink; the source size is "no scaling" and removes
 // the entry.
