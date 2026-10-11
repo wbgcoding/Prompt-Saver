@@ -41,6 +41,20 @@ pub(crate) async fn list_trash(state: State<'_, Db>) -> Result<Vec<TrashRow>, St
     Ok(trash_rows(&lock(&state).trash))
 }
 
+// Seats a restored prompt in the active view: a free cell when there is one, and
+// membership either way (a member without a cell shows as overflow, never lost).
+pub(crate) fn seat_restored_in_active_view(settings: &mut Settings, id: &str) {
+    let folder_cells = active_view_folder_cells(settings);
+    let view = settings.active_view_mut();
+    if let Some(cell) = first_free_cell_excluding(view, &folder_cells) {
+        let key = grid_key(view.cols, view.rows);
+        view.layouts.entry(key).or_default().insert(id.to_string(), cell);
+    }
+    if !view.members.iter().any(|m| m == id) {
+        view.members.push(id.to_string());
+    }
+}
+
 // Moves a trashed prompt back onto the active view and persists it. On a failed
 // write the store is put back exactly as it was: the rollback copy is the FULL
 // settings (never the window copy, which lacks the receiver's password hash and
@@ -55,13 +69,7 @@ pub(crate) fn restore_trashed_core(store: &mut Store, id: &str, save: impl FnOnc
     p.trashed_at = 0;
     // A trash entry from before the placeholder spelling changed comes back readable.
     upgrade_prompt_placeholders(&mut p);
-    let folder_cells = active_view_folder_cells(&store.settings);
-    let view = store.settings.active_view_mut();
-    if let Some(cell) = first_free_cell_excluding(view, &folder_cells) {
-        let key = grid_key(view.cols, view.rows);
-        view.layouts.entry(key).or_default().insert(p.id.clone(), cell);
-    }
-    view.members.push(p.id.clone());
+    seat_restored_in_active_view(&mut store.settings, &p.id);
     store.prompts.push(p);
     // Same atomic prompts+trash write as delete_prompt - on failure, undo the
     // in-memory move (including the layout cell claimed above) instead of

@@ -1365,9 +1365,11 @@ fn cmd_restore(store: &mut Store, id: &str, json: bool) -> Outcome {
     let mut p = store.trash.remove(pos);
     p.trashed_at = 0;
     upgrade_prompt_placeholders(&mut p);
+    // Same seat the app's own restore gives: on the active view, or its overflow row.
+    crate::seat_restored_in_active_view(&mut store.settings, &p.id);
     store.prompts.push(p);
     let body = if json { "{\"ok\":true}\n".to_string() } else { String::new() };
-    Outcome::ok(body).mutating_trash()
+    Outcome::ok(body).mutating_trash().mutating_settings()
 }
 
 // ---------- Tags ----------

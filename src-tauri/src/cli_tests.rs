@@ -461,6 +461,10 @@ fn restore_moves_a_trashed_prompt_back_only_with_yes() {
     assert_eq!(ok.code, 0);
     assert_eq!(store.trash.len(), 0);
     assert!(store.prompts.iter().any(|p| p.id == "p1"));
+    assert!(ok.mutated_settings, "the view placement is a settings change and must be saved");
+    let view = store.settings.active_view_mut();
+    assert!(view.members.iter().any(|m| m == "p1"), "a restored prompt belongs to the active view again");
+    assert!(view.layouts.values().any(|l| l.contains_key("p1")), "and sits on a free cell");
 }
 
 #[test]
