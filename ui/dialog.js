@@ -123,7 +123,7 @@ export function confirmDialog({ title, message, confirmLabel, cancelLabel, altLa
       if (input && input.copy) {
         field.select();
         const value = field.value;
-        Promise.resolve(navigator.clipboard?.writeText(value)).then(() => toast(t("copied"))).catch(() => {
+        (navigator.clipboard?.writeText ? navigator.clipboard.writeText(value) : Promise.reject(new Error("no clipboard api"))).then(() => toast(t("copied"))).catch(() => {
           try { document.execCommand("copy"); toast(t("copied")); } catch (e) { /* nothing more to try */ }
         });
         return;
