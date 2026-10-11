@@ -19285,6 +19285,20 @@ fn a_version_row_with_an_unreadable_column_is_left_untouched() {
 }
 
 #[test]
+fn a_new_empty_snapshot_gets_its_names_cache_at_creation() {
+    let dir = stream_test_dir("empty-names");
+    {
+        let conn = Connection::open(dir.join("data.db")).unwrap();
+        conn.execute_batch("CREATE TABLE prompts(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);").unwrap();
+    }
+    let root = dir.join("backups");
+    let guard_src = std::sync::Mutex::new(0u8);
+    let name = backup_released(guard_src.lock().unwrap(), &dir, &root, 5, None, || {}).unwrap();
+    assert!(root.join(&name).join(BACKUP_NAMES_FILE).exists(), "written when the snapshot is made, not at the first listing");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn backup_names_cache_is_written_for_an_empty_snapshot() {
     let dir = std::env::temp_dir().join(format!("{}-test-empty-names-cache", brand::SLUG));
     let _ = std::fs::remove_dir_all(&dir);

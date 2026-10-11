@@ -611,13 +611,17 @@ pub(crate) fn backup_pack_protecting(pending: PendingBackup, root: &std::path::P
     let packed = gzip_to(&tmp, &dest);
     // The count and names are taken from the vacuumed copy while it is still
     // unpacked, so the list never has to decompress a snapshot for either.
+    let mut counted = None;
     if let Ok(conn) = Connection::open(&tmp) {
         if let Ok(n) = conn.query_row("SELECT COUNT(*) FROM prompts", [], |r| r.get::<_, i64>(0)) {
             let _ = fs::write(folder.join(BACKUP_COUNT_FILE), n.max(0).to_string());
+            counted = Some(n);
         }
     }
     let items = read_prompt_names(&tmp);
-    if !items.is_empty() {
+    // An empty list is cached only for a snapshot that really holds no prompt: a
+    // failed read looks the same and must not be pinned.
+    if !items.is_empty() || counted == Some(0) {
         write_prompt_names(&folder.join(BACKUP_NAMES_FILE), &items);
     }
     // The app version that made this snapshot, so the content viewer can show it
