@@ -181,6 +181,20 @@ pub(crate) fn crop_rgba(img: &image::RgbaImage, x: i32, y: i32, width: u32, heig
     Some(image::imageops::crop_imm(img, x0 as u32, y0 as u32, (x1 - x0) as u32, (y1 - y0) as u32).to_image())
 }
 
+// Index of the monitor (x, y, width, height in global physical pixels) holding the
+// centre of the window rect; 0 when none does, so a window half off every screen
+// still crops against the primary capture as before.
+pub(crate) fn monitor_index_for_rect(monitors: &[(i32, i32, u32, u32)], wx: i32, wy: i32, ww: i32, wh: i32) -> usize {
+    let cx = wx as i64 + ww as i64 / 2;
+    let cy = wy as i64 + wh as i64 / 2;
+    monitors
+        .iter()
+        .position(|&(mx, my, mw, mh)| {
+            cx >= mx as i64 && cx < mx as i64 + mw as i64 && cy >= my as i64 && cy < my as i64 + mh as i64
+        })
+        .unwrap_or(0)
+}
+
 // Crop the frozen monitor capture at a physical-pixel rect.
 pub(crate) fn crop_frozen(
     state: &State<SnipState>,
@@ -406,9 +420,12 @@ pub(crate) async fn capture_window(
         Some(r) => r,
         None => return Err("blocked".to_string()),
     };
-    let origin = {
+    // The frozen monitor the window sits on (by its centre), with that monitor's origin.
+    let (mon_idx, origin) = {
         let g = state.0.lock().unwrap_or_else(|e| e.into_inner());
-        g.first().map(|c| (c.x, c.y))
+        let rects: Vec<(i32, i32, u32, u32)> = g.iter().map(|c| (c.x, c.y, c.width, c.height)).collect();
+        let idx = monitor_index_for_rect(&rects, wx, wy, ww, wh);
+        (idx, g.get(idx).map(|c| (c.x, c.y)))
     };
 
     #[cfg(windows)]
@@ -418,7 +435,7 @@ pub(crate) async fn capture_window(
         // 2. Unobstructed: the frozen desktop already shows the target cleanly.
         if occ.is_empty() {
             if let Some((ox, oy)) = origin {
-                if let Some(im) = crop_frozen(&state, 0, wx - ox, wy - oy, ww as u32, wh as u32) {
+                if let Some(im) = crop_frozen(&state, mon_idx, wx - ox, wy - oy, ww as u32, wh as u32) {
                     if !capture_is_blank(&im) {
                         return if ocr_armed { finalize_ocr_capture(&app, &state, gen, im).await } else { finalize_capture(&app, gen, im, app_name.clone()).await };
                     }
@@ -466,7 +483,7 @@ pub(crate) async fn capture_window(
     #[cfg(not(windows))]
     {
         let img = origin
-            .and_then(|(ox, oy)| crop_frozen(&state, 0, wx - ox, wy - oy, ww as u32, wh as u32))
+            .and_then(|(ox, oy)| crop_frozen(&state, mon_idx, wx - ox, wy - oy, ww as u32, wh as u32))
             .filter(|im| !capture_is_blank(im));
         match img {
             Some(im) => {

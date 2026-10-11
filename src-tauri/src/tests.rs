@@ -19301,3 +19301,13 @@ fn backup_names_cache_is_written_for_an_empty_snapshot() {
     assert!(!bad.join(BACKUP_NAMES_FILE).exists());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn window_capture_picks_the_monitor_under_its_centre() {
+    let mons = [(0, 0, 1920u32, 1080u32), (1920, 0, 1920, 1080), (-1280, 100, 1280, 1024)];
+    assert_eq!(monitor_index_for_rect(&mons, 100, 100, 800, 600), 0);
+    assert_eq!(monitor_index_for_rect(&mons, 2500, 200, 800, 600), 1);
+    assert_eq!(monitor_index_for_rect(&mons, -1000, 300, 600, 400), 2);
+    // A window nowhere near any screen keeps the primary capture.
+    assert_eq!(monitor_index_for_rect(&mons, 9000, 9000, 100, 100), 0);
+}
