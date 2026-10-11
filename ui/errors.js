@@ -194,8 +194,8 @@ function resolveErrMessage(err, t) {
     }
   }
   let msg = t(key || "errUnexpected");
-  if (args.length) msg = msg.replace("{n}", args[0]);
-  if (args.length > 1) msg = msg.replace("{m}", args[1]);
+  if (args.length) msg = msg.replace("{n}", () => args[0]); // a function: `$&` in a path is no pattern
+  if (args.length > 1) msg = msg.replace("{m}", () => args[1]);
   return { msg, known: !!key };
 }
 
