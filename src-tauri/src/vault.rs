@@ -948,7 +948,9 @@ pub(crate) fn apply_import(store: &mut Store, backup: Backup, want_data: bool, w
     // app-level hotkey can collide with untouched prompts, and imported prompts
     // can collide with an untouched app-level hotkey.
     let app_hotkey = store.settings.hotkey.clone();
-    let dropped = drop_colliding_hotkeys(&app_hotkey, &mut store.prompts);
+    let reserved = reserved_hotkeys(&store.settings);
+    let reserved: Vec<&str> = reserved.iter().map(String::as_str).collect();
+    let dropped = drop_colliding_hotkeys(&app_hotkey, &reserved, &mut store.prompts);
     // Folders index into prompts, so only re-normalize when prompts actually
     // changed -- a settings-only import must not touch the current grid.
     if want_data {

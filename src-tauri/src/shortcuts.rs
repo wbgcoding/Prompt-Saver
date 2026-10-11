@@ -184,11 +184,14 @@ pub(crate) fn hotkey_plan(
 // A restored backup can carry an accelerator the app hotkey or an earlier prompt
 // already owns. The import must not fail over that, so the losing binding is
 // dropped and counted for the summary.
-pub(crate) fn drop_colliding_hotkeys(app_hotkey: &str, prompts: &mut [Prompt]) -> usize {
+// `reserved` are the other global combinations that outrank a prompt binding (the
+// voice and recording hotkeys, see `reserved_hotkeys`).
+pub(crate) fn drop_colliding_hotkeys(app_hotkey: &str, reserved: &[&str], prompts: &mut [Prompt]) -> usize {
     let mut taken: std::collections::HashSet<Accel> = std::collections::HashSet::new();
     if let Some(sc) = parse_accel(app_hotkey) {
         taken.insert(sc);
     }
+    taken.extend(reserved.iter().filter_map(|hk| parse_accel(hk)));
     let mut dropped = 0;
     for p in prompts.iter_mut() {
         if p.hotkey.trim().is_empty() {
@@ -216,6 +219,7 @@ pub(crate) fn drop_colliding_hotkeys(app_hotkey: &str, prompts: &mut [Prompt]) -
 pub(crate) fn sanitize_hotkey(
     raw: &str,
     app_hotkey: &str,
+    voice_hotkey: &str,
     rec_stop_hotkey: &str,
     rec_pause_hotkey: &str,
     others: &[&Prompt],
@@ -226,6 +230,7 @@ pub(crate) fn sanitize_hotkey(
     }
     let sc = accel_error(hk).map_err(|e| e.to_string())?;
     if parse_accel(app_hotkey) == Some(sc)
+        || parse_accel(voice_hotkey) == Some(sc)
         || parse_accel(rec_stop_hotkey) == Some(sc)
         || parse_accel(rec_pause_hotkey) == Some(sc)
         || others.iter().any(|p| parse_accel(&p.hotkey) == Some(sc))
@@ -233,6 +238,25 @@ pub(crate) fn sanitize_hotkey(
         return Err(HK_TAKEN.to_string());
     }
     Ok(hk.to_string())
+}
+
+// The voice accelerator to check prompt hotkeys against, or "" while the voice
+// feature or its own hotkey switch is off (the same gate rearm_hotkeys applies).
+pub(crate) fn active_voice_hotkey<'a>(hk: &'a str, flags: &HashMap<String, bool>) -> &'a str {
+    if flags.get("voice") != Some(&false) && flags.get("voiceHotkey") == Some(&true) {
+        hk
+    } else {
+        ""
+    }
+}
+
+// Every global combination except the app hotkey that outranks a prompt binding.
+pub(crate) fn reserved_hotkeys(settings: &Settings) -> Vec<String> {
+    vec![
+        active_voice_hotkey(&settings.voice_hotkey, &settings.ui_flags).to_string(),
+        active_rec_hotkey(&settings.rec_stop_hotkey, "recStopHotkey", &settings.ui_flags).to_string(),
+        active_rec_hotkey(&settings.rec_pause_hotkey, "recPauseHotkey", &settings.ui_flags).to_string(),
+    ]
 }
 
 // The rec-stop/rec-pause accelerator to check prompt hotkeys against, or ""

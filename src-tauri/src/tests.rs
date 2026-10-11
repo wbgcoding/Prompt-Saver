@@ -13403,16 +13403,16 @@ fn the_default_hotkey_is_not_refused() {
 fn a_blocked_combination_never_reaches_the_store() {
     let prompts = sample_prompts();
     let others: Vec<&Prompt> = prompts.iter().collect();
-    assert_eq!(sanitize_hotkey("Ctrl+C", "", "", "", &others), Err(HK_SYSTEM.into()));
-    assert_eq!(sanitize_hotkey("Shift+A", "", "", "", &others), Err(HK_INVALID.into()));
-    assert_eq!(sanitize_hotkey("Super+J", "", "", "", &others), Err(HK_SYSTEM.into()));
+    assert_eq!(sanitize_hotkey("Ctrl+C", "", "", "", "", &others), Err(HK_SYSTEM.into()));
+    assert_eq!(sanitize_hotkey("Shift+A", "", "", "", "", &others), Err(HK_INVALID.into()));
+    assert_eq!(sanitize_hotkey("Super+J", "", "", "", "", &others), Err(HK_SYSTEM.into()));
     // A blocked accelerator is never registered, whatever put it in the store.
     let mut blocked = sample_prompts();
     blocked[0].hotkey = "Ctrl+V".into();
     blocked[1].hotkey = "Alt+Tab".into();
     assert!(hotkey_plan("Ctrl+S", None, None, None, &blocked, true).is_empty());
     // …and an import drops it instead of keeping a binding that does nothing.
-    assert_eq!(drop_colliding_hotkeys("", &mut blocked), 2);
+    assert_eq!(drop_colliding_hotkeys("", &[], &mut blocked), 2);
     assert!(blocked.iter().all(|p| p.hotkey.is_empty()));
 }
 
@@ -13490,20 +13490,20 @@ fn a_deleted_prompt_gives_its_accelerator_back() {
 fn an_import_drops_colliding_hotkeys_instead_of_failing() {
     let mut prompts = sample_prompts();
     prompts[1].hotkey = "ctrl+shift+1".into(); // same combination as p1
-    assert_eq!(drop_colliding_hotkeys("", &mut prompts), 1);
+    assert_eq!(drop_colliding_hotkeys("", &[], &mut prompts), 1);
     assert_eq!(prompts[0].hotkey, "CommandOrControl+Shift+1");
     assert!(prompts[1].hotkey.is_empty());
 
     // The app hotkey outranks every prompt, and junk is dropped too.
     let mut prompts = sample_prompts();
     prompts[1].hotkey = "not an accelerator".into();
-    assert_eq!(drop_colliding_hotkeys("Ctrl+Shift+1", &mut prompts), 2);
+    assert_eq!(drop_colliding_hotkeys("Ctrl+Shift+1", &[], &mut prompts), 2);
     assert!(prompts.iter().all(|p| p.hotkey.is_empty()));
 
     // Nothing to drop leaves every binding in place.
     let mut prompts = sample_prompts();
     prompts[1].hotkey = "Alt+F9".into();
-    assert_eq!(drop_colliding_hotkeys("Ctrl+Alt+Q", &mut prompts), 0);
+    assert_eq!(drop_colliding_hotkeys("Ctrl+Alt+Q", &[], &mut prompts), 0);
     assert_eq!(prompts[1].hotkey, "Alt+F9");
 }
 
@@ -13511,14 +13511,14 @@ fn an_import_drops_colliding_hotkeys_instead_of_failing() {
 fn the_editor_rejects_a_taken_or_unusable_accelerator() {
     let prompts = sample_prompts();
     let others: Vec<&Prompt> = prompts.iter().collect();
-    assert_eq!(sanitize_hotkey("", "Ctrl+Q", "", "", &others).unwrap(), "");
-    assert_eq!(sanitize_hotkey("  Alt+F9  ", "Ctrl+Q", "", "", &others).unwrap(), "Alt+F9");
-    assert_eq!(sanitize_hotkey("Ctrl+Shift+P", "ctrl+shift+p", "", "", &others), Err("hotkey-taken".into()));
-    assert_eq!(sanitize_hotkey("ctrl+shift+1", "", "", "", &others), Err("hotkey-taken".into()));
-    assert_eq!(sanitize_hotkey("F9", "", "", "", &others), Err("hotkey-invalid".into()));
+    assert_eq!(sanitize_hotkey("", "Ctrl+Q", "", "", "", &others).unwrap(), "");
+    assert_eq!(sanitize_hotkey("  Alt+F9  ", "Ctrl+Q", "", "", "", &others).unwrap(), "Alt+F9");
+    assert_eq!(sanitize_hotkey("Ctrl+Shift+P", "ctrl+shift+p", "", "", "", &others), Err("hotkey-taken".into()));
+    assert_eq!(sanitize_hotkey("ctrl+shift+1", "", "", "", "", &others), Err("hotkey-taken".into()));
+    assert_eq!(sanitize_hotkey("F9", "", "", "", "", &others), Err("hotkey-invalid".into()));
     // Editing the prompt that already owns the combination is not a conflict.
     let others: Vec<&Prompt> = prompts.iter().filter(|p| p.id != "p1").collect();
-    assert_eq!(sanitize_hotkey("ctrl+shift+1", "", "", "", &others).unwrap(), "ctrl+shift+1");
+    assert_eq!(sanitize_hotkey("ctrl+shift+1", "", "", "", "", &others).unwrap(), "ctrl+shift+1");
 }
 
 // A prompt hotkey identical to the currently-configured rec-stop/pause
@@ -13530,15 +13530,15 @@ fn the_editor_rejects_a_prompt_hotkey_matching_the_active_recording_hotkeys() {
     let prompts = sample_prompts();
     let others: Vec<&Prompt> = prompts.iter().collect();
     assert_eq!(
-        sanitize_hotkey("Ctrl+Alt+S", "", "ctrl+alt+s", "ctrl+alt+o", &others),
+        sanitize_hotkey("Ctrl+Alt+S", "", "", "ctrl+alt+s", "ctrl+alt+o", &others),
         Err(HK_TAKEN.into())
     );
     assert_eq!(
-        sanitize_hotkey("Ctrl+Alt+O", "", "ctrl+alt+s", "ctrl+alt+o", &others),
+        sanitize_hotkey("Ctrl+Alt+O", "", "", "ctrl+alt+s", "ctrl+alt+o", &others),
         Err(HK_TAKEN.into())
     );
     // Feature/toggle off (caller passes "") -- the same combination is free again.
-    assert_eq!(sanitize_hotkey("Ctrl+Alt+S", "", "", "", &others).unwrap(), "Ctrl+Alt+S");
+    assert_eq!(sanitize_hotkey("Ctrl+Alt+S", "", "", "", "", &others).unwrap(), "Ctrl+Alt+S");
 }
 
 // A prompt stored before per-prompt hotkeys existed has no hotkey field at all: it must load with an
@@ -19644,4 +19644,31 @@ fn only_a_microsoft_signature_passes_the_bootstrapper_gate() {
             assert!(signed_by_microsoft(Path::new(p)), "{p}");
         }
     }
+}
+
+// The voice combination outranks a prompt binding in the plan, so a prompt bound to
+// it would be stored as fine and never fire: it is refused when set and dropped when
+// a backup brings it in, while the voice hotkey is actually registered.
+#[test]
+fn a_prompt_hotkey_cannot_take_the_active_voice_combination() {
+    let others: Vec<&Prompt> = Vec::new();
+    assert_eq!(sanitize_hotkey("Ctrl+Alt+V", "", "ctrl+alt+v", "", "", &others), Err("hotkey-taken".into()));
+    assert_eq!(sanitize_hotkey("Ctrl+Alt+V", "", "", "", "", &others).unwrap(), "Ctrl+Alt+V");
+
+    let mut s = Settings::default();
+    s.voice_hotkey = "Ctrl+Alt+V".to_string();
+    assert_eq!(active_voice_hotkey(&s.voice_hotkey, &s.ui_flags), "", "off until its own switch is on");
+    s.ui_flags.insert("voiceHotkey".to_string(), true);
+    assert_eq!(active_voice_hotkey(&s.voice_hotkey, &s.ui_flags), "Ctrl+Alt+V");
+    s.ui_flags.insert("voice".to_string(), false);
+    assert_eq!(active_voice_hotkey(&s.voice_hotkey, &s.ui_flags), "", "and the voice feature itself");
+    s.ui_flags.insert("voice".to_string(), true);
+
+    let mut p = sample_prompts().remove(0);
+    p.hotkey = "ctrl+alt+v".to_string();
+    let mut prompts = vec![p];
+    let reserved = reserved_hotkeys(&s);
+    let reserved: Vec<&str> = reserved.iter().map(String::as_str).collect();
+    assert_eq!(drop_colliding_hotkeys("", &reserved, &mut prompts), 1);
+    assert!(prompts[0].hotkey.is_empty());
 }

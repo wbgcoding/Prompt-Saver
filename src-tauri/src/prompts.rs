@@ -820,7 +820,8 @@ pub(crate) async fn add_prompt(
         let others: Vec<&Prompt> = store.prompts.iter().collect();
         let rec_stop_hk = active_rec_hotkey(&store.settings.rec_stop_hotkey, "recStopHotkey", &store.settings.ui_flags);
         let rec_pause_hk = active_rec_hotkey(&store.settings.rec_pause_hotkey, "recPauseHotkey", &store.settings.ui_flags);
-        let hotkey = sanitize_hotkey(&hotkey.unwrap_or_default(), &store.settings.hotkey, rec_stop_hk, rec_pause_hk, &others)?;
+        let voice_hk = active_voice_hotkey(&store.settings.voice_hotkey, &store.settings.ui_flags);
+        let hotkey = sanitize_hotkey(&hotkey.unwrap_or_default(), &store.settings.hotkey, voice_hk, rec_stop_hk, rec_pause_hk, &others)?;
         let hotkey_paste = if hotkey.is_empty() {
             String::new() // no binding, no action to remember for it
         } else {
@@ -1204,7 +1205,8 @@ pub(crate) async fn update_prompt(
                 let others: Vec<&Prompt> = store.prompts.iter().filter(|p| p.id != id).collect();
                 let rec_stop_hk = active_rec_hotkey(&store.settings.rec_stop_hotkey, "recStopHotkey", &store.settings.ui_flags);
                 let rec_pause_hk = active_rec_hotkey(&store.settings.rec_pause_hotkey, "recPauseHotkey", &store.settings.ui_flags);
-                Some(sanitize_hotkey(&raw, &store.settings.hotkey, rec_stop_hk, rec_pause_hk, &others)?)
+                let voice_hk = active_voice_hotkey(&store.settings.voice_hotkey, &store.settings.ui_flags);
+                Some(sanitize_hotkey(&raw, &store.settings.hotkey, voice_hk, rec_stop_hk, rec_pause_hk, &others)?)
             }
             None => None,
         };
