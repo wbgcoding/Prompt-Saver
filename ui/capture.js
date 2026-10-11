@@ -550,15 +550,17 @@ export function bindCapture() {
     if (recMorePop.contains(e.target) || recMoreBtn.contains(e.target)) return;
     closeRecMorePop();
   });
-  // Opening the editor hands the raw file to another window that keeps working
-  // with it -- treat this like Save/Attach so closing this modal afterward never
-  // deletes a file the editor might still be reading from.
+  // Opening the editor hands the raw file to another window that owns it from
+  // then on (saving happens there). Treat this like Save/Attach so closing the
+  // modal never deletes a file the editor is reading, and close it at once so
+  // no Save/Save as/Copy here can move the file out from under the editor.
   $("rec-modal-edit").addEventListener("click", async () => {
-    if (!pendingRecPath) return;
+    if (!pendingRecPath || recSaveBusy || recSaveAsBusy || recCopyBusy) return;
     try {
       await invoke("open_video_editor", { srcPath: pendingRecPath });
       recordToolUsage("video_editor");
       recSavedOrAttached = true;
+      closeRecModal();
     } catch (err) {
       errToast(err);
     }

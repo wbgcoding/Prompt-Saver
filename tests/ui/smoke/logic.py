@@ -267,6 +267,26 @@ REC_CONVERT_PROBE = """
     }
 """
 
+# 3001-recedit: choosing Edit in the recording dialog hands the file to the editor and closes the
+# dialog, so no Save, Save as or Copy can move it afterwards and nothing is discarded.
+REC_EDIT_PROBE = """
+    // 3001-recedit:
+    {
+      window.__FIRE__('recording-captured', { path: 'C:/fake/edit-me.mp4' });
+      await until(() => visible($('rec-modal')), 40);
+      if (!visible($('rec-modal'))) errs.push('3001-recedit: the recording dialog did not open');
+      $('rec-modal-edit').click();
+      await until(() => argsOf('open_video_editor').length > 0, 40);
+      await until(() => !visible($('rec-modal')), 40);
+      if (argsOf('open_video_editor').length !== 1) errs.push('3001-recedit: the editor was not opened once');
+      if (visible($('rec-modal'))) errs.push('3001-recedit: the dialog stayed open after Edit');
+      await sleep(200);
+      for (const cmd of ['discard_recording_file', 'save_recording_now', 'save_recording_as', 'copy_recording_to_clipboard']) {
+        if (argsOf(cmd).length) errs.push('3001-recedit: ' + cmd + ' ran after Edit');
+      }
+    }
+"""
+
 # 859: a resize keeps the earlier image for undo, but only as far back as the undo limit
 # reaches; what lies behind it is released, and closing the editor releases the whole session.
 SNIP_HOLD_SEED = ''
@@ -370,6 +390,7 @@ def run(browser, tmp):
             ("search-race", SEARCH_RACE_PROBE, ""),
             ("snip-replace", SNIP_REPLACE_PROBE, SNIP_REPLACE_SEED),
             ("rec-convert", REC_CONVERT_PROBE, REC_CONVERT_SEED),
+            ("rec-edit", REC_EDIT_PROBE, ""),
             ("snip-hold", SNIP_HOLD_PROBE, SNIP_HOLD_SEED),
             ("backup-now", BACKUP_NOW_PROBE, "")):
         errs = _boot(browser, tmp, tag, body, seed=seed)
