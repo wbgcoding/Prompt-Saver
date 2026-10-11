@@ -438,9 +438,9 @@ pub(crate) fn open_bg_op_folder(path: String) -> Result<(), String> {
 }
 
 // Set once the main window's own confirm dialog answers "quit anyway" to a
-// bg-quit-requested prompt -- the close() that follows re-enters
-// CloseRequested a second time, and this flag lets that second pass through
-// instead of asking again. Never reset: a fresh app run starts at false.
+// bg-quit-requested prompt, so any later quit attempt while the process is still
+// shutting down passes without asking again. Never reset: a fresh app run starts
+// at false.
 pub(crate) static QUIT_CONFIRMED: AtomicBool = AtomicBool::new(false);
 
 // The app's one real shutdown sequence -- same three steps whether it runs
@@ -476,7 +476,7 @@ pub(crate) fn request_app_quit(app: &AppHandle) {
 // Called only after the main window's own dialog asked "N jobs are still
 // running, cancel them and quit?" and the user said yes. Cancels every
 // cancelable job (backup/import have no cancel of their own -- see
-// cancel_all_bg_ops) and closes the main window again, this time for real.
+// cancel_all_bg_ops) and then quits for real.
 #[tauri::command]
 pub(crate) async fn confirm_quit_with_running_ops(app: AppHandle) {
     cancel_all_bg_ops();
@@ -491,7 +491,7 @@ pub(crate) async fn confirm_quit_with_running_ops(app: AppHandle) {
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     }
     QUIT_CONFIRMED.store(true, Ordering::SeqCst);
-    if let Some(w) = app.get_webview_window("main") {
-        let _ = w.close();
-    }
+    // Straight into the shutdown: closing the window instead would only hide it
+    // while minimize-to-tray is on, and the app would keep running.
+    do_full_exit(&app);
 }

@@ -138,8 +138,7 @@ pub(crate) fn build_main_window(app: &AppHandle) -> tauri::Result<tauri::Webview
                 // download, backup or import is still going --
                 // request_app_quit asks the main window first,
                 // exactly once per quit attempt (QUIT_CONFIRMED
-                // short-circuits the second CloseRequested that
-                // confirm_quit_with_running_ops itself triggers).
+                // lets a quit through once the user has answered).
                 api.prevent_close();
                 request_app_quit(&handle2);
             }
