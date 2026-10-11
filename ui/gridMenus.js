@@ -146,7 +146,7 @@ export function renderViewsPop(id) {
         } catch (e) { batchErrorToast(e); return; }
         closeViewsPop();
         await renderGrid(true);
-        toast(t("movedToView").replace("{view}", v.name));
+        toast(t("movedToView").replace("{view}", () => v.name));
       });
       viewsPop.appendChild(move);
       continue;
@@ -236,7 +236,7 @@ export function renderMoveToFolderPop(id) {
       closeMoveToFolderPop();
       if (await saveFolder(f, { members: [...f.members, id] })) {
         await renderGrid(true);
-        toast(t("movedToFolderToast").replace("{folder}", folderTitle(f)));
+        toast(t("movedToFolderToast").replace("{folder}", () => folderTitle(f)));
       }
     });
     moveToFolderPop.appendChild(row);

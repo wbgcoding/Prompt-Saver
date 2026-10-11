@@ -679,7 +679,7 @@ export async function runViewMutation(ids, targetViewId, fromViewId, copy, mySeq
   } catch (e) {
     if (mySeq !== viewMutationSeq) return; // superseded meanwhile -- its own toast would be stale too
     const m = String(e).match(/view-full:(\d+)/);
-    if (m) toast(t("viewDropFull").replace("{name}", viewById(targetViewId)?.name || "").replace("{n}", m[1]));
+    if (m) toast(t("viewDropFull").replace("{name}", () => viewById(targetViewId)?.name || "").replace("{n}", () => m[1]));
     else errToast(e);
     return;
   }
@@ -896,7 +896,7 @@ export function bindViews() {
     if (deleted) {
       const sure = await confirmIfNoUndo({
         title: t("viewDeleteTitle"),
-        message: t("viewDeleteMsg").replace("{name}", deleted.name),
+        message: t("viewDeleteMsg").replace("{name}", () => deleted.name),
         confirmLabel: t("delete"),
       });
       if (!sure) return;
@@ -911,7 +911,7 @@ export function bindViews() {
     renderViews();
     await renderGrid(true);
     if (deleted) {
-      undoToast(t("viewDeletedToast").replace("{name}", deleted.name), () => restoreDeletedView(deleted, wasActive ? null : prevActive));
+      undoToast(t("viewDeletedToast").replace("{name}", () => deleted.name), () => restoreDeletedView(deleted, wasActive ? null : prevActive));
     }
   });
 

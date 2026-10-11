@@ -161,7 +161,7 @@ export function setStatusText(el, key, token, value) {
   el.dataset.statusKey = key;
   el.dataset.statusToken = token;
   el.dataset.statusValue = String(value);
-  el.textContent = t(key).replace("{" + token + "}", String(value));
+  el.textContent = t(key).replace("{" + token + "}", () => String(value));
 }
 
 export const DOTS =

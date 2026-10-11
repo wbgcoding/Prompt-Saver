@@ -131,7 +131,7 @@ export function bindAbout() {
     offerUpdate(info);
     notesFromAbout = false;
     setUpdateButtons(false);
-    updateModal.title.textContent = t("updateAvailable").replace("{v}", info.version);
+    updateModal.title.textContent = t("updateAvailable").replace("{v}", () => info.version);
     renderNotes(updateModal.notes, info.notes?.trim() || t("noChangelog"), info.version || "");
     updateModal.warn.classList.toggle("hidden", !info.skipped);
     updateModal.root.classList.remove("hidden");
@@ -194,7 +194,7 @@ export function bindAbout() {
     setStatusText(updateVersion, "versionInstalled", "v", appVersion);
     updateVersion.classList.remove("update-avail");
     closeUpdateModal();
-    toast(t("versionSkipped").replace("{v}", v));
+    toast(t("versionSkipped").replace("{v}", () => v));
   });
   updateModal.cancel.addEventListener("click", closeUpdateModal);
   updateModal.close.addEventListener("click", closeUpdateModal);
@@ -218,7 +218,7 @@ export function bindAbout() {
     offerUpdate(e.payload);
     const icon =
       '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M5 20h14"/></svg>';
-    toast(t("updateAvailable").replace("{v}", e.payload.version), {
+    toast(t("updateAvailable").replace("{v}", () => e.payload.version), {
       label: t("installNow"),
       variant: "update",
       icon,

@@ -16,7 +16,7 @@ export function applyI18n() {
   // The placeholder stays short so the field keeps one line in a small window; the save
   // shortcut is built from the shortcut table and lives in the tooltip and accessible name.
   inputEl.placeholder = t("promptPhComposer");
-  const composerTip = t("composerTip").replace("{keys}", keysLabel("mainCreate", LANG));
+  const composerTip = t("composerTip").replace("{keys}", () => keysLabel("mainCreate", LANG));
   inputEl.title = composerTip;
   inputEl.setAttribute("aria-label", composerTip);
   // A shortcut-bearing element gets its tooltip built from SHORTCUTS (base
@@ -28,7 +28,7 @@ export function applyI18n() {
   document.querySelectorAll("[data-i18n-aria]").forEach((el) => { el.setAttribute("aria-label", t(el.dataset.i18nAria)); });
   // The maximize button's title flips between maximize and restore with the window state.
   document.querySelectorAll("[data-status-key]").forEach((el) => {
-    el.textContent = t(el.dataset.statusKey).replace("{" + el.dataset.statusToken + "}", el.dataset.statusValue);
+    el.textContent = t(el.dataset.statusKey).replace("{" + el.dataset.statusToken + "}", () => el.dataset.statusValue);
   });
   const winMax = document.getElementById("win-max");
   if (winMax) winMax.title = t(document.body.classList.contains("win-maximized") ? "winRestore" : "winMaximize");

@@ -131,7 +131,7 @@ export function pickTileFolderColor(f, anchor) {
 export async function dissolveTileFolder(f) {
   const ok = await confirmDialog({
     title: t("tileFolderDissolve"),
-    message: t("tileFolderDissolveMsg").replace("{name}", folderTitle(f)),
+    message: t("tileFolderDissolveMsg").replace("{name}", () => folderTitle(f)),
     confirmLabel: t("tileFolderDissolve"),
   });
   if (!ok) return;

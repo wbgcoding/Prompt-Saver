@@ -901,7 +901,7 @@ export async function warnDataDirSyncFolder() {
   dataDirSyncWarnedThisSession = true;
   const provider = await invoke("current_data_dir_sync_hint").catch(() => null);
   if (!provider) return;
-  await infoDialog(t("dataDirSyncTitle"), t("dataDirSyncMsg").replace("{provider}", provider), ICON_WARN);
+  await infoDialog(t("dataDirSyncTitle"), t("dataDirSyncMsg").replace("{provider}", () => provider), ICON_WARN);
 }
 // Asked right before committing to a newly picked data folder.
 // Returns true when the folder is fine as-is or the user chose to use it anyway;
@@ -911,7 +911,7 @@ export async function confirmSyncFolderChoice(dir) {
   if (!provider) return true;
   return await confirmDialog({
     title: t("dataDirSyncTitle"),
-    message: t("dataDirSyncMsg").replace("{provider}", provider),
+    message: t("dataDirSyncMsg").replace("{provider}", () => provider),
     confirmLabel: t("dataDirSyncContinue"),
     cancelLabel: t("cancel"),
     icon: ICON_WARN,
@@ -1070,7 +1070,7 @@ export async function applySyncDir(dir) {
   if (info && info.ours > 0) {
     const answer = await confirmDialog({
       title: t("syncOldDirTitle"),
-      message: t("syncOldDirMsg").replace("{path}", info.path).replace("{n}", info.ours),
+      message: t("syncOldDirMsg").replace("{path}", () => info.path).replace("{n}", () => info.ours),
       confirmLabel: t("syncOldDirDelete"),
       altLabel: t("syncOldDirKeep"),
       cancelLabel: t("cancel"),
@@ -1101,7 +1101,7 @@ export async function applySyncDir(dir) {
     // in the old folder and why nothing there was touched.
     await infoDialog(
       t("syncOldDirTitle"),
-      t("syncOldDirKept").replace("{path}", info?.path || "").replace("{what}", errText(e)),
+      t("syncOldDirKept").replace("{path}", () => info?.path || "").replace("{what}", () => errText(e)),
     );
   }
   refreshSyncStatus(true);
@@ -1132,7 +1132,7 @@ export function syncAgoText(unixSecs) {
   if (!unixSecs) return t("syncStatsNever");
   const mins = Math.max(0, Math.round((Date.now() / 1000 - unixSecs) / 60));
   if (mins < 1) return t("syncStatsJustNow");
-  if (mins < 60) return t("syncStatsMinsAgo").replace("{n}", mins);
+  if (mins < 60) return t("syncStatsMinsAgo").replace("{n}", () => mins);
   return new Date(unixSecs * 1000).toLocaleTimeString();
 }
 
@@ -1168,7 +1168,7 @@ export function pathRow(key) {
     info.className = "path-video-stats";
     const text = document.createElement("span");
     text.textContent = videoFolderInfo
-      ? t("videoFolderStatsLine").replace("{n}", videoFolderInfo.count).replace("{size}", fmtBytes(videoFolderInfo.bytes, LANG))
+      ? t("videoFolderStatsLine").replace("{n}", () => videoFolderInfo.count).replace("{size}", fmtBytes(videoFolderInfo.bytes, LANG))
       : t("videoFolderStatsLoading");
     const cleanBtn = document.createElement("button");
     cleanBtn.type = "button";
@@ -1188,11 +1188,11 @@ export function pathRow(key) {
     if (!syncStatus) {
       line.textContent = t("syncStatsLoading");
     } else if (syncStatus.paused) {
-      line.textContent = t("syncStatsPaused").replace("{why}", syncStatus.reason || t("syncStatsNoFolder"));
+      line.textContent = t("syncStatsPaused").replace("{why}", () => syncStatus.reason || t("syncStatsNoFolder"));
     } else {
       line.textContent = t("syncStatsLine")
-        .replace("{when}", syncAgoText(syncStatus.last_ok))
-        .replace("{n}", syncStatus.files);
+        .replace("{when}", () => syncAgoText(syncStatus.last_ok))
+        .replace("{n}", () => syncStatus.files);
     }
     info.appendChild(line);
     row.appendChild(info);
@@ -1327,7 +1327,7 @@ export async function openVideoCleanup(dir) {
   if (!confirmed) return;
   const ageDays = Number(ageSel.value);
   const deleted = await invoke("video_folder_cleanup", { dir, ageDays }).catch((e) => { errToast(e); return 0; });
-  toast(t("videoFolderCleanupDone").replace("{n}", deleted));
+  toast(t("videoFolderCleanupDone").replace("{n}", () => deleted));
   refreshVideoFolderInfo(dir);
 }
 
@@ -1383,7 +1383,7 @@ export async function runBatchExportRecordings(dir, names) {
   const diskWarn = await invoke("check_export_disk_space_batch", { destDir, format, videoKbps, losslessQuality, durationsMs }).catch(() => null);
   if (diskWarn) {
     const msg = t("recDiskWarnExportMsg")
-      .replace("{drive}", diskWarn.drive)
+      .replace("{drive}", () => diskWarn.drive)
       .replace("{free}", fmtBytes(diskWarn.free_mb * 1024 * 1024, LANG))
       .replace("{needed}", fmtBytes(diskWarn.needed_mb * 1024 * 1024, LANG));
     const proceed = await confirmDialog({ title: t("recDiskWarnTitle"), message: msg, confirmLabel: t("recDiskWarnExportAnyway"), cancelLabel: t("cancel") });
@@ -1396,7 +1396,7 @@ export async function runBatchExportRecordings(dir, names) {
   }));
   const outcome = await invoke("export_recordings_batch", { items, format, losslessQuality, videoKbps }).catch((e) => { errToast(e); return null; });
   if (!outcome) return;
-  toast(t("batchExportDone").replace("{ok}", outcome.ok).replace("{failed}", outcome.failed));
+  toast(t("batchExportDone").replace("{ok}", () => outcome.ok).replace("{failed}", () => outcome.failed));
 }
 
 export let expertTab = 0;
@@ -1812,7 +1812,7 @@ export function noticeRow(id) {
   const head = document.createElement("strong");
   head.textContent = t(def.title);
   const body = document.createElement("span");
-  body.textContent = t(def.body).replace("{host}", dataDirLockStatus.otherHost || "?");
+  body.textContent = t(def.body).replace("{host}", () => dataDirLockStatus.otherHost || "?");
   text.append(head, body);
   row.append(icon, text);
   return row;
@@ -2326,7 +2326,7 @@ export function bindExpertMenu() {
     const found = await invoke("ffmpeg_status").catch(() => null);
     ffmpegAvailable = !!found;
     if (found) {
-      toast(t("ffmpegFoundMsg").replace("{path}", found));
+      toast(t("ffmpegFoundMsg").replace("{path}", () => found));
       renderExpert();
       return;
     }

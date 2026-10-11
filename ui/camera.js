@@ -381,7 +381,7 @@ async function startRecording() {
       appendFailed = false;
       await abandonCall;
       abandonCall = null;
-      const text = t("camChunkWriteFailed").replace("{path}", path);
+      const text = t("camChunkWriteFailed").replace("{path}", () => path);
       statusText.textContent = text;
       statusText.title = text;
       idleControls();

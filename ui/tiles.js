@@ -215,7 +215,7 @@ export function applyRotateState(tile, id) {
     // 0 = show the whole entry, same convention as notesTipLen/clipNote.
     const short = ROTATE_SHORT_MAX > 0 && s.text.length > ROTATE_SHORT_MAX
       ? `${s.text.slice(0, ROTATE_SHORT_MAX)}…` : s.text;
-    tile.dataset.tipRotate = t("tileTipRotate").replace("{text}", short);
+    tile.dataset.tipRotate = t("tileTipRotate").replace("{text}", () => short);
   }
 }
 
@@ -368,7 +368,7 @@ export function buildTile(p) {
   if (preview && preview !== p.name) tile.dataset.tipBody = preview;
   // The prompt's own hotkey rides along as a line after the body: the corner
   // badge cannot show it (it ignores the pointer).
-  if (p.hotkey && promptHotkeysOn()) tile.dataset.tipHotkey = t("tileHotkeyBadgeTitle").replace("{accel}", prettyAccel(p.hotkey));
+  if (p.hotkey && promptHotkeysOn()) tile.dataset.tipHotkey = t("tileHotkeyBadgeTitle").replace("{accel}", () => prettyAccel(p.hotkey));
   // Two prompts of wildly different length look identical on the tile itself:
   // the same char/~token readout the editor already shows, reused here so there is
   // only one formula for "how long is this" in the whole app.
@@ -478,7 +478,7 @@ export function buildTile(p) {
   if (p.hotkey && promptHotkeysOn() && flag("tileHotkeyBadge")) {
     const hkBadge = document.createElement("span");
     hkBadge.className = "tile-hotkey-badge";
-    const hkLabel = t("tileHotkeyBadgeTitle").replace("{accel}", prettyAccel(p.hotkey));
+    const hkLabel = t("tileHotkeyBadgeTitle").replace("{accel}", () => prettyAccel(p.hotkey));
     hkBadge.title = hkLabel;
     hkBadge.setAttribute("aria-label", hkLabel);
     hkBadge.innerHTML = ICON_KEYBOARD;

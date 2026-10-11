@@ -82,7 +82,7 @@ export function renderPromptHotkey() {
     // The inherited mode is spelled out on the default entry, and the whole row is
     // pointless without a binding to act on.
     const def = sel.querySelector('option[value=""]');
-    if (def) def.textContent = t("promptHotkeyActionDefault").replace("{mode}", hotkeyPasteDefault());
+    if (def) def.textContent = t("promptHotkeyActionDefault").replace("{mode}", () => hotkeyPasteDefault());
     modal.hotkeyActionRow.classList.toggle("hidden", !accel);
   }
   showHotkeyError("");
@@ -116,7 +116,7 @@ export const hotkeyTakenMsg = (owner) =>
     : owner.voice ? t("promptHotkeyTakenVoice")
     : owner.recStop ? t("promptHotkeyTakenRecStop")
     : owner.recPause ? t("promptHotkeyTakenRecPause")
-    : t("promptHotkeyTakenBy").replace("{name}", owner.name);
+    : t("promptHotkeyTakenBy").replace("{name}", () => owner.name);
 
 // Global hotkeys have to be off while a field is capturing: Windows hands a
 // registered combination to the owning process, not to the focused window, so the

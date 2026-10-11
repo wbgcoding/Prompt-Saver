@@ -532,7 +532,7 @@ export async function saveSavedSearch() {
   const max = SAVED_SEARCH_MAX;
   if (list.length >= max) {
     const oldest = list[0];
-    toast(t("savedSearchLimitToast").replace("{max}", String(max)).replace("{name}", oldest ? oldest.name : ""));
+    toast(t("savedSearchLimitToast").replace("{max}", String(max)).replace("{name}", () => oldest ? oldest.name : ""));
     return;
   }
   const suggested = suggestedSearchName(libQuery);
@@ -713,7 +713,7 @@ function updateLibraryCount(shown) {
   const all = archiveHidden() ? prompts.filter((p) => !isArchived(p)).length : prompts.length;
   count.textContent = shown === all
     ? String(all)
-    : t("libraryCount").replace("{n}", shown).replace("{v}", all);
+    : t("libraryCount").replace("{n}", () => shown).replace("{v}", () => all);
   const tabCount = $("library-tab-prompts-count");
   if (tabCount) tabCount.textContent = `(${count.textContent})`;
 }
@@ -722,7 +722,7 @@ export function renderLibrary() {
   // The archive chip names the tag it filters by, so a renamed archive tag shows where it is used.
   const archiveChip = $("library-archive");
   $("library-archive-label").textContent = archiveTagName();
-  const archiveTip = t("showArchiveTagged").replace("{name}", archiveTagName());
+  const archiveTip = t("showArchiveTagged").replace("{name}", () => archiveTagName());
   archiveChip.title = archiveTip;
   archiveChip.setAttribute("aria-label", archiveTip);
   const list = $("library-list");
@@ -1235,7 +1235,7 @@ export async function trashPromptWithUndo(id, name) {
     errToast(err);
     return false;
   }
-  undoToast(t("promptTrashedToast").replace("{name}", label), () => restoreBatchDelete([id], placements));
+  undoToast(t("promptTrashedToast").replace("{name}", () => label), () => restoreBatchDelete([id], placements));
   return true;
 }
 

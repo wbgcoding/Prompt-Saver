@@ -322,7 +322,7 @@ export function renderJournal() {
       (showElsewhere ? journalInbox.length : 0);
     jcount.textContent = recent.length === all
       ? String(all)
-      : t("libraryCount").replace("{n}", recent.length).replace("{v}", all);
+      : t("libraryCount").replace("{n}", recent.length).replace("{v}", () => all);
     const tabCount = $("library-tab-history-count");
     if (tabCount) tabCount.textContent = `(${jcount.textContent})`;
   }
@@ -421,7 +421,7 @@ export function renderJournal() {
     : used.map(([p, n, ts]) => journalRow(p, {
       left: showTime && ts ? fmtWhen(ts) : "",
       title: showTime && ts ? fmtFull(ts) : "",
-      right: t("usedTimes").replace("{n}", n),
+      right: t("usedTimes").replace("{n}", () => n),
     }, copyAgain(p)));
   if (!rowEls.length) {
     const e = document.createElement("div");

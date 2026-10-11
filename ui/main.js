@@ -279,7 +279,7 @@ function bind() {
   // event on refusal -- one toast, the same wording every time, instead of
   // each action failing quietly in its own different way.
   listen("data-dir-readonly-write-blocked", (e) => {
-    toast(t("dataDirReadOnlyToast").replace("{host}", e.payload || dataDirLockStatus.otherHost || "?"));
+    toast(t("dataDirReadOnlyToast").replace("{host}", () => e.payload || dataDirLockStatus.otherHost || "?"));
   });
   // The disk problem that caused the above went away and a later settings write
   // reached it again -- the notice does not need to survive that, so it comes
@@ -445,7 +445,7 @@ async function maybeOfferEditorDraftRecovery() {
   const preview = (draft.name || draft.text || "").split("\n").slice(0, 2).join(" ").trim().slice(0, 140);
   const restore = await confirmDialog({
     title: t("draftRecoverTitle"),
-    message: t("draftRecoverBody").replace("{time}", when).replace("{preview}", preview),
+    message: t("draftRecoverBody").replace("{time}", () => when).replace("{preview}", () => preview),
     confirmLabel: t("draftRecoverRestore"),
     cancelLabel: t("draftRecoverDiscard"),
     danger: false,

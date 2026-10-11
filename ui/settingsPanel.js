@@ -84,7 +84,7 @@ export async function runImportPreview() {
   const newCount = preview.items.filter((i) => !i.duplicate).length;
   const dupCount = preview.items.length - newCount;
   $("import-preview-summary").textContent = t("importPreviewSummary")
-    .replace("{new}", newCount).replace("{dup}", dupCount);
+    .replace("{new}", () => newCount).replace("{dup}", () => dupCount);
   const list = $("import-preview-list");
   list.innerHTML = "";
   for (const item of preview.items) {
@@ -190,7 +190,7 @@ export async function runImportFolder() {
   const checks = new Map(); // relPath -> checkbox, readable items only
   const updateSummary = () => {
     const n = [...checks.values()].filter((cb) => cb.checked).length;
-    let text = t("importFolderSummary").replace("{n}", n).replace("{total}", preview.items.length);
+    let text = t("importFolderSummary").replace("{n}", () => n).replace("{total}", preview.items.length);
     if (preview.truncated) text += " " + t("importFolderTruncated");
     summary.textContent = text;
     confirmBtn.disabled = n === 0;
@@ -298,7 +298,7 @@ export async function runImportAll() {
     try {
       const res = await withTaskbarBusy("import", () => invoke("import_all", { path, password, scope }));
       await reloadEverything();
-      let msg = t("importAllDone").replace("{f}", res.name).replace("{n}", Number(res.count).toLocaleString(LANG));
+      let msg = t("importAllDone").replace("{f}", () => res.name).replace("{n}", Number(res.count).toLocaleString(LANG));
       // A hotkey the restore could not keep is named, never silently dropped.
       if (res.dropped_hotkeys) msg += "\n" + t("importHotkeysDropped").replace("{n}", Number(res.dropped_hotkeys).toLocaleString(LANG));
       // The file's own backup password is a foreign-machine DPAPI blob and was
@@ -337,11 +337,11 @@ export async function runImportAll() {
 export async function offerTakeover() {
   const offer = await invoke("takeover_offer").catch(() => null);
   if (!offer) return false;
-  const countText = offer.prompts != null ? t("takeoverPromptCount").replace("{n}", offer.prompts) : t("takeoverCountUnknown");
+  const countText = offer.prompts != null ? t("takeoverPromptCount").replace("{n}", () => offer.prompts) : t("takeoverCountUnknown");
   const details = `${fmtBytes(offer.size, LANG)}, ${countText}`;
   const adopt = await confirmDialog({
     title: t("takeoverTitle"),
-    message: t("takeoverBody").replace("{path}", offer.path).replace("{details}", details).replace("{skip}", t("takeoverSkip")),
+    message: t("takeoverBody").replace("{path}", () => offer.path).replace("{details}", () => details).replace("{skip}", t("takeoverSkip")),
     confirmLabel: t("takeoverAdopt"),
     cancelLabel: t("takeoverSkip"),
     icon: TAKEOVER_SVG,
@@ -364,7 +364,7 @@ export async function offerTakeover() {
     await reloadEverything();
     const newDir = await invoke("current_data_dir").catch(() => null);
     if (newDir) {
-      toast(t("takeoverDoneBody").replace("{path}", newDir), { label: t("backupOpenFolder"), onClick: () => invoke("open_storage_folder", { path: newDir }).catch((e) => errToast(e)) }, "", null, 8000);
+      toast(t("takeoverDoneBody").replace("{path}", () => newDir), { label: t("backupOpenFolder"), onClick: () => invoke("open_storage_folder", { path: newDir }).catch((e) => errToast(e)) }, "", null, 8000);
     }
   }
   return true;

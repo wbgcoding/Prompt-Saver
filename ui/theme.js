@@ -393,7 +393,7 @@ export async function deleteThemeDraft() {
   if (!themeDraft?.id) return;
   const ok = await confirmDialog({
     title: t("themeDeleteTitle"),
-    message: t("themeDeleteMsg").replace("{name}", themeDraft.name),
+    message: t("themeDeleteMsg").replace("{name}", () => themeDraft.name),
     confirmLabel: t("delete"),
   });
   if (!ok) return;

@@ -122,7 +122,7 @@ export function bindCapture() {
     } catch (err) {
       const msg = String(err);
       if (msg === "not-media") toast(t("openFileNotMedia"));
-      else if (msg.startsWith("too-large:")) toast(t("openFileTooBig").replace("{mb}", msg.split(":")[1] || ""));
+      else if (msg.startsWith("too-large:")) toast(t("openFileTooBig").replace("{mb}", () => msg.split(":")[1] || ""));
       else errToast(err);
       return;
     }
@@ -215,7 +215,7 @@ export function bindCapture() {
       const proceed = await confirmDialog({
         title: t("recDiskWarnTitle"),
         message: t("recDiskWarnMsg")
-          .replace("{drive}", diskWarn.drive)
+          .replace("{drive}", () => diskWarn.drive)
           .replace("{free}", fmtBytes(diskWarn.free_mb * 1024 * 1024, LANG))
           .replace("{minutes}", String(minutes)),
         confirmLabel: t("recDiskWarnRecordAnyway"),
@@ -226,7 +226,7 @@ export function bindCapture() {
     let n = Math.round(val("recCountdownS"));
     if (n <= 0) { await startNow(); return; }
     const tick = () => {
-      toast(t("recCountdownToast").replace("{n}", n));
+      toast(t("recCountdownToast").replace("{n}", () => n));
       n -= 1;
       if (n < 0) { recCountdownTimer = 0; startNow(); return; }
       recCountdownTimer = setTimeout(tick, 1000);
@@ -968,7 +968,7 @@ export function bindCapture() {
     const due = e.payload || [];
     if (!due.length) return;
     const msg = due.length === 1
-      ? t("ocrLangUpdateOne").replace("{lang}", due[0].label)
+      ? t("ocrLangUpdateOne").replace("{lang}", () => due[0].label)
       : t("ocrLangUpdateMany").replace("{n}", String(due.length));
     toast(
       msg,
@@ -982,7 +982,7 @@ export function bindCapture() {
     const due = e.payload || [];
     if (!due.length) return;
     const msg = due.length === 1
-      ? t("ocrLangUpdateOne").replace("{lang}", due[0].label)
+      ? t("ocrLangUpdateOne").replace("{lang}", () => due[0].label)
       : t("ocrLangUpdateMany").replace("{n}", String(due.length));
     toast(
       msg,

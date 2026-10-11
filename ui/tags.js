@@ -318,7 +318,7 @@ export function renderTagBar(bar, activeSet, rerender) {
 export async function mergeTagWithUndo(from, into, refresh) {
   const sure = await confirmIfNoUndo({
     title: t("tagMergeTargetTitle"),
-    message: t("tagMergeConfirmMsg").replace("{from}", from).replace("{into}", into),
+    message: t("tagMergeConfirmMsg").replace("{from}", () => from).replace("{into}", () => into),
     confirmLabel: t("tagMerge"),
     danger: false,
   });
@@ -334,7 +334,7 @@ export async function mergeTagWithUndo(from, into, refresh) {
   catch (err) { errToast(err); return; }
   await refresh();
   undoToast(
-    t("tagMergeDone").replace("{from}", from).replace("{into}", into),
+    t("tagMergeDone").replace("{from}", () => from).replace("{into}", () => into),
     () => undoTagMerge(from, into, fromIds, intoIds, fromColor, intoColor, refresh),
   );
 }
@@ -462,7 +462,7 @@ export function renderTagManager() {
       const others = allTags().filter((n2) => tagKey(n2) !== tagKey(name));
       const target = await confirmDialog({
         title: t("tagMergeTargetTitle"),
-        message: t("tagMergeTargetMsg").replace("{name}", name).replace("{n}", String(counts.get(tagKey(name)) || 0)),
+        message: t("tagMergeTargetMsg").replace("{name}", () => name).replace("{n}", String(counts.get(tagKey(name)) || 0)),
         confirmLabel: t("tagMerge"),
         danger: false,
         input: { type: "text", placeholder: t("tagsPh"), datalist: others },
@@ -479,7 +479,7 @@ export function renderTagManager() {
     del.addEventListener("click", async () => {
       const ok = await confirmDialog({
         title: t("tagDeleteTitle"),
-        message: t("tagDeleteMsg").replace("{name}", name),
+        message: t("tagDeleteMsg").replace("{name}", () => name),
         confirmLabel: t("delete"),
       });
       if (!ok) return;
@@ -491,7 +491,7 @@ export function renderTagManager() {
       libTags.delete(key);
       for (const p of prompts) p.tags = (p.tags || []).filter((x) => tagKey(x) !== key);
       await refresh();
-      undoToast(t("tagDeletedToast").replace("{name}", name), () => restoreDeletedTag(name, hadIds, color));
+      undoToast(t("tagDeletedToast").replace("{name}", () => name), () => restoreDeletedTag(name, hadIds, color));
     });
     row.append(dot, label, count, rename, merge, del);
     list.appendChild(row);

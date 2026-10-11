@@ -799,7 +799,7 @@ export async function loadHistory(id) {
     restoreNew.textContent = t("historyRestoreAsNew");
     restoreNew.addEventListener("click", async () => {
       try {
-        const suffix = t("historyRestoreAsNewSuffix").replace("{date}", new Date(v.ts * 1000).toLocaleString(LANG));
+        const suffix = t("historyRestoreAsNewSuffix").replace("{date}", () => new Date(v.ts * 1000).toLocaleString(LANG));
         const created = await invoke("restore_version_as_new", { versionId: v.id, suffix });
         // Same staleness guard as the restore button above: the editor may have
         // moved on while this invoke was in flight.

@@ -2019,7 +2019,7 @@ export function initSnipEditor() {
 
     const size = document.createElement("div");
     size.className = "snip-scale-current";
-    size.textContent = t("snipScaleCurrentSize").replace("{w}", origW).replace("{h}", origH);
+    size.textContent = t("snipScaleCurrentSize").replace("{w}", () => origW).replace("{h}", () => origH);
     snipScalePop.appendChild(size);
 
     const widthField = numberField({
@@ -2136,7 +2136,7 @@ export function initSnipEditor() {
     const dataUrl = snipEditExportDataUrl();
     try {
       const path = await invoke("save_screenshot_as", { dataUrl });
-      if (path) toast(t("snipEditSavedTo").replace("{path}", path));
+      if (path) toast(t("snipEditSavedTo").replace("{path}", () => path));
     } catch (e) { errToast(e); }
   });
   // SouthEast-only resize handle. The move side of the titlebar needs no JS

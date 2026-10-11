@@ -121,7 +121,7 @@ export async function refreshBgOps() {
     const action = op.target
       ? { label: t("bgOpenFolder"), onClick: () => invoke("open_bg_op_folder", { path: op.target }).catch((err) => errToast(err)) }
       : null;
-    toast(t("bgDoneToast").replace("{what}", bgKindNoun(op.kind)), action);
+    toast(t("bgDoneToast").replace("{what}", () => bgKindNoun(op.kind)), action);
   }
   bgOpsFirstRun = false;
 }

@@ -114,7 +114,7 @@ export async function renderStoragePanel(root, force) {
   totalEl.textContent = `${t("storageTotal")}: ${fmtBytes(data.total_bytes, LANG)}`;
   const measuredEl = document.createElement("span");
   measuredEl.className = "storage-measured";
-  measuredEl.textContent = t("storageMeasured").replace("{when}", new Date(data.measured_at * 1000).toLocaleString(LANG));
+  measuredEl.textContent = t("storageMeasured").replace("{when}", () => new Date(data.measured_at * 1000).toLocaleString(LANG));
   totalWrap.append(totalEl, measuredEl);
   const remeasureBtn = document.createElement("button");
   remeasureBtn.type = "button";
@@ -183,10 +183,10 @@ export const RETENTION_ROWS = [
 // value has no off state so it never needs the zero case at all.
 export function retentionKeepText(row) {
   const n = row.fixed ?? val(row.settingKey);
-  if (row.wording === "count") return t("retentionKeepsCount").replace("{n}", n);
-  if (row.wording === "minutes") return t("retentionKeepsMinutes").replace("{n}", n);
+  if (row.wording === "count") return t("retentionKeepsCount").replace("{n}", () => n);
+  if (row.wording === "minutes") return t("retentionKeepsMinutes").replace("{n}", () => n);
   if (n <= 0) return t("retentionForever");
-  return t(row.wording === "hours" ? "retentionKeepsHours" : "retentionKeepsDays").replace("{n}", n);
+  return t(row.wording === "hours" ? "retentionKeepsHours" : "retentionKeepsDays").replace("{n}", () => n);
 }
 
 export async function retentionCleanupResult(promise, nothingKey) {
@@ -242,7 +242,7 @@ export async function renderRetentionPanel(root, force) {
 
   const measuredEl = document.createElement("span");
   measuredEl.className = "storage-measured";
-  measuredEl.textContent = t("storageMeasured").replace("{when}", new Date(data.measured_at * 1000).toLocaleString(LANG));
+  measuredEl.textContent = t("storageMeasured").replace("{when}", () => new Date(data.measured_at * 1000).toLocaleString(LANG));
   panel.appendChild(measuredEl);
 
   const list = document.createElement("div");

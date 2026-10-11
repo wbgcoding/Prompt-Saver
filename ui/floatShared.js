@@ -352,7 +352,7 @@ export function fmtSizeCompact(bytes, lang = "en") {
 export function formatEta(result, t) {
   if (!result) return "";
   if (result.key === "etaOverHour") return t("etaOverHour");
-  return t("etaAbout").replace("{time}", t(result.key).replace("{n}", String(result.value)));
+  return t("etaAbout").replace("{time}", () => t(result.key).replace("{n}", String(result.value)));
 }
 
 // A screen reader's aria-valuetext for the same progress + estimate() result
@@ -362,7 +362,7 @@ export function formatEta(result, t) {
 export function a11yProgressText(t, pct, estimate) {
   if (estimate && estimate.key !== "etaOverHour") {
     const rest = t(estimate.key).replace("{n}", String(estimate.value));
-    return t("a11yPctLeft").replace("{pct}", String(Math.round(pct))).replace("{rest}", rest);
+    return t("a11yPctLeft").replace("{pct}", String(Math.round(pct))).replace("{rest}", () => rest);
   }
   return t("a11yPctOnly").replace("{pct}", String(Math.round(pct)));
 }
@@ -437,7 +437,7 @@ export function parseFfmpegError(err, t, origin = "video") {
   }
   if (!payload) return { message: errMessageLogged(text, t, origin), details: text };
   const message = payload.key === "ffErrOther"
-    ? t("ffErrOther").replace("{code}", payload.code != null ? String(payload.code) : "?")
+    ? t("ffErrOther").replace("{code}", () => payload.code != null ? String(payload.code) : "?")
     : t(payload.key);
   return { message, details: payload.raw || "" };
 }

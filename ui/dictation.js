@@ -251,7 +251,7 @@ export function langRow(kind, cap) {
   // download blind.
   btn.textContent = busy
     ? t("ocrLangsInstalling")
-    : t("ocrLangsDownloadBtn").replace("{size}", cap.download_size == null ? "\u2014" : fmtBytes(cap.download_size, LANG));
+    : t("ocrLangsDownloadBtn").replace("{size}", () => cap.download_size == null ? "\u2014" : fmtBytes(cap.download_size, LANG));
   btn.addEventListener("click", () => startLangInstall(kind, cap));
   actions.appendChild(btn);
   return row;
@@ -264,7 +264,7 @@ export async function startLangInstall(kind, cap) {
   const size = cap.download_size == null ? "\u2014" : fmtBytes(cap.download_size, LANG);
   const ok = await confirmDialog({
     title: t("ocrElevateTitle"),
-    message: t("ocrElevateInfo").replace("{lang}", cap.label).replace("{size}", size),
+    message: t("ocrElevateInfo").replace("{lang}", () => cap.label).replace("{size}", () => size),
     confirmLabel: t("ocrElevateInstall"),
     danger: false,
   });

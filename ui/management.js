@@ -520,7 +520,7 @@ export async function maybeShowSimilarHint(id) {
   try {
     const hit = await invoke("similar_to_saved", { id, threshold: Math.round(val("similarThreshold")) });
     if (!hit) return;
-    toast(t("similarHintToast").replace("{name}", hit.name), null, "", [
+    toast(t("similarHintToast").replace("{name}", () => hit.name), null, "", [
       { label: t("similarHintOpen"), onClick: () => { hideToast(); editPrompt(hit.id); } },
       { label: t("compareBtn"), onClick: () => { hideToast(); openCompareView([id, hit.id]); } },
     ]);
@@ -702,7 +702,7 @@ export async function openRemoteRangesDialog() {
     settings.ui_texts = { ...(settings.ui_texts || {}), remoteAllowedRanges: value };
   } catch (e) {
     const prefix = "not a valid address or range: ";
-    if (String(e).startsWith(prefix)) toast(t("remoteRangesInvalid").replace("{value}", String(e).slice(prefix.length)));
+    if (String(e).startsWith(prefix)) toast(t("remoteRangesInvalid").replace("{value}", () => String(e).slice(prefix.length)));
     else errToast(e);
   }
 }
@@ -822,7 +822,7 @@ export function wireManagement() {
   EXPERT_ACTIONS["settings-export"] = async () => {
     try {
       const path = await invoke("export_settings_only");
-      toast(t("settingsExportDone").replace("{path}", path));
+      toast(t("settingsExportDone").replace("{path}", () => path));
     } catch (e) {
       if (e !== "canceled") errToast(e);
     }

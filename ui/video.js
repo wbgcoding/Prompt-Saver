@@ -1894,14 +1894,14 @@ function updateScaleCurrent() {
   if (!VE.w || !VE.h) {
     line.textContent = "";
   } else if (!scale) {
-    line.textContent = t("veScaleCurrentOriginal").replace("{sw}", VE.w).replace("{sh}", VE.h);
+    line.textContent = t("veScaleCurrentOriginal").replace("{sw}", () => VE.w).replace("{sh}", () => VE.h);
   } else {
     const kbps = videoKbps();
     const durS = totalOutMs() / 1000;
     let text = kbps != null && durS > 0
       ? t("veScaleCurrent").replace("{size}", fmtSizeCompact(Math.round(((kbps + AUDIO_KBPS_ESTIMATE) * 1000 / 8) * durS), LANG))
       : t("veScaleCurrentNoSize");
-    text = text.replace("{sw}", VE.w).replace("{sh}", VE.h).replace("{tw}", scale.w).replace("{th}", scale.h);
+    text = text.replace("{sw}", () => VE.w).replace("{sh}", () => VE.h).replace("{tw}", () => scale.w).replace("{th}", () => scale.h);
     if (scale.w > VE.w || scale.h > VE.h) text += " " + t("veScaleUpscaleNote");
     line.textContent = text;
   }
@@ -1913,7 +1913,7 @@ function updateScaleCurrent() {
     btn.classList.toggle("sel", key !== null && btn.dataset.key === key);
   }
   $("ve-export-scale-summary").textContent = scale
-    ? t("veExportScaleSummary").replace("{w}", scale.w).replace("{h}", scale.h)
+    ? t("veExportScaleSummary").replace("{w}", () => scale.w).replace("{h}", () => scale.h)
     : t("veScaleOff");
 }
 
@@ -3425,7 +3425,7 @@ async function startExport(toClipboard) {
         }).catch(() => null);
         if (diskWarn) {
           const msg = t("recDiskWarnExportMsg")
-            .replace("{drive}", diskWarn.drive)
+            .replace("{drive}", () => diskWarn.drive)
             .replace("{free}", fmtBytes(diskWarn.free_mb * 1024 * 1024, LANG))
             .replace("{needed}", fmtBytes(diskWarn.needed_mb * 1024 * 1024, LANG));
           const proceed = await confirmDialog({ title: t("recDiskWarnTitle"), message: msg, confirmLabel: t("recDiskWarnExportAnyway"), danger: false });
@@ -3448,15 +3448,15 @@ async function startExport(toClipboard) {
         if (stillHere()) setProgress(100);
         if (toClipboard) {
           const clipOk = await invoke("copy_file_to_clipboard", { path: dest }).catch(() => false);
-          if (stillHere()) $("ve-export-status").textContent = clipOk ? t("veClipExportDone") : t("veExportDone").replace("{path}", dest);
-          toast(clipOk ? t("veClipExportDone") : t("veExportDone").replace("{path}", dest));
+          if (stillHere()) $("ve-export-status").textContent = clipOk ? t("veClipExportDone") : t("veExportDone").replace("{path}", () => dest);
+          toast(clipOk ? t("veClipExportDone") : t("veExportDone").replace("{path}", () => dest));
         } else {
           if (stillHere()) {
             VE.lastExport = dest;
-            $("ve-export-status").textContent = t("veExportDone").replace("{path}", dest);
+            $("ve-export-status").textContent = t("veExportDone").replace("{path}", () => dest);
             $("ve-export-saveas").classList.remove("hidden");
           }
-          toast(t("veExportDone").replace("{path}", dest));
+          toast(t("veExportDone").replace("{path}", () => dest));
         }
         return;
       } catch (err) {
@@ -3814,7 +3814,7 @@ function updateAudioLabels() {
 // since resetForNewSource() changes the state without any click happening to
 // trigger audioControl()'s own listener.
 function updateVolumeValueText(volId) {
-  $(volId).setAttribute("aria-valuetext", t("a11yPctOnly").replace("{pct}", $(volId).value));
+  $(volId).setAttribute("aria-valuetext", t("a11yPctOnly").replace("{pct}", () => $(volId).value));
 }
 
 function syncAudioButtons() {
@@ -3919,7 +3919,7 @@ $("ve-export-saveas").addEventListener("click", async () => {
   const moved = await invoke("save_recording_as", { srcPath: VE.lastExport }).catch((err) => { toast(String(err).includes("source-not-allowed") ? t("veMoveNotAllowed") : errMessageLogged(err, t, "video")); return null; });
   if (moved) {
     VE.lastExport = moved;
-    $("ve-export-status").textContent = t("veExportDone").replace("{path}", moved);
+    $("ve-export-status").textContent = t("veExportDone").replace("{path}", () => moved);
   }
 });
 
