@@ -1233,12 +1233,11 @@ fn cmd_copy(store: &Store, id: &str) -> Outcome {
     if p.secret {
         return Outcome::err(1, format!("prompt {id} is confidential and can only be copied in the app itself\n"));
     }
+    // Our own copy: the clipboard watcher must not take it for a foreign one, and
+    // it can see the change before the write returns, so note it first.
+    crate::note_own_copy(&p.text);
     match arboard::Clipboard::new().and_then(|mut c| c.set_text(p.text.clone())) {
-        Ok(()) => {
-            // Our own copy: the clipboard watcher must not take it for a foreign one.
-            crate::note_own_copy(&p.text);
-            Outcome::ok(String::new())
-        }
+        Ok(()) => Outcome::ok(String::new()),
         Err(e) => Outcome::err(3, format!("clipboard unavailable: {e}\n")),
     }
 }
