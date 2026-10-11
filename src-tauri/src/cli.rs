@@ -1491,6 +1491,9 @@ fn cmd_export(store: &Store, cwd: &Path, path: &str, format: &str, ids: Option<&
         }
         _ => store.prompts.clone(),
     };
+    // A confidential entry holds sealed ciphertext in its text fields: it never
+    // leaves in a file, the same default the app's own export applies.
+    let selected = crate::filter_export_secrets(selected, false);
     let remembered = if store.settings.ui_flags.get("varDefaults") != Some(&false) { parse_ui_text_map(&store.settings, "varDefaults") } else { std::collections::HashMap::new() };
     let fixed = if store.settings.ui_flags.get("varFixed") == Some(&true) { parse_ui_text_map(&store.settings, "varFixed") } else { std::collections::HashMap::new() };
     let resolved: Vec<Prompt> = selected.iter().map(|p| resolved_for_export(p, &remembered, &fixed)).collect();

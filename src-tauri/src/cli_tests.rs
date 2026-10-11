@@ -688,6 +688,20 @@ fn export_writes_a_file_and_refuses_to_overwrite_without_yes() {
 }
 
 #[test]
+fn export_leaves_confidential_entries_out() {
+    let tmp = TempDir::new("export-secret");
+    let mut store = fixture_store();
+    store.prompts[0].secret = true;
+    store.prompts[0].text = "SEALED-CIPHERTEXT".to_string();
+    let out = exec(&mut store, tmp.path(), &Cmd::Export { path: "s.json".to_string(), format: "json".to_string(), ids: None, confirmed: false }, tmp.path());
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert!(out.stdout.contains("exported 1 prompt"), "{}", out.stdout);
+    let written = std::fs::read_to_string(tmp.path().join("s.json")).unwrap();
+    assert!(!written.contains("SEALED-CIPHERTEXT"));
+    assert!(written.contains("beta text"));
+}
+
+#[test]
 fn export_relative_paths_resolve_against_the_callers_cwd_not_this_process() {
     let tmp = TempDir::new("export-cwd");
     let mut store = fixture_store();
