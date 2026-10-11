@@ -330,6 +330,7 @@ fn run_session(
             // caller's intended (and now false) reason.
             if !ended.swap(true, Ordering::SeqCst) {
                 let _ = app.emit("voice-stopped", VoiceStoppedEvent { id, token, reason: "error".to_string() });
+                super::set_tray_recording(app, false);
             }
             return;
         }
@@ -343,6 +344,7 @@ fn run_session(
             if Instant::now() >= deadline {
                 if !ended.swap(true, Ordering::SeqCst) {
                     let _ = app.emit("voice-stopped", VoiceStoppedEvent { id, token, reason: reason.to_string() });
+                    super::set_tray_recording(app, false);
                 }
                 break;
             }
