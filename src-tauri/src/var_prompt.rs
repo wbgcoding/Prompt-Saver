@@ -103,6 +103,15 @@ pub(crate) async fn open_var_window(
             let _ = app.emit_to("main", "vars-filled", Option::<String>::None);
         }
         let _ = win.close();
+        // close() only queues the teardown; the label is free again once it ran.
+        // Building under the same label before that fails, which would leave the
+        // new request without a window.
+        for _ in 0..50 {
+            if app.get_webview_window(VAR_WIN_LABEL).is_none() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
     }
     // Never hold the store mutex while a window is built (deadlock shape).
     let excluded = {
@@ -113,7 +122,7 @@ pub(crate) async fn open_var_window(
     let gen = pending.next_gen.fetch_add(1, Ordering::Relaxed);
     *pending.lock() = Some((gen, payload));
     let rect = var_window_rect(&app, rows);
-    let win = WebviewWindowBuilder::new(&app, VAR_WIN_LABEL, WebviewUrl::App("vars.html".into()))
+    let built = WebviewWindowBuilder::new(&app, VAR_WIN_LABEL, WebviewUrl::App("vars.html".into()))
         .title(brand::DISPLAY_NAME)
         .inner_size(VAR_WIN_W, VAR_WIN_W) // placeholder: set_bounds_phys owns the real box
         .decorations(false)
@@ -124,8 +133,20 @@ pub(crate) async fn open_var_window(
         .shadow(false)
         .focused(true)
         .visible(false) // sized in physical pixels first, so nothing flashes at the wrong size
-        .build()
-        .map_err(|e| e.to_string())?;
+        .build();
+    let win = match built {
+        Ok(w) => w,
+        Err(e) => {
+            // No window will ever answer this request: release the copy waiting on it.
+            let mut slot = pending.lock();
+            if slot.as_ref().is_some_and(|(g, _)| *g == gen) {
+                slot.take();
+                drop(slot);
+                let _ = app.emit_to("main", "vars-filled", Option::<String>::None);
+            }
+            return Err(e.to_string());
+        }
+    };
     let _ = win.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
     set_capture_exclusion(&win, excluded);
     set_bounds_phys(&win, rect);
