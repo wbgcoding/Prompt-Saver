@@ -19448,3 +19448,17 @@ fn restoring_a_version_with_an_unreadable_column_is_refused() {
     assert!(dec_str_strict(&format!("{ENC_PREFIX}AAAA")).is_none());
     assert_eq!(dec_str_strict("plain").as_deref(), Some("plain"));
 }
+
+#[test]
+fn an_unreadable_settings_file_is_reported_to_the_caller_that_locks_settings_writes() {
+    let dir = std::env::temp_dir().join(format!("{}-test-fallback-settings-lock", brand::SLUG));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let (_, unreadable) = load_store_from_json_parts(&dir);
+    assert!(!unreadable, "no settings file is a fresh install, not a corrupt one");
+    std::fs::write(dir.join("settings.json"), format!("{ENC_PREFIX}not-readable")).unwrap();
+    let (store, unreadable) = load_store_from_json_parts(&dir);
+    assert!(unreadable);
+    assert!(store.prompts_locked);
+    let _ = std::fs::remove_dir_all(&dir);
+}

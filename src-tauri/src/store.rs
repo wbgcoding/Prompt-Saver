@@ -1988,7 +1988,10 @@ pub(crate) fn load_store(app: &AppHandle) -> Store {
         return store;
     }
     // Fallback: DB unavailable → read the JSON files directly.
-    let mut store = load_store_from_json(&dir);
+    let (mut store, settings_unreadable) = load_store_from_json_parts(&dir);
+    // The same write-lock the database path sets for a settings row it could not
+    // read: a later settings write must not replace the unreadable file with defaults.
+    SETTINGS_LOCKED.store(settings_unreadable, Ordering::Relaxed);
     acquire_data_dir_lock(&dir, data_dir_lock_enabled(&store.settings));
     if tour_should_be_marked_seen(!store.prompts.is_empty(), store.settings.examples_seeded) {
         store.settings.ui_flags.entry("tourSeen".to_string()).or_insert(true);
@@ -2010,13 +2013,22 @@ pub(crate) fn data_dir_lock_enabled(settings: &Settings) -> bool {
 // There is no second source to fall back to on this path, so an unreadable file
 // must lock writes (like load_store's decrypt_fails case) rather than silently
 // present (and then save) an empty store.
+#[cfg(test)]
 pub(crate) fn load_store_from_json(dir: &Path) -> Store {
+    load_store_from_json_parts(dir).0
+}
+
+// Also says whether settings.json was there but unreadable, so the caller that
+// owns the process-wide settings write-lock can set it.
+pub(crate) fn load_store_from_json_parts(dir: &Path) -> (Store, bool) {
     let mut unreadable = false;
+    let mut settings_unreadable = false;
     let mut settings_missing = false;
     let mut settings = match read_sealed_json::<Settings>(&dir.join("settings.json")) {
         SealedRead::Loaded(s) => s,
         SealedRead::Unreadable => {
             unreadable = true;
+            settings_unreadable = true;
             Settings { retention_defaults_v2: false, ..Settings::default() }
         }
         SealedRead::Missing => {
@@ -2067,13 +2079,14 @@ pub(crate) fn load_store_from_json(dir: &Path) -> Store {
     }
     // No usable database was read here, so nothing is known to be on disk: the map
     // starts empty and the next successful save writes every row.
-    Store {
+    let store = Store {
         prompts,
         trash: Vec::new(),
         settings,
         prompts_locked: unreadable,
         written: std::cell::RefCell::new(WrittenRows::new()),
-    }
+    };
+    (store, settings_unreadable)
 }
 
 pub(crate) fn gen_id() -> String {
