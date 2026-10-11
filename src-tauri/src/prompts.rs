@@ -1583,7 +1583,6 @@ pub(crate) fn set_favorite(app: AppHandle, state: State<Db>, id: String, favorit
 // those are all app-level associations, not part of the prompt's own content, and
 // a restored prompt gets a fresh placement rather than trying to replay them.
 pub(crate) async fn delete_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Result<bool, String> {
-    close_floating_window(&app, &id);
     let changed = {
         let mut store = lock(&state);
         let original_settings = store.settings.clone();
@@ -1626,6 +1625,9 @@ pub(crate) async fn delete_prompt(app: AppHandle, state: State<'_, Db>, id: Stri
         }
         moved.is_some()
     };
+    // Only now: a failed save returned above with the prompt still in the library,
+    // and its pill has to stay open then.
+    close_floating_window(&app, &id);
     if changed {
         rearm_hotkeys(&app); // A deleted prompt gives its accelerator back
         rebuild_tray(&app);

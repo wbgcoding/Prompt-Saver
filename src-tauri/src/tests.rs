@@ -6067,6 +6067,18 @@ fn the_vault_reports_how_long_until_the_idle_timeout_locks_it() {
     assert_eq!(secret_relock_in_secs(0, 5000), None, "a timeout of 0 means until quit");
 }
 
+// A delete that fails to save rolls the prompt back, so its pill must still be
+// open: the window may only be closed once the trash move is on disk.
+#[test]
+fn delete_prompt_closes_the_pill_only_after_the_trash_move_saved() {
+    let src = production_sources();
+    let a = src.find("async fn delete_prompt(").expect("delete_prompt");
+    let body = &src[a..a + src[a..].find("// The in-memory half of a batch delete").expect("end marker")];
+    let saved = body.find("save_prompts_and_trash(&app, &store)").expect("the trash save");
+    let closed = body.find("close_floating_window(&app, &id)").expect("the pill close");
+    assert!(closed > saved, "the pill must be closed after the save, not before it");
+}
+
 // A write that sends no text and no entries (a hotkey or the auto-rotate switch
 // set straight from the tile menu) keeps what is stored, whatever the entry is.
 // For a confidential entry that means the ciphertext, with the vault locked too.
