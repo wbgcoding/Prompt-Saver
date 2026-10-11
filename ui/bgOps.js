@@ -96,9 +96,9 @@ export function renderBgOpsPop(ops) {
   }
 }
 
-// Keyed by "kind:started_at_ms" -- the registry itself is keyed by kind alone
-// (only one job per kind at a time today), but that combination is what tells
-// this toast-once check a NEW run of the same kind from one it already showed.
+// Keyed by "id:started_at_ms": the id is unique per job (a batch of exports runs
+// several jobs of one kind, possibly started in the same millisecond), and the start
+// time tells this toast-once check a NEW run of the same job id from one it showed.
 export const bgOpsToasted = new Set();
 export let bgOpsFirstRun = true;
 
@@ -112,7 +112,7 @@ export async function refreshBgOps() {
   if (!bgOpsPop.classList.contains("hidden")) renderBgOpsPop(ops);
   for (const op of ops) {
     if (op.state !== "done" && op.state !== "error") continue;
-    const key = `${op.kind}:${op.started_at_ms}`;
+    const key = `${op.id || op.kind}:${op.started_at_ms}`;
     if (bgOpsToasted.has(key)) continue;
     bgOpsToasted.add(key);
     // First call after load just learns the current state -- a job finished
