@@ -988,7 +988,11 @@ pub(crate) fn run_import(
     // Colliding accelerators are dropped from the prompts whatever the scope, so
     // a settings-only import that dropped one has changed prompt rows too.
     let write_prompts = want_data || dropped > 0 || ocr_cleared;
-    if !persist(store, write_prompts, want_settings) {
+    // A data-only import still carries the backup's vault salt and verifier into the
+    // settings (the imported confidential prompts are sealed with them): leaving them
+    // out of the write would restart with the old keys against the new prompts.
+    let write_settings = want_settings || vault_keys_differ(&original_settings, &store.settings);
+    if !persist(store, write_prompts, write_settings) {
         store.prompts = original_prompts;
         store.trash = original_trash;
         store.settings = original_settings;

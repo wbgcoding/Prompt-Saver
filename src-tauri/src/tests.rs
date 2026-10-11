@@ -19502,3 +19502,19 @@ fn a_damaged_fixed_key_backup_is_corrupt_not_password_protected() {
     locked[last] ^= 0xff;
     assert!(backup_decrypt(&locked, Some("pw")).unwrap_err().to_lowercase().contains("password"));
 }
+
+#[test]
+fn a_data_only_import_writes_the_vault_keys_it_carried_in() {
+    let _serial = SETTINGS_LOCK_TEST.lock().unwrap_or_else(|e| e.into_inner());
+    let (settings, p, _) = vault_fixture();
+    for (foreign, expect_settings_written) in [(true, true), (false, false)] {
+        let mut store = vault_store(settings.clone(), p.clone());
+        let mut seen = None;
+        run_import(&mut store, foreign_backup(foreign), true, false, |_, prompts, settings| {
+            seen = Some((prompts, settings));
+            true
+        })
+        .unwrap();
+        assert_eq!(seen, Some((true, expect_settings_written)), "foreign vault keys: {foreign}");
+    }
+}
