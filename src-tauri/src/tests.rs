@@ -19478,3 +19478,14 @@ fn a_data_wipe_leaves_no_prompt_placed_in_any_view() {
     assert_eq!(s.views.len(), 1, "the view itself stays");
     assert_eq!(first_free_cell_excluding(&s.views[0], &[]), Some([0, 0]), "the first cell is free again");
 }
+
+#[test]
+fn a_reset_keeps_a_trash_that_never_empties_itself() {
+    let mut old = Settings::default();
+    old.ui_values.insert("trashRetentionDays".into(), 0.0);
+    assert_eq!(trash_retention_secs(&settings_after_reset(&old)), None, "never-purge survives a reset");
+    old.ui_values.insert("trashRetentionDays".into(), 365.0);
+    assert_eq!(trash_retention_secs(&settings_after_reset(&old)), Some(365 * 86_400));
+    old.ui_values.insert("trashRetentionDays".into(), 7.0);
+    assert_eq!(trash_retention_secs(&settings_after_reset(&old)), Some(30 * 86_400), "a shorter window takes the default");
+}

@@ -435,12 +435,14 @@ pub(crate) async fn empty_trash(app: AppHandle, state: State<'_, Db>) -> Result<
     Ok(trash)
 }
 
+pub(crate) const TRASH_RETENTION_DAYS_DEFAULT: f64 = 30.0;
+
 // Drop anything past the retention window (0/off by settings default, same
 // "0 = forever" convention as historyDays). Runs once at startup, mirroring
 // prune_history's own startup sweep: never on a timer, so a long-idle app does
 // not surprise-purge something the user only just noticed in the trash.
 pub(crate) fn trash_retention_secs(settings: &Settings) -> Option<u64> {
-    let days = settings.ui_values.get("trashRetentionDays").copied().unwrap_or(30.0);
+    let days = settings.ui_values.get("trashRetentionDays").copied().unwrap_or(TRASH_RETENTION_DAYS_DEFAULT);
     if days <= 0.0 {
         None
     } else {
@@ -599,7 +601,11 @@ pub(crate) fn settings_after_reset(old: &Settings) -> Settings {
     fresh.migrate();
     // A reset must never start deleting what the old settings kept: each retention
     // window stays at whichever of the old value and the default keeps longer.
-    for (k, def) in [("historyDays", HISTORY_DAYS_DEFAULT), ("recordingRetentionDays", RECORDING_RETENTION_DAYS_DEFAULT)] {
+    for (k, def) in [
+        ("historyDays", HISTORY_DAYS_DEFAULT),
+        ("recordingRetentionDays", RECORDING_RETENTION_DAYS_DEFAULT),
+        ("trashRetentionDays", TRASH_RETENTION_DAYS_DEFAULT),
+    ] {
         let was = old.ui_values.get(k).copied().unwrap_or(def);
         if was <= 0.0 || was > def {
             fresh.ui_values.insert(k.to_string(), was.max(0.0));
