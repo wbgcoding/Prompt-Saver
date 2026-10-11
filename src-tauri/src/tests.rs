@@ -12264,8 +12264,11 @@ fn a_window_copy_of_the_settings_has_no_private_key() {
     s.ui_texts.insert(remote_tls::REMOTE_TLS_CA.into(), "ca".into());
     s.ui_texts.insert(remote::REMOTE_PASSWORD_KEY.into(), "hash".into());
     s.ui_texts.insert("remoteAllowedRanges".into(), "10.0.0.0/8".into());
+    s.ui_texts.insert(BACKUP_PW_KEY.into(), "sealed".into());
     let copy = webview_settings(&s);
     assert!(!copy.ui_texts.contains_key(remote::REMOTE_PASSWORD_KEY));
+    assert!(!copy.ui_texts.contains_key(BACKUP_PW_KEY));
+    assert!(s.ui_texts.contains_key(BACKUP_PW_KEY), "the stored settings keep it");
     assert!(copy.ui_texts.contains_key("remoteAllowedRanges"));
     assert!(!copy.ui_texts.contains_key(remote_tls::REMOTE_TLS_KEY));
     assert_eq!(copy.ui_texts.get(remote_tls::REMOTE_TLS_CA).map(String::as_str), Some("ca"));

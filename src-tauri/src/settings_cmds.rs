@@ -9,6 +9,9 @@ pub(crate) fn webview_settings(settings: &Settings) -> Settings {
     remote_tls::strip_private_key(&mut copy);
     // The password hash is checked inside the backend only; its dialog has its own command.
     copy.ui_texts.remove(remote::REMOTE_PASSWORD_KEY);
+    // The sealed backup password is read in the backend only; the window asks
+    // has_backup_password whether one is set.
+    copy.ui_texts.remove(BACKUP_PW_KEY);
     copy
 }
 
