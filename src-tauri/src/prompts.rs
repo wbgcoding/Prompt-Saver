@@ -872,12 +872,16 @@ pub(crate) async fn add_prompt(
             // Nothing actually reached disk (or the JSON fallback) - undo the
             // in-memory add and report it, instead of handing back an id the
             // editor will believe is safely saved. The layout entry above was
-            // never persisted (save_settings below is skipped too), so it is
-            // harmless to leave dangling in memory: no prompt id means nothing
-            // ever draws it. `members` gets the same undo so it never names an
-            // id that store.prompts no longer has.
+            // never persisted (save_settings below is skipped too), but left in
+            // memory it would keep its cell occupied for the next add. `members`
+            // gets the same undo so it never names an id that store.prompts no
+            // longer has.
             store.prompts.pop();
-            store.settings.active_view_mut().members.retain(|m| *m != prompt.id);
+            let view = store.settings.active_view_mut();
+            view.members.retain(|m| *m != prompt.id);
+            for layout in view.layouts.values_mut() {
+                layout.remove(&prompt.id);
+            }
             return Err("save-failed".into());
         }
         staged_copies.commit();
