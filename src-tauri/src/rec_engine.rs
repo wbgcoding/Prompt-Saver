@@ -324,6 +324,20 @@ pub(crate) fn monitor_rect_at(x: i32, y: i32) -> Option<(i32, i32, u32, u32)> {
     Some((left, top, (right - left).max(1) as u32, (bottom - top).max(1) as u32))
 }
 
+// The part of a frame placed at (at_x, at_y) that really lands on the canvas, as
+// (x, y, w, h); None when none of it does. The used-area crop built from these
+// must stay inside the encoded picture, or ffmpeg refuses the crop.
+pub(crate) fn visible_canvas_rect(at_x: i64, at_y: i64, width: usize, height: usize, canvas_w: usize, canvas_h: usize) -> Option<(u32, u32, u32, u32)> {
+    let x0 = at_x.max(0);
+    let y0 = at_y.max(0);
+    let x1 = (at_x + width as i64).min(canvas_w as i64);
+    let y1 = (at_y + height as i64).min(canvas_h as i64);
+    if x1 <= x0 || y1 <= y0 {
+        return None;
+    }
+    Some((x0 as u32, y0 as u32, (x1 - x0) as u32, (y1 - y0) as u32))
+}
+
 // Tracks the union of every placed frame's own rectangle over a recording,
 // so the post-capture crop step knows the smallest rectangle that
 // still contains everything actually shown, rather than the full output

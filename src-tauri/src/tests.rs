@@ -19377,3 +19377,16 @@ fn video_folder_cleanup_takes_the_sidecars_of_a_deleted_recording() {
     assert!(sidecar_path(&fresh, KEYS_SIDECAR_EXT).exists());
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn visible_canvas_rect_never_leaves_the_canvas() {
+    // Fully inside.
+    assert_eq!(visible_canvas_rect(100, 50, 800, 600, 1920, 1080), Some((100, 50, 800, 600)));
+    // Hanging over the right and bottom edge: only the visible part counts.
+    assert_eq!(visible_canvas_rect(1500, 900, 800, 600, 1920, 1080), Some((1500, 900, 420, 180)));
+    // Hanging over the left and top edge.
+    assert_eq!(visible_canvas_rect(-300, -100, 1000, 500, 1920, 1080), Some((0, 0, 700, 400)));
+    // Entirely off the canvas.
+    assert_eq!(visible_canvas_rect(2000, 10, 800, 600, 1920, 1080), None);
+    assert_eq!(visible_canvas_rect(-900, 10, 800, 600, 1920, 1080), None);
+}

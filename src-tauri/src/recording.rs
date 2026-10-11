@@ -3,7 +3,7 @@ use super::{
     scale_to_fit_frame_top_down, rec_filename, now_ms,
     AudioQueueShared, RecWavWriter,
     RecFeederShared, RecFrameItem, RecPhase, RecordClock, REC_AUDIO_CHANNELS, REC_AUDIO_SAMPLE_RATE,
-    canvas_within_ceiling, external_window_rect, monitor_rect_at, place_frame_in_canvas,
+    canvas_within_ceiling, external_window_rect, monitor_rect_at, place_frame_in_canvas, visible_canvas_rect,
     scale_bitrate_to_used_area, virtual_screen_bounds, recording_limit_reached,
     estimate_recording_seconds_remaining, UsedAreaTracker,
 };
@@ -201,9 +201,9 @@ impl GraphicsCaptureApiHandler for RecHandler {
             let at_x = (live_origin.0 - placement.canvas_origin.0) as i64;
             let at_y = (live_origin.1 - placement.canvas_origin.1) as i64;
             let (ew, eh) = (self.enc_size.0 as usize, self.enc_size.1 as usize);
-            let clamped_x = at_x.clamp(0, ew as i64) as u32;
-            let clamped_y = at_y.clamp(0, eh as i64) as u32;
-            placement.used_area.update(clamped_x, clamped_y, width.min(ew) as u32, height.min(eh) as u32);
+            if let Some((vx, vy, vw, vh)) = visible_canvas_rect(at_x, at_y, width, height, ew, eh) {
+                placement.used_area.update(vx, vy, vw, vh);
+            }
             let (padded, padded_stride) = place_frame_in_canvas(fb.as_raw_buffer(), width, height, stride, ew, eh, at_x, at_y);
             crop_and_flip_rows_bottom_up(&padded, ew, eh, padded_stride, 0, 0, ew, eh)
         } else if self.crop.is_none() && (even_dim(width as u32), even_dim(height as u32)) != self.enc_size {
