@@ -19528,3 +19528,18 @@ fn a_trim_with_only_an_end_still_limits_the_export_length() {
     assert_eq!(trim_duration_secs(Some(5000), Some(5000)), None);
     assert_eq!(trim_duration_secs(Some(6000), Some(5000)), None);
 }
+
+#[test]
+fn shrinking_a_grid_never_moves_a_folder_onto_one_that_still_fits() {
+    // The folder that no longer fits comes FIRST in the list: it must not take the
+    // cell the in-bounds one holds.
+    let mut folders = vec![
+        test_tile_folder("far", "v1", [5, 5], &["a", "b"]),
+        test_tile_folder("near", "v1", [0, 0], &["c", "d"]),
+        test_tile_folder("other-view", "v2", [9, 9], &["e", "f"]),
+    ];
+    fit_folders_to_grid(&mut folders, "v1", 3, 3);
+    assert_eq!(folders[1].cell, [0, 0], "the folder that fits stays where it was");
+    assert_eq!(folders[0].cell, [1, 0], "the moved one takes the first free cell");
+    assert_eq!(folders[2].cell, [9, 9], "another view's folder is not touched");
+}

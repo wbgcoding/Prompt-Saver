@@ -85,6 +85,30 @@ pub(crate) fn rebuild_view_layout(
     view.layouts.insert(key, layout);
 }
 
+// Moves every folder of `view_id` whose cell lies outside a cols x rows grid to the
+// first cell no folder of that view holds. The cells of folders that already fit are
+// taken up front, so a moved folder never lands on one that was not touched.
+pub(crate) fn fit_folders_to_grid(folders: &mut [TileFolder], view_id: &str, cols: u32, rows: u32) {
+    let mut taken_cells: Vec<[u32; 2]> = folders
+        .iter()
+        .filter(|f| f.view_id == view_id && f.cell[0] < cols && f.cell[1] < rows)
+        .map(|f| f.cell)
+        .collect();
+    for folder in folders.iter_mut().filter(|f| f.view_id == view_id) {
+        if folder.cell[0] >= cols || folder.cell[1] >= rows {
+            'find: for row in 0..rows {
+                for col in 0..cols {
+                    if !taken_cells.contains(&[col, row]) {
+                        folder.cell = [col, row];
+                        taken_cells.push(folder.cell);
+                        break 'find;
+                    }
+                }
+            }
+        }
+    }
+}
+
 // Change the active view's grid dimensions. The arrangement saved for the new
 // size (if any) is restored automatically because layouts are keyed per size;
 // membership itself (`members`) never changes here, so no entry can appear or
@@ -98,25 +122,7 @@ pub(crate) fn set_view_grid(app: AppHandle, state: State<Db>, id: String, cols: 
     // cell in this view instead of landing off-grid and becoming unreachable -
     // it loses at most its own cell, same as a single entry would.
     // normalize_tile_folders below resolves any collision the move creates.
-    let mut taken_cells: Vec<[u32; 2]> = Vec::new();
-    for folder in store
-        .settings
-        .tile_folders
-        .iter_mut()
-        .filter(|f| f.view_id == id)
-    {
-        if folder.cell[0] >= cols || folder.cell[1] >= rows {
-            'find: for row in 0..rows {
-                for col in 0..cols {
-                    if !taken_cells.contains(&[col, row]) {
-                        folder.cell = [col, row];
-                        break 'find;
-                    }
-                }
-            }
-        }
-        taken_cells.push(folder.cell);
-    }
+    fit_folders_to_grid(&mut store.settings.tile_folders, &id, cols, rows);
     let ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
     let view_ids: Vec<String> = store.settings.views.iter().map(|v| v.id.clone()).collect();
     normalize_tile_folders(&mut store.settings.tile_folders, &ids, &view_ids);
