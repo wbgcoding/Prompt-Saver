@@ -1973,14 +1973,16 @@ pub(crate) fn copy_store_files(src: &Path, dst: &Path, landed: &mut bool) -> Res
 // complete, the old folder can still be the only place the current data exists, so
 // offering to delete it would be offering to delete the data itself.
 // `flush` persists the live store into `current`; `rebind` is called once the file
-// the process will write to is a different one.
+// the process will write to is a different one. Returns whether the target already
+// held a store that was adopted as it is: the live store in memory then describes
+// the OTHER library and must be reloaded from the new folder.
 pub(crate) fn move_store_dir(
     current: &Path,
     new: &Path,
     pointer_dir: &Path,
     flush: &mut dyn FnMut() -> Result<(), String>,
     rebind: &mut dyn FnMut(),
-) -> Result<(), String> {
+) -> Result<bool, String> {
     flush()?;
     // Adopt an existing store in the target; otherwise copy ours across. Abort
     // before writing the redirect pointer if the copy fails, so a launch can
@@ -1988,7 +1990,8 @@ pub(crate) fn move_store_dir(
     // Every file the store can consist of, not just the database: a prompts.json or
     // settings.json left behind by a failed DB write is the ONLY copy of that change,
     // and delete_data_dir removes the old folder right after this.
-    if !new.join("data.db").exists() {
+    let adopted = new.join("data.db").exists();
+    if !adopted {
         let mut landed = false;
         copy_store_files(current, new, &mut landed).map_err(|e| format!("copy store: {}", e))?;
         // Bring local backup history along -- otherwise the Backup panel shows 0
@@ -2013,7 +2016,7 @@ pub(crate) fn move_store_dir(
     // Everything the move consists of has landed, so the folder we came from is now
     // a redundant copy: and the only one delete_data_dir is allowed to clean.
     *LAST_OLD_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()) = Some(current.to_path_buf());
-    Ok(())
+    Ok(adopted)
 }
 
 // Redirect the store to a new folder (applies on next launch). Adopts an existing
@@ -2063,7 +2066,15 @@ pub(crate) async fn set_data_dir(app: AppHandle, state: State<'_, Db>, dir: Stri
     // store just copied across or one already living there. Neither is described by
     // what the old folder's rows hashed to.
     let mut rebind = || lock(&state).forget_written_rows();
-    move_store_dir(&current, &new, &default_data_dir(&app), &mut flush, &mut rebind)?;
+    let adopted = move_store_dir(&current, &new, &default_data_dir(&app), &mut flush, &mut rebind)?;
+    if adopted {
+        // The folder already held a library. The session's in-memory store belongs to
+        // the one just left, and data_dir() points here already: left as it is, the
+        // next settings flush or prompt edit would write that state over this store
+        // (or merge both libraries). Load what is really in the new folder instead.
+        let fresh = load_store(&app);
+        *lock(&state) = fresh;
+    }
     // The lock decision was made for the folder just left; re-run it for the one
     // just entered, exactly like a fresh load_store() would, so a move into (or
     // out of) a folder someone else already holds a fresh lock on takes effect

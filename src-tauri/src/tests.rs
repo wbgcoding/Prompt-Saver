@@ -10133,7 +10133,8 @@ fn a_failed_flush_aborts_the_data_folder_move_and_authorises_no_cleanup() {
     {
         let mut works = || -> Result<(), String> { Ok(()) };
         let mut rebind = || rebound = true;
-        move_store_dir(&current, &new, &pointer, &mut works, &mut rebind).unwrap();
+        let adopted = move_store_dir(&current, &new, &pointer, &mut works, &mut rebind).unwrap();
+        assert!(!adopted, "a store copied across is the session's own: nothing to reload");
     }
     assert!(rebound, "the live store must be told it is writing to a different file now");
     assert!(new.join("data.db").exists(), "the store must arrive in the new folder");
@@ -10148,6 +10149,30 @@ fn a_failed_flush_aborts_the_data_folder_move_and_authorises_no_cleanup() {
         "only a completed move may authorise cleaning up the old folder"
     );
 
+    *LAST_OLD_DATA_DIR.lock().unwrap() = None;
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+// Picking a folder that already holds a store adopts it as it is. The caller has to
+// reload the in-memory store from there, so the move must say that it happened and
+// must leave the adopted files alone.
+#[test]
+fn moving_into_a_folder_with_a_store_reports_the_adoption_and_keeps_its_files() {
+    let root = std::env::temp_dir().join(format!("{}-test-datadir-adopt", brand::SLUG));
+    let _ = std::fs::remove_dir_all(&root);
+    let current = root.join("old");
+    let new = root.join("new");
+    let pointer = root.join("pointer");
+    for d in [&current, &new, &pointer] {
+        std::fs::create_dir_all(d).unwrap();
+    }
+    std::fs::write(current.join("data.db"), b"this session").unwrap();
+    std::fs::write(new.join("data.db"), b"the other library").unwrap();
+    let mut works = || -> Result<(), String> { Ok(()) };
+    let mut rebind = || {};
+    let adopted = move_store_dir(&current, &new, &pointer, &mut works, &mut rebind).unwrap();
+    assert!(adopted, "an existing store in the target must be reported as adopted");
+    assert_eq!(std::fs::read(new.join("data.db")).unwrap(), b"the other library");
     *LAST_OLD_DATA_DIR.lock().unwrap() = None;
     let _ = std::fs::remove_dir_all(&root);
 }
