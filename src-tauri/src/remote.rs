@@ -953,7 +953,6 @@ pub(crate) fn start(app: AppHandle) -> Result<(), String> {
             Ok(a) => Some(a),
             Err(e) => {
                 log_remote(&settings, "remoteApi", &format!("remote access could not start: {e}"));
-                log_remote(&settings, "remoteApi", &format!("remote access could not start: {e}"));
                 return Err(e);
             }
         }
