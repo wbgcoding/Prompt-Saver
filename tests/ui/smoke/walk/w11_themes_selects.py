@@ -166,6 +166,16 @@ SECTION = """\
       targetSel.value = 'ct1';
       targetSel.dispatchEvent(new Event('change', { bubbles: true }));
       await sleep(120);
+      // Revert goes back to the theme being edited now, not to the one the editor opened on.
+      const nameEl = document.getElementById('theme-edit-name');
+      const ct1Name = nameEl.value;
+      nameEl.value = ct1Name + ' edited';
+      nameEl.dispatchEvent(new Event('input', { bubbles: true }));
+      await click('theme-edit-revert');
+      await sleep(120);
+      if (document.getElementById('theme-edit-name').value !== ct1Name) {
+        out.errors.push('Revert changes jumped away from the theme being edited');
+      }
       const exportBtn = document.getElementById('theme-edit-export');
       if (!exportBtn || exportBtn.classList.contains('hidden')) {
         out.errors.push('the export button is missing/hidden for a saved theme');
@@ -193,6 +203,9 @@ SECTION = """\
       await sleep(150);
       if (document.documentElement.style.getPropertyValue('--bg') === '#123456') {
         out.errors.push('cancelling the theme editor kept the preview');
+      }
+      if (document.documentElement.style.getPropertyValue('--bg') !== '#0a0a0a') {
+        out.errors.push('cancelling after an import repainted the old theme while the imported one stays active');
       }
     }
     layoutScan('settings');

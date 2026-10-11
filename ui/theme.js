@@ -494,6 +494,9 @@ export function wireTheme() {
     }
     fillThemeSelect();
     const imported = findCustomTheme(settings.theme);
+    // The backend made the imported theme the active one: that is now the state
+    // Cancel returns to, not the theme the editor was opened on.
+    if (imported) themeRestore = { theme: imported.base, vars: { ...(imported.vars || {}) } };
     themeDraft = imported ? draftFrom(imported) : newThemeDraft();
     themeDraftStart = draftFrom(themeDraft);
     renderThemeEditor();
@@ -510,6 +513,9 @@ export function wireTheme() {
   $("theme-edit-target")?.addEventListener("change", (e) => {
     const theme = customThemes().find((c) => c.id === e.target.value);
     themeDraft = theme ? draftFrom(theme) : newThemeDraft();
+    // "Revert changes" goes back to the theme being edited now, not to the one the
+    // editor was opened on.
+    themeDraftStart = draftFrom(themeDraft);
     renderThemeEditor();
     previewThemeDraft();
   });
