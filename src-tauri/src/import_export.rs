@@ -1197,31 +1197,7 @@ pub(crate) async fn import_folder_files(app: AppHandle, state: State<'_, Db>, di
             continue;
         }
         let tags = import_folder_tags(base, &path);
-        // The rotation split runs FIRST, on the whole file -- the note is only
-        // ever pulled off entry 0 (the plain text), never off a later variant,
-        // so a short line right after the separator is never mistaken for it.
-        let (raw_text, variants) = split_variants(&content);
-        let (text, note) = split_folder_note(&raw_text);
-        items.push(ImportedPrompt {
-            name,
-            text,
-            color: String::new(),
-            font: String::new(),
-            font_size: 0,
-            file_path: String::new(),
-            pdf_page: 0,
-            icon_path: String::new(),
-            caption: String::new(),
-            caption_size: 0,
-            show_image: false,
-            copy_image: false,
-            image: String::new(),
-            tags,
-            notes: note,
-            variants,
-            rotate_mode: String::new(),
-            favorite: false,
-        });
+        items.push(folder_file_item(name, tags, &content));
     }
     let mut store = lock(&state);
     let before_len = store.prompts.len();
@@ -1235,6 +1211,37 @@ pub(crate) async fn import_folder_files(app: AppHandle, state: State<'_, Db>, di
     push_theme(&app, &settings);
     rebuild_tray(&app);
     Ok(count)
+}
+
+// One note file of an imported folder as a prompt. A file from an older version
+// still spells placeholders the old way, so they are upgraded like on every other
+// inbound path.
+pub(crate) fn folder_file_item(name: String, tags: Vec<String>, content: &str) -> ImportedPrompt {
+    // The rotation split runs FIRST, on the whole file -- the note is only
+    // ever pulled off entry 0 (the plain text), never off a later variant,
+    // so a short line right after the separator is never mistaken for it.
+    let (raw_text, variants) = split_variants(content);
+    let (text, note) = split_folder_note(&raw_text);
+    ImportedPrompt {
+        name,
+        text: upgrade_placeholders(&text),
+        color: String::new(),
+        font: String::new(),
+        font_size: 0,
+        file_path: String::new(),
+        pdf_page: 0,
+        icon_path: String::new(),
+        caption: String::new(),
+        caption_size: 0,
+        show_image: false,
+        copy_image: false,
+        image: String::new(),
+        tags,
+        notes: note,
+        variants: variants.iter().map(|v| upgrade_placeholders(v)).collect(),
+        rotate_mode: String::new(),
+        favorite: false,
+    }
 }
 
 // Full backup: prompts + settings as one JSON file ("export/import everything").

@@ -19311,3 +19311,11 @@ fn window_capture_picks_the_monitor_under_its_centre() {
     // A window nowhere near any screen keeps the primary capture.
     assert_eq!(monitor_index_for_rect(&mons, 9000, 9000, 100, 100), 0);
 }
+
+#[test]
+fn folder_import_upgrades_the_retired_placeholder_spelling() {
+    let item = folder_file_item("Note".to_string(), vec![], "Title\nHi {#{name}#} on {#{date}#}");
+    assert_eq!(item.text, "Hi {?name} on {?@date}");
+    let item = folder_file_item("Note".to_string(), vec![], &format!("one{}Dear {{#{{name}}#}}", VARIANT_SEP));
+    assert_eq!(item.variants, vec!["Dear {?name}".to_string()]);
+}
