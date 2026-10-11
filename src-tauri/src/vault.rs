@@ -281,10 +281,20 @@ pub(crate) fn secret_session_key(timeout_min: u32) -> Option<[u8; 32]> {
     None
 }
 
+// Seconds until the idle timeout locks the session again. None = it never does
+// (timeout 0, until quit). Pure, so the arithmetic can be tested without a clock.
+pub(crate) fn secret_relock_in_secs(timeout_min: u32, elapsed_secs: u64) -> Option<u64> {
+    (timeout_min > 0).then(|| (timeout_min as u64 * 60).saturating_sub(elapsed_secs))
+}
+
 #[derive(Serialize)]
 pub(crate) struct SecretVaultStatus {
     pub(crate) configured: bool,
     pub(crate) unlocked: bool,
+    // While unlocked with a timeout: how long until the key is dropped. The window
+    // schedules a refetch for that moment, since the backend only notices the
+    // expiry when it is next asked and nothing else tells the window.
+    pub(crate) remaining_secs: Option<u64>,
 }
 
 #[tauri::command(async)]
@@ -296,10 +306,15 @@ pub(crate) fn secret_vault_status(state: State<Db>) -> SecretVaultStatus {
         .get(SECRET_SALT_KEY)
         .map(|s| s.is_empty())
         .unwrap_or(true);
-    SecretVaultStatus {
-        configured,
-        unlocked: secret_session_key(secret_timeout_min(&store.settings)).is_some(),
-    }
+    let timeout = secret_timeout_min(&store.settings);
+    let unlocked = secret_session_key(timeout).is_some();
+    let remaining_secs = if unlocked {
+        let guard = SECRET_SESSION.lock().unwrap_or_else(|e| e.into_inner());
+        guard.as_ref().and_then(|s| secret_relock_in_secs(timeout, s.unlocked_at.elapsed().as_secs()))
+    } else {
+        None
+    };
+    SecretVaultStatus { configured, unlocked, remaining_secs }
 }
 
 // Verifies a password against the stored salt and verifier and returns the key.

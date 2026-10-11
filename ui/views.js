@@ -273,6 +273,26 @@ function gridMemberIds(view) {
 }
 
 // ---- Render ----
+// The confidential timeout is lazy on the backend: the key is only dropped when
+// something asks for it, and nothing tells this window. So while decrypted
+// confidential text sits in `prompts`, one refetch is scheduled for the moment
+// the key expires; it brings the locked shape back (empty text, lock badge). The
+// refetch re-arms itself only if the vault is still open.
+let vaultRelockTimer = 0;
+async function armVaultRelock() {
+  if (vaultRelockTimer || !prompts.some((p) => p.secret && !p.locked)) return;
+  vaultRelockTimer = -1; // claimed while the status call is in flight
+  let st = null;
+  try { st = await invoke("secret_vault_status"); } catch (_) { /* no timer; copies still re-check */ }
+  vaultRelockTimer = 0;
+  if (!st || !st.unlocked || st.remaining_secs == null) return;
+  vaultRelockTimer = setTimeout(async () => {
+    vaultRelockTimer = 0;
+    await renderGrid().catch(() => {});
+    if (!libraryEl.classList.contains("hidden")) renderLibrary();
+  }, (st.remaining_secs + 1) * 1000);
+}
+
 // skipFetch: caller already updated the local state (drag/hide hot path).
 export async function renderGrid(skipFetch = false) {
   hideTileTip(); // the hovered tile may be replaced by this render
@@ -289,6 +309,7 @@ export async function renderGrid(skipFetch = false) {
       if (!settings || !prompts) return;
     }
   }
+  armVaultRelock();
   if (favView && !favViewEnabled()) assignFavView(false); // setting switched off underneath us
   if (favView) { renderFavGrid(); return; }
   const view = activeView();

@@ -6059,6 +6059,14 @@ fn add_and_update_prompt_do_the_slow_work_before_the_insert_lock() {
     }
 }
 
+#[test]
+fn the_vault_reports_how_long_until_the_idle_timeout_locks_it() {
+    assert_eq!(secret_relock_in_secs(15, 0), Some(900));
+    assert_eq!(secret_relock_in_secs(15, 899), Some(1));
+    assert_eq!(secret_relock_in_secs(15, 5000), Some(0));
+    assert_eq!(secret_relock_in_secs(0, 5000), None, "a timeout of 0 means until quit");
+}
+
 // A write that sends no text and no entries (a hotkey or the auto-rotate switch
 // set straight from the tile menu) keeps what is stored, whatever the entry is.
 // For a confidential entry that means the ciphertext, with the vault locked too.

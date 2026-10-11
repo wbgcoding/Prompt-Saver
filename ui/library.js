@@ -1351,6 +1351,17 @@ export async function copyResolved(p) {
   // anything else, the same first-access moment the spec describes for a
   // click on a locked tile. A cancelled/wrong-password prompt just fails the
   // copy, same as any other cancelled copy.
+  // The cached copy can say "unlocked" after the backend already dropped the key
+  // (the idle timeout): ask before trusting it, and fall back to the locked path.
+  if (p.secret && !p.locked) {
+    const st = await invoke("secret_vault_status").catch(() => null);
+    if (st && !st.unlocked) {
+      await renderGrid();
+      const now = prompts.find((x) => x.id === p.id);
+      if (!now) return false;
+      p = now;
+    }
+  }
   if (p.locked) {
     if (!(await ensureSecretVaultUnlocked())) return false;
     await renderGrid(); // pulls the now-decrypted text into `prompts`
