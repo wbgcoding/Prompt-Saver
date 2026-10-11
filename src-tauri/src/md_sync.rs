@@ -1542,9 +1542,15 @@ pub(crate) fn sync_poll_apply(
                 let view = store.settings.active_view_mut();
                 if let Some(cell) = first_free_cell_excluding(view, &folder_cells) {
                     let key = grid_key(view.cols, view.rows);
-                    view.layouts.entry(key).or_default().insert(id, cell);
-                    settings_changed = true;
+                    view.layouts.entry(key).or_default().insert(id.clone(), cell);
                 }
+                // Members is the authoritative list: a prompt with a cell but no
+                // membership is purged by the next grid rebuild, and one without a
+                // free cell still belongs to the view (shown as overflow).
+                if !view.members.iter().any(|m| *m == id) {
+                    view.members.push(id);
+                }
+                settings_changed = true;
             }
             changed = true;
         } else if let Some(idx) = store.prompts.iter().position(|p| p.id == stem) {

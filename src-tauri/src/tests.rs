@@ -19319,3 +19319,19 @@ fn folder_import_upgrades_the_retired_placeholder_spelling() {
     let item = folder_file_item("Note".to_string(), vec![], &format!("one{}Dear {{#{{name}}#}}", VARIANT_SEP));
     assert_eq!(item.variants, vec!["Dear {?name}".to_string()]);
 }
+
+#[test]
+fn sync_poll_adds_an_unplaced_new_file_to_the_view_members() {
+    let mut p = sync_test_prompt();
+    p.id = "fresh".into();
+    let content = prompt_to_md(&p, &SyncPlacement::default());
+    let mut store = sync_apply_store(Vec::new(), Vec::new());
+    store.settings.views = vec![test_view("v1")];
+    store.settings.active_view = "v1".into();
+    let (changed, settings_changed) = sync_apply(&mut store, "fresh", content, true);
+    assert!(changed && settings_changed);
+    let view = store.settings.active_view_mut();
+    assert!(view.members.iter().any(|m| m == "fresh"), "the new prompt must belong to the view, not only sit on a cell");
+    let key = grid_key(view.cols, view.rows);
+    assert!(view.layouts.get(&key).is_some_and(|l| l.contains_key("fresh")));
+}
