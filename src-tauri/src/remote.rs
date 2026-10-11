@@ -326,7 +326,10 @@ pub(crate) fn set_remote_api_flag(app: &AppHandle, state: &State<Db>, enabled: b
     };
     match result.action {
         SwitchAction::Start => {
-            if let Err(e) = start(app.clone()) {
+            // start() returns before the bind, so only waiting for it tells whether
+            // the port was really usable.
+            if let Err(e) = start(app.clone()).and_then(|_| wait_bound(app)) {
+                stop(app);
                 // The receiver did not come up: the switch must not stay on, and
                 // a password nobody was shown must not stay on record.
                 let mut store = lock(state);
