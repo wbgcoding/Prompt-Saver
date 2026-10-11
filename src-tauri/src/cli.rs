@@ -1860,6 +1860,18 @@ pub(crate) fn run_standalone_with(resolve_dir: impl FnOnce() -> PathBuf, argv: &
     }
 
     let mut store = store;
+    // What an autostart change has to put back if the Windows entry cannot follow.
+    let prior_autostart = store.settings.autostart;
+    let prior_entry = match os_backed_toggle(&cmd) {
+        Some(("autostart", Ok(_))) => match crate::autostart_command() {
+            Ok(entry) => Some(entry),
+            Err(e) => {
+                eprintln!("the Windows entry could not be read: {e}\n");
+                return 3;
+            }
+        },
+        _ => None,
+    };
     let outcome = exec(&mut store, &dir, &cmd, cwd);
     if outcome.mutated_prompts || outcome.mutated_trash || outcome.mutated_settings {
         let Some(mut conn) = db_conn_at(&dir) else {
@@ -1889,7 +1901,16 @@ pub(crate) fn run_standalone_with(resolve_dir: impl FnOnce() -> PathBuf, argv: &
         if let Some(("autostart", Ok(on))) = os_backed_toggle(&cmd) {
             if outcome.code == 0 {
                 if let Err(e) = crate::apply_autostart(on, store.settings.start_minimized) {
-                    eprintln!("the setting was saved but the Windows entry could not be changed: {e}\n");
+                    // Same as the app's own switch: neither side keeps the change.
+                    if let Some(entry) = prior_entry {
+                        let _ = crate::autostart_restore(entry);
+                    }
+                    store.settings.autostart = prior_autostart;
+                    let restored = db_write_settings(&conn, &store.settings).is_ok();
+                    eprintln!(
+                        "the Windows entry could not be changed{}: {e}\n",
+                        if restored { "" } else { " and the setting could not be put back" }
+                    );
                     return 3;
                 }
             }
