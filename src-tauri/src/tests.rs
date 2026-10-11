@@ -19593,3 +19593,20 @@ fn taking_a_prompt_out_never_drops_it_on_a_cell_a_folder_keeps() {
     let cells: Vec<[u32; 2]> = two.iter().map(|f| f.cell).collect();
     assert_eq!(take_out_target_cell(&full, &two, &cells, "x", [1, 0]), Err(()));
 }
+
+// A portable copy whose exe folder cannot take a file must fall back to AppData:
+// `create_dir_all` succeeds on an existing read-only folder, so the choice rests
+// on a create-and-delete probe that leaves nothing behind.
+#[test]
+fn dir_is_writable_probes_with_a_real_file() {
+    let dir = std::env::temp_dir().join(format!("ps-writable-probe-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    assert!(dir_is_writable(&dir), "a creatable folder is usable");
+    assert_eq!(fs::read_dir(&dir).unwrap().count(), 0, "the probe file is removed again");
+    // A path whose parent is a plain file can be neither created nor written to.
+    let file = dir.join("plain-file");
+    fs::write(&file, b"x").unwrap();
+    assert!(!dir_is_writable(&file.join("sub")), "a folder under a file is not usable");
+    assert!(!dir_is_writable(&file), "a file is not a usable data folder");
+    let _ = fs::remove_dir_all(&dir);
+}

@@ -8,7 +8,7 @@ pub(crate) fn default_data_dir(app: &AppHandle) -> PathBuf {
     // writable (e.g. run from a read-only location), fall back to AppData.
     if is_portable() {
         if let Some(dir) = portable_data_dir() {
-            if fs::create_dir_all(&dir).is_ok() {
+            if portable_dir_usable(&dir) {
                 return dir;
             }
         }
@@ -21,6 +21,26 @@ pub(crate) fn default_data_dir(app: &AppHandle) -> PathBuf {
     let _ = fs::create_dir_all(&dir);
     migrate_legacy_data(app, &dir);
     dir
+}
+
+// Whether `dir` can hold the store: it exists (or can be made) and a file can be
+// created and removed in it. `create_dir_all` alone succeeds on an existing
+// read-only folder, so the portable choice needs a real write probe.
+pub(crate) fn dir_is_writable(dir: &std::path::Path) -> bool {
+    if fs::create_dir_all(dir).is_err() {
+        return false;
+    }
+    let probe = dir.join(format!(".write-probe-{}", std::process::id()));
+    let ok = fs::write(&probe, b"").is_ok();
+    let _ = fs::remove_file(&probe);
+    ok
+}
+
+// The portable folder is probed once per process: the answer does not change
+// while the app runs and `data_dir` is called on every store access.
+fn portable_dir_usable(dir: &std::path::Path) -> bool {
+    static USABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *USABLE.get_or_init(|| dir_is_writable(dir))
 }
 
 // Portable data lives directly beside the exe (no sub-folder) so a single
@@ -121,7 +141,7 @@ pub(crate) fn data_dir(app: &AppHandle) -> PathBuf {
 pub(crate) fn default_data_dir_headless() -> PathBuf {
     if is_portable() {
         if let Some(dir) = portable_data_dir() {
-            if fs::create_dir_all(&dir).is_ok() {
+            if portable_dir_usable(&dir) {
                 return dir;
             }
         }
