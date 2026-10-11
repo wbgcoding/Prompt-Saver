@@ -19373,6 +19373,45 @@ fn copy_mic_sidecar_alongside_brings_the_microphone_track_to_the_open_editor_cop
 }
 
 #[test]
+fn an_oversized_mic_sidecar_is_not_copied_to_the_open_editor_copy() {
+    let dir = std::env::temp_dir().join(format!("ps-openedit-mic-big-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let src = dir.join("rec-x.mp4");
+    let dest = dir.join("copy.mp4");
+    fs::write(&src, b"video").unwrap();
+    fs::write(src.with_extension("mic.wav"), vec![0u8; 2 * 1024 * 1024]).unwrap();
+    copy_mic_sidecar_capped(&src, &dest, 1.0);
+    assert!(!dest.with_extension("mic.wav").exists(), "past the ceiling, the sidecar stays behind");
+    copy_mic_sidecar_capped(&src, &dest, 4.0);
+    assert!(dest.with_extension("mic.wav").is_file());
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_editor_work_copy_is_recognised_only_inside_its_own_temp_folders() {
+    let root = std::env::temp_dir().join(format!("ps-openedit-root-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    let work = root.join(format!("{}-openedit-1-2", brand::TEMP_PREFIX));
+    let other = root.join("somewhere-else");
+    fs::create_dir_all(&work).unwrap();
+    fs::create_dir_all(work.join("nested")).unwrap();
+    fs::create_dir_all(&other).unwrap();
+    let copy = work.join("My clip.mp4");
+    let stray = other.join("My clip.mp4");
+    let nested = work.join("nested").join("My clip.mp4");
+    for f in [&copy, &stray, &nested] {
+        fs::write(f, b"v").unwrap();
+    }
+    assert!(is_editor_work_copy_in(&root, &copy));
+    assert!(!is_editor_work_copy_in(&root, &stray), "another folder under the temp root is not a work folder");
+    assert!(!is_editor_work_copy_in(&root, &nested), "only the work folder's own files count");
+    assert!(!is_editor_work_copy_in(&root, &work.join("missing.mp4")));
+    assert!(!is_editor_work_copy_in(&other, &copy), "a different temp root does not match");
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
 fn video_folder_cleanup_takes_the_sidecars_of_a_deleted_recording() {
     let dir = std::env::temp_dir().join(format!("ps-video-folder-cleanup-sidecars-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);

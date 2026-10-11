@@ -106,12 +106,43 @@ pub(crate) fn copy_keys_sidecar_alongside(_src: &Path, _dest: &Path) {}
 
 // A dual-audio recording that the editor has not muxed yet keeps its microphone
 // track in "<name>.mic.wav" beside the video. The editor's working copy needs it
-// too, or the export silently drops the microphone.
+// too, or the export silently drops the microphone. Held to the same size ceiling
+// as the video itself, and a copy that fails halfway is not left behind.
 pub(crate) fn copy_mic_sidecar_alongside(src: &Path, dest: &Path) {
+    copy_mic_sidecar_capped(src, dest, EDITOR_OPEN_MAX_MB);
+}
+
+pub(crate) fn copy_mic_sidecar_capped(src: &Path, dest: &Path, max_mb: f64) {
     let src_mic = src.with_extension("mic.wav");
-    if src_mic.is_file() {
-        let _ = fs::copy(&src_mic, dest.with_extension("mic.wav"));
+    let dest_mic = dest.with_extension("mic.wav");
+    let Ok(meta) = fs::metadata(&src_mic) else { return };
+    if !meta.is_file() || exceeds_open_edit_limit(meta.len(), max_mb) {
+        return;
     }
+    if fs::copy(&src_mic, &dest_mic).is_err() {
+        let _ = fs::remove_file(&dest_mic);
+    }
+}
+
+// Whether `path` is a file inside one of the throwaway working folders that
+// open_file_in_editor makes (directly under the app's own temp folder). Its copy
+// carries the opened file's name, not a recording's, so it cannot pass
+// is_own_recording_source, yet the editor has to mux the mic track into it.
+pub(crate) fn is_editor_work_copy(path: &Path) -> bool {
+    is_editor_work_copy_in(&std::env::temp_dir().join(brand::TEMP_DIR), path)
+}
+
+pub(crate) fn is_editor_work_copy_in(temp_root: &Path, path: &Path) -> bool {
+    if !path.is_file() {
+        return false;
+    }
+    let Some(dir) = path.parent().and_then(|d| d.canonicalize().ok()) else { return false };
+    let Ok(root) = temp_root.canonicalize() else { return false };
+    dir.parent() == Some(root.as_path())
+        && dir
+            .file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|n| n.starts_with(&format!("{}-openedit-", brand::TEMP_PREFIX)))
 }
 
 // Right-click "Open a file in the editor" (the screenshot/record buttons, and
@@ -160,9 +191,20 @@ pub(crate) async fn open_file_in_editor(app: AppHandle, path: String) -> Result<
             let work_dir = std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-openedit-{}-{}", brand::TEMP_PREFIX, local_stamp(), std::process::id()));
             fs::create_dir_all(&work_dir).map_err(|e| e.to_string())?;
             let dest = work_dir.join(format!("{base}.{ext}"));
-            fs::copy(&p, &dest).map_err(|e| e.to_string())?;
-            copy_keys_sidecar_alongside(&p, &dest);
-            copy_mic_sidecar_alongside(&p, &dest);
+            // A copy of up to the size ceiling plus its sidecars: off the async
+            // runtime's own threads.
+            tauri::async_runtime::spawn_blocking({
+                let p = p.clone();
+                let dest = dest.clone();
+                move || {
+                    fs::copy(&p, &dest).map_err(|e| e.to_string())?;
+                    copy_keys_sidecar_alongside(&p, &dest);
+                    copy_mic_sidecar_alongside(&p, &dest);
+                    Ok::<(), String>(())
+                }
+            })
+            .await
+            .map_err(|e| e.to_string())??;
             Ok(OpenEditResult::Video { copied_path: dest.to_string_lossy().to_string(), origin_dir, name })
         }
         _ => Err("not-media".to_string()),

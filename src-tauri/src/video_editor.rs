@@ -268,7 +268,9 @@ pub(crate) async fn mux_mic_track(app: AppHandle, state: State<'_, Db>, video_pa
     // recordings, and the sidecar must be exactly THAT video's own mic
     // capture, never an unrelated second path that just happens to sit in
     // the same allowed folder.
-    if !is_own_recording_source(&recording_source_dirs(&app, &state), &video) {
+    // The editor's working copy of an opened file counts too: it is the app's own
+    // throwaway file, and its mic track is what that copy was given a sidecar for.
+    if !is_own_recording_source(&recording_source_dirs(&app, &state), &video) && !is_editor_work_copy(&video) {
         return Err("source-not-allowed".to_string());
     }
     if !is_own_mic_sidecar(&video, &sidecar) {
