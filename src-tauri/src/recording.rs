@@ -697,9 +697,17 @@ pub fn start(
 ) -> Result<RecSession, String> {
     let result = start_inner(target, output_path.clone(), audio, canvas_mode, opts);
     if result.is_err() {
-        discard_empty_output(&output_path);
+        discard_start_leftovers(&output_path);
     }
     result
+}
+
+// What a refused start leaves behind: the empty output file and, for a take that
+// had both audio sources, the microphone sidecar its writer thread had already
+// begun. The sidecar belongs to this one unfinished take, so it goes with it.
+pub(crate) fn discard_start_leftovers(output_path: &Path) {
+    discard_empty_output(output_path);
+    let _ = fs::remove_file(output_path.with_extension("mic.wav"));
 }
 
 // Everything start_inner has started so far. A failure after the first thread is up

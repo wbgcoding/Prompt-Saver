@@ -19400,3 +19400,17 @@ fn a_paused_tick_does_not_count_toward_the_recording_minute_limit() {
     assert_eq!(elapsed, 3);
     assert!(!recording_limit_reached(elapsed, 0, 1.0, 0.0), "a long pause must not reach the limit");
 }
+
+#[test]
+fn a_refused_start_removes_the_mic_sidecar_with_the_empty_output() {
+    let dir = std::env::temp_dir().join(format!("ps-refused-start-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let out = dir.join("rec-x.mp4");
+    fs::write(&out, b"").unwrap();
+    fs::write(out.with_extension("mic.wav"), b"RIFF").unwrap();
+    recording::discard_start_leftovers(&out);
+    assert!(!out.exists());
+    assert!(!out.with_extension("mic.wav").exists());
+    let _ = fs::remove_dir_all(&dir);
+}
