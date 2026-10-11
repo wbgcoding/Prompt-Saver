@@ -277,20 +277,28 @@ function gridMemberIds(view) {
 // something asks for it, and nothing tells this window. So while decrypted
 // confidential text sits in `prompts`, one refetch is scheduled for the moment
 // the key expires; it brings the locked shape back (empty text, lock badge). The
-// refetch re-arms itself only if the vault is still open.
+// refetch re-arms itself only if the vault is still open. Every render asks again
+// and moves a waiting timer forward when the key now expires sooner (the timeout
+// was shortened in the expert menu).
 let vaultRelockTimer = 0;
+let vaultRelockAt = 0;
+let vaultRelockAsking = false;
 async function armVaultRelock() {
-  if (vaultRelockTimer || !prompts.some((p) => p.secret && !p.locked)) return;
-  vaultRelockTimer = -1; // claimed while the status call is in flight
+  if (vaultRelockAsking || !prompts.some((p) => p.secret && !p.locked)) return;
+  vaultRelockAsking = true; // claimed while the status call is in flight
   let st = null;
   try { st = await invoke("secret_vault_status"); } catch (_) { /* no timer; copies still re-check */ }
-  vaultRelockTimer = 0;
+  vaultRelockAsking = false;
   if (!st || !st.unlocked || st.remaining_secs == null) return;
+  const at = Date.now() + (st.remaining_secs + 1) * 1000;
+  if (vaultRelockTimer && vaultRelockAt <= at) return;
+  clearTimeout(vaultRelockTimer);
+  vaultRelockAt = at;
   vaultRelockTimer = setTimeout(async () => {
     vaultRelockTimer = 0;
     await renderGrid().catch(() => {});
     if (!libraryEl.classList.contains("hidden")) renderLibrary();
-  }, (st.remaining_secs + 1) * 1000);
+  }, at - Date.now());
 }
 
 // skipFetch: caller already updated the local state (drag/hide hot path).

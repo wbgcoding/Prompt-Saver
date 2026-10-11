@@ -144,6 +144,15 @@ const SECRET_REAL_TEXT = "REAL_TEXT_MARKER";
 let SECRET_UNLOCKED = false;
 let SECRET_CONFIGURED = false;
 let SECRET_PASSWORD = null;
+let SECRET_EXPIRES_AT = 0;
+// Opening the vault starts the idle timeout when the page asks for one.
+function secretOpened() {
+  SECRET_UNLOCKED = true;
+  const ms = Number(window.__SECRET_EXPIRES_MS__) || 0;
+  if (!ms) return;
+  SECRET_EXPIRES_AT = Date.now() + ms;
+  setTimeout(() => { SECRET_UNLOCKED = false; SECRET_EXPIRES_AT = 0; }, ms);
+}
 if (window.__SECRET_TEST__) {
   PROMPTS.push({
     id: "psecret", name: "Confidential prompt", text: SECRET_REAL_TEXT, color: "#a855f7",
@@ -365,18 +374,27 @@ const RESULTS = {
   get_state: () => ({ prompts: PROMPTS.map(presentPrompt), settings: JSON.parse(JSON.stringify(SETTINGS)) }),
   // 458: the single in-memory session key model -- unlock/lock/status only,
   // never a real Argon2/AES round trip (that is the Rust unit tests' job).
-  secret_vault_status: () => ({ unlocked: SECRET_UNLOCKED, configured: SECRET_CONFIGURED }),
+  // remaining_secs mirrors the backend: null until the vault is open with a timeout,
+  // else the seconds left (window.__SECRET_EXPIRES_MS__ is that timeout; the stub
+  // locks itself when it runs out, like the lazily expiring real key).
+  secret_vault_status: () => ({
+    unlocked: SECRET_UNLOCKED,
+    configured: SECRET_CONFIGURED,
+    remaining_secs: SECRET_UNLOCKED && SECRET_EXPIRES_AT
+      ? Math.max(0, Math.ceil((SECRET_EXPIRES_AT - Date.now()) / 1000))
+      : null,
+  }),
   secret_vault_unlock: (a) => {
     const pw = a && a.password;
     if (!pw) throw new Error("password-required");
     if (!SECRET_CONFIGURED) {
       SECRET_PASSWORD = pw;
       SECRET_CONFIGURED = true;
-      SECRET_UNLOCKED = true;
+      secretOpened();
       return null;
     }
     if (pw !== SECRET_PASSWORD) throw "wrong-password";
-    SECRET_UNLOCKED = true;
+    secretOpened();
     return null;
   },
   set_prompt_secret: (a) => {

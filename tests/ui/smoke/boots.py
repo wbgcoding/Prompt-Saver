@@ -327,6 +327,20 @@ SECRET_PROBE = """
           if (window.__LAST_COPY__ !== 'REAL_TEXT_MARKER') {
             errs.push('unlocking did not copy the real text: ' + JSON.stringify(window.__LAST_COPY__));
           }
+
+          // ---- Ablauf: the idle timeout drops the key; nothing tells this window, so
+          // the relock timer (status remaining_secs + 1 s) must bring the bar back ----
+          if (freshTile) {
+            await sleep(5200);
+            const after = document.querySelector('.tile[data-id=\\"psecret\\"]');
+            if (!after || !after.classList.contains('tile-locked')) {
+              errs.push('the tile stayed unlocked after the vault timeout ran out');
+            }
+            if (bodyHasLeaked()) errs.push('the real text stayed in the DOM after the vault timeout');
+            if (!(window.__SMOKE_CALLS__ || []).includes('secret_vault_status')) {
+              errs.push('the relock timer never asked the vault for its remaining time');
+            }
+          }
         }
       }
     }
@@ -2237,7 +2251,8 @@ def run(browser, tmp):
     side.write_text(
         (REPO / "ui" / "index.html").read_text(encoding="utf-8")
         .replace("<script",
-                 '<script>window.__SECRET_TEST__ = true; window.__SECRET_PRECONFIGURED__ = true;</script>\n'
+                 '<script>window.__SECRET_TEST__ = true; window.__SECRET_PRECONFIGURED__ = true;'
+                 ' window.__SECRET_EXPIRES_MS__ = 3000;</script>\n'
                  '<script src="tauri_stub.js"></script>\n<script', 1)
         .replace("</body>", SECRET_PROBE + "</body>"),
         encoding="utf-8")

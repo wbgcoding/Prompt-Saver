@@ -514,6 +514,8 @@ export async function commitValue(key, value) {
   }
   applyValues();
   await refreshTiles(key);
+  // The relock refetch is timed from the old timeout: a render asks the backend again.
+  if (key === "secretTimeoutMin") await renderGrid(true);
   // Fires once on release, not per drag frame: same "no flash mid-drag" reason
   // previewValue() never calls this, safe to rebuild the (possibly filtered) list here.
   // An off-at-zero value that crossed zero opens or closes the rows gated on it.
