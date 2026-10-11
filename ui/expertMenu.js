@@ -406,6 +406,7 @@ export function flagRow(key) {
     // goes back to where it was when it is cancelled or fails.
     if (key === "remoteTlsShortLived") {
       if (!(await toggleShortLivedCert(enabled))) input.checked = !enabled;
+      else syncRowReset("flags", key); // the reset icon follows the new value
       return;
     }
     // Turning sync on starts writing every text prompt as a plain-text .md file
@@ -804,12 +805,13 @@ export function ensureFfmpegStatusChecked() {
   if (ffmpegAvailable !== null || ffmpegChecking) return;
   ffmpegChecking = true;
   invoke("ffmpeg_status")
-    .then((p) => { ffmpegAvailable = !!p; })
+    .then((p) => { ffmpegAvailable = !!p; ffmpegChecking = false; renderExpert(); })
     // A failed probe (not "ffmpeg missing", the call itself erroring) leaves
     // this null rather than latching false, so the next render retries
-    // instead of claiming "missing" for the rest of the session.
-    .catch(() => { ffmpegAvailable = null; })
-    .finally(() => { ffmpegChecking = false; renderExpert(); });
+    // instead of claiming "missing" for the rest of the session. It does NOT
+    // re-render itself: that render would start the probe again at once, an
+    // endless loop of failing calls.
+    .catch(() => { ffmpegAvailable = null; ffmpegChecking = false; });
 }
 export let voiceLangsCache = []; // [{tag, label}], fetched once at startup (init())
 export function assignVoiceLangsCache(v) { voiceLangsCache = v; }
