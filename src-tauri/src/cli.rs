@@ -1699,7 +1699,24 @@ fn cmd_settings_set(store: &mut Store, key: &str, value: &str) -> Outcome {
             Err(_) => return Outcome::err(1, "alwaysOnTop takes true or false\n".to_string()),
         },
         _ => {
-            if let Ok(b) = value.parse::<bool>() {
+            // A key that already holds a value keeps its kind: a text setting set to
+            // "2024" stays text, and a switch never turns into a stray number.
+            let held = if s.ui_flags.contains_key(key) {
+                "flag"
+            } else if s.ui_values.contains_key(key) {
+                "number"
+            } else if s.ui_texts.contains_key(key) {
+                "text"
+            } else {
+                ""
+            };
+            let as_flag = if held == "flag" || held.is_empty() { value.parse::<bool>().ok() } else { None };
+            let as_number = if held == "number" || held.is_empty() { value.parse::<f64>().ok() } else { None };
+            if as_flag.is_none() && as_number.is_none() && !(held.is_empty() || held == "text") {
+                let wants = if held == "flag" { "true or false" } else { "a number" };
+                return Outcome::err(1, format!("{key} takes {wants}\n"));
+            }
+            if let Some(b) = as_flag {
                 // Switching the picture-text index off here erases its text, the same
                 // as the switch in the app does: that text was read out of pictures.
                 if key == "ocrIndex" && !b && s.ui_flags.get(key).copied().unwrap_or(false) {
@@ -1709,7 +1726,7 @@ fn cmd_settings_set(store: &mut Store, key: &str, value: &str) -> Outcome {
                     return if cleared { out.mutating().mutating_trash() } else { out };
                 }
                 s.ui_flags.insert(key.to_string(), b);
-            } else if let Ok(n) = value.parse::<f64>() {
+            } else if let Some(n) = as_number {
                 // "NaN", "inf" and "1e999" parse as numbers but cannot be stored: they
                 // are written as null and the whole settings block fails to load.
                 let Some(n) = crate::clamp_ui_value(key, n) else {

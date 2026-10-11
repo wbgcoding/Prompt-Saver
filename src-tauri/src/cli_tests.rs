@@ -1173,3 +1173,27 @@ fn autostart_and_always_on_top_are_routed_to_the_app_handlers() {
     assert_eq!(os_backed_toggle(&set("autostart", "false", false)), None);
     assert_eq!(os_backed_toggle(&set("theme", "dark", true)), None);
 }
+
+#[test]
+fn settings_set_keeps_the_kind_a_key_already_has() {
+    let mut store = fixture_store();
+    let dir = std::env::temp_dir();
+    store.settings.ui_texts.insert("myText".to_string(), "hello".to_string());
+    store.settings.ui_values.insert("myNumber".to_string(), 3.0);
+    store.settings.ui_flags.insert("myFlag".to_string(), true);
+    // A number-looking or switch-looking value stays text for a text key.
+    assert_eq!(run_cmd(&mut store, &dir, &["settings", "set", "myText", "2024", "--yes"]).code, 0);
+    assert_eq!(store.settings.ui_texts.get("myText").map(String::as_str), Some("2024"));
+    assert_eq!(run_cmd(&mut store, &dir, &["settings", "set", "myText", "true", "--yes"]).code, 0);
+    assert_eq!(store.settings.ui_texts.get("myText").map(String::as_str), Some("true"));
+    assert!(!store.settings.ui_flags.contains_key("myText") && !store.settings.ui_values.contains_key("myText"));
+    // A mismatch is refused and leaves every map alone.
+    assert_eq!(run_cmd(&mut store, &dir, &["settings", "set", "myNumber", "true", "--yes"]).code, 1);
+    assert_eq!(run_cmd(&mut store, &dir, &["settings", "set", "myFlag", "5", "--yes"]).code, 1);
+    assert_eq!(store.settings.ui_values.get("myNumber"), Some(&3.0));
+    assert_eq!(store.settings.ui_flags.get("myFlag"), Some(&true));
+    assert!(!store.settings.ui_flags.contains_key("myNumber") && !store.settings.ui_values.contains_key("myFlag"));
+    // The matching kinds still work.
+    assert_eq!(run_cmd(&mut store, &dir, &["settings", "set", "myNumber", "4", "--yes"]).code, 0);
+    assert_eq!(store.settings.ui_values.get("myNumber"), Some(&4.0));
+}
