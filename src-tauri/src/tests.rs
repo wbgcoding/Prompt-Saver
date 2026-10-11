@@ -19720,6 +19720,16 @@ fn a_prompt_placed_on_the_grid_becomes_a_view_member() {
 }
 
 #[test]
+fn a_stale_layout_drops_the_ids_of_deleted_prompts() {
+    let layout: HashMap<String, [u32; 2]> =
+        [("a".to_string(), [0, 0]), ("gone".to_string(), [1, 0])].into_iter().collect();
+    let known: std::collections::HashSet<String> = ["a".to_string()].into_iter().collect();
+    let kept = layout_of_known(layout, &known);
+    assert_eq!(kept.len(), 1);
+    assert!(kept.contains_key("a"));
+}
+
+#[test]
 fn renaming_a_tag_to_another_casing_keeps_its_colour() {
     let mut prompts = vec![test_prompt("a")];
     prompts[0].tags = vec!["css".to_string()];

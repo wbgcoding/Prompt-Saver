@@ -8,12 +8,23 @@ use super::*;
 pub(crate) async fn set_layout(app: AppHandle, state: State<'_, Db>, layout: HashMap<String, [u32; 2]>) -> Result<(), String> {
     let mut store = lock(&state);
     let known: std::collections::HashSet<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
+    let layout = layout_of_known(layout, &known);
     let view = store.settings.active_view_mut();
     let key = grid_key(view.cols, view.rows);
     seat_layout_ids_as_members(view, &layout, &known);
     view.layouts.insert(key, layout);
     save_settings(&app, &store.settings);
     Ok(())
+}
+
+// A layout sent after a delete still names the deleted prompt: stored as it came,
+// it would recreate an occupied ghost cell, so only existing prompts are kept.
+pub(crate) fn layout_of_known(
+    mut layout: HashMap<String, [u32; 2]>,
+    known: &std::collections::HashSet<String>,
+) -> HashMap<String, [u32; 2]> {
+    layout.retain(|id, _| known.contains(id));
+    layout
 }
 
 // A prompt placed on the grid (dragged in from the library, or added with its plus)
