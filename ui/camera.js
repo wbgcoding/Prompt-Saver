@@ -133,7 +133,8 @@ async function populateAudioDevices() {
     // alone still lets the camera be used silently.
   }
   if (gen !== audioListGen) return; // a newer call rebuilds the list
-  audioSelect.replaceChildren(...opts);
+  audioSelect.innerHTML = "";
+  for (const o of opts) audioSelect.appendChild(o);
   if (keep && opts.some((o) => o.value === keep)) audioSelect.value = keep;
 }
 

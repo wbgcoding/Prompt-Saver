@@ -19655,8 +19655,7 @@ fn a_prompt_hotkey_cannot_take_the_active_voice_combination() {
     assert_eq!(sanitize_hotkey("Ctrl+Alt+V", "", "ctrl+alt+v", "", "", &others), Err("hotkey-taken".into()));
     assert_eq!(sanitize_hotkey("Ctrl+Alt+V", "", "", "", "", &others).unwrap(), "Ctrl+Alt+V");
 
-    let mut s = Settings::default();
-    s.voice_hotkey = "Ctrl+Alt+V".to_string();
+    let mut s = Settings { voice_hotkey: "Ctrl+Alt+V".to_string(), ..Settings::default() };
     assert_eq!(active_voice_hotkey(&s.voice_hotkey, &s.ui_flags), "", "off until its own switch is on");
     s.ui_flags.insert("voiceHotkey".to_string(), true);
     assert_eq!(active_voice_hotkey(&s.voice_hotkey, &s.ui_flags), "Ctrl+Alt+V");
@@ -19675,14 +19674,16 @@ fn a_prompt_hotkey_cannot_take_the_active_voice_combination() {
 
 #[test]
 fn prune_history_keeps_entries_stored_without_a_timestamp() {
-    let mut settings = Settings::default();
-    settings.ui_values.insert("historyDays".into(), 1.0);
     let now = now_secs();
-    settings.copy_log = vec![
-        CopyEntry { id: "undated".into(), ts: 0 },
-        CopyEntry { id: "fresh".into(), ts: now },
-        CopyEntry { id: "old".into(), ts: now - 3 * 86_400 },
-    ];
+    let mut settings = Settings {
+        copy_log: vec![
+            CopyEntry { id: "undated".into(), ts: 0 },
+            CopyEntry { id: "fresh".into(), ts: now },
+            CopyEntry { id: "old".into(), ts: now - 3 * 86_400 },
+        ],
+        ..Settings::default()
+    };
+    settings.ui_values.insert("historyDays".into(), 1.0);
     prune_history(&mut settings);
     let ids: Vec<&str> = settings.copy_log.iter().map(|e| e.id.as_str()).collect();
     assert_eq!(ids, vec!["undated", "fresh"]);
