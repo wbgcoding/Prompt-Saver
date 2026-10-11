@@ -1533,11 +1533,11 @@ pub(crate) fn sync_poll_apply(
                 .unwrap_or((false, false));
             if folders_touched_here {
                 placements_touched = true;
-                settings_changed = true;
             }
-            if placed {
-                settings_changed = true;
-            } else {
+            // A placed file changed the settings itself; an unplaced one gets a
+            // view membership below. Either way the settings are dirty.
+            settings_changed = true;
+            if !placed {
                 let folder_cells = active_view_folder_cells(&store.settings);
                 let view = store.settings.active_view_mut();
                 if let Some(cell) = first_free_cell_excluding(view, &folder_cells) {
@@ -1550,7 +1550,6 @@ pub(crate) fn sync_poll_apply(
                 if !view.members.iter().any(|m| *m == id) {
                     view.members.push(id);
                 }
-                settings_changed = true;
             }
             changed = true;
         } else if let Some(idx) = store.prompts.iter().position(|p| p.id == stem) {
