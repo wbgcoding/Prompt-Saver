@@ -714,7 +714,10 @@ listen("language-changed", () => applySettings().catch(() => {}));
 // of a still-pending settings fetch and resize the window for the OLD tile
 // size while renderGrid (from the settings landing moments later) drew tiles
 // at the NEW size -- clipped or oversized members until something else reflowed.
-listen("settings-changed", () => { applySettings().catch(() => {}).then(() => loadState()); });
+listen("settings-changed", () => {
+  applySettings().catch(() => {}).then(() => loadState());
+  refreshParkedBadge();
+});
 listen("prompt-updated", (e) => {
   if (e.payload && state.members.some((p) => p.id === e.payload.id)) {
     // An edit can change entry count/text: drop the cached rotation state so
@@ -743,6 +746,14 @@ appWin.onScaleChanged(() => {
   else invoke("set_float_folder_scale", { id: folderId, scale: state.scale }).catch(() => {});
 });
 
+// Asked at boot and again after a settings change (the recall action moves a
+// parked folder back).
+function refreshParkedBadge() {
+  invoke("is_float_parked", { id: folderId }).then((parked) => {
+    parkedBadge.classList.toggle("hidden", !parked);
+  }).catch(() => {});
+}
+
 (async () => {
   try {
     applyFloatTheme(await invoke("current_theme"), await invoke("theme_vars"));
@@ -751,8 +762,5 @@ appWin.onScaleChanged(() => {
   // lazily so the window opens fast) land a moment later and only relabel.
   applySettings().catch(() => {});
   await loadState().catch(() => {});
-  // Same one-shot check as the pill: fresh at every open, never kept live.
-  invoke("is_float_parked", { id: folderId }).then((parked) => {
-    parkedBadge.classList.toggle("hidden", !parked);
-  }).catch(() => {});
+  refreshParkedBadge();
 })();

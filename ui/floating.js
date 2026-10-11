@@ -974,7 +974,10 @@ listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars
 listen("language-changed", () => applySettings().catch(() => {}));
 // An expert setting changed: re-read it here too, or a feature switched on while
 // this pill is already on screen would stay off until the next restart.
-listen("settings-changed", () => applySettings().catch(() => {}));
+listen("settings-changed", () => {
+  applySettings().catch(() => {});
+  refreshParkedBadge();
+});
 
 // Moving onto a monitor with a different DPI can leave a stale frame:
 // re-apply the size so the window repaints at the new scale factor.
@@ -982,6 +985,14 @@ appWin.onScaleChanged(() => {
   applyPillSize();
   ensureVideoPlaying();
 });
+
+// Whether the pill sits on a stand-in spot instead of its own: asked at boot and
+// again after the recall action moved it back.
+function refreshParkedBadge() {
+  invoke("is_float_parked", { id: promptId }).then((parked) => {
+    parkedBadge.classList.toggle("hidden", !parked);
+  }).catch(() => {});
+}
 
 (async () => {
   // A transient IPC failure must not leave the pill blank/unstyled: guard each
@@ -991,10 +1002,8 @@ appWin.onScaleChanged(() => {
   } catch (_) {}
   applySettings().catch(() => {});
   loadName().catch(() => {});
-  // Checked once at boot, not kept live: the window only ever opens freshly
-  // placed (parked or on its own remembered spot), so nothing changes this
-  // mid-session short of the float-recall action, which closes and reopens it.
-  invoke("is_float_parked", { id: promptId }).then((parked) => {
-    parkedBadge.classList.toggle("hidden", !parked);
-  }).catch(() => {});
+  // Checked at boot and after a settings change: the window only ever opens freshly
+  // placed (parked or on its own remembered spot), so only the float-recall action
+  // changes this mid-session.
+  refreshParkedBadge();
 })();

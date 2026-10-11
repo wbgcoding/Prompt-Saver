@@ -957,10 +957,17 @@ pub(crate) async fn float_recall(app: AppHandle, state: State<'_, Db>) -> Result
         .and_then(|w| w.available_monitors().ok())
         .and_then(|m| m.first().map(|m| m.scale_factor()))
         .unwrap_or(1.0);
+    let mut moves: Vec<(String, i32, i32)> = Vec::new();
     {
         let mut store = lock(&state);
         let (pill_ids, wishes) = recall_wishes(&store.settings, &store.prompts, work, dpi);
         let spots = spread_free_positions(&wishes, &[], work);
+        for (id, (x, y)) in pill_ids.iter().zip(spots.iter()) {
+            moves.push((flabel(id), x.round() as i32, y.round() as i32));
+        }
+        for (folder, (x, y)) in store.settings.float_folders.iter().zip(spots.iter().skip(pill_ids.len())) {
+            moves.push((folder_label(&folder.id), x.round() as i32, y.round() as i32));
+        }
 
         for (id, (x, y)) in pill_ids.iter().zip(spots.iter()) {
             store.settings.floating.insert(
@@ -976,6 +983,17 @@ pub(crate) async fn float_recall(app: AppHandle, state: State<'_, Db>) -> Result
     }
     if let Some(state) = app.try_state::<ParkedFloats>() {
         state.0.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    }
+    // A window that is already open keeps its place through sync_float_windows, so it
+    // is moved here; an open folder's origin sits off its icon by the grown box.
+    for (label, x, y) in moves {
+        if let Some(win) = app.get_webview_window(&label) {
+            let off = label
+                .strip_prefix("folder-")
+                .and_then(|id| folder_expansion(&app, id))
+                .unwrap_or(Rect { x: 0.0, y: 0.0, w: 0.0, h: 0.0 });
+            let _ = win.set_position(PhysicalPosition::new(x - off.x.round() as i32, y - off.y.round() as i32));
+        }
     }
     sync_float_windows(&app);
     notify_float_settings(&app);
