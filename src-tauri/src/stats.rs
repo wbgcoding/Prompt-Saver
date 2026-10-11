@@ -663,6 +663,22 @@ pub(crate) fn dup_sources(prompts: &[Prompt]) -> Vec<DupSource> {
         .collect()
 }
 
+// Prompt id -> names of the views it belongs to. Membership is `View.members`
+// (a prompt in a grid folder or without a cell on the current grid size still
+// belongs); the per-size layouts are history and say nothing about it.
+pub(crate) fn view_names_by_prompt(views: &[View]) -> std::collections::HashMap<&str, Vec<String>> {
+    let mut out: std::collections::HashMap<&str, Vec<String>> = std::collections::HashMap::new();
+    for v in views {
+        let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
+        for id in &v.members {
+            if seen.insert(id.as_str()) {
+                out.entry(id.as_str()).or_default().push(v.name.clone());
+            }
+        }
+    }
+    out
+}
+
 // Find near-duplicate prompts by trigram/Dice similarity. Rayon-parallel over the
 // upper-triangle of pairs; 1000 prompts finish well under a second.
 #[tauri::command]
@@ -745,17 +761,7 @@ pub(crate) async fn find_duplicates(state: State<'_, Db>, threshold: f64) -> Res
         }
     }
     // Precompute view membership: prompt id -> view names containing it.
-    let mut in_views: Map<&str, Vec<String>> = Map::new();
-    for v in &views {
-        let mut seen: Set<&str> = Set::new();
-        for layout in v.layouts.values() {
-            for id in layout.keys() {
-                if seen.insert(id.as_str()) {
-                    in_views.entry(id.as_str()).or_default().push(v.name.clone());
-                }
-            }
-        }
-    }
+    let in_views = view_names_by_prompt(&views);
     let mut out: Vec<DupGroup> = groups
         .into_iter()
         .filter(|(_, m)| m.len() >= 2)
