@@ -12272,8 +12272,9 @@ fn a_window_copy_of_the_settings_has_no_private_key() {
     assert!(s.ui_texts.contains_key(BACKUP_PW_KEY), "the stored settings keep it");
     assert!(copy.ui_texts.contains_key("remoteAllowedRanges"));
     assert!(!copy.ui_texts.contains_key(remote_tls::REMOTE_TLS_KEY));
-    assert_eq!(copy.ui_texts.get(remote_tls::REMOTE_TLS_CA).map(String::as_str), Some("ca"));
+    assert!(!copy.ui_texts.contains_key(remote_tls::REMOTE_TLS_CA), "the certificates stay in the backend too");
     assert!(s.ui_texts.contains_key(remote_tls::REMOTE_TLS_KEY));
+    assert!(s.ui_texts.contains_key(remote_tls::REMOTE_TLS_CA));
 }
 
 // A full "data" import must actually delete the prompts it replaces ON DISK,

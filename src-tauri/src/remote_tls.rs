@@ -451,9 +451,10 @@ pub(crate) fn stored_ca(settings: &Settings) -> Option<String> {
     stored(settings, REMOTE_TLS_CA)
 }
 
-// What a window may see: everything except the private key.
+// What a window may see: none of the receiver's TLS values. The fingerprint of
+// the CA has its own command.
 pub(crate) fn strip_private_key(settings: &mut Settings) {
-    settings.ui_texts.remove(REMOTE_TLS_KEY);
+    strip_tls_keys(&mut settings.ui_texts);
 }
 
 // Removes all three machine values from a map about to leave this machine or
@@ -581,10 +582,7 @@ mod tests {
         let mut s = Settings::default();
         ensure_tls_identity(&mut s, &names(), |_| true).unwrap();
         strip_private_key(&mut s);
-        assert!(!s.ui_texts.contains_key(REMOTE_TLS_KEY));
-        assert!(s.ui_texts.contains_key(REMOTE_TLS_CA));
-        strip_tls_keys(&mut s.ui_texts);
-        assert!(REMOTE_TLS_KEYS.iter().all(|k| !s.ui_texts.contains_key(*k)));
+        assert!(REMOTE_TLS_KEYS.iter().all(|k| !s.ui_texts.contains_key(*k)), "key, certificate and CA all stay in the backend");
     }
 
     fn leaf_not_after(id: &TlsIdentity) -> i64 {
