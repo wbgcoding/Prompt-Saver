@@ -19352,3 +19352,28 @@ fn copy_mic_sidecar_alongside_brings_the_microphone_track_to_the_open_editor_cop
     assert!(src.with_extension("mic.wav").is_file(), "the original stays untouched");
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn video_folder_cleanup_takes_the_sidecars_of_a_deleted_recording() {
+    let dir = std::env::temp_dir().join(format!("ps-video-folder-cleanup-sidecars-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let stale = dir.join("rec-old.mp4");
+    let fresh = dir.join("rec-new.mp4");
+    fs::write(&stale, b"old").unwrap();
+    fs::write(&fresh, b"new").unwrap();
+    for v in [&stale, &fresh] {
+        fs::write(v.with_extension("mic.wav"), b"w").unwrap();
+        fs::write(sidecar_path(v, KEYS_SIDECAR_EXT), b"{}").unwrap();
+        fs::write(sidecar_path(v, CAM_SIDECAR_EXT), b"{}").unwrap();
+    }
+    backdate(&stale, Duration::from_secs(40 * 24 * 3600));
+    let dir_s = dir.to_string_lossy().to_string();
+    assert_eq!(video_folder_cleanup_impl(&dir_s, 30, &dir), 1);
+    assert!(!stale.with_extension("mic.wav").exists());
+    assert!(!sidecar_path(&stale, KEYS_SIDECAR_EXT).exists());
+    assert!(!sidecar_path(&stale, CAM_SIDECAR_EXT).exists());
+    assert!(fresh.with_extension("mic.wav").exists(), "a kept recording keeps its sidecars");
+    assert!(sidecar_path(&fresh, KEYS_SIDECAR_EXT).exists());
+    let _ = fs::remove_dir_all(&dir);
+}

@@ -328,7 +328,14 @@ pub(crate) fn video_folder_cleanup_impl(dir: &str, age_days: u32, configured: &P
     let stale = video_folder_stale(dir, age_days);
     let mut n = 0;
     for (path, _) in stale {
-        if fs::remove_file(&path).is_ok() { n += 1; }
+        if fs::remove_file(&path).is_ok() {
+            n += 1;
+            // The sidecars only mean something next to their video: left behind
+            // they would sit in the folder with no owner.
+            let _ = fs::remove_file(path.with_extension("mic.wav"));
+            let _ = fs::remove_file(sidecar_path(&path, KEYS_SIDECAR_EXT));
+            let _ = fs::remove_file(sidecar_path(&path, CAM_SIDECAR_EXT));
+        }
     }
     n
 }
