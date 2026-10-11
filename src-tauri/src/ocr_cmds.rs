@@ -548,6 +548,29 @@ pub(crate) fn search_image_text(state: State<Db>, query: String) -> Vec<String> 
 // Set by cancel_ocr_index_backfill, polled between pictures in the loop below.
 pub(crate) static OCR_INDEX_CANCEL: AtomicBool = AtomicBool::new(false);
 
+// One backfill pass at a time. Starting a second one would reset the cancel flag
+// the first is still polling (the cancel is lost, two passes read the same pictures
+// at once) and both report under the one background-job row.
+static OCR_INDEX_RUNNING: AtomicBool = AtomicBool::new(false);
+
+// Held for the length of a pass; released on every way out of it.
+pub(crate) struct OcrIndexPass;
+
+impl OcrIndexPass {
+    pub(crate) fn claim() -> Option<OcrIndexPass> {
+        OCR_INDEX_RUNNING
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .ok()
+            .map(|_| OcrIndexPass)
+    }
+}
+
+impl Drop for OcrIndexPass {
+    fn drop(&mut self) {
+        OCR_INDEX_RUNNING.store(false, Ordering::SeqCst);
+    }
+}
+
 #[tauri::command]
 pub(crate) fn cancel_ocr_index_backfill() {
     OCR_INDEX_CANCEL.store(true, Ordering::SeqCst);
@@ -622,6 +645,9 @@ pub(crate) fn apply_ocr_backfill_text(store: &mut Store, id: &str, recognized_fr
 // no progress UI of its own.
 #[tauri::command]
 pub(crate) async fn ocr_index_backfill(app: AppHandle, state: State<'_, Db>) -> Result<usize, String> {
+    let Some(_pass) = OcrIndexPass::claim() else {
+        return Err("ocr-index-busy".to_string());
+    };
     OCR_INDEX_CANCEL.store(false, Ordering::SeqCst);
     let (ids, max_chars, started_epoch) = {
         let store = lock(&state);

@@ -17,7 +17,7 @@ SRC = os.path.join(ROOT, "src-tauri", "src")
 ALLOW = {
     "the caller branches on the code and shows its own text": [
         "canceled", "cancelled", "demo-mode-active", "focus-failed", "no-target", "import-changed",
-        "ocr-no-language", "voice-no-language", "voice-busy", "voice-online-required",
+        "ocr-no-language", "ocr-index-busy", "voice-no-language", "voice-busy", "voice-online-required",
         "recording-too-young-to-continue", "source-not-allowed", "not-media", "no-source",
         "sync-backup-failed: {e}", "sync-write-failed: {failed}", "too-large:{}",
         "view-full:{deficit}", "{RESTART_FAILED_PREFIX}{e}",
@@ -44,6 +44,8 @@ ALLOW = {
         "path is empty, contains a NUL byte, or is too long",
         "could not open the restored store", "could not write the restored store",
         "refused: the path escapes the data folder",
+        "refused: that path belongs to the stored data",
+        "refused: the path has no file name",
         "refused: the path does not resolve inside the data folder",
         "the data folder could not be resolved",
     ],

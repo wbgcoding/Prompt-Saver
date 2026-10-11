@@ -6079,6 +6079,14 @@ fn delete_prompt_closes_the_pill_only_after_the_trash_move_saved() {
     assert!(closed > saved, "the pill must be closed after the save, not before it");
 }
 
+#[test]
+fn only_one_picture_text_pass_runs_at_a_time() {
+    let first = OcrIndexPass::claim().expect("nothing is running");
+    assert!(OcrIndexPass::claim().is_none(), "a second pass must not start while one runs");
+    drop(first);
+    assert!(OcrIndexPass::claim().is_some(), "the claim is released when the pass ends");
+}
+
 // A write that sends no text and no entries (a hotkey or the auto-rotate switch
 // set straight from the tile menu) keeps what is stored, whatever the entry is.
 // For a confidential entry that means the ciphertext, with the vault locked too.

@@ -871,7 +871,8 @@ export function wireManagement() {
       const q = libQuery.trim().toLowerCase();
       if (q) refreshImageHits(q);
     } catch (e) {
-      errToast(e);
+      // A pass is already running: its progress and cancel button are in the jobs popover.
+      if (String(e) !== "ocr-index-busy") errToast(e);
     }
   };
 }
