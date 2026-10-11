@@ -958,6 +958,39 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **A deleted prompt stays deleted.** After a settings reset or a move of the
+  data folder, a prompt deleted next could come back after a restart, and
+  restoring it from the trash then blocked every later save.
+- **Restoring the oldest backup no longer deletes it.** The safety backup taken
+  before a restore could rotate away exactly the backup you picked, in the app
+  and from the command line.
+- **Picking a data folder that already holds data loads that data.** The running
+  session used to write its own state over it.
+- **Confidential entries keep their text.** Assigning a hotkey, switching
+  rotation or taking a side in Compare could empty a confidential entry or
+  encrypt it twice. Auto rotation no longer pastes encrypted text, and a
+  confidential entry is locked again on time when the lock timeout runs out,
+  also when you shorten the timeout.
+- **The command line and remote access refuse confidential entries for copy**
+  and can no longer export over the database or a backup.
+- **Recording pauses no longer count against the maximum length**, and a
+  recording no longer stops when you close the window it was switched away
+  from.
+- **The video editor keeps an end-only trim and the microphone track of an
+  opened file**, and a trim made long ago is no longer dropped after many
+  edits.
+- **The screenshot editor takes typed numbers in its fields** and its
+  shortcuts work again while a switch or slider has the focus.
+- **Edit in the recording dialog closes the dialog**, so Save and Copy can no
+  longer move the file away from the open editor.
+- **New folder on a single tile asks for a second prompt** instead of failing,
+  since a folder needs two.
+- **Grid tiles no longer vanish or overlap** after hiding a tile in a view,
+  shrinking the grid, editing folders or dragging a tile out of a folder.
+- **A command line call waits for the running app** to finish a long import or
+  backup instead of reporting a failure after five seconds.
+- **A portable copy in a folder it cannot write to** keeps its data in AppData.
+- **Names with a dollar sign show correctly in messages.**
 - **Cancelling the ffmpeg download in the video editor is quiet.** The download
   button there now behaves like the one in the expert menu: a click while it runs
   cancels it, and a cancel no longer shows an error.
