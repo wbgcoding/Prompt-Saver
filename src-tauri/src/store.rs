@@ -527,8 +527,14 @@ pub(crate) fn current_data_dir_sync_hint(app: AppHandle) -> Option<String> {
 // undecryptable prefixed value (e.g. another Windows account) yields "" so the row is
 // skipped rather than fed garbage to the JSON parser.
 pub(crate) fn dec_str(stored: &str) -> String {
+    dec_str_strict(stored).unwrap_or_default()
+}
+
+// dec_str that tells "could not be read" (None) from "reads as empty" (Some("")),
+// for the callers that must never act on a value they could not read.
+pub(crate) fn dec_str_strict(stored: &str) -> Option<String> {
     if let Some(rest) = stored.strip_prefix(PLAINTEXT_ESCAPE) {
-        return rest.to_string();
+        return Some(rest.to_string());
     }
     #[cfg(windows)]
     if let Some(b64) = stored.strip_prefix(ENC_PREFIX) {
@@ -536,13 +542,13 @@ pub(crate) fn dec_str(stored: &str) -> String {
         if !ct.is_empty() {
             if let Some(pt) = store_crypt::unprotect(&ct) {
                 if let Ok(s) = String::from_utf8(pt) {
-                    return s;
+                    return Some(s);
                 }
             }
         }
-        return String::new();
+        return None;
     }
-    stored.to_string()
+    Some(stored.to_string())
 }
 
 // Schema + migration probe for a data.db connection, run once per data folder and
@@ -1163,18 +1169,26 @@ pub(crate) fn db_last_edited(conn: &Connection) -> std::collections::HashMap<Str
     }
     out
 }
+// None when the row is missing or any of its sealed columns cannot be read (the
+// store was written under another Windows account): handing back empty fields
+// would let a restore overwrite a live prompt with nothing.
 pub(crate) fn db_get_version(conn: &Connection, id: i64) -> Option<(String, String, String, Vec<String>)> {
-    conn.query_row(
-        "SELECT prompt_id, name, text, variants FROM prompt_versions WHERE id = ?1",
-        params![id],
-        |r| Ok((
-            r.get::<_, String>(0)?,
-            dec_str(&r.get::<_, String>(1)?),
-            upgrade_placeholders(&dec_str(&r.get::<_, String>(2)?)),
-            decode_variants(&dec_str(&r.get::<_, String>(3)?)).iter().map(|v| upgrade_placeholders(v)).collect(),
-        )),
-    )
-    .ok()
+    let (prompt_id, name, text, variants): (String, String, String, String) = conn
+        .query_row(
+            "SELECT prompt_id, name, text, variants FROM prompt_versions WHERE id = ?1",
+            params![id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        )
+        .ok()?;
+    let name = dec_str_strict(&name)?;
+    let text = dec_str_strict(&text)?;
+    let variants = dec_str_strict(&variants)?;
+    Some((
+        prompt_id,
+        name,
+        upgrade_placeholders(&text),
+        decode_variants(&variants).iter().map(|v| upgrade_placeholders(v)).collect(),
+    ))
 }
 // Removes version history whose prompt is in neither the library nor the trash.
 // Works on the plaintext id column alone, so it is safe even when the rows

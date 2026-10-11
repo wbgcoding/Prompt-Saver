@@ -19432,3 +19432,19 @@ fn duplicate_report_view_names_come_from_members_not_old_layouts() {
     assert_eq!(names.get("p2").cloned(), Some(vec!["A".to_string(), "B".to_string()]));
     assert!(!names.contains_key("p3"));
 }
+
+#[test]
+#[cfg(windows)]
+fn restoring_a_version_with_an_unreadable_column_is_refused() {
+    let conn = Connection::open_in_memory().unwrap();
+    assert!(db_conn_init_schema(&conn));
+    db_add_version(&conn, "p1", 10, "", "Entry", &["v".to_string()], 20).unwrap();
+    let id = db_list_versions(&conn, "p1")[0].id;
+    // A legitimately empty name reads back as empty and is still restorable.
+    assert!(db_get_version(&conn, id).is_some());
+    // Text that looks sealed but cannot be read here must not come back as "".
+    conn.execute("UPDATE prompt_versions SET text = ?1", params![format!("{ENC_PREFIX}AAAA")]).unwrap();
+    assert!(db_get_version(&conn, id).is_none());
+    assert!(dec_str_strict(&format!("{ENC_PREFIX}AAAA")).is_none());
+    assert_eq!(dec_str_strict("plain").as_deref(), Some("plain"));
+}
