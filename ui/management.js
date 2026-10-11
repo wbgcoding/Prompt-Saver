@@ -1,9 +1,10 @@
 // Statistics, duplicate finder, compare view, trash, error log and the receiver dialogs.
 import { $, assignLibraryTab, assignPrompts, assignSettings, errToast, EXPERT_ACTIONS, flag, hideToast, invoke, LANG, libraryEl, optFlag, prompts, settings, t, toast, txt, undoToast, val } from "./core.js";
 import { EXPERT_VALUES } from "./expertConfig.js";
-import { applyValues, renderExpert, rowResetBtn, withTip } from "./expertMenu.js";
+import { applyFlags, applyValues, renderExpert, rowResetBtn, withTip } from "./expertMenu.js";
+import { loadPalette, refreshColorUI } from "./theme.js";
 import { attachSelectPicker } from "./selectpop.js";
-import { runStatsExport } from "./settingsPanel.js";
+import { runStatsExport, syncSettingsControls } from "./settingsPanel.js";
 import { assignLibQuery, lastEdited, libLabel, libQuery, refreshImageHits, renderLibrary, restoreBatchDelete } from "./library.js";
 import { renderGrid, renderViews } from "./views.js";
 import { confirmDialog } from "./dialog.js";
@@ -854,8 +855,15 @@ export function wireManagement() {
       const s = await invoke("get_state");
       assignPrompts(s.prompts);
       assignSettings(s.settings);
+      // The file carried flags, values and texts (palette included): every place
+      // that reads them is brought in line, not only the expert menu.
+      loadPalette();
+      applyFlags();
       applyValues();
+      refreshColorUI();
+      syncSettingsControls();
       renderExpert();
+      renderViews();
       renderGrid(true);
     } catch (e) {
       errToast(e);
