@@ -450,6 +450,19 @@ async function exportIdleCheck() {
   expect("the removal marker never reaches the ops list or the saved state", src.includes('op.tool !== "clip" && op.tool !== "removal"') && src.includes('VE.ops.filter((o) => o.tool !== "removal")'));
 }
 
+// A finished export clears "unsaved changes" only when nothing was edited while it ran
+// and the same recording is still open.
+{
+  const sb = makeSandbox({});
+  sb.VE = { loadGen: 4, rev: 10 };
+  vm.runInContext(extractBlock("exportCoveredEdits", "function exportCoveredEdits(gen, rev) {"), sb);
+  const covered = vm.runInContext("exportCoveredEdits", sb);
+  expect("an untouched editor is covered by its export", covered(4, 10) === true);
+  expect("an edit made while the export ran is not covered", (() => { sb.VE.rev = 11; return covered(4, 10) === false; })());
+  expect("another recording is never covered", (() => { sb.VE.rev = 10; sb.VE.loadGen = 5; return covered(4, 10) === false; })());
+  expect("every ops change bumps the revision", /function afterOpsChanged\(opts\) \{[^}]*VE\.rev \+= 1;/.test(src));
+}
+
 // The undo cap limits how far back undo reaches, never what the preview and the
 // export render: a trim made before the cap was hit stays in the list.
 {

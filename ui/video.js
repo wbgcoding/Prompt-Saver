@@ -151,6 +151,7 @@ const VE = {
   peaks: { 0: null, 1: null },
   exporting: false,
   dirty: false,         // ops changed since the last successful export
+  rev: 0,               // counts every ops change; an export compares it with its start value
   lastExport: "",       // path of the file the last export produced
   destOverride: null,   // a full path picked via "Save as…" or typed by hand
   destDir: "",          // remembered folder from "Export to…", persisted across videos
@@ -436,6 +437,7 @@ function redo() {
 function afterOpsChanged(opts) {
   const keep = opts && opts.keepEditor;
   VE.dirty = true;
+  VE.rev += 1;
   $("ve-undo").disabled = VE.ops.length <= VE.floor;
   $("ve-redo").disabled = !VE.redo.length;
   if (VE.selOv && !VE.ops.some((o) => o.id === VE.selOv)) VE.selOv = null;
@@ -3331,6 +3333,12 @@ function updateExportNote() {
 
 const exportEta = makeEtaEstimator();
 
+// Whether an export that started on recording `gen` at edit revision `rev` rendered
+// everything that is in the editor now: the same recording, no edit made while it ran.
+function exportCoveredEdits(gen, rev) {
+  return VE.loadGen === gen && VE.rev === rev;
+}
+
 // Back to the idle look after an export that never started writing: no stale
 // "Exporting" line, no 0% bar.
 function clearExportStatus() {
@@ -3370,6 +3378,7 @@ async function startExport(toClipboard) {
   // Another recording can be opened while this export still runs; its result
   // must never touch that recording's state.
   const gen = VE.loadGen;
+  const rev = VE.rev;
   const src = VE.src;
   const stillHere = () => VE.loadGen === gen;
   VE.exporting = true;
@@ -3390,7 +3399,7 @@ async function startExport(toClipboard) {
   try {
     for (;;) {
       const request = {
-        src_path: VE.src,
+        src_path: src,
         dest_path: dest,
         filter_chain: lossless ? null : buildVideoChain(),
         audio_map: lossless ? null : buildAudioChain(),
@@ -3426,12 +3435,14 @@ async function startExport(toClipboard) {
       try {
         await invoke("export_video", { req: request });
         invoke("record_tool_usage", { tool: "video_export" }).catch(() => {});
-        if (stillHere()) VE.dirty = false;
+        // Only when nothing was edited while it ran: a later edit is not in the file.
+        const covered = exportCoveredEdits(gen, rev);
+        if (covered) VE.dirty = false;
         // A finished export means nothing here is "unfinished" any more -- clear the
         // remembered row so reopening this recording later never offers to restore
         // work that already made it out. Continued editing after this point simply
         // gets a fresh row from the next autosave tick, same as any other edit.
-        if (stillHere() && VE.editStateKeepOn && src) {
+        if (covered && VE.editStateKeepOn && src) {
           invoke("discard_edit_state", { kind: "video", target: src }).catch(() => {});
         }
         if (stillHere()) setProgress(100);
@@ -3453,6 +3464,8 @@ async function startExport(toClipboard) {
         if (!toClipboard && !destRetried && raw.includes("export destination not recognized")) {
           destRetried = true;
           const folder = await invoke("pick_export_folder").catch(() => null);
+          // Another recording was opened while the picker was up: this export is over.
+          if (!stillHere()) return;
           if (!folder) {
             // Nothing was chosen (cancelled, or no dialog could open): the
             // export did not happen, and the status line says why.
