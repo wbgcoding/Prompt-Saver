@@ -480,8 +480,16 @@ pub(crate) async fn finish_and_continue_recording(
             *guard = Some(s);
             return Err("recording-too-young-to-continue".to_string());
         }
+        // The state stays empty for the whole stop-and-restart below, which looks
+        // idle to a start request: holding the start claim until the new session
+        // is published keeps a second capture from starting in that gap.
+        if REC_STARTING.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+            *guard = Some(s);
+            return Err("recording-busy".to_string());
+        }
         s
     };
+    let _rec_starting_guard = RecStartingGuard;
     // Every part after the first keeps the very FIRST file's own name stem,
     // never the previous part's already-numbered one -- read once, before
     // this call's own finished part is pushed further down.
