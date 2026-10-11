@@ -55,8 +55,9 @@ pub fn list_mic_devices() -> Vec<MicDevice> {
         let Ok(count) = collection.GetCount() else { return out };
         for i in 0..count {
             let Ok(device) = collection.Item(i) else { continue };
-            let Ok(id) = device.GetId() else { continue };
-            let id = id.to_string().unwrap_or_default();
+            let Ok(id_ptr) = device.GetId() else { continue };
+            let id = id_ptr.to_string().unwrap_or_default();
+            windows::Win32::System::Com::CoTaskMemFree(Some(id_ptr.0 as *const _));
             let name = device_friendly_name(&device).unwrap_or_else(|| id.clone());
             out.push(MicDevice { id, name });
         }
@@ -69,7 +70,9 @@ unsafe fn device_friendly_name(device: &IMMDevice) -> Option<String> {
     let store = device.OpenPropertyStore(windows::Win32::System::Com::STGM_READ).ok()?;
     let value = store.GetValue(&PKEY_Device_FriendlyName).ok()?;
     let s = windows::Win32::System::Com::StructuredStorage::PropVariantToStringAlloc(&value).ok()?;
-    Some(s.to_string().unwrap_or_default())
+    let name = s.to_string().unwrap_or_default();
+    windows::Win32::System::Com::CoTaskMemFree(Some(s.0 as *const _));
+    Some(name)
 }
 
 fn open_endpoint(flow: EDataFlow, device_id: &str) -> windows::core::Result<IMMDevice> {
@@ -120,7 +123,11 @@ pub fn spawn_capture(
                     (*wave_format).wFormatTag == WAVE_FORMAT_IEEE_FLOAT
                 };
                 let stream_flags = if loopback { AUDCLNT_STREAMFLAGS_LOOPBACK } else { 0 };
-                client.Initialize(AUDCLNT_SHAREMODE_SHARED, stream_flags, 2_000_000, 0, wave_format, None)?;
+                // The mix format is a CoTaskMem block the caller owns; Initialize
+                // copies what it needs, so free it right after, success or not.
+                let init = client.Initialize(AUDCLNT_SHAREMODE_SHARED, stream_flags, 2_000_000, 0, wave_format, None);
+                windows::Win32::System::Com::CoTaskMemFree(Some(wave_format as *const _));
+                init?;
                 let capture_client: IAudioCaptureClient = client.GetService()?;
                 client.Start()?;
                 while !stop.load(Ordering::Relaxed) {
