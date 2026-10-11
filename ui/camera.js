@@ -590,6 +590,11 @@ listen("language-changed", () => {
 
 // A fallback in case the permission-ready event is somehow missed (e.g. this
 // window is reopened while WebView2 already answered it once for this
-// origin, so no new prompt round trip happens at all) -- tries the preview
-// once after a short delay regardless of the event.
-setTimeout(() => { if (!stream) refreshPreview(); }, 1500);
+// origin, so no new prompt round trip happens at all) -- counts the permission as
+// given after a short delay regardless of the event. The preview still waits for
+// the saved settings, so a slow read never opens the default camera for good.
+setTimeout(() => {
+  if (stream) return;
+  permissionReady = true;
+  startPreviewWhenReady();
+}, 1500);
