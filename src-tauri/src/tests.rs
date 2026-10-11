@@ -19561,3 +19561,33 @@ fn a_folder_edit_that_leaves_another_folder_with_one_member_keeps_that_member_on
     let key = grid_key(view.cols, view.rows);
     assert_eq!(view.layouts.get(&key).and_then(|l| l.get("c")).copied(), Some([1, 0]), "c is a tile again, on the old folder's cell");
 }
+
+#[test]
+fn taking_a_prompt_out_never_drops_it_on_a_cell_a_folder_keeps() {
+    let mut view = test_view("v");
+    view.cols = 3;
+    view.rows = 1;
+    let folders = vec![
+        test_tile_folder("origin", "v", [0, 0], &["x", "a", "b"]),
+        test_tile_folder("other", "v", [1, 0], &["c", "d"]),
+    ];
+    let cells: Vec<[u32; 2]> = folders.iter().map(|f| f.cell).collect();
+    // Onto another folder's cell, and onto the origin folder that keeps two members.
+    assert_eq!(take_out_target_cell(&view, &folders, &cells, "x", [1, 0]), Ok([2, 0]));
+    assert_eq!(take_out_target_cell(&view, &folders, &cells, "x", [0, 0]), Ok([2, 0]));
+    // A free cell is used as asked.
+    assert_eq!(take_out_target_cell(&view, &folders, &cells, "x", [2, 0]), Ok([2, 0]));
+    // The origin folder that would dissolve may be dropped on (its last member is settled aside).
+    let small = vec![test_tile_folder("origin", "v", [0, 0], &["x", "a"])];
+    assert_eq!(take_out_target_cell(&view, &small, &[[0, 0]], "x", [0, 0]), Ok([0, 0]));
+    // No free cell at all: refused.
+    let mut full = test_view("v");
+    full.cols = 2;
+    full.rows = 1;
+    let two = vec![
+        test_tile_folder("origin", "v", [0, 0], &["x", "a", "b"]),
+        test_tile_folder("other", "v", [1, 0], &["c", "d"]),
+    ];
+    let cells: Vec<[u32; 2]> = two.iter().map(|f| f.cell).collect();
+    assert_eq!(take_out_target_cell(&full, &two, &cells, "x", [1, 0]), Err(()));
+}

@@ -900,6 +900,28 @@ pub(crate) fn place_taken_out_member(
     Ok(())
 }
 
+// Where a prompt taken out of a folder really lands. A cell a folder will still hold
+// after the member left is not free to drop on: folders live outside view.layouts, so
+// the tile would save fine and never draw. It takes the first free cell instead. The
+// origin folder only counts while it keeps two or more members (below that it
+// dissolves and its last member is settled afterwards).
+pub(crate) fn take_out_target_cell(
+    view: &View,
+    folders: &[TileFolder],
+    folder_cells: &[[u32; 2]],
+    id: &str,
+    cell: [u32; 2],
+) -> Result<[u32; 2], ()> {
+    let held = folders
+        .iter()
+        .any(|f| f.view_id == view.id && f.cell == cell && f.members.iter().filter(|m| m.as_str() != id).count() >= 2);
+    if held {
+        first_free_cell_excluding(view, folder_cells).ok_or(())
+    } else {
+        Ok(cell)
+    }
+}
+
 // Take one prompt out of its folder and put it on `cell` of the folder's view. The
 // second-to-last member leaving dissolves the folder (normalize), which is what makes
 // "drag the last one out" work without a case of its own.
@@ -931,7 +953,11 @@ pub(crate) fn take_out_of_tile_folder(
         .collect();
     // Decide the placement first: a drop that cannot be honoured leaves the
     // member in its folder instead of half-moving it.
+    let folders = store.settings.tile_folders.clone();
     if let Some(view) = store.settings.views.iter_mut().find(|v| v.id == view_id) {
+        let Ok(cell) = take_out_target_cell(view, &folders, &folder_cells, &id, cell) else {
+            return Err("no free cell".to_string());
+        };
         if place_taken_out_member(view, &folder_cells, &id, cell).is_err() {
             return Err("no free cell".to_string());
         }
