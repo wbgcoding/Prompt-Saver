@@ -268,7 +268,7 @@ export function gsForgetRecent(term) {
   gsSaveRecent(list.filter((x) => x.toLowerCase() !== term.toLowerCase()));
   gsRender();
   const dels = $("gs-results").querySelectorAll(".gs-recent-del");
-  if (dels.length) dels[Math.min(idx, dels.length - 1)].focus();
+  if (dels.length) dels[Math.max(0, Math.min(idx, dels.length - 1))].focus();
   else $("gs-input").focus();
 }
 
@@ -354,7 +354,10 @@ export function gsRender() {
   if (!any) empty.textContent = t("globalSearchNoResults");
   gsSetActive(gsFlatRows.length ? 0 : -1);
 }
-export const gsRenderDebounced = debounced(() => gsRender());
+// True from a keystroke until its render ran, so Enter can render first instead of
+// acting on the rows of the previous query.
+let gsRenderPending = false;
+export const gsRenderDebounced = debounced(() => { gsRenderPending = false; gsRender(); });
 
 export async function openGlobalSearch() {
   if (gsOpen) return;
@@ -388,13 +391,14 @@ export function bindGlobalSearch() {
   $("global-search-btn").addEventListener("click", toggleGlobalSearch);
   $("gs-close").addEventListener("click", closeGlobalSearch);
   gsEl.addEventListener("pointerdown", (e) => { if (e.target === gsEl) closeGlobalSearch(); });
-  $("gs-input").addEventListener("input", (e) => { gsQuery = e.target.value; gsRenderDebounced(); });
+  $("gs-input").addEventListener("input", (e) => { gsQuery = e.target.value; gsRenderPending = true; gsRenderDebounced(); });
   $("gs-input").addEventListener("keydown", (e) => {
     if (e.key === "Escape") { e.preventDefault(); closeGlobalSearch(); }
     else if (e.key === "ArrowDown") { e.preventDefault(); if (gsFlatRows.length) gsSetActive(Math.min(gsActive + 1, gsFlatRows.length - 1)); }
     else if (e.key === "ArrowUp") { e.preventDefault(); if (gsFlatRows.length) gsSetActive(Math.max(gsActive - 1, 0)); }
     else if (e.key === "Enter") {
       e.preventDefault();
+      if (gsRenderPending) { gsRenderDebounced.cancel(); gsRenderPending = false; gsRender(); }
       const row = gsFlatRows[gsActive];
       if (row) row.run();
     }
