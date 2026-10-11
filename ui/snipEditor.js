@@ -1781,6 +1781,13 @@ export function initSnipEditor() {
   });
   snipEditTextInput.addEventListener("blur", () => { if (SE.textEdit) snipEditCommitTextInput(); });
 
+  // Only a text-entry target owns its keys. The editor's own toggles and sliders keep
+  // the focus after a click, and must not swallow undo, Enter or the tool letters.
+  function snipEditFieldOwnsKeys(tgt) {
+    if (!tgt) return false;
+    if (tgt.isContentEditable || tgt.tagName === "TEXTAREA" || tgt.tagName === "SELECT") return true;
+    return tgt.tagName === "INPUT" && !["checkbox", "radio", "range", "button", "color"].includes(tgt.type);
+  }
   // ---- keyboard: tool shortcuts, undo/redo, Enter/Esc, nudge, pan, before/after ----
   function snipEditKeydown(e) {
     if (snipEdit.classList.contains("hidden")) return;
@@ -1817,8 +1824,7 @@ export function initSnipEditor() {
     if (document.activeElement === snipEditTextInput) return; // input owns its own keys
     // Any other field (size, colour hex, select) owns its keys too: a letter
     // typed there must not switch tools, and arrows must move its caret.
-    const tgt = e.target;
-    if (tgt && (tgt.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(tgt.tagName))) return;
+    if (snipEditFieldOwnsKeys(e.target)) return;
     if (e.key === "Enter") {
       e.preventDefault();
       // The untouched full-image box is no crop, so Enter then applies the editor.

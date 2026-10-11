@@ -38,12 +38,17 @@ function sandbox() {
     snipEditTextInput: {}, document: { activeElement: null },
     $: () => ({ classList: { contains: () => true } }),
     snipEditContextIsOpen: () => false, snipColorPopIsOpen: () => false,
+    snipEditDrawShapeSelectionLive() {}, snipEditUpdateNudgeHint() {},
     NUM_FIELD_BIG_STEP: 10, snipOriginalToggle: { press() {} }, snipEditWrap: { style: {}, classList: { add() {} } },
   };
   vm.createContext(sb);
   vm.runInContext(extractBlock("function snipEditPushUniqueOp(tool, op) {"), sb);
   vm.runInContext(extractBlock("function snipEditCropDiscard() {"), sb);
+  vm.runInContext(extractBlock("function snipEditFieldOwnsKeys(tgt) {"), sb);
   vm.runInContext(extractBlock("function snipEditKeydown(e) {"), sb);
+  vm.runInContext(extractBlock("function snipEditNudge(op, key, amount, resize) {"), sb);
+  vm.runInContext(extractBlock("function snipEditGeom(op) {"), sb);
+  vm.runInContext(extractBlock("function snipEditExportDataUrl() {"), sb);
   return sb;
 }
 
@@ -89,6 +94,47 @@ function sandbox() {
   check("typing in a field: no tool switch", sb.tools, []);
   sb.snipEditKeydown(ev({ tagName: "BODY" }));
   check("canvas key: tool switches", sb.tools, ["rect"]);
+}
+
+// The editor's own toggles and sliders keep the focus after a click: undo and the
+// tool letters still work there, while a text field keeps them.
+{
+  const sb = sandbox();
+  const ev = (target, key = "r", ctrlKey = false) => ({ key, target, preventDefault() {}, ctrlKey, metaKey: false, repeat: false });
+  sb.snipEditKeydown(ev({ tagName: "INPUT", type: "range" }));
+  sb.snipEditKeydown(ev({ tagName: "INPUT", type: "checkbox" }));
+  check("focused slider or toggle: tool switches", sb.tools, ["rect", "rect"]);
+  sb.snipEditKeydown(ev({ tagName: "INPUT", type: "text" }));
+  sb.snipEditKeydown(ev({ tagName: "INPUT", type: "number" }));
+  sb.snipEditKeydown(ev({ tagName: "TEXTAREA" }));
+  check("text entry keeps its keys", sb.tools, ["rect", "rect"]);
+}
+// A nudge folded into the entry below the top is a new edit: it ends the redo branch.
+{
+  const sb = sandbox();
+  const op = { tool: "rect", rect: { x: 1, y: 1, w: 10, h: 10 } };
+  sb.SE.ops = [op, { tool: "edit", kind: "geom", op, before: {}, after: {}, nudgeOf: op, nudgeTool: "rect" }];
+  sb.SE.tool = "rect";
+  sb.SE.lastNudged = op;
+  sb.SE.redo = [{ tool: "rect" }];
+  sb.snipEditNudge(op, "ArrowRight", 1, false);
+  check("merged nudge: rect moved", op.rect.x, 2);
+  check("merged nudge: redo branch ended", sb.SE.redo.length, 0);
+  check("merged nudge: still one undo entry", sb.SE.ops.length, 2);
+}
+// Export draws the cropped image from the bare base, never the dimmed one.
+{
+  const sb = sandbox();
+  const calls = [];
+  sb.snipEditRedrawBase = (bare) => calls.push(bare ? "bare" : "dimmed");
+  sb.SE.ops = [{ tool: "crop", rect: { x: 0, y: 0, w: 20, h: 20 } }];
+  sb.SE.w = 100; sb.SE.h = 100; sb.SE.tool = "rect";
+  sb.snipEditClamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  sb.snipOriginalToggle = { reset() {} };
+  sb.snipEditBaseCv = {};
+  sb.document = { activeElement: null, createElement: () => ({ getContext: () => ({ drawImage: () => calls.push("draw") }), toDataURL: () => "data:" }) };
+  sb.snipEditExportDataUrl();
+  check("export crop: bare redraw before the draw, dimmed one after", calls, ["bare", "draw", "dimmed"]);
 }
 
 for (const p of problems) console.log("FAIL", p);
