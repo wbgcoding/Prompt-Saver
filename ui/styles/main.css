@@ -3278,8 +3278,8 @@ select.modal-input { padding-right: 30px; }
 .expert-action { width: 100%; margin-top: 4px; }
 /* A sub-row's own left margin (.expert-sub, depth-based indent) shrinks a
    width:100% action button's box by the same amount -- otherwise its right
-   edge overflows the panel by exactly that margin (278's hotkey-set buttons,
-   the first long enough label at depth 2, to show it). */
+   edge overflows the panel by exactly that margin (the hotkey-set buttons are
+   the first with a label long enough at depth 2 to show it). */
 .expert-action.expert-sub { width: calc(100% - var(--expert-depth, 1) * 18px); }
 
 /* Clear-X inside text / number fields + textareas. The wrapper is block by default
@@ -5195,7 +5195,7 @@ body:not(.flag-archiveTag) #grid-batch-archive { display: none; }
 .modal-advanced-sub + .modal-advanced-sub { padding-top: 10px; border-top: 1px solid var(--border); }
 .modal-advanced-sub-label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
 /* Hotkey/history used to be their own .modal-collapse-body (flex column, 4px gap)
-   before 28 merged them in; restore that spacing here so their own children
+   before they were merged into the Advanced panel; restore that spacing here so their own children
    (row, inline error, action dropdown, hint) don't touch. Not applied to
    .modal-tags, which keeps its own single-row wrapping layout. */
 #modal-hotkey, #modal-history { display: flex; flex-direction: column; gap: 4px; }
