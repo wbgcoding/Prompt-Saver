@@ -575,7 +575,16 @@ pub(crate) async fn finish_and_continue_recording(
                             REC_INTERIM_CROPS.lock().unwrap_or_else(|e| e.into_inner()).retain(|(_, h)| h.thread().id() != me);
                         });
                         match spawned {
-                            Ok(handle) => REC_INTERIM_CROPS.lock().unwrap_or_else(|e| e.into_inner()).push((cancel_flag, handle)),
+                            Ok(handle) => {
+                                // The thread removes its own entry when it ends, which can
+                                // happen before this push: finished ones are dropped here
+                                // so none stays in the list for good.
+                                let mut crops = REC_INTERIM_CROPS.lock().unwrap_or_else(|e| e.into_inner());
+                                crops.retain(|(_, h)| !h.is_finished());
+                                if !handle.is_finished() {
+                                    crops.push((cancel_flag, handle));
+                                }
+                            }
                             Err(_) => append_crash_log("recording: could not start the interim-part crop thread"),
                         }
                     }

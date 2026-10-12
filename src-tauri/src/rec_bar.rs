@@ -177,7 +177,7 @@ pub(crate) async fn show_rec_bar(app: AppHandle, target_kind: String, id: i64) -
         // Unconditional -- not gated by the privacy screenshot-exclusion setting.
         // The bar must never appear in the recording no matter what.
         set_capture_exclusion(&win, true);
-        *REC_BAR_TARGET.lock().unwrap() = (target_kind.clone(), id as isize);
+        *REC_BAR_TARGET.lock().unwrap_or_else(|e| e.into_inner()) = (target_kind.clone(), id as isize);
         position_rec_bar(&win, &target_kind, id as isize);
         let _ = win.show();
         // A reused bar page still holds the last recording's state.
@@ -206,7 +206,7 @@ pub(crate) fn fit_rec_bar(app: AppHandle, width: f64, height: f64) {
     {
         if let Some(win) = app.get_webview_window("rec-bar") {
             let _ = win.set_size(tauri::LogicalSize::new(width, height));
-            let (target_kind, id) = REC_BAR_TARGET.lock().unwrap().clone();
+            let (target_kind, id) = REC_BAR_TARGET.lock().unwrap_or_else(|e| e.into_inner()).clone();
             if !target_kind.is_empty() {
                 position_rec_bar(&win, &target_kind, id);
             }
