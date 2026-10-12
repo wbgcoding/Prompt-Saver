@@ -271,8 +271,9 @@ async function startRecording() {
   let begin;
   try {
     begin = await invoke("camera_begin_recording", { ext: recExt });
-  } catch {
+  } catch (err) {
     startBtn.disabled = false;
+    await showCameraError(err);
     return;
   }
   recPath = begin.path;
@@ -388,6 +389,7 @@ async function startRecording() {
       refreshPreview();
       return;
     }
+    let finishError = null;
     try {
       const finished = await invoke("camera_finish_recording", { path, camStartMs: startedAtMs, screenElapsedMs });
       // A companion screen recording that has ALREADY stopped by now opens
@@ -401,12 +403,14 @@ async function startRecording() {
       } else {
         await invoke("open_video_editor", { srcPath: path });
       }
-    } catch {
+    } catch (err) {
       // A finish that fails leaves the raw file in place, still playable --
       // the same fallback the screen recorder's own encode-error path uses.
+      finishError = err;
     }
     idleControls();
     refreshPreview();
+    if (finishError) await showCameraError(finishError);
   };
   try {
     recorder.start(1000);
@@ -429,19 +433,17 @@ async function startRecording() {
   }, 250);
 }
 
-function stopRecording() {
-  if (recorder && recorder.state !== "inactive") recorder.stop();
+// A failed start, finish or editor hand-off says so in the status strip, in the same
+// mapped wording every other window shows for a backend error.
+async function showCameraError(err) {
+  const { errMessageLogged } = await import("./errors.js");
+  const text = errMessageLogged(err, t, "camera");
+  statusText.textContent = text;
+  statusText.title = text;
 }
 
-// A cancel (window closed mid-take) discards instead of finishing -- no
-// half-length recording, no sidecar, nothing for the library to trip over.
-async function discardRecording() {
-  if (!recorder || recorder.state === "inactive") return;
-  const path = recPath;
-  recorder.onstop = null;
-  recorder.stop();
-  recPath = null;
-  if (path) invoke("camera_discard_recording", { path }).catch(() => {});
+function stopRecording() {
+  if (recorder && recorder.state !== "inactive") recorder.stop();
 }
 
 startBtn.addEventListener("click", startRecording);
@@ -476,7 +478,8 @@ folderBtn.addEventListener("click", async () => {
   }
 });
 closeBtn.addEventListener("click", async () => {
-  await discardRecording();
+  // A running take is stopped and kept, like Escape; a second press closes the window.
+  if (isRecording()) { stopBtn.click(); return; }
   stopStream();
   appWin.close();
 });
