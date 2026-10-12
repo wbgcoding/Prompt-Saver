@@ -13,19 +13,19 @@ import { bindHelpView } from "./helpView.js";
 import { bindLibrary, hideLibrary, renderLibrary } from "./library.js";
 import { closeTagManager, closeTagPop, tagPop, wireTags } from "./tags.js";
 import { bindJournal } from "./journal.js";
-import { applyTheme, applyTileStyle, bindTheme, wireTheme } from "./theme.js";
+import { applyTheme, applyTileStyle, bindTheme, closeThemeEditor, wireTheme } from "./theme.js";
 import { applySettingsCore, applySettingsUi, bindSettingsPanel, closeImportMenu, hideSettings, offerTakeover, runExportAll } from "./settingsPanel.js";
 import { bindHotkeys } from "./hotkeys.js";
 import { bindAbout } from "./about.js";
 import { applyFlags, assignCameraDevicesCache, assignCurrentDataDir, assignDefaultRecordingDir, assignDefaultScreenshotDir, assignDefaultSyncDir, assignMicDevicesCache, assignOcrLangsCache, assignSettingsWriteFailed, assignStoreSealed, assignVoiceLangsCache, assignVoiceSupport, bindExpertMenu, dataDirLockStatus, refreshDataDirLock, refreshSettingsLocked, renderExpert, settingsWriteFailed, storeSealed, syncBannerStack, warnDataDirSyncFolder } from "./expertMenu.js";
 import { bindManagement, bindStats, closeCompareView, closeStats, wireManagement } from "./management.js";
 import { bindBackups, closeBackups } from "./backups.js";
-import { bindDictation, wireDictation } from "./dictation.js";
+import { bindDictation, closeLangsModal, wireDictation } from "./dictation.js";
 import { bindEditor, closeModal, confirmDiscardIfDirty, editPrompt, openModal, promptToModal, setupDragDrop, wireEditor } from "./editor.js";
 import { cacheFloatingState, closeTileFolderPop, tileFolderPop, wireGridFolders } from "./gridFolders.js";
-import { wireBgOps } from "./bgOps.js";
+import { bgOpsPop, closeBgOpsPop, wireBgOps } from "./bgOps.js";
 import { bindTour, openTour, wireTour } from "./tour.js";
-import { bindGlobalSearch } from "./globalSearch.js";
+import { bindGlobalSearch, closeGlobalSearch } from "./globalSearch.js";
 import { bindCapture, wireCapture } from "./capture.js";
 import { bindGridMenus, closeCtx, closeGridTagPop, closeMoveToFolderPop, closeToolbarMenu, closeViewsPop, gridTagPop, moveToFolderPop, toolbarMenu, viewsPop, wireGridMenus } from "./gridMenus.js";
 primeLang("en", EN);
@@ -131,6 +131,26 @@ function bind() {
     if (next && next.id !== settings.active_view) switchToView(next.id);
   });
 
+  // Dialogs that live at the base z-index and later in the page than most other
+  // overlays, topmost first. Promise-based ones have no close function of their
+  // own: pressing their cancel/close button resolves them the way a click does.
+  const STACKED_DIALOGS = ["ocr-langs-modal", "ocr-modal", "batch-export-modal", "video-cleanup-modal", "import-folder-modal", "import-preview-modal", "error-log-modal"];
+  const STACKED_DIALOG_CLOSE = {
+    "ocr-langs-modal": closeLangsModal,
+    "ocr-modal": () => $("ocr-modal-close").click(),
+    "batch-export-modal": () => $("batch-export-cancel").click(),
+    "video-cleanup-modal": () => $("video-cleanup-cancel").click(),
+    "import-folder-modal": () => $("import-folder-cancel").click(),
+    "import-preview-modal": () => $("import-preview-cancel").click(),
+    "error-log-modal": () => $("error-log-close").click(),
+  };
+  function closeStackedDialog() {
+    const id = STACKED_DIALOGS.find((d) => !$(d).classList.contains("hidden"));
+    if (!id) return false;
+    STACKED_DIALOG_CLOSE[id]();
+    return true;
+  }
+
   // Keeps Tab from leaking past whichever overlay is currently topmost,
   // into the (visually dimmed) page behind it. Mirrors the Escape dispatcher's
   // own "what's on top wins" cascade below one for one, reusing the same
@@ -157,13 +177,19 @@ function bind() {
     if (!openEditorPop.classList.contains("hidden")) { trapTabWithin(openEditorPop, e); return; }
     if (!$("rec-modal-more-pop").classList.contains("hidden")) { trapTabWithin($("rec-modal-more-pop"), e); return; }
     if (!$("import-menu-pop").classList.contains("hidden")) { trapTabWithin($("import-menu-pop"), e); return; }
+    if (!bgOpsPop.classList.contains("hidden")) { trapTabWithin(bgOpsPop, e); return; }
     if (!$("lightbox").classList.contains("hidden")) { trapTabWithin($("lightbox"), e); return; }
+    if (!$("global-search").classList.contains("hidden")) { trapTabWithin($("global-search"), e); return; }
     if (!$("confirm-modal").classList.contains("hidden")) { trapTabWithin($("confirm-modal"), e); return; }
     if (!colorPop.classList.contains("hidden")) { trapTabWithin(colorPop, e); return; }
     if (!tagPop.classList.contains("hidden")) { trapTabWithin(tagPop, e); return; }
     if (!$("compare-modal").classList.contains("hidden")) { trapTabWithin($("compare-modal"), e); return; }
+    if (!$("theme-modal").classList.contains("hidden")) { trapTabWithin($("theme-modal"), e); return; }
     if (!$("tag-modal").classList.contains("hidden")) { trapTabWithin($("tag-modal"), e); return; }
     if (!ctxEl.classList.contains("hidden")) { trapTabWithin(ctxEl, e); return; }
+    // Promise-based dialogs and the OCR dialogs sit at the base z-index but later in the page than the
+    // dialogs below, so they are the ones on top when opened from settings, the library or a capture.
+    for (const id of STACKED_DIALOGS) if (!$(id).classList.contains("hidden")) { trapTabWithin($(id), e); return; }
     if (!$("update-modal").classList.contains("hidden")) { trapTabWithin($("update-modal"), e); return; }
     if (!$("about-modal").classList.contains("hidden")) { trapTabWithin($("about-modal"), e); return; }
     if (!$("snip-modal").classList.contains("hidden")) { trapTabWithin($("snip-modal"), e); return; }
@@ -192,13 +218,17 @@ function bind() {
     if (!openEditorPop.classList.contains("hidden")) { closeOpenEditorPop(); return; }
     if (!$("rec-modal-more-pop").classList.contains("hidden")) { closeRecMorePop(); return; }
     if (!$("import-menu-pop").classList.contains("hidden")) { closeImportMenu(); return; }
+    if (!bgOpsPop.classList.contains("hidden")) { closeBgOpsPop(); return; }
     if (!$("lightbox").classList.contains("hidden")) closeLightbox();
+    else if (!$("global-search").classList.contains("hidden")) closeGlobalSearch();
     else if (dismissConfirm()) { /* the dialog closed itself */ }
     else if (!colorPop.classList.contains("hidden")) closeColorPop();
     else if (!tagPop.classList.contains("hidden")) closeTagPop();
     else if (!$("compare-modal").classList.contains("hidden")) closeCompareView();
+    else if (!$("theme-modal").classList.contains("hidden")) closeThemeEditor();
     else if (!$("tag-modal").classList.contains("hidden")) closeTagManager();
     else if (!ctxEl.classList.contains("hidden")) closeCtx();
+    else if (closeStackedDialog()) { /* the dialog closed itself */ }
     else if (!$("update-modal").classList.contains("hidden")) closeUpdateModal();
     else if (!$("about-modal").classList.contains("hidden")) $("about-modal").classList.add("hidden");
     else if (!$("snip-modal").classList.contains("hidden")) closeSnipModal();
