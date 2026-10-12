@@ -4116,7 +4116,9 @@ body.drag-over::after {
    wraps instead of cutting a text. */
 .update-line > .update-auto { display: flex; flex: 1 1 auto; flex-wrap: nowrap; align-items: center; gap: 8px; min-width: 0; }
 .update-auto > .switch-field { flex: 0 0 auto; gap: 8px; white-space: nowrap; }
-.update-interval { flex: 1 1 84px; min-width: 84px; max-width: 150px; }
+/* The explicit width is the size the line is broken on (the group wraps as a whole);
+   the interval then grows into leftover room up to max-width. */
+.update-interval { flex: 1 1 84px; width: 84px; min-width: 84px; max-width: 150px; }
 /* Same 8px vertical padding as the buttons beside it, so the whole line is one height. */
 .update-interval > select { width: 100%; padding-block: 8px; }
 /* Clickable version/status label, plain text look → releases page, or the update
