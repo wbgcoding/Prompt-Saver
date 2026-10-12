@@ -217,6 +217,51 @@ section(() => {
   check(/lock\.innerHTML = LOCK_SVG;/.test(tiles), "the tile lock badge reuses LOCK_SVG");
 });
 
+// 9. Views: one save per dialog confirm, a refused grid write restores the size boxes,
+// a cancelled tab drag lets go, the test hooks stay out of the shipped window.
+section(() => {
+  const views = read("views.js");
+  let release;
+  const calls = [];
+  const sb = run(`let viewModalSaving = false;\n${extractBlock(views, "export async function confirmViewModal(").replace("export ", "")}`, {
+    viewModal: { name: { value: "Work", focus: () => {} } },
+    viewModalId: null, viewModalColor: "",
+    settings: { views: [] }, clampGrid: (v) => v,
+    invoke: (cmd) => { calls.push(cmd); return new Promise((r) => { release = () => r({}); }); },
+    assignSettings: () => {}, errToast: () => {}, closeViewModal: () => {}, renderViews: () => {}, renderGrid: async () => {},
+  });
+  later(async () => {
+    const a = sb.confirmViewModal();
+    const b = sb.confirmViewModal();
+    release();
+    await Promise.all([a, b]);
+    check(calls.filter((c) => c === "add_view").length === 1, `two fast confirms create one view (got ${calls.length} calls)`);
+    const c = sb.confirmViewModal();
+    release();
+    await c;
+    check(calls.length === 2, "a later confirm works again after the first finished");
+  });
+
+  const inputs = { "qg-cols": { value: "9" }, "qg-rows": { value: "9" } };
+  const toasts = [];
+  let rendered = 0;
+  const sb2 = run(extractBlock(views, "async function applyViewGrid("), {
+    $: (id) => inputs[id], activeView: () => ({ cols: 3, rows: 2 }),
+    invoke: async () => { throw new Error("locked"); }, assignSettings: () => {},
+    errToast: (e) => toasts.push(String(e)), renderGrid: async () => { rendered++; },
+  });
+  later(async () => {
+    await sb2.applyViewGrid({ id: "v", cols: 3, rows: 2 }, 9, 9);
+    check(toasts.length === 1 && rendered === 0, "a refused grid write is reported and nothing is redrawn");
+    check(inputs["qg-cols"].value === 3 && inputs["qg-rows"].value === 2, "the size boxes show the real grid again");
+  });
+
+  const wire = extractBlock(views, "export function wireViews(");
+  check(/addEventListener\("pointercancel"[\s\S]*tabDrag = null/.test(wire), "a cancelled tab press ends the drag");
+  check(/if \(window\.__SMOKE_ERRORS__\) \{\s*window\.__runViewMutation/.test(wire), "the view-mutation test hooks exist only under the test stub");
+  check(/favViewButton: !on/.test(views), "a refused favorites-view switch is rolled back");
+});
+
 if (problems.length) {
     console.error("FAIL");
     for (const p of problems) console.error("  - " + p);

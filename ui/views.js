@@ -807,9 +807,12 @@ export async function restoreDeletedView(deleted, reactivateId) {
   if (!libraryEl.classList.contains("hidden")) renderLibrary();
 }
 
+let viewModalSaving = false; // a double Enter or Enter plus a click must not save twice
 export async function confirmViewModal() {
   const name = viewModal.name.value.trim();
   if (!name) { viewModal.name.focus(); return; }
+  if (viewModalSaving) return;
+  viewModalSaving = true;
   try {
     if (viewModalId) {
       await invoke("rename_view", { id: viewModalId, name });
@@ -825,6 +828,8 @@ export async function confirmViewModal() {
   } catch (err) {
     errToast(err);
     return;
+  } finally {
+    viewModalSaving = false;
   }
   closeViewModal();
   renderViews();
@@ -847,6 +852,21 @@ export async function duplicateView(v) {
   await renderGrid(true);
 }
 
+// Writes a new grid size for the view on screen. A refused write (settings locked,
+// read-only data folder) leaves the size boxes showing what the grid really has.
+async function applyViewGrid(view, cols, rows) {
+  try {
+    assignSettings(await invoke("set_view_grid", { id: view.id, cols, rows }));
+  } catch (err) {
+    errToast(err);
+    const current = activeView();
+    $("qg-cols").value = current.cols;
+    $("qg-rows").value = current.rows;
+    return;
+  }
+  await renderGrid(true);
+}
+
 export function bindViews() {
   // Quick grid-size control (top-right of the layout, active view).
   const applyQuickGrid = async () => {
@@ -855,8 +875,7 @@ export function bindViews() {
     const cols = clampGrid($("qg-cols").value, view.cols);
     const rows = clampGrid($("qg-rows").value, view.rows);
     if (cols === view.cols && rows === view.rows) return;
-    assignSettings(await invoke("set_view_grid", { id: view.id, cols, rows }));
-    await renderGrid(true);
+    await applyViewGrid(view, cols, rows);
   };
   attachGridPicker($("qg-cols"), applyQuickGrid);
   attachGridPicker($("qg-rows"), applyQuickGrid);
@@ -877,8 +896,7 @@ export function bindViews() {
       else break;
     }
     if (cols === view.cols && rows === view.rows) return;
-    assignSettings(await invoke("set_view_grid", { id: view.id, cols, rows }));
-    await renderGrid(true);
+    await applyViewGrid(view, cols, rows);
   });
 
   // View add / rename / delete popup.
@@ -927,7 +945,14 @@ export function bindViews() {
   $("opt-favview").addEventListener("change", (e) => {
     const on = e.target.checked;
     settings.ui_flags = { ...(settings.ui_flags || {}), favViewButton: on };
-    invoke("set_ui_flag", { key: "favViewButton", enabled: on }).catch((err) => errToast(err));
+    invoke("set_ui_flag", { key: "favViewButton", enabled: on }).catch((err) => {
+      // A refused write: put the switch and the header star back as they were.
+      settings.ui_flags = { ...(settings.ui_flags || {}), favViewButton: !on };
+      e.target.checked = !on;
+      applyFlags();
+      refreshFavViewUi();
+      errToast(err);
+    });
     if (!on && favView) assignFavView(false);
     applyFlags();
     refreshFavViewUi();
@@ -986,8 +1011,11 @@ export function wireViews() {
   document.body.appendChild(miniMenu);
   // Exercised directly by the UI test suite to prove the sequence-number rule
   // without needing two real drags to race in wall-clock time.
-  window.__runViewMutation = runViewMutation;
-  window.__nextViewMutationSeq = () => ++viewMutationSeq;
+  // Only the test stub defines __SMOKE_ERRORS__; the shipped window carries no hooks.
+  if (window.__SMOKE_ERRORS__) {
+    window.__runViewMutation = runViewMutation;
+    window.__nextViewMutationSeq = () => ++viewMutationSeq;
+  }
   window.addEventListener("pointermove", (e) => {
     if (!tabDrag) return;
     if (!tabDrag.moved) {
@@ -1001,6 +1029,16 @@ export function wireViews() {
     const valid = hit && hit !== tabDrag.el && !hit.classList.contains("view-add-top") ? hit : null;
     if (!valid) { markTabDrop(null); return; }
     markTabDrop(valid, tabDropZone(valid, e.clientX));
+  });
+  // A press the system cancels (focus loss, a touch turned into a gesture) must not
+  // leave the drag armed: the next pointermove would keep dragging with the button up.
+  window.addEventListener("pointercancel", () => {
+    if (!tabDrag) return;
+    const d = tabDrag;
+    tabDrag = null;
+    tabDragBlockClick = false; // no click follows a cancelled press
+    d.el.classList.remove("tab-dragging");
+    clearTabDropMark(d.target);
   });
   window.addEventListener("pointerup", async (e) => {
     if (!tabDrag) return;
