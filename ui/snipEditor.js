@@ -9,6 +9,9 @@ import { EXPERT_DROPDOWNS } from "./expertMenu.js";
 import { recordToolUsage } from "./management.js";
 import { buildSwatches } from "./editor.js";
 
+// The expert switch for the mouse wheel on number fields, read when a field is built.
+const snipWheelOn = () => settings.ui_flags?.numFieldWheel !== false;
+
 export function initSnipEditor() {
   // ==== screenshot editor ====
   // Opens right after a capture, before #snip-modal. Pure frontend: it receives a
@@ -1227,6 +1230,7 @@ export function initSnipEditor() {
     });
     wrap.appendChild(row);
     const control = numberField({
+      wheelEnabled: snipWheelOn(),
       value: ts.width, min: 1, max: 80, step: 1, steppers: false,
       onChange: (v) => { ts.width = v; snipRememberSize(tool, "width", v); snipEditRenderContext(); },
     });
@@ -1323,6 +1327,7 @@ export function initSnipEditor() {
     wrap.className = "snip-edit-field";
     wrap.append(Object.assign(document.createElement("span"), { textContent: labelText }));
     const control = numberField({
+      wheelEnabled: snipWheelOn(),
       value, min, max, step: 1, presets, onChange,
       decreaseLabel: t("numFieldDecrease"), increaseLabel: t("numFieldIncrease"), presetsLabel: t("numFieldPresets"),
       decreaseAriaKey: "numFieldDecrease", increaseAriaKey: "numFieldIncrease", presetsAriaKey: "numFieldPresets",
@@ -2046,6 +2051,7 @@ export function initSnipEditor() {
     snipScalePop.appendChild(size);
 
     const widthField = numberField({
+      wheelEnabled: snipWheelOn(),
       value: origW, min: 1, max: 20000, step: 1,
       decreaseLabel: t("numFieldDecrease"), increaseLabel: t("numFieldIncrease"),
       decreaseAriaKey: "numFieldDecrease", increaseAriaKey: "numFieldIncrease",
@@ -2055,6 +2061,7 @@ export function initSnipEditor() {
       },
     });
     const heightField = numberField({
+      wheelEnabled: snipWheelOn(),
       value: origH, min: 1, max: 20000, step: 1,
       decreaseLabel: t("numFieldDecrease"), increaseLabel: t("numFieldIncrease"),
       decreaseAriaKey: "numFieldDecrease", increaseAriaKey: "numFieldIncrease",
@@ -2072,6 +2079,7 @@ export function initSnipEditor() {
       heightField.setValue(Math.max(1, Math.round((origH * p) / 100)));
     };
     const percentField = numberField({
+      wheelEnabled: snipWheelOn(),
       value: 100, min: 1, max: 1000, step: 5,
       decreaseLabel: t("numFieldDecrease"), increaseLabel: t("numFieldIncrease"),
       decreaseAriaKey: "numFieldDecrease", increaseAriaKey: "numFieldIncrease",
