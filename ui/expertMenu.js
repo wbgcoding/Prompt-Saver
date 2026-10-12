@@ -1291,6 +1291,8 @@ export async function openVideoCleanup(dir) {
       deleteBtn.className = "ghost-btn danger-btn";
       deleteBtn.textContent = t("videoDiscardedDeleteNow");
       deleteBtn.addEventListener("click", async () => {
+        const sure = await confirmDialog({ title: t("videoDiscardedDeleteNow"), message: t("videoDiscardedDeleteAsk"), confirmLabel: t("videoDiscardedDeleteNow") });
+        if (!sure) return;
         const ok = await invoke("delete_discarded_recording_now", { dir, name: f.name }).catch(() => false);
         if (ok) { refreshDiscarded(); refreshVideoFolderInfo(dir); }
         else toast(t("videoDiscardedDeleteFailed"));

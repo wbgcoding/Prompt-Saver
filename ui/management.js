@@ -655,6 +655,8 @@ export async function copyErrorLogAll() {
 }
 export async function clearErrorLogAll() {
   if (!errorLogList.length) return;
+  const ok = await confirmDialog({ title: t("errorLogTitle"), message: t("errorLogClearAsk"), confirmLabel: t("delete") });
+  if (!ok) return;
   try { await invoke("clear_error_log"); } catch (e) { errToast(e); return; }
   errorLogList = [];
   renderErrorLogList();

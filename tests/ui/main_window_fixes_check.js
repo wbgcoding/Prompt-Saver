@@ -369,6 +369,27 @@ section(() => {
   check(read("backups.js").includes('armButton(del, t("deleteConfirmArmed"))'), "the armed delete label is a translated string");
 });
 
+// 14. Destructive one-click clears now ask first.
+section(() => {
+  const mg = read("management.js");
+  let answer = false;
+  const calls = [];
+  const sb = run(`let errorLogList = ["a"];\n${extractBlock(mg, "export async function clearErrorLogAll(").replace("export ", "")}`, {
+    t: (k) => k, confirmDialog: async () => answer, invoke: async (c) => { calls.push(c); },
+    errToast: () => {}, renderErrorLogList: () => {},
+  });
+  later(async () => {
+    await sb.clearErrorLogAll();
+    check(calls.length === 0, "declining the confirm keeps the error log");
+    answer = true;
+    await sb.clearErrorLogAll();
+    check(calls.join() === "clear_error_log", "confirming clears the error log");
+  });
+  const em = read("expertMenu.js");
+  const at = em.indexOf('invoke("delete_discarded_recording_now"');
+  check(at > 0 && em.slice(at - 400, at).includes("videoDiscardedDeleteAsk"), "deleting a discarded recording asks first");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
