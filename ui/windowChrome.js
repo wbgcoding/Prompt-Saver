@@ -94,7 +94,7 @@ export function hideTileTip() {
   if (tipTimer) { clearTimeout(tipTimer); tipTimer = null; }
   tipEl?.classList.remove("show");
 }
-// Reveal toggle for password fields (backup settings + the restore prompt).
+// Clear-X inside a text field or textarea; shows while the field holds text.
 export function wireClear(el) {
   if (!el || el.dataset.clearWired || el.readOnly) return;
   const isTa = el.tagName === "TEXTAREA";
@@ -321,8 +321,24 @@ export function wireSearchSuggest(input, storeKey) {
     settings.ui_texts = { ...(settings.ui_texts || {}), [storeKey]: value };
     invoke("set_ui_text", { key: storeKey, value }).catch(() => {});
   };
-  const hide = () => pop.classList.add("hidden");
+  // Row highlighted by the arrow keys (-1 = none); the field keeps the focus throughout.
+  let activeIdx = -1;
+  const hide = () => { pop.classList.add("hidden"); activeIdx = -1; };
+  const isOpen = () => !pop.classList.contains("hidden");
+  const setActive = (i) => {
+    const rows = [...pop.querySelectorAll(".search-suggest-item")];
+    activeIdx = rows.length ? Math.max(-1, Math.min(i, rows.length - 1)) : -1;
+    rows.forEach((r, n) => r.classList.toggle("active", n === activeIdx));
+    rows[activeIdx]?.scrollIntoView({ block: "nearest" });
+  };
+  const pick = (term) => {
+    input.value = term;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    remember(term);
+    hide();
+  };
   const show = () => {
+    activeIdx = -1;
     if (!flag("searchSuggest")) { hide(); return; }
     const q = input.value.trim().toLowerCase();
     const items = load().filter((x) => !q || x.toLowerCase().includes(q)).slice(0, val("searchListMax"));
@@ -336,10 +352,7 @@ export function wireSearchSuggest(input, storeKey) {
       label.textContent = term;
       label.addEventListener("mousedown", (e) => {
         e.preventDefault(); // keep focus so blur-hide doesn't beat the click
-        input.value = term;
-        input.dispatchEvent(new Event("input", { bubbles: true }));
-        remember(term);
-        hide();
+        pick(term);
       });
       const del = document.createElement("button");
       del.type = "button";
@@ -353,6 +366,7 @@ export function wireSearchSuggest(input, storeKey) {
         forget(term);
         show(); // re-render the shortened list, keeping the popup open
       });
+      row.dataset.term = term;
       row.append(label, del);
       pop.appendChild(row);
     }
@@ -367,7 +381,28 @@ export function wireSearchSuggest(input, storeKey) {
   // Open on an explicit click/type, NOT on the focus the dialog may grab on open.
   input.addEventListener("pointerdown", show);
   input.addEventListener("input", show);
-  input.addEventListener("keydown", (e) => { if (e.key === "Enter") { remember(input.value); hide(); } });
+  input.addEventListener("keydown", (e) => {
+    const rows = isOpen() ? pop.querySelectorAll(".search-suggest-item") : [];
+    if (rows.length && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+      e.preventDefault();
+      setActive(e.key === "ArrowDown" ? (activeIdx + 1) % rows.length : (activeIdx <= 0 ? rows.length - 1 : activeIdx - 1));
+    } else if (e.key === "Escape" && rows.length) {
+      // Closes the list only; a second Escape reaches whatever the field's window does with it.
+      e.preventDefault();
+      e.stopPropagation();
+      hide();
+    } else if (e.key === "Delete" && e.shiftKey && activeIdx >= 0 && rows[activeIdx]) {
+      e.preventDefault();
+      forget(rows[activeIdx].dataset.term);
+      const keep = activeIdx;
+      show();
+      setActive(keep);
+    } else if (e.key === "Enter") {
+      if (activeIdx >= 0 && rows[activeIdx]) { e.preventDefault(); pick(rows[activeIdx].dataset.term); return; }
+      remember(input.value);
+      hide();
+    }
+  });
   input.addEventListener("blur", () => { remember(input.value); setTimeout(hide, 120); });
 }
 
