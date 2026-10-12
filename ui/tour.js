@@ -240,11 +240,8 @@ export function tourGoto(i) {
   renderTourStep();
 }
 
-// Keyboard focus trap shared by every modal overlay with aria-modal="true"
-// (screenshot editor, first-run tour): keeps Tab/Shift+Tab cycling within
-// the container instead of escaping to the page behind it. Declared at top
-// level so both bind()'s screenshot-editor code and the tour code below can
-// call it without a second implementation.
+// Keys while the first-run tour is open: Tab stays inside the tour, Escape skips it
+// (with an undo), the arrows and Enter step through it.
 export function tourKeydown(e) {
   // A confirmation dialog on top owns every key while it is open --
   // otherwise Escape would close both it and the tour underneath on one press.
