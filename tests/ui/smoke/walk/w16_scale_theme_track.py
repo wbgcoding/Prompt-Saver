@@ -408,6 +408,9 @@ SECTION = """\
           }
         }
         document.getElementById('snip-edit-cancel').click();
+        // An edited session asks before it is dropped: answer yes so the next probe starts clean.
+        await sleep(40);
+        if (!document.getElementById('confirm-modal').classList.contains('hidden')) document.getElementById('confirm-ok').click();
         await sleep(200);
         if (!document.getElementById('snip-edit').classList.contains('hidden')) {
           out.errors.push('screenshot editor did not close on Cancel');
@@ -450,6 +453,9 @@ SECTION = """\
         document.querySelector('#snip-edit-tools button[data-tool="rect"]').click();
         await sleep(60);
         document.getElementById('snip-edit-cancel').click();
+        // An edited session asks before it is dropped: answer yes so the next probe starts clean.
+        await sleep(40);
+        if (!document.getElementById('confirm-modal').classList.contains('hidden')) document.getElementById('confirm-ok').click();
         await sleep(500);
         const stored = (await window.__TAURI__.core.invoke('get_settings')).ui_texts.snipLastTool;
         if (stored !== 'rect') {
@@ -460,6 +466,9 @@ SECTION = """\
           out.errors.push('931-de: the editor reopened with ' + pressedTool() + ', expected rect');
         }
         document.getElementById('snip-edit-cancel').click();
+        // An edited session asks before it is dropped: answer yes so the next probe starts clean.
+        await sleep(40);
+        if (!document.getElementById('confirm-modal').classList.contains('hidden')) document.getElementById('confirm-ok').click();
         await sleep(200);
         await setDefaultTool('pen');
         await reopen();
@@ -467,6 +476,9 @@ SECTION = """\
           out.errors.push('931-de: a fixed default tool pen opened with ' + pressedTool());
         }
         document.getElementById('snip-edit-cancel').click();
+        // An edited session asks before it is dropped: answer yes so the next probe starts clean.
+        await sleep(40);
+        if (!document.getElementById('confirm-modal').classList.contains('hidden')) document.getElementById('confirm-ok').click();
         await sleep(200);
         await setDefaultTool('last');
         await reopen();
@@ -474,6 +486,9 @@ SECTION = """\
           out.errors.push('931-de: back on Last used the editor opened with ' + pressedTool() + ', expected rect');
         }
         document.getElementById('snip-edit-cancel').click();
+        // An edited session asks before it is dropped: answer yes so the next probe starts clean.
+        await sleep(40);
+        if (!document.getElementById('confirm-modal').classList.contains('hidden')) document.getElementById('confirm-ok').click();
         await sleep(200);
       }
       // 363: an image that fails to decode (truncated data, a broken picked
@@ -540,6 +555,9 @@ SECTION = """\
           }
         }
         document.getElementById('snip-edit-cancel').click();
+        // An edited session asks before it is dropped: answer yes so the next probe starts clean.
+        await sleep(40);
+        if (!document.getElementById('confirm-modal').classList.contains('hidden')) document.getElementById('confirm-ok').click();
         await sleep(200);
       }
       // The shared mouse-only number field, exercised on the text tool's
@@ -606,6 +624,9 @@ SECTION = """\
           }
         }
         document.getElementById('snip-edit-cancel').click();
+        // An edited session asks before it is dropped: answer yes so the next probe starts clean.
+        await sleep(40);
+        if (!document.getElementById('confirm-modal').classList.contains('hidden')) document.getElementById('confirm-ok').click();
         await sleep(200);
       }
       // 394: the text tool's background is now three choices (none, plate,
@@ -685,6 +706,9 @@ SECTION = """\
           }
         }
         document.getElementById('snip-edit-cancel').click();
+        // An edited session asks before it is dropped: answer yes so the next probe starts clean.
+        await sleep(40);
+        if (!document.getElementById('confirm-modal').classList.contains('hidden')) document.getElementById('confirm-ok').click();
         await sleep(200);
       }
       // 342: scaling the image itself (not just the view). A filled rect is
@@ -760,6 +784,9 @@ SECTION = """\
           }
         }
         document.getElementById('snip-edit-cancel').click();
+        // An edited session asks before it is dropped: answer yes so the next probe starts clean.
+        await sleep(40);
+        if (!document.getElementById('confirm-modal').classList.contains('hidden')) document.getElementById('confirm-ok').click();
         await sleep(200);
       }
       // 383: the screenshot and video editors zoom on the same three keys and
@@ -960,6 +987,9 @@ SECTION = """\
           }
         }
         document.getElementById('snip-edit-cancel').click();
+        // An edited session asks before it is dropped: answer yes so the next probe starts clean.
+        await sleep(40);
+        if (!document.getElementById('confirm-modal').classList.contains('hidden')) document.getElementById('confirm-ok').click();
         await sleep(200);
       }
       // 470: dragging a selected rect (or one of its resize handles), and
@@ -1043,6 +1073,9 @@ SECTION = """\
           if (!hasInk470(380, 134)) out.errors.push('470: dragging a line endpoint to (390,140) put no line near there');
         }
         document.getElementById('snip-edit-cancel').click();
+        // An edited session asks before it is dropped: answer yes so the next probe starts clean.
+        await sleep(40);
+        if (!document.getElementById('confirm-modal').classList.contains('hidden')) document.getElementById('confirm-ok').click();
         await sleep(200);
       }
       // 365: the fullscreen media viewer (lightbox) keeps the point under the
@@ -1096,6 +1129,9 @@ SECTION = """\
           }
           document.getElementById('modal-close-x').click();
           await sleep(150);
+          // The swapped preview image makes the editor dirty, so closing it asks; answer yes.
+          if (!document.getElementById('confirm-modal').classList.contains('hidden')) document.getElementById('confirm-ok').click();
+          await sleep(100);
         }
       }
       // 181: a properly sized capture (not the 1x1 fixture above) to check the
@@ -1201,6 +1237,9 @@ SECTION = """\
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
         await sleep(30);
         document.getElementById('snip-edit-cancel').click();
+        // An edited session asks before it is dropped: answer yes so the next probe starts clean.
+        await sleep(40);
+        if (!document.getElementById('confirm-modal').classList.contains('hidden')) document.getElementById('confirm-ok').click();
         await sleep(200);
       }
     }
@@ -1262,6 +1301,9 @@ SECTION = """\
           }
         }
         document.getElementById('snip-edit-cancel').click();
+        // An edited session asks before it is dropped: answer yes so the next probe starts clean.
+        await sleep(40);
+        if (!document.getElementById('confirm-modal').classList.contains('hidden')) document.getElementById('confirm-ok').click();
         await sleep(100);
       }
       swatch508.remove();
@@ -1282,6 +1324,9 @@ SECTION = """\
         }
         layoutScan('screenshot editor in ' + lang);
         document.getElementById('snip-edit-cancel').click();
+        // An edited session asks before it is dropped: answer yes so the next probe starts clean.
+        await sleep(40);
+        if (!document.getElementById('confirm-modal').classList.contains('hidden')) document.getElementById('confirm-ok').click();
         await sleep(100);
       }
       langSel2.value = 'de';
