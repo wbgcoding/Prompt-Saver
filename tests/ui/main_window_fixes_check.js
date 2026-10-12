@@ -178,8 +178,7 @@ section(() => {
   check(/toLocaleString\(LANG\)/.test(main), "the crash-draft time is formatted in the UI language");
 });
 
-Promise.all(pending).then(() => {
-  // 7. A toast shown right after hideToast() is not hidden by the stale 200 ms timer.
+// 7. A toast shown right after hideToast() is not hidden by the stale 200 ms timer.
 section(() => {
   const core = read("core.js");
   const timers = new Map();
@@ -262,7 +261,40 @@ section(() => {
   check(/favViewButton: !on/.test(views), "a refused favorites-view switch is rolled back");
 });
 
-if (problems.length) {
+// 10. A cancelled fill-in dialog does not use up a counter value.
+section(() => {
+  const pv = read("promptVars.js");
+  let counter = 0;
+  let answer = null;
+  const sb = run(extractBlock(pv, "export async function resolveVarsList(").replace("export ", ""), {
+    CLIP_VAR_MAX: 10, toast: () => {}, t: (k) => k,
+    extractVars: (text) => text.split(" "),
+    parseVar: (tok) => ({ name: tok }),
+    isDynVar: (name) => name === "@counter",
+    dynName: (raw) => (raw.startsWith("@") ? raw.slice(1) : ""),
+    dynValue: (name, now, ctx) => (name === "counter" ? String(ctx.counter) : name),
+    fillVars: (text, values) => text.split(" ").map((tok) => values[tok] ?? tok).join(" "),
+    nextVarCounter: () => ++counter,
+    promptVarsWindow: async () => answer,
+    invoke: async () => "",
+  });
+  later(async () => {
+    answer = null; // the dialog is cancelled
+    const cancelled = await sb.resolveVarsList(["@counter name"]);
+    check(cancelled === null && counter === 0, `a cancelled dialog leaves the counter alone (counter ${counter})`);
+    answer = { name: "Ann" };
+    const done = await sb.resolveVarsList(["@counter name"]);
+    check(counter === 1 && done[0] === "1 Ann", `a finished dialog uses one counter value (got ${JSON.stringify(done)}, counter ${counter})`);
+    const only = await sb.resolveVarsList(["@counter"]);
+    check(counter === 2 && only[0] === "2", "a text with only the counter still gets the next value");
+  });
+});
+
+let guard;
+const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
+Promise.race([Promise.all(pending), timedOut]).then(() => {
+  clearTimeout(guard);
+  if (problems.length) {
     console.error("FAIL");
     for (const p of problems) console.error("  - " + p);
     process.exit(1);

@@ -240,23 +240,29 @@ export async function resolveVarsList(texts) {
   for (const tok of tokens) {
     (isDynVar(parseVar(tok).name) ? dyn : ask).push(tok);
   }
+  const ctx = { clip: "", user: "", counter: 0 };
+  const isCounter = (tok) => dynName(parseVar(tok).name) === "counter";
   if (dyn.length) {
     const names = new Set(dyn.map((tok) => dynName(parseVar(tok).name)));
-    const ctx = { clip: "", user: "", counter: 0 };
     if (names.has("clipboard")) {
       ctx.clip = String(await invoke("clipboard_text").catch(() => "") || "").slice(0, CLIP_VAR_MAX);
       if (!ctx.clip) toast(t("clipVarEmpty")); // image/file payload, or an empty clipboard
     }
     if (names.has("username")) ctx.user = String(await invoke("os_user_name").catch(() => "") || "");
-    if (names.has("counter")) ctx.counter = nextVarCounter();
     const now = new Date();
-    for (const tok of dyn) values[tok] = dynValue(dynName(parseVar(tok).name), now, ctx);
+    for (const tok of dyn) if (!isCounter(tok)) values[tok] = dynValue(dynName(parseVar(tok).name), now, ctx);
   }
   if (ask.length) {
     const filled = await promptVarsWindow(ask);
     if (filled === false) { toast(t("varsWindowFailed")); return null; }
     if (!filled) return null;
     Object.assign(values, filled);
+  }
+  // The counter advances only once the copy is going ahead: a cancelled dialog must not burn a value.
+  if (dyn.some(isCounter)) {
+    ctx.counter = nextVarCounter();
+    const now = new Date();
+    for (const tok of dyn) if (isCounter(tok)) values[tok] = dynValue("counter", now, ctx);
   }
   return texts.map((text) => fillVars(text, values));
 }
