@@ -375,6 +375,12 @@ SNIP_HOLD_PROBE = """
         while (!redo.disabled && redos < 80) { redo.click(); redos++; await sleep(20); }
         if (redos !== 50) errs.push('859: redo walked ' + redos + ' resizes, wanted 50');
         $('snip-edit-cancel').click();
+        await sleep(100);
+        // The session holds edits: Cancel asks before throwing them away, and the question
+        // is drawn above the editor.
+        if (!visible($('confirm-modal')) || !visible(edit)) errs.push('859: Cancel with edits did not ask before closing');
+        else if (Number(getComputedStyle($('confirm-modal')).zIndex) <= Number(getComputedStyle(edit).zIndex)) errs.push('859: the discard question sits behind the editor');
+        $('confirm-ok').click();
         await sleep(200);
         const after = window.__snipEditHeld();
         if (after.ops || after.redo || after.img || after.raw || after.resizes) errs.push('859: closing the editor left the session alive: ' + JSON.stringify(after));
@@ -397,6 +403,8 @@ SNIP_HOLD_PROBE = """
         const behind = window.__snipEditHeld().resizes;
         if (behind !== 0) errs.push('859: a resize behind the undo limit still holds its earlier image: ' + behind);
         $('snip-edit-cancel').click();
+        await sleep(100);
+        $('confirm-ok').click();
       }
     }
 """
