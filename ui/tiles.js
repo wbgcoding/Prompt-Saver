@@ -7,7 +7,7 @@ import { FLAG_GATES } from "./expertConfig.js";
 import { applyCopySizeLevel, DRAG_OUT_MODS, fileUri, rotateBadgeLabel } from "./floatShared.js";
 import { activeView, clearViewDropHover, dropTilesOnView, gridKeyOf, layoutOf, openGridSizeFor, openMiniMenu, placeFav, renderGrid, resolveViewDropTarget, updateViewDropHover, viewsContaining } from "./views.js";
 import { dialogTokens, peekRotatedText } from "./promptVars.js";
-import { copyOnCooldown, copyTextWithVars, maybeCloseOnCopy, recordCopy } from "./copyFlow.js";
+import { blockedByCooldown, copyTextWithVars, maybeCloseOnCopy, recordCopy } from "./copyFlow.js";
 import { copyResolved, dropLibraryFront, tagMatches, thumbEl, toggleGridSelect } from "./library.js";
 import { tileTimeLines } from "./journal.js";
 import { prettyAccel, promptHotkeysOn } from "./hotkeys.js";
@@ -933,23 +933,15 @@ export function wireTiles() {
         // double-click paste shortcut would otherwise fire on the 2nd click and paste
         // stale clipboard without ever asking. A click only copies, never pastes.
         // Check the entry rotation is actually about to copy, not always entry 0.
-        // A click swallowed by the cooldown used to give no feedback at all:
-        // a quick shake says "that didn't do anything" instead of silence.
-        const blockedByCooldown = () => {
-          if (!copyOnCooldown(id)) return false;
-          el.classList.add("cooldown-blocked");
-          setTimeout(() => el.classList.remove("cooldown-blocked"), 250);
-          return true;
-        };
         if (p && dialogTokens(p, await peekRotatedText(p)).length) {
           // The cooldown comes before the dialog: a copy that just happened must not
           // ask again (a cancelled dialog starts no cooldown, so it can be reopened).
-          if (blockedByCooldown()) return;
+          if (blockedByCooldown(id, el)) return;
           await copyTextWithVars(p, el);
           return;
         }
         if (autoPasteDouble(id)) { await autoPasteNow(el); return; } // 2nd fast click pastes
-        if (blockedByCooldown()) return;
+        if (blockedByCooldown(id, el)) return;
         if (p && await copyResolved(p)) {
           showCopied(el);
           recordCopy(id);

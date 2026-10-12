@@ -116,6 +116,35 @@ section(() => {
   check(paints === 1, "a closed library is not repainted by a backfill answer");
 });
 
+// 5. Keyboard activation in the grid: a focused control keeps Enter/Space, a cooldown shakes the tile.
+section(() => {
+  const cf = read("copyFlow.js");
+  const keyFn = run(extractBlock(cf, "function controlOwnsActivateKey("), {}).controlOwnsActivateKey;
+  const target = (matches) => ({ closest: (sel) => (sel.split(",").map((x) => x.trim()).some((x) => matches.includes(x)) ? {} : null) });
+  check(keyFn(target(["button"])) === true, "Enter on a focused button must not copy the focused tile");
+  check(keyFn(target(["select"])) === true, "Enter on a focused select must not copy the focused tile");
+  check(keyFn(target(["[tabindex]"])) === true, "Enter on a tabindex element must not copy the focused tile");
+  check(keyFn(target([])) === false, "Enter on the plain page still activates the focused tile");
+  check(/&& kbFocus && !controlOwnsActivateKey\(e\.target\)/.test(cf), "the Enter/Space branch must ask controlOwnsActivateKey");
+  check(/if \(!kbFocus \|\| !flag\("keyboardNav"\) \|\| !flag\("chainPrompts"\)/.test(cf), "Shift arms chain mode only while the focus ring is in use");
+
+  let cooling = true;
+  const timers = [];
+  const sandbox = run(extractBlock(cf, "export function blockedByCooldown(").replace("export ", ""), {
+    copyOnCooldown: () => cooling,
+    setTimeout: (fn) => timers.push(fn),
+  });
+  const classes = new Set();
+  const el = { classList: { add: (c) => classes.add(c), remove: (c) => classes.delete(c) } };
+  check(sandbox.blockedByCooldown("a", el) === true && classes.has("cooldown-blocked"), "a blocked keyboard activation shakes the tile");
+  timers.forEach((fn) => fn());
+  check(!classes.has("cooldown-blocked"), "the shake class is removed again");
+  check(sandbox.blockedByCooldown("a", null) === true, "a blocked copy without a tile element still reports blocked");
+  cooling = false;
+  check(sandbox.blockedByCooldown("a", el) === false && !classes.has("cooldown-blocked"), "no cooldown: nothing blocked, nothing shaken");
+  check(/if \(blockedByCooldown\(id, el\)\) return;\n  if \(dialogTokens/.test(cf), "activateTile must use the shared cooldown shake");
+});
+
 if (problems.length) {
   console.error("FAIL");
   for (const p of problems) console.error("  - " + p);

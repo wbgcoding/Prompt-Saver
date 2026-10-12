@@ -113,7 +113,7 @@ export function focusTile(id) {
 export function clearKbFocus(fade) {
   const el = kbFocus ? gridEl.querySelector(`.tile[data-id="${CSS.escape(kbFocus)}"]`) : null;
   kbFocus = null;
-  for (const t of gridEl.querySelectorAll(".tile.kb-focus")) t.classList.remove("kb-focus");
+  for (const tile of gridEl.querySelectorAll(".tile.kb-focus")) tile.classList.remove("kb-focus");
   if (fade && el) {
     el.classList.add("kb-leaving");
     setTimeout(() => el.classList.remove("kb-leaving"), 520);
@@ -140,6 +140,20 @@ export function moveKbFocus(dc, dr) {
   }
   if (best) focusTile(best);
 }
+// A copy swallowed by the cooldown would otherwise give no feedback at all: a
+// quick shake on the tile says "that didn't do anything" instead of silence.
+export function blockedByCooldown(id, el) {
+  if (!copyOnCooldown(id)) return false;
+  if (el) {
+    el.classList.add("cooldown-blocked");
+    setTimeout(() => el.classList.remove("cooldown-blocked"), 250);
+  }
+  return true;
+}
+// Enter and Space belong to a focused control (button, select, link, ...), not to the focus ring.
+function controlOwnsActivateKey(target) {
+  return !!target?.closest?.("button, select, a, summary, [role=button], [tabindex]");
+}
 // One activation path for "copy this prompt now": Enter on a focused tile and a
 // prompt hotkey both land here, so usage recording, chain semantics and
 // placeholder filling behave identically. `paste` decides whether the copy is also
@@ -150,7 +164,7 @@ export async function activateTile(id, paste = flag("autoPaste")) {
   if (!p) return;
   const el = gridEl.querySelector(`.tile[data-id="${CSS.escape(id)}"]`);
   if (chainMode) { await toggleChainPick(p); return; }
-  if (copyOnCooldown(id)) return;
+  if (blockedByCooldown(id, el)) return;
   if (dialogTokens(p, await peekRotatedText(p)).length) {
     await copyTextWithVars(p, el, paste);
   } else if (await copyResolved(p)) {
@@ -217,7 +231,7 @@ export function bindCopyFlow() {
     if (e.target?.closest?.("input, textarea, [contenteditable]")) return;
     if (document.querySelector(".overlay:not(.hidden)")) return; // a dialog is open
     if (NAV[e.key]) { e.preventDefault(); moveKbFocus(...NAV[e.key]); }
-    else if ((e.key === "Enter" || e.key === " ") && kbFocus) { e.preventDefault(); activateTile(kbFocus); }
+    else if ((e.key === "Enter" || e.key === " ") && kbFocus && !controlOwnsActivateKey(e.target)) { e.preventDefault(); activateTile(kbFocus); }
   });
   // Hold Shift during keyboard navigation to arm chaining on the fly: it switches
   // on while Shift is down and off again when released: unless a prompt was picked
@@ -227,7 +241,8 @@ export function bindCopyFlow() {
   const kbBlocked = (e) => e.target.closest("input, textarea, [contenteditable]") || document.querySelector(".overlay:not(.hidden)");
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Shift" || e.repeat || shiftChain || chainMode) return;
-    if (!flag("keyboardNav") || !flag("chainPrompts") || kbBlocked(e)) return;
+    // Only while the focus ring is in use: Shift+Tab or Shift+wheel elsewhere is not chaining.
+    if (!kbFocus || !flag("keyboardNav") || !flag("chainPrompts") || kbBlocked(e)) return;
     shiftChain = true;
     setChainMode(true);
   });
