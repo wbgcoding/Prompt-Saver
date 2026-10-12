@@ -1843,8 +1843,12 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 ::-webkit-scrollbar-corner { background: transparent; }
 /* Themed resize handle: WebView2 draws its own corner grip on every
    `resize:` field (.modal-text, .modal-notes-text, …) and ignores theme
-   variables, so it stayed a bright white square in dark themes. */
-::-webkit-resizer { background-color: var(--surface); border: 1px solid var(--border); }
+   variables, so it stayed a bright white square in dark themes. Two themed diagonal
+   strokes on a transparent square: a filled or bordered box would poke out over the
+   rounded bottom-right corner of the field. */
+::-webkit-resizer {
+  background: linear-gradient(135deg, transparent 0 52%, var(--muted) 52% 60%, transparent 60% 76%, var(--muted) 76% 84%, transparent 84%);
+}
 
 /* Scroll bodies in the feature popups reach the modal's inner edges so the
    scrollbar sits flush at the right border, while the content keeps symmetric 20px
