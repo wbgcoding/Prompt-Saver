@@ -1132,12 +1132,14 @@
             <button id="update-version" type="button" class="update-version" data-i18n-title="openReleases"></button>
             <button id="about-btn" class="ghost-btn" data-i18n="aboutTitle">About</button>
             <button id="update-btn" class="ghost-btn" data-i18n="checkUpdate">Check for updates</button>
-            <label class="field switch-field" data-i18n-title="autoUpdateHint">
-              <span data-i18n="autoUpdate">Auto update</span>
-              <input id="opt-autoupdate" type="checkbox" class="switch" />
-            </label>
-            <div class="update-interval">
-              <select id="opt-update-interval" class="modal-input" data-i18n-aria="valUpdateCheckH"></select>
+            <div class="update-auto">
+              <label class="field switch-field" data-i18n-title="autoUpdateHint">
+                <span data-i18n="autoUpdate">Auto update</span>
+                <input id="opt-autoupdate" type="checkbox" class="switch" />
+              </label>
+              <div class="update-interval">
+                <select id="opt-update-interval" class="batch-view-select" data-i18n-aria="valUpdateCheckH"></select>
+              </div>
             </div>
           </div>
         </div>

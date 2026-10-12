@@ -4103,7 +4103,8 @@ body.drag-over::after {
 /* The interval list sits right beside the switch and shows only while Auto update is on.
    Only when even that is not enough (the minimum window in a long language) the line
    wraps instead of cutting a text. */
-.update-line > .switch-field { flex: 0 0 auto; gap: 8px; white-space: nowrap; }
+.update-line > .update-auto { display: flex; flex: 1 1 auto; flex-wrap: nowrap; align-items: center; gap: 8px; min-width: 0; }
+.update-auto > .switch-field { flex: 0 0 auto; gap: 8px; white-space: nowrap; }
 .update-interval { flex: 1 1 84px; min-width: 84px; max-width: 150px; }
 /* Same 8px vertical padding as the buttons beside it, so the whole line is one height. */
 .update-interval > select { width: 100%; padding-block: 8px; }
