@@ -2,7 +2,7 @@
 // They carry their OWN tokens (floating.css), so a custom theme's colours are mapped
 // onto them; a floating button follows the same palette as the main window instead
 // of falling back to the base theme's colours.
-import { hexLuminance, inkFor, themeColorScheme } from "./floatShared.js";
+import { hexLuminance, INK_CROSSOVER, inkFor, themeColorScheme } from "./floatShared.js";
 
 const FLOAT_THEME_MAP = {
   accent: "--pill-bg",
@@ -19,7 +19,8 @@ const FLOAT_HEX = /^#[0-9a-fA-F]{6}$/;
 // "Shadow strength"), kept fresh from two sources: the theme-changed event's
 // payload and one ink_prefs() fetch at module load (covers the window before
 // the first event arrives). Defaults match the backend's own shipped default.
-let INK = { auto: true, threshold: 25, halo: true, haloStrength: 75 };
+const INK_DEFAULTS = { auto: true, threshold: 25, halo: true, haloStrength: 75 };
+let INK = { ...INK_DEFAULTS };
 let lastTheme = null;
 let lastVars = null;
 let applied = false; // true once applyFloatTheme has run at least once
@@ -40,7 +41,7 @@ const INK_HALO_RATIO = 0.7 / 0.85;
 function inkShadow(hex) {
   if (!INK.halo) return "none";
   const l = hexLuminance(hex);
-  if (!(l > 0.179) || readableInk(hex) !== "#fff") return "none";
+  if (!(l > INK_CROSSOVER) || readableInk(hex) !== "#fff") return "none";
   const a1 = INK.haloStrength / 100;
   const a2 = Number((a1 * INK_HALO_RATIO).toFixed(2));
   return `0 0 2px rgba(0, 0, 0, ${Number(a1.toFixed(2))}), 0 1px 3px rgba(0, 0, 0, ${a2})`;
@@ -95,9 +96,9 @@ function setInk(ink) {
   if (!ink) return;
   INK = {
     auto: ink.auto !== false,
-    threshold: Number.isFinite(ink.threshold) ? ink.threshold : 25,
+    threshold: Number.isFinite(ink.threshold) ? ink.threshold : INK_DEFAULTS.threshold,
     halo: ink.halo !== false,
-    haloStrength: Number.isFinite(ink.haloStrength) ? ink.haloStrength : 75,
+    haloStrength: Number.isFinite(ink.haloStrength) ? ink.haloStrength : INK_DEFAULTS.haloStrength,
   };
   if (applied) applyFloatTheme(lastTheme, lastVars);
 }

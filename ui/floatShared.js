@@ -146,8 +146,8 @@ export async function copyGate(id, copyFn, prefs) {
 // Resolve the active UI language: the explicit setting first, the browser locale
 // as fallback, matched against a list of available language codes (pass the
 // canonical LANGS export from i18n.js). Takes that list as a parameter instead of
-// importing i18n.js itself, so a caller that lazy-loads the translations (the
-// pill/folder windows have to open fast) keeps doing so.
+// importing i18n.js itself, so a window that loads the translations lazily (the
+// screenshot overlay) keeps doing so.
 export function resolveLang(settingsLanguage, langs) {
   const pref = (settingsLanguage && settingsLanguage !== "auto"
     ? settingsLanguage
@@ -179,7 +179,7 @@ export function trapTabWithin(container, e) {
   else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
 }
 
-// Which of the 7 built-in themes render dark, so every window can set the
+// Which of the built-in themes render dark, so every window can set the
 // standard `color-scheme` CSS property from the active theme name. Without it
 // a WebView2 native control that isn't styled by our own CSS -- the video
 // element's built-in three-dot menu is the one that got reported -- always
@@ -559,7 +559,7 @@ export function numberField({ input, value, min, max, step, bigStep, presets, de
   minusBtn.type = "button";
   minusBtn.className = "numfield-dec";
   minusBtn.textContent = "−";
-  minusBtn.setAttribute("aria-label", decreaseLabel || "Decrease value");
+  if (decreaseLabel || decreaseAriaKey) minusBtn.setAttribute("aria-label", decreaseLabel || decreaseAriaKey);
   // Lets the caller's own applyI18n() keep this in sync on every language
   // switch (and, for a lazily-loaded dictionary, once it finishes loading)
   // the same generic way it already refreshes every other [data-i18n-aria]
@@ -577,7 +577,7 @@ export function numberField({ input, value, min, max, step, bigStep, presets, de
   plusBtn.type = "button";
   plusBtn.className = "numfield-inc";
   plusBtn.textContent = "+";
-  plusBtn.setAttribute("aria-label", increaseLabel || "Increase value");
+  if (increaseLabel || increaseAriaKey) plusBtn.setAttribute("aria-label", increaseLabel || increaseAriaKey);
   if (increaseAriaKey) plusBtn.dataset.i18nAria = increaseAriaKey;
   plusBtn.tabIndex = -1;
 
@@ -652,7 +652,7 @@ export function numberField({ input, value, min, max, step, bigStep, presets, de
     listBtn.type = "button";
     listBtn.className = "numfield-list";
     listBtn.textContent = "▾";
-    listBtn.setAttribute("aria-label", presetsLabel || "Common values");
+    if (presetsLabel || presetsAriaKey) listBtn.setAttribute("aria-label", presetsLabel || presetsAriaKey);
     if (presetsAriaKey) listBtn.dataset.i18nAria = presetsAriaKey;
     listBtn.addEventListener("click", () => {
       if (activeNumPopTrigger === listBtn) { closeActiveNumPop(); return; } // toggle closed
