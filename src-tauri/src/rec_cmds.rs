@@ -18,6 +18,12 @@ pub(crate) fn free_space_bytes(path: &std::path::Path) -> std::io::Result<u64> {
             _ => break,
         }
     }
+    // The call wants a directory: a live recording file resolves to its folder.
+    if probe.is_file() {
+        if let Some(parent) = probe.parent().filter(|p| !p.as_os_str().is_empty()) {
+            probe = parent;
+        }
+    }
     let wide: Vec<u16> = probe.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
     let mut free_available = 0u64;
     unsafe { GetDiskFreeSpaceExW(PCWSTR(wide.as_ptr()), Some(&mut free_available), None, None) }

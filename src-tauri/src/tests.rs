@@ -1080,6 +1080,16 @@ fn free_space_bytes_returns_a_plausible_positive_number() {
     assert!(free_space_bytes(&std::env::temp_dir()).expect("free space") > 0);
 }
 
+#[test]
+fn free_space_bytes_accepts_an_existing_file() {
+    // The recording loop passes the live output file, not its folder.
+    let file = std::env::temp_dir().join(format!("{}-test-free-space-file.tmp", brand::SLUG));
+    std::fs::write(&file, b"x").unwrap();
+    let result = free_space_bytes(&file);
+    let _ = std::fs::remove_file(&file);
+    assert!(result.expect("free space for a file path") > 0);
+}
+
 // ---- Video editor (242-245): real ffmpeg/ffprobe, no capture hardware needed ----
 
 fn test_ffprobe() -> Option<PathBuf> {
