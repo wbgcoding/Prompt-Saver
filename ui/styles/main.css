@@ -3416,6 +3416,10 @@ select.modal-input { padding-right: 30px; }
    Save row away, and the 120px floor stops the cap from collapsing to a sliver on
    a very short window (the dialog scrolls there instead). */
 .modal-collapse-body { max-height: min(240px, max(120px, 34vh)); overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 4px; }
+/* The editor's Advanced panel grows with its content and only the dialog body scrolls:
+   an inner scroller beside the dialog's own gave two scrollbars and a wheel that
+   scrolled the inner one first. */
+#modal-advanced-body { max-height: none; overflow-y: visible; }
 /* The collapsed hotkey row still shows the bound combination, so the binding
    is readable without opening the row. */
 .modal-collapse-side { display: flex; align-items: center; gap: 8px; min-width: 0; }
