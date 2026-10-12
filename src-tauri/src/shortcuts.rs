@@ -549,6 +549,18 @@ pub(crate) fn accel_is_free(app: &AppHandle, sc: Accel) -> bool {
     }
 }
 
+// Whether a combination is already bound inside the app. The recording stop and
+// pause keys only count while recording and their own switch are on, the same gate
+// the arming side applies.
+pub(crate) fn hotkey_in_use(settings: &Settings, prompts: &[Prompt], editing: Option<&str>, sc: Accel) -> bool {
+    let flags = &settings.ui_flags;
+    parse_accel(&settings.hotkey) == Some(sc)
+        || parse_accel(&settings.voice_hotkey) == Some(sc)
+        || parse_accel(active_rec_hotkey(&settings.rec_stop_hotkey, "recStopHotkey", flags)) == Some(sc)
+        || parse_accel(active_rec_hotkey(&settings.rec_pause_hotkey, "recPauseHotkey", flags)) == Some(sc)
+        || prompts.iter().any(|p| Some(p.id.as_str()) != editing && parse_accel(&p.hotkey) == Some(sc))
+}
+
 // Everything the editor needs to know BEFORE a binding is stored: shape, blocklist,
 // duplicates inside the app, and whether another running app already owns it.
 // `id` is the prompt being edited (its own current binding is not a duplicate).
@@ -566,14 +578,7 @@ pub(crate) async fn check_hotkey(
     // Read what is bound, then drop the lock: registering hops to the main thread.
     let taken = {
         let store = lock(&state);
-        parse_accel(&store.settings.hotkey) == Some(sc)
-            || parse_accel(&store.settings.voice_hotkey) == Some(sc)
-            || parse_accel(&store.settings.rec_stop_hotkey) == Some(sc)
-            || parse_accel(&store.settings.rec_pause_hotkey) == Some(sc)
-            || store
-                .prompts
-                .iter()
-                .any(|p| Some(&p.id) != id.as_ref() && parse_accel(&p.hotkey) == Some(sc))
+        hotkey_in_use(&store.settings, &store.prompts, id.as_deref(), sc)
     };
     if taken {
         return Err(HK_TAKEN.to_string());

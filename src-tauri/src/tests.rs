@@ -13609,6 +13609,22 @@ fn the_editor_rejects_a_prompt_hotkey_matching_the_active_recording_hotkeys() {
     assert_eq!(sanitize_hotkey("Ctrl+Alt+S", "", "", "", "", &others).unwrap(), "Ctrl+Alt+S");
 }
 
+#[test]
+fn check_hotkey_ignores_recording_hotkeys_that_are_switched_off() {
+    let mut settings = Settings::default();
+    settings.rec_stop_hotkey = "Ctrl+Alt+S".to_string();
+    settings.rec_pause_hotkey = "Ctrl+Alt+O".to_string();
+    let stop = parse_accel("Ctrl+Alt+S").unwrap();
+    let pause = parse_accel("Ctrl+Alt+O").unwrap();
+    assert!(hotkey_in_use(&settings, &[], None, stop));
+    assert!(hotkey_in_use(&settings, &[], None, pause));
+    settings.ui_flags.insert("recPauseHotkey".to_string(), false);
+    assert!(hotkey_in_use(&settings, &[], None, stop));
+    assert!(!hotkey_in_use(&settings, &[], None, pause));
+    settings.ui_flags.insert("screenRecord".to_string(), false);
+    assert!(!hotkey_in_use(&settings, &[], None, stop));
+}
+
 // A prompt stored before per-prompt hotkeys existed has no hotkey field at all: it must load with an
 // empty binding instead of failing the whole row.
 #[test]
