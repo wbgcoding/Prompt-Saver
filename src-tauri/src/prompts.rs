@@ -1540,7 +1540,8 @@ pub(crate) async fn restore_version_as_new(app: AppHandle, state: State<'_, Db>,
         store.prompts.push(prompt.clone());
         if !save_prompts(&app, &store) {
             store.prompts.pop();
-            store.settings.active_view_mut().members.retain(|m| *m != prompt.id);
+            // Its cell goes too, or the unsaved copy would keep it occupied.
+            strip_ids_from_view(store.settings.active_view_mut(), std::slice::from_ref(&prompt.id));
             return Err("save-failed".into());
         }
         save_settings(&app, &store.settings);
