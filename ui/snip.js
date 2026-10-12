@@ -137,7 +137,10 @@ function resetSession() {
 async function beginSession() {
   resetSession();
   const tok = sessionSeq;
-  const b = await invoke("snip_background", { index: IDX });
+  let b = null;
+  try {
+    b = await invoke("snip_background", { index: IDX });
+  } catch { /* treated like an empty answer: the session is cancelled below */ }
   if (tok !== sessionSeq) return; // a newer session already started while this was in flight
   if (!b) { invoke("snip_cancel").catch(() => {}); return; }
   FULL_W = b.width || 1;
@@ -595,8 +598,8 @@ async function pickHere() {
   }
 }
 
-// Text for a failed color pick: translated, never the raw backend string.
-function pickErrorText(err) {
+// Text for a failed recorder-target pick: translated, never the raw backend string.
+function targetPickErrorText(err) {
   return snipTx ? snipErrMessage(err, snipTx, "snip") : T.pickFailed;
 }
 
@@ -698,14 +701,12 @@ window.addEventListener("mouseup", async (e) => {
       }
     } catch (err) {
       busy = false;
-      showError(pickErrorText(err));
+      showError(targetPickErrorText(err));
     }
     return;
   }
   if (pickMode) {
     if (e.button !== 0) return;
-    // `cur` already tracks the pointer; only seed it if the mouse never moved. A
-    // click must not undo an arrow-key nudge made from the same spot.
     // `cur` already tracks the pointer once it has moved (or an arrow key aimed it);
     // a click that follows neither still has to take the pixel under the pointer,
     // never the seed the session started on.
