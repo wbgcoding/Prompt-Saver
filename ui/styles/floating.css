@@ -858,7 +858,7 @@ body.tray-menu-body {
 .tray-menu-search {
   flex: 0 0 30px;
   box-sizing: border-box;
-  margin: 0 10px 6px;
+  margin: 0 10px;
   padding: 0 8px;
   border: none;
   border-bottom: 1px solid var(--menu-line);

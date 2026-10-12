@@ -380,6 +380,9 @@ UNDO_OFF_PROBE = """
     .find(b => (b.querySelector('span') || {}).textContent === 'Home (copy)');
   try {
     for (let i = 0; i < 80 && !document.querySelector('.view-btn[data-view-id="home"]'); i++) await sleep(100);
+    // The first-run take-over question is still open: a later question waits behind it, so answer it.
+    for (let i = 0; i < 30 && !confirmOpen(); i++) await sleep(100);
+    if (confirmOpen()) await click('confirm-cancel');
     // View delete.
     const home = document.querySelector('.view-btn[data-view-id="home"]');
     home.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));

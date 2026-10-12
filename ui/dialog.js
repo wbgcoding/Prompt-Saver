@@ -16,31 +16,38 @@ export const EYE_SVG ='<svg viewBox="0 0 24 24" width="16" height="16" aria-hidd
 // One dialog is on screen at a time: a question that arrives while another is open
 // (an event from another window, say) waits and is shown, with its own focus restore,
 // once the open one is answered. It never answers the open one in the user's place.
+// On an idle queue a dialog opens at once, in the same tick as the call.
 const dialogQueue = [];
 let dialogOpen = false;
 export function confirmDialog(opts) {
   return new Promise((resolve, reject) => {
-    dialogQueue.push({ opts, resolve, reject });
-    if (!dialogOpen) showNextDialog();
+    const item = { opts, resolve, reject };
+    if (!dialogOpen && !dialogQueue.length) showItem(item);
+    else dialogQueue.push(item);
   });
 }
-function showNextDialog() {
-  const next = dialogQueue.shift();
-  if (!next) { dialogOpen = false; return; }
+function showItem(item) {
   dialogOpen = true;
-  let shown;
   try {
-    shown = showConfirmDialog(next.opts);
+    showConfirmDialog(item.opts, onDialogClosed).then(item.resolve, item.reject);
   } catch (err) {
-    next.reject(err);
+    dialogOpen = false;
+    item.reject(err);
     showNextDialog();
-    return;
   }
-  shown.then(next.resolve, next.reject).finally(() => {
-    // After a tick, so the answered caller can still read its checkboxes and input
-    // before the next dialog rebuilds them.
-    setTimeout(showNextDialog, 0);
-  });
+}
+// Runs inside the answer itself, before the caller continues, so a dialog opened by
+// that caller finds the queue idle.
+function onDialogClosed() {
+  dialogOpen = false;
+  // The next waiting dialog shows after a tick, so the answered caller can still read
+  // its checkboxes and input before they are rebuilt.
+  if (dialogQueue.length) setTimeout(showNextDialog, 0);
+}
+function showNextDialog() {
+  if (dialogOpen) return;
+  const next = dialogQueue.shift();
+  if (next) showItem(next);
 }
 
 // Themed yes/no dialog. Resolves true on confirm, false on cancel / dismiss.
@@ -58,7 +65,7 @@ let confirmCleanup = null;
 // resolves to the string "alt": a question with two different ways to go ahead
 // (delete the old sync folder, keep it) plus the way out. Left out, the dialog is
 // exactly the two-button one every other caller gets.
-function showConfirmDialog({ title, message, confirmLabel, cancelLabel, altLabel, icon, input, checkboxes, checkboxesOptional = false, danger = true, oneButton = false }) {
+function showConfirmDialog({ title, message, confirmLabel, cancelLabel, altLabel, icon, input, checkboxes, checkboxesOptional = false, danger = true, oneButton = false }, onClosed) {
   // Restored once this dialog resolves, so a keyboard user's next Tab
   // continues from where they were instead of restarting from the page top.
   const opener = document.activeElement;
@@ -136,6 +143,7 @@ function showConfirmDialog({ title, message, confirmLabel, cancelLabel, altLabel
       eye.removeEventListener("click", onEye);
       confirmCleanup = null;
       opener?.focus?.();
+      onClosed?.();
       resolve(val);
     };
     const finish = (okPressed) => done(input ? (okPressed ? field.value : null) : okPressed);

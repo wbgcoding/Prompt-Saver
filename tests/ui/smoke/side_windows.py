@@ -1597,7 +1597,7 @@ def run(browser, tmp):
             ("launcher.html", (560, 420), LAUNCHER_PROBE, 15000),
             ("launcher_prefill.html", (560, 420), LAUNCHER_PREFILL_PROBE, 15000),
             ("launcher_md.html", (560, 420), LAUNCHER_MD_STUB + LAUNCHER_MD_PROBE, 15000),
-            ("tray.html", (240, 360), TRAY_PROBE, 15000),
+            ("tray.html", (240, 370), TRAY_PROBE, 15000),  # 271 px of content (the backend sizes the window the same way) plus the headless frame
             ("recbar.html", (320, 56), RECBAR_PROBE, 15000),
             ("camera.html", (420, 620), CAMERA_STUB + CAMERA_PROBE, 15000),
             ("camera_dirfail.html", (420, 620), CAMERA_STUB + CAMERA_DIRFAIL_STUB + CAMERA_DIRFAIL_PROBE, 15000),

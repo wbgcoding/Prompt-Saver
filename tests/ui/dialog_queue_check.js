@@ -77,6 +77,15 @@ const open = (name) => confirmDialog({ title: name, message: "m", confirmLabel: 
   els["confirm-cancel"].fire("click");
   check("D answered no", await d, false);
 
+  // A caller that opens its next question right after being answered finds the queue idle.
+  const f = open("F");
+  els["confirm-ok"].fire("click");
+  await f;
+  const g = open("G");
+  check("a dialog opened right after an answer shows in the same tick", title(), "G");
+  els["confirm-cancel"].fire("click");
+  check("G answered no", await g, false);
+
   if (problems.length) {
     console.log("dialog_queue_check: FAIL\n  " + problems.join("\n  "));
     process.exit(1);
