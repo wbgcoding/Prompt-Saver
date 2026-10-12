@@ -11282,6 +11282,14 @@ fn find_similar_prompt_ignores_an_unrelated_entry_and_itself() {
 }
 
 #[test]
+fn encode_snip_jpeg_refuses_a_side_beyond_sixteen_bits() {
+    let tiny = vec![255u8; 2 * 2 * 4];
+    assert!(encode_snip_jpeg(&tiny, 2, 2, 90).is_some());
+    assert!(encode_snip_jpeg(&tiny, 65_536 + 2, 2, 90).is_none());
+    assert!(encode_snip_jpeg(&tiny, 2, 65_536 + 2, 90).is_none());
+}
+
+#[test]
 fn similar_inputs_leaves_confidential_prompts_out_on_both_sides() {
     let mut a = test_prompt("a");
     a.text = "Please write a short friendly email".into();

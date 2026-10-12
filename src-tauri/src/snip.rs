@@ -1411,9 +1411,11 @@ pub(crate) const SNIP_SAVE_Q: u8 = 90;
 // Encode RGBA bytes to a JPEG for the overlay preview. jpeg-encoder = SIMD baseline JPEG,
 // much faster than the image crate's. Returns the raw JPEG bytes.
 pub(crate) fn encode_snip_jpeg(rgba: &[u8], w: u32, h: u32, quality: u8) -> Option<Vec<u8>> {
+    // JPEG sides are 16 bit: a larger capture is refused, not wrapped around.
+    let (w16, h16) = (u16::try_from(w).ok()?, u16::try_from(h).ok()?);
     let mut buf = Vec::<u8>::new();
     jpeg_encoder::Encoder::new(&mut buf, quality)
-        .encode(rgba, w as u16, h as u16, jpeg_encoder::ColorType::Rgba)
+        .encode(rgba, w16, h16, jpeg_encoder::ColorType::Rgba)
         .ok()?;
     Some(buf)
 }
