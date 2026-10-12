@@ -431,7 +431,7 @@ SECTION = """\
               out.errors.push('OCR langs modal: row ' + i + ' name is not "' + cap.label + '"');
             }
             const sizeEl = row.querySelector('.lang-row-size');
-            const expectSize = (cap.state === 'Installed' ? cap.install_size : cap.download_size) == null ? '\u2014' : 'MB';
+            const expectSize = (cap.state === 'Installed' ? cap.install_size : cap.download_size) == null ? '\u2013' : 'MB';
             if (!sizeEl || !sizeEl.textContent.includes(expectSize)) {
               out.errors.push('OCR langs modal: row ' + i + ' size column does not show "' + expectSize + '"');
             }
@@ -462,7 +462,7 @@ SECTION = """\
           if (!buttons.some((b) => /12[.,]4 MB/.test(b.textContent))) {
             out.errors.push('OCR langs modal: download button does not show the size in its own label');
           }
-          if (!buttons.some((b) => b.textContent.includes('\u2014'))) {
+          if (!buttons.some((b) => b.textContent.includes('\u2013'))) {
             out.errors.push('OCR langs modal: a missing size did not render as a dash');
           }
           layoutScan('OCR langs modal');

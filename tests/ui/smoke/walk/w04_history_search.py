@@ -711,6 +711,9 @@ SECTION = """\
           }
           document.getElementById('error-log-clear').click();
           await sleep(150);
+          // Clearing asks first: confirm it.
+          document.getElementById('confirm-ok').click();
+          await sleep(150);
           if (!window.__SMOKE_CALLS__.includes('clear_error_log')) {
             out.errors.push('439: clear did not call clear_error_log');
           }

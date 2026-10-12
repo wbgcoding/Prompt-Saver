@@ -379,7 +379,7 @@ SECTION = """\
               if (!li[0].querySelector('.backup-name-row-kind') || !li[0].querySelector('.backup-name-row-chars')) {
                 out.errors.push('a backup name row is missing its type chip or char count');
               }
-              if (li[1].querySelector('.backup-name-row-chars').textContent !== '\u2014') {
+              if (li[1].querySelector('.backup-name-row-chars').textContent !== '\u2013') {
                 out.errors.push('a zero-char (legacy-cache) row does not show the placeholder dash');
               }
             }
