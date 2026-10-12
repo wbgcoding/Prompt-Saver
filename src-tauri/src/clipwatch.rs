@@ -165,7 +165,9 @@ fn read_dword_format(fmt: u32) -> Option<u32> {
         }
         let h = GetClipboardData(fmt);
         let value = if h != 0 {
-            let ptr = GlobalLock(h);
+            // The block belongs to another program: it may be smaller than a DWORD.
+            let big_enough = GlobalSize(h) >= std::mem::size_of::<u32>();
+            let ptr = if big_enough { GlobalLock(h) } else { std::ptr::null_mut() };
             let v = if ptr.is_null() { None } else { Some(std::ptr::read_unaligned(ptr as *const u32)) };
             if !ptr.is_null() { GlobalUnlock(h); }
             v
