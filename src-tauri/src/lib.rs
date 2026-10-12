@@ -879,6 +879,7 @@ pub fn run() {
             backups::restore_backup,
             backups::backup_contents,
             clip::clip_inbox_list,
+            clip::clip_inbox_count,
             clip::clip_inbox_dismiss,
             clip::clip_inbox_clear,
             clip::restore_clip_inbox,

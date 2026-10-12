@@ -13768,8 +13768,10 @@ fn a_failing_item_leaves_the_clip_inbox_untouched() {
     ];
     assert!(db_restore_clips(&conn, &items, 50).is_err());
     assert!(db_list_clips(&conn).is_empty(), "no partial restore");
+    assert_eq!(db_count_clips(&conn), 0);
     assert!(db_restore_clips(&conn, &[ClipRestoreItem { ts: 1, text: "a".into() }, ClipRestoreItem { ts: 3, text: "b".into() }], 50).is_ok());
     assert_eq!(db_list_clips(&conn).len(), 2);
+    assert_eq!(db_count_clips(&conn), 2, "the count matches the list without unsealing it");
 }
 
 #[test]

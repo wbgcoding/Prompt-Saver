@@ -43,7 +43,7 @@ export async function offerClipInboxCleanup() {
 // Something changed in the stored entries: reload the copy history if it is on screen.
 export async function refreshClipInbox() {
   if (isHistoryTabOpen()) { await loadJournal(); return; }
-  clipStored = (await invoke("clip_inbox_list").catch(() => [])).length;
+  clipStored = Number(await invoke("clip_inbox_count").catch(() => 0)) || 0;
 }
 
 // One history entry on a single line: the same thumbnail as a library row, the name, a

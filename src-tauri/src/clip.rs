@@ -143,6 +143,15 @@ pub(crate) fn note_own_copy(_text: &str) {}
 pub(crate) async fn clip_inbox_list(app: AppHandle) -> Result<Vec<ClipItem>, String> {
     Ok(db_conn(&app).map(|c| db_list_clips(&c)).unwrap_or_default())
 }
+// How many entries the inbox holds, without unsealing any of them: the tab badge
+// asks on every clipboard change while the watcher is on.
+#[tauri::command]
+pub(crate) async fn clip_inbox_count(app: AppHandle) -> Result<u64, String> {
+    Ok(db_conn(&app).map(|c| db_count_clips(&c)).unwrap_or(0))
+}
+pub(crate) fn db_count_clips(conn: &Connection) -> u64 {
+    conn.query_row("SELECT COUNT(*) FROM clip_inbox", [], |r| r.get::<_, i64>(0)).map(|n| n.max(0) as u64).unwrap_or(0)
+}
 #[tauri::command]
 pub(crate) async fn clip_inbox_dismiss(app: AppHandle, id: i64) -> Result<(), String> {
     // Privacy-sensitive rows: a swallowed failure here used to always answer

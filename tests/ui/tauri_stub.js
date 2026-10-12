@@ -884,6 +884,8 @@ const RESULTS = {
   // "copied elsewhere", to dismiss one of, and to snapshot and replay on a clear.
   // Clear and restore stay no-ops so every later check still finds both.
   clip_inbox_list: () => CLIP_INBOX.map((x) => ({ ...x })),
+  // Follows a probe's own clip_inbox_list override, so both answers always agree.
+  clip_inbox_count: () => RESULTS.clip_inbox_list().length,
   clip_inbox_dismiss: (a) => { CLIP_INBOX = CLIP_INBOX.filter((x) => x.id !== (a && a.id)); return null; },
   restore_clip_inbox: () => null,
   // P31: two snapshots for p6, each one word off from the next, so the diff
