@@ -81,7 +81,8 @@ SECTION = """\
           out.errors.push('the short status is taller than the old long sentence was: ' + Math.round(lineH) + ' vs ' + Math.round(lineHOld));
         }
         uv.textContent = 'Version 2.7.0';
-        const kids727 = [...line1.children];
+        // The switch and its interval sit in one non-wrapping group; count them as two controls.
+        const kids727 = [...line1.children].flatMap((k) => (k.classList.contains('update-auto') ? [...k.children] : [k]));
         if (kids727.length !== 5 || !line1.contains(ub) || !line1.contains(ui727)) {
           out.errors.push('727: the System line does not hold all five controls (' + kids727.length + ')');
         }

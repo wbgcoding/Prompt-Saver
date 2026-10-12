@@ -1692,6 +1692,10 @@ def run(browser, tmp):
     if (panelOpen()) errs.push('829: the first Escape left the panel open');
     if (document.getElementById('snip-edit').classList.contains('hidden')) errs.push('829: the first Escape closed the whole editor');
     await esc();
+    // The stroke drawn above is an edit: the second Escape asks before closing.
+    if (document.getElementById('confirm-modal').classList.contains('hidden')) errs.push('829: the second Escape with an edit did not ask before closing');
+    else document.getElementById('confirm-ok').click();
+    await sleep(120);
     if (!document.getElementById('snip-edit').classList.contains('hidden')) errs.push('829: the second Escape did not close the editor');
 """)
     failed += ar_probe('bq829c', '829: popups that belong to the panel do not close it', 'index', '880x600', '', snip_panel_common + r"""
