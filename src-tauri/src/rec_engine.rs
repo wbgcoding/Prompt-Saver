@@ -107,8 +107,8 @@ impl RecordClock {
 // Pure byte-shuffle: crops to (crop_x, crop_y, crop_w, crop_h) within a
 // possibly padded, top-down source (row spacing `stride`), copying into a
 // tightly packed, bottom-up destination -- what VideoEncoder::send_frame_buffer's
-// own docs say it expects. A full-frame flip (238's monitor/window targets) is
-// just this with the crop set to the whole frame; region recording (238's third
+// own docs say it expects. A full-frame flip (the monitor/window targets) is
+// just this with the crop set to the whole frame; region recording (the third
 // target kind) uses a real sub-rectangle, since WGC itself has no region capture
 // source and always delivers the whole monitor. Independent of any capture-frame
 // type so it is unit-testable without a GPU or a Windows build.
@@ -251,7 +251,7 @@ pub(crate) fn place_frame_in_canvas(
     (out, dst_stride)
 }
 
-// The combined-display rectangle (369's default recording canvas for a
+// The combined-display rectangle (the default recording canvas for a
 // Window target), via the same desktop-geometry metrics Windows itself
 // already tracks -- a plain four-integer query, not an image read, and
 // already the union of every display, so no per-display enumeration or
@@ -280,7 +280,7 @@ pub(crate) fn virtual_screen_bounds() -> Result<(i32, i32, u32, u32), String> {
     Ok((x, y, w as u32, h as u32))
 }
 
-// Whether an output size of (w, h) is small enough to even attempt (369's
+// Whether an output size of (w, h) is small enough to even attempt (the
 // safety guard against the memory cost -- and possible outright refusal --
 // of a very large combined-display output). `build_encoder` is still tried
 // on top of this and can still fail on its own; this only short-circuits the
@@ -318,7 +318,7 @@ pub(crate) fn recording_limit_reached(elapsed_secs: u64, file_len: u64, max_min:
     by_time || by_size
 }
 
-// The bounds of whichever display currently contains (x, y) -- 369's "the
+// The bounds of whichever display currently contains (x, y) -- the "the
 // display the window is on" fallback tier, using the same Win32 lookup
 // `resolve_region_monitor` already does for region recordings (no second way
 // to ask which display a point belongs to).
@@ -390,7 +390,7 @@ impl UsedAreaTracker {
     }
 }
 
-// 369's bitrate scaling: `recBitrateKbps` is defined as the rate for a
+// Bitrate scaling: `recBitrateKbps` is defined as the rate for a
 // full-canvas recording, so when the canvas ends up larger than the window
 // itself (the every-display case), the encoder's bitrate is scaled down by
 // the fraction the window occupies of that canvas -- otherwise a small

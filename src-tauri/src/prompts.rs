@@ -676,7 +676,7 @@ pub(crate) fn discarded_stale_in(dir: &Path, age: Duration) -> (u32, u64) {
     (count, bytes)
 }
 
-// 281's "Jetzt aufräumen" -- runs the same sweep on demand and always reports
+// "Jetzt aufräumen" -- runs the same sweep on demand and always reports
 // what it did, even when that is nothing: an explicit request needs an answer
 // either way, unlike the silent background sweep above.
 #[tauri::command]

@@ -41,13 +41,16 @@ INLINE_ITEM_REF = re.compile(
     r"(?<!\w)\(\s*\d{2,3}(?:\s*/\s*\d{2,3})*\s*[):]"  # (88)  (215):  (90/92) -- not O(64)
     r"|(?<![\w.,%–/-])\b\d{2,3}:\s+[a-zA-Z]"      # 34: catch  101: load_store
     r"|\b\d{2,3}\s+review\b"                      # 122 review fix
+    r"|\b\d{2,3}'s\b"                             # 131's global hotkey
+    r"|(?<![\w.])\d{2,3}/\d{2,3}(?=:|\s+flow\b)"  # 117/118: editor  pre-117/118 flow
+    r"|\(\s*[a-zA-Z][^()]*,\s*\d{2,3}\s*\)"       # (the feature switch, 93)
 )
 # "// 43" -- the bare item number, with nothing else in the comment at all. A
 # comment that says only a number tells a reader nothing either way.
 BARE_NUMBER_COMMENT = re.compile(r"^\s*\d+(?:\s*[-,/]\s*\d+)*\s*$")
 # The same thing spelled out, in either language the plans were written in.
 WORK_ITEM_WORD = re.compile(
-    r"\b(?:points?|items?|punkte?|entscheidung|runde|round|phase)\s+(?:\d+|[A-Z]\b)",
+    r"\b(?:points?|items?|punkte?|entscheidung|runde|round|phase|vorschlag|suggestion)\s+(?:\d+|[A-Z]\b)",
     re.IGNORECASE,
 )
 # A work-item code buried anywhere in a comment -- e.g. a section divider like

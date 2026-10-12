@@ -213,7 +213,7 @@ pub(crate) async fn open_file_in_editor(app: AppHandle, path: String) -> Result<
 
 // Target folder for a plain "Save": a custom expert path, else
 // Videos\<app>. Mirrors screenshot_dir. The raw capture itself always keeps
-// landing in <data>/recordings until explicitly saved/copied -- 281's sweep
+// landing in <data>/recordings until explicitly saved/copied -- the sweep
 // stays in charge of whatever is still undecided there.
 pub(crate) fn recording_dir(custom: &str) -> PathBuf {
     let c = custom.trim();

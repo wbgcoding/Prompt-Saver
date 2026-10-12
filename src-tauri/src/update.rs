@@ -322,7 +322,7 @@ pub(crate) fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled
     if is_capture {
         apply_capture_exclusion_all(&app, !enabled);
     }
-    // The window itself now always runs (started at boot) since 91's
+    // The window itself now always runs (started at boot) since the
     // auto-advance session needs it independently of this toggle; on/off just
     // changes what on_clipboard_update does with each event, checked live.
     let _ = is_clip;

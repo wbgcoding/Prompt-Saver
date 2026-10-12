@@ -105,7 +105,7 @@ pub(crate) fn backup_prompt_count(folder: &std::path::Path) -> Option<usize> {
 }
 
 // Total characters across a rotating prompt's entry 1 (`text`) and every variant:
-// what the version history diff and 90-94's auto-advance already treat as "the
+// what the version history diff and the auto-advance already treat as "the
 // whole prompt", so the backup list counts the same thing.
 pub(crate) fn prompt_char_count(p: &Prompt) -> usize {
     p.text.chars().count() + p.variants.iter().map(|v| v.chars().count()).sum::<usize>()

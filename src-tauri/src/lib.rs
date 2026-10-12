@@ -440,7 +440,7 @@ pub fn run() {
 
             // The message-only window is harmless to run unconditionally (same
             // reasoning as the sync poll below): on_clipboard_update itself checks the
-            // clipWatcher opt-in on every event, and 91's auto-advance session needs this
+            // clipWatcher opt-in on every event, and the auto-advance session needs this
             // window regardless of that flag.
             #[cfg(windows)]
             clipwatch::start(handle.clone());

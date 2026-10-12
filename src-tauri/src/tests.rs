@@ -2654,7 +2654,7 @@ fn rec_audio_real_10min_drift() {
 }
 
 // Neither source active: the plain (audio-free) feeder path is exactly
-// 191/238's original code, unchanged. Still 2 "trak" boxes though -- a
+// The original code, unchanged. Still 2 "trak" boxes though -- a
 // real-hardware run of this test is what surfaced that windows-capture's
 // MediaStreamSource is built with both a video AND an audio descriptor
 // regardless of AudioSettingsBuilder::disabled (see encoder.rs's
@@ -2834,7 +2834,7 @@ fn letterbox_frame_top_down_crops_a_larger_live_frame() {
 
 #[test]
 fn letterbox_frame_top_down_is_place_frame_in_canvas_at_the_origin() {
-    // 369's placement helper must reproduce the existing (0, 0) case
+    // The placement helper must reproduce the existing (0, 0) case
     // byte-for-byte -- letterbox_frame_top_down is only ever this now.
     let raw = vec![9u8, 8, 7, 255];
     assert_eq!(letterbox_frame_top_down(&raw, 1, 1, 4, 2, 2), place_frame_in_canvas(&raw, 1, 1, 4, 2, 2, 0, 0));

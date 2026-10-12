@@ -261,7 +261,7 @@ impl CapKind {
         }
     }
     // Temp-file name segment AND the ui_flags/ui_values/ui_texts setting-key
-    // prefix -- "voice", not "speech", to match the expert-menu keys (126's
+    // prefix -- "voice", not "speech", to match the expert-menu keys (the
     // table of language-pack settings).
     pub(super) fn slug(self) -> &'static str {
         match self {
