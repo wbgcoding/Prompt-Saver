@@ -124,15 +124,7 @@ pub(crate) async fn usage_stats(app: AppHandle, state: State<'_, Db>, top_n: usi
 
     let store = lock(&state);
     let usage = &store.settings.usage;
-    let name_of = |p: &Prompt| -> String {
-        if !p.name.is_empty() {
-            p.name.clone()
-        } else if !p.text.is_empty() {
-            p.text.chars().take(40).collect()
-        } else {
-            p.id.clone()
-        }
-    };
+    let name_of = stats_display_name;
     let total_prompts = store.prompts.len();
     let mut used: Vec<&Prompt> = store
         .prompts
@@ -179,20 +171,24 @@ pub(crate) struct StatsExportEntry {
     pub(crate) last_used: u64,
 }
 
+// The label a statistics row shows. A confidential prompt's text can be sealed
+// ciphertext, so it never stands in for a missing name; the id does.
+pub(crate) fn stats_display_name(p: &Prompt) -> String {
+    if !p.name.is_empty() {
+        p.name.clone()
+    } else if !p.text.is_empty() && !p.secret {
+        p.text.chars().take(40).collect()
+    } else {
+        p.id.clone()
+    }
+}
+
 // Tool-usage rows join this export once per-tool usage counters exist; an
 // empty slice until then keeps the JSON shape stable across both features.
 pub(crate) fn stats_export_entries(store: &Store) -> Vec<StatsExportEntry> {
     let usage = &store.settings.usage;
     let last_used = &store.settings.last_used;
-    let name_of = |p: &Prompt| -> String {
-        if !p.name.is_empty() {
-            p.name.clone()
-        } else if !p.text.is_empty() {
-            p.text.chars().take(40).collect()
-        } else {
-            p.id.clone()
-        }
-    };
+    let name_of = stats_display_name;
     let mut entries: Vec<StatsExportEntry> = store
         .prompts
         .iter()
@@ -548,12 +544,13 @@ pub(crate) async fn retention_overview(app: AppHandle, state: State<'_, Db>, for
             return Ok(cached);
         }
     }
-    let (trash_count, trash_bytes, recording_custom) = {
+    // Only the paths are collected under the lock; measuring them touches the disk.
+    let (trash_count, trash_paths, recording_custom) = {
         let store = lock(&state);
         let trash_paths: Vec<String> = store.trash.iter().map(|p| p.file_path.clone()).collect();
-        let (_, bytes) = attachments_bytes(&trash_paths);
-        (store.trash.len() as u64, bytes, store.settings.ui_texts.get("recordingDir").cloned().unwrap_or_default())
+        (store.trash.len() as u64, trash_paths, store.settings.ui_texts.get("recordingDir").cloned().unwrap_or_default())
     };
+    let (_, trash_bytes) = attachments_bytes(&trash_paths);
     let (copy_count, copy_bytes) = db_conn(&app)
         .map(|c| {
             c.query_row("SELECT COUNT(*), COALESCE(SUM(LENGTH(id)), 0) FROM copy_log", [], |r| {
@@ -855,6 +852,15 @@ pub(crate) fn find_similar_prompt(target: &Prompt, others: &[&Prompt], threshold
     best.map(|(hit, _)| hit)
 }
 
+// The target and the prompts it may be compared with. A confidential prompt is
+// neither compared nor offered as a match: its stored text can be ciphertext and
+// its name must not surface as a hint. None when the target is missing or secret.
+pub(crate) fn similar_inputs(prompts: &[Prompt], id: &str) -> Option<(Prompt, Vec<Prompt>)> {
+    let target = prompts.iter().find(|p| p.id == id).filter(|p| !p.secret)?.clone();
+    let others = prompts.iter().filter(|p| p.id != id && !p.secret).cloned().collect();
+    Some((target, others))
+}
+
 // Called from the frontend right after add_prompt/update_prompt already
 // returned -- never awaited as part of saving, so a slow scan can only ever
 // delay the hint toast, not the save. A missing id (deleted again in the
@@ -865,13 +871,8 @@ pub(crate) async fn similar_to_saved(state: State<'_, Db>, id: String, threshold
     // Snapshot and drop the lock before the scan, same tradeoff find_duplicates
     // makes above and for the same reason -- this must not block every other
     // command for the length of the (bounded, but still real) comparison.
-    let (target, others) = {
-        let store = lock(&state);
-        let Some(target) = store.prompts.iter().find(|p| p.id == id).cloned() else {
-            return Ok(None);
-        };
-        let others: Vec<Prompt> = store.prompts.iter().filter(|p| p.id != id).cloned().collect();
-        (target, others)
+    let Some((target, others)) = similar_inputs(&lock(&state).prompts, &id) else {
+        return Ok(None);
     };
     let others_ref: Vec<&Prompt> = others.iter().collect();
     Ok(find_similar_prompt(&target, &others_ref, threshold))

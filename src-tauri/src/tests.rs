@@ -11282,6 +11282,35 @@ fn find_similar_prompt_ignores_an_unrelated_entry_and_itself() {
 }
 
 #[test]
+fn similar_inputs_leaves_confidential_prompts_out_on_both_sides() {
+    let mut a = test_prompt("a");
+    a.text = "Please write a short friendly email".into();
+    let mut b = test_prompt("b");
+    b.text = "Please write a short friendly email today".into();
+    let mut s = test_prompt("s");
+    s.secret = true;
+    s.text = "Please write a short friendly email".into();
+    let all = vec![a, b, s];
+    let (target, others) = similar_inputs(&all, "a").expect("a plain target");
+    assert_eq!(target.id, "a");
+    assert_eq!(others.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(), vec!["b"]);
+    assert!(similar_inputs(&all, "s").is_none(), "a confidential target gets no hint");
+    assert!(similar_inputs(&all, "missing").is_none());
+}
+
+#[test]
+fn stats_display_name_never_falls_back_to_the_text_of_a_confidential_prompt() {
+    let mut p = test_prompt("p1");
+    p.name = String::new();
+    p.text = "plain body".into();
+    assert_eq!(stats_display_name(&p), "plain body");
+    p.secret = true;
+    assert_eq!(stats_display_name(&p), "p1");
+    p.name = "Named".into();
+    assert_eq!(stats_display_name(&p), "Named");
+}
+
+#[test]
 fn find_similar_prompt_stays_within_budget_at_ten_thousand_entries() {
     let mut target = test_prompt("target");
     target.text = "Please write a short friendly email about the quarterly report".into();
