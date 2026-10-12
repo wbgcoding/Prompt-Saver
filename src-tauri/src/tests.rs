@@ -6969,6 +6969,29 @@ fn reserve_unique_dest_path_never_replaces_a_file_that_wins_the_race() {
 }
 
 #[test]
+fn place_in_dir_keeps_both_files_and_leaves_no_placeholder_on_failure() {
+    let root = std::env::temp_dir().join(format!("ps-place-in-dir-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    let dest_dir = root.join("dest");
+    let (a_dir, b_dir) = (root.join("a"), root.join("b"));
+    fs::create_dir_all(&a_dir).unwrap();
+    fs::create_dir_all(&b_dir).unwrap();
+    let (a, b) = (a_dir.join("rec.mp4"), b_dir.join("rec.mp4"));
+    fs::write(&a, b"first").unwrap();
+    fs::write(&b, b"second").unwrap();
+    let first = place_in_dir(&a, &dest_dir).unwrap();
+    let second = place_in_dir(&b, &dest_dir).unwrap();
+    assert_ne!(first, second);
+    assert_eq!(fs::read(&first).unwrap(), b"first");
+    assert_eq!(fs::read(&second).unwrap(), b"second");
+    // A source that is gone: the move fails and no empty placeholder stays behind.
+    let before = fs::read_dir(&dest_dir).unwrap().count();
+    assert!(place_in_dir(&a_dir.join("missing.mp4"), &dest_dir).is_err());
+    assert_eq!(fs::read_dir(&dest_dir).unwrap().count(), before);
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
 fn is_own_mic_sidecar_accepts_only_the_matching_videos_own_sidecar() {
     let video = PathBuf::from("C:/recs/rec-2026-01-01-00-00-00.mp4");
     let own_sidecar = PathBuf::from("C:/recs/rec-2026-01-01-00-00-00.mic.wav");

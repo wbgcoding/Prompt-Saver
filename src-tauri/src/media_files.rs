@@ -515,8 +515,13 @@ pub(crate) fn place_in_dir(src: &std::path::Path, dir: &std::path::Path) -> std:
     }
     let ext = src.extension().and_then(|e| e.to_str()).unwrap_or("mp4");
     let stem = src.file_stem().and_then(|e| e.to_str()).unwrap_or("Recording");
-    let dest = unique_dest_path(dir, stem, ext);
-    move_file(src, &dest)?;
+    // The name is claimed up front, so a second move at the same moment takes the
+    // next free one instead of replacing this file.
+    let dest = reserve_unique_dest_path(dir, stem, ext)?;
+    if let Err(e) = move_file(src, &dest) {
+        let _ = fs::remove_file(&dest);
+        return Err(e);
+    }
     move_mic_sidecar_alongside(src, &dest);
     Ok(dest)
 }
