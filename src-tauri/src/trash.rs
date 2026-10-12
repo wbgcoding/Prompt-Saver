@@ -759,7 +759,7 @@ pub(crate) fn takeover_offer(app: AppHandle, state: State<Db>) -> Option<Takeove
 // original stays untouched) and reloads it; either way, `remember` decides whether
 // this exact old location is settled for future launches or asked about again --
 // closing the dialog without ticking "do not ask again" must leave nothing decided.
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn takeover_apply(app: AppHandle, state: State<'_, Db>, adopt: bool, remember: bool) -> Result<(), String> {
     let dir = data_dir(&app);
     let src = appdata_store_dir(&app, &dir);

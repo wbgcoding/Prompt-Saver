@@ -487,7 +487,7 @@ pub(crate) fn reset_expert_settings(settings: &mut Settings) {
 }
 
 // Clear all expert overrides back to the shipped defaults.
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn reset_expert(app: AppHandle, state: State<Db>) {
     let effects = {
         let mut store = lock(&state);

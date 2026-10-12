@@ -382,7 +382,7 @@ pub(crate) fn video_folder_cleanup_impl(dir: &str, age_days: u32, configured: &P
     n
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn video_folder_cleanup(state: State<'_, Db>, dir: String, age_days: u32) -> usize {
     video_folder_cleanup_impl(&dir, age_days, &configured_recording_dir(&state))
 }

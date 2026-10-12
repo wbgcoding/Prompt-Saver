@@ -434,7 +434,7 @@ pub(crate) fn open_explorer_at(path: &str) -> Result<(), String> {
 }
 
 // Reveals the folder for a path already recorded as some job's own `target`.
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn open_bg_op_folder(path: String) -> Result<(), String> {
     open_explorer_at(&path)
 }

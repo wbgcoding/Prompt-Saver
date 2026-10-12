@@ -512,7 +512,7 @@ pub(crate) static STORAGE_CACHE: Mutex<Option<StorageBreakdown>> = Mutex::new(No
 
 // Opens a storage-breakdown row's own folder -- the path travels from
 // storage_breakdown's own computation, never from anything the user typed.
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn open_storage_folder(path: String) -> Result<(), String> {
     open_explorer_at(&path)
 }
