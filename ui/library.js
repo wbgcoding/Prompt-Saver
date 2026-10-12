@@ -4,7 +4,7 @@ import { mediaKind } from "./media.js";
 import { armDragOut, autoPasteDouble, autoPasteNow, fitAllTiles, hasImage, imageOf, notesOn, placeTile } from "./tiles.js";
 import { openLightbox, wireSearchSuggest } from "./windowChrome.js";
 import { fillVideoFormatSelect, fmtBytes, varPreview } from "./floatShared.js";
-import { anyEntryHasVars, dialogTokens, extractVars, parseVar, peekRotatedText, resolveVars, varTokens } from "./promptVars.js";
+import { anyEntryHasVars, dialogTokens, extractVars, parseVar, peekRotatedText, resolveVars, resolveVarsList, varTokens } from "./promptVars.js";
 import { confirmDialog } from "./dialog.js";
 import { activeView, firstFree, layoutOf, renderGrid, renderViews } from "./views.js";
 import { copyOnCooldown, recordCopy } from "./copyFlow.js";
@@ -1380,6 +1380,17 @@ export async function copyResolved(p) {
   // copy actually reaches the clipboard, so a cancelled variable dialog never
   // burns an entry.
   if ((p.variants || []).length) {
+    // Auto-advance with placeholders in any entry: every entry is filled from one
+    // dialog up front, so the later pastes of the session deliver filled text too.
+    // The backend moves the pointer itself here, so no commit follows.
+    if (p.rotate_auto && flag("rotatingPrompts") && flag("rotateAuto") && anyEntryHasVars(p)) {
+      const resolved = await resolveVarsList([p.text, ...p.variants]);
+      if (!resolved) return false;
+      if (await invoke("rotation_arm_session", { id: p.id, resolved }).catch(() => false)) {
+        recordToolUsage("rotation_advance");
+        return true;
+      }
+    }
     const peek = await invoke("rotation_peek", { id: p.id }).catch(() => null);
     const rawText = peek ? peek.text : p.text;
     const text = varTokens(p, rawText).length ? await resolveVars(rawText) : rawText;

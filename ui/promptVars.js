@@ -203,7 +203,8 @@ export const dialogTokens = (p, text) => varTokens(p, text).filter((tok) => !isD
 // True while any entry of a rotating prompt still carries a placeholder. An
 // auto-advance session renders the following entries itself, from their raw text:
 // so a prompt in this state must not open one, or the second paste would deliver
-// the placeholder rather than what it stands for.
+// the placeholder rather than what it stands for, unless every entry was filled
+// up front (copyResolved hands them to rotation_arm_session).
 export const anyEntryHasVars = (p) =>
   [p.text, ...(p.variants || [])].some((entry) => varTokens(p, entry).length > 0);
 
@@ -223,8 +224,16 @@ export async function peekRotatedText(p) {
 // cancelled, or when the small window the placeholders are asked in could not be
 // opened (a toast says so; every caller treats null as a cancel).
 export async function resolveVars(text) {
-  const tokens = extractVars(text);
-  if (!tokens.length) return text;
+  const out = await resolveVarsList([text]);
+  return out ? out[0] : null;
+}
+
+// Several texts filled from ONE round: the union of their placeholders is asked
+// once and every text gets the same values (an auto-advancing prompt's entries).
+// Returns the filled texts in input order, or null exactly where resolveVars does.
+export async function resolveVarsList(texts) {
+  const tokens = [...new Set(texts.flatMap((text) => extractVars(text)))];
+  if (!tokens.length) return texts.slice();
   const values = {};
   const ask = [];
   const dyn = [];
@@ -249,7 +258,7 @@ export async function resolveVars(text) {
     if (!filled) return null;
     Object.assign(values, filled);
   }
-  return fillVars(text, values);
+  return texts.map((text) => fillVars(text, values));
 }
 
 // Values the user asked to remember, keyed by variable NAME (expert: varDefaults).
