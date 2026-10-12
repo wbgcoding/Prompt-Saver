@@ -15215,6 +15215,18 @@ fn test_view(id: &str) -> View {
 }
 
 #[test]
+fn dissolving_a_folder_adds_members_the_view_did_not_list() {
+    let mut view = test_view("v");
+    view.members = vec!["a".to_string()];
+    let members = vec!["a".to_string(), "b".to_string()];
+    seat_dissolved_members(&mut view, &members, &[[0, 0]]);
+    let layout = view.layouts.get(&grid_key(view.cols, view.rows)).expect("a layout");
+    assert!(layout.contains_key("a") && layout.contains_key("b"));
+    assert!(layout.values().all(|c| *c != [0, 0]), "another folder's cell stays free");
+    assert_eq!(view.members, vec!["a".to_string(), "b".to_string()], "each member listed once");
+}
+
+#[test]
 fn reorder_views_by_id_moves_a_view_to_a_new_position() {
     let views = vec![test_view("a"), test_view("b"), test_view("c")];
     // "c" moved to the front, same as dropping its tab before "a"'s.

@@ -1027,6 +1027,22 @@ pub(crate) fn settle_lone_folder_members(views: &mut [View], folders: &[TileFold
     }
 }
 
+// Gives each member of a dissolved folder the first free cell of its view. A member
+// the view's own `members` list does not name yet (a folder can hold a prompt the
+// view never listed) joins it, since it now sits on that view's grid.
+pub(crate) fn seat_dissolved_members(view: &mut View, members: &[String], other_folder_cells: &[[u32; 2]]) {
+    let key = grid_key(view.cols, view.rows);
+    for member in members {
+        // Grid full: this and any remaining member stay library-only, same as a
+        // brand-new prompt would.
+        let Some(cell) = first_free_cell_excluding(view, other_folder_cells) else { break };
+        view.layouts.entry(key.clone()).or_default().insert(member.clone(), cell);
+        if !view.members.contains(member) {
+            view.members.push(member.clone());
+        }
+    }
+}
+
 // Dissolve a grid folder: its prompts become tiles again, nothing is deleted. Each
 // member lands on the first free cell of the folder's view: the folder's own cell is
 // free again by the time this runs, so it is usually one of them. Cells held by any
@@ -1047,13 +1063,7 @@ pub(crate) fn delete_tile_folder(app: AppHandle, state: State<Db>, id: String) -
             .map(|f| f.cell)
             .collect();
         if let Some(view) = store.settings.views.iter_mut().find(|v| v.id == folder.view_id) {
-            let key = grid_key(view.cols, view.rows);
-            for member in &folder.members {
-                // Grid full: this and any remaining member stay library-only, same as a
-                // brand-new prompt would.
-                let Some(cell) = first_free_cell_excluding(view, &other_folder_cells) else { break };
-                view.layouts.entry(key.clone()).or_default().insert(member.clone(), cell);
-            }
+            seat_dissolved_members(view, &folder.members, &other_folder_cells);
         }
     }
     save_settings(&app, &store.settings);
