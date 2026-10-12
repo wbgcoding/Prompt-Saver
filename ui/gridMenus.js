@@ -340,7 +340,11 @@ export function buildToolbarMenu() {
     b.addEventListener("click", async () => {
       const next = !toolFlagOn(key);
       settings.ui_flags = { ...(settings.ui_flags || {}), [key]: next };
-      await invoke("set_ui_flag", { key, enabled: next }).catch((e) => errToast(e));
+      await invoke("set_ui_flag", { key, enabled: next }).catch((e) => {
+        // A refused write: the menu keeps showing what is really stored.
+        settings.ui_flags = { ...(settings.ui_flags || {}), [key]: !next };
+        errToast(e);
+      });
       applyFlags();
       renderViews();
       refreshFavViewUi();

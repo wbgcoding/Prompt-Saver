@@ -494,8 +494,12 @@ export let liveRenderQueued = false;
 // offAtZero value -> was it above 0 when the current drag began. A drag writes the
 // value live, so commitValue() could not tell otherwise whether it crossed zero.
 export const offAtZeroWas = {};
+// The stored value a drag started from: previewValue overwrites it live, and a refused
+// write has to put this one back, not the last dragged position.
+const valueBeforeDrag = {};
 export function previewValue(key, value) {
   if (EXPERT_VALUES[key]?.offAtZero && !(key in offAtZeroWas)) offAtZeroWas[key] = val(key) > 0;
+  if (!(key in valueBeforeDrag)) valueBeforeDrag[key] = (settings.ui_values || {})[key];
   settings.ui_values = { ...(settings.ui_values || {}), [key]: value };
   applyValues();
   if (liveRenderQueued) return;
@@ -503,14 +507,19 @@ export function previewValue(key, value) {
   requestAnimationFrame(() => { liveRenderQueued = false; refreshTiles(key); });
 }
 export async function commitValue(key, value) {
-  const before = (settings.ui_values || {})[key];
+  const before = key in valueBeforeDrag ? valueBeforeDrag[key] : (settings.ui_values || {})[key];
+  delete valueBeforeDrag[key];
   const wasOn = key in offAtZeroWas ? offAtZeroWas[key] : val(key) > 0;
   delete offAtZeroWas[key];
   settings.ui_values = { ...(settings.ui_values || {}), [key]: value };
+  let failed = false;
   try { await invoke("set_ui_value", { key, value }); } catch (err) {
     errToast(err);
-    // The backend kept the old port: show that one again.
-    if (key === "remotePort" && before !== undefined) settings.ui_values = { ...settings.ui_values, [key]: before };
+    // The backend kept the old value: show that one again.
+    failed = true;
+    const kept = { ...settings.ui_values };
+    if (before === undefined) delete kept[key]; else kept[key] = before;
+    settings.ui_values = kept;
   }
   applyValues();
   await refreshTiles(key);
@@ -520,7 +529,7 @@ export async function commitValue(key, value) {
   // previewValue() never calls this, safe to rebuild the (possibly filtered) list here.
   // An off-at-zero value that crossed zero opens or closes the rows gated on it.
   const crossedZero = EXPERT_VALUES[key]?.offAtZero && wasOn !== (val(key) > 0);
-  if (expertOnlyChanged || crossedZero) renderExpert();
+  if (failed || expertOnlyChanged || crossedZero) renderExpert();
   else syncRowReset("values", key); // reset icon must not wait for an unrelated rebuild
 }
 

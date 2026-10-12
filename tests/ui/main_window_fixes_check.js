@@ -318,6 +318,43 @@ section(() => {
   check(/broadcastThemeSoon\(/.test(preview) && !/\bbroadcastTheme\(/.test(preview), "previewThemeDraft uses the throttled broadcast");
 });
 
+// 12. A refused write puts the previous value back instead of leaving UI and backend apart.
+section(() => {
+  const em = read("expertMenu.js");
+  const settings = { ui_values: { gridMax: 8 } };
+  let rendered = 0;
+  let fail = true;
+  const toasts = [];
+  const code = [
+    "const offAtZeroWas = {};\nconst valueBeforeDrag = {};\nlet liveRenderQueued = false;\nlet expertOnlyChanged = false;",
+    extractBlock(em, "export function previewValue(").replace("export ", ""),
+    extractBlock(em, "export async function commitValue(").replace("export ", ""),
+  ].join("\n");
+  const sb = run(code, {
+    EXPERT_VALUES: {}, settings, val: (k) => settings.ui_values[k] || 0,
+    applyValues: () => {}, refreshTiles: async () => {}, renderGrid: async () => {}, renderExpert: () => { rendered++; }, syncRowReset: () => {},
+    requestAnimationFrame: () => 0, errToast: (e) => toasts.push(String(e)),
+    invoke: async () => { if (fail) throw new Error("locked"); },
+  });
+  later(async () => {
+    sb.previewValue("gridMax", 12); // dragging
+    sb.previewValue("gridMax", 14);
+    await sb.commitValue("gridMax", 14);
+    check(settings.ui_values.gridMax === 8, `a refused slider write restores the value the drag started from (got ${settings.ui_values.gridMax})`);
+    check(toasts.length === 1 && rendered === 1, "the failure is reported and the control redrawn");
+    await sb.commitValue("newKey", 3);
+    check(!("newKey" in settings.ui_values), "a refused write of a key that was unset removes it again");
+    fail = false;
+    sb.previewValue("gridMax", 10);
+    await sb.commitValue("gridMax", 10);
+    check(settings.ui_values.gridMax === 10, "an accepted write keeps the new value");
+  });
+  const sp = read("settingsPanel.js");
+  check(/settings\.theme = prevTheme;/.test(sp), "a refused theme write restores settings.theme");
+  check(/set_language[\s\S]{0,200}setLangSelect\(\);/.test(sp), "a refused language write restores the select");
+  check(/\[key\]: !next/.test(read("gridMenus.js")), "a refused toolbar switch is flipped back");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

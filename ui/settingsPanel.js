@@ -497,14 +497,28 @@ export function bindSettingsPanel() {
   const themeSelect = $("theme-select");
   themeSelect.addEventListener("change", async () => {
     if (themeSelect.value === THEME_EDITOR_ENTRY) { fillThemeSelect(); openThemeEditor(); return; }
+    const prevTheme = settings.theme;
     settings.theme = themeSelect.value; // applyTheme reads the custom overrides from it
-    applyTheme(await invoke("set_theme", { theme: themeSelect.value }));
+    try {
+      applyTheme(await invoke("set_theme", { theme: themeSelect.value }));
+    } catch (err) {
+      // A refused write: keep showing the theme that is really stored.
+      settings.theme = prevTheme;
+      fillThemeSelect();
+      errToast(err);
+    }
   });
 
   // Language: persist, then re-render every translated string in place;
   // no restart, no reload.
   $("lang-select").addEventListener("change", async (e) => {
-    await invoke("set_language", { lang: e.target.value });
+    try {
+      await invoke("set_language", { lang: e.target.value });
+    } catch (err) {
+      setLangSelect(); // the stored language stays; show it again
+      errToast(err);
+      return;
+    }
     await setLang(e.target.value);
     applyI18n();
     // Re-fill the JS-built selects, then restore their current values.
