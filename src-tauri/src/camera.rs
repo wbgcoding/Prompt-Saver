@@ -236,12 +236,13 @@ fn take_matching(slot: &mut Option<CamSession>, path: &Path) -> Result<CamSessio
 // instead of three to four times bigger, for every chunk of every take.
 #[tauri::command]
 pub async fn camera_append_chunk(cam: State<'_, CameraState>, path: String, bytes_b64: String) -> Result<(), String> {
+    // Decoded before the lock is taken: the synchronous finish commands wait on it.
+    let bytes = base64::engine::general_purpose::STANDARD.decode(bytes_b64).map_err(|e| e.to_string())?;
     let guard = cam.0.lock().unwrap_or_else(|e| e.into_inner());
     let session = guard.as_ref().ok_or_else(|| "no active camera recording".to_string())?;
     if session.output_path != Path::new(&path) {
         return Err("path does not match the active camera recording".to_string());
     }
-    let bytes = base64::engine::general_purpose::STANDARD.decode(bytes_b64).map_err(|e| e.to_string())?;
     let mut f = OpenOptions::new().append(true).open(&session.output_path).map_err(|e| e.to_string())?;
     f.write_all(&bytes).map_err(|e| e.to_string())
 }
