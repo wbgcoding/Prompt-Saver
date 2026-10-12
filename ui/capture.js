@@ -303,7 +303,7 @@ export function bindCapture() {
     // Copy alone does not count as saving, but it already moved the file to
     // where the clipboard reference points -- closing without confirming
     // first would delete that file out from under the still-live clipboard
-    // reference (280's own rule). A toast after the fact is too late; ask now,
+    // reference. A toast after the fact is too late; ask now,
     // before anything else changes, so declining leaves the modal untouched.
     if (shouldDelete && path && recCopiedNotSaved) {
       const ok = await confirmDialog({
@@ -335,7 +335,7 @@ export function bindCapture() {
     }
   }
   // needsCrop: the window recording's canvas was bigger than the window
-  // ever used (369's multi-display canvas) -- trim the black margin first,
+  // ever used (a multi-display canvas) -- trim the black margin first,
   // with the same visible/cancellable status line as the format conversion
   // below, before either showing the raw preview or starting that conversion.
   // A cancel or any failure here just keeps the untouched, letterboxed
@@ -751,8 +751,9 @@ export function bindCapture() {
     pendingSnipName = e.payload?.name || "";
     pendingSnipOriginDir = "";
     if (!flag("snipEditor")) {
-      // Off -> the pre-117/118 flow, unedited shot straight into the result dialog.
+      // Editor off: the unedited shot goes straight into the result dialog.
       $("snip-preview").src = pendingSnip;
+      $("snip-modal-retry").classList.remove("hidden"); // a fresh capture can be retaken
       $("snip-save-folder").checked = optFlag("screenshotSave");
       $("snip-modal-saveas-format").value = normScreenshotFormat(txt("screenshotFormat"));
       snipModal.classList.remove("hidden");
