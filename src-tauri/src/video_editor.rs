@@ -1059,7 +1059,9 @@ pub(crate) type ExportJoinHandle = tauri::async_runtime::JoinHandle<Result<Strin
 // loop and the final drain (after the last item is spawned) share the exact
 // same bookkeeping instead of two near-identical copies.
 pub(crate) async fn await_batch_export(handle: ExportJoinHandle, id: String, generation: u64, app: AppHandle) -> Result<bool, String> {
-    let res = handle.await.map_err(|e| e.to_string())?;
+    // A panicked export task fails that one item like any encode error does; the
+    // rest of the batch still runs and the item's row does not stay "running".
+    let res = handle.await.unwrap_or_else(|e| Err(e.to_string()));
     let ok = match &res {
         Ok(_) => {
             push_bg_op(&app, &id, "export", "done", None, None);
