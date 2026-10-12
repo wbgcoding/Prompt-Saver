@@ -958,6 +958,40 @@ the video editor and the introduction tour ship on).
 
 ### Fixed
 
+- **Auto rotation works with placeholders.** A rotating prompt with Auto on and
+  placeholders in its texts now asks for all of them once and advances on every
+  paste, instead of falling back to one copy at a time.
+- **Low disk space during a recording is noticed again.** The warning and the
+  automatic stop while recording never fired, because the free space check
+  failed on the recording file itself.
+- **A cancelled recording can be restored.** Cancel moves the take to the
+  recently discarded recordings instead of deleting it at once.
+- **Fewer things lost by one key press.** Escape or the close button in the
+  screenshot editor asks before throwing edits away, the camera's close button
+  keeps a running take, and deleting a discarded recording or clearing the
+  message log asks first.
+- **Escape and Tab follow the dialog on top.** Nine dialogs and popups (search,
+  import previews, batch export, the theme editor, text recognition and more)
+  closed the window behind them on Escape or let Tab wander into the page.
+- **A question over the screenshot editor is visible.** The "replace?" question
+  for a new capture opened behind the editor; a second question no longer
+  cancels one that is already open.
+- **Layout fixes.** Tray menu rows have their full height, the microphone lane
+  in the video editor is no longer cut in half, the folder list of a tile menu
+  opens next to the menu row, and checkboxes follow the theme everywhere.
+- **No more freezes during disk work.** Taking over an old data folder,
+  cleaning the recordings folder, resetting the expert menu and opening a
+  folder from a list no longer hold up every window.
+- **A failed selective restore can no longer lose data.** Restoring only data or
+  only settings from a backup now writes everything into the database file
+  before the journal is removed.
+- **Removing a view from the command line** dissolves its grid folders, so their
+  prompts are not stuck in a folder nobody can reach.
+- **Small fixes.** A recording hotkey that is switched off no longer counts as
+  taken, a failed batch export item no longer stops the rest, the counter
+  placeholder only counts up when the copy really happens, and the remote
+  receiver shows as stopped when it could not open its port.
+
 - **A deleted prompt stays deleted.** After a settings reset or a move of the
   data folder, a prompt deleted next could come back after a restart, and
   restoring it from the trash then blocked every later save.
@@ -1609,6 +1643,16 @@ the video editor and the introduction tour ship on).
   darker accent as the main window's buttons.
 
 ### Security
+
+- **Confidential prompts stay out of statistics and similarity hints.** An
+  unnamed confidential prompt no longer shows a piece of its stored text as its
+  name in the statistics or their export, and it is never offered as "similar
+  to" another prompt.
+- **Tighter checks on outside input.** A folder import only reads files inside
+  the chosen folder, a clipboard entry from another program is size-checked
+  before it is read, a `promptsaver://copy` link to a prompt that does not exist
+  no longer asks for permission, and the TLS library of the remote receiver is
+  updated to a fixed version.
 
 - **The update check now asks for permission on first launch; nothing goes
   online before you answer.** Installs that already had the update check on or
