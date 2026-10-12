@@ -33,7 +33,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const $ = (id) => document.getElementById(id);
 for (let i = 0; i < 40; i++) {
   await sleep(100);
-  const b = [...document.querySelectorAll('#confirm-modal:not(.hidden) button')].find((x) => /leer|empty/i.test(x.textContent));
+  const b = document.querySelector('#confirm-modal:not(.hidden) #confirm-cancel');
   if (b) { b.click(); break; }
 }
 await sleep(300);
