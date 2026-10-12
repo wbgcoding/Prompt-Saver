@@ -300,13 +300,18 @@ function parseTime(text) {
 const frameOf = (ms) => Math.round((ms / 1000) * VE.fps);
 const frameMs = () => 1000 / (VE.fps || 30);
 
+// This window's toast stays longer than the main window's (the editor reports export
+// and file problems here, which take longer to read); one zoom key press scales the
+// timeline by this factor.
+const VE_TOAST_MS = 2600;
+const TIMELINE_ZOOM_STEP = 1.4;
 let toastTimer = 0;
 function toast(message) {
   const el = $("ve-toast");
   el.textContent = message;
   el.classList.remove("hidden");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.add("hidden"), 2600);
+  toastTimer = setTimeout(() => el.classList.add("hidden"), VE_TOAST_MS);
 }
 
 // The "?" overview -- same modal/modal-narrow/modal-titlebar shell as
@@ -1603,24 +1608,29 @@ function noteTickError(err) {
 function tick() {
   try {
     if (VE.dur) {
-      const segments = keptSegments();
-      const last = segments[segments.length - 1];
       const now = videoEl.currentTime * 1000;
-      const vb = videoBox();
-      if (!videoEl.paused) {
-        if (now >= last.b - 1) {
-          videoEl.pause();
-          seek(last.b, vb);
-        } else {
-          const kept = nextKept(now);
-          if (kept > now + 1) videoEl.currentTime = kept / 1000;
+      const playing = !videoEl.paused;
+      // Paused and already in step with the playhead: nothing to do, so an idle
+      // editor costs no segment sort and no layout read per frame.
+      if (playing || Math.abs(now - VE.playhead) > 0.5) {
+        const vb = videoBox();
+        if (playing) {
+          const segments = keptSegments();
+          const last = segments[segments.length - 1];
+          if (now >= last.b - 1) {
+            videoEl.pause();
+            seek(last.b, vb);
+          } else {
+            const kept = nextKept(now);
+            if (kept > now + 1) videoEl.currentTime = kept / 1000;
+          }
         }
-      }
-      if (Math.abs(now - VE.playhead) > 0.5) {
-        VE.playhead = now;
-        renderPlayhead();
-        renderOverlayLive(vb);
-        if (!videoEl.paused) keepPlayheadVisible();
+        if (Math.abs(now - VE.playhead) > 0.5) {
+          VE.playhead = now;
+          renderPlayhead();
+          renderOverlayLive(vb);
+          if (!videoEl.paused) keepPlayheadVisible();
+        }
       }
     }
   } catch (err) {
@@ -3616,8 +3626,8 @@ $("ve-still").addEventListener("click", async () => {
   }
 });
 
-$("ve-zoom-in").addEventListener("click", () => setZoom(VE.zoom * 1.4));
-$("ve-zoom-out").addEventListener("click", () => setZoom(VE.zoom / 1.4));
+$("ve-zoom-in").addEventListener("click", () => setZoom(VE.zoom * TIMELINE_ZOOM_STEP));
+$("ve-zoom-out").addEventListener("click", () => setZoom(VE.zoom / TIMELINE_ZOOM_STEP));
 $("ve-zoom-fit").addEventListener("click", () => setZoom(fitZoom()));
 
 // Hold the button (or V) to peek at the source without overlays, fades or
@@ -4059,7 +4069,15 @@ document.addEventListener("keydown", (e) => {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
 
   switch (e.key) {
-    case " ": e.preventDefault(); togglePlay(); break;
+    case " ": {
+      // A control focused from the keyboard keeps Space for its own activation; after a
+      // mouse click the button has no focus ring, and Space still plays.
+      const ae = document.activeElement;
+      if (ae && ae.matches("button, a[href], [role='button'], summary") && ae.matches(":focus-visible")) break;
+      e.preventDefault();
+      togglePlay();
+      break;
+    }
     case "ArrowLeft": e.preventDefault(); if (e.shiftKey) seek(VE.playhead - 1000); else stepFrame(-1); break;
     case "ArrowRight": e.preventDefault(); if (e.shiftKey) seek(VE.playhead + 1000); else stepFrame(1); break;
     case "Home": e.preventDefault(); seek(0); break;
@@ -4067,8 +4085,8 @@ document.addEventListener("keydown", (e) => {
     case "i": case "I": e.preventDefault(); $("ve-mark-in").click(); break;
     case "o": case "O": e.preventDefault(); $("ve-mark-out").click(); break;
     case "c": case "C": e.preventDefault(); $("ve-cut-add").click(); break;
-    case "+": case "=": e.preventDefault(); setZoom(VE.zoom * 1.4); break;
-    case "-": e.preventDefault(); setZoom(VE.zoom / 1.4); break;
+    case "+": case "=": e.preventDefault(); setZoom(VE.zoom * TIMELINE_ZOOM_STEP); break;
+    case "-": e.preventDefault(); setZoom(VE.zoom / TIMELINE_ZOOM_STEP); break;
     case "v": case "V": if (!e.repeat) veOriginalToggle.press(); e.preventDefault(); break;
     default: break;
   }
@@ -4145,11 +4163,10 @@ function resetForNewSource() {
 // the source file's own (size, mtime) as of the load that produced these ops --
 // a changed file never matches, so this can never restore ops drawn against
 // content that is no longer there. The video editor is the only place this
-// applies today: the screenshot editor (see snipEditor.js) always opens a fresh
-// in-memory capture with no file path of its own to key on -- opening an
-// EXISTING file in either editor is a separate, not-yet-built feature that
-// would first give it one, and the Rust side already accepts kind="snip" for
-// exactly that day.
+// applies today: the screenshot editor (see snipEditor.js) works on an in-memory
+// image, an opened file included (the original is never touched), so it has no
+// state keyed to a file; the Rust side already accepts kind="snip" should that
+// ever be added.
 let editStateTimer = null;
 // Seconds between two autosaves of the unfinished edit state.
 const EDIT_STATE_SAVE_SECS = 30;
