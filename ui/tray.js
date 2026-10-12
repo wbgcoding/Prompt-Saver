@@ -205,6 +205,10 @@ function onSearchInput() {
 }
 
 document.addEventListener("keydown", (e) => {
+  // Once the launcher has the typed text the rows are no longer in play: an Enter
+  // that lands before the focus moves must not activate the first row (a favourite,
+  // or Stop while a recording runs).
+  if (handover && (e.key === "Enter" || e.key === "ArrowDown" || e.key === "ArrowUp")) return;
   if (e.key === "Escape") {
     e.preventDefault();
     close();

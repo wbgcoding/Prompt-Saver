@@ -152,7 +152,17 @@ function fitWindow() {
 }
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") { e.preventDefault(); answer(null); }
+  if (e.key === "Escape") {
+    e.preventDefault();
+    // An open choice list closes first; only a second Escape cancels the form.
+    const openList = document.querySelector(".vars-choice-list:not(.hidden)");
+    if (openList) {
+      openList.classList.add("hidden");
+      openList.parentElement?.querySelector("button")?.focus();
+      return;
+    }
+    answer(null);
+  }
   // Enter inside a choice control (the collapsed button, or a focused item in
   // the open list) must reach that control's OWN native activation (open the list,
   // or pick the focused item) instead of being hijacked into an immediate confirm

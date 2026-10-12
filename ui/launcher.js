@@ -197,7 +197,8 @@ async function boot() {
   const state = await invoke("launcher_items").catch(() => ({ prompts: [], language: "", usage: {}, last_used: {}, prefill: "" }));
   const cfg = await invoke("get_settings").catch(() => null);
   const wanted = Number(cfg?.ui_values?.searchListMax);
-  maxResults = Number.isFinite(wanted) ? Math.min(20, Math.max(3, Math.round(wanted))) : MAX_RESULTS_DEFAULT;
+  // The backend already clamps a stored value to the expert slider's range.
+  maxResults = Number.isFinite(wanted) ? Math.round(wanted) : MAX_RESULTS_DEFAULT;
   applyFloatTheme(await invoke("current_theme").catch(() => null), await invoke("theme_vars").catch(() => ({})));
   listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars));
 
