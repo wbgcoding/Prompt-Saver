@@ -13,6 +13,36 @@ export function initDialogs({ t: translate, toast: showToast }) {
 const COPY_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>';
 export const EYE_SVG ='<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.6" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
 
+// One dialog is on screen at a time: a question that arrives while another is open
+// (an event from another window, say) waits and is shown, with its own focus restore,
+// once the open one is answered. It never answers the open one in the user's place.
+const dialogQueue = [];
+let dialogOpen = false;
+export function confirmDialog(opts) {
+  return new Promise((resolve, reject) => {
+    dialogQueue.push({ opts, resolve, reject });
+    if (!dialogOpen) showNextDialog();
+  });
+}
+function showNextDialog() {
+  const next = dialogQueue.shift();
+  if (!next) { dialogOpen = false; return; }
+  dialogOpen = true;
+  let shown;
+  try {
+    shown = showConfirmDialog(next.opts);
+  } catch (err) {
+    next.reject(err);
+    showNextDialog();
+    return;
+  }
+  shown.then(next.resolve, next.reject).finally(() => {
+    // After a tick, so the answered caller can still read its checkboxes and input
+    // before the next dialog rebuilds them.
+    setTimeout(showNextDialog, 0);
+  });
+}
+
 // Themed yes/no dialog. Resolves true on confirm, false on cancel / dismiss.
 // `icon` puts an SVG above the title, `input` turns it into a one-field prompt
 // (then it resolves to the entered string, or null when dismissed).
@@ -28,7 +58,7 @@ let confirmCleanup = null;
 // resolves to the string "alt": a question with two different ways to go ahead
 // (delete the old sync folder, keep it) plus the way out. Left out, the dialog is
 // exactly the two-button one every other caller gets.
-export function confirmDialog({ title, message, confirmLabel, cancelLabel, altLabel, icon, input, checkboxes, checkboxesOptional = false, danger = true, oneButton = false }) {
+function showConfirmDialog({ title, message, confirmLabel, cancelLabel, altLabel, icon, input, checkboxes, checkboxesOptional = false, danger = true, oneButton = false }) {
   // Restored once this dialog resolves, so a keyboard user's next Tab
   // continues from where they were instead of restarting from the page top.
   const opener = document.activeElement;
@@ -92,10 +122,6 @@ export function confirmDialog({ title, message, confirmLabel, cancelLabel, altLa
       cbRow.appendChild(label);
     }
   }
-  // Resolve any stale dialog BEFORE syncOk(), not after -- its done() resets
-  // ok.disabled = false unconditionally, which otherwise clobbered a fresh
-  // checkbox dialog's correct disabled-with-nothing-checked state.
-  confirmCleanup?.(false);
   syncOk();
   root.classList.remove("hidden");
   return new Promise((resolve) => {
@@ -136,9 +162,8 @@ export function confirmDialog({ title, message, confirmLabel, cancelLabel, altLa
     root.addEventListener("pointerdown", onBg);
     field.addEventListener("keydown", onKey);
     eye.addEventListener("click", onEye);
-    // Escape and the stale-dialog sweep both come through here, so they must map
-    // their answer exactly like Cancel does: a prompt with an input field owes its
-    // caller null, never false.
+    // Escape comes through here, so it must map its answer exactly like Cancel
+    // does: a prompt with an input field owes its caller null, never false.
     confirmCleanup = finish;
     (input ? field : ok).focus();
     if (input && field.value) field.select();
