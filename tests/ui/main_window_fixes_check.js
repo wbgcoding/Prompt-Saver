@@ -390,6 +390,23 @@ section(() => {
   check(at > 0 && em.slice(at - 400, at).includes("videoDiscardedDeleteAsk"), "deleting a discarded recording asks first");
 });
 
+// 15. The chain overview keeps the placeholder syntax of the copy path: same pattern, same reserved names.
+section(() => {
+  const literal = (src, name) => {
+    const m = new RegExp("const " + name + " = (/.*/[a-z]*);").exec(src);
+    if (!m) throw new Error("pattern not found: " + name);
+    return m[1];
+  };
+  const list = (src, name) => {
+    const m = new RegExp("const " + name + " = \\[([^\\]]*)\\]").exec(src);
+    if (!m) throw new Error("list not found: " + name);
+    return m[1].replace(/\s+/g, " ").trim();
+  };
+  const chain = read("chainvars.js");
+  check(literal(chain, "CHAIN_VAR_RE") === literal(read("floatShared.js"), "VAR_RE"), "CHAIN_VAR_RE drifted from VAR_RE in floatShared.js");
+  check(list(chain, "CHAIN_DYN_VARS") === list(read("promptVars.js"), "DYN_VARS"), "CHAIN_DYN_VARS drifted from DYN_VARS in promptVars.js");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
