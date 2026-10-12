@@ -6921,10 +6921,10 @@ fn export_output_to_remember_records_the_written_sibling_not_the_requested_dst()
     fs::create_dir_all(&dir).unwrap();
     let requested = dir.join("clip-edit.mp4");
     fs::write(&requested, b"pre-existing file the export must not overwrite").unwrap();
-    // The same unique_dest_path call export_video_blocking makes once it
-    // finds the requested name already taken, standing in for the file
-    // ffmpeg actually wrote for this test.
-    let sibling = unique_dest_path(&dir, "clip-edit", "mp4");
+    // The same reservation export_video_blocking makes once it finds the
+    // requested name already taken, standing in for the file ffmpeg
+    // actually wrote for this test.
+    let sibling = reserve_unique_dest_path(&dir, "clip-edit", "mp4").unwrap();
     fs::write(&sibling, b"the file ffmpeg actually produced").unwrap();
     let result: Result<String, String> = Ok(sibling.to_string_lossy().to_string());
     if let Some(actual) = export_output_to_remember(&result) {
@@ -6957,7 +6957,7 @@ fn reserve_unique_dest_path_never_replaces_a_file_that_wins_the_race() {
     let dir = std::env::temp_dir().join(format!("ps-reserve-race-{}", std::process::id()));
     fs::create_dir_all(&dir).unwrap();
     // Stands in for another export (or another app) claiming the first
-    // candidate name in the gap unique_dest_path's plain exists() check
+    // candidate name in the gap a plain exists() check
     // could not see -- reserve_unique_dest_path must fail that name
     // outright and move on rather than overwrite it later.
     let rival = dir.join("clip-edit.mp4");
@@ -13654,9 +13654,11 @@ fn the_editor_rejects_a_prompt_hotkey_matching_the_active_recording_hotkeys() {
 
 #[test]
 fn check_hotkey_ignores_recording_hotkeys_that_are_switched_off() {
-    let mut settings = Settings::default();
-    settings.rec_stop_hotkey = "Ctrl+Alt+S".to_string();
-    settings.rec_pause_hotkey = "Ctrl+Alt+O".to_string();
+    let mut settings = Settings {
+        rec_stop_hotkey: "Ctrl+Alt+S".to_string(),
+        rec_pause_hotkey: "Ctrl+Alt+O".to_string(),
+        ..Default::default()
+    };
     let stop = parse_accel("Ctrl+Alt+S").unwrap();
     let pause = parse_accel("Ctrl+Alt+O").unwrap();
     assert!(hotkey_in_use(&settings, &[], None, stop));

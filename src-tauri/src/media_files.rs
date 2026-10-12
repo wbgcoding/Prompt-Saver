@@ -411,26 +411,14 @@ pub(crate) async fn video_folder_file_durations_ms(app: AppHandle, dir: String, 
 // Never overwrite an existing file at the target: "<stem>.<ext>", then
 // "<stem> (2).<ext>", "<stem> (3).<ext>", etc. Shared by every 280 button
 // that writes into a folder instead of a dialog-chosen exact path.
-pub(crate) fn unique_dest_path(dir: &std::path::Path, stem: &str, ext: &str) -> PathBuf {
-    let mut candidate = dir.join(format!("{stem}.{ext}"));
-    let mut n = 2;
-    while candidate.exists() {
-        candidate = dir.join(format!("{stem} ({n}).{ext}"));
-        n += 1;
-    }
-    candidate
-}
-
-// Same naming scheme as unique_dest_path, but the free name is claimed the
-// moment it is found instead of merely observed: unique_dest_path only checks
-// candidate.exists(), and a file that appears at that name between the check
-// and a later fs::rename onto it gets silently replaced, since rename onto an
-// existing file overwrites on Windows. create_new opens the name atomically
-// (the OS refuses if it already exists) and moves straight to the next
-// numbered candidate on that exact race, so the name this function returns is
-// always one nothing else could have claimed first. The empty placeholder
-// file it leaves behind still needs to be replaced (or removed on failure) by
-// the caller, same as before.
+// The free name is claimed the moment it is found instead of merely observed: a
+// plain exists() check lets a file that appears at that name before a later
+// fs::rename onto it get silently replaced, since rename onto an existing file
+// overwrites on Windows. create_new opens the name atomically (the OS refuses if
+// it already exists) and moves straight to the next numbered candidate on that
+// exact race, so the name this function returns is always one nothing else could
+// have claimed first. The empty placeholder file it leaves behind still needs to
+// be replaced (or removed on failure) by the caller.
 pub(crate) fn reserve_unique_dest_path(dir: &std::path::Path, stem: &str, ext: &str) -> std::io::Result<PathBuf> {
     let mut n: u32 = 1;
     loop {

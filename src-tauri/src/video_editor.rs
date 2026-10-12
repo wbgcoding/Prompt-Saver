@@ -749,7 +749,7 @@ pub(crate) fn move_tracked_export_output(src: &Path, dst: &Path) -> std::io::Res
 // What export_video should add to EXPORT_OUTPUTS once ffmpeg finishes: the
 // path export_video_blocking's own Ok result names, never the caller's
 // originally requested dest_path. When that name was already taken,
-// export_video_blocking's own unique_dest_path rename lands the real file at
+// export_video_blocking's own reserve_unique_dest_path rename lands the real file at
 // a sibling instead -- recording the requested path there would remember a
 // file this export never wrote, while the file that actually exists stays
 // unrecognized by save_recording_as.
@@ -806,7 +806,7 @@ pub(crate) fn export_file_name_is_valid(name: &str) -> bool {
 }
 
 // Exporting a file over itself would ask ffmpeg to read and overwrite the
-// same file mid-run; refused outright rather than relying on unique_dest_path
+// same file mid-run; refused outright rather than relying on reserve_unique_dest_path
 // to save it by silently picking a different name. dest need not exist yet
 // (that is the normal case for a fresh export), so only its parent folder is
 // canonicalized; the file name itself is compared case-insensitively, the way
