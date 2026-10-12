@@ -197,8 +197,9 @@ export function draftFrom(theme) {
 }
 
 // Live preview. Writing the variables costs a style recalc, which the browser
-// already coalesces into the next frame: no grid rebuild, no IPC, so dragging a
-// colour stays smooth without an extra throttle in front of it.
+// already coalesces into the next frame, and there is no grid rebuild. The
+// broadcast to the pill and folder windows (each repaints on it) is coalesced to
+// one per frame, so dragging a colour stays smooth in every window.
 export function previewThemeDraft() {
   if (!themeDraft) return;
   document.documentElement.setAttribute("data-theme", themeDraft.base);
@@ -206,7 +207,25 @@ export function previewThemeDraft() {
   // The pills and folders are their own windows and only ever hear the backend's
   // theme-changed event, which fires on a real switch: without this the preview
   // would stop at the main window's edge while they kept the old colours.
-  broadcastTheme(themeDraft.base, themeDraft.vars);
+  broadcastThemeSoon(themeDraft.base, themeDraft.vars);
+}
+
+let themeBroadcastFrame = 0;
+let themeBroadcastPending = null;
+function broadcastThemeSoon(theme, vars) {
+  themeBroadcastPending = { theme, vars: { ...vars } };
+  if (themeBroadcastFrame) return;
+  themeBroadcastFrame = requestAnimationFrame(() => {
+    themeBroadcastFrame = 0;
+    const pending = themeBroadcastPending;
+    themeBroadcastPending = null;
+    if (pending) broadcastTheme(pending.theme, pending.vars);
+  });
+}
+function cancelThemeBroadcast() {
+  if (themeBroadcastFrame) cancelAnimationFrame(themeBroadcastFrame);
+  themeBroadcastFrame = 0;
+  themeBroadcastPending = null;
 }
 
 // Same payload shape the backend emits, so the small windows need no new listener.
@@ -233,6 +252,7 @@ export function closeThemeEditor(revert = true) {
   closeColorPop();
   if (revert && themeRestore) {
     applyTheme(themeRestore.theme, themeRestore.vars);
+    cancelThemeBroadcast(); // a queued preview frame must not land after the revert
     broadcastTheme(themeRestore.theme, themeRestore.vars); // undo the preview in the pills too
   }
   themeDraft = null;

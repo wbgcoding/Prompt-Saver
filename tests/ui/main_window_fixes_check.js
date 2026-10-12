@@ -290,6 +290,34 @@ section(() => {
   });
 });
 
+// 11. The live theme preview tells the other windows once per frame.
+section(() => {
+  const th = read("theme.js");
+  const frames = new Map();
+  let nextFrame = 1;
+  const sent = [];
+  const code = [
+    "let themeBroadcastFrame = 0;\nlet themeBroadcastPending = null;",
+    extractBlock(th, "function broadcastThemeSoon("),
+    extractBlock(th, "function cancelThemeBroadcast("),
+  ].join("\n");
+  const sb = run(code, {
+    requestAnimationFrame: (fn) => { const id = nextFrame++; frames.set(id, fn); return id; },
+    cancelAnimationFrame: (id) => { frames.delete(id); },
+    broadcastTheme: (theme, vars) => sent.push({ theme, vars }),
+  });
+  const vars = { "--bg": "#000" };
+  for (let i = 0; i < 30; i++) { vars["--bg"] = "#" + i; sb.broadcastThemeSoon("dark", vars); }
+  check(sent.length === 0 && frames.size === 1, "30 drag steps queue a single frame");
+  for (const [id, fn] of [...frames]) { frames.delete(id); fn(); }
+  check(sent.length === 1 && sent[0].vars["--bg"] === "#29", `one broadcast with the latest colours (got ${JSON.stringify(sent)})`);
+  sb.broadcastThemeSoon("dark", vars);
+  sb.cancelThemeBroadcast();
+  check(frames.size === 0, "a revert cancels the queued preview frame");
+  const preview = extractBlock(th, "export function previewThemeDraft(");
+  check(/broadcastThemeSoon\(/.test(preview) && !/\bbroadcastTheme\(/.test(preview), "previewThemeDraft uses the throttled broadcast");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {
