@@ -1074,7 +1074,6 @@ export default {
     ffmpegOfferConfirm: "Herunterladen",
     ffmpegFoundMsg: "FFmpeg gefunden: {path}",
     ffmpegDownloading: "Wird heruntergeladen… {pct}% (zum Abbrechen klicken)",
-    ocrIndexBackfilling: "Bilder werden gelesen… {pct}% (zum Abbrechen klicken)",
     ffmpegDownloadDone: "ffmpeg heruntergeladen",
     ffmpegCancelHint: "Klicken, um den Download abzubrechen",
     valRecQuality: "Qualität",

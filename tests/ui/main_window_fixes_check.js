@@ -355,6 +355,20 @@ section(() => {
   check(/\[key\]: !next/.test(read("gridMenus.js")), "a refused toolbar switch is flipped back");
 });
 
+// 13. Background job labels have their own strings; empty values use one shared mark.
+section(() => {
+  const bg = read("bgOps.js");
+  const sb = run(extractBlock(bg, "export function bgOpLabel(").replace("export ", ""), { t: (k) => k });
+  const labels = ["export", "convert", "ocr-index", "ffmpeg-download"].map((k) => sb.bgOpLabel(k));
+  check(new Set(labels).size === 4 && labels.every((l) => /^bgOpLabel/.test(l)), `each job kind has its own label key (got ${labels})`);
+  const bs = String.fromCharCode(92);
+  for (const file of ["bgOps.js", "backups.js", "dictation.js", "management.js"]) {
+    check(!read(file).includes(bs + "u2014"), `${file} writes no em dash escape`);
+  }
+  check(read("core.js").includes('export const EMPTY_VALUE = "' + bs + 'u2013";'), "core.js defines EMPTY_VALUE as a lone en dash");
+  check(read("backups.js").includes('armButton(del, t("deleteConfirmArmed"))'), "the armed delete label is a translated string");
+});
+
 let guard;
 const timedOut = new Promise((resolve) => { guard = setTimeout(() => { problems.push("an async check never finished"); resolve(); }, 3000); });
 Promise.race([Promise.all(pending), timedOut]).then(() => {

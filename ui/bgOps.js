@@ -1,5 +1,5 @@
 // Background jobs popup.
-import { $, errToast, invoke, listen, t, toast } from "./core.js";
+import { $, EMPTY_VALUE, errToast, invoke, listen, t, toast } from "./core.js";
 import { placePopover } from "./popover.js";
 import { confirmDialog } from "./dialog.js";
 
@@ -22,14 +22,13 @@ export function bgKindNoun(kind) {
   if (kind === "ocr-index") return t("bgKindOcrIndex");
   return t("bgKindDownload");
 }
-// The four progress strings ("Converting… {s}s (click to cancel)", etc.) all
-// start with the same short present-tense phrase this popover needs -- reusing
-// them here avoids a fifth near-duplicate translation for every language.
+// Short present-tense label of a running job; its own strings, because the
+// progress sentences carry a placeholder in a language-dependent place.
 export function bgOpLabel(kind) {
-  const key = kind === "export" ? "veExporting" : kind === "convert" ? "recConverting" : kind === "ocr-index" ? "ocrIndexBackfilling" : "ffmpegDownloading";
-  const s = t(key);
-  const i = s.indexOf("{");
-  return (i >= 0 ? s.slice(0, i) : s).trim();
+  if (kind === "export") return t("bgOpLabelExport");
+  if (kind === "convert") return t("bgOpLabelConvert");
+  if (kind === "ocr-index") return t("bgOpLabelOcrIndex");
+  return t("bgOpLabelDownload");
 }
 export const bgOpsPop = document.createElement("div");
 
@@ -53,7 +52,7 @@ export function renderBgOpsPop(ops) {
     const pct = document.createElement("span");
     pct.className = "bg-ops-pct";
     const pctNum = op.state === "done" ? 100 : op.pct != null ? op.pct : null;
-    pct.textContent = op.state === "error" ? "\u2014" : op.state === "done" ? "100%" : (op.pct != null ? `${op.pct}%` : "…");
+    pct.textContent = op.state === "error" ? EMPTY_VALUE : op.state === "done" ? "100%" : (op.pct != null ? `${op.pct}%` : "…");
     if (pctNum != null) {
       pct.setAttribute("role", "progressbar");
       pct.setAttribute("aria-valuemin", "0");

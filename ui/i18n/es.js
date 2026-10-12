@@ -1103,7 +1103,6 @@ export default {
     ffmpegOfferConfirm: "Descargar",
     ffmpegFoundMsg: "FFmpeg encontrado: {path}",
     ffmpegDownloading: "Descargando… {pct}% (clic para cancelar)",
-    ocrIndexBackfilling: "Leyendo imágenes… {pct}% (clic para cancelar)",
     ffmpegDownloadDone: "ffmpeg descargado",
     ffmpegCancelHint: "Haz clic para cancelar la descarga",
     valRecQuality: "Calidad",

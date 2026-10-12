@@ -1103,7 +1103,6 @@ export default {
     ffmpegOfferConfirm: "Descarcă",
     ffmpegFoundMsg: "FFmpeg găsit: {path}",
     ffmpegDownloading: "Se descarcă… {pct}% (clic pentru a anula)",
-    ocrIndexBackfilling: "Se citesc imaginile… {pct}% (clic pentru a anula)",
     ffmpegDownloadDone: "ffmpeg descărcat",
     ffmpegCancelHint: "Clic pentru a anula descărcarea",
     valRecQuality: "Calitate",

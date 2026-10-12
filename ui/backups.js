@@ -1,5 +1,5 @@
 // Backup dialog: storage and retention panels, restore and selective restore.
-import { $, armButton, DISARM_MS, disarmButton, errText, errToast, flag, invoke, LANG, LOCK_SVG, optFlag, settings, t, toast, undoToast, val, withTaskbarBusy } from "./core.js";
+import { $, armButton, DISARM_MS, disarmButton, EMPTY_VALUE, errText, errToast, flag, invoke, LANG, LOCK_SVG, optFlag, settings, t, toast, undoToast, val, withTaskbarBusy } from "./core.js";
 import { applyFlags, applyValues, EXPERT_PATHS, jumpToExpertSetting, openVideoCleanup, rowResetBtn, withTip } from "./expertMenu.js";
 import { collapsibleHead, numRow, PROMPT_TYPE_LABELS, recordToolUsage, statSection } from "./management.js";
 import { fmtBytes } from "./floatShared.js";
@@ -310,7 +310,7 @@ export async function renderBackupPanel(body) {
       const dd = document.createElement("div"); dd.className = "dt-date"; dd.textContent = d.toLocaleDateString(LANG);
       const tt = document.createElement("div"); tt.className = "dt-time"; tt.textContent = d.toLocaleTimeString(LANG);
       vv.append(dd, tt);
-    } else { vv.textContent = "\u2014"; }
+    } else { vv.textContent = EMPTY_VALUE; }
     const ll = document.createElement("div"); ll.className = "stat-label"; ll.textContent = l;
     c.append(vv, ll); return c;
   };
@@ -549,11 +549,11 @@ export async function renderBackupPanel(body) {
   cards.append(
     statCard(nf(backups.length), t("backupCount")),
     statCard(fmtBytes(total, LANG), t("backupTotalSize")),
-    statCard(backups.length ? fmtBytes(Math.max(...sizes), LANG) : "\u2014", t("backupLargest")),
-    statCard(backups.length ? fmtBytes(Math.min(...sizes), LANG) : "\u2014", t("backupSmallest")),
+    statCard(backups.length ? fmtBytes(Math.max(...sizes), LANG) : EMPTY_VALUE, t("backupLargest")),
+    statCard(backups.length ? fmtBytes(Math.min(...sizes), LANG) : EMPTY_VALUE, t("backupSmallest")),
     statCard(newest && oldest
       ? `${nf(Math.max(0, Math.round((newest - oldest) / 86400000)))} d`
-      : "\u2014", t("backupSpan")),
+      : EMPTY_VALUE, t("backupSpan")),
     dtCard(t("backupNext"), newest && flag("autoBackup") ? new Date(newest.getTime() + val("backupIntervalH") * 3600000) : null),
     dtCard(t("backupNewest"), newest),
     dtCard(t("backupOldest"), oldest),
@@ -572,7 +572,7 @@ export async function renderBackupPanel(body) {
       const name = document.createElement("span"); name.className = "backup-name"; name.textContent = prettyStamp(b.name);
       // What is actually in that snapshot: read from the snapshot itself, not guessed.
       const count = document.createElement("span"); count.className = "backup-count";
-      count.textContent = b.prompts === null || b.prompts === undefined ? "\u2014" : nf(b.prompts);
+      count.textContent = b.prompts === null || b.prompts === undefined ? EMPTY_VALUE : nf(b.prompts);
       count.title = t("backupPrompts");
       // Names are read straight from the snapshot (DPAPI-sealed exactly like
       // the live library: a local snapshot is never password-protected, only the
@@ -590,7 +590,7 @@ export async function renderBackupPanel(body) {
           kind.textContent = t(PROMPT_TYPE_LABELS[item.kind] || item.kind);
           const chars = document.createElement("span");
           chars.className = "backup-name-row-chars";
-          chars.textContent = item.chars ? nf(item.chars) : "\u2014";
+          chars.textContent = item.chars ? nf(item.chars) : EMPTY_VALUE;
           li.append(nm, kind, chars);
           namesBox.appendChild(li);
         }
@@ -623,7 +623,7 @@ export async function renderBackupPanel(body) {
       restore.addEventListener("click", () => restoreBackup(b.name));
       const del = document.createElement("button"); del.type = "button"; del.className = "ghost-btn danger-btn"; del.textContent = t("delete");
       del.addEventListener("click", async () => {
-        if (!armButton(del, `${t("delete")}?`)) { setTimeout(() => disarmButton(del, t("delete")), DISARM_MS); return; }
+        if (!armButton(del, t("deleteConfirmArmed"))) { setTimeout(() => disarmButton(del, t("delete")), DISARM_MS); return; }
         await invoke("delete_backup", { name: b.name }).catch((e) => errToast(e));
         await saveUiState("backupListOpen", true); // stay in the list after delete
         renderBackupPanel(body);
@@ -671,8 +671,8 @@ export async function renderBackupContent(box, name) {
     statCard(nf(data.entries), t("backupContentEntries")),
     statCard(nf(data.views), t("backupContentViews")),
     statCard(nf(data.tags), t("backupContentTags")),
-    statCard(data.last_change ? new Date(data.last_change * 1000).toLocaleDateString(LANG) : "\u2014", t("backupContentLastChange")),
-    statCard(data.program_version || "\u2014", t("backupContentVersion")),
+    statCard(data.last_change ? new Date(data.last_change * 1000).toLocaleDateString(LANG) : EMPTY_VALUE, t("backupContentLastChange")),
+    statCard(data.program_version || EMPTY_VALUE, t("backupContentVersion")),
     statCard(data.encrypted ? t("backupContentEncryptedYes") : t("backupContentEncryptedNo"), t("backupContentEncrypted")),
   );
   box.appendChild(cards);
@@ -752,8 +752,8 @@ export async function renderBackupContent(box, name) {
       const row = document.createElement("div"); row.className = "backup-content-row";
       const nm = document.createElement("span"); nm.className = "backup-content-cell-name"; nm.textContent = it.name;
       const dt = document.createElement("span"); dt.className = "backup-content-cell-date";
-      dt.textContent = it.date ? new Date(it.date * 1000).toLocaleDateString(LANG) : "\u2014";
-      const sz = document.createElement("span"); sz.className = "backup-content-cell-chars"; sz.textContent = it.chars ? nf(it.chars) : "\u2014";
+      dt.textContent = it.date ? new Date(it.date * 1000).toLocaleDateString(LANG) : EMPTY_VALUE;
+      const sz = document.createElement("span"); sz.className = "backup-content-cell-chars"; sz.textContent = it.chars ? nf(it.chars) : EMPTY_VALUE;
       const kd = document.createElement("span"); kd.className = "backup-content-cell-kind"; kd.textContent = t(PROMPT_TYPE_LABELS[it.kind] || it.kind);
       row.append(nm, dt, sz, kd);
       rowsBox.appendChild(row);

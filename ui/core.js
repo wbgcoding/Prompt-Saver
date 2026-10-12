@@ -304,6 +304,8 @@ export const DEFAULT_COLORS = [
 export let COLORS = [...DEFAULT_COLORS];
 export function assignCOLORS(v) { COLORS = v; }
 export const PALETTE_LEN = DEFAULT_COLORS.length - 1; // editable hues (index 0 is "none")
+// The house mark for "no value": a lone en dash.
+export const EMPTY_VALUE = "\u2013";
 export const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
 // The pending "finish hiding" step of the last hideToast(). A toast shown inside

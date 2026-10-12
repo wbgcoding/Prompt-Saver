@@ -1,5 +1,5 @@
 // Statistics, duplicate finder, compare view, trash, error log and the receiver dialogs.
-import { $, assignLibraryTab, assignPrompts, assignSettings, errToast, EXPERT_ACTIONS, flag, hideToast, invoke, LANG, libraryEl, optFlag, prompts, settings, t, toast, txt, undoToast, val } from "./core.js";
+import { $, assignLibraryTab, assignPrompts, assignSettings, EMPTY_VALUE, errToast, EXPERT_ACTIONS, flag, hideToast, invoke, LANG, libraryEl, optFlag, prompts, settings, t, toast, txt, undoToast, val } from "./core.js";
 import { EXPERT_VALUES } from "./expertConfig.js";
 import { applyFlags, applyValues, renderExpert, rowResetBtn, withTip } from "./expertMenu.js";
 import { loadPalette, refreshColorUI } from "./theme.js";
@@ -139,7 +139,7 @@ export async function renderStatsPanel(body) {
   cards.className = "stat-cards";
   cards.append(
     statCard(nf(s.total_prompts), t("statTotalPrompts")),
-    statCard(s.history_on ? nf(s.copies7) : "\u2014", t("statCopies7")),
+    statCard(s.history_on ? nf(s.copies7) : EMPTY_VALUE, t("statCopies7")),
   );
   body.appendChild(cards);
   // Most used: the heading shares its row with the list length choice.
@@ -717,7 +717,7 @@ export async function openRemoteTlsDialog() {
     const answer = await confirmDialog({
       title: t("remoteTlsFingerprint"),
       message: t("remoteTlsActionTip"),
-      input: { type: "text", value: fingerprint || "\u2013", copy: true },
+      input: { type: "text", value: fingerprint || EMPTY_VALUE, copy: true },
       confirmLabel: t("remoteTlsSave"),
       altLabel: t("remoteTlsRenew"),
       cancelLabel: t("close"),

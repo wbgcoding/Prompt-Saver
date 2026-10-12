@@ -1,5 +1,5 @@
 // Voice dictation and the OCR and speech language packs.
-import { $, autoGrow, errText, errToast, EXPERT_ACTIONS, flag, inputEl, invoke, LANG, listen, modal, settings, t, toast, txt, val } from "./core.js";
+import { $, autoGrow, EMPTY_VALUE, errText, errToast, EXPERT_ACTIONS, flag, inputEl, invoke, LANG, listen, modal, settings, t, toast, txt, val } from "./core.js";
 import { confirmDialog } from "./dialog.js";
 import { fmtCopyTime } from "./journal.js";
 import { fmtBytes } from "./floatShared.js";
@@ -208,14 +208,14 @@ export function langRow(kind, cap) {
   name.textContent = cap.label;
   const sub = document.createElement("div");
   sub.className = "lang-row-sub";
-  sub.textContent = `${cap.tag} · ${cap.version || "\u2014"}`;
+  sub.textContent = `${cap.tag} · ${cap.version || EMPTY_VALUE}`;
   main.append(name, sub);
   const installed = cap.state === "Installed";
   const size = installed ? cap.install_size : cap.download_size;
   const sizeEl = document.createElement("div");
   sizeEl.className = "lang-row-size";
   // Windows does not always report a size -- never guess one, show the dash instead.
-  sizeEl.textContent = size == null ? "\u2014" : fmtBytes(size, LANG);
+  sizeEl.textContent = size == null ? EMPTY_VALUE : fmtBytes(size, LANG);
   const chip = document.createElement("span");
   chip.className = installed ? "lang-row-chip installed" : "lang-row-chip";
   chip.textContent = installed ? t("ocrLangsInstalled") : t("ocrLangsNotInstalled");
@@ -251,7 +251,7 @@ export function langRow(kind, cap) {
   // download blind.
   btn.textContent = busy
     ? t("ocrLangsInstalling")
-    : t("ocrLangsDownloadBtn").replace("{size}", () => cap.download_size == null ? "\u2014" : fmtBytes(cap.download_size, LANG));
+    : t("ocrLangsDownloadBtn").replace("{size}", () => cap.download_size == null ? EMPTY_VALUE : fmtBytes(cap.download_size, LANG));
   btn.addEventListener("click", () => startLangInstall(kind, cap));
   actions.appendChild(btn);
   return row;
@@ -261,7 +261,7 @@ export function langRow(kind, cap) {
 // once, BEFORE that prompt ever appears. No exceptions.
 export async function startLangInstall(kind, cap) {
   const st = LANG_DIALOG[kind];
-  const size = cap.download_size == null ? "\u2014" : fmtBytes(cap.download_size, LANG);
+  const size = cap.download_size == null ? EMPTY_VALUE : fmtBytes(cap.download_size, LANG);
   const ok = await confirmDialog({
     title: t("ocrElevateTitle"),
     message: t("ocrElevateInfo").replace("{lang}", () => cap.label).replace("{size}", () => size),
