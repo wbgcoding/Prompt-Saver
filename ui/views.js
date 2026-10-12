@@ -40,12 +40,6 @@ export function renderNumPop() {
   if (selected) selected.scrollIntoView({ block: "center" });
 }
 
-// UI scale now uses the WebView's NATIVE zoom (set from Rust, like Ctrl +/-), which
-// keeps event coords and getBoundingClientRect in one coordinate space: so
-// JS-positioned fixed popups need no compensation. Kept as a hook (always 1) so the
-// existing `/ z` call sites stay no-ops instead of being ripped out everywhere.
-export const uiZoom = () => 1;
-
 // placePopover/placePopoverAt now live in ui/popover.js -- the one placement
 // rule for every popover, dropdown and context menu in THIS window. See that
 // file for why floating.js/folder.js and media.js's volume popup stay separate.

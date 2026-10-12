@@ -1,7 +1,7 @@
 // Window chrome: language apply, bar toggles, the tile tooltip engine, clear buttons,
 // the lightbox and the shortcuts modal.
 import { $, ALL_SHORTCUT_SCOPES, applyBrand, CLEAR_SVG, drag, flag, inputEl, invoke, LANG, mediaBarLabels, settings, shortcutRows, shortcutSections, t, val, videoCache, withShortcut } from "./core.js";
-import { uiZoom, updateExamplesBanner } from "./views.js";
+import { updateExamplesBanner } from "./views.js";
 import { fitAllTiles } from "./tiles.js";
 import { fillVarHighlighted } from "./promptVars.js";
 import { placePopover } from "./popover.js";
@@ -179,12 +179,11 @@ export function wireTooltips() {
     let y = cy + OFF;
     if (x + r.width + PAD > innerWidth) x = cx - OFF - r.width;
     if (y + r.height + PAD > innerHeight) y = cy - OFF - r.height;
-    const z = uiZoom(); // fixed popup lives inside the zoomed body
     // The flip above only guards the edge it checked: near a corner, with a
     // wide tooltip, the flipped side can itself run off the
     // FAR edge. Clamp both bounds, same as placePopover does for every other popup.
-    tipEl.style.left = `${Math.max(PAD, Math.min(x, innerWidth - r.width - PAD)) / z}px`;
-    tipEl.style.top = `${Math.max(PAD, Math.min(y, innerHeight - r.height - PAD)) / z}px`;
+    tipEl.style.left = `${Math.max(PAD, Math.min(x, innerWidth - r.width - PAD))}px`;
+    tipEl.style.top = `${Math.max(PAD, Math.min(y, innerHeight - r.height - PAD))}px`;
   };
   // Actually reveal the tip for `el` (called immediately or after the show-delay).
   const showNow = (el) => {
@@ -474,9 +473,8 @@ export function wireLightbox() {
   });
   stage.addEventListener("pointermove", (e) => {
     if (!lbDrag) return;
-    const z = uiZoom();
-    lbX += (e.clientX - lbDrag.x) / z;
-    lbY += (e.clientY - lbDrag.y) / z;
+    lbX += e.clientX - lbDrag.x;
+    lbY += e.clientY - lbDrag.y;
     lbDrag.x = e.clientX; lbDrag.y = e.clientY;
     lbApply();
   });
