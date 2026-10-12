@@ -420,7 +420,7 @@ function focusOnOpen(mode) {
   modal.name.setSelectionRange(n, n);
 }
 
-// ---- Confidential entries (Vorschlag 68) ----
+// ---- Confidential entries ----
 // Marking a prompt confidential only ever applies to a saved, plain text
 // entry -- an image/file prompt has nothing in `text` worth encrypting, and a
 // brand-new "create" draft has no id yet for set_prompt_secret to act on.
@@ -1035,7 +1035,7 @@ export function renderRotateUi() {
 
 // Mirrors the backend's auto_eligible minus the two feature gates:
 // rotatingPrompts already gates this whole row (rotationUiOn), and rotateAuto
-// (the feature switch, 93) is checked here so the button disables live if it
+// (the feature switch) is checked here so the button disables live if it
 // gets flipped off with the editor open.
 export function rotateAutoEligibleHere() {
   const filled = (modalState.rotateEntries || []).filter((e) => (e || "").trim()).length;

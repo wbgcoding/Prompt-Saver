@@ -75,7 +75,7 @@ export async function loadLangCaps(kind, force) {
   } catch (e) {
     // Listing is supposed to need no elevated rights, but some Windows builds
     // require it even for this read-only query -- an honest inline reason
-    // (plus a retry, 162) beats a blank dialog or a generic error toast. 177:
+    // (plus a retry) beats a blank dialog or a generic error toast.
     // ANY failure here comes back this same way now (backend no longer tries
     // to classify by HResult/message text, which varies by machine/locale) --
     // "code|raw text" so the raw PowerShell/DISM reason can still be shown.
@@ -655,7 +655,7 @@ export function voiceWatchDiscard(el) {
     if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(e.key)) discard();
   });
 }
-// 131's global hotkey has no visible field to dictate into (the window is
+// The global dictation hotkey has no visible field to dictate into (the window is
 // never brought forward), so it targets this detached textarea instead --
 // never added to the DOM, but a real element, so it rides the exact same
 // insertVoiceText/voiceJoiner pipeline as the two visible buttons rather than

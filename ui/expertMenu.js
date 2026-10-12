@@ -295,8 +295,8 @@ export function withTip(row, key) {
 }
 
 // A small per-row undo icon, visible only while this exact row differs from its
-// default: resets just this one key. Reuses the same isRowChanged() diff as 66/67
-// and the same per-key commands resetExpertGroup() uses; no confirmation, since one
+// default: resets just this one key. Reuses the same isRowChanged() diff as the
+// group reset and the same per-key commands resetExpertGroup() uses; no confirmation, since one
 // click back is reversible.
 // `after` lets a caller outside the main expert menu (the backup/statistics
 // panels, their own top-level window) redraw itself instead of renderExpert().
@@ -762,7 +762,7 @@ export function dropdownRow(key) {
 // The reason line under recQuality/recFormat: the GIF format's fixed 30s cap
 // (always shown, ffmpeg or not) and, when ffmpeg is missing, why the picked
 // step/format cannot actually be produced plus an inline offer to fetch it --
-// on the control itself, not only in the help (240's explicit requirement).
+// on the control itself, not only in the help (an explicit requirement).
 export function recFfmpegHintEl(key, sel) {
   const hint = document.createElement("div");
   hint.className = "expert-row-hint";
@@ -2059,7 +2059,7 @@ export function renderExpert() {
         head.addEventListener("click", () => toggleExpertGroup(group.title, sec));
       }
       // Per-category reset: only worth showing when there is something in this
-      // group to reset. Reuses the same isRowChanged() diff as 66/67.
+      // group to reset. Reuses the same isRowChanged() diff as the per-row reset.
       // Data & system (expGroupData) mixes ordinary settings with destructive,
       // one-click data actions (emergency purge, delete all data) right below
       // them -- a bulk-reset button in that neighbourhood is one misclick away

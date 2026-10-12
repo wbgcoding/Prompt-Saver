@@ -70,8 +70,8 @@ export const FLAG_LABELS = {
   copyFlash: "flagCopyFlash",
   cleanupFiles: "flagCleanupFiles",
   // A text prompt can hold a list of variants instead of one text; each
-  // copy serves the next entry (in order, or shuffled without repeats). Default
-  // on since 33; shipped default off at 32's original release.
+  // copy serves the next entry (in order, or shuffled without repeats). On by
+  // default now; it shipped off at first.
   rotatingPrompts: "flagRotatingPrompts",
   // Sub-toggle of rotatingPrompts, itself also default on.
   rotateBadge: "flagRotateBadge",

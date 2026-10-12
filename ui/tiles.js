@@ -220,7 +220,7 @@ export function applyRotateState(tile, id) {
 }
 
 // Ids with a live auto-advance session, kept by the backend's rotation-auto
-// event (fired on arm/end from clipwatch: see mod clipwatch, 91).
+// event (fired on arm/end by the clipboard watcher).
 export const autoActiveIds = new Set();
 
 export function applyAutoBadge(tile, id) {

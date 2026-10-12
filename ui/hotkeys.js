@@ -215,7 +215,7 @@ export async function commitGlobalHotkey(accel) {
   renderHotkeysList(); // a no-op while the popup is closed
   return accel;
 }
-// 131's counterpart, same shape -- its own field, gated behind the voiceHotkey
+// The dictation hotkey's counterpart, same shape -- its own field, gated behind the voiceHotkey
 // expert flag, checked through the same set_voice_hotkey/check_hotkey backend
 // path (hotkeyOwner above already treats it as a real collision).
 export async function commitVoiceHotkey(accel) {
@@ -224,7 +224,7 @@ export async function commitVoiceHotkey(accel) {
   if (accel) toast(t("hotkeySet"));
   return accel;
 }
-// 278's own pair, same shape again -- only ever actually registered while a
+// The recording stop hotkey, same shape again -- only ever actually registered while a
 // recording runs (see rearm_hotkeys on the backend), so a successful commit
 // here can still show as blocked later through the bar's own warning icon.
 export async function commitRecStopHotkey(accel) {
